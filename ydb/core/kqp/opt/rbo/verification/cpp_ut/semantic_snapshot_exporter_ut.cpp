@@ -6703,6 +6703,477 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         }
     }
 
+    Y_UNIT_TEST(NormalizesExactAlwaysPresentLiteralWrappers) {
+        {
+            TExportTestContext ctx;
+            const auto* dateType = ScalarType(ctx, NUdf::EDataSlot::Date);
+            const auto expression = ExportMapExpression(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "Just",
+                    {TypedLiteral(ctx, "Date", "10324", dateType)},
+                    ScalarType(ctx, NUdf::EDataSlot::Date, true)));
+
+            UNIT_ASSERT_VALUES_EQUAL(expression["kind"].GetStringSafe(), "if");
+            UNIT_ASSERT_VALUES_EQUAL(expression["type"].GetStringSafe(), "Date");
+            UNIT_ASSERT(expression["nullable"].GetBooleanSafe());
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["condition"]["kind"].GetStringSafe(),
+                "literal");
+            UNIT_ASSERT(expression["condition"]["value"].GetBooleanSafe());
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["then"]["kind"].GetStringSafe(),
+                "literal");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["then"]["type"].GetStringSafe(),
+                "Date");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["then"]["value"].GetUIntegerSafe(),
+                10324);
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["else"]["kind"].GetStringSafe(),
+                "null");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["else"]["type"].GetStringSafe(),
+                "Date");
+        }
+
+        struct TConversionCase {
+            TStringBuf SourceName;
+            NUdf::EDataSlot SourceSlot;
+            TStringBuf Value;
+            TStringBuf TargetName;
+            NUdf::EDataSlot TargetSlot;
+            bool Direct;
+            bool Wrapped;
+        };
+        for (const auto& test : {
+                 TConversionCase{"Int32", NUdf::EDataSlot::Int32, "0",
+                     "Int64", NUdf::EDataSlot::Int64, true, true},
+                 TConversionCase{"Int32", NUdf::EDataSlot::Int32,
+                     "-2147483648", "Int64", NUdf::EDataSlot::Int64, true, true},
+                 TConversionCase{"Int32", NUdf::EDataSlot::Int32,
+                     "2147483647", "Int64", NUdf::EDataSlot::Int64, true, true},
+                 TConversionCase{"Int64", NUdf::EDataSlot::Int64,
+                     "-9223372036854775808", "Int64",
+                     NUdf::EDataSlot::Int64, true, false},
+                 TConversionCase{"Uint32", NUdf::EDataSlot::Uint32,
+                     "4294967295", "Uint64",
+                     NUdf::EDataSlot::Uint64, true, false},
+                 TConversionCase{"Uint32", NUdf::EDataSlot::Uint32,
+                     "4294967295", "Int64",
+                     NUdf::EDataSlot::Int64, false, true},
+             })
+        {
+            for (const bool wrapped : {false, true}) {
+                if ((!wrapped && !test.Direct) ||
+                    (wrapped && !test.Wrapped))
+                {
+                    continue;
+                }
+
+                TExportTestContext ctx;
+                const auto* sourceType = ScalarType(ctx, test.SourceSlot);
+                const auto* targetType = ScalarType(ctx, test.TargetSlot);
+                TExprNode::TPtr root = TypedCallable(
+                    ctx,
+                    "Convert",
+                    {
+                        TypedLiteral(
+                            ctx,
+                            test.SourceName,
+                            test.Value,
+                            sourceType),
+                        DataTypeDescriptor(
+                            ctx,
+                            test.TargetName,
+                            targetType),
+                    },
+                    targetType);
+                if (wrapped) {
+                    root = TypedCallable(
+                        ctx,
+                        "Just",
+                        {std::move(root)},
+                        ScalarType(ctx, test.TargetSlot, true));
+                }
+
+                const auto expression =
+                    ExportMapExpression(ctx, "a", std::move(root));
+                UNIT_ASSERT_VALUES_EQUAL(
+                    expression["kind"].GetStringSafe(),
+                    wrapped ? "if" : "literal");
+                const auto& literal =
+                    wrapped ? expression["then"] : expression;
+                UNIT_ASSERT_VALUES_EQUAL(
+                    literal["kind"].GetStringSafe(),
+                    "literal");
+                UNIT_ASSERT_VALUES_EQUAL(
+                    literal["type"].GetStringSafe(),
+                    TString(test.TargetName));
+                UNIT_ASSERT_VALUES_EQUAL(
+                    literal["value"].GetIntegerRobust(),
+                    FromString<i64>(test.Value));
+                if (wrapped) {
+                    UNIT_ASSERT(expression["nullable"].GetBooleanSafe());
+                    UNIT_ASSERT(
+                        expression["condition"]["value"].GetBooleanSafe());
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        expression["else"]["kind"].GetStringSafe(),
+                        "null");
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        expression["else"]["type"].GetStringSafe(),
+                        TString(test.TargetName));
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ExactAlwaysPresentLiteralWrappersFailClosed) {
+        {
+            TExportTestContext ctx;
+            const auto* int64Type =
+                ScalarType(ctx, NUdf::EDataSlot::Int64);
+            const auto expression = ExportMapExpression(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "Just",
+                    {TypedLiteral(ctx, "Int64", "0", int64Type)},
+                    ScalarType(ctx, NUdf::EDataSlot::Int64, true)));
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["kind"].GetStringSafe(),
+                "opaque");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* dateType = ScalarType(ctx, NUdf::EDataSlot::Date);
+            const auto expression = ExportTypedMapExpression(
+                ctx,
+                "a",
+                "Date",
+                false,
+                TypedCallable(
+                    ctx,
+                    "Just",
+                    {TypedMember(ctx, "a.x", dateType)},
+                    ScalarType(ctx, NUdf::EDataSlot::Date, true)));
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["kind"].GetStringSafe(),
+                "opaque");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["args"].GetArraySafe().size(),
+                1);
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["args"][0]["column"].GetStringSafe(),
+                "a.x");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* int32Type =
+                ScalarType(ctx, NUdf::EDataSlot::Int32);
+            const auto* int64Type =
+                ScalarType(ctx, NUdf::EDataSlot::Int64);
+            const auto expression = ExportMapExpression(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "Just",
+                    {
+                        TypedCallable(
+                            ctx,
+                            "Convert",
+                            {
+                                TypedMember(ctx, "a.x", int32Type),
+                                DataTypeDescriptor(
+                                    ctx,
+                                    "Int64",
+                                    int64Type),
+                            },
+                            int64Type),
+                    },
+                    ScalarType(ctx, NUdf::EDataSlot::Int64, true)));
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["kind"].GetStringSafe(),
+                "opaque");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["args"].GetArraySafe().size(),
+                1);
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["args"][0]["column"].GetStringSafe(),
+                "a.x");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* dateType = ScalarType(ctx, NUdf::EDataSlot::Date);
+            auto malformed = ctx.ExprCtx.NewCallable(
+                TPositionHandle(),
+                "Date",
+                {
+                    ctx.ExprCtx.NewAtom(TPositionHandle(), "10324"),
+                    ctx.ExprCtx.NewAtom(TPositionHandle(), "extra"),
+                });
+            malformed->SetTypeAnn(dateType);
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "Just",
+                    {std::move(malformed)},
+                    ScalarType(ctx, NUdf::EDataSlot::Date, true)));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "Unsupported literal callable Date");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* dateType = ScalarType(ctx, NUdf::EDataSlot::Date);
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "Just",
+                    {TypedLiteral(ctx, "Date", "10324", dateType)},
+                    ScalarType(ctx, NUdf::EDataSlot::Int64, true)));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "matching optional result");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* dateType = ScalarType(ctx, NUdf::EDataSlot::Date);
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "Just",
+                    {TypedLiteral(ctx, "Date", "10324", dateType)},
+                    dateType));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "matching optional result");
+        }
+
+        for (const auto& [slot, nullable] : {
+                 std::pair{NUdf::EDataSlot::Date, true},
+                 std::pair{NUdf::EDataSlot::Int64, false},
+             })
+        {
+            TExportTestContext ctx;
+            const auto* argumentType = ScalarType(ctx, slot, nullable);
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "Just",
+                    {TypedLiteral(ctx, "Date", "10324", argumentType)},
+                    ScalarType(ctx, slot, true)));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "literal type annotation does not match its callable");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* int32Type =
+                ScalarType(ctx, NUdf::EDataSlot::Int32);
+            const auto* int64Type =
+                ScalarType(ctx, NUdf::EDataSlot::Int64);
+            const auto* optionalInt64Type =
+                ScalarType(ctx, NUdf::EDataSlot::Int64, true);
+            const auto expression = ExportMapExpression(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "Convert",
+                    {
+                        TypedLiteral(ctx, "Int32", "0", int32Type),
+                        OptionalDataTypeDescriptor(
+                            ctx,
+                            "Int64",
+                            int64Type,
+                            optionalInt64Type),
+                    },
+                    optionalInt64Type));
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["kind"].GetStringSafe(),
+                "opaque");
+            UNIT_ASSERT(expression["nullable"].GetBooleanSafe());
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* int32Type =
+                ScalarType(ctx, NUdf::EDataSlot::Int32);
+            const auto* int64Type =
+                ScalarType(ctx, NUdf::EDataSlot::Int64);
+            const auto* uint64Type =
+                ScalarType(ctx, NUdf::EDataSlot::Uint64);
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "Convert",
+                    {
+                        TypedLiteral(ctx, "Int32", "0", int32Type),
+                        DataTypeDescriptor(ctx, "Uint64", uint64Type),
+                    },
+                    int64Type));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "target does not match its result");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* int32Type =
+                ScalarType(ctx, NUdf::EDataSlot::Int32);
+            const auto* int64Type =
+                ScalarType(ctx, NUdf::EDataSlot::Int64);
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "Convert",
+                    {
+                        TypedLiteral(ctx, "Int32", "0", int32Type),
+                        DataTypeDescriptor(ctx, "Int64", int32Type),
+                    },
+                    int64Type));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "target annotation disagrees");
+        }
+
+        struct TMetadataCase {
+            size_t Depth;
+            TStringBuf Kind;
+            TStringBuf Expected;
+        };
+        for (const auto& test : {
+                 TMetadataCase{
+                     0,
+                     "unsafe",
+                     "side-effecting or CSE-unsafe"},
+                 TMetadataCase{
+                     1,
+                     "executed",
+                     "executed Result node"},
+                 TMetadataCase{
+                     2,
+                     "unordered",
+                     "unordered children"},
+             })
+        {
+            TExportTestContext ctx;
+            const auto* int32Type =
+                ScalarType(ctx, NUdf::EDataSlot::Int32);
+            const auto* int64Type =
+                ScalarType(ctx, NUdf::EDataSlot::Int64);
+            auto root = TypedCallable(
+                ctx,
+                "Just",
+                {
+                    TypedCallable(
+                        ctx,
+                        "Convert",
+                        {
+                            TypedLiteral(
+                                ctx,
+                                "Int32",
+                                "0",
+                                int32Type),
+                            DataTypeDescriptor(
+                                ctx,
+                                "Int64",
+                                int64Type),
+                        },
+                        int64Type),
+                },
+                ScalarType(ctx, NUdf::EDataSlot::Int64, true));
+            TExpression expression(
+                std::move(root),
+                &ctx.ExprCtx,
+                &ctx.ExpressionProps);
+            TExprNode* mutated = expression.GetExpressionBody().Get();
+            if (test.Depth > 0) {
+                mutated = mutated->Child(0);
+            }
+            if (test.Depth > 1) {
+                mutated = mutated->Child(1);
+            }
+
+            if (test.Kind == "unsafe") {
+                mutated->SetSideEffects(ESideEffects::General);
+            } else if (test.Kind == "executed") {
+                mutated->SetResult(
+                    ctx.ExprCtx.NewAtom(
+                        TPositionHandle(),
+                        "executed"));
+            } else {
+                mutated->SetUnorderedChildren();
+            }
+
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                std::move(expression));
+            UNIT_ASSERT_C(
+                !result.IsSupported(),
+                TStringBuilder()
+                    << "metadata mutation unexpectedly supported: "
+                    << test.Kind);
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                test.Expected);
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* int32Type =
+                ScalarType(ctx, NUdf::EDataSlot::Int32);
+            const auto* int64Type =
+                ScalarType(ctx, NUdf::EDataSlot::Int64);
+            const auto result = ExportMapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "Convert",
+                    {
+                        TypedLiteral(ctx, "Int64", "0", int64Type),
+                        DataTypeDescriptor(ctx, "Int32", int32Type),
+                    },
+                    int32Type));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "Opaque Convert may fail");
+        }
+    }
+
     Y_UNIT_TEST(ConstantDecimalJustGateFailsClosed) {
         {
             TExportTestContext ctx;

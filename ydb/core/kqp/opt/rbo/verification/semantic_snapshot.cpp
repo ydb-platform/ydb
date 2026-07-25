@@ -1178,6 +1178,82 @@ NJson::TJsonValue DecimalConstantCastExpr(const TExprNode& node) {
     return DecimalValueExpr(resultType, *parameters, source.Child(0)->Content());
 }
 
+struct TCompleteIntegerLiteralConvert {
+    const TExprNode* Source = nullptr;
+    TString ResultType;
+
+    explicit operator bool() const {
+        return Source != nullptr;
+    }
+};
+
+TCompleteIntegerLiteralConvert CompleteIntegerLiteralConvert(
+    const TExprNode& node)
+{
+    if (!node.IsCallable("Convert") || node.ChildrenSize() != 2) {
+        return {};
+    }
+
+    const auto& source = *node.Child(0);
+    if (!source.IsCallable() ||
+        source.ChildrenSize() != 1 ||
+        !source.Child(0)->IsAtom())
+    {
+        return {};
+    }
+
+    bool sourceNullable = false;
+    const TString sourceType = ScalarTypeName(source, &sourceNullable);
+    if (sourceNullable ||
+        !IsIntegerType(sourceType) ||
+        source.Content() != sourceType)
+    {
+        return {};
+    }
+
+    bool resultNullable = false;
+    const TString resultType = ScalarTypeName(node, &resultNullable);
+    if (resultNullable || !IsIntegerType(resultType)) {
+        return {};
+    }
+
+    const auto& target = *node.Child(1);
+    if (!target.IsCallable("DataType")) {
+        return {};
+    }
+    bool targetNullable = false;
+    if (DataTypeDescriptorName(target, &targetNullable) != resultType ||
+        targetNullable)
+    {
+        Unsupported(
+            "Complete integer literal Convert target does not match its result");
+    }
+
+    const auto targetAnnotation = target.GetTypeAnn();
+    bool annotationNullable = false;
+    if (!targetAnnotation ||
+        targetAnnotation->GetKind() != ETypeAnnotationKind::Type ||
+        TypeName(
+            targetAnnotation->Cast<TTypeExprType>()->GetType(),
+            &annotationNullable) != resultType ||
+        annotationNullable)
+    {
+        Unsupported(
+            "Complete integer literal Convert target annotation disagrees");
+    }
+
+    LiteralExpr(source);
+    if (CastResult<false>(source.GetTypeAnn(), node.GetTypeAnn()) !=
+        NUdf::ECastOptions::Complete)
+    {
+        return {};
+    }
+    return {
+        .Source = &source,
+        .ResultType = resultType,
+    };
+}
+
 bool IsStringDecimalSafeCastCandidate(const TExprNode& node) {
     return node.IsCallable("SafeCast") &&
         node.ChildrenSize() == 2 &&
@@ -2337,6 +2413,43 @@ bool IsExactDataAnnotation(
         IsDataOrOptionalOfData(annotation, optional, data) && data &&
         optional == nullable && data->GetSlot() == slot &&
         !dynamic_cast<const TDataExprParamsType*>(data);
+}
+
+const TExprNode* ExactAlwaysPresentLiteralJustArgument(
+    const TExprNode& node)
+{
+    if (!node.IsCallable("Just") || node.ChildrenSize() != 1) {
+        return nullptr;
+    }
+
+    const auto& argument = *node.Child(0);
+    TString argumentType;
+    if (argument.IsCallable("Date") &&
+        IsExactDataAnnotation(
+            argument.GetTypeAnn(),
+            NUdf::EDataSlot::Date,
+            false))
+    {
+        LiteralExpr(argument);
+        argumentType = "Date";
+    } else if (const auto convert = CompleteIntegerLiteralConvert(argument);
+        convert)
+    {
+        argumentType = convert.ResultType;
+    } else {
+        return nullptr;
+    }
+
+    bool resultNullable = false;
+    if (ScalarTypeName(node, &resultNullable) != argumentType ||
+        !resultNullable)
+    {
+        Unsupported(
+            "Exact literal Just requires a matching optional result");
+    }
+
+    CheckScalarSafetyMetadata(node);
+    return &argument;
 }
 
 const TExprNode* ExactUint64DirectMemberJustArgument(
@@ -4307,6 +4420,55 @@ NJson::TJsonValue ExportExprNode(
                 Unsupported("Date literal type annotation does not match its callable");
             }
         }
+        return result;
+    }
+
+    if (const auto convert = CompleteIntegerLiteralConvert(node); convert) {
+        // A complete conversion of a direct non-null integer literal is itself
+        // a non-null constant. Keep the exact converted type and value rather
+        // than assigning this closed literal a zero-argument opaque identity.
+        TOpaqueExpressionEncoder(
+            rowArgument,
+            visibleColumns,
+            boundArguments).Validate(node);
+        auto result = LiteralExpr(*convert.Source);
+        result["type"] = convert.ResultType;
+        return result;
+    }
+
+    if (const auto* argument = ExactAlwaysPresentLiteralJustArgument(node)) {
+        // Just of either a direct Date literal or a complete integer-literal
+        // Convert is always present. Preserve the Optional result shape with
+        // an explicit unreachable NULL branch.
+        TOpaqueExpressionEncoder(
+            rowArgument,
+            visibleColumns,
+            boundArguments).Validate(node);
+        const TString resultType = ScalarTypeName(*argument);
+
+        budget.Charge(normalizedDepth + 1, 2); // Synthetic true and typed NULL.
+        auto condition = JsonMap();
+        condition["kind"] = "literal";
+        condition["type"] = "Bool";
+        condition["value"] = true;
+        auto missing = JsonMap();
+        missing["kind"] = "null";
+        missing["type"] = resultType;
+
+        auto result = JsonMap();
+        result["kind"] = "if";
+        result["condition"] = std::move(condition);
+        result["then"] = ExportExprNode(
+            *argument,
+            rowArgument,
+            visibleColumns,
+            boundArguments,
+            budget,
+            normalizedDepth + 1,
+            sourceDepth + 1);
+        result["else"] = std::move(missing);
+        result["type"] = resultType;
+        result["nullable"] = true;
         return result;
     }
 

@@ -334,8 +334,8 @@
       <span class="swatch"><span class="dot" style="background:#ddf4ff;box-shadow:inset 0 0 0 1px #0969da"></span>in progress</span>
       <span class="swatch"><span class="dot" style="background:#dafbe1;box-shadow:inset 0 0 0 1px #1a7f37"></span>ok</span>
       <span class="swatch"><span class="dot" style="background:#f6f8fa;box-shadow:inset 0 0 0 1px #d0d7de"></span>no data</span>
-      <span class="swatch"><span class="dot" style="background:linear-gradient(135deg,#ffebe9,#ffcecb);box-shadow:inset 0 0 0 1px #cf222e"></span>compare worse</span>
-      <span class="swatch"><span class="dot" style="background:linear-gradient(135deg,#ffebe9,#dafbe1);box-shadow:inset 0 0 0 1px #1a7f37"></span>compare better</span>
+      <span class="swatch"><span class="dot" style="background:linear-gradient(90deg,#dafbe1 0%,#dafbe1 40%,#ffebe9 60%,#ffebe9 100%);box-shadow:inset 0 0 0 1px #cf222e"></span>compare worse</span>
+      <span class="swatch"><span class="dot" style="background:linear-gradient(90deg,#ffebe9 0%,#ffebe9 40%,#dafbe1 60%,#dafbe1 100%);box-shadow:inset 0 0 0 1px #1a7f37"></span>compare better</span>
     </div>
     <div id="heatmap"></div>
   </div>
@@ -726,12 +726,13 @@ function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-function destroyCharts(prefix) {
+function destroyCharts(prefix, opts) {
+  const exclude = (opts && opts.exclude) || null;
   for (const k of Object.keys(charts)) {
-    if (!prefix || k.startsWith(prefix)) {
-      try { charts[k].destroy(); } catch (_) {}
-      delete charts[k];
-    }
+    if (prefix && !k.startsWith(prefix)) continue;
+    if (exclude && k.includes(exclude)) continue;
+    try { charts[k].destroy(); } catch (_) {}
+    delete charts[k];
   }
 }
 
@@ -1351,7 +1352,8 @@ function mountHistory(item, id) {
     box.innerHTML = '<div class="empty">Нет истории в выбранном интервале дат</div>';
     return;
   }
-  destroyCharts(id + '_');
+  // Only suite canvases (id_ydb / id_fail) — keep query charts id_q_* alive.
+  destroyCharts(id + '_', { exclude: '_q_' });
   box.innerHTML = `<div class="pair">
     <div class="chart-box"><canvas id="${id}_ydb"></canvas></div>
     <div class="chart-box"><canvas id="${id}_fail"></canvas></div>

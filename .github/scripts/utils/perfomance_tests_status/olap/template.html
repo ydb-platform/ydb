@@ -88,8 +88,31 @@
   .cell.stale, .cell.watch { background: #fff8c5; color: var(--warn); cursor: pointer; }
   .cell.in_progress { background: #ddf4ff; color: var(--info); cursor: pointer; }
   .cell.nodata { background: #f6f8fa; color: var(--muted); cursor: pointer; box-shadow: inset 0 0 0 1px var(--border); }
+  .cell.delta-worse { background: linear-gradient(135deg, #ffebe9 0%, #ffcecb 100%); color: var(--bad); cursor: pointer; }
+  .cell.delta-better { background: linear-gradient(135deg, #ffebe9 0%, #dafbe1 100%); color: #1a7f37; cursor: pointer; }
+  .cell.delta-mixed { background: linear-gradient(135deg, #fff8c5 0%, #ddf4ff 100%); color: #9a6700; cursor: pointer; }
+  .cell.delta-same { background: #f6f8fa; color: var(--muted); cursor: pointer; }
   .cell.selected { outline: 2px solid var(--info); outline-offset: 2px; box-shadow: 0 0 0 3px #0969da33; }
   .cell .cnt { font-size: 11px; opacity: .85; }
+  .cmp-cell { text-align: left; vertical-align: middle; min-width: 200px; }
+  .cmp-cell select {
+    max-width: 260px; width: 100%; padding: 4px 6px; font: inherit; font-size: 11px;
+    border: 1px solid var(--border); border-radius: 6px; background: #fff;
+  }
+  .run-card { cursor: pointer; transition: box-shadow .12s, border-color .12s; }
+  .run-card:hover { border-color: var(--info); }
+  .run-card.active { border-color: var(--info); box-shadow: 0 0 0 2px #0969da33; background: #f6f8fa; }
+  .pill.delta-better {
+    background: linear-gradient(90deg, #ffebe9, #dafbe1); color: #1a7f37;
+    box-shadow: inset 0 0 0 1px #1a7f3766;
+  }
+  .pill.delta-worse {
+    background: linear-gradient(90deg, #dafbe1, #ffebe9); color: var(--bad);
+    box-shadow: inset 0 0 0 1px #cf222e66;
+  }
+  .pill.delta-soft {
+    background: linear-gradient(90deg, #fff8c5, #dafbe1); color: #9a6700;
+  }
   .heat-legend {
     display: flex; flex-wrap: wrap; gap: 8px 14px; padding: 8px 12px 12px;
     font-size: 11px; color: var(--muted);
@@ -149,6 +172,7 @@
     background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12px;
   }
   .run-card .t { font-weight: 650; margin-bottom: 4px; }
+  /* active/hover styles declared above with delta cells */
   .qlist { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
   /* soft vs hard: pale amber outline vs solid orange fill */
   .pill.watch { background: #fffdf5; color: #9a6700; box-shadow: inset 0 0 0 1.5px #d4a72c; }
@@ -262,6 +286,8 @@
       <span class="swatch"><span class="dot" style="background:#ddf4ff;box-shadow:inset 0 0 0 1px #0969da"></span>in progress</span>
       <span class="swatch"><span class="dot" style="background:#dafbe1;box-shadow:inset 0 0 0 1px #1a7f37"></span>ok</span>
       <span class="swatch"><span class="dot" style="background:#f6f8fa;box-shadow:inset 0 0 0 1px #d0d7de"></span>no data</span>
+      <span class="swatch"><span class="dot" style="background:linear-gradient(135deg,#ffebe9,#ffcecb);box-shadow:inset 0 0 0 1px #cf222e"></span>compare worse</span>
+      <span class="swatch"><span class="dot" style="background:linear-gradient(135deg,#ffebe9,#dafbe1);box-shadow:inset 0 0 0 1px #1a7f37"></span>compare better</span>
     </div>
     <div id="heatmap"></div>
   </div>
@@ -350,6 +376,288 @@ function setWave(v) {
   syncWaveButtons();
   destroyCharts();
   renderAll();
+}
+
+const CMP_KEY = 'olap_now_compare_waves';
+let compareState = {};
+try { compareState = JSON.parse(sessionStorage.getItem(CMP_KEY) || '{}') || {}; } catch (_) { compareState = {}; }
+/** diveId → selected now_runs index (default = last) */
+const diveRunFocus = {};
+
+function cmpKey(branch, db) { return `${branch || ''}|${db || ''}`; }
+function getCompareId(branch, db) {
+  return compareState[cmpKey(branch, db)] || '';
+}
+function setCompareId(branch, db, id) {
+  const k = cmpKey(branch, db);
+  if (!id) delete compareState[k];
+  else compareState[k] = id;
+  try { sessionStorage.setItem(CMP_KEY, JSON.stringify(compareState)); } catch (_) {}
+}
+function waveListFor(branch, db) {
+  return (DATA.wave_list && DATA.wave_list[cmpKey(branch, db)]) || [];
+}
+function waveEntry(branch, db, id) {
+  if (!id) return null;
+  return waveListFor(branch, db).find(w => w.id === id || w.ci_version === id) || null;
+}
+function alertRules() {
+  const r = DATA.rules || {};
+  const ui = DATA.ui || {};
+  return {
+    failBroken: r.fail_broken ?? 0.5,
+    failHot: r.fail_hot ?? 0.1,
+    failRise: r.fail_rise ?? 0.05,
+    durTol: (r.dur_tol != null ? r.dur_tol : 0.1) * 100,
+    durHard: (r.dur_hard != null ? r.dur_hard : 0.25) * 100,
+    noiseK: r.noise_k ?? 2,
+    outlierMult: r.outlier_mult ?? 3,
+    slowPersist: r.slow_persist_min ?? 1,
+    baseline: r.baseline_runs || ui.baseline_runs || 7,
+  };
+}
+function medianNums(arr) {
+  const a = (arr || []).filter(x => x != null && Number.isFinite(Number(x))).map(Number).sort((x, y) => x - y);
+  if (!a.length) return null;
+  const m = Math.floor(a.length / 2);
+  return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
+}
+function avgNums(arr) {
+  const a = (arr || []).filter(x => x != null && Number.isFinite(Number(x))).map(Number);
+  if (!a.length) return null;
+  return a.reduce((s, v) => s + v, 0) / a.length;
+}
+function pstdevNums(arr) {
+  const a = (arr || []).filter(x => x != null && Number.isFinite(Number(x))).map(Number);
+  if (a.length < 2) return 0;
+  const m = a.reduce((s, v) => s + v, 0) / a.length;
+  return Math.sqrt(a.reduce((s, v) => s + (v - m) * (v - m), 0) / a.length);
+}
+function findHistIndexForWave(hist, wave) {
+  if (!hist || !wave) return -1;
+  const civs = hist.ci_versions || [];
+  const id = wave.id || wave.ci_version;
+  for (let i = civs.length - 1; i >= 0; i--) {
+    if (civs[i] && civs[i] === id) return i;
+  }
+  const lo = Date.parse(wave.min_ts);
+  const hi = Date.parse(wave.max_ts);
+  if (!Number.isFinite(lo) || !Number.isFinite(hi)) return -1;
+  const labels = hist.labels || [];
+  let best = -1, bestDist = Infinity;
+  for (let i = 0; i < labels.length; i++) {
+    const t = Date.parse(labels[i]);
+    if (!Number.isFinite(t)) continue;
+    if (t < lo - 120000 || t > hi + 120000) continue;
+    const d = Math.abs(t - hi);
+    if (d < bestDist) { bestDist = d; best = i; }
+  }
+  return best;
+}
+function findHistIndexForRun(hist, run) {
+  if (!hist || !run) return -1;
+  const reports = hist.reports || [];
+  if (run.report) {
+    const i = reports.lastIndexOf(run.report);
+    if (i >= 0) return i;
+  }
+  const civs = hist.ci_versions || [];
+  if (run.ci_version) {
+    for (let i = civs.length - 1; i >= 0; i--) {
+      if (civs[i] === run.ci_version) return i;
+    }
+  }
+  const vers = hist.versions || [];
+  if (run.version) {
+    const want = String(run.version).slice(0, 8);
+    for (let i = vers.length - 1; i >= 0; i--) {
+      if (vers[i] && String(vers[i]).slice(0, 8) === want) return i;
+    }
+  }
+  const runTs = Date.parse(run.ts || run.day);
+  if (!Number.isFinite(runTs)) return -1;
+  const labels = hist.labels || [];
+  let best = -1, bestDist = Infinity;
+  for (let i = 0; i < labels.length; i++) {
+    const t = Date.parse(labels[i]);
+    if (!Number.isFinite(t)) continue;
+    const d = Math.abs(t - runTs);
+    if (d < bestDist) { bestDist = d; best = i; }
+  }
+  return bestDist <= 6 * 3600 * 1000 ? best : -1;
+}
+/** Classify series at index idx (ydb raw, fail_rate as 0–100 from history). */
+function classifyAtIndex(ydbArr, frPctArr, idx, nodataArr) {
+  const R = alertRules();
+  if (idx < 0 || idx >= (ydbArr || []).length) {
+    return { status: 'nodata', kind: 'nodata', ydb_pct: null, ydb_now: null, ydb_base: null, fail_rate: null, error_class: null };
+  }
+  if (nodataArr && nodataArr[idx]) {
+    return { status: 'nodata', kind: 'nodata', ydb_pct: null, ydb_now: null, ydb_base: null, fail_rate: null, error_class: null };
+  }
+  const nowY = ydbArr[idx];
+  const baseSlice = [];
+  for (let i = Math.max(0, idx - R.baseline); i < idx; i++) {
+    if (nodataArr && nodataArr[i]) continue;
+    if (ydbArr[i] != null) baseSlice.push(Number(ydbArr[i]));
+  }
+  const ydb_now = nowY == null ? null : Number(nowY);
+  const ydb_base = medianNums(baseSlice);
+  let ydb_pct = null;
+  if (ydb_base != null && ydb_base > 0 && ydb_now != null) {
+    ydb_pct = ((ydb_now - ydb_base) / ydb_base) * 100;
+  }
+  const frNow = frPctArr && frPctArr[idx] != null ? Number(frPctArr[idx]) / 100 : 0;
+  const frBaseArr = [];
+  for (let i = Math.max(0, idx - R.baseline); i < idx; i++) {
+    if (nodataArr && nodataArr[i]) continue;
+    if (frPctArr && frPctArr[i] != null) frBaseArr.push(Number(frPctArr[i]) / 100);
+  }
+  const frBase = avgNums(frBaseArr) || 0;
+  const is_fail = frNow >= R.failBroken || (
+    frNow >= R.failHot && (frNow >= frBase + R.failRise || frNow >= R.failBroken)
+  );
+  let durStatus = 'ok';
+  const noise = (ydb_base != null && ydb_base > 0) ? (pstdevNums(baseSlice) / ydb_base) * 100 : 0;
+  const thr = Math.max(R.durTol, R.noiseK * noise);
+  const hardFloor = Math.max(R.durHard, thr);
+  const nAbove = (ydb_base != null)
+    ? (ydb_now != null && ydb_now > ydb_base ? 1 : 0)
+    : 0;
+  const persist = nAbove >= R.slowPersist;
+  if (ydb_base != null && ydb_now != null && ydb_now > ydb_base * R.outlierMult) {
+    durStatus = 'broken';
+  } else if (ydb_pct != null && persist && ydb_pct >= hardFloor) {
+    durStatus = 'regression';
+  } else if (ydb_pct != null && persist && ydb_pct >= thr) {
+    durStatus = 'watch';
+  }
+  const is_slow = durStatus === 'regression' || durStatus === 'broken';
+  const is_watch = durStatus === 'watch';
+  let kind = 'ok';
+  let status = 'ok';
+  if (is_fail && is_slow) { kind = 'both'; status = 'broken'; }
+  else if (is_fail) { kind = 'fail'; status = 'broken'; }
+  else if (is_slow) { kind = 'slow'; status = durStatus === 'broken' ? 'broken' : 'regression'; }
+  else if (is_watch) { kind = 'watch'; status = 'watch'; }
+  return {
+    status, kind, ydb_pct, ydb_now, ydb_base,
+    fail_rate: frNow,
+    error_class: null,
+  };
+}
+function statusSeverity(st) {
+  return ({
+    ok: 0, nodata: 1, watch: 2, in_progress: 2, stale: 3,
+    regression: 4, slower: 4, failing: 5, missing: 5, broken: 6, both: 6, fail: 5, slow: 4,
+  })[st] || 0;
+}
+function shortCellStatus(st, nFail, nSlow, nSoft) {
+  if (st === 'broken' || st === 'failing' || st === 'fail') {
+    if (nFail) return `fail ${nFail}`;
+    return 'fail';
+  }
+  if (st === 'regression' || st === 'slower' || st === 'slow') {
+    if (nSlow) return `slow ${nSlow}`;
+    return 'slow';
+  }
+  if (st === 'watch') {
+    if (nSoft) return `soft ${nSoft}`;
+    return 'soft';
+  }
+  if (st === 'missing') return 'missing';
+  if (st === 'stale') return 'stale';
+  if (st === 'in_progress') return 'in progress';
+  if (st === 'nodata') return 'no data';
+  if (st === 'both') return nFail || nSlow ? `fail ${nFail || 0} slow ${nSlow || 0}` : 'fail+slow';
+  return 'ok';
+}
+function allSuiteRows(branch, db, fam) {
+  const out = [];
+  const seen = new Set();
+  for (const r of [...(DATA.inbox || []), ...(DATA.ok || [])]) {
+    if (branch && r.branch !== branch) continue;
+    if (r.db !== db || r.family !== fam) continue;
+    if (!r.suite || r.suite === '—') continue;
+    const k = `${r.branch}|${r.db}|${r.suite}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(r);
+  }
+  return out;
+}
+function classifySuiteAtWave(item, wave) {
+  if (!wave) return null;
+  const names = new Set(wave.suite_names || []);
+  if (names.size && item.suite && !names.has(item.suite)) {
+    return { status: 'missing', kind: 'missing', ydb_pct: null, n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 0 };
+  }
+  const hist = item.history || {};
+  const idx = findHistIndexForWave(hist, wave);
+  if (idx < 0) {
+    return { status: 'nodata', kind: 'nodata', ydb_pct: null, n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 1 };
+  }
+  const m = classifyAtIndex(hist.ydb, hist.fail_rate, idx, hist.nodata);
+  // query-level counts from catalog at that wave
+  let n_fail = 0, n_slow = 0, n_soft = 0, n_nodata = 0;
+  for (const q of (item.queries || [])) {
+    const qh = q.history;
+    if (!qh) continue;
+    const qi = findHistIndexForWave(qh, wave);
+    if (qi < 0) continue;
+    const qm = classifyAtIndex(qh.ydb, qh.fail_rate, qi, qh.nodata);
+    if (qm.kind === 'nodata') n_nodata++;
+    else if (qm.kind === 'fail' || qm.kind === 'both') n_fail++;
+    if (qm.kind === 'slow' || qm.kind === 'both') n_slow++;
+    if (qm.kind === 'watch') n_soft++;
+  }
+  return {
+    status: m.status,
+    kind: m.kind,
+    ydb_pct: m.ydb_pct,
+    n_fail, n_slow, n_soft, n_nodata,
+  };
+}
+function aggregateSide(parts) {
+  const rank = {
+    broken: 6, missing: 5, regression: 4, both: 4, watch: 3,
+    failing: 3, slower: 3, stale: 2, nodata: 1.5, in_progress: 1, ok: 0, fail: 5, slow: 4,
+  };
+  let best = 'nodata';
+  let n_fail = 0, n_slow = 0, n_soft = 0, n_nodata = 0, n_hot = 0;
+  if (!parts.length) return { status: 'nodata', n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 0, n_hot: 0, n_queries: 0 };
+  for (const p of parts) {
+    const st = p.status || 'ok';
+    if ((rank[st] || 0) > (rank[best] || 0)) best = st;
+    n_fail += p.n_fail || 0;
+    n_slow += p.n_slow || 0;
+    n_soft += p.n_soft || 0;
+    n_nodata += p.n_nodata || 0;
+    if (st !== 'ok' && st !== 'nodata') n_hot++;
+  }
+  return {
+    status: best,
+    n_fail, n_slow, n_soft, n_nodata, n_hot,
+    n_queries: n_fail + n_slow + n_soft + n_nodata,
+  };
+}
+function formatWaveOption(w) {
+  const t = String(w.max_ts || '').slice(11, 16) || '—';
+  return `${w.ci_version || w.id} · ${t} · ${w.sha8 || '—'} · ${w.day || '—'}`;
+}
+function compareSelectHtml(branch, db) {
+  const list = waveListFor(branch, db);
+  const older = list.filter(w => !w.current);
+  if (!older.length) {
+    return `<td class="cmp-cell"><span class="muted" style="font-size:11px">нет волн</span></td>`;
+  }
+  const cur = getCompareId(branch, db);
+  const opts = [`<option value="">— compare —</option>`]
+    .concat(older.map(w => {
+      const sel = (cur && (cur === w.id || cur === w.ci_version)) ? ' selected' : '';
+      return `<option value="${esc(w.id)}"${sel}>${esc(formatWaveOption(w))}</option>`;
+    }));
+  return `<td class="cmp-cell"><select class="cmp-wave" data-cmp-branch="${esc(branch)}" data-cmp-db="${esc(db)}" title="Сравнить last wave с выбранной">${opts.join('')}</select></td>`;
 }
 
 function fmt(v) {
@@ -554,7 +862,7 @@ function okRowsForCell(branch, db, fam) {
     return itemInWindow(r);
   });
 }
-function liveCell(branch, db, fam) {
+function liveCellNow(branch, db, fam) {
   const s = reactSignals();
   const rows = candidateRows().filter(r => {
     if (branch && r.branch !== branch) return false;
@@ -562,7 +870,6 @@ function liveCell(branch, db, fam) {
     if (!itemInWindow(r)) return false;
     return rowMatchesReact(r);
   });
-  // No hot rows under react filters ≠ verified ok. Green only if DATA.ok has slices.
   if (!rows.length) {
     const oks = okRowsForCell(branch, db, fam);
     if (oks.length) {
@@ -583,7 +890,6 @@ function liveCell(branch, db, fam) {
   let best = null;
   for (const r of rows) {
     let st = r.status || r.issue || 'ok';
-    // downgrade severity when that signal is off
     if (!s.fail && (st === 'broken' || st === 'failing') && hasHardSlowSignal(r) && s.hard) st = 'regression';
     if (!s.fail && !s.hard && s.soft && hasSoftSlowSignal(r)) st = 'watch';
     if (!s.fail && !s.hard && !s.soft && s.nodata && hasNodataSignal(r)) st = 'nodata';
@@ -611,7 +917,50 @@ function liveCell(branch, db, fam) {
     n_queries: new Set([...failSet, ...slowSet, ...softSet, ...nodataSet]).size,
   };
 }
+function liveCell(branch, db, fam) {
+  const now = liveCellNow(branch, db, fam);
+  const cmpId = getCompareId(branch, db);
+  if (!cmpId) return now;
+  const wave = waveEntry(branch, db, cmpId);
+  if (!wave) return now;
+  const suites = allSuiteRows(branch, db, fam);
+  const prevParts = suites.map(r => classifySuiteAtWave(r, wave)).filter(Boolean);
+  const prev = aggregateSide(prevParts);
+  // Prefer query counts from catalogs when present; else suite-level status
+  const prevSev = statusSeverity(prev.status);
+  const nowSev = statusSeverity(now.status);
+  let delta = 'same';
+  if (nowSev > prevSev) delta = 'worse';
+  else if (nowSev < prevSev) delta = 'better';
+  else if ((now.n_fail || 0) + (now.n_slow || 0) !== (prev.n_fail || 0) + (prev.n_slow || 0)) {
+    const nowHot = (now.n_fail || 0) + (now.n_slow || 0);
+    const prevHot = (prev.n_fail || 0) + (prev.n_slow || 0);
+    if (nowHot > prevHot) delta = 'worse';
+    else if (nowHot < prevHot) delta = 'better';
+    else if (nowHot !== prevHot || now.status !== prev.status) delta = 'mixed';
+  } else if (now.status !== prev.status) {
+    delta = 'mixed';
+  }
+  return {
+    ...now,
+    compare: true,
+    prev,
+    delta,
+    status: delta === 'same' ? now.status : `delta-${delta}`,
+    delta_status: now.status,
+  };
+}
 function cellLabel(st, live) {
+  if (live && live.compare && live.prev) {
+    const a = shortCellStatus(
+      live.prev.status, live.prev.n_fail, live.prev.n_slow, live.prev.n_soft
+    );
+    const b = shortCellStatus(
+      live.delta_status || live.status, live.n_fail, live.n_slow, live.n_soft
+    );
+    if (a === b) return `<span class="cnt">${esc(b)} <span style="opacity:.55">=</span></span>`;
+    return `<span class="cnt">${esc(a)} → ${esc(b)}</span>`;
+  }
   if (st === 'regression' || st === 'watch' || st === 'nodata') {
     const fs = fmtFS(live.n_fail || 0, live.n_slow || 0, live.n_soft || 0, live.n_nodata || 0);
     if (fs) return `<span class="cnt">${fs}</span>`;
@@ -634,7 +983,8 @@ function sliceHist(hist) {
   if (!hist || !(hist.labels || []).length) return hist;
   if (!winFrom && !winTo) return hist;
   const out = {
-    labels: [], ydb: [], fail_rate: [], reports: [], versions: [], ci_versions: [], markers: [],
+    labels: [], ydb: [], fail_rate: [], reports: [], versions: [], ci_versions: [],
+    markers: [], error_classes: [], nodata: [],
     mode: hist.mode,
   };
   for (let i = 0; i < hist.labels.length; i++) {
@@ -647,6 +997,8 @@ function sliceHist(hist) {
     out.versions.push(hist.versions ? hist.versions[i] : null);
     out.ci_versions.push(hist.ci_versions ? hist.ci_versions[i] : null);
     out.markers.push(hist.markers ? hist.markers[i] : 'ok');
+    out.error_classes.push(hist.error_classes ? hist.error_classes[i] : null);
+    out.nodata.push(hist.nodata ? hist.nodata[i] : false);
   }
   return out;
 }
@@ -827,28 +1179,41 @@ function renderHeatmap() {
     }
     html += `<table class="heat"><thead><tr><th>DbAlias</th>`;
     for (const fam of h.families) html += `<th>${esc(fam)}</th>`;
-    html += `<th>Last wave</th></tr></thead><tbody>`;
+    html += `<th>Compare</th><th>Last wave</th></tr></thead><tbody>`;
     for (const db of dbs) {
       html += `<tr><td><span class="cluster">${esc(db)}</span></td>`;
       for (const fam of h.families) {
         const live = liveCell(branch, db, fam);
         const st = live.status || 'ok';
-        const tip = (st === 'regression' || st === 'broken' || st === 'watch' || st === 'nodata')
-          ? `${live.n_fail || 0} fail · ${live.n_slow || 0} hard slow · ${live.n_soft || 0} soft · ${live.n_nodata || 0} no data`
-          : `${live.n_hot || 0} suites`;
+        const tip = live.compare && live.prev
+          ? `compare → now: ${shortCellStatus(live.prev.status, live.prev.n_fail, live.prev.n_slow, live.prev.n_soft)} → ${shortCellStatus(live.delta_status, live.n_fail, live.n_slow, live.n_soft)}`
+          : ((st === 'regression' || st === 'broken' || st === 'watch' || st === 'nodata')
+            ? `${live.n_fail || 0} fail · ${live.n_slow || 0} hard slow · ${live.n_soft || 0} soft · ${live.n_nodata || 0} no data`
+            : `${live.n_hot || 0} suites`);
         const heat = heatSelection();
         const selected = !!(heat && heat.db === db && heat.fam === fam
           && (!selectedBranch() || selectedBranch() === branch));
-        html += `<td><div class="cell ${st}${selected ? ' selected' : ''}" data-branch="${esc(branch)}" data-db="${esc(db)}" data-fam="${esc(fam)}" title="${esc(tip)}">${cellLabel(st, live)}</div></td>`;
+        const cellCls = live.compare ? (st.startsWith('delta-') ? st : `delta-${live.delta || 'same'}`) : st;
+        html += `<td><div class="cell ${cellCls}${selected ? ' selected' : ''}" data-branch="${esc(branch)}" data-db="${esc(db)}" data-fam="${esc(fam)}" title="${esc(tip)}">${cellLabel(st, live)}</div></td>`;
       }
       const w = waveFor(branch, db);
+      html += compareSelectHtml(branch, db);
       html += `<td class="muted" style="text-align:left;white-space:nowrap">${formatWave(w)}</td></tr>`;
     }
     html += `</tbody></table>`;
   }
   const root = document.getElementById('heatmap');
   root.innerHTML = html || '<div class="empty">нет данных</div>';
-  root.querySelectorAll('.cell.regression, .cell.broken, .cell.missing, .cell.stale, .cell.in_progress, .cell.ok, .cell.watch, .cell.nodata').forEach(el => {
+  root.querySelectorAll('select.cmp-wave').forEach(sel => {
+    sel.addEventListener('change', (ev) => {
+      ev.stopPropagation();
+      setCompareId(sel.dataset.cmpBranch, sel.dataset.cmpDb, sel.value || '');
+      destroyCharts();
+      renderAll();
+    });
+    sel.addEventListener('click', (ev) => ev.stopPropagation());
+  });
+  root.querySelectorAll('.cell.regression, .cell.broken, .cell.missing, .cell.stale, .cell.in_progress, .cell.ok, .cell.watch, .cell.nodata, .cell.delta-worse, .cell.delta-better, .cell.delta-mixed, .cell.delta-same').forEach(el => {
     el.addEventListener('click', () => {
       const db = el.dataset.db || '';
       const fam = el.dataset.fam || '';
@@ -866,7 +1231,7 @@ function renderHeatmap() {
         if (branch) document.getElementById('fBranch').value = branch;
         fDb.value = db;
         fFam.value = fam;
-        fIssue.value = el.classList.contains('ok')
+        fIssue.value = el.classList.contains('ok') || el.classList.contains('delta-same')
           ? 'ok'
           : (el.classList.contains('nodata') ? 'nodata' : '');
       }
@@ -1062,6 +1427,30 @@ function failColors(vals) {
   });
 }
 
+function markIndicesForQuery(item, diveId, q, hist) {
+  /** Map full-history indices onto sliced hist via labels. */
+  const labelIndex = new Map((hist.labels || []).map((lab, i) => [String(lab), i]));
+  function mapIdx(fullIdx) {
+    if (fullIdx < 0 || !q.history) return -1;
+    const lab = (q.history.labels || [])[fullIdx];
+    if (lab == null) return -1;
+    const i = labelIndex.get(String(lab));
+    return i == null ? -1 : i;
+  }
+  const data = diveData(item);
+  const runs = data.now_runs || [];
+  const latestRun = runs.length ? runs[runs.length - 1] : null;
+  const cmpId = getCompareId(item.branch, item.db);
+  const wave = cmpId ? waveEntry(item.branch, item.db, cmpId) : null;
+  const focusIdx = diveFocusRunIndex(diveId, data);
+  const focusRun = wave ? latestRun : (runs[focusIdx] || latestRun);
+  let nowFull = -1;
+  if (focusRun) nowFull = findHistIndexForRun(q.history, focusRun);
+  if (nowFull < 0 && q.history && q.history.labels) nowFull = q.history.labels.length - 1;
+  const cmpFull = wave ? findHistIndexForWave(q.history, wave) : -1;
+  return { now: mapIdx(nowFull), compare: mapIdx(cmpFull) };
+}
+
 function mountQueryHistory(item, diveId, testName) {
   const q = findQuery(item, testName);
   const box = document.getElementById(diveId + '_qhist');
@@ -1077,6 +1466,7 @@ function mountQueryHistory(item, diveId, testName) {
     return;
   }
   const hist = sliceHist(q.history);
+  const marks = markIndicesForQuery(item, diveId, q, hist);
   if (!(hist.labels || []).length) {
     box.innerHTML = `<div class="qdetail"><div class="ttl">${esc(testName)}</div>
       <div class="muted">Нет точек в выбранном интервале дат</div></div>`;
@@ -1164,14 +1554,32 @@ function mountQueryHistory(item, diveId, testName) {
 
   function paint() {
     destroyCharts(diveId + '_q_');
-    const yColors = colorsVsMedianMavg(hist.ydb, win);
-    const fColors = failColors(hist.fail_rate);
+    const yColors = colorsVsMedianMavg(hist.ydb, win).map((c, i) => {
+      if (i === marks.now) return '#0969da';
+      if (i === marks.compare) return '#9a6700';
+      return c;
+    });
+    const fColors = failColors(hist.fail_rate).map((c, i) => {
+      if (i === marks.now) return '#0969da';
+      if (i === marks.compare) return '#9a6700';
+      return c;
+    });
+    const borderColors = (hist.labels || []).map((_, i) => {
+      if (i === marks.now) return '#0550ae';
+      if (i === marks.compare) return '#7d5a00';
+      return 'transparent';
+    });
+    const borderWidths = (hist.labels || []).map((_, i) => (
+      (i === marks.now || i === marks.compare) ? 2 : 0
+    ));
     function runChart(cid, vals, label, colors) {
       const el = document.getElementById(cid);
       if (!el) return;
       const useTime = histMode === 'runs' || String(hist.labels[0] || '').includes('T');
       const xy = useTime ? toXY(hist.labels, vals) : null;
       const xyColors = useTime ? xy.map(p => colors[p.i] || '#5b8def') : colors;
+      const xyBorder = useTime ? xy.map(p => borderColors[p.i] || 'transparent') : borderColors;
+      const xyBorderW = useTime ? xy.map(p => borderWidths[p.i] || 0) : borderWidths;
       const xBounds = useTime && xy.length ? {
         min: Math.min(...xy.map(p => p.x)),
         max: Math.max(...xy.map(p => p.x)),
@@ -1182,6 +1590,8 @@ function mountQueryHistory(item, diveId, testName) {
           datasets: [{
             data: xy,
             backgroundColor: xyColors,
+            borderColor: xyBorder,
+            borderWidth: xyBorderW,
             borderSkipped: false,
             barPercentage: 0.9,
             categoryPercentage: 0.9,
@@ -1191,6 +1601,8 @@ function mountQueryHistory(item, diveId, testName) {
           datasets: [{
             data: vals,
             backgroundColor: colors,
+            borderColor: borderColors,
+            borderWidth: borderWidths,
             borderSkipped: false,
             barPercentage: 0.9,
           }]
@@ -1223,6 +1635,8 @@ function mountQueryHistory(item, diveId, testName) {
                   const bits = [];
                   const i = useTime ? (xy[it.dataIndex]?.i) : it.dataIndex;
                   if (i == null) return '';
+                  if (i === marks.now) bits.push('now / focus run');
+                  if (i === marks.compare) bits.push('compare wave');
                   if (cid.endsWith('_ydb')) {
                     const cur = vals[i];
                     const start = Math.max(0, i - win);
@@ -1259,11 +1673,38 @@ function mountQueryHistory(item, diveId, testName) {
         plugins: [{
           id: 'qbase',
           afterDraw(chart) {
+            const { left, right, top, bottom } = chart.chartArea;
+            const ctx = chart.ctx;
+            const xScale = chart.scales.x;
+            function vline(idx, color, tag) {
+              if (idx < 0 || !xScale) return;
+              let x;
+              if (useTime && xy && xy.length) {
+                const pt = xy.find(p => p.i === idx);
+                if (!pt) return;
+                x = xScale.getPixelForValue(pt.x);
+              } else {
+                x = xScale.getPixelForValue(idx);
+              }
+              if (x < left || x > right) return;
+              ctx.save();
+              ctx.beginPath();
+              ctx.setLineDash([3, 3]);
+              ctx.strokeStyle = color;
+              ctx.lineWidth = 1.5;
+              ctx.moveTo(x, top);
+              ctx.lineTo(x, bottom);
+              ctx.stroke();
+              ctx.fillStyle = color;
+              ctx.font = '10px sans-serif';
+              ctx.fillText(tag, Math.min(x + 3, right - 36), top + 12);
+              ctx.restore();
+            }
+            vline(marks.now, '#0969da', 'now');
+            vline(marks.compare, '#9a6700', 'cmp');
             if (!showBase || !cid.endsWith('_ydb') || alertBase == null) return;
             const y = chart.scales.y.getPixelForValue(alertBase);
-            const { left, right, top, bottom } = chart.chartArea;
             if (y < top || y > bottom) return;
-            const ctx = chart.ctx;
             ctx.save();
             ctx.beginPath(); ctx.setLineDash([4, 3]); ctx.strokeStyle = '#0969da'; ctx.lineWidth = 1;
             ctx.moveTo(left, y); ctx.lineTo(right, y); ctx.stroke();
@@ -1285,6 +1726,133 @@ function mountQueryHistory(item, diveId, testName) {
   paint();
 }
 
+function kindSev(k) {
+  return ({ ok: 0, nodata: 1, watch: 2, slow: 3, fail: 4, both: 5, missing: 4 })[k] || 0;
+}
+function kindLabelShort(k) {
+  if (k === 'nodata') return 'no data';
+  if (k === 'watch') return 'soft';
+  if (k === 'slow') return 'slow';
+  if (k === 'fail') return 'fail';
+  if (k === 'both') return 'fail+slow';
+  if (k === 'missing') return 'missing';
+  return 'ok';
+}
+function metricsAtHistIndex(q, idx) {
+  const h = q.history || {};
+  const m = classifyAtIndex(h.ydb, h.fail_rate, idx, h.nodata);
+  if (h.error_classes && h.error_classes[idx]) m.error_class = h.error_classes[idx];
+  return m;
+}
+function diveData(r) {
+  const fin = (r.issue === 'in_progress' && r.finished) ? r.finished : null;
+  return fin || r;
+}
+function diveFocusRunIndex(diveId, data) {
+  const runs = data.now_runs || [];
+  if (!runs.length) return -1;
+  if (diveRunFocus[diveId] != null && diveRunFocus[diveId] >= 0 && diveRunFocus[diveId] < runs.length) {
+    return diveRunFocus[diveId];
+  }
+  return runs.length - 1;
+}
+function queryPillHtml(q, diveId, item, data) {
+  const runs = data.now_runs || [];
+  const latestRun = runs.length ? runs[runs.length - 1] : null;
+  const cmpId = getCompareId(item.branch, item.db);
+  const wave = cmpId ? waveEntry(item.branch, item.db, cmpId) : null;
+  // With compare: now = latest suite run. Without: focused Last-runs card.
+  const focusIdx = diveFocusRunIndex(diveId, data);
+  const focusRun = wave ? latestRun : (runs[focusIdx] || latestRun);
+  let nowM = null;
+  if (q.history && focusRun) {
+    const hi = findHistIndexForRun(q.history, focusRun);
+    if (hi >= 0) nowM = metricsAtHistIndex(q, hi);
+  }
+  if (!nowM) {
+    nowM = {
+      kind: q.kind || 'ok',
+      ydb_pct: q.ydb_pct,
+      ydb_now: q.ydb_now,
+      error_class: q.error_class,
+    };
+  }
+  let prevM = null;
+  if (wave && q.history) {
+    const pi = findHistIndexForWave(q.history, wave);
+    if (pi >= 0) prevM = metricsAtHistIndex(q, pi);
+    else prevM = { kind: 'nodata', ydb_pct: null };
+  }
+  let cls = (nowM.kind === 'fail' || nowM.kind === 'both') ? 'fail'
+    : (nowM.kind === 'slow' ? 'slow'
+    : (nowM.kind === 'watch' ? 'watch'
+    : (nowM.kind === 'nodata' ? 'nodata' : 'qok')));
+  let labelExtra = '';
+  if (prevM) {
+    const dSev = kindSev(nowM.kind) - kindSev(prevM.kind);
+    if (dSev < 0) cls = 'delta-better';
+    else if (dSev > 0) cls = 'delta-worse';
+    else if (prevM.kind === 'watch' || nowM.kind === 'watch') cls = 'delta-soft';
+    const a = kindLabelShort(prevM.kind);
+    const b = kindLabelShort(nowM.kind);
+    const pctBit = (prevM.ydb_pct != null || nowM.ydb_pct != null)
+      ? ` · ${(prevM.ydb_pct != null ? pct(prevM.ydb_pct) : '—')} → ${(nowM.ydb_pct != null ? pct(nowM.ydb_pct) : '—')}`
+      : '';
+    labelExtra = a === b ? ` ${b}${pctBit}` : ` ${a} → ${b}${pctBit}`;
+  } else {
+    labelExtra = nowM.kind === 'nodata' ? ' · no data'
+      : (nowM.ydb_pct != null ? ' ' + pct(nowM.ydb_pct)
+        : (nowM.ydb_now != null ? ' ' + fmt(nowM.ydb_now) : ''));
+  }
+  const err = (nowM.kind === 'fail' || nowM.kind === 'both') && nowM.error_class
+    ? ` · ${nowM.error_class}` : '';
+  return `<button type="button" class="pill ${cls}" data-qpick="${diveId}" data-test="${esc(q.test)}">${esc(q.test)}${esc(labelExtra)}${err}${q.history ? '' : ' · no hist'}</button>`;
+}
+function buildQueryBlockHtml(item, diveId) {
+  const data = diveData(item);
+  const catalog = (data.queries || []).slice().sort((a, b) => String(a.test).localeCompare(String(b.test)));
+  const cmpId = getCompareId(item.branch, item.db);
+  const focusIdx = diveFocusRunIndex(diveId, data);
+  const focusRun = (data.now_runs || [])[focusIdx];
+  const focusNote = focusRun
+    ? ` · focus <code>${esc(focusRun.label || focusRun.ci_version || '')}</code>`
+    : '';
+  const cmpNote = cmpId ? ` · compare <code>${esc(cmpId)}</code>` : '';
+  if (catalog.length) {
+    const catalogHtml = catalog.map(q => queryPillHtml(q, diveId, item, data)).join('');
+    return `<div>
+        <div class="muted"><b>Queries</b> (${catalog.length}) · клик = история${focusNote}${cmpNote} ·
+          <span class="pill qok">ok</span>
+          <span class="pill watch">soft</span>
+          <span class="pill slow">hard slow</span>
+          <span class="pill fail">fail</span>
+          <span class="pill delta-better">worse→better</span>
+          <span class="pill delta-worse">better→worse</span>
+          <span class="pill nodata">no data</span>
+        </div>
+        <div class="qlist">${catalogHtml}</div>
+      </div>`;
+  }
+  const slow = listedSlow(data);
+  const fails = listedFail(data);
+  const qPill = (q, cls) => {
+    const err = (cls === 'fail' || q.kind === 'fail' || q.kind === 'both') && q.error_class
+      ? ` · ${q.error_class}` : '';
+    return `<button type="button" class="pill ${cls}" data-qpick="${diveId}" data-test="${esc(q.test)}">${esc(q.test)}${
+      cls === 'nodata' ? ' · no data'
+        : (q.ydb_pct != null ? ' ' + pct(q.ydb_pct) : (q.ydb_now != null ? ' ' + fmt(q.ydb_now) : ''))
+    }${err}${q.history ? '' : ' · no hist'}</button>`;
+  };
+  return `<div>
+        <div class="muted"><b>Slow queries</b> (клик = история · last run vs prev 7)</div>
+        <div class="qlist">${slow.length ? slow.map(q => qPill(q, 'slow')).join('') : '<span class="muted">нет (или нет daily dump)</span>'}</div>
+      </div>
+      <div>
+        <div class="muted"><b>Failing queries</b> (клик = история)</div>
+        <div class="qlist">${fails.length ? fails.map(q => qPill(q, 'fail')).join('') : '<span class="muted">—</span>'}</div>
+      </div>`;
+}
+
 function diveHtml(r, id) {
   const fin = (r.issue === 'in_progress' && r.finished) ? r.finished : null;
   const data = fin || r;
@@ -1294,9 +1862,13 @@ function diveHtml(r, id) {
       (fin ? ` · ниже — <b>последний завершённый</b> (${esc(fin.issue || fin.status || 'ok')})` : ' · finished twin нет') +
       `</div>`
     : '';
-  const runs = (data.now_runs || []).map(run => {
+  const focusIdx = diveFocusRunIndex(id, data);
+  const cmpId = getCompareId(r.branch, r.db);
+  const runs = (data.now_runs || []).map((run, ri) => {
     const link = run.report ? `<a href="${esc(run.report)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">report</a>` : '—';
-    return `<div class="run-card">
+    const active = ri === focusIdx ? ' active' : '';
+    const cmpHit = cmpId && run.ci_version && run.ci_version === cmpId ? ' style="outline:1px dashed #9a6700"' : '';
+    return `<div class="run-card${active}" data-run-card="${id}" data-run-idx="${ri}" data-ci="${esc(run.ci_version || '')}"${cmpHit}>
       <div class="t">${esc(run.label)}</div>
       <div>fail ${fmtFail(run.fail_rate)} · ydb ${fmt(run.ydb)}</div>
       <div class="muted">${esc(run.ci_version || '')}</div>
@@ -1312,60 +1884,11 @@ function diveHtml(r, id) {
         : 'Нет последних прогонов (missing/stale)'
   }</div>`;
 
-  const slow = listedSlow(data);
-  const fails = listedFail(data);
-  const catalog = (data.queries || []).slice().sort((a, b) => String(a.test).localeCompare(String(b.test)));
-  const qPill = (q, cls) => {
-    const err = (cls === 'fail' || q.kind === 'fail' || q.kind === 'both') && q.error_class
-      ? ` · ${q.error_class}` : '';
-    return `<button type="button" class="pill ${cls}" data-qpick="${id}" data-test="${esc(q.test)}">${esc(q.test)}${
-      cls === 'nodata' ? ' · no data'
-        : (q.ydb_pct != null ? ' ' + pct(q.ydb_pct) : (q.ydb_now != null ? ' ' + fmt(q.ydb_now) : ''))
-    }${err}${q.history ? '' : ' · no hist'}</button>`;
-  };
-  const slowHtml = slow.length
-    ? slow.map(q => qPill(q, 'slow')).join('')
-    : '<span class="muted">нет (или нет daily dump)</span>';
-  const failHtml = fails.length
-    ? fails.map(q => qPill(q, 'fail')).join('')
-    : '<span class="muted">—</span>';
-  const catalogHtml = catalog.length
-    ? catalog.map(q => {
-        const cls = (q.kind === 'fail' || q.kind === 'both') ? 'fail'
-          : (q.kind === 'slow' ? 'slow'
-          : (q.kind === 'watch' ? 'watch'
-          : (q.kind === 'nodata' ? 'nodata' : 'qok')));
-        return qPill(q, cls);
-      }).join('')
-    : '';
-
   const reportUrl = data.report || r.report;
   const report = reportUrl
     ? `<a href="${esc(reportUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">latest report</a>`
     : '—';
 
-  const queryBlock = catalog.length
-    ? `<div>
-        <div class="muted"><b>Queries</b> (${catalog.length}) · клик = история ·
-          <span class="pill qok">ok</span>
-          <span class="pill watch">soft</span>
-          <span class="pill slow">hard slow</span>
-          <span class="pill fail">fail</span>
-          <span class="pill fail">timeout/diff/other</span>
-          <span class="pill nodata">no data</span>
-        </div>
-        <div class="qlist">${catalogHtml}</div>
-      </div>`
-    : `<div>
-        <div class="muted"><b>Slow queries</b> (клик = история · last run vs prev 7)</div>
-        <div class="qlist">${slowHtml}</div>
-      </div>
-      <div>
-        <div class="muted"><b>Failing queries</b> (клик = история)</div>
-        <div class="qlist">${failHtml}</div>
-      </div>`;
-
-  // query/history pickers need catalogs on the row object
   if (fin) {
     r.queries = data.queries;
     r.query_map = data.query_map;
@@ -1379,10 +1902,10 @@ function diveHtml(r, id) {
     ${waveNote}
     <div class="muted">${esc((r.reasons || []).join(' · '))} · ${report}</div>
     <div>
-      <div class="muted" style="margin-bottom:6px"><b>Last runs</b>${fin ? ' <span class="pill nodata">finished</span>' : ''}</div>
+      <div class="muted" style="margin-bottom:6px"><b>Last runs</b> · клик = focus queries${fin ? ' <span class="pill nodata">finished</span>' : ''}</div>
       <div class="runs">${runs}</div>
     </div>
-    ${queryBlock}
+    <div id="${id}_qblock">${buildQueryBlockHtml(r, id)}</div>
     <div id="${id}_qhist"></div>
     <div class="toolbar" style="margin:0">
       <button type="button" class="btn" data-hist="${id}">Show suite history</button>
@@ -1492,14 +2015,52 @@ function renderInbox() {
       if (item) mountHistory(item, id);
     });
   });
-  root.querySelectorAll('button[data-qpick]').forEach(btn => {
-    btn.addEventListener('click', (ev) => {
+  function bindQPicks(scope) {
+    (scope || root).querySelectorAll('button[data-qpick]').forEach(btn => {
+      btn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        const id = btn.dataset.qpick;
+        const test = btn.dataset.test;
+        const idx = Number(root.querySelector(`tr.row[data-id="${id}"]`)?.dataset.idx);
+        const item = rows[idx];
+        if (item && test) mountQueryHistory(item, id, test);
+      });
+    });
+  }
+  bindQPicks(root);
+  root.querySelectorAll('[data-run-card]').forEach(card => {
+    card.addEventListener('click', (ev) => {
+      if (ev.target.closest('a')) return;
       ev.stopPropagation();
-      const id = btn.dataset.qpick;
-      const test = btn.dataset.test;
+      const id = card.dataset.runCard;
+      const ri = Number(card.dataset.runIdx);
       const idx = Number(root.querySelector(`tr.row[data-id="${id}"]`)?.dataset.idx);
       const item = rows[idx];
-      if (item && test) mountQueryHistory(item, id, test);
+      if (!item || !Number.isFinite(ri)) return;
+      const data = diveData(item);
+      const runs = data.now_runs || [];
+      const run = runs[ri];
+      diveRunFocus[id] = ri;
+      const isLatest = ri === runs.length - 1;
+      if (run && run.ci_version && !isLatest) {
+        const list = waveListFor(item.branch, item.db);
+        if (list.some(w => !w.current && (w.id === run.ci_version || w.ci_version === run.ci_version))) {
+          setCompareId(item.branch, item.db, run.ci_version);
+        }
+      } else if (isLatest) {
+        setCompareId(item.branch, item.db, '');
+      }
+      // refresh heatmap compare selects + this dive's cards/queries; keep row open
+      const openIds = [...root.querySelectorAll('tr.row.open')].map(tr => tr.dataset.id);
+      renderAll();
+      openIds.forEach(oid => {
+        const tr = document.querySelector(`#inbox tr.row[data-id="${oid}"]`);
+        const detail = document.querySelector(`#inbox tr.detail[data-detail="${oid}"]`);
+        if (tr && detail) {
+          tr.classList.add('open');
+          detail.classList.remove('hidden');
+        }
+      });
     });
   });
 }

@@ -87,6 +87,7 @@ python3 generate.py \
 | Branch dimension | UI filter; heatmap/counters/waves = `Branch × DbAlias`; wave = `CiVersion × Branch × DbAlias` |
 | Date interval | From/To (started day); filters inbox, heatmap cells, last wave, history charts; Reset → full `--since..until` |
 | Wave view | UI toggle **finished** (default) = last completed run in heatmap/inbox; **all** = latest wave state (prefer in_progress when suite not in current wave yet) |
+| Compare wave | Per-cluster select (left of Last wave) from `wave_list`; heatmap shows `was → now` (e.g. `ok → fail`, `slow 8 → slow 4`); dive query pills gradient worse→better / better→worse; charts mark **now** (blue) and **cmp** (amber). Option label: `CiVersion · HH:MM · sha8 · run day` (no git commit date in mart). Click older Last-runs card syncs compare; latest clears it. |
 
 Focus DbAliases: `sas_big/small`, `cloud_slonnn_64/128`, `vla_big/small`, `vla_3_node`.
 
@@ -95,5 +96,5 @@ Branch for cloud often from `CiBranch` (`trunk`) when `Branch`/`Version` empty.
 ## UI layers
 
 1. **Now** — counters + Db×family heatmap + problem inbox  
-2. **Deep dive** — click inbox row → last runs, bad queries, report links  
-3. **History** — “Show history” charts (suite-level only)
+2. **Deep dive** — click inbox row → last runs (clickable focus), query catalog, report links  
+3. **History** — “Show history” charts (suite-level only); query charts highlight now/compare runs

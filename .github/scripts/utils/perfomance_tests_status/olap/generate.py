@@ -926,14 +926,48 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
     # Display waves: full --since window (alerts still use 14d lookback above)
     display_waves = build_waves(points, since, branch_set)
     display_expected = expected_suites(display_waves)
+    # Best sha8 per (branch, db, ci_version) from suite points
+    wave_sha: dict[tuple[str, str, str], str] = {}
+    for p in points:
+        civ = p.get("ci_version") or ""
+        if not civ or p["db"] not in FOCUS_DBS or p["branch"] not in branch_set:
+            continue
+        ver = (p.get("version") or "").strip()
+        if not ver or ver == "—":
+            continue
+        key3 = (p["branch"], p["db"], civ)
+        prev = wave_sha.get(key3)
+        if prev is None or (len(ver) >= 8 and len(prev) < 8):
+            wave_sha[key3] = ver[:8]
+
     waves_meta = {}
+    wave_list: dict[str, list[dict]] = {}
     for (br, db), waves in display_waves.items():
         if not waves:
             continue
         last = waves[-1]
-        waves_meta[f"{br}|{db}"] = wave_meta_entry(
-            br, db, last, len(display_expected.get((br, db), ()))
-        )
+        exp_n = len(display_expected.get((br, db), ()))
+        waves_meta[f"{br}|{db}"] = wave_meta_entry(br, db, last, exp_n)
+        entries = []
+        for w in reversed(waves):  # newest first
+            max_ts = w["max_ts"]
+            min_ts = w["min_ts"]
+            civ = w["ci_version"]
+            entries.append(
+                {
+                    "id": civ,
+                    "ci_version": civ,
+                    "max_ts": max_ts.isoformat().replace("+00:00", "")[:19],
+                    "min_ts": min_ts.isoformat().replace("+00:00", "")[:19],
+                    "day": max_ts.date().isoformat(),
+                    "sha8": wave_sha.get((br, db, civ), "—"),
+                    "suites": len(w["suites"]),
+                    "expected": exp_n,
+                    "suite_names": sorted(w["suites"]),
+                    "current": w is last,
+                }
+            )
+        wave_list[f"{br}|{db}"] = entries
 
     # Fallback: freshest wave per DbAlias across branches (cloud=trunk, etc.)
     waves_by_db: dict[str, dict] = {}
@@ -1005,6 +1039,7 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
             "cells": cells,
         },
         "waves": waves_meta,
+        "wave_list": wave_list,
         "waves_by_db": waves_by_db,
         "last_activity": last_activity,
         "inbox": inbox,
@@ -1012,11 +1047,18 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
         "rules": {
             "now": f"last completed run",
             "baseline": f"previous {BASELINE_RUNS} runs",
+            "baseline_runs": BASELINE_RUNS,
             "dur_soft": f"+{int(DUR_TOL*100)}% floor · thr=max(soft, {NOISE_K:g}×noise) · last run > base",
             "dur_hard": f"+{int(DUR_HARD*100)}% (or thr if noisier) on last run → hard slow; soft → watch",
             "dur": f"hard +{int(DUR_HARD*100)}% / soft +{int(DUR_TOL*100)}% · noise×{NOISE_K:g} · last run",
             "fail_broken": FAIL_BROKEN,
             "fail_hot": FAIL_HOT,
+            "fail_rise": FAIL_RISE,
+            "dur_tol": DUR_TOL,
+            "dur_hard": DUR_HARD,
+            "noise_k": NOISE_K,
+            "outlier_mult": OUTLIER_MULT,
+            "slow_persist_min": SLOW_PERSIST_MIN,
             "expected": f"suites in ≥{int(EXPECTED_MIN_SHARE*100)}% of CiVersion waves / {EXPECTED_LOOKBACK_DAYS}d",
             "wave": "CiVersion × Branch × DbAlias",
         },
@@ -1069,6 +1111,18 @@ def _query_history(
             r.get("report") or report_by_day.get(str(r.get("day") or "")[:10])
             for r in tail
         ],
+        "error_classes": [
+            None
+            if r.get("nodata")
+            else (
+                r.get("error_class")
+                or error_class_of(r.get("color"), r.get("diff_response"))
+            )
+            for r in tail
+        ],
+        "nodata": [bool(r.get("nodata")) for r in tail],
+        "versions": [r.get("version") for r in tail],
+        "ci_versions": [r.get("ci_version") for r in tail],
         "mode": "runs" if any(r.get("ts") and "T" in str(r.get("ts")) for r in tail) else "daily",
     }
 
@@ -1217,6 +1271,8 @@ def load_daily_points(
                         "error_class": error_class_of(
                             color, diff_response, nodata=bool(nodata)
                         ),
+                        "version": commit_of(o),
+                        "ci_version": ci_version_of(o),
                     }
                 )
                 continue
@@ -1233,6 +1289,8 @@ def load_daily_points(
                     "ydb": None if ydb is None else float(ydb),
                     "fr": (fails / n) if n else 0.0,
                     "report": report,
+                    "version": commit_of(o),
+                    "ci_version": ci_version_of(o),
                 }
             )
     for key, rows in out.items():

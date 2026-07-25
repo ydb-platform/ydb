@@ -76,7 +76,8 @@ A defect in these files can turn inequivalent supported plans into
 | File | Trusted responsibility |
 |---|---|
 | `semantic_snapshot.h` | Version-one catalog, snapshot, boundary, and fail-closed exporter contract. |
-| `semantic_snapshot.cpp` | Mechanical catalog and plan export; scalar normalization and safety gates, including exact literal-only String `Concat` folding and the passive-Double constructor; operator, exact scalar- and one-level `IN`-inside-`IN` nesting, subplan, correlated outer-binding, StageGraph, topology, task, and resource validation; deterministic JSON serialization. |
+| `semantic_snapshot.cpp` | Mechanical catalog and plan export; scalar normalization and safety gates, including exact literal-only String `Concat` folding and the passive-Double constructor; operator, exact scalar- and one-level `IN`-inside-`IN` nesting, subplan, correlated outer-binding, StageGraph, topology, task, and resource validation; exact read-range integration; deterministic JSON serialization. |
+| `read_range_predicate_impl.h` | Closed q9/q45 point and finite point-set `RangeInfo::ComputeNode` grammar, physical-key/catalog binding, extractor-cap and node-identity validation, and lowering to existing equality/static-`IN` predicate IR. Included exactly once inside `semantic_snapshot.cpp`'s anonymous namespace. |
 | `rbo_verifier/ir.py` | Strict JSON decoding, version/schema validation, normalized IR, expression typing, passive-Double use confinement, all-plan-root virtual-binding confinement, exact scalar- and one-level `IN`-inside-`IN` plus correlated-subplan shape checks, and operator/StageGraph invariants. |
 | `rbo_verifier/types.py` | Supported scalar identities, exact domains, opaque-carrier family, and compatibility predicates. |
 | `rbo_verifier/smt.py` | Typed immutable SMT terms, script-owned one-constructor product datatypes, closed quantifier-free exact function definitions, quantifier-safe sharing, deterministic canonical rendering, exact marked-obligation substitution, and solver-output parsing primitives. |
@@ -99,6 +100,41 @@ a verifier limit. The cache changes the cost of repeated routing-fact and set
 lookups, not the formula or proof obligation. Deep independently constructed
 shared-DAG regressions check both equal-key coalescing and separation of unequal
 terms with deliberately colliding hashes.
+
+The exact read-range audit seam is intentionally closed and C++-only.
+`RangeInfo::ComputeNode` is authoritative because it is the program consumed
+by runtime range extraction; `OriginalPredicate` is not trusted as a semantic
+proxy. An accepted read must be an unordered column-store StageGraph source
+whose catalog has one non-null `Int64` physical primary key, and the read must
+emit that physical key exactly once. The descriptive `KeyColumns` entry must
+resolve independently to the same output IU. The matcher accepts only q9's
+single-point `RangeFinalize`/`RangeMultiply`/`RangeUnion`/`RangeFor` tree or
+q45's typed static tuple and exact
+`IfPresent`/`FlatMap`/`Collect`/`Take`/overflow-fallback program. It checks
+binders, tuple ordinals, shared-node identities, descriptors, the
+10,000/10,001 caps, and `ExpectedMaxRanges`. Missing annotations on generated
+prephysical nodes are permitted, while every present annotation is additional
+evidence that must agree. The only output is existing exact equality or
+static-`IN` IR, optionally conjoined with an independently decoded OLAP
+predicate; there is no new Python semantic axiom.
+
+The 929-line matcher lives in `read_range_predicate_impl.h` and is included
+exactly once after the shared scalar-safety and read-column helpers inside
+`semantic_snapshot.cpp`'s anonymous namespace. This layout makes the complete
+grammar one review unit without duplicating general helpers or exposing a
+second exporter API. Mutation tests cover each finite enumerated operator,
+cap, binder, tuple-index, pointer-sharing, descriptor, primary-key, and
+annotation condition, plus duplicate/adjacent values,
+`OriginalPredicate` irrelevance, `ComputeNode` sensitivity, and conjunction
+with pushed OLAP filtering. Focused production-host q45 reaches formula
+construction; q9 reaches the verifier and then fails closed on the independent
+4,096-row relation construction bound. This slice adds no proof or optimizer
+finding. The checkpoint partitions TPCH as 18 formula / 2 unsupported / 2
+no-pair and TPC-DS as 56 / 25 / 18. This is 74/121 corpus formulas, 74/101
+exact-pair formulas, 74/93 preparation-success formulas, and 74/80 verifier
+entrants; unsupported outcomes split 21 initial / 0 final / 6 verifier. The
+proof floor remains twenty-seven, with 232/232 C++ exporter, 593/593 Python
+verifier, and 14/14 policy tests green.
 
 The packed-row declaration substrate remains deliberately narrower than a
 general SMT datatype or macro facility. A product has exactly one constructor,
@@ -691,6 +727,29 @@ cannot prove headroom. Independent scalar boundary/special tests, a two-row
 aggregate regression, q66's real snapshots, the complete formula dashboards,
 and a separate timed solver experiment cover the slice.
 
+The latest post-read-range 2026-07-25 physical-line audit uses source
+`6e5b1ab2d12` plus this documentation update:
+
+| Area | Physical lines |
+|---|---:|
+| Ten trusted Python semantic modules | 12,424 |
+| C++ exporter (`semantic_snapshot.cpp`, `.h`, and `read_range_predicate_impl.h`) | 11,332 |
+| **Proof-producing code total** | **23,756** |
+| Tests, outside the TCB | 57,915 |
+| Diagnostic/orchestration tools, outside the TCB | 5,230 |
+| Documentation, outside the TCB | 8,421 |
+
+Relative to the post-q66 audit, exact range handling adds 977 trusted C++ lines
+and 846 test lines; trusted Python and diagnostic-tool size are unchanged.
+The added C++ total consists of the closed 929-line matcher plus its small
+integration seam. It lowers only to existing equality/static-`IN` JSON, so no
+Python evaluator or SMT theorem rule was added. The independent audit surface
+is the complete `ComputeNode` grammar and its catalog/output-key binding,
+isolated in `read_range_predicate_impl.h`; source safety, column resolution,
+predicate conjunction, JSON validation, and Python equality/membership
+semantics are reused. Cardinality-certified integral `AVG` is the next planned
+trusted semantic slice.
+
 ## External assumptions
 
 The production optimizer claim additionally relies on facts not established by
@@ -839,6 +898,6 @@ each slice. It is an audit checklist, not a claim that tests are exhaustive.
 | Types, NULLs, scalar functions | `semantic_snapshot.cpp`; `ir.py`; `types.py`; `scalar.py`; `decimal.py`; `string_order.py` | `ut/test_scalar.py`; `test_decimal.py`; `test_string_order.py`; `test_string_proof.py`; `test_sql_in.py`; canonical literal-only String-`Concat`, String-predicate, Date-year, proven-total Date-`Unwrap`, direct-Uint64-`Just`, exact Decimal weak-`SafeCast`, proven-present raw-tuple Date-`SafeCast`, restricted whole-floating-predicate, passive-Double carrier, and exact literal-wrapper mutations; integral-right Decimal finite-bound boundary/special and two-row aggregate tests; passive-carrier identity/mutation and non-key Sort/Merge passenger proofs; `source_type`, NULL, overflow, widening-special, and fail-closed references; synthetic real-host proofs; exporter near-miss mutations |
 | Logical bags, order, limits, errors | `semantic_snapshot.cpp`; `ir.py`; `smt.py`; `sort_network.py`; `relation.py` | `ut/test_logical_reference.py`; `test_limit.py`; `test_sort.py`; exhaustive network topology/prefix/nullable/mixed-order/Merge-hole/AVG-state tests; packed-layout, declaration-structure, present-prefix equality, and cap tests; focused concrete differential tests |
 | Aggregates and subplans | `semantic_snapshot.cpp`; `ir.py`; `decimal.py`; `scalar.py`; `relation.py` | aggregate/DistinctAll/count-distinct/unwrap exporter and IR mutations; exhaustive count-distinct duplicates and triangular cap; scalar-final unwrap empty/all-NULL/present references; Decimal-extrema raw-code differential, routing, and solver-mutation checks; nullable composite-key differential and staged-routing checks; `ut/test_subplans.py`; cardinality, demand, NULL, duplicate, error, exact scalar- and one-level `IN`-inside-`IN` ownership/nesting/cache/choice checks, nested finite references and sequential-semi solver differentials, correlated outer-binding, one- and exact two-dependency `EXISTS` ordering/shape/semi/anti checks, dynamic-`IN` mapping/cache/pair-cap and positive-nullable integral/Date-context checks, real-host Decimal-AVG and correlated-`EXISTS`, and non-null/nullable `IN`-to-`left_semi` cases |
-| StageGraph, joins, and routing | `semantic_snapshot.cpp`; `ir.py`; `scalar.py`; `stages.py`; `relation.py` | `ut/test_stagegraph_reference.py`; `test_stage_compaction.py`; shared-IU semi/anti exhaustive execution; JoinKey budget/mutation checks; C++ topology/task mutations; real-host integration |
+| StageGraph, reads, joins, and routing | `semantic_snapshot.cpp`; `read_range_predicate_impl.h`; `ir.py`; `scalar.py`; `stages.py`; `relation.py` | exact q9 point and q45 finite-set `ComputeNode` references; exhaustive range-grammar/key/annotation/pointer-identity mutations; pushed-range-plus-OLAP conjunction; `OriginalPredicate` irrelevance and `ComputeNode` sensitivity; `ut/test_stagegraph_reference.py`; `test_stage_compaction.py`; shared-IU semi/anti exhaustive execution; JoinKey budget/mutation checks; C++ topology/task mutations; real-host integration |
 | SMT construction and verdict | `smt.py`; `verify.py` | `ut/test_smt.py`; `test_verify.py`; product ownership, closed-definition, free-symbol, nullary-capture, and foreign-declaration rejections; emitted-SMT inspection; identity and semantic-mutation obligations |
 | Workload reach and regressions | no additional trusted code | `benchmark_ut/`, coverage policy, TPCH/TPC-DS reports, inspector and replay for candidates |

@@ -1186,7 +1186,7 @@ function renderHeatmap() {
         const live = liveCell(branch, db, fam);
         const st = live.status || 'ok';
         const tip = live.compare && live.prev
-          ? `compare → now: ${shortCellStatus(live.prev.status, live.prev.n_fail, live.prev.n_slow, live.prev.n_soft)} → ${shortCellStatus(live.delta_status, live.n_fail, live.n_slow, live.n_soft)}`
+          ? `compare → now: ${shortCellStatus(live.prev.status, live.prev.n_fail, live.prev.n_slow, live.prev.n_soft, live.prev.n_nodata)} → ${shortCellStatus(live.delta_status, live.n_fail, live.n_slow, live.n_soft, live.n_nodata)}`
           : ((st === 'regression' || st === 'broken' || st === 'watch' || st === 'nodata')
             ? `${live.n_fail || 0} fail · ${live.n_slow || 0} hard slow · ${live.n_soft || 0} soft · ${live.n_nodata || 0} no data`
             : `${live.n_hot || 0} suites`);

@@ -3351,6 +3351,87 @@ private:
     TRestrictedConcatAuditToken() = default;
 };
 
+class TRestrictedFloatingPredicateAuditor;
+
+class TRestrictedFloatingPredicateAuditToken {
+    friend class TRestrictedFloatingPredicateAuditor;
+
+private:
+    TRestrictedFloatingPredicateAuditToken() = default;
+};
+
+enum class ERestrictedFloatingConstant : ui8 {
+    PointNine,
+    OnePointTwo,
+    TwoThirds,
+    ThreeHalves,
+};
+
+struct TRestrictedFloatingConstant {
+    ERestrictedFloatingConstant Kind;
+    TStringBuf Fingerprint;
+};
+
+std::optional<TRestrictedFloatingConstant> RecognizeRestrictedFloatingConstant(
+    const TExprNode& node)
+{
+    // Tags name the exact IEEE-754 binary64 payload produced by YQL parsing
+    // and constant folding.  The two division spellings are admitted only as
+    // aliases of the directly observed folded literals.
+    const auto literal = [](const TExprNode& value)
+        -> std::optional<TStringBuf>
+    {
+        if (!value.IsCallable("Double") ||
+            value.ChildrenSize() != 1 ||
+            !value.Child(0)->IsAtom())
+        {
+            return std::nullopt;
+        }
+        return value.Child(0)->Content();
+    };
+
+    if (const auto value = literal(node)) {
+        if (*value == "0.9") {
+            return TRestrictedFloatingConstant{
+                ERestrictedFloatingConstant::PointNine,
+                "yql-double-bits-3feccccccccccccd-v1"};
+        }
+        if (*value == "1.2") {
+            return TRestrictedFloatingConstant{
+                ERestrictedFloatingConstant::OnePointTwo,
+                "yql-double-bits-3ff3333333333333-v1"};
+        }
+        if (*value == "0.6666666666666666") {
+            return TRestrictedFloatingConstant{
+                ERestrictedFloatingConstant::TwoThirds,
+                "yql-double-bits-3fe5555555555555-v1"};
+        }
+        if (*value == "1.5") {
+            return TRestrictedFloatingConstant{
+                ERestrictedFloatingConstant::ThreeHalves,
+                "yql-double-bits-3ff8000000000000-v1"};
+        }
+        return std::nullopt;
+    }
+
+    if (!node.IsCallable("/") || node.ChildrenSize() != 2) {
+        return std::nullopt;
+    }
+    const auto left = literal(*node.Child(0));
+    const auto right = literal(*node.Child(1));
+    if (left && right && *left == "2.0" && *right == "3.0") {
+        return TRestrictedFloatingConstant{
+            ERestrictedFloatingConstant::TwoThirds,
+            "yql-double-bits-3fe5555555555555-v1"};
+    }
+    if (left && right && *left == "3.0" && *right == "2.0") {
+        return TRestrictedFloatingConstant{
+            ERestrictedFloatingConstant::ThreeHalves,
+            "yql-double-bits-3ff8000000000000-v1"};
+    }
+    return std::nullopt;
+}
+
 class TOpaqueExpressionEncoder {
 public:
     TOpaqueExpressionEncoder(
@@ -3370,6 +3451,19 @@ public:
         : RowArgument(rowArgument)
         , VisibleColumns(visibleColumns)
         , AllowRestrictedConcat(true)
+    {
+    }
+
+    TOpaqueExpressionEncoder(
+        TRestrictedFloatingPredicateAuditToken,
+        const TExprNode* rowArgument,
+        const THashSet<TString>& visibleColumns,
+        const TExprNode* restrictedFloatingComparison,
+        const TExprNode* restrictedFloatingConstant)
+        : RowArgument(rowArgument)
+        , VisibleColumns(visibleColumns)
+        , RestrictedFloatingComparison(restrictedFloatingComparison)
+        , RestrictedFloatingConstantNode(restrictedFloatingConstant)
     {
     }
 
@@ -3449,6 +3543,7 @@ private:
             Unsupported(TStringBuilder() << "Member does not reference the input row column " << column);
         }
         ScalarTypeName(node);
+        CheckSafeNode(*node.Child(1));
 
         const size_t index = ExternalIndex(
             TStringBuilder() << "column:" << column.size() << ":" << column,
@@ -3550,6 +3645,25 @@ private:
             EncodeIfPresent(node, out, depth);
             return;
         }
+        if (&node == RestrictedFloatingConstantNode && depth == 1) {
+            const auto constant =
+                RecognizeRestrictedFloatingConstant(node);
+            if (!constant) {
+                Unsupported(
+                    "Audited floating constant has no canonical tag");
+            }
+            AppendIdentityField(
+                out,
+                "node",
+                "restricted-floating-constant");
+            AppendIdentityField(
+                out,
+                "content",
+                constant->Fingerprint);
+            AppendIdentityField(out, "type", TypeFingerprint(node));
+            AppendIdentityField(out, "children", "0");
+            return;
+        }
 
         switch (node.Type()) {
             case TExprNode::Callable:
@@ -3557,7 +3671,10 @@ private:
                     if (!AllowRestrictedConcat) {
                         Unsupported("Unsupported scalar callable Concat");
                     }
-                } else {
+                } else if (
+                    &node != RestrictedFloatingComparison ||
+                    depth != 0)
+                {
                     CheckOpaqueCallable(node, allowExactUint32LiteralConversion);
                 }
                 AppendIdentityField(out, "node", "callable");
@@ -3600,6 +3717,201 @@ private:
     size_t NodeCount = 0;
     bool AllowNestedIfPresent = false;
     bool AllowRestrictedConcat = false;
+    const TExprNode* RestrictedFloatingComparison = nullptr;
+    const TExprNode* RestrictedFloatingConstantNode = nullptr;
+};
+
+bool IsRestrictedFloatingPredicateCandidate(const TExprNode& node) {
+    return node.IsCallable({"<", "<=", ">", ">="}) &&
+        node.ChildrenSize() == 2 &&
+        IsExactDataAnnotation(
+            node.Child(1)->GetTypeAnn(),
+            NUdf::EDataSlot::Double,
+            false);
+}
+
+class TRestrictedFloatingPredicateAuditor {
+public:
+    TRestrictedFloatingPredicateAuditor(
+        const TExprNode* rowArgument,
+        const THashSet<TString>& visibleColumns)
+        : RowArgument(rowArgument)
+        , VisibleColumns(visibleColumns)
+    {
+    }
+
+    NJson::TJsonValue ExportAsOpaque(
+        const TExprNode& root,
+        TExactScalarBudget& budget,
+        size_t argumentDepth)
+    {
+        Validate(root);
+        return TOpaqueExpressionEncoder(
+            TRestrictedFloatingPredicateAuditToken{},
+            RowArgument,
+            VisibleColumns,
+            &root,
+            root.Child(1)).Export(root, budget, argumentDepth);
+    }
+
+    void Validate(const TExprNode& root) const {
+        AuditRoot(root);
+    }
+
+private:
+    [[noreturn]] void Fail(TStringBuf reason) const {
+        Unsupported(TStringBuilder()
+            << "Restricted floating predicate: " << reason);
+    }
+
+    void CheckFalseLiteral(
+        const TExprNode& node,
+        TStringBuf label) const
+    {
+        if (!node.IsCallable("Bool") ||
+            node.ChildrenSize() != 1 ||
+            !node.Child(0)->IsAtom("false") ||
+            !IsExactDataAnnotation(
+                node.GetTypeAnn(),
+                NUdf::EDataSlot::Bool,
+                false))
+        {
+            Fail(TStringBuilder() << label << " must be Bool(false)");
+        }
+        LiteralExpr(node);
+        CheckScalarSafetyMetadata(node);
+        CheckScalarSafetyMetadata(*node.Child(0));
+    }
+
+    void AuditDoubleLiteral(
+        const TExprNode& node,
+        TStringBuf expected) const
+    {
+        if (!node.IsCallable("Double") ||
+            node.ChildrenSize() != 1 ||
+            !node.Child(0)->IsAtom(expected) ||
+            !IsExactDataAnnotation(
+                node.GetTypeAnn(),
+                NUdf::EDataSlot::Double,
+                false))
+        {
+            Fail(TStringBuilder()
+                << "constant component must be Double(\""
+                << expected << "\")");
+        }
+        CheckDoubleAtomFlags(*node.Child(0));
+        CheckScalarSafetyMetadata(node);
+        CheckScalarSafetyMetadata(*node.Child(0));
+    }
+
+    void CheckDoubleAtomFlags(const TExprNode& atom) const {
+        if (atom.Flags() & TNodeFlags::BinaryContent) {
+            Fail("Double literal has binary-content atom flags");
+        }
+        constexpr ui32 CanonicalTextFlags =
+            TNodeFlags::ArbitraryContent | TNodeFlags::MultilineContent;
+        if (atom.GetFlagsToCompare() != CanonicalTextFlags) {
+            Fail("Double literal has noncanonical text atom flags");
+        }
+    }
+
+    ERestrictedFloatingConstant AuditFloatingConstant(
+        const TExprNode& node) const
+    {
+        if (!IsExactDataAnnotation(
+                node.GetTypeAnn(),
+                NUdf::EDataSlot::Double,
+                false))
+        {
+            Fail("right operand must be a non-null Double constant");
+        }
+        const auto constant = RecognizeRestrictedFloatingConstant(node);
+        if (!constant) {
+            Fail(
+                "right operand is not one of the reviewed Double constants");
+        }
+        if (node.IsCallable("Double")) {
+            CheckDoubleAtomFlags(*node.Child(0));
+            CheckScalarSafetyMetadata(node);
+            CheckScalarSafetyMetadata(*node.Child(0));
+            return constant->Kind;
+        }
+        CheckScalarSafetyMetadata(node);
+        if (node.Child(0)->Child(0)->Content() == "2.0") {
+            AuditDoubleLiteral(*node.Child(0), "2.0");
+            AuditDoubleLiteral(*node.Child(1), "3.0");
+        } else {
+            AuditDoubleLiteral(*node.Child(0), "3.0");
+            AuditDoubleLiteral(*node.Child(1), "2.0");
+        }
+        return constant->Kind;
+    }
+
+    void AuditComparison(const TExprNode& node) const {
+        if (!node.IsCallable({"<", "<=", ">", ">="}) ||
+            node.ChildrenSize() != 2)
+        {
+            Fail("root comparison must be one binary ordering predicate");
+        }
+        if (!IsExactDataAnnotation(
+                node.GetTypeAnn(),
+                NUdf::EDataSlot::Bool,
+                true))
+        {
+            Fail("root comparison result must be Optional<Bool>");
+        }
+        if (!IsExactDataAnnotation(
+                node.Child(0)->GetTypeAnn(),
+                NUdf::EDataSlot::Int64,
+                true))
+        {
+            Fail("left operand must be Optional<Int64>");
+        }
+        CheckScalarSafetyMetadata(node);
+        const auto constant = AuditFloatingConstant(*node.Child(1));
+        const bool reviewed =
+            (node.IsCallable(">=") &&
+             constant == ERestrictedFloatingConstant::TwoThirds) ||
+            (node.IsCallable("<=") &&
+             constant == ERestrictedFloatingConstant::ThreeHalves) ||
+            (node.IsCallable(">") &&
+             constant == ERestrictedFloatingConstant::OnePointTwo) ||
+            (node.IsCallable("<") &&
+             constant == ERestrictedFloatingConstant::PointNine);
+        if (!reviewed) {
+            Fail(
+                "comparison operator and Double constant do not match a "
+                "reviewed workload predicate");
+        }
+
+        // The pointer-scoped encoder traverses the entire Optional<Int64>
+        // input under the ordinary opaque grammar; only this root comparison
+        // and its exact constant bypass ordinary scalar type admission.
+    }
+
+    void AuditRoot(const TExprNode& root) const {
+        if (!root.IsCallable("Coalesce")) {
+            AuditComparison(root);
+            return;
+        }
+        if (root.ChildrenSize() != 2 ||
+            !IsExactDataAnnotation(
+                root.GetTypeAnn(),
+                NUdf::EDataSlot::Bool,
+                false))
+        {
+            Fail(
+                "root envelope must be "
+                "Coalesce(Optional<Bool>, Bool(false))");
+        }
+        CheckScalarSafetyMetadata(root);
+        AuditComparison(*root.Child(0));
+        CheckFalseLiteral(*root.Child(1), "root fallback");
+    }
+
+private:
+    const TExprNode* RowArgument;
+    const THashSet<TString>& VisibleColumns;
 };
 
 // NDataShard::NLimits::MaxWriteValueSize caps an ordinary stored value at
@@ -3825,6 +4137,15 @@ NJson::TJsonValue ExportExprNode(
             << MaxExactScalarDepth);
     }
     budget.Charge(normalizedDepth);
+
+    if (IsRestrictedFloatingPredicateCandidate(node)) {
+        return TRestrictedFloatingPredicateAuditor(
+            rowArgument,
+            visibleColumns).ExportAsOpaque(
+                node,
+                budget,
+                normalizedDepth + 1);
+    }
 
     if (node.IsArgument()) {
         const auto it = std::find(boundArguments.begin(), boundArguments.end(), &node);
@@ -4142,7 +4463,11 @@ NJson::TJsonValue ExportExprNode(
                 rowArgument,
                 visibleColumns,
                 boundArguments);
-            if (argument->UnorderedChildren()) {
+            if (IsRestrictedFloatingPredicateCandidate(*argument)) {
+                TRestrictedFloatingPredicateAuditor(
+                    rowArgument,
+                    visibleColumns).Validate(node);
+            } else if (argument->UnorderedChildren()) {
                 // YQL marks equality operands unordered because equality is
                 // commutative.  The explicit eq/not-eq IR has the same
                 // symmetry, so this one marker is semantic rather than an

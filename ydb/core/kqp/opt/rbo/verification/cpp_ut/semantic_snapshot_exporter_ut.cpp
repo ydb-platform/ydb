@@ -22,8 +22,10 @@
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
 #include <yql/essentials/public/udf/udf_type_ops.h>
+#include <yql/essentials/utils/parse_double.h>
 
 #include <algorithm>
+#include <bit>
 #include <functional>
 #include <initializer_list>
 #include <limits>
@@ -2227,6 +2229,172 @@ NJson::TJsonValue ExportMapExpression(
     const auto& columns = FindNode(snapshot, "project")["columns"].GetArraySafe();
     UNIT_ASSERT_VALUES_EQUAL(columns.back()["output"].GetStringSafe(), "result");
     return columns.back()["expression"];
+}
+
+TSemanticSnapshotExportResult ExportOptionalInt64MapExpressionResult(
+    TExportTestContext& ctx,
+    const TString& alias,
+    TExprNode::TPtr expression)
+{
+    const auto& table = AddTable(ctx, "/Root/FloatingPredicate", {
+        {"x", "Int64", false},
+        {"y", "Int64", false},
+    });
+    auto read = MakeRead(ctx, table, alias, {"x", "y"});
+    auto map = MakeIntrusive<TOpMap>(
+        read,
+        TPositionHandle(),
+        TVector<TMapElement>{TMapElement(
+            TInfoUnit("result"),
+            TExpression(
+                std::move(expression),
+                &ctx.ExprCtx,
+                &ctx.ExpressionProps))});
+    TOpRoot root(map, TPositionHandle(), {"result"});
+    return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+}
+
+NJson::TJsonValue ExportOptionalInt64MapExpression(
+    TExportTestContext& ctx,
+    const TString& alias,
+    TExprNode::TPtr expression)
+{
+    const auto snapshot = ParseSupported(
+        ExportOptionalInt64MapExpressionResult(
+            ctx,
+            alias,
+            std::move(expression)));
+    const auto& columns =
+        FindNode(snapshot, "project")["columns"].GetArraySafe();
+    UNIT_ASSERT_VALUES_EQUAL(
+        columns.back()["output"].GetStringSafe(),
+        "result");
+    return columns.back()["expression"];
+}
+
+TExprNode::TPtr TypedOptionalInt64Division(
+    TExportTestContext& ctx,
+    TStringBuf alias,
+    TStringBuf numerator,
+    TStringBuf denominator)
+{
+    const auto* optionalInt64 =
+        ScalarType(ctx, NUdf::EDataSlot::Int64, true);
+    return TypedCallable(
+        ctx,
+        "/",
+        {
+            TypedMember(
+                ctx,
+                TStringBuilder() << alias << "." << numerator,
+                optionalInt64),
+            TypedMember(
+                ctx,
+                TStringBuilder() << alias << "." << denominator,
+                optionalInt64),
+        },
+        optionalInt64);
+}
+
+TExprNode::TPtr TypedGuardedOptionalInt64Division(
+    TExportTestContext& ctx,
+    TStringBuf alias,
+    TStringBuf numerator,
+    TStringBuf denominator)
+{
+    const auto* int32 = ScalarType(ctx, NUdf::EDataSlot::Int32);
+    const auto* optionalInt64 =
+        ScalarType(ctx, NUdf::EDataSlot::Int64, true);
+    const auto* boolean = ScalarType(ctx, NUdf::EDataSlot::Bool);
+    const auto* optionalBoolean =
+        ScalarType(ctx, NUdf::EDataSlot::Bool, true);
+    auto guard = TypedCallable(
+        ctx,
+        "Coalesce",
+        {
+            TypedCallable(
+                ctx,
+                ">",
+                {
+                    TypedMember(
+                        ctx,
+                        TStringBuilder() << alias << "." << denominator,
+                        optionalInt64),
+                    TypedLiteral(ctx, "Int32", "0", int32),
+                },
+                optionalBoolean),
+            TypedLiteral(ctx, "Bool", "false", boolean),
+        },
+        boolean);
+    return TypedCallable(
+        ctx,
+        "If",
+        {
+            std::move(guard),
+            TypedOptionalInt64Division(
+                ctx,
+                alias,
+                numerator,
+                denominator),
+            TypedNothing(ctx, "Int64", ScalarType(
+                ctx, NUdf::EDataSlot::Int64), optionalInt64),
+        },
+        optionalInt64);
+}
+
+TExprNode::TPtr TypedDoubleConstant(
+    TExportTestContext& ctx,
+    TStringBuf value)
+{
+    return TypedLiteral(
+        ctx,
+        "Double",
+        value,
+        ScalarType(ctx, NUdf::EDataSlot::Double));
+}
+
+TExprNode::TPtr TypedDoubleConstantDivision(
+    TExportTestContext& ctx,
+    TStringBuf numerator,
+    TStringBuf denominator)
+{
+    const auto* type = ScalarType(ctx, NUdf::EDataSlot::Double);
+    return TypedCallable(
+        ctx,
+        "/",
+        {
+            TypedLiteral(ctx, "Double", numerator, type),
+            TypedLiteral(ctx, "Double", denominator, type),
+        },
+        type);
+}
+
+TExprNode::TPtr TypedRestrictedFloatingPredicate(
+    TExportTestContext& ctx,
+    TStringBuf callable,
+    TExprNode::TPtr left,
+    TExprNode::TPtr right,
+    bool coalesceFalse = false)
+{
+    const auto* boolean = ScalarType(ctx, NUdf::EDataSlot::Bool);
+    const auto* optionalBoolean =
+        ScalarType(ctx, NUdf::EDataSlot::Bool, true);
+    auto comparison = TypedCallable(
+        ctx,
+        callable,
+        {std::move(left), std::move(right)},
+        optionalBoolean);
+    if (!coalesceFalse) {
+        return comparison;
+    }
+    return TypedCallable(
+        ctx,
+        "Coalesce",
+        {
+            std::move(comparison),
+            TypedLiteral(ctx, "Bool", "false", boolean),
+        },
+        boolean);
 }
 
 enum class EDateUnwrapShape {
@@ -10497,6 +10665,420 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                 result.UnsupportedReason,
                 TStringBuilder() << "unsupported arity " << arity);
         }
+    }
+
+    Y_UNIT_TEST(ExportsRestrictedFloatingPredicatesAsWholeOpaqueBooleans) {
+        TExportTestContext q75;
+        const auto q75Expression = ExportOptionalInt64MapExpression(
+            q75,
+            "current",
+            TypedRestrictedFloatingPredicate(
+                q75,
+                "<",
+                TypedOptionalInt64Division(
+                    q75,
+                    "current",
+                    "x",
+                    "y"),
+                TypedDoubleConstant(q75, "0.9")));
+        UNIT_ASSERT_VALUES_EQUAL(
+            q75Expression["kind"].GetStringSafe(),
+            "opaque");
+        UNIT_ASSERT_VALUES_EQUAL(
+            q75Expression["type"].GetStringSafe(),
+            "Bool");
+        UNIT_ASSERT(q75Expression["nullable"].GetBooleanSafe());
+        UNIT_ASSERT_STRING_CONTAINS(
+            q75Expression["fingerprint"].GetStringSafe(),
+            "yql-double-bits-3feccccccccccccd-v1");
+        UNIT_ASSERT_VALUES_EQUAL(
+            q75Expression["args"].GetArraySafe().size(),
+            2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            q75Expression["args"][0]["column"].GetStringSafe(),
+            "current.x");
+        UNIT_ASSERT_VALUES_EQUAL(
+            q75Expression["args"][1]["column"].GetStringSafe(),
+            "current.y");
+
+        TExportTestContext renamed;
+        const auto renamedExpression = ExportOptionalInt64MapExpression(
+            renamed,
+            "renamed",
+            TypedRestrictedFloatingPredicate(
+                renamed,
+                "<",
+                TypedOptionalInt64Division(
+                    renamed,
+                    "renamed",
+                    "x",
+                    "y"),
+                TypedDoubleConstant(renamed, "0.9")));
+        UNIT_ASSERT_VALUES_EQUAL(
+            q75Expression["fingerprint"].GetStringSafe(),
+            renamedExpression["fingerprint"].GetStringSafe());
+
+        TExportTestContext q34;
+        const auto q34Expression = ExportOptionalInt64MapExpression(
+            q34,
+            "household",
+            TypedRestrictedFloatingPredicate(
+                q34,
+                ">",
+                TypedGuardedOptionalInt64Division(
+                    q34,
+                    "household",
+                    "x",
+                    "y"),
+                TypedDoubleConstant(q34, "1.2"),
+                false));
+        UNIT_ASSERT_VALUES_EQUAL(
+            q34Expression["kind"].GetStringSafe(),
+            "opaque");
+        UNIT_ASSERT(q34Expression["nullable"].GetBooleanSafe());
+        UNIT_ASSERT_STRING_CONTAINS(
+            q34Expression["fingerprint"].GetStringSafe(),
+            "yql-double-bits-3ff3333333333333-v1");
+        UNIT_ASSERT_STRING_CONTAINS(
+            q34Expression["fingerprint"].GetStringSafe(),
+            "If");
+        UNIT_ASSERT_VALUES_EQUAL(
+            q34Expression["args"].GetArraySafe().size(),
+            2);
+
+        TExportTestContext q34Coalesced;
+        const auto q34CoalescedExpression =
+            ExportOptionalInt64MapExpression(
+                q34Coalesced,
+                "folded",
+                TypedRestrictedFloatingPredicate(
+                    q34Coalesced,
+                    ">",
+                    TypedGuardedOptionalInt64Division(
+                        q34Coalesced,
+                        "folded",
+                        "x",
+                        "y"),
+                    TypedDoubleConstant(q34Coalesced, "1.2"),
+                    true));
+        UNIT_ASSERT_VALUES_EQUAL(
+            q34CoalescedExpression["kind"].GetStringSafe(),
+            "if_present");
+        UNIT_ASSERT_VALUES_EQUAL(
+            q34CoalescedExpression["optional"]["kind"].GetStringSafe(),
+            "opaque");
+        UNIT_ASSERT_VALUES_EQUAL(
+            q34Expression["fingerprint"].GetStringSafe(),
+            q34CoalescedExpression["optional"]["fingerprint"].GetStringSafe());
+    }
+
+    Y_UNIT_TEST(RestrictedFloatingQ21ConstantFoldsShareFingerprint) {
+        const auto exportPredicate = [](
+            TStringBuf comparison,
+            TStringBuf numerator,
+            TStringBuf denominator,
+            TStringBuf folded)
+        {
+            TExportTestContext initial;
+            const auto initialExpression =
+                ExportOptionalInt64MapExpression(
+                    initial,
+                    "inventory",
+                    TypedRestrictedFloatingPredicate(
+                        initial,
+                        comparison,
+                        TypedGuardedOptionalInt64Division(
+                            initial,
+                            "inventory",
+                            "x",
+                            "y"),
+                        TypedDoubleConstantDivision(
+                            initial,
+                            numerator,
+                            denominator)));
+
+            TExportTestContext final;
+            const auto finalExpression =
+                ExportOptionalInt64MapExpression(
+                    final,
+                    "folded",
+                    TypedRestrictedFloatingPredicate(
+                        final,
+                        comparison,
+                        TypedGuardedOptionalInt64Division(
+                            final,
+                            "folded",
+                            "x",
+                            "y"),
+                        TypedDoubleConstant(final, folded)));
+            UNIT_ASSERT_VALUES_EQUAL(
+                initialExpression["fingerprint"].GetStringSafe(),
+                finalExpression["fingerprint"].GetStringSafe());
+            return initialExpression["fingerprint"].GetStringSafe();
+        };
+
+        const TString lower = exportPredicate(
+            ">=",
+            "2.0",
+            "3.0",
+            "0.6666666666666666");
+        const TString upper = exportPredicate(
+            "<=",
+            "3.0",
+            "2.0",
+            "1.5");
+        UNIT_ASSERT_VALUES_UNEQUAL(lower, upper);
+        UNIT_ASSERT_STRING_CONTAINS(
+            lower,
+            "yql-double-bits-3fe5555555555555-v1");
+        UNIT_ASSERT_STRING_CONTAINS(
+            upper,
+            "yql-double-bits-3ff8000000000000-v1");
+    }
+
+    Y_UNIT_TEST(RestrictedFloatingConstantTagsMatchRuntimeBits) {
+        const auto parse = [](TStringBuf text) {
+            return NYql::DoubleFromString(text);
+        };
+        const auto bits = [](double value) {
+            return std::bit_cast<ui64>(value);
+        };
+
+        const double twoThirds = parse("2.0") / parse("3.0");
+        UNIT_ASSERT_VALUES_EQUAL(
+            bits(twoThirds),
+            0x3fe5555555555555ULL);
+        UNIT_ASSERT_VALUES_EQUAL(
+            bits(parse("0.6666666666666666")),
+            0x3fe5555555555555ULL);
+
+        const double threeHalves = parse("3.0") / parse("2.0");
+        UNIT_ASSERT_VALUES_EQUAL(
+            bits(threeHalves),
+            0x3ff8000000000000ULL);
+        UNIT_ASSERT_VALUES_EQUAL(
+            bits(parse("1.5")),
+            0x3ff8000000000000ULL);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            bits(parse("0.9")),
+            0x3feccccccccccccdULL);
+        UNIT_ASSERT_VALUES_EQUAL(
+            bits(parse("1.2")),
+            0x3ff3333333333333ULL);
+    }
+
+    Y_UNIT_TEST(RestrictedFloatingPredicateGateFailsClosed) {
+        {
+            TExportTestContext ctx;
+            const auto result = ExportOptionalInt64MapExpressionResult(
+                ctx,
+                "a",
+                TypedRestrictedFloatingPredicate(
+                    ctx,
+                    "<",
+                    TypedOptionalInt64Division(ctx, "a", "x", "y"),
+                    TypedDoubleConstant(ctx, "0.90")));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "not one of the reviewed Double constants");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto result = ExportOptionalInt64MapExpressionResult(
+                ctx,
+                "a",
+                TypedRestrictedFloatingPredicate(
+                    ctx,
+                    ">=",
+                    TypedOptionalInt64Division(ctx, "a", "x", "y"),
+                    TypedDoubleConstantDivision(ctx, "2.0", "4.0")));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "not one of the reviewed Double constants");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto result = ExportOptionalInt64MapExpressionResult(
+                ctx,
+                "a",
+                TypedRestrictedFloatingPredicate(
+                    ctx,
+                    ">",
+                    TypedOptionalInt64Division(ctx, "a", "x", "y"),
+                    TypedDoubleConstant(ctx, "0.9")));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "operator and Double constant do not match");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto result = ExportOptionalInt64MapExpressionResult(
+                ctx,
+                "a",
+                TypedRestrictedFloatingPredicate(
+                    ctx,
+                    "<",
+                    TypedMember(
+                        ctx,
+                        "a.x",
+                        ScalarType(
+                            ctx,
+                            NUdf::EDataSlot::Int32,
+                            true)),
+                    TypedDoubleConstant(ctx, "0.9")));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "left operand must be Optional<Int64>");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* optionalInt64 =
+                ScalarType(ctx, NUdf::EDataSlot::Int64, true);
+            const auto result = ExportOptionalInt64MapExpressionResult(
+                ctx,
+                "a",
+                TypedRestrictedFloatingPredicate(
+                    ctx,
+                    "<",
+                    TypedCallable(
+                        ctx,
+                        "Udf",
+                        {TypedMember(ctx, "a.x", optionalInt64)},
+                        optionalInt64),
+                    TypedDoubleConstant(ctx, "0.9")));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "Unsupported scalar callable Udf");
+        }
+
+        {
+            TExportTestContext ctx;
+            auto shared = TypedDoubleConstant(ctx, "0.9");
+            const auto* optionalInt64 =
+                ScalarType(ctx, NUdf::EDataSlot::Int64, true);
+            auto malformedLeft = TypedCallable(
+                ctx,
+                "And",
+                {shared},
+                optionalInt64);
+            const auto result = ExportOptionalInt64MapExpressionResult(
+                ctx,
+                "a",
+                TypedRestrictedFloatingPredicate(
+                    ctx,
+                    "<",
+                    std::move(malformedLeft),
+                    shared));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "Unsupported scalar callable Double");
+        }
+
+        {
+            TExportTestContext ctx;
+            auto binaryAtom = ctx.ExprCtx.NewAtom(
+                TPositionHandle(),
+                "0.9",
+                TNodeFlags::BinaryContent);
+            auto binaryDouble = TypedCallable(
+                ctx,
+                "Double",
+                {std::move(binaryAtom)},
+                ScalarType(ctx, NUdf::EDataSlot::Double));
+            const auto result = ExportOptionalInt64MapExpressionResult(
+                ctx,
+                "a",
+                TypedRestrictedFloatingPredicate(
+                    ctx,
+                    "<",
+                    TypedOptionalInt64Division(ctx, "a", "x", "y"),
+                    std::move(binaryDouble)));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "binary-content atom flags");
+        }
+
+        {
+            TExportTestContext ctx;
+            auto predicate = TypedRestrictedFloatingPredicate(
+                ctx,
+                "<",
+                TypedOptionalInt64Division(ctx, "a", "x", "y"),
+                TypedDoubleConstant(ctx, "0.9"));
+            predicate->Child(0)->Child(0)->Child(1)
+                ->SetSideEffects(ESideEffects::General);
+            const auto result = ExportOptionalInt64MapExpressionResult(
+                ctx,
+                "a",
+                std::move(predicate));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "side-effecting or CSE-unsafe");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto* optionalBoolean =
+                ScalarType(ctx, NUdf::EDataSlot::Bool, true);
+            const auto result = ExportOptionalInt64MapExpressionResult(
+                ctx,
+                "a",
+                TypedCallable(
+                    ctx,
+                    "==",
+                    {
+                        TypedOptionalInt64Division(
+                            ctx,
+                            "a",
+                            "x",
+                            "y"),
+                        TypedDoubleConstant(ctx, "0.9"),
+                    },
+                    optionalBoolean));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "Unsupported scalar type Double");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto result = ExportOptionalInt64MapExpressionResult(
+                ctx,
+                "a",
+                TypedDoubleConstant(ctx, "0.9"));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "Unsupported scalar type Double");
+        }
+    }
+
+    Y_UNIT_TEST(DoubleCatalogColumnRemainsUnsupported) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/DoubleCatalog", {
+            {"value", "Double", false},
+        });
+        auto read = MakeRead(ctx, table, "a", {"value"});
+        TOpRoot root(read, TPositionHandle(), {"a.value"});
+        const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.UnsupportedReason,
+            "Unsupported metadata for column");
     }
 
     Y_UNIT_TEST(ExportsExactDecimalArithmetic) {

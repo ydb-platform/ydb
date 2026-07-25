@@ -76,13 +76,13 @@ A defect in these files can turn inequivalent supported plans into
 | File | Trusted responsibility |
 |---|---|
 | `semantic_snapshot.h` | Version-one catalog, snapshot, boundary, and fail-closed exporter contract. |
-| `semantic_snapshot.cpp` | Mechanical catalog and plan export; scalar normalization and safety gates, including the exact passive-Double constructor; operator, exact scalar- and one-level `IN`-inside-`IN` nesting, subplan, correlated outer-binding, StageGraph, topology, task, and resource validation; deterministic JSON serialization. |
+| `semantic_snapshot.cpp` | Mechanical catalog and plan export; scalar normalization and safety gates, including exact literal-only String `Concat` folding and the passive-Double constructor; operator, exact scalar- and one-level `IN`-inside-`IN` nesting, subplan, correlated outer-binding, StageGraph, topology, task, and resource validation; deterministic JSON serialization. |
 | `rbo_verifier/ir.py` | Strict JSON decoding, version/schema validation, normalized IR, expression typing, passive-Double use confinement, all-plan-root virtual-binding confinement, exact scalar- and one-level `IN`-inside-`IN` plus correlated-subplan shape checks, and operator/StageGraph invariants. |
 | `rbo_verifier/types.py` | Supported scalar identities, exact domains, opaque-carrier family, and compatibility predicates. |
 | `rbo_verifier/smt.py` | Typed immutable SMT terms, script-owned one-constructor product datatypes, closed quantifier-free exact function definitions, quantifier-safe sharing, deterministic canonical rendering, exact marked-obligation substitution, and solver-output parsing primitives. |
 | `rbo_verifier/string_order.py` | Finite exact bounded quotient for String/Utf8 equality and unsigned byte ordering. |
 | `rbo_verifier/decimal.py` | Decimal representation, domains, comparison, arithmetic, extrema, specials, and proof bounds. |
-| `rbo_verifier/scalar.py` | Nullable values, SQL three-valued predicates, exact scalar evaluation, typed opaque functions, and the domain-free passive carrier encoding. |
+| `rbo_verifier/scalar.py` | Nullable values, SQL three-valued predicates, exact scalar evaluation, conservative Decimal finite-coefficient propagation, typed opaque functions, and the domain-free passive carrier encoding. |
 | `rbo_verifier/sort_network.py` | Audited power-of-two bitonic compare-exchange topology and exact construction cost. |
 | `rbo_verifier/relation.py` | Symbolic database, unique-key constraints, logical operators, per-row scalar subplans, bags/sequences, packed exact Sort/Merge transport with concrete or symbolic producer order, exact present-prefix equality, errors, choices, result-family equality, and the exact mismatch cover. |
 | `rbo_verifier/stages.py` | Two-task StageGraph execution, routing, connection semantics, per-task evaluation, and root gathering. |
@@ -666,6 +666,31 @@ Relative to the preceding post-wrapper audit, the passive-Double slice adds
 and 1,270 test lines; diagnostic tooling is unchanged. The new trusted seams
 are confined to `semantic_snapshot.cpp`, `ir.py`, `types.py`, and `scalar.py`.
 
+The latest post-q66 2026-07-25 physical-line audit uses source
+`be52c6395de` plus this documentation update:
+
+| Area | Physical lines |
+|---|---:|
+| Ten trusted Python semantic modules | 12,424 |
+| C++ exporter (`semantic_snapshot.cpp` and `.h`) | 10,355 |
+| **Proof-producing code total** | **22,779** |
+| Tests, outside the TCB | 57,069 |
+| Diagnostic/orchestration tools, outside the TCB | 5,230 |
+
+Relative to the post-passive-Double audit, the q66 slice adds 33 trusted
+Python lines, 110 C++ exporter lines, 143 proof-producing lines, and 350 test
+lines; diagnostic tooling is unchanged. The exporter seam is one positive,
+allocation-bounded fold from an audited literal-only String `Concat` tree to
+the existing literal IR. The Python seam changes only conservative metadata:
+for a Decimal value with finite-coefficient bound `B`, multiplication by an
+integral right operand uses the full type-domain magnitude and division by an
+integral right operand retains `B`. Exact Decimal value terms, same-Decimal
+arithmetic, aggregate semantics, and the top-level obligation are unchanged.
+Unknown bounds remain unknown and therefore fail closed at any aggregate that
+cannot prove headroom. Independent scalar boundary/special tests, a two-row
+aggregate regression, q66's real snapshots, the complete formula dashboards,
+and a separate timed solver experiment cover the slice.
+
 ## External assumptions
 
 The production optimizer claim additionally relies on facts not established by
@@ -706,6 +731,10 @@ the SMT obligation itself:
   the recorded direct literal `SafeCast`, MiniKQL parsing proves the runtime
   value present, and replacing it with the emitted non-null Date literal is
   exact;
+- each accepted literal-only String `Concat` evaluates by ordered byte
+  concatenation, has no hidden failure within the audited type, metadata,
+  source-size, and allocation bounds, and therefore equals the emitted
+  canonical literal;
 - each accepted `opaque_double` denotes the recorded deterministic q83
   average/deviation expression over exactly three direct nullable Int64
   arguments, its fingerprint preserves the complete reviewed callable,
@@ -737,6 +766,9 @@ the SMT obligation itself:
   weak integral-to-Decimal `SafeCast` propagates source NULL but saturates
   present overflow to signed infinity, and same-scale non-decreasing-precision
   Decimal `SafeCast` preserves every finite and special encoded value;
+- every propagated Decimal integral-arithmetic bound covers all finite runtime
+  outputs under the recorded integer type domain; NULL and Decimal specials do
+  not create an additional finite result outside that bound;
 - opaque fingerprints identify the same runtime function exactly when
   intended, and every admitted opaque expression is deterministic, total, and
   safe to model as an uninterpreted function;
@@ -804,7 +836,7 @@ each slice. It is an audit checklist, not a claim that tests are exhaustive.
 | Slice | Trusted path to review | Primary independent evidence |
 |---|---|---|
 | Capture, catalog, root schema | host hook assumption; `semantic_snapshot.*`; `ir.py`; `verify.py` | `cpp_ut/semantic_snapshot_exporter_ut.cpp`; `integration_ut/optimizer_snapshot_pair_ut.cpp`; schema-mutation tests |
-| Types, NULLs, scalar functions | `semantic_snapshot.cpp`; `ir.py`; `types.py`; `scalar.py`; `decimal.py`; `string_order.py` | `ut/test_scalar.py`; `test_decimal.py`; `test_string_order.py`; `test_string_proof.py`; `test_sql_in.py`; canonical String-predicate, Date-year, proven-total Date-`Unwrap`, direct-Uint64-`Just`, exact Decimal weak-`SafeCast`, proven-present raw-tuple Date-`SafeCast`, restricted whole-floating-predicate, passive-Double carrier, and exact literal-wrapper mutations; passive-carrier identity/mutation and non-key Sort/Merge passenger proofs; `source_type`, NULL, overflow, widening-special, and fail-closed references; synthetic real-host proofs; exporter near-miss mutations |
+| Types, NULLs, scalar functions | `semantic_snapshot.cpp`; `ir.py`; `types.py`; `scalar.py`; `decimal.py`; `string_order.py` | `ut/test_scalar.py`; `test_decimal.py`; `test_string_order.py`; `test_string_proof.py`; `test_sql_in.py`; canonical literal-only String-`Concat`, String-predicate, Date-year, proven-total Date-`Unwrap`, direct-Uint64-`Just`, exact Decimal weak-`SafeCast`, proven-present raw-tuple Date-`SafeCast`, restricted whole-floating-predicate, passive-Double carrier, and exact literal-wrapper mutations; integral-right Decimal finite-bound boundary/special and two-row aggregate tests; passive-carrier identity/mutation and non-key Sort/Merge passenger proofs; `source_type`, NULL, overflow, widening-special, and fail-closed references; synthetic real-host proofs; exporter near-miss mutations |
 | Logical bags, order, limits, errors | `semantic_snapshot.cpp`; `ir.py`; `smt.py`; `sort_network.py`; `relation.py` | `ut/test_logical_reference.py`; `test_limit.py`; `test_sort.py`; exhaustive network topology/prefix/nullable/mixed-order/Merge-hole/AVG-state tests; packed-layout, declaration-structure, present-prefix equality, and cap tests; focused concrete differential tests |
 | Aggregates and subplans | `semantic_snapshot.cpp`; `ir.py`; `decimal.py`; `scalar.py`; `relation.py` | aggregate/DistinctAll/count-distinct/unwrap exporter and IR mutations; exhaustive count-distinct duplicates and triangular cap; scalar-final unwrap empty/all-NULL/present references; Decimal-extrema raw-code differential, routing, and solver-mutation checks; nullable composite-key differential and staged-routing checks; `ut/test_subplans.py`; cardinality, demand, NULL, duplicate, error, exact scalar- and one-level `IN`-inside-`IN` ownership/nesting/cache/choice checks, nested finite references and sequential-semi solver differentials, correlated outer-binding, one- and exact two-dependency `EXISTS` ordering/shape/semi/anti checks, dynamic-`IN` mapping/cache/pair-cap and positive-nullable integral/Date-context checks, real-host Decimal-AVG and correlated-`EXISTS`, and non-null/nullable `IN`-to-`left_semi` cases |
 | StageGraph, joins, and routing | `semantic_snapshot.cpp`; `ir.py`; `scalar.py`; `stages.py`; `relation.py` | `ut/test_stagegraph_reference.py`; `test_stage_compaction.py`; shared-IU semi/anti exhaustive execution; JoinKey budget/mutation checks; C++ topology/task mutations; real-host integration |

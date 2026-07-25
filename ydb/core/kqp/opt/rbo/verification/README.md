@@ -73,6 +73,11 @@ OLAP `just` wrapper, exactly folds direct numeric Date/Interval literal
 arithmetic, exactly folds the reviewed constant
 `DateTime2.Split`/calendar-shift/`MakeDate` shape, and admits the reviewed
 catalog-bounded stored-String `Concat` shape.
+A disjoint literal-only `Concat` gate folds an audited non-null String tree at
+a Map-body root to the ordinary canonical literal node. Exact integral-right
+Decimal multiplication and division also propagate conservative finite
+coefficient bounds into later Decimal aggregates without changing their value
+semantics.
 Separate normalized-plan, concrete-counterexample inspection, and isolated
 real-YDB replay tools are also implemented. A real-host transformation-prefix capture
 command and sequential localizer are implemented outside the verifier kernel.
@@ -92,15 +97,16 @@ TPCH q1, q2, q3, q4, q5, q6, q7, q8, q9, q10, q11, q12, q14,
 q15, q18, q19, q21, and q22 plus TPC-DS q2, q3, q5, q6, q10, q15, q16, q18,
 q19, q21, q25, q29, q33, q34,
 q37, q38, q40, q42, q43, q46, q48, q50, q52, q54, q55, q56, q58, q59, q60, q61,
-q62, q65, q68, q69, q71, q73, q75, q76, q77, q78, q79, q80, q82, q83, q87,
-q88, q90, q91, q93, q94, q95, q96, q97, and q99: 72/121 workload queries
-(59.5%).
+q62, q65, q66, q68, q69, q71, q73, q75, q76, q77, q78, q79, q80, q82, q83,
+q87, q88, q90, q91, q93, q94, q95, q96, q97, and q99: 73/121 workload
+queries (60.3%).
 The current complete policy-checked dashboards were generated on 2026-07-25
-after the passive-Double q83 milestone. TPCH has eighteen formulas, two
-unsupported semantic outcomes, and two no-pair optimizer failures; TPC-DS has
-fifty-four formulas, twenty-seven unsupported semantic outcomes, and eighteen
-no-pair optimizer failures. Across both suites the semantic partition is 72
-formulas, 29 `UNSUPPORTED`, and 20 `OPTIMIZER_FAILURE`.
+after the literal-`Concat`/Decimal-bound q66 milestone. TPCH has eighteen
+formulas, two unsupported semantic outcomes, and two no-pair optimizer
+failures; TPC-DS has fifty-five formulas, twenty-six unsupported semantic
+outcomes, and eighteen no-pair optimizer failures. Across both suites the
+semantic partition is 73 formulas, 28 `UNSUPPORTED`, and 20
+`OPTIMIZER_FAILURE`.
 Preparation is a separate partition: twenty TPCH and seventy-three TPC-DS
 queries succeed, while two TPCH and twenty-six TPC-DS queries fail. Eight
 TPC-DS rows belong to both the preparation-failure and semantic-unsupported
@@ -108,13 +114,13 @@ inventories, so those inventories must not be added as disjoint workload
 counts.
 
 Four denominators answer different questions. Formula coverage is
-72/121 (59.5%) over the corpus, 72/101 (71.3%) over exact Initial/Final
-boundary-result pairs, 72/93 (77.4%) within the preparation-successful subset,
-and 72/77 (93.5%) among verifier entrants. The preparation-success ratio uses
+73/121 (60.3%) over the corpus, 73/101 (72.3%) over exact Initial/Final
+boundary-result pairs, 73/93 (78.5%) within the preparation-successful subset,
+and 73/78 (93.6%) among verifier entrants. The preparation-success ratio uses
 the intersection of formula rows with preparation-success rows; version five
-permits a future formula to coexist with failed later preparation. Of the 29
-unsupported outcomes, 22 stop first at initial export, two at final export,
-and five inside the verifier. Thus the strict C++ boundary rejects 24 of the
+permits a future formula to coexist with failed later preparation. Of the 28
+unsupported outcomes, 21 stop first at initial export, two at final export,
+and five inside the verifier. Thus the strict C++ boundary rejects 23 of the
 101 exact pairs before formula construction, while five exported pairs
 fail closed in the verifier itself.
 
@@ -982,18 +988,26 @@ the pushed coalesce is erased only in a positive filter context. Operand, type,
 nullability, result-descriptor, catalog-column, and operation near-misses fail
 closed.
 
-The reviewed `Concat` shape is confined to the body root of a Map expression
-and returns exactly non-null `String`. It is a binary tree whose leaves are
-canonical String literals, non-null stored String members, or exactly
-`Coalesce(nullable stored String member, String(""))`. At least one and at most
-two stored-member occurrences are required; repeated occurrences count
+The two reviewed `Concat` shapes are confined to the body root of a Map
+expression and return exactly non-null `String`. A literal-only binary tree
+must contain only canonical String literals, pass the closed-world scalar
+safety and shared node/depth limits, and remain within the exact allocation
+bound below. The exporter concatenates its leaf bytes in evaluation order and
+emits the existing canonical String literal node. This exact normalization can
+therefore compare an unfolded initial constant with the optimizer's folded
+literal without adding a new Python expression kind.
+
+The separate stored-member shape is a binary tree whose leaves are canonical
+String literals, non-null stored String members, or exactly
+`Coalesce(nullable stored String member, String(""))`. At least one and at
+most two stored-member occurrences are required; repeated occurrences count
 separately. Generic or nested-parent `Concat`, `Utf8`, computed strings,
-nonempty nullable fallbacks, and every other leaf fail closed. The entire tree
-is encoded as one opaque function: its canonical fingerprint retains tree
-shape, literal bytes, argument order, and repeated uses, while IU names are
-alpha-normalized. Consequently this rule can prove only syntax-preserving
-uses of the same total function; reassociation or another semantic rewrite may
-cause a false counterexample, never a false proof.
+nonempty nullable fallbacks, and every other leaf fail closed. The entire
+stored-member tree is encoded as one opaque function: its canonical fingerprint
+retains tree shape, literal bytes, argument order, and repeated uses, while IU
+names are alpha-normalized. Consequently this rule can prove only
+syntax-preserving uses of the same total function; reassociation or another
+semantic rewrite may cause a false counterexample, never a false proof.
 
 Stored-member provenance begins only at catalog-confirmed Datashard or Olap
 tables and excludes system views, generated values, and external sources. It
@@ -1028,6 +1042,12 @@ headroom and 82,944-pair grouped-aggregate construction checks. q84 has two
 Olap String occurrences, so it fails the allocation-totality gate. The formula
 slice at that milestone remained 23/121 (19.0%) and the proof floor remained
 ten.
+
+The later literal-only gate moves q66 through both boundaries. Integral-right
+Decimal bound propagation then proves sufficient accumulator headroom for its
+projected products, quotients, inner sums, and outer sums, so the complete
+two-row/two-task obligation reaches formula construction. This is formula
+coverage, not a bounded proof.
 
 An explicit `cast_integral` node models only partial integer `SafeCast`: the
 source is any exact signed or unsigned 8/16/32/64-bit integer expression, and
@@ -1871,8 +1891,13 @@ Finite literals seed their absolute coefficient, while typed NULL and special
 literals seed the vacuous zero bound. Exact same-type `+` and `-` use the capped
 sum of operand bounds, and an exact integral-to-Decimal cast derives its bound
 from the complete signed or unsigned source-type domain, target scale, and
-finite saturation point. `If`/`IfPresent` branches and stage alternatives take
-conservative maxima, aliases preserve bounds, and Decimal `SUM` states
+finite saturation point. If the left Decimal coefficient has bound `B`,
+`DecimalMul` by an integral right operand uses
+`min(decimal_max, B * max_abs(right_type))`; `DecimalDiv` by an integral right
+operand retains `B`, because every nonzero divisor has magnitude at least one
+and zero produces only a special result. Same-Decimal multiplication/division
+still has no propagated bound. `If`/`IfPresent` branches and stage alternatives
+take conservative maxima, aliases preserve bounds, and Decimal `SUM` states
 accumulate them. Any missing operand proof remains unknown and can only make a
 later sum fail closed.
 

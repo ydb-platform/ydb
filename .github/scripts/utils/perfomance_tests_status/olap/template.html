@@ -447,8 +447,10 @@ function setWave(v) {
 const CMP_KEY = 'olap_now_compare_waves';
 let compareState = {};
 try { compareState = JSON.parse(sessionStorage.getItem(CMP_KEY) || '{}') || {}; } catch (_) { compareState = {}; }
-/** diveId → selected now_runs index (default = last) */
+/** suiteKey → selected now_runs index (default = last) */
 const diveRunFocus = {};
+/** suiteKey → selected query test name (sticky across Last-runs focus changes) */
+const diveQueryFocus = {};
 
 function cmpKey(branch, db) { return `${branch || ''}|${db || ''}`; }
 function getCompareId(branch, db) {
@@ -1892,10 +1894,17 @@ function markIndicesForQuery(item, diveId, q, hist) {
   return { now: mapIdx(nowFull), compare: mapIdx(cmpFull) };
 }
 
+function restoreDiveQueryFocus(item, diveId) {
+  if (!item || !diveId) return;
+  const test = diveQueryFocus[suiteKey(item)];
+  if (!test) return;
+  mountQueryHistory(item, diveId, test);
+}
 function mountQueryHistory(item, diveId, testName) {
   const q = findQuery(item, testName);
   const box = document.getElementById(diveId + '_qhist');
   if (!box) return;
+  diveQueryFocus[suiteKey(item)] = testName;
   destroyCharts(diveId + '_q_');
   box.closest('.dive')?.querySelectorAll('button.pill[data-qpick]').forEach(b => {
     b.classList.toggle('active', b.dataset.test === testName);
@@ -2598,6 +2607,7 @@ function renderInbox() {
         if (item && (item.issue === 'missing' || item.issue === 'in_progress')) {
           mountHistory(item, id);
         }
+        restoreDiveQueryFocus(item, id);
       }
     });
   });
@@ -2641,15 +2651,23 @@ function renderInbox() {
         setCompareId(item.branch, item.db, '');
       }
       // refresh heatmap compare selects + this dive's cards/queries; keep row open
-      const openIds = [...root.querySelectorAll('tr.row.open')].map(tr => tr.dataset.id);
+      const openKeys = [...root.querySelectorAll('tr.row.open')].map(tr => {
+        const i = Number(tr.dataset.idx);
+        return rows[i] ? suiteKey(rows[i]) : null;
+      }).filter(Boolean);
       renderAll();
-      openIds.forEach(oid => {
-        const tr = document.querySelector(`#inbox tr.row[data-id="${oid}"]`);
-        const detail = document.querySelector(`#inbox tr.detail[data-detail="${oid}"]`);
+      const curRows = filteredInboxOrDrill();
+      curRows.forEach((r, i) => {
+        if (!openKeys.includes(suiteKey(r))) return;
+        const diveId = 'dive_' + i;
+        const tr = document.querySelector(`#inbox tr.row[data-id="${diveId}"]`);
+        const detail = document.querySelector(`#inbox tr.detail[data-detail="${diveId}"]`);
         if (tr && detail) {
           tr.classList.add('open');
           detail.classList.remove('hidden');
         }
+        // Keep the same query selected under the new Last-runs focus.
+        restoreDiveQueryFocus(r, diveId);
       });
     });
   });

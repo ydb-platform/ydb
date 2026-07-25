@@ -1530,10 +1530,10 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredPrepareSuccessQueries ==
             std::set<ui32>({
-                2, 3, 5, 6, 10, 15, 16, 18, 19, 25, 29, 33, 37, 38, 40, 42, 43,
-                46, 48, 50, 52, 54, 55, 56, 58, 59, 60, 61, 62, 65, 68, 69, 71,
-                73, 76, 77, 78, 79, 80, 82, 87, 88, 90, 91, 93, 94, 95, 96, 97,
-                99,
+                2, 3, 5, 6, 10, 15, 16, 18, 19, 21, 25, 29, 33, 34, 37, 38, 40,
+                42, 43, 46, 48, 50, 52, 54, 55, 56, 58, 59, 60, 61, 62, 65, 68,
+                69, 71, 73, 75, 76, 77, 78, 79, 80, 82, 87, 88, 90, 91, 93, 94,
+                95, 96, 97, 99,
             }));
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredVerifierEntryQueries ==
@@ -1541,15 +1541,15 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredFormulaQueries ==
             std::set<ui32>({
-                2, 3, 5, 6, 10, 15, 16, 18, 19, 25, 29, 33, 37, 38, 40, 42, 43,
-                46, 48, 50, 52, 54, 55, 56, 58, 59, 60, 61, 62, 65, 68, 69, 71,
-                73, 76, 77, 78, 79, 80, 82, 87, 88, 90, 91, 93, 94, 95, 96, 97,
-                99,
+                2, 3, 5, 6, 10, 15, 16, 18, 19, 21, 25, 29, 33, 34, 37, 38, 40,
+                42, 43, 46, 48, 50, 52, 54, 55, 56, 58, 59, 60, 61, 62, 65, 68,
+                69, 71, 73, 75, 76, 77, 78, 79, 80, 82, 87, 88, 90, 91, 93, 94,
+                95, 96, 97, 99,
             }));
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredVerifiedQueries ==
             std::set<ui32>({
-                3, 16, 38, 42, 48, 52, 55, 69, 73, 87, 90, 93, 94, 95, 96,
+                3, 16, 34, 38, 42, 48, 52, 55, 69, 73, 87, 90, 93, 94, 95, 96,
             }));
 
         const auto report = CoverageReportHeader(Tpcds);
@@ -2082,10 +2082,11 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
     Y_UNIT_TEST(PolicyEnforcesCuratedProofFloor) {
         const auto policy = LoadCoveragePolicy();
         const std::set<ui32> selected = {
-            3, 16, 38, 42, 48, 52, 55, 69, 73, 87, 90, 93, 94, 95, 96};
+            3, 16, 34, 38, 42, 48, 52, 55, 69, 73, 87, 90, 93, 94, 95, 96};
         const TMap<ui32, TString> statuses = {
             {3, "VERIFIED_BOUNDED"},
             {16, "VERIFIED_BOUNDED"},
+            {34, "VERIFIED_BOUNDED"},
             {38, "VERIFIED_BOUNDED"},
             {42, "VERIFIED_BOUNDED"},
             {48, "VERIFIED_BOUNDED"},
@@ -2142,6 +2143,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         const TMap<ui32, TString> statuses = {
             {3, "VERIFIED_BOUNDED"},
             {16, "VERIFIED_BOUNDED"},
+            {34, "VERIFIED_BOUNDED"},
             {38, "VERIFIED_BOUNDED"},
             {42, "VERIFIED_BOUNDED"},
             {48, "VERIFIED_BOUNDED"},
@@ -2158,7 +2160,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         const auto evaluation = EvaluateCoveragePolicy(
             policy,
             Tpcds,
-            {3, 16, 38, 42, 48, 52, 55, 69, 73, 87, 90, 93, 94, 95, 96},
+            {3, 16, 34, 38, 42, 48, 52, 55, 69, 73, 87, 90, 93, 94, 95, 96},
             statuses,
             {},
             policy.Suites.at(Tpcds.Name).RequiredPrepareSuccessQueries,
@@ -2179,7 +2181,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         const auto optimizerFailure = EvaluateCoveragePolicy(
             policy,
             Tpcds,
-            {3, 16, 38, 42, 48, 52, 55, 69, 73, 87, 90, 93, 94, 95, 96},
+            {3, 16, 34, 38, 42, 48, 52, 55, 69, 73, 87, 90, 93, 94, 95, 96},
             optimizerFailureStatuses,
             {},
             policy.Suites.at(Tpcds.Name).RequiredPrepareSuccessQueries,
@@ -2235,7 +2237,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         const auto coincidentalProofSelection = EvaluateCoveragePolicy(
             policy,
             Tpcds,
-            {3, 16, 38, 42, 48, 52, 55, 69, 73, 87, 90, 93, 94, 95, 96},
+            {3, 16, 34, 38, 42, 48, 52, 55, 69, 73, 87, 90, 93, 94, 95, 96},
             statuses,
             {},
             {},
@@ -2289,7 +2291,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         UNIT_ASSERT(
             config.Selected ==
             std::set<ui32>({
-                3, 16, 38, 42, 48, 52, 55, 69, 73, 87, 90, 93, 94, 95, 96,
+                3, 16, 34, 38, 42, 48, 52, 55, 69, 73, 87, 90, 93, 94, 95, 96,
             }));
         UNIT_ASSERT(config.Solver);
         UNIT_ASSERT_STRING_CONTAINS(

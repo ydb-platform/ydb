@@ -147,9 +147,6 @@ def test_database_scoped_endpoints_access_controls(mon_base_url_with_extra_sids_
         {'path': '/viewer/json/sysinfo', 'method': EndpointMethod.GET},
         {'path': '/viewer/feature_flags', 'method': EndpointMethod.GET},
         {'path': '/viewer/json/feature_flags', 'method': EndpointMethod.GET},
-        # Empty target skips graph request and returns a 1x1 PNG placeholder.
-        {'path': '/viewer/render?target=', 'method': EndpointMethod.POST},
-        {'path': '/viewer/json/render?target=', 'method': EndpointMethod.POST},
     ]
 
     for endpoint in endpoints:

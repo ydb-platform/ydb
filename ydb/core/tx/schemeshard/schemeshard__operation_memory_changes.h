@@ -97,11 +97,17 @@ class TMemoryChanges: public TSimpleRefCount<TMemoryChanges> {
     // so only it records undos; other txs would just accumulate dead weight.
     bool Armed = false;
 
-public:
-    ~TMemoryChanges() = default;
+    // Set by Arm(): the shard this armed instance is registered with, so the
+    // registration can be withdrawn on destruction.
+    TSchemeShard* SS = nullptr;
 
-    // Called from IgniteOperation.
-    void Arm() { Armed = true; }
+public:
+    // Withdraws the armed registration; see Arm().
+    ~TMemoryChanges();
+
+    // Called from IgniteOperation. Publishes the armed window on the shard so
+    // undo-less mutators (TDbRefMap::erase) can assert they run outside it.
+    void Arm(TSchemeShard* ss);
 
     // True only inside an armed propose; tracked Set/Update are legal only then.
     bool IsArmed() const { return Armed; }

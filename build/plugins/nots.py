@@ -456,6 +456,8 @@ def _create_pm(unit: NotsUnitType) -> 'PackageManager':
 
 
 def _use_hermetic_node_modules(unit: NotsUnitType) -> bool:
+    # Only TS_LIBRARY and TS_PACKAGE enable eligibility. Deprecated builders
+    # keep their legacy prepare-deps and node_modules installation flow.
     return (
         unit.get("TS_HERMETIC_NODE_MODULES") != "no"
         and unit.get("_HERMETIC_NODE_MODULES_ELIGIBLE") == "yes"
@@ -467,6 +469,7 @@ def _use_hermetic_node_modules(unit: NotsUnitType) -> bool:
 def _enable_hermetic_node_modules(unit: NotsUnitType) -> None:
     if _use_hermetic_node_modules(unit):
         unit.set(["_HERMETIC_NODE_MODULES_ARG", "--hermetic-node-modules yes"])
+        unit.set(["NOTS_TOOL_REQUIREMENTS__NO_UID__", '${hide;requirements:"cpu:4 ram_disk:4"}'])
 
 
 def _setup_prebuilder_resource(unit: NotsUnitType) -> None:
@@ -964,8 +967,7 @@ def _TS_PROTO_CONFIGURE(unit: NotsUnitType) -> None:
         return
 
     in_pj = _build_directives(["hide", "input"], ["package.json"])
-    out_pj = _build_directives(["hide", "output"], ["package.json"])
-    __set_append(unit, "_TS_PROTO_IMPL_INOUTS", [in_pj, out_pj])
+    __set_append(unit, "_TS_PROTO_IMPL_INOUTS", [in_pj])
 
     unit.set(["_TS_PROTO_AUTO_ARGS", ""])
 
@@ -997,8 +999,9 @@ def _TS_PROTO_CONFIGURE(unit: NotsUnitType) -> None:
 @ymake.macro
 @_with_report_configure_error
 def _TS_PROTO_AUTO_CONFIGURE(unit: NotsUnitType) -> None:
-    out_files = _build_directives(["hide", "output"], ["package.json", "pnpm-lock.yaml"])
-    __set_append(unit, "_TS_PROTO_IMPL_INOUTS", out_files)
+    in_package_json = _build_directives(["hide", "input"], ["package.json"])
+    out_lockfile = _build_directives(["hide", "output"], ["pnpm-lock.yaml"])
+    __set_append(unit, "_TS_PROTO_IMPL_INOUTS", [in_package_json, out_lockfile])
 
     deps_path = unit.get("_TS_PROTO_AUTO_DEPS")
     unit.onpeerdir([deps_path])
@@ -1039,9 +1042,7 @@ def _PREPARE_DEPS_CONFIGURE(unit: NotsUnitType) -> None:
     has_deps = pj.has_dependencies()
     local_cli = unit.get("TS_LOCAL_CLI") == "yes"
     use_hermetic_node_modules = _use_hermetic_node_modules(unit)
-    ins, outs, resources = pm.calc_prepare_deps_inouts_and_resources(
-        unit.get("_TARBALLS_STORE"), has_deps, local_cli, include_peer_outputs=use_hermetic_node_modules
-    )
+    ins, outs, resources = pm.calc_prepare_deps_inouts_and_resources(unit.get("_TARBALLS_STORE"), has_deps, local_cli)
     if use_hermetic_node_modules:
         from lib.nots.package_manager import constants
         from lib.nots.package_manager.utils import b_rooted, s_rooted
@@ -1063,18 +1064,13 @@ def _PREPARE_DEPS_CONFIGURE(unit: NotsUnitType) -> None:
             # The cached injected snapshot must contain built workspace peers,
             # not their source/pre-build state.
             unit.ondepends(local_peers)
-        __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives(["hide", "input"], sorted(ins)))
-        __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives(["hide", "output"], sorted(outs)))
         unit.set(["_PREPARE_DEPS_RESOURCES", " ".join([f'${{resource:"{uri}"}}' for uri in sorted(resources)])])
         unit.set(["_PREPARE_DEPS_USE_RESOURCES_FLAG", "--resource-root $(RESOURCE_ROOT)"])
 
-    else:
-        if use_hermetic_node_modules:
-            __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives(["hide", "input"], sorted(ins)))
-            __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives(["hide", "output"], sorted(outs)))
-        else:
-            __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives(["output"], sorted(outs)))
-            unit.set(["_PREPARE_DEPS_CMD", "$_PREPARE_NO_DEPS_CMD"])
+    tarballs_prefix = os.path.join("$B", pm.module_path, unit.get("_TARBALLS_STORE"), "")
+    ordered_outs = sorted(outs, key=lambda path: (path.startswith(tarballs_prefix), path))
+    __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives(["hide", "input"], sorted(ins)))
+    __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives(["hide", "output"], ordered_outs))
 
 
 @ymake.macro
@@ -1087,7 +1083,13 @@ def _TS_PROTO_AUTO_PREPARE_DEPS_CONFIGURE(unit: NotsUnitType) -> None:
     local_cli = unit.get("TS_LOCAL_CLI") == "yes"
     _, outs, _ = pm.calc_prepare_deps_inouts_and_resources(store_path="", has_deps=False, local_cli=local_cli)
     __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives(["hide", "output"], sorted(outs)))
-    unit.set(["_PREPARE_DEPS_TS_PROTO_AUTO_FLAG", f"--ts-proto-auto-deps-path {deps_path}"])
+    package_name = unit.get("_TS_PROTO_AUTO_PACKAGE_NAME")
+    unit.set(
+        [
+            "_PREPARE_DEPS_TS_PROTO_AUTO_FLAG",
+            f"--ts-proto-auto-deps-path {deps_path} --ts-proto-auto-package-name {package_name}",
+        ]
+    )
 
 
 def _node_modules_bundle_needed(unit: NotsUnitType, arc_path: str) -> bool:

@@ -33,6 +33,8 @@ struct TTransactionStartOptions
     bool PingAncestors = true;
     std::optional<std::string> PingerAddress;
 
+    std::optional<NTransactionClient::EMasterTransactionExpirationMode> MasterExpirationMode;
+
     NYTree::IAttributeDictionaryPtr Attributes;
 
     NTransactionClient::EAtomicity Atomicity = NTransactionClient::EAtomicity::Full;

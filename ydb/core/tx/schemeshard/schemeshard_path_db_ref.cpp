@@ -29,4 +29,8 @@ void ReleasePathDbRef(TSchemeShard* ss, const TPathId& pathId, TRefLabel reason)
     }
 }
 
+bool IsProposeArmed(const TSchemeShard* ss) {
+    return ss && ss->ArmedChanges;
+}
+
 } // NKikimr::NSchemeShard

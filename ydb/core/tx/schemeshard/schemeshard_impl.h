@@ -97,6 +97,8 @@ extern ui64 gVectorIndexSeed; // for tests only
 // Forward declaration for incremental restore context
 struct TIncrementalRestoreState;
 
+class TMemoryChanges;
+
 // Forward declaration for index build info
 struct TIndexBuildInfo;
 struct TSetColumnConstraintOperationInfo;
@@ -348,6 +350,8 @@ public:
     THashMap<TTxId, TPublicationInfo> Publications;
     THashMap<TOperationId, TTxState> TxInFlight;
     THashMap<TPathId, TPathDbRef> OwnDbRefs; // path's own type info record ref
+    // Non-null only inside an armed propose; undo-less mutators assert against it.
+    const TMemoryChanges* ArmedChanges = nullptr;
     THashMap<TOperationId, NKikimrSchemeOp::TLongIncrementalRestoreOp> LongIncrementalRestoreOps;
 
     // Simplified state tracking for sequential incremental restore

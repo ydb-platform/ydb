@@ -4,6 +4,20 @@
 
 namespace NKikimr::NSchemeShard {
 
+TMemoryChanges::~TMemoryChanges() {
+    // Several instances coexist (init, stats, side effects); only the propose one
+    // arms, so withdraw only our own registration.
+    if (SS && SS->ArmedChanges == this) {
+        SS->ArmedChanges = nullptr;
+    }
+}
+
+void TMemoryChanges::Arm(TSchemeShard* ss) {
+    Armed = true;
+    SS = ss;
+    ss->ArmedChanges = this;
+}
+
 template <typename I, typename C, typename H>
 static void GrabNew(const I& id, const C& cont, H& holder) {
     Y_ABORT_UNLESS(!cont.contains(id));

@@ -174,6 +174,9 @@ public:
 
     // No undo: only legal outside an armed propose (an armed-propose erase can't roll back).
     size_t erase(const TPathId& id) {
+        Y_VERIFY_DEBUG_S(!IsProposeArmed(SS),
+            "erase on " << Reason.c_str() << " during an armed propose is not reversible;"
+            " erase at plan step or later");
         if (Map.contains(id)) {
             ReleasePathDbRef(SS, id, Reason);
         }

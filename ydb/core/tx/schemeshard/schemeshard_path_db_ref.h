@@ -111,4 +111,8 @@ static_assert(std::is_move_assignable_v<TPathDbRef>);
 void AcquirePathDbRef(TSchemeShard* ss, const TPathId& pathId, TRefLabel reason);
 void ReleasePathDbRef(TSchemeShard* ss, const TPathId& pathId, TRefLabel reason);
 
+// True inside an armed propose. Free function so headers holding only a forward
+// declaration of TSchemeShard can assert on it.
+bool IsProposeArmed(const TSchemeShard* ss);
+
 } // NKikimr::NSchemeShard

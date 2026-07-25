@@ -2,14 +2,13 @@
 
 import unittest
 import warnings
-from typing import List, Tuple
 
 import idna
 
 
 class IDNATests(unittest.TestCase):
     def setUp(self):
-        self.tld_strings: List[Tuple[str, bytes]] = [
+        self.tld_strings: list[tuple[str, bytes]] = [
             ("\u6d4b\u8bd5", b"xn--0zwm56d"),
             ("\u092a\u0930\u0940\u0915\u094d\u0937\u093e", b"xn--11b5bs3a9aj6g"),
             ("\ud55c\uad6d", b"xn--3e0b707e"),
@@ -104,7 +103,7 @@ class IDNATests(unittest.TestCase):
         import codecs
         import time
 
-        import idna.codec  # noqa: F401  (register the idna2008 codec)
+        import idna.codec  # register the idna2008 codec
 
         payload = "・" * 8000 + "漢"
         start = time.perf_counter()

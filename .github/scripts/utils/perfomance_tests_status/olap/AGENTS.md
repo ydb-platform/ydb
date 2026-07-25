@@ -1,6 +1,6 @@
 # Agent instructions — OLAP Now report
 
-Toolkit: `ydb/tools/perfomance_tests_status/olap`
+Toolkit: `.github/scripts/utils/perfomance_tests_status/olap`
 
 When the user asks for an OLAP / Clickbench / Tpch / Tpcds / suites performance report:
 
@@ -40,7 +40,7 @@ Legacy day buckets: `fetch_olap_test_daily.sql` via `fetch_daily.py --mode daily
 **Do not use plain ydb CLI `yql`** — it truncates. Use scan via `ydb_wrapper`:
 
 ```bash
-cd ydb/tools/perfomance_tests_status/olap
+cd .github/scripts/utils/perfomance_tests_status/olap
 python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
 export CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=/path/to/sa-key.json
 ./.venv/bin/python fetch_daily.py -o out/raw_test_runs.json   # default: last 30d
@@ -54,7 +54,7 @@ Query Now alert = **last completed run** vs previous **7 runs** (same as suite).
 ## 3. Generate HTML
 
 ```bash
-cd ydb/tools/perfomance_tests_status/olap
+cd .github/scripts/utils/perfomance_tests_status/olap
 python3 generate.py \
   --input out/raw.json \
   --tests-input out/raw_tests.json \

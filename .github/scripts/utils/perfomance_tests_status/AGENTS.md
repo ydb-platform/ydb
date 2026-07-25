@@ -1,6 +1,6 @@
 # Agent instructions — performance tests status
 
-Toolkit root: `ydb/tools/perfomance_tests_status`
+Toolkit root: `.github/scripts/utils/perfomance_tests_status`
 
 | Request | Subfolder | Instructions |
 |---------|-----------|--------------|
@@ -14,7 +14,7 @@ Route to the matching subfolder and follow its AGENTS.md.
 ```bash
 export CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=/path/to/sa-key.json
 python3 -m pip install 'ydb[yc]>=3.20'
-python3 ydb/tools/perfomance_tests_status/run_reports.py --publish-dir /tmp/perf_reports
+python3 .github/scripts/utils/perfomance_tests_status/run_reports.py --publish-dir /tmp/perf_reports
 ```
 
 Hourly GitHub Actions: `.github/workflows/perfomance_tests_status.yml`  

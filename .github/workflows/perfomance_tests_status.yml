@@ -49,7 +49,7 @@ jobs:
           PUBLISH_DIR="${RUNNER_TEMP}/perfomance_tests_status_publish"
           rm -rf "$PUBLISH_DIR"
           mkdir -p "$PUBLISH_DIR"
-          python3 ydb/tools/perfomance_tests_status/run_reports.py --publish-dir "$PUBLISH_DIR"
+          python3 .github/scripts/utils/perfomance_tests_status/run_reports.py --publish-dir "$PUBLISH_DIR"
           test -f "$PUBLISH_DIR/olap-report.html"
           test -f "$PUBLISH_DIR/tpcc-report.html"
           echo "publish_dir=$PUBLISH_DIR" >> "$GITHUB_OUTPUT"

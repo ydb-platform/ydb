@@ -1,6 +1,6 @@
 # Agent instructions — TPC-C Now report
 
-Toolkit: `ydb/tools/perfomance_tests_status/tpcc`
+Toolkit: `.github/scripts/utils/perfomance_tests_status/tpcc`
 
 When the user asks for a TPC-C / tpcc / lat90 / tpmC performance report:
 
@@ -34,7 +34,7 @@ Fetch with `{{SINCE}}` = today − 30d (`YYYY-MM-DDT00:00:00Z`).
 ## 2. Generate HTML
 
 ```bash
-cd ydb/tools/perfomance_tests_status/tpcc
+cd .github/scripts/utils/perfomance_tests_status/tpcc
 python3 generate.py \
   --input out/raw.json \
   --output out/tpcc-report.html --open

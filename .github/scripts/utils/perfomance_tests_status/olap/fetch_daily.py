@@ -26,8 +26,8 @@ from decimal import Decimal
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-# olap → perfomance_tests_status → tools → ydb/ → <repo>
-REPO_ROOT = ROOT.parents[3]
+# olap → perfomance_tests_status → utils → scripts → .github → <repo>
+REPO_ROOT = ROOT.parents[4]
 ANALYTICS = REPO_ROOT / ".github" / "scripts" / "analytics"
 SQL_BY_MODE = {
     "runs": ROOT / "queries" / "fetch_olap_test_runs.sql",

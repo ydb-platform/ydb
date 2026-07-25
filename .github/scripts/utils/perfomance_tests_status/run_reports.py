@@ -20,7 +20,7 @@ from decimal import Decimal
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-REPO_ROOT = ROOT.parents[2]  # ydb/tools/perfomance_tests_status → repo
+REPO_ROOT = ROOT.parents[3]  # .github/scripts/utils/perfomance_tests_status → repo
 ANALYTICS = REPO_ROOT / ".github" / "scripts" / "analytics"
 OLAP = ROOT / "olap"
 TPCC = ROOT / "tpcc"

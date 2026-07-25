@@ -666,12 +666,13 @@ function aggregateSide(parts) {
     broken: 6, missing: 5, regression: 4, both: 4, watch: 3,
     failing: 3, slower: 3, stale: 2, nodata: 1.5, in_progress: 1, ok: 0, fail: 5, slow: 4,
   };
-  let best = 'nodata';
+  // best starts null — must not seed with nodata, else ok (rank 0) never wins.
+  let best = null;
   let n_fail = 0, n_slow = 0, n_soft = 0, n_nodata = 0, n_hot = 0;
   if (!parts.length) return { status: 'nodata', n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 0, n_hot: 0, n_queries: 0 };
   for (const p of parts) {
     const st = p.status || 'ok';
-    if ((rank[st] || 0) > (rank[best] || 0)) best = st;
+    if (best == null || (rank[st] || 0) > (rank[best] || 0)) best = st;
     n_fail += p.n_fail || 0;
     n_slow += p.n_slow || 0;
     n_soft += p.n_soft || 0;
@@ -679,7 +680,7 @@ function aggregateSide(parts) {
     if (st !== 'ok' && st !== 'nodata') n_hot++;
   }
   return {
-    status: best,
+    status: best || 'nodata',
     n_fail, n_slow, n_soft, n_nodata, n_hot,
     n_queries: n_fail + n_slow + n_soft + n_nodata,
   };

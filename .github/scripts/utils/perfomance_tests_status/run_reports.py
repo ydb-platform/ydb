@@ -15,6 +15,7 @@ import json
 import os
 import subprocess
 import sys
+import traceback
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -132,6 +133,11 @@ def main() -> int:
     olap_suites = work / "olap_suites.json"
     olap_runs = work / "olap_test_runs.jsonl"
     tpcc_raw = work / "tpcc.json"
+    status: dict = {
+        "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "olap": {"ok": False, "error": None, "path": None},
+        "tpcc": {"ok": False, "error": None, "path": None},
+    }
 
     if not args.skip_fetch:
         if not args.sa_key_file:
@@ -159,56 +165,100 @@ def main() -> int:
                 raise SystemExit("YDB credentials check failed")
 
             if do_olap:
-                sql = load_sql(
-                    OLAP / "queries" / "fetch_olap_suites.sql", since_iso(OLAP_SUITE_DAYS)
-                )
-                write_json_list(
-                    olap_suites, fetch_rows(ydb_w, sql, "fetch_olap_suites")
-                )
-                sql = load_sql(
-                    OLAP / "queries" / "fetch_olap_test_runs.sql", since_iso(OLAP_RUNS_DAYS)
-                )
-                write_jsonl(olap_runs, fetch_rows(ydb_w, sql, "fetch_olap_test_runs"))
+                try:
+                    sql = load_sql(
+                        OLAP / "queries" / "fetch_olap_suites.sql",
+                        since_iso(OLAP_SUITE_DAYS),
+                    )
+                    write_json_list(
+                        olap_suites, fetch_rows(ydb_w, sql, "fetch_olap_suites")
+                    )
+                    sql = load_sql(
+                        OLAP / "queries" / "fetch_olap_test_runs.sql",
+                        since_iso(OLAP_RUNS_DAYS),
+                    )
+                    write_jsonl(
+                        olap_runs, fetch_rows(ydb_w, sql, "fetch_olap_test_runs")
+                    )
+                except Exception as e:
+                    status["olap"]["error"] = f"fetch: {e}"
+                    print(f"OLAP fetch FAILED: {e}", flush=True)
+                    traceback.print_exc()
 
             if do_tpcc:
-                sql = load_sql(TPCC / "queries" / "fetch_tpcc.sql", since_iso(TPCC_DAYS))
-                write_json_list(tpcc_raw, fetch_rows(ydb_w, sql, "fetch_tpcc"))
+                try:
+                    sql = load_sql(
+                        TPCC / "queries" / "fetch_tpcc.sql", since_iso(TPCC_DAYS)
+                    )
+                    write_json_list(tpcc_raw, fetch_rows(ydb_w, sql, "fetch_tpcc"))
+                except Exception as e:
+                    status["tpcc"]["error"] = f"fetch: {e}"
+                    print(f"TPC-C fetch FAILED: {e}", flush=True)
+                    traceback.print_exc()
 
-    if do_olap:
-        if not olap_suites.is_file():
-            raise SystemExit(f"missing {olap_suites}")
-        out_html = publish / "olap-report.html"
-        cmd = [
-            sys.executable,
-            str(OLAP / "generate.py"),
-            "--input",
-            str(olap_suites),
-            "--output",
-            str(out_html),
-        ]
-        if olap_runs.is_file():
-            cmd.extend(["--tests-daily-input", str(olap_runs)])
-        run_generate(cmd, OLAP)
-        print(f"OLAP report → {out_html}", flush=True)
-
-    if do_tpcc:
-        if not tpcc_raw.is_file():
-            raise SystemExit(f"missing {tpcc_raw}")
-        out_html = publish / "tpcc-report.html"
-        run_generate(
-            [
+    if do_olap and not status["olap"]["error"]:
+        try:
+            if not olap_suites.is_file():
+                raise RuntimeError(f"missing {olap_suites}")
+            out_html = publish / "olap-report.html"
+            cmd = [
                 sys.executable,
-                str(TPCC / "generate.py"),
+                str(OLAP / "generate.py"),
                 "--input",
-                str(tpcc_raw),
+                str(olap_suites),
                 "--output",
                 str(out_html),
-            ],
-            TPCC,
-        )
-        print(f"TPC-C report → {out_html}", flush=True)
+            ]
+            if olap_runs.is_file():
+                cmd.extend(["--tests-daily-input", str(olap_runs)])
+            run_generate(cmd, OLAP)
+            status["olap"]["ok"] = True
+            status["olap"]["path"] = str(out_html)
+            print(f"OLAP report → {out_html}", flush=True)
+        except Exception as e:
+            status["olap"]["error"] = f"generate: {e}"
+            print(f"OLAP generate FAILED: {e}", flush=True)
+            traceback.print_exc()
 
-    return 0
+    if do_tpcc and not status["tpcc"]["error"]:
+        try:
+            if not tpcc_raw.is_file():
+                raise RuntimeError(f"missing {tpcc_raw}")
+            out_html = publish / "tpcc-report.html"
+            run_generate(
+                [
+                    sys.executable,
+                    str(TPCC / "generate.py"),
+                    "--input",
+                    str(tpcc_raw),
+                    "--output",
+                    str(out_html),
+                ],
+                TPCC,
+            )
+            status["tpcc"]["ok"] = True
+            status["tpcc"]["path"] = str(out_html)
+            print(f"TPC-C report → {out_html}", flush=True)
+        except Exception as e:
+            status["tpcc"]["error"] = f"generate: {e}"
+            print(f"TPC-C generate FAILED: {e}", flush=True)
+            traceback.print_exc()
+
+    status_path = publish / "status.json"
+    status_path.write_text(json.dumps(status, ensure_ascii=False, indent=2) + "\n")
+    print(f"wrote {status_path}", flush=True)
+
+    any_ok = (not do_olap or status["olap"]["ok"]) and (
+        not do_tpcc or status["tpcc"]["ok"]
+    )
+    # Partial success still exits 0 so CI can upload what worked; fail only if nothing.
+    if do_olap and do_tpcc:
+        if status["olap"]["ok"] or status["tpcc"]["ok"]:
+            if not (status["olap"]["ok"] and status["tpcc"]["ok"]):
+                print("PARTIAL: one report failed — uploading successes", flush=True)
+            return 0
+        return 1
+    return 0 if any_ok else 1
 
 
 if __name__ == "__main__":

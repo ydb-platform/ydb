@@ -183,6 +183,25 @@ def norm_branch(d: dict) -> str:
     return "unknown"
 
 
+def error_class_of(color, diff_response=None, *, nodata: bool = False) -> str | None:
+    """Map mart Color / diff_response → timeout|diff|other|warning (None if n/a)."""
+    if nodata:
+        return None
+    try:
+        if diff_response is not None and int(diff_response) > 0:
+            return "diff"
+    except (TypeError, ValueError):
+        pass
+    c = (str(color).strip().lower() if color is not None else "")
+    if c == "blue":
+        return "timeout"
+    if c == "yellow":
+        return "warning"
+    if c == "red":
+        return "other"
+    return None
+
+
 def commit_of(d: dict) -> str:
     for key in ("Version", "CiVersion", "version"):
         v = str(d.get(key) or "").strip()
@@ -593,10 +612,36 @@ def expected_suites(by_br_db_waves: dict[tuple[str, str], list[dict]]) -> dict[t
     return out
 
 
+def balance_inbox(
+    all_hot: list[dict],
+    branches: list[str],
+    inbox_key,
+) -> list[dict]:
+    """Per-branch × kind cap so promote/query-hot rows stay visible."""
+    picked: list[dict] = []
+    by_branch_rows: dict[str, list[dict]] = defaultdict(list)
+    for r in all_hot:
+        by_branch_rows[r.get("branch") or "unknown"].append(r)
+    for br in branches:
+        rows = by_branch_rows.get(br, [])
+        by_kind: dict[str, list[dict]] = defaultdict(list)
+        for r in rows:
+            by_kind[r.get("issue") or "other"].append(r)
+        br_picked: list[dict] = []
+        for kind, limit in INBOX_PER_KIND.items():
+            lim = max(5, limit // max(1, len(branches) - 1)) if br != "main" else limit
+            if br == "main":
+                lim = limit
+            br_picked.extend(sorted(by_kind.get(kind, []), key=inbox_key)[:lim])
+        picked.extend(sorted(br_picked, key=inbox_key)[:INBOX_PER_BRANCH])
+    return sorted(picked, key=inbox_key)[: INBOX_LIMIT * max(1, len(branches))]
+
+
 def build_now_report(points: list[dict], since: datetime) -> dict:
     until = max((p["ts"] for p in points), default=since)
-    now_utc = until  # data-relative "now"
-    lookback = until - timedelta(days=EXPECTED_LOOKBACK_DAYS)
+    # Wall-clock: if the whole pipeline stops, stale must still fire.
+    now_utc = datetime.now(timezone.utc)
+    lookback = now_utc - timedelta(days=EXPECTED_LOOKBACK_DAYS)
     branches = select_branches(points)
     branch_set = set(branches)
 
@@ -860,25 +905,7 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
             br_hot, ok_n=br_ok, slices_n=br_slices, branch=br
         )
 
-    # Balanced inbox per branch × kind
-    picked: list[dict] = []
-    by_branch_rows: dict[str, list[dict]] = defaultdict(list)
-    for r in all_hot:
-        by_branch_rows[r.get("branch") or "unknown"].append(r)
-    for br in branches:
-        rows = by_branch_rows.get(br, [])
-        by_kind: dict[str, list[dict]] = defaultdict(list)
-        for r in rows:
-            by_kind[r.get("issue") or "other"].append(r)
-        br_picked: list[dict] = []
-        for kind, limit in INBOX_PER_KIND.items():
-            # smaller per-branch budget
-            lim = max(5, limit // max(1, len(branches) - 1)) if br != "main" else limit
-            if br == "main":
-                lim = limit
-            br_picked.extend(sorted(by_kind.get(kind, []), key=inbox_key)[:lim])
-        picked.extend(sorted(br_picked, key=inbox_key)[:INBOX_PER_BRANCH])
-    inbox = sorted(picked, key=inbox_key)[: INBOX_LIMIT * max(1, len(branches))]
+    inbox = balance_inbox(all_hot, branches, inbox_key)
     # OK catalog for drill-down (not in hot inbox by default)
     ok_slices = sorted(
         ok_slices,
@@ -955,6 +982,7 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
     return {
         "mode": "now",
         "window": f"{since.date().isoformat()}..{until.date().isoformat()}",
+        "generated_at": now_utc.isoformat().replace("+00:00", "Z"),
         "source": "perfomance/olap/fast_results_siutes",
         "ui": {
             "now_runs": NOW_RUNS,
@@ -1131,9 +1159,18 @@ def load_daily_points(
                 o = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            branch = o.get("Branch") or "unknown"
             db = o.get("DbAlias") or "unknown"
             suite = o.get("Suite") or "unknown"
+            # Align with suite-level norm_branch (cloud_* → trunk, Version→branch).
+            branch = norm_branch(
+                {
+                    "Branch": o.get("Branch"),
+                    "Version": o.get("Version"),
+                    "CiBranch": o.get("CiBranch"),
+                    "CiVersion": o.get("CiVersion"),
+                    "DbAlias": db,
+                }
+            )
             if (branch, db, suite) not in suite_keys:
                 continue
             test = o.get("Test") or "unknown"
@@ -1150,6 +1187,9 @@ def load_daily_points(
                 day = dt.date().isoformat()
                 success = o.get("Success")
                 color = o.get("Color")
+                diff_response = o.get("DiffResponse")
+                if diff_response is None:
+                    diff_response = o.get("diff_response")
                 # mart null-templates: Success=0 + Color NULL + no ydb → not in this run
                 nodata = (
                     success is not None
@@ -1172,6 +1212,11 @@ def load_daily_points(
                         "fr": fr,
                         "report": report,
                         "nodata": nodata,
+                        "color": color,
+                        "diff_response": diff_response,
+                        "error_class": error_class_of(
+                            color, diff_response, nodata=bool(nodata)
+                        ),
                     }
                 )
                 continue
@@ -1249,6 +1294,7 @@ def _query_metrics(rows: list[dict]) -> dict | None:
             "dur_thr_pct": None,
             "dur_noise_pct": None,
             "dur_level": None,
+            "error_class": None,
         }
     if len(rows) < 2:
         return None
@@ -1261,7 +1307,8 @@ def _query_metrics(rows: list[dict]) -> dict | None:
     ydb_pct = pct(ydb_base, ydb_now)
     fr_now = avg([r["fr"] for r in now]) or 0.0
     fr_base = avg([r["fr"] for r in base]) or 0.0
-    last_fr = (now[-1].get("fr") or 0.0) if now else 0.0
+    last = now[-1] if now else {}
+    last_fr = (last.get("fr") or 0.0) if last else 0.0
     # last completed run only
     is_fail = last_fr >= FAIL_BROKEN or (
         last_fr >= FAIL_HOT and (last_fr >= fr_base + FAIL_RISE or last_fr >= FAIL_BROKEN)
@@ -1278,6 +1325,9 @@ def _query_metrics(rows: list[dict]) -> dict | None:
         kind = "slow"
     elif is_watch:
         kind = "watch"
+    err = last.get("error_class") or error_class_of(
+        last.get("color"), last.get("diff_response")
+    )
     return {
         "ydb_pct": ydb_pct,
         "ydb_base": ydb_base,
@@ -1291,6 +1341,7 @@ def _query_metrics(rows: list[dict]) -> dict | None:
         "dur_thr_pct": dur.get("thr_pct"),
         "dur_noise_pct": dur.get("noise_pct"),
         "dur_level": dur.get("level"),
+        "error_class": err if is_fail else None,
     }
 
 
@@ -1330,6 +1381,7 @@ def attach_now_query_regressions(
                 "dur_thr_pct": m.get("dur_thr_pct"),
                 "dur_noise_pct": m.get("dur_noise_pct"),
                 "dur_level": m.get("dur_level"),
+                "error_class": m.get("error_class"),
                 "history": _query_history(rows, report_by_day),
             }
             if m["is_slow"]:
@@ -1390,7 +1442,7 @@ def attach_suite_query_catalogs(
                     "dur_thr_pct": m.get("dur_thr_pct"),
                     "dur_noise_pct": m.get("dur_noise_pct"),
                     "dur_level": m.get("dur_level"),
-                    # slightly shorter history to keep HTML size reasonable
+                    "error_class": m.get("error_class"),
                     "history": _query_history(rows, report_by_day),
                 }
             )
@@ -1489,7 +1541,45 @@ def promote_ok_with_hot_queries(data: dict) -> int:
         data.setdefault("inbox", []).append(item)
         moved += 1
     data["ok"] = stay
+    if moved:
+        recap_inbox_after_promote(data)
     return moved
+
+
+def recap_inbox_after_promote(data: dict) -> None:
+    """Re-apply per-branch/kind caps after query-driven promotions."""
+    ui = data.get("ui") or {}
+    branches = list(ui.get("focus_branches") or [])
+    if not branches:
+        branches = sorted(
+            {
+                r.get("branch")
+                for r in (data.get("inbox") or [])
+                if r.get("branch")
+            }
+        )
+    if not branches:
+        return
+
+    def inbox_key(r):
+        return (
+            branch_rank(r.get("branch") or ""),
+            {
+                "missing": 0,
+                "failing": 1,
+                "both": 1,
+                "slower": 2,
+                "in_progress": 3,
+                "stale": 4,
+            }.get(r.get("issue"), 9),
+            -STATUS_ORDER.get(r.get("status") or "ok", 0),
+            -(r.get("fail_rate_now") or 0),
+            -(r.get("ydb_pct") or 0),
+            r.get("db") or "",
+            r.get("suite") or "",
+        )
+
+    data["inbox"] = balance_inbox(list(data.get("inbox") or []), branches, inbox_key)
 
 
 def refresh_summary_counts(data: dict) -> None:

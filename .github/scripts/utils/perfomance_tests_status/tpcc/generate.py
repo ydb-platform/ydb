@@ -482,8 +482,9 @@ def expected_suites(by_br_cl: dict[tuple[str, str], list[dict]]) -> dict[tuple[s
 
 def build_now_report(points: list[dict], since: datetime) -> dict:
     until = max((p["ts"] for p in points), default=since)
-    now_utc = until
-    lookback = until - timedelta(days=EXPECTED_LOOKBACK_DAYS)
+    # Wall-clock: if the whole pipeline stops, stale must still fire.
+    now_utc = datetime.now(timezone.utc)
+    lookback = now_utc - timedelta(days=EXPECTED_LOOKBACK_DAYS)
     branches = select_branches(points)
     branch_set = set(branches)
     clusters = select_clusters(points, branch_set)
@@ -844,6 +845,7 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
     return {
         "mode": "now",
         "window": f"{since.date().isoformat()}..{until.date().isoformat()}",
+        "generated_at": now_utc.isoformat().replace("+00:00", "Z"),
         "source": "perfomance/tpcc",
         "ui": {
             "now_runs": NOW_RUNS,

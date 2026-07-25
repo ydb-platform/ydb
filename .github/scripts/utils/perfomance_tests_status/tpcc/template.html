@@ -540,8 +540,11 @@ function renderHeader() {
   if (lblDisplay) lblDisplay.textContent = String(ui.display_runs || 3);
   document.getElementById('lblBase').textContent = String(ui.baseline_runs || 7);
   document.getElementById('lblAllBranches').textContent = (ui.focus_branches || []).join(', ') || '—';
+  const genAt = (DATA.generated_at || (DATA.meta && DATA.meta.generated_at) || '')
+    .replace('T', ' ').replace('Z', ' UTC').slice(0, 22);
   document.getElementById('subtitle').innerHTML =
     `Source: <code>${esc(DATA.source || '')}</code> · data ${esc(DATA.window || '')} · ` +
+    `built <b>${esc(genAt || '—')}</b> · ` +
     `filter <b>${esc(winFrom || '…')} → ${esc(winTo || '…')}</b> · ` +
     `branch <b>${esc(br || 'all')}</b> · wave <b>${esc(wv)}</b> · hot ${total.hot || 0}` +
     (heat ? ` · heat <b>${esc(heat.db || '*')} × ${esc(heat.fam || '*')}</b> (N/M)` : '');

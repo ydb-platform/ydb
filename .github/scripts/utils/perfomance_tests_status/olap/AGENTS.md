@@ -67,7 +67,7 @@ python3 generate.py \
 
 - Path to `out/olap-report.html`
 - Summary counts: **missing / failing / slower / stale**
-- Note window + that Now uses last-3 vs prev-7 runs
+- Note window + that Now uses last completed vs prev-7; stale is wall-clock; fail pills show timeout/diff/other
 
 ## Rules (v1)
 

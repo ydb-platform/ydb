@@ -18,8 +18,10 @@ python3 .github/scripts/utils/perfomance_tests_status/run_reports.py --publish-d
 ```
 
 Hourly GitHub Actions: `.github/workflows/perfomance_tests_status.yml`  
-Stable S3 URLs (overwritten each run):
+Stable S3 URLs (overwritten each successful run; OLAP/TPC-C publish independently):
 
 - `{AWS_ENDPOINT}/ydb-builds/main/perfomance_tests_status/olap-report.html`
 - `{AWS_ENDPOINT}/ydb-builds/main/perfomance_tests_status/tpcc-report.html`
+
+Duty notes: stale uses wall-clock; Now = last completed vs median(prev7); failing queries show mart error class (`timeout`/`diff`/`other` via Color).
 

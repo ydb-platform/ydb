@@ -1,5 +1,6 @@
 -- Per-run per-query series (datetime points — no day averaging).
 -- Replace {{SINCE}} e.g. 2026-06-08T00:00:00Z
+-- BranchNorm must match generate.py norm_branch() (cloud_* → trunk).
 $base = (
     SELECT
         IF(
@@ -8,7 +9,17 @@ $base = (
             IF(
                 COALESCE(CiBranch, '') != '' AND NOT StartsWith(COALESCE(CiBranch, ''), '.'),
                 CiBranch,
-                'unknown'
+                IF(
+                    COALESCE(Version, '') != ''
+                    AND NOT StartsWith(COALESCE(Version, ''), '.')
+                    AND FIND(Version, '.') IS NOT NULL,
+                    SubString(Version, 0U, RFIND(Version, '.')),
+                    IF(
+                        DbAlias LIKE '%cloud_%',
+                        'trunk',
+                        'unknown'
+                    )
+                )
             )
         ) AS BranchNorm,
         DbAlias,
@@ -18,8 +29,12 @@ $base = (
         YdbSumMeans,
         CAST(Success AS Int32) AS Success,
         Color,
+        CAST(diff_response AS Int32) AS DiffResponse,
         CAST(Suite_not_runned AS Bool) AS SuiteNotRunned,
-        Report
+        Report,
+        Version,
+        CiVersion,
+        CiBranch
     FROM `perfomance/olap/fast_results`
     WHERE Run_start_timestamp >= Timestamp('{{SINCE}}')
       AND Test NOT IN ('_Verification', 'Sum')
@@ -51,6 +66,10 @@ SELECT
     YdbSumMeans AS ydb,
     Success,
     Color,
-    Report
+    DiffResponse,
+    Report,
+    Version,
+    CiVersion,
+    CiBranch
 FROM $base
 ORDER BY Ts, DbAlias, Suite, Test;

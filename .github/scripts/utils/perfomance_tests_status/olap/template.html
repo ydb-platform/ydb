@@ -724,8 +724,10 @@ function renderHeader() {
   if (rs.soft) reactBits.push('soft slow');
   if (rs.nodata) reactBits.push('no data');
   const wv = waveView();
+  const genAt = (DATA.generated_at || '').replace('T', ' ').replace('Z', ' UTC').slice(0, 22);
   document.getElementById('subtitle').innerHTML =
     `Source: <code>${esc(DATA.source || '')}</code> · data ${esc(DATA.window || '')} · ` +
+    `built <b>${esc(genAt || '—')}</b> · ` +
     `filter <b>${esc(winFrom || '…')} → ${esc(winTo || '…')}</b> · ` +
     `branch <b>${esc(br || 'all')}</b> · wave <b>${esc(wv)}</b> · ` +
     `react <b>${esc(reactBits.join(' + ') || 'infra only')}</b> · hot ${total.hot || 0}` +
@@ -1101,8 +1103,11 @@ function mountQueryHistory(item, diveId, testName) {
     : (q.kind === 'fail' || q.kind === 'both') ? 'fail'
     : (q.kind === 'slow' ? 'slow' : (q.kind === 'watch' ? 'watch' : 'qok'));
   const kindLabel = q.kind === 'nodata' ? 'no data' : (q.kind || 'query');
+  const errPill = q.error_class
+    ? ` <span class="pill fail" title="mart Color / diff_response">${esc(q.error_class)}</span>`
+    : '';
   box.innerHTML = `<div class="qdetail">
-    <div class="ttl">${esc(testName)} <span class="pill ${kindCls}">${esc(kindLabel)}</span></div>
+    <div class="ttl">${esc(testName)} <span class="pill ${kindCls}">${esc(kindLabel)}</span>${errPill}</div>
     <div style="margin-bottom:4px">${
       q.kind === 'nodata'
         ? 'в последнем suite-run <b>нет данных</b> по этому query (mart placeholder, не fail)'
@@ -1290,11 +1295,14 @@ function diveHtml(r, id) {
   const slow = listedSlow(data);
   const fails = listedFail(data);
   const catalog = (data.queries || []).slice().sort((a, b) => String(a.test).localeCompare(String(b.test)));
-  const qPill = (q, cls) =>
-    `<button type="button" class="pill ${cls}" data-qpick="${id}" data-test="${esc(q.test)}">${esc(q.test)}${
+  const qPill = (q, cls) => {
+    const err = (cls === 'fail' || q.kind === 'fail' || q.kind === 'both') && q.error_class
+      ? ` · ${q.error_class}` : '';
+    return `<button type="button" class="pill ${cls}" data-qpick="${id}" data-test="${esc(q.test)}">${esc(q.test)}${
       cls === 'nodata' ? ' · no data'
         : (q.ydb_pct != null ? ' ' + pct(q.ydb_pct) : (q.ydb_now != null ? ' ' + fmt(q.ydb_now) : ''))
-    }${q.history ? '' : ' · no hist'}</button>`;
+    }${err}${q.history ? '' : ' · no hist'}</button>`;
+  };
   const slowHtml = slow.length
     ? slow.map(q => qPill(q, 'slow')).join('')
     : '<span class="muted">нет (или нет daily dump)</span>';
@@ -1323,6 +1331,7 @@ function diveHtml(r, id) {
           <span class="pill watch">soft</span>
           <span class="pill slow">hard slow</span>
           <span class="pill fail">fail</span>
+          <span class="pill fail">timeout/diff/other</span>
           <span class="pill nodata">no data</span>
         </div>
         <div class="qlist">${catalogHtml}</div>

@@ -30,7 +30,7 @@ OUTLIER_MULT = 3.0
 DEFAULT_WINDOW_DAYS = 30  # default fetch/report/chart window
 
 NOW_RUNS = 1  # alert signal = last completed run (avoids green-last / red-prev confusion)
-DISPLAY_RUNS = 3  # dive cards: recent context
+DISPLAY_RUNS = 7  # dive cards + recent-run context
 BASELINE_RUNS = 7
 EXPECTED_LOOKBACK_DAYS = 14
 EXPECTED_MIN_SHARE = 0.50
@@ -1667,13 +1667,13 @@ def render_html(data: dict, output: Path) -> None:
     html = tpl.replace("__OLAP_REPORT_DATA__", payload)
     html = re.sub(
         r"<title>.*?</title>",
-        f"<title>OLAP Now · {title_bit}</title>",
+        f"<title>Olap results · {title_bit}</title>",
         html,
         count=1,
     )
     html = re.sub(
         r"<h1>.*?</h1>",
-        f"<h1>OLAP Now · {title_bit}</h1>",
+        f"<h1>Olap results · {title_bit}</h1>",
         html,
         count=1,
     )

@@ -1,4 +1,4 @@
-# Agent instructions — OLAP Now report
+# Agent instructions — Olap results (Now report)
 
 Toolkit: `.github/scripts/utils/perfomance_tests_status/olap`
 

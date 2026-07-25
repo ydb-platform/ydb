@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>OLAP Now</title>
+<title>Olap results</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230969da'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='system-ui,sans-serif' font-size='15' font-weight='800' fill='white'%3EO%3C/text%3E%3C/svg%3E" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
@@ -22,13 +22,13 @@
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
     background: var(--bg); color: var(--text); line-height: 1.4;
   }
-  .wrap { max-width: 1280px; margin: 0 auto; padding: 20px 16px 64px; }
-  h1 { font-size: 22px; margin: 0 0 4px; }
-  h2 { font-size: 16px; margin: 22px 0 10px; }
-  .sub { color: var(--muted); font-size: 13px; margin-bottom: 14px; }
+  .wrap { max-width: 1400px; margin: 0 auto; padding: 14px 14px 48px; }
+  h1 { font-size: 20px; margin: 0 0 2px; }
+  h2 { font-size: 15px; margin: 16px 0 8px; }
+  .sub { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
   .note {
-    background: #ddf4ff; border: 1px solid #54aeff66; border-radius: 8px;
-    padding: 10px 12px; font-size: 13px; color: #0550ae; margin: 0 0 14px;
+    background: #ddf4ff; border: 1px solid #54aeff66; border-radius: 6px;
+    padding: 6px 10px; font-size: 12px; color: #0550ae; margin: 0 0 8px;
   }
   .badge {
     display: inline-block; font-size: 11px; font-weight: 700; padding: 3px 8px;
@@ -136,20 +136,34 @@
   }
 
   .filters {
-    display: flex; flex-wrap: wrap; gap: 10px; align-items: end; margin: 0 0 12px;
-    background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: end; margin: 0;
+    background: transparent; border: 0; border-radius: 0; padding: 0;
   }
-  label { display: grid; gap: 3px; font-size: 11px; color: var(--muted); }
+  label { display: grid; gap: 2px; font-size: 10px; color: var(--muted); }
   select, input[type="date"] {
-    min-width: 140px; padding: 6px 8px; border: 1px solid var(--border);
-    border-radius: 6px; background: #fff; font: inherit;
+    min-width: 110px; padding: 4px 6px; border: 1px solid var(--border);
+    border-radius: 5px; background: #fff; font: inherit; font-size: 12px;
   }
-  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
   .toolbar button, .btn {
-    border: 1px solid var(--border); background: var(--panel); border-radius: 6px;
-    padding: 6px 10px; font: inherit; font-size: 13px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--panel); border-radius: 5px;
+    padding: 4px 8px; font: inherit; font-size: 12px; cursor: pointer;
   }
   .toolbar button:hover, .btn:hover { border-color: var(--info); color: var(--info); }
+  .top-filters {
+    display: flex; flex-wrap: nowrap; align-items: center; gap: 8px 10px;
+    margin: 0 0 12px; padding: 6px 10px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+  }
+  .top-filters .lbl { font-size: 11px; color: var(--muted); white-space: nowrap; flex: 0 0 auto; }
+  .top-filters .sep { width: 1px; height: 22px; background: var(--border); flex: 0 0 auto; }
+  .top-filters .react-btn, .top-filters .wave-btn {
+    padding: 3px 8px; font-size: 11px; border-radius: 999px;
+  }
+  .top-filters .filters { flex-wrap: nowrap; align-items: center; gap: 6px; }
+  .top-filters label { display: flex; flex-direction: row; align-items: center; gap: 4px; white-space: nowrap; }
+  .top-filters select, .top-filters input[type="date"] { min-width: 0; }
 
   table.inbox { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
   table.inbox th {
@@ -176,13 +190,23 @@
     display: grid; gap: 12px;
   }
   .runs {
-    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;
+    display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px;
   }
-  @media (max-width: 800px) { .runs { grid-template-columns: 1fr; } }
+  @media (max-width: 900px) {
+    .runs { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  }
+  @media (max-width: 600px) {
+    .runs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
   .run-card {
-    background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12px;
+    background: #fff; border: 1px solid var(--border); border-radius: 6px;
+    padding: 5px 6px; font-size: 10px; line-height: 1.25; min-width: 0;
   }
-  .run-card .t { font-weight: 650; margin-bottom: 4px; }
+  .run-card .t {
+    font-weight: 650; margin-bottom: 2px; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .run-card .muted { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* active/hover styles declared above with delta cells */
   .qlist { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
   .q-split {
@@ -244,82 +268,55 @@
   @media (max-width: 900px) { .pair { grid-template-columns: 1fr; } }
   .empty { color: var(--muted); padding: 16px; text-align: center; }
   a { color: var(--info); }
-  .react-bar {
-    display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
-    margin: 0 0 14px; padding: 10px 12px;
-    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
-  }
-  .react-bar .lbl { font-size: 13px; color: var(--muted); margin-right: 4px; }
-  .react-btn {
+  .react-btn, .wave-btn {
     border: 1px solid var(--border); background: #fff; color: var(--muted);
     border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 12px; font-weight: 650;
-    cursor: pointer;
+    cursor: pointer; white-space: nowrap;
   }
   .react-btn[aria-pressed="true"] { color: #fff; border-color: transparent; }
   .react-btn[data-react="fail"][aria-pressed="true"] { background: var(--bad); }
   .react-btn[data-react="hard"][aria-pressed="true"] { background: #e8590c; }
   .react-btn[data-react="soft"][aria-pressed="true"] { background: #9a6700; }
   .react-btn[data-react="nodata"][aria-pressed="true"] { background: #656d76; }
-  .react-btn:hover { filter: brightness(0.97); }
-  .wave-bar {
-    display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
-    margin: 0 0 14px; padding: 10px 12px;
-    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
-  }
-  .wave-bar .lbl { font-size: 13px; color: var(--muted); margin-right: 4px; }
-  .wave-btn {
-    border: 1px solid var(--border); background: #fff; color: var(--muted);
-    border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 12px; font-weight: 650;
-    cursor: pointer;
-  }
+  .react-btn:hover, .wave-btn:hover { filter: brightness(0.97); }
   .wave-btn[aria-pressed="true"] { color: #fff; border-color: transparent; background: var(--info); }
-  .wave-btn:hover { filter: brightness(0.97); }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>OLAP Now</h1>
+  <h1>Olap results</h1>
   <div class="sub" id="subtitle"></div>
   <div class="note">
-    Now = <b>последний завершённый</b> прогон vs предыдущие <b id="lblBase">7</b>.
-    <b>Missing</b> = suite нет в <i>завершённой</i> волне.
-    <b>In progress</b> = волна ещё едет (не алерт).
+    Now = last completed vs prev <b id="lblBase">7</b>
+    · Missing = нет в завершённой волне
+    · In progress = волна едет (не алерт)
+    · branches: <span id="lblAllBranches">all</span>
   </div>
 
-  <div class="wave-bar" id="waveBar">
-    <span class="lbl">Wave view:</span>
-    <button type="button" class="wave-btn" data-wave="finished" aria-pressed="true">finished runs</button>
-    <button type="button" class="wave-btn" data-wave="all" aria-pressed="false">all</button>
-    <span class="muted" style="font-size:12px">finished = данные последнего завершённого · all = latest (в т.ч. in progress)</span>
-  </div>
-
-  <div class="react-bar" id="reactBar">
-    <span class="lbl">Реагируем на:</span>
-    <button type="button" class="react-btn" data-react="fail" aria-pressed="true">fail</button>
-    <button type="button" class="react-btn" data-react="hard" aria-pressed="false">hard slow</button>
-    <button type="button" class="react-btn" data-react="soft" aria-pressed="false">soft slow</button>
-    <button type="button" class="react-btn" data-react="nodata" aria-pressed="false">no data</button>
-    <span class="muted" style="font-size:12px">по умолчанию только fail · missing/stale всегда · in progress — в режиме all</span>
-  </div>
-
-  <div class="filters" id="branchBar" style="margin-bottom:14px">
-    <label>Branch
-      <select id="fBranch"></select>
-    </label>
-    <label>From
-      <input type="date" id="winFrom" />
-    </label>
-    <label>To
-      <input type="date" id="winTo" />
-    </label>
-    <div class="toolbar" style="margin:0;align-self:end">
-      <button type="button" id="winApply">Apply dates</button>
-      <button type="button" id="winReset">Reset</button>
+  <div class="top-filters" id="topFilters">
+    <span class="lbl">Wave</span>
+    <span id="waveBar" style="display:inline-flex;gap:4px">
+      <button type="button" class="wave-btn" data-wave="finished" aria-pressed="true" title="данные последнего завершённого">finished</button>
+      <button type="button" class="wave-btn" data-wave="all" aria-pressed="false" title="latest в т.ч. in progress">all</button>
+    </span>
+    <span class="sep"></span>
+    <span class="lbl">React</span>
+    <span id="reactBar" style="display:inline-flex;gap:4px">
+      <button type="button" class="react-btn" data-react="fail" aria-pressed="true">fail</button>
+      <button type="button" class="react-btn" data-react="hard" aria-pressed="false">hard</button>
+      <button type="button" class="react-btn" data-react="soft" aria-pressed="false">soft</button>
+      <button type="button" class="react-btn" data-react="nodata" aria-pressed="false">no data</button>
+    </span>
+    <span class="sep"></span>
+    <div class="filters" id="branchBar">
+      <label>Branch <select id="fBranch"></select></label>
+      <label>From <input type="date" id="winFrom" /></label>
+      <label>To <input type="date" id="winTo" /></label>
+      <div class="toolbar">
+        <button type="button" id="winApply">Apply</button>
+        <button type="button" id="winReset">Reset</button>
+      </div>
     </div>
-    <label class="muted" style="align-self:end;padding-bottom:6px">
-      ветка → только её DbAlias · даты режут inbox / last wave / графики
-      (<span id="lblAllBranches">all</span> = все ветки)
-    </label>
   </div>
 
   <div class="counters" id="counters"></div>
@@ -697,13 +694,23 @@ function compareSelectHtml(branch, db) {
   if (!older.length) {
     return `<td class="cmp-cell"><span class="muted" style="font-size:11px">нет волн</span></td>`;
   }
+  const nShow = (DATA.ui && DATA.ui.display_runs) || 7;
+  // Prefer last N waves in the open list; keep older ones under optgroup.
+  const recent = older.slice(0, nShow);
+  const rest = older.slice(nShow);
   const cur = getCompareId(branch, db);
+  const opt = (w) => {
+    const sel = (cur && (cur === w.id || cur === w.ci_version)) ? ' selected' : '';
+    return `<option value="${esc(w.id)}"${sel}>${esc(formatWaveOption(w))}</option>`;
+  };
   const opts = [`<option value="">— compare —</option>`]
-    .concat(older.map(w => {
-      const sel = (cur && (cur === w.id || cur === w.ci_version)) ? ' selected' : '';
-      return `<option value="${esc(w.id)}"${sel}>${esc(formatWaveOption(w))}</option>`;
-    }));
-  return `<td class="cmp-cell"><select class="cmp-wave" data-cmp-branch="${esc(branch)}" data-cmp-db="${esc(db)}" title="Сравнить last wave с выбранной">${opts.join('')}</select></td>`;
+    .concat(recent.map(opt));
+  if (rest.length) {
+    opts.push(`<optgroup label="older (${rest.length})">`);
+    opts.push(...rest.map(opt));
+    opts.push('</optgroup>');
+  }
+  return `<td class="cmp-cell"><select class="cmp-wave" data-cmp-branch="${esc(branch)}" data-cmp-db="${esc(db)}" title="Сравнить last wave с выбранной (top ${nShow} = recent)">${opts.join('')}</select></td>`;
 }
 
 function fmt(v) {
@@ -1918,10 +1925,14 @@ function diveHtml(r, id) {
     const link = run.report ? `<a href="${esc(run.report)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">report</a>` : '—';
     const active = ri === focusIdx ? ' active' : '';
     const cmpHit = cmpId && run.ci_version && run.ci_version === cmpId ? ' style="outline:1px dashed #9a6700"' : '';
-    return `<div class="run-card${active}" data-run-card="${id}" data-run-idx="${ri}" data-ci="${esc(run.ci_version || '')}"${cmpHit}>
-      <div class="t">${esc(run.label)}</div>
-      <div>fail ${fmtFail(run.fail_rate)} · ydb ${fmt(run.ydb)}</div>
-      <div class="muted">${esc(run.ci_version || '')}</div>
+    const sha = (run.version || run.label || '').toString();
+    const shortLbl = run.label
+      ? String(run.label).replace(/^(\d{4}-\d{2}-\d{2})_([a-f0-9]{7,8}).*$/i, '$1·$2')
+      : sha.slice(0, 10);
+    return `<div class="run-card${active}" data-run-card="${id}" data-run-idx="${ri}" data-ci="${esc(run.ci_version || '')}" title="${esc((run.label || '') + ' · ' + (run.ci_version || ''))}"${cmpHit}>
+      <div class="t">${esc(shortLbl)}</div>
+      <div>${fmtFail(run.fail_rate)} · ${fmt(run.ydb)}</div>
+      <div class="muted">${esc(run.ci_version || '—')}</div>
       <div>${link}</div>
     </div>`;
   }).join('') || `<div class="muted">${

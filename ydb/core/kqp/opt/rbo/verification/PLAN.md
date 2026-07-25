@@ -193,8 +193,8 @@ membership normalization admits only
 1..512 non-null exact-type items; generic dictionaries and `Contains` remain
 unsupported.
 
-Three reviewed optimizer-generated wrapper normalizations reuse those existing
-exact nodes.
+Reviewed optimizer-generated wrapper normalizations reuse those existing exact
+nodes.
 `Coalesce(predicate, false)` lowers to `if_present` only when the first child
 is either one direct nullable ordinary comparison, exactly binary
 `Or(member == literal, member == literal)`/`And(member != literal, member != literal)`,
@@ -213,10 +213,18 @@ Decimal, or that exact Decimal Coalesce-zero form, and its result is the
 matching `Optional<Decimal>`. Independently, `Just(member)` lowers to the same
 explicit constant-true `if` shape only for one direct visible, exact non-null
 `Uint64` input member and an exact `Optional<Uint64>` result.
+An additional always-present literal gate evaluates a complete `Convert` from
+one direct non-null integer literal to a non-null integer result as the exact
+target-typed literal. `Just(Date literal)` and
+`Just(complete integer-literal Convert)` then lower to the same
+`if(true, value, typed-null)` shape when the Optional result type, target
+descriptor, and nested annotations all agree. A direct integer-literal `Just`
+without that reviewed conversion, an incomplete or dynamic conversion, and
+mismatched wrapper/result types remain opaque or fail closed.
 The unreachable typed-NULL branch preserves the Optional schema while the
 constant-true condition preserves `Just` runtime presence. Incomplete,
 mismatched, dynamic, nonzero, or broader safe near-matches remain opaque.
-All three gates retain
+All wrapper gates retain
 the full closed-world scalar safety validation and shared normalized-node,
 source-depth, and live-binding limits.
 
@@ -230,6 +238,20 @@ shared deterministic-total uninterpreted function, not a reimplementation of
 the byte predicate, so it can prove preservation of the same operation and
 arguments across dialect lowering. Other types, arities, operand orders,
 computed operands, and catalog/descriptor mismatches fail closed.
+
+The restricted floating-predicate bridge does not add `Double` values or
+floating arithmetic to the snapshot IR. It accepts only an
+`Optional<Int64>` left expression under one `Optional<Bool>` ordering
+comparison paired with the exact reviewed non-null `Double` constant/operator
+combinations `>= 2/3`, `<= 3/2`, `> 1.2`, and `< 0.9`. The two fractional
+constants may use their reviewed source divisions or the exact folded literal
+spelling; all four constants receive stable fingerprints containing their
+exact IEEE-754 binary64 bits. The comparison may additionally appear under the
+existing exact `Coalesce(..., false)` envelope. The exporter audits the full
+left subtree and keeps the complete comparison as one typed opaque Boolean
+function over its ordered visible-IU arguments. Every other floating constant,
+operator pairing, `Double` carrier, arithmetic use, result shape, or wrapper
+fails closed.
 
 Every other deterministic, total scalar subtree is represented as a typed
 uninterpreted function:
@@ -273,7 +295,9 @@ non-optional. Operand NULL, a zero divisor, and signed `MIN / -1` overflow
 produce NULL. Every other quotient truncates toward zero: the model divides
 nonnegative magnitudes and restores the sign instead of using SMT integer
 division's negative rounding. Mixed-type, mixed-width, non-Optional-result,
-and floating-point forms fail closed.
+and floating-point forms fail closed as standalone expressions. The restricted
+whole-predicate bridge above may audit such syntax only inside its one opaque
+Boolean identity; it does not expose floating division to the scalar evaluator.
 
 Decimal arithmetic has a separate canonical gate. Binary `+` and `-` require
 both operands and the result to have one exact canonical `Decimal(p,s)` type.
@@ -293,12 +317,15 @@ only when YQL's cast analysis says it cannot fail. The exact workload form
 `Substring(Optional<String>, constant Uint32, constant Uint32)` is also
 admitted, including direct in-range integer-literal conversions in its two
 bound positions. Its constants remain in the canonical fingerprint and only
-the String input is an external UF argument. Unknown callables, UDF/PG calls,
-floating-point or mixed-type division, strict casts, `Unwrap`, free variables,
-position-aware or unordered nodes, and side-effecting/CSE-unsafe nodes fail
-closed. `DecimalDiv` and exact same-type fixed-width integral `/` are the
-explicitly audited total division callables. Expanding this list requires an
-explicit totality review and tests.
+the String input is an external UF argument. The restricted whole
+floating-predicate bridge above is a separate pointer-scoped positive audit:
+only its exact comparison root and constant bypass ordinary `Double` type
+admission. Unknown callables, UDF/PG calls, floating-point or mixed-type
+division outside that whole-predicate bridge, strict casts, `Unwrap`, free
+variables, position-aware or unordered nodes, and side-effecting/CSE-unsafe
+nodes fail closed. `DecimalDiv` and exact same-type fixed-width integral `/`
+are the explicitly audited total division callables in the scalar core.
+Expanding this list requires an explicit totality review and tests.
 
 One cast shape is normalized before opaque fallback: when YQL cast analysis
 reports a complete conversion from a non-null integer literal to a non-null
@@ -488,8 +515,8 @@ equality makes two NaNs a sort tie. One order item retains one exact canonical
 `Decimal(p,s)` identity without scale alignment; separate tuple keys may have
 different Decimal identities. NULL placement continues to use the pre-physical
 snapshot's explicit `nulls_first` field. Floating-point, mixed-type, and other
-division forms, casts outside the exact weak-`SafeCast` and
-constant-normalization gates,
+division forms outside the restricted whole-predicate bridge, casts outside the
+exact weak-`SafeCast` and constant-normalization gates,
 dynamic or otherwise non-core `IN`, and aggregate functions outside the
 modeled subset below remain unsupported.
 
@@ -703,7 +730,14 @@ Implementation sequence:
 55. M4: proven-present String/Utf8-literal Date `SafeCast` items in raw
     static-`SqlIn` tuples, moving both q83 snapshots to the later `Double`
     boundary;
-56. M4 next: floating-point/`Double`, more than two dependencies, broader
+56. M4: restricted whole floating predicates over `Optional<Int64>` with
+    exact IEEE-bit constant identities, moving TPC-DS q21/q34/q75 through
+    formula construction and q34 into the proof floor;
+57. M4: exact always-present direct Date-literal and complete integer-literal
+    `Convert` wrappers, preserving Optional schema and removing q21's spurious
+    candidate;
+58. M4 next: passive `Double` carriers beginning with q83, more than two
+    dependencies, broader
     correlations, coercing and nullable-String dynamic `IN`, range reads, and
     other OLAP pushdowns.
 
@@ -2021,12 +2055,13 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   the TPC-DS run spent 1,446/36,036 ms and produced
   `136deef295abfe9c1fa8b4c7d8b01fe8e5131a76886ec998c0a90cbd8b778846`.
   Those historical reports contain the previous eighteen curated proofs. The
-  current policy contains twenty-six confirmed proofs, 26/121 (21.5% of the
+  current policy contains twenty-seven confirmed proofs, 27/121 (22.3% of the
   workload): the first relational `EXISTS` slice contributed TPCH q4/q22 and
   TPC-DS q69, while the two-dependency slice contributes TPCH q21 and TPC-DS
   q16/q94. Dynamic `IN` contributes TPCH q18; the shared-IU/q95 aggregate slice
   contributes TPC-DS q95; and exact proven-total Date `Unwrap` contributes
-  TPC-DS q38/q87. Exact same-type integral division contributes TPC-DS q73.
+  TPC-DS q38/q87. Exact same-type integral division contributes TPC-DS q73,
+  and the restricted floating-predicate bridge contributes TPC-DS q34.
   The solver first checks the stable grouped mismatch with a three-quarter SMT
   timeout, then, only after `UNKNOWN`, replaces that assertion with the exact
   two language-absence predicates and one guarded unmatched predicate per
@@ -2342,15 +2377,21 @@ q83's final raw static tuple contains three valid direct String-literal
 exporter gate parses each literal with MiniKQL, admits it only when the result
 is present, and serializes the existing non-null Date literal. Invalid text,
 dynamic input, `Nothing`, `StrictCast`, other optional types, and nullable
-`AsList` items remain unsupported. After both exact slices, q83's current
+`AsList` items remain unsupported. After both exact slices, q83's then-current
 complete-dashboard row prepares successfully in 1,351 ms, then both snapshots
 first fail on `Unsupported scalar type Double`; verifier work is 0 ms. The
 preceding focused run spent 1,310/0 ms and produced report SHA-256
 `7f1bae257dfcede11aa2f6a37f8e1bc45e079be4f13f8b836887a1768b6d7113`.
 It adds no formula, verifier entry, bounded proof, policy change, or optimizer
-finding. Current validation passes 577/577 verifier tests, 214/214 C++
-exporter tests, and 14/14 coverage-policy tests. Coercions, nullable String,
-nullable non-positive Boolean contexts, and `Double` remain separate work.
+finding. Validation at that checkpoint passed 577/577 verifier tests, 214/214
+C++ exporter tests, and 14/14 coverage-policy tests.
+
+The subsequent restricted whole-predicate and exact literal-wrapper gates add
+TPC-DS q21/q34/q75 to formula construction and q34 to the proof floor. Current
+validation passes 577/577 verifier tests, 221/221 C++ exporter tests, and 14/14
+coverage-policy tests. Passive `Double` carriers beginning with q83, coercions,
+nullable String, and nullable non-positive Boolean contexts remain separate
+work.
 
 The exact nullable Date-year projection bridge accepts only the reviewed
 `Map(SafeCast(Optional<Date> -> Optional<Timestamp>), lambda Timestamp:

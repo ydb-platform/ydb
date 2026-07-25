@@ -1247,7 +1247,10 @@ function renderHeatmap() {
         const heat = heatSelection();
         const selected = !!(heat && heat.db === db && heat.fam === fam
           && (!selectedBranch() || selectedBranch() === branch));
-        const cellCls = live.compare ? (st.startsWith('delta-') ? st : `delta-${live.delta || 'same'}`) : st;
+        // same → keep now status color; delta-* only when status actually changed
+        const cellCls = (live.compare && live.delta && live.delta !== 'same')
+          ? (st.startsWith('delta-') ? st : `delta-${live.delta}`)
+          : (live.delta_status || st);
         html += `<td><div class="cell ${cellCls}${selected ? ' selected' : ''}" data-branch="${esc(branch)}" data-db="${esc(db)}" data-fam="${esc(fam)}" title="${esc(tip)}">${cellLabel(st, live)}</div></td>`;
       }
       const w = waveFor(branch, db);

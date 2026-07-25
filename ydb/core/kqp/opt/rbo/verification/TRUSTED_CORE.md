@@ -76,13 +76,13 @@ A defect in these files can turn inequivalent supported plans into
 | File | Trusted responsibility |
 |---|---|
 | `semantic_snapshot.h` | Version-one catalog, snapshot, boundary, and fail-closed exporter contract. |
-| `semantic_snapshot.cpp` | Mechanical catalog and plan export; scalar normalization and safety gates; operator, exact scalar- and one-level `IN`-inside-`IN` nesting, subplan, correlated outer-binding, StageGraph, topology, task, and resource validation; deterministic JSON serialization. |
-| `rbo_verifier/ir.py` | Strict JSON decoding, version/schema validation, normalized IR, expression typing, all-plan-root virtual-binding confinement, exact scalar- and one-level `IN`-inside-`IN` plus correlated-subplan shape checks, and operator/StageGraph invariants. |
-| `rbo_verifier/types.py` | Supported scalar identities, domains, families, and compatibility predicates. |
+| `semantic_snapshot.cpp` | Mechanical catalog and plan export; scalar normalization and safety gates, including the exact passive-Double constructor; operator, exact scalar- and one-level `IN`-inside-`IN` nesting, subplan, correlated outer-binding, StageGraph, topology, task, and resource validation; deterministic JSON serialization. |
+| `rbo_verifier/ir.py` | Strict JSON decoding, version/schema validation, normalized IR, expression typing, passive-Double use confinement, all-plan-root virtual-binding confinement, exact scalar- and one-level `IN`-inside-`IN` plus correlated-subplan shape checks, and operator/StageGraph invariants. |
+| `rbo_verifier/types.py` | Supported scalar identities, exact domains, opaque-carrier family, and compatibility predicates. |
 | `rbo_verifier/smt.py` | Typed immutable SMT terms, script-owned one-constructor product datatypes, closed quantifier-free exact function definitions, quantifier-safe sharing, deterministic canonical rendering, exact marked-obligation substitution, and solver-output parsing primitives. |
 | `rbo_verifier/string_order.py` | Finite exact bounded quotient for String/Utf8 equality and unsigned byte ordering. |
 | `rbo_verifier/decimal.py` | Decimal representation, domains, comparison, arithmetic, extrema, specials, and proof bounds. |
-| `rbo_verifier/scalar.py` | Nullable values, SQL three-valued predicates, exact scalar evaluation, and typed opaque functions. |
+| `rbo_verifier/scalar.py` | Nullable values, SQL three-valued predicates, exact scalar evaluation, typed opaque functions, and the domain-free passive carrier encoding. |
 | `rbo_verifier/sort_network.py` | Audited power-of-two bitonic compare-exchange topology and exact construction cost. |
 | `rbo_verifier/relation.py` | Symbolic database, unique-key constraints, logical operators, per-row scalar subplans, bags/sequences, packed exact Sort/Merge transport with concrete or symbolic producer order, exact present-prefix equality, errors, choices, result-family equality, and the exact mismatch cover. |
 | `rbo_verifier/stages.py` | Two-task StageGraph execution, routing, connection semantics, per-task evaluation, and root gathering. |
@@ -155,6 +155,10 @@ order-sensitive inspector digests, an omitted-second-correlation
 TPC-DS q16/q94 all return `VERIFIED_BOUNDED` at two rows per table and two
 tasks. The current complete policy gate independently returns 11/11 TPCH and
 16/16 TPC-DS `VERIFIED_BOUNDED`, confirming all 27/27 curated obligations.
+TPCH spent 1,308/62,684 ms and produced report SHA-256
+`0eed270ad0148908f05f59ad4e09f8710c280fca39871b5269b60ca1f707979e`;
+TPC-DS spent 3,666/57,767 ms and produced
+`e8b018abf0286bead86484b8a8739985554b70c823ef663abbeb938eb52a44b6`.
 TPC-DS q34 is the new proof: its focused run returns `VERIFIED_BOUNDED` after
 263/2,471 ms with report SHA-256
 `44bdcd9f105d4f334b628bb672fa8d6b4f6ffd43ceece0666cd03829dfa5b677`.
@@ -272,7 +276,8 @@ only the reviewed root comparison and its constant; the whole input subtree
 still passes the ordinary opaque-expression visibility, metadata, type, and
 node-budget audit. Swapped operands, a mismatched operator/constant, a
 different constant spelling or payload, nested floating arithmetic, a
-different envelope, and general or passive `Double` dataflow fail closed.
+different envelope, and `Double` dataflow outside the separately audited
+passive-carrier slice fail closed.
 Because the exported node remains an opaque expression, no new Python
 floating-point semantics enter the TCB.
 
@@ -292,10 +297,66 @@ q21 is `UNKNOWN` after 170/60,950 ms
 and q75 remains `UNKNOWN` in retained 1,134/128,182 ms evidence
 (`1322068b8d57dfa984e91f6f775b063cc3c10e997e30a841e40c46f8d2058a9f`).
 The q21 wrapper normalization eliminates the preceding spurious candidate.
-q83 remains unsupported because
-its passive `Double` carrier is outside the reviewed whole-predicate shape.
-Current validation passes 577/577 Python verifier tests, 221/221 C++ exporter
-tests, and 14/14 coverage-policy tests.
+At that checkpoint q83 remained unsupported because its passive `Double`
+carrier was outside the reviewed whole-predicate shape.
+Validation at that checkpoint passed 577/577 Python verifier tests, 221/221 C++
+exporter tests, and 14/14 coverage-policy tests.
+
+The following q83 slice introduces a distinct `opaque_double` IR constructor;
+it does not reinterpret ordinary `opaque` or add floating arithmetic. The C++
+auditor accepts exactly two roots over three distinct, direct,
+`Optional<Int64>` members:
+
+- the left-associated three-member total divided by exact non-null
+  `Double("3.0")`, producing the average; or
+- one member divided by that same three-member total, then by exact
+  `Double("3.0")`, then multiplied by exact non-null `Int32("100")`, producing
+  one deviation.
+
+Every root and floating division must be `Optional<Double>`. Pointer-scoped
+exceptions admit only those audited nodes and the exact binary64 `3.0`
+constant; the remaining integer subtree still passes the ordinary opaque
+visibility, type, metadata, depth, and node-budget audit. The structural
+fingerprint starts with `yql-passive-double-v1`, retains ordered/repeated
+member positions and all types, and exposes exactly three direct arguments.
+The four q83 expressions—three deviations and one average—have byte-identical
+fingerprints across Initial and Final for each corresponding result.
+
+Python independently requires `opaque_double`, `Optional<Double>`, the audited
+fingerprint prefix, three distinct direct `Optional<Int64>` columns, and a
+nonempty identity suffix. `Double` is a carrier family represented by one SMT
+integer token plus its NULL Boolean. Both are deterministic uninterpreted
+functions shared by fingerprint and ordered argument types across the two
+plans; there is deliberately no IEEE value domain, arithmetic, comparison, or
+ordering rule. SMT congruence forces the same fingerprint and equal ordered
+arguments to produce the same NULL and payload values. Distinct identities
+remain unconstrained and may coincide in a model. This relaxation can produce
+a spurious `SAT`/`UNKNOWN`, but never a false `UNSAT`.
+
+The carrier is derived-only and passive-only. Base-table metadata, literals and
+typed NULLs, `outer_bind`, subplan inputs/outputs, scalar consumers, comparison
+and static `IN`, join keys, aggregate keys/inputs/results, sort keys, and
+HashShuffle keys reject `Double`. Direct column pass-through may carry it
+through relational operators and StageGraph only as an uninspected payload;
+q83's observed downstream path is Project, non-key Sort, Limit, and Merge.
+Inspector rendering preserves the explicit `opaque_double` kind and
+fingerprint; the inspector remains outside the proof TCB.
+
+Focused q83 formula construction under the hardened gates returns
+`FORMULA_EMITTED` after 1,301/6,081 ms; its report SHA-256 is
+`04e5df3a8f55044002fdf9b231d75b707bf58fd51c8b60a4a8879d4d623b9a5b`.
+Its 10,953,698-byte canonical formula has SHA-256
+`5228c142eef65eb7707ff039c58e6cfc85f599286a9ec2ccf480b5fd94903db6`.
+A separate 60-second solver run returns `UNKNOWN` after 1,313/66,340 ms when
+the global deadline expires before branch 2/4 (`right_language_empty`); its
+report SHA-256 is
+`5571045865cbd30d7b2a35e61c379bdb7e3e24b63bfd1df2be8f514454487572`.
+The complete TPC-DS dashboard independently records q83 as
+`FORMULA_EMITTED` after 1,338/6,175 ms and confirms a 72/121 formula policy.
+q83 is not a bounded proof, reveals no optimizer correctness bug, and leaves
+the proof floor at 27/121. Validation passes 588/588 Python verifier tests,
+225/225 C++ exporter tests, 46/46 inspector tests, and 14/14 coverage-policy
+tests.
 
 The exact duplicate-source Map projection changes only
 `semantic_snapshot.cpp`; the existing Project IR and evaluator already copy a
@@ -571,7 +632,7 @@ nested-binding ownership/topology validation in
 static-`IN` semantics are reused. There is no q83-specific equivalence axiom or
 new diagnostic path.
 
-The latest post-wrapper 2026-07-25 physical-line audit uses source
+The preceding post-wrapper 2026-07-25 physical-line audit uses source
 `a0ec2bc866b` plus this documentation update:
 
 | Area | Physical lines |
@@ -588,6 +649,22 @@ exact-wrapper slices add 487 trusted C++ lines and 1,055 test lines. Trusted
 Python and diagnostic-tool size are unchanged. The new TCB surface is confined
 to the two fail-closed C++ exporter audits described above; existing Python
 opaque, literal, and `If` semantics are reused.
+
+The latest post-passive-Double 2026-07-25 physical-line audit uses source
+`15fd238fd31`:
+
+| Area | Physical lines |
+|---|---:|
+| Ten trusted Python semantic modules | 12,391 |
+| C++ exporter (`semantic_snapshot.cpp` and `.h`) | 10,245 |
+| **Proof-producing code total** | **22,636** |
+| Tests, outside the TCB | 56,719 |
+| Diagnostic/orchestration tools, outside the TCB | 5,230 |
+
+Relative to the preceding post-wrapper audit, the passive-Double slice adds
+144 trusted Python lines, 345 C++ exporter lines, 489 proof-producing lines,
+and 1,270 test lines; diagnostic tooling is unchanged. The new trusted seams
+are confined to `semantic_snapshot.cpp`, `ir.py`, `types.py`, and `scalar.py`.
 
 ## External assumptions
 
@@ -629,6 +706,11 @@ the SMT obligation itself:
   the recorded direct literal `SafeCast`, MiniKQL parsing proves the runtime
   value present, and replacing it with the emitted non-null Date literal is
   exact;
+- each accepted `opaque_double` denotes the recorded deterministic q83
+  average/deviation expression over exactly three direct nullable Int64
+  arguments, its fingerprint preserves the complete reviewed callable,
+  literal, type, and ordered-use identity, and transporting the result as a
+  non-key payload does not inspect or alter its runtime Double value;
 - each accepted repeated-source Map rename copies the same runtime input value
   into every declared distinct output, suppresses the original source once,
   and preserves the recorded Map-element order without hidden computation;
@@ -722,7 +804,7 @@ each slice. It is an audit checklist, not a claim that tests are exhaustive.
 | Slice | Trusted path to review | Primary independent evidence |
 |---|---|---|
 | Capture, catalog, root schema | host hook assumption; `semantic_snapshot.*`; `ir.py`; `verify.py` | `cpp_ut/semantic_snapshot_exporter_ut.cpp`; `integration_ut/optimizer_snapshot_pair_ut.cpp`; schema-mutation tests |
-| Types, NULLs, scalar functions | `semantic_snapshot.cpp`; `ir.py`; `types.py`; `scalar.py`; `decimal.py`; `string_order.py` | `ut/test_scalar.py`; `test_decimal.py`; `test_string_order.py`; `test_string_proof.py`; `test_sql_in.py`; canonical String-predicate, Date-year, proven-total Date-`Unwrap`, direct-Uint64-`Just`, exact Decimal weak-`SafeCast`, proven-present raw-tuple Date-`SafeCast`, restricted whole-floating-predicate, and exact literal-wrapper mutations; `source_type`, NULL, overflow, widening-special, and fail-closed references; synthetic real-host proofs; exporter near-miss mutations |
+| Types, NULLs, scalar functions | `semantic_snapshot.cpp`; `ir.py`; `types.py`; `scalar.py`; `decimal.py`; `string_order.py` | `ut/test_scalar.py`; `test_decimal.py`; `test_string_order.py`; `test_string_proof.py`; `test_sql_in.py`; canonical String-predicate, Date-year, proven-total Date-`Unwrap`, direct-Uint64-`Just`, exact Decimal weak-`SafeCast`, proven-present raw-tuple Date-`SafeCast`, restricted whole-floating-predicate, passive-Double carrier, and exact literal-wrapper mutations; passive-carrier identity/mutation and non-key Sort/Merge passenger proofs; `source_type`, NULL, overflow, widening-special, and fail-closed references; synthetic real-host proofs; exporter near-miss mutations |
 | Logical bags, order, limits, errors | `semantic_snapshot.cpp`; `ir.py`; `smt.py`; `sort_network.py`; `relation.py` | `ut/test_logical_reference.py`; `test_limit.py`; `test_sort.py`; exhaustive network topology/prefix/nullable/mixed-order/Merge-hole/AVG-state tests; packed-layout, declaration-structure, present-prefix equality, and cap tests; focused concrete differential tests |
 | Aggregates and subplans | `semantic_snapshot.cpp`; `ir.py`; `decimal.py`; `scalar.py`; `relation.py` | aggregate/DistinctAll/count-distinct/unwrap exporter and IR mutations; exhaustive count-distinct duplicates and triangular cap; scalar-final unwrap empty/all-NULL/present references; Decimal-extrema raw-code differential, routing, and solver-mutation checks; nullable composite-key differential and staged-routing checks; `ut/test_subplans.py`; cardinality, demand, NULL, duplicate, error, exact scalar- and one-level `IN`-inside-`IN` ownership/nesting/cache/choice checks, nested finite references and sequential-semi solver differentials, correlated outer-binding, one- and exact two-dependency `EXISTS` ordering/shape/semi/anti checks, dynamic-`IN` mapping/cache/pair-cap and positive-nullable integral/Date-context checks, real-host Decimal-AVG and correlated-`EXISTS`, and non-null/nullable `IN`-to-`left_semi` cases |
 | StageGraph, joins, and routing | `semantic_snapshot.cpp`; `ir.py`; `scalar.py`; `stages.py`; `relation.py` | `ut/test_stagegraph_reference.py`; `test_stage_compaction.py`; shared-IU semi/anti exhaustive execution; JoinKey budget/mutation checks; C++ topology/task mutations; real-host integration |

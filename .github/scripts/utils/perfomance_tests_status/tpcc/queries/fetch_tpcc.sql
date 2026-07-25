@@ -6,6 +6,7 @@ SELECT
   warehouses,
   COALESCE(git_branch, '') AS git_branch,
   timestamp,
+  git_commit_timestamp,
   tpmC,
   newOrderLatency90 AS lat90,
   efficiency,

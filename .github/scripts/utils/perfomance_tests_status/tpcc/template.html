@@ -129,7 +129,7 @@
     background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12px;
   }
   .run-card .t { font-weight: 650; margin-bottom: 4px; }
-  .chart-box { height: 220px; background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 8px; }
+  .chart-box { height: 260px; background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 8px; }
   .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   @media (max-width: 900px) { .pair { grid-template-columns: 1fr; } }
   .empty { color: var(--muted); padding: 16px; text-align: center; }
@@ -158,7 +158,7 @@
   <div class="sub" id="subtitle"></div>
   <div class="note">
     Now = последние <b id="lblNow">3</b> прогона vs предыдущие <b id="lblBase">7</b>
-    (median). <b>Lat↑</b> ≥ +10% · <b>tpmC↓</b> ≤ −10% · <b>broken</b> = lat cap ≥30000 или outlier &gt;3×.
+    (median). <b>Lat↑</b> ≥ +10% · <b>tpmC↓</b> ≤ −10% · <b>broken</b> = lat cap ≥30000&nbsp;ms или outlier &gt;3×.
     <b>Missing</b> = slice нет в завершённой day-wave (Branch × Cluster × день).
   </div>
 
@@ -338,7 +338,13 @@ function itemInWindow(r) {
     else if (run.ts) days.push(dayOf(run.ts));
     else if (run.label) days.push(dayOf(run.label));
   }
-  for (const lab of ((r.history && r.history.labels) || [])) days.push(dayOf(lab));
+  for (const hist of [r.history, r.history_by_commit]) {
+    if (!hist) continue;
+    const n = (hist.labels || []).length;
+    for (let i = 0; i < n; i++) {
+      days.push(dayOf((hist.days && hist.days[i]) || hist.labels[i]));
+    }
+  }
   if (!days.length) return true;
   return days.some(d => dayInRange(d, winFrom, winTo));
 }
@@ -438,11 +444,12 @@ function cellLabel(st, live) {
 function sliceHist(hist) {
   if (!hist || !(hist.labels || []).length) return hist;
   if (!winFrom && !winTo) return hist;
-  const out = { labels: [], tpmc: [], lat90: [], markers: [], versions: [] };
+  const out = { labels: [], days: [], tpmc: [], lat90: [], markers: [], versions: [] };
   for (let i = 0; i < hist.labels.length; i++) {
-    const day = dayOf(hist.labels[i]);
+    const day = dayOf((hist.days && hist.days[i]) || hist.labels[i]);
     if (!dayInRange(day, winFrom, winTo)) continue;
     out.labels.push(hist.labels[i]);
+    out.days.push(hist.days ? hist.days[i] : day);
     out.tpmc.push(hist.tpmc ? hist.tpmc[i] : null);
     out.lat90.push(hist.lat90 ? hist.lat90[i] : null);
     out.markers.push(hist.markers ? hist.markers[i] : 'ok');
@@ -661,52 +668,97 @@ function colorsTpmcVsMavg(vals, win) {
     return '#5b8def';
   });
 }
+function datalensGitBranch(branch) {
+  if (!branch || branch === '(empty)' || branch === '—') return '';
+  if (branch.startsWith('origin/')) return branch;
+  return 'origin/' + branch;
+}
+function datalensRunType(item) {
+  if (item.run_type) return item.run_type;
+  const fam = item.family;
+  if (fam && fam !== '—') return 'ydb_cli_' + fam;
+  return '';
+}
+/** DataLens TPC-C dashboard for this slice (cluster × run_type × branch). */
+function datalensUrl(item) {
+  const ui = DATA.ui || {};
+  const base = ui.datalens_base || 'https://datalens.yandex/wf5xdbbl923ok';
+  const tab = ui.datalens_tab || '9l5';
+  const params = new URLSearchParams();
+  params.set('tab', tab);
+  const runType = datalensRunType(item);
+  const cluster = item.cluster || item.db || '';
+  const gitBranch = datalensGitBranch(item.branch);
+  if (runType) params.set('run_type', runType);
+  if (cluster) params.set('cluster', cluster);
+  if (gitBranch) params.set('git_branch', gitBranch);
+  return `${base}?${params.toString()}`;
+}
+function openDatalens(item) {
+  const url = datalensUrl(item);
+  if (!url) return;
+  window.open(url, '_blank', 'noopener');
+}
+
 function mountHistory(item, id) {
   const metrics = (item.issue === 'in_progress' && item.finished) ? item.finished : item;
-  const src = (item.issue === 'in_progress' && item.finished && item.finished.history)
+  const srcRun = (item.issue === 'in_progress' && item.finished && item.finished.history)
     ? item.finished.history
     : (item.history || {});
-  const hist = sliceHist(src);
+  const srcCommit = (item.issue === 'in_progress' && item.finished && item.finished.history_by_commit)
+    ? item.finished.history_by_commit
+    : (item.history_by_commit || item.history || {});
+  const histRun = sliceHist(srcRun);
+  const histCommit = sliceHist(srcCommit);
   const box = document.getElementById(id + '_hist');
   if (!box) return;
-  if (!(hist.labels || []).length) {
+  if (!(histRun.labels || []).length && !(histCommit.labels || []).length) {
     box.innerHTML = '<div class="empty">Нет истории в выбранном интервале дат</div>';
     return;
   }
   const win = (DATA.ui && DATA.ui.baseline_runs) || 7;
   const tpmcBase = metrics.tpmc_base;
   const latBase = metrics.lat_base;
+  const dashUrl = datalensUrl(item);
   let showBase = true;
   box.innerHTML = `
   <label class="muted" style="display:inline-flex;gap:6px;align-items:center;margin-bottom:8px;cursor:pointer">
     <input type="checkbox" id="${id}_base" checked /> показать alert baseline (median prev${win} runs)
   </label>
+  <div class="muted" style="margin:8px 0 4px;font-weight:650">X = дата запуска</div>
   <div class="pair">
-    <div class="chart-box"><canvas id="${id}_tpmc"></canvas></div>
-    <div class="chart-box"><canvas id="${id}_lat"></canvas></div>
+    <div class="chart-box" style="cursor:pointer"><canvas id="${id}_run_tpmc"></canvas></div>
+    <div class="chart-box" style="cursor:pointer"><canvas id="${id}_run_lat"></canvas></div>
+  </div>
+  <div class="muted" style="margin:14px 0 4px;font-weight:650">X = дата коммита (git_commit_timestamp)</div>
+  <div class="pair">
+    <div class="chart-box" style="cursor:pointer"><canvas id="${id}_cmt_tpmc"></canvas></div>
+    <div class="chart-box" style="cursor:pointer"><canvas id="${id}_cmt_lat"></canvas></div>
   </div>
   <div class="muted" style="margin-top:6px">
     Сырые прогоны · цвет vs median mavg(prev${win}) · тёмно-красный = lat cap ·
-    синий = synthetic in_progress · оранжевый = synthetic missing
+    синий = synthetic in_progress · оранжевый = synthetic missing ·
+    <b>клик по столбцу → DataLens</b>
+    ${dashUrl ? ` (<a href="${esc(dashUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">открыть</a>)` : ''}
     ${(tpmcBase != null || latBase != null)
-      ? ` · alert: tpmC ${fmt(tpmcBase)} · lat ${fmt(latBase)}`
+      ? ` · alert: tpmC ${fmt(tpmcBase)} · lat ${fmt(latBase)}&nbsp;ms`
       : ''}
   </div>`;
 
-  const markers = hist.markers || [];
-  const markColors = (colors) => colors.map((c, i) => {
-    const m = markers[i];
-    if (m === 'in_progress') return '#54aeff';
-    if (m === 'missing') return '#fb8500';
-    if (m === 'capped') return '#8a1f1a';
-    return c;
-  });
-
   function paint() {
     destroyCharts(id + '_');
-    function bar(cid, vals, label, colors, alertBase) {
+    function bar(cid, hist, vals, label, colors, alertBase, unit) {
       const el = document.getElementById(cid);
       if (!el) return;
+      if (!(hist.labels || []).length) {
+        el.parentElement.innerHTML = '<div class="empty">нет точек</div>';
+        return;
+      }
+      const markers = hist.markers || [];
+      const nBars = (hist.labels || []).length;
+      const valueFont = nBars > 24 ? '8px sans-serif' : (nBars > 14 ? '9px sans-serif' : '10px sans-serif');
+      const unitSuffix = unit ? ` ${unit}` : '';
+      const fmtU = (v) => (v == null || Number.isNaN(v)) ? '—' : `${fmt(v)}${unitSuffix}`;
       charts[cid] = new Chart(el, {
         type: 'bar',
         data: {
@@ -715,11 +767,20 @@ function mountHistory(item, id) {
         },
         options: {
           responsive: true, maintainAspectRatio: false, animation: false,
+          layout: { padding: { top: 18 } },
+          onClick: (_e, els) => {
+            if (!els.length) return;
+            openDatalens(item);
+          },
           plugins: {
             legend: { display: false },
             title: { display: true, text: label, color: '#656d76', font: { size: 12 } },
             tooltip: {
               callbacks: {
+                label: (it) => {
+                  const v = it.raw;
+                  return v == null ? '—' : fmtU(v);
+                },
                 afterLabel: (it) => {
                   const bits = [];
                   const i = it.dataIndex;
@@ -727,15 +788,18 @@ function mountHistory(item, id) {
                   if (m === 'in_progress') bits.push('SYNTHETIC · day-wave in progress');
                   else if (m === 'missing') bits.push('SYNTHETIC · missing in completed wave');
                   else if (m === 'capped') bits.push('lat capped');
+                  const ver = (hist.versions || [])[i];
+                  if (ver) bits.push(`sha ${ver}`);
                   const cur = vals[i];
                   const start = Math.max(0, i - win);
                   const ref = medianOf(vals.slice(start, i));
                   if (cur != null && ref != null && ref > 0) {
-                    bits.push(`vs median mavg(${win} runs) ${pct(((cur - ref) / ref) * 100)} (ref ${fmt(ref)})`);
+                    bits.push(`vs median mavg(${win} runs) ${pct(((cur - ref) / ref) * 100)} (ref ${fmtU(ref)})`);
                   }
                   if (showBase && alertBase != null) {
-                    bits.push(`alert baseline ${fmt(alertBase)}`);
+                    bits.push(`alert baseline ${fmtU(alertBase)}`);
                   }
+                  bits.push('клик → DataLens');
                   return bits.join(' · ');
                 }
               }
@@ -743,7 +807,13 @@ function mountHistory(item, id) {
           },
           scales: {
             x: { ticks: { maxRotation: 60, font: { size: 9 }, color: '#656d76' }, grid: { display: false } },
-            y: { beginAtZero: true, grace: '8%', ticks: { color: '#656d76' }, grid: { color: 'rgba(0,0,0,.06)' } }
+            y: {
+              beginAtZero: true,
+              grace: '18%',
+              ticks: { color: '#656d76' },
+              grid: { color: 'rgba(0,0,0,.06)' },
+              title: unit ? { display: true, text: unit, color: '#656d76', font: { size: 11 } } : undefined,
+            }
           }
         },
         plugins: [{
@@ -758,16 +828,57 @@ function mountHistory(item, id) {
             ctx.beginPath(); ctx.setLineDash([4, 3]); ctx.strokeStyle = '#0969da'; ctx.lineWidth = 1;
             ctx.moveTo(left, y); ctx.lineTo(right, y); ctx.stroke();
             ctx.fillStyle = '#0969da'; ctx.font = '10px sans-serif';
-            ctx.fillText('alert baseline', left + 4, Math.max(top + 10, y - 4));
+            ctx.fillText(`alert baseline ${fmtU(alertBase)}`, left + 4, Math.max(top + 10, y - 4));
+            ctx.restore();
+          }
+        }, {
+          id: 'barValueLabels',
+          afterDatasetsDraw(chart) {
+            const meta = chart.getDatasetMeta(0);
+            if (!meta || !meta.data) return;
+            const { top } = chart.chartArea;
+            const ctx = chart.ctx;
+            ctx.save();
+            ctx.fillStyle = '#1f2328';
+            ctx.font = valueFont;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            meta.data.forEach((bar, i) => {
+              const v = vals[i];
+              if (v == null || !Number.isFinite(Number(v))) return;
+              const text = unit ? `${fmt(v)}${unit}` : fmt(v);
+              const x = bar.x;
+              let y = bar.y - 3;
+              if (y < top + 10) y = top + 10;
+              ctx.fillText(text, x, y);
+            });
             ctx.restore();
           }
         }]
       });
     }
-    bar(id + '_tpmc', hist.tpmc || [], 'tpmC · raw runs (↑ better)',
-      markColors(colorsTpmcVsMavg(hist.tpmc)), tpmcBase);
-    bar(id + '_lat', hist.lat90 || [], 'NewOrder p90 · raw runs (↓ better)',
-      markColors(colorsLatVsMavg(hist.lat90)), latBase);
+    function markColors(hist, colors) {
+      const markers = hist.markers || [];
+      return colors.map((c, i) => {
+        const m = markers[i];
+        if (m === 'in_progress') return '#54aeff';
+        if (m === 'missing') return '#fb8500';
+        if (m === 'capped') return '#8a1f1a';
+        return c;
+      });
+    }
+    if ((histRun.labels || []).length) {
+      bar(id + '_run_tpmc', histRun, histRun.tpmc || [], 'tpmC · by run date (↑ better)',
+        markColors(histRun, colorsTpmcVsMavg(histRun.tpmc)), tpmcBase, '');
+      bar(id + '_run_lat', histRun, histRun.lat90 || [], 'NewOrder p90 · by run date (↓ better)',
+        markColors(histRun, colorsLatVsMavg(histRun.lat90)), latBase, 'ms');
+    }
+    if ((histCommit.labels || []).length) {
+      bar(id + '_cmt_tpmc', histCommit, histCommit.tpmc || [], 'tpmC · by commit date (↑ better)',
+        markColors(histCommit, colorsTpmcVsMavg(histCommit.tpmc)), tpmcBase, '');
+      bar(id + '_cmt_lat', histCommit, histCommit.lat90 || [], 'NewOrder p90 · by commit date (↓ better)',
+        markColors(histCommit, colorsLatVsMavg(histCommit.lat90)), latBase, 'ms');
+    }
   }
 
   const chk = document.getElementById(id + '_base');
@@ -788,11 +899,12 @@ function diveHtml(r, id) {
   if (fin) {
     r.now_runs = data.now_runs;
     r.history = data.history || r.history;
+    r.history_by_commit = data.history_by_commit || r.history_by_commit;
   }
   const runs = (data.now_runs || []).map(run => {
     const lat = run.lat_capped
-      ? `<span class="bad">CAPPED ${fmt(run.lat_raw)}</span>`
-      : fmt(run.lat90);
+      ? `<span class="bad">CAPPED ${fmt(run.lat_raw)}&nbsp;ms</span>`
+      : `${fmt(run.lat90)}&nbsp;ms`;
     return `<div class="run-card">
       <div class="t">${esc(run.label)}</div>
       <div>tpmC ${fmt(run.tpmc)} · lat ${lat}</div>
@@ -812,9 +924,6 @@ function diveHtml(r, id) {
     <div>
       <div class="muted" style="margin-bottom:6px"><b>Last runs</b> (Now window)${fin ? ' <span class="pill">finished</span>' : ''}</div>
       <div class="runs">${runs}</div>
-    </div>
-    <div class="toolbar" style="margin:0">
-      <button type="button" class="btn" data-hist="${id}">Show history</button>
     </div>
     <div id="${id}_hist"></div>
   </div>`;
@@ -844,7 +953,7 @@ function renderInbox() {
           <div class="muted">${esc(r.branch)}</div></td>
         <td>${esc(r.suite)} <span class="pill">${esc(r.family)}</span>
           <div class="muted">${esc(r.wh_label || '')} WH · ${esc(r.wave || r.version || '')}</div></td>
-        <td class="num">${fmt(metrics.lat_base)} → ${fmt(metrics.lat_now)}<div class="muted">${latDelta}</div></td>
+        <td class="num">${fmt(metrics.lat_base)} → ${fmt(metrics.lat_now)}&nbsp;ms<div class="muted">${latDelta}</div></td>
         <td class="num">${fmt(metrics.tpmc_base)} → ${fmt(metrics.tpmc_now)}<div class="muted">${tpmcDelta}</div></td>
         <td class="muted">${esc(r.last_ts || '—')}
           ${r.last_seen && r.last_seen !== r.last_ts ? `<div class="muted">seen ${esc(r.last_seen)}</div>` : ''}
@@ -856,7 +965,7 @@ function renderInbox() {
   root.innerHTML = `<table class="inbox">
     <thead><tr>
       <th>Status</th><th>Cluster</th><th>Slice</th>
-      <th class="num">Lat p90</th><th class="num">tpmC</th><th>Wave / last</th>
+      <th class="num">Lat p90, ms</th><th class="num">tpmC</th><th>Wave / last</th>
     </tr></thead>
     <tbody>${body}</tbody>
   </table>
@@ -872,19 +981,8 @@ function renderInbox() {
       else {
         const idx = Number(tr.dataset.idx);
         const item = rows[idx];
-        if (item && (item.issue === 'missing' || item.issue === 'in_progress')) {
-          mountHistory(item, id);
-        }
+        if (item) mountHistory(item, id);
       }
-    });
-  });
-  root.querySelectorAll('button[data-hist]').forEach(btn => {
-    btn.addEventListener('click', (ev) => {
-      ev.stopPropagation();
-      const id = btn.dataset.hist;
-      const idx = Number(root.querySelector(`tr.row[data-id="${id}"]`)?.dataset.idx);
-      const item = rows[idx];
-      if (item) mountHistory(item, id);
     });
   });
 }

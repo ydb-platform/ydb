@@ -227,11 +227,15 @@ def normalize_points(rows: list[dict], since: datetime) -> list[dict]:
         if tpmc is None:
             tpmc = d.get("tpmc")
         version = str(d.get("version") or "")[:12]
+        commit_ts = parse_ts(
+            d.get("git_commit_timestamp") or d.get("commit_timestamp") or d.get("commit_ts")
+        )
         cluster = d.get("cluster") or "unknown"
         wh = int(d.get("warehouses") or 0)
         branch = norm_branch(d.get("git_branch") or d.get("branch"))
         fam = run_family(str(run_type))
         suite = suite_name(str(run_type), wh)
+        commit_iso = commit_ts.isoformat().replace("+00:00", "") if commit_ts else None
         points.append(
             {
                 "branch": branch,
@@ -243,12 +247,19 @@ def normalize_points(rows: list[dict], since: datetime) -> list[dict]:
                 "family": fam,
                 "ts": ts,
                 "ts_iso": ts.isoformat().replace("+00:00", ""),
+                "commit_ts": commit_ts,
+                "commit_iso": commit_iso,
                 "tpmc": None if tpmc is None else float(tpmc),
                 "lat90": None if capped or lat_f is None else lat_f,
                 "lat_capped": capped,
                 "lat_raw": lat_f,
                 "version": version,
                 "label": f"{ts.date().isoformat()}_{version[:7] or '—'}",
+                "commit_label": (
+                    f"{commit_ts.strftime('%Y-%m-%d %H:%M')}_{version[:7] or '—'}"
+                    if commit_ts
+                    else f"no-commit_{version[:7] or '—'}"
+                ),
             }
         )
     return points
@@ -264,17 +275,51 @@ def run_view(p: dict) -> dict:
         "lat_capped": p["lat_capped"],
         "lat_raw": p["lat_raw"],
         "version": p["version"],
+        "commit_iso": p.get("commit_iso"),
     }
 
 
 def history_view(pts: list[dict]) -> dict:
-    tail = pts[-HISTORY_MAX_POINTS:]
+    """History keyed by run timestamp (default order)."""
+    ordered = sorted(pts, key=lambda p: p["ts"])
+    tail = ordered[-HISTORY_MAX_POINTS:]
     return {
         "labels": [p["label"] for p in tail],
+        "days": [p["ts_iso"][:10] for p in tail],
         "tpmc": [p["tpmc"] for p in tail],
         "lat90": [p["lat_raw"] if p["lat_capped"] else p["lat90"] for p in tail],
         "markers": ["capped" if p["lat_capped"] else "ok" for p in tail],
         "versions": [p["version"] for p in tail],
+    }
+
+
+def history_by_commit_view(pts: list[dict]) -> dict:
+    """Same points ordered by git commit timestamp (fallback: run ts)."""
+    ordered = sorted(
+        pts,
+        key=lambda p: (p["commit_ts"] or p["ts"], p["ts"]),
+    )
+    tail = ordered[-HISTORY_MAX_POINTS:]
+    return {
+        "labels": [p["commit_label"] for p in tail],
+        "days": [
+            (p["commit_iso"] or p["ts_iso"] or "")[:10] for p in tail
+        ],
+        "tpmc": [p["tpmc"] for p in tail],
+        "lat90": [p["lat_raw"] if p["lat_capped"] else p["lat90"] for p in tail],
+        "markers": ["capped" if p["lat_capped"] else "ok" for p in tail],
+        "versions": [p["version"] for p in tail],
+    }
+
+
+def empty_history() -> dict:
+    return {
+        "labels": [],
+        "days": [],
+        "tpmc": [],
+        "lat90": [],
+        "markers": [],
+        "versions": [],
     }
 
 
@@ -287,6 +332,7 @@ def append_synthetic_history(hist: dict, *, day: str, kind: str) -> dict:
     ref_lat = next((v for v in reversed(out.get("lat90") or []) if v is not None), None)
     ref_tpmc = next((v for v in reversed(out.get("tpmc") or []) if v is not None), None)
     out.setdefault("labels", []).append(f"{day}_{kind.upper()}")
+    out.setdefault("days", []).append(day)
     out.setdefault("lat90", []).append(ref_lat)
     out.setdefault("tpmc", []).append(ref_tpmc)
     out.setdefault("versions", []).append(kind)
@@ -462,6 +508,7 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
         info = classify_slice(pts)
         fam = pts[0]["family"]
         wh = pts[0]["warehouses"]
+        run_type = pts[0]["run_type"]
         info.update(
             {
                 "id": safe_id(branch, cluster, suite),
@@ -470,21 +517,25 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
                 "cluster": cluster,
                 "suite": suite,
                 "family": fam,
+                "run_type": run_type,
                 "warehouses": wh,
                 "wh_label": wh_label(wh),
             }
         )
         slice_status[(branch, cluster, suite)] = info
-        hist = history_view(sorted(pts, key=lambda p: p["ts"]))
+        hist = history_view(pts)
+        hist_commit = history_by_commit_view(pts)
         if info["status"] in ("broken", "regression"):
             item = dict(info)
             item["issue"] = info["kind"]
             item["history"] = hist
+            item["history_by_commit"] = hist_commit
             inbox.append(item)
         elif info["status"] in ("ok", "watch"):
             item = dict(info)
             item["issue"] = "watch" if info["status"] == "watch" else "ok"
             item["history"] = hist
+            item["history_by_commit"] = hist_commit
             ok_slices.append(item)
 
     for (branch, cluster), waves in by_br_cl_waves.items():
@@ -521,13 +572,8 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
                     "last_ts": last["max_ts"].isoformat().replace("+00:00", "")[:19],
                     "last_seen": None,
                     "version": "",
-                    "history": {
-                        "labels": [],
-                        "tpmc": [],
-                        "lat90": [],
-                        "markers": [],
-                        "versions": [],
-                    },
+                    "history": empty_history(),
+                    "history_by_commit": empty_history(),
                     "wave": last["day"],
                 }
             )
@@ -544,14 +590,12 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
 
         for suite in absent:
             pts = slices.get((branch, cluster, suite), [])
-            hist = history_view(sorted(pts, key=lambda p: p["ts"])) if pts else {
-                "labels": [],
-                "tpmc": [],
-                "lat90": [],
-                "markers": [],
-                "versions": [],
-            }
+            hist = history_view(pts) if pts else empty_history()
+            hist_commit = history_by_commit_view(pts) if pts else empty_history()
             hist = append_synthetic_history(hist, day=last["day"], kind=issue_kind)
+            hist_commit = append_synthetic_history(
+                hist_commit, day=last["day"], kind=issue_kind
+            )
             last_seen = pts[-1]["ts_iso"][:19] if pts else None
             fam = suite.split("@", 1)[0] if "@" in suite else suite
             wh_s = suite.split("@", 1)[1] if "@" in suite else ""
@@ -594,7 +638,8 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
                     "n": fin.get("n") or 0,
                     "last_ts": fin.get("last_ts"),
                     "version": fin.get("version") or "",
-                    "history": history_view(sorted(pts, key=lambda p: p["ts"])) if pts else None,
+                    "history": history_view(pts) if pts else None,
+                    "history_by_commit": history_by_commit_view(pts) if pts else None,
                 }
             inbox.append(
                 {
@@ -607,6 +652,7 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
                     "cluster": cluster,
                     "suite": suite,
                     "family": fam,
+                    "run_type": f"ydb_cli_{fam}" if fam and fam != "—" else "",
                     "warehouses": wh_i,
                     "wh_label": wh_label(wh_i) if wh_i is not None else "—",
                     "reasons": [reason],
@@ -623,6 +669,7 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
                     "last_seen": last_seen,
                     "version": "",
                     "history": hist,
+                    "history_by_commit": hist_commit,
                     "wave": last["day"],
                     "wave_in_progress": in_prog,
                     "expected": True,
@@ -807,6 +854,8 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
             "dbs_by_branch": dbs_by_branch,
             "default_from": since.date().isoformat(),
             "default_to": until.date().isoformat(),
+            "datalens_base": "https://datalens.yandex/wf5xdbbl923ok",
+            "datalens_tab": "9l5",
         },
         "summary": summary,
         "by_branch": by_branch_summary,

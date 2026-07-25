@@ -8,6 +8,7 @@ SRCS(
     spilling_counters.cpp
     spilling_file.cpp
     spilling.cpp
+    spiller_memory_reporter.cpp
 )
 
 PEERDIR(

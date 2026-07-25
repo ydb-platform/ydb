@@ -74,6 +74,7 @@ FOCUS_DBS = {
 CORE_BRANCHES = ("main", "trunk")
 
 STATUS_ORDER = {
+    "nodata": -1,
     "ok": 0,
     "in_progress": 1,
     "stale": 2,
@@ -812,13 +813,13 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
             by_id[r["id"]] = r
     all_hot = list(by_id.values())
 
-    # Heatmap cells: branch|db|family
+    # Heatmap cells: branch|db|family (empty = nodata, not fake ok)
     dbs = sorted(FOCUS_DBS)
     cells = {}
     for br in branches:
         for db in dbs:
             for fam in FAMILIES:
-                cells[f"{br}|{db}|{fam}"] = {"status": "ok", "n_hot": 0, "n_queries": 0, "n": 0}
+                cells[f"{br}|{db}|{fam}"] = {"status": "nodata", "n_hot": 0, "n_queries": 0, "n": 0}
     cell_queries: dict[str, set[str]] = defaultdict(set)
 
     for (branch, db, suite), info in slice_status.items():
@@ -839,6 +840,8 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
                     t = part.strip()
                     if t:
                         cell_queries[key].add(t)
+        elif info["status"] in ("ok", "watch"):
+            cells[key]["status"] = worse(cells[key]["status"], info["status"])
 
     for r in all_hot:
         br = r.get("branch") or ""
@@ -849,7 +852,7 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
                 cells[key]["status"] = worse(cells[key]["status"], "missing")
         if r.get("issue") == "in_progress" and r.get("family") in FAMILIES:
             key = f"{br}|{r['db']}|{r['family']}"
-            if key in cells and cells[key]["status"] == "ok":
+            if key in cells and cells[key]["status"] in ("ok", "nodata", "watch"):
                 cells[key]["status"] = "in_progress"
         if r.get("issue") == "stale":
             for fam in FAMILIES:

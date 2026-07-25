@@ -54,6 +54,7 @@ INBOX_PER_KIND = {
 CORE_BRANCHES = ("main",)
 
 STATUS_ORDER = {
+    "nodata": -1,
     "ok": 0,
     "in_progress": 1,
     "stale": 2,
@@ -705,7 +706,7 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
     for br in branches:
         for cl in clusters:
             for fam in families:
-                cells[f"{br}|{cl}|{fam}"] = {"status": "ok", "n_hot": 0, "n": 0}
+                cells[f"{br}|{cl}|{fam}"] = {"status": "nodata", "n_hot": 0, "n": 0}
 
     for (branch, cluster, suite), info in slice_status.items():
         fam = info["family"]
@@ -715,6 +716,8 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
         cells[key]["n"] += 1
         if info["status"] in ("broken", "regression"):
             cells[key]["n_hot"] += 1
+            cells[key]["status"] = worse(cells[key]["status"], info["status"])
+        elif info["status"] in ("ok", "watch"):
             cells[key]["status"] = worse(cells[key]["status"], info["status"])
 
     for r in all_hot:
@@ -727,7 +730,7 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
                 cells[key]["status"] = worse(cells[key]["status"], "missing")
         if r.get("issue") == "in_progress" and fam in families:
             key = f"{br}|{r['db']}|{fam}"
-            if key in cells and cells[key]["status"] == "ok":
+            if key in cells and cells[key]["status"] in ("ok", "nodata", "watch"):
                 cells[key]["status"] = "in_progress"
         if r.get("issue") == "stale":
             for fam in families:

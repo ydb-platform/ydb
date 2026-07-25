@@ -547,6 +547,13 @@ function candidateRows() {
   if (mode === 'all') return preferLatestBySuite(rows);
   return rows;
 }
+function okRowsForCell(branch, db, fam) {
+  return (DATA.ok || []).filter(r => {
+    if (branch && r.branch !== branch) return false;
+    if (r.db !== db || r.family !== fam) return false;
+    return itemInWindow(r);
+  });
+}
 function liveCell(branch, db, fam) {
   const s = reactSignals();
   const rows = candidateRows().filter(r => {
@@ -555,7 +562,20 @@ function liveCell(branch, db, fam) {
     if (!itemInWindow(r)) return false;
     return rowMatchesReact(r);
   });
-  if (!rows.length) return { status: 'ok', n_hot: 0, n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 0, n_queries: 0 };
+  // No hot rows under react filters ≠ verified ok. Green only if DATA.ok has slices.
+  if (!rows.length) {
+    const oks = okRowsForCell(branch, db, fam);
+    if (oks.length) {
+      const watch = oks.some(r => r.issue === 'watch' || r.status === 'watch');
+      return {
+        status: watch ? 'watch' : 'ok',
+        n_hot: 0, n_fail: 0, n_slow: 0,
+        n_soft: watch ? oks.filter(r => r.issue === 'watch' || r.status === 'watch').length : 0,
+        n_nodata: 0, n_queries: 0,
+      };
+    }
+    return { status: 'nodata', n_hot: 0, n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 0, n_queries: 0 };
+  }
   const rank = {
     broken: 6, missing: 5, regression: 4, both: 4, watch: 3,
     failing: 3, slower: 3, stale: 2, nodata: 1.5, in_progress: 1, ok: 0,

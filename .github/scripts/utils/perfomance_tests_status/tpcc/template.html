@@ -76,12 +76,13 @@
     display: inline-flex; align-items: center; justify-content: center; gap: 6px;
     min-width: 72px; padding: 6px 8px; border-radius: 8px; font-weight: 650; cursor: default;
   }
-  .cell.ok { background: #dafbe1; color: var(--ok); }
+  .cell.ok { background: #dafbe1; color: var(--ok); cursor: pointer; }
   .cell.broken { background: var(--broken-bg); color: var(--broken); cursor: pointer; box-shadow: inset 0 0 0 1px #ff818266; }
   .cell.regression { background: var(--regress-bg); color: var(--regress); cursor: pointer; }
   .cell.missing { background: var(--miss-bg); color: var(--miss); cursor: pointer; }
   .cell.stale, .cell.watch { background: #fff8c5; color: var(--warn); cursor: pointer; }
   .cell.in_progress { background: #ddf4ff; color: var(--info); cursor: pointer; }
+  .cell.nodata { background: #f6f8fa; color: #656d76; cursor: pointer; }
   .cell.selected { outline: 2px solid var(--info); outline-offset: 2px; box-shadow: 0 0 0 3px #0969da33; }
   .cell .cnt { font-size: 11px; opacity: .85; }
   .heat-legend {
@@ -413,7 +414,19 @@ function liveCell(branch, db, fam) {
     if (r.db !== db || r.family !== fam) return false;
     return itemInWindow(r);
   });
-  if (!rows.length) return { status: 'ok', n_hot: 0, n_lat: 0, n_tpmc: 0, n_broken: 0 };
+  // Empty under filters ≠ verified ok — green only when DATA.ok has slices.
+  if (!rows.length) {
+    const oks = (DATA.ok || []).filter(r => {
+      if (branch && r.branch !== branch) return false;
+      if (r.db !== db || r.family !== fam) return false;
+      return itemInWindow(r);
+    });
+    if (oks.length) {
+      const watch = oks.some(r => r.issue === 'watch' || r.status === 'watch');
+      return { status: watch ? 'watch' : 'ok', n_hot: 0, n_lat: 0, n_tpmc: 0, n_broken: 0 };
+    }
+    return { status: 'nodata', n_hot: 0, n_lat: 0, n_tpmc: 0, n_broken: 0 };
+  }
   const rank = {
     broken: 6, missing: 5, regression: 4, both: 4,
     lat: 3, tpmc: 3, stale: 2, in_progress: 1, ok: 0, watch: 2,
@@ -433,6 +446,7 @@ function liveCell(branch, db, fam) {
 }
 function cellLabel(st, live) {
   if (st === 'ok') return 'ok';
+  if (st === 'nodata') return 'no data';
   const parts = [];
   if (live.n_broken) parts.push(`broken ${live.n_broken}`);
   else if (st === 'broken') parts.push('broken');
@@ -634,7 +648,7 @@ function renderHeatmap() {
   }
   const root = document.getElementById('heatmap');
   root.innerHTML = html || '<div class="empty">нет данных</div>';
-  root.querySelectorAll('.cell.regression, .cell.broken, .cell.missing, .cell.stale, .cell.in_progress, .cell.ok').forEach(el => {
+  root.querySelectorAll('.cell.regression, .cell.broken, .cell.missing, .cell.stale, .cell.in_progress, .cell.ok, .cell.nodata, .cell.watch').forEach(el => {
     el.addEventListener('click', () => {
       const db = el.dataset.db || '';
       const fam = el.dataset.fam || '';
@@ -654,7 +668,8 @@ function renderHeatmap() {
         fFam.value = fam;
         fIssue.value = el.classList.contains('ok')
           ? 'ok'
-          : (el.classList.contains('in_progress') ? 'in_progress' : '');
+          : (el.classList.contains('nodata') ? 'nodata'
+            : (el.classList.contains('in_progress') ? 'in_progress' : ''));
       }
       renderAll();
       if (!same) {

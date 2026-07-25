@@ -5,17 +5,25 @@
 namespace NKikimr::NSchemeShard {
 
 TMemoryChanges::~TMemoryChanges() {
-    // Several instances coexist (init, stats, side effects); only the propose one
-    // arms, so withdraw only our own registration.
-    if (SS && SS->ArmedChanges == this) {
-        SS->ArmedChanges = nullptr;
-    }
+    // Backstop: IgniteOperation disarms on every exit, so this normally has
+    // nothing to do.
+    Disarm();
 }
 
 void TMemoryChanges::Arm(TSchemeShard* ss) {
     Armed = true;
     SS = ss;
     ss->ArmedChanges = this;
+}
+
+void TMemoryChanges::Disarm() {
+    Armed = false;
+    // Several instances coexist (init, stats, side effects); only the propose one
+    // arms, so withdraw only our own registration.
+    if (SS && SS->ArmedChanges == this) {
+        SS->ArmedChanges = nullptr;
+    }
+    SS = nullptr;
 }
 
 template <typename I, typename C, typename H>

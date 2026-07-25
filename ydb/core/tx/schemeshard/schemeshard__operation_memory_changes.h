@@ -109,6 +109,10 @@ public:
     // undo-less mutators (TDbRefMap::erase) can assert they run outside it.
     void Arm(TSchemeShard* ss);
 
+    // Ends the armed window at the close of IgniteOperation, so the rest of the
+    // propose tx (side effects, Persist*) is not mistaken for the mutation phase.
+    void Disarm();
+
     // True only inside an armed propose; tracked Set/Update are legal only then.
     bool IsArmed() const { return Armed; }
 

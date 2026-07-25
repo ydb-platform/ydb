@@ -10,6 +10,7 @@ ELSE()
 ENDIF()
 
 SRCS(
+    classifier_representation_ut.cpp
     has_app_name_ut.cpp
     action_reject_ut.cpp
     has_full_scan_matcher_ut.cpp

@@ -1367,10 +1367,8 @@ def _query_metrics(rows: list[dict]) -> dict | None:
     fr_base = avg([r["fr"] for r in base]) or 0.0
     last = now[-1] if now else {}
     last_fr = (last.get("fr") or 0.0) if last else 0.0
-    # last completed run only
-    is_fail = last_fr >= FAIL_BROKEN or (
-        last_fr >= FAIL_HOT and (last_fr >= fr_base + FAIL_RISE or last_fr >= FAIL_BROKEN)
-    )
+    # last completed run only — same as classify_slice: ≥ FAIL_HOT always hot
+    is_fail = last_fr >= FAIL_HOT
     dur = classify_duration(ydb_pct, ydb_now, ydb_base, now_ydbs, base_ydbs)
     is_slow = dur["status"] in ("regression", "broken")  # hard only
     is_watch = dur["status"] == "watch"

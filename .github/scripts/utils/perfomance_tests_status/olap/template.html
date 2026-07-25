@@ -551,18 +551,47 @@ function findHistIndexForRun(hist, run) {
   return bestDist <= 6 * 3600 * 1000 ? best : -1;
 }
 /** Classify series at index idx (ydb raw, fail_rate as 0–100 from history). */
-function classifyAtIndex(ydbArr, frPctArr, idx, nodataArr) {
+function histPointUsable(nodataArr, markersArr, i) {
+  if (nodataArr && nodataArr[i]) return false;
+  const m = markersArr && markersArr[i];
+  if (m === 'in_progress' || m === 'missing') return false;
+  return true;
+}
+/** Last real (non-synthetic) history index. */
+function lastCompletedHistIndex(hist) {
+  const ydb = (hist && hist.ydb) || [];
+  const n = ydb.length;
+  const nodata = (hist && hist.nodata) || [];
+  const markers = (hist && hist.markers) || [];
+  for (let i = n - 1; i >= 0; i--) {
+    if (histPointUsable(nodata, markers, i)) return i;
+  }
+  return n > 0 ? n - 1 : -1;
+}
+/**
+ * Mirror generate.classify_slice at history index.
+ * @param baseEndIdx optional: take prev7 baseline ending at this index (for same-baseline compare).
+ */
+function classifyAtIndex(ydbArr, frPctArr, idx, nodataArr, markersArr, baseEndIdx) {
   const R = alertRules();
   if (idx < 0 || idx >= (ydbArr || []).length) {
     return { status: 'nodata', kind: 'nodata', ydb_pct: null, ydb_now: null, ydb_base: null, fail_rate: null, error_class: null };
   }
-  if (nodataArr && nodataArr[idx]) {
+  if (!histPointUsable(nodataArr, markersArr, idx)) {
+    const m = markersArr && markersArr[idx];
+    if (m === 'in_progress') {
+      return { status: 'in_progress', kind: 'in_progress', ydb_pct: null, ydb_now: null, ydb_base: null, fail_rate: null, error_class: null };
+    }
+    if (m === 'missing') {
+      return { status: 'missing', kind: 'missing', ydb_pct: null, ydb_now: null, ydb_base: null, fail_rate: null, error_class: null };
+    }
     return { status: 'nodata', kind: 'nodata', ydb_pct: null, ydb_now: null, ydb_base: null, fail_rate: null, error_class: null };
   }
   const nowY = ydbArr[idx];
+  const baseEnd = (baseEndIdx != null && baseEndIdx >= 0) ? baseEndIdx : idx;
   const baseSlice = [];
-  for (let i = Math.max(0, idx - R.baseline); i < idx; i++) {
-    if (nodataArr && nodataArr[i]) continue;
+  for (let i = Math.max(0, baseEnd - R.baseline); i < baseEnd; i++) {
+    if (!histPointUsable(nodataArr, markersArr, i)) continue;
     if (ydbArr[i] != null) baseSlice.push(Number(ydbArr[i]));
   }
   const ydb_now = nowY == null ? null : Number(nowY);
@@ -573,14 +602,12 @@ function classifyAtIndex(ydbArr, frPctArr, idx, nodataArr) {
   }
   const frNow = frPctArr && frPctArr[idx] != null ? Number(frPctArr[idx]) / 100 : 0;
   const frBaseArr = [];
-  for (let i = Math.max(0, idx - R.baseline); i < idx; i++) {
-    if (nodataArr && nodataArr[i]) continue;
+  for (let i = Math.max(0, baseEnd - R.baseline); i < baseEnd; i++) {
+    if (!histPointUsable(nodataArr, markersArr, i)) continue;
     if (frPctArr && frPctArr[i] != null) frBaseArr.push(Number(frPctArr[i]) / 100);
   }
-  const frBase = avgNums(frBaseArr) || 0;
-  const is_fail = frNow >= R.failBroken || (
-    frNow >= R.failHot && (frNow >= frBase + R.failRise || frNow >= R.failBroken)
-  );
+  // Match generate.classify_slice: last_fr ≥ failHot (≥10%) is always hot (rise only affects reason text).
+  const is_fail = frNow >= R.failHot;
   let durStatus = 'ok';
   const noise = (ydb_base != null && ydb_base > 0) ? (pstdevNums(baseSlice) / ydb_base) * 100 : 0;
   const thr = Math.max(R.durTol, R.noiseK * noise);
@@ -648,6 +675,24 @@ function allSuiteRows(branch, db, fam) {
   }
   return out;
 }
+function countQueryKindsAt(item, resolveIdx) {
+  /** resolveIdx(qh) → { nowIdx, baseEndIdx } or null to skip. */
+  let n_fail = 0, n_slow = 0, n_soft = 0, n_nodata = 0;
+  for (const q of (item.queries || [])) {
+    const qh = q.history;
+    if (!qh) continue;
+    const resolved = resolveIdx(qh);
+    if (!resolved || resolved.nowIdx < 0) continue;
+    const qm = classifyAtIndex(
+      qh.ydb, qh.fail_rate, resolved.nowIdx, qh.nodata, qh.markers, resolved.baseEndIdx
+    );
+    if (qm.kind === 'nodata' || qm.kind === 'in_progress' || qm.kind === 'missing') n_nodata++;
+    else if (qm.kind === 'fail' || qm.kind === 'both') n_fail++;
+    if (qm.kind === 'slow' || qm.kind === 'both') n_slow++;
+    if (qm.kind === 'watch') n_soft++;
+  }
+  return { n_fail, n_slow, n_soft, n_nodata };
+}
 function classifySuiteAtWave(item, wave) {
   if (!wave) return null;
   const names = new Set(wave.suite_names || []);
@@ -659,25 +704,47 @@ function classifySuiteAtWave(item, wave) {
   if (idx < 0) {
     return { status: 'nodata', kind: 'nodata', ydb_pct: null, n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 1 };
   }
-  const m = classifyAtIndex(hist.ydb, hist.fail_rate, idx, hist.nodata);
-  // query-level counts from catalog at that wave
-  let n_fail = 0, n_slow = 0, n_soft = 0, n_nodata = 0;
-  for (const q of (item.queries || [])) {
-    const qh = q.history;
-    if (!qh) continue;
+  const m = classifyAtIndex(hist.ydb, hist.fail_rate, idx, hist.nodata, hist.markers, idx);
+  const counts = countQueryKindsAt(item, qh => {
     const qi = findHistIndexForWave(qh, wave);
-    if (qi < 0) continue;
-    const qm = classifyAtIndex(qh.ydb, qh.fail_rate, qi, qh.nodata);
-    if (qm.kind === 'nodata') n_nodata++;
-    else if (qm.kind === 'fail' || qm.kind === 'both') n_fail++;
-    if (qm.kind === 'slow' || qm.kind === 'both') n_slow++;
-    if (qm.kind === 'watch') n_soft++;
-  }
+    if (qi < 0) return null;
+    return { nowIdx: qi, baseEndIdx: qi };
+  });
   return {
     status: m.status,
     kind: m.kind,
     ydb_pct: m.ydb_pct,
-    n_fail, n_slow, n_soft, n_nodata,
+    ...counts,
+  };
+}
+/**
+ * Heatmap now-side: latest completed vs the *same* prev7 baseline as the compare wave.
+ * Apples-to-apples with classifySuiteAtWave (not server liveCellNow).
+ */
+function classifySuiteNowVsWaveBaseline(item, wave) {
+  if (!wave) return null;
+  const names = new Set(wave.suite_names || []);
+  if (names.size && item.suite && !names.has(item.suite)) {
+    return { status: 'missing', kind: 'missing', ydb_pct: null, n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 0 };
+  }
+  const hist = item.history || {};
+  const cmpIdx = findHistIndexForWave(hist, wave);
+  const nowIdx = lastCompletedHistIndex(hist);
+  if (cmpIdx < 0 || nowIdx < 0) {
+    return { status: 'nodata', kind: 'nodata', ydb_pct: null, n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 1 };
+  }
+  const m = classifyAtIndex(hist.ydb, hist.fail_rate, nowIdx, hist.nodata, hist.markers, cmpIdx);
+  const counts = countQueryKindsAt(item, qh => {
+    const qCmp = findHistIndexForWave(qh, wave);
+    const qNow = lastCompletedHistIndex(qh);
+    if (qCmp < 0 || qNow < 0) return null;
+    return { nowIdx: qNow, baseEndIdx: qCmp };
+  });
+  return {
+    status: m.status,
+    kind: m.kind,
+    ydb_pct: m.ydb_pct,
+    ...counts,
   };
 }
 function aggregateSide(parts) {
@@ -1132,14 +1199,17 @@ function compareDeltaOlap(prev, now) {
   return 'same';
 }
 function liveCell(branch, db, fam) {
-  const now = liveCellNow(branch, db, fam);
+  const alertNow = liveCellNow(branch, db, fam);
   const cmpId = getCompareId(branch, db);
-  if (!cmpId) return now;
+  if (!cmpId) return alertNow;
   const wave = waveEntry(branch, db, cmpId);
-  if (!wave) return now;
+  if (!wave) return alertNow;
   const suites = allSuiteRows(branch, db, fam);
+  // Both sides vs the same prev7 baseline (before compare day) — comparable bands/counts.
   const prevParts = suites.map(r => classifySuiteAtWave(r, wave)).filter(Boolean);
+  const nowParts = suites.map(r => classifySuiteNowVsWaveBaseline(r, wave)).filter(Boolean);
   const prev = aggregateSide(prevParts);
+  const now = aggregateSide(nowParts);
   const delta = compareDeltaOlap(prev, now);
   return {
     ...now,
@@ -1645,14 +1715,14 @@ function markIndicesForQuery(item, diveId, q, hist) {
   }
   const data = diveData(item);
   const runs = data.now_runs || [];
-  const latestRun = runs.length ? runs[runs.length - 1] : null;
   const cmpId = getCompareId(item.branch, item.db);
   const wave = cmpId ? waveEntry(item.branch, item.db, cmpId) : null;
   const focusIdx = diveFocusRunIndex(item, data);
-  const focusRun = wave ? latestRun : (runs[focusIdx] || latestRun);
+  // Dive "now" is always the focused Last-runs card (not forced to latest when compare is on).
+  const focusRun = runs[focusIdx] || null;
   let nowFull = -1;
   if (focusRun) nowFull = findHistIndexForRun(q.history, focusRun);
-  if (nowFull < 0 && q.history && q.history.labels) nowFull = q.history.labels.length - 1;
+  if (nowFull < 0 && q.history) nowFull = lastCompletedHistIndex(q.history);
   const cmpFull = wave ? findHistIndexForWave(q.history, wave) : -1;
   return { now: mapIdx(nowFull), compare: mapIdx(cmpFull) };
 }
@@ -1948,9 +2018,9 @@ function kindLabelShort(k) {
   if (k === 'missing') return 'missing';
   return 'ok';
 }
-function metricsAtHistIndex(q, idx) {
+function metricsAtHistIndex(q, idx, baseEndIdx) {
   const h = q.history || {};
-  const m = classifyAtIndex(h.ydb, h.fail_rate, idx, h.nodata);
+  const m = classifyAtIndex(h.ydb, h.fail_rate, idx, h.nodata, h.markers, baseEndIdx);
   if (h.error_classes && h.error_classes[idx]) m.error_class = h.error_classes[idx];
   return m;
 }
@@ -1980,10 +2050,10 @@ function suiteViewAtFocus(item, diveId) {
   let m = null;
   let fail_rate_base = data.fail_rate_base ?? item.fail_rate_base;
   if (hi >= 0) {
-    m = classifyAtIndex(hist.ydb, hist.fail_rate, hi, hist.nodata);
+    m = classifyAtIndex(hist.ydb, hist.fail_rate, hi, hist.nodata, hist.markers, hi);
     const frBaseArr = [];
     for (let i = Math.max(0, hi - R.baseline); i < hi; i++) {
-      if (hist.nodata && hist.nodata[i]) continue;
+      if (!histPointUsable(hist.nodata, hist.markers, i)) continue;
       if (hist.fail_rate && hist.fail_rate[i] != null) frBaseArr.push(Number(hist.fail_rate[i]) / 100);
     }
     const fb = avgNums(frBaseArr);
@@ -1991,16 +2061,22 @@ function suiteViewAtFocus(item, diveId) {
   }
   const fails = [];
   const slows = [];
+  const softs = [];
+  const nodatas = [];
   for (const q of (data.queries || [])) {
     if (!q.history) continue;
     const qi = findHistIndexForRun(q.history, focusRun);
-    if (qi < 0) continue;
+    if (qi < 0) { nodatas.push({ test: q.test }); continue; }
     const qm = metricsAtHistIndex(q, qi);
     if (qm.kind === 'fail' || qm.kind === 'both') {
       fails.push({ test: q.test, ydb_pct: qm.ydb_pct, error_class: qm.error_class });
     }
     if (qm.kind === 'slow' || qm.kind === 'both') {
       slows.push({ test: q.test, ydb_pct: qm.ydb_pct });
+    }
+    if (qm.kind === 'watch') softs.push({ test: q.test, ydb_pct: qm.ydb_pct });
+    if (qm.kind === 'nodata' || qm.kind === 'missing' || qm.kind === 'in_progress') {
+      nodatas.push({ test: q.test });
     }
   }
   let status = m ? m.status : (item.status || 'ok');
@@ -2011,6 +2087,8 @@ function suiteViewAtFocus(item, diveId) {
     kind = 'slow'; status = 'regression';
   } else if (slows.length && status === 'watch') {
     kind = 'slow'; status = 'regression';
+  } else if (!fails.length && !slows.length && softs.length && (status === 'ok' || status === 'nodata')) {
+    kind = 'watch'; status = 'watch';
   }
   let issue = item.issue;
   if (!['missing', 'stale', 'in_progress'].includes(issue)) {
@@ -2037,6 +2115,8 @@ function suiteViewAtFocus(item, diveId) {
     last_ts: focusRun.ts || focusRun.day || item.last_ts,
     fails,
     slows,
+    softs,
+    nodatas,
     focusRun,
     reasons: [
       m && m.fail_rate != null
@@ -2050,12 +2130,11 @@ function suiteViewAtFocus(item, diveId) {
 }
 function queryPillHtml(q, diveId, item, data) {
   const runs = data.now_runs || [];
-  const latestRun = runs.length ? runs[runs.length - 1] : null;
   const cmpId = getCompareId(item.branch, item.db);
   const wave = cmpId ? waveEntry(item.branch, item.db, cmpId) : null;
-  // With compare: now = latest suite run. Without: focused Last-runs card.
+  // Dive now = focused Last-runs card; compare wave is was-side only.
   const focusIdx = diveFocusRunIndex(item, data);
-  const focusRun = wave ? latestRun : (runs[focusIdx] || latestRun);
+  const focusRun = runs[focusIdx] || null;
   let nowM = null;
   if (q.history && focusRun) {
     const hi = findHistIndexForRun(q.history, focusRun);
@@ -2220,7 +2299,7 @@ function diveHtml(r, id) {
     ${waveNote}
     ${summaryHtml}
     <div>
-      <div class="muted" style="margin-bottom:6px"><b>Last runs</b> · клик = focus · % на карточке = fail rate этого запуска (не base)${fin ? ' <span class="pill nodata">finished</span>' : ''}</div>
+      <div class="muted" style="margin-bottom:6px"><b>Last runs</b> · клик = focus (now для строки / pills / charts) · compare — в heatmap · % на карточке = fail rate запуска${fin ? ' <span class="pill nodata">finished</span>' : ''}</div>
       <div class="runs">${runs}</div>
     </div>
     <div class="q-split">
@@ -2259,7 +2338,6 @@ function renderInbox() {
     const dataRow = diveData(r);
     const runsRow = dataRow.now_runs || [];
     const focusRun = (view && view.focusRun) || (runsRow.length ? runsRow[runsRow.length - 1] : null);
-    const fi = diveFocusRunIndex(r, dataRow);
     const cmpId = getCompareId(r.branch, r.db);
     const cmpWave = cmpId ? waveEntry(r.branch, r.db, cmpId) : null;
     const cmpIsFocus = !!(cmpWave && focusRun && (
@@ -2267,16 +2345,20 @@ function renderInbox() {
       || (focusRun.label && cmpWave.label && focusRun.label === cmpWave.label)
     ));
     const nowCounts = view
-      ? { fail: view.fails.length, slow: view.slows.length, soft: 0, nodata: 0 }
+      ? {
+          fail: view.fails.length,
+          slow: view.slows.length,
+          soft: (view.softs || []).length,
+          nodata: (view.nodatas || []).length,
+        }
       : (() => { const qs = querySplit(metrics); return { fail: qs.fail.size, slow: qs.slow.size, soft: qs.soft.size, nodata: qs.nodata.size }; })();
+    // Status "was" only from compare wave (same axis as heatmap). No prev-card fallback —
+    // metrics base is prev7, not the neighbor card.
     let prevCounts = null;
     let prevLabel = '';
     if (cmpWave && !cmpIsFocus) {
       prevCounts = queryCountsAtWave(dataRow, cmpWave);
       prevLabel = `compare ${cmpWave.day || cmpWave.id || cmpId}`;
-    } else if (fi > 0) {
-      prevCounts = queryCountsAtRun(dataRow, runsRow[fi - 1]);
-      prevLabel = `prev card ${runsRow[fi - 1].label || runsRow[fi - 1].ci_version || ''}`;
     }
     const primary = inboxPrimaryStatus(status, issue, nowCounts, metrics.fail_rate_now);
     const failBits = view
@@ -2382,15 +2464,10 @@ function renderInbox() {
       if (!item || !Number.isFinite(ri)) return;
       const data = diveData(item);
       const runs = data.now_runs || [];
-      const run = runs[ri];
       diveRunFocus[suiteKey(item)] = ri;
-      const isLatest = ri === runs.length - 1;
-      if (run && run.ci_version && !isLatest) {
-        const list = waveListFor(item.branch, item.db);
-        if (list.some(w => !w.current && (w.id === run.ci_version || w.ci_version === run.ci_version))) {
-          setCompareId(item.branch, item.db, run.ci_version);
-        }
-      } else if (isLatest) {
+      // Focus only — do not sync compare here (avoids two different "now"s in one dive).
+      // Compare stays a separate heatmap control; clicking latest clears compare.
+      if (ri === runs.length - 1) {
         setCompareId(item.branch, item.db, '');
       }
       // refresh heatmap compare selects + this dive's cards/queries; keep row open

@@ -73,11 +73,11 @@ python3 generate.py \
 
 | Signal | Rule |
 |--------|------|
-| Now | **last completed run** / slice (dive still shows last 3 for context) |
+| Now | **last completed run** / slice (dive shows last 7 for context) |
 | Baseline | previous 7 runs |
 | Slower (hard) | thr=`max(+10%, 2×noise%)`; last run > base; hard if pct ≥ `max(+25%, thr)` → slow; soft (thr ≤ pct < hard) → **watch**; **>3×** → broken |
 | Noise | `noise% = pstdev(prev7) / median(prev7) · 100` |
-| Failing | last run fail_rate ≥50% → broken; ≥10% (elevated vs baseline) → fail/regression |
+| Failing | last run fail_rate ≥50% → broken; **≥10% always fail** (suite / query / JS classify — same rule) |
 | No data | per-query mart null-template (`Success=0` + `Color` NULL) → kind `nodata`, not fail |
 | Wave | `CiVersion × DbAlias` |
 | Expected suite | present in ≥50% of waves for that DbAlias over ~14d |
@@ -87,7 +87,7 @@ python3 generate.py \
 | Branch dimension | UI filter; heatmap/counters/waves = `Branch × DbAlias`; wave = `CiVersion × Branch × DbAlias` |
 | Date interval | From/To (started day); filters inbox, heatmap cells, last wave, history charts; Reset → full `--since..until` |
 | Wave view | UI toggle **finished** (default) = last completed run in heatmap/inbox; **all** = latest wave state (prefer in_progress when suite not in current wave yet) |
-| Compare wave | Per-cluster select (left of Last wave) from `wave_list`; heatmap shows `was → now`. **Paint** only on significant hard changes (fail/hard-slow count or band cross); watch/soft/nodata-only → solid now color. Query pills: gradient only for hard kind changes. Charts mark **now** (blue) and **cmp** (amber). Option label: `CiVersion · HH:MM · sha8 · run day`. Click older Last-runs card syncs compare; latest clears it. |
+| Compare wave | Per-cluster select from `wave_list`; heatmap `was → now` both reclassified vs **same prev7 before compare day** (like TPC-C). **Paint** only on significant hard changes; watch/soft/nodata-only → solid now color. Dive: Last-runs click = **focus (now)** for row/pills/charts; compare is separate (latest card clears compare). Charts mark **now** (blue) and **cmp** (amber). |
 
 Focus DbAliases: `sas_big/small`, `cloud_slonnn_64/128`, `vla_big/small`, `vla_3_node`.
 

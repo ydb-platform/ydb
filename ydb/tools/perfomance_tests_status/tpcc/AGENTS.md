@@ -62,6 +62,7 @@ python3 generate.py \
 | Scope | `main` + `stable-*` / `prestable-*` / `26*` with enough points; inbox = hot only |
 | Slice | `Branch × Cluster × run_type@warehouses` |
 | Date interval | From/To; filters inbox, heatmap, history; Reset → full `--since..until` |
+| Wave view | UI toggle **finished** (default) = last completed run in heatmap/inbox; **all** = latest day-wave state (prefer in_progress when slice not in today yet) |
 
 ## UI layers
 

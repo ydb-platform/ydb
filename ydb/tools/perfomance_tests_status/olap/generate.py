@@ -1419,6 +1419,48 @@ def attach_suite_query_catalogs(
     return n_hot_q, n_ok_q
 
 
+def attach_finished_snapshots(data: dict) -> int:
+    """Attach last finished-run twin onto in_progress stubs (for All wave view dive)."""
+    twins: dict[tuple[str, str, str], dict] = {}
+    for r in list(data.get("ok") or []) + list(data.get("inbox") or []):
+        if r.get("issue") == "in_progress":
+            continue
+        suite = r.get("suite")
+        if not suite or suite == "—":
+            continue
+        twins[(r.get("branch") or "", r.get("db") or "", suite)] = r
+    n = 0
+    for r in data.get("inbox") or []:
+        if r.get("issue") != "in_progress":
+            continue
+        twin = twins.get((r.get("branch") or "", r.get("db") or "", r.get("suite") or ""))
+        if not twin:
+            continue
+        r["finished"] = {
+            "issue": twin.get("issue"),
+            "status": twin.get("status"),
+            "kind": twin.get("kind"),
+            "reasons": twin.get("reasons") or [],
+            "ydb_base": twin.get("ydb_base"),
+            "ydb_now": twin.get("ydb_now"),
+            "ydb_pct": twin.get("ydb_pct"),
+            "fail_rate_base": twin.get("fail_rate_base"),
+            "fail_rate_now": twin.get("fail_rate_now"),
+            "fail_tests": twin.get("fail_tests") or "",
+            "bad_queries": twin.get("bad_queries") or [],
+            "slow_queries": twin.get("slow_queries") or [],
+            "queries": twin.get("queries") or [],
+            "query_map": twin.get("query_map") or {},
+            "now_runs": twin.get("now_runs") or [],
+            "report": twin.get("report"),
+            "last_ts": twin.get("last_ts"),
+            "ci_version": twin.get("ci_version"),
+            "history": twin.get("history"),
+        }
+        n += 1
+    return n
+
+
 def promote_ok_with_hot_queries(data: dict) -> int:
     """Suite sum can be OK while individual queries are hard-slow/fail — promote those."""
     stay: list[dict] = []
@@ -1552,8 +1594,14 @@ def main():
         if n_promo:
             refresh_summary_counts(data)
             print(f"promoted ok→hot by query signal: {n_promo}")
+        n_fin = attach_finished_snapshots(data)
+        if n_fin:
+            print(f"finished snapshots on in_progress: {n_fin}")
     else:
         print("no per-query dump at out/raw_test_runs.json (optional — query drill-down limited)")
+        n_fin = attach_finished_snapshots(data)
+        if n_fin:
+            print(f"finished snapshots on in_progress: {n_fin}")
 
     out = Path(args.output)
     render_html(data, out)

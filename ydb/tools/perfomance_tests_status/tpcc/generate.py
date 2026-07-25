@@ -439,6 +439,7 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
     expected = expected_suites(by_br_cl_waves)
 
     inbox: list[dict] = []
+    ok_slices: list[dict] = []
     slice_status: dict[tuple[str, str, str], dict] = {}
 
     for (branch, cluster, suite), pts in slices.items():
@@ -462,11 +463,17 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
             }
         )
         slice_status[(branch, cluster, suite)] = info
+        hist = history_view(sorted(pts, key=lambda p: p["ts"]))
         if info["status"] in ("broken", "regression"):
             item = dict(info)
             item["issue"] = info["kind"]
-            item["history"] = history_view(sorted(pts, key=lambda p: p["ts"]))
+            item["history"] = hist
             inbox.append(item)
+        elif info["status"] in ("ok", "watch"):
+            item = dict(info)
+            item["issue"] = "watch" if info["status"] == "watch" else "ok"
+            item["history"] = hist
+            ok_slices.append(item)
 
     for (branch, cluster), waves in by_br_cl_waves.items():
         if not waves:
@@ -550,6 +557,33 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
                     f"absent in completed day-wave {last['day']} "
                     f"(last seen {last_seen or 'never'})"
                 )
+            finished = None
+            fin = slice_status.get((branch, cluster, suite))
+            if issue_kind == "in_progress" and fin:
+                if fin["status"] in ("broken", "regression"):
+                    fin_issue = fin["kind"]
+                elif fin["status"] == "watch":
+                    fin_issue = "watch"
+                else:
+                    fin_issue = "ok"
+                finished = {
+                    "issue": fin_issue,
+                    "status": fin["status"],
+                    "kind": fin["kind"],
+                    "reasons": fin.get("reasons") or [],
+                    "lat_base": fin.get("lat_base"),
+                    "lat_now": fin.get("lat_now"),
+                    "lat_pct": fin.get("lat_pct"),
+                    "tpmc_base": fin.get("tpmc_base"),
+                    "tpmc_now": fin.get("tpmc_now"),
+                    "tpmc_pct": fin.get("tpmc_pct"),
+                    "capped_now": fin.get("capped_now") or 0,
+                    "now_runs": fin.get("now_runs") or [],
+                    "n": fin.get("n") or 0,
+                    "last_ts": fin.get("last_ts"),
+                    "version": fin.get("version") or "",
+                    "history": history_view(sorted(pts, key=lambda p: p["ts"])) if pts else None,
+                }
             inbox.append(
                 {
                     "id": safe_id(issue_kind, branch, cluster, suite),
@@ -580,6 +614,7 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
                     "wave": last["day"],
                     "wave_in_progress": in_prog,
                     "expected": True,
+                    "finished": finished,
                 }
             )
 
@@ -774,6 +809,7 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
         "waves_by_db": waves_by_db,
         "last_activity": last_activity,
         "inbox": inbox,
+        "ok": ok_slices,
         "rules": {
             "now": f"last {NOW_RUNS} runs",
             "baseline": f"previous {BASELINE_RUNS} runs",
@@ -782,6 +818,7 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
             "cap": f"lat ≥ {int(LAT_CAP)} → broken",
             "expected": f"suites in ≥{int(EXPECTED_MIN_SHARE*100)}% of day-waves / {EXPECTED_LOOKBACK_DAYS}d",
             "wave": "calendar day × Branch × Cluster",
+            "wave_view": "finished (default) = last completed run; all = latest incl. in_progress",
         },
     }
 

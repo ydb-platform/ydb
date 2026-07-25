@@ -183,6 +183,19 @@
   .react-btn[data-react="soft"][aria-pressed="true"] { background: #9a6700; }
   .react-btn[data-react="nodata"][aria-pressed="true"] { background: #656d76; }
   .react-btn:hover { filter: brightness(0.97); }
+  .wave-bar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+    margin: 0 0 14px; padding: 10px 12px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  }
+  .wave-bar .lbl { font-size: 13px; color: var(--muted); margin-right: 4px; }
+  .wave-btn {
+    border: 1px solid var(--border); background: #fff; color: var(--muted);
+    border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 12px; font-weight: 650;
+    cursor: pointer;
+  }
+  .wave-btn[aria-pressed="true"] { color: #fff; border-color: transparent; background: var(--info); }
+  .wave-btn:hover { filter: brightness(0.97); }
 </style>
 </head>
 <body>
@@ -195,13 +208,20 @@
     <b>In progress</b> = волна ещё едет (не алерт).
   </div>
 
+  <div class="wave-bar" id="waveBar">
+    <span class="lbl">Wave view:</span>
+    <button type="button" class="wave-btn" data-wave="finished" aria-pressed="true">finished runs</button>
+    <button type="button" class="wave-btn" data-wave="all" aria-pressed="false">all</button>
+    <span class="muted" style="font-size:12px">finished = данные последнего завершённого · all = latest (в т.ч. in progress)</span>
+  </div>
+
   <div class="react-bar" id="reactBar">
     <span class="lbl">Реагируем на:</span>
     <button type="button" class="react-btn" data-react="fail" aria-pressed="true">fail</button>
     <button type="button" class="react-btn" data-react="hard" aria-pressed="false">hard slow</button>
     <button type="button" class="react-btn" data-react="soft" aria-pressed="false">soft slow</button>
     <button type="button" class="react-btn" data-react="nodata" aria-pressed="false">no data</button>
-    <span class="muted" style="font-size:12px">по умолчанию только fail · missing/stale/in progress всегда</span>
+    <span class="muted" style="font-size:12px">по умолчанию только fail · missing/stale всегда · in progress — в режиме all</span>
   </div>
 
   <div class="filters" id="branchBar" style="margin-bottom:14px">
@@ -273,6 +293,7 @@ const UI = DATA.ui || {};
 let winFrom = UI.default_from || null;
 let winTo = UI.default_to || null;
 const REACT_KEY = 'olap_now_react_signals';
+const WAVE_KEY = 'olap_now_wave_view';
 function defaultReact() { return { fail: true, hard: false, soft: false, nodata: false }; }
 function loadReact() {
   try {
@@ -296,6 +317,31 @@ function setReact(key) {
   reactState = { ...reactState, [key]: !reactState[key] };
   try { localStorage.setItem(REACT_KEY, JSON.stringify(reactState)); } catch (_) {}
   syncReactButtons();
+  destroyCharts();
+  renderAll();
+}
+function defaultWave() { return 'finished'; }
+function loadWave() {
+  try {
+    const v = localStorage.getItem(WAVE_KEY);
+    return (v === 'all' || v === 'finished') ? v : defaultWave();
+  } catch (_) {
+    return defaultWave();
+  }
+}
+let waveState = loadWave();
+function waveView() { return waveState; }
+function syncWaveButtons() {
+  const v = waveView();
+  document.querySelectorAll('#waveBar .wave-btn').forEach(btn => {
+    btn.setAttribute('aria-pressed', btn.dataset.wave === v ? 'true' : 'false');
+  });
+}
+function setWave(v) {
+  if (v !== 'all' && v !== 'finished') return;
+  waveState = v;
+  try { localStorage.setItem(WAVE_KEY, waveState); } catch (_) {}
+  syncWaveButtons();
   destroyCharts();
   renderAll();
 }
@@ -395,6 +441,9 @@ function listedNodata(r) {
 function rowKey(r) {
   return r.id || `${r.branch || ''}|${r.db || ''}|${r.suite || ''}|${r.issue || ''}`;
 }
+function suiteKey(r) {
+  return `${r.branch || ''}|${r.db || ''}|${r.suite || ''}`;
+}
 function hasFailSignal(r) {
   if (['failing', 'both'].includes(r.issue)) return true;
   if (r.status === 'broken' && (r.fail_rate_now || 0) >= 0.1) return true;
@@ -412,7 +461,8 @@ function hasNodataSignal(r) {
   return listedNodata(r).length > 0;
 }
 function isInfraIssue(r) {
-  return ['missing', 'in_progress', 'stale'].includes(r.issue);
+  if (r.issue === 'in_progress') return waveView() === 'all';
+  return ['missing', 'stale'].includes(r.issue);
 }
 function rowMatchesReact(r) {
   if (isInfraIssue(r)) return true;
@@ -443,18 +493,52 @@ function fmtFS(nFail, nSlow, nSoft, nNodata) {
   if (s.nodata && nNodata) bits.push(`no data ${nNodata}`);
   return bits.join(' ');
 }
-function candidateRows() {
-  const rows = [...(DATA.inbox || [])];
+function softNodataExtras(seen) {
   const s = reactSignals();
-  if (!s.soft && !s.nodata) return rows;
-  const seen = new Set(rows.map(rowKey));
+  const extras = [];
+  if (!s.soft && !s.nodata) return extras;
   for (const r of (DATA.ok || [])) {
     if (!(s.soft && hasSoftSlowSignal(r)) && !(s.nodata && hasNodataSignal(r))) continue;
     const k = rowKey(r);
     if (seen.has(k)) continue;
     seen.add(k);
+    extras.push(r);
+  }
+  return extras;
+}
+function preferLatestBySuite(rows) {
+  // all-mode: one row per suite — prefer in_progress (latest wave) over finished twin
+  const by = new Map();
+  const passthrough = [];
+  for (const r of rows) {
+    if (!r.suite || r.suite === '—') {
+      passthrough.push(r);
+      continue;
+    }
+    const sk = suiteKey(r);
+    const prev = by.get(sk);
+    if (!prev) {
+      by.set(sk, r);
+      continue;
+    }
+    if (r.issue === 'in_progress') by.set(sk, r);
+    else if (prev.issue !== 'in_progress') by.set(sk, r);
+  }
+  return [...passthrough, ...by.values()];
+}
+function candidateRows() {
+  const mode = waveView();
+  const seen = new Set();
+  const rows = [];
+  for (const r of (DATA.inbox || [])) {
+    if (mode === 'finished' && r.issue === 'in_progress') continue;
+    const k = rowKey(r);
+    if (seen.has(k)) continue;
+    seen.add(k);
     rows.push(r);
   }
+  rows.push(...softNodataExtras(seen));
+  if (mode === 'all') return preferLatestBySuite(rows);
   return rows;
 }
 function liveCell(branch, db, fam) {
@@ -608,10 +692,14 @@ function renderHeader() {
   if (rs.hard) reactBits.push('hard slow');
   if (rs.soft) reactBits.push('soft slow');
   if (rs.nodata) reactBits.push('no data');
+  const wv = waveView();
+  const nInProg = (DATA.inbox || []).filter(r => r.issue === 'in_progress' && itemInWindow(r)
+    && (!br || r.branch === br)).length;
   document.getElementById('subtitle').innerHTML =
     `Source: <code>${esc(DATA.source || '')}</code> · data ${esc(DATA.window || '')} · ` +
     `filter <b>${esc(winFrom || '…')} → ${esc(winTo || '…')}</b> · ` +
-    `branch <b>${esc(br || 'all')}</b> · react <b>${esc(reactBits.join(' + ') || 'infra only')}</b> · hot ${s.hot || 0}`;
+    `branch <b>${esc(br || 'all')}</b> · wave <b>${esc(wv)}</b> · ` +
+    `react <b>${esc(reactBits.join(' + ') || 'infra only')}</b> · hot ${s.hot || 0}`;
 
   const fifth = rs.nodata
     ? `<div class="counter nodata"><div class="n">${s.nodata || 0}</div><div class="lbl">No data</div></div>`
@@ -620,7 +708,7 @@ function renderHeader() {
       : `<div class="counter warn"><div class="n">${s.stale || 0}</div><div class="lbl">Stale</div></div>`;
   document.getElementById('counters').innerHTML = `
     <div class="counter miss"><div class="n">${s.missing || 0}</div><div class="lbl">Missing</div></div>
-    <div class="counter info"><div class="n">${s.in_progress || 0}</div><div class="lbl">In progress</div></div>
+    <div class="counter info"><div class="n">${nInProg}</div><div class="lbl">In progress</div></div>
     <div class="counter hot"><div class="n">${s.failing || 0}</div><div class="lbl">Failing</div></div>
     <div class="counter regress"><div class="n">${s.slower || 0}</div><div class="lbl">Hard slow</div></div>
     ${fifth}
@@ -726,10 +814,14 @@ function uiBranches() {
 
 function inboxPool(issue) {
   if (issue === 'ok' || issue === 'watch') return DATA.ok || [];
+  if (issue === 'in_progress') {
+    return (DATA.inbox || []).filter(r => r.issue === 'in_progress');
+  }
   if (issue === 'nodata') {
     const seen = new Set();
     const out = [];
     for (const r of [...(DATA.inbox || []), ...(DATA.ok || [])]) {
+      if (waveView() === 'finished' && r.issue === 'in_progress') continue;
       const k = rowKey(r);
       if (seen.has(k)) continue;
       seen.add(k);
@@ -766,7 +858,10 @@ function filteredInbox() {
 }
 
 function mountHistory(item, id) {
-  const hist = sliceHist(item.history || {});
+  const src = (item.issue === 'in_progress' && item.finished && item.finished.history)
+    ? item.finished.history
+    : (item.history || {});
+  const hist = sliceHist(src);
   const box = document.getElementById(id + '_hist');
   if (!box) return;
   if (!(hist.labels || []).length) {
@@ -1118,7 +1213,15 @@ function mountQueryHistory(item, diveId, testName) {
 }
 
 function diveHtml(r, id) {
-  const runs = (r.now_runs || []).map(run => {
+  const fin = (r.issue === 'in_progress' && r.finished) ? r.finished : null;
+  const data = fin || r;
+  const waveNote = (r.issue === 'in_progress')
+    ? `<div class="muted" style="margin-bottom:8px">Волна <code>${esc(r.ci_version || r.wave || '')}</code> in progress` +
+      (r.last_seen ? ` · last seen ${esc(r.last_seen)}` : '') +
+      (fin ? ` · ниже — <b>последний завершённый</b> (${esc(fin.issue || fin.status || 'ok')})` : ' · finished twin нет') +
+      `</div>`
+    : '';
+  const runs = (data.now_runs || []).map(run => {
     const link = run.report ? `<a href="${esc(run.report)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">report</a>` : '—';
     return `<div class="run-card">
       <div class="t">${esc(run.label)}</div>
@@ -1127,7 +1230,7 @@ function diveHtml(r, id) {
       <div>${link}</div>
     </div>`;
   }).join('') || `<div class="muted">${
-    r.issue === 'in_progress'
+    r.issue === 'in_progress' && !fin
       ? `Волна <code>${esc(r.ci_version || r.wave || '')}</code> ещё едет — данных по suite пока нет` +
         (r.last_seen ? ` · last seen ${esc(r.last_seen)}` : '')
       : r.issue === 'missing'
@@ -1136,9 +1239,9 @@ function diveHtml(r, id) {
         : 'Нет последних прогонов (missing/stale)'
   }</div>`;
 
-  const slow = listedSlow(r);
-  const fails = listedFail(r);
-  const catalog = (r.queries || []).slice().sort((a, b) => String(a.test).localeCompare(String(b.test)));
+  const slow = listedSlow(data);
+  const fails = listedFail(data);
+  const catalog = (data.queries || []).slice().sort((a, b) => String(a.test).localeCompare(String(b.test)));
   const qPill = (q, cls) =>
     `<button type="button" class="pill ${cls}" data-qpick="${id}" data-test="${esc(q.test)}">${esc(q.test)}${
       cls === 'nodata' ? ' · no data'
@@ -1160,8 +1263,9 @@ function diveHtml(r, id) {
       }).join('')
     : '';
 
-  const report = r.report
-    ? `<a href="${esc(r.report)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">latest report</a>`
+  const reportUrl = data.report || r.report;
+  const report = reportUrl
+    ? `<a href="${esc(reportUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">latest report</a>`
     : '—';
 
   const queryBlock = catalog.length
@@ -1184,10 +1288,21 @@ function diveHtml(r, id) {
         <div class="qlist">${failHtml}</div>
       </div>`;
 
+  // query/history pickers need catalogs on the row object
+  if (fin) {
+    r.queries = data.queries;
+    r.query_map = data.query_map;
+    r.bad_queries = data.bad_queries;
+    r.slow_queries = data.slow_queries;
+    r.now_runs = data.now_runs;
+    r.history = data.history || r.history;
+  }
+
   return `<div class="dive">
+    ${waveNote}
     <div class="muted">${esc((r.reasons || []).join(' · '))} · ${report}</div>
     <div>
-      <div class="muted" style="margin-bottom:6px"><b>Last runs</b></div>
+      <div class="muted" style="margin-bottom:6px"><b>Last runs</b>${fin ? ' <span class="pill nodata">finished</span>' : ''}</div>
       <div class="runs">${runs}</div>
     </div>
     ${queryBlock}
@@ -1212,11 +1327,12 @@ function renderInbox() {
   }
   const body = rows.map((r, idx) => {
     const id = 'dive_' + idx;
-    const delta = r.ydb_pct == null ? '—' : `<span class="${r.ydb_pct > 10 ? 'bad' : ''}">${pct(r.ydb_pct)}</span>`;
-    const fr = (r.fail_rate_now == null && r.issue === 'missing')
+    const metrics = (r.issue === 'in_progress' && r.finished) ? r.finished : r;
+    const delta = metrics.ydb_pct == null ? '—' : `<span class="${metrics.ydb_pct > 10 ? 'bad' : ''}">${pct(metrics.ydb_pct)}</span>`;
+    const fr = (metrics.fail_rate_now == null && (r.issue === 'missing' || (r.issue === 'in_progress' && !r.finished)))
       ? '—'
-      : `${fmtFail(r.fail_rate_base)} → <span class="${(r.fail_rate_now||0) >= 0.1 ? 'bad' : ''}">${fmtFail(r.fail_rate_now)}</span>`;
-    const sp = querySplit(r);
+      : `${fmtFail(metrics.fail_rate_base)} → <span class="${(metrics.fail_rate_now||0) >= 0.1 ? 'bad' : ''}">${fmtFail(metrics.fail_rate_now)}</span>`;
+    const sp = querySplit(metrics);
     let statusLbl = esc(r.status);
     let badgeCls = r.status || 'ok';
     if (r.status === 'regression' || r.status === 'broken' || r.status === 'watch' || r.issue === 'watch') {
@@ -1224,6 +1340,11 @@ function renderInbox() {
       if (r.status === 'broken' && fs) statusLbl = `broken ${fs}`;
       else if (fs) statusLbl = fs;
       else if (r.status === 'regression') statusLbl = 'hot';
+    } else if (r.issue === 'in_progress') {
+      badgeCls = 'in_progress';
+      statusLbl = r.finished
+        ? `in progress · fin ${esc(r.finished.issue || r.finished.status || 'ok')}`
+        : 'in progress';
     } else if (hasNodataSignal(r) && reactSignals().nodata && !hasFailSignal(r) && !hasHardSlowSignal(r)) {
       badgeCls = 'nodata';
       statusLbl = fmtFS(0, 0, 0, sp.nodata.size) || 'no data';
@@ -1244,11 +1365,14 @@ function renderInbox() {
             if (fails.length) bits.push('fail: ' + fails.map(q => q.test + (q.ydb_pct!=null?' '+pct(q.ydb_pct):'')).join(', '));
             if (slow.length) bits.push('slow: ' + slow.map(q => q.test + (q.ydb_pct!=null?' '+pct(q.ydb_pct):'')).join(', '));
             if (nd.length) bits.push('no data: ' + nd.length + 'q');
+            if (r.issue === 'in_progress' && r.finished) {
+              bits.push('finished: ' + (r.finished.issue || r.finished.status || 'ok'));
+            }
             return bits.length ? `<div class="muted">${esc(bits.join(' · '))}</div>` : '';
           })()}
         </td>
         <td class="num">${fr}</td>
-        <td class="num">${fmt(r.ydb_base)} → ${fmt(r.ydb_now)}<div class="muted">${delta}</div></td>
+        <td class="num">${fmt(metrics.ydb_base)} → ${fmt(metrics.ydb_now)}<div class="muted">${delta}</div></td>
         <td class="muted">${esc(r.last_ts || '—')}
           ${r.last_seen && r.last_seen !== r.last_ts ? `<div class="muted">seen ${esc(r.last_seen)}</div>` : ''}
         </td>
@@ -1363,8 +1487,12 @@ function setupFilters() {
   refreshDbFilter();
   setupDateBar();
   syncReactButtons();
+  syncWaveButtons();
   document.querySelectorAll('#reactBar .react-btn').forEach(btn => {
     btn.addEventListener('click', () => setReact(btn.dataset.react));
+  });
+  document.querySelectorAll('#waveBar .wave-btn').forEach(btn => {
+    btn.addEventListener('click', () => setWave(btn.dataset.wave));
   });
   ['fBranch', 'fIssue', 'fDb', 'fFam'].forEach(id => {
     document.getElementById(id).addEventListener('change', () => {

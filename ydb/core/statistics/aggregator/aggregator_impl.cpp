@@ -977,6 +977,7 @@ void TStatisticsAggregator::FinishTraversal(
             BackgroundAnalyzeFailedCounter->Inc();
         }
     }
+    InvalidateCachedChangeCounters();
     ReportAnalyzeCounters();
 
     // When a background traversal completes successfully, check whether there
@@ -1504,32 +1505,47 @@ bool TStatisticsAggregator::IsChangeRatioAboveThreshold(
         return false;
     }
 
+    // Use integer arithmetic to avoid floating-point precision loss for very
+    // large counters (> 2^53). The comparison is:
+    //   changesSinceAnalyze / rowCount * 100 >= threshold
+    // rewritten as:
+    //   changesSinceAnalyze * 100 >= threshold * rowCount
+    // using __int128 to avoid overflow.
     ui64 changesSinceAnalyze = currentRowModifications - lastAnalyzeRowModifications;
-    double ratio = static_cast<double>(changesSinceAnalyze) / rowCount * 100.0;
     auto threshold = StatisticsConfig.GetBackgroundAnalyzeChangeRatioThresholdPercent();
 
-    return ratio >= static_cast<double>(threshold);
+    __int128 lhs = static_cast<__int128>(changesSinceAnalyze) * 100;
+    __int128 rhs = static_cast<__int128>(threshold) * static_cast<__int128>(rowCount);
+
+    return lhs >= rhs;
 }
 
-THashMap<TPathId, std::pair<ui64, ui64>> TStatisticsAggregator::CollectCurrentChangeCounters() const {
-    // Parse each schemeshard's base stats once into a pathId -> (rowModifications,
-    // rowCount) lookup. Doing per-table GetCurrentChangeCounters() calls instead
-    // would re-parse the whole blob for every table (quadratic on large databases).
-    THashMap<TPathId, std::pair<ui64, ui64>> currentCounters;
-    for (const auto& [ssId, serializedStats] : BaseStatistics) {
-        if (!serializedStats.Latest) {
-            continue;
+const THashMap<TPathId, std::pair<ui64, ui64>>& TStatisticsAggregator::GetCachedChangeCounters() {
+    if (!CachedChangeCountersValid) {
+        // Parse each schemeshard's base stats once into a pathId -> (rowModifications,
+        // rowCount) lookup. The cache is reused across scheduling ticks and counter
+        // reports, avoiding re-parsing all BaseStatistics blobs every second.
+        CachedChangeCounters.clear();
+        for (const auto& [ssId, serializedStats] : BaseStatistics) {
+            if (!serializedStats.Latest) {
+                continue;
+            }
+            NKikimrStat::TSchemeShardStats stats;
+            if (!stats.ParseFromString(*serializedStats.Latest)) {
+                continue;
+            }
+            for (const auto& entry : stats.GetEntries()) {
+                CachedChangeCounters[TPathId::FromProto(entry.GetPathId())] =
+                    {entry.GetRowModifications(), entry.GetRowCount()};
+            }
         }
-        NKikimrStat::TSchemeShardStats stats;
-        if (!stats.ParseFromString(*serializedStats.Latest)) {
-            continue;
-        }
-        for (const auto& entry : stats.GetEntries()) {
-            currentCounters[TPathId::FromProto(entry.GetPathId())] =
-                {entry.GetRowModifications(), entry.GetRowCount()};
-        }
+        CachedChangeCountersValid = true;
     }
-    return currentCounters;
+    return CachedChangeCounters;
+}
+
+void TStatisticsAggregator::InvalidateCachedChangeCounters() {
+    CachedChangeCountersValid = false;
 }
 
 TStatisticsAggregator::TScheduleTraversal* TStatisticsAggregator::FindStaleColumnTable() {
@@ -1537,7 +1553,7 @@ TStatisticsAggregator::TScheduleTraversal* TStatisticsAggregator::FindStaleColum
     // ordering in ScheduleTraversalsByTime, so we must scan all tables rather than
     // inspecting only the heap top. Among the stale column tables pick the one
     // analyzed longest ago.
-    auto currentCounters = CollectCurrentChangeCounters();
+    const auto& currentCounters = GetCachedChangeCounters();
 
     TScheduleTraversal* stalest = nullptr;
     for (auto& [pathId, traversal] : ScheduleTraversals) {
@@ -1574,7 +1590,7 @@ void TStatisticsAggregator::InitAnalyzeCounters() {
 }
 
 void TStatisticsAggregator::ReportAnalyzeCounters() {
-    auto currentCounters = CollectCurrentChangeCounters();
+    const auto& currentCounters = GetCachedChangeCounters();
 
     ui64 pendingTables = 0;
     for (const auto& [pathId, traversal] : ScheduleTraversals) {

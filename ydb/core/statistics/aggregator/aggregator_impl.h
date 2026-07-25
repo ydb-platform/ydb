@@ -209,7 +209,12 @@ private:
     bool IsChangeRatioAboveThreshold(
         ui64 lastAnalyzeRowModifications, ui64 currentRowModifications, ui64 rowCount) const;
     std::pair<ui64, ui64> GetCurrentChangeCounters(const TPathId& pathId) const;
-    THashMap<TPathId, std::pair<ui64, ui64>> CollectCurrentChangeCounters() const;
+
+    // Returns cached change counters, rebuilding the cache from BaseStatistics
+    // if it is invalid. The cache is invalidated when BaseStatistics is updated
+    // (TTxSchemeShardStats::Complete) or when a traversal finishes (FinishTraversal).
+    const THashMap<TPathId, std::pair<ui64, ui64>>& GetCachedChangeCounters();
+    void InvalidateCachedChangeCounters();
 
     std::optional<bool> IsKnownTable(const TPathId& pathId) const;
     std::optional<bool> IsColumnTable(const TPathId& pathId) const;
@@ -287,6 +292,13 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr BackgroundAnalyzePendingCounter;
     NMonitoring::TDynamicCounters::TCounterPtr BackgroundAnalyzeCompletedCounter;
     NMonitoring::TDynamicCounters::TCounterPtr BackgroundAnalyzeFailedCounter;
+
+    // Cached parsed change counters (pathId -> (rowModifications, rowCount)).
+    // Invalidated when BaseStatistics is updated (TTxSchemeShardStats::Complete)
+    // or when a traversal finishes (FinishTraversal). This avoids re-parsing
+    // all BaseStatistics protobuf blobs on every 1-second scheduling tick.
+    THashMap<TPathId, std::pair<ui64, ui64>> CachedChangeCounters;
+    bool CachedChangeCountersValid = false;
 
     TInstant AggregationRequestBeginTime;
 

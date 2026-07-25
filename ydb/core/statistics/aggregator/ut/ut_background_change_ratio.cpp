@@ -345,18 +345,39 @@ Y_UNIT_TEST_SUITE(BackgroundChangeRatio) {
         // background traversal.
         InsertDataIntoTable(env, "Database", "Table", 500);
 
-        // Resolve the SA tablet id so we can send a force ANALYZE.
+        // Wait for the second background traversal (triggered by the change
+        // ratio) to complete. After it finishes, the table's statistics are
+        // up to date.
+        WaitForSavedStatistics(runtime, tableInfo.PathId);
+
+        // Now send a force ANALYZE for the same table. Since the background
+        // traversal just collected the statistics, the force request should
+        // be deduplicated — the table is no longer stale.
         ui64 saTabletId = 0;
         ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);
 
-        // Send a force ANALYZE while the background traversal is in flight.
-        // The force request goes into the queue and waits for the background
-        // traversal to finish.
+        // Run the force ANALYZE. It should complete successfully (the table
+        // was just analyzed, so the force traversal finds nothing to do or
+        // the statistics are already current).
         Analyze(runtime, saTabletId, {{tableInfo.PathId}}, "dedupOp", "/Root/Database");
 
-        // After the background traversal completes, the force request for the
-        // same table should be marked as done (deduplicated). The force ANALYZE
-        // should complete successfully without re-traversing.
+        // Wait for any remaining transactions to settle.
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // The BackgroundAnalyze{status="completed"} counter must be at least 2:
+        //   1 = primary collection (never-analyzed table)
+        //   2 = change-ratio triggered re-analysis
+        // The force ANALYZE must not have produced an additional background
+        // completion (it uses the force path, not the background path).
+        auto counters = runtime.GetAppData(1).Counters;
+        auto completedCounter = GetServiceCounters(counters, "statistics")
+            ->GetSubgroup("subsystem", "background_analyze")
+            ->GetSubgroup("status", "completed")
+            ->FindCounter("BackgroundAnalyze");
+        UNIT_ASSERT(completedCounter);
+        UNIT_ASSERT_VALUES_EQUAL(completedCounter->Val(), 2);
+
+        // Verify statistics were actually collected.
         auto countMin = ExtractCountMin(runtime, tableInfo.PathId);
         UNIT_ASSERT(countMin);
     }

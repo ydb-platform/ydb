@@ -143,6 +143,8 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
         YDB_LOG_DEBUG("TTxSchemeShardStats::Complete",
             {"tabletId", Self->TabletID()});
         Self->BaseStatistics[Record.GetSchemeShardId()].Committed = UpdatedStats;
+
+        Self->InvalidateCachedChangeCounters();
         Self->ReportBaseStatisticsCounters();
         Self->ReportAnalyzeCounters();
     }

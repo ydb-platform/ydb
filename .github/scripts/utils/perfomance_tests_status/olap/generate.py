@@ -73,6 +73,8 @@ FOCUS_DBS = {
 # Always-on branches; plus stable-/prestable-* discovered from data
 CORE_BRANCHES = ("main", "trunk")
 MIN_BRANCH_POINTS = 30
+# New stables often have <30 points in the window — still show if they ran recently.
+RECENT_BRANCH_HOURS = 48
 
 STATUS_ORDER = {
     "ok": 0,
@@ -104,15 +106,30 @@ def branch_rank(branch: str) -> int:
     return 9
 
 
-def select_branches(points: list[dict]) -> list[str]:
+def select_branches(
+    points: list[dict], now_utc: datetime | None = None
+) -> list[str]:
+    now_utc = now_utc or datetime.now(timezone.utc)
+    recent_cut = now_utc - timedelta(hours=RECENT_BRANCH_HOURS)
     counts: dict[str, int] = defaultdict(int)
+    last_ts: dict[str, datetime] = {}
     for p in points:
         if p["db"] not in FOCUS_DBS:
             continue
         if not is_report_branch(p["branch"]):
             continue
-        counts[p["branch"]] += 1
-    chosen = [b for b, n in counts.items() if b in CORE_BRANCHES or n >= MIN_BRANCH_POINTS]
+        br = p["branch"]
+        counts[br] += 1
+        ts = p["ts"]
+        if br not in last_ts or ts > last_ts[br]:
+            last_ts[br] = ts
+    chosen: list[str] = []
+    for b, n in counts.items():
+        if b in CORE_BRANCHES or n >= MIN_BRANCH_POINTS:
+            chosen.append(b)
+        elif last_ts.get(b) is not None and last_ts[b] >= recent_cut:
+            # Fresh stable-/prestable- with few historical points (e.g. new release line)
+            chosen.append(b)
     for b in CORE_BRANCHES:
         if b in counts and b not in chosen:
             chosen.append(b)
@@ -642,7 +659,7 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
     # Wall-clock: if the whole pipeline stops, stale must still fire.
     now_utc = datetime.now(timezone.utc)
     lookback = now_utc - timedelta(days=EXPECTED_LOOKBACK_DAYS)
-    branches = select_branches(points)
+    branches = select_branches(points, now_utc=now_utc)
     branch_set = set(branches)
 
     slices: dict[tuple[str, str, str], list[dict]] = defaultdict(list)

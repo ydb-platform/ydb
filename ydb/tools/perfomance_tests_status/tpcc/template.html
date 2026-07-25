@@ -34,6 +34,7 @@
   .badge.broken { background: var(--broken-bg); color: var(--broken); }
   .badge.missing { background: var(--miss-bg); color: var(--miss); }
   .badge.regression, .badge.both, .badge.lat, .badge.tpmc { background: var(--regress-bg); color: var(--regress); }
+  .badge.lat_tpmc { background: var(--regress-bg); color: var(--regress); }
   .badge.stale, .badge.watch { background: #fff8c5; color: var(--warn); }
   .badge.in_progress { background: #ddf4ff; color: var(--info); }
   .badge.ok { background: #dafbe1; color: var(--ok); }
@@ -194,7 +195,7 @@
   <div class="heat-wrap">
     <div class="heat-legend">
       <span class="swatch"><span class="dot" style="background:#ffd7d5;box-shadow:inset 0 0 0 1px #a40e26"></span>broken · lat cap / outlier</span>
-      <span class="swatch"><span class="dot" style="background:#fff1e5;box-shadow:inset 0 0 0 1px #bc4c00"></span>regression · lat↑ / tpmC↓</span>
+      <span class="swatch"><span class="dot" style="background:#fff1e5;box-shadow:inset 0 0 0 1px #bc4c00"></span>lat↑ / tpmC↓ · с Δ%</span>
       <span class="swatch"><span class="dot" style="background:#fbefff;box-shadow:inset 0 0 0 1px #8250df"></span>missing</span>
       <span class="swatch"><span class="dot" style="background:#fff8c5;box-shadow:inset 0 0 0 1px #bf8700"></span>stale</span>
       <span class="swatch"><span class="dot" style="background:#ddf4ff;box-shadow:inset 0 0 0 1px #0969da"></span>in progress</span>
@@ -341,31 +342,98 @@ function itemInWindow(r) {
   if (!days.length) return true;
   return days.some(d => dayInRange(d, winFrom, winTo));
 }
+function metricBits(r) {
+  /** Human label of what went wrong + delta. Uses finished twin for in_progress. */
+  const m = (r.issue === 'in_progress' && r.finished) ? r.finished : r;
+  const issue = (r.issue === 'in_progress' && r.finished) ? (r.finished.issue || r.finished.kind) : (r.issue || r.kind);
+  const bits = [];
+  const latHot = issue === 'lat' || issue === 'both' || issue === 'broken'
+    || (m.lat_pct != null && m.lat_pct >= 10) || (m.capped_now > 0);
+  const tpmcHot = issue === 'tpmc' || issue === 'both'
+    || (m.tpmc_pct != null && m.tpmc_pct <= -10);
+  if (issue === 'broken' || (m.capped_now > 0)) {
+    if (m.capped_now > 0) bits.push(`lat capped ×${m.capped_now}`);
+    else bits.push('lat broken');
+    if (m.lat_pct != null && m.lat_pct >= 10) bits.push(`lat↑ ${pct(m.lat_pct)}`);
+  } else if (latHot && m.lat_pct != null) {
+    bits.push(`lat↑ ${pct(m.lat_pct)}`);
+  } else if (latHot) {
+    bits.push('lat↑');
+  }
+  if (tpmcHot && m.tpmc_pct != null) {
+    bits.push(`tpmC↓ ${pct(m.tpmc_pct)}`);
+  } else if (tpmcHot) {
+    bits.push('tpmC↓');
+  }
+  if (issue === 'watch' && m.lat_pct != null) bits.push(`lat↑ ${pct(m.lat_pct)} watch`);
+  return bits;
+}
+function statusLabel(r) {
+  if (r.issue === 'missing') return 'missing';
+  if (r.issue === 'stale') return 'stale';
+  if (r.issue === 'in_progress') {
+    if (!r.finished) return 'in progress';
+    const finBits = metricBits({ ...r.finished, issue: r.finished.issue || r.finished.kind });
+    return finBits.length
+      ? `in progress · fin ${finBits.join(' · ')}`
+      : `in progress · fin ${r.finished.issue || r.finished.status || 'ok'}`;
+  }
+  if (r.issue === 'ok') return 'ok';
+  const bits = metricBits(r);
+  if (bits.length) return bits.join(' · ');
+  return r.issue || r.status || 'ok';
+}
+function badgeClass(r) {
+  if (r.issue === 'in_progress') return 'in_progress';
+  if (r.issue === 'missing') return 'missing';
+  if (r.issue === 'stale') return 'stale';
+  if (r.issue === 'broken' || r.status === 'broken') return 'broken';
+  if (r.issue === 'both') return 'both';
+  if (r.issue === 'lat' || r.issue === 'watch') return 'lat';
+  if (r.issue === 'tpmc') return 'tpmc';
+  if (r.status === 'regression') return 'regression';
+  return r.status || 'ok';
+}
 function liveCell(branch, db, fam) {
   const rows = candidateRows().filter(r => {
     if (branch && r.branch !== branch) return false;
     if (r.db !== db || r.family !== fam) return false;
     return itemInWindow(r);
   });
-  if (!rows.length) return { status: 'ok', n_hot: 0 };
+  if (!rows.length) return { status: 'ok', n_hot: 0, n_lat: 0, n_tpmc: 0, n_broken: 0 };
   const rank = {
     broken: 6, missing: 5, regression: 4, both: 4,
     lat: 3, tpmc: 3, stale: 2, in_progress: 1, ok: 0, watch: 2,
   };
   let best = null;
+  let n_lat = 0, n_tpmc = 0, n_broken = 0;
   for (const r of rows) {
     const st = r.status || r.issue || 'ok';
     if (!best || (rank[st] || 0) > (rank[best] || 0)) best = st;
+    const issue = r.issue;
+    if (issue === 'broken' || (issue === 'both' && r.status === 'broken')) n_broken++;
+    if (issue === 'lat' || issue === 'both' || issue === 'broken') n_lat++;
+    if (issue === 'tpmc' || issue === 'both') n_tpmc++;
   }
   const hot = rows.filter(r => r.issue !== 'in_progress');
-  return { status: best || 'ok', n_hot: hot.length };
+  return { status: best || 'ok', n_hot: hot.length, n_lat, n_tpmc, n_broken };
 }
 function cellLabel(st, live) {
-  if (st === 'regression' || st === 'broken' || st === 'missing' || st === 'stale' || st === 'in_progress') {
+  if (st === 'ok') return 'ok';
+  const parts = [];
+  if (live.n_broken) parts.push(`broken ${live.n_broken}`);
+  else if (st === 'broken') parts.push('broken');
+  if (live.n_lat && st !== 'broken') parts.push(`lat↑ ${live.n_lat}`);
+  else if (st === 'regression' && !live.n_tpmc) parts.push('lat↑');
+  if (live.n_tpmc) parts.push(`tpmC↓ ${live.n_tpmc}`);
+  if (st === 'missing') parts.push(live.n_hot ? `missing ${live.n_hot}` : 'missing');
+  if (st === 'stale') parts.push(live.n_hot ? `stale ${live.n_hot}` : 'stale');
+  if (st === 'in_progress') parts.push(live.n_hot ? `in progress ${live.n_hot}` : 'in progress');
+  if (!parts.length) {
     const ns = live.n_hot || 0;
     return ns ? `${esc(st)} <span class="cnt">${ns}</span>` : esc(st);
   }
-  return esc(st);
+  return parts.map(esc).join(' · ');
 }
 function sliceHist(hist) {
   if (!hist || !(hist.labels || []).length) return hist;
@@ -714,7 +782,7 @@ function diveHtml(r, id) {
   const waveNote = (r.issue === 'in_progress')
     ? `<div class="muted" style="margin-bottom:8px">Day-wave <code>${esc(r.wave || '')}</code> in progress` +
       (r.last_seen ? ` · last seen ${esc(r.last_seen)}` : '') +
-      (fin ? ` · ниже — <b>последний завершённый</b> (${esc(fin.issue || fin.status || 'ok')})` : ' · finished twin нет') +
+      (fin ? ` · ниже — <b>последний завершённый</b> (${esc(statusLabel({ ...fin, issue: fin.issue || fin.kind }))})` : ' · finished twin нет') +
       `</div>`
     : '';
   if (fin) {
@@ -767,18 +835,11 @@ function renderInbox() {
     const metrics = (r.issue === 'in_progress' && r.finished) ? r.finished : r;
     const latDelta = metrics.lat_pct == null ? '—' : `<span class="${metrics.lat_pct >= 10 ? 'bad' : ''}">${pct(metrics.lat_pct)}</span>`;
     const tpmcDelta = metrics.tpmc_pct == null ? '—' : `<span class="${metrics.tpmc_pct <= -10 ? 'bad' : ''}">${pct(metrics.tpmc_pct)}</span>`;
-    let statusLbl = esc(r.status);
-    let badgeCls = r.status || 'ok';
-    if (r.issue === 'in_progress') {
-      badgeCls = 'in_progress';
-      statusLbl = r.finished
-        ? `in progress · fin ${esc(r.finished.issue || r.finished.status || 'ok')}`
-        : 'in progress';
-    }
+    const statusLbl = esc(statusLabel(r));
+    const badgeCls = badgeClass(r);
     return `
       <tr class="row" data-idx="${idx}" data-id="${id}">
-        <td><span class="badge ${esc(badgeCls)}">${statusLbl}</span>
-          <div class="pill" style="margin-top:4px">${esc(r.issue)}</div></td>
+        <td><span class="badge ${esc(badgeCls)}">${statusLbl}</span></td>
         <td><span class="cluster">${esc(r.db)}</span>
           <div class="muted">${esc(r.branch)}</div></td>
         <td>${esc(r.suite)} <span class="pill">${esc(r.family)}</span>

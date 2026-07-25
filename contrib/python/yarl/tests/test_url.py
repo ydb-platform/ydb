@@ -176,6 +176,24 @@ def test_raw_host():
     assert url.raw_host == url._val.hostname
 
 
+@pytest.mark.parametrize(
+    ("host"),
+    [
+        ("example.com"),
+        ("[::1]"),
+        ("xn--gnter-4ya.com"),
+    ],
+)
+def test_host_subcomponent(host: str):
+    url = URL(f"http://{host}")
+    assert url.host_subcomponent == host
+
+
+def test_host_subcomponent_return_idna_encoded_host():
+    url = URL("http://оун-упа.укр")
+    assert url.host_subcomponent == "xn----8sb1bdhvc.xn--j1amh"
+
+
 def test_raw_host_non_ascii():
     url = URL("http://оун-упа.укр")
     assert "xn----8sb1bdhvc.xn--j1amh" == url.raw_host
@@ -2041,3 +2059,14 @@ def test_parsing_populates_cache():
     assert url._cache["raw_query_string"] == "a=b"
     assert url._cache["raw_fragment"] == "frag"
     assert url._cache["scheme"] == "http"
+
+
+@pytest.mark.parametrize(
+    ("host", "is_authority"),
+    [
+        *(("other_gen_delim_" + c, False) for c in "[]"),
+    ],
+)
+def test_build_with_invalid_ipv6_host(host: str, is_authority: bool):
+    with pytest.raises(ValueError, match="Invalid IPv6 URL"):
+        URL(f"http://{host}/")

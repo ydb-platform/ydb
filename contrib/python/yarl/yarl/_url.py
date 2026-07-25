@@ -1,4 +1,5 @@
 import math
+import re
 import sys
 import warnings
 from collections.abc import Mapping, Sequence
@@ -45,6 +46,22 @@ SCHEME_REQUIRES_HOST = frozenset(("http", "https", "ws", "wss", "ftp"))
 
 sentinel = object()
 
+# reg-name: unreserved / pct-encoded / sub-delims
+# this pattern matches anything that is *not* in those classes. and is only used
+# on lower-cased ASCII values.
+_not_reg_name = re.compile(
+    r"""
+        # any character not in the unreserved or sub-delims sets, plus %
+        # (validated with the additional check for pct-encoded sequences below)
+        [^a-z0-9\-._~!$&'()*+,;=%]
+    |
+        # % only allowed if it is part of a pct-encoded
+        # sequence of 2 hex digits.
+        %(?![0-9a-f]{2})
+    """,
+    re.VERBOSE,
+)
+
 SimpleQuery = Union[str, int, float]
 QueryVariable = Union[SimpleQuery, "Sequence[SimpleQuery]"]
 Query = Union[
@@ -64,6 +81,7 @@ class CacheInfo(TypedDict):
     idna_encode: _CacheInfo
     idna_decode: _CacheInfo
     ip_address: _CacheInfo
+    host_validate: _CacheInfo
 
 
 class _SplitResultDict(TypedDict, total=False):
@@ -269,7 +287,7 @@ class URL:
                         raise ValueError(msg)
                     else:
                         host = ""
-                host = cls._encode_host(host)
+                host = cls._encode_host(host, validate_host=False)
                 raw_user = None if username is None else cls._REQUOTER(username)
                 raw_password = None if password is None else cls._REQUOTER(password)
                 netloc = cls._make_netloc(
@@ -350,10 +368,15 @@ class URL:
             if encoded:
                 netloc = authority
             else:
-                tmp = SplitResult("", authority, "", "", "")
-                port = None if tmp.port == DEFAULT_PORTS.get(scheme) else tmp.port
+                _user, _password, _host, _port = cls._split_netloc(authority)
+                port = None if _port == DEFAULT_PORTS.get(scheme) else _port
+                _host = (
+                    ""
+                    if _host is None
+                    else cls._encode_host(_host, validate_host=False)
+                )
                 netloc = cls._make_netloc(
-                    tmp.username, tmp.password, tmp.hostname, port, encode=True
+                    _user, _password, _host, port, encode=True, encode_host=False
                 )
         elif not user and not password and not host and not port:
             netloc = ""
@@ -395,7 +418,7 @@ class URL:
                 netloc=self._make_netloc(
                     self.raw_user,
                     self.raw_password,
-                    self.raw_host,
+                    self.host_subcomponent,
                     port,
                     encode_host=False,
                 )
@@ -647,6 +670,8 @@ class URL:
 
         None for relative URLs.
 
+        When working with IPv6 addresses, use the `host_subcomponent` property instead
+        as it will return the host subcomponent with brackets.
         """
         # Use host instead of hostname for sake of shortness
         # May add .hostname prop later
@@ -660,15 +685,34 @@ class URL:
         None for relative URLs.
 
         """
-        raw = self.raw_host
-        if raw is None:
+        if (raw := self.raw_host) is None:
             return None
-        if "%" in raw:
-            # Hack for scoped IPv6 addresses like
-            # fe80::2%Перевірка
-            # presence of '%' sign means only IPv6 address, so idna is useless.
+        if raw and raw[-1].isdigit() or ":" in raw:
+            # IP addresses are never IDNA encoded
             return raw
         return _idna_decode(raw)
+
+    @cached_property
+    def host_subcomponent(self) -> Union[str, None]:
+        """Return the host subcomponent part of URL.
+
+        None for relative URLs.
+
+        https://datatracker.ietf.org/doc/html/rfc3986#section-3.2.2
+
+        `IP-literal = "[" ( IPv6address / IPvFuture  ) "]"`
+
+        Examples:
+        - `http://example.com:8080` -> `example.com`
+        - `http://example.com:80` -> `example.com`
+        - `https://127.0.0.1:8443` -> `127.0.0.1`
+        - `https://[::1]:8443` -> `[::1]`
+        - `http://[::1]` -> `[::1]`
+
+        """
+        if (raw := self.raw_host) is None:
+            return None
+        return f"[{raw}]" if ":" in raw else raw
 
     @cached_property
     def port(self) -> Union[int, None]:
@@ -938,7 +982,9 @@ class URL:
         return prefix + "/".join(_normalize_path_segments(segments))
 
     @classmethod
-    def _encode_host(cls, host: str, human: bool = False) -> str:
+    def _encode_host(
+        cls, host: str, human: bool = False, validate_host: bool = True
+    ) -> str:
         if "%" in host:
             raw_ip, sep, zone = host.partition("%")
         else:
@@ -953,7 +999,8 @@ class URL:
             # - 127.0.0.1 (last character is a digit)
             # - 2001:db8::ff00:42:8329 (contains a colon)
             # - 2001:db8::ff00:42:8329%eth0 (contains a colon)
-            # - [2001:db8::ff00:42:8329] (contains a colon)
+            # - [2001:db8::ff00:42:8329] (contains a colon -- brackets should
+            #                             have been removed before it gets here)
             # Rare IP Address formats are not supported per:
             # https://datatracker.ietf.org/doc/html/rfc3986#section-7.4
             #
@@ -977,11 +1024,18 @@ class URL:
                 return host
 
         host = host.lower()
+        if human:
+            return host
+
         # IDNA encoding is slow,
         # skip it for ASCII-only strings
         # Don't move the check into _idna_encode() helper
         # to reduce the cache size
-        if human or host.isascii():
+        if host.isascii():
+            # Check for invalid characters explicitly; _idna_encode() does this
+            # for non-ascii host names.
+            if validate_host:
+                _host_validate(host)
             return host
         return _idna_encode(host)
 
@@ -1537,12 +1591,31 @@ def _ip_compressed_version(raw_ip: str) -> Tuple[str, int]:
     return ip.compressed, ip.version
 
 
+@lru_cache(_MAXCACHE)
+def _host_validate(host: str) -> None:
+    """Validate an ascii host name."""
+    invalid = _not_reg_name.search(host)
+    if invalid is None:
+        return
+    value, pos, extra = invalid.group(), invalid.start(), ""
+    if value == "@" or (value == ":" and "@" in host[pos:]):
+        # this looks like an authority string
+        extra = (
+            ", if the value includes a username or password, "
+            "use 'authority' instead of 'host'"
+        )
+    raise ValueError(
+        f"Host {host!r} cannot contain {value!r} (at position " f"{pos}){extra}"
+    ) from None
+
+
 @rewrite_module
 def cache_clear() -> None:
     """Clear all LRU caches."""
     _idna_decode.cache_clear()
     _idna_encode.cache_clear()
     _ip_compressed_version.cache_clear()
+    _host_validate.cache_clear()
 
 
 @rewrite_module
@@ -1552,6 +1625,7 @@ def cache_info() -> CacheInfo:
         "idna_encode": _idna_encode.cache_info(),
         "idna_decode": _idna_decode.cache_info(),
         "ip_address": _ip_compressed_version.cache_info(),
+        "host_validate": _host_validate.cache_info(),
     }
 
 
@@ -1561,12 +1635,14 @@ def cache_configure(
     idna_encode_size: Union[int, None] = _MAXCACHE,
     idna_decode_size: Union[int, None] = _MAXCACHE,
     ip_address_size: Union[int, None] = _MAXCACHE,
+    host_validate_size: Union[int, None] = _MAXCACHE,
 ) -> None:
     """Configure LRU cache sizes."""
-    global _idna_decode, _idna_encode, _ip_compressed_version
+    global _idna_decode, _idna_encode, _ip_compressed_version, _host_validate
 
     _idna_encode = lru_cache(idna_encode_size)(_idna_encode.__wrapped__)
     _idna_decode = lru_cache(idna_decode_size)(_idna_decode.__wrapped__)
     _ip_compressed_version = lru_cache(ip_address_size)(
         _ip_compressed_version.__wrapped__
     )
+    _host_validate = lru_cache(host_validate_size)(_host_validate.__wrapped__)

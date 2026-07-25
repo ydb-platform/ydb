@@ -544,6 +544,9 @@ public:
         InputBufferBytes = counters->GetCounter("InputBuffer/Bytes", true);
         InputBufferChunks = counters->GetCounter("InputBuffer/Chunks", true);
         InputBufferInflightBytes = counters->GetCounter("InputBuffer/InflightBytes", false);
+        SessionMessagesSent = counters->GetCounter("Session/MessagesSent", true);
+        SessionMessagesResent = counters->GetCounter("Session/MessagesResent", true);
+        SessionReconciliations = counters->GetCounter("Session/Reconciliations", true);
         auto now = TInstant::Now();
         LastPeerActivity.store(now);
         LastCleanup = now;
@@ -629,6 +632,9 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferChunks;
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferInflightBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SessionMessagesSent;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SessionMessagesResent;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SessionReconciliations;
     const TDuration ReconciliationTimeout = TDuration::MilliSeconds(1000);
     std::atomic<ui64> FailureLossSend = 0;
     std::atomic<ui64> FailureDoubleSend = 0;

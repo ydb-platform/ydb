@@ -968,6 +968,7 @@ void TNodeState::PushDataChunk(TDataChunk&& data, std::shared_ptr<TOutputDescrip
                 Queue.push_back(item);
                 SendMessage(item);
                 SendCount++;
+                (*SessionMessagesSent)++;
                 InflightBytes += bytes;
                 *OutputBufferInflightBytes += bytes;
                 (*OutputBufferInflightMessages)++;
@@ -1474,6 +1475,7 @@ now may need to send very last msg from terminated descriptor
                 Queue.push_back(item);
                 SendMessage(item);
                 SendCount++;
+                (*SessionMessagesSent)++;
                 inflightBytes += bytes;
                 InflightBytes += bytes;
                 *OutputBufferInflightBytes += bytes;
@@ -1613,6 +1615,7 @@ void TNodeState::HandleAck(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
                 for (auto item : Queue) {
                     SendMessage(item);
                     ResendCount++;
+                    (*SessionMessagesResent)++;
                     item->Descriptor->CheckGenMajor(GenMajor, TStringBuilder() << "Abort by Repeat from SeqNo=" << Queue.front()->SeqNo << ", item->SeqNo=" << item->SeqNo);
                 }
             }
@@ -1900,6 +1903,7 @@ void TNodeState::HandleReconciliation(TEvPrivate::TEvReconciliation::TPtr& ev) {
 void TNodeState::StartReconciliation(bool major, char logSymbol) {
     if (Reconciliation.load() == 0 || (major && (GenMinor > 1))) {
         ReconCount++;
+        (*SessionReconciliations)++;
         if (major) {
             GenMajor++;
             GenMinor = 1;

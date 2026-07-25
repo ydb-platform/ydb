@@ -695,22 +695,19 @@ function compareSelectHtml(branch, db) {
     return `<td class="cmp-cell"><span class="muted" style="font-size:11px">нет волн</span></td>`;
   }
   const nShow = (DATA.ui && DATA.ui.display_runs) || 7;
-  // Prefer last N waves in the open list; keep older ones under optgroup.
   const recent = older.slice(0, nShow);
-  const rest = older.slice(nShow);
   const cur = getCompareId(branch, db);
-  const opt = (w) => {
-    const sel = (cur && (cur === w.id || cur === w.ci_version)) ? ' selected' : '';
-    return `<option value="${esc(w.id)}"${sel}>${esc(formatWaveOption(w))}</option>`;
-  };
-  const opts = [`<option value="">— compare —</option>`]
-    .concat(recent.map(opt));
-  if (rest.length) {
-    opts.push(`<optgroup label="older (${rest.length})">`);
-    opts.push(...rest.map(opt));
-    opts.push('</optgroup>');
+  // Drop selection if it fell out of the recent window.
+  if (cur && !recent.some(w => w.id === cur || w.ci_version === cur)) {
+    setCompareId(branch, db, '');
   }
-  return `<td class="cmp-cell"><select class="cmp-wave" data-cmp-branch="${esc(branch)}" data-cmp-db="${esc(db)}" title="Сравнить last wave с выбранной (top ${nShow} = recent)">${opts.join('')}</select></td>`;
+  const selNow = getCompareId(branch, db);
+  const opts = [`<option value="">— compare —</option>`]
+    .concat(recent.map(w => {
+      const sel = (selNow && (selNow === w.id || selNow === w.ci_version)) ? ' selected' : '';
+      return `<option value="${esc(w.id)}"${sel}>${esc(formatWaveOption(w))}</option>`;
+    }));
+  return `<td class="cmp-cell"><select class="cmp-wave" data-cmp-branch="${esc(branch)}" data-cmp-db="${esc(db)}" title="Сравнить last wave с одной из последних ${nShow} волн">${opts.join('')}</select></td>`;
 }
 
 function fmt(v) {

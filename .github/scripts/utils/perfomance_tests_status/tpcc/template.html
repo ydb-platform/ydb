@@ -43,14 +43,18 @@
     background: #eaeef2; color: var(--muted); font-weight: 600;
   }
   .counters {
-    display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin: 0 0 16px;
+    display: flex; flex-wrap: nowrap; gap: 10px; margin: 0 0 16px;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
   }
-  @media (max-width: 800px) { .counters { grid-template-columns: repeat(2, 1fr); } }
   .counter {
     background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
-    padding: 12px 14px;
+    padding: 12px 14px; flex: 1 1 0; min-width: 96px;
   }
-  .counter .n { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
+  .counter .n {
+    font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums;
+    line-height: 1.1; white-space: nowrap;
+  }
+  .counter .n .sel { font-size: 0.85em; opacity: .85; }
   .counter .lbl { font-size: 12px; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: .03em; }
   .counter.hot .n { color: var(--broken); }
   .counter.regress .n { color: var(--regress); }
@@ -77,6 +81,7 @@
   .cell.missing { background: var(--miss-bg); color: var(--miss); cursor: pointer; }
   .cell.stale, .cell.watch { background: #fff8c5; color: var(--warn); cursor: pointer; }
   .cell.in_progress { background: #ddf4ff; color: var(--info); cursor: pointer; }
+  .cell.selected { outline: 2px solid var(--info); outline-offset: 2px; box-shadow: 0 0 0 3px #0969da33; }
   .cell .cnt { font-size: 11px; opacity: .85; }
   .heat-legend {
     display: flex; flex-wrap: wrap; gap: 8px 14px; padding: 8px 12px 12px;
@@ -460,8 +465,36 @@ function sliceHist(hist) {
 function selectedBranch() {
   return document.getElementById('fBranch')?.value || '';
 }
-function summarizeRows(rows) {
+function heatSelection() {
+  const db = document.getElementById('fDb')?.value || '';
+  const fam = document.getElementById('fFam')?.value || '';
+  return (db || fam) ? { db, fam } : null;
+}
+function rowsForSummary({ db = '', fam = '' } = {}) {
+  const br = selectedBranch();
+  return candidateRows().filter(r => {
+    if (br && r.branch !== br) return false;
+    if (db && r.db !== db) return false;
+    if (fam && r.family !== fam) return false;
+    if (!itemInWindow(r)) return false;
+    return true;
+  });
+}
+function countOkSlices({ db = '', fam = '' } = {}) {
+  const br = selectedBranch();
+  const base = currentSummaryBase();
+  if (!db && !fam) return base.ok_slices || 0;
+  return (DATA.ok || []).filter(r => {
+    if (br && r.branch !== br) return false;
+    if (db && r.db !== db) return false;
+    if (fam && r.family !== fam) return false;
+    if (!itemInWindow(r)) return false;
+    return r.issue === 'ok' || r.issue === 'watch';
+  }).length;
+}
+function summarizeRows(rows, { db = '', fam = '' } = {}) {
   const hot = rows.filter(r => r.issue !== 'in_progress');
+  const base = currentSummaryBase();
   return {
     missing: rows.filter(r => r.issue === 'missing').length,
     in_progress: rows.filter(r => r.issue === 'in_progress').length,
@@ -469,9 +502,9 @@ function summarizeRows(rows) {
     lat: rows.filter(r => r.issue === 'lat' || r.issue === 'both').length,
     tpmc: rows.filter(r => r.issue === 'tpmc' || r.issue === 'both').length,
     stale: rows.filter(r => r.issue === 'stale').length,
-    ok_slices: (currentSummaryBase().ok_slices) || 0,
+    ok_slices: countOkSlices({ db, fam }),
     hot: hot.length,
-    slices: currentSummaryBase().slices || 0,
+    slices: base.slices || 0,
   };
 }
 function currentSummaryBase() {
@@ -480,45 +513,45 @@ function currentSummaryBase() {
   return (DATA.by_branch && DATA.by_branch[br]) || DATA.summary || {};
 }
 function currentSummary() {
-  const br = selectedBranch();
-  const db = document.getElementById('fDb')?.value || '';
-  const fam = document.getElementById('fFam')?.value || '';
-  const rows = candidateRows().filter(r => {
-    if (br && r.branch !== br) return false;
-    if (db && r.db !== db) return false;
-    if (fam && r.family !== fam) return false;
-    if (!itemInWindow(r)) return false;
-    return true;
-  });
-  const s = summarizeRows(rows);
-  const base = currentSummaryBase();
-  s.ok_slices = base.ok_slices || 0;
-  s.slices = base.slices || 0;
-  return s;
+  // Branch/date totals only — heatmap cell must not replace widgets.
+  return summarizeRows(rowsForSummary());
+}
+function selectedSummary() {
+  const sel = heatSelection();
+  if (!sel) return null;
+  return summarizeRows(rowsForSummary(sel), sel);
+}
+function fmtNM(n, m, selected) {
+  const N = n || 0;
+  const M = m || 0;
+  if (!selected) return String(M);
+  return `<span class="sel">${N}</span>/${M}`;
 }
 function renderHeader() {
   const ui = DATA.ui || {};
-  const s = currentSummary();
+  const total = currentSummary();
+  const sel = selectedSummary();
   const br = selectedBranch();
   const wv = waveView();
-  const nInProg = (DATA.inbox || []).filter(r => r.issue === 'in_progress' && itemInWindow(r)
-    && (!br || r.branch === br)).length;
+  const heat = heatSelection();
   document.getElementById('lblNow').textContent = String(ui.now_runs || 3);
   document.getElementById('lblBase').textContent = String(ui.baseline_runs || 7);
   document.getElementById('lblAllBranches').textContent = (ui.focus_branches || []).join(', ') || '—';
   document.getElementById('subtitle').innerHTML =
     `Source: <code>${esc(DATA.source || '')}</code> · data ${esc(DATA.window || '')} · ` +
     `filter <b>${esc(winFrom || '…')} → ${esc(winTo || '…')}</b> · ` +
-    `branch <b>${esc(br || 'all')}</b> · wave <b>${esc(wv)}</b> · hot ${s.hot || 0}`;
+    `branch <b>${esc(br || 'all')}</b> · wave <b>${esc(wv)}</b> · hot ${total.hot || 0}` +
+    (heat ? ` · heat <b>${esc(heat.db || '*')} × ${esc(heat.fam || '*')}</b> (N/M)` : '');
 
+  const s = sel || total;
   document.getElementById('counters').innerHTML = `
-    <div class="counter miss"><div class="n">${s.missing || 0}</div><div class="lbl">Missing</div></div>
-    <div class="counter info"><div class="n">${nInProg}</div><div class="lbl">In progress</div></div>
-    <div class="counter hot"><div class="n">${s.broken || 0}</div><div class="lbl">Broken</div></div>
-    <div class="counter regress"><div class="n">${s.lat || 0}</div><div class="lbl">Lat↑</div></div>
-    <div class="counter regress"><div class="n">${s.tpmc || 0}</div><div class="lbl">tpmC↓</div></div>
-    <div class="counter warn"><div class="n">${s.stale || 0}</div><div class="lbl">Stale</div></div>
-    <div class="counter ok"><div class="n">${s.ok_slices || 0}</div><div class="lbl">OK slices</div></div>
+    <div class="counter miss"><div class="n">${fmtNM(s.missing, total.missing, !!sel)}</div><div class="lbl">Missing</div></div>
+    <div class="counter info"><div class="n">${fmtNM(s.in_progress, total.in_progress, !!sel)}</div><div class="lbl">In progress</div></div>
+    <div class="counter hot"><div class="n">${fmtNM(s.broken, total.broken, !!sel)}</div><div class="lbl">Broken</div></div>
+    <div class="counter regress"><div class="n">${fmtNM(s.lat, total.lat, !!sel)}</div><div class="lbl">Lat↑</div></div>
+    <div class="counter regress"><div class="n">${fmtNM(s.tpmc, total.tpmc, !!sel)}</div><div class="lbl">tpmC↓</div></div>
+    <div class="counter warn"><div class="n">${fmtNM(s.stale, total.stale, !!sel)}</div><div class="lbl">Stale</div></div>
+    <div class="counter ok"><div class="n">${fmtNM(s.ok_slices, total.ok_slices, !!sel)}</div><div class="lbl">OK slices</div></div>
   `;
 }
 function formatWave(w) {
@@ -584,7 +617,10 @@ function renderHeatmap() {
       for (const fam of h.families) {
         const live = liveCell(branch, db, fam);
         const st = live.status || 'ok';
-        html += `<td><div class="cell ${st}" data-branch="${esc(branch)}" data-db="${esc(db)}" data-fam="${esc(fam)}">${cellLabel(st, live)}</div></td>`;
+        const heat = heatSelection();
+        const selected = !!(heat && heat.db === db && heat.fam === fam
+          && (!selectedBranch() || selectedBranch() === branch));
+        html += `<td><div class="cell ${st}${selected ? ' selected' : ''}" data-branch="${esc(branch)}" data-db="${esc(db)}" data-fam="${esc(fam)}">${cellLabel(st, live)}</div></td>`;
       }
       html += `<td class="muted" style="text-align:left;white-space:nowrap">${formatWave(waveFor(branch, db))}</td></tr>`;
     }
@@ -594,14 +630,30 @@ function renderHeatmap() {
   root.innerHTML = html || '<div class="empty">нет данных</div>';
   root.querySelectorAll('.cell.regression, .cell.broken, .cell.missing, .cell.stale, .cell.in_progress, .cell.ok').forEach(el => {
     el.addEventListener('click', () => {
-      if (el.dataset.branch) document.getElementById('fBranch').value = el.dataset.branch;
-      document.getElementById('fDb').value = el.dataset.db || '';
-      document.getElementById('fFam').value = el.dataset.fam || '';
-      document.getElementById('fIssue').value = el.classList.contains('ok')
-        ? 'ok'
-        : (el.classList.contains('in_progress') ? 'in_progress' : '');
+      const db = el.dataset.db || '';
+      const fam = el.dataset.fam || '';
+      const branch = el.dataset.branch || '';
+      const fDb = document.getElementById('fDb');
+      const fFam = document.getElementById('fFam');
+      const fIssue = document.getElementById('fIssue');
+      const same = fDb.value === db && fFam.value === fam
+        && (!branch || selectedBranch() === branch);
+      if (same) {
+        fDb.value = '';
+        fFam.value = '';
+        fIssue.value = '';
+      } else {
+        if (branch) document.getElementById('fBranch').value = branch;
+        fDb.value = db;
+        fFam.value = fam;
+        fIssue.value = el.classList.contains('ok')
+          ? 'ok'
+          : (el.classList.contains('in_progress') ? 'in_progress' : '');
+      }
       renderAll();
-      document.getElementById('inbox').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (!same) {
+        document.getElementById('inbox').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
     });
   });
 }

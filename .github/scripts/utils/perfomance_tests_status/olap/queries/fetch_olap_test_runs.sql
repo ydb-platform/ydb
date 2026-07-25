@@ -10,12 +10,16 @@ $base = (
                 COALESCE(CiBranch, '') != '' AND NOT StartsWith(COALESCE(CiBranch, ''), '.'),
                 CiBranch,
                 IF(
-                    COALESCE(Version, '') != ''
-                    AND NOT StartsWith(COALESCE(Version, ''), '.')
-                    AND FIND(Version, '.') IS NOT NULL,
-                    SubString(Version, 0U, RFIND(Version, '.')),
+                    COALESCE(CAST(Version AS String), '') != ''
+                    AND NOT StartsWith(COALESCE(CAST(Version AS String), ''), '.')
+                    AND FIND(CAST(Version AS String), '.') IS NOT NULL,
+                    SubString(
+                        CAST(Version AS String),
+                        0U,
+                        RFIND(CAST(Version AS String), '.')
+                    ),
                     IF(
-                        DbAlias LIKE '%cloud_%',
+                        CAST(DbAlias AS String) LIKE '%cloud_%',
                         'trunk',
                         'unknown'
                     )

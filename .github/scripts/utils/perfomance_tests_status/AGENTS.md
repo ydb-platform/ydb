@@ -25,3 +25,10 @@ Stable S3 URLs (overwritten each successful run; OLAP/TPC-C publish independentl
 
 Duty notes: stale uses wall-clock; Now = last completed vs median(prev7); failing queries show mart error class (`timeout`/`diff`/`other` via Color).
 
+## Local unit tests (classify / compare)
+
+```bash
+cd .github/scripts/utils/perfomance_tests_status/olap
+python3 test_classify_rules.py
+```
+

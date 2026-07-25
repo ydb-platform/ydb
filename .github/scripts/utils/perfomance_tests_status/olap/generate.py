@@ -13,20 +13,31 @@ from __future__ import annotations
 import argparse
 import json
 import re
-import statistics
 import webbrowser
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from classify_rules import (
+    DUR_HARD,
+    DUR_TOL,
+    FAIL_BROKEN,
+    FAIL_HOT,
+    FAIL_RISE,
+    NOISE_K,
+    OUTLIER_MULT,
+    SLOW_PERSIST_MIN,
+    avg,
+    classify_duration,
+    fail_status_from_last,
+    is_fail_rate_hot,
+    median,
+    pct,
+)
+
 ROOT = Path(__file__).resolve().parent
 TEMPLATE = ROOT / "template.html"
 
-DUR_TOL = 0.10  # soft floor (%); quiet series
-DUR_HARD = 0.25  # hard regression floor (%) when above noise threshold
-NOISE_K = 2.0  # effective thr = max(DUR_TOL, NOISE_K * stdev(base)/median(base))
-SLOW_PERSIST_MIN = 1  # last completed run above baseline median
-OUTLIER_MULT = 3.0
 DEFAULT_WINDOW_DAYS = 30  # default fetch/report/chart window
 
 NOW_RUNS = 1  # alert signal = last completed run (avoids green-last / red-prev confusion)
@@ -37,7 +48,7 @@ EXPECTED_MIN_SHARE = 0.50
 WAVE_COMPLETE_HOURS = 6
 WAVE_COVERAGE_DONE = 0.85  # expected suites present → wave considered complete
 STALE_HOURS = 36
-HISTORY_MAX_POINTS = 100  # ~1 month of per-run points (2–4 runs/day)
+HISTORY_MAX_POINTS = 100  # ~1 month of per-run points (2–4 runs/day); TPCC keeps full window (day-grain)
 INBOX_LIMIT = 80
 INBOX_PER_KIND = {
     "missing": 20,
@@ -47,10 +58,6 @@ INBOX_PER_KIND = {
     "slower": 20,
     "stale": 10,
 }
-
-FAIL_BROKEN = 0.50
-FAIL_HOT = 0.10
-FAIL_RISE = 0.05
 
 FOCUS_PREFIXES = (
     "Clickbench",
@@ -223,123 +230,6 @@ def suite_family(suite: str) -> str:
     return "Other"
 
 
-def median(xs):
-    vs = [v for v in xs if v is not None]
-    return statistics.median(vs) if vs else None
-
-
-def avg(xs):
-    vs = [v for v in xs if v is not None]
-    return sum(vs) / len(vs) if vs else None
-
-
-def pct(a, b):
-    if a is None or b is None or a == 0:
-        return None
-    return (b - a) / a * 100
-
-
-def stdev(xs) -> float:
-    vs = [v for v in xs if v is not None]
-    if len(vs) < 2:
-        return 0.0
-    return float(statistics.pstdev(vs))
-
-
-def noise_pct(base_vals, ydb_base) -> float:
-    """Baseline noise as % of median (0 if unknown)."""
-    if ydb_base is None or ydb_base <= 0:
-        return 0.0
-    return stdev(base_vals) / ydb_base * 100.0
-
-
-def dur_threshold_pct(base_vals, ydb_base) -> float:
-    """Effective slow threshold % = max(DUR_TOL*100, NOISE_K * noise%)."""
-    return max(DUR_TOL * 100.0, NOISE_K * noise_pct(base_vals, ydb_base))
-
-
-def count_above_base(now_vals, ydb_base) -> int:
-    if ydb_base is None:
-        return 0
-    return sum(1 for v in now_vals if v is not None and v > ydb_base)
-
-
-def classify_duration(
-    ydb_pct: float | None,
-    ydb_now,
-    ydb_base,
-    now_vals: list,
-    base_vals: list,
-) -> dict:
-    """Soft/hard duration vs noisy baseline.
-
-    - hard (regression): pct ≥ max(DUR_HARD*100, thr) AND ≥SLOW_PERSIST_MIN runs > base
-    - soft (watch): thr ≤ pct < hard floor AND persist (quiet series only; thr usually 10%)
-    - broken: outlier > OUTLIER_MULT × base (unchanged)
-    """
-    thr = dur_threshold_pct(base_vals, ydb_base)
-    hard_floor = max(DUR_HARD * 100.0, thr)
-    n_above = count_above_base(now_vals, ydb_base)
-    persist = n_above >= SLOW_PERSIST_MIN
-    noise = noise_pct(base_vals, ydb_base)
-
-    if ydb_base is not None and ydb_now is not None and ydb_now > ydb_base * OUTLIER_MULT:
-        return {
-            "status": "broken",
-            "level": "hard",
-            "reasons": [f"dur outlier >{OUTLIER_MULT:.0f}×"],
-            "thr_pct": thr,
-            "noise_pct": noise,
-            "n_above": n_above,
-            "persist": persist,
-        }
-    if ydb_pct is None:
-        return {
-            "status": "ok",
-            "level": "ok",
-            "reasons": [],
-            "thr_pct": thr,
-            "noise_pct": noise,
-            "n_above": n_above,
-            "persist": persist,
-        }
-    if persist and ydb_pct >= hard_floor:
-        return {
-            "status": "regression",
-            "level": "hard",
-            "reasons": [
-                f"dur +{ydb_pct:.0f}% ≥ hard {hard_floor:.0f}% "
-                f"(thr {thr:.0f}% · noise {noise:.0f}% · {n_above}/{len(now_vals)} above base)"
-            ],
-            "thr_pct": thr,
-            "noise_pct": noise,
-            "n_above": n_above,
-            "persist": persist,
-        }
-    if persist and ydb_pct >= thr:
-        return {
-            "status": "watch",
-            "level": "soft",
-            "reasons": [
-                f"dur +{ydb_pct:.0f}% soft watch "
-                f"(thr {thr:.0f}% · < hard {hard_floor:.0f}% · {n_above}/{len(now_vals)} above base)"
-            ],
-            "thr_pct": thr,
-            "noise_pct": noise,
-            "n_above": n_above,
-            "persist": persist,
-        }
-    return {
-        "status": "ok",
-        "level": "ok",
-        "reasons": [],
-        "thr_pct": thr,
-        "noise_pct": noise,
-        "n_above": n_above,
-        "persist": persist,
-    }
-
-
 def worse(a, b):
     return a if STATUS_ORDER.get(a, 0) >= STATUS_ORDER.get(b, 0) else b
 
@@ -495,17 +385,7 @@ def classify_slice(pts: list[dict]) -> dict:
     fr_base = avg([p["fail_rate"] for p in base]) or 0.0
     last_fr = now[-1]["fail_rate"] if now else 0.0
 
-    fail_status = "ok"
-    fail_reasons: list[str] = []
-    if last_fr >= FAIL_BROKEN:
-        fail_status = "broken"
-        fail_reasons.append(f"last run fail_rate {last_fr:.0%}")
-    elif last_fr >= FAIL_HOT and last_fr >= fr_base + FAIL_RISE:
-        fail_status = "regression"
-        fail_reasons.append(f"fail_rate {fr_base:.0%}→{last_fr:.0%} (last run)")
-    elif last_fr >= FAIL_HOT:
-        fail_status = "regression"
-        fail_reasons.append(f"last run fail_rate {last_fr:.0%}")
+    fail_status, fail_reasons = fail_status_from_last(last_fr, fr_base)
 
     dur = classify_duration(ydb_pct, ydb_now, ydb_base, now_ydbs, base_ydbs)
     dur_status = dur["status"]
@@ -1367,8 +1247,8 @@ def _query_metrics(rows: list[dict]) -> dict | None:
     fr_base = avg([r["fr"] for r in base]) or 0.0
     last = now[-1] if now else {}
     last_fr = (last.get("fr") or 0.0) if last else 0.0
-    # last completed run only — same as classify_slice: ≥ FAIL_HOT always hot
-    is_fail = last_fr >= FAIL_HOT
+    # last completed run only — same as classify_slice / JS
+    is_fail = is_fail_rate_hot(last_fr)
     dur = classify_duration(ydb_pct, ydb_now, ydb_base, now_ydbs, base_ydbs)
     is_slow = dur["status"] in ("regression", "broken")  # hard only
     is_watch = dur["status"] == "watch"

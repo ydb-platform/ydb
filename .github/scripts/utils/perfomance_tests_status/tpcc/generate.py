@@ -2,7 +2,8 @@
 """Generate Now-first TPC-C HTML report from YDB query JSON.
 
 Focus: last completed run vs previous 7 (lat↑ / tpmC↓ / broken cap), missing in
-day-waves, stale clusters. Dive cards show last 3 for context. History is deep-dive only.
+day-waves, stale clusters. Dive cards show last DISPLAY_RUNS for context.
+History keeps the full --since window (day-grain; needed for compare-to-any-day).
 
 Example:
   python3 generate.py --input out/raw.json --output out/tpcc-report.html --open
@@ -38,7 +39,7 @@ EXPECTED_MIN_SHARE = 0.50
 WAVE_COMPLETE_HOURS = 6
 WAVE_COVERAGE_DONE = 0.85
 STALE_HOURS = 36
-# 0 = keep full --since window in history (needed for compare-to-any-wave).
+# 0 = keep full --since window (day-grain; OLAP caps at 100 run-points instead).
 HISTORY_MAX_POINTS = 0
 INBOX_LIMIT = 80
 INBOX_PER_BRANCH = 45

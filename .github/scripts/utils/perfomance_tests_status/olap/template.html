@@ -352,6 +352,7 @@
       <span class="swatch"><span class="dot" style="background:#f6f8fa;box-shadow:inset 0 0 0 1px #d0d7de"></span>no data</span>
       <span class="swatch"><span class="dot" style="background:linear-gradient(90deg,#dafbe1 0%,#dafbe1 40%,#ffebe9 60%,#ffebe9 100%);box-shadow:inset 0 0 0 1px #cf222e"></span>compare worse</span>
       <span class="swatch"><span class="dot" style="background:linear-gradient(90deg,#ffebe9 0%,#ffebe9 40%,#dafbe1 60%,#dafbe1 100%);box-shadow:inset 0 0 0 1px #1a7f37"></span>compare better</span>
+      <span class="swatch"><span class="dot" style="background:linear-gradient(90deg,#fff8c5 0%,#fff8c5 40%,#ddf4ff 60%,#ddf4ff 100%);box-shadow:inset 0 0 0 1px #9a6700"></span>compare mixed</span>
     </div>
     <div id="heatmap"></div>
   </div>
@@ -1187,15 +1188,18 @@ function olapHardBand(side) {
 /**
  * Compare paint only on significant hard changes:
  * fail/slow count up/down, or cross into/out of hard band.
- * Soft/watch/nodata-only flips → same (keep solid now color).
+ * Opposing fail↑+slow↓ (or reverse) → mixed. Soft/watch-only → same.
  */
 function compareDeltaOlap(prev, now) {
   const pb = olapHardBand(prev);
   const nb = olapHardBand(now);
   const pf = prev.n_fail || 0, ps = prev.n_slow || 0;
   const nf = now.n_fail || 0, ns = now.n_slow || 0;
-  if (nf > pf || ns > ps || nb > pb) return 'worse';
-  if (nf < pf || ns < ps || nb < pb) return 'better';
+  const failUp = nf > pf, failDown = nf < pf;
+  const slowUp = ns > ps, slowDown = ns < ps;
+  if ((failUp && slowDown) || (failDown && slowUp)) return 'mixed';
+  if (failUp || slowUp || nb > pb) return 'worse';
+  if (failDown || slowDown || nb < pb) return 'better';
   return 'same';
 }
 function liveCell(branch, db, fam) {
@@ -1506,9 +1510,11 @@ function renderHeatmap() {
         if (branch) document.getElementById('fBranch').value = branch;
         fDb.value = db;
         fFam.value = fam;
-        fIssue.value = el.classList.contains('ok') || el.classList.contains('delta-same')
-          ? 'ok'
-          : (el.classList.contains('nodata') ? 'nodata' : '');
+        // Issue from *now* side (compare-aware), not CSS class alone —
+        // delta-worse on alert-ok used to leave Issue empty → empty inbox.
+        const live = liveCell(branch, db, fam);
+        const nowSt = live.compare ? (live.delta_status || live.status) : (live.status || '');
+        fIssue.value = issueFilterFromCellStatus(nowSt);
       }
       renderAll();
       if (!same) {
@@ -1516,6 +1522,69 @@ function renderHeatmap() {
       }
     });
   });
+}
+function issueFilterFromCellStatus(nowSt) {
+  if (nowSt === 'ok' || nowSt === 'watch') return 'ok';
+  if (nowSt === 'nodata') return 'nodata';
+  if (nowSt === 'in_progress') return 'in_progress';
+  if (nowSt === 'missing') return 'missing';
+  if (nowSt === 'stale') return 'stale';
+  if (nowSt === 'both') return 'both';
+  if (nowSt === 'broken' || nowSt === 'failing' || nowSt === 'fail') return 'failing';
+  if (nowSt === 'regression' || nowSt === 'slower' || nowSt === 'slow') return 'slower';
+  return '';
+}
+function isHotIssue(issue) {
+  return ['failing', 'slower', 'both', 'missing', 'stale', 'in_progress', 'broken'].includes(issue);
+}
+function issueFromClassifyPart(part) {
+  if (!part) return 'ok';
+  const kind = part.kind || '';
+  const st = part.status || '';
+  if (kind === 'both' || st === 'both') return 'both';
+  if (kind === 'fail' || st === 'broken' || st === 'failing' || st === 'fail') return 'failing';
+  if (kind === 'slow' || st === 'regression' || st === 'slower' || st === 'slow') return 'slower';
+  if (kind === 'watch' || st === 'watch') return 'watch';
+  if (st === 'missing') return 'missing';
+  if (st === 'in_progress') return 'in_progress';
+  if (st === 'stale') return 'stale';
+  return 'ok';
+}
+/** Under active compare: issue from same-prev7 now-side reclassify. */
+function effectiveIssue(r) {
+  const cmpId = getCompareId(r.branch, r.db);
+  if (!cmpId) return r.issue;
+  const wave = waveEntry(r.branch, r.db, cmpId);
+  if (!wave) return r.issue;
+  return issueFromClassifyPart(classifySuiteNowVsWaveBaseline(r, wave));
+}
+function compareElevatedOkRows() {
+  const mode = waveView();
+  const out = [];
+  const seen = new Set();
+  for (const r of (DATA.ok || [])) {
+    if (mode === 'finished' && r.issue === 'in_progress') continue;
+    const k = rowKey(r);
+    if (seen.has(k)) continue;
+    if (!getCompareId(r.branch, r.db)) continue;
+    if (!isHotIssue(effectiveIssue(r))) continue;
+    seen.add(k);
+    out.push(r);
+  }
+  return out;
+}
+function mergeRowPools(...pools) {
+  const seen = new Set();
+  const out = [];
+  for (const pool of pools) {
+    for (const r of (pool || [])) {
+      const k = rowKey(r);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push(r);
+    }
+  }
+  return out;
 }
 
 function uiBranches() {
@@ -1547,21 +1616,38 @@ function filteredInbox() {
   const db = document.getElementById('fDb').value;
   const fam = document.getElementById('fFam').value;
   const br = selectedBranch();
+  const drill = !!(db && fam);
   const browseOk = issue === 'ok' || issue === 'watch' || issue === 'nodata';
-  return inboxPool(issue).filter(r => {
+  let pool;
+  if (browseOk || issue === 'in_progress') {
+    pool = inboxPool(issue);
+  } else if (!issue && drill) {
+    // Heatmap drill: show the slice even if alert-ok (compare may paint it).
+    pool = mergeRowPools(candidateRows(), DATA.ok || []);
+  } else if (!issue) {
+    pool = mergeRowPools(candidateRows(), compareElevatedOkRows());
+  } else {
+    pool = mergeRowPools(inboxPool(issue), compareElevatedOkRows());
+  }
+  return pool.filter(r => {
     if (br && r.branch !== br) return false;
+    if (db && r.db !== db) return false;
+    if (fam && r.family !== fam) return false;
+    if (!itemInWindow(r)) return false;
     if (issue === 'ok') {
       if (r.issue !== 'ok' && r.issue !== 'watch') return false;
     } else if (issue === 'watch') {
       if (r.issue !== 'watch' && !hasSoftSlowSignal(r)) return false;
     } else if (issue === 'nodata') {
       if (!hasNodataSignal(r)) return false;
-    } else if (issue && r.issue !== issue) {
-      return false;
+    } else if (issue === 'in_progress') {
+      if (r.issue !== 'in_progress') return false;
+    } else if (issue) {
+      if (r.issue !== issue && effectiveIssue(r) !== issue) return false;
+    } else if (!drill) {
+      if (!isHotIssue(r.issue) && !isHotIssue(effectiveIssue(r))) return false;
     }
-    if (db && r.db !== db) return false;
-    if (fam && r.family !== fam) return false;
-    if (!itemInWindow(r)) return false;
+    // all hot + drill: any matching slice (ok or hot)
     if (!browseOk && !rowMatchesReact(r)) return false;
     return true;
   });

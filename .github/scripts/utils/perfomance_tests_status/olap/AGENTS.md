@@ -87,7 +87,8 @@ python3 generate.py \
 | Branch dimension | UI filter; heatmap/counters/waves = `Branch × DbAlias`; wave = `CiVersion × Branch × DbAlias` |
 | Date interval | From/To (started day); filters inbox, heatmap cells, last wave, history charts; Reset → full `--since..until` |
 | Wave view | UI toggle **finished** (default) = last completed run in heatmap/inbox; **all** = latest wave state (prefer in_progress when suite not in current wave yet) |
-| Compare wave | Per-cluster select from `wave_list`; heatmap `was → now` both reclassified vs **same prev7 before compare day** (like TPC-C). **Paint** only on significant hard changes; watch/soft/nodata-only → solid now color. Dive: Last-runs click = **focus (now)** for row/pills/charts; compare is separate (latest card clears compare). Charts mark **now** (blue) and **cmp** (amber). |
+| Compare wave | Per-cluster select from `wave_list`; heatmap `was → now` both reclassified vs **same prev7 before compare day** (like TPC-C). **Paint** only on significant hard changes; fail↑+slow↓ → **mixed**; watch/soft-only → solid now. Heatmap click sets Issue from now-side status (compare-aware). Dive: Last-runs click = **focus (now)**; compare is separate. Charts mark **now** (blue) and **cmp** (amber). |
+| History window | `HISTORY_MAX_POINTS=100` (~1 month of run points). Pure rules live in `classify_rules.py` (+ `test_classify_rules.py`). |
 
 Focus DbAliases: `sas_big/small`, `cloud_slonnn_64/128`, `vla_big/small`, `vla_3_node`.
 

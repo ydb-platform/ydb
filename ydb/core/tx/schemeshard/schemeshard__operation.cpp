@@ -20,6 +20,7 @@
 #include <ydb/library/protobuf_printer/security_printer.h>
 
 #include <util/generic/algorithm.h>
+#include <util/generic/scope.h>
 #include <util/string/builder.h>
 
 namespace NKikimr::NSchemeShard {
@@ -195,7 +196,12 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
 
     // Propose is the only flow that can roll back (via AbortOperationPropose ->
     // MemChanges.UnDo): arm the changes so their self-ref undos are recorded.
+    // Disarm on every exit: AbortOperationPropose runs while still armed, but the
+    // rest of the propose tx must not read as the mutation phase.
     context.MemChanges.Arm(context.SS);
+    Y_DEFER {
+        context.MemChanges.Disarm();
+    };
 
     auto selfId = SelfTabletId();
     auto& record = request.Record;

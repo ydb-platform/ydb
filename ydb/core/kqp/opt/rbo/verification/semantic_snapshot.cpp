@@ -4379,6 +4379,111 @@ static_assert(MaxOlapStoredStringBytes < MaxConcatAllocationBytes);
 static_assert(2 * MaxOlapStoredStringBytes > MaxConcatAllocationBytes);
 static_assert(2 * MaxDatashardStoredStringBytes < MaxConcatAllocationBytes);
 
+class TLiteralStringConcatFolder {
+public:
+    static std::optional<NJson::TJsonValue> TryFold(const TExprNode& root) {
+        if (!IsCandidate(root)) {
+            return std::nullopt;
+        }
+
+        TLiteralStringConcatFolder folder;
+        folder.Visit(root, 0);
+
+        auto result = JsonMap();
+        result["kind"] = "literal";
+        result["type"] = "String";
+        result["value"] = std::move(folder.Value);
+        return result;
+    }
+
+private:
+    static bool IsCandidate(const TExprNode& root) {
+        if (!root.IsCallable("Concat")) {
+            return false;
+        }
+
+        TVector<const TExprNode*> pending{&root};
+        size_t nodes = 0;
+        while (!pending.empty()) {
+            const auto* node = pending.back();
+            pending.pop_back();
+            if (++nodes > MaxExactScalarNodes) {
+                Unsupported(
+                    "Literal String Concat exceeds the scalar audit limit");
+            }
+            if (node->IsCallable("Concat")) {
+                for (const auto& child : node->Children()) {
+                    pending.push_back(child.Get());
+                }
+                continue;
+            }
+            if (!node->IsCallable("String")) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    [[noreturn]] static void Fail(TStringBuf reason) {
+        Unsupported(TStringBuilder()
+            << "Literal String Concat: " << reason);
+    }
+
+    static void CheckStringType(const TExprNode& node) {
+        if (!IsExactDataAnnotation(
+                node.GetTypeAnn(),
+                NUdf::EDataSlot::String,
+                false))
+        {
+            Fail("node is not exactly non-null String");
+        }
+    }
+
+    void AddLiteral(const TExprNode& node) {
+        CheckStringType(node);
+        if (!node.IsCallable("String") ||
+            node.ChildrenSize() != 1 ||
+            !node.Child(0)->IsAtom())
+        {
+            Fail("leaf is not canonical String data");
+        }
+        LiteralExpr(node);
+        const TStringBuf bytes = node.Child(0)->Content();
+        if (bytes.size() > MaxConcatAllocationBytes - Value.size()) {
+            Fail("byte length exceeds the safe Concat allocation bound");
+        }
+        Value.append(bytes.data(), bytes.size());
+    }
+
+    void Visit(const TExprNode& node, size_t depth) {
+        if (++NodeCount > MaxExactScalarNodes ||
+            depth > MaxExactScalarDepth)
+        {
+            Fail("exceeds the scalar audit limit");
+        }
+        CheckScalarSafetyMetadata(node);
+
+        if (node.IsCallable("String")) {
+            AddLiteral(node);
+            return;
+        }
+        if (!node.IsCallable("Concat")) {
+            Fail(TStringBuilder()
+                << "contains unsupported callable " << node.Content());
+        }
+        CheckStringType(node);
+        if (node.ChildrenSize() != 2) {
+            Fail("Concat is not binary");
+        }
+        Visit(*node.Child(0), depth + 1);
+        Visit(*node.Child(1), depth + 1);
+    }
+
+private:
+    size_t NodeCount = 0;
+    TString Value;
+};
+
 class TRestrictedConcatAuditor {
 public:
     TRestrictedConcatAuditor(
@@ -5782,6 +5887,11 @@ NJson::TJsonValue ExportExpr(
     const auto body = expression.GetExpressionBody();
     if (!body->IsCallable("Concat")) {
         return ExportExpr(expression, visibleColumns);
+    }
+
+    if (auto folded = TLiteralStringConcatFolder::TryFold(*body)) {
+        AuditExactScalarExpression(*folded);
+        return std::move(*folded);
     }
 
     TExactScalarBudget budget;

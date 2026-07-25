@@ -28,7 +28,8 @@ Prefer MCP `user-ydb-qa` → `ydb_query`, or ydb CLI. Save MCP-shaped JSON:
 
 Endpoint/DB: see `.github/config/ydb_qa_config.json`.
 
-Default lookback: from `--since` (e.g. ~3–4 weeks).
+Default lookback: **~1 month** (`DEFAULT_WINDOW_DAYS = 30`).  
+Fetch with `{{SINCE}}` = today − 30d (`YYYY-MM-DDT00:00:00Z`).
 
 ## 2. Generate HTML
 
@@ -36,9 +37,10 @@ Default lookback: from `--since` (e.g. ~3–4 weeks).
 cd ydb/tools/perfomance_tests_status/tpcc
 python3 generate.py \
   --input out/raw.json \
-  --since YYYY-MM-DD \
   --output out/tpcc-report.html --open
 ```
+
+`--since` optional (default: today − 30 days). Override only if the user asks.
 
 ## 3. Deliver
 

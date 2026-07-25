@@ -1,0 +1,83 @@
+name: Performance-tests-status-reports
+
+on:
+  schedule:
+    - cron: "0 * * * *"  # Every hour
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        type: string
+        default: ""
+        description: "Optional commit SHA to build reports from"
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  reports:
+    name: Build and publish Now reports
+    runs-on: [self-hosted, auto-provisioned, build-preset-analytic-node]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.commit_sha }}
+          fetch-depth: 1
+
+      - name: Setup ydb access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
+
+      - name: Setup s3cmd
+        uses: ./.github/actions/s3cmd
+        with:
+          s3_bucket: "ydb-builds"
+          s3_endpoint: ${{ vars.AWS_ENDPOINT }}
+          s3_key_id: ${{ secrets.AWS_KEY_ID }}
+          s3_key_secret: ${{ secrets.AWS_KEY_VALUE }}
+
+      - name: Install Python deps
+        run: python3 -m pip install -q "ydb[yc]>=3.20"
+
+      - name: Fetch data and generate reports
+        id: build
+        run: |
+          set -eux
+          PUBLISH_DIR="${RUNNER_TEMP}/perfomance_tests_status_publish"
+          rm -rf "$PUBLISH_DIR"
+          mkdir -p "$PUBLISH_DIR"
+          python3 ydb/tools/perfomance_tests_status/run_reports.py --publish-dir "$PUBLISH_DIR"
+          test -f "$PUBLISH_DIR/olap-report.html"
+          test -f "$PUBLISH_DIR/tpcc-report.html"
+          echo "publish_dir=$PUBLISH_DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Upload reports to S3 (stable URLs)
+        env:
+          PUBLISH_DIR: ${{ steps.build.outputs.publish_dir }}
+          AWS_ENDPOINT: ${{ vars.AWS_ENDPOINT }}
+        run: |
+          set -eux
+          S3_STABLE="s3://ydb-builds/main/perfomance_tests_status"
+          URL_STABLE="${AWS_ENDPOINT}/ydb-builds/main/perfomance_tests_status"
+
+          s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic \
+            --guess-mime-type --no-check-md5 --force \
+            "$PUBLISH_DIR/olap-report.html" "$S3_STABLE/olap-report.html"
+
+          s3cmd sync --follow-symlinks --acl-public --no-progress --stats --no-mime-magic \
+            --guess-mime-type --no-check-md5 --force \
+            "$PUBLISH_DIR/tpcc-report.html" "$S3_STABLE/tpcc-report.html"
+
+          {
+            echo "## Performance tests status reports"
+            echo ""
+            echo "| Report | Link |"
+            echo "| --- | --- |"
+            echo "| OLAP Now | [${URL_STABLE}/olap-report.html](${URL_STABLE}/olap-report.html) |"
+            echo "| TPC-C Now | [${URL_STABLE}/tpcc-report.html](${URL_STABLE}/tpcc-report.html) |"
+            echo ""
+            echo "Stable paths (overwritten each run, no versioning)."
+          } >> "$GITHUB_STEP_SUMMARY"

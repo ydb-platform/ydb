@@ -5,7 +5,8 @@ Focus: last 3 runs vs previous 7 (lat↑ / tpmC↓ / broken cap), missing in day
 stale clusters. History is deep-dive only.
 
 Example:
-  python3 generate.py --input out/raw.json --since 2026-07-01 --output out/tpcc-report.html --open
+  python3 generate.py --input out/raw.json --output out/tpcc-report.html --open
+  # default --since = today − 30 days (~1 month)
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ TPMC_TOL = 0.10
 OUTLIER_MULT = 3.0
 LAT_CAP = 30000.0
 
+DEFAULT_WINDOW_DAYS = 30  # ~1 month lookback when --since omitted
 NOW_RUNS = 3
 BASELINE_RUNS = 7
 EXPECTED_LOOKBACK_DAYS = 14
@@ -826,13 +828,22 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
 def main():
     ap = argparse.ArgumentParser(description="TPC-C Now report generator")
     ap.add_argument("--input", required=True, type=Path)
-    ap.add_argument("--since", required=True, help="YYYY-MM-DD")
+    ap.add_argument(
+        "--since",
+        default=None,
+        help=f"YYYY-MM-DD (default: today − {DEFAULT_WINDOW_DAYS}d ≈ 1 month)",
+    )
     ap.add_argument("--until", default=None, help="YYYY-MM-DD optional upper bound")
     ap.add_argument("--output", type=Path, default=ROOT / "out" / "tpcc-report.html")
     ap.add_argument("--open", action="store_true")
     args = ap.parse_args()
 
-    since = datetime.fromisoformat(args.since).replace(tzinfo=timezone.utc)
+    if args.since:
+        since = datetime.fromisoformat(args.since).replace(tzinfo=timezone.utc)
+    else:
+        since = datetime.now(timezone.utc).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ) - timedelta(days=DEFAULT_WINDOW_DAYS)
     until = None
     if args.until:
         until = datetime.fromisoformat(args.until).replace(tzinfo=timezone.utc) + timedelta(days=1)

@@ -18,6 +18,7 @@ from classify_rules import (  # noqa: E402
 from generate import (  # noqa: E402
     allure_suite_for,
     attach_reports,
+    classify_slice,
     collapse_in_progress_suite_dupes,
     mart_cluster_to_ci,
 )
@@ -168,6 +169,51 @@ class WaveCompareRowFilterTests(unittest.TestCase):
             "all",
         )
         self.assertEqual(got["issue"], "ok")
+
+
+class ClassifySliceDriftTests(unittest.TestCase):
+    def _pts(self, tpmcs, lat=800.0):
+        from datetime import datetime, timedelta, timezone
+
+        t0 = datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc)
+        out = []
+        for i, tpmc in enumerate(tpmcs):
+            ts = t0 + timedelta(days=i)
+            out.append(
+                {
+                    "ts": ts,
+                    "ts_iso": ts.isoformat().replace("+00:00", "Z"),
+                    "tpmc": float(tpmc),
+                    "lat90": float(lat),
+                    "lat_raw": float(lat),
+                    "lat_capped": False,
+                    "version": f"c{i:04d}",
+                    "label": f"{ts.date().isoformat()}_c{i:04d}",
+                    "report": None,
+                }
+            )
+        return out
+
+    def test_gradual_tpmc_drift_is_watch_not_hot(self):
+        # Early ~250k (p90 anchor), then prev7 already walked to ~242k, now ~241k.
+        lookback = [250000 + (i % 5) * 200 for i in range(21)]
+        prev7 = [242000 + i * 50 for i in range(7)]
+        now = [240994]
+        info = classify_slice(self._pts(lookback + prev7 + now))
+        self.assertEqual(info["status"], "watch")
+        self.assertEqual(info["kind"], "tpmc")
+        self.assertIsNotNone(info["tpmc_drift_pct"])
+        self.assertLessEqual(info["tpmc_drift_pct"], -3.5)
+        self.assertGreater(info["tpmc_pct"], -10)  # not alert-hot vs prev7
+        self.assertTrue(any("drift" in r for r in info["reasons"]))
+        self.assertTrue(any("p90" in r for r in info["reasons"]))
+
+    def test_sharp_tpmc_drop_still_hot(self):
+        base = [250000] * 28
+        info = classify_slice(self._pts(base + [220000]))  # −12% vs prev7
+        self.assertEqual(info["status"], "regression")
+        self.assertEqual(info["kind"], "tpmc")
+        self.assertLessEqual(info["tpmc_pct"], -10)
 
 
 class ReportJoinTests(unittest.TestCase):

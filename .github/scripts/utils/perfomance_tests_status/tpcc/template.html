@@ -15,12 +15,17 @@
     --miss: #8250df; --miss-bg: #fbefff;
   }
   * { box-sizing: border-box; }
+  html { max-width: 100%; }
   body {
     margin: 0;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
     background: var(--bg); color: var(--text); line-height: 1.4;
+    max-width: 100%; overflow-x: hidden; /* page never grows; panes scroll inside */
   }
-  .wrap { max-width: 1400px; margin: 0 auto; padding: 14px 14px 48px; }
+  .wrap {
+    max-width: 1400px; width: 100%; margin: 0 auto; padding: 14px 14px 48px;
+    min-width: 0;
+  }
   h1 { font-size: 20px; margin: 0 0 2px; }
   h2 { font-size: 15px; margin: 16px 0 8px; }
   .sub { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
@@ -45,7 +50,9 @@
   }
   .counters {
     display: flex; flex-wrap: nowrap; gap: 10px; margin: 0 0 16px;
+    max-width: 100%; min-width: 0;
     overflow-x: auto; -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
   }
   .counter {
     background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
@@ -66,11 +73,18 @@
 
   .heat-wrap {
     background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
-    overflow: auto; margin-bottom: 18px;
+    max-width: 100%; min-width: 0; margin-bottom: 18px;
+    overflow-x: auto; overflow-y: visible; -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
   }
-  table.heat { border-collapse: collapse; width: 100%; font-size: 12px; }
+  table.heat {
+    border-collapse: collapse; width: max-content; min-width: 100%; font-size: 12px;
+  }
   table.heat th, table.heat td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: center; }
-  table.heat th:first-child, table.heat td:first-child { text-align: left; position: sticky; left: 0; background: #fafbfc; }
+  table.heat th:first-child, table.heat td:first-child {
+    text-align: left; position: sticky; left: 0; z-index: 2;
+    background: #fafbfc; box-shadow: 1px 0 0 var(--border);
+  }
   table.heat th { color: var(--muted); font-weight: 600; background: #fafbfc; }
   .cell {
     display: inline-flex; align-items: center; justify-content: center; gap: 6px;
@@ -139,7 +153,9 @@
     display: flex; flex-wrap: nowrap; align-items: center; gap: 8px 10px;
     margin: 0 0 12px; padding: 6px 10px;
     background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    max-width: 100%; min-width: 0;
     overflow-x: auto; -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
   }
   .top-filters .lbl { font-size: 11px; color: var(--muted); white-space: nowrap; flex: 0 0 auto; }
   .top-filters .sep { width: 1px; height: 22px; background: var(--border); flex: 0 0 auto; }
@@ -149,7 +165,17 @@
   .top-filters select, .top-filters input[type="date"] { min-width: 0; }
   .inbox-filters { margin: 0 0 8px; }
 
-  table.inbox { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  #inbox {
+    max-width: 100%; min-width: 0;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  }
+  table.inbox {
+    width: 100%; border-collapse: collapse; font-size: 13px;
+    background: transparent; border: 0;
+    table-layout: auto;
+  }
   table.inbox th {
     text-align: left; font-size: 11px; color: var(--muted); font-weight: 600;
     padding: 8px 10px; border-bottom: 1px solid var(--border); background: #fafbfc;
@@ -162,7 +188,12 @@
   table.inbox tr.row { cursor: pointer; }
   table.inbox tr.row:hover { filter: brightness(0.985); }
   table.inbox tr.row.open { background: #f6f8fa; }
-  table.inbox tr.detail td { background: #f6f8fa; padding: 12px 14px; }
+  table.inbox tr.detail td {
+    background: #f6f8fa; padding: 12px 14px;
+    /* Keep dive/charts inside the visible inbox width (not clipped by page). */
+    max-width: 0; /* colspan cell inherits table width */
+    overflow-x: auto;
+  }
   table.inbox tr.detail.hidden { display: none; }
   .cluster { font-weight: 700; }
   .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--info); }
@@ -181,7 +212,7 @@
   .mcell .delta.bad { color: var(--bad); }
   .mcell .delta.good { color: var(--ok); }
 
-  .dive { display: grid; gap: 12px; }
+  .dive { display: grid; gap: 12px; min-width: 0; max-width: 100%; }
   .runs {
     display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 5px;
   }
@@ -198,8 +229,15 @@
     overflow: hidden; text-overflow: ellipsis;
   }
   .run-card .muted { font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .chart-box { height: 260px; background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 8px; }
-  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .chart-box {
+    height: 260px; min-width: 0; max-width: 100%;
+    background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 8px;
+  }
+  .chart-box canvas { max-width: 100% !important; }
+  .pair {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px;
+    min-width: 0; width: 100%;
+  }
   @media (max-width: 900px) { .pair { grid-template-columns: 1fr; } }
   .empty { color: var(--muted); padding: 16px; text-align: center; }
   a { color: var(--info); }
@@ -249,6 +287,32 @@
     padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border);
     box-shadow: 0 4px 14px #0002; white-space: nowrap; pointer-events: none;
   }
+
+  /* Mobile: keep wide tables inside scroll panes; do not grow the page width. */
+  @media (max-width: 720px) {
+    .wrap { padding: 10px 8px 80px; }
+    h1 { font-size: 18px; }
+    .note { font-size: 11px; }
+    .cell { min-width: 56px; padding: 4px 6px; gap: 4px; font-size: 11px; }
+    .cmp-cell { min-width: 140px; }
+    .cmp-cell select { max-width: 160px; }
+    .mcell { min-width: 96px; }
+    table.heat { font-size: 11px; }
+    table.heat th, table.heat td { padding: 6px; }
+    table.inbox { font-size: 12px; }
+    table.inbox th, table.inbox td { padding: 8px; }
+    table.inbox th:nth-child(n+4),
+    table.inbox tr.row td:nth-child(n+4) { display: none; }
+    table.inbox tr.detail td { padding: 10px; }
+    .filters { gap: 6px; }
+    .filters label { min-width: 0; }
+    .filters select { min-width: 0; max-width: 100%; }
+    .duty-fab-wrap { right: 12px; bottom: 12px; gap: 8px; }
+    .duty-fab { width: 56px; height: 56px; }
+    .duty-fab svg { width: 28px; height: 28px; }
+    .duty-fab-copy { width: 44px; height: 44px; }
+    .duty-fab-hint, .duty-fab-toast { display: none; }
+  }
 </style>
 </head>
 <body>
@@ -258,6 +322,7 @@
   <div class="note">
     Now = last completed vs prev <b id="lblBase">7</b> (median)
     · Lat↑ ≥ +10% · tpmC↓ ≤ −10% · broken = lat cap / outlier
+    · Soft watch: lat ≥ +7% · tpmC ≤ −5% · <b>tpmC drift</b> ≤ −3.5% vs p90 lookback 21 (до prev7)
     · Missing = нет в завершённой day-wave
     · Compare paint = hard cross or Δ% ≥ +10pp / −10pp (не watch/шум)
     · branches: <span id="lblAllBranches">all</span>
@@ -434,11 +499,14 @@ function classifyPairValues(lat_base, tpmc_base, lat_now, tpmc_now, capped_now) 
   if (tpmc_pct != null && tpmc_pct <= -10) {
     tpmc_status = 'regression';
     reasons.push(`tpmC ${pct(tpmc_pct)}`);
+  } else if (tpmc_pct != null && tpmc_pct <= -5) {
+    tpmc_status = 'watch';
+    reasons.push(`tpmC ${pct(tpmc_pct)} watch`);
   }
   let status = 'ok';
   if (lat_status === 'broken') status = 'broken';
   else if (lat_status === 'regression' || tpmc_status === 'regression') status = 'regression';
-  else if (lat_status === 'watch') status = 'watch';
+  else if (lat_status === 'watch' || tpmc_status === 'watch') status = 'watch';
   let kind = 'ok';
   const latHot = lat_status === 'broken' || lat_status === 'regression';
   const tpmcHot = tpmc_status === 'regression';
@@ -447,6 +515,7 @@ function classifyPairValues(lat_base, tpmc_base, lat_now, tpmc_now, capped_now) 
   else if (latHot) kind = 'lat';
   else if (tpmcHot) kind = 'tpmc';
   else if (lat_status === 'watch') kind = 'lat';
+  else if (tpmc_status === 'watch') kind = 'tpmc';
   const issue = kind === 'ok' ? (status === 'watch' ? 'watch' : 'ok') : kind;
   return {
     status, kind, issue, reasons,
@@ -1054,7 +1123,9 @@ function shortCellStatus(st, live) {
   const showLat = st === 'lat' || st === 'regression' || st === 'both' || st === 'watch'
     || (live && (live.n_lat || (live.lat_pct != null && live.lat_pct >= 7)));
   const showTpmc = st === 'tpmc' || st === 'both' || st === 'regression'
-    || (live && (live.n_tpmc || (live.tpmc_pct != null && live.tpmc_pct <= -10)));
+    || (st === 'watch' && live && live.tpmc_pct != null && live.tpmc_pct <= -5)
+    || (live && (live.n_tpmc || (live.tpmc_pct != null && live.tpmc_pct <= -10)
+      || (live.tpmc_drift_pct != null && live.tpmc_drift_pct <= -3.5)));
   if (showLat && st !== 'broken') {
     if (live && live.lat_pct != null) parts.push(`lat ${pct(live.lat_pct)}`);
     else if (live && live.n_lat) parts.push(`lat↑ ${live.n_lat}`);
@@ -1096,39 +1167,28 @@ function histRunAt(hist, idx) {
     report: (hist.reports && hist.reports[idx]) || null,
   };
 }
-/** Cards = every completed day this slice has in history (+ now). Incomplete cluster days OK. */
+/** Cards = every completed history point (same grain as chart bars; day may repeat). */
 function runCardsForItem(item) {
   const hist = sliceHistory(item);
   const markers = hist.markers || [];
   const cards = [];
-  const seen = new Set();
   const nowIdx = lastCompletedHistIndex(hist);
   for (let i = 0; i < (hist.labels || []).length; i++) {
     const m = markers[i] || 'ok';
     if (m === 'missing' || m === 'in_progress') continue;
     const run = histRunAt(hist, i);
-    if (!run || !run.day || seen.has(run.day)) continue;
-    // date window
+    if (!run || !run.day) continue;
     if (winFrom || winTo) {
       if (!dayInRange(run.day, winFrom, winTo)) continue;
     }
-    seen.add(run.day);
-    cards.push({ ...run, isNow: i === nowIdx });
+    cards.push({ ...run, histIdx: i, isNow: i === nowIdx });
   }
-  // ensure now card is last / flagged
+  // keep chronological order; ensure now is last if present
   if (nowIdx >= 0) {
-    const nowRun = histRunAt(hist, nowIdx);
-    if (nowRun && nowRun.day) {
-      const idx = cards.findIndex(c => c.day === nowRun.day);
-      if (idx >= 0) {
-        cards[idx] = { ...cards[idx], ...nowRun, isNow: true };
-        if (idx !== cards.length - 1) {
-          const [x] = cards.splice(idx, 1);
-          cards.push(x);
-        }
-      } else {
-        cards.push({ ...nowRun, isNow: true });
-      }
+    const idx = cards.findIndex(c => c.histIdx === nowIdx);
+    if (idx >= 0 && idx !== cards.length - 1) {
+      const [x] = cards.splice(idx, 1);
+      cards.push({ ...x, isNow: true });
     }
   }
   return cards;
@@ -2134,6 +2194,7 @@ function diveHtml(r, id) {
   const runList = runCardsForItem(r);
   const latestDay = runList.length ? (runList[runList.length - 1].day || '') : '';
   const nCmp = Math.max(0, runList.filter(x => !x.isNow).length);
+  const nDays = new Set(runList.map(c => c.day).filter(Boolean)).size;
   let dashUrl = null;
   try { dashUrl = datalensUrl(r); } catch (_) {}
   const dashLink = dashUrl
@@ -2180,7 +2241,11 @@ function diveHtml(r, id) {
          <div>tpmC: base <b>${fmt(dm.tpmc_base)}</b> → now <b>${fmt(dm.tpmc_now)}</b> · Δ <b class="${dm.tpmc_pct != null && dm.tpmc_pct <= -10 ? 'bad' : ''}">${fmtAbs(absTpmc, '')} (${pct(dm.tpmc_pct)})</b></div>
          <div class="muted" style="font-size:11px">alert (median prev${win}): ${esc((r.reasons || []).join(' · ') || '—')}</div>
        </div>`
-    : `<div class="muted">alert (median prev${win}): ${esc((r.reasons || []).join(' · ') || '—')}</div>`;
+    : `<div class="muted">alert (median prev${win}): ${esc((r.reasons || []).join(' · ') || '—')}${
+        (r.tpmc_drift_pct != null)
+          ? ` · drift ${pct(r.tpmc_drift_pct)} vs lookback`
+          : ''
+      }</div>`;
   const reasonHtml = summaryHtml;
   const linksRow = [
     `Allure: ${reportLink}`,
@@ -2192,7 +2257,7 @@ function diveHtml(r, id) {
     ${reasonHtml}
     <div class="muted" style="margin-bottom:6px">${linksRow}</div>
     <div>
-      <div class="muted" style="margin-bottom:6px"><b>Compare runs</b> (${nCmp} baseline + now; клик = baseline; now очищает)${fin ? ' <span class="pill">finished</span>' : ''}</div>
+      <div class="muted" style="margin-bottom:6px"><b>Compare runs</b> (${nCmp} + now · ${nDays}d; клик = day-baseline; now очищает)${fin ? ' <span class="pill">finished</span>' : ''}</div>
       <div class="runs">${runs}</div>
     </div>
     <div class="toolbar" style="margin:8px 0 0">

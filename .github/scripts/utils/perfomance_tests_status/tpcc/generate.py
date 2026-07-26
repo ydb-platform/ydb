@@ -35,6 +35,10 @@ _CFG = load_report_config(ROOT)
 LAT_TOL = cfg_float(_CFG, "lat_tol", 0.10)
 LAT_WATCH = cfg_float(_CFG, "lat_watch", 0.07)
 TPMC_TOL = cfg_float(_CFG, "tpmc_tol", 0.10)
+TPMC_WATCH = cfg_float(_CFG, "tpmc_watch", 0.05)
+# Slow drift vs older lookback (before alert prev-N window) → soft watch.
+DRIFT_LOOKBACK_RUNS = cfg_int(_CFG, "drift_lookback_runs", 21)
+TPMC_DRIFT_TOL = cfg_float(_CFG, "tpmc_drift_tol", 0.035)
 OUTLIER_MULT = cfg_float(_CFG, "outlier_mult", 3.0)
 LAT_CAP = cfg_float(_CFG, "lat_cap", 30000.0)
 
@@ -291,6 +295,18 @@ def avg(xs):
     return sum(vs) / len(vs) if vs else None
 
 
+def percentile(xs, p: float):
+    """Nearest-rank percentile; p in [0, 100]."""
+    vs = sorted(v for v in xs if v is not None)
+    if not vs:
+        return None
+    if len(vs) == 1:
+        return vs[0]
+    p = max(0.0, min(100.0, float(p)))
+    k = int(round((p / 100.0) * (len(vs) - 1)))
+    return vs[k]
+
+
 def pct(a, b):
     if a is None or b is None or a == 0:
         return None
@@ -461,11 +477,20 @@ def wave_is_in_progress(age_h: float, present: set[str], expected: set[str]) -> 
 
 
 def classify_slice(pts: list[dict]) -> dict:
-    """Now = last completed run; baseline = previous BASELINE_RUNS (median)."""
+    """Now = last completed run; alert baseline = previous BASELINE_RUNS (median).
+
+    Slow tpmC drift uses a second baseline: p90 of runs before the alert window
+    (capped to the oldest DRIFT_LOOKBACK_RUNS). p90 keeps a high anchor so a
+    gradual walk-down cannot hide a ~250k→240k slide the way median-prev7 does.
+    """
     pts = sorted(pts, key=lambda p: p["ts"])
     now = pts[-NOW_RUNS:]
     base = pts[-(NOW_RUNS + BASELINE_RUNS) : -NOW_RUNS] or pts[: max(1, len(pts) // 2)]
     display = pts[-DISPLAY_RUNS:]
+    alert_start = max(0, len(pts) - NOW_RUNS - BASELINE_RUNS)
+    older = pts[:alert_start]
+    # Oldest chunk of the pre-alert history (not the slice immediately before prev7).
+    drift = older[:DRIFT_LOOKBACK_RUNS] if older else []
 
     lat_now = median([p["lat90"] for p in now if not p["lat_capped"]])
     lat_base = median([p["lat90"] for p in base if not p["lat_capped"]])
@@ -474,6 +499,8 @@ def classify_slice(pts: list[dict]) -> dict:
     tpmc_now = median([p["tpmc"] for p in now])
     tpmc_base = median([p["tpmc"] for p in base])
     tpmc_pct = pct(tpmc_base, tpmc_now)
+    tpmc_drift_base = percentile([p["tpmc"] for p in drift], 90) if drift else None
+    tpmc_drift_pct = pct(tpmc_drift_base, tpmc_now)
 
     capped_now = sum(1 for p in now if p["lat_capped"])
 
@@ -497,13 +524,21 @@ def classify_slice(pts: list[dict]) -> dict:
     if tpmc_pct is not None and tpmc_pct <= -TPMC_TOL * 100:
         tpmc_status = "regression"
         tpmc_reasons.append(f"tpmC {tpmc_pct:.0f}% vs prev {len(base)} (last run)")
+    elif tpmc_drift_pct is not None and tpmc_drift_pct <= -TPMC_DRIFT_TOL * 100:
+        tpmc_status = "watch"
+        tpmc_reasons.append(
+            f"tpmC drift {tpmc_drift_pct:.0f}% vs p90 lookback {len(drift)} (before prev{len(base)})"
+        )
+    elif tpmc_pct is not None and tpmc_pct <= -TPMC_WATCH * 100:
+        tpmc_status = "watch"
+        tpmc_reasons.append(f"tpmC {tpmc_pct:.0f}% (watch, last run)")
 
     # watch does not escalate overall above regression from the other metric
     status = worse(
         lat_status if lat_status != "watch" else "ok",
-        tpmc_status,
+        tpmc_status if tpmc_status != "watch" else "ok",
     )
-    if lat_status == "watch" and status == "ok":
+    if (lat_status == "watch" or tpmc_status == "watch") and status == "ok":
         status = "watch"
     if lat_status == "broken":
         status = "broken"
@@ -523,6 +558,8 @@ def classify_slice(pts: list[dict]) -> dict:
         kind = "tpmc"
     elif lat_status == "watch":
         kind = "lat"
+    elif tpmc_status == "watch":
+        kind = "tpmc"
 
     return {
         "status": status,
@@ -534,6 +571,8 @@ def classify_slice(pts: list[dict]) -> dict:
         "tpmc_base": tpmc_base,
         "tpmc_now": tpmc_now,
         "tpmc_pct": tpmc_pct,
+        "tpmc_drift_base": tpmc_drift_base,
+        "tpmc_drift_pct": tpmc_drift_pct,
         "capped_now": capped_now,
         "now_runs": [run_view(p) for p in display],
         "n": len(pts),
@@ -774,6 +813,8 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
                     "tpmc_base": fin.get("tpmc_base"),
                     "tpmc_now": fin.get("tpmc_now"),
                     "tpmc_pct": fin.get("tpmc_pct"),
+                    "tpmc_drift_base": fin.get("tpmc_drift_base"),
+                    "tpmc_drift_pct": fin.get("tpmc_drift_pct"),
                     "capped_now": fin.get("capped_now") or 0,
                     "now_runs": fin.get("now_runs") or [],
                     "n": fin.get("n") or 0,
@@ -1035,6 +1076,9 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
             # null = compare dropdown lists every day-wave in the window (no top-N cut).
             "compare_runs": None,
             "baseline_runs": BASELINE_RUNS,
+            "drift_lookback_runs": DRIFT_LOOKBACK_RUNS,
+            "tpmc_drift_tol": TPMC_DRIFT_TOL,
+            "tpmc_watch": TPMC_WATCH,
             "stale_hours": STALE_HOURS,
             "wave_complete_hours": WAVE_COMPLETE_HOURS,
             "focus_branches": branches,
@@ -1066,7 +1110,13 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
             "baseline": f"previous {BASELINE_RUNS} runs (median)",
             "display": f"last {DISPLAY_RUNS} runs in dive",
             "lat": f"+{int(LAT_TOL*100)}%",
+            "lat_watch": f"+{int(LAT_WATCH*100)}%",
             "tpmc": f"-{int(TPMC_TOL*100)}%",
+            "tpmc_watch": f"-{int(TPMC_WATCH*100)}%",
+            "tpmc_drift": (
+                f"-{TPMC_DRIFT_TOL*100:.1f}% vs p90 of oldest lookback {DRIFT_LOOKBACK_RUNS} "
+                f"(before prev{BASELINE_RUNS}) → watch"
+            ),
             "cap": f"lat ≥ {int(LAT_CAP)} → broken",
             "expected": f"suites in ≥{int(EXPECTED_MIN_SHARE*100)}% of day-waves / {EXPECTED_LOOKBACK_DAYS}d",
             "wave": "calendar day × Branch × Cluster",

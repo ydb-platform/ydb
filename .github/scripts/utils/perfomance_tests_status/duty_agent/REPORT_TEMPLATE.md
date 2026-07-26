@@ -43,8 +43,12 @@
 Поля из `dig_prs.json`: `merged_at`, `pr_url`, `pr_title`, `author_login`, `window_source`.
 
 ## Что дальше
-1. … (для `open_ticket`: «вставить Title+Body из блока ниже»)
-2. Перед заведением: `gh search issues "<search keys>" --repo ydb-platform/ydb`
+Только для дежурного (не чеклист агента). Пример:
+1. Тикет: [#N](url) — комментарий при повторе
+2. Coredump на `<host>` около `<ts>`, если нужно докопать стек
+3. Не смешивать с [#M](url) (другой abort)
+
+Запрещено: `gh search`, «Перед заведением», «скопировать Title/Body», команды `dutyctl`.
 
 ## Ход разбора
 

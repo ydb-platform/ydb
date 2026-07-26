@@ -483,6 +483,11 @@ def validate_analysis_md(
         (r"last\s*touch|касание\s+path|Crash path|crash-path", "last touch/Crash path — «место падения» / «когда файл меняли последний раз»"),
         (r"метрик[ауи]\s*«?зелён", "не «метрика зелёный» — объясни: в UI зелёный по метрике, по Allure с падениями"),
         (r"^\|?\s*раньше\s*\|", "«раньше» в таблице — поставь дату/label прогона"),
+        (
+            r"перед\s+заведением|скопировать\s+\*\*Title\*\*|gh\s+search\s+issues|"
+            r"dutyctl\s+\w+|завести\s+issue:\s*скопир",
+            "чеклист агента в «Что дальше» — пиши шаги для дежурного (тикет / coredump / не смешивать)",
+        ),
     ]
     for pat, hint in jargon:
         if re.search(pat, body_for_jargon, re.I):

@@ -52,6 +52,8 @@ INBOX_PER_KIND = {
     "tpmc": 20,
     "stale": 10,
 }
+# Join Allure URLs from tests_results onto mart points (nearest within window).
+REPORT_MATCH_MAX_SEC = 6 * 3600
 
 CORE_BRANCHES = ("main",)
 
@@ -176,6 +178,91 @@ def suite_name(run_type: str, warehouses: int) -> str:
     return f"{run_family(run_type)}@{warehouses}"
 
 
+def mart_cluster_to_ci(cluster: str) -> str:
+    """perf3 → oltp-perf-3 (tests_results Info.ci_cluster_name)."""
+    c = (cluster or "").strip().lower()
+    m = re.fullmatch(r"perf(\d+)", c)
+    if m:
+        return f"oltp-perf-{m.group(1)}"
+    return c
+
+
+def ci_cluster_to_mart(ci_cluster: str) -> str:
+    """oltp-perf-3 → perf3."""
+    c = (ci_cluster or "").strip().lower()
+    m = re.fullmatch(r"oltp-perf-(\d+)", c)
+    if m:
+        return f"perf{m.group(1)}"
+    return c
+
+
+def allure_suite_for(run_type: str, warehouses: int) -> str | None:
+    """Map mart run_type@WH → tests_results Suite (TpccW{WH}T0Snapshot|Serializable)."""
+    fam = run_family(run_type).lower()
+    if "snapshot" in fam:
+        mode = "Snapshot"
+    elif "serializable" in fam:
+        mode = "Serializable"
+    else:
+        return None
+    try:
+        wh = int(warehouses)
+    except (TypeError, ValueError):
+        return None
+    if wh <= 0:
+        return None
+    return f"TpccW{wh}T0{mode}"
+
+
+def attach_reports(
+    points: list[dict],
+    report_rows: list[dict],
+    *,
+    max_delta_sec: int = REPORT_MATCH_MAX_SEC,
+) -> int:
+    """Set point['report'] from nearest tests_results Allure URL. Returns match count."""
+    by_key: dict[tuple[str, str], list[tuple[datetime, str]]] = defaultdict(list)
+    for d in report_rows:
+        url = (d.get("report_url") or d.get("Report") or "").strip()
+        if not url:
+            continue
+        suite = str(d.get("Suite") or d.get("suite") or "")
+        ci = str(d.get("ci_cluster_name") or d.get("ci_cluster") or "")
+        if not suite or not ci:
+            continue
+        ts = parse_ts(d.get("timestamp") or d.get("Timestamp") or d.get("ts"))
+        if ts is None:
+            continue
+        by_key[(ci.lower(), suite)].append((ts, url))
+    for lst in by_key.values():
+        lst.sort(key=lambda x: x[0])
+
+    matched = 0
+    for p in points:
+        p.setdefault("report", None)
+        suite = allure_suite_for(p.get("run_type") or "", p.get("warehouses") or 0)
+        if not suite:
+            continue
+        ci = mart_cluster_to_ci(str(p.get("cluster") or ""))
+        cand = by_key.get((ci, suite))
+        if not cand:
+            continue
+        ts = p["ts"]
+        best_url = None
+        best_delta = None
+        for rts, url in cand:
+            delta = abs((rts - ts).total_seconds())
+            if delta > max_delta_sec:
+                continue
+            if best_delta is None or delta < best_delta:
+                best_delta = delta
+                best_url = url
+        if best_url:
+            p["report"] = best_url
+            matched += 1
+    return matched
+
+
 def wh_label(wh: int) -> str:
     if wh >= 1000 and wh % 1000 == 0:
         return f"{wh // 1000}k"
@@ -253,6 +340,7 @@ def normalize_points(rows: list[dict], since: datetime) -> list[dict]:
                 "lat_capped": capped,
                 "lat_raw": lat_f,
                 "version": version,
+                "report": d.get("report") or d.get("Report") or None,
                 "label": f"{ts.date().isoformat()}_{version[:7] or '—'}",
                 "commit_label": (
                     f"{commit_ts.strftime('%Y-%m-%d %H:%M')}_{version[:7] or '—'}"
@@ -275,6 +363,7 @@ def run_view(p: dict) -> dict:
         "lat_raw": p["lat_raw"],
         "version": p["version"],
         "commit_iso": p.get("commit_iso"),
+        "report": p.get("report"),
     }
 
 
@@ -295,6 +384,7 @@ def history_view(pts: list[dict]) -> dict:
         "lat90": [p["lat_raw"] if p["lat_capped"] else p["lat90"] for p in tail],
         "markers": ["capped" if p["lat_capped"] else "ok" for p in tail],
         "versions": [p["version"] for p in tail],
+        "reports": [p.get("report") for p in tail],
     }
 
 
@@ -314,6 +404,7 @@ def history_by_commit_view(pts: list[dict]) -> dict:
         "lat90": [p["lat_raw"] if p["lat_capped"] else p["lat90"] for p in tail],
         "markers": ["capped" if p["lat_capped"] else "ok" for p in tail],
         "versions": [p["version"] for p in tail],
+        "reports": [p.get("report") for p in tail],
     }
 
 
@@ -325,6 +416,7 @@ def empty_history() -> dict:
         "lat90": [],
         "markers": [],
         "versions": [],
+        "reports": [],
     }
 
 
@@ -341,6 +433,7 @@ def append_synthetic_history(hist: dict, *, day: str, kind: str) -> dict:
     out.setdefault("lat90", []).append(ref_lat)
     out.setdefault("tpmc", []).append(ref_tpmc)
     out.setdefault("versions", []).append(kind)
+    out.setdefault("reports", []).append(None)
     markers.append(kind)
     out["markers"] = markers
     return out
@@ -434,6 +527,7 @@ def classify_slice(pts: list[dict]) -> dict:
         "n": len(pts),
         "last_ts": now[-1]["ts_iso"][:19] if now else None,
         "version": now[-1]["version"] if now else "",
+        "report": next((p.get("report") for p in reversed(now) if p.get("report")), None),
     }
 
 
@@ -673,6 +767,7 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
                     "n": fin.get("n") or 0,
                     "last_ts": fin.get("last_ts"),
                     "version": fin.get("version") or "",
+                    "report": fin.get("report"),
                     "warehouses": fin.get("warehouses") if fin.get("warehouses") is not None else wh_i,
                     "wh_label": fin.get("wh_label") or (wh_label(wh_i) if wh_i is not None else "—"),
                     "wave": fin.get("wave") or "",
@@ -921,7 +1016,7 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
         "mode": "now",
         "window": f"{since.date().isoformat()}..{until.date().isoformat()}",
         "generated_at": now_utc.isoformat().replace("+00:00", "Z"),
-        "source": "perfomance/tpcc",
+        "source": "perfomance/tpcc + perfomance/olap/tests_results.report_url",
         "ui": {
             "now_runs": NOW_RUNS,
             "display_runs": DISPLAY_RUNS,
@@ -973,6 +1068,12 @@ def main():
     ap = argparse.ArgumentParser(description="TPC-C Now report generator")
     ap.add_argument("--input", required=True, type=Path)
     ap.add_argument(
+        "--reports-input",
+        type=Path,
+        default=None,
+        help="tests_results Allure URLs JSON (default: <input-dir>/reports.json if present)",
+    )
+    ap.add_argument(
         "--since",
         default=None,
         help=f"YYYY-MM-DD (default: today − {DEFAULT_WINDOW_DAYS}d ≈ 1 month)",
@@ -999,11 +1100,26 @@ def main():
     if not points:
         raise SystemExit("No points after filters")
 
+    reports_path = args.reports_input
+    if reports_path is None:
+        cand = args.input.parent / "reports.json"
+        if cand.is_file():
+            reports_path = cand
+    reports_matched = 0
+    if reports_path and reports_path.is_file():
+        report_rows = load_rows(reports_path)
+        reports_matched = attach_reports(points, report_rows)
+        print(f"reports: matched {reports_matched}/{len(points)} from {reports_path}", flush=True)
+    else:
+        print("reports: skipped (no --reports-input / out/reports.json)", flush=True)
+
     data = build_now_report(points, since)
     data["meta"] = {
         "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "points": len(points),
         "input": str(args.input),
+        "reports_input": str(reports_path) if reports_path else None,
+        "reports_matched": reports_matched,
     }
 
     args.output.parent.mkdir(parents=True, exist_ok=True)

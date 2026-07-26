@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Fetch TPC-C runs via common.ydb_client (YDBWrapper scan).
+"""Fetch TPC-C runs + Allure report URLs via common.ydb_client (YDBWrapper scan).
+
+Writes:
+  out/raw.json       — perfomance/tpcc metrics
+  out/reports.json   — tests_results Info.report_url for TpccW* suites
 
 Auth:
   export CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=/path/to/sa-key.json
@@ -32,17 +36,26 @@ from common.ydb_client import (  # noqa: E402
 )
 
 SQL_PATH = ROOT / "queries" / "fetch_tpcc.sql"
+REPORTS_SQL_PATH = ROOT / "queries" / "fetch_tpcc_reports.sql"
 DEFAULT_OUT = ROOT / "out" / "raw.json"
 DEFAULT_WINDOW_DAYS = 30
 
 
-def build_sql(since_iso: str) -> str:
-    sql = SQL_PATH.read_text()
+def build_sql(sql_path: Path, since_iso: str) -> str:
+    sql = sql_path.read_text()
     if "{{SINCE}}" not in sql:
-        raise SystemExit(f"{SQL_PATH} missing {{SINCE}} placeholder")
+        raise SystemExit(f"{sql_path} missing {{SINCE}} placeholder")
     sql = sql.replace("{{SINCE}}", since_iso)
     lines = [ln for ln in sql.splitlines() if not ln.strip().upper().startswith("ORDER BY")]
     return "\n".join(lines) + "\n"
+
+
+def _write_result_sets(path: Path, rows: list) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = to_result_sets(rows)
+    cols = payload["result_sets"][0]["columns"]
+    payload["result_sets"][0]["columns"] = [{"name": c} for c in cols]
+    path.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
 
 def main() -> int:
@@ -62,7 +75,17 @@ def main() -> int:
         "--output",
         "-o",
         default=str(DEFAULT_OUT),
-        help="Output result_sets JSON (default: out/raw.json)",
+        help="Output metrics result_sets JSON (default: out/raw.json)",
+    )
+    ap.add_argument(
+        "--reports-output",
+        default=None,
+        help="Allure URLs JSON (default: <output-dir>/reports.json)",
+    )
+    ap.add_argument(
+        "--skip-reports",
+        action="store_true",
+        help="Fetch metrics only (no tests_results Allure URLs)",
     )
     ap.add_argument(
         "--sa-key-file",
@@ -85,14 +108,13 @@ def main() -> int:
         datetime.now(timezone.utc).date() - timedelta(days=max(1, args.days))
     ).isoformat()
     since_iso = f"{since_day}T00:00:00Z"
-    sql = build_sql(since_iso)
     out = Path(args.output)
-    out.parent.mkdir(parents=True, exist_ok=True)
+    reports_out = Path(args.reports_output) if args.reports_output else out.parent / "reports.json"
 
     print(f"scan fetch tpcc since={since_iso} → {out}", flush=True)
     try:
         rows = scan_query(
-            sql,
+            build_sql(SQL_PATH, since_iso),
             query_name="fetch_tpcc",
             script_name="tpcc/fetch_daily.py",
             sa_key_file=args.sa_key_file,
@@ -102,11 +124,25 @@ def main() -> int:
     except YdbClientError as e:
         raise SystemExit(str(e)) from e
 
-    payload = to_result_sets(rows)
-    cols = payload["result_sets"][0]["columns"]
-    payload["result_sets"][0]["columns"] = [{"name": c} for c in cols]
-    out.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    _write_result_sets(out, rows)
     print(f"wrote {len(rows)} rows (result_sets JSON) → {out}", flush=True)
+
+    if not args.skip_reports:
+        print(f"scan fetch tpcc reports since={since_iso} → {reports_out}", flush=True)
+        try:
+            report_rows = scan_query(
+                build_sql(REPORTS_SQL_PATH, since_iso),
+                query_name="fetch_tpcc_reports",
+                script_name="tpcc/fetch_daily.py",
+                sa_key_file=args.sa_key_file,
+                config=args.config,
+                use_local_config=True,
+            )
+        except YdbClientError as e:
+            raise SystemExit(str(e)) from e
+        _write_result_sets(reports_out, report_rows)
+        print(f"wrote {len(report_rows)} report rows → {reports_out}", flush=True)
+
     return 0
 
 

@@ -39,6 +39,7 @@ from tools.detect_type import detect_type  # noqa: E402
 from tools.dig_prs import dig_prs_window  # noqa: E402
 from tools.dig_runs import (  # noqa: E402
     build_dig_sql,
+    enrich_tpcc_rows_with_reports,
     rows_from_result_json,
     summarize_dig,
 )
@@ -217,9 +218,12 @@ def cmd_prepare(args: argparse.Namespace) -> int:
             print(f"metrics: flags={md.get('flags')}")
 
         focus_ok = bool(focus.get("fetched")) or not need_remote
-        # tpcc often has no sandbox — still ok
+        # TPC-C without Allure URL still ok (metrics-only / join miss); with URL — dig like OLAP
         if (ctx.get("report") or {}).get("kind") == "tpcc" and not url and not local:
             focus_ok = True
+            print("focus: no Allure URL in context — metrics/DataLens path", flush=True)
+        elif (ctx.get("report") or {}).get("kind") == "tpcc" and (url or local):
+            print("focus: Allure present — dig kikimr__stderr + kikimr__logs like OLAP", flush=True)
 
         status = "partial"
         ok = True
@@ -292,7 +296,12 @@ def cmd_dig_runs(args: argparse.Namespace) -> int:
         )
         sql_path = out_dir / "dig_runs.sql"
         sql_path.write_text(plan["sql"], encoding="utf-8")
-        write_json(out_dir / "dig_runs_plan.json", {k: v for k, v in plan.items() if k != "sql"})
+        if plan.get("reports_sql"):
+            (out_dir / "dig_runs_reports.sql").write_text(plan["reports_sql"], encoding="utf-8")
+        write_json(
+            out_dir / "dig_runs_plan.json",
+            {k: v for k, v in plan.items() if k not in ("sql", "reports_sql")},
+        )
         print(f"wrote {sql_path}")
         print(
             f"table={plan['table']} since={plan['since']} until={plan['until']} "
@@ -329,7 +338,6 @@ def cmd_dig_runs(args: argparse.Namespace) -> int:
             scan_query,
             to_result_sets,
         )
-
         sa = getattr(args, "sa_key_file", None)
         try:
             print("ydb ping…", flush=True)
@@ -341,6 +349,18 @@ def cmd_dig_runs(args: argparse.Namespace) -> int:
                 script_name="duty_agent/dig-runs",
                 sa_key_file=sa,
             )
+            if plan.get("kind") == "tpcc" and plan.get("reports_sql"):
+                print("ydb scan dig-runs reports (tests_results)…", flush=True)
+                report_rows = scan_query(
+                    plan["reports_sql"],
+                    query_name="duty_dig_runs_tpcc_reports",
+                    script_name="duty_agent/dig-runs",
+                    sa_key_file=sa,
+                )
+                rows = enrich_tpcc_rows_with_reports(rows, report_rows)
+                n_rep = sum(1 for r in rows if r.get("Report"))
+                print(f"reports: attached {n_rep}/{len(rows)}", flush=True)
+                write_json(out_dir / "dig_runs_reports_raw.json", to_result_sets(report_rows))
         except YdbClientError as e:
             print(str(e), file=sys.stderr)
             merge_result(

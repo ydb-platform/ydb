@@ -1093,6 +1093,7 @@ function histRunAt(hist, idx) {
     lat_raw: lat,
     lat_capped: capped,
     version: (hist.versions && hist.versions[idx]) || '',
+    report: (hist.reports && hist.reports[idx]) || null,
   };
 }
 /** Cards = every completed day this slice has in history (+ now). Incomplete cluster days OK. */
@@ -1354,7 +1355,7 @@ function cellLabel(st, live) {
 function sliceHist(hist) {
   if (!hist || !(hist.labels || []).length) return hist;
   if (!winFrom && !winTo) return hist;
-  const out = { labels: [], days: [], tpmc: [], lat90: [], markers: [], versions: [] };
+  const out = { labels: [], days: [], tpmc: [], lat90: [], markers: [], versions: [], reports: [] };
   for (let i = 0; i < hist.labels.length; i++) {
     const day = dayOf((hist.days && hist.days[i]) || hist.labels[i]);
     if (!dayInRange(day, winFrom, winTo)) continue;
@@ -1364,6 +1365,7 @@ function sliceHist(hist) {
     out.lat90.push(hist.lat90 ? hist.lat90[i] : null);
     out.markers.push(hist.markers ? hist.markers[i] : 'ok');
     out.versions.push(hist.versions ? hist.versions[i] : null);
+    out.reports.push(hist.reports ? hist.reports[i] : null);
   }
   return out;
 }
@@ -1704,6 +1706,15 @@ function openDatalens(item) {
   if (!url) return;
   window.open(url, '_blank', 'noopener');
 }
+/** Prefer Allure report for a history bar; fallback DataLens (slice-level). */
+function openHistReport(hist, idx, item) {
+  const url = (hist && hist.reports && hist.reports[idx]) || null;
+  if (url) {
+    window.open(url, '_blank', 'noopener');
+    return;
+  }
+  openDatalens(item);
+}
 
 function mountHistory(item, id) {
   const metrics = itemMetrics(item);
@@ -1756,8 +1767,8 @@ function mountHistory(item, id) {
     Сырые прогоны · цвет vs median mavg(prev${win}) · тёмно-красный = lat cap ·
     синий = synthetic in_progress · оранжевый = synthetic missing ·
     <b>жирная рамка</b> = now или cmp ·
-    <b>клик по столбцу → DataLens</b>
-    ${dashUrl ? ` (<a href="${esc(dashUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">открыть</a>)` : ''}
+    <b>клик по столбцу → Allure report</b> (если есть; иначе DataLens)
+    ${dashUrl ? ` · <a href="${esc(dashUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">DataLens</a>` : ''}
     ${(tpmcBase != null || latBase != null)
       ? ` · ${esc(baseTitle)}: tpmC ${fmt(tpmcBase)} · lat ${fmt(latBase)}&nbsp;ms`
       : ''}
@@ -1809,7 +1820,7 @@ function mountHistory(item, id) {
           layout: { padding: { top: 18 } },
           onClick: (_e, els) => {
             if (!els.length) return;
-            openDatalens(item);
+            openHistReport(hist, els[0].index, item);
           },
           plugins: {
             legend: { display: false },
@@ -1831,6 +1842,7 @@ function mountHistory(item, id) {
                   else if (m === 'capped') bits.push('lat capped');
                   const ver = (hist.versions || [])[i];
                   if (ver) bits.push(`sha ${ver}`);
+                  bits.push((hist.reports && hist.reports[i]) ? 'клик → report' : 'клик → DataLens');
                   const cur = vals[i];
                   const start = Math.max(0, i - win);
                   const ref = medianOf(vals.slice(start, i));
@@ -1840,7 +1852,6 @@ function mountHistory(item, id) {
                   if (showBase && alertBase != null) {
                     bits.push(`${baseTitle} ${fmtU(alertBase)}`);
                   }
-                  bits.push('клик → DataLens');
                   return bits.join(' · ');
                 }
               }
@@ -1941,6 +1952,7 @@ function compactHist(hist, maxPts) {
     tpmc: slice(hist.tpmc),
     versions: slice(hist.versions),
     days: slice(hist.days),
+    reports: slice(hist.reports),
     nodata: slice(hist.nodata),
   };
 }
@@ -2129,10 +2141,14 @@ function diveHtml(r, id) {
     const isLatest = !!run.isNow;
     const isCmp = !!(cmpId && run.day && run.day === cmpId && !isLatest);
     const cls = isLatest ? 'run-card active' : (isCmp ? 'run-card cmp' : 'run-card');
+    const link = run.report
+      ? `<a href="${esc(run.report)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">report</a>`
+      : '—';
     return `<div class="${cls}" data-run-day="${esc(run.day || '')}" data-run-latest="${isLatest ? '1' : '0'}" title="${isLatest ? 'now · клик очищает compare' : 'клик = baseline для compare'}">
       <div class="t">${esc(run.label)}</div>
       <div>tpmC ${fmt(run.tpmc)} · lat ${lat}</div>
       <div class="muted">${esc(run.version || '')}${isCmp ? ' · cmp' : (isLatest ? ' · now' : '')}</div>
+      <div>${link}</div>
     </div>`;
   }).join('') || `<div class="muted">${
     r.issue === 'in_progress' && !fin
@@ -2144,6 +2160,11 @@ function diveHtml(r, id) {
 
   const dm = resolveDisplayMetrics(r);
   const win = (DATA.ui && DATA.ui.baseline_runs) || 7;
+  const nowCard = runList.length ? runList[runList.length - 1] : null;
+  const reportUrl = (nowCard && nowCard.report) || data.report || r.report || null;
+  const reportLink = reportUrl
+    ? `<a href="${esc(reportUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Allure report</a>`
+    : '—';
   const absLat = (dm.lat_base != null && dm.lat_now != null) ? (dm.lat_now - dm.lat_base) : null;
   const absTpmc = (dm.tpmc_base != null && dm.tpmc_now != null) ? (dm.tpmc_now - dm.tpmc_base) : null;
   const fmtAbs = (v, u) => v == null ? '—' : `${v > 0 ? '+' : ''}${fmt(v)}${u || ''}`;
@@ -2160,6 +2181,7 @@ function diveHtml(r, id) {
   return `<div class="dive" data-dive-branch="${esc(r.branch || '')}" data-dive-db="${esc(r.db || '')}" data-dive-latest-day="${esc(latestDay)}">
     ${waveNote}
     ${reasonHtml}
+    <div class="muted" style="margin-bottom:6px">Report: ${reportLink}</div>
     <div>
       <div class="muted" style="margin-bottom:6px"><b>Compare runs</b> (${nCmp} baseline + now; клик = baseline; now очищает)${fin ? ' <span class="pill">finished</span>' : ''}</div>
       <div class="runs">${runs}</div>

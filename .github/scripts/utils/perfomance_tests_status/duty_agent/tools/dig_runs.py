@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -11,6 +13,9 @@ QUERIES_DIR = Path(__file__).resolve().parent.parent / "queries"
 # Default lookback: pack suite_history is short; mart dig must be wider for correlations.
 DEFAULT_DAYS_BEFORE = 35
 DEFAULT_DAYS_AFTER = 3
+
+# Nearest Allure URL from tests_results onto mart dig rows.
+TPCC_REPORT_MATCH_MAX_SEC = 6 * 3600
 
 # Map UI db alias → cluster column in perfomance/tpcc (best-effort).
 TPCC_DB_TO_CLUSTER = {
@@ -121,6 +126,92 @@ def window_from_focus(
     since = dt - timedelta(days=int(days_before))
     until = dt + timedelta(days=int(days_after))
     return _iso(since), _iso(until)
+
+
+def _mart_cluster_to_ci(cluster: str) -> str:
+    c = (cluster or "").strip().lower()
+    m = re.fullmatch(r"perf(\d+)", c)
+    if m:
+        return f"oltp-perf-{m.group(1)}"
+    return c
+
+
+def _allure_suite_for(run_type: str, warehouses: Any) -> str | None:
+    fam = (run_type or "").lower()
+    if fam.startswith("ydb_cli_"):
+        fam = fam[len("ydb_cli_") :]
+    if "snapshot" in fam:
+        mode = "Snapshot"
+    elif "serializable" in fam:
+        mode = "Serializable"
+    else:
+        return None
+    try:
+        wh = int(warehouses)
+    except (TypeError, ValueError):
+        return None
+    if wh <= 0:
+        return None
+    return f"TpccW{wh}T0{mode}"
+
+
+def build_tpcc_reports_sql(*, since: str, until: str) -> str:
+    """Allure URLs for TPC-C suites in the dig window (tests_results)."""
+    return f"""SELECT
+  Suite,
+  Test,
+  JSON_VALUE(Info, '$.ci_cluster_name') AS ci_cluster_name,
+  JSON_VALUE(Info, '$.report_url') AS report_url,
+  Timestamp AS timestamp
+FROM `perfomance/olap/tests_results`
+WHERE Timestamp >= Timestamp('{_escape_ydb_str(since)}')
+  AND Timestamp <= Timestamp('{_escape_ydb_str(until)}')
+  AND StartsWith(Suite, 'TpccW')
+  AND Test = 'test'
+  AND JSON_VALUE(Info, '$.report_url') IS NOT NULL
+ORDER BY Timestamp;
+"""
+
+
+def enrich_tpcc_rows_with_reports(
+    rows: list[dict[str, Any]],
+    report_rows: list[dict[str, Any]],
+    *,
+    max_delta_sec: int = TPCC_REPORT_MATCH_MAX_SEC,
+) -> list[dict[str, Any]]:
+    """Attach Report (= Allure URL) onto mart dig rows by cluster/suite/nearest ts."""
+    by_key: dict[tuple[str, str], list[tuple[datetime, str]]] = defaultdict(list)
+    for d in report_rows:
+        url = str(d.get("report_url") or d.get("Report") or "").strip()
+        suite = str(d.get("Suite") or "")
+        ci = str(d.get("ci_cluster_name") or "").lower()
+        ts = _parse_ts(str(d.get("timestamp") or ""))
+        if not url or not suite or not ci or ts is None:
+            continue
+        by_key[(ci, suite)].append((ts, url))
+    for lst in by_key.values():
+        lst.sort(key=lambda x: x[0])
+
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        row = dict(r)
+        suite = _allure_suite_for(str(r.get("run_type") or ""), r.get("warehouses"))
+        ci = _mart_cluster_to_ci(str(r.get("cluster") or ""))
+        ts = _parse_ts(str(r.get("timestamp") or ""))
+        best = None
+        best_delta = None
+        if suite and ts is not None:
+            for rts, url in by_key.get((ci, suite), []):
+                delta = abs((rts - ts).total_seconds())
+                if delta > max_delta_sec:
+                    continue
+                if best_delta is None or delta < best_delta:
+                    best_delta = delta
+                    best = url
+        if best:
+            row["Report"] = best
+        out.append(row)
+    return out
 
 
 def build_tpcc_sql(
@@ -240,6 +331,7 @@ def build_dig_sql(
         days_after=days_after,
     )
     kind = sel.get("kind") or "olap"
+    reports_sql = None
     if kind == "tpcc":
         sql = build_tpcc_sql(
             since=since,
@@ -251,6 +343,7 @@ def build_dig_sql(
             neighbors=neighbors,
         )
         table = "perfomance/tpcc"
+        reports_sql = build_tpcc_reports_sql(since=since, until=until)
     else:
         sql = build_olap_sql(
             since=since,
@@ -271,9 +364,11 @@ def build_dig_sql(
         "selection": sel,
         "neighbors": neighbors,
         "sql": sql,
+        "reports_sql": reports_sql,
         "fetch_hint": (
             "Default: dutyctl dig-runs -c CONTEXT -o OUT  (executes via common/ydb_client; "
             "needs CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS from init-token). "
+            "TPC-C also fetches Allure URLs from tests_results and attaches Report on slice_runs. "
             "Offline: --from-json dig_runs_raw.json. SQL only: --sql-only. "
             "If jump sits at the edge of the window, re-run with --days-before 60|90."
         ),
@@ -555,6 +650,7 @@ def summarize_tpcc_rows(
                 "git_branch": r.get("git_branch"),
                 "run_type": r.get("run_type"),
                 "warehouses": r.get("warehouses"),
+                "Report": r.get("Report"),
             }
             for r in focus_slice
         ],

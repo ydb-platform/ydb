@@ -26,7 +26,7 @@ Frozen incident pack from OLAP or TPC-C Now HTML dive (`Save` / `Copy context`).
 | Field | OLAP | TPC-C |
 |-------|------|-------|
 | `report.kind` | `olap` | `tpcc` |
-| `selection.focus_run.report` | usually sandbox URL | often null |
+| `selection.focus_run.report` | usually sandbox URL | usually sandbox URL (joined from `tests_results`; null only on join miss) |
 | `suite_now` | fail_rate / ydb | lat / tpmc |
 | `queries` / `sticky_query` | yes | empty / null |
 

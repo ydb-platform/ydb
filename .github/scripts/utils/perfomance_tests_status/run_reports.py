@@ -116,6 +116,7 @@ def main() -> int:
     olap_suites = work / "olap_suites.json"
     olap_runs = work / "olap_test_runs.jsonl"
     tpcc_raw = work / "tpcc.json"
+    tpcc_reports = work / "tpcc_reports.json"
     status: dict = {
         "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "olap": {"ok": False, "error": None, "path": None},
@@ -162,6 +163,20 @@ def main() -> int:
                             TPCC / "queries" / "fetch_tpcc.sql", since_iso(TPCC_DAYS)
                         )
                         write_json_list(tpcc_raw, fetch_rows(ydb_w, sql, "fetch_tpcc"))
+                        # Allure URLs live in tests_results (mart has none).
+                        # Soft-fail: metrics report still publishes without reports.
+                        try:
+                            sql = load_sql(
+                                TPCC / "queries" / "fetch_tpcc_reports.sql",
+                                since_iso(TPCC_DAYS),
+                            )
+                            write_json_list(
+                                tpcc_reports,
+                                fetch_rows(ydb_w, sql, "fetch_tpcc_reports"),
+                            )
+                        except Exception as e:
+                            print(f"TPC-C reports fetch FAILED (continue): {e}", flush=True)
+                            traceback.print_exc()
                     except Exception as e:
                         status["tpcc"]["error"] = f"fetch: {e}"
                         print(f"TPC-C fetch FAILED: {e}", flush=True)
@@ -198,17 +213,17 @@ def main() -> int:
             if not tpcc_raw.is_file():
                 raise RuntimeError(f"missing {tpcc_raw}")
             out_html = publish / "tpcc-report.html"
-            run_generate(
-                [
-                    sys.executable,
-                    str(TPCC / "generate.py"),
-                    "--input",
-                    str(tpcc_raw),
-                    "--output",
-                    str(out_html),
-                ],
-                TPCC,
-            )
+            cmd = [
+                sys.executable,
+                str(TPCC / "generate.py"),
+                "--input",
+                str(tpcc_raw),
+                "--output",
+                str(out_html),
+            ]
+            if tpcc_reports.is_file():
+                cmd.extend(["--reports-input", str(tpcc_reports)])
+            run_generate(cmd, TPCC)
             status["tpcc"]["ok"] = True
             status["tpcc"]["path"] = str(out_html)
             print(f"TPC-C report → {out_html}", flush=True)

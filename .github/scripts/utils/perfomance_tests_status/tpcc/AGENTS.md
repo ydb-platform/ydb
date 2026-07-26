@@ -16,7 +16,9 @@ History charts are deep-dive only (do not drive alerts).
 
 ## 1. Fetch data
 
-SQL: `queries/fetch_tpcc.sql` (replace `{{SINCE}}`).
+SQL:
+- `queries/fetch_tpcc.sql` — metrics from `perfomance/tpcc`
+- `queries/fetch_tpcc_reports.sql` — Allure URLs from `perfomance/olap/tests_results` (`TpccW*`)
 
 Use [`fetch_daily.py`](fetch_daily.py) → [`../common/ydb_client.py`](../common/ydb_client.py) (YDBWrapper scan). **Do not use MCP.**
 
@@ -24,12 +26,14 @@ Use [`fetch_daily.py`](fetch_daily.py) → [`../common/ydb_client.py`](../common
 cd .github/scripts/utils/perfomance_tests_status/tpcc
 # SA: env, --sa-key-file, or:
 # eval "$(python3 ../duty_agent/dutyctl.py init-token --shell)"
-python3 fetch_daily.py -o out/raw.json   # last 30d → result_sets JSON
+python3 fetch_daily.py -o out/raw.json   # → out/raw.json + out/reports.json
 ```
 
 Endpoint/DB: see `.github/config/ydb_qa_config.json`.
 
 Default lookback: **~1 month** (`DEFAULT_WINDOW_DAYS = 30`).
+
+`generate.py` joins reports onto points: `perfN` ↔ `oltp-perf-N`, `ydb_cli_{snapshot|serializable}_*`@WH ↔ `TpccW{WH}T0{Snapshot|Serializable}`, nearest timestamp ≤6h. Dive / chart click / Save context → `focus_run.report` for [`../duty_agent/`](../duty_agent/).
 
 ## 2. Generate HTML
 
@@ -40,6 +44,7 @@ python3 generate.py \
   --output out/tpcc-report.html --open
 ```
 
+Auto-loads `out/reports.json` when present (`--reports-input` to override).  
 `--since` optional (default: today − 30 days). Override only if the user asks.
 
 ## 3. Deliver

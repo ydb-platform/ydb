@@ -46,7 +46,7 @@ Extra digs: `gh search` / browse code at tested sha. Offline mart: `dig-runs --f
 
 ```text
 1) dutyctl prepare -c CONTEXT.json -o $OUT
-2) DIG LOGS FIRST when Allure focus exists (OLAP fail — never skip):
+2) DIG LOGS FIRST when Allure focus exists (OLAP fail + TPC-C with report URL — never skip):
      focus.json → kikimr__stderr + kikimr__logs (+ Stderr)
      Do not block log reading on mart fetch.
 3) DIG RUNS FROM DB before writing analysis (mandatory for tpcc + olap):
@@ -121,7 +121,7 @@ Put a clear line in the report: **Давность:** …
 |------|----------|
 | `olap_fail` | Allure + **stderr + cluster logs** + **dig-runs** (when suite went red / peers) + bisect |
 | `olap_slow` | **dig-runs** + metrics_delta + dig-prs/bisect |
-| `tpcc_tpmc` / `tpcc_lat` | **dig-runs** (`perfomance/tpcc`) + **dig-prs** on jump window + metrics + DataLens |
+| `tpcc_tpmc` / `tpcc_lat` | Allure focus (+ stderr/logs when URL present) + **dig-runs** (`perfomance/tpcc`, `Report` from `tests_results`) + **dig-prs** + metrics + DataLens |
 | `mixed` | split problems |
 
 ### Harness (read for yourself — filter candidates; do not dump into report)
@@ -144,13 +144,14 @@ Put a clear line in the report: **Давность:** …
 
 ### TPC-C playbook (mandatory)
 
-1. `prepare` → lat/tpmC vs prev-7 in pack (short).  
-2. `dig-runs` (default ~35d, neighbors) → all `ydb_cli_*` on **all clusters**, same branch. Use `largest_lat_step` on focus suite + `cross_run_type` + `peer_clusters_latest` (often jump ≠ alert commit). Widen window if edged.  
+1. `prepare` → lat/tpmC vs prev-7 in pack (short). If `focus_run.report` is set (Allure from Now join) — **read** `focus.json` attachments (`kikimr__stderr`, `kikimr__logs`, Stderr) like OLAP fail.  
+2. `dig-runs` (default ~35d, neighbors) → all `ydb_cli_*` on **all clusters**, same branch; slice_runs include `Report` when join hits. Use `largest_lat_step` on focus suite + `cross_run_type` + `peer_clusters_latest` (often jump ≠ alert commit). Widen window if edged.  
 3. Use harness knowledge to filter PRs (SnapshotRW vs StrictSerializable; WH scale).  
 4. `dig-prs` on the jump window.  
 5. Only then: `wait_next_wave` / `investigate_further` / candidate.  
-**Forbidden:** stop at «no Allure» / pack metrics only / blame alert-commit PR without dig-runs/dig-prs.  
-**Report:** no harness dump unless one sentence narrows the product cause. Cross-suite = search filter, not root cause.
+**Forbidden:** skip Allure when URL is in the pack / pack metrics only / blame alert-commit PR without dig-runs/dig-prs.  
+**Report:** no harness dump unless one sentence narrows the product cause. Cross-suite = search filter, not root cause.  
+**Allure source:** mart `perfomance/tpcc` has no URL; Now + dig-runs join `perfomance/olap/tests_results` (`TpccW{WH}T0Snapshot|Serializable`, `oltp-perf-N` ↔ `perfN`).
 
 ### OLAP playbook (mandatory dig-runs)
 

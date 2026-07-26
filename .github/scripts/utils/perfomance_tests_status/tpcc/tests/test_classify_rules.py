@@ -15,7 +15,12 @@ from classify_rules import (  # noqa: E402
     resolve_compare_row,
     tpcc_hard_band,
 )
-from generate import collapse_in_progress_suite_dupes  # noqa: E402
+from generate import (  # noqa: E402
+    allure_suite_for,
+    attach_reports,
+    collapse_in_progress_suite_dupes,
+    mart_cluster_to_ci,
+)
 
 
 def _side(
@@ -163,6 +168,50 @@ class WaveCompareRowFilterTests(unittest.TestCase):
             "all",
         )
         self.assertEqual(got["issue"], "ok")
+
+
+class ReportJoinTests(unittest.TestCase):
+    def test_cluster_and_suite_mapping(self):
+        self.assertEqual(mart_cluster_to_ci("perf3"), "oltp-perf-3")
+        self.assertEqual(
+            allure_suite_for("ydb_cli_snapshot_default", 20000),
+            "TpccW20000T0Snapshot",
+        )
+        self.assertEqual(
+            allure_suite_for("ydb_cli_serializable_latency", 12000),
+            "TpccW12000T0Serializable",
+        )
+
+    def test_attach_nearest_report(self):
+        from datetime import datetime, timezone
+
+        ts = datetime(2026, 7, 26, 15, 20, tzinfo=timezone.utc)
+        points = [
+            {
+                "cluster": "perf3",
+                "run_type": "ydb_cli_snapshot_default",
+                "warehouses": 20000,
+                "ts": ts,
+                "report": None,
+            }
+        ]
+        reports = [
+            {
+                "Suite": "TpccW20000T0Snapshot",
+                "ci_cluster_name": "oltp-perf-3",
+                "report_url": "https://proxy.sandbox.yandex-team.ru/111/index.html",
+                "timestamp": "2026-07-26T15:21:57Z",
+            },
+            {
+                "Suite": "TpccW20000T0Snapshot",
+                "ci_cluster_name": "oltp-perf-3",
+                "report_url": "https://proxy.sandbox.yandex-team.ru/222/index.html",
+                "timestamp": "2026-07-26T07:33:06Z",
+            },
+        ]
+        n = attach_reports(points, reports)
+        self.assertEqual(n, 1)
+        self.assertIn("/111/", points[0]["report"])
 
 
 if __name__ == "__main__":

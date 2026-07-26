@@ -39,6 +39,19 @@ TString MakeLbUserTopicPath(const TString& lbUserDatabaseRoot, const TString& to
     return CanonizePath(NKikimr::JoinPath(parts));
 }
 
+// First path component is federation account; requires account/topic shape.
+TMaybe<TString> ExtractFederationAccount(const TString& topicPath) {
+    auto parts = NKikimr::SplitPath(topicPath);
+    if (parts.size() < 2 || parts[0].empty()) {
+        return Nothing();
+    }
+    return parts[0];
+}
+
+TString MakeLbUserAccountDatabase(const TString& lbUserDatabaseRoot, const TString& account) {
+    return CanonizePath(NKikimr::JoinPath({lbUserDatabaseRoot, account}));
+}
+
 class TDescribeActor : public TActorBootstrapped<TDescribeActor> {
 public:
     TDescribeActor(const NActors::TActorId& parent, const TString& databasePath, absl::flat_hash_set<TString>&& topicPaths, const TDescribeSettings& settings)
@@ -56,6 +69,7 @@ public:
         }
         RetryWithSyncVersion = Settings.ForceSyncVersion;
         UsedSyncVersion = Settings.ForceSyncVersion;
+        RequestDatabaseName = DatabasePath;
         DoRequest(TopicPaths);
     }
 
@@ -63,10 +77,11 @@ public:
         YDB_LOG_DEBUG("Create request with",
             {"logPrefix", LOG_PREFIX},
             {"topicPaths", JoinRange(", ", topicPath.begin(), topicPath.end())},
-            {"syncVersion", RetryWithSyncVersion});
+            {"syncVersion", RetryWithSyncVersion},
+            {"databaseName", RequestDatabaseName});
 
         auto schemeRequest = std::make_unique<TSchemeCacheNavigate>(1);
-        schemeRequest->DatabaseName = DatabasePath;
+        schemeRequest->DatabaseName = RequestDatabaseName;
 
         auto addEntry = [&](const TString& topic) {
             auto split = NKikimr::SplitPath(topic);
@@ -80,7 +95,7 @@ public:
         };
 
         for (const auto& topic : topicPath) {
-            auto normalizedPath = NKikimr::NormalizePath(DatabasePath, CanonizePath(topic));
+            auto normalizedPath = NKikimr::NormalizePath(RequestDatabaseName, CanonizePath(topic));
             // Keep the originally requested path across retries (sync / LbRoot / CDC).
             PathToOriginalPath.try_emplace(normalizedPath, topic);
             addEntry(normalizedPath);
@@ -247,23 +262,14 @@ public:
             return DoRequest(unknownPaths);
         }
 
-        if (!LbRootPaths.empty() && !RetryWithLbRoot) {
-            RetryWithLbRoot = true;
-            // Same local→global pattern as for the original topic paths.
-            RetryWithSyncVersion = false;
-
-            absl::flat_hash_set<TString> newPath;
-            newPath.reserve(LbRootPaths.size());
-            for (const auto& [path, _] : LbRootPaths) {
-                newPath.insert(path);
-            }
-
-            return DoRequest(newPath);
+        if (TryStartNextLbRootDatabaseRequest()) {
+            return;
         }
 
         if (!CDCPaths.empty() && !RetryWithCDC) {
             RetryWithSyncVersion = false;
             RetryWithCDC = true;
+            RequestDatabaseName = DatabasePath;
 
             absl::flat_hash_set<TString> newPath;
             newPath.reserve(CDCPaths.size());
@@ -304,14 +310,52 @@ private:
             return false;
         }
 
+        const auto account = ExtractFederationAccount(originalPath);
+        if (!account.Defined()) {
+            return false;
+        }
+
+        const auto accountDatabase = MakeLbUserAccountDatabase(LbUserDatabaseRoot, *account);
         const auto lbPath = MakeLbUserTopicPath(LbUserDatabaseRoot, originalPath);
-        if (lbPath == realPath) {
+        // Same path string can still need a retry with DatabaseName = account DB
+        // (e.g. DatabasePath == LbUserDatabaseRoot: /Root/account/topic under /Root).
+        if (lbPath == realPath && RequestDatabaseName == accountDatabase) {
             return false;
         }
 
         LbRootPaths[lbPath] = TLbRootTopicInfo{
-            .OriginalPath = originalPath
+            .OriginalPath = originalPath,
+            .AccountDatabase = accountDatabase
         };
+        return true;
+    }
+
+    // One SchemeCache request per account database (DatabaseName = LbRoot/account).
+    bool TryStartNextLbRootDatabaseRequest() {
+        TString nextDatabase;
+        for (const auto& [_, info] : LbRootPaths) {
+            if (!RequestedLbRootDatabases.contains(info.AccountDatabase)) {
+                nextDatabase = info.AccountDatabase;
+                break;
+            }
+        }
+        if (nextDatabase.empty()) {
+            return false;
+        }
+
+        RetryWithLbRoot = true;
+        RetryWithSyncVersion = false;
+        RequestDatabaseName = nextDatabase;
+        RequestedLbRootDatabases.insert(nextDatabase);
+
+        absl::flat_hash_set<TString> newPath;
+        for (const auto& [path, info] : LbRootPaths) {
+            if (info.AccountDatabase == nextDatabase) {
+                newPath.insert(path);
+            }
+        }
+
+        DoRequest(newPath);
         return true;
     }
 
@@ -339,6 +383,9 @@ private:
     bool RetryWithCDC = false;
     bool RetryWithLbRoot = false;
     TString LbUserDatabaseRoot;
+    // DatabaseName for the current SchemeCache request (account DB on LbRoot retry).
+    TString RequestDatabaseName;
+    absl::flat_hash_set<TString> RequestedLbRootDatabases;
     // CDC topic path -> original topic path
     struct TCDCTopicInfo {
         TString OriginalPath;
@@ -348,6 +395,7 @@ private:
     // LbUserDatabaseRoot-prefixed path -> original topic path
     struct TLbRootTopicInfo {
         TString OriginalPath;
+        TString AccountDatabase;
     };
     absl::flat_hash_map<TString, TLbRootTopicInfo> LbRootPaths;
     absl::flat_hash_map<TString, TTopicInfo> Result;

@@ -48,6 +48,16 @@ python3 generate.py \
 - Summary counts: **missing / broken / lat↑ / tpmC↓ / stale**
 - Note window + that Now uses last completed vs prev-7 (median)
 
+## Local unit tests
+
+```bash
+cd .github/scripts/utils/perfomance_tests_status/tpcc
+python3 tests/test_classify_rules.py
+```
+
+Compare-delta paint rules (Python mirror of `template.html` `compareDeltaTpcc`): `classify_rules.py`.  
+Now classification stays in `generate.py` (`classify_slice`).
+
 ## Rules (v1)
 
 | Signal | Rule |

@@ -290,7 +290,7 @@ Agent **decides** which subset of tools to run per problem; core does not force 
 | `tools/code_bisect.py` | `tools/classify.py` / `problems.py` status enums as final answer |
 | `tools/github_pr.py` (sha→PR); issue search via `gh` | `run.py` one-shot default |
 | `tools/context.py`, schema | rigid `REPORT_TEMPLATE` 6-H2 law |
-| token_config / fixtures | — |
+| token_config / `tests/fixtures` | — |
 
 `AGENTS.md` rewritten around loop + playbooks + evidence bar (this doc).  
 `REDESIGN.md` (this file) = north star until implemented.
@@ -325,7 +325,7 @@ Agree architecture, `result.json`, analysis types, anti-bullshit rules.
 
 - Remove `build_root_cause` / narrative renderer / old card schema as primary
 - Optional: thin `investigate-legacy` removed
-- Tests: validate + tool unit tests; golden `analysis.md` only for validate fixtures
+- Tests: `tests/test_duty_agent.py` + `tests/fixtures/`; golden `analysis.md` only for validate fixtures
 
 ---
 

@@ -11,8 +11,10 @@ import unittest
 import zipfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
-sys.path.insert(0, str(ROOT))
+TESTS = Path(__file__).resolve().parent
+AGENT = TESTS.parent
+FIXTURES = TESTS / "fixtures"
+sys.path.insert(0, str(AGENT))
 
 from tools.attachments import pick_priority_attachments, scan_log_text  # noqa: E402
 from tools.context import (  # noqa: E402
@@ -39,11 +41,11 @@ from tools.yav import read_token_config, token_specs_from_config  # noqa: E402
 
 class ContextTests(unittest.TestCase):
     def test_load_olap(self):
-        ctx = load_context(ROOT / "fixtures" / "sample_olap.json")
+        ctx = load_context(FIXTURES / "sample_olap.json")
         self.assertEqual(ctx["report"]["kind"], "olap")
 
     def test_load_tpcc(self):
-        ctx = load_context(ROOT / "fixtures" / "sample_tpcc.json")
+        ctx = load_context(FIXTURES / "sample_tpcc.json")
         self.assertEqual(ctx["report"]["kind"], "tpcc")
 
     def test_reject_bad_schema(self):
@@ -53,14 +55,14 @@ class ContextTests(unittest.TestCase):
 
 class DetectTypeTests(unittest.TestCase):
     def test_olap_fail_seed(self):
-        ctx = load_context(ROOT / "fixtures" / "sample_olap.json")
+        ctx = load_context(FIXTURES / "sample_olap.json")
         det = detect_type(ctx)
         self.assertEqual(det["rollup"], "olap_fail")
         self.assertIn("olap_fail", det["analysis_types"])
         self.assertTrue(any(p.get("test") == "Query05" for p in det["problems_seed"]))
 
     def test_tpcc_mixed_lat_tpmc(self):
-        ctx = load_context(ROOT / "fixtures" / "sample_tpcc.json")
+        ctx = load_context(FIXTURES / "sample_tpcc.json")
         det = detect_type(ctx)
         self.assertEqual(det["rollup"], "mixed")
         self.assertIn("tpcc_tpmc", det["analysis_types"])
@@ -69,7 +71,7 @@ class DetectTypeTests(unittest.TestCase):
 
 class MetricsDeltaTests(unittest.TestCase):
     def test_tpcc_flags(self):
-        ctx = load_context(ROOT / "fixtures" / "sample_tpcc.json")
+        ctx = load_context(FIXTURES / "sample_tpcc.json")
         m = metrics_delta(ctx)
         self.assertIn("lat_regression", m["flags"])
         self.assertIn("tpmc_regression", m["flags"])
@@ -77,7 +79,7 @@ class MetricsDeltaTests(unittest.TestCase):
 
 class DigRunsTests(unittest.TestCase):
     def test_build_tpcc_sql_and_summarize(self):
-        ctx = load_context(ROOT / "fixtures" / "sample_tpcc.json")
+        ctx = load_context(FIXTURES / "sample_tpcc.json")
         plan = build_dig_sql(ctx, neighbors=True, days_before=35)
         self.assertEqual(plan["kind"], "tpcc")
         self.assertEqual(plan["days_before"], 35)
@@ -160,7 +162,7 @@ class DigRunsTests(unittest.TestCase):
         self.assertTrue(any(c["suite"].startswith("ydb_cli_snapshot_latency") for c in summary["cross_run_type"]))
 
     def test_build_olap_sql_neighbors(self):
-        ctx = load_context(ROOT / "fixtures" / "sample_olap.json")
+        ctx = load_context(FIXTURES / "sample_olap.json")
         plan = build_dig_sql(ctx, neighbors=True, days_before=40)
         self.assertEqual(plan["kind"], "olap")
         self.assertIn("fast_results_siutes", plan["sql"])
@@ -347,7 +349,7 @@ class ResultMergeTests(unittest.TestCase):
     def test_merge_problems(self):
         with tempfile.TemporaryDirectory() as td:
             d = Path(td)
-            ctx = load_context(ROOT / "fixtures" / "sample_olap.json")
+            ctx = load_context(FIXTURES / "sample_olap.json")
             write_json(
                 d / "problems.json",
                 {
@@ -394,7 +396,7 @@ class SandboxTests(unittest.TestCase):
 
 class YavConfigTests(unittest.TestCase):
     def test_token_config_has_sandbox(self):
-        cfg = read_token_config(ROOT / "token_config.json")
+        cfg = read_token_config(AGENT / "token_config.json")
         specs = token_specs_from_config(cfg)
         self.assertIn("SANDBOX_TOKEN", specs)
 
@@ -422,7 +424,7 @@ class AttachmentTests(unittest.TestCase):
 
 class DutyctlCliTests(unittest.TestCase):
     def test_prepare_cli_offline(self):
-        run = ROOT / "dutyctl.py"
+        run = AGENT / "dutyctl.py"
         with tempfile.TemporaryDirectory() as td:
             out = Path(td)
             proc = subprocess.run(
@@ -431,7 +433,7 @@ class DutyctlCliTests(unittest.TestCase):
                     str(run),
                     "prepare",
                     "-c",
-                    str(ROOT / "fixtures" / "sample_olap.json"),
+                    str(FIXTURES / "sample_olap.json"),
                     "-o",
                     str(out),
                     "--offline",
@@ -450,7 +452,7 @@ class DutyctlCliTests(unittest.TestCase):
             self.assertIn("fatal", focus)
 
     def test_prepare_tpcc_metrics(self):
-        run = ROOT / "dutyctl.py"
+        run = AGENT / "dutyctl.py"
         with tempfile.TemporaryDirectory() as td:
             out = Path(td)
             proc = subprocess.run(
@@ -459,7 +461,7 @@ class DutyctlCliTests(unittest.TestCase):
                     str(run),
                     "prepare",
                     "-c",
-                    str(ROOT / "fixtures" / "sample_tpcc.json"),
+                    str(FIXTURES / "sample_tpcc.json"),
                     "-o",
                     str(out),
                     "--offline",
@@ -472,7 +474,7 @@ class DutyctlCliTests(unittest.TestCase):
             self.assertTrue((out / "metrics_delta.json").is_file())
 
     def test_validate_cli_ok(self):
-        run = ROOT / "dutyctl.py"
+        run = AGENT / "dutyctl.py"
         with tempfile.TemporaryDirectory() as td:
             out = Path(td)
             (out / "analysis.md").write_text(
@@ -520,7 +522,7 @@ https://github.com/ydb-platform/ydb/commit/f88e100
 class ZipBundleTests(unittest.TestCase):
     def test_load_zip_and_local_sandbox(self):
         with tempfile.TemporaryDirectory() as td:
-            ctx = json.loads((ROOT / "fixtures" / "sample_olap.json").read_text(encoding="utf-8"))
+            ctx = json.loads((FIXTURES / "sample_olap.json").read_text(encoding="utf-8"))
             fr = ctx["selection"]["focus_run"]
             fr["report"] = "https://example.test/sandbox/index.html"
             fr["report_local"] = "sandbox/focus/index.html"

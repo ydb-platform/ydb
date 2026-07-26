@@ -1,4 +1,5 @@
 .venv/
 out/
 __pycache__/
+tests/__pycache__/
 *.pyc

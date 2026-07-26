@@ -269,5 +269,6 @@ Also update `$OUT/problems.json`.
 ## Tests
 
 ```bash
-python3 test_duty_agent.py
+python3 tests/test_duty_agent.py
+# fixtures: tests/fixtures/*.json
 ```

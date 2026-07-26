@@ -33,7 +33,16 @@ Duty notes: stale uses wall-clock; Now = last completed vs median(prev7); failin
 ## Local unit tests (classify / compare)
 
 ```bash
+# OLAP Now / compare
 cd .github/scripts/utils/perfomance_tests_status/olap
-python3 test_classify_rules.py
+python3 tests/test_classify_rules.py
+
+# TPC-C compare-delta (mirror of template.html)
+cd .github/scripts/utils/perfomance_tests_status/tpcc
+python3 tests/test_classify_rules.py
+
+# Duty agent
+cd .github/scripts/utils/perfomance_tests_status/duty_agent
+python3 tests/test_duty_agent.py
 ```
 

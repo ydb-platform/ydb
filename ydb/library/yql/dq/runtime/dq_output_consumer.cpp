@@ -763,46 +763,61 @@ private:
             return;
         }
 
-        TVector<const arrow::Datum*> datums;
-        datums.reserve(count - 1);
+        Datums_.clear();
+        Datums_.reserve(count - 1);
         for (ui32 i = 0; i < count - 1; ++i) {
-            datums.push_back(&TArrowBlock::From(values[i]).GetDatum());
+            Datums_.push_back(&TArrowBlock::From(values[i]).GetDatum());
         }
 
-        TVector<TVector<ui64>> outputBlockIndexes(Outputs_.size());
+        const size_t numPartitions = Outputs_.size();
+
+        RowPartition_.resize(inputBlockLen);
+        PartitionOffsets_.assign(numPartitions + 1, 0);
         for (ui64 i = 0; i < inputBlockLen; ++i) {
-            std::size_t idx = GetHashPartitionIndex(datums.data(), i);
-            outputBlockIndexes[idx].push_back(i);
+            const std::size_t idx = GetHashPartitionIndex(Datums_.data(), i);
+            RowPartition_[i] = static_cast<ui32>(idx);
+            ++PartitionOffsets_[idx + 1];
+        }
+        for (size_t p = 0; p < numPartitions; ++p) {
+            PartitionOffsets_[p + 1] += PartitionOffsets_[p];
+        }
+        RowOrder_.resize(inputBlockLen);
+        PartitionCursor_.assign(PartitionOffsets_.begin(), PartitionOffsets_.end() - 1);
+        for (ui64 i = 0; i < inputBlockLen; ++i) {
+            RowOrder_[PartitionCursor_[RowPartition_[i]]++] = i;
         }
 
-        TVector<std::unique_ptr<TArgsDechunker>> outputData;
-        for (size_t i = 0; i < Outputs_.size(); ++i) {
-            ui64 outputBlockLen = outputBlockIndexes[i].size();
+        EnsureBuilders(inputBlockLen);
+
+        OutputData_.clear();
+        OutputData_.reserve(numPartitions);
+        for (size_t i = 0; i < numPartitions; ++i) {
+            const ui64 start = PartitionOffsets_[i];
+            const ui64 outputBlockLen = PartitionOffsets_[i + 1] - start;
             if (!outputBlockLen) {
-                outputData.emplace_back();
+                OutputData_.emplace_back();
                 continue;
             }
-            MakeBuilders(outputBlockLen);
-            const ui64* indexes = outputBlockIndexes[i].data();
+            const ui64* indexes = RowOrder_.data() + start;
 
-            std::vector<arrow::Datum> output;
-            for (size_t j = 0; j < datums.size(); ++j) {
-                const arrow::Datum* src = datums[j];
+            ScratchOutput_.clear();
+            for (size_t j = 0; j < Datums_.size(); ++j) {
+                const arrow::Datum* src = Datums_[j];
                 if (src->is_scalar()) {
-                    output.emplace_back(*src);
+                    ScratchOutput_.emplace_back(*src);
                 } else {
                     IArrayBuilder::TArrayDataItem dataItem {
                         .Data = src->array().get(),
                         .StartOffset = 0,
                     };
                     Builders_[j]->AddMany(&dataItem, 1, indexes, outputBlockLen);
-                    output.emplace_back(Builders_[j]->Build(true));
+                    ScratchOutput_.emplace_back(Builders_[j]->Build(false));
                 }
             }
-            outputData.emplace_back(std::make_unique<TArgsDechunker>(std::move(output)));
+            OutputData_.emplace_back(std::make_unique<TArgsDechunker>(std::move(ScratchOutput_)));
         }
 
-        DoConsume(std::move(outputData));
+        DoConsume(std::move(OutputData_));
     }
 
     void DoConsume(TVector<std::unique_ptr<TArgsDechunker>>&& outputData) const {
@@ -881,8 +896,12 @@ private:
         return HashFunc.Finish(Outputs_.size());
     }
 
-    void MakeBuilders(ui64 maxBlockLen) {
+    void EnsureBuilders(ui64 maxBlockLen) {
+        if (Y_LIKELY(!Builders_.empty() && BuildersMaxLen_ >= maxBlockLen)) {
+            return;
+        }
         Builders_.clear();
+        BuildersMaxLen_ = maxBlockLen;
         TTypeInfoHelper helper;
         for (auto& columnType : OutputType_->GetElements()) {
             YQL_ENSURE(columnType->IsBlock());
@@ -901,7 +920,6 @@ private:
     const NKikimr::NMiniKQL::THolderFactory& HolderFactory_;
 
     const TVector<IDqOutput::TPtr> Outputs_;
-    mutable TVector<std::unique_ptr<TArgsDechunker>> OutputData_;
 
     const TVector<TColumnInfo> KeyColumns_;
     const ui32 OutputWidth_;
@@ -909,10 +927,20 @@ private:
 
     TVector<std::unique_ptr<IBlockReader>> Readers_;
     TVector<std::unique_ptr<IArrayBuilder>> Builders_;
+    ui64 BuildersMaxLen_ = 0;
 
     NUdf::IPgBuilder* PgBuilder_;
     THashFunc HashFunc;
     std::shared_ptr<TDqFillAggregator> Aggregator;
+
+    TVector<const arrow::Datum*> Datums_;
+    std::vector<arrow::Datum> ScratchOutput_;
+    TVector<std::unique_ptr<TArgsDechunker>> OutputData_;
+
+    TVector<ui32> RowPartition_;
+    TVector<ui64> PartitionOffsets_;
+    TVector<ui64> PartitionCursor_;
+    TVector<ui64> RowOrder_;
 };
 
 class TDqOutputBroadcastConsumer : public IDqOutputConsumer {

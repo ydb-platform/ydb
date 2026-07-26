@@ -680,7 +680,10 @@ function shortCellStatus(st, nFail, nSlow, nSoft, nNodata) {
 function allSuiteRows(branch, db, fam) {
   const out = [];
   const seen = new Set();
+  const mode = waveView();
   for (const r of [...(DATA.inbox || []), ...(DATA.ok || [])]) {
+    // Match candidateRows: finished wave must not pull synthetic in_progress into compare.
+    if (mode === 'finished' && r.issue === 'in_progress') continue;
     if (branch && r.branch !== branch) continue;
     if (r.db !== db || r.family !== fam) continue;
     if (!r.suite || r.suite === '—') continue;
@@ -1205,27 +1208,34 @@ function liveCellNow(branch, db, fam) {
     n_queries: new Set([...failSet, ...slowSet, ...softSet, ...nodataSet]).size,
   };
 }
-/** Hard OLAP signals only (fail / hard slow / broken) — ignore watch/soft/nodata for paint. */
+/**
+ * Hard OLAP signals for compare paint — same React toggles as cell labels (fmtFS).
+ * Default React: fail on, hard off → slows must not paint delta while labels say "ok".
+ */
 function olapHardBand(side) {
   if (!side) return 0;
+  const s = reactSignals();
   const st = side.status || '';
-  if (st === 'broken' || st === 'failing' || st === 'fail' || st === 'both') return 2;
-  const fails = side.n_fail || 0;
-  const slows = side.n_slow || 0;
+  const fails = s.fail ? (side.n_fail || 0) : 0;
+  const slows = s.hard ? (side.n_slow || 0) : 0;
+  if (s.fail && (st === 'broken' || st === 'failing' || st === 'fail' || st === 'both')) return 2;
   if (fails > 0) return 2;
-  if (slows > 0 || st === 'regression' || st === 'slower' || st === 'slow') return 1;
+  if (s.hard && (slows > 0 || st === 'regression' || st === 'slower' || st === 'slow')) return 1;
   return 0;
 }
 /**
- * Compare paint only on significant hard changes:
+ * Compare paint only on significant hard changes (React-filtered):
  * fail/slow count up/down, or cross into/out of hard band.
  * Opposing fail↑+slow↓ (or reverse) → mixed. Soft/watch-only → same.
  */
 function compareDeltaOlap(prev, now) {
+  const s = reactSignals();
   const pb = olapHardBand(prev);
   const nb = olapHardBand(now);
-  const pf = prev.n_fail || 0, ps = prev.n_slow || 0;
-  const nf = now.n_fail || 0, ns = now.n_slow || 0;
+  const pf = s.fail ? (prev.n_fail || 0) : 0;
+  const ps = s.hard ? (prev.n_slow || 0) : 0;
+  const nf = s.fail ? (now.n_fail || 0) : 0;
+  const ns = s.hard ? (now.n_slow || 0) : 0;
   const failUp = nf > pf, failDown = nf < pf;
   const slowUp = ns > ps, slowDown = ns < ps;
   if ((failUp && slowDown) || (failDown && slowUp)) return 'mixed';

@@ -885,7 +885,10 @@ function classifySliceNowVsWaveBaseline(item, wave) {
 function allSliceRows(branch, db, fam) {
   const out = [];
   const seen = new Set();
+  const mode = waveView();
   for (const r of [...(DATA.inbox || []), ...(DATA.ok || [])]) {
+    // Match candidateRows: finished wave must not pull synthetic in_progress into compare.
+    if (mode === 'finished' && r.issue === 'in_progress') continue;
     if (branch && r.branch !== branch) continue;
     if (r.db !== db || r.family !== fam) continue;
     if (!r.suite || r.suite === '—') continue;

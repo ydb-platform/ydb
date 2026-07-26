@@ -312,7 +312,12 @@ namespace NKikimr {
             , CallerInfo(callerInfo)
             , WId(wId)
         {
+<<<<<<< HEAD
             Y_ABORT_UNLESS(!WId == Metadata.RemovedHugeBlobs.Empty());
+=======
+            Y_VERIFY_S(!WId == (Metadata.RemovedHugeBlobs.Empty() && Metadata.AllocatedHugeBlobs.Empty()),
+                HullLogCtx->VCtx->VDiskLogPrefix);
+>>>>>>> ca26b796971 (Fix bug in VDisk related to huge blob compaction when changing size limit and improve unit test (#33015))
             // we create commit message in the constructor to avoid race condition
             GenerateCommitMessage();
         }

@@ -1,5 +1,8 @@
 #include "describer.h"
 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/path.h>
+
 #include <util/generic/algorithm.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_DESCRIBER
@@ -25,6 +28,14 @@ bool HasAccess(const TDescribeSettings& settings, TIntrusivePtr<TSecurityObject>
     return false;
 }
 
+TString MakeLbUserTopicPath(const TString& lbUserDatabaseRoot, const TString& topicPath) {
+    auto parts = NKikimr::SplitPath(lbUserDatabaseRoot);
+    for (const auto& part : NKikimr::SplitPath(topicPath)) {
+        parts.push_back(part);
+    }
+    return CanonizePath(NKikimr::JoinPath(parts));
+}
+
 class TDescribeActor : public TActorBootstrapped<TDescribeActor> {
 public:
     TDescribeActor(const NActors::TActorId& parent, const TString& databasePath, const std::unordered_set<TString>&& topicPaths, const TDescribeSettings& settings)
@@ -37,6 +48,7 @@ public:
 
     void Bootstrap() {
         Become(&TDescribeActor::StateWork);
+        LbUserDatabaseRoot = AppData()->PQConfig.GetPQDiscoveryConfig().GetLbUserDatabaseRoot();
         RetryWithSyncVersion = Settings.ForceSyncVersion;
         UsedSyncVersion = Settings.ForceSyncVersion;
         DoRequest(TopicPaths);
@@ -64,7 +76,8 @@ public:
 
         for (const auto& topic : topicPath) {
             auto normalizedPath = NKikimr::NormalizePath(DatabasePath, CanonizePath(topic));
-            PathToOriginalPath[normalizedPath] = topic;
+            // Keep the originally requested path across retries (sync / LbRoot / CDC).
+            PathToOriginalPath.try_emplace(normalizedPath, topic);
             addEntry(normalizedPath);
         }
 
@@ -92,6 +105,8 @@ public:
                 originalPath = it->second.OriginalPath;
                 isCDCStream = true;
                 cdcStreamName = it->second.CdcStreamName;
+            } else if (auto lbIt = LbRootPaths.find(realPath); lbIt != LbRootPaths.end()) {
+                originalPath = lbIt->second.OriginalPath;
             }
 
             switch (entry.Status) {
@@ -104,17 +119,19 @@ public:
                                 {"logPrefix", LOG_PREFIX},
                                 {"realPath", realPath});
 
-                            Result[originalPath] = TTopicInfo{
-                                .Status = EStatus::UNAUTHORIZED
-                            };
+                            SetErrorResult(originalPath, EStatus::UNAUTHORIZED);
+                        } else if (TryScheduleLbRootRetry(originalPath, realPath)) {
+                            YDB_LOG_DEBUG("Path not found, will try LbUserDatabaseRoot",
+                                {"logPrefix", LOG_PREFIX},
+                                {"realPath", realPath},
+                                {"originalPath", originalPath},
+                                {"lbUserDatabaseRoot", LbUserDatabaseRoot});
                         } else {
                             YDB_LOG_DEBUG("Path not found",
                                 {"logPrefix", LOG_PREFIX},
                                 {"realPath", realPath});
 
-                            Result[originalPath] = TTopicInfo{
-                                .Status = EStatus::NOT_FOUND
-                            };
+                            SetErrorResult(originalPath, EStatus::NOT_FOUND);
                         }
                     } else {
                         unknownPaths.insert(realPath);
@@ -144,12 +161,18 @@ public:
                     } else if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic) {
                         if (!entry.PQGroupInfo || entry.PQGroupInfo->Description.GetBalancerTabletID() == 0) {
                             if (RetryWithSyncVersion) {
-                                YDB_LOG_DEBUG("Path not found",
-                                    {"logPrefix", LOG_PREFIX},
-                                    {"realPath", realPath});
-                                Result[originalPath] = TTopicInfo{
-                                    .Status = EStatus::NOT_FOUND
-                                };
+                                if (TryScheduleLbRootRetry(originalPath, realPath)) {
+                                    YDB_LOG_DEBUG("Path not found, will try LbUserDatabaseRoot",
+                                        {"logPrefix", LOG_PREFIX},
+                                        {"realPath", realPath},
+                                        {"originalPath", originalPath},
+                                        {"lbUserDatabaseRoot", LbUserDatabaseRoot});
+                                } else {
+                                    YDB_LOG_DEBUG("Path not found",
+                                        {"logPrefix", LOG_PREFIX},
+                                        {"realPath", realPath});
+                                    SetErrorResult(originalPath, EStatus::NOT_FOUND);
+                                }
                             } else {
                                 unknownPaths.insert(realPath);
                             }
@@ -219,6 +242,20 @@ public:
             return DoRequest(unknownPaths);
         }
 
+        if (!LbRootPaths.empty() && !RetryWithLbRoot) {
+            RetryWithLbRoot = true;
+            // Same local→global pattern as for the original topic paths.
+            RetryWithSyncVersion = false;
+
+            std::unordered_set<TString> newPath;
+            newPath.reserve(LbRootPaths.size());
+            for (const auto& [path, _] : LbRootPaths) {
+                newPath.insert(path);
+            }
+
+            return DoRequest(newPath);
+        }
+
         if (!CDCPaths.empty() && !RetryWithCDC) {
             RetryWithSyncVersion = false;
             RetryWithCDC = true;
@@ -244,6 +281,47 @@ public:
     }
 
 private:
+    bool TryScheduleLbRootRetry(const TString& originalPath, const TString& realPath) {
+        if (LbUserDatabaseRoot.empty()) {
+            return false;
+        }
+        if (LbRootPaths.contains(realPath)) {
+            // This response is already for an LbUserDatabaseRoot path.
+            return false;
+        }
+        for (const auto& [_, info] : LbRootPaths) {
+            if (info.OriginalPath == originalPath) {
+                // LbUserDatabaseRoot path is already scheduled.
+                return true;
+            }
+        }
+        if (RetryWithLbRoot) {
+            return false;
+        }
+
+        const auto lbPath = MakeLbUserTopicPath(LbUserDatabaseRoot, originalPath);
+        if (lbPath == realPath) {
+            return false;
+        }
+
+        LbRootPaths[lbPath] = TLbRootTopicInfo{
+            .OriginalPath = originalPath
+        };
+        return true;
+    }
+
+    void SetErrorResult(const TString& originalPath, EStatus status, const TString& realPath = {}) {
+        auto it = Result.find(originalPath);
+        if (it != Result.end() && it->second.Status == EStatus::SUCCESS) {
+            return;
+        }
+        Result[originalPath] = TTopicInfo{
+            .Status = status,
+            .RealPath = realPath
+        };
+    }
+
+private:
     const NActors::TActorId Parent;
     const TString DatabasePath;
     const std::unordered_set<TString> TopicPaths;
@@ -254,12 +332,19 @@ private:
     bool RetryWithSyncVersion = false;
     bool UsedSyncVersion = false;
     bool RetryWithCDC = false;
+    bool RetryWithLbRoot = false;
+    TString LbUserDatabaseRoot;
     // CDC topic path -> original topic path
     struct TCDCTopicInfo {
         TString OriginalPath;
         TString CdcStreamName;
     };
     std::unordered_map<TString, TCDCTopicInfo> CDCPaths;
+    // LbUserDatabaseRoot-prefixed path -> original topic path
+    struct TLbRootTopicInfo {
+        TString OriginalPath;
+    };
+    std::unordered_map<TString, TLbRootTopicInfo> LbRootPaths;
     std::unordered_map<TString, TTopicInfo> Result;
 };
 

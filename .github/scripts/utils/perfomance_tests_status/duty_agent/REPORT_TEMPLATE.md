@@ -16,9 +16,11 @@
 
 ## Проблемы
 
+Один P\* = одна корневая причина. Crash/abort + соседние `code: 2005` на том же прогоне — **один** P1 (следствие query перечисли строкой). P2 только при другом механизме / отдельном классе (nodata lag и т.п.).
+
 ### P1 — <короткое имя>
 - Тип: `olap_fail` | `olap_slow` | `tpcc_tpmc` | `tpcc_lat`
-- Что сломалось: …
+- Что сломалось: … (включая следствия: Query0N/0M → 2005 после abort)
 - Почему / механика: … (для slow: `plan_regressed` | `plan_same_runtime_regressed` | `unstable_across_iterations` | …)
 - Логи: `kikimr__stderr` …; `kikimr__logs` … (или явно пусто); при crash — coredump URL / `/place/coredumps`
 - План (если `olap_slow`): Explain / Final plan по итерациям; сравнение с baseline Allure
@@ -27,7 +29,7 @@
 - Давность: …
 - Гипотеза проверена: `yes` | `no` | `partial`
 - Связанный issue: [#{N}](https://github.com/ydb-platform/ydb/issues/{N}) или нет
-- Тикет: отдельный | тот же, что P1 | комментарий в #{N}
+- Тикет: …
 
 ## Кандидаты PR (если есть)
 Не список голых ссылок. Таблица:

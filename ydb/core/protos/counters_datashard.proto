@@ -38,6 +38,7 @@ enum ESimpleCounters {
     COUNTER_VOLATILE_TX_ABORTING_COUNT = 28                        [(CounterOpts) = {Name: "VolatileTxAbortingCount"}];
     COUNTER_LOCK_ROWS_INFLIGHT = 29                                [(CounterOpts) = {Name: "LockRowsInFlight"}];
     COUNTER_LOCK_ROWS_WAITING = 30                                 [(CounterOpts) = {Name: "LockRowsWaiting"}];
+    COUNTER_TOTAL_IN_FLIGHT_MAX = 31                               [(CounterOpts) = {Name: "TotalInFlightMax"}];
 }
 
 enum ECumulativeCounters {

@@ -319,6 +319,29 @@ class DigRunsTests(unittest.TestCase):
         self.assertGreater(summary["largest_fail_step"]["delta"], 0)
         self.assertTrue(any(p["DbAlias"] == "sas_big_column" for p in summary["peer_dbs"]))
         self.assertTrue(any(c["suite"] == "UploadTpch100" for c in summary["cross_suite"]))
+        # last FailCount=0 before focus → pr_window for dig-prs
+        self.assertIsNotNone(summary.get("pr_window"))
+        self.assertEqual(summary["pr_window"]["source"], "last_stable_FailCount0")
+        self.assertTrue(str(summary["pr_window"]["head"]).endswith("bbbbbbb") or "bbbbbbb" in str(summary["pr_window"]["head"]))
+
+    def test_olap_pr_window_prefers_last_stable_not_ancient_fail_step(self):
+        from tools.dig_runs import build_olap_pr_window
+
+        runs = [
+            {"RunTs": "t0", "Version": "main.oldfail1", "FailCount": 0, "YdbSumMeans": 100},
+            {"RunTs": "t1", "Version": "main.oldfail2", "FailCount": 1, "YdbSumMeans": 90},
+            {"RunTs": "t2", "Version": "main.stable", "FailCount": 0, "YdbSumMeans": 110},
+            {"RunTs": "t3", "Version": "main.focus", "FailCount": 1, "YdbSumMeans": 80},
+        ]
+        fail_jump = {
+            "from_version": "main.oldfail1",
+            "to_version": "main.oldfail2",
+            "delta": 1,
+        }
+        pw = build_olap_pr_window(runs, fail_jump=fail_jump, ydb_jump=None)
+        self.assertEqual(pw["source"], "last_stable_FailCount0")
+        self.assertEqual(pw["base"], "main.stable")
+        self.assertEqual(pw["head"], "main.focus")
 
 
 class ValidateTests(unittest.TestCase):

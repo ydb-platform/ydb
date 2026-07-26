@@ -32,13 +32,15 @@
 - Тикет: …
 
 ## Кандидаты PR (если есть)
+Окно = mart `pr_window` (последний стабильный FailCount=0 / ydb|lat jump → разбираемый sha), не «просто» prev-green из пака. В заголовке укажи окно **и** `source` из `dig_prs.json` / `dig_runs.summary.pr_window`.
+
 Не список голых ссылок. Таблица:
 
 | Влито (UTC) | PR | Title | Автор | Почему |
 |--|--|--|--|--|
 | 2026-07-22 11:11 | [#46638](https://github.com/ydb-platform/ydb/pull/46638) | … | @login | … |
 
-Поля из `dig_prs.json`: `merged_at`, `pr_url`, `pr_title`, `author_login`.
+Поля из `dig_prs.json`: `merged_at`, `pr_url`, `pr_title`, `author_login`, `window_source`.
 
 ## Что дальше
 1. … (для `open_ticket`: «вставить Title+Body из блока ниже»)

@@ -464,6 +464,84 @@ def _largest_metric_step(
     return step
 
 
+def _olap_last_stable_before_focus(
+    slice_runs: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Last suite@db row with FailCount==0 before the newest (focus) row."""
+    if len(slice_runs) < 2:
+        return None
+    last_stable: dict[str, Any] | None = None
+    for r in slice_runs[:-1]:
+        fc = _num(r.get("FailCount"))
+        if fc is not None and fc <= 0:
+            last_stable = r
+    if not last_stable:
+        return None
+    return {
+        "RunTs": last_stable.get("RunTs"),
+        "Version": last_stable.get("Version"),
+        "FailCount": last_stable.get("FailCount"),
+        "YdbSumMeans": _num(last_stable.get("YdbSumMeans")),
+        "Report": last_stable.get("Report"),
+    }
+
+
+def build_olap_pr_window(
+    slice_runs: list[dict[str, Any]],
+    *,
+    fail_jump: dict[str, Any] | None,
+    ydb_jump: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """
+    Window for dig-prs / code bisect.
+
+    Prefer last FailCount=0 before focus → focus (mart truth), not pack prev-green
+    and not an ancient largest_fail_step alone. For duration regressions fall back
+    to largest_ydb_step.
+    """
+    if not slice_runs:
+        return None
+    focus = slice_runs[-1]
+    head = focus.get("Version")
+    if not head:
+        return None
+    focus_fc = _num(focus.get("FailCount"))
+    stable = _olap_last_stable_before_focus(slice_runs)
+    if stable and stable.get("Version") and (focus_fc is None or focus_fc > 0):
+        if str(stable.get("Version")) != str(head):
+            return {
+                "base": stable.get("Version"),
+                "head": head,
+                "source": "last_stable_FailCount0",
+                "reason": (
+                    "последний прогон suite@db с FailCount=0 в mart до разбираемого"
+                ),
+                "base_FailCount": 0,
+                "head_FailCount": focus_fc,
+                "base_Report": stable.get("Report"),
+            }
+    if ydb_jump and ydb_jump.get("from_version"):
+        return {
+            "base": ydb_jump.get("from_version"),
+            "head": ydb_jump.get("to_version") or head,
+            "source": "largest_ydb_step",
+            "reason": "наибольший скачок YdbSumMeans в mart",
+            "delta": ydb_jump.get("delta"),
+        }
+    if fail_jump and fail_jump.get("from_version"):
+        return {
+            "base": fail_jump.get("from_version"),
+            "head": head,
+            "source": "largest_fail_step_to_focus",
+            "reason": (
+                "скачок FailCount в окне dig → голова = разбираемый Version "
+                "(не промежуточный to_version)"
+            ),
+            "delta": fail_jump.get("delta"),
+        }
+    return None
+
+
 def summarize_tpcc_rows(
     rows: list[dict[str, Any]],
     *,
@@ -680,9 +758,24 @@ def summarize_tpcc_rows(
         jump=jump_for_base,
         focus_version=focus_sha[:7] if focus_sha else None,
     )
+    pr_window = None
+    if jump and jump.get("from_version"):
+        head_ver = None
+        if slice_runs:
+            head_ver = slice_runs[-1].get("version")
+        if not head_ver and focus_sha:
+            head_ver = focus_sha
+        pr_window = {
+            "base": jump.get("from_version"),
+            "head": head_ver or jump.get("to_version"),
+            "source": "largest_lat_step",
+            "reason": "наибольший скачок lat90 в mart; голова = разбираемый Version",
+            "lat_delta": jump.get("lat_delta"),
+        }
     return {
         "slice_runs": slice_runs,
         "largest_lat_step": jump,
+        "pr_window": pr_window,
         "baseline_candidate": baseline_candidate,
         "focus_row": focus_row,
         "peer_clusters_latest": peer_snapshot,
@@ -835,10 +928,16 @@ def summarize_olap_rows(
         jump=ydb_jump,
         focus_version=str(selection.get("focus_sha") or "")[:7] or None,
     )
+    last_stable = _olap_last_stable_before_focus(slice_runs)
+    pr_window = build_olap_pr_window(
+        slice_runs, fail_jump=fail_jump, ydb_jump=ydb_jump
+    )
     return {
         "slice_runs": slice_runs,
         "largest_fail_step": fail_jump,
         "largest_ydb_step": ydb_jump,
+        "last_stable_before_focus": last_stable,
+        "pr_window": pr_window,
         "baseline_candidate": baseline_candidate,
         "cross_suite": cross_suite,
         "peer_dbs": peer_dbs,

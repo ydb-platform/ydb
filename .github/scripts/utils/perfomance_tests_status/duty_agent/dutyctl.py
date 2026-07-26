@@ -6,7 +6,7 @@ CLI:
   prepare        detect-type + focus + priors (+ metrics if slow/tpcc)
   dig-runs       SQL + execute via ydb_client + summarize mart runs (+ baseline Allure)
   dig-baseline   fetch plans/logs from good historical run (baseline_candidate)
-  dig-prs        product PRs / hot areas in sha window
+  dig-prs        product PRs in mart pr_window (last stable→focus / jump)
   bisect         crash-path window + focus PR files
   validate       lint analysis.md
   inject-trace   rebuild action tree + inject <details> into analysis.md
@@ -735,38 +735,98 @@ def cmd_dig_baseline(args: argparse.Namespace) -> int:
             loaded.close()
 
 
+def _sha_for_compare(v) -> str:
+    """Normalize Version/sha for gh compare (strip main. prefix)."""
+    s = str(v or "").strip()
+    for prefix in ("main.", "origin/main.", "origin/"):
+        if s.startswith(prefix):
+            s = s[len(prefix) :]
+            break
+    return s
+
+
 def cmd_dig_prs(args: argparse.Namespace) -> int:
-    """Product PRs + hot areas between base…head (default: jump / history window)."""
+    """Product PRs + hot areas between base…head.
+
+    Default window = mart dig_runs.pr_window (last FailCount=0 → focus, or
+    ydb/lat jump) — **not** pack prev-green. Pack history is fallback only.
+    """
     loaded = _load_ctx(args.context) if args.context else None
     try:
         out_dir = ensure_run_dir(args.out_dir, loaded.ctx if loaded else None)
         base = args.base_sha
         head = args.head_sha
-        if (not base or not head) and (out_dir / "history.json").is_file():
-            hist = json.loads((out_dir / "history.json").read_text(encoding="utf-8"))
-            appeared = hist.get("appeared") or {}
-            base = base or appeared.get("prev_green_sha")
-            head = head or appeared.get("first_fail_sha") or appeared.get("focus_sha")
+        window_source = "cli" if (base and head) else None
+
+        # 1) Mart dig-runs first (last stable / metric jump) — before pack history.
         if (not base or not head) and (out_dir / "dig_runs.json").is_file():
             dig = json.loads((out_dir / "dig_runs.json").read_text(encoding="utf-8"))
             summary = dig.get("summary") or {}
-            # TPC-C: lat jump; OLAP slow: ydb jump; OLAP fail: fail jump
-            jump = (
-                summary.get("largest_lat_step")
-                or summary.get("largest_ydb_step")
-                or summary.get("largest_fail_step")
-                or {}
-            )
-            # versions are often full shas
-            if not base and jump.get("from_version"):
-                base = str(jump["from_version"])[:40]
-            if not head and jump.get("to_version"):
-                head = str(jump["to_version"])[:40]
-            if base and head:
+            pw = summary.get("pr_window") or {}
+            if pw.get("base") or pw.get("head"):
+                if not base and pw.get("base"):
+                    base = str(pw["base"])
+                if not head and pw.get("head"):
+                    head = str(pw["head"])
+                window_source = str(pw.get("source") or "pr_window")
                 print(
-                    f"dig-prs: window from dig_runs "
-                    f"{jump.get('metric') or 'jump'} "
-                    f"{str(base)[:7]}…{str(head)[:7]}",
+                    f"dig-prs: window from dig_runs.pr_window "
+                    f"source={window_source} "
+                    f"{_sha_for_compare(base)[:7]}…{_sha_for_compare(head)[:7]} "
+                    f"({pw.get('reason') or ''})",
+                    flush=True,
+                )
+            # Prefer ydb jump for slow-only suites when CLI did not force a window
+            if (out_dir / "detect_type.json").is_file() and not args.base_sha and not args.head_sha:
+                det = json.loads((out_dir / "detect_type.json").read_text(encoding="utf-8"))
+                types = det.get("analysis_types") or []
+                ydb_jump = summary.get("largest_ydb_step") or {}
+                if (
+                    "olap_slow" in types
+                    and "olap_fail" not in types
+                    and ydb_jump.get("from_version")
+                ):
+                    base = str(ydb_jump["from_version"])
+                    head = str(ydb_jump.get("to_version") or head or "")
+                    window_source = "largest_ydb_step"
+                    print(
+                        f"dig-prs: olap_slow → ydb jump "
+                        f"{_sha_for_compare(base)[:7]}…{_sha_for_compare(head)[:7]}",
+                        flush=True,
+                    )
+            if not base or not head:
+                jump = (
+                    summary.get("largest_lat_step")
+                    or summary.get("largest_ydb_step")
+                    or summary.get("largest_fail_step")
+                    or {}
+                )
+                if not base and jump.get("from_version"):
+                    base = str(jump["from_version"])
+                if not head and jump.get("to_version"):
+                    head = str(jump["to_version"])
+                if base and head and not window_source:
+                    window_source = str(jump.get("metric") or "jump")
+                    print(
+                        f"dig-prs: window from dig_runs jump "
+                        f"{window_source} "
+                        f"{_sha_for_compare(base)[:7]}…{_sha_for_compare(head)[:7]}",
+                        flush=True,
+                    )
+
+        # 2) Pack / history prev-green — fallback only
+        if (not base or not head) and (out_dir / "history.json").is_file():
+            hist = json.loads((out_dir / "history.json").read_text(encoding="utf-8"))
+            appeared = hist.get("appeared") or {}
+            if not base and appeared.get("prev_green_sha"):
+                base = appeared.get("prev_green_sha")
+                window_source = window_source or "pack_prev_green"
+            if not head:
+                head = appeared.get("first_fail_sha") or appeared.get("focus_sha")
+            if base and head and window_source == "pack_prev_green":
+                print(
+                    f"dig-prs: fallback pack history "
+                    f"{_sha_for_compare(base)[:7]}…{_sha_for_compare(head)[:7]}",
                     flush=True,
                 )
         if (not base or not head) and loaded:
@@ -775,7 +835,10 @@ def cmd_dig_prs(args: argparse.Namespace) -> int:
             appeared = hist.get("appeared") or {}
             base = base or appeared.get("prev_green_sha")
             head = head or appeared.get("first_fail_sha") or appeared.get("focus_sha")
-        # metrics_delta history: TPC-C lat jump or OLAP ydb jump
+            if base and head and not window_source:
+                window_source = "pack_prev_green"
+
+        # 3) metrics_delta history: TPC-C lat / OLAP ydb
         if (not base or not head) and (out_dir / "metrics_delta.json").is_file():
             md = json.loads((out_dir / "metrics_delta.json").read_text(encoding="utf-8"))
             labels = (md.get("history_tail") or {}).get("labels") or []
@@ -798,32 +861,48 @@ def cmd_dig_prs(args: argparse.Namespace) -> int:
                 if best_i is not None:
                     base = base or str(versions[best_i])
                     head = head or str(versions[best_i + 1])
+                    window_source = f"metrics_delta_{metric_name}"
                     print(
                         f"dig-prs: using largest {metric_name} step "
-                        f"{labels[best_i] if best_i < len(labels) else best_i} → "
-                        f"{labels[best_i+1] if best_i+1 < len(labels) else best_i+1} "
-                        f"(Δ={best_d:.0f})"
+                        f"from metrics_delta {_sha_for_compare(base)[:7]}…"
+                        f"{_sha_for_compare(head)[:7]} "
+                        f"(labels {labels[best_i] if best_i < len(labels) else '?'} → "
+                        f"{labels[best_i + 1] if best_i + 1 < len(labels) else '?'})",
+                        flush=True,
                     )
 
         if not base or not head:
             print(
-                "dig-prs: need --base-sha and --head-sha (or history/metrics_delta in -o)",
+                "dig-prs: need dig-runs (pr_window) or --base-sha/--head-sha",
                 file=sys.stderr,
             )
             return 2
 
-        result = dig_prs_window(str(base), str(head))
+        base_cmp = _sha_for_compare(base)
+        head_cmp = _sha_for_compare(head)
+        result = dig_prs_window(base_cmp, head_cmp)
+        result["window_source"] = window_source
+        result["window_reason"] = None
+        if (out_dir / "dig_runs.json").is_file():
+            try:
+                dig = json.loads((out_dir / "dig_runs.json").read_text(encoding="utf-8"))
+                pw = (dig.get("summary") or {}).get("pr_window") or {}
+                if pw.get("reason") and window_source == pw.get("source"):
+                    result["window_reason"] = pw.get("reason")
+            except (OSError, json.JSONDecodeError, TypeError, ValueError):
+                pass
         write_json(out_dir / "dig_prs.json", result)
         print(f"wrote {out_dir / 'dig_prs.json'}")
         n_hot = len(result.get("hot_prs") or result.get("prs") or [])
         n_prod = len(result.get("product_prs") or [])
+        src_bit = f"; source={window_source}" if window_source else ""
         trace_record(
             out_dir,
             "dig-prs",
             kind="stage",
             detail=(
-                f"окно {str(base)[:7]}…{str(head)[:7]}; "
-                f"product PR={n_prod}; горячих={n_hot}"
+                f"окно {base_cmp[:7]}…{head_cmp[:7]}; "
+                f"product PR={n_prod}; горячих={n_hot}{src_bit}"
             ),
             status="error" if result.get("error") else "ok",
         )
@@ -840,6 +919,7 @@ def cmd_dig_prs(args: argparse.Namespace) -> int:
             loaded.close()
 
 
+
 def cmd_bisect(args: argparse.Namespace) -> int:
     """Path window prev…head + files of focus/first-fail PR."""
     loaded = _load_ctx(args.context) if args.context else None
@@ -852,6 +932,26 @@ def cmd_bisect(args: argparse.Namespace) -> int:
             history = analyze_history(loaded.ctx)
             write_json(out_dir / "history.json", history)
         appeared = dict(history.get("appeared") or {})
+        # Prefer mart pr_window over pack prev-green when CLI did not force shas.
+        if (not args.prev_sha or not args.head_sha) and (out_dir / "dig_runs.json").is_file():
+            try:
+                dig = json.loads((out_dir / "dig_runs.json").read_text(encoding="utf-8"))
+                pw = (dig.get("summary") or {}).get("pr_window") or {}
+                if not args.prev_sha and pw.get("base"):
+                    appeared["prev_green_sha"] = _sha_for_compare(pw["base"])
+                if not args.head_sha and pw.get("head"):
+                    appeared["first_fail_sha"] = _sha_for_compare(pw["head"])
+                    appeared["focus_sha"] = _sha_for_compare(pw["head"])
+                if pw.get("base") or pw.get("head"):
+                    print(
+                        f"bisect: window from dig_runs.pr_window "
+                        f"source={pw.get('source')} "
+                        f"{_sha_for_compare(pw.get('base'))[:7]}…"
+                        f"{_sha_for_compare(pw.get('head'))[:7]}",
+                        flush=True,
+                    )
+            except (OSError, json.JSONDecodeError, TypeError, ValueError):
+                pass
         if args.prev_sha:
             appeared["prev_green_sha"] = args.prev_sha
         if args.head_sha:
@@ -1206,11 +1306,19 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser(
         "dig-prs",
-        help="product PRs + hot areas in base…head (jump window)",
+        help="product PRs in mart pr_window (last FailCount=0→focus / ydb|lat jump; pack prev-green is fallback)",
     )
     p.add_argument("--context", "-c", type=Path, default=None)
-    p.add_argument("--base-sha", default=None)
-    p.add_argument("--head-sha", default=None)
+    p.add_argument(
+        "--base-sha",
+        default=None,
+        help="override base (default: dig_runs.summary.pr_window.base)",
+    )
+    p.add_argument(
+        "--head-sha",
+        default=None,
+        help="override head (default: dig_runs.summary.pr_window.head / focus)",
+    )
     add_out(p)
     p.set_defaults(func=cmd_dig_prs)
 

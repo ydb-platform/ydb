@@ -408,7 +408,13 @@ def rebuild_from_artifacts(out_dir: Path) -> dict[str, Any]:
         bc = s.get("baseline_candidate") or {}
         fail = s.get("largest_fail_step") or {}
         ydb = s.get("largest_ydb_step") or {}
+        pw = s.get("pr_window") or {}
         parts = [f"срезов={_fmt_val(s.get('slice_count'))}"]
+        if pw.get("base") or pw.get("head"):
+            parts.append(
+                f"pr_window {_short_sha(pw.get('base'))}→{_short_sha(pw.get('head'))}"
+                f" ({pw.get('source') or '?'})"
+            )
         if fail.get("to_version") or fail.get("delta"):
             parts.append(
                 f"fail↑ {_short_sha(fail.get('from_version'))}→{_short_sha(fail.get('to_version'))}"
@@ -431,7 +437,9 @@ def rebuild_from_artifacts(out_dir: Path) -> dict[str, Any]:
         h = _short_sha(d.get("head") or d.get("head_sha"))
         n_prod = len(d.get("product_prs") or [])
         win = f"{b}…{h}" if b or h else "—"
-        return f"окно {win}; product PR={n_prod}; горячих={len(hot)}"
+        src = d.get("window_source")
+        src_bit = f"; source={src}" if src else ""
+        return f"окно {win}; product PR={n_prod}; горячих={len(hot)}{src_bit}"
 
     def _fmt_bisect(d: dict[str, Any]) -> str:
         paths = list(d.get("paths") or [])

@@ -36,7 +36,7 @@ OUT=./runs/my-case
 | `prepare -c CONTEXT -o $OUT` | facts: detect + Allure focus(+fatal) + priors + metrics |
 | `dig-runs -c CONTEXT -o $OUT` | Mart history (~35d): execute + summarize; auto `baseline_focus.json` for slow/lat |
 | `dig-baseline -o $OUT [-c CONTEXT]` | re-fetch / override baseline Allure plans+logs |
-| `dig-prs -o $OUT [--base-sha … --head-sha …]` | product PRs + hot areas in jump window |
+| `dig-prs -o $OUT [--base-sha … --head-sha …]` | product PRs; default window = mart `pr_window` (last stable→focus / ydb|lat jump), not pack prev-green |
 | `bisect -o $OUT [-c CONTEXT] [--path …]` | code window on **tested** sha vs prev + focus PR files |
 | `inject-trace -o $OUT` | rebuild `action_tree.json` + inject `<details>` tree into `analysis.md` |
 | `trace-note -o $OUT "…"` | append hypothesis/dig/decision node to the action tree |
@@ -64,10 +64,17 @@ Extra digs: `gh search` / browse code at tested sha. Offline mart: `dig-runs --f
        OLAP  — related suite families + all DbAlias; fail/ydb jumps; cross_suite + peer_dbs
      If summary.window_edge_hint → widen --days-before and re-run dig-runs
      If baseline missing Report → dig-baseline --report-url … or widen window
-4) DIG CODE IN THE JUMP INTERVAL (not only PR of the alert commit):
-     dutyctl dig-prs -o $OUT   # OLAP: largest_ydb_step / fail_step; TPC-C: lat step
-     dutyctl bisect …          # crash path, or optimizer/CS path from plan_compare
+4) DIG CODE IN THE MART WINDOW (not only pack prev-green / alert commit):
+     dutyctl dig-prs -o $OUT   # после dig-runs; **без** --base-sha из пака
+       → окно = dig_runs.summary.pr_window:
+         OLAP fail: последний FailCount=0 на suite@db → focus
+         OLAP slow: largest_ydb_step; TPC-C: largest_lat_step
+       Pack prev-green — только fallback, если mart window нет.
+       Если сам нашёл более ранний стабильный в mart — используй его (или
+       `dig-prs --base-sha <stable> --head-sha <focus>`), не окно алерта.
+     dutyctl bisect …          # тот же интервал / crash path
      read hot PR diffs @ tested sha — filter by plan hints (join/scan/kqp/cs)
+     В analysis «Кандидаты PR» укажи source окна (last_stable / ydb_step / …).
 5) Form hypothesis H → verify against dig_runs + dig_prs + plans/logs/code
      falsified → new H (≤3); culprit only if evidence bar met
 6) Self-check — if fail, dig more (do NOT jump to wait_next_wave early)
@@ -199,7 +206,7 @@ Put a clear line in the report: **Давность:** …
    В отчёте: Version/label baseline + «план совпал / разъехался» (`plan_compare.verdict`).  
 5. Если `plan_same` — копай логи baseline **и** focus (`kikimr__logs` в обоих) на runtime/infra.  
 6. **Код в окне jump (обязательно, как для fail/TPC-C):**
-   - `dutyctl dig-prs` на `largest_ydb_step` (from_version…to_version) — не PR алерт-коммита.  
+   - `dutyctl dig-prs -o $OUT` (окно из mart `pr_window` / ydb jump) — не PR алерт-коммита и не pack prev-green.  
    - Отфильтруй hot PR по `plan_compare` / hints:
      - `plan_regressed` → kqp / optimizer / statistics / columnshard reader / join  
      - `plan_same` → runtime / CS execute / conveyor / memory / IC (или infra)  
@@ -236,7 +243,7 @@ Put a clear line in the report: **Давность:** …
 1. `prepare` → lat/tpmC vs prev-7 in pack (short). If `focus_run.report` is set (Allure from Now join) — **read** `focus.json` attachments (`kikimr__stderr`, `kikimr__logs`, Stderr) like OLAP fail.  
 2. `dig-runs` (default ~35d, neighbors) → all `ydb_cli_*` on **all clusters**, same branch; slice_runs include `Report` when join hits. Use `largest_lat_step` on focus suite + `cross_run_type` + `peer_clusters_latest` (often jump ≠ alert commit). Widen window if edged.  
 3. Use harness knowledge to filter PRs (SnapshotRW vs StrictSerializable; WH scale).  
-4. `dig-prs` on the jump window.  
+4. `dig-prs -o $OUT` after dig-runs (mart `pr_window` / lat jump — not pack prev-green).  
 5. Only then: `wait_next_wave` / `investigate_further` / candidate.  
 **Forbidden:** skip Allure when URL is in the pack / pack metrics only / blame alert-commit PR without dig-runs/dig-prs.  
 **Report:** no harness dump unless one sentence narrows the product cause. Cross-suite = search filter, not root cause.  
@@ -251,7 +258,7 @@ Put a clear line in the report: **Давность:** …
 4. **Read logs** from `focus.json` when `olap_fail` **or** nodata branch = «в отчёте тоже нет» **or** slow path needs server-side evidence (`kikimr__stderr` + `kikimr__logs`).  
 5. If signals include `segfault` / `abort` / `verify`, or status is 2005+node-down: follow **Host journals + coredumps** (coredump URL / `/place/coredumps` / optional journalctl). Prefer stack over surface 2005.  
 6. `dig-runs` (~35d+, ydb_client) → related suites + **peer DbAlias**. Для nodata — Now vs mart SuccessCount/YdbSumMeans. Для slow — auto `baseline_focus` + ydb jump window for dig-prs.  
-7. Metrics + **dig-prs/bisect обязательны для slow/fail** (для «не доехали» — нет).  
+7. Metrics + **dig-prs/bisect обязательны для slow/fail** (для «не доехали» — нет). dig-prs без `--base-sha` из пака — окно из mart.  
 8. Use harness paths above when mechanism depends on upload vs query suite.
 
 ## Evidence bar (culprit)
@@ -267,7 +274,7 @@ Focus-wave PR alone forbidden. Unchanged crash path → do not blame that PR.
 For each problem, you can answer yes:
 
 - [ ] TPC-C / OLAP: `dig_runs.json` from mart (neighbors + ≥~month if needed), not only pack metrics  
-- [ ] TPC-C: `dig_prs.json` on the **jump** window (not only PR of alert commit)  
+- [ ] TPC-C / OLAP fail|slow: `dig_prs.json` on mart `pr_window` / jump (last stable→focus or ydb|lat step), not pack prev-green alone  
 - [ ] OLAP nodata: checked Allure/report for those queries; wrote branch «не доехали» **or** «в отчёте тоже нет → логи/кластер»  
 - [ ] OLAP slow: plans × iterations + `baseline_focus` / plan_compare + dig-prs on ydb jump + H-loop (≤3) + culprit only with evidence  
 - [ ] OLAP slow: if plan_same — server logs focus+baseline; if plan_regressed — code/bisect on planner/CS path  

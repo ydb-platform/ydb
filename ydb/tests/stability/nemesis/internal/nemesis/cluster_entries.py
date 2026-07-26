@@ -15,9 +15,9 @@ from typing import Any, Type
 
 from ydb.tests.library.common.types import TabletTypes
 from ydb.tests.stability.nemesis.internal.nemesis.runners import (
-    ClusterBulkChangeTabletGroupNemesis,
-    ClusterChangeTabletGroupNemesis,
-    ClusterKickTabletsFromNodeNemesis,
+    # ClusterBulkChangeTabletGroupNemesis,
+    # ClusterChangeTabletGroupNemesis,
+    # ClusterKickTabletsFromNodeNemesis,
     ClusterKillBlockstorePartitionNemesis,
     ClusterKillBlockstoreVolumeNemesis,
     ClusterKillBsControllerNemesis,
@@ -33,7 +33,7 @@ from ydb.tests.stability.nemesis.internal.nemesis.runners import (
     ClusterKillSlotDaemonNemesis,
     ClusterKillTenantSlotBrokerNemesis,
     ClusterKillTxAllocatorNemesis,
-    ClusterReBalanceTabletsNemesis,
+    # ClusterReBalanceTabletsNemesis,
     ClusterRollingRestartNemesis,
     ClusterSafelyBreakDiskNemesis,
     ClusterSafelyCleanupDisksNemesis,

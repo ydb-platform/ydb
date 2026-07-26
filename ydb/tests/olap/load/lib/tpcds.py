@@ -95,7 +95,7 @@ class TestTpcds10(TpcdsSuiteBase):
 
 class TestTpcds100(TpcdsSuiteBase):
     scale: int = 100
-    iterations: int = 2
+    iterations: int = 10
     timeout = max(TpcdsSuiteBase.timeout, 3600.)
     query_settings = {
         14: LoadSuiteBase.QuerySettings(timeout=max(TpcdsSuiteBase.timeout, 7200.)),
@@ -125,7 +125,7 @@ class TestTpcds100(TpcdsSuiteBase):
 
 class TestTpcds1000(TpcdsSuiteBase):
     scale: int = 1000
-    iterations: int = 1
+    iterations: int = 10
     timeout = max(TpcdsSuiteBase.timeout, 3600.)
     tables_size: dict[str, int] = {
         'call_center': 42,

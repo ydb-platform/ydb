@@ -131,4 +131,7 @@ struct TKqpProviderContext : public TBaseProviderContext {
     double CONSTS_GRACEJOIN_OUTPUT_POW = 1.0;
 };
 
+// Creating this PR before the majo change to the main in Query Optimizer.
+// https://github.com/ydb-platform/ydb/pull/37509
+
 }

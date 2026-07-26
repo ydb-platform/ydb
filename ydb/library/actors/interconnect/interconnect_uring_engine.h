@@ -48,10 +48,18 @@ namespace NActors {
 
     using TUringEnginePtr = TIntrusivePtr<IUringEngine>;
 
-    // Creates the engine with `numShards` rings/reaper threads (clamped to >= 1). The engine is created
-    // without an actor system (it does not exist yet at startup); bind it later via SetActorSystem before the
-    // first Register. Returns nullptr when io_uring is unavailable (non-Linux or a kernel that cannot create
-    // a ring).
-    TUringEnginePtr CreateUringEngine(ui32 numShards, NMonitoring::TDynamicCounterPtr counters, bool sqpoll);
+    // Creates the engine with `numShards` worker threads (clamped to >= 1), each driving `ringsPerShard`
+    // io_uring rings (clamped to >= 1). With SQPOLL, each ring has its own kernel poll thread, so
+    // rings-per-shard scales submission-polling capacity independently of serialization workers.
+    // The engine is created without an actor system (it does not exist yet at startup); bind it later via
+    // SetActorSystem before the first Register. Returns nullptr when io_uring is unavailable (non-Linux or a
+    // kernel that cannot create a ring).
+    //
+    // When the kernel SQPOLL thread is saturated while shard workers still have headroom, try
+    // EnableSQPOLLv2=false (submit from the underutilized worker) or raise ringsPerShard. When workers are
+    // the bottleneck, raise numShards / lower ringsPerShard.
+    // sqThreadIdleMs is the SQPOLL kernel-thread idle timeout in milliseconds (ignored when sqpoll is false).
+    TUringEnginePtr CreateUringEngine(ui32 numShards, NMonitoring::TDynamicCounterPtr counters, bool sqpoll,
+        ui32 ringsPerShard = 1, ui32 sqThreadIdleMs = 2000, bool shareRingsAmongThreads = false);
 
 }

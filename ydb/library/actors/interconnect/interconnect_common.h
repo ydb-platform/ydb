@@ -85,15 +85,30 @@ namespace NActors {
         bool CollectSubscriptionStackTrace = false;
         bool UseUring = false;
         bool EnableUringSQPOLL = false; // only effective when UseUring is set
-        // Enables negotiation and usage of TInterconnectSessionTCPv2 (no session continuation, no encryption).
-        // v2 is used only when both peers have this enabled and encryption is not in effect.
-        bool EnableInterconnectSessionV2 = false;
-        bool ChecksumInterconnectSessionV2 = false;
-        // Use io_uring SQPOLL mode for the v2 data-plane rings (kernel-side submission polling).
-        bool EnableSQPOLLv2 = true;
-        // Preserialize outgoing events on the session mailbox before handing them to the v2 engine (moves
-        // serialization cost off the engine's shard worker thread).
-        bool EnablePreserializeInV2 = false;
+
+        struct {
+            // Enables negotiation and usage of TInterconnectSessionTCPv2 (no session continuation, no encryption).
+            // v2 is used only when both peers have this enabled and encryption is not in effect.
+            bool Enable = false;
+            bool ChecksumEvents = false;
+            // Use io_uring SQPOLL mode for the v2 data-plane rings (kernel-side submission polling).
+            // When the kernel poller is pegged (~100% CPU) while shard workers still have headroom, disable this
+            // so io_uring_submit/enter runs on the worker thread instead.
+            bool EnableSQPOLL = true;
+            // Preserialize outgoing events on the session mailbox before handing them to the v2 engine (moves
+            // serialization cost off the engine's shard worker thread).
+            bool EnablePreserializeEvents = false;
+            // Number of worker threads.
+            ui32 UringEngineThreads = 4;
+            // io_uring rings per v2 shard worker (default 1). Each ring may have its own SQPOLL thread, so this
+            // scales kernel submission-polling independently of the number of serialization workers.
+            ui32 UringEngineRingsPerShard = 1;
+            // SQPOLL kernel-thread idle window (ms) for v2 rings before it sleeps. Only used when EnableSQPOLLv2
+            // is on. Matches TUringContext::SqThreadIdleMs by default.
+            ui32 UringEngineSqThreadIdleMs = 2000;
+            // Enable kernel threads sharing among different worker threads.
+            bool ShareRingsAmongThreads = false;
+        } V2;
     };
 
     struct TWhiteboardSessionStatus {

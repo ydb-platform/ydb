@@ -311,6 +311,10 @@ def attach_tickets_to_report(
                 kind=kind,
             )
             item["tickets"] = tickets
+            # Wave=finished unwraps item.finished — keep pills on the twin too.
+            fin = item.get("finished")
+            if isinstance(fin, dict):
+                fin["tickets"] = tickets
             if tickets:
                 n += 1
     return n

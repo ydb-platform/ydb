@@ -888,6 +888,8 @@ function unwrapFinishedTwin(r) {
     ci_version: fin.ci_version || r.ci_version,
     wave: fin.wave || r.wave,
     issue,
+    // Duty pills live on the in_progress parent; finished twin must keep them in Wave=finished.
+    tickets: (r.tickets && r.tickets.length) ? r.tickets : (fin.tickets || []),
   };
 }
 /**

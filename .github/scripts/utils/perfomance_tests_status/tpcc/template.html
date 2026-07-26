@@ -1138,6 +1138,8 @@ function unwrapFinishedTwin(r) {
     wave: fin.wave || r.wave,
     version: fin.version || r.version,
     issue,
+    // Duty pills on parent; keep them when Wave=finished unwraps the twin.
+    tickets: (r.tickets && r.tickets.length) ? r.tickets : (fin.tickets || []),
   };
 }
 /**

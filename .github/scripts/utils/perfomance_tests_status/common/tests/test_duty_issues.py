@@ -166,6 +166,35 @@ class JoinTests(unittest.TestCase):
         self.assertEqual(data["inbox"][1]["tickets"], [])
         self.assertEqual(len(data["known_issues"]), 1)
 
+    def test_attach_copies_tickets_onto_finished_twin(self):
+        data = {
+            "inbox": [
+                {
+                    "suite": "UploadTpch1000",
+                    "db": "sas_big_column",
+                    "issue": "in_progress",
+                    "finished": {"issue": "failing", "status": "failing"},
+                },
+            ],
+            "ok": [],
+        }
+        issues = [
+            {
+                "number": 47871,
+                "title": "OLAP: range.Offset",
+                "url": "https://github.com/ydb-platform/ydb/issues/47871",
+                "kind": "olap",
+                "fingerprint": "read.cpp:59",
+                "keys": ["read.cpp:59"],
+                "affected": [
+                    {"suite": "UploadTpch1000", "db": "sas_big_column", "queries": ["Query12"]}
+                ],
+            }
+        ]
+        attach_tickets_to_report(data, issues, kind="olap")
+        self.assertEqual(data["inbox"][0]["tickets"][0]["number"], 47871)
+        self.assertEqual(data["inbox"][0]["finished"]["tickets"][0]["number"], 47871)
+
 
 if __name__ == "__main__":
     unittest.main()

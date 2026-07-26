@@ -866,7 +866,35 @@ class TraceTests(unittest.TestCase):
             write_json(d / "detect_type.json", {"analysis_types": ["olap_slow"]})
             write_json(
                 d / "dig_runs.json",
-                {"summary": {"slice_count": 3, "baseline_candidate": {"reason": "min_metric_with_report"}}},
+                {
+                    "summary": {
+                        "slice_count": 3,
+                        "row_count": 10,
+                        "baseline_candidate": {"reason": "min_metric_with_report"},
+                        "largest_fail_step": {
+                            "from_version": "main.aaa1111",
+                            "to_version": "main.bbb2222",
+                            "delta": 1,
+                        },
+                    }
+                },
+            )
+            write_json(
+                d / "dig_prs.json",
+                {
+                    "base": "aaa1111",
+                    "head": "bbb2222",
+                    "product_prs": [{"pr": 1}],
+                    "hot_prs": [{"pr": 1}],
+                },
+            )
+            write_json(
+                d / "code_bisect.json",
+                {
+                    "paths": ["ydb/core/formats/arrow/serializer/native.cpp"],
+                    "introduced_in_window": False,
+                    "window": {"base": "aaa1111", "head": "bbb2222"},
+                },
             )
             (d / "analysis.md").write_text(
                 """# Perf duty — t
@@ -893,6 +921,10 @@ https://proxy.sandbox.yandex-team.ru/1/index.html
                 encoding="utf-8",
             )
             trace_record(d, "H1: plan_same", kind="hypothesis", detail="runtime?")
+            # Simulate buggy repeated bisect stages (path=None) + dig-prs before rebuild sync
+            trace_record(d, "dig-prs", kind="stage", detail="hot=1")
+            trace_record(d, "bisect", kind="stage", detail="path=None introduced_in_window=False")
+            trace_record(d, "bisect", kind="stage", detail="path=None introduced_in_window=False")
             info = ensure_trace_in_analysis(d, rebuild=True)
             self.assertTrue(info["injected"])
             text = (d / "analysis.md").read_text(encoding="utf-8")
@@ -901,10 +933,23 @@ https://proxy.sandbox.yandex-team.ru/1/index.html
             self.assertIn("Дерево разбора", text)
             self.assertIn("H1: plan_same", text)
             self.assertIn("тип разбора", text)
-            # re-inject replaces block, does not duplicate markers
+            self.assertIn("Проверка пути в коде", text)
+            self.assertIn("native.cpp", text)
+            self.assertIn("не менялся в окне", text)
+            self.assertIn("окно aaa1111…bbb2222", text)
+            self.assertIn("fail↑", text)
+            self.assertNotIn("path=None", text)
+            self.assertNotIn("window=..", text)
+            # one artifacts rollup only
+            self.assertEqual(text.count("Сводка по артефактам"), 1)
+            # re-inject replaces block, does not duplicate markers / rollups
             ensure_trace_in_analysis(d, rebuild=True)
             text2 = (d / "analysis.md").read_text(encoding="utf-8")
             self.assertEqual(text2.count("duty-action-tree:start"), 1)
+            self.assertEqual(text2.count("Сводка по артефактам"), 1)
+            tree = json.loads((d / "action_tree.json").read_text(encoding="utf-8"))
+            arts = [n for n in tree["nodes"] if n.get("kind") == "artifacts"]
+            self.assertEqual(len(arts), 1)
 
     def test_render_ascii_nested(self):
         tree = {
@@ -913,14 +958,14 @@ https://proxy.sandbox.yandex-team.ru/1/index.html
                     "title": "prepare",
                     "status": "ok",
                     "children": [
-                        {"title": "detect", "status": "ok", "detail": "olap_slow", "children": []},
+                        {"title": "detect_type", "status": "ok", "detail": "olap_slow", "children": []},
                     ],
                 }
             ]
         }
         ascii_ = render_ascii_tree(tree)
-        self.assertIn("prepare", ascii_)
-        self.assertIn("detect", ascii_)
+        self.assertIn("Подготовка", ascii_)
+        self.assertIn("тип разбора", ascii_)
 
 
 class BaselineTests(unittest.TestCase):

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 import uuid
 from contextlib import contextmanager
@@ -15,6 +16,24 @@ from .run_dir import read_json, write_json
 TRACE_FILE = "action_tree.json"
 TRACE_MARK_START = "<!-- duty-action-tree:start -->"
 TRACE_MARK_END = "<!-- duty-action-tree:end -->"
+ARTIFACTS_NODE_ID = "artifacts_rollup"
+
+# Human-facing titles for CLI stages (report is Russian; keep agent notes as written).
+TITLE_RU: dict[str, str] = {
+    "prepare": "Подготовка",
+    "detect_type": "тип разбора",
+    "focus / Allure": "Allure разбираемого прогона",
+    "crash dig hints": "подсказки crash (coredump/journal)",
+    "priors / history": "прошлые Allure",
+    "metrics_delta": "метрики suite",
+    "dig-runs": "История прогонов (mart)",
+    "mart summarize": "сводка mart",
+    "baseline_candidate": "кандидат baseline",
+    "baseline_focus / plan_compare": "планы baseline",
+    "dig-prs": "PR в окне кода",
+    "bisect": "Проверка пути в коде",
+    "Сводка по артефактам": "Сводка по артефактам",
+}
 
 
 def _now_iso() -> str:
@@ -23,6 +42,43 @@ def _now_iso() -> str:
 
 def _new_id(prefix: str = "n") -> str:
     return f"{prefix}_{uuid.uuid4().hex[:8]}"
+
+
+def _human_title(title: str | None) -> str:
+    t = str(title or "?")
+    return TITLE_RU.get(t, t)
+
+
+def _fmt_val(v: Any) -> str:
+    """Compact values for humans (no Python list/dict repr)."""
+    if v is None:
+        return "—"
+    if isinstance(v, bool):
+        return "да" if v else "нет"
+    if isinstance(v, (list, tuple)):
+        if not v:
+            return "—"
+        return ", ".join(_fmt_val(x) for x in v[:12])
+    if isinstance(v, dict):
+        return ",".join(f"{k}={_fmt_val(val)}" for k, val in list(v.items())[:6])
+    s = str(v).strip()
+    return s if s else "—"
+
+
+def _short_sha(v: Any) -> str:
+    s = str(v or "").strip()
+    for prefix in ("main.", "origin/main.", "trunk."):
+        if s.startswith(prefix):
+            s = s[len(prefix) :]
+            break
+    return s[:7] if s else ""
+
+
+def _short_path(path: str | None) -> str:
+    if not path:
+        return "—"
+    p = str(path)
+    return p.rsplit("/", 1)[-1] if "/" in p else p
 
 
 def empty_tree(*, run_dir: str | None = None) -> dict[str, Any]:
@@ -162,19 +218,161 @@ def span(
         raise
 
 
+def _strip_artifact_nodes(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop auto rollups (including historical duplicates with same/different ids)."""
+    keep: list[dict[str, Any]] = []
+    for n in nodes:
+        if n.get("id") == ARTIFACTS_NODE_ID or n.get("kind") == "artifacts":
+            continue
+        keep.append(n)
+    return keep
+
+
+def _detail_is_placeholder(detail: Any) -> bool:
+    s = str(detail or "").strip()
+    if not s:
+        return True
+    return bool(
+        re.search(
+            r"path\s*=\s*None|path\s*=\s*—|window=\.\.|окно\s*—\s*$|introduced_in_window=None",
+            s,
+            re.I,
+        )
+    )
+
+
+def _sync_live_stages_from_files(tree: dict[str, Any], out_dir: Path) -> None:
+    """Refresh stage details from JSON (fixes stale path=None / Python-repr / empty windows)."""
+    files: dict[str, Any] = {}
+    for name in (
+        "dig_prs.json",
+        "code_bisect.json",
+        "dig_runs.json",
+        "detect_type.json",
+        "focus.json",
+        "metrics_delta.json",
+        "priors.json",
+    ):
+        p = out_dir / name
+        if p.is_file():
+            try:
+                files[name] = read_json(p)
+            except (OSError, json.JSONDecodeError, TypeError, ValueError):
+                pass
+
+    dig_prs = files.get("dig_prs.json")
+    bis = files.get("code_bisect.json")
+    dig_runs = files.get("dig_runs.json")
+    detect = files.get("detect_type.json")
+    focus = files.get("focus.json")
+    metrics = files.get("metrics_delta.json")
+    priors = files.get("priors.json")
+
+    nodes = list(tree.get("nodes") or [])
+    # Collapse consecutive placeholder bisect stages into one synced from file.
+    if bis and isinstance(bis, dict):
+        paths = list(bis.get("paths") or [])
+        path = bis.get("path") or (paths[0] if paths else None)
+        w = bis.get("window") or {}
+        changed = bis.get("introduced_in_window")
+        if changed is True:
+            ch = "менялся в окне"
+        elif changed is False:
+            ch = "не менялся в окне"
+        else:
+            ch = "окно не проверено"
+        wb, wh = _short_sha(w.get("base")), _short_sha(w.get("head"))
+        win = f"{wb}…{wh}" if wb or wh else "—"
+        new_detail = f"{_short_path(path)} — {ch}; окно {win}"
+        bisect_idxs = [i for i, n in enumerate(nodes) if n.get("title") == "bisect"]
+        if bisect_idxs:
+            keep_i = bisect_idxs[-1]
+            nodes[keep_i]["detail"] = new_detail
+            drop = {i for i in bisect_idxs[:-1] if _detail_is_placeholder(nodes[i].get("detail"))}
+            if drop:
+                nodes = [n for i, n in enumerate(nodes) if i not in drop]
+
+    for n in nodes:
+        title = n.get("title")
+        if title == "prepare":
+            for c in n.get("children") or []:
+                ct = c.get("title")
+                if ct == "detect_type" and isinstance(detect, dict):
+                    c["detail"] = (
+                        f"типы: {_fmt_val(detect.get('analysis_types'))}; "
+                        f"rollup={_fmt_val(detect.get('rollup'))}"
+                    )
+                elif ct == "focus / Allure" and isinstance(focus, dict):
+                    fatal = focus.get("fatal") or {}
+                    c["detail"] = (
+                        f"скачан={_fmt_val(focus.get('fetched'))}; "
+                        f"сигналы: {_fmt_val(fatal.get('signals'))}; "
+                        f"slow: {_fmt_val(focus.get('slow_query_names'))}"
+                    )
+                elif ct == "crash dig hints" and isinstance(focus, dict):
+                    fatal = focus.get("fatal") or {}
+                    c["detail"] = (
+                        f"coredump-ссылок={len(fatal.get('coredump_urls') or [])}; "
+                        f"journal-рецептов={len(fatal.get('journal_cmds') or [])}"
+                    )
+                elif ct == "priors / history" and isinstance(priors, dict):
+                    c["detail"] = (
+                        f"сканов={len(priors.get('prior_scans') or [])}; "
+                        f"same_class={_fmt_val(priors.get('same_class_before'))}"
+                    )
+                elif ct == "metrics_delta" and isinstance(metrics, dict):
+                    c["detail"] = f"флаги: {_fmt_val(metrics.get('flags'))}"
+        if title == "dig-prs" and isinstance(dig_prs, dict):
+            hot = dig_prs.get("hot_prs") or dig_prs.get("prs") or []
+            b = _short_sha(dig_prs.get("base") or dig_prs.get("base_sha"))
+            h = _short_sha(dig_prs.get("head") or dig_prs.get("head_sha"))
+            n_prod = len(dig_prs.get("product_prs") or [])
+            win = f"{b}…{h}" if b or h else "—"
+            n["detail"] = f"окно {win}; product PR={n_prod}; горячих={len(hot)}"
+        if title == "dig-runs" and isinstance(dig_runs, dict):
+            s = dig_runs.get("summary") or {}
+            fail = s.get("largest_fail_step") or {}
+            ydb = s.get("largest_ydb_step") or {}
+            bc = s.get("baseline_candidate") or {}
+            bits = [f"срезов={_fmt_val(s.get('slice_count'))}"]
+            if fail.get("to_version") or fail.get("delta"):
+                bits.append(
+                    f"fail↑ {_short_sha(fail.get('from_version'))}→{_short_sha(fail.get('to_version'))}"
+                )
+            if ydb.get("to_version") or ydb.get("delta"):
+                bits.append(
+                    f"ydb↑ {_short_sha(ydb.get('from_version'))}→{_short_sha(ydb.get('to_version'))}"
+                )
+            n["detail"] = "; ".join(bits)
+            for c in n.get("children") or []:
+                if c.get("title") == "mart summarize":
+                    c["detail"] = (
+                        f"строк={_fmt_val(s.get('row_count'))}; "
+                        f"срезов={_fmt_val(s.get('slice_count'))}"
+                        + (f"; {'; '.join(bits[1:])}" if len(bits) > 1 else "")
+                    )
+                elif c.get("title") == "baseline_candidate" and bc:
+                    c["detail"] = (
+                        f"{bc.get('reason')}; Version={bc.get('Version')}; "
+                        f"metric={bc.get('metric_value')}; "
+                        f"report={'да' if bc.get('Report') else 'нет'}"
+                    )
+    tree["nodes"] = nodes
+
+
 def rebuild_from_artifacts(out_dir: Path) -> dict[str, Any]:
-    """Synthesize a tree from known duty artifacts (even if live trace was sparse)."""
+    """Keep live dig nodes; replace a single artifacts rollup (never append duplicates)."""
     tree = load_tree(out_dir)
-    # Keep live nodes; append an "Артефакты" branch summarizing files.
+    tree["nodes"] = _strip_artifact_nodes(list(tree.get("nodes") or []))
+    _sync_live_stages_from_files(tree, out_dir)
     art = add_node(
         tree,
         title="Сводка по артефактам",
         kind="artifacts",
         status="ok",
-        detail="автосборка из файлов run dir",
-        node_id="artifacts_rollup",
+        detail="итог файлов run dir (одна сводка)",
+        node_id=ARTIFACTS_NODE_ID,
     )
-    # wipe previous auto children if re-run
     art["children"] = []
 
     def child(title: str, detail: str | None = None, status: str = "ok") -> None:
@@ -192,52 +390,91 @@ def rebuild_from_artifacts(out_dir: Path) -> dict[str, Any]:
         )
 
     def _fmt_detect(d: dict[str, Any]) -> str:
-        return f"types={d.get('analysis_types')}"
+        return f"типы: {_fmt_val(d.get('analysis_types'))}; rollup={_fmt_val(d.get('rollup'))}"
 
     def _fmt_focus(d: dict[str, Any]) -> str:
         fatal = d.get("fatal") or {}
         return (
-            f"fetched={d.get('fetched')} signals={fatal.get('signals')} "
-            f"slow={d.get('slow_query_names')}"
+            f"скачан={_fmt_val(d.get('fetched'))}; "
+            f"сигналы: {_fmt_val(fatal.get('signals'))}; "
+            f"slow: {_fmt_val(d.get('slow_query_names'))}"
         )
 
     def _fmt_metrics(d: dict[str, Any]) -> str:
-        return f"flags={d.get('flags')}"
+        return f"флаги: {_fmt_val(d.get('flags'))}"
 
     def _fmt_dig_runs(d: dict[str, Any]) -> str:
         s = d.get("summary") or {}
         bc = s.get("baseline_candidate") or {}
-        return f"slice={s.get('slice_count')} baseline={bc.get('reason')}"
+        fail = s.get("largest_fail_step") or {}
+        ydb = s.get("largest_ydb_step") or {}
+        parts = [f"срезов={_fmt_val(s.get('slice_count'))}"]
+        if fail.get("to_version") or fail.get("delta"):
+            parts.append(
+                f"fail↑ {_short_sha(fail.get('from_version'))}→{_short_sha(fail.get('to_version'))}"
+            )
+        if ydb.get("to_version") or ydb.get("delta"):
+            parts.append(
+                f"ydb↑ {_short_sha(ydb.get('from_version'))}→{_short_sha(ydb.get('to_version'))}"
+            )
+        if bc.get("reason"):
+            parts.append(f"baseline={bc.get('reason')}")
+        return "; ".join(parts)
 
     def _fmt_baseline(d: dict[str, Any]) -> str:
         comps = (d.get("plan_compare") or {}).get("comparisons") or []
-        return f"fetched={d.get('fetched')} compare={len(comps)}"
+        return f"скачан={_fmt_val(d.get('fetched'))}; сравнений планов={len(comps)}"
 
     def _fmt_prs(d: dict[str, Any]) -> str:
         hot = d.get("hot_prs") or d.get("prs") or []
-        b = str(d.get("base_sha") or "")[:7]
-        h = str(d.get("head_sha") or "")[:7]
-        return f"window={b}..{h} hot={len(hot)}"
+        b = _short_sha(d.get("base") or d.get("base_sha"))
+        h = _short_sha(d.get("head") or d.get("head_sha"))
+        n_prod = len(d.get("product_prs") or [])
+        win = f"{b}…{h}" if b or h else "—"
+        return f"окно {win}; product PR={n_prod}; горячих={len(hot)}"
 
     def _fmt_bisect(d: dict[str, Any]) -> str:
-        return (
-            f"introduced_in_window={d.get('introduced_in_window')} "
-            f"path={d.get('path')}"
-        )
+        paths = list(d.get("paths") or [])
+        path = d.get("path") or (paths[0] if paths else None)
+        w = d.get("window") or {}
+        b = _short_sha(w.get("base"))
+        h = _short_sha(w.get("head"))
+        changed = d.get("introduced_in_window")
+        if changed is True:
+            ch = "менялся в окне"
+        elif changed is False:
+            ch = "не менялся в окне"
+        else:
+            ch = "окно не проверено"
+        extra = ""
+        if len(paths) > 1:
+            extra = f"; ещё путей: {len(paths) - 1}"
+        win = f"{b}…{h}" if b or h else "—"
+        return f"{_short_path(path)} — {ch}; окно {win}{extra}"
 
     def _fmt_priors(d: dict[str, Any]) -> str:
-        return f"same_class={d.get('same_class_before')}"
+        n = len(d.get("prior_scans") or [])
+        return f"сканов={n}; same_class={_fmt_val(d.get('same_class_before'))}"
 
     def _fmt_problems(d: Any) -> str:
         items = d if isinstance(d, list) else (d.get("items") or [])
-        return f"items={len(items)}"
+        analyzed = sum(
+            1
+            for it in items
+            if isinstance(it, dict) and str(it.get("status") or "") == "analyzed"
+        )
+        return f"проблем={len(items)}; разобрано={analyzed}"
 
     def _fmt_validate(d: dict[str, Any]) -> str:
         errs = d.get("errors") or []
-        return f"ok={d.get('ok')} errors={len(errs)}"
+        warns = d.get("warnings") or []
+        return f"ok={_fmt_val(d.get('ok'))}; ошибок={len(errs)}; предупреждений={len(warns)}"
 
     def _fmt_result(d: dict[str, Any]) -> str:
-        return f"status={d.get('status')} resolution={d.get('resolution')}"
+        return (
+            f"status={_fmt_val(d.get('status'))}; "
+            f"решение={_fmt_val(d.get('resolution'))}"
+        )
 
     mapping: list[tuple[str, str, Any]] = [
         ("detect_type.json", "тип разбора", _fmt_detect),
@@ -245,27 +482,36 @@ def rebuild_from_artifacts(out_dir: Path) -> dict[str, Any]:
         ("metrics_delta.json", "метрики suite", _fmt_metrics),
         ("dig_runs.json", "история mart", _fmt_dig_runs),
         ("baseline_focus.json", "Allure baseline", _fmt_baseline),
-        ("dig_prs.json", "PR в окне jump", _fmt_prs),
-        ("code_bisect.json", "окно кода", _fmt_bisect),
+        ("dig_prs.json", "PR в окне кода", _fmt_prs),
+        ("code_bisect.json", "проверка пути в коде", _fmt_bisect),
         ("priors.json", "прошлые Allure", _fmt_priors),
         ("problems.json", "problems.json", _fmt_problems),
-        ("analysis.md", "analysis.md", lambda _d: "written"),
+        ("analysis.md", "analysis.md", lambda _d: "есть"),
         ("validate.json", "validate", _fmt_validate),
         ("result.json", "result", _fmt_result),
     ]
     for fname, title, fmt in mapping:
         p = out_dir / fname
         if not p.is_file():
-            child(f"{title} — нет", status="missing")
+            # Optional for pure fail without baseline plans / metrics.
+            if fname in ("baseline_focus.json", "metrics_delta.json"):
+                child(f"{title} — нет (не нужен для этого типа)", status="skip")
+            else:
+                child(f"{title} — нет", status="missing")
             continue
         if fname.endswith(".md"):
             child(title, f"{p.stat().st_size} bytes")
             continue
         try:
             data = read_json(p)
-            child(title, fmt(data) if isinstance(data, dict) else str(type(data)))
+            if isinstance(data, dict):
+                child(title, fmt(data))
+            elif isinstance(data, list):
+                child(title, fmt(data))
+            else:
+                child(title, type(data).__name__)
         except (OSError, json.JSONDecodeError, TypeError, ValueError) as e:
-            child(title, f"read error: {e}", status="error")
+            child(title, f"ошибка чтения: {e}", status="error")
 
     # plan_compare verdicts as subtree
     bf = out_dir / "baseline_focus.json"
@@ -276,7 +522,7 @@ def rebuild_from_artifacts(out_dir: Path) -> dict[str, Any]:
             if comps:
                 pc = {
                     "id": _new_id("pc"),
-                    "title": "plan_compare",
+                    "title": "сравнение планов",
                     "kind": "compare",
                     "status": "ok",
                     "detail": f"{len(comps)} query",
@@ -292,7 +538,8 @@ def rebuild_from_artifacts(out_dir: Path) -> dict[str, Any]:
                             "kind": "compare",
                             "status": "ok",
                             "detail": (
-                                f"focus={c.get('focus_hints')} baseline={c.get('baseline_hints')}"
+                                f"разбираемый={_fmt_val(c.get('focus_hints'))}; "
+                                f"baseline={_fmt_val(c.get('baseline_hints'))}"
                             )[:400],
                             "meta": {},
                             "ts": _now_iso(),
@@ -310,17 +557,15 @@ def rebuild_from_artifacts(out_dir: Path) -> dict[str, Any]:
 def render_ascii_tree(tree: dict[str, Any]) -> str:
     lines: list[str] = []
 
-    def walk(nodes: list[dict[str, Any]], prefix: str = "", is_last_list: list[bool] | None = None) -> None:
+    def walk(nodes: list[dict[str, Any]], is_last_list: list[bool] | None = None) -> None:
         is_last_list = is_last_list or []
         for i, n in enumerate(nodes):
             last = i == len(nodes) - 1
             branch = "└─ " if last else "├─ "
-            pad = ""
-            for is_last in is_last_list:
-                pad += "   " if is_last else "│  "
+            pad = "".join("   " if is_last else "│  " for is_last in is_last_list)
             st = n.get("status") or ""
-            st_s = f" [{st}]" if st and st not in ("ok", "running") else ""
-            title = str(n.get("title") or "?")
+            st_s = f" [{st}]" if st and st not in ("ok", "running", "skip") else ""
+            title = _human_title(n.get("title"))
             detail = n.get("detail")
             line = f"{pad}{branch}{title}{st_s}"
             if detail:
@@ -328,21 +573,21 @@ def render_ascii_tree(tree: dict[str, Any]) -> str:
             lines.append(line)
             kids = list(n.get("children") or [])
             if kids:
-                walk(kids, prefix, is_last_list + [last])
+                walk(kids, is_last_list + [last])
 
     roots = list(tree.get("nodes") or [])
     if not roots:
         return "(пусто)"
     for i, n in enumerate(roots):
         st = n.get("status") or ""
-        st_s = f" [{st}]" if st and st not in ("ok",) else ""
-        head = f"{n.get('title')}{st_s}"
+        st_s = f" [{st}]" if st and st not in ("ok", "skip") else ""
+        head = f"{_human_title(n.get('title'))}{st_s}"
         if n.get("detail"):
             head += f" — {n['detail']}"
         lines.append(head)
         kids = list(n.get("children") or [])
         if kids:
-            walk(kids, "", [])
+            walk(kids, [])
         if i != len(roots) - 1:
             lines.append("")
     return "\n".join(lines)

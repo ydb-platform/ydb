@@ -400,17 +400,18 @@ Also update `$OUT/problems.json`.
 ## Ход разбора (дерево под кат)
 
 Пайплайн пишет `action_tree.json`. Перед validate / через `inject-trace` в `analysis.md`
-появляется секция **«Ход разбора»** с GitHub `<details>` — ASCII-дерево от prepare до result.
+появляется секция **«Ход разбора»** с GitHub `<details>` — ASCII-дерево для человека:
+что сделали → что нашли (без Python-repr и без дублей «Сводка по артефактам»).
 
-- CLI stages логируются сами (`prepare`, `dig-runs`, `baseline_focus`, `dig-prs`, `bisect`).  
-- Агент **обязан** добавлять смысловые узлы:
+- CLI stages логируются сами (Подготовка / mart / PR / путь в коде).  
+- Агент **обязан** добавлять смысловые узлы по-русски (итог dig, гипотеза, решение):
   ```bash
   dutyctl trace-note -o $OUT --kind hypothesis -- "H1: plan_regressed → kqp join"
-  dutyctl trace-note -o $OUT --kind dig --detail "stderr: no VERIFY" -- "read kikimr__stderr"
-  dutyctl trace-note -o $OUT --kind decision -- " culprits unknown; wait_next_wave"
+  dutyctl trace-note -o $OUT --kind dig --detail "stderr: нет VERIFY" -- "читал kikimr__stderr"
+  dutyctl trace-note -o $OUT --kind decision -- "виновник unknown; wait_next_wave"
   ```
 - Не дублируй дерево в Заключение — только под катом.  
-- `validate` сам обновляет кат; ручной `inject-trace` — если правишь analysis без validate.
+- `validate` сам обновляет кат (одна актуальная сводка артефактов); ручной `inject-trace` — если правишь analysis без validate.
 
 ## Rules
 

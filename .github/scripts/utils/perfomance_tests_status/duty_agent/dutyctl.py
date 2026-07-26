@@ -183,11 +183,12 @@ def _cmd_prepare_body(
     # 1) detect
     det = detect_type(ctx)
     write_json(out_dir / "detect_type.json", det)
+    types_s = ", ".join(str(t) for t in (det.get("analysis_types") or []))
     trace_record(
         out_dir,
         "detect_type",
         parent_id=str(prep["id"]),
-        detail=f"types={det.get('analysis_types')} rollup={det.get('rollup')}",
+        detail=f"типы: {types_s or '—'}; rollup={det.get('rollup') or '—'}",
     )
     probs_path = out_dir / "problems.json"
     if not probs_path.is_file():
@@ -263,13 +264,15 @@ def _cmd_prepare_body(
         for c in ((focus.get("allure") or {}).get("cases") or [])
         if (c.get("attach_analysis") or {}).get("plan_dig")
     )
+    sig_s = ", ".join(str(s) for s in (focus["fatal"].get("signals") or []))
+    slow_s = ", ".join(slow_names[:6]) if slow_names else "—"
     trace_record(
         out_dir,
         "focus / Allure",
         parent_id=str(prep["id"]),
         detail=(
-            f"fetched={focus.get('fetched')} signals={focus['fatal'].get('signals')} "
-            f"slow={slow_names[:6]} plan_dig_cases={n_plan}"
+            f"скачан={'да' if focus.get('fetched') else 'нет'}; "
+            f"сигналы: {sig_s or '—'}; slow: {slow_s}; планов={n_plan}"
         ),
         status="ok" if focus.get("fetched") or not need_remote else "error",
     )
@@ -296,7 +299,7 @@ def _cmd_prepare_body(
             out_dir,
             "crash dig hints",
             parent_id=str(prep["id"]),
-            detail=f"coredump_urls={n_core} journal_cmds={n_j}",
+            detail=f"coredump-ссылок={n_core}; journal-рецептов={n_j}",
         )
     if sandbox.get("error"):
         errors.append(
@@ -327,7 +330,10 @@ def _cmd_prepare_body(
         out_dir,
         "priors / history",
         parent_id=str(prep["id"]),
-        detail=f"prior_scans={len(contrast.get('prior_scans') or [])}",
+        detail=(
+            f"сканов={len(contrast.get('prior_scans') or [])}; "
+            f"same_class={'да' if contrast.get('same_class_before') else 'нет'}"
+        ),
     )
 
     # 4) metrics when relevant
@@ -343,11 +349,12 @@ def _cmd_prepare_body(
         md = metrics_delta(ctx)
         write_json(out_dir / "metrics_delta.json", md)
         print(f"metrics: flags={md.get('flags')}")
+        flags_s = ", ".join(str(f) for f in (md.get("flags") or []))
         trace_record(
             out_dir,
             "metrics_delta",
             parent_id=str(prep["id"]),
-            detail=f"flags={md.get('flags')}",
+            detail=f"флаги: {flags_s or '—'}",
         )
 
     focus_ok = bool(focus.get("fetched")) or not need_remote
@@ -502,13 +509,28 @@ def _summarize_and_write_dig(
         f"jump={jump}"
     )
     with trace_span(out_dir, "dig-runs", kind="stage") as stage:
+        fail_j = summary.get("largest_fail_step") or {}
+        ydb_j = summary.get("largest_ydb_step") or {}
+        jump_bits = []
+        if fail_j.get("to_version") or fail_j.get("delta"):
+            jump_bits.append(
+                f"fail↑ {str(fail_j.get('from_version') or '')[:7]}→"
+                f"{str(fail_j.get('to_version') or '')[:7]}"
+            )
+        if ydb_j.get("to_version") or ydb_j.get("delta"):
+            jump_bits.append(
+                f"ydb↑ {str(ydb_j.get('from_version') or '')[:7]}→"
+                f"{str(ydb_j.get('to_version') or '')[:7]}"
+            )
+        if not jump_bits and jump:
+            jump_bits.append(f"metric={(jump or {}).get('metric') or '—'}")
         trace_record(
             out_dir,
             "mart summarize",
             parent_id=str(stage["id"]),
             detail=(
-                f"rows={summary.get('row_count')} slice={summary.get('slice_count')} "
-                f"jump_metric={(jump or {}).get('metric') or (jump or {}).get('lat_delta')}"
+                f"строк={summary.get('row_count')}; срезов={summary.get('slice_count')}"
+                + (f"; {'; '.join(jump_bits)}" if jump_bits else "")
             ),
         )
         if summary.get("baseline_candidate"):
@@ -524,8 +546,9 @@ def _summarize_and_write_dig(
                 "baseline_candidate",
                 parent_id=str(stage["id"]),
                 detail=(
-                    f"{bc.get('reason')} Version={bc.get('Version')} "
-                    f"metric={bc.get('metric_value')} report={bool(bc.get('Report'))}"
+                    f"{bc.get('reason')}; Version={bc.get('Version')}; "
+                    f"metric={bc.get('metric_value')}; "
+                    f"report={'да' if bc.get('Report') else 'нет'}"
                 ),
             )
         if summary.get("window_edge_hint"):
@@ -535,14 +558,17 @@ def _summarize_and_write_dig(
             if (out_dir / "baseline_focus.json").is_file():
                 bf = json.loads((out_dir / "baseline_focus.json").read_text(encoding="utf-8"))
                 comps = (bf.get("plan_compare") or {}).get("comparisons") or []
-                verdicts = ",".join(
+                verdicts = ", ".join(
                     f"{c.get('query')}={c.get('verdict')}" for c in comps[:6]
                 )
                 trace_record(
                     out_dir,
                     "baseline_focus / plan_compare",
                     parent_id=str(stage["id"]),
-                    detail=f"fetched={bf.get('fetched')} {verdicts}",
+                    detail=(
+                        f"скачан={'да' if bf.get('fetched') else 'нет'}"
+                        + (f"; {verdicts}" if verdicts else "")
+                    ),
                     status="ok" if bf.get("fetched") else "error",
                 )
     return 0
@@ -790,11 +816,15 @@ def cmd_dig_prs(args: argparse.Namespace) -> int:
         write_json(out_dir / "dig_prs.json", result)
         print(f"wrote {out_dir / 'dig_prs.json'}")
         n_hot = len(result.get("hot_prs") or result.get("prs") or [])
+        n_prod = len(result.get("product_prs") or [])
         trace_record(
             out_dir,
             "dig-prs",
             kind="stage",
-            detail=f"{str(base)[:7]}…{str(head)[:7]} hot={n_hot}",
+            detail=(
+                f"окно {str(base)[:7]}…{str(head)[:7]}; "
+                f"product PR={n_prod}; горячих={n_hot}"
+            ),
             status="error" if result.get("error") else "ok",
         )
         if result.get("conclusion"):
@@ -861,13 +891,25 @@ def cmd_bisect(args: argparse.Namespace) -> int:
 
         write_json(out_dir / "code_bisect.json", bis)
         print(f"wrote {out_dir / 'code_bisect.json'}")
+        paths = list(bis.get("paths") or [])
+        path = bis.get("path") or (paths[0] if paths else None)
+        path_short = (str(path).rsplit("/", 1)[-1] if path else "—")
+        changed = bis.get("introduced_in_window")
+        if changed is True:
+            ch = "менялся в окне"
+        elif changed is False:
+            ch = "не менялся в окне"
+        else:
+            ch = "окно не проверено"
+        w = bis.get("window") or {}
+        wb = str(w.get("base") or "")[:7]
+        wh = str(w.get("head") or "")[:7]
+        win = f"{wb}…{wh}" if wb or wh else "—"
         trace_record(
             out_dir,
             "bisect",
             kind="stage",
-            detail=(
-                f"path={bis.get('path')} introduced_in_window={bis.get('introduced_in_window')}"
-            ),
+            detail=f"{path_short} — {ch}; окно {win}",
             status="error" if bis.get("error") else "ok",
         )
         if bis.get("conclusion"):

@@ -1,0 +1,26 @@
+{
+  "module_name": "Filters",
+  "calling_convention": "unversioned_value",
+  "module_extension": "wasm",
+  "required_libraries": ["sdk", "ctx_lib"],
+  "functions": [
+    {
+      "name": "ApplyA",
+      "export": "filter_a",
+      "argument_types": [
+        {"value": "uint64", "tag": "concrete_type"},
+        {"value": "int64", "tag": "concrete_type"}
+      ],
+      "result_type": {"value": "int64", "tag": "concrete_type"}
+    },
+    {
+      "name": "ApplyB",
+      "export": "filter_b",
+      "argument_types": [
+        {"value": "uint64", "tag": "concrete_type"},
+        {"value": "int64", "tag": "concrete_type"}
+      ],
+      "result_type": {"value": "int64", "tag": "concrete_type"}
+    }
+  ]
+}

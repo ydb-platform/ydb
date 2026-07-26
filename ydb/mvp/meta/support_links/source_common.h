@@ -19,10 +19,6 @@ inline bool HasUrlQuery(TStringBuf url) {
     return url.Contains('?');
 }
 
-inline bool HasUrlTemplatePlaceholders(TStringBuf url) {
-    return url.Contains('{') || url.Contains('}');
-}
-
 inline TString JoinUrl(TStringBuf endpoint, TStringBuf path) {
     const bool endpointHasSlash = endpoint.EndsWith('/');
     const bool pathHasSlash = path.StartsWith('/');

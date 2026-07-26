@@ -92,7 +92,7 @@ private:
             AFL_VERIFY(!!Owner);
         }
 
-        operator size_t() const {
+        explicit operator size_t() const {
             return CombineHashes(Owner.GetRawValue(), Tenant.Hash());
         }
         bool operator==(const TColumnOwnerId& other) const {

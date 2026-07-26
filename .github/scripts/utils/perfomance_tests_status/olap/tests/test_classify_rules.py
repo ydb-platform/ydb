@@ -20,7 +20,10 @@ from classify_rules import (  # noqa: E402
     fmt_fs,
     include_row_in_compare,
     is_fail_rate_hot,
+    normalize_side_for_react,
     olap_hard_band,
+    resolve_alert_cell,
+    resolve_compare_cell,
     resolve_compare_row,
     short_cell_status,
 )
@@ -286,6 +289,155 @@ class CoverageLabelTests(unittest.TestCase):
         )
         self.assertEqual(short_cell_status("missing", n_fail=3), "missing")
         self.assertEqual(short_cell_status("stale", n_slow=2), "stale")
+
+
+class NormalizeSideForReactTests(unittest.TestCase):
+    def test_fail_off_hides_failing_suite(self):
+        react = {"fail": False, "hard": False, "soft": False, "nodata": False}
+        got = normalize_side_for_react(_side("failing", n_fail=3), react)
+        self.assertEqual(got["status"], "ok")
+        self.assertEqual(got["n_fail"], 0)
+
+    def test_fail_on_keeps_failing(self):
+        got = normalize_side_for_react(_side("failing", n_fail=3), DEFAULT_REACT)
+        self.assertEqual(got["status"], "failing")
+        self.assertEqual(got["n_fail"], 3)
+
+    def test_hard_off_hides_slow(self):
+        got = normalize_side_for_react(_side("regression", n_slow=4), DEFAULT_REACT)
+        self.assertEqual(got["status"], "ok")
+        self.assertEqual(got["n_slow"], 0)
+
+    def test_stale_with_nodata_becomes_nodata(self):
+        react = {"fail": False, "hard": False, "soft": False, "nodata": True}
+        got = normalize_side_for_react(_side("stale", n_nodata=18), react)
+        self.assertEqual(got["status"], "nodata")
+        self.assertEqual(got["n_nodata"], 18)
+
+    def test_missing_stays_missing(self):
+        react = {"fail": False, "hard": False, "soft": False, "nodata": True}
+        got = normalize_side_for_react(_side("missing", n_nodata=2), react)
+        self.assertEqual(got["status"], "missing")
+
+
+class ResolveCompareCellTests(unittest.TestCase):
+    """Published bug: alert ok (React fail off) → compare select → red 'fail ='."""
+
+    def test_react_fail_off_equal_fails_is_ok_equals_not_fail(self):
+        react = {"fail": False, "hard": False, "soft": False, "nodata": True}
+        prev = _side("failing", n_fail=3)
+        now = _side("failing", n_fail=3)
+        cell = resolve_compare_cell(prev, now, react)
+        self.assertEqual(cell["delta"], "same")
+        self.assertEqual(cell["paint"], "ok")
+        self.assertEqual(cell["label"], "ok =")
+        self.assertFalse(cell["paint"].startswith("delta-"))
+        self.assertNotIn("fail", cell["label"])
+
+    def test_react_fail_on_equal_fails_is_fail_equals(self):
+        prev = _side("failing", n_fail=3)
+        now = _side("failing", n_fail=3)
+        cell = resolve_compare_cell(prev, now, DEFAULT_REACT)
+        self.assertEqual(cell["delta"], "same")
+        self.assertEqual(cell["paint"], "failing")
+        self.assertEqual(cell["label"], "fail 3 =")
+
+    def test_uploadtpch_style_alert_ok_compare_same(self):
+        # Alert path with fail off sees ok; compare must not invent red fail=.
+        react = {"fail": False, "hard": False, "soft": False, "nodata": False}
+        alert = resolve_alert_cell(_side("failing", n_fail=3, n_slow=0), react)
+        self.assertEqual(alert["paint"], "ok")
+        self.assertEqual(alert["label"], "ok")
+        cell = resolve_compare_cell(
+            _side("failing", n_fail=3), _side("failing", n_fail=3), react
+        )
+        self.assertEqual(cell["paint"], alert["paint"])
+        self.assertEqual(cell["label"], "ok =")
+
+    def test_real_fail_regression_still_delta_worse(self):
+        prev = _side("ok")
+        now = _side("failing", n_fail=2)
+        cell = resolve_compare_cell(prev, now, DEFAULT_REACT)
+        self.assertEqual(cell["delta"], "worse")
+        self.assertEqual(cell["paint"], "delta-worse")
+        self.assertEqual(cell["label"], "ok → fail 2")
+
+    def test_paint_matches_label_contract(self):
+        cases = [
+            (_side("ok"), _side("failing", n_fail=3), {"fail": False, "hard": False, "soft": False, "nodata": False}),
+            (_side("failing", n_fail=1), _side("failing", n_fail=1), DEFAULT_REACT),
+            (_side("ok"), _side("ok", n_slow=5), DEFAULT_REACT),
+            (_side("stale", n_nodata=47), _side("stale", n_nodata=47), {"fail": False, "hard": False, "soft": False, "nodata": True}),
+        ]
+        for prev, now, react in cases:
+            with self.subTest(prev=prev, now=now, react=react):
+                cell = resolve_compare_cell(prev, now, react)
+                # Never paint delta-* when labels are equal.
+                if " =" in cell["label"]:
+                    self.assertEqual(cell["delta"], "same")
+                    self.assertFalse(cell["paint"].startswith("delta-"))
+                # Never show bare 'fail' when React.fail is off.
+                if not react.get("fail"):
+                    self.assertNotRegex(cell["label"], r"\bfail\b")
+
+
+class ResolveAlertCellTests(unittest.TestCase):
+    def test_nodata_counts_paint_nodata(self):
+        react = {"fail": False, "hard": False, "soft": False, "nodata": True}
+        cell = resolve_alert_cell(_side("ok", n_nodata=73), react)
+        self.assertEqual(cell["paint"], "nodata")
+        self.assertEqual(cell["label"], "no data 73")
+
+    def test_empty_cell_is_noruns_not_nodata(self):
+        react = {"fail": False, "hard": False, "soft": False, "nodata": True}
+        cell = resolve_alert_cell(_side("nodata", n_nodata=0), react)
+        self.assertEqual(cell["paint"], "noruns")
+        self.assertEqual(cell["label"], "no runs")
+
+
+class QueryNodataCompareTests(unittest.TestCase):
+    """no data 73 → no data 73 must stay purple, never green ok =."""
+
+    def test_equal_query_nodata_is_not_ok_equals(self):
+        react = {"fail": False, "hard": False, "soft": False, "nodata": True}
+        prev = _side("nodata", n_nodata=73)
+        now = _side("nodata", n_nodata=73)
+        cell = resolve_compare_cell(prev, now, react)
+        self.assertEqual(cell["delta"], "same")
+        self.assertEqual(cell["paint"], "nodata")
+        self.assertEqual(cell["label"], "no data 73 =")
+        self.assertNotIn("ok", cell["label"])
+
+    def test_ok_to_nodata_is_delta_worse_purple(self):
+        react = {"fail": True, "hard": False, "soft": False, "nodata": True}
+        prev = _side("ok")
+        now = _side("nodata", n_nodata=73)
+        cell = resolve_compare_cell(prev, now, react)
+        self.assertEqual(cell["delta"], "worse")
+        self.assertTrue(cell["paint"].startswith("delta-worse"))
+        self.assertIn("delta-nodata", cell["paint"])
+        self.assertEqual(cell["label"], "ok → no data 73")
+
+    def test_nodata_to_ok_is_delta_better_purple(self):
+        react = {"fail": True, "hard": False, "soft": False, "nodata": True}
+        prev = _side("nodata", n_nodata=18)
+        now = _side("ok")
+        cell = resolve_compare_cell(prev, now, react)
+        self.assertEqual(cell["delta"], "better")
+        self.assertIn("delta-nodata", cell["paint"])
+
+    def test_nodata_count_up_is_worse(self):
+        react = {"fail": False, "hard": False, "soft": False, "nodata": True}
+        prev = _side("nodata", n_nodata=18)
+        now = _side("nodata", n_nodata=47)
+        self.assertEqual(compare_delta_olap(prev, now, react), "worse")
+
+    def test_paint_class_splits_noruns_and_query_nodata(self):
+        from classify_rules import paint_class_for_side
+
+        self.assertEqual(paint_class_for_side(_side("noruns")), "noruns")
+        self.assertEqual(paint_class_for_side(_side("nodata", n_nodata=0)), "noruns")
+        self.assertEqual(paint_class_for_side(_side("nodata", n_nodata=18)), "nodata")
 
 
 if __name__ == "__main__":

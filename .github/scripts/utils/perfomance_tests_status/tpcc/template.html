@@ -319,14 +319,6 @@
 <div class="wrap">
   <h1>TPC-C Now</h1>
   <div class="sub" id="subtitle"></div>
-  <div class="note">
-    Now = last completed vs prev <b id="lblBase">7</b> (median)
-    · Lat↑ ≥ +10% · tpmC↓ ≤ −10% · broken = lat cap / outlier
-    · Soft watch: lat ≥ +7% · tpmC ≤ −5% · <b>tpmC drift</b> ≤ −3.5% vs p90 lookback 21 (до prev7)
-    · Missing = нет в завершённой day-wave
-    · Compare paint = hard cross or Δ% ≥ +10pp / −10pp (не watch/шум)
-    · branches: <span id="lblAllBranches">all</span>
-  </div>
 
   <div class="top-filters" id="topFilters">
     <span class="lbl">Wave</span>
@@ -476,8 +468,17 @@ function lastCompletedHistIndex(hist) {
   }
   return n - 1;
 }
-/** Pairwise classify now vs a single baseline point (same thresholds as generate.classify_slice). */
+/** True when prev7 before index/wave has at least one metric — else classify is undefined. */
+function baselineUsable(lat_base, tpmc_base) {
+  return lat_base != null || tpmc_base != null;
+}
+/**
+ * Pairwise classify now vs a single baseline point (same thresholds as generate.classify_slice).
+ * Mirror: tpcc/classify_rules.py classify_pair_values
+ * Returns null when baseline is empty (unless capped) — never greenwash window-edge compare.
+ */
 function classifyPairValues(lat_base, tpmc_base, lat_now, tpmc_now, capped_now) {
+  if (!capped_now && !baselineUsable(lat_base, tpmc_base)) return null;
   const lat_pct = pctChange(lat_base, lat_now);
   const tpmc_pct = pctChange(tpmc_base, tpmc_now);
   let lat_status = 'ok';
@@ -567,6 +568,9 @@ function resolveDisplayMetrics(item) {
   const lat_now = capped ? lat_now_raw : lat_now_raw;
   const pair = classifyPairValues(lat_base, tpmc_base, capped ? null : lat_now, tpmc_now, capped);
   const day = wave.day || cmpId;
+  if (!pair) {
+    return { ...alert, note: `compare ${day}: empty baseline point` };
+  }
   return {
     mode: 'compare',
     lat_base,
@@ -952,7 +956,10 @@ function classifyAtIndex(hist, idx) {
   const latNow = capped ? null : (latNowRaw == null ? null : Number(latNowRaw));
   const tpmcNow = tpmcArr[idx] == null ? null : Number(tpmcArr[idx]);
   const { latBase, tpmcBase } = baselineBeforeIndex(hist, idx);
-  return pairToHeatStatus(classifyPairValues(latBase, tpmcBase, latNow, tpmcNow, capped));
+  const pair = classifyPairValues(latBase, tpmcBase, latNow, tpmcNow, capped);
+  // Empty prev7 → null (not fake ok). Caller falls back / skips.
+  if (!pair) return null;
+  return pairToHeatStatus(pair);
 }
 function sliceHistory(item) {
   if (item.issue === 'in_progress' && item.finished && item.finished.history) {
@@ -971,7 +978,8 @@ function classifySliceAtWave(item, wave) {
     }
     return { status: 'nodata', kind: 'nodata', n_lat: 0, n_tpmc: 0, n_broken: 0 };
   }
-  return classifyAtIndex(hist, idx) || { status: 'nodata', kind: 'nodata', n_lat: 0, n_tpmc: 0, n_broken: 0 };
+  // null = insufficient prev7 at this index (not the same as suite missing from wave).
+  return classifyAtIndex(hist, idx);
 }
 /** Now (last completed) vs selected compare-day raw values — used in dive Δ vs cmp. */
 function classifySlicePairwise(item, wave) {
@@ -992,7 +1000,12 @@ function classifySlicePairwise(item, wave) {
   const lat_now_raw = hist.lat90[nowIdx] == null ? null : Number(hist.lat90[nowIdx]);
   const tpmc_now = hist.tpmc[nowIdx] == null ? null : Number(hist.tpmc[nowIdx]);
   const capped = markers[nowIdx] === 'capped' || (lat_now_raw != null && lat_now_raw >= 30000);
-  return pairToHeatStatus(classifyPairValues(lat_base, tpmc_base, capped ? null : lat_now_raw, tpmc_now, capped));
+  // Pairwise uses the compare *point* as base (not prev7). Point itself is the baseline.
+  const pair = classifyPairValues(lat_base, tpmc_base, capped ? null : lat_now_raw, tpmc_now, capped);
+  if (!pair) {
+    return { status: 'nodata', kind: 'nodata', n_lat: 0, n_tpmc: 0, n_broken: 0, lat_pct: null, tpmc_pct: null };
+  }
+  return pairToHeatStatus(pair);
 }
 /**
  * Heatmap now-side: latest vs the *same* prev7 baseline as the compare wave.
@@ -1026,7 +1039,10 @@ function classifySliceNowVsWaveBaseline(item, wave) {
   const lat_now_raw = hist.lat90[nowIdx] == null ? null : Number(hist.lat90[nowIdx]);
   const tpmc_now = hist.tpmc[nowIdx] == null ? null : Number(hist.tpmc[nowIdx]);
   const capped = markers[nowIdx] === 'capped' || (lat_now_raw != null && lat_now_raw >= 30000);
-  return pairToHeatStatus(classifyPairValues(latBase, tpmcBase, capped ? null : lat_now_raw, tpmc_now, capped));
+  const pair = classifyPairValues(latBase, tpmcBase, capped ? null : lat_now_raw, tpmc_now, capped);
+  // Window-edge compare (no prev7 before wave) → skip; liveCell falls back to alert.
+  if (!pair) return null;
+  return pairToHeatStatus(pair);
 }
 /** Synthetic in_progress → finished twin for classify/compare (keeps branch/db/suite). */
 function unwrapFinishedTwin(r) {
@@ -1320,6 +1336,21 @@ function compareDeltaTpcc(prev, now) {
   }
   return 'same';
 }
+/** Mirror: tpcc/classify_rules.py resolve_compare_cell */
+function resolveCompareCell(prev, now) {
+  const delta = compareDeltaTpcc(prev, now);
+  const nowSt = now.status || 'ok';
+  const paint = delta === 'same' ? nowSt : `delta-${delta}`;
+  return {
+    ...now,
+    compare: true,
+    prev,
+    delta,
+    paint,
+    status: paint,
+    delta_status: nowSt,
+  };
+}
 function liveCell(branch, db, fam) {
   const alertNow = liveCellNow(branch, db, fam);
   const cmpId = getCompareId(branch, db);
@@ -1338,22 +1369,17 @@ function liveCell(branch, db, fam) {
       prevPart = { ...nowPart };
     } else {
       prevPart = classifySliceAtWave(r, wave);
-      if (!prevPart || prevPart.status === 'nodata') continue;
+      // Keep suite when prev lacks baseline but now classified (shouldn't happen often).
+      if (!prevPart) continue;
+      if (prevPart.status === 'nodata' && nowPart.status === 'ok') continue;
     }
     prevParts.push(prevPart);
     nowParts.push(nowPart);
   }
-  const prev = aggregateSide(prevParts);
-  const now = aggregateSide(nowParts);
-  const delta = compareDeltaTpcc(prev, now);
-  return {
-    ...now,
-    compare: true,
-    prev,
-    delta,
-    status: delta === 'same' ? now.status : `delta-${delta}`,
-    delta_status: now.status,
-  };
+  // No usable compare baseline (e.g. oldest wave / empty prev7) → keep alert paint.
+  // Fixes: green "ok =" while inbox still has alert-broken and DATA.ok is empty.
+  if (!nowParts.length) return alertNow;
+  return resolveCompareCell(aggregateSide(prevParts), aggregateSide(nowParts));
 }
 /** Compare-side label: always prefer % vs that side's baseline (not slice counts). */
 function sideMetricLabel(side) {
@@ -1495,23 +1521,13 @@ function fmtNM(n, m, selected) {
   return `<span class="sel">${N}</span>/${M}`;
 }
 function renderHeader() {
-  const ui = DATA.ui || {};
   const total = currentSummary();
   const sel = selectedSummary();
   const s = sel || total;
-  const br = selectedBranch();
-  const wv = waveView();
-  const heat = heatSelection();
-  document.getElementById('lblBase').textContent = String(ui.baseline_runs || 7);
-  document.getElementById('lblAllBranches').textContent = (ui.focus_branches || []).join(', ') || '—';
   const genAt = (DATA.generated_at || (DATA.meta && DATA.meta.generated_at) || '')
     .replace('T', ' ').replace('Z', ' UTC').slice(0, 22);
   document.getElementById('subtitle').innerHTML =
-    `Source: <code>${esc(DATA.source || '')}</code> · data ${esc(DATA.window || '')} · ` +
-    `built <b>${esc(genAt || '—')}</b> · ` +
-    `filter <b>${esc(winFrom || '…')} → ${esc(winTo || '…')}</b> · ` +
-    `branch <b>${esc(br || 'all')}</b> · wave <b>${esc(wv)}</b> · hot ${total.hot || 0}` +
-    (heat ? ` · heat <b>${esc(heat.db || '*')} × ${esc(heat.fam || '*')}</b> (N/M)` : '');
+    `Updated <b>${esc(genAt || '—')}</b>`;
 
   document.getElementById('counters').innerHTML = `
     <div class="counter miss"><div class="n">${fmtNM(s.missing, total.missing, !!sel)}</div><div class="lbl">Missing</div></div>
@@ -1594,10 +1610,10 @@ function renderHeatmap() {
         const heat = heatSelection();
         const selected = !!(heat && heat.db === db && heat.fam === fam
           && (!selectedBranch() || selectedBranch() === branch));
-        // same → keep now status color; delta-* when compare side actually moved
-        const cellCls = (live.compare && live.delta && live.delta !== 'same')
+        // paint from resolveCompareCell / alert liveCellNow
+        const cellCls = live.paint || ((live.compare && live.delta && live.delta !== 'same')
           ? (st.startsWith('delta-') ? st : `delta-${live.delta}`)
-          : (live.delta_status || st);
+          : (live.delta_status || st));
         html += `<td><div class="cell ${cellCls}${selected ? ' selected' : ''}" data-branch="${esc(branch)}" data-db="${esc(db)}" data-fam="${esc(fam)}" title="${esc(tip)}">${cellLabel(st, live)}</div></td>`;
       }
       html += compareSelectHtml(branch, db);
@@ -1638,6 +1654,8 @@ function renderHeatmap() {
         // delta-worse on an alert-ok slice used to force "all hot" → empty inbox.
         const live = liveCell(branch, db, fam);
         const nowSt = live.compare ? (live.delta_status || live.status) : (live.status || '');
+        // nodata cell ≠ ok: clear Issue so drill shows suites in Cluster×Run type
+        // (TPC-C has no dedicated nodata Issue option; false "ok" hid real data).
         if (nowSt === 'ok' || nowSt === 'watch') fIssue.value = 'ok';
         else if (nowSt === 'in_progress') fIssue.value = 'in_progress';
         else if (nowSt === 'missing') fIssue.value = 'missing';
@@ -1646,7 +1664,7 @@ function renderHeatmap() {
         else if (nowSt === 'lat') fIssue.value = 'lat';
         else if (nowSt === 'tpmc') fIssue.value = 'tpmc';
         else if (nowSt === 'both') fIssue.value = 'both';
-        else if (nowSt === 'nodata') fIssue.value = 'ok';
+        else if (nowSt === 'nodata') fIssue.value = '';
         else fIssue.value = '';
       }
       renderAll();
@@ -1664,7 +1682,8 @@ function filteredInbox() {
   const drill = !!(db && fam);
   let pool;
   if (issue === 'ok') {
-    pool = DATA.ok || [];
+    // Include hot rows whose compare-effective issue is ok (and vice versa via effectiveIssue).
+    pool = mergeRowPools(DATA.ok || [], candidateRows());
   } else if (issue === 'in_progress') {
     pool = (DATA.inbox || []).filter(r => r.issue === 'in_progress');
   } else if (!issue && drill) {
@@ -1680,7 +1699,8 @@ function filteredInbox() {
     if (fam && r.family !== fam) return false;
     if (!itemInWindow(r)) return false;
     if (issue === 'ok') {
-      if (r.issue !== 'ok' && r.issue !== 'watch') return false;
+      const eff = effectiveIssue(r);
+      if (r.issue !== 'ok' && r.issue !== 'watch' && eff !== 'ok' && eff !== 'watch') return false;
     } else if (issue === 'in_progress') {
       if (r.issue !== 'in_progress') return false;
     } else if (issue) {
@@ -1691,6 +1711,21 @@ function filteredInbox() {
       if (!isHotIssue(r.issue) && !isHotIssue(effectiveIssue(r))) return false;
     }
     // all hot + drill: any matching slice (ok or hot)
+    return true;
+  });
+}
+/** Heatmap drill safety: if Issue filter empties the slice, show all suites in that cell. */
+function filteredInboxOrDrill() {
+  const rows = filteredInbox();
+  if (rows.length) return rows;
+  const db = document.getElementById('fDb')?.value || '';
+  const fam = document.getElementById('fFam')?.value || '';
+  if (!db || !fam) return rows;
+  const br = selectedBranch();
+  return mergeRowPools(candidateRows(), DATA.ok || []).filter(r => {
+    if (br && r.branch !== br) return false;
+    if (r.db !== db || r.family !== fam) return false;
+    if (!itemInWindow(r)) return false;
     return true;
   });
 }
@@ -1826,7 +1861,7 @@ function mountHistory(item, id) {
   <div class="muted" style="margin-top:6px">
     Сырые прогоны · цвет vs median mavg(prev${win}) · тёмно-красный = lat cap ·
     синий = synthetic in_progress · оранжевый = synthetic missing ·
-    <b>жирная рамка</b> = now или cmp ·
+    <b>тёмная рамка</b> = now · <b>оранжевая</b> = compare ·
     <b>клик по столбцу → Allure report</b> (если есть; иначе DataLens)
     ${dashUrl ? ` · <a href="${esc(dashUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">DataLens</a>` : ''}
     ${(tpmcBase != null || latBase != null)
@@ -1854,10 +1889,10 @@ function mountHistory(item, id) {
       const valueFont = nBars > 24 ? '8px sans-serif' : (nBars > 14 ? '9px sans-serif' : '10px sans-serif');
       const unitSuffix = unit ? ` ${unit}` : '';
       const fmtU = (v) => (v == null || Number.isNaN(v)) ? '—' : `${fmt(v)}${unitSuffix}`;
-      // Keep status fill; selection = bold dark border (same for now + cmp).
+      // Keep status fill; now = dark border, compare = orange (OLAP parity).
       const bg = colors;
       const borderColors = (hist.labels || []).map((_, i) => (
-        (i === marks.now || i === marks.compare) ? '#1f2328' : 'transparent'
+        i === marks.now ? '#1f2328' : (i === marks.compare ? '#9a6700' : 'transparent')
       ));
       const borderWidths = (hist.labels || []).map((_, i) => (
         (i === marks.now || i === marks.compare) ? 3 : 0
@@ -2268,16 +2303,20 @@ function diveHtml(r, id) {
 }
 function renderInbox() {
   destroyCharts();
-  const rows = filteredInbox();
+  const rows = filteredInboxOrDrill();
   const root = document.getElementById('inbox');
   if (!rows.length) {
     const issue = document.getElementById('fIssue').value;
-    const drill = !!(document.getElementById('fDb').value && document.getElementById('fFam').value);
+    const db = document.getElementById('fDb')?.value || '';
+    const fam = document.getElementById('fFam')?.value || '';
+    const drill = !!(db && fam);
+    if (drill) {
+      root.innerHTML = '<div class="empty">no runs</div>';
+      return;
+    }
     root.innerHTML = issue === 'ok'
       ? '<div class="empty">Нет ok-slice под фильтры.</div>'
-      : (drill
-        ? '<div class="empty">Нет slice для этого Cluster × Run type в выбранном окне.</div>'
-        : '<div class="empty">Нет hot-проблем под фильтры — good.</div>');
+      : '<div class="empty">Нет hot-проблем под фильтры — good.</div>';
     return;
   }
   const body = rows.map((r, idx) => {

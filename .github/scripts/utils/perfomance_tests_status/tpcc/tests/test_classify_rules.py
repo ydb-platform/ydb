@@ -10,9 +10,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from classify_rules import (  # noqa: E402
+    baseline_usable,
+    classify_pair_values,
     compare_delta_tpcc,
     include_row_in_compare,
+    issue_filter_from_live,
+    resolve_compare_cell,
     resolve_compare_row,
+    side_metric_label,
     tpcc_hard_band,
 )
 from generate import (  # noqa: E402
@@ -258,6 +263,57 @@ class ReportJoinTests(unittest.TestCase):
         n = attach_reports(points, reports)
         self.assertEqual(n, 1)
         self.assertIn("/111/", points[0]["report"])
+
+
+class ClassifyPairBaselineTests(unittest.TestCase):
+    """Window-edge compare: empty prev7 must not classify as ok."""
+
+    def test_null_baseline_returns_none(self):
+        self.assertFalse(baseline_usable(None, None))
+        self.assertIsNone(classify_pair_values(None, None, 358.0, 148194.0, False))
+
+    def test_null_baseline_capped_still_broken(self):
+        got = classify_pair_values(None, None, None, 148194.0, True)
+        self.assertIsNotNone(got)
+        self.assertEqual(got["status"], "broken")
+
+    def test_outlier_with_baseline(self):
+        got = classify_pair_values(64.0, 151000.0, 358.0, 148194.0, False)
+        self.assertEqual(got["status"], "broken")
+        self.assertEqual(got["n_broken"], 1)
+
+    def test_ok_with_baseline(self):
+        got = classify_pair_values(64.0, 151000.0, 66.0, 151100.0, False)
+        self.assertEqual(got["status"], "ok")
+
+
+class ResolveCompareCellTpccTests(unittest.TestCase):
+    def test_equal_ok_label(self):
+        prev = _side("ok", lat_pct=1.0, tpmc_pct=0.0)
+        now = _side("ok", lat_pct=1.0, tpmc_pct=0.0)
+        cell = resolve_compare_cell(prev, now)
+        self.assertEqual(cell["delta"], "same")
+        self.assertEqual(cell["paint"], "ok")
+        self.assertTrue(cell["label"].endswith("=") or " =" in cell["label"])
+
+    def test_broken_same_not_ok_equals(self):
+        prev = _side("broken", n_broken=1, n_lat=1, lat_pct=400.0)
+        now = _side("broken", n_broken=1, n_lat=1, lat_pct=459.0)
+        cell = resolve_compare_cell(prev, now)
+        self.assertNotEqual(cell["paint"], "ok")
+        self.assertFalse(cell["label"].startswith("ok"))
+        self.assertNotEqual(cell["label"], "ok =")
+
+    def test_issue_filter_from_live_ok_and_broken(self):
+        self.assertEqual(
+            issue_filter_from_live({"compare": True, "delta_status": "ok", "status": "ok"}),
+            "ok",
+        )
+        self.assertEqual(
+            issue_filter_from_live({"compare": False, "status": "broken"}),
+            "broken",
+        )
+        self.assertEqual(side_metric_label(_side("ok")), "ok")
 
 
 if __name__ == "__main__":

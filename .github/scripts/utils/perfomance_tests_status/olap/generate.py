@@ -1611,13 +1611,13 @@ def render_html(data: dict, output: Path) -> None:
     html = tpl.replace("__OLAP_REPORT_DATA__", payload)
     html = re.sub(
         r"<title>.*?</title>",
-        f"<title>Olap results · {title_bit}</title>",
+        f"<title>OLAP Now · {title_bit}</title>",
         html,
         count=1,
     )
     html = re.sub(
         r"<h1>.*?</h1>",
-        f"<h1>Olap results · {title_bit}</h1>",
+        f"<h1>OLAP Now · {title_bit}</h1>",
         html,
         count=1,
     )

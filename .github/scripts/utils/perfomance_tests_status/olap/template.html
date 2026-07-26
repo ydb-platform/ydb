@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Olap results</title>
+<title>OLAP Now</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230969da'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='system-ui,sans-serif' font-size='15' font-weight='800' fill='white'%3EO%3C/text%3E%3C/svg%3E" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
@@ -47,7 +47,8 @@
   .badge.stale, .badge.watch { background: #fff8c5; color: var(--warn); }
   .badge.in_progress { background: #ddf4ff; color: var(--info); }
   .badge.ok { background: #dafbe1; color: var(--ok); }
-  .badge.nodata { background: #f6f8fa; color: var(--muted); }
+  .badge.nodata { background: var(--miss-bg); color: var(--miss); box-shadow: inset 0 0 0 1px #8250df66; }
+  .badge.noruns { background: #f6f8fa; color: var(--muted); box-shadow: inset 0 0 0 1px var(--border); }
   .pill {
     display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 999px;
     background: #eaeef2; color: var(--muted); font-weight: 600;
@@ -74,7 +75,8 @@
   .counter.info .n { color: var(--info); }
   .counter.warn .n { color: var(--warn); }
   .counter.ok .n { color: var(--ok); }
-  .counter.nodata .n { color: var(--muted); }
+  .counter.nodata .n { color: var(--miss); }
+  .counter.noruns .n { color: var(--muted); }
 
   .heat-wrap {
     background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
@@ -102,7 +104,9 @@
   .cell.missing { background: var(--miss-bg); color: var(--miss); cursor: pointer; }
   .cell.stale, .cell.watch { background: #fff8c5; color: var(--warn); cursor: pointer; }
   .cell.in_progress { background: #ddf4ff; color: var(--info); cursor: pointer; }
-  .cell.nodata { background: #f6f8fa; color: var(--muted); cursor: pointer; box-shadow: inset 0 0 0 1px var(--border); }
+  /* query gaps (no data N) = critical purple; empty cell (no runs) = muted grey */
+  .cell.nodata { background: var(--miss-bg); color: var(--miss); cursor: pointer; box-shadow: inset 0 0 0 1px #8250df66; }
+  .cell.noruns { background: #f6f8fa; color: var(--muted); cursor: pointer; box-shadow: inset 0 0 0 1px var(--border); }
   /* compare deltas: 40% was · 20% blend · 40% now (not a smear across the whole chip) */
   .cell.delta-worse {
     background: linear-gradient(90deg, #dafbe1 0%, #dafbe1 40%, #ffebe9 60%, #ffebe9 100%);
@@ -110,6 +114,15 @@
   }
   .cell.delta-better {
     background: linear-gradient(90deg, #ffebe9 0%, #ffebe9 40%, #dafbe1 60%, #dafbe1 100%);
+    color: #1a7f37; cursor: pointer;
+  }
+  /* nodata compare: green↔purple (query gaps), not red fail gradient */
+  .cell.delta-worse.delta-nodata, .cell.delta-worse-nodata {
+    background: linear-gradient(90deg, #dafbe1 0%, #dafbe1 40%, #fbefff 60%, #fbefff 100%);
+    color: var(--miss); cursor: pointer;
+  }
+  .cell.delta-better.delta-nodata, .cell.delta-better-nodata {
+    background: linear-gradient(90deg, #fbefff 0%, #fbefff 40%, #dafbe1 60%, #dafbe1 100%);
     color: #1a7f37; cursor: pointer;
   }
   .cell.delta-mixed {
@@ -127,6 +140,7 @@
   .run-card { cursor: pointer; transition: box-shadow .12s, border-color .12s; }
   .run-card:hover { border-color: var(--info); }
   .run-card.active { border-color: var(--info); box-shadow: 0 0 0 2px #0969da33; background: #f6f8fa; }
+  .run-card.cmp { border-color: #9a6700; box-shadow: 0 0 0 2px #9a670033; }
   .pill.delta-better {
     background: linear-gradient(90deg, #ffebe9 0%, #ffebe9 40%, #dafbe1 60%, #dafbe1 100%);
     color: #1a7f37; box-shadow: inset 0 0 0 1px #1a7f3766;
@@ -134,6 +148,14 @@
   .pill.delta-worse {
     background: linear-gradient(90deg, #dafbe1 0%, #dafbe1 40%, #ffebe9 60%, #ffebe9 100%);
     color: var(--bad); box-shadow: inset 0 0 0 1px #cf222e66;
+  }
+  .pill.delta-better.delta-nodata, .pill.delta-better-nodata {
+    background: linear-gradient(90deg, #fbefff 0%, #fbefff 40%, #dafbe1 60%, #dafbe1 100%);
+    color: #1a7f37; box-shadow: inset 0 0 0 1px #8250df66;
+  }
+  .pill.delta-worse.delta-nodata, .pill.delta-worse-nodata {
+    background: linear-gradient(90deg, #dafbe1 0%, #dafbe1 40%, #fbefff 60%, #fbefff 100%);
+    color: var(--miss); box-shadow: inset 0 0 0 1px #8250df66;
   }
   .pill.delta-soft {
     background: linear-gradient(90deg, #fff8c5 0%, #fff8c5 40%, #dafbe1 60%, #dafbe1 100%);
@@ -276,6 +298,35 @@
     width: 100%; border-radius: 6px; text-align: left; justify-content: flex-start;
     white-space: normal; line-height: 1.25; padding: 5px 8px;
   }
+  /* Compare query pills: name | was → now (centered) | extra */
+  .q-split-list .qlist .pill.q-pill-cmp {
+    display: grid;
+    grid-template-columns: minmax(64px, 26%) minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 6px 10px;
+    text-align: left;
+  }
+  .q-split-list .qlist .pill .q-name {
+    font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .q-split-list .qlist .pill .q-cmp-mid {
+    display: flex; align-items: baseline; justify-content: center; gap: 8px;
+    min-width: 0; font-variant-numeric: tabular-nums;
+  }
+  .q-split-list .qlist .pill .q-was {
+    flex: 1 1 0; text-align: right; opacity: .78; font-weight: 600;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .q-split-list .qlist .pill .q-arrow {
+    flex: 0 0 auto; opacity: .45; font-weight: 700;
+  }
+  .q-split-list .qlist .pill .q-now {
+    flex: 1 1 0; text-align: left; font-weight: 700;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .q-split-list .qlist .pill .q-extra {
+    opacity: .7; font-size: 11px; white-space: nowrap;
+  }
   .q-split-charts {
     min-width: 0; display: flex; flex-direction: column;
   }
@@ -301,7 +352,8 @@
   .pill.slow { background: #e8590c; color: #fff; }
   .pill.fail { background: #ffebe9; color: var(--bad); }
   .pill.qok { background: #dafbe1; color: var(--ok); }
-  .pill.nodata { background: #f6f8fa; color: var(--muted); box-shadow: inset 0 0 0 1px var(--border); }
+  .pill.nodata { background: var(--miss-bg); color: var(--miss); box-shadow: inset 0 0 0 1px #8250df66; }
+  .pill.noruns { background: #f6f8fa; color: var(--muted); box-shadow: inset 0 0 0 1px var(--border); }
   button.pill {
     border: 0; cursor: pointer; font: inherit; font-size: 11px; font-weight: 600;
     padding: 2px 7px; border-radius: 999px;
@@ -405,15 +457,8 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>Olap results</h1>
+  <h1>OLAP Now</h1>
   <div class="sub" id="subtitle"></div>
-  <div class="note">
-    Now = last completed vs prev <b id="lblBase">7</b>
-    · Missing = нет в завершённой волне
-    · In progress = волна едет (не алерт)
-    · Compare paint = только hard fail/slow (не soft/watch)
-    · branches: <span id="lblAllBranches">all</span>
-  </div>
 
   <div class="top-filters" id="topFilters">
     <span class="lbl">Wave</span>
@@ -427,7 +472,7 @@
       <button type="button" class="react-btn" data-react="fail" aria-pressed="true">fail</button>
       <button type="button" class="react-btn" data-react="hard" aria-pressed="false">hard</button>
       <button type="button" class="react-btn" data-react="soft" aria-pressed="false">soft</button>
-      <button type="button" class="react-btn" data-react="nodata" aria-pressed="false">no data</button>
+      <button type="button" class="react-btn" data-react="nodata" aria-pressed="true">no data</button>
     </span>
     <span class="sep"></span>
     <div class="filters" id="branchBar">
@@ -449,12 +494,15 @@
       <span class="swatch"><span class="dot" style="background:#ffd7d5;box-shadow:inset 0 0 0 1px #a40e26"></span>broken · hard fail / outlier</span>
       <span class="swatch"><span class="dot" style="background:#fff1e5;box-shadow:inset 0 0 0 1px #bc4c00"></span>hot · label = <b>slow N fail M</b></span>
       <span class="swatch"><span class="dot" style="background:#fbefff;box-shadow:inset 0 0 0 1px #8250df"></span>missing</span>
+      <span class="swatch"><span class="dot" style="background:#fbefff;box-shadow:inset 0 0 0 1px #8250df"></span>no data · query gaps</span>
       <span class="swatch"><span class="dot" style="background:#fff8c5;box-shadow:inset 0 0 0 1px #bf8700"></span>stale</span>
       <span class="swatch"><span class="dot" style="background:#ddf4ff;box-shadow:inset 0 0 0 1px #0969da"></span>in progress</span>
       <span class="swatch"><span class="dot" style="background:#dafbe1;box-shadow:inset 0 0 0 1px #1a7f37"></span>ok</span>
-      <span class="swatch"><span class="dot" style="background:#f6f8fa;box-shadow:inset 0 0 0 1px #d0d7de"></span>no data</span>
+      <span class="swatch"><span class="dot" style="background:#f6f8fa;box-shadow:inset 0 0 0 1px #d0d7de"></span>no runs</span>
       <span class="swatch"><span class="dot" style="background:linear-gradient(90deg,#dafbe1 0%,#dafbe1 40%,#ffebe9 60%,#ffebe9 100%);box-shadow:inset 0 0 0 1px #cf222e"></span>compare worse</span>
       <span class="swatch"><span class="dot" style="background:linear-gradient(90deg,#ffebe9 0%,#ffebe9 40%,#dafbe1 60%,#dafbe1 100%);box-shadow:inset 0 0 0 1px #1a7f37"></span>compare better</span>
+      <span class="swatch"><span class="dot" style="background:linear-gradient(90deg,#dafbe1 0%,#dafbe1 40%,#fbefff 60%,#fbefff 100%);box-shadow:inset 0 0 0 1px #8250df"></span>compare no data worse</span>
+      <span class="swatch"><span class="dot" style="background:linear-gradient(90deg,#fbefff 0%,#fbefff 40%,#dafbe1 60%,#dafbe1 100%);box-shadow:inset 0 0 0 1px #8250df"></span>compare no data better</span>
       <span class="swatch"><span class="dot" style="background:linear-gradient(90deg,#fff8c5 0%,#fff8c5 40%,#ddf4ff 60%,#ddf4ff 100%);box-shadow:inset 0 0 0 1px #9a6700"></span>compare mixed</span>
     </div>
     <div id="heatmap"></div>
@@ -523,7 +571,7 @@ let winFrom = UI.default_from || null;
 let winTo = UI.default_to || null;
 const REACT_KEY = 'olap_now_react_signals';
 const WAVE_KEY = 'olap_now_wave_view';
-function defaultReact() { return { fail: true, hard: false, soft: false, nodata: false }; }
+function defaultReact() { return { fail: true, hard: false, soft: false, nodata: true }; }
 function loadReact() {
   try {
     const o = JSON.parse(localStorage.getItem(REACT_KEY) || '');
@@ -592,6 +640,13 @@ function setCompareId(branch, db, id) {
   if (!id) delete compareState[k];
   else compareState[k] = id;
   try { sessionStorage.setItem(CMP_KEY, JSON.stringify(compareState)); } catch (_) {}
+}
+/** Keep dive/query "now" on latest when compare changes (cards ↔ heatmap stay in sync). */
+function clearDiveFocusForDb(branch, db) {
+  const prefix = `${branch || ''}|${db || ''}|`;
+  for (const k of Object.keys(diveRunFocus)) {
+    if (k.startsWith(prefix)) delete diveRunFocus[k];
+  }
 }
 function waveListFor(branch, db) {
   return (DATA.wave_list && DATA.wave_list[cmpKey(branch, db)]) || [];
@@ -793,6 +848,7 @@ function shortCellStatus(st, nFail, nSlow, nSoft, nNodata) {
   if (st === 'missing') return 'missing';
   if (st === 'stale') return 'stale';
   if (st === 'in_progress') return 'in progress';
+  if (st === 'noruns') return 'no runs';
   // Counts next — same order as fmtFS / legend (slow N fail M).
   // Do NOT map status "regression" → "slow" when only fails are present.
   const fs = fmtFS(nFail || 0, nSlow || 0, nSoft || 0, nNodata || 0);
@@ -803,7 +859,8 @@ function shortCellStatus(st, nFail, nSlow, nSoft, nNodata) {
   if (st === 'broken' || st === 'failing' || st === 'fail') return 'fail';
   if (st === 'regression' || st === 'slower' || st === 'slow') return 'hot';
   if (st === 'watch') return 'soft';
-  if (st === 'nodata') return 'no data';
+  // Bare nodata without counts = empty cell → no runs (not query gaps).
+  if (st === 'nodata') return (nNodata || 0) > 0 ? 'no data' : 'no runs';
   if (st === 'both') return 'fail+slow';
   return 'ok';
 }
@@ -859,9 +916,16 @@ function countQueryKindsAt(item, resolveIdx) {
   let n_fail = 0, n_slow = 0, n_soft = 0, n_nodata = 0;
   for (const q of (item.queries || [])) {
     const qh = q.history;
-    if (!qh) continue;
+    if (!qh) {
+      // No history: trust catalog kind (alert path uses the same).
+      if (q.kind === 'nodata' || q.kind === 'missing' || q.kind === 'in_progress') n_nodata++;
+      else if (q.kind === 'fail' || q.kind === 'both') n_fail++;
+      if (q.kind === 'slow' || q.kind === 'both') n_slow++;
+      if (q.kind === 'watch') n_soft++;
+      continue;
+    }
     const resolved = resolveIdx(qh);
-    if (!resolved || resolved.nowIdx < 0) continue;
+    if (!resolved || resolved.nowIdx < 0) { n_nodata++; continue; }
     const qm = classifyAtIndex(
       qh.ydb, qh.fail_rate, resolved.nowIdx, qh.nodata, qh.markers, resolved.baseEndIdx
     );
@@ -871,6 +935,24 @@ function countQueryKindsAt(item, resolveIdx) {
     if (qm.kind === 'watch') n_soft++;
   }
   return { n_fail, n_slow, n_soft, n_nodata };
+}
+/** Catalog kinds from generate (same source as inbox / liveCellNow). */
+function catalogKindCounts(item) {
+  const sp = querySplit(item);
+  return {
+    n_fail: sp.fail.size,
+    n_slow: sp.slow.size,
+    n_soft: sp.soft.size,
+    n_nodata: sp.nodata.size,
+  };
+}
+function mergeKindCounts(a, b) {
+  return {
+    n_fail: Math.max(a.n_fail || 0, b.n_fail || 0),
+    n_slow: Math.max(a.n_slow || 0, b.n_slow || 0),
+    n_soft: Math.max(a.n_soft || 0, b.n_soft || 0),
+    n_nodata: Math.max(a.n_nodata || 0, b.n_nodata || 0),
+  };
 }
 function classifySuiteAtWave(item, wave) {
   if (!wave) return null;
@@ -924,15 +1006,23 @@ function classifySuiteNowVsWaveBaseline(item, wave) {
     return { status: 'nodata', kind: 'nodata', ydb_pct: null, n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 1 };
   }
   const m = classifyAtIndex(hist.ydb, hist.fail_rate, nowIdx, hist.nodata, hist.markers, cmpIdx);
-  const counts = countQueryKindsAt(item, qh => {
+  const histCounts = countQueryKindsAt(item, qh => {
     const qCmp = findHistIndexForWave(qh, wave);
     const qNow = lastCompletedHistIndex(qh);
     if (qCmp < 0 || qNow < 0) return null;
     return { nowIdx: qNow, baseEndIdx: qCmp };
   });
+  // Merge catalog: hist reclassify alone greenwashes "no data 73" → ok on compare.
+  const counts = mergeKindCounts(histCounts, catalogKindCounts(item));
+  let status = m.status;
+  let kind = m.kind;
+  if (counts.n_nodata && status === 'ok' && !counts.n_fail && !counts.n_slow) {
+    status = 'nodata';
+    kind = 'nodata';
+  }
   return {
-    status: m.status,
-    kind: m.kind,
+    status,
+    kind,
     ydb_pct: m.ydb_pct,
     ...counts,
   };
@@ -1041,14 +1131,15 @@ function metricCellHtml(base, now, pctVal, unit, baseHint, kind) {
     <div class="delta ${dCls}">${absStr === '—' ? 'Δ —' : 'Δ ' + absStr}</div>
   </div>`;
 }
-/** One badge = worst real signal. Color always matches label. */
+/** One badge = worst real signal. Color always matches label / queries line. */
 function inboxPrimaryStatus(status, issue, nowCounts, failRateNow) {
   const R = alertRules();
   const nFail = nowCounts.fail || 0;
   const nSlow = nowCounts.slow || 0;
+  const nSoft = nowCounts.soft || 0;
+  const nNodata = nowCounts.nodata || 0;
   const fr = failRateNow == null ? null : Number(failRateNow);
   if (issue === 'missing') return { cls: 'missing', lbl: 'missing' };
-  if (issue === 'stale') return { cls: 'stale', lbl: 'stale' };
   if (issue === 'in_progress') return { cls: 'in_progress', lbl: 'in progress' };
   if (status === 'broken' || (fr != null && fr >= R.failBroken) || (nFail && nSlow)) {
     const bits = [];
@@ -1064,8 +1155,20 @@ function inboxPrimaryStatus(status, issue, nowCounts, failRateNow) {
   if (nSlow || status === 'regression' || issue === 'slower' || issue === 'both') {
     return { cls: 'slower', lbl: nSlow ? `slow ${nSlow}` : 'slow' };
   }
-  if (status === 'watch' || issue === 'watch') return { cls: 'watch', lbl: 'soft' };
-  if (status === 'nodata') return { cls: 'nodata', lbl: 'no data' };
+  const sReact = reactSignals();
+  // Soft only when React.soft is on — else nodata counts win the badge color.
+  if (sReact.soft && (status === 'watch' || issue === 'watch' || nSoft)) {
+    return { cls: 'watch', lbl: nSoft ? `soft ${nSoft}` : 'soft' };
+  }
+  // Server keeps many nodata suites as status/issue=ok — badge must follow counts.
+  if (status === 'nodata' || issue === 'nodata' || nNodata) {
+    return { cls: 'nodata', lbl: nNodata ? `no data ${nNodata}` : 'no data' };
+  }
+  if (status === 'noruns') return { cls: 'noruns', lbl: 'no runs' };
+  if (status === 'watch' || issue === 'watch' || nSoft) {
+    return { cls: 'watch', lbl: nSoft ? `soft ${nSoft}` : 'soft' };
+  }
+  if (issue === 'stale') return { cls: 'stale', lbl: 'stale' };
   return { cls: 'ok', lbl: 'ok' };
 }
 function statusCellHtml(primary, nowCounts, prevCounts, prevLabel) {
@@ -1306,51 +1409,67 @@ function candidateRows() {
   if (mode === 'all') return preferLatestBySuite(rows);
   return rows;
 }
-function okRowsForCell(branch, db, fam) {
-  return (DATA.ok || []).filter(r => {
-    if (branch && r.branch !== branch) return false;
-    if (r.db !== db || r.family !== fam) return false;
-    return itemInWindow(r);
-  });
+function suitesInCell(branch, db, fam) {
+  const seen = new Set();
+  const out = [];
+  for (const r of [...candidateRows(), ...(DATA.ok || [])]) {
+    if (branch && r.branch !== branch) continue;
+    if (r.db !== db || r.family !== fam) continue;
+    if (!itemInWindow(r)) continue;
+    const k = (r.suite && r.suite !== '—') ? suiteKey(r) : rowKey(r);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(r);
+  }
+  return out;
 }
 function liveCellNow(branch, db, fam) {
   const s = reactSignals();
-  const rows = candidateRows().filter(r => {
-    if (branch && r.branch !== branch) return false;
-    if (r.db !== db || r.family !== fam) return false;
-    if (!itemInWindow(r)) return false;
-    return rowMatchesReact(r);
-  });
+  const allSuites = suitesInCell(branch, db, fam);
+  const rows = allSuites.filter(r => rowMatchesReact(r));
   if (!rows.length) {
-    // No suite matched active React channels in this cell.
-    // Do not surface soft/nodata here unless those channels are on — otherwise
-    // fail-only mode still paints yellow "soft" from ok/watch fallbacks.
-    const oks = okRowsForCell(branch, db, fam);
-    if (oks.length) {
-      const watch = s.soft && oks.some(r => r.issue === 'watch' || r.status === 'watch');
-      const nd = s.nodata && oks.some(r => hasNodataSignal(r));
-      if (watch) {
-        return {
-          status: 'watch',
-          n_hot: 0, n_fail: 0, n_slow: 0,
-          n_soft: oks.filter(r => r.issue === 'watch' || r.status === 'watch').length,
-          n_nodata: 0, n_queries: 0,
-        };
+    // No suite matched active React channels.
+    // IMPORTANT: "no data" = mart nodata queries, NOT "hidden by React" / empty match.
+    if (!allSuites.length) {
+      return resolveAlertCell({ status: 'noruns', n_hot: 0, n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 0, n_queries: 0 });
+    }
+    const softRows = s.soft ? allSuites.filter(r => hasSoftSlowSignal(r)) : [];
+    if (softRows.length) {
+      const softSet = new Set();
+      for (const r of softRows) {
+        for (const q of listedWatch(r)) softSet.add(String(q.test));
       }
-      if (nd) {
-        return {
+      return resolveAlertCell({
+        status: 'watch',
+        n_hot: 0, n_fail: 0, n_slow: 0,
+        n_soft: softSet.size || softRows.length,
+        n_nodata: 0, n_queries: softSet.size || softRows.length,
+      });
+    }
+    // Real nodata signal only when nothing harder is present in the cell.
+    const hasQuality = allSuites.some(r =>
+      hasFailSignal(r) || hasHardSlowSignal(r) || hasSoftSlowSignal(r)
+      || ['failing', 'slower', 'both', 'broken', 'watch'].includes(r.issue));
+    if (s.nodata && !hasQuality) {
+      const ndRows = allSuites.filter(r => hasNodataSignal(r));
+      if (ndRows.length) {
+        const ndSet = new Set();
+        for (const r of ndRows) {
+          for (const q of listedNodata(r)) ndSet.add(String(q.test));
+        }
+        return resolveAlertCell({
           status: 'nodata',
           n_hot: 0, n_fail: 0, n_slow: 0, n_soft: 0,
-          n_nodata: oks.filter(r => hasNodataSignal(r)).length,
-          n_queries: 0,
-        };
+          n_nodata: ndSet.size || ndRows.length,
+          n_queries: ndSet.size || ndRows.length,
+        });
       }
-      return {
-        status: 'ok',
-        n_hot: 0, n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 0, n_queries: 0,
-      };
     }
-    return { status: 'nodata', n_hot: 0, n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 0, n_queries: 0 };
+    // Suites exist (e.g. hard-slow while React.hard is off) → ok, not "no data".
+    return resolveAlertCell({
+      status: 'ok',
+      n_hot: 0, n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 0, n_queries: 0,
+    });
   }
   const rank = {
     broken: 6, missing: 5, regression: 4, both: 4, watch: 3,
@@ -1358,7 +1477,12 @@ function liveCellNow(branch, db, fam) {
   };
   let best = null;
   for (const r of rows) {
-    let st = r.status || r.issue || 'ok';
+    // Prefer issue/signals over status=ok (server keeps watch suites as status=ok).
+    let st = r.issue || r.status || 'ok';
+    if (st === 'ok' && hasSoftSlowSignal(r)) st = 'watch';
+    if (st === 'ok' && hasHardSlowSignal(r)) st = 'regression';
+    if (st === 'ok' && hasFailSignal(r)) st = 'failing';
+    if (st === 'ok' && hasNodataSignal(r)) st = 'nodata';
     if (!s.fail && (st === 'broken' || st === 'failing') && hasHardSlowSignal(r) && s.hard) st = 'regression';
     if (!s.fail && !s.hard && s.soft && hasSoftSlowSignal(r)) st = 'watch';
     if (!s.fail && !s.hard && !s.soft && s.nodata && hasNodataSignal(r)) st = 'nodata';
@@ -1380,12 +1504,31 @@ function liveCellNow(branch, db, fam) {
   let status = best || 'ok';
   if (failSet.size && slowSet.size) {
     status = (status === 'broken') ? 'broken' : 'both';
-  } else if (failSet.size && (status === 'regression' || status === 'ok' || status === 'watch')) {
+  } else if (failSet.size && (status === 'regression' || status === 'ok' || status === 'watch' || status === 'nodata')) {
     status = 'failing';
-  } else if (slowSet.size && status === 'ok') {
+  } else if (slowSet.size && (status === 'ok' || status === 'watch' || status === 'nodata')) {
     status = 'regression';
+  } else if (softSet.size && (status === 'ok' || status === 'nodata')) {
+    status = 'watch';
   }
-  return {
+  // Align paint with React label: only-nodata counts → grey "no data".
+  // Overrides ok/watch/stale/in_progress (stale suites still match React via infra,
+  // but fmtFS shows "no data N" — color must match). missing/broken stay.
+  if (nodataSet.size && !failSet.size && !slowSet.size && !softSet.size) {
+    if (!['missing', 'broken', 'failing', 'both', 'regression', 'slower'].includes(status)) {
+      status = 'nodata';
+    }
+  }
+  // Never paint "no data" when React-active fail/hard/soft counts exist.
+  // Use sets only — hasSoftSlowSignal(issue=watch) must not override when soft is off.
+  if (status === 'nodata' && (failSet.size || slowSet.size || softSet.size)) {
+    if (failSet.size && slowSet.size) status = 'both';
+    else if (failSet.size) status = 'failing';
+    else if (slowSet.size) status = 'regression';
+    else status = 'watch';
+  }
+  // Final React normalize — same contract as compare (classify_rules.resolve_alert_cell).
+  return resolveAlertCell({
     status,
     n_hot: hot.length,
     n_fail: failSet.size,
@@ -1393,11 +1536,12 @@ function liveCellNow(branch, db, fam) {
     n_soft: softSet.size,
     n_nodata: nodataSet.size,
     n_queries: new Set([...failSet, ...slowSet, ...softSet, ...nodataSet]).size,
-  };
+  });
 }
 /**
  * Hard OLAP signals for compare paint — same React toggles as cell labels (fmtFS).
  * Default React: fail on, hard off → slows must not paint delta while labels say "ok".
+ * Mirror: olap/classify_rules.py olap_hard_band
  */
 function olapHardBand(side) {
   if (!side) return 0;
@@ -1410,10 +1554,20 @@ function olapHardBand(side) {
   if (s.hard && (slows > 0 || st === 'regression' || st === 'slower' || st === 'slow')) return 1;
   return 0;
 }
+/** React-visible nodata count; status=nodata/noruns with 0 counts → 1. */
+function nodataCount(side) {
+  const s = reactSignals();
+  if (!side || !s.nodata) return 0;
+  const n = side.n_nodata || 0;
+  if (n) return n;
+  const st = side.status || '';
+  if (st === 'nodata' || st === 'noruns') return 1;
+  return 0;
+}
 /**
- * Compare paint only on significant hard changes (React-filtered):
- * fail/slow count up/down, or cross into/out of hard band.
- * Opposing fail↑+slow↓ (or reverse) → mixed. Soft/watch-only → same.
+ * Compare paint (React-filtered): fail/slow/nodata up/down, hard band cross.
+ * Opposing channels → mixed. Soft/watch-only → same.
+ * Mirror: olap/classify_rules.py compare_delta_olap
  */
 function compareDeltaOlap(prev, now) {
   const s = reactSignals();
@@ -1423,12 +1577,115 @@ function compareDeltaOlap(prev, now) {
   const ps = s.hard ? (prev.n_slow || 0) : 0;
   const nf = s.fail ? (now.n_fail || 0) : 0;
   const ns = s.hard ? (now.n_slow || 0) : 0;
+  const pnd = nodataCount(prev);
+  const nnd = nodataCount(now);
   const failUp = nf > pf, failDown = nf < pf;
   const slowUp = ns > ps, slowDown = ns < ps;
+  const ndUp = nnd > pnd, ndDown = nnd < pnd;
   if ((failUp && slowDown) || (failDown && slowUp)) return 'mixed';
-  if (failUp || slowUp || nb > pb) return 'worse';
-  if (failDown || slowDown || nb < pb) return 'better';
+  if ((failUp && ndDown) || (failDown && ndUp) || (slowUp && ndDown) || (slowDown && ndUp)) return 'mixed';
+  if (failUp || slowUp || ndUp || nb > pb) return 'worse';
+  if (failDown || slowDown || ndDown || nb < pb) return 'better';
   return 'same';
+}
+/** True when compare delta is driven by nodata (not fail/hard) — purple gradient. */
+function compareDeltaIsNodataOnly(prev, now) {
+  const s = reactSignals();
+  if (!s.nodata) return false;
+  const pf = s.fail ? (prev.n_fail || 0) : 0;
+  const ps = s.hard ? (prev.n_slow || 0) : 0;
+  const nf = s.fail ? (now.n_fail || 0) : 0;
+  const ns = s.hard ? (now.n_slow || 0) : 0;
+  if (nf !== pf || ns !== ps) return false;
+  if (olapHardBand(prev) !== olapHardBand(now)) return false;
+  return nodataCount(prev) !== nodataCount(now);
+}
+/**
+ * Align status+counts with React toggles.
+ * Mirror: olap/classify_rules.py normalize_side_for_react
+ * Critical: status=failing + React.fail off → ok (else compare paints red 'fail =').
+ * noruns = empty cell; nodata = query gaps (n_nodata>0).
+ */
+function normalizeSideForReact(side) {
+  if (!side) {
+    return { status: 'noruns', n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 0, n_hot: 0, n_queries: 0 };
+  }
+  const s = reactSignals();
+  const st = side.status || 'ok';
+  if (st === 'noruns') {
+    return { status: 'noruns', n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 0, n_hot: 0, n_queries: 0 };
+  }
+  const rawNd = side.n_nodata || 0;
+  const n_fail = s.fail ? (side.n_fail || 0) : 0;
+  const n_slow = s.hard ? (side.n_slow || 0) : 0;
+  const n_soft = s.soft ? (side.n_soft || 0) : 0;
+  const n_nodata = s.nodata ? rawNd : 0;
+  if (st === 'missing' || st === 'stale' || st === 'in_progress') {
+    let outSt = st;
+    if ((st === 'stale' || st === 'in_progress') && n_nodata && !n_fail && !n_slow && !n_soft) {
+      outSt = 'nodata';
+    }
+    return {
+      status: outSt, n_fail, n_slow, n_soft, n_nodata,
+      n_hot: side.n_hot || 0, n_queries: n_fail + n_slow + n_soft + n_nodata,
+    };
+  }
+  const suiteFail = s.fail && (st === 'broken' || st === 'failing' || st === 'fail' || st === 'both');
+  const suiteSlow = s.hard && (st === 'regression' || st === 'slower' || st === 'slow' || st === 'both');
+  const suiteSoft = s.soft && st === 'watch';
+  const suiteNd = s.nodata && (st === 'nodata' || st === 'noruns');
+  let newSt = 'ok';
+  if (n_fail && n_slow) newSt = (st === 'broken') ? 'broken' : 'both';
+  else if (n_fail || suiteFail) newSt = (st === 'broken') ? 'broken' : 'failing';
+  else if (n_slow || suiteSlow) newSt = 'regression';
+  else if (n_soft || suiteSoft) newSt = 'watch';
+  else if (n_nodata || (suiteNd && rawNd > 0)) newSt = 'nodata';
+  else if ((st === 'nodata' || st === 'noruns') && !n_fail && !n_slow && !n_soft) newSt = 'noruns';
+  return {
+    status: newSt, n_fail, n_slow, n_soft, n_nodata,
+    n_hot: side.n_hot || 0, n_queries: n_fail + n_slow + n_soft + n_nodata,
+  };
+}
+/** Mirror: olap/classify_rules.py paint_class_for_side */
+function paintClassForSide(side) {
+  if (!side) return 'noruns';
+  const st = side.status || 'ok';
+  const nNd = side.n_nodata || 0;
+  if (st === 'noruns') return 'noruns';
+  if (st === 'nodata' || nNd > 0) return nNd > 0 ? 'nodata' : 'noruns';
+  if (String(st).startsWith('delta-')) return st;
+  return st;
+}
+/** Mirror: olap/classify_rules.py resolve_alert_cell */
+function resolveAlertCell(side) {
+  const now = normalizeSideForReact(side);
+  return {
+    ...now,
+    compare: false,
+    delta: null,
+    paint: paintClassForSide(now),
+    delta_status: now.status,
+  };
+}
+/** Mirror: olap/classify_rules.py resolve_compare_cell */
+function resolveCompareCell(prev, now) {
+  const prevN = normalizeSideForReact(prev);
+  const nowN = normalizeSideForReact(now);
+  const delta = compareDeltaOlap(prevN, nowN);
+  let paint = delta === 'same' ? paintClassForSide(nowN) : `delta-${delta}`;
+  // Purple green↔purple gradient when only nodata channel moved.
+  if (delta !== 'same' && compareDeltaIsNodataOnly(prevN, nowN)) {
+    paint = `${paint} delta-nodata`;
+  }
+  return {
+    ...nowN,
+    compare: true,
+    prev: prevN,
+    delta,
+    paint,
+    status: paint.split(/\s+/)[0], // CSS primary class for filters; full paint on cell
+    delta_status: nowN.status,
+  };
 }
 function liveCell(branch, db, fam) {
   const alertNow = liveCellNow(branch, db, fam);
@@ -1449,22 +1706,15 @@ function liveCell(branch, db, fam) {
       prevPart = { ...nowPart };
     } else {
       prevPart = classifySuiteAtWave(r, wave);
-      if (!prevPart || prevPart.status === 'nodata') continue;
+      // Don't drop suite when prev hist is nodata but now has catalog query gaps —
+      // otherwise compare greenwashes "no data 73" → "ok =".
+      if (!prevPart) continue;
+      if (prevPart.status === 'nodata' && !(nowPart.n_nodata || 0)) continue;
     }
     prevParts.push(prevPart);
     nowParts.push(nowPart);
   }
-  const prev = aggregateSide(prevParts);
-  const now = aggregateSide(nowParts);
-  const delta = compareDeltaOlap(prev, now);
-  return {
-    ...now,
-    compare: true,
-    prev,
-    delta,
-    status: delta === 'same' ? now.status : `delta-${delta}`,
-    delta_status: now.status,
-  };
+  return resolveCompareCell(aggregateSide(prevParts), aggregateSide(nowParts));
 }
 function cellLabel(st, live) {
   if (live && live.compare && live.prev) {
@@ -1485,24 +1735,28 @@ function cellLabel(st, live) {
     const ns = live.n_hot || 0;
     return ns ? `broken <span class="cnt">${ns}</span>` : 'broken';
   }
-  // failing / regression / both / slower — prefer query counts (fail N slow M)
+  // failing / regression / both / slower / soft — prefer query counts
   if (st === 'failing' || st === 'fail' || st === 'both'
       || st === 'regression' || st === 'slower' || st === 'slow'
-      || st === 'watch' || st === 'nodata') {
+      || st === 'watch' || st === 'nodata' || st === 'noruns'
+      || ((live.n_soft || 0) > 0) || ((live.n_fail || 0) > 0) || ((live.n_slow || 0) > 0)
+      || ((live.n_nodata || 0) > 0)) {
     if (fs) return `<span class="cnt">${fs}</span>`;
     const ns = live.n_hot || 0;
     if (ns) return `<span class="cnt">${ns} suites</span>`;
+    if (st === 'noruns' || (st === 'nodata' && !(live.n_nodata || 0))) return 'no runs';
     if (st === 'nodata') return 'no data';
-    if (st === 'watch') return 'soft';
+    if (st === 'watch' || (live.n_soft || 0) > 0) return 'soft';
     if (st === 'failing' || st === 'fail') return 'fail';
     if (st === 'both') return 'fail+slow';
     return 'hot';
   }
+  if (st === 'noruns') return 'no runs';
   if (st === 'missing' || st === 'stale' || st === 'in_progress') {
     const ns = live.n_hot || 0;
     return ns ? `${esc(st)} <span class="cnt">${ns}</span>` : esc(st);
   }
-  return esc(st);
+  return esc(st === 'ok' ? 'ok' : st);
 }
 function sliceHist(hist) {
   if (!hist || !(hist.labels || []).length) return hist;
@@ -1606,29 +1860,13 @@ function fmtNM(n, m, selected) {
 }
 
 function renderHeader() {
-  const ui = DATA.ui || {};
   const total = currentSummary();
   const sel = selectedSummary();
   const s = sel || total;
-  const br = selectedBranch();
   const rs = reactSignals();
-  const heat = heatSelection();
-  document.getElementById('lblBase').textContent = String(ui.baseline_runs || 7);
-  document.getElementById('lblAllBranches').textContent = (ui.focus_branches || []).join(', ') || '—';
-  const reactBits = [];
-  if (rs.fail) reactBits.push('fail');
-  if (rs.hard) reactBits.push('hard slow');
-  if (rs.soft) reactBits.push('soft slow');
-  if (rs.nodata) reactBits.push('no data');
-  const wv = waveView();
   const genAt = (DATA.generated_at || '').replace('T', ' ').replace('Z', ' UTC').slice(0, 22);
   document.getElementById('subtitle').innerHTML =
-    `Source: <code>${esc(DATA.source || '')}</code> · data ${esc(DATA.window || '')} · ` +
-    `built <b>${esc(genAt || '—')}</b> · ` +
-    `filter <b>${esc(winFrom || '…')} → ${esc(winTo || '…')}</b> · ` +
-    `branch <b>${esc(br || 'all')}</b> · wave <b>${esc(wv)}</b> · ` +
-    `react <b>${esc(reactBits.join(' + ') || 'infra only')}</b> · hot ${total.hot || 0}` +
-    (heat ? ` · heat <b>${esc(heat.db || '*')} × ${esc(heat.fam || '*')}</b> (N/M)` : '');
+    `Updated <b>${esc(genAt || '—')}</b>`;
 
   const fifth = rs.nodata
     ? `<div class="counter nodata"><div class="n">${fmtNM(s.nodata, total.nodata, !!sel)}</div><div class="lbl">No data</div></div>`
@@ -1706,7 +1944,8 @@ function cellMatchesReact(live) {
     return true;
   }
   if (s.soft && ((live.n_soft || 0) > 0 || st === 'watch')) return true;
-  if (s.nodata && ((live.n_nodata || 0) > 0 || st === 'nodata')) return true;
+  if (s.nodata && ((live.n_nodata || 0) > 0 || st === 'nodata' || st === 'noruns'
+      || live.paint === 'nodata' || live.paint === 'noruns')) return true;
   // Coverage / wave issues stay visible regardless of react channels.
   if (st === 'missing' || st === 'stale' || st === 'in_progress') return true;
   return false;
@@ -1772,10 +2011,10 @@ function renderHeatmap() {
         const heat = heatSelection();
         const selected = !!(heat && heat.db === db && heat.fam === fam
           && (!selectedBranch() || selectedBranch() === branch));
-        // same → keep now status color; delta-* only when status actually changed
-        const cellCls = (live.compare && live.delta && live.delta !== 'same')
+        // paint from resolve_alert_cell / resolve_compare_cell (React-normalized).
+        const cellCls = live.paint || ((live.compare && live.delta && live.delta !== 'same')
           ? (st.startsWith('delta-') ? st : `delta-${live.delta}`)
-          : (live.delta_status || st);
+          : (live.delta_status || st));
         html += `<td><div class="cell ${cellCls}${selected ? ' selected' : ''}" data-branch="${esc(branch)}" data-db="${esc(db)}" data-fam="${esc(fam)}" title="${esc(tip)}">${cellLabel(st, live)}</div></td>`;
       }
       const w = waveFor(branch, db);
@@ -1789,7 +2028,11 @@ function renderHeatmap() {
   root.querySelectorAll('select.cmp-wave').forEach(sel => {
     sel.addEventListener('change', (ev) => {
       ev.stopPropagation();
-      setCompareId(sel.dataset.cmpBranch, sel.dataset.cmpDb, sel.value || '');
+      const branch = sel.dataset.cmpBranch || '';
+      const db = sel.dataset.cmpDb || '';
+      setCompareId(branch, db, sel.value || '');
+      // Compare must not steal query/dive "now" — always latest completed.
+      clearDiveFocusForDb(branch, db);
       destroyCharts();
       renderAll();
     });
@@ -1837,8 +2080,14 @@ function issueFilterFromLive(live) {
   const st = live.compare ? (live.delta_status || live.status) : (live.status || '');
   const nf = live.n_fail || 0;
   const ns = live.n_slow || 0;
-  if (st === 'ok' || st === 'watch') return (nf || ns) ? (nf && ns ? 'both' : (nf ? 'failing' : 'slower')) : 'ok';
-  if (st === 'nodata') return 'nodata';
+  const nSoft = live.n_soft || 0;
+  const nNd = live.n_nodata || 0;
+  // Query gaps → nodata filter. Empty cell (noruns) → leave issue empty (inbox: no runs).
+  if (st === 'noruns' || (st === 'nodata' && !nNd && live.paint === 'noruns')) return '';
+  if (st === 'nodata' || (nNd > 0 && !nf && !ns && !nSoft
+      && !['missing', 'broken', 'failing', 'both', 'regression', 'slower'].includes(st))) {
+    return 'nodata';
+  }
   if (st === 'in_progress') return 'in_progress';
   if (st === 'missing') return 'missing';
   if (st === 'stale') return 'stale';
@@ -1847,6 +2096,9 @@ function issueFilterFromLive(live) {
   if (ns > 0 || st === 'slower' || st === 'slow') return 'slower';
   // Python: fail_status "regression" and dur "regression" share the same status word.
   if (st === 'regression') return nf > 0 ? 'failing' : 'slower';
+  // soft / watch (incl. compare "ok → soft") — not generic ok
+  if (st === 'watch' || nSoft > 0) return 'watch';
+  if (st === 'ok') return 'ok';
   return '';
 }
 function issueFilterFromCellStatus(nowSt) {
@@ -1980,20 +2232,19 @@ function filteredInbox() {
     return true;
   });
 }
-/** Heatmap drill safety: if Issue filter empties the slice, show all react-matching rows in cell. */
+/** Heatmap drill safety: if Issue filter empties the slice, show all suites in that cell. */
 function filteredInboxOrDrill() {
   const rows = filteredInbox();
   if (rows.length) return rows;
-  const issue = document.getElementById('fIssue')?.value || '';
   const db = document.getElementById('fDb')?.value || '';
   const fam = document.getElementById('fFam')?.value || '';
-  if (!issue || !db || !fam) return rows;
+  if (!db || !fam) return rows;
   const br = selectedBranch();
   return mergeRowPools(candidateRows(), DATA.ok || []).filter(r => {
     if (br && r.branch !== br) return false;
     if (r.db !== db || r.family !== fam) return false;
     if (!itemInWindow(r)) return false;
-    return rowMatchesReact(r) || isInfraIssue(r);
+    return true;
   });
 }
 
@@ -2147,8 +2398,8 @@ function markIndicesForQuery(item, diveId, q, hist) {
   const runs = data.now_runs || [];
   const cmpId = getCompareId(item.branch, item.db);
   const wave = cmpId ? waveEntry(item.branch, item.db, cmpId) : null;
-  const focusIdx = diveFocusRunIndex(item, data);
-  // Dive "now" is always the focused Last-runs card (not forced to latest when compare is on).
+  // With active compare: now = latest completed (was-side = compare). Focus only when no compare.
+  const focusIdx = cmpId ? (runs.length - 1) : diveFocusRunIndex(item, data);
   const focusRun = runs[focusIdx] || null;
   let nowFull = -1;
   if (focusRun) nowFull = findHistIndexForRun(q.history, focusRun);
@@ -2216,16 +2467,37 @@ function mountQueryHistory(item, diveId, testName) {
   if (q.dur_noise_pct != null) thrBits.push(`noise ${pct(q.dur_noise_pct)}`);
   if (q.dur_level) thrBits.push(q.dur_level);
   const alertLine = (q.ydb_base != null && q.ydb_now != null)
-    ? `alert (last run vs median prev7): ${fmt(q.ydb_base)} → ${fmt(q.ydb_now)}${q.ydb_pct != null ? ' ' + pct(q.ydb_pct) : ''}` +
+    ? `alert (last vs median prev7 до now): ${fmt(q.ydb_base)} → ${fmt(q.ydb_now)}${q.ydb_pct != null ? ' ' + pct(q.ydb_pct) : ''}` +
       (thrBits.length ? ` · ${thrBits.join(' · ')}` : '')
     : null;
+  // Same numbers as left-list pills under compare (vs prev7 ending at compare wave).
+  let cmpAxisLine = null;
+  let viewKind = q.kind || 'ok';
+  const cmpIdQ = getCompareId(item.branch, item.db);
+  const cmpWaveQ = cmpIdQ ? waveEntry(item.branch, item.db, cmpIdQ) : null;
+  if (cmpWaveQ && q.history) {
+    const fullH = q.history;
+    const nowFull = lastCompletedHistIndex(fullH);
+    const cmpFull = findHistIndexForWave(fullH, cmpWaveQ);
+    if (nowFull >= 0 && cmpFull >= 0 && cmpFull !== nowFull) {
+      const nowM = metricsAtHistIndex(q, nowFull, cmpFull);
+      const prevM = metricsAtHistIndex(q, cmpFull);
+      viewKind = nowM.kind || viewKind;
+      cmpAxisLine =
+        `compare-ось (как в списке слева): ` +
+        `cmp ${querySideLabel(prevM)} (${fmt(prevM.ydb_now)} vs median prev7 до cmp ${fmt(prevM.ydb_base)}) → ` +
+        `now ${querySideLabel(nowM)} (${fmt(nowM.ydb_now)} vs тот же median ${fmt(nowM.ydb_base)})` +
+        ` · % не Δ cmp→now`;
+    }
+  }
   const nReports = (hist.reports || []).filter(Boolean).length;
   const histMode = hist.mode || q.history.mode || 'runs';
 
-  const kindCls = q.kind === 'nodata' ? 'nodata'
-    : (q.kind === 'fail' || q.kind === 'both') ? 'fail'
-    : (q.kind === 'slow' ? 'slow' : (q.kind === 'watch' ? 'watch' : 'qok'));
-  const kindLabel = q.kind === 'nodata' ? 'no data' : (q.kind || 'query');
+  const kindCls = viewKind === 'nodata' ? 'nodata'
+    : (viewKind === 'fail' || viewKind === 'both') ? 'fail'
+    : (viewKind === 'slow' ? 'slow' : (viewKind === 'watch' ? 'watch' : 'qok'));
+  const kindLabel = viewKind === 'nodata' ? 'no data'
+    : (viewKind === 'watch' ? 'soft' : (viewKind || 'query'));
   const errPill = q.error_class
     ? ` <span class="pill fail" title="mart Color / diff_response">${esc(q.error_class)}</span>`
     : '';
@@ -2238,8 +2510,9 @@ function mountQueryHistory(item, diveId, testName) {
     }</div>
     <div class="muted" style="margin-bottom:6px">
       график = <b>каждый запуск</b> · цвет vs <b>median mavg(prev${win})</b> · клик → report${nReports ? ` (${nReports})` : ''}
-      · <b>жирная рамка</b> = now/focus или cmp
-      ${alertLine ? `<div class="muted">${esc(alertLine)} · fail ${fmtFail(q.fail_rate_late)}</div>` : ''}
+      · <b>тёмная рамка</b> = now · <b>оранжевая</b> = compare
+      ${cmpAxisLine ? `<div class="muted" style="margin-top:4px">${esc(cmpAxisLine)}</div>` : ''}
+      ${alertLine ? `<div class="muted" style="margin-top:2px">${esc(alertLine)} · fail ${fmtFail(q.fail_rate_late)}</div>` : ''}
     </div>
     <label class="muted" style="display:inline-flex;gap:6px;align-items:center;margin-bottom:8px;cursor:pointer">
       <input type="checkbox" id="${diveId}_q_base" /> показать alert baseline (median prev7 runs)
@@ -2271,7 +2544,7 @@ function mountQueryHistory(item, diveId, testName) {
     const yColors = colorsVsMedianMavg(hist.ydb, win);
     const fColors = failColors(hist.fail_rate);
     const borderColors = (hist.labels || []).map((_, i) => (
-      (i === marks.now || i === marks.compare) ? '#1f2328' : 'transparent'
+      i === marks.now ? '#1f2328' : (i === marks.compare ? '#9a6700' : 'transparent')
     ));
     const borderWidths = (hist.labels || []).map((_, i) => (
       (i === marks.now || i === marks.compare) ? 3 : 0
@@ -2339,7 +2612,8 @@ function mountQueryHistory(item, diveId, testName) {
                   const bits = [];
                   const i = useTime ? (xy[it.dataIndex]?.i) : it.dataIndex;
                   if (i == null) return '';
-                  if (i === marks.now) bits.push('now / focus run');
+                  if (i === marks.now) bits.push('now');
+                  if (i === marks.compare) bits.push('compare');
                   if (i === marks.compare) bits.push('compare wave');
                   if (cid.endsWith('_ydb')) {
                     const cur = vals[i];
@@ -2405,7 +2679,7 @@ function mountQueryHistory(item, diveId, testName) {
               ctx.restore();
             }
             vline(marks.now, '#1f2328', 'now');
-            vline(marks.compare, '#1f2328', 'cmp');
+            vline(marks.compare, '#9a6700', 'cmp');
             if (!showBase || !cid.endsWith('_ydb') || alertBase == null) return;
             const y = chart.scales.y.getPixelForValue(alertBase);
             if (y < top || y > bottom) return;
@@ -2433,9 +2707,9 @@ function mountQueryHistory(item, diveId, testName) {
 function kindSev(k) {
   return ({ ok: 0, nodata: 1, watch: 2, slow: 3, fail: 4, both: 5, missing: 4 })[k] || 0;
 }
-/** Hard kind only — watch/nodata do not drive compare pill paint. */
+/** Compare pill severity — nodata participates (ok↔no data gets purple gradient). */
 function kindHardSev(k) {
-  return ({ ok: 0, nodata: 0, watch: 0, slow: 1, fail: 2, both: 3, missing: 2 })[k] || 0;
+  return ({ ok: 0, watch: 0, nodata: 1, slow: 1, fail: 2, both: 3, missing: 2 })[k] || 0;
 }
 function kindLabelShort(k) {
   if (k === 'nodata') return 'no data';
@@ -2459,13 +2733,17 @@ function diveData(r) {
 function diveFocusRunIndex(item, data) {
   const runs = data.now_runs || [];
   if (!runs.length) return -1;
+  // Active heatmap/card compare → now is always latest (was-side = compare).
+  if (getCompareId(item.branch, item.db)) return runs.length - 1;
   const key = suiteKey(item);
   if (diveRunFocus[key] != null && diveRunFocus[key] >= 0 && diveRunFocus[key] < runs.length) {
     return diveRunFocus[key];
   }
   return runs.length - 1;
 }
-/** Inbox-row metrics for focused Last-runs card (fallback = server Now). */
+/** Inbox-row metrics for focused Last-runs card (fallback = server Now).
+ *  Under active compare: same axis as heatmap — classify now vs compare wave baseline
+ *  so card slow/soft/fail match the cell and are findable in inbox. */
 function suiteViewAtFocus(item, diveId) {
   const data = diveData(item);
   const runs = data.now_runs || [];
@@ -2475,12 +2753,22 @@ function suiteViewAtFocus(item, diveId) {
   const hist = data.history || item.history || {};
   const hi = findHistIndexForRun(hist, focusRun);
   const R = alertRules();
+  const cmpId = getCompareId(item.branch, item.db);
+  const cmpWave = cmpId ? waveEntry(item.branch, item.db, cmpId) : null;
+  const cmpIdx = cmpWave ? findHistIndexForWave(hist, cmpWave) : -1;
+  const cmpIsFocus = !!(cmpWave && focusRun && (
+    (focusRun.ci_version && (cmpWave.id === focusRun.ci_version || cmpWave.ci_version === focusRun.ci_version))
+    || (focusRun.label && cmpWave.label && focusRun.label === cmpWave.label)
+  ));
+  // Heatmap now = last vs compare baseEnd; without compare / when cmp=focus → prev7 at hi.
+  const suiteBaseEnd = (cmpIdx >= 0 && !cmpIsFocus) ? cmpIdx : hi;
   let m = null;
   let fail_rate_base = data.fail_rate_base ?? item.fail_rate_base;
   if (hi >= 0) {
-    m = classifyAtIndex(hist.ydb, hist.fail_rate, hi, hist.nodata, hist.markers, hi);
+    m = classifyAtIndex(hist.ydb, hist.fail_rate, hi, hist.nodata, hist.markers, suiteBaseEnd);
     const frBaseArr = [];
-    for (let i = Math.max(0, hi - R.baseline); i < hi; i++) {
+    const frEnd = suiteBaseEnd >= 0 ? suiteBaseEnd : hi;
+    for (let i = Math.max(0, frEnd - R.baseline); i < frEnd; i++) {
       if (!histPointUsable(hist.nodata, hist.markers, i)) continue;
       if (hist.fail_rate && hist.fail_rate[i] != null) frBaseArr.push(Number(hist.fail_rate[i]) / 100);
     }
@@ -2495,7 +2783,12 @@ function suiteViewAtFocus(item, diveId) {
     if (!q.history) continue;
     const qi = findHistIndexForRun(q.history, focusRun);
     if (qi < 0) { nodatas.push({ test: q.test }); continue; }
-    const qm = metricsAtHistIndex(q, qi);
+    let qBaseEnd = qi;
+    if (cmpWave && !cmpIsFocus) {
+      const qCmp = findHistIndexForWave(q.history, cmpWave);
+      if (qCmp >= 0) qBaseEnd = qCmp;
+    }
+    const qm = metricsAtHistIndex(q, qi, qBaseEnd);
     if (qm.kind === 'fail' || qm.kind === 'both') {
       fails.push({ test: q.test, ydb_pct: qm.ydb_pct, error_class: qm.error_class });
     }
@@ -2561,17 +2854,46 @@ function suiteViewAtFocus(item, diveId) {
     ].filter(Boolean),
   };
 }
+/** Side chip for compare pill: "soft +24%" / "fail" / "no data".
+ *  % = this run vs median(prev7) ending at that side's baseline — NOT Δ(cmp→now). */
+function querySideLabel(m) {
+  if (!m) return '—';
+  const kind = kindLabelShort(m.kind || 'ok');
+  if (m.kind === 'nodata' || m.kind === 'missing') return kind;
+  if (m.ydb_pct != null) return `${kind} ${pct(m.ydb_pct)}`;
+  return kind;
+}
+function querySideTitle(m, baseHint) {
+  if (!m) return 'нет точки';
+  const kind = kindLabelShort(m.kind || 'ok');
+  if (m.ydb_now == null) return `${kind} · нет YdbSumMeans`;
+  const base = m.ydb_base != null ? fmt(m.ydb_base) : '—';
+  const pctBit = m.ydb_pct != null ? ` ${pct(m.ydb_pct)}` : '';
+  return `${kind}${pctBit} · ${fmt(m.ydb_now)} vs median(prev7 ${baseHint}): ${base}`;
+}
 function queryPillHtml(q, diveId, item, data) {
   const runs = data.now_runs || [];
   const cmpId = getCompareId(item.branch, item.db);
   const wave = cmpId ? waveEntry(item.branch, item.db, cmpId) : null;
-  // Dive now = focused Last-runs card; compare wave is was-side only.
+  // Dive now = focused Last-runs card; under compare classify vs compare baseline
+  // (same axis as heatmap / inbox card) so slow/soft are findable in pills.
   const focusIdx = diveFocusRunIndex(item, data);
   const focusRun = runs[focusIdx] || null;
+  const cmpIsFocus = !!(wave && focusRun && (
+    (focusRun.ci_version && (wave.id === focusRun.ci_version || wave.ci_version === focusRun.ci_version))
+    || (focusRun.label && wave.label && focusRun.label === wave.label)
+  ));
   let nowM = null;
   if (q.history && focusRun) {
     const hi = findHistIndexForRun(q.history, focusRun);
-    if (hi >= 0) nowM = metricsAtHistIndex(q, hi);
+    if (hi >= 0) {
+      let qBaseEnd = hi;
+      if (wave && !cmpIsFocus) {
+        const qCmp = findHistIndexForWave(q.history, wave);
+        if (qCmp >= 0) qBaseEnd = qCmp;
+      }
+      nowM = metricsAtHistIndex(q, hi, qBaseEnd);
+    }
   }
   if (!nowM) {
     nowM = {
@@ -2591,26 +2913,49 @@ function queryPillHtml(q, diveId, item, data) {
     : (nowM.kind === 'slow' ? 'slow'
     : (nowM.kind === 'watch' ? 'watch'
     : (nowM.kind === 'nodata' ? 'nodata' : 'qok')));
-  let labelExtra = '';
+  const extras = [];
+  if ((nowM.kind === 'fail' || nowM.kind === 'both') && nowM.error_class) extras.push(nowM.error_class);
+  if (!q.history) extras.push('no hist');
+  const extraHtml = extras.length
+    ? `<span class="q-extra">${esc(extras.join(' · '))}</span>`
+    : '<span class="q-extra"></span>';
   if (prevM) {
     const dHard = kindHardSev(nowM.kind) - kindHardSev(prevM.kind);
-    if (dHard < 0) cls = 'delta-better';
-    else if (dHard > 0) cls = 'delta-worse';
-    // watch/soft-only flips: keep solid now kind color (no compare paint)
-    const a = kindLabelShort(prevM.kind);
-    const b = kindLabelShort(nowM.kind);
-    const pctBit = (prevM.ydb_pct != null || nowM.ydb_pct != null)
-      ? ` · ${(prevM.ydb_pct != null ? pct(prevM.ydb_pct) : '—')} → ${(nowM.ydb_pct != null ? pct(nowM.ydb_pct) : '—')}`
-      : '';
-    labelExtra = a === b ? ` ${b}${pctBit}` : ` ${a} → ${b}${pctBit}`;
-  } else {
-    labelExtra = nowM.kind === 'nodata' ? ' · no data'
-      : (nowM.ydb_pct != null ? ' ' + pct(nowM.ydb_pct)
-        : (nowM.ydb_now != null ? ' ' + fmt(nowM.ydb_now) : ''));
+    const hardKinds = new Set(['fail', 'both', 'slow', 'missing']);
+    const nodataOnly = dHard !== 0
+      && (prevM.kind === 'nodata' || nowM.kind === 'nodata')
+      && !hardKinds.has(prevM.kind) && !hardKinds.has(nowM.kind);
+    if (dHard < 0) cls = nodataOnly ? 'delta-better delta-nodata' : 'delta-better';
+    else if (dHard > 0) cls = nodataOnly ? 'delta-worse delta-nodata' : 'delta-worse';
+    const was = querySideLabel(prevM);
+    const now = querySideLabel(nowM);
+    const tip = [
+      'стрелка = смена статуса compare → now (не дельта %)',
+      `cmp: ${querySideTitle(prevM, 'до cmp')}`,
+      `now: ${querySideTitle(nowM, wave && !cmpIsFocus ? 'до cmp (compare-ось)' : 'до now')}`,
+      'alert в графике справа = другая ось: last vs median prev7 до now',
+    ].join('\n');
+    return `<button type="button" class="pill q-pill-cmp ${cls}" data-qpick="${diveId}" data-test="${esc(q.test)}" title="${esc(tip)}">
+      <span class="q-name">${esc(q.test)}</span>
+      <span class="q-cmp-mid">
+        <span class="q-was">${esc(was)}</span>
+        <span class="q-arrow">→</span>
+        <span class="q-now">${esc(now)}</span>
+      </span>
+      ${extraHtml}
+    </button>`;
   }
-  const err = (nowM.kind === 'fail' || nowM.kind === 'both') && nowM.error_class
-    ? ` · ${nowM.error_class}` : '';
-  return `<button type="button" class="pill ${cls}" data-qpick="${diveId}" data-test="${esc(q.test)}">${esc(q.test)}${esc(labelExtra)}${err}${q.history ? '' : ' · no hist'}</button>`;
+  const nowBit = nowM.kind === 'nodata' ? 'no data'
+    : (nowM.ydb_pct != null ? pct(nowM.ydb_pct)
+      : (nowM.ydb_now != null ? fmt(nowM.ydb_now) : ''));
+  const nowHtml = nowBit
+    ? `<span class="q-cmp-mid"><span class="q-now">${esc(nowBit)}</span></span>`
+    : `<span class="q-cmp-mid"></span>`;
+  return `<button type="button" class="pill q-pill-cmp ${cls}" data-qpick="${diveId}" data-test="${esc(q.test)}">
+    <span class="q-name">${esc(q.test)}</span>
+    ${nowHtml}
+    ${extraHtml}
+  </button>`;
 }
 function buildQueryBlockHtml(item, diveId) {
   const data = diveData(item);
@@ -2624,6 +2969,16 @@ function buildQueryBlockHtml(item, diveId) {
   const cmpNote = cmpId ? ` · compare <code>${esc(cmpId)}</code>` : '';
   if (catalog.length) {
     const catalogHtml = catalog.map(q => queryPillHtml(q, diveId, item, data)).join('');
+    const pctNote = cmpId
+      ? `<div class="muted" style="margin-top:4px;font-size:11px;line-height:1.35">
+          <b>%</b> в пилюле = этот run vs <b>median(prev7)</b> до baseline-точки ·
+          при compare у <b>now</b> baseline = prev7 <b>до compare-волны</b> (та же ось, что heatmap) ·
+          стрелка = смена <b>статуса</b>, не Δ% cmp→now ·
+          справа в графике <b>alert</b> = другая ось (last vs prev7 до now)
+        </div>`
+      : `<div class="muted" style="margin-top:4px;font-size:11px">
+          <b>%</b> = last run vs <b>median(prev7)</b> до now
+        </div>`;
     return `<div>
         <div class="muted"><b>Queries</b> (${catalog.length}) · клик = история${focusNote}${cmpNote} ·
           <span class="pill qok">ok</span>
@@ -2634,6 +2989,7 @@ function buildQueryBlockHtml(item, diveId) {
           <span class="pill delta-worse">better→worse</span>
           <span class="pill nodata">no data</span>
         </div>
+        ${pctNote}
         <div class="qlist">${catalogHtml}</div>
       </div>`;
   }
@@ -2871,18 +3227,23 @@ function diveHtml(r, id) {
     : '';
   const focusIdx = diveFocusRunIndex(r, data);
   const cmpId = getCompareId(r.branch, r.db);
+  const cmpWave = cmpId ? waveEntry(r.branch, r.db, cmpId) : null;
   const runs = (data.now_runs || []).map((run, ri) => {
     const link = run.report ? `<a href="${esc(run.report)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">report</a>` : '—';
+    const isLatest = ri === (data.now_runs || []).length - 1;
     const active = ri === focusIdx ? ' active' : '';
-    const cmpHit = cmpId && run.ci_version && run.ci_version === cmpId ? ' style="outline:1px dashed #9a6700"' : '';
+    const isCmp = !!(cmpWave && run.ci_version && (
+      run.ci_version === cmpWave.id || run.ci_version === cmpWave.ci_version || run.ci_version === cmpId
+    ) && !isLatest);
+    const cls = isLatest && active ? 'run-card active' : (isCmp ? 'run-card cmp' : `run-card${active}`);
     const sha = (run.version || run.label || '').toString();
     const shortLbl = run.label
       ? String(run.label).replace(/^(\d{4}-\d{2}-\d{2})_([a-f0-9]{7,8}).*$/i, '$1·$2')
       : sha.slice(0, 10);
-    return `<div class="run-card${active}" data-run-card="${id}" data-run-idx="${ri}" data-ci="${esc(run.ci_version || '')}" title="${esc((run.label || '') + ' · ' + (run.ci_version || ''))}"${cmpHit}>
+    return `<div class="${cls}" data-run-card="${id}" data-run-idx="${ri}" data-ci="${esc(run.ci_version || '')}" title="${esc((run.label || '') + ' · ' + (run.ci_version || '') + (isCmp ? ' · compare' : (isLatest ? ' · now' : '')))}">
       <div class="t">${esc(shortLbl)}</div>
       <div>${fmtFail(run.fail_rate)} · ${fmt(run.ydb)}</div>
-      <div class="muted">${esc(run.ci_version || '—')}</div>
+      <div class="muted">${esc(run.ci_version || '—')}${isCmp ? ' · cmp' : (isLatest ? ' · now' : '')}</div>
       <div>${link}</div>
     </div>`;
   }).join('') || `<div class="muted">${
@@ -2935,7 +3296,7 @@ function diveHtml(r, id) {
     ${waveNote}
     ${summaryHtml}
     <div>
-      <div class="muted" style="margin-bottom:6px"><b>Last runs</b> · клик = focus (now для строки / pills / charts) · compare — в heatmap · % на карточке = fail rate запуска${fin ? ' <span class="pill nodata">finished</span>' : ''}</div>
+      <div class="muted" style="margin-bottom:6px"><b>Last runs</b> · клик = compare baseline (синхрон с heatmap) · latest = now и сбрасывает compare · % = fail rate${fin ? ' <span class="pill nodata">finished</span>' : ''}</div>
       <div class="runs">${runs}</div>
     </div>
     <div class="q-split">
@@ -2958,9 +3319,23 @@ function renderInbox() {
   const root = document.getElementById('inbox');
   if (!rows.length) {
     const issue = document.getElementById('fIssue').value;
+    const db = document.getElementById('fDb')?.value || '';
+    const fam = document.getElementById('fFam')?.value || '';
+    const br = selectedBranch();
+    // Heatmap "no data" with zero suites in window = no runs (not "no hot problems").
+    if (db && fam && !suitesInCell(br, db, fam).length) {
+      root.innerHTML = '<div class="empty">no runs</div>';
+      return;
+    }
+    if (issue === 'nodata') {
+      root.innerHTML = '<div class="empty">Нет suite с no-data queries под фильтры.</div>';
+      return;
+    }
     root.innerHTML = issue === 'ok'
       ? '<div class="empty">Нет ok-slice под фильтры.</div>'
-      : '<div class="empty">Нет hot-проблем под фильтры — good. (Issue → ok чтобы смотреть зелёные)</div>';
+      : (db && fam
+        ? '<div class="empty">Нет slice для этого DbAlias × family в выбранном окне.</div>'
+        : '<div class="empty">Нет hot-проблем под фильтры — good. (Issue → ok чтобы смотреть зелёные)</div>');
     return;
   }
   const body = rows.map((r, idx) => {
@@ -3004,6 +3379,9 @@ function renderInbox() {
     const slowBits = view
       ? view.slows.slice(0, 3)
       : listedSlow(r).slice(0, 3);
+    const softBits = view
+      ? (view.softs || []).slice(0, 3)
+      : [];
     const noFr = metrics.fail_rate_now == null && (issue === 'missing' || (issue === 'in_progress' && !r.finished));
     const ydbPct = metrics.ydb_pct;
     const focusHint = focusRun
@@ -3021,6 +3399,7 @@ function renderInbox() {
             const bits = [];
             if (failBits.length) bits.push('fail: ' + failBits.map(q => q.test + (q.ydb_pct!=null?' '+pct(q.ydb_pct):'')).join(', '));
             if (slowBits.length) bits.push('slow: ' + slowBits.map(q => q.test + (q.ydb_pct!=null?' '+pct(q.ydb_pct):'')).join(', '));
+            if (softBits.length) bits.push('soft: ' + softBits.map(q => q.test + (q.ydb_pct!=null?' '+pct(q.ydb_pct):'')).join(', '));
             if (nd.length) bits.push('no data: ' + nd.length + 'q');
             if (issue === 'in_progress' && r.finished) {
               bits.push('finished: ' + (r.finished.issue || r.finished.status || 'ok'));
@@ -3112,17 +3491,22 @@ function renderInbox() {
       if (!item || !Number.isFinite(ri)) return;
       const data = diveData(item);
       const runs = data.now_runs || [];
-      diveRunFocus[suiteKey(item)] = ri;
-      // Focus only — do not sync compare here (avoids two different "now"s in one dive).
-      // Compare stays a separate heatmap control; clicking latest clears compare.
-      if (ri === runs.length - 1) {
+      const run = runs[ri];
+      // TPC-C parity: cards ↔ heatmap compare. Now always stays on latest.
+      if (ri === runs.length - 1 || !run) {
         setCompareId(item.branch, item.db, '');
+        diveRunFocus[suiteKey(item)] = runs.length - 1;
+      } else if (run.ci_version) {
+        setCompareId(item.branch, item.db, run.ci_version);
+        clearDiveFocusForDb(item.branch, item.db);
+      } else {
+        diveRunFocus[suiteKey(item)] = ri;
       }
-      // refresh heatmap compare selects + this dive's cards/queries; keep row open
       const openKeys = [...root.querySelectorAll('tr.row.open')].map(tr => {
         const i = Number(tr.dataset.idx);
         return rows[i] ? suiteKey(rows[i]) : null;
       }).filter(Boolean);
+      destroyCharts();
       renderAll();
       const curRows = filteredInboxOrDrill();
       curRows.forEach((r, i) => {
@@ -3134,7 +3518,6 @@ function renderInbox() {
           tr.classList.add('open');
           detail.classList.remove('hidden');
         }
-        // Keep the same query selected under the new Last-runs focus.
         restoreDiveQueryFocus(r, diveId);
       });
       syncDutyFab(curRows);

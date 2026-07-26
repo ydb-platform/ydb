@@ -27,6 +27,7 @@ PTS = ROOT.parent
 if str(PTS) not in sys.path:
     sys.path.insert(0, str(PTS))
 
+from common.report_config import cfg_int, load_report_config  # noqa: E402
 from common.ydb_client import (  # noqa: E402
     DEFAULT_CONFIG,
     YdbClientError,
@@ -38,7 +39,7 @@ from common.ydb_client import (  # noqa: E402
 SQL_PATH = ROOT / "queries" / "fetch_tpcc.sql"
 REPORTS_SQL_PATH = ROOT / "queries" / "fetch_tpcc_reports.sql"
 DEFAULT_OUT = ROOT / "out" / "raw.json"
-DEFAULT_WINDOW_DAYS = 30
+DEFAULT_WINDOW_DAYS = cfg_int(load_report_config(ROOT), "window_days", 60)
 
 
 def build_sql(sql_path: Path, since_iso: str) -> str:

@@ -1,5 +1,5 @@
--- TPC-C runs for the Now report window (~1 month by default).
--- Replace {{SINCE}} with ISO timestamp = today − 30d, e.g. 2026-06-25T00:00:00Z
+-- TPC-C runs for the Now report window (see report_config.json window_days).
+-- Replace {{SINCE}} with ISO timestamp = today − window_days, e.g. 2026-05-27T00:00:00Z
 SELECT
   cluster,
   run_type,

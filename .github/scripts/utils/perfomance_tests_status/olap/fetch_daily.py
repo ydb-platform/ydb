@@ -27,6 +27,7 @@ PTS = ROOT.parent
 if str(PTS) not in sys.path:
     sys.path.insert(0, str(PTS))
 
+from common.report_config import cfg_int, load_report_config  # noqa: E402
 from common.ydb_client import (  # noqa: E402
     DEFAULT_CONFIG,
     YdbClientError,
@@ -47,7 +48,8 @@ DEFAULT_OUT = {
     "suites": ROOT / "out" / "raw.json",
     "tests": ROOT / "out" / "raw_tests.json",
 }
-DEFAULT_WINDOW_DAYS = 30
+_CFG = load_report_config(ROOT)
+DEFAULT_WINDOW_DAYS = cfg_int(_CFG, "window_days", 30)
 
 
 def build_sql(since: str, mode: str) -> str:

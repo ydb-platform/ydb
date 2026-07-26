@@ -7,7 +7,7 @@ History keeps the full --since window (day-grain; needed for compare-to-any-day)
 
 Example:
   python3 generate.py --input out/raw.json --output out/tpcc-report.html --open
-  # default --since = today − 30 days (~1 month)
+  # default --since from report_config.json (window_days, default 60)
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ import argparse
 import json
 import re
 import statistics
+import sys
 import webbrowser
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
@@ -23,39 +24,50 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 TEMPLATE = ROOT / "template.html"
+PTS = ROOT.parent
+if str(PTS) not in sys.path:
+    sys.path.insert(0, str(PTS))
 
-LAT_TOL = 0.10
-LAT_WATCH = 0.07
-TPMC_TOL = 0.10
-OUTLIER_MULT = 3.0
-LAT_CAP = 30000.0
+from common.report_config import cfg_float, cfg_int, cfg_str, load_report_config  # noqa: E402
 
-DEFAULT_WINDOW_DAYS = 30  # ~1 month lookback when --since omitted
-NOW_RUNS = 1  # alert signal = last completed run (same as OLAP)
-DISPLAY_RUNS = 3  # dive cards: recent context
-BASELINE_RUNS = 7
-EXPECTED_LOOKBACK_DAYS = 14
-EXPECTED_MIN_SHARE = 0.50
-WAVE_COMPLETE_HOURS = 6
-WAVE_COVERAGE_DONE = 0.85
-STALE_HOURS = 36
-# 0 = keep full --since window (day-grain; OLAP caps at 100 run-points instead).
-HISTORY_MAX_POINTS = 0
-INBOX_LIMIT = 80
-INBOX_PER_BRANCH = 45
-INBOX_PER_KIND = {
-    "missing": 20,
-    "in_progress": 15,
-    "broken": 25,
-    "both": 15,
-    "lat": 20,
-    "tpmc": 20,
-    "stale": 10,
-}
-# Join Allure URLs from tests_results onto mart points (nearest within window).
-REPORT_MATCH_MAX_SEC = 6 * 3600
+_CFG = load_report_config(ROOT)
 
-CORE_BRANCHES = ("main",)
+LAT_TOL = cfg_float(_CFG, "lat_tol", 0.10)
+LAT_WATCH = cfg_float(_CFG, "lat_watch", 0.07)
+TPMC_TOL = cfg_float(_CFG, "tpmc_tol", 0.10)
+OUTLIER_MULT = cfg_float(_CFG, "outlier_mult", 3.0)
+LAT_CAP = cfg_float(_CFG, "lat_cap", 30000.0)
+
+DEFAULT_WINDOW_DAYS = cfg_int(_CFG, "window_days", 60)  # ~2 months
+NOW_RUNS = cfg_int(_CFG, "now_runs", 1)
+DISPLAY_RUNS = cfg_int(_CFG, "display_runs", 3)
+BASELINE_RUNS = cfg_int(_CFG, "baseline_runs", 7)
+EXPECTED_LOOKBACK_DAYS = cfg_int(_CFG, "expected_lookback_days", 14)
+EXPECTED_MIN_SHARE = cfg_float(_CFG, "expected_min_share", 0.50)
+WAVE_COMPLETE_HOURS = cfg_float(_CFG, "wave_complete_hours", 6)
+WAVE_COVERAGE_DONE = cfg_float(_CFG, "wave_coverage_done", 0.85)
+STALE_HOURS = cfg_float(_CFG, "stale_hours", 36)
+# 0 = keep full --since window (day-grain; OLAP caps run-points instead).
+HISTORY_MAX_POINTS = cfg_int(_CFG, "history_max_points", 0)
+INBOX_LIMIT = cfg_int(_CFG, "inbox_limit", 80)
+INBOX_PER_BRANCH = cfg_int(_CFG, "inbox_per_branch", 45)
+INBOX_PER_KIND = dict(
+    _CFG.get("inbox_per_kind")
+    or {
+        "missing": 20,
+        "in_progress": 15,
+        "broken": 25,
+        "both": 15,
+        "lat": 20,
+        "tpmc": 20,
+        "stale": 10,
+    }
+)
+REPORT_MATCH_MAX_SEC = cfg_int(_CFG, "report_match_max_sec", 6 * 3600)
+
+CORE_BRANCHES = tuple(_CFG.get("core_branches") or ("main",))
+DATALENS_BASE = cfg_str(_CFG, "datalens_base", "https://datalens.yandex/wf5xdbbl923ok")
+DATALENS_TAB = cfg_str(_CFG, "datalens_tab", "9l5")
 
 STATUS_ORDER = {
     "nodata": -1,
@@ -1031,8 +1043,8 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
             "dbs_by_branch": dbs_by_branch,
             "default_from": since.date().isoformat(),
             "default_to": until.date().isoformat(),
-            "datalens_base": "https://datalens.yandex/wf5xdbbl923ok",
-            "datalens_tab": "9l5",
+            "datalens_base": DATALENS_BASE,
+            "datalens_tab": DATALENS_TAB,
         },
         "summary": summary,
         "by_branch": by_branch_summary,
@@ -1076,7 +1088,7 @@ def main():
     ap.add_argument(
         "--since",
         default=None,
-        help=f"YYYY-MM-DD (default: today − {DEFAULT_WINDOW_DAYS}d ≈ 1 month)",
+        help=f"YYYY-MM-DD (default: today − {DEFAULT_WINDOW_DAYS}d from report_config.json)",
     )
     ap.add_argument("--until", default=None, help="YYYY-MM-DD optional upper bound")
     ap.add_argument("--output", type=Path, default=ROOT / "out" / "tpcc-report.html")

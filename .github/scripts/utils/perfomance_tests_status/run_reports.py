@@ -23,6 +23,7 @@ ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from common.report_config import cfg_int, load_report_config  # noqa: E402
 from common.ydb_client import (  # noqa: E402
     DEFAULT_CONFIG,
     YdbClientError,
@@ -34,9 +35,11 @@ from common.ydb_client import (  # noqa: E402
 OLAP = ROOT / "olap"
 TPCC = ROOT / "tpcc"
 
-OLAP_SUITE_DAYS = 30
-OLAP_RUNS_DAYS = 30
-TPCC_DAYS = 30
+_OLAP_CFG = load_report_config(OLAP)
+_TPCC_CFG = load_report_config(TPCC)
+OLAP_SUITE_DAYS = cfg_int(_OLAP_CFG, "suite_window_days", cfg_int(_OLAP_CFG, "window_days", 30))
+OLAP_RUNS_DAYS = cfg_int(_OLAP_CFG, "runs_window_days", cfg_int(_OLAP_CFG, "window_days", 30))
+TPCC_DAYS = cfg_int(_TPCC_CFG, "window_days", 60)
 
 
 def since_iso(days: int) -> str:

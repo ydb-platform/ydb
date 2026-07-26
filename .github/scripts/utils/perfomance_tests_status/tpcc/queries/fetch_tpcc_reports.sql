@@ -1,6 +1,6 @@
 -- Allure report URLs for TPC-C suites (joined onto perfomance/tpcc points in generate.py).
 -- Source: tests_results (Suite TpccW* / Test=test); mart perfomance/tpcc has no report_url.
--- Replace {{SINCE}} with ISO timestamp = today − 30d, e.g. 2026-06-25T00:00:00Z
+-- Replace {{SINCE}} with ISO timestamp = today − window_days (report_config.json).
 SELECT
   Suite,
   Test,

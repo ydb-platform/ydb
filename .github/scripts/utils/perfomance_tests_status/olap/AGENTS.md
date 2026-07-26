@@ -30,7 +30,7 @@ python3 fetch_daily.py --mode suites -o out/raw.json          # last 30d
 Endpoint/DB: see `.github/config/ydb_qa_config.json`.  
 Auth: `CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS` / `--sa-key-file` / duty `init-token`.
 
-Default lookback: **last 30 days** (`--since` / `fetch_daily.py --days 30`).
+Defaults: [`report_config.json`](report_config.json) — lookback **`window_days` = 30**.
 
 ## 2. Per-query run series (required for slow-query drill-down)
 
@@ -84,7 +84,7 @@ python3 generate.py \
 | Date interval | From/To (started day); filters inbox, heatmap cells, last wave, history charts; Reset → full `--since..until` |
 | Wave view | UI toggle **finished** (default) = last completed run in heatmap/inbox; **all** = latest wave state (prefer in_progress when suite not in current wave yet) |
 | Compare wave | Per-cluster select from `wave_list`; heatmap `was → now` both reclassified vs **same prev7 before compare day** (like TPC-C). **Paint** only on significant hard changes; fail↑+slow↓ → **mixed**; watch/soft-only → solid now. Heatmap click sets Issue from now-side status (compare-aware). Dive: Last-runs click = **focus (now)**; compare is separate. Charts mark **now** (blue) and **cmp** (amber). |
-| History window | `HISTORY_MAX_POINTS=100` (~1 month of run points). Pure OLAP rules: `classify_rules.py` + `tests/test_classify_rules.py` (TPC-C compare → `../tpcc/`). |
+| History window | `history_max_points` in `report_config.json` (default 100). Pure OLAP rules: `classify_rules.py` + `tests/test_classify_rules.py` (TPC-C compare → `../tpcc/`). |
 
 Focus DbAliases: `sas_big/small`, `cloud_slonnn_64/128`, `vla_big/small`, `vla_3_node`.
 

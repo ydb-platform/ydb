@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 import webbrowser
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
@@ -37,46 +38,62 @@ from classify_rules import (
 
 ROOT = Path(__file__).resolve().parent
 TEMPLATE = ROOT / "template.html"
+PTS = ROOT.parent
+if str(PTS) not in sys.path:
+    sys.path.insert(0, str(PTS))
 
-DEFAULT_WINDOW_DAYS = 30  # default fetch/report/chart window
+from common.report_config import cfg_float, cfg_int, load_report_config  # noqa: E402
 
-NOW_RUNS = 1  # alert signal = last completed run (avoids green-last / red-prev confusion)
-DISPLAY_RUNS = 7  # dive cards + recent-run context
-BASELINE_RUNS = 7
-EXPECTED_LOOKBACK_DAYS = 14
-EXPECTED_MIN_SHARE = 0.50
-WAVE_COMPLETE_HOURS = 6
-WAVE_COVERAGE_DONE = 0.85  # expected suites present → wave considered complete
-STALE_HOURS = 36
-HISTORY_MAX_POINTS = 100  # ~1 month of per-run points (2–4 runs/day); TPCC keeps full window (day-grain)
-INBOX_LIMIT = 80
-INBOX_PER_KIND = {
-    "missing": 20,
-    "in_progress": 15,
-    "failing": 30,
-    "both": 15,
-    "slower": 20,
-    "stale": 10,
-}
+_CFG = load_report_config(ROOT)
 
-FOCUS_PREFIXES = (
-    "Clickbench",
-    "Tpch",
-    "Tpcds",
-    "UploadTpch",
-    "WorkloadManager",
+DEFAULT_WINDOW_DAYS = cfg_int(_CFG, "window_days", 30)
+
+NOW_RUNS = cfg_int(_CFG, "now_runs", 1)
+DISPLAY_RUNS = cfg_int(_CFG, "display_runs", 7)
+BASELINE_RUNS = cfg_int(_CFG, "baseline_runs", 7)
+EXPECTED_LOOKBACK_DAYS = cfg_int(_CFG, "expected_lookback_days", 14)
+EXPECTED_MIN_SHARE = cfg_float(_CFG, "expected_min_share", 0.50)
+WAVE_COMPLETE_HOURS = cfg_float(_CFG, "wave_complete_hours", 6)
+WAVE_COVERAGE_DONE = cfg_float(_CFG, "wave_coverage_done", 0.85)
+STALE_HOURS = cfg_float(_CFG, "stale_hours", 36)
+HISTORY_MAX_POINTS = cfg_int(_CFG, "history_max_points", 100)
+INBOX_LIMIT = cfg_int(_CFG, "inbox_limit", 80)
+INBOX_PER_KIND = dict(
+    _CFG.get("inbox_per_kind")
+    or {
+        "missing": 20,
+        "in_progress": 15,
+        "failing": 30,
+        "both": 15,
+        "slower": 20,
+        "stale": 10,
+    }
+)
+
+FOCUS_PREFIXES = tuple(
+    _CFG.get("focus_prefixes")
+    or (
+        "Clickbench",
+        "Tpch",
+        "Tpcds",
+        "UploadTpch",
+        "WorkloadManager",
+    )
 )
 FAMILIES = list(FOCUS_PREFIXES)
 
-FOCUS_DBS = {
-    "sas_big_column",
-    "sas_small_column",
-    "cloud_slonnn_64_column",
-    "cloud_slonnn_128_column",
-    "vla_big_column",
-    "vla_small_column",
-    "vla_3_node_column",
-}
+FOCUS_DBS = set(
+    _CFG.get("focus_dbs")
+    or {
+        "sas_big_column",
+        "sas_small_column",
+        "cloud_slonnn_64_column",
+        "cloud_slonnn_128_column",
+        "vla_big_column",
+        "vla_small_column",
+        "vla_3_node_column",
+    }
+)
 # Prefer these first in UI; every branch with points in the window is included.
 CORE_BRANCHES = ("main", "trunk")
 
@@ -1625,7 +1642,7 @@ def main():
     ap.add_argument(
         "--since",
         default=None,
-        help=f"YYYY-MM-DD history lookback (default: {DEFAULT_WINDOW_DAYS} days ago UTC)",
+        help=f"YYYY-MM-DD history lookback (default: {DEFAULT_WINDOW_DAYS}d from report_config.json)",
     )
     ap.add_argument("--output", "-o", default=str(ROOT / "out" / "olap-report.html"))
     ap.add_argument("--open", action="store_true")

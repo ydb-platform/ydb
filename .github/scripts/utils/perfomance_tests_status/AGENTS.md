@@ -13,7 +13,8 @@ Route to the matching subfolder and follow its AGENTS.md.
 Duty: dive **Save context** / **Copy context** → JSON →  
 `cd duty_agent && eval "$(python3 dutyctl.py init-token --shell)"`  
 (YAV → `SANDBOX_TOKEN` + YDB SA key path) → follow [`duty_agent/AGENTS.md`](duty_agent/AGENTS.md).  
-Mart fetch: [`common/ydb_client.py`](common/ydb_client.py) (not MCP).
+Mart fetch: [`common/ydb_client.py`](common/ydb_client.py) (not MCP).  
+Report defaults (window, baseline, focus dbs, …): `tpcc/report_config.json`, `olap/report_config.json`.
 
 ## One-shot local / CI build
 

@@ -2134,6 +2134,11 @@ function diveHtml(r, id) {
   const runList = runCardsForItem(r);
   const latestDay = runList.length ? (runList[runList.length - 1].day || '') : '';
   const nCmp = Math.max(0, runList.filter(x => !x.isNow).length);
+  let dashUrl = null;
+  try { dashUrl = datalensUrl(r); } catch (_) {}
+  const dashLink = dashUrl
+    ? `<a href="${esc(dashUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="DataLens · cluster × run_type × branch">dashboard</a>`
+    : '';
   const runs = runList.map((run) => {
     const lat = run.lat_capped
       ? `<span class="bad">CAPPED ${fmt(run.lat_raw)}&nbsp;ms</span>`
@@ -2163,7 +2168,7 @@ function diveHtml(r, id) {
   const nowCard = runList.length ? runList[runList.length - 1] : null;
   const reportUrl = (nowCard && nowCard.report) || data.report || r.report || null;
   const reportLink = reportUrl
-    ? `<a href="${esc(reportUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Allure report</a>`
+    ? `<a href="${esc(reportUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Allure</a>`
     : '—';
   const absLat = (dm.lat_base != null && dm.lat_now != null) ? (dm.lat_now - dm.lat_base) : null;
   const absTpmc = (dm.tpmc_base != null && dm.tpmc_now != null) ? (dm.tpmc_now - dm.tpmc_base) : null;
@@ -2177,11 +2182,15 @@ function diveHtml(r, id) {
        </div>`
     : `<div class="muted">alert (median prev${win}): ${esc((r.reasons || []).join(' · ') || '—')}</div>`;
   const reasonHtml = summaryHtml;
+  const linksRow = [
+    `Allure: ${reportLink}`,
+    dashLink ? `Dashboard: ${dashLink}` : null,
+  ].filter(Boolean).join(' · ');
 
   return `<div class="dive" data-dive-branch="${esc(r.branch || '')}" data-dive-db="${esc(r.db || '')}" data-dive-latest-day="${esc(latestDay)}">
     ${waveNote}
     ${reasonHtml}
-    <div class="muted" style="margin-bottom:6px">Report: ${reportLink}</div>
+    <div class="muted" style="margin-bottom:6px">${linksRow}</div>
     <div>
       <div class="muted" style="margin-bottom:6px"><b>Compare runs</b> (${nCmp} baseline + now; клик = baseline; now очищает)${fin ? ' <span class="pill">finished</span>' : ''}</div>
       <div class="runs">${runs}</div>

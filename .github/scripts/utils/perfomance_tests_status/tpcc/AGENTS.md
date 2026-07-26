@@ -31,7 +31,7 @@ python3 fetch_daily.py -o out/raw.json   # → out/raw.json + out/reports.json
 
 Endpoint/DB: see `.github/config/ydb_qa_config.json`.
 
-Default lookback: **~1 month** (`DEFAULT_WINDOW_DAYS = 30`).
+Defaults: [`report_config.json`](report_config.json) — lookback **`window_days` = 60** (~2 months).
 
 `generate.py` joins reports onto points: `perfN` ↔ `oltp-perf-N`, `ydb_cli_{snapshot|serializable}_*`@WH ↔ `TpccW{WH}T0{Snapshot|Serializable}`, nearest timestamp ≤6h. Dive / chart click / Save context → `focus_run.report` for [`../duty_agent/`](../duty_agent/).
 
@@ -45,7 +45,7 @@ python3 generate.py \
 ```
 
 Auto-loads `out/reports.json` when present (`--reports-input` to override).  
-`--since` optional (default: today − 30 days). Override only if the user asks.
+`--since` optional (default: `window_days` from `report_config.json`). Override only if the user asks.
 
 ## 3. Deliver
 

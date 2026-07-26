@@ -1288,7 +1288,9 @@ function listedWatch(r) {
 }
 function listedNodata(r) {
   if ((r.queries || []).length) {
-    return r.queries.filter(q => q && q.test && q.kind === 'nodata');
+    // Align with heatmap countQueryKindsAt (gaps = nodata | missing | in_progress).
+    return r.queries.filter(q => q && q.test
+      && (q.kind === 'nodata' || q.kind === 'missing' || q.kind === 'in_progress'));
   }
   return [];
 }
@@ -1312,6 +1314,7 @@ function hasSoftSlowSignal(r) {
   return listedWatch(r).length > 0;
 }
 function hasNodataSignal(r) {
+  if (r.status === 'nodata' || r.kind === 'nodata' || r.issue === 'nodata') return true;
   return listedNodata(r).length > 0;
 }
 function isInfraIssue(r) {
@@ -2092,7 +2095,14 @@ function issueFilterFromCellStatus(nowSt) {
   return issueFilterFromLive({ status: nowSt, n_fail: 0, n_slow: 0 });
 }
 function isHotIssue(issue) {
-  return ['failing', 'slower', 'both', 'missing', 'stale', 'in_progress', 'broken'].includes(issue);
+  return ['failing', 'slower', 'both', 'missing', 'stale', 'in_progress', 'broken', 'nodata', 'watch'].includes(issue);
+}
+/** Inbox "all hot": classic issue buckets + React signals on issue=ok rows (no data / soft). */
+function isHotRow(r) {
+  if (isHotIssue(r.issue) || isHotIssue(effectiveIssue(r))) return true;
+  if (hasFailSignal(r) || hasHardSlowSignal(r)) return true;
+  if (hasSoftSlowSignal(r) || hasNodataSignal(r)) return true;
+  return false;
 }
 function issueFromClassifyPart(part) {
   if (!part) return 'ok';
@@ -2105,6 +2115,7 @@ function issueFromClassifyPart(part) {
   if (kind === 'fail' || st === 'broken' || st === 'failing' || st === 'fail') return 'failing';
   if (kind === 'slow' || st === 'regression' || st === 'slower' || st === 'slow') return 'slower';
   if (kind === 'watch' || st === 'watch') return 'watch';
+  if (kind === 'nodata' || st === 'nodata') return 'nodata';
   return 'ok';
 }
 /** Under active compare: issue from same-prev7 now-side reclassify. */
@@ -2231,9 +2242,10 @@ function filteredInbox() {
     } else if (issue) {
       if (r.issue !== issue && effectiveIssue(r) !== issue) return false;
     } else if (!drill) {
-      if (!isHotIssue(r.issue) && !isHotIssue(effectiveIssue(r))) return false;
+      // no data / soft live on issue=ok — isHotIssue alone used to drop them from all hot.
+      if (!isHotRow(r)) return false;
     }
-    // all hot + drill: any matching slice (ok or hot)
+    // all hot + drill: React channels (fail/hard/soft/nodata) still gate visibility
     if (!browseOk && !rowMatchesReact(r)) return false;
     return true;
   });

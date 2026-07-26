@@ -45,10 +45,26 @@ jobs:
       - name: Install Python deps
         run: python3 -m pip install -q "ydb[yc]>=3.20"
 
+      - name: Install GitHub CLI
+        run: |
+          set -eux
+          if command -v gh >/dev/null 2>&1; then
+            gh --version
+            exit 0
+          fi
+          # Analytic runners often lack gh; pin a release into PATH for duty known_issues.
+          GH_VER=2.74.0
+          mkdir -p "$RUNNER_TEMP/gh-bin"
+          curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VER}/gh_${GH_VER}_linux_amd64.tar.gz" \
+            | tar -xz -C "$RUNNER_TEMP/gh-bin" --strip-components=1
+          echo "$RUNNER_TEMP/gh-bin/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/gh-bin/bin/gh" --version
+
       - name: Fetch data and generate reports
         id: build
         env:
-          # duty known_issues: generate.py uses gh, else GitHub REST with this token
+          # duty known_issues via `gh search` (REST fallback if gh still missing)
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -eux

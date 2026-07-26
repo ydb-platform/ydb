@@ -483,15 +483,26 @@ def validate_analysis_md(
         (r"last\s*touch|касание\s+path|Crash path|crash-path", "last touch/Crash path — «место падения» / «когда файл меняли последний раз»"),
         (r"метрик[ауи]\s*«?зелён", "не «метрика зелёный» — объясни: в UI зелёный по метрике, по Allure с падениями"),
         (r"^\|?\s*раньше\s*\|", "«раньше» в таблице — поставь дату/label прогона"),
-        (
-            r"перед\s+заведением|скопировать\s+\*\*Title\*\*|gh\s+search\s+issues|"
-            r"dutyctl\s+\w+|завести\s+issue:\s*скопир",
-            "чеклист агента в «Что дальше» — пиши шаги для дежурного (тикет / coredump / не смешивать)",
-        ),
     ]
     for pat, hint in jargon:
         if re.search(pat, body_for_jargon, re.I):
             errors.append(f"jargon in report: {hint}")
+
+    # «Что дальше» = for the human on duty — not agent playbook (gh search belongs in Materials only).
+    next_sec = ""
+    if re.search(r"^##\s+Что дальше\s*$", body_for_jargon, re.M):
+        next_sec = re.split(r"^##\s+Что дальше\s*$", body_for_jargon, maxsplit=1, flags=re.M)[-1]
+        next_sec = re.split(r"^##\s+\S", next_sec, maxsplit=1, flags=re.M)[0]
+    if next_sec and re.search(
+        r"перед\s+заведением|скопировать\s+\*\*Title\*\*|gh\s+search\s+issues|"
+        r"dutyctl\s+\w+|создать\s+issue:\s*скопир",
+        next_sec,
+        re.I,
+    ):
+        errors.append(
+            "jargon in report: чеклист агента в «Что дальше» — "
+            "пиши шаги для дежурного (тикет / coredump / не смешивать)"
+        )
 
     # Issue materials: sandbox report URL (OLAP) or explicit metrics-only / DataLens (TPC-C)
     tpcc_only = bool(types) and all(t.startswith("tpcc_") for t in types)

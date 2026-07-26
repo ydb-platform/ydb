@@ -37,3 +37,4 @@ TWasmCompartmentStatePtr LoadWasmFromManifest(const TWasmLoadParams& params) {
 }
 
 } // namespace NKikimr::NUdfStore::NWasm
+

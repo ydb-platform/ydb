@@ -22,6 +22,7 @@ class TestYdbWorkload(object):
         self.cluster = KiKiMR(KikimrConfigGenerator(
             column_shard_config={
                 "alter_object_enabled": True,
+                'max_read_staleness_ms': 2000,
             },
             static_pdisk_size=10 * 1024 * 1024,
             dynamic_pdisk_size=5 * 1024 * 1024

@@ -165,11 +165,38 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         const TString shortTopicName = account + "/topic1";
         const TString fullTopicPath = dbRoot + "/" + shortTopicName;
 
-        setup->GetRuntime().GetAppData().PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot(dbRoot);
-
         ExecuteDDL(*setup, "CREATE TOPIC `LbAccount/account/topic1`");
 
         auto& runtime = setup->GetRuntime();
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
+        runtime.GetAppData().PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot(dbRoot);
+
+        CreateActor(runtime, {shortTopicName});
+        auto topics = WaitResult(runtime);
+
+        UNIT_ASSERT(topics.contains(shortTopicName));
+        auto& topicInfo = topics[shortTopicName];
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.RealPath, fullTopicPath);
+    }
+
+    Y_UNIT_TEST(TopicWithLbUserDatabaseRootLeadingSlash) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
+        setup->GetServer().EnableLogs(
+                { NKikimrServices::TX_PROXY_SCHEME_CACHE, NKikimrServices::PQ_DESCRIBER },
+                NActors::NLog::PRI_DEBUG
+        );
+
+        const TString dbRoot = "/Root/LbAccount";
+        const TString shortTopicName = "/account/topic";
+        const TString fullTopicPath = dbRoot + "/account/topic";
+
+        ExecuteDDL(*setup, "CREATE TOPIC `LbAccount/account/topic`");
+
+        auto& runtime = setup->GetRuntime();
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
+        runtime.GetAppData().PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot(dbRoot);
+
         CreateActor(runtime, {shortTopicName});
         auto topics = WaitResult(runtime);
 
@@ -186,14 +213,39 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
                 NActors::NLog::PRI_DEBUG
         );
 
-        setup->GetRuntime().GetAppData().PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot("/Root/LbAccount");
-
         auto& runtime = setup->GetRuntime();
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
+        runtime.GetAppData().PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot("/Root/LbAccount");
+
         CreateActor(runtime, {"account/topic_not_exists"});
         auto topics = WaitResult(runtime);
 
         UNIT_ASSERT(topics.contains("account/topic_not_exists"));
         auto& topicInfo = topics["account/topic_not_exists"];
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::NOT_FOUND);
+    }
+
+    Y_UNIT_TEST(TopicWithLbUserDatabaseRootIgnoredForFirstClassCitizen) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
+        setup->GetServer().EnableLogs(
+                { NKikimrServices::TX_PROXY_SCHEME_CACHE, NKikimrServices::PQ_DESCRIBER },
+                NActors::NLog::PRI_DEBUG
+        );
+
+        const TString dbRoot = "/Root/LbAccount";
+        const TString shortTopicName = "account/topic1";
+
+        ExecuteDDL(*setup, "CREATE TOPIC `LbAccount/account/topic1`");
+
+        auto& runtime = setup->GetRuntime();
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
+        runtime.GetAppData().PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot(dbRoot);
+
+        CreateActor(runtime, {shortTopicName});
+        auto topics = WaitResult(runtime);
+
+        UNIT_ASSERT(topics.contains(shortTopicName));
+        auto& topicInfo = topics[shortTopicName];
         UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::NOT_FOUND);
     }
 }

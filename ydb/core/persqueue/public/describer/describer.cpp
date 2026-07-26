@@ -51,7 +51,9 @@ public:
 
     void Bootstrap() {
         Become(&TDescribeActor::StateWork);
-        LbUserDatabaseRoot = AppData()->PQConfig.GetPQDiscoveryConfig().GetLbUserDatabaseRoot();
+        if (!AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
+            LbUserDatabaseRoot = AppData()->PQConfig.GetPQDiscoveryConfig().GetLbUserDatabaseRoot();
+        }
         RetryWithSyncVersion = Settings.ForceSyncVersion;
         UsedSyncVersion = Settings.ForceSyncVersion;
         DoRequest(TopicPaths);

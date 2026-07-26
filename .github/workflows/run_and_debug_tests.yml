@@ -20,6 +20,9 @@ jobs:
   reports:
     name: Build and publish Now reports (debug harness)
     runs-on: [self-hosted, auto-provisioned, build-preset-analytic-node]
+    permissions:
+      contents: read
+      issues: read
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -46,6 +49,9 @@ jobs:
 
       - name: Fetch data and generate reports
         id: build
+        env:
+          # duty known_issues: generate.py uses gh, else GitHub REST with this token
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -eux
           PUBLISH_DIR="${RUNNER_TEMP}/perfomance_tests_status_publish"

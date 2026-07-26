@@ -21,14 +21,19 @@ Agent expands ``affected`` when the same fingerprint appears on another suite/qu
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
+import urllib.error
+import urllib.parse
+import urllib.request
 from typing import Any
 
 DEFAULT_REPO = "ydb-platform/ydb"
 # Search token in issue body (HTML comment). No GitHub label required.
 MATCH_SEARCH_QUERY = "perf-duty-match"
+GITHUB_API = "https://api.github.com"
 BLOCK_START = "<!-- perf-duty-match"
 BLOCK_END = "-->"
 BLOCK_RE = re.compile(
@@ -327,6 +332,64 @@ def _gh_json(args: list[str], *, timeout: float = 60.0) -> Any:
     return json.loads(proc.stdout or "null")
 
 
+def _github_token() -> str | None:
+    for key in ("GH_TOKEN", "GITHUB_TOKEN"):
+        tok = (os.environ.get(key) or "").strip()
+        if tok:
+            return tok
+    return None
+
+
+def _github_api_json(path: str, *, timeout: float = 60.0) -> Any:
+    """GET GitHub REST JSON. path is absolute URL or /… under api.github.com."""
+    url = path if path.startswith("http") else f"{GITHUB_API}{path}"
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "ydb-perfomance-tests-status",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    tok = _github_token()
+    if tok:
+        headers["Authorization"] = f"Bearer {tok}"
+    req = urllib.request.Request(url, headers=headers, method="GET")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")[:300]
+        raise RuntimeError(f"HTTP {e.code}: {body}") from e
+
+
+def _search_open_issues_via_api(repo: str, *, limit: int) -> list[dict[str, Any]]:
+    """Search + re-fetch each issue so match-block at end of body is not truncated."""
+    q = f"repo:{repo} is:issue is:open {MATCH_SEARCH_QUERY}"
+    qs = urllib.parse.urlencode({"q": q, "per_page": min(limit, 100)})
+    data = _github_api_json(f"/search/issues?{qs}")
+    items = data.get("items") if isinstance(data, dict) else None
+    if not isinstance(items, list):
+        return []
+    owner, name = repo.split("/", 1)
+    out: list[dict[str, Any]] = []
+    for it in items[:limit]:
+        if not isinstance(it, dict):
+            continue
+        num = it.get("number")
+        if not num:
+            continue
+        full = _github_api_json(f"/repos/{owner}/{name}/issues/{int(num)}")
+        if not isinstance(full, dict):
+            continue
+        out.append(
+            {
+                "number": full.get("number") or num,
+                "title": full.get("title") or it.get("title"),
+                "url": full.get("html_url") or it.get("html_url") or it.get("url"),
+                "body": full.get("body") or "",
+            }
+        )
+    return out
+
+
 def _issue_from_gh(raw: dict[str, Any]) -> dict[str, Any] | None:
     body = raw.get("body") or ""
     block = parse_match_block(body)
@@ -356,7 +419,9 @@ def fetch_open_duty_issues(
 ) -> tuple[list[dict[str, Any]], str | None]:
     """Fetch open issues that contain ``<!-- perf-duty-match`` in the body.
 
-    Uses ``gh search issues`` (no label). Returns (issues, warning).
+    Prefers ``gh search issues``; falls back to GitHub REST (``GITHUB_TOKEN`` /
+    ``GH_TOKEN``) when ``gh`` is missing — typical on Actions runners.
+    Returns (issues, warning).
     """
     warning: str | None = None
     raw_list: list[dict[str, Any]] = []
@@ -378,9 +443,16 @@ def fetch_open_duty_issues(
         )
         if isinstance(found, list):
             raw_list = found
-    except Exception as e:  # noqa: BLE001
-        warning = f"gh search issues {MATCH_SEARCH_QUERY}: {e}"
-        return [], warning
+    except Exception as e_gh:  # noqa: BLE001
+        try:
+            raw_list = _search_open_issues_via_api(repo, limit=min(limit, 100))
+            warning = f"gh unavailable ({e_gh}); used GitHub REST API"
+        except Exception as e_api:  # noqa: BLE001
+            warning = (
+                f"gh search issues {MATCH_SEARCH_QUERY}: {e_gh}; "
+                f"REST fallback: {e_api}"
+            )
+            return [], warning
 
     out: list[dict[str, Any]] = []
     for raw in raw_list:

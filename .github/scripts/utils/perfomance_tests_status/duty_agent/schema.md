@@ -1,60 +1,91 @@
-# perf-duty-context/v1
+# Schemas
 
-Frozen incident pack from OLAP or TPC-C Now HTML dive.
+## perf-duty-context/v1 (input)
+
+Frozen incident pack from OLAP or TPC-C Now HTML dive (`Save` / `Copy context`).
 
 ```json
 {
   "schema": "perf-duty-context/v1",
-  "generated_at": "2026-07-24T12:00:00.000Z",
-  "report": {
-    "kind": "olap",
-    "url": "https://…/olap-report.html",
-    "window": ["2026-06-24", "2026-07-24"],
-    "generated_at": "…",
-    "source": "perfomance/olap/…"
-  },
+  "report": { "kind": "olap|tpcc", "url": "…", "window": ["…", "…"] },
   "selection": {
     "branch": "main",
-    "db": "sas_small_column",
-    "suite": "TpchParallelS100T10",
-    "family": "Tpch",
-    "focus_run": {
-      "label": "2026-07-08_da957bd",
-      "ci_version": "trunk.r20245012",
-      "sha": "da957bd",
-      "ts": "2026-07-08T05:32:58",
-      "report": "https://proxy.sandbox.yandex-team.ru/…/index.html",
-      "fail_rate": 1.0
-    }
+    "db": "…",
+    "suite": "…",
+    "focus_run": { "label": "…", "sha": "…", "report": "https://proxy.sandbox…/index.html" }
   },
-  "suite_now": {
-    "issue": "failing",
-    "status": "failing",
-    "fail_rate_now": 0.38,
-    "fail_rate_base": 0.38,
-    "reasons": []
-  },
-  "queries": [
-    { "test": "Query05", "kind": "fail", "error_class": "other" }
-  ],
-  "sticky_query": "Query05",
-  "sticky_detail": null,
-  "suite_history": { "labels": [], "fail_rate": [], "versions": [] },
-  "compare": { "wave_id": null },
+  "suite_now": { },
+  "queries": [],
+  "sticky_query": null,
+  "suite_history": { },
   "links": { "datalens": null },
-  "hints": { "react": ["fail"], "wave_view": "finished" }
+  "hints": { }
 }
 ```
-
-## Kind differences
 
 | Field | OLAP | TPC-C |
 |-------|------|-------|
 | `report.kind` | `olap` | `tpcc` |
 | `selection.focus_run.report` | usually sandbox URL | often null |
-| `selection.focus_run.ci_version` | yes | — (use `day`) |
-| `suite_now` metrics | fail_rate / ydb | lat / tpmc |
+| `suite_now` | fail_rate / ydb | lat / tpmc |
 | `queries` / `sticky_query` | yes | empty / null |
-| `links.datalens` | — | optional |
 
-Harness must accept both kinds without requiring sandbox URL.
+See also `dutyctl detect-type` seeds: `olap_fail`, `olap_slow`, `tpcc_tpmc`, `tpcc_lat`, `mixed`.
+
+---
+
+## perf-duty-result/v1 (output)
+
+Written by `dutyctl write-result` (always, even on failure). Agent owns problem conclusions in `problems.json`; tools merge errors/artifacts.
+
+```json
+{
+  "schema": "perf-duty-result/v1",
+  "ok": true,
+  "run_id": "2026-07-25_f88e100_UploadTpch100",
+  "context": {
+    "kind": "olap",
+    "branch": "main",
+    "db": "sas_big_column",
+    "suite": "UploadTpch100",
+    "focus_sha": "f88e100",
+    "focus_label": "2026-07-25_f88e100"
+  },
+  "analysis_types": ["olap_fail"],
+  "status": "completed",
+  "resolution": "update_known",
+  "summary": "one-line plain summary",
+  "confidence": "high",
+  "confidence_score": 0.85,
+  "culprit_found": false,
+  "culprit": null,
+  "problems": {
+    "total": 2,
+    "analyzed": 2,
+    "unknown": 0,
+    "items": []
+  },
+  "errors": [],
+  "warnings": [],
+  "artifacts": {
+    "analysis_md": "analysis.md",
+    "focus_json": "focus.json"
+  },
+  "timings_sec": {}
+}
+```
+
+| Field | Meaning |
+|-------|---------|
+| `ok` | no hard tool/infra failure |
+| `status` | `completed` \| `partial` \| `failed` \| `stopped` |
+| `resolution` | `update_known` \| `open_ticket` \| `wait_next_wave` \| `investigate_further` \| `no_action` \| `unknown` |
+| `culprit_found` | true only if evidence bar met |
+| `problems.total` | seeded + discovered |
+| `problems.analyzed` | reached a conclusion (incl. unknown) |
+| `problems.unknown` | explicitly could not determine |
+| `errors[]` | `{ "stage", "message", "retriable" }` |
+
+Human report: `analysis.md` (agent-written). Validate with `dutyctl validate`.
+
+Architecture: see [`REDESIGN.md`](REDESIGN.md). CLI: `dutyctl.py`.

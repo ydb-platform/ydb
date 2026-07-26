@@ -10,8 +10,9 @@ Toolkit root: `.github/scripts/utils/perfomance_tests_status`
 
 Route to the matching subfolder and follow its AGENTS.md.
 
-Duty: dive **Save context** / **Copy context** → `perf-duty-context/v1` JSON →  
-`python3 duty_agent/run.py --context pack.json --out duty-card.md` (works for olap + tpcc).
+Duty: dive **Save context** / **Copy context** → JSON →  
+`cd duty_agent && python3 run.py init-token` (YAV → `SANDBOX_TOKEN`) →  
+`python3 run.py --context pack.json --out duty-card.md` (olap + tpcc; OAuth sandbox + Allure JSON).
 
 ## One-shot local / CI build
 

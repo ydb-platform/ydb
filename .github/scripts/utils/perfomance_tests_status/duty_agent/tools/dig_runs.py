@@ -271,16 +271,22 @@ def build_dig_sql(
         "selection": sel,
         "neighbors": neighbors,
         "sql": sql,
-        "mcp_hint": (
-            "Run SQL via MCP user-ydb-qa → ydb_query, save JSON to dig_runs_raw.json, "
-            "then: dutyctl dig-runs -c CONTEXT -o OUT --from-json dig_runs_raw.json. "
+        "fetch_hint": (
+            "Default: dutyctl dig-runs -c CONTEXT -o OUT  (executes via common/ydb_client; "
+            "needs CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS from init-token). "
+            "Offline: --from-json dig_runs_raw.json. SQL only: --sql-only. "
             "If jump sits at the edge of the window, re-run with --days-before 60|90."
+        ),
+        # legacy key for older callers
+        "mcp_hint": (
+            "Deprecated: use dutyctl dig-runs (ydb_client). "
+            "Offline: --from-json dig_runs_raw.json."
         ),
     }
 
 
-def rows_from_mcp_json(payload: Any) -> list[dict[str, Any]]:
-    """Accept MCP {result_sets:[{columns,rows}]} or list[dict] or {rows:…}."""
+def rows_from_result_json(payload: Any) -> list[dict[str, Any]]:
+    """Accept {result_sets:[{columns,rows}]} or list[dict] or {rows:…}."""
     if isinstance(payload, list):
         if payload and isinstance(payload[0], dict) and "columns" not in payload[0]:
             return [r for r in payload if isinstance(r, dict)]
@@ -300,6 +306,10 @@ def rows_from_mcp_json(payload: Any) -> list[dict[str, Any]]:
         if rows and isinstance(rows[0], dict):
             return rows
     return []
+
+
+# Backward-compatible alias (old fixture / test name)
+rows_from_mcp_json = rows_from_result_json
 
 
 def _result_set_to_rows(rs: dict[str, Any]) -> list[dict[str, Any]]:

@@ -18,18 +18,18 @@ History charts are deep-dive only (do not drive alerts).
 
 SQL: `queries/fetch_tpcc.sql` (replace `{{SINCE}}`).
 
-Prefer MCP `user-ydb-qa` → `ydb_query`, or ydb CLI. Save MCP-shaped JSON:
+Use [`fetch_daily.py`](fetch_daily.py) → [`../common/ydb_client.py`](../common/ydb_client.py) (YDBWrapper scan). **Do not use MCP.**
 
-```json
-{"result_sets":[{"columns":[...],"rows":[...]}]}
+```bash
+cd .github/scripts/utils/perfomance_tests_status/tpcc
+# SA: env, --sa-key-file, or:
+# eval "$(python3 ../duty_agent/dutyctl.py init-token --shell)"
+python3 fetch_daily.py -o out/raw.json   # last 30d → result_sets JSON
 ```
-
-→ `out/raw.json`
 
 Endpoint/DB: see `.github/config/ydb_qa_config.json`.
 
-Default lookback: **~1 month** (`DEFAULT_WINDOW_DAYS = 30`).  
-Fetch with `{{SINCE}}` = today − 30d (`YYYY-MM-DDT00:00:00Z`).
+Default lookback: **~1 month** (`DEFAULT_WINDOW_DAYS = 30`).
 
 ## 2. Generate HTML
 

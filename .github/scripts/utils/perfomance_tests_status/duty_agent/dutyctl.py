@@ -2,9 +2,9 @@
 """Perf duty toolbox (facts only) — agent owns root cause.
 
 CLI:
-  init-token     load SANDBOX_TOKEN from YAV
+  init-token     load SANDBOX_TOKEN + YDB SA key path from YAV
   prepare        detect-type + focus + priors (+ metrics if slow/tpcc)
-  dig-runs       SQL + summarize runs from perfomance/tpcc|olap marts
+  dig-runs       SQL + execute via ydb_client + summarize mart runs
   dig-prs        product PRs / hot areas in sha window
   bisect         crash-path window + focus PR files
   validate       lint analysis.md
@@ -22,8 +22,11 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parent
+PTS_ROOT = ROOT.parent  # perfomance_tests_status
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+if str(PTS_ROOT) not in sys.path:
+    sys.path.insert(0, str(PTS_ROOT))
 
 from tools.code_bisect import build_code_bisect  # noqa: E402
 from tools.context import (  # noqa: E402
@@ -36,7 +39,7 @@ from tools.detect_type import detect_type  # noqa: E402
 from tools.dig_prs import dig_prs_window  # noqa: E402
 from tools.dig_runs import (  # noqa: E402
     build_dig_sql,
-    rows_from_mcp_json,
+    rows_from_result_json,
     summarize_dig,
 )
 from tools.github_pr import resolve_sha  # noqa: E402
@@ -239,8 +242,44 @@ def cmd_prepare(args: argparse.Namespace) -> int:
         loaded.close()
 
 
+def _summarize_and_write_dig(
+    *,
+    out_dir: Path,
+    plan: dict[str, Any],
+    sql_path: Path,
+    rows: list[dict[str, Any]],
+    raw_path: Path,
+) -> int:
+    dig = summarize_dig(
+        kind=str(plan["kind"]),
+        rows=rows,
+        selection=plan["selection"],
+        meta={
+            "since": plan["since"],
+            "until": plan["until"],
+            "table": plan["table"],
+            "days_before": plan["days_before"],
+            "days_after": plan["days_after"],
+            "neighbors": plan["neighbors"],
+        },
+    )
+    dig["sql_path"] = str(sql_path)
+    dig["raw_path"] = str(raw_path)
+    write_json(out_dir / "dig_runs.json", dig)
+    summary = dig.get("summary") or {}
+    print(f"wrote {out_dir / 'dig_runs.json'}")
+    jump = summary.get("largest_lat_step") or summary.get("largest_fail_step")
+    print(
+        f"rows={summary.get('row_count')} slice={summary.get('slice_count')} "
+        f"jump={jump}"
+    )
+    if summary.get("window_edge_hint"):
+        print(f"HINT: {summary['window_edge_hint']}")
+    return 0
+
+
 def cmd_dig_runs(args: argparse.Namespace) -> int:
-    """Build mart SQL (Now sources) and/or summarize MCP JSON → dig_runs.json."""
+    """Build mart SQL, execute via ydb_client (default), summarize → dig_runs.json."""
     loaded = _load_ctx(args.context)
     try:
         ctx = loaded.ctx
@@ -254,53 +293,74 @@ def cmd_dig_runs(args: argparse.Namespace) -> int:
         sql_path = out_dir / "dig_runs.sql"
         sql_path.write_text(plan["sql"], encoding="utf-8")
         write_json(out_dir / "dig_runs_plan.json", {k: v for k, v in plan.items() if k != "sql"})
+        print(f"wrote {sql_path}")
+        print(
+            f"table={plan['table']} since={plan['since']} until={plan['until']} "
+            f"days_before={plan['days_before']} neighbors={plan['neighbors']}"
+        )
 
-        if not args.from_json:
-            print(f"wrote {sql_path}")
-            print(
-                f"table={plan['table']} since={plan['since']} until={plan['until']} "
-                f"days_before={plan['days_before']} neighbors={plan['neighbors']}"
+        if args.from_json:
+            raw_path = Path(args.from_json)
+            payload = json.loads(raw_path.read_text(encoding="utf-8"))
+            rows = rows_from_result_json(payload)
+            return _summarize_and_write_dig(
+                out_dir=out_dir,
+                plan=plan,
+                sql_path=sql_path,
+                rows=rows,
+                raw_path=raw_path,
             )
-            print(plan["mcp_hint"])
+
+        if args.sql_only:
+            print(plan.get("fetch_hint") or plan.get("mcp_hint") or "")
             print("--- SQL ---")
             print(plan["sql"])
             merge_result(
                 out_dir,
                 ctx=ctx,
                 status="partial",
-                warnings=["dig-runs: SQL ready — run via MCP ydb_query, then --from-json"],
+                warnings=["dig-runs: --sql-only — run without flag to execute via ydb_client"],
             )
             return 0
 
-        raw_path = Path(args.from_json)
-        payload = json.loads(raw_path.read_text(encoding="utf-8"))
-        rows = rows_from_mcp_json(payload)
-        dig = summarize_dig(
-            kind=str(plan["kind"]),
+        from common.ydb_client import (  # noqa: E402
+            YdbClientError,
+            ping,
+            scan_query,
+            to_result_sets,
+        )
+
+        sa = getattr(args, "sa_key_file", None)
+        try:
+            print("ydb ping…", flush=True)
+            ping(sa_key_file=sa, script_name="duty_agent/dig-runs")
+            print("ydb scan dig-runs…", flush=True)
+            rows = scan_query(
+                plan["sql"],
+                query_name="duty_dig_runs",
+                script_name="duty_agent/dig-runs",
+                sa_key_file=sa,
+            )
+        except YdbClientError as e:
+            print(str(e), file=sys.stderr)
+            merge_result(
+                out_dir,
+                ctx=ctx,
+                status="partial",
+                warnings=[f"dig-runs: ydb execute failed: {e}"],
+            )
+            return 1
+
+        raw_path = out_dir / "dig_runs_raw.json"
+        write_json(raw_path, to_result_sets(rows))
+        print(f"wrote {raw_path} ({len(rows)} rows)")
+        return _summarize_and_write_dig(
+            out_dir=out_dir,
+            plan=plan,
+            sql_path=sql_path,
             rows=rows,
-            selection=plan["selection"],
-            meta={
-                "since": plan["since"],
-                "until": plan["until"],
-                "table": plan["table"],
-                "days_before": plan["days_before"],
-                "days_after": plan["days_after"],
-                "neighbors": plan["neighbors"],
-            },
+            raw_path=raw_path,
         )
-        dig["sql_path"] = str(sql_path)
-        dig["raw_path"] = str(raw_path)
-        write_json(out_dir / "dig_runs.json", dig)
-        summary = dig.get("summary") or {}
-        print(f"wrote {out_dir / 'dig_runs.json'}")
-        jump = summary.get("largest_lat_step") or summary.get("largest_fail_step")
-        print(
-            f"rows={summary.get('row_count')} slice={summary.get('slice_count')} "
-            f"jump={jump}"
-        )
-        if summary.get("window_edge_hint"):
-            print(f"HINT: {summary['window_edge_hint']}")
-        return 0
     finally:
         loaded.close()
 
@@ -624,14 +684,24 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser(
         "dig-runs",
-        help="SQL against perfomance/tpcc|olap (+ summarize MCP JSON)",
+        help="SQL against perfomance/tpcc|olap (execute via ydb_client + summarize)",
     )
     p.add_argument("--context", "-c", type=Path, required=True)
     p.add_argument(
         "--from-json",
         type=Path,
         default=None,
-        help="MCP ydb_query JSON result to summarize → dig_runs.json",
+        help="Offline: result_sets JSON to summarize → dig_runs.json (skip YDB)",
+    )
+    p.add_argument(
+        "--sql-only",
+        action="store_true",
+        help="Write dig_runs.sql only (do not execute)",
+    )
+    p.add_argument(
+        "--sa-key-file",
+        default=None,
+        help="SA JSON key path (default: CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS from init-token)",
     )
     p.add_argument(
         "--slice-only",

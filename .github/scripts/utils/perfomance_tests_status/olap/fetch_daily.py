@@ -1,34 +1,40 @@
 #!/usr/bin/env python3
-"""Fetch OLAP per-query run series via YDBWrapper scan query.
+"""Fetch OLAP suite / per-query series via common.ydb_client (YDBWrapper scan).
 
 Default: one row per (suite, test, run) with datetime — no day averaging.
 Legacy `--mode daily` still available (day buckets).
 
-Uses streaming scan (same stack as `.github/scripts/analytics/ydb_wrapper.py`) —
-no ydb CLI ~1000-row cap.
-
 Auth:
   export CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=/path/to/sa-key.json
+  # or: eval "$(python3 ../duty_agent/dutyctl.py init-token --shell)"
   # or pass --sa-key-file
 
 Example:
-  ./.venv/bin/python fetch_daily.py --output out/raw_test_runs.json
+  python3 fetch_daily.py --mode suites -o out/raw.json
+  python3 fetch_daily.py --output out/raw_test_runs.json
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
-from datetime import date, datetime, timedelta, timezone
-from decimal import Decimal
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-# olap → perfomance_tests_status → utils → scripts → .github → <repo>
-REPO_ROOT = ROOT.parents[4]
-ANALYTICS = REPO_ROOT / ".github" / "scripts" / "analytics"
+PTS = ROOT.parent
+if str(PTS) not in sys.path:
+    sys.path.insert(0, str(PTS))
+
+from common.ydb_client import (  # noqa: E402
+    DEFAULT_CONFIG,
+    YdbClientError,
+    ensure_sa_credentials,
+    scan_query,
+    to_result_sets,
+)
+
 SQL_BY_MODE = {
     "runs": ROOT / "queries" / "fetch_olap_test_runs.sql",
     "daily": ROOT / "queries" / "fetch_olap_test_daily.sql",
@@ -42,32 +48,6 @@ DEFAULT_OUT = {
     "tests": ROOT / "out" / "raw_tests.json",
 }
 DEFAULT_WINDOW_DAYS = 30
-
-
-def _setup_path() -> None:
-    # Prefer analytics ydb_wrapper; never put repo root on path (shadows pip `ydb` SDK).
-    ap = str(ANALYTICS)
-    if ap not in sys.path:
-        sys.path.insert(0, ap)
-
-
-def _jsonable(v):
-    if v is None or isinstance(v, (str, int, float, bool)):
-        return v
-    if isinstance(v, bytes):
-        return v.decode("utf-8", errors="replace")
-    if isinstance(v, Decimal):
-        return float(v)
-    if isinstance(v, (datetime, date)):
-        return v.isoformat()
-    if hasattr(v, "as_py"):
-        return _jsonable(v.as_py())
-    return str(v)
-
-
-def row_to_obj(row) -> dict:
-    d = dict(row)
-    return {k: _jsonable(v) for k, v in d.items()}
 
 
 def build_sql(since: str, mode: str) -> str:
@@ -104,33 +84,24 @@ def main() -> int:
         "--output",
         "-o",
         default=None,
-        help="Output jsonl (default: out/raw_test_runs.json or out/raw_test_daily.json)",
+        help="Output path (default depends on --mode)",
     )
     ap.add_argument(
         "--sa-key-file",
-        default=os.environ.get("CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS")
-        or os.environ.get("YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"),
+        default=None,
         help="Service account JSON key (sets CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS)",
     )
     ap.add_argument(
         "--config",
-        default=str(REPO_ROOT / ".github" / "config" / "ydb_qa_config.json"),
+        default=str(DEFAULT_CONFIG),
         help="ydb_qa_config.json path",
     )
     args = ap.parse_args()
 
-    if not args.sa_key_file:
-        raise SystemExit(
-            "Need --sa-key-file or env CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
-        )
-    key = Path(args.sa_key_file).expanduser().resolve()
-    if not key.is_file():
-        raise SystemExit(f"SA key not found: {key}")
-    os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = str(key)
-    os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = str(key)
-
-    _setup_path()
-    from ydb_wrapper import YDBWrapper  # noqa: E402
+    try:
+        ensure_sa_credentials(args.sa_key_file)
+    except YdbClientError as e:
+        raise SystemExit(str(e)) from e
 
     since = args.since or (
         datetime.now(timezone.utc).date() - timedelta(days=max(1, args.days))
@@ -141,36 +112,31 @@ def main() -> int:
 
     qname = f"fetch_olap_{args.mode}"
     print(f"scan fetch mode={args.mode} since={since} → {out}", flush=True)
-    with YDBWrapper(
-        config_path=args.config,
-        enable_statistics=False,
-        script_name="olap/fetch_daily.py",
-        silent=False,
-        use_local_config=True,
-    ) as ydb_w:
-        if not ydb_w.check_credentials():
-            raise SystemExit("YDB credentials check failed")
-        rows = ydb_w.execute_scan_query(sql, query_name=qname)
+    try:
+        rows = scan_query(
+            sql,
+            query_name=qname,
+            script_name="olap/fetch_daily.py",
+            sa_key_file=args.sa_key_file,
+            config=args.config,
+            use_local_config=True,
+        )
+    except YdbClientError as e:
+        raise SystemExit(str(e)) from e
 
-    # suites/tests → MCP-shaped JSON for generate.load_rows; runs/daily → jsonl
+    # suites/tests → result_sets JSON for generate.load_rows; runs/daily → jsonl
     if args.mode in ("suites", "tests"):
-        objs = [row_to_obj(row) for row in rows]
-        cols = list(objs[0].keys()) if objs else []
-        payload = {
-            "result_sets": [{
-                "columns": [{"name": c} for c in cols],
-                "rows": [[o.get(c) for c in cols] for o in objs],
-            }]
-        }
+        payload = to_result_sets(rows)
+        # generate.load_rows accepts columns as strings or {name:…}
+        cols = payload["result_sets"][0]["columns"]
+        payload["result_sets"][0]["columns"] = [{"name": c} for c in cols]
         out.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-        print(f"wrote {len(objs)} rows (MCP JSON) → {out}", flush=True)
+        print(f"wrote {len(rows)} rows (result_sets JSON) → {out}", flush=True)
     else:
-        n = 0
         with out.open("w") as f:
             for row in rows:
-                f.write(json.dumps(row_to_obj(row), ensure_ascii=False, separators=(",", ":")) + "\n")
-                n += 1
-        print(f"wrote {n} rows (jsonl) → {out}", flush=True)
+                f.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
+        print(f"wrote {len(rows)} rows (jsonl) → {out}", flush=True)
     return 0
 
 

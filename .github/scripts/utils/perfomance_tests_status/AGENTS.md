@@ -11,13 +11,15 @@ Toolkit root: `.github/scripts/utils/perfomance_tests_status`
 Route to the matching subfolder and follow its AGENTS.md.
 
 Duty: dive **Save context** / **Copy context** → JSON →  
-`cd duty_agent && python3 run.py init-token` (YAV → `SANDBOX_TOKEN`) →  
-`python3 run.py --context pack.json --out duty-card.md` (olap + tpcc; OAuth sandbox + Allure JSON).
+`cd duty_agent && eval "$(python3 dutyctl.py init-token --shell)"`  
+(YAV → `SANDBOX_TOKEN` + YDB SA key path) → follow [`duty_agent/AGENTS.md`](duty_agent/AGENTS.md).  
+Mart fetch: [`common/ydb_client.py`](common/ydb_client.py) (not MCP).
 
 ## One-shot local / CI build
 
 ```bash
-export CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=/path/to/sa-key.json
+# Local: eval "$(python3 duty_agent/dutyctl.py init-token --shell)"
+# or: export CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=/path/to/sa-key.json
 python3 -m pip install 'ydb[yc]>=3.20'
 python3 .github/scripts/utils/perfomance_tests_status/run_reports.py --publish-dir /tmp/perf_reports
 ```

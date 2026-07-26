@@ -128,7 +128,7 @@ Minimal CLI. Artifacts under `--out-dir` / auto `run_id`.
 
 | Command | Purpose |
 |---------|---------|
-| `init-token` | YAV → `SANDBOX_TOKEN` |
+| `init-token` | YAV → `SANDBOX_TOKEN` + YDB SA key path (`CI_YDB_*`) |
 | `prepare` | detect-type + focus(+fatal) + priors + metrics (tpcc/slow) |
 | `dig-runs` | Mart history (~35d+): TPC-C all run_types + peer clusters; OLAP related suites + peer DbAlias (same branch) |
 | `dig-prs` | product PRs + hot areas in jump window |

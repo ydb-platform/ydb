@@ -3,3 +3,4 @@ __pycache__/
 tests/__pycache__/
 *.pyc
 .token_cache
+.cache/

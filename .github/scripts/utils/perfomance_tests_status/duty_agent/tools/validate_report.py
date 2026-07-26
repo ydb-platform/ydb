@@ -147,7 +147,7 @@ def validate_analysis_md(
                 kind = "tpcc" if tpcc else "olap"
                 errors.append(
                     f"{kind}: missing dig_runs.json — run `dutyctl dig-runs` "
-                    "(neighbors + ~35d history via MCP ydb_query; widen --days-before if edged) "
+                    "(neighbors + ~35d via ydb_client; widen --days-before if edged) "
                     "or explain 'dig-runs skipped' with reason"
                 )
     if tpcc and out_dir:

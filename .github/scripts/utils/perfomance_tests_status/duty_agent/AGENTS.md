@@ -21,38 +21,42 @@ For each problem, answer **all** of:
 
 ```bash
 cd .github/scripts/utils/perfomance_tests_status/duty_agent
-eval "$(python3 dutyctl.py init-token --shell)"   # if SANDBOX_TOKEN missing
+eval "$(python3 dutyctl.py init-token --shell)"   # SANDBOX_TOKEN + YDB SA key path (YAV)
 OUT=./runs/my-case
 ```
+
+`init-token` loads from [`token_config.json`](token_config.json): sandbox OAuth + SA JSON
+(`CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS` → path under `.cache/`). Mart access goes through
+[`../common/ydb_client.py`](../common/ydb_client.py) (YDBWrapper) — **do not use MCP for YDB**.
 
 ## CLI
 
 | Command | Role |
 |---------|------|
 | `prepare -c CONTEXT -o $OUT` | facts: detect + Allure focus(+fatal) + priors + metrics |
-| `dig-runs -c CONTEXT -o $OUT` | Mart history (~35d): neighbors (other run_type/suite + peer clusters, same branch) |
+| `dig-runs -c CONTEXT -o $OUT` | Mart history (~35d): execute via ydb_client + summarize (neighbors) |
 | `dig-prs -o $OUT [--base-sha … --head-sha …]` | product PRs + hot areas in jump window |
 | `bisect -o $OUT [-c CONTEXT] [--path …]` | code window on **tested** sha vs prev + focus PR files |
 | `validate -o $OUT` | **quality gate** — must exit 0 (fix ≤5) |
 | `write-result -c CONTEXT -o $OUT` | final `result.json` only after validate OK |
 
-Extra digs: `gh search` / MCP `user-ydb-qa` / browse code at tested sha.
+Extra digs: `gh search` / browse code at tested sha. Offline mart: `dig-runs --from-json`. SQL only: `--sql-only`.
 
 ## Pipeline (mandatory quality loop)
 
 ```text
 1) dutyctl prepare -c CONTEXT.json -o $OUT
-2) DIG RUNS FROM DB before writing analysis (mandatory for tpcc + olap):
+2) DIG LOGS FIRST when Allure focus exists (OLAP fail — never skip):
+     focus.json → kikimr__stderr + kikimr__logs (+ Stderr)
+     Do not block log reading on mart fetch.
+3) DIG RUNS FROM DB before writing analysis (mandatory for tpcc + olap):
      Pack suite_history is short — do NOT stop there.
      dutyctl dig-runs -c CONTEXT -o $OUT [--days-before 35|60|90]
-     MCP user-ydb-qa → ydb_query(<sql>) → save JSON
-     dutyctl dig-runs -c CONTEXT -o $OUT --from-json raw.json
+       → ping + scan via common/ydb_client → dig_runs_raw.json + dig_runs.json
      Default neighbors (same branch):
        TPC-C — all ydb_cli_* run_type + all clusters; jump on focus suite; cross_run_type + peer jumps
        OLAP  — related suite families + all DbAlias; fail/ydb jumps; cross_suite + peer_dbs
-     If summary.window_edge_hint → widen --days-before and re-query
-3) DIG LOGS (OLAP fail — never skip):
-     focus.json → kikimr__stderr + kikimr__logs (+ Stderr)
+     If summary.window_edge_hint → widen --days-before and re-run dig-runs
 4) DIG CODE IN THE JUMP INTERVAL (not only PR of the alert commit):
      dutyctl dig-prs -o $OUT   # uses largest lat step / history window
      dutyctl bisect …          # crash path or forced --path
@@ -64,6 +68,8 @@ Extra digs: `gh search` / MCP `user-ydb-qa` / browse code at tested sha.
 8) dutyctl validate -o $OUT
 9) dutyctl write-result …
 ```
+
+Note: `metrics_delta.json` is produced for slow/tpcc (or `prepare --metrics`); pure `olap_fail` may omit it.
 
 **`wait_next_wave` only after** dig-runs + dig-prs (or explicit skip reason) and no remaining dig that could pin mechanism.
 
@@ -149,9 +155,10 @@ Put a clear line in the report: **Давность:** …
 ### OLAP playbook (mandatory dig-runs)
 
 1. `prepare` → Allure focus + fatal + pack history.  
-2. `dig-runs` (~35d+) → related suites (e.g. UploadTpch↔Tpch) + **peer DbAlias**, same branch. See when FailCount / YdbSumMeans jumped; whether peers/other suites correlate.  
-3. Logs (fail) / metrics (slow) + bisect/dig-prs as needed.  
-4. Use harness paths above when mechanism depends on upload vs query suite.
+2. **Read logs** from `focus.json` (fail: stderr + kikimr__logs) before blocking on mart.  
+3. `dig-runs` (~35d+, ydb_client) → related suites (e.g. UploadTpch↔Tpch) + **peer DbAlias**, same branch. See when FailCount / YdbSumMeans jumped; whether peers/other suites correlate.  
+4. Metrics (slow) + bisect/dig-prs as needed.  
+5. Use harness paths above when mechanism depends on upload vs query suite.
 
 ## Evidence bar (culprit)
 

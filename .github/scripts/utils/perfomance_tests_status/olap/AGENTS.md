@@ -18,17 +18,17 @@ History charts are deep-dive only (do not drive alerts).
 
 SQL: `queries/fetch_olap_suites.sql` (must include `Report`, `CiVersion`, `FailTests`).
 
-Prefer **ydb CLI scan** (`table query execute -t scan`) or chunked `yql` —
-plain `yql`/`sql` often caps ~1000 rows. MCP truncates large results.
+Use [`fetch_daily.py`](fetch_daily.py) → [`../common/ydb_client.py`](../common/ydb_client.py) (YDBWrapper scan). **Do not use MCP / plain ydb CLI `yql`** (truncates).
 
 ```bash
-# merge chunks into MCP-shaped JSON:
-# {"result_sets":[{"columns":[...],"rows":[...]}]}
-# → out/raw.json
+cd .github/scripts/utils/perfomance_tests_status/olap
+# SA: env, --sa-key-file, or:
+# eval "$(python3 ../duty_agent/dutyctl.py init-token --shell)"
+python3 fetch_daily.py --mode suites -o out/raw.json          # last 30d
 ```
 
 Endpoint/DB: see `.github/config/ydb_qa_config.json`.  
-Auth: `CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS` / `--sa-key-file`.
+Auth: `CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS` / `--sa-key-file` / duty `init-token`.
 
 Default lookback: **last 30 days** (`--since` / `fetch_daily.py --days 30`).
 
@@ -37,13 +37,9 @@ Default lookback: **last 30 days** (`--since` / `fetch_daily.py --days 30`).
 SQL: `queries/fetch_olap_test_runs.sql` — **one point per launch** (datetime), not day AVG.
 Legacy day buckets: `fetch_olap_test_daily.sql` via `fetch_daily.py --mode daily`.
 
-**Do not use plain ydb CLI `yql`** — it truncates. Use scan via `ydb_wrapper`:
-
 ```bash
 cd .github/scripts/utils/perfomance_tests_status/olap
-python3.12 -m venv .venv && .venv/bin/pip install -r requirements.txt
-export CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=/path/to/sa-key.json
-./.venv/bin/python fetch_daily.py -o out/raw_test_runs.json   # default: last 30d
+python3 fetch_daily.py -o out/raw_test_runs.json   # default mode=runs, last 30d
 ```
 
 Also ok: `out/raw_tests.json` — fallback names without history.

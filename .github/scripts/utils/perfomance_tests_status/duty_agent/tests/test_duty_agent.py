@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -395,10 +396,57 @@ class SandboxTests(unittest.TestCase):
 
 
 class YavConfigTests(unittest.TestCase):
-    def test_token_config_has_sandbox(self):
+    def test_token_config_has_sandbox_and_ydb_sa(self):
         cfg = read_token_config(AGENT / "token_config.json")
         specs = token_specs_from_config(cfg)
         self.assertIn("SANDBOX_TOKEN", specs)
+        self.assertEqual(specs["SANDBOX_TOKEN"]["kind"], "string")
+        self.assertIn("CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS", specs)
+        sa = specs["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"]
+        self.assertEqual(sa["kind"], "file")
+        self.assertEqual(sa["key"], "my-robot-key.json")
+        self.assertTrue(sa["secret_id"].startswith("sec-"))
+
+    def test_file_kind_materialize(self):
+        import tempfile
+        from unittest import mock
+
+        from tools import yav as yav_mod
+
+        with tempfile.TemporaryDirectory() as td:
+            cache = Path(td) / "cache"
+            cfg_path = Path(td) / "token_config.json"
+            cfg_path.write_text(
+                json.dumps(
+                    {
+                        "tokens": {
+                            "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS": {
+                                "secret_id": "sec-test",
+                                "key": "my-robot-key.json",
+                                "kind": "file",
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            fake = mock.Mock(
+                returncode=0,
+                stdout='{"id":"sa","private_key":"x"}\n',
+                stderr="",
+            )
+            with mock.patch.object(yav_mod, "CACHE_DIR", cache):
+                with mock.patch.dict(os.environ, {}, clear=False):
+                    os.environ.pop("CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS", None)
+                    os.environ.pop("YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS", None)
+                    with mock.patch("subprocess.run", return_value=fake):
+                        tokens = yav_mod.fetch_tokens_from_yav(cfg_path)
+            path = Path(tokens["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"])
+            self.assertTrue(path.is_file())
+            self.assertIn("private_key", path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                tokens["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"], str(path)
+            )
 
 
 class AttachmentTests(unittest.TestCase):

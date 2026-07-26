@@ -3,6 +3,7 @@
 
 Auth:
   export CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS=/path/to/sa-key.json
+  # or: eval "$(python3 duty_agent/dutyctl.py init-token --shell)"
 
 Example:
   python3 run_reports.py --publish-dir /tmp/perf_reports
@@ -12,47 +13,30 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import subprocess
 import sys
 import traceback
-from datetime import date, datetime, timedelta, timezone
-from decimal import Decimal
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-REPO_ROOT = ROOT.parents[3]  # .github/scripts/utils/perfomance_tests_status → repo
-ANALYTICS = REPO_ROOT / ".github" / "scripts" / "analytics"
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from common.ydb_client import (  # noqa: E402
+    DEFAULT_CONFIG,
+    YdbClientError,
+    ensure_sa_credentials,
+    open_wrapper,
+    row_to_obj,
+)
+
 OLAP = ROOT / "olap"
 TPCC = ROOT / "tpcc"
 
 OLAP_SUITE_DAYS = 30
 OLAP_RUNS_DAYS = 30
 TPCC_DAYS = 30
-
-
-def _setup_path() -> None:
-    ap = str(ANALYTICS)
-    if ap not in sys.path:
-        sys.path.insert(0, ap)
-
-
-def _jsonable(v):
-    if v is None or isinstance(v, (str, int, float, bool)):
-        return v
-    if isinstance(v, bytes):
-        return v.decode("utf-8", errors="replace")
-    if isinstance(v, Decimal):
-        return float(v)
-    if isinstance(v, (datetime, date)):
-        return v.isoformat()
-    if hasattr(v, "as_py"):
-        return _jsonable(v.as_py())
-    return str(v)
-
-
-def row_to_obj(row) -> dict:
-    return {k: _jsonable(v) for k, v in dict(row).items()}
 
 
 def since_iso(days: int) -> str:
@@ -109,13 +93,12 @@ def main() -> int:
     )
     ap.add_argument(
         "--sa-key-file",
-        default=os.environ.get("CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS")
-        or os.environ.get("YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"),
+        default=None,
         help="Service account JSON key",
     )
     ap.add_argument(
         "--config",
-        default=str(REPO_ROOT / ".github" / "config" / "ydb_qa_config.json"),
+        default=str(DEFAULT_CONFIG),
         help="ydb_qa_config.json path",
     )
     ap.add_argument("--skip-fetch", action="store_true", help="Reuse dumps in work-dir")
@@ -140,61 +123,51 @@ def main() -> int:
     }
 
     if not args.skip_fetch:
-        if not args.sa_key_file:
-            raise SystemExit(
-                "Need --sa-key-file or env CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
-            )
-        key = Path(args.sa_key_file).expanduser().resolve()
-        if not key.is_file():
-            raise SystemExit(f"SA key not found: {key}")
-        os.environ["CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = str(key)
-        os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = str(key)
+        try:
+            ensure_sa_credentials(args.sa_key_file)
+        except YdbClientError as e:
+            raise SystemExit(str(e)) from e
 
-        _setup_path()
-        from ydb_wrapper import YDBWrapper  # noqa: E402
+        try:
+            with open_wrapper(
+                script_name="perfomance_tests_status/run_reports.py",
+                config=args.config,
+                # None: prefer env YDB_QA_CONFIG (CI), else local config file
+                use_local_config=None,
+            ) as ydb_w:
+                if do_olap:
+                    try:
+                        sql = load_sql(
+                            OLAP / "queries" / "fetch_olap_suites.sql",
+                            since_iso(OLAP_SUITE_DAYS),
+                        )
+                        write_json_list(
+                            olap_suites, fetch_rows(ydb_w, sql, "fetch_olap_suites")
+                        )
+                        sql = load_sql(
+                            OLAP / "queries" / "fetch_olap_test_runs.sql",
+                            since_iso(OLAP_RUNS_DAYS),
+                        )
+                        write_jsonl(
+                            olap_runs, fetch_rows(ydb_w, sql, "fetch_olap_test_runs")
+                        )
+                    except Exception as e:
+                        status["olap"]["error"] = f"fetch: {e}"
+                        print(f"OLAP fetch FAILED: {e}", flush=True)
+                        traceback.print_exc()
 
-        with YDBWrapper(
-            config_path=args.config,
-            enable_statistics=False,
-            script_name="perfomance_tests_status/run_reports.py",
-            silent=False,
-            # None: prefer env YDB_QA_CONFIG (CI), else local config file
-            use_local_config=None,
-        ) as ydb_w:
-            if not ydb_w.check_credentials():
-                raise SystemExit("YDB credentials check failed")
-
-            if do_olap:
-                try:
-                    sql = load_sql(
-                        OLAP / "queries" / "fetch_olap_suites.sql",
-                        since_iso(OLAP_SUITE_DAYS),
-                    )
-                    write_json_list(
-                        olap_suites, fetch_rows(ydb_w, sql, "fetch_olap_suites")
-                    )
-                    sql = load_sql(
-                        OLAP / "queries" / "fetch_olap_test_runs.sql",
-                        since_iso(OLAP_RUNS_DAYS),
-                    )
-                    write_jsonl(
-                        olap_runs, fetch_rows(ydb_w, sql, "fetch_olap_test_runs")
-                    )
-                except Exception as e:
-                    status["olap"]["error"] = f"fetch: {e}"
-                    print(f"OLAP fetch FAILED: {e}", flush=True)
-                    traceback.print_exc()
-
-            if do_tpcc:
-                try:
-                    sql = load_sql(
-                        TPCC / "queries" / "fetch_tpcc.sql", since_iso(TPCC_DAYS)
-                    )
-                    write_json_list(tpcc_raw, fetch_rows(ydb_w, sql, "fetch_tpcc"))
-                except Exception as e:
-                    status["tpcc"]["error"] = f"fetch: {e}"
-                    print(f"TPC-C fetch FAILED: {e}", flush=True)
-                    traceback.print_exc()
+                if do_tpcc:
+                    try:
+                        sql = load_sql(
+                            TPCC / "queries" / "fetch_tpcc.sql", since_iso(TPCC_DAYS)
+                        )
+                        write_json_list(tpcc_raw, fetch_rows(ydb_w, sql, "fetch_tpcc"))
+                    except Exception as e:
+                        status["tpcc"]["error"] = f"fetch: {e}"
+                        print(f"TPC-C fetch FAILED: {e}", flush=True)
+                        traceback.print_exc()
+        except YdbClientError as e:
+            raise SystemExit(str(e)) from e
 
     if do_olap and not status["olap"]["error"]:
         try:

@@ -32,7 +32,7 @@
 - Тикет: …
 
 ## Кандидаты PR (если есть)
-Окно = mart `pr_window` (последний стабильный FailCount=0 / ydb|lat jump → разбираемый sha), не «просто» prev-green из пака. В заголовке укажи окно **и** `source` из `dig_prs.json` / `dig_runs.summary.pr_window`.
+Окно = mart `pr_window` (конец suite-stable streak FailCount=0+Ydb≈median / ydb|lat jump → разбираемый sha), не ближайший одиночный FailCount=0 и не prev-green из пака. В заголовке укажи окно **и** `source` из `dig_prs.json` / `dig_runs.summary.pr_window`.
 
 Не список голых ссылок. Таблица:
 

@@ -320,19 +320,25 @@ class DigRunsTests(unittest.TestCase):
         self.assertGreater(summary["largest_fail_step"]["delta"], 0)
         self.assertTrue(any(p["DbAlias"] == "sas_big_column" for p in summary["peer_dbs"]))
         self.assertTrue(any(c["suite"] == "UploadTpch100" for c in summary["cross_suite"]))
-        # last FailCount=0 before focus → pr_window for dig-prs
+        # suite-stable plateau end → pr_window for dig-prs (not pack prev-green)
         self.assertIsNotNone(summary.get("pr_window"))
-        self.assertEqual(summary["pr_window"]["source"], "last_stable_FailCount0")
+        self.assertIn(summary["pr_window"]["source"], (
+            "stable_streak_end",
+            "stable_streak_end_weak",
+        ))
         self.assertTrue(str(summary["pr_window"]["head"]).endswith("bbbbbbb") or "bbbbbbb" in str(summary["pr_window"]["head"]))
 
-    def test_olap_pr_window_prefers_last_stable_not_ancient_fail_step(self):
+    def test_olap_pr_window_prefers_stable_streak_not_ancient_fail_step(self):
         from tools.dig_runs import build_olap_pr_window
 
+        # Three calm greens, then red — plateau end = main.s3 (not ancient jump).
         runs = [
             {"RunTs": "t0", "Version": "main.oldfail1", "FailCount": 0, "YdbSumMeans": 100},
             {"RunTs": "t1", "Version": "main.oldfail2", "FailCount": 1, "YdbSumMeans": 90},
-            {"RunTs": "t2", "Version": "main.stable", "FailCount": 0, "YdbSumMeans": 110},
-            {"RunTs": "t3", "Version": "main.focus", "FailCount": 1, "YdbSumMeans": 80},
+            {"RunTs": "t2", "Version": "main.s1", "FailCount": 0, "YdbSumMeans": 105},
+            {"RunTs": "t3", "Version": "main.s2", "FailCount": 0, "YdbSumMeans": 110},
+            {"RunTs": "t4", "Version": "main.s3", "FailCount": 0, "YdbSumMeans": 108},
+            {"RunTs": "t5", "Version": "main.focus", "FailCount": 1, "YdbSumMeans": 80},
         ]
         fail_jump = {
             "from_version": "main.oldfail1",
@@ -340,9 +346,32 @@ class DigRunsTests(unittest.TestCase):
             "delta": 1,
         }
         pw = build_olap_pr_window(runs, fail_jump=fail_jump, ydb_jump=None)
-        self.assertEqual(pw["source"], "last_stable_FailCount0")
-        self.assertEqual(pw["base"], "main.stable")
+        self.assertEqual(pw["source"], "stable_streak_end")
+        self.assertEqual(pw["base"], "main.s3")
         self.assertEqual(pw["head"], "main.focus")
+        self.assertEqual(pw["streak_len"], 3)
+
+    def test_olap_pr_window_skips_fluke_green_in_red_streak(self):
+        """Nearest FailCount=0 in a red streak is not a stable baseline."""
+        from tools.dig_runs import build_olap_pr_window, find_olap_stable_plateau
+
+        runs = [
+            {"RunTs": "t0", "Version": "main.a", "FailCount": 0, "YdbSumMeans": 140},
+            {"RunTs": "t1", "Version": "main.b", "FailCount": 0, "YdbSumMeans": 135},
+            {"RunTs": "t2", "Version": "main.c", "FailCount": 0, "YdbSumMeans": 142},
+            {"RunTs": "t3", "Version": "main.d", "FailCount": 1, "YdbSumMeans": 120},
+            {"RunTs": "t4", "Version": "main.e", "FailCount": 1, "YdbSumMeans": 118},
+            {"RunTs": "t5", "Version": "main.f", "FailCount": 1, "YdbSumMeans": 112},
+            {"RunTs": "t6", "Version": "main.fluke", "FailCount": 0, "YdbSumMeans": 141},
+            {"RunTs": "t7", "Version": "main.focus", "FailCount": 1, "YdbSumMeans": 113},
+        ]
+        plate = find_olap_stable_plateau(runs)
+        self.assertEqual(plate["Version"], "main.c")
+        self.assertEqual(plate["streak_len"], 3)
+        pw = build_olap_pr_window(runs, fail_jump=None, ydb_jump=None)
+        self.assertEqual(pw["base"], "main.c")
+        self.assertNotEqual(pw["base"], "main.fluke")
+        self.assertEqual(pw["source"], "stable_streak_end")
 
 
 class ValidateTests(unittest.TestCase):
@@ -997,14 +1026,14 @@ https://proxy.sandbox.yandex-team.ru/1/index.html
             {"title": "H1", "kind": "hypothesis", "children": []},
             {"title": "dig-runs", "detail": "new", "children": [{"title": "mart summarize"}]},
             {"title": "dig-prs", "detail": "a", "children": []},
-            {"title": "dig-prs", "detail": "b source=last_stable_FailCount0", "children": []},
+            {"title": "dig-prs", "detail": "b source=stable_streak_end", "children": []},
         ]
         out = _dedupe_root_stages(nodes)
         titles = [n["title"] for n in out]
         self.assertEqual(titles.count("dig-runs"), 1)
         self.assertEqual(titles.count("dig-prs"), 1)
         self.assertEqual(out[titles.index("dig-runs")]["detail"], "new")
-        self.assertIn("last_stable", out[titles.index("dig-prs")]["detail"])
+        self.assertIn("stable_streak", out[titles.index("dig-prs")]["detail"])
         self.assertIn("H1", titles)
 
 

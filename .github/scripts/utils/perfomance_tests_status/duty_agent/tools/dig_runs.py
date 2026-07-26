@@ -464,25 +464,125 @@ def _largest_metric_step(
     return step
 
 
+# Suite-level "ok": FailCount==0 and Ydb not an outlier vs median of greens.
+_STABLE_MIN_STREAK = 3
+_YDB_LO = 0.55  # below → likely incomplete / collapsed suite duration
+_YDB_HI = 2.0   # above → duration spike, not a calm baseline
+
+
+def _median(vals: list[float]) -> float | None:
+    if not vals:
+        return None
+    xs = sorted(vals)
+    mid = len(xs) // 2
+    if len(xs) % 2:
+        return xs[mid]
+    return (xs[mid - 1] + xs[mid]) / 2.0
+
+
+def _olap_suite_ok(
+    r: dict[str, Any],
+    *,
+    ydb_median: float | None,
+) -> bool:
+    """Whole-suite health — not a single query. FailCount + duration band."""
+    fc = _num(r.get("FailCount"))
+    if fc is None or fc > 0:
+        return False
+    ydb = _num(r.get("YdbSumMeans"))
+    if ydb is None or ydb_median is None or ydb_median <= 0:
+        return True
+    return (_YDB_LO * ydb_median) <= ydb <= (_YDB_HI * ydb_median)
+
+
+def _olap_ydb_median_greens(slice_before_focus: list[dict[str, Any]]) -> float | None:
+    ys = [
+        y
+        for r in slice_before_focus
+        if (_num(r.get("FailCount")) is not None and _num(r.get("FailCount")) <= 0)
+        for y in (_num(r.get("YdbSumMeans")),)
+        if y is not None and y > 0
+    ]
+    return _median(ys)
+
+
+def find_olap_stable_plateau(
+    slice_runs: list[dict[str, Any]],
+    *,
+    min_streak: int = _STABLE_MIN_STREAK,
+) -> dict[str, Any] | None:
+    """
+    End of the latest *suite-stable* streak before focus.
+
+    Stable ≠ nearest FailCount=0. Need a streak of suite-ok runs
+    (FailCount==0 and YdbSumMeans in band around median greens).
+    Returns the last run of that streak (+ meta).
+    """
+    if len(slice_runs) < 2:
+        return None
+    before = list(slice_runs[:-1])
+    ydb_med = _olap_ydb_median_greens(before)
+    ok_flags = [_olap_suite_ok(r, ydb_median=ydb_med) for r in before]
+
+    # Collect streaks (start_i, end_i inclusive) of consecutive ok.
+    streaks: list[tuple[int, int]] = []
+    i = 0
+    n = len(before)
+    while i < n:
+        if not ok_flags[i]:
+            i += 1
+            continue
+        j = i
+        while j + 1 < n and ok_flags[j + 1]:
+            j += 1
+        streaks.append((i, j))
+        i = j + 1
+    if not streaks:
+        return None
+
+    # Prefer latest streak with length >= min_streak; else latest with >=2; else latest any.
+    chosen: tuple[int, int] | None = None
+    for need in (min_streak, 2, 1):
+        for s, e in reversed(streaks):
+            if (e - s + 1) >= need:
+                chosen = (s, e)
+                break
+        if chosen:
+            break
+    if not chosen:
+        return None
+    s, e = chosen
+    end = before[e]
+    streak_len = e - s + 1
+    return {
+        "RunTs": end.get("RunTs"),
+        "Version": end.get("Version"),
+        "FailCount": end.get("FailCount"),
+        "YdbSumMeans": _num(end.get("YdbSumMeans")),
+        "Report": end.get("Report"),
+        "streak_len": streak_len,
+        "streak_start_Version": before[s].get("Version"),
+        "ydb_median_greens": ydb_med,
+        "min_streak_required": min_streak,
+        "weak": streak_len < min_streak,
+    }
+
+
 def _olap_last_stable_before_focus(
     slice_runs: list[dict[str, Any]],
 ) -> dict[str, Any] | None:
-    """Last suite@db row with FailCount==0 before the newest (focus) row."""
-    if len(slice_runs) < 2:
-        return None
-    last_stable: dict[str, Any] | None = None
-    for r in slice_runs[:-1]:
-        fc = _num(r.get("FailCount"))
-        if fc is not None and fc <= 0:
-            last_stable = r
-    if not last_stable:
+    """Compat alias: plateau end (not nearest FailCount=0)."""
+    plate = find_olap_stable_plateau(slice_runs)
+    if not plate:
         return None
     return {
-        "RunTs": last_stable.get("RunTs"),
-        "Version": last_stable.get("Version"),
-        "FailCount": last_stable.get("FailCount"),
-        "YdbSumMeans": _num(last_stable.get("YdbSumMeans")),
-        "Report": last_stable.get("Report"),
+        "RunTs": plate.get("RunTs"),
+        "Version": plate.get("Version"),
+        "FailCount": plate.get("FailCount"),
+        "YdbSumMeans": plate.get("YdbSumMeans"),
+        "Report": plate.get("Report"),
+        "streak_len": plate.get("streak_len"),
+        "weak": plate.get("weak"),
     }
 
 
@@ -495,9 +595,9 @@ def build_olap_pr_window(
     """
     Window for dig-prs / code bisect.
 
-    Prefer last FailCount=0 before focus → focus (mart truth), not pack prev-green
-    and not an ancient largest_fail_step alone. For duration regressions fall back
-    to largest_ydb_step.
+    Prefer end of latest suite-stable streak (FailCount=0 + normal YdbSumMeans,
+    ≥3 runs) → focus. Not the nearest single FailCount=0 (fluke green).
+    Duration-only regressions → largest_ydb_step.
     """
     if not slice_runs:
         return None
@@ -506,21 +606,50 @@ def build_olap_pr_window(
     if not head:
         return None
     focus_fc = _num(focus.get("FailCount"))
-    stable = _olap_last_stable_before_focus(slice_runs)
-    if stable and stable.get("Version") and (focus_fc is None or focus_fc > 0):
-        if str(stable.get("Version")) != str(head):
+    focus_ydb = _num(focus.get("YdbSumMeans"))
+    plate = find_olap_stable_plateau(slice_runs)
+
+    # Fail / flaky suite: dig from end of last calm plateau.
+    if plate and plate.get("Version") and str(plate.get("Version")) != str(head):
+        if focus_fc is None or focus_fc > 0 or plate.get("streak_len", 0) >= 2:
+            src = (
+                "stable_streak_end"
+                if not plate.get("weak")
+                else "stable_streak_end_weak"
+            )
             return {
-                "base": stable.get("Version"),
+                "base": plate.get("Version"),
                 "head": head,
-                "source": "last_stable_FailCount0",
+                "source": src,
                 "reason": (
-                    "последний прогон suite@db с FailCount=0 в mart до разбираемого"
+                    f"конец серии suite-ok (FailCount=0 + Ydb≈median, "
+                    f"streak={plate.get('streak_len')}, "
+                    f"с {plate.get('streak_start_Version')}) → разбираемый; "
+                    "не одиночный FailCount=0"
                 ),
                 "base_FailCount": 0,
                 "head_FailCount": focus_fc,
-                "base_Report": stable.get("Report"),
+                "base_Report": plate.get("Report"),
+                "streak_len": plate.get("streak_len"),
+                "streak_start_Version": plate.get("streak_start_Version"),
+                "ydb_median_greens": plate.get("ydb_median_greens"),
             }
-    if ydb_jump and ydb_jump.get("from_version"):
+
+    # Pure duration regression (suite still FailCount=0 but Ydb jumped).
+    if (
+        (focus_fc is not None and focus_fc <= 0)
+        and ydb_jump
+        and ydb_jump.get("from_version")
+        and focus_ydb is not None
+    ):
+        return {
+            "base": ydb_jump.get("from_version"),
+            "head": ydb_jump.get("to_version") or head,
+            "source": "largest_ydb_step",
+            "reason": "наибольший скачок YdbSumMeans в mart (suite без FailCount)",
+            "delta": ydb_jump.get("delta"),
+        }
+    if ydb_jump and ydb_jump.get("from_version") and not plate:
         return {
             "base": ydb_jump.get("from_version"),
             "head": ydb_jump.get("to_version") or head,
@@ -928,6 +1057,7 @@ def summarize_olap_rows(
         jump=ydb_jump,
         focus_version=str(selection.get("focus_sha") or "")[:7] or None,
     )
+    stable_plateau = find_olap_stable_plateau(slice_runs)
     last_stable = _olap_last_stable_before_focus(slice_runs)
     pr_window = build_olap_pr_window(
         slice_runs, fail_jump=fail_jump, ydb_jump=ydb_jump
@@ -936,6 +1066,7 @@ def summarize_olap_rows(
         "slice_runs": slice_runs,
         "largest_fail_step": fail_jump,
         "largest_ydb_step": ydb_jump,
+        "stable_plateau": stable_plateau,
         "last_stable_before_focus": last_stable,
         "pr_window": pr_window,
         "baseline_candidate": baseline_candidate,

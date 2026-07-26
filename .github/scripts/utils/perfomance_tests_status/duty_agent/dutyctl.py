@@ -6,7 +6,7 @@ CLI:
   prepare        detect-type + focus + priors (+ metrics if slow/tpcc)
   dig-runs       SQL + execute via ydb_client + summarize mart runs (+ baseline Allure)
   dig-baseline   fetch plans/logs from good historical run (baseline_candidate)
-  dig-prs        product PRs in mart pr_window (last stable→focus / jump)
+  dig-prs        product PRs in mart pr_window (suite-stable streak→focus / jump)
   bisect         crash-path window + focus PR files
   validate       lint analysis.md
   inject-trace   rebuild action tree + inject <details> into analysis.md
@@ -748,8 +748,8 @@ def _sha_for_compare(v) -> str:
 def cmd_dig_prs(args: argparse.Namespace) -> int:
     """Product PRs + hot areas between base…head.
 
-    Default window = mart dig_runs.pr_window (last FailCount=0 → focus, or
-    ydb/lat jump) — **not** pack prev-green. Pack history is fallback only.
+    Default window = mart dig_runs.pr_window (suite-stable streak end → focus, or
+    ydb/lat jump) — **not** nearest FailCount=0 / pack prev-green. Pack history is fallback only.
     """
     loaded = _load_ctx(args.context) if args.context else None
     try:
@@ -758,7 +758,7 @@ def cmd_dig_prs(args: argparse.Namespace) -> int:
         head = args.head_sha
         window_source = "cli" if (base and head) else None
 
-        # 1) Mart dig-runs first (last stable / metric jump) — before pack history.
+        # 1) Mart dig-runs first (suite-stable streak / metric jump) — before pack history.
         if (not base or not head) and (out_dir / "dig_runs.json").is_file():
             dig = json.loads((out_dir / "dig_runs.json").read_text(encoding="utf-8"))
             summary = dig.get("summary") or {}
@@ -1306,7 +1306,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser(
         "dig-prs",
-        help="product PRs in mart pr_window (last FailCount=0→focus / ydb|lat jump; pack prev-green is fallback)",
+        help="product PRs in mart pr_window (suite-stable streak→focus / ydb|lat jump; pack prev-green is fallback)",
     )
     p.add_argument("--context", "-c", type=Path, default=None)
     p.add_argument(

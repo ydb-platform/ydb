@@ -10,7 +10,7 @@ Use ``dutyctl.py`` + AGENTS.md instead:
   python3 dutyctl.py validate -o RUN_DIR
   python3 dutyctl.py write-result -c CONTEXT.json -o RUN_DIR
 
-See REDESIGN.md / AGENTS.md.
+See AGENTS.md.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ def main(argv: list[str] | None = None) -> int:
     print(
         "run.py autopilot is removed.\n"
         "Use: python3 dutyctl.py <subcommand> …\n"
-        "See AGENTS.md and REDESIGN.md.",
+        "See AGENTS.md.",
         file=sys.stderr,
     )
     return 2

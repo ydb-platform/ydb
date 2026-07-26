@@ -1,7 +1,7 @@
 # Agent instructions — performance duty investigator
 
 Toolkit: `.github/scripts/utils/perfomance_tests_status/duty_agent`  
-Architecture: [`REDESIGN.md`](REDESIGN.md) — **Python = facts + validate; you think.**
+Model: **Python = facts + validate; agent = thinking.**
 
 Input: frozen **perf-duty-context/v1** JSON (OLAP/TPC-C Now `Save` / `Copy context`).  
 Outputs: `analysis.md` (plain language) + `result.json` (`perf-duty-result/v1`).
@@ -224,44 +224,75 @@ If any checkbox fails → dig again (loop), do not polish a hollow report.
 `дата влития (UTC)` · `[#N](url)` · `title` · `@author` · кратко почему.
 Бери `merged_at` / `pr_title` / `author_login` из `dig_prs.json` (после `dutyctl dig-prs`).
 
+**Читаемость (обязательно):**
+- В **Заключении** каждый пункт — 1–2 коротких предложения; не сваливать sha + PR + давность + гонку в один абзац.
+- **Давность** раздели: (1) что подтверждено на разбираемом прогоне; (2) с какого label suite/метрика красные; (3) с какого PR строка в коде. Если fline раньше не смотрели — напиши явно.
+- При **Виновник: unknown** не тегай авторов истории файла как виновников; если упоминаешь PR введения строки — «история кода, не виновник».
+- Числа вроде «доля падений 0.17 vs ~0.05» — одна фраза, что это значит для читателя.
+- Следствия того же abort (P2…) — не отдельный issue, пока нет отдельной корневой причины; в P* поле **Тикет:**.
+
+**Issue = copy-paste + findable:** при `open_ticket` / `update_known` обязательны `### Title` и `### Body`.  
+В Body **первым** идёт `#### Фактура`: branch, Version, CI version, suite, db, Allure URL, fingerprint/`fline`, Search keys.  
+Без стабильных Search keys следующий агент issue не найдёт. Шаблон: [`REPORT_TEMPLATE.md`](REPORT_TEMPLATE.md).
+
+**Перед `open_ticket`:**  
+`gh search issues "<Search keys>" --repo ydb-platform/ydb`  
+(и по `fline=…` / `file.cpp:NN` / symbol). Если нашлось — `update_known`, не плодить дубликат.
+
+**Как следующий агент ищет:** те же ключи из Фактура / Title (`workers_pool.cpp:117`, `AFL_VERIFY(found)`, suite@db).
+
 ```markdown
 # Perf duty — {suite} @ {db} — {focus_label}
 
 ## Заключение
 - **Итог:** …
 - **Решение:** токен + коротко по-русски:
-  - `investigate_further` — продолжить разбор (ещё не хватает доказательств на PR/механику)
-  - `open_ticket` — завести/обновить issue
-  - `update_known` — это уже известный тикет
-  - `wait_next_wave` — ждать следующий прогон (только после dig, когда копать больше нечего)
-  - `no_action` — действий не нужно
+  - `investigate_further` — продолжить разбор
+  - `open_ticket` — завести issue (Title+Body ниже)
+  - `update_known` — уже известный тикет (Body = комментарий + та же Фактура)
+  - `wait_next_wave` / `no_action` — …
 - **Виновник:** unknown | @{login} / [PR #N](url) — …
 - **Уверенность:** высокая | средняя | низкая
-- **Давность:** … (когда могло проявиться; ссылки на issue/PR/коммиты)
-- **Механика:** … (поведение системы → поломка)
+- **Давность:** подтверждено на …; suite красный с …; в коде с …
+- **Механика:** …
 
 ## Проблемы
 ### P1 — …
-- Тип: olap_fail | …
-- Что сломалось: …
-- Почему / механика: …
-- Логи: kikimr__stderr …; kikimr__logs … (или явно пусто)
-- Код ([sha](commit-url)): [path](blob-url) / symbol …
-- Кто (если есть): … + доказательство
-- Давность: …
-- Гипотеза проверена: yes | no | partial
-- Связанный issue: [ссылка] или нет
+- … + Тикет: отдельный | тот же, что P1 | комментарий в #N
 
 ## Что дальше
 1. …
 
 ## Материалы для issue
-Обязательный блок в конце — одним куском в GitHub issue / комментарий.
-- Окружение: suite, db, branch, label, время, CI, commit (ссылка)
-- Таблица отчётов: разбираемый + соседние по дате/label (полные URL sandbox)
-- Код: место падения (blob@commit), менялся ли файл, когда меняли последний раз, issue/PR
-- Короткая цитата из stderr/logs
-- 3–5 пунктов «что важно для формулировки issue»
+### Title
+{fingerprint + suite — одна строка}
+
+### Body
+#### Фактура
+| Branch | main |
+| Version | main.{sha} |
+| CI version | trunk.r… |
+| Suite / DB | … @ … |
+| Allure / Sandbox | https://proxy.sandbox… |
+| Fingerprint | fline=file.cpp:NN / verification=… |
+| Search keys | `file.cpp:NN` `AFL_VERIFY(…)` `Symbol` `Suite` `db` |
+
+#### Кратко
+…
+
+#### Отчёты (соседи)
+…
+
+#### Код
+…
+
+#### Доказательства из логов
+```
+цитата VERIFY / fatal
+```
+
+#### Важно
+1. …
 ```
 
 Also update `$OUT/problems.json`.

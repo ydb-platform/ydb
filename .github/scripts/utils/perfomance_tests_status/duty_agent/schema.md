@@ -88,4 +88,4 @@ Written by `dutyctl write-result` (always, even on failure). Agent owns problem 
 
 Human report: `analysis.md` (agent-written). Validate with `dutyctl validate`.
 
-Architecture: see [`REDESIGN.md`](REDESIGN.md). CLI: `dutyctl.py`.
+Architecture / playbooks: [`AGENTS.md`](AGENTS.md). CLI: `dutyctl.py`.

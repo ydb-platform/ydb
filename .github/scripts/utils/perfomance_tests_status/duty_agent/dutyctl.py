@@ -4,10 +4,13 @@
 CLI:
   init-token     load SANDBOX_TOKEN + YDB SA key path from YAV
   prepare        detect-type + focus + priors (+ metrics if slow/tpcc)
-  dig-runs       SQL + execute via ydb_client + summarize mart runs
+  dig-runs       SQL + execute via ydb_client + summarize mart runs (+ baseline Allure)
+  dig-baseline   fetch plans/logs from good historical run (baseline_candidate)
   dig-prs        product PRs / hot areas in sha window
   bisect         crash-path window + focus PR files
   validate       lint analysis.md
+  inject-trace   rebuild action tree + inject <details> into analysis.md
+  trace-note     append a manual node to the action tree (hypothesis / dig)
   write-result   merge problems.json → result.json
 """
 
@@ -15,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 import time
@@ -28,11 +32,21 @@ if str(ROOT) not in sys.path:
 if str(PTS_ROOT) not in sys.path:
     sys.path.insert(0, str(PTS_ROOT))
 
+from tools.baseline import (  # noqa: E402
+    compare_plan_digs,
+    dig_baseline_allure,
+    select_baseline,
+)
 from tools.code_bisect import build_code_bisect  # noqa: E402
 from tools.context import (  # noqa: E402
     focus_report_local,
     focus_report_url,
     load_context_pack,
+)
+from tools.trace import (  # noqa: E402
+    ensure_trace_in_analysis,
+    record as trace_record,
+    span as trace_span,
 )
 from tools.contrast import build_contrast  # noqa: E402
 from tools.detect_type import detect_type  # noqa: E402
@@ -62,15 +76,19 @@ def _fatal_from_focus(focus: dict[str, Any]) -> dict[str, Any]:
     quotes: list[str] = []
     hosts: list[str] = []
     nodes: list[str] = []
+    coredump_urls: list[str] = []
+    journal_cmds: list[str] = []
     by_case: list[dict[str, Any]] = []
     for c in (focus.get("allure") or {}).get("cases") or []:
         aa = c.get("attach_analysis") or {}
+        hd = aa.get("host_dig") or {}
         entry = {
             "name": c.get("name"),
             "signals": list(aa.get("signals") or []),
             "quotes": list(aa.get("quotes") or [])[:4],
             "hosts": list(aa.get("hosts") or [])[:6],
             "nodes": list(aa.get("nodes") or [])[:6],
+            "coredump_urls": list(hd.get("coredump_urls") or [])[:3],
         }
         by_case.append(entry)
         for s in entry["signals"]:
@@ -85,6 +103,12 @@ def _fatal_from_focus(focus: dict[str, Any]) -> dict[str, Any]:
         for n in entry["nodes"]:
             if n not in nodes:
                 nodes.append(n)
+        for u in hd.get("coredump_urls") or []:
+            if u not in coredump_urls:
+                coredump_urls.append(u)
+        for cmd in hd.get("journal_cmds") or []:
+            if cmd not in journal_cmds:
+                journal_cmds.append(cmd)
     for q in focus.get("quotes") or []:
         qs = str(q)[:400]
         if qs not in quotes:
@@ -94,8 +118,13 @@ def _fatal_from_focus(focus: dict[str, Any]) -> dict[str, Any]:
         "quotes": quotes[:12],
         "hosts": hosts[:12],
         "nodes": nodes[:12],
+        "coredump_urls": coredump_urls[:8],
+        "journal_cmds": journal_cmds[:6],
         "cases": by_case,
-        "note": "Embedded in focus.json — hints only.",
+        "note": (
+            "Embedded in focus.json — hints only. "
+            "On segfault/abort: dig coredump_urls / /place/coredumps on hosts (see AGENTS.md)."
+        ),
     }
 
 
@@ -133,120 +162,305 @@ def cmd_prepare(args: argparse.Namespace) -> int:
         ctx = loaded.ctx
         out_dir = ensure_run_dir(args.out_dir, ctx)
         errors: list[dict[str, Any]] = []
-
-        # 1) detect
-        det = detect_type(ctx)
-        write_json(out_dir / "detect_type.json", det)
-        probs_path = out_dir / "problems.json"
-        if not probs_path.is_file():
-            write_json(
-                probs_path,
-                {"items": det.get("problems_seed") or [], "note": "seed — agent updates"},
+        with trace_span(out_dir, "prepare", kind="stage") as prep:
+            return _cmd_prepare_body(
+                args, ctx, out_dir, errors, t0, prep, base_dir=loaded.base_dir
             )
-        types = list(det.get("analysis_types") or [])
-        print(f"detect: rollup={det.get('rollup')} types={types}")
-
-        # 2) focus
-        url = focus_report_url(ctx)
-        local = focus_report_local(ctx, loaded.base_dir)
-        need_remote = bool(url and not local and not args.offline)
-        if need_remote and not sandbox_oauth_token():
-            errors.append(
-                {
-                    "stage": "prepare/focus",
-                    "message": "SANDBOX_TOKEN missing — run: python3 dutyctl.py init-token",
-                    "retriable": True,
-                }
-            )
-        sandbox = inspect_sandbox(url, local_path=local, offline=args.offline)
-        focus = {
-            "url": url,
-            "local_path": str(local) if local else None,
-            "fetched": sandbox.get("fetched"),
-            "source": sandbox.get("source"),
-            "auth": sandbox.get("auth"),
-            "error": sandbox.get("error"),
-            "fingerprints": sandbox.get("fingerprints"),
-            "primary": sandbox.get("primary"),
-            "quotes": sandbox.get("quotes"),
-            "allure": sandbox.get("allure"),
-            "note": "Facts only — no root_cause classification.",
-        }
-        focus["fatal"] = _fatal_from_focus(focus)
-        write_json(out_dir / "focus.json", focus)
-        # keep fatal_scan.json alias for older notes
-        write_json(out_dir / "fatal_scan.json", focus["fatal"])
-        print(
-            f"focus: fetched={focus.get('fetched')} source={focus.get('source')} "
-            f"fatal_signals={focus['fatal'].get('signals')}"
-        )
-        if sandbox.get("error"):
-            errors.append(
-                {
-                    "stage": "prepare/focus",
-                    "message": str(sandbox.get("error"))[:400],
-                    "retriable": "401" in str(sandbox.get("error"))
-                    or "missing" in str(sandbox.get("error")),
-                }
-            )
-
-        # 3) priors + history
-        history = analyze_history(ctx)
-        write_json(out_dir / "history.json", history)
-        contrast = build_contrast(
-            ctx,
-            history,
-            focus,
-            offline=args.offline,
-            max_prev=int(args.max_prev),
-        )
-        write_json(out_dir / "priors.json", contrast)
-        print(
-            f"priors: scans={len(contrast.get('prior_scans') or [])} "
-            f"same_class={contrast.get('same_class_before')}"
-        )
-
-        # 4) metrics when relevant
-        want_metrics = bool(
-            args.metrics
-            or any(
-                t in ("olap_slow", "olap_nodata", "tpcc_tpmc", "tpcc_lat", "mixed")
-                for t in types
-            )
-            or (ctx.get("report") or {}).get("kind") == "tpcc"
-        )
-        if want_metrics:
-            md = metrics_delta(ctx)
-            write_json(out_dir / "metrics_delta.json", md)
-            print(f"metrics: flags={md.get('flags')}")
-
-        focus_ok = bool(focus.get("fetched")) or not need_remote
-        # TPC-C without Allure URL still ok (metrics-only / join miss); with URL — dig like OLAP
-        if (ctx.get("report") or {}).get("kind") == "tpcc" and not url and not local:
-            focus_ok = True
-            print("focus: no Allure URL in context — metrics/DataLens path", flush=True)
-        elif (ctx.get("report") or {}).get("kind") == "tpcc" and (url or local):
-            print("focus: Allure present — dig kikimr__stderr + kikimr__logs like OLAP", flush=True)
-
-        status = "partial"
-        ok = True
-        if errors and need_remote and not focus.get("fetched"):
-            status = "failed"
-            ok = False
-
-        result = merge_result(
-            out_dir,
-            ctx=ctx,
-            status=status,
-            ok=ok,
-            errors=errors or None,
-        )
-        result.setdefault("timings_sec", {})["prepare"] = round(time.time() - t0, 2)
-        write_json(out_dir / "result.json", result)
-        print(f"prepare: wrote artifacts under {out_dir}")
-        return 0 if ok else 1
     finally:
         loaded.close()
+
+
+def _cmd_prepare_body(
+    args: argparse.Namespace,
+    ctx: dict[str, Any],
+    out_dir: Path,
+    errors: list[dict[str, Any]],
+    t0: float,
+    prep: dict[str, Any],
+    *,
+    base_dir,
+) -> int:
+    # 1) detect
+    det = detect_type(ctx)
+    write_json(out_dir / "detect_type.json", det)
+    trace_record(
+        out_dir,
+        "detect_type",
+        parent_id=str(prep["id"]),
+        detail=f"types={det.get('analysis_types')} rollup={det.get('rollup')}",
+    )
+    probs_path = out_dir / "problems.json"
+    if not probs_path.is_file():
+        write_json(
+            probs_path,
+            {"items": det.get("problems_seed") or [], "note": "seed — agent updates"},
+        )
+    types = list(det.get("analysis_types") or [])
+    print(f"detect: rollup={det.get('rollup')} types={types}")
+
+    # 2) focus
+    url = focus_report_url(ctx)
+    local = focus_report_local(ctx, base_dir)
+    need_remote = bool(url and not local and not args.offline)
+    if need_remote and not sandbox_oauth_token():
+        errors.append(
+            {
+                "stage": "prepare/focus",
+                "message": "SANDBOX_TOKEN missing — run: python3 dutyctl.py init-token",
+                "retriable": True,
+            }
+        )
+    slow_names: list[str] = []
+    for q in (ctx.get("queries") or []):
+        if not isinstance(q, dict):
+            continue
+        if str(q.get("kind") or "") in ("slow", "both", "soft"):
+            t = str(q.get("test") or "").strip()
+            if t and t not in slow_names:
+                slow_names.append(t)
+    for seed in det.get("problems_seed") or []:
+        if not isinstance(seed, dict):
+            continue
+        if str(seed.get("analysis_type") or "") != "olap_slow":
+            continue
+        title = str(seed.get("title") or "")
+        m = re.search(r"(?:slow|soft)\s+(\S+)", title, re.I)
+        if m:
+            t = m.group(1).strip()
+            if t and t not in slow_names:
+                slow_names.append(t)
+    want_plans = "olap_slow" in types or bool(slow_names)
+    sandbox = inspect_sandbox(
+        url,
+        local_path=local,
+        offline=args.offline,
+        extra_case_names=slow_names or None,
+        include_plans=want_plans,
+    )
+    focus = {
+        "url": url,
+        "local_path": str(local) if local else None,
+        "fetched": sandbox.get("fetched"),
+        "source": sandbox.get("source"),
+        "auth": sandbox.get("auth"),
+        "error": sandbox.get("error"),
+        "fingerprints": sandbox.get("fingerprints"),
+        "primary": sandbox.get("primary"),
+        "quotes": sandbox.get("quotes"),
+        "allure": sandbox.get("allure"),
+        "slow_query_names": slow_names,
+        "note": "Facts only — no root_cause classification.",
+    }
+    focus["fatal"] = _fatal_from_focus(focus)
+    write_json(out_dir / "focus.json", focus)
+    write_json(out_dir / "fatal_scan.json", focus["fatal"])
+    print(
+        f"focus: fetched={focus.get('fetched')} source={focus.get('source')} "
+        f"fatal_signals={focus['fatal'].get('signals')}"
+    )
+    n_plan = sum(
+        1
+        for c in ((focus.get("allure") or {}).get("cases") or [])
+        if (c.get("attach_analysis") or {}).get("plan_dig")
+    )
+    trace_record(
+        out_dir,
+        "focus / Allure",
+        parent_id=str(prep["id"]),
+        detail=(
+            f"fetched={focus.get('fetched')} signals={focus['fatal'].get('signals')} "
+            f"slow={slow_names[:6]} plan_dig_cases={n_plan}"
+        ),
+        status="ok" if focus.get("fetched") or not need_remote else "error",
+    )
+    if want_plans:
+        n_slow = len((focus.get("allure") or {}).get("slow_names") or [])
+        print(
+            f"focus: slow dig — requested={slow_names[:8]} matched={n_slow} "
+            f"plan_dig_cases={n_plan} (compare iterations + baseline Allure)",
+            flush=True,
+        )
+    fatal = focus.get("fatal") or {}
+    if fatal.get("coredump_urls") or (
+        set(str(s).lower() for s in (fatal.get("signals") or []))
+        & {"segfault", "abort", "verify"}
+    ):
+        n_core = len(fatal.get("coredump_urls") or [])
+        n_j = len(fatal.get("journal_cmds") or [])
+        print(
+            f"focus: crash dig — coredump_urls={n_core} journal_cmds={n_j}; "
+            "read host_dig + /place/coredumps (AGENTS.md)",
+            flush=True,
+        )
+        trace_record(
+            out_dir,
+            "crash dig hints",
+            parent_id=str(prep["id"]),
+            detail=f"coredump_urls={n_core} journal_cmds={n_j}",
+        )
+    if sandbox.get("error"):
+        errors.append(
+            {
+                "stage": "prepare/focus",
+                "message": str(sandbox.get("error"))[:400],
+                "retriable": "401" in str(sandbox.get("error"))
+                or "missing" in str(sandbox.get("error")),
+            }
+        )
+
+    # 3) priors + history
+    history = analyze_history(ctx)
+    write_json(out_dir / "history.json", history)
+    contrast = build_contrast(
+        ctx,
+        history,
+        focus,
+        offline=args.offline,
+        max_prev=int(args.max_prev),
+    )
+    write_json(out_dir / "priors.json", contrast)
+    print(
+        f"priors: scans={len(contrast.get('prior_scans') or [])} "
+        f"same_class={contrast.get('same_class_before')}"
+    )
+    trace_record(
+        out_dir,
+        "priors / history",
+        parent_id=str(prep["id"]),
+        detail=f"prior_scans={len(contrast.get('prior_scans') or [])}",
+    )
+
+    # 4) metrics when relevant
+    want_metrics = bool(
+        args.metrics
+        or any(
+            t in ("olap_slow", "olap_nodata", "tpcc_tpmc", "tpcc_lat", "mixed")
+            for t in types
+        )
+        or (ctx.get("report") or {}).get("kind") == "tpcc"
+    )
+    if want_metrics:
+        md = metrics_delta(ctx)
+        write_json(out_dir / "metrics_delta.json", md)
+        print(f"metrics: flags={md.get('flags')}")
+        trace_record(
+            out_dir,
+            "metrics_delta",
+            parent_id=str(prep["id"]),
+            detail=f"flags={md.get('flags')}",
+        )
+
+    focus_ok = bool(focus.get("fetched")) or not need_remote
+    if (ctx.get("report") or {}).get("kind") == "tpcc" and not url and not local:
+        focus_ok = True
+        print("focus: no Allure URL in context — metrics/DataLens path", flush=True)
+    elif (ctx.get("report") or {}).get("kind") == "tpcc" and (url or local):
+        print("focus: Allure present — dig kikimr__stderr + kikimr__logs like OLAP", flush=True)
+
+    status = "partial"
+    ok = True
+    if errors and need_remote and not focus.get("fetched"):
+        status = "failed"
+        ok = False
+
+    result = merge_result(
+        out_dir,
+        ctx=ctx,
+        status=status,
+        ok=ok,
+        errors=errors or None,
+    )
+    result.setdefault("timings_sec", {})["prepare"] = round(time.time() - t0, 2)
+    write_json(out_dir / "result.json", result)
+    print(f"prepare: wrote artifacts under {out_dir}")
+    return 0 if ok else 1
+
+
+
+def _slow_query_names_from_out(out_dir: Path, ctx: dict[str, Any] | None) -> list[str]:
+    names: list[str] = []
+    if (out_dir / "focus.json").is_file():
+        focus = json.loads((out_dir / "focus.json").read_text(encoding="utf-8"))
+        for n in focus.get("slow_query_names") or []:
+            if n and n not in names:
+                names.append(str(n))
+    if (out_dir / "detect_type.json").is_file():
+        det = json.loads((out_dir / "detect_type.json").read_text(encoding="utf-8"))
+        for seed in det.get("problems_seed") or []:
+            if not isinstance(seed, dict):
+                continue
+            if str(seed.get("analysis_type") or "") != "olap_slow":
+                continue
+            m = re.search(r"(?:slow|soft)\s+(\S+)", str(seed.get("title") or ""), re.I)
+            if m and m.group(1) not in names:
+                names.append(m.group(1))
+    if ctx:
+        for q in ctx.get("queries") or []:
+            if isinstance(q, dict) and str(q.get("kind") or "") in ("slow", "both", "soft"):
+                t = str(q.get("test") or "").strip()
+                if t and t not in names:
+                    names.append(t)
+    return names
+
+
+def _maybe_dig_baseline(
+    out_dir: Path,
+    *,
+    dig: dict[str, Any],
+    ctx: dict[str, Any] | None,
+    offline: bool = False,
+) -> None:
+    """After dig-runs: fetch Allure plans/logs from baseline_candidate when slow/lat."""
+    types: list[str] = []
+    if (out_dir / "detect_type.json").is_file():
+        types = list(
+            (json.loads((out_dir / "detect_type.json").read_text(encoding="utf-8"))).get(
+                "analysis_types"
+            )
+            or []
+        )
+    want = any(t in ("olap_slow", "tpcc_lat", "tpcc_tpmc") for t in types)
+    if not want and not _slow_query_names_from_out(out_dir, ctx):
+        # still useful for olap_fail when ydb jumped — skip unless slow seeded
+        return
+    summary = dig.get("summary") or {}
+    baseline = summary.get("baseline_candidate") or select_baseline(dig=dig, ctx=ctx)
+    if not baseline or not baseline.get("Report"):
+        print("baseline: no candidate with Report in dig window", flush=True)
+        write_json(
+            out_dir / "baseline_focus.json",
+            {"fetched": False, "error": "no baseline Report", "baseline": baseline},
+        )
+        return
+    names = _slow_query_names_from_out(out_dir, ctx)
+    print(
+        f"baseline: {baseline.get('reason')} Version={baseline.get('Version')} "
+        f"metric={baseline.get('metric_value')} Report=… "
+        f"queries={names[:6] or '(all failed/named via include)'}",
+        flush=True,
+    )
+    blob = dig_baseline_allure(
+        baseline,
+        query_names=names or None,
+        offline=offline,
+        include_plans=True,
+    )
+    # Compare to focus plans when both present
+    focus_cases = []
+    if (out_dir / "focus.json").is_file():
+        focus = json.loads((out_dir / "focus.json").read_text(encoding="utf-8"))
+        focus_cases = list((focus.get("allure") or {}).get("cases") or [])
+    base_cases = list((blob.get("allure") or {}).get("cases") or [])
+    if focus_cases and base_cases:
+        blob["plan_compare"] = compare_plan_digs(focus_cases, base_cases)
+        for c in (blob["plan_compare"].get("comparisons") or [])[:6]:
+            print(
+                f"baseline plan_compare {c.get('query')}: {c.get('verdict')} "
+                f"focus={c.get('focus_hints')} base={c.get('baseline_hints')}",
+                flush=True,
+            )
+    write_json(out_dir / "baseline_focus.json", blob)
+    print(f"wrote {out_dir / 'baseline_focus.json'} fetched={blob.get('fetched')}", flush=True)
 
 
 def _summarize_and_write_dig(
@@ -256,6 +470,9 @@ def _summarize_and_write_dig(
     sql_path: Path,
     rows: list[dict[str, Any]],
     raw_path: Path,
+    ctx: dict[str, Any] | None = None,
+    fetch_baseline: bool = True,
+    offline: bool = False,
 ) -> int:
     dig = summarize_dig(
         kind=str(plan["kind"]),
@@ -275,13 +492,59 @@ def _summarize_and_write_dig(
     write_json(out_dir / "dig_runs.json", dig)
     summary = dig.get("summary") or {}
     print(f"wrote {out_dir / 'dig_runs.json'}")
-    jump = summary.get("largest_lat_step") or summary.get("largest_fail_step")
+    jump = (
+        summary.get("largest_lat_step")
+        or summary.get("largest_ydb_step")
+        or summary.get("largest_fail_step")
+    )
     print(
         f"rows={summary.get('row_count')} slice={summary.get('slice_count')} "
         f"jump={jump}"
     )
-    if summary.get("window_edge_hint"):
-        print(f"HINT: {summary['window_edge_hint']}")
+    with trace_span(out_dir, "dig-runs", kind="stage") as stage:
+        trace_record(
+            out_dir,
+            "mart summarize",
+            parent_id=str(stage["id"]),
+            detail=(
+                f"rows={summary.get('row_count')} slice={summary.get('slice_count')} "
+                f"jump_metric={(jump or {}).get('metric') or (jump or {}).get('lat_delta')}"
+            ),
+        )
+        if summary.get("baseline_candidate"):
+            bc = summary["baseline_candidate"]
+            print(
+                f"baseline_candidate: reason={bc.get('reason')} "
+                f"Version={bc.get('Version')} metric={bc.get('metric_value')} "
+                f"has_report={bool(bc.get('Report'))}",
+                flush=True,
+            )
+            trace_record(
+                out_dir,
+                "baseline_candidate",
+                parent_id=str(stage["id"]),
+                detail=(
+                    f"{bc.get('reason')} Version={bc.get('Version')} "
+                    f"metric={bc.get('metric_value')} report={bool(bc.get('Report'))}"
+                ),
+            )
+        if summary.get("window_edge_hint"):
+            print(f"HINT: {summary['window_edge_hint']}")
+        if fetch_baseline:
+            _maybe_dig_baseline(out_dir, dig=dig, ctx=ctx, offline=offline)
+            if (out_dir / "baseline_focus.json").is_file():
+                bf = json.loads((out_dir / "baseline_focus.json").read_text(encoding="utf-8"))
+                comps = (bf.get("plan_compare") or {}).get("comparisons") or []
+                verdicts = ",".join(
+                    f"{c.get('query')}={c.get('verdict')}" for c in comps[:6]
+                )
+                trace_record(
+                    out_dir,
+                    "baseline_focus / plan_compare",
+                    parent_id=str(stage["id"]),
+                    detail=f"fetched={bf.get('fetched')} {verdicts}",
+                    status="ok" if bf.get("fetched") else "error",
+                )
     return 0
 
 
@@ -321,6 +584,9 @@ def cmd_dig_runs(args: argparse.Namespace) -> int:
                 sql_path=sql_path,
                 rows=rows,
                 raw_path=raw_path,
+                ctx=ctx,
+                fetch_baseline=not getattr(args, "no_baseline", False),
+                offline=bool(getattr(args, "offline", False)),
             )
 
         if args.sql_only:
@@ -383,9 +649,64 @@ def cmd_dig_runs(args: argparse.Namespace) -> int:
             sql_path=sql_path,
             rows=rows,
             raw_path=raw_path,
+            ctx=ctx,
+            fetch_baseline=not getattr(args, "no_baseline", False),
+            offline=bool(getattr(args, "offline", False)),
         )
     finally:
         loaded.close()
+
+
+def cmd_dig_baseline(args: argparse.Namespace) -> int:
+    """Pick good historical run from dig_runs/pack history and dig its Allure plans/logs."""
+    loaded = _load_ctx(args.context) if args.context else None
+    try:
+        ctx = loaded.ctx if loaded else None
+        out_dir = ensure_run_dir(args.out_dir, ctx)
+        dig = None
+        if (out_dir / "dig_runs.json").is_file():
+            dig = json.loads((out_dir / "dig_runs.json").read_text(encoding="utf-8"))
+        baseline = select_baseline(dig=dig, ctx=ctx)
+        if args.report_url:
+            baseline = baseline or {}
+            baseline = {
+                **baseline,
+                "Report": args.report_url,
+                "reason": baseline.get("reason") or "manual_report_url",
+            }
+        if not baseline:
+            print("dig-baseline: no candidate (run dig-runs first or pass --report-url)", file=sys.stderr)
+            return 1
+        # stash candidate onto dig summary for consistency
+        if dig is not None:
+            dig.setdefault("summary", {})["baseline_candidate"] = baseline
+            write_json(out_dir / "dig_runs.json", dig)
+            _maybe_dig_baseline(
+                out_dir,
+                dig=dig,
+                ctx=ctx,
+                offline=bool(args.offline),
+            )
+        else:
+            names = _slow_query_names_from_out(out_dir, ctx)
+            blob = dig_baseline_allure(
+                baseline,
+                query_names=names or None,
+                offline=bool(args.offline),
+                include_plans=True,
+            )
+            if (out_dir / "focus.json").is_file():
+                focus = json.loads((out_dir / "focus.json").read_text(encoding="utf-8"))
+                blob["plan_compare"] = compare_plan_digs(
+                    list((focus.get("allure") or {}).get("cases") or []),
+                    list((blob.get("allure") or {}).get("cases") or []),
+                )
+            write_json(out_dir / "baseline_focus.json", blob)
+            print(f"wrote {out_dir / 'baseline_focus.json'} fetched={blob.get('fetched')}")
+        return 0
+    finally:
+        if loaded:
+            loaded.close()
 
 
 def cmd_dig_prs(args: argparse.Namespace) -> int:
@@ -402,30 +723,48 @@ def cmd_dig_prs(args: argparse.Namespace) -> int:
             head = head or appeared.get("first_fail_sha") or appeared.get("focus_sha")
         if (not base or not head) and (out_dir / "dig_runs.json").is_file():
             dig = json.loads((out_dir / "dig_runs.json").read_text(encoding="utf-8"))
-            jump = (dig.get("summary") or {}).get("largest_lat_step") or {}
+            summary = dig.get("summary") or {}
+            # TPC-C: lat jump; OLAP slow: ydb jump; OLAP fail: fail jump
+            jump = (
+                summary.get("largest_lat_step")
+                or summary.get("largest_ydb_step")
+                or summary.get("largest_fail_step")
+                or {}
+            )
             # versions are often full shas
             if not base and jump.get("from_version"):
                 base = str(jump["from_version"])[:40]
             if not head and jump.get("to_version"):
                 head = str(jump["to_version"])[:40]
+            if base and head:
+                print(
+                    f"dig-prs: window from dig_runs "
+                    f"{jump.get('metric') or 'jump'} "
+                    f"{str(base)[:7]}…{str(head)[:7]}",
+                    flush=True,
+                )
         if (not base or not head) and loaded:
             hist = analyze_history(loaded.ctx)
             write_json(out_dir / "history.json", hist)
             appeared = hist.get("appeared") or {}
             base = base or appeared.get("prev_green_sha")
             head = head or appeared.get("first_fail_sha") or appeared.get("focus_sha")
-        # metrics_delta history for tpcc jump 21→23 style
+        # metrics_delta history: TPC-C lat jump or OLAP ydb jump
         if (not base or not head) and (out_dir / "metrics_delta.json").is_file():
             md = json.loads((out_dir / "metrics_delta.json").read_text(encoding="utf-8"))
             labels = (md.get("history_tail") or {}).get("labels") or []
             versions = (md.get("history_tail") or {}).get("versions") or []
-            lat = (md.get("history_tail") or {}).get("lat90") or []
-            if len(versions) >= 2 and len(lat) == len(versions):
+            series = (md.get("history_tail") or {}).get("lat90") or []
+            metric_name = "lat"
+            if not series:
+                series = (md.get("history_tail") or {}).get("ydb") or []
+                metric_name = "ydb"
+            if len(versions) >= 2 and len(series) == len(versions):
                 best_i = None
                 best_d = 0.0
-                for i in range(len(lat) - 1):
+                for i in range(len(series) - 1):
                     try:
-                        d = float(lat[i + 1]) - float(lat[i])
+                        d = float(series[i + 1]) - float(series[i])
                     except (TypeError, ValueError):
                         continue
                     if best_i is None or abs(d) > abs(best_d):
@@ -434,10 +773,10 @@ def cmd_dig_prs(args: argparse.Namespace) -> int:
                     base = base or str(versions[best_i])
                     head = head or str(versions[best_i + 1])
                     print(
-                        f"dig-prs: using largest lat step "
+                        f"dig-prs: using largest {metric_name} step "
                         f"{labels[best_i] if best_i < len(labels) else best_i} → "
                         f"{labels[best_i+1] if best_i+1 < len(labels) else best_i+1} "
-                        f"(Δlat={best_d:.0f})"
+                        f"(Δ={best_d:.0f})"
                     )
 
         if not base or not head:
@@ -450,6 +789,14 @@ def cmd_dig_prs(args: argparse.Namespace) -> int:
         result = dig_prs_window(str(base), str(head))
         write_json(out_dir / "dig_prs.json", result)
         print(f"wrote {out_dir / 'dig_prs.json'}")
+        n_hot = len(result.get("hot_prs") or result.get("prs") or [])
+        trace_record(
+            out_dir,
+            "dig-prs",
+            kind="stage",
+            detail=f"{str(base)[:7]}…{str(head)[:7]} hot={n_hot}",
+            status="error" if result.get("error") else "ok",
+        )
         if result.get("conclusion"):
             print(result["conclusion"])
         for hp in (result.get("hot_prs") or [])[:8]:
@@ -514,6 +861,15 @@ def cmd_bisect(args: argparse.Namespace) -> int:
 
         write_json(out_dir / "code_bisect.json", bis)
         print(f"wrote {out_dir / 'code_bisect.json'}")
+        trace_record(
+            out_dir,
+            "bisect",
+            kind="stage",
+            detail=(
+                f"path={bis.get('path')} introduced_in_window={bis.get('introduced_in_window')}"
+            ),
+            status="error" if bis.get("error") else "ok",
+        )
         if bis.get("conclusion"):
             print(bis["conclusion"])
         spr = (bis.get("focus_pr") or {}).get("pr") or {}
@@ -524,6 +880,39 @@ def cmd_bisect(args: argparse.Namespace) -> int:
     finally:
         if loaded:
             loaded.close()
+
+
+def cmd_inject_trace(args: argparse.Namespace) -> int:
+    """Rebuild action_tree.json from artifacts (+ live nodes) and inject into analysis.md."""
+    out_dir = ensure_run_dir(args.out_dir, None)
+    info = ensure_trace_in_analysis(out_dir, rebuild=not args.no_rebuild)
+    print(f"wrote {out_dir / 'action_tree.json'}")
+    print(f"injected_into_analysis={info.get('injected')}")
+    print("--- tree ---")
+    print(info.get("ascii") or "")
+    return 0
+
+
+def cmd_trace_note(args: argparse.Namespace) -> int:
+    """Append a manual investigation node (hypothesis / dig / decision)."""
+    out_dir = ensure_run_dir(args.out_dir, None)
+    title = args.title or args.text
+    if not title:
+        print("trace-note: need --title or positional text", file=sys.stderr)
+        return 2
+    node = trace_record(
+        out_dir,
+        title,
+        kind=args.kind,
+        detail=args.detail,
+        status=args.status,
+        parent_id=args.parent,
+    )
+    print(f"trace: +{node.get('id')} {title}")
+    if args.inject:
+        ensure_trace_in_analysis(out_dir, rebuild=True)
+        print("analysis.md updated")
+    return 0
 
 
 def cmd_validate(args: argparse.Namespace) -> int:
@@ -538,6 +927,12 @@ def cmd_validate(args: argparse.Namespace) -> int:
             errors=[{"stage": "validate", "message": "analysis.md missing", "retriable": False}],
         )
         return 2
+    # Keep action tree under <details> fresh before lint
+    if not getattr(args, "no_trace", False):
+        try:
+            ensure_trace_in_analysis(out_dir, rebuild=True)
+        except Exception as e:  # noqa: BLE001
+            print(f"trace inject warning: {e}", file=sys.stderr)
     text = md_path.read_text(encoding="utf-8")
     report = validate_analysis_md(text, out_dir=out_dir)
     write_json(out_dir / "validate.json", report)
@@ -682,7 +1077,8 @@ def main(argv: list[str] | None = None) -> int:
 
     ap = argparse.ArgumentParser(
         description=(
-            "Perf duty toolbox — prepare | dig-runs | dig-prs | bisect | validate | write-result"
+            "Perf duty toolbox — prepare | dig-runs | dig-baseline | dig-prs | bisect | "
+            "inject-trace | validate | write-result"
         ),
     )
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -743,8 +1139,28 @@ def main(argv: list[str] | None = None) -> int:
         default=3,
         help="mart lookforward days after focus run (default 3)",
     )
+    p.add_argument(
+        "--no-baseline",
+        action="store_true",
+        help="do not auto-fetch baseline Allure plans/logs after summarize",
+    )
+    p.add_argument(
+        "--offline",
+        action="store_true",
+        help="with --from-json: skip remote baseline Allure fetch",
+    )
     add_out(p)
     p.set_defaults(func=cmd_dig_runs)
+
+    p = sub.add_parser(
+        "dig-baseline",
+        help="fetch Allure plans/logs from a good historical run (dig_runs baseline_candidate)",
+    )
+    p.add_argument("--context", "-c", type=Path, default=None)
+    p.add_argument("--report-url", default=None, help="override baseline Allure URL")
+    p.add_argument("--offline", action="store_true")
+    add_out(p)
+    p.set_defaults(func=cmd_dig_baseline)
 
     p = sub.add_parser(
         "dig-prs",
@@ -765,9 +1181,44 @@ def main(argv: list[str] | None = None) -> int:
     add_out(p)
     p.set_defaults(func=cmd_bisect)
 
-    p = sub.add_parser("validate", help="lint analysis.md")
+    p = sub.add_parser("validate", help="lint analysis.md (+ refresh action-tree <details>)")
+    p.add_argument(
+        "--no-trace",
+        action="store_true",
+        help="do not refresh action_tree / <details> before lint",
+    )
     add_out(p)
     p.set_defaults(func=cmd_validate)
+
+    p = sub.add_parser(
+        "inject-trace",
+        help="rebuild action_tree.json and inject <details> tree into analysis.md",
+    )
+    p.add_argument(
+        "--no-rebuild",
+        action="store_true",
+        help="inject live tree only (skip artifacts rollup)",
+    )
+    add_out(p)
+    p.set_defaults(func=cmd_inject_trace)
+
+    p = sub.add_parser(
+        "trace-note",
+        help="append a manual node to action_tree (hypothesis / dig / decision)",
+    )
+    p.add_argument("text", nargs="?", default=None, help="node title")
+    p.add_argument("--title", default=None)
+    p.add_argument("--detail", default=None)
+    p.add_argument("--kind", default="note", help="note|hypothesis|dig|decision")
+    p.add_argument("--status", default="ok")
+    p.add_argument("--parent", default=None, help="parent node id")
+    p.add_argument(
+        "--inject",
+        action="store_true",
+        help="also refresh <details> in analysis.md",
+    )
+    add_out(p)
+    p.set_defaults(func=cmd_trace_note)
 
     p = sub.add_parser("write-result", help="merge problems.json → result.json")
     p.add_argument("--context", "-c", type=Path, default=None)

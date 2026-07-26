@@ -19,8 +19,9 @@
 ### P1 — <короткое имя>
 - Тип: `olap_fail` | `olap_slow` | `tpcc_tpmc` | `tpcc_lat`
 - Что сломалось: …
-- Почему / механика: …
-- Логи: `kikimr__stderr` …; `kikimr__logs` … (или явно пусто)
+- Почему / механика: … (для slow: `plan_regressed` | `plan_same_runtime_regressed` | `unstable_across_iterations` | …)
+- Логи: `kikimr__stderr` …; `kikimr__logs` … (или явно пусто); при crash — coredump URL / `/place/coredumps`
+- План (если `olap_slow`): Explain / Final plan по итерациям; сравнение с baseline Allure
 - Код ([`{sha}`](https://github.com/ydb-platform/ydb/commit/{sha})): [файл](blob-url) / функция …
 - Кто (если есть): … + доказательство (или `unknown`)
 - Давность: …
@@ -40,6 +41,22 @@
 ## Что дальше
 1. … (для `open_ticket`: «вставить Title+Body из блока ниже»)
 2. Перед заведением: `gh search issues "<search keys>" --repo ydb-platform/ydb`
+
+## Ход разбора
+
+Под катом — дерево действий (`dutyctl inject-trace` / `validate` обновляет само).  
+Сюда же попадают `trace-note` (гипотезы / dig / решение).
+
+<!-- duty-action-tree:start -->
+<details>
+<summary>Дерево разбора (от начала до конца)</summary>
+
+```
+(будет заполнено inject-trace / validate)
+```
+
+</details>
+<!-- duty-action-tree:end -->
 
 ## Материалы для issue
 
@@ -96,8 +113,9 @@ Title: коротко + уникальный fingerprint (`file.cpp:NN` / symbol
 
 #### Доказательства из логов
 ```
-<цитата VERIFY / fatal — целиком ключевые строки, без «…» посередине fingerprint>
+<цитата VERIFY / Received signal N / fatal — целиком ключевые строки, без «…» посередине fingerprint>
 ```
+Coredump (если был): `https://coredumps.yandex-team.ru/v3/cores/<uuid>` + 1–2 frame.
 
 #### Важно
 1. Корневая причина — …, не «просто 2005».

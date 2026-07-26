@@ -34,10 +34,13 @@ OUT=./runs/my-case
 | Command | Role |
 |---------|------|
 | `prepare -c CONTEXT -o $OUT` | facts: detect + Allure focus(+fatal) + priors + metrics |
-| `dig-runs -c CONTEXT -o $OUT` | Mart history (~35d): execute via ydb_client + summarize (neighbors) |
+| `dig-runs -c CONTEXT -o $OUT` | Mart history (~35d): execute + summarize; auto `baseline_focus.json` for slow/lat |
+| `dig-baseline -o $OUT [-c CONTEXT]` | re-fetch / override baseline Allure plans+logs |
 | `dig-prs -o $OUT [--base-sha … --head-sha …]` | product PRs + hot areas in jump window |
 | `bisect -o $OUT [-c CONTEXT] [--path …]` | code window on **tested** sha vs prev + focus PR files |
-| `validate -o $OUT` | **quality gate** — must exit 0 (fix ≤5) |
+| `inject-trace -o $OUT` | rebuild `action_tree.json` + inject `<details>` tree into `analysis.md` |
+| `trace-note -o $OUT "…"` | append hypothesis/dig/decision node to the action tree |
+| `validate -o $OUT` | **quality gate** (+ refreshes action tree under the cut) |
 | `write-result -c CONTEXT -o $OUT` | final `result.json` only after validate OK |
 
 Extra digs: `gh search` / browse code at tested sha. Offline mart: `dig-runs --from-json`. SQL only: `--sql-only`.
@@ -46,27 +49,33 @@ Extra digs: `gh search` / browse code at tested sha. Offline mart: `dig-runs --f
 
 ```text
 1) dutyctl prepare -c CONTEXT.json -o $OUT
-2) DIG LOGS FIRST when Allure focus exists (OLAP fail + TPC-C with report URL — never skip):
-     focus.json → kikimr__stderr + kikimr__logs (+ Stderr)
-     Do not block log reading on mart fetch.
+2) DIG LOGS / PLANS FIRST when Allure focus exists (never skip):
+     fail → kikimr__stderr + kikimr__logs (+ Stderr); crash → coredump playbook
+     slow → plan_dig (Stats + Final plan × iterations) + logs; then baseline Allure plan
+     Do not block log/plan reading on mart fetch.
 3) DIG RUNS FROM DB before writing analysis (mandatory for tpcc + olap):
      Pack suite_history is short — do NOT stop there.
      dutyctl dig-runs -c CONTEXT -o $OUT [--days-before 35|60|90]
        → ping + scan via common/ydb_client → dig_runs_raw.json + dig_runs.json
+       → summary.baseline_candidate (good Ydb/lat90 + Report) + baseline_focus.json
+         (Allure plans/logs for slow queries + plan_compare vs focus)
      Default neighbors (same branch):
        TPC-C — all ydb_cli_* run_type + all clusters; jump on focus suite; cross_run_type + peer jumps
        OLAP  — related suite families + all DbAlias; fail/ydb jumps; cross_suite + peer_dbs
      If summary.window_edge_hint → widen --days-before and re-run dig-runs
+     If baseline missing Report → dig-baseline --report-url … or widen window
 4) DIG CODE IN THE JUMP INTERVAL (not only PR of the alert commit):
-     dutyctl dig-prs -o $OUT   # uses largest lat step / history window
-     dutyctl bisect …          # crash path or forced --path
-     read hot PR diffs @ tested sha
-5) Form hypothesis H → verify against dig_runs + dig_prs + logs
-     falsified → new H (≤3)
+     dutyctl dig-prs -o $OUT   # OLAP: largest_ydb_step / fail_step; TPC-C: lat step
+     dutyctl bisect …          # crash path, or optimizer/CS path from plan_compare
+     read hot PR diffs @ tested sha — filter by plan hints (join/scan/kqp/cs)
+5) Form hypothesis H → verify against dig_runs + dig_prs + plans/logs/code
+     falsified → new H (≤3); culprit only if evidence bar met
 6) Self-check — if fail, dig more (do NOT jump to wait_next_wave early)
 7) Write analysis.md + problems.json
-8) dutyctl validate -o $OUT
-9) dutyctl write-result …
+   Along the way: dutyctl trace-note -o $OUT --kind hypothesis -- "H1: …"
+8) dutyctl inject-trace -o $OUT   # or rely on validate — дерево под <details>
+9) dutyctl validate -o $OUT
+10) dutyctl write-result …
 ```
 
 Note: `metrics_delta.json` is produced for slow/tpcc (or `prepare --metrics`); pure `olap_fail` may omit it.
@@ -81,14 +90,41 @@ For `olap_fail` / any Allure focus:
 
 | Attachment | Role |
 |------------|------|
-| `kikimr__stderr` | **execution / process** — VERIFY, AFL_VERIFY, SIGABRT, stacks |
+| `kikimr__stderr` | **execution / process** — VERIFY, AFL_VERIFY, SIGABRT, **SIGSEGV / `Received signal 11`**, stacks |
 | `kikimr__logs` | **cluster** — connection lost, node down/restart, tablet, IC |
 | `Stderr` | query SQL / iteration `statusMessage` surface |
+| `descriptionHtml` / `host_dig` | coredumps.yandex-team.ru links + shell recipes (`parallel-ssh` / `unified_agent select` / `journalctl`) |
 
 `prepare` already fetches these into `focus.json`. You **must read them** (via `focus.fatal` + per-case `attach_analysis`).  
 Stopping at Allure `statusMessage` / code 2005 **without** stderr+logs dig = failed investigation.
 
 If attachments empty: say so explicitly (`stderr empty` / `logs empty`) and lower confidence.
+
+### Host journals + coredumps (mandatory when crash / node death)
+
+`descriptionHtml` «запросы к журналу» — это **shell-рецепты**, не YDB SQL. Не пытайся гонять их через mart/MCP.
+
+**Порядок (после чтения вложений):**
+
+1. **Сначала вложения** — `kikimr__stderr` / `kikimr__logs` уже содержат результат `unified_agent select` / stderr слота. Ищи `Received signal 11|6`, `SIGSEGV`/`SIGABRT`, `VERIFY`, `Backtrace:`, `Registered as <nodeId>` (рестарт после abort).  
+2. **Coredump** — если в `attach_analysis.host_dig.coredump_urls` / description есть `coredumps.yandex-team.ru`, открой UUID-ссылку. На хосте падения (из `Node NNN@host` / `host_dig.hosts`):
+   ```bash
+   ssh <host> 'ls -la /place/coredumps/*$(date -d @<approx_ts> +%s 2>/dev/null || true)* 2>/dev/null; ls /place/coredumps/backtrace_kikimr_* /place/coredumps/sended_kikimr_*.json | tail -20'
+   # конкретный dump около времени падения:
+   ssh <host> 'cat /place/coredumps/sended_kikimr_<slot>_<unix_ts>.json'   # → url_v3 / traceback_fingerprint_v3
+   ssh <host> 'grep -nE "Program terminated|BufferReader|VERIFY|TWorker|#0 " /place/coredumps/backtrace_kikimr_<slot>_<unix_ts>.dmp | head'
+   ```
+   В отчёт: URL coredump + 1–2 ключевые frame (symbol/path), не весь dump.  
+3. **Повтор рецептов с хоста** — только если вложений мало / нет abort, а node down остаётся загадкой:
+   ```bash
+   # окно времени — из descriptionHtml (MSK/UTC как в рецепте)
+   ssh <host> 'sudo journalctl -k -S "YYYY-MM-DD HH:MM:SS" -U "…" --grep ydb --no-pager'
+   ssh <host> 'ulimit -n 100500; unified_agent select -S "…+03:00" -U "…+03:00" -s kikimr' | grep -Ei 'signal|VERIFY|Fatal|Received signal'
+   ```
+   Пустой `journalctl -k --grep ydb` **нормален** при user-space SIGSEGV — не останавливай разбор на «kernel empty».  
+4. **Не путать** abort A (`workers_pool` VERIFY / signal 6) с abort B (Arrow `BufferReader` / signal 11) и с «просто 2005» на соседнем query (следствие disconnect).
+
+`focus.fatal` после `prepare` несёт `coredump_urls` / `journal_cmds` / `signals` — используй как чеклист, не как ответ.
 
 ## Root cause from tested codebase
 
@@ -120,7 +156,7 @@ Put a clear line in the report: **Давность:** …
 | Type | Evidence |
 |------|----------|
 | `olap_fail` | Allure + **stderr + cluster logs** + **dig-runs** (when suite went red / peers) + bisect |
-| `olap_slow` | **dig-runs** + metrics_delta + dig-prs/bisect |
+| `olap_slow` | **plans per iteration** + server logs + **baseline Allure plan** + dig-runs + metrics_delta + dig-prs |
 | `olap_nodata` | Pack `query_counts` / nodata samples / incomplete `SuccessCount`. **First:** Allure/report for those queries — then branch (lag vs real gap). |
 | `tpcc_tpmc` / `tpcc_lat` | Allure focus (+ stderr/logs when URL present) + **dig-runs** (`perfomance/tpcc`, `Report` from `tests_results`) + **dig-prs** + metrics + DataLens |
 | `mixed` | split problems |
@@ -140,6 +176,42 @@ Put a clear line in the report: **Давность:** …
 4. В `analysis.md` явно написать ветку: «отчёт ok → не доехали» **или** «в отчёте тоже нет → логи/кластер».
 
 `validate` fails if nodata is seeded but report-check branch is missing from the write-up.
+
+### OLAP slow / duration growth (mandatory when seeded)
+
+`olap_slow` / soft regression — **не** сводить к `ydb_pct` и списку PR. Нужен план и сравнение с нормальным прогоном.
+
+**Playbook (order matters):**
+
+1. **Какие query** — из `detect_type` / pack `queries` (`kind=slow|both|soft`) + `metrics_delta.queries`.  
+2. **`prepare` уже тянет** эти кейсы из Allure (даже если `passed`) и кладёт `attach_analysis.plan_dig`:
+   - `Stats` / Mean  
+   - `Plan table` (Explain)  
+   - `Final plan table|json|stats` **по Iteration 0..N**  
+   - плюс `kikimr__stderr` / `kikimr__logs` (не только для fail)  
+3. **На медленном прогоне:**
+   - сравнить планы **между итерациями** (`plan_dig.plan_changed_across_iterations`, hints: Lookup/GraceJoin/FullScan/…);  
+   - если план стабилен, а duration прыгает — смотреть логи сервера (CPU steal, spilling, tablet, IC) в окне query;  
+   - если план меняется между итерациями — это уже сигнал нестабильности оптимизатора/статистики.  
+4. **Baseline (нормальная продолжительность):** `dig-runs` сам выбирает `summary.baseline_candidate`
+   (предпочтительно точка `largest_ydb_step.from` / latest better + `Report`) и пишет `baseline_focus.json`
+   + `plan_compare` (hints focus vs baseline). Читай это; при пустом Report — `dutyctl dig-baseline` / pack `suite_history.reports`.  
+   В отчёте: Version/label baseline + «план совпал / разъехался» (`plan_compare.verdict`).  
+5. Если `plan_same` — копай логи baseline **и** focus (`kikimr__logs` в обоих) на runtime/infra.  
+6. **Код в окне jump (обязательно, как для fail/TPC-C):**
+   - `dutyctl dig-prs` на `largest_ydb_step` (from_version…to_version) — не PR алерт-коммита.  
+   - Отфильтруй hot PR по `plan_compare` / hints:
+     - `plan_regressed` → kqp / optimizer / statistics / columnshard reader / join  
+     - `plan_same` → runtime / CS execute / conveyor / memory / IC (или infra)  
+     - `unstable_across_iterations` → stats/cache/planner nondeterminism  
+   - `dutyctl bisect --path …` на подозрительный файл/директорию из diff.  
+7. **Hypothesis loop (≤3):** H1 из plan_compare → проверить diff@tested sha + логи; falsified → H2…  
+   Виновник = PR только при evidence bar (files ∩ path **или** path changed in window). Иначе `unknown` / candidate.  
+8. В `analysis.md`: механика — `plan_regressed` | `plan_same_runtime_regressed` | `unstable_across_iterations` | `infra/logs`;  
+   кандидаты PR таблицей из `dig_prs.json`; **Гипотеза проверена:** yes|partial|no.
+
+**Forbidden:** `wait_next_wave` / blame PR только по `ydb_pct` без plan dig, baseline и dig-prs.  
+`validate` fails without plan/iteration/baseline **and** without `dig_prs.json` (or explicit skip).
 
 ### Harness (read for yourself — filter candidates; do not dump into report)
 
@@ -172,12 +244,15 @@ Put a clear line in the report: **Давность:** …
 
 ### OLAP playbook (mandatory dig-runs)
 
-1. `prepare` → Allure focus + fatal + pack history. **Read `detect_type.json` `query_counts` / `olap_nodata` seed first.**  
+1. `prepare` → Allure focus + fatal + pack history. **Read `detect_type.json` `query_counts` / `olap_nodata` / `olap_slow` seeds first.**  
 2. If `olap_nodata` (or `n_nodata>0`): **сначала отчёт** по этим query (см. playbook nodata выше). Логи/кластер — только если в отчёте тоже дыра. Не подменять nodata чужим fail с того же Allure.  
-3. **Read logs** from `focus.json` when `olap_fail` **or** nodata branch = «в отчёте тоже нет» (`kikimr__stderr` + `kikimr__logs`).  
-4. `dig-runs` (~35d+, ydb_client) → related suites + **peer DbAlias**. Для nodata — Now vs mart SuccessCount/YdbSumMeans.  
-5. Metrics + bisect/dig-prs as needed (fail/slow; для «не доехали» bisect обычно не нужен).  
-6. Use harness paths above when mechanism depends on upload vs query suite.
+3. If `olap_slow`: follow **OLAP slow / duration growth** end-to-end  
+   (plans × iterations → baseline_focus/plan_compare → logs if plan_same → **dig-prs + bisect + H-loop**).  
+4. **Read logs** from `focus.json` when `olap_fail` **or** nodata branch = «в отчёте тоже нет» **or** slow path needs server-side evidence (`kikimr__stderr` + `kikimr__logs`).  
+5. If signals include `segfault` / `abort` / `verify`, or status is 2005+node-down: follow **Host journals + coredumps** (coredump URL / `/place/coredumps` / optional journalctl). Prefer stack over surface 2005.  
+6. `dig-runs` (~35d+, ydb_client) → related suites + **peer DbAlias**. Для nodata — Now vs mart SuccessCount/YdbSumMeans. Для slow — auto `baseline_focus` + ydb jump window for dig-prs.  
+7. Metrics + **dig-prs/bisect обязательны для slow/fail** (для «не доехали» — нет).  
+8. Use harness paths above when mechanism depends on upload vs query suite.
 
 ## Evidence bar (culprit)
 
@@ -194,8 +269,11 @@ For each problem, you can answer yes:
 - [ ] TPC-C / OLAP: `dig_runs.json` from mart (neighbors + ≥~month if needed), not only pack metrics  
 - [ ] TPC-C: `dig_prs.json` on the **jump** window (not only PR of alert commit)  
 - [ ] OLAP nodata: checked Allure/report for those queries; wrote branch «не доехали» **or** «в отчёте тоже нет → логи/кластер»  
+- [ ] OLAP slow: plans × iterations + `baseline_focus` / plan_compare + dig-prs on ydb jump + H-loop (≤3) + culprit only with evidence  
+- [ ] OLAP slow: if plan_same — server logs focus+baseline; if plan_regressed — code/bisect on planner/CS path  
 - [ ] Correlations checked: other run_type/suite and peer cluster on same branch  
 - [ ] Read cluster logs **and** execution stderr (OLAP fail), or documented empty  
+- [ ] On segfault/abort/VERIFY: coredump URL or `/place/coredumps` dig (or explicit skip why)  
 - [ ] Mechanism stated (not only fingerprint)  
 - [ ] Tied to code at **tested sha**  
 - [ ] Давность stated with dates/labels  
@@ -317,9 +395,25 @@ If any checkbox fails → dig again (loop), do not polish a hollow report.
 
 Also update `$OUT/problems.json`.
 
+## Ход разбора (дерево под кат)
+
+Пайплайн пишет `action_tree.json`. Перед validate / через `inject-trace` в `analysis.md`
+появляется секция **«Ход разбора»** с GitHub `<details>` — ASCII-дерево от prepare до result.
+
+- CLI stages логируются сами (`prepare`, `dig-runs`, `baseline_focus`, `dig-prs`, `bisect`).  
+- Агент **обязан** добавлять смысловые узлы:
+  ```bash
+  dutyctl trace-note -o $OUT --kind hypothesis -- "H1: plan_regressed → kqp join"
+  dutyctl trace-note -o $OUT --kind dig --detail "stderr: no VERIFY" -- "read kikimr__stderr"
+  dutyctl trace-note -o $OUT --kind decision -- " culprits unknown; wait_next_wave"
+  ```
+- Не дублируй дерево в Заключение — только под катом.  
+- `validate` сам обновляет кат; ручной `inject-trace` — если правишь analysis без validate.
+
 ## Rules
 
 - Prefer crash stack + mechanism over surface 2005.  
+- Prefer coredump / `Received signal N` stack over «kernel journal empty».  
 - Prefer **unknown** over a confident lie.  
 - No mute without human. Secrets out of reports.  
 - `validate` is the quality gate — treat failures as missing investigation, not as “tweak wording only” when logs/bisect were skipped.

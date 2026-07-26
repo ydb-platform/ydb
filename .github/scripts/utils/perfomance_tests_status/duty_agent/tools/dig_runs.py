@@ -638,23 +638,52 @@ def summarize_tpcc_rows(
                 "re-run dig-runs with larger --days-before (60/90)"
             )
 
-    return {
-        "slice_runs": [
+    slice_runs = [
+        {
+            "timestamp": r.get("timestamp"),
+            "version": r.get("version"),
+            "lat90": _num(r.get("lat90")),
+            "tpmC": _num(r.get("tpmC")),
+            "efficiency": _num(r.get("efficiency")),
+            "cluster": r.get("cluster"),
+            "git_branch": r.get("git_branch"),
+            "run_type": r.get("run_type"),
+            "warehouses": r.get("warehouses"),
+            "Report": r.get("Report"),
+        }
+        for r in focus_slice
+    ]
+    from .baseline import select_baseline_from_slice_runs
+
+    # Map tpcc jump shape → from_ts for baseline picker
+    jump_for_base = None
+    if jump:
+        jump_for_base = dict(jump)
+        if not jump_for_base.get("from_ts"):
+            fv = str(jump.get("from_version") or "")[:7]
+            for r in slice_runs:
+                ver = str(r.get("version") or "")
+                if fv and (ver.startswith(fv) or fv in ver):
+                    jump_for_base["from_ts"] = r.get("timestamp")
+                    break
+    baseline_candidate = select_baseline_from_slice_runs(
+        [
             {
-                "timestamp": r.get("timestamp"),
-                "version": r.get("version"),
-                "lat90": _num(r.get("lat90")),
-                "tpmC": _num(r.get("tpmC")),
-                "efficiency": _num(r.get("efficiency")),
-                "cluster": r.get("cluster"),
-                "git_branch": r.get("git_branch"),
-                "run_type": r.get("run_type"),
-                "warehouses": r.get("warehouses"),
-                "Report": r.get("Report"),
+                **r,
+                "RunTs": r.get("timestamp"),
+                "Version": r.get("version"),
+                "lat90": r.get("lat90"),
             }
-            for r in focus_slice
+            for r in slice_runs
         ],
+        metric="lat90",
+        jump=jump_for_base,
+        focus_version=focus_sha[:7] if focus_sha else None,
+    )
+    return {
+        "slice_runs": slice_runs,
         "largest_lat_step": jump,
+        "baseline_candidate": baseline_candidate,
         "focus_row": focus_row,
         "peer_clusters_latest": peer_snapshot,
         "cross_run_type": cross,
@@ -787,20 +816,30 @@ def summarize_olap_rows(
             "re-run dig-runs with larger --days-before (60/90)"
         )
 
+    slice_runs = [
+        {
+            "RunTs": r.get("RunTs"),
+            "Version": r.get("Version"),
+            "Suite": r.get("Suite"),
+            "FailCount": r.get("FailCount"),
+            "YdbSumMeans": _num(r.get("YdbSumMeans")),
+            "Report": r.get("Report"),
+        }
+        for r in focus_slice
+    ]
+    from .baseline import select_baseline_from_slice_runs  # local import — avoid cycle at import time
+
+    baseline_candidate = select_baseline_from_slice_runs(
+        slice_runs,
+        metric="YdbSumMeans",
+        jump=ydb_jump,
+        focus_version=str(selection.get("focus_sha") or "")[:7] or None,
+    )
     return {
-        "slice_runs": [
-            {
-                "RunTs": r.get("RunTs"),
-                "Version": r.get("Version"),
-                "Suite": r.get("Suite"),
-                "FailCount": r.get("FailCount"),
-                "YdbSumMeans": _num(r.get("YdbSumMeans")),
-                "Report": r.get("Report"),
-            }
-            for r in focus_slice
-        ],
+        "slice_runs": slice_runs,
         "largest_fail_step": fail_jump,
         "largest_ydb_step": ydb_jump,
+        "baseline_candidate": baseline_candidate,
         "cross_suite": cross_suite,
         "peer_dbs": peer_dbs,
         "row_count": len(rows),

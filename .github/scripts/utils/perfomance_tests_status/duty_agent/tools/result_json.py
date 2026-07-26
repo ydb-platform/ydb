@@ -202,6 +202,10 @@ def merge_result(
         "metrics_delta.json",
         "fatal_scan.json",
         "issues.json",
+        "action_tree.json",
+        "baseline_focus.json",
+        "dig_runs.json",
+        "dig_prs.json",
     ):
         if (out_dir / name).is_file():
             arts[name.replace(".", "_").replace("json", "json").replace("md", "md")] = name

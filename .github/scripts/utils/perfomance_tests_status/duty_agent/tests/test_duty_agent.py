@@ -17,7 +17,25 @@ AGENT = TESTS.parent
 FIXTURES = TESTS / "fixtures"
 sys.path.insert(0, str(AGENT))
 
-from tools.attachments import pick_priority_attachments, scan_log_text  # noqa: E402
+from tools.attachments import (  # noqa: E402
+    extract_host_dig_hints,
+    pick_priority_attachments,
+    scan_log_text,
+    summarize_plan_text,
+)
+from tools.baseline import (  # noqa: E402
+    compare_plan_digs,
+    select_baseline_from_pack_history,
+    select_baseline_from_slice_runs,
+)
+from tools.sandbox import _name_matches  # noqa: E402
+from tools.trace import (  # noqa: E402
+    ensure_trace_in_analysis,
+    inject_into_analysis,
+    record as trace_record,
+    rebuild_from_artifacts,
+    render_ascii_tree,
+)
 from tools.context import (  # noqa: E402
     ContextError,
     focus_report_local,
@@ -304,6 +322,103 @@ class DigRunsTests(unittest.TestCase):
 
 
 class ValidateTests(unittest.TestCase):
+    def test_olap_slow_requires_plan_and_baseline(self):
+        with tempfile.TemporaryDirectory() as td:
+            d = Path(td)
+            write_json(d / "detect_type.json", {"analysis_types": ["olap_slow"]})
+            write_json(d / "dig_runs.json", {"kind": "olap", "summary": {}})
+            write_json(d / "focus.json", {"fetched": False, "slow_query_names": ["Query03"]})
+            md = """# Perf duty — x
+
+## Заключение
+- **Итог:** suite slower by ydb_pct
+- **Решение:** wait_next_wave
+- **Виновник:** unknown
+- **Уверенность:** низкая
+- **Давность:** прогон 2026-07-26_x
+- **Механика:** ydb wall time up
+
+## Проблемы
+### P1 — slow
+- Тип: olap_slow
+- Логи: kikimr__stderr empty; kikimr__logs empty
+- Код ([`abc1234`](https://github.com/ydb-platform/ydb/commit/abc1234)): n/a
+- Гипотеза проверена: no
+
+## Что дальше
+1. ждать
+
+## Материалы для issue
+https://proxy.sandbox.yandex-team.ru/12927692288/index.html
+[`abc1234`](https://github.com/ydb-platform/ydb/commit/abc1234)
+"""
+            r = validate_analysis_md(md, out_dir=d)
+            self.assertFalse(r["ok"], r)
+            blob = " ".join(r["errors"]).lower()
+            self.assertIn("plan", blob)
+            self.assertTrue("iteration" in blob or "итерац" in blob or "baseline" in blob)
+            self.assertIn("dig_prs", blob)
+            self.assertIn("bisect", blob)
+
+    def test_olap_fail_segfault_requires_coredump_dig(self):
+        with tempfile.TemporaryDirectory() as td:
+            d = Path(td)
+            write_json(d / "detect_type.json", {"analysis_types": ["olap_fail"]})
+            write_json(
+                d / "focus.json",
+                {
+                    "fetched": True,
+                    "fatal": {"signals": ["segfault", "unavailable"], "coredump_urls": [
+                        "https://coredumps.yandex-team.ru/v3/cores/86b7f24834f1489abf7a67d56057c595"
+                    ]},
+                    "allure": {
+                        "cases": [
+                            {
+                                "name": "UploadTpch100.Query03",
+                                "attach_analysis": {
+                                    "signals": ["segfault"],
+                                    "host_dig": {
+                                        "coredump_urls": [
+                                            "https://coredumps.yandex-team.ru/v3/cores/"
+                                            "86b7f24834f1489abf7a67d56057c595"
+                                        ]
+                                    },
+                                },
+                            }
+                        ]
+                    },
+                },
+            )
+            write_json(d / "code_bisect.json", {"introduced_in_window": None})
+            write_json(d / "dig_runs.json", {"kind": "olap", "summary": {}})
+            md = """# Perf duty — x
+
+## Заключение
+- **Итог:** code 2005 without stack dig
+- **Решение:** investigate_further
+- **Виновник:** unknown
+- **Уверенность:** низкая
+- **Давность:** прогон 2026-07-26_631ab94
+- **Механика:** node lost
+
+## Проблемы
+### P1 — q
+- Тип: olap_fail
+- Логи: kikimr__stderr signal mentioned vaguely; kikimr__logs connection lost
+- Код ([`631ab94`](https://github.com/ydb-platform/ydb/commit/631ab94)): `ydb/core/`
+- Гипотеза проверена: no
+
+## Что дальше
+1. ещё логи
+
+## Материалы для issue
+https://proxy.sandbox.yandex-team.ru/12927692288/index.html
+[`631ab94`](https://github.com/ydb-platform/ydb/commit/631ab94)
+"""
+            r = validate_analysis_md(md, out_dir=d)
+            self.assertFalse(r["ok"], r)
+            self.assertTrue(any("coredump" in e.lower() for e in r["errors"]), r["errors"])
+
     def test_olap_nodata_must_be_discussed(self):
         with tempfile.TemporaryDirectory() as td:
             d = Path(td)
@@ -677,6 +792,36 @@ class AttachmentTests(unittest.TestCase):
         self.assertIn("disconnect", out["signals"])
         self.assertIn("1234", out["nodes"])
 
+    def test_scan_log_signal_11_segfault(self):
+        text = (
+            "sas9-1578.host.testing.ydb.yandex.net:\n"
+            "Received signal 11\n"
+            "Backtrace:\n"
+            "#6 arrow::io::BufferReader::DoReadAt(long, long, void*)\n"
+            "Success. Registered as 50004\n"
+        )
+        out = scan_log_text(text)
+        self.assertIn("segfault", out["signals"])
+        self.assertIn("restart", out["signals"])
+        self.assertTrue(any("BufferReader" in q for q in out["quotes"]))
+
+    def test_extract_host_dig_hints(self):
+        html = (
+            "<tr><td>Coredumps</td><td>"
+            "<a href='https://coredumps.yandex-team.ru/v3/cores?"
+            "filter=program_type%3Dkikimr'>link</a></td></tr>"
+            "<tr><td>Kikimr log</td><td><details><code>"
+            "parallel-ssh -H sas9-1578.host.testing.ydb.yandex.net -i "
+            "'ulimit -n 100500;unified_agent select -S \"2026-07-26T19:23:33+03:00\" "
+            "-U \"2026-07-26T19:24:05+03:00\" -s kikimr'"
+            "</code></details></td></tr>"
+        )
+        hints = extract_host_dig_hints(html, log_text="Received signal 11\nBacktrace:\n")
+        self.assertTrue(hints["coredump_urls"])
+        self.assertTrue(any("unified_agent" in c for c in hints["journal_cmds"]))
+        self.assertIn("sas9-1578.host.testing.ydb.yandex.net", hints["hosts"])
+        self.assertTrue(hints["local_dump_hint"])
+
     def test_pick_priority_attachments(self):
         atts = [
             {"name": "noise", "source": "a", "size": 10},
@@ -685,6 +830,149 @@ class AttachmentTests(unittest.TestCase):
         ]
         picked = pick_priority_attachments(atts)
         self.assertEqual([p["name"] for p in picked], ["kikimr__stderr", "kikimr__logs"])
+
+    def test_pick_priority_attachments_with_plans(self):
+        atts = [
+            {"name": "kikimr__stderr", "source": "b", "size": 100},
+            {"name": "Stats", "source": "s.json", "size": 200},
+            {"name": "Final plan table", "source": "p0.txt", "size": 300},
+            {"name": "Final plan table", "source": "p1.txt", "size": 310},
+            {"name": "Plan table", "source": "ex.txt", "size": 250},
+        ]
+        picked = pick_priority_attachments(atts, include_plans=True)
+        names = [p["name"] for p in picked]
+        self.assertIn("kikimr__stderr", names)
+        self.assertIn("Stats", names)
+        self.assertIn("Final plan table", names)
+        self.assertIn("Plan table", names)
+
+    def test_summarize_plan_text_hints(self):
+        text = "└─ GraceJoin (Left)\n   └─ TableFullScan on lineitem\nTotal duration: 12.5 s"
+        out = summarize_plan_text(text, name="Final plan table")
+        self.assertIn("grace_join", out["hints"])
+        self.assertIn("fullscan", out["hints"])
+        self.assertAlmostEqual(out["duration_ms"] or 0, 12500.0, delta=1.0)
+
+    def test_name_matches_slow_query(self):
+        self.assertTrue(_name_matches("UploadTpch100.Query03", "Query03"))
+        self.assertTrue(_name_matches("UploadTpch100.Query03", "UploadTpch100.Query03"))
+        self.assertFalse(_name_matches("UploadTpch100.Query04", "Query03"))
+
+
+class TraceTests(unittest.TestCase):
+    def test_record_and_inject_details(self):
+        with tempfile.TemporaryDirectory() as td:
+            d = Path(td)
+            write_json(d / "detect_type.json", {"analysis_types": ["olap_slow"]})
+            write_json(
+                d / "dig_runs.json",
+                {"summary": {"slice_count": 3, "baseline_candidate": {"reason": "min_metric_with_report"}}},
+            )
+            (d / "analysis.md").write_text(
+                """# Perf duty — t
+
+## Заключение
+- **Итог:** x
+- **Решение:** investigate_further
+- **Виновник:** unknown
+- **Уверенность:** низкая
+- **Давность:** —
+- **Механика:** —
+
+## Проблемы
+### P1 — x
+- Гипотеза проверена: no
+
+## Что дальше
+1. more
+
+## Материалы для issue
+https://proxy.sandbox.yandex-team.ru/1/index.html
+[`abc1234`](https://github.com/ydb-platform/ydb/commit/abc1234)
+""",
+                encoding="utf-8",
+            )
+            trace_record(d, "H1: plan_same", kind="hypothesis", detail="runtime?")
+            info = ensure_trace_in_analysis(d, rebuild=True)
+            self.assertTrue(info["injected"])
+            text = (d / "analysis.md").read_text(encoding="utf-8")
+            self.assertIn("duty-action-tree:start", text)
+            self.assertIn("<details>", text)
+            self.assertIn("Дерево разбора", text)
+            self.assertIn("H1: plan_same", text)
+            self.assertIn("тип разбора", text)
+            # re-inject replaces block, does not duplicate markers
+            ensure_trace_in_analysis(d, rebuild=True)
+            text2 = (d / "analysis.md").read_text(encoding="utf-8")
+            self.assertEqual(text2.count("duty-action-tree:start"), 1)
+
+    def test_render_ascii_nested(self):
+        tree = {
+            "nodes": [
+                {
+                    "title": "prepare",
+                    "status": "ok",
+                    "children": [
+                        {"title": "detect", "status": "ok", "detail": "olap_slow", "children": []},
+                    ],
+                }
+            ]
+        }
+        ascii_ = render_ascii_tree(tree)
+        self.assertIn("prepare", ascii_)
+        self.assertIn("detect", ascii_)
+
+
+class BaselineTests(unittest.TestCase):
+    def test_select_baseline_prefers_jump_from(self):
+        runs = [
+            {"RunTs": "t1", "Version": "aaa", "YdbSumMeans": 100, "Report": "https://proxy/1/"},
+            {"RunTs": "t2", "Version": "bbb", "YdbSumMeans": 110, "Report": "https://proxy/2/"},
+            {"RunTs": "t3", "Version": "ccc", "YdbSumMeans": 200, "Report": "https://proxy/3/"},
+        ]
+        jump = {"from_ts": "t2", "to_ts": "t3", "from": 110, "to": 200, "delta": 90}
+        b = select_baseline_from_slice_runs(runs, metric="YdbSumMeans", jump=jump)
+        self.assertIsNotNone(b)
+        self.assertEqual(b["reason"], "largest_step_from")
+        self.assertEqual(b["Version"], "bbb")
+        self.assertEqual(b["Report"], "https://proxy/2/")
+
+    def test_select_baseline_from_pack_history(self):
+        ctx = {
+            "report": {"kind": "olap"},
+            "suite_history": {
+                "labels": ["a", "b", "c"],
+                "versions": ["111", "222", "333"],
+                "ydb": [50, 55, 120],
+                "reports": [
+                    "https://proxy/a/",
+                    "https://proxy/b/",
+                    "https://proxy/c/",
+                ],
+            },
+        }
+        b = select_baseline_from_pack_history(ctx)
+        self.assertIsNotNone(b)
+        self.assertTrue(b["Report"])
+        self.assertLess(b["metric_value"], 120)
+
+    def test_compare_plan_digs(self):
+        focus = [
+            {
+                "name": "Suite.Query01",
+                "attach_analysis": {
+                    "plan_dig": {"hints": ["grace_join", "fullscan"], "iterations": [{}]}
+                },
+            }
+        ]
+        base = [
+            {
+                "name": "Suite.Query01",
+                "attach_analysis": {"plan_dig": {"hints": ["lookup"], "iterations": [{}]}},
+            }
+        ]
+        cmp_ = compare_plan_digs(focus, base)
+        self.assertEqual(cmp_["comparisons"][0]["verdict"], "plan_regressed")
 
 
 class DutyctlCliTests(unittest.TestCase):

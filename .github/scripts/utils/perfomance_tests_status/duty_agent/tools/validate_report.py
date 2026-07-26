@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .run_dir import read_json
+from .trace import TRACE_MARK_END, TRACE_MARK_START
 
 REQUIRED_HEADINGS = (
     "## Заключение",
@@ -50,10 +51,19 @@ def validate_analysis_md(
     errors: list[str] = []
     warnings: list[str] = []
     body = text or ""
+    # Action-tree <details> may list artifact names (priors/focus) — not report jargon.
+    body_for_jargon = body
+    if TRACE_MARK_START in body_for_jargon and TRACE_MARK_END in body_for_jargon:
+        body_for_jargon = (
+            body_for_jargon.split(TRACE_MARK_START, 1)[0]
+            + body_for_jargon.split(TRACE_MARK_END, 1)[1]
+        )
     bl = body.lower()
+    bl_jargon = body_for_jargon.lower()
     types = _analysis_types(out_dir)
     olap_fail = "olap_fail" in types
     olap_nodata = "olap_nodata" in types
+    olap_slow = "olap_slow" in types
     # Also force nodata gate from context / detect query_counts (legacy packs).
     if out_dir and not olap_nodata:
         for name in ("detect_type.json", "context.json"):
@@ -88,6 +98,19 @@ def validate_analysis_md(
     for h in REQUIRED_HEADINGS:
         if h not in body:
             errors.append(f"missing heading `{h}`")
+
+    # Action tree under <details> (inject-trace / validate refreshes it)
+    if "duty-action-tree:start" not in body and "<details>" not in body.lower():
+        if out_dir and (out_dir / "action_tree.json").is_file():
+            warnings.append(
+                "action_tree.json exists but analysis.md has no <details> cut — "
+                "run `dutyctl inject-trace` (validate usually injects it)"
+            )
+        else:
+            warnings.append(
+                "no action-tree <details> in analysis.md — "
+                "run `dutyctl inject-trace` so the dig path is under the cut"
+            )
 
     # Заключение required fields
     if not re.search(r"\*\*Итог:\*\*", body) and not re.search(r"\*\*Summary:\*\*", body, re.I):
@@ -176,6 +199,78 @@ def validate_analysis_md(
             if not (out_dir / "priors.json").is_file():
                 warnings.append("missing priors.json — давность may be weak; run prepare")
 
+    # Slow / duration growth: must dig plans × iterations + baseline plan (not ydb_pct only).
+    if olap_slow:
+        has_plan = bool(
+            re.search(
+                r"\bplan\b|final plan|plan_dig|plan table|explain|"
+                r"gracejoin|lookupjoin|fullscan|итерац",
+                bl,
+            )
+        )
+        has_iter = bool(
+            re.search(
+                r"iteration|итерац|across iterations|между итерац|plan_changed",
+                bl,
+            )
+        )
+        has_baseline_plan = bool(
+            re.search(
+                r"baseline|baseline_focus|базов\w*\s+план|план\s+на\s+сосед|"
+                r"нормальн\w+\s+продолжит|plan_same|plan_regressed|plan_compare|"
+                r"разъехал|совпал.*план|план.*совпал|"
+                r"plan skipped|без plan|plans empty|план(?:а|ов)?\s+нет|"
+                r"baseline skipped|без baseline|baseline не",
+                bl,
+            )
+        )
+        if not has_plan:
+            errors.append(
+                "olap_slow: discuss query plan dig (Final plan / Explain / plan_dig) — "
+                "do not conclude from ydb_pct alone"
+            )
+        if not has_iter:
+            errors.append(
+                "olap_slow: compare plans/durations across iterations "
+                "(or note single-iteration / plans empty)"
+            )
+        if not has_baseline_plan:
+            errors.append(
+                "olap_slow: compare plan to baseline_focus / dig-runs baseline_candidate "
+                "(good historical run with Report) "
+                "or explicitly note baseline skipped / unavailable"
+            )
+        if out_dir and (out_dir / "baseline_focus.json").is_file():
+            bf = read_json(out_dir / "baseline_focus.json")
+            if bf.get("fetched") and bf.get("plan_compare") and not re.search(
+                r"plan_compare|plan_same|plan_regressed|baseline_focus|совпал|разъехал",
+                bl,
+            ):
+                warnings.append(
+                    "olap_slow: baseline_focus.json has plan_compare — mention verdict in analysis.md"
+                )
+        if out_dir and (out_dir / "focus.json").is_file():
+            focus = read_json(out_dir / "focus.json")
+            cases = (focus.get("allure") or {}).get("cases") or []
+            slow_cases = [
+                c
+                for c in cases
+                if c.get("want_plans")
+                or c.get("role") == "slow"
+                or (c.get("attach_analysis") or {}).get("plan_dig")
+            ]
+            if focus.get("fetched") and (focus.get("slow_query_names") or slow_cases):
+                any_plan = any(
+                    (c.get("attach_analysis") or {}).get("plan_dig") for c in cases
+                )
+                if not any_plan and not re.search(
+                    r"plan skipped|plans empty|план(?:а|ов)?\s+нет|без plan", bl
+                ):
+                    warnings.append(
+                        "olap_slow: focus has slow query names but no plan_dig — "
+                        "re-run prepare (non-offline) or note plans empty"
+                    )
+
     # Nodata: must discuss gap + report-first branch (lag vs real missing).
     if olap_nodata:
         if not re.search(
@@ -240,18 +335,41 @@ def validate_analysis_md(
                     "(neighbors + ~35d via ydb_client; widen --days-before if edged) "
                     "or explain 'dig-runs skipped' with reason"
                 )
-    if tpcc and out_dir:
+    if (tpcc or olap_slow) and out_dir:
         if not (out_dir / "dig_prs.json").is_file():
             if not re.search(r"dig-prs skipped|dig.prs не|без dig-prs", bl):
+                kind = "tpcc" if tpcc else "olap_slow"
                 errors.append(
-                    "tpcc: missing dig_prs.json — run `dutyctl dig-prs` on the latency jump "
-                    "window (or explain 'dig-prs skipped')"
+                    f"{kind}: missing dig_prs.json — run `dutyctl dig-prs` on the "
+                    f"{'latency' if tpcc else 'ydb'} jump window "
+                    "(or explain 'dig-prs skipped')"
                 )
+    if olap_slow and out_dir:
+        if not (out_dir / "code_bisect.json").is_file():
+            if not re.search(r"bisect skipped|без bisect|bisect не", bl):
+                errors.append(
+                    "olap_slow: missing code_bisect.json — run `dutyctl bisect` "
+                    "on a path suggested by plan_compare/hot PR "
+                    "(or explain 'bisect skipped')"
+                )
+        if not re.search(
+            r"гипотеза проверена|hypothesis|plan_regressed|plan_same|"
+            r"кандидат|dig_prs|hot pr|в окне",
+            bl,
+        ):
+            warnings.append(
+                "olap_slow: after plans, state hypothesis loop / dig-prs filtering "
+                "(what could affect duration in the jump window)"
+            )
 
     # Surface 2005 without fatal
     if re.search(r"code:\s*2005|cluster unavailable|connection with node", bl):
         has_fatal = bool(
-            re.search(r"verify failed|afl_verify|sigabrt|received signal|oom|segfault", bl)
+            re.search(
+                r"verify failed|afl_verify|sigabrt|sigsegv|received signal|"
+                r"oom|segfault|coredump|backtrace",
+                bl,
+            )
         )
         stderr_note = bool(
             re.search(r"stderr empty|no crash|нет fatal|без fatal|kikimr__stderr", bl)
@@ -260,6 +378,36 @@ def validate_analysis_md(
             errors.append(
                 "olap_fail: do not stop at 2005/node-lost without VERIFY/abort evidence "
                 "or an explicit note that stderr has no fatal / is empty"
+            )
+
+    # Segfault and/or explicit coredump URL → must dig dump (VERIFY/SIGABRT in stderr is enough without URL)
+    need_coredump_dig = False
+    if out_dir and (out_dir / "focus.json").is_file():
+        focus = read_json(out_dir / "focus.json")
+        fatal = focus.get("fatal") or {}
+        sigs = {str(s).lower() for s in (fatal.get("signals") or [])}
+        if "segfault" in sigs or fatal.get("coredump_urls"):
+            need_coredump_dig = True
+        for c in (focus.get("allure") or {}).get("cases") or []:
+            aa = c.get("attach_analysis") or {}
+            if "segfault" in {str(s).lower() for s in (aa.get("signals") or [])}:
+                need_coredump_dig = True
+            if (aa.get("host_dig") or {}).get("coredump_urls"):
+                need_coredump_dig = True
+    if olap_fail and need_coredump_dig:
+        has_core_dig = bool(
+            re.search(
+                r"coredump|cores\.yandex|/place/coredumps|backtrace_kikimr|"
+                r"traceback_fingerprint|url_v3|journalctl|unified_agent|"
+                r"coredump skipped|без coredump|coredump не|host dig skipped",
+                bl,
+            )
+        )
+        if not has_core_dig:
+            errors.append(
+                "olap_fail: focus has SIGSEGV/segfault or coredump URL — "
+                "dig coredumps.yandex-team.ru / /place/coredumps (or journalctl/"
+                "unified_agent), or explicitly note coredump skipped"
             )
 
     # Confident culprit without proof markers
@@ -337,7 +485,7 @@ def validate_analysis_md(
         (r"^\|?\s*раньше\s*\|", "«раньше» в таблице — поставь дату/label прогона"),
     ]
     for pat, hint in jargon:
-        if re.search(pat, body, re.I):
+        if re.search(pat, body_for_jargon, re.I):
             errors.append(f"jargon in report: {hint}")
 
     # Issue materials: sandbox report URL (OLAP) or explicit metrics-only / DataLens (TPC-C)

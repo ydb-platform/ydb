@@ -104,17 +104,37 @@ def _merge_fp(dst: dict[str, Any], src: dict[str, Any]) -> None:
     dst["bytes"] = (dst.get("bytes") or 0) + (src.get("bytes") or 0)
 
 
+def _name_matches(case_name: str, want: str) -> bool:
+    """Match pack query names like Query03 / UploadTpch100.Query03 to Allure names."""
+    cn = (case_name or "").strip().lower()
+    w = (want or "").strip().lower()
+    if not cn or not w:
+        return False
+    if cn == w or cn.endswith("." + w) or w.endswith("." + cn):
+        return True
+    # bare QueryNN
+    m = re.search(r"(query\d+)\b", w)
+    if m and m.group(1) in cn:
+        return True
+    m = re.search(r"(query\d+)\b", cn)
+    if m and m.group(1) in w:
+        return True
+    return w in cn or cn in w
+
+
 def fetch_allure_failures(
     report_url: str,
     *,
     oauth: str | None = None,
     max_cases: int = 24,
+    extra_names: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Pull Allure multi-file JSON (status-chart + failed test-cases)."""
+    """Pull Allure multi-file JSON: failed/broken + optional named cases (slow queries)."""
     base = _report_base(report_url)
     out: dict[str, Any] = {
         "base": base,
         "failed_names": [],
+        "slow_names": [],
         "cases": [],
         "summary": None,
         "errors": [],
@@ -141,9 +161,29 @@ def fetch_allure_failures(
     ]
     out["failed_names"] = [str(x.get("name") or "") for x in failed[:max_cases]]
 
+    wants = [str(x) for x in (extra_names or []) if str(x).strip()]
+    named: list[dict[str, Any]] = []
+    if wants:
+        for x in chart:
+            if not isinstance(x, dict):
+                continue
+            name = str(x.get("name") or "")
+            if any(_name_matches(name, w) for w in wants):
+                named.append(x)
+        # de-dupe by uid vs failed
+        failed_uids = {str(x.get("uid") or "") for x in failed}
+        named = [x for x in named if str(x.get("uid") or "") not in failed_uids]
+        out["slow_names"] = [str(x.get("name") or "") for x in named[:max_cases]]
+
+    selected: list[tuple[dict[str, Any], bool]] = []
+    for item in failed[:max_cases]:
+        selected.append((item, False))
+    for item in named[: max(0, max_cases - len(selected))]:
+        selected.append((item, True))
+
     blobs: list[str] = []
     test_cases: dict[str, dict[str, Any]] = {}
-    for item in failed[:max_cases]:
+    for item, want_plans in selected:
         uid = item.get("uid")
         if not uid:
             continue
@@ -165,6 +205,8 @@ def fetch_allure_failures(
                 "status": tc.get("status") or item.get("status"),
                 "statusMessage": msg[:2000],
                 "statusTrace_head": trace[:800],
+                "want_plans": bool(want_plans),
+                "role": "slow" if want_plans else "fail",
             }
         )
         blobs.append(f"{name}\n{msg}\n{trace[:1500]}")
@@ -179,6 +221,8 @@ def inspect_sandbox(
     *,
     local_path: Path | str | None = None,
     offline: bool = False,
+    extra_case_names: list[str] | None = None,
+    include_plans: bool = False,
 ) -> dict[str, Any]:
     """Prefer local sandbox HTML; else fetch remote Allure (OAuth for sandbox hosts)."""
     out: dict[str, Any] = {
@@ -238,17 +282,21 @@ def inspect_sandbox(
         for k in ("fingerprints", "primary", "quotes", "query_hits", "bytes", "plain_chars"):
             out[k] = fp.get(k)
 
-        # 2) Allure JSON + 3) kikimr__stderr / kikimr__logs
-        allure = fetch_allure_failures(url, oauth=token)
+        # 2) Allure JSON + 3) kikimr__stderr / kikimr__logs (+ plans for slow names)
+        allure = fetch_allure_failures(
+            url, oauth=token, extra_names=extra_case_names
+        )
         cases = enrich_allure_cases(
             str(allure.get("base") or _report_base(url)),
             list(allure.get("cases") or []),
             dict(allure.get("test_cases") or {}),
             oauth=token,
+            include_plans=include_plans,
         )
         out["allure"] = {
             "base": allure.get("base"),
             "failed_names": allure.get("failed_names"),
+            "slow_names": allure.get("slow_names"),
             "cases": cases,
             "summary": allure.get("summary"),
             "errors": allure.get("errors"),

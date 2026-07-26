@@ -2101,7 +2101,7 @@ function mountQueryHistory(item, diveId, testName) {
     }</div>
     <div class="muted" style="margin-bottom:6px">
       график = <b>каждый запуск</b> · цвет vs <b>median mavg(prev${win})</b> · клик → report${nReports ? ` (${nReports})` : ''}
-      · <span style="color:#0969da">now</span> · <span style="color:#9a6700">cmp</span>
+      · <b>жирная рамка</b> = now/focus · <span style="color:#9a6700">рамка</span> = cmp
       ${alertLine ? `<div class="muted">${esc(alertLine)} · fail ${fmtFail(q.fail_rate_late)}</div>` : ''}
     </div>
     <label class="muted" style="display:inline-flex;gap:6px;align-items:center;margin-bottom:8px;cursor:pointer">
@@ -2130,24 +2130,19 @@ function mountQueryHistory(item, diveId, testName) {
 
   function paint() {
     destroyCharts(diveId + '_q_');
-    const yColors = colorsVsMedianMavg(hist.ydb, win).map((c, i) => {
-      if (i === marks.now) return '#0969da';
-      if (i === marks.compare) return '#9a6700';
-      return c;
-    });
-    const fColors = failColors(hist.fail_rate).map((c, i) => {
-      if (i === marks.now) return '#0969da';
-      if (i === marks.compare) return '#9a6700';
-      return c;
-    });
+    // Keep status fill (red/green/…); selection = bold border only (blue fill looked like "ok").
+    const yColors = colorsVsMedianMavg(hist.ydb, win);
+    const fColors = failColors(hist.fail_rate);
     const borderColors = (hist.labels || []).map((_, i) => {
-      if (i === marks.now) return '#0550ae';
-      if (i === marks.compare) return '#7d5a00';
+      if (i === marks.now) return '#1f2328';
+      if (i === marks.compare) return '#9a6700';
       return 'transparent';
     });
-    const borderWidths = (hist.labels || []).map((_, i) => (
-      (i === marks.now || i === marks.compare) ? 2 : 0
-    ));
+    const borderWidths = (hist.labels || []).map((_, i) => {
+      if (i === marks.now) return 3;
+      if (i === marks.compare) return 3;
+      return 0;
+    });
     function runChart(cid, vals, label, colors) {
       const el = document.getElementById(cid);
       if (!el) return;
@@ -2276,7 +2271,7 @@ function mountQueryHistory(item, diveId, testName) {
               ctx.fillText(tag, Math.min(x + 3, right - 36), top + 12);
               ctx.restore();
             }
-            vline(marks.now, '#0969da', 'now');
+            vline(marks.now, '#1f2328', 'now');
             vline(marks.compare, '#9a6700', 'cmp');
             if (!showBase || !cid.endsWith('_ydb') || alertBase == null) return;
             const y = chart.scales.y.getPixelForValue(alertBase);

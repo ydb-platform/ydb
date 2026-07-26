@@ -170,7 +170,7 @@ def recovery_sec_for(nemesis_type: str) -> float | None:
 
 
 def recovery_mode_for(nemesis_type: str) -> str:
-    """How the weighted scheduler recovers this fault and frees its budget.
+    """How the boundary scheduler recovers this fault and frees its budget.
 
     ``"self"`` (default) — the fault heals on its own (SIGKILL + systemd restart, stop/start
     pulse); the recovery probe releases the lease once healthcheck sees the host answer again.
@@ -182,20 +182,6 @@ def recovery_mode_for(nemesis_type: str) -> str:
     if spec is None:
         return "self"
     return "extract" if spec.get("recovery") == "extract" else "self"
-
-
-def weight_for(nemesis_type: str) -> float:
-    """Relative selection weight for the weighted scheduler (unannotated -> 1.0).
-
-    Higher = picked more often. ``<= 0`` mutes the type (never scheduled)."""
-    spec = NEMESIS_TYPES.get(nemesis_type)
-    if spec is None:
-        return 1.0
-    try:
-        w = float(spec.get("weight", 1.0))
-    except (TypeError, ValueError):
-        return 1.0
-    return w if w > 0 else 0.0
 
 
 def supports_manual_for(nemesis_type: str) -> bool:

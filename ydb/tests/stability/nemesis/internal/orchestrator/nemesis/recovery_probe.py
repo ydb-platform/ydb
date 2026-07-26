@@ -1,6 +1,6 @@
 """Fact-based recovery for reserved failure budget.
 
-The weighted scheduler reserves budget per injected fault and holds it (``recovery_sec=None``)
+The boundary scheduler reserves budget per injected fault and holds it (``recovery_sec=None``)
 until the fault is observed to have recovered. :class:`RecoveryProbe` polls a ``recovered(target)``
 predicate and calls :meth:`FailureModelGuard.release` the moment a target is back — instead of
 guessing a fixed timer. If a fault does NOT recover within its timeout the probe does not silently

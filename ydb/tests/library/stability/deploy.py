@@ -428,7 +428,7 @@ class StressUtilDeployer:
     def _set_schedules_enabled(
         self, enabled: bool, nemesis_log: list[str]
     ) -> bool:
-        """Start or stop the weighted nemesis scheduler via the orchestrator API.
+        """Start or stop the nemesis scheduler via the orchestrator API.
 
         ``POST /api/scheduler/start`` (empty profile → catalog defaults) or
         ``POST /api/scheduler/stop``.
@@ -441,7 +441,7 @@ class StressUtilDeployer:
         payload = json.dumps({}).encode()
 
         action = "Enabling" if enabled else "Disabling"
-        nemesis_log.append(f"{action} weighted nemesis scheduler via {url}")
+        nemesis_log.append(f"{action} nemesis scheduler via {url}")
         logging.info(f"{action} nemesis scheduler: POST {url}")
 
         try:

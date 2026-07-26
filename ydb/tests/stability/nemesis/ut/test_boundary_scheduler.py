@@ -1,4 +1,4 @@
-"""Unit tests for the single-threaded weighted nemesis scheduler."""
+"""Unit tests for the single-threaded boundary-walking nemesis scheduler."""
 
 from __future__ import annotations
 
@@ -12,8 +12,8 @@ import yaml
 
 from ydb.tests.stability.nemesis.internal.nemesis.catalog import (
     NEMESIS_TYPES,
+    guard_mode_for,
     recovery_mode_for,
-    weight_for as catalog_weight_for,
 )
 from ydb.tests.stability.nemesis.internal.nemesis.chaos_dispatch import dispatch as build_dispatch
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_state import (
@@ -23,10 +23,11 @@ from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_target impo
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import (
     ClusterTopologyModel,
     FailureModelGuard,
+    GuardMode,
     ImpactScope,
 )
-from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.weighted_scheduler import (
-    WeightedNemesisScheduler,
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.boundary_scheduler import (
+    BoundaryNemesisScheduler,
     _STABILITY_PROFILE,
     default_enabled_types,
 )
@@ -60,16 +61,12 @@ class FakeInventory:
 class ScriptedRandom:
     """Deterministic stand-in for random.Random with scripted return values."""
 
-    def __init__(self, *, randint: int = 1, randoms=None, uniform: float = 0.0) -> None:
+    def __init__(self, *, randint: int = 1, uniform: float = 0.0) -> None:
         self._randint = randint
-        self._randoms = list(randoms if randoms is not None else [])
         self._uniform = uniform
 
     def randint(self, a: int, b: int) -> int:
         return max(a, min(b, self._randint))
-
-    def random(self) -> float:
-        return self._randoms.pop(0) if self._randoms else 0.0
 
     def uniform(self, a: float, b: float) -> float:
         return self._uniform
@@ -87,11 +84,12 @@ def _make_scheduler(guard, inventory, dispatched, **overrides):
         enabled_types=["KillNode"],
         scope_for=lambda t: ImpactScope.NODE,
         kind_for=lambda t: TargetKind.NODE,
+        mode_for=lambda t: GuardMode.FULL,
         recovery_sec_for=lambda t: None,
         default_recovery_sec=300.0,
     )
     kwargs.update(overrides)
-    return WeightedNemesisScheduler(**kwargs)
+    return BoundaryNemesisScheduler(**kwargs)
 
 
 def _nodes() -> list[ChaosTarget]:
@@ -118,63 +116,30 @@ class TestTick:
         )
         assert len(guard.snapshot()["impaired_racks"]) == 2
 
-    def test_disabled_guard_fills_cap_with_distinct_targets(self):
+    def test_disabled_guard_fills_cap(self):
         guard = _guard("no-such-erasure")  # unknown -> guard disabled (fail-open)
         assert not guard.enabled, "unknown erasure must leave the guard disabled"
         dispatched: list = []
         sched = _make_scheduler(
             guard, FakeInventory(_nodes()), dispatched,
-            max_per_tick=3, rng=ScriptedRandom(randint=3, randoms=[0.0, 0.3, 0.6]),
+            max_per_tick=3, rng=ScriptedRandom(randint=3),
         )
         injected = sched.tick()
         assert injected == 3, f"a disabled guard must never block; cap of 3 must fill; got {injected}"
         assert len(dispatched) == 3
-        assert len({c.target.host for c in dispatched}) == 3, (
-            "with a walking rng the disabled scheduler should spread across distinct hosts; "
-            f"hosts={[c.target.host for c in dispatched]}"
-        )
 
-    def test_zero_weight_type_is_never_offered(self):
+    def test_menu_offers_every_enabled_type_uniformly(self):
         guard = _guard("block-4-2")
-        dispatched: list = []
         sched = _make_scheduler(
-            guard, FakeInventory(_nodes()), dispatched,
-            enabled_types=["Muted", "Active"],
-            weight_for=lambda t: 0.0 if t == "Muted" else 1.0,
+            guard, FakeInventory(_nodes()), [],
+            enabled_types=["A", "B"],
             max_per_tick=1, rng=ScriptedRandom(randint=1),
         )
         menu = sched._menu()
-        assert menu, "the weighted (Active) type must still produce a menu"
-        assert all(item[0] == "Active" for item in menu), (
-            f"a zero-weight type must never appear in the menu; got {[m[0] for m in menu]}"
+        assert {item[0] for item in menu} == {"A", "B"}, (
+            f"every enabled type must be offered (no weights, no muting); got {[m[0] for m in menu]}"
         )
-
-
-class TestWeightedChoice:
-    def _menu(self):
-        t = ChaosTarget.for_node("h1", node_id=1)
-        fs = frozenset({"r1"})
-        return [("A", t, fs, 1.0), ("B", t, fs, 3.0)]
-
-    def test_low_draw_picks_first_bucket(self):
-        sched = _make_scheduler(_guard("block-4-2"), FakeInventory([]), [],
-                                rng=ScriptedRandom(randoms=[0.1]))
-        picked = sched._weighted_choice(self._menu())
-        assert picked[0] == "A", f"r=0.4 lands in A's [0,1] bucket; got {picked[0]}"
-
-    def test_high_draw_picks_weighted_bucket(self):
-        sched = _make_scheduler(_guard("block-4-2"), FakeInventory([]), [],
-                                rng=ScriptedRandom(randoms=[0.5]))
-        picked = sched._weighted_choice(self._menu())
-        assert picked[0] == "B", f"r=2.0 lands in B's (1,4] bucket; got {picked[0]}"
-
-    def test_all_zero_weight_menu_falls_back_to_choice(self):
-        sched = _make_scheduler(_guard("block-4-2"), FakeInventory([]), [],
-                                rng=ScriptedRandom())
-        t = ChaosTarget.for_node("h1", node_id=1)
-        menu = [("A", t, frozenset({"r1"}), 0.0), ("B", t, frozenset({"r2"}), 0.0)]
-        picked = sched._weighted_choice(menu)
-        assert picked[0] == "A", "with zero total weight, choice() (first element) is used"
+        assert all(len(item) == 3 for item in menu), "menu entries are (type, target, racks) triples"
 
 
 class TestSleep:
@@ -195,20 +160,13 @@ class TestSleep:
 
 
 class TestProfile:
-    def test_set_profile_updates_weights_and_bounds(self):
+    def test_set_profile_updates_enabled_and_bounds(self):
         sched = _make_scheduler(_guard("block-4-2"), FakeInventory(_nodes()), [])
-        sched.set_profile(enabled=["X"], weights={"X": 2.0}, base_interval=10.0,
-                          jitter=0.25, max_per_tick=7)
-        assert sched._weight_for("X") == 2.0
-        assert sched._weight_for("unlisted") == 1.0, "unlisted types default to weight 1.0"
+        sched.set_profile(enabled=["X"], base_interval=10.0, jitter=0.25, max_per_tick=7)
+        assert sched._enabled == ["X"]
         assert sched._base_interval == 10.0
+        assert sched._jitter == 0.25
         assert sched._max_per_tick == 7
-
-
-class TestCatalogWeights:
-    def test_weight_for_reads_registry_and_defaults(self):
-        assert catalog_weight_for("KillSlotDaemonNemesis") == 3.0, "annotated weight must be read from the registry"
-        assert catalog_weight_for("no-such-nemesis") == 1.0, "unknown types default to weight 1.0"
 
 
 class TestDatacenterFanout:
@@ -326,6 +284,60 @@ class TestToggleRecovery:
         assert sched.tick() == 0
 
 
+class TestBypass:
+    """BYPASS types (tablet chaos) inject without spending the failure-model budget."""
+
+    def _bypass_scheduler(self, guard, dispatched, targets, enabled, **overrides):
+        return _make_scheduler(
+            guard, FakeInventory(targets), dispatched,
+            enabled_types=enabled,
+            kind_for=lambda t: TargetKind.TABLET,
+            mode_for=lambda t: GuardMode.BYPASS,
+            **overrides,
+        )
+
+    def test_bypass_fires_even_when_budget_is_full(self):
+        guard = _guard("block-4-2")
+        # Reserve the whole block-4-2 budget so no budgeted fault could fit.
+        assert guard.reserve(frozenset({"r1"}), recovery_sec=None, identity_key="x1")
+        assert guard.reserve(frozenset({"r2"}), recovery_sec=None, identity_key="x2")
+        dispatched: list = []
+        sched = self._bypass_scheduler(
+            guard, dispatched, [ChaosTarget.for_tablet("h1")], ["KillHive"],
+            max_per_tick=1, rng=ScriptedRandom(randint=1),
+        )
+        assert sched.tick() == 1, "a BYPASS fault must fire even with the failure budget exhausted"
+        assert len(dispatched) == 1
+        assert len(guard.snapshot()["impaired_racks"]) == 2, (
+            "BYPASS injection must not reserve any additional budget"
+        )
+
+    def test_multiple_bypass_types_share_one_target_in_a_tick(self):
+        guard = _guard("block-4-2")
+        dispatched: list = []
+        sched = self._bypass_scheduler(
+            guard, dispatched, [ChaosTarget.for_tablet("h1")], ["KillHive", "ReBalance"],
+            max_per_tick=2, rng=ScriptedRandom(randint=2),
+        )
+        assert sched.tick() == 2, (
+            "two BYPASS types on one control-host target must both fire (dedup is per "
+            "(type, target), not per target)"
+        )
+        assert {c.nemesis_type for c in dispatched} == {"KillHive", "ReBalance"}
+
+    def test_bypass_type_fires_at_most_once_per_tick(self):
+        guard = _guard("block-4-2")
+        dispatched: list = []
+        sched = self._bypass_scheduler(
+            guard, dispatched, [ChaosTarget.for_tablet("h1")], ["KillHive"],
+            max_per_tick=3, rng=ScriptedRandom(randint=3),
+        )
+        assert sched.tick() == 1, (
+            "one BYPASS type on one target fires once per tick even at a higher cap; the "
+            "(type, target) dedup empties the menu after the first inject"
+        )
+
+
 class TestDefaultProfile:
     def test_default_profile_is_curated_and_registered(self):
         enabled = default_enabled_types()
@@ -337,6 +349,15 @@ class TestDefaultProfile:
         for t in ("KillNodeNemesis", "KillSlotDaemonNemesis", "StopStartNodeNemesis",
                   "SafelyBreakDiskNemesis", "TimeSkewNemesis"):
             assert t in enabled, f"{t} must be in the default stability profile"
+
+    def test_tablet_chaos_is_in_profile_and_bypass(self):
+        enabled = default_enabled_types()
+        for t in ("KillHiveNemesis", "KillCoordinatorNemesis", "ReBalanceTabletsNemesis"):
+            assert t in enabled, f"tablet chaos type {t} must be in the default profile"
+            assert guard_mode_for(t) is GuardMode.BYPASS, f"{t} must be BYPASS (no budget spent)"
+        # Kicking tablets kills the node, so it stays budgeted like any other node fault.
+        assert "KickTabletsFromNodeNemesis" in enabled
+        assert guard_mode_for("KickTabletsFromNodeNemesis") is GuardMode.FULL
 
     def test_toggle_members_are_extract_mode(self):
         for t in ("StopStartNodeNemesis", "SafelyBreakDiskNemesis",

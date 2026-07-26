@@ -15,9 +15,9 @@ from typing import Any, Type
 
 from ydb.tests.library.common.types import TabletTypes
 from ydb.tests.stability.nemesis.internal.nemesis.runners import (
-    # ClusterBulkChangeTabletGroupNemesis,
-    # ClusterChangeTabletGroupNemesis,
-    # ClusterKickTabletsFromNodeNemesis,
+    ClusterBulkChangeTabletGroupNemesis,
+    ClusterChangeTabletGroupNemesis,
+    ClusterKickTabletsFromNodeNemesis,
     ClusterKillBlockstorePartitionNemesis,
     ClusterKillBlockstoreVolumeNemesis,
     ClusterKillBsControllerNemesis,
@@ -33,7 +33,7 @@ from ydb.tests.stability.nemesis.internal.nemesis.runners import (
     ClusterKillSlotDaemonNemesis,
     ClusterKillTenantSlotBrokerNemesis,
     ClusterKillTxAllocatorNemesis,
-    # ClusterReBalanceTabletsNemesis,
+    ClusterReBalanceTabletsNemesis,
     ClusterRollingRestartNemesis,
     ClusterSafelyBreakDiskNemesis,
     ClusterSafelyCleanupDisksNemesis,
@@ -157,7 +157,6 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         # SIGKILL + systemd restart + rejoin: 20s was well under real re-replication, so the
         # probe cried "stuck" too early (and the timer freed budget before the node was back).
         "auto_recovery_sec": 120,
-        "weight": 1.0,
     }
     # out["DnsNemesis"] = {
     #     "runner": DnsNemesis(),
@@ -215,55 +214,54 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         # Toggle fault: skew the clock, then the scheduler dispatches extract (re-enable ntp).
         "recovery": "extract",
         "auto_recovery_sec": 120,
-        "weight": 1.0,
     }
 
-    # --- tablet chaos (temporarily disabled: BYPASS / not in failure-model budget) ---
-    # for wire, cls, sched in _KILL_TABLET_SPECS:
-    #     out[wire] = {
-    #         "runner": cls(),
-    #         "schedule": sched,
-    #         "ui_group": _TABLET_UI_GROUP,
-    #         "target_kind": TargetKind.TABLET,
-    #         "impact_scope": ImpactScope.NODE,
-    #         "guard_mode": GuardMode.BYPASS,
-    #     }
-    #
-    # out["KickTabletsFromNodeNemesis"] = {
-    #     "runner": ClusterKickTabletsFromNodeNemesis(),
-    #     "schedule": 200,
-    #     "ui_group": _TABLET_UI_GROUP,
-    #     "target_kind": TargetKind.NODE,
-    #     "impact_scope": ImpactScope.NODE,
-    #     "guard_mode": GuardMode.FULL,
-    # }
-    # out["ReBalanceTabletsNemesis"] = {
-    #     "runner": ClusterReBalanceTabletsNemesis(),
-    #     "schedule": 120,
-    #     "ui_group": _TABLET_UI_GROUP,
-    #     "target_kind": TargetKind.TABLET,
-    #     "impact_scope": ImpactScope.NODE,
-    #     "guard_mode": GuardMode.BYPASS,
-    # }
-    #
-    # # One scheduled type per tablet kind is enough (orchestrator picks hosts at random per tick).
-    # for tt in _CHANGE_TABLET_TYPES:
-    #     out[f"ChangeTabletGroup_{tt.name}"] = {
-    #         "runner": ClusterChangeTabletGroupNemesis(tt, channels=()),
-    #         "schedule": 120,
-    #         "ui_group": _TABLET_UI_GROUP,
-    #         "target_kind": TargetKind.TABLET,
-    #         "impact_scope": ImpactScope.NODE,
-    #         "guard_mode": GuardMode.BYPASS,
-    #     }
-    #     out[f"BulkChangeTabletGroup_{tt.name}"] = {
-    #         "runner": ClusterBulkChangeTabletGroupNemesis(tt, percent=None, channels=()),
-    #         "schedule": 180,
-    #         "ui_group": _TABLET_UI_GROUP,
-    #         "target_kind": TargetKind.TABLET,
-    #         "impact_scope": ImpactScope.NODE,
-    #         "guard_mode": GuardMode.BYPASS,
-    #     }
+    # --- tablet chaos (BYPASS: not counted against the failure-model budget) ---
+    for wire, cls, sched in _KILL_TABLET_SPECS:
+        out[wire] = {
+            "runner": cls(),
+            "schedule": sched,
+            "ui_group": _TABLET_UI_GROUP,
+            "target_kind": TargetKind.TABLET,
+            "impact_scope": ImpactScope.NODE,
+            "guard_mode": GuardMode.BYPASS,
+        }
+
+    out["KickTabletsFromNodeNemesis"] = {
+        "runner": ClusterKickTabletsFromNodeNemesis(),
+        "schedule": 200,
+        "ui_group": _TABLET_UI_GROUP,
+        "target_kind": TargetKind.NODE,
+        "impact_scope": ImpactScope.NODE,
+        "guard_mode": GuardMode.FULL,
+    }
+    out["ReBalanceTabletsNemesis"] = {
+        "runner": ClusterReBalanceTabletsNemesis(),
+        "schedule": 120,
+        "ui_group": _TABLET_UI_GROUP,
+        "target_kind": TargetKind.TABLET,
+        "impact_scope": ImpactScope.NODE,
+        "guard_mode": GuardMode.BYPASS,
+    }
+
+    # One scheduled type per tablet kind is enough (orchestrator picks hosts at random per tick).
+    for tt in _CHANGE_TABLET_TYPES:
+        out[f"ChangeTabletGroup_{tt.name}"] = {
+            "runner": ClusterChangeTabletGroupNemesis(tt, channels=()),
+            "schedule": 120,
+            "ui_group": _TABLET_UI_GROUP,
+            "target_kind": TargetKind.TABLET,
+            "impact_scope": ImpactScope.NODE,
+            "guard_mode": GuardMode.BYPASS,
+        }
+        out[f"BulkChangeTabletGroup_{tt.name}"] = {
+            "runner": ClusterBulkChangeTabletGroupNemesis(tt, percent=None, channels=()),
+            "schedule": 180,
+            "ui_group": _TABLET_UI_GROUP,
+            "target_kind": TargetKind.TABLET,
+            "impact_scope": ImpactScope.NODE,
+            "guard_mode": GuardMode.BYPASS,
+        }
 
     # --- daemon kills -------------------------------------------------------
     # SIGKILL + no-op extract: systemd auto-restarts the daemon, so the guard releases the rack
@@ -276,7 +274,6 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "impact_scope": ImpactScope.NODE,
         "guard_mode": GuardMode.FULL,
         "auto_recovery_sec": 90,
-        "weight": 3.0,
     }
     out["KillNodeDaemonNemesis"] = {
         "runner": ClusterKillNodeDaemonNemesis(),
@@ -286,7 +283,6 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "impact_scope": ImpactScope.NODE,
         "guard_mode": GuardMode.FULL,
         "auto_recovery_sec": 90,
-        "weight": 2.0,
     }
 
     # --- serial kills -------------------------------------------------------
@@ -311,16 +307,16 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
 
     # --- disk / rolling / stop-start / suspend ------------------------------
     # Toggle faults (``recovery: extract``): the pinned planner injects the scheduler-chosen
-    # target; the weighted scheduler holds the budget for ``auto_recovery_sec`` then dispatches
+    # target; the boundary scheduler holds the budget for ``auto_recovery_sec`` then dispatches
     # an extract so the agent-side actor restores its stored state.
     for wire, cls, sched, scope, tkind, extra in (
         ("SafelyBreakDiskNemesis", ClusterSafelyBreakDiskNemesis, 400, ImpactScope.DISK, TargetKind.DISK,
-         {"recovery": "extract", "auto_recovery_sec": 120, "weight": 0.5}),
+         {"recovery": "extract", "auto_recovery_sec": 120}),
         ("SafelyCleanupDisksNemesis", ClusterSafelyCleanupDisksNemesis, 400, ImpactScope.DISK, TargetKind.DISK,
-         {"recovery": "extract", "auto_recovery_sec": 90, "weight": 0.4}),
+         {"recovery": "extract", "auto_recovery_sec": 90}),
         # ("RollingUpdateClusterNemesis", ClusterRollingUpdateNemesis, 120, ImpactScope.NODE, TargetKind.NODE, {}),
         ("StopStartNodeNemesis", ClusterStopStartNodeNemesis, 400, ImpactScope.NODE, TargetKind.NODE,
-         {"recovery": "extract", "auto_recovery_sec": 90, "weight": 2.0}),
+         {"recovery": "extract", "auto_recovery_sec": 90}),
         ("SuspendNodeNemesis", ClusterSuspendNodeNemesis, 800, ImpactScope.NODE, TargetKind.NODE, {}),
     ):
         out[wire] = {
@@ -360,7 +356,7 @@ def _topology_conditional_entries() -> dict[str, dict[str, Any]]:
 
     if yaml_has_multi_datacenter(path):
         # StopNodes only (self-recovering stop/start pulse). Route/iptables/DNS variants stay off:
-        # they need explicit extract and don't fit the inject-only weighted-scheduler path.
+        # they need explicit extract and don't fit the inject-only boundary-scheduler path.
         from ydb.tests.stability.nemesis.internal.nemesis.runners import (
             ClusterDataCenterStopNodesNemesis,
         )
@@ -374,7 +370,6 @@ def _topology_conditional_entries() -> dict[str, dict[str, Any]]:
             "impact_scope": ImpactScope.DATACENTER,
             "guard_mode": GuardMode.FULL,  # reserves the whole realm (mirror-3-dc sacrificial DC)
             "auto_recovery_sec": 240,
-            "weight": 0.3,  # heavy + rare relative to node kills
             "supports_manual": False,
         }
 

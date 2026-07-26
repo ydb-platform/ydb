@@ -1,8 +1,8 @@
-"""Single-threaded weighted nemesis scheduler.
+"""Single-threaded nemesis scheduler.
 
 Walks the failure-model boundary: each tick breaks a random number of things (``cap``), picking
-each fault by weight from whatever currently fits the budget, reserving it atomically, then sleeps
-a randomized interval. Replaces the per-type schedule threads in ``schedule_loop.py``.
+each fault uniformly at random from whatever currently fits the budget, reserving it atomically,
+then sleeps a randomized interval. Replaces the per-type schedule threads in ``schedule_loop.py``.
 
 Budget is released by the :class:`RecoveryProbe`, per the type's :func:`recovery_mode_for`:
 self-recovering faults are released once healthcheck sees the host answer again; toggle faults
@@ -19,25 +19,28 @@ from typing import Callable, Sequence
 
 from ydb.tests.stability.nemesis.internal.nemesis.catalog import (
     NEMESIS_TYPES,
+    guard_mode_for,
     impact_scope_for,
     recovery_mode_for as catalog_recovery_mode_for,
     recovery_sec_for,
     target_kind_for,
-    weight_for as catalog_weight_for,
 )
 from ydb.tests.stability.nemesis.internal.nemesis.chaos_dispatch import DispatchCommand
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_target import ChaosTarget, TargetKind
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import (
     DEFAULT_RECOVERY_SEC,
     FailureModelGuard,
+    GuardMode,
     ImpactScope,
 )
 
 logger = logging.getLogger(__name__)
 
 # Curated stability chaos profile: datacenter stop, node kill, slot kill, node stop/start, disk
-# break/cleanup, clock skew. Filtered to what the cluster actually registers (e.g. the DC type
-# only exists on multi-DC clusters). Toggle members are recovered via timed extract.
+# break/cleanup, clock skew, plus tablet chaos. Filtered to what the cluster actually registers
+# (e.g. the DC type only exists on multi-DC clusters). Toggle members are recovered via timed
+# extract. Tablet types are BYPASS (injected without spending the failure-model budget), except
+# KickTabletsFromNodeNemesis, which kills the node and so is counted like any other node fault.
 _STABILITY_PROFILE: tuple[str, ...] = (
     "DataCenterStopNodesNemesis",
     "KillNodeNemesis",
@@ -46,6 +49,13 @@ _STABILITY_PROFILE: tuple[str, ...] = (
     "SafelyBreakDiskNemesis",
     "SafelyCleanupDisksNemesis",
     "TimeSkewNemesis",
+    "KillHiveNemesis",
+    "KillCoordinatorNemesis",
+    "KillSchemeShardNemesis",
+    "KillDataShardNemesis",
+    "KillPersQueueNemesis",
+    "ReBalanceTabletsNemesis",
+    "KickTabletsFromNodeNemesis",
 )
 
 
@@ -54,7 +64,7 @@ def default_enabled_types() -> list[str]:
     return [t for t in _STABILITY_PROFILE if t in NEMESIS_TYPES]
 
 
-class WeightedNemesisScheduler:
+class BoundaryNemesisScheduler:
     def __init__(
         self,
         *,
@@ -65,9 +75,9 @@ class WeightedNemesisScheduler:
         recovery_probe=None,
         plan_extract: Callable[[str, ChaosTarget], list[DispatchCommand]] | None = None,
         enabled_types: Sequence[str] | None = None,
-        weight_for: Callable[[str], float] | None = None,
         scope_for: Callable[[str], ImpactScope] = impact_scope_for,
         kind_for: Callable[[str], TargetKind] = target_kind_for,
+        mode_for: Callable[[str], GuardMode] = guard_mode_for,
         recovery_sec_for: Callable[[str], float | None] = recovery_sec_for,
         recovery_mode_for: Callable[[str], str] = catalog_recovery_mode_for,
         base_interval: float = 60.0,
@@ -82,9 +92,9 @@ class WeightedNemesisScheduler:
         self._plan_extract = plan_extract
         self._dispatch = dispatch
         self._recovery_probe = recovery_probe
-        self._weight_for = weight_for or catalog_weight_for
         self._scope_for = scope_for
         self._kind_for = kind_for
+        self._mode_for = mode_for
         self._recovery_sec_for = recovery_sec_for
         self._recovery_mode_for = recovery_mode_for
         self._default_recovery_sec = float(default_recovery_sec)
@@ -103,7 +113,6 @@ class WeightedNemesisScheduler:
         self,
         *,
         enabled: Sequence[str] | None = None,
-        weights: dict[str, float] | None = None,
         base_interval: float | None = None,
         jitter: float | None = None,
         max_per_tick: int | None = None,
@@ -117,9 +126,6 @@ class WeightedNemesisScheduler:
                 self._jitter = float(jitter)
             if max_per_tick is not None:
                 self._max_per_tick = max(1, int(max_per_tick))
-        if weights is not None:
-            wmap = {k: float(v) for k, v in weights.items()}
-            self._weight_for = lambda t: wmap.get(t, 1.0)
 
     def running(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
@@ -144,56 +150,59 @@ class WeightedNemesisScheduler:
     def _can_extract(self) -> bool:
         return self._plan_extract is not None and self._recovery_probe is not None
 
-    def _menu(self) -> list[tuple[str, ChaosTarget, frozenset[str], float]]:
+    def _menu(
+        self, bypass_used: frozenset[tuple[str, str]] = frozenset()
+    ) -> list[tuple[str, ChaosTarget, frozenset[str]]]:
         with self._cfg_lock:
             enabled = list(self._enabled)
         impaired = self._guard.active_identities()
         can_extract = self._can_extract()
-        menu: list[tuple[str, ChaosTarget, frozenset[str], float]] = []
+        menu: list[tuple[str, ChaosTarget, frozenset[str]]] = []
         for nemesis_type in enabled:
-            weight = self._weight_for(nemesis_type)
-            if weight <= 0:
-                continue
             # A toggle fault with no way to auto-extract would stay broken forever — don't offer it.
             if self._recovery_mode_for(nemesis_type) == "extract" and not can_extract:
                 continue
+            bypass = self._mode_for(nemesis_type) is GuardMode.BYPASS
             scope = self._scope_for(nemesis_type)
             kind = self._kind_for(nemesis_type)
             seen: set[str] = set()  # collapse duplicate targets (e.g. one DC exposed per host)
             for target in self._inventory.entities(kind):
                 key = target.identity_key()
-                if key in impaired or key in seen:
+                if key in seen:
                     continue
                 seen.add(key)
+                if bypass:
+                    # BYPASS: not counted against the failure budget, so it's offered every tick
+                    # regardless of what's impaired. Deduped per (type, target) — tablet types all
+                    # share one control-host target, so this keeps each firing at most once a tick.
+                    if (nemesis_type, key) not in bypass_used:
+                        menu.append((nemesis_type, target, frozenset()))
+                    continue
+                if key in impaired:
+                    continue
                 racks = self._guard.footprint_for(target, scope)
                 if self._guard.fits(racks):
-                    menu.append((nemesis_type, target, racks, weight))
+                    menu.append((nemesis_type, target, racks))
         return menu
-
-    def _weighted_choice(
-        self, menu: list[tuple[str, ChaosTarget, frozenset[str], float]]
-    ) -> tuple[str, ChaosTarget, frozenset[str], float]:
-        total = sum(item[3] for item in menu)
-        if total <= 0:
-            return self._rng.choice(menu)
-        r = self._rng.random() * total
-        acc = 0.0
-        for item in menu:
-            acc += item[3]
-            if r <= acc:
-                return item
-        return menu[-1]
 
     def tick(self) -> int:
         """One scheduling tick: break up to a random ``cap`` faults. Returns how many were injected."""
         with self._cfg_lock:
             cap = self._rng.randint(1, self._max_per_tick)
         added = 0
+        bypass_used: set[tuple[str, str]] = set()
         while added < cap:
-            menu = self._menu()
+            menu = self._menu(frozenset(bypass_used))
             if not menu:
                 break
-            nemesis_type, target, racks, _weight = self._weighted_choice(menu)
+            nemesis_type, target, racks = self._rng.choice(menu)
+            if self._mode_for(nemesis_type) is GuardMode.BYPASS:
+                # No budget to reserve and no probe to track — just fire and remember it fired.
+                for cmd in self._plan_inject(nemesis_type, target):
+                    self._dispatch(cmd)
+                bypass_used.add((nemesis_type, target.identity_key()))
+                added += 1
+                continue
             recovery = self._recovery_sec_for(nemesis_type)
             if recovery is None:
                 recovery = self._default_recovery_sec
@@ -245,14 +254,14 @@ class WeightedNemesisScheduler:
 
     def _run(self) -> None:
         logger.info(
-            "WeightedNemesisScheduler started: %d type(s), base=%.1fs jitter=%.2f max_per_tick=%d",
+            "BoundaryNemesisScheduler started: %d type(s), base=%.1fs jitter=%.2f max_per_tick=%d",
             len(self._enabled), self._base_interval, self._jitter, self._max_per_tick,
         )
         while not self._stop.is_set():
             try:
                 self.tick()
             except Exception:
-                logger.exception("weighted scheduler tick raised")
+                logger.exception("boundary scheduler tick raised")
             self._stop.wait(self._sleep_seconds())
 
     def start(self) -> None:
@@ -273,4 +282,4 @@ class WeightedNemesisScheduler:
             self._recovery_probe.stop()
 
 
-__all__ = ["WeightedNemesisScheduler", "default_enabled_types"]
+__all__ = ["BoundaryNemesisScheduler", "default_enabled_types"]

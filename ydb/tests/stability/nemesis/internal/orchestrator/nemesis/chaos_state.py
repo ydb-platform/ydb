@@ -111,7 +111,7 @@ class ChaosOrchestratorStore:
     def plan_inject_target(
         self, nemesis_type: str, target: ChaosTarget
     ) -> list[DispatchCommand]:
-        """Inject command(s) for one already-chosen ``target`` (weighted scheduler path).
+        """Inject command(s) for one already-chosen ``target`` (boundary scheduler path).
 
         The scheduler has already reserved the failure budget, so this skips the legacy
         ``filter_safe`` pre-filter. A DATACENTER target fans out to every host in the chosen
@@ -132,7 +132,7 @@ class ChaosOrchestratorStore:
     def plan_extract_target(
         self, nemesis_type: str, target: ChaosTarget
     ) -> list[DispatchCommand]:
-        """Extract command for one chosen ``target`` (weighted-scheduler toggle recovery).
+        """Extract command for one chosen ``target`` (boundary-scheduler toggle recovery).
 
         Bypasses the planner's cross-tick state — the scheduler owns which target is broken;
         the agent-side actor restores from its own stored state on extract."""

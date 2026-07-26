@@ -75,6 +75,7 @@ namespace NActors {
         EvRegisterSession,
         EvUnregisterSession,
         EvStop,
+        EvMigrateDone,
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // nonlocal messages; their indices must be preserved in order to work properly while doing rolling update

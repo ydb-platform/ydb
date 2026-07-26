@@ -49,18 +49,30 @@ jobs:
     if: ${{ !cancelled() && needs.ydbdoc-verify.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger PR-check and docs rebuild on translation PR
+      - name: Trigger PR-check and docs build on translation PR
         uses: actions/github-script@v8
         with:
           github-token: ${{ secrets.YDBOT_TOKEN }}
           script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
             const prNumber = context.payload.pull_request.number;
+
             await github.rest.issues.addLabels({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
+              owner,
+              repo,
               issue_number: prNumber,
               labels: ['ok-to-test'],
             });
-            core.info(
-              `Added ok-to-test to translation PR #${prNumber}`
-            );
+            core.info(`Added ok-to-test to translation PR #${prNumber}`);
+
+            await github.rest.actions.createWorkflowDispatch({
+              owner,
+              repo,
+              workflow_id: 'docs_build.yaml',
+              ref: context.payload.repository.default_branch,
+              inputs: {
+                pull_number: String(prNumber),
+              },
+            });
+            core.info(`Dispatched Build documentation for translation PR #${prNumber}`);

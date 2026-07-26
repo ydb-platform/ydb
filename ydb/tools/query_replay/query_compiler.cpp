@@ -71,8 +71,22 @@ struct TTableReadAccessInfo {
 
 enum EWriteType : ui32 {
     Upsert = 1,
-    Erase = 2
+    Erase = 2,
+    Replace = 3,
 };
+
+TString ToString(EWriteType writeType) {
+    switch (writeType) {
+        case EWriteType::Upsert:
+            return "upsert";
+        case EWriteType::Erase:
+            return "erase";
+        case EWriteType::Replace:
+            return "replace";
+        default:
+            return "unknown";
+    }
+}
 
 struct TTableWriteInfo {
     EWriteType WriteType;
@@ -425,6 +439,8 @@ private:
                         const auto& type = write["type"].GetStringSafe();
                         if (type == "Upsert" || type == "MultiUpsert") {
                             writes.push_back(TTableWriteInfo{EWriteType::Upsert, columns});
+                        } else if (type == "Replace" || type == "MultiReplace") {
+                            writes.push_back(TTableWriteInfo{EWriteType::Replace, columns});
                         } else if (type == "Erase" || type == "MultiErase") {
                             writes.push_back(TTableWriteInfo{EWriteType::Erase, columns});
                         }
@@ -493,6 +509,12 @@ private:
         for (size_t i = 0; i < oldEngineStats.Writes.size(); ++i) {
             if (oldEngineStats.Writes[i].WriteColumns != newEngineStats.Writes[i].WriteColumns) {
                 return {TQueryReplayEvents::WriteColumnsMismatch, TStringBuilder() << "Write columns mismatch"};
+            }
+
+            if (oldEngineStats.Writes[i].WriteType != newEngineStats.Writes[i].WriteType) {
+                return {TQueryReplayEvents::WriteTypesMismatch, TStringBuilder() << "Write types mismatch, old engine: "
+                    << ToString(oldEngineStats.Writes[i].WriteType) << ", new engine: "
+                    << ToString(newEngineStats.Writes[i].WriteType)};
             }
         }
 

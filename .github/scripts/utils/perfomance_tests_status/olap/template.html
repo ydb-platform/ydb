@@ -384,8 +384,10 @@
   <div id="inbox"></div>
 </div>
 
+<!-- Huge payload as JSON text (not JS AST) — much faster than const DATA = {...} -->
+<script type="application/json" id="olap-report-data">__OLAP_REPORT_DATA__</script>
 <script>
-const DATA = __OLAP_REPORT_DATA__;
+const DATA = JSON.parse(document.getElementById('olap-report-data').textContent);
 const charts = {};
 const UI = DATA.ui || {};
 let winFrom = UI.default_from || null;
@@ -2470,7 +2472,7 @@ async function copyDutyJson(obj) {
 function flashDutyBtn(btn, okMsg, failMsg, ok) {
   const prev = btn.textContent;
   btn.textContent = ok ? okMsg : failMsg;
-  setTimeout(() => { btn.textContent = prev; }, 1400);
+  setTimeout(() => { btn.textContent = prev; }, 1600);
 }
 
 function dutySafeName(s) {
@@ -2649,7 +2651,7 @@ function diveHtml(r, id) {
     </div>
     <div class="toolbar" style="margin:0">
       <button type="button" class="btn" data-hist="${id}">Show suite history</button>
-      <button type="button" class="btn" data-ctx-dl="${id}" title="Download frozen incident pack for duty_agent">Save context</button>
+      <button type="button" class="btn" data-ctx-dl="${id}" title="Download perf-duty-context/v1 JSON">Save context</button>
       <button type="button" class="btn" data-ctx-cp="${id}" title="Copy incident pack JSON">Copy context</button>
     </div>
     <div id="${id}_hist"></div>

@@ -1536,11 +1536,21 @@ def refresh_summary_counts(data: dict) -> None:
     }
 
 
+def _embed_json_payload(data: dict) -> str:
+    """JSON for <script type=application/json> — escape so </script> cannot break out."""
+    return (
+        json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+        .replace("<", "\\u003c")
+        .replace("\u2028", "\\u2028")
+        .replace("\u2029", "\\u2029")
+    )
+
+
 def render_html(data: dict, output: Path) -> None:
     tpl = TEMPLATE.read_text()
     if "__OLAP_REPORT_DATA__" not in tpl:
         raise SystemExit("template.html missing __OLAP_REPORT_DATA__ placeholder")
-    payload = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+    payload = _embed_json_payload(data)
     title_bit = data.get("window", "")
     html = tpl.replace("__OLAP_REPORT_DATA__", payload)
     html = re.sub(

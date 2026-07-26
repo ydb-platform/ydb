@@ -977,7 +977,15 @@ def main():
     json_path.write_text(json.dumps(data, ensure_ascii=False, indent=2))
 
     tpl = TEMPLATE.read_text()
-    html = tpl.replace("__TPCC_REPORT_DATA__", json.dumps(data, ensure_ascii=False))
+    if "__TPCC_REPORT_DATA__" not in tpl:
+        raise SystemExit("template.html missing __TPCC_REPORT_DATA__ placeholder")
+    payload = (
+        json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+        .replace("<", "\\u003c")
+        .replace("\u2028", "\\u2028")
+        .replace("\u2029", "\\u2029")
+    )
+    html = tpl.replace("__TPCC_REPORT_DATA__", payload)
     args.output.write_text(html)
 
     s = data["summary"]

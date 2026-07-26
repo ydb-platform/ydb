@@ -220,12 +220,25 @@ def validate_analysis_md(
         if re.search(pat, body, re.I):
             errors.append(f"jargon in report: {hint}")
 
-    # Issue materials: sandbox report URL required
+    # Issue materials: sandbox report URL (OLAP) or explicit metrics-only / DataLens (TPC-C)
+    tpcc_only = bool(types) and all(t.startswith("tpcc_") for t in types)
     if "## Материалы для issue" in body or "## Materials" in body:
-        if not re.search(r"proxy\.sandbox\.yandex-team\.ru/\d+", body):
+        has_sandbox = bool(re.search(r"proxy\.sandbox\.yandex-team\.ru/\d+", body))
+        has_tpcc_alt = bool(
+            re.search(
+                r"datalens\.yandex|"
+                r"sandbox/allure\s*(report\s*)?отсутств|"
+                r"нет\s*\(TPC-C|"
+                r"TPC-C metrics-only|"
+                r"report:\s*null",
+                body,
+                re.I,
+            )
+        )
+        if not has_sandbox and not (tpcc_only and has_tpcc_alt):
             errors.append(
-                "Материалы для issue: нужен хотя бы один URL отчёта "
-                "proxy.sandbox.yandex-team.ru/<id>/…"
+                "Материалы для issue: нужен URL proxy.sandbox.yandex-team.ru/<id>/… "
+                "(для TPC-C — DataLens и/или явно «Sandbox/Allure нет»)"
             )
         if not re.search(r"github\.com/ydb-platform/ydb/(commit|blob|issues|pull)/", body):
             errors.append(

@@ -428,18 +428,21 @@ class StressUtilDeployer:
     def _set_schedules_enabled(
         self, enabled: bool, nemesis_log: list[str]
     ) -> bool:
-        """Call ``POST /api/schedule/all`` to enable or disable all nemesis schedules.
+        """Start or stop the weighted nemesis scheduler via the orchestrator API.
+
+        ``POST /api/scheduler/start`` (empty profile → catalog defaults) or
+        ``POST /api/scheduler/stop``.
 
         Returns:
             ``True`` on success, ``False`` on failure.
         """
         endpoint = self._get_orchestrator_endpoint()
-        url = f"{endpoint}/api/schedule/all"
-        payload = json.dumps({"enabled": enabled}).encode()
+        url = f"{endpoint}/api/scheduler/{'start' if enabled else 'stop'}"
+        payload = json.dumps({}).encode()
 
         action = "Enabling" if enabled else "Disabling"
-        nemesis_log.append(f"{action} all nemesis schedules via {url}")
-        logging.info(f"{action} nemesis schedules: POST {url}")
+        nemesis_log.append(f"{action} weighted nemesis scheduler via {url}")
+        logging.info(f"{action} nemesis scheduler: POST {url}")
 
         try:
             req = urllib.request.Request(
@@ -733,10 +736,10 @@ class StressUtilDeployer:
         operation_context: str = None,
         existing_log: list = None,
     ):
-        """Manage nemesis chaos schedules via the orchestrator HTTP API.
+        """Manage nemesis chaos via the orchestrator HTTP API.
 
-        * **enable** — install → health-poll → ``POST /api/schedule/all``
-        * **disable** — ``POST /api/schedule/all {"enabled": false}``
+        * **enable** — install → health-poll → ``POST /api/scheduler/start``
+        * **disable** — ``POST /api/scheduler/stop``
 
         Args:
             enable_nemesis: True to enable chaos, False to disable

@@ -33,6 +33,8 @@ PY_SRCS(
     internal/orchestrator/unified_agent_verify_failed_aggregated.py
     internal/orchestrator/orchestrator_warden_checker.py
     internal/orchestrator/nemesis/schedule_loop.py
+    internal/orchestrator/nemesis/weighted_scheduler.py
+    internal/orchestrator/nemesis/recovery_probe.py
     internal/orchestrator/nemesis/chaos_state.py
     internal/orchestrator/nemesis/default_planner.py
     internal/orchestrator/nemesis/pinned_first_host_planner.py

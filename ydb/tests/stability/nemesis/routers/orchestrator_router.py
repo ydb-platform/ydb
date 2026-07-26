@@ -22,6 +22,7 @@ from ydb.tests.stability.nemesis.internal.nemesis.catalog import (
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_target import ChaosTarget, TargetKind
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.cluster_inventory import ClusterInventory
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import FailureModelGuard, GuardMode
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.weighted_scheduler import WeightedNemesisScheduler
 import ydb.tests.stability.nemesis.routers.agent_router as agent_router
 
 
@@ -36,6 +37,7 @@ hosts: list[str] = []
 mon_port = 8765  # Default monitoring port
 orchestrator_warden_checker: OrchestratorWardenChecker | None = None
 nemesis_schedule: OrchestratorNemesisSchedule | None = None
+weighted_scheduler: WeightedNemesisScheduler | None = None
 chaos_store: ChaosOrchestratorStore | None = None
 failure_guard: FailureModelGuard | None = None
 cluster_inventory: ClusterInventory | None = None
@@ -417,6 +419,62 @@ def get_schedule():
 def get_schedule_history():
     """Return last scheduled executions"""
     return jsonify(nemesis_schedule.recent_history(15))
+
+
+def _scheduler_state() -> dict:
+    """Weighted-scheduler status plus the current failure-budget snapshot."""
+    if weighted_scheduler is None:
+        return {"available": False}
+    state = {"available": True, **weighted_scheduler.status()}
+    if failure_guard is not None:
+        state["failure_budget"] = failure_guard.snapshot()
+    return state
+
+
+@blueprint.route("/api/scheduler", methods=["GET"])
+def get_scheduler():
+    """Weighted nemesis scheduler status (running, profile, budget, recovery probe)."""
+    return jsonify(_scheduler_state())
+
+
+@blueprint.route("/api/scheduler/start", methods=["POST"])
+def start_scheduler():
+    """Apply an optional profile and start the weighted scheduler.
+
+    Body (all optional): ``enabled`` (list of type names), ``weights`` (name->float),
+    ``base_interval`` (sec), ``jitter`` (0..1), ``max_per_tick`` (int). Omitted fields keep
+    their current value; on a fresh scheduler that means the catalog defaults.
+    """
+    if weighted_scheduler is None:
+        return jsonify(
+            {"status": "error", "message": "Weighted scheduler not initialized (failure model unavailable)"}
+        ), 500
+
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify({"status": "error", "message": "Body must be a JSON object"}), 400
+
+    profile = {
+        k: data[k]
+        for k in ("enabled", "weights", "base_interval", "jitter", "max_per_tick")
+        if k in data
+    }
+    try:
+        if profile:
+            weighted_scheduler.set_profile(**profile)
+        weighted_scheduler.start()
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 400
+    return jsonify({"status": "ok", "scheduler": _scheduler_state()})
+
+
+@blueprint.route("/api/scheduler/stop", methods=["POST"])
+def stop_scheduler():
+    """Stop the weighted scheduler (and its recovery probe)."""
+    if weighted_scheduler is None:
+        return jsonify({"status": "ok", "message": "Scheduler not initialized"})
+    weighted_scheduler.stop()
+    return jsonify({"status": "ok", "scheduler": _scheduler_state()})
 
 
 @blueprint.route("/api/healthcheck", methods=["GET"])

@@ -154,7 +154,10 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "target_kind": TargetKind.NODE,
         "impact_scope": ImpactScope.NODE,
         "guard_mode": GuardMode.FULL,
-        "auto_recovery_sec": 20,
+        # SIGKILL + systemd restart + rejoin: 20s was well under real re-replication, so the
+        # probe cried "stuck" too early (and the timer freed budget before the node was back).
+        "auto_recovery_sec": 120,
+        "weight": 3.0,
     }
     # out["DnsNemesis"] = {
     #     "runner": DnsNemesis(),
@@ -269,6 +272,7 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "impact_scope": ImpactScope.NODE,
         "guard_mode": GuardMode.FULL,
         "auto_recovery_sec": 90,
+        "weight": 2.0,
     }
     out["KillNodeDaemonNemesis"] = {
         "runner": ClusterKillNodeDaemonNemesis(),
@@ -278,6 +282,7 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "impact_scope": ImpactScope.NODE,
         "guard_mode": GuardMode.FULL,
         "auto_recovery_sec": 90,
+        "weight": 2.0,
     }
 
     # --- serial kills -------------------------------------------------------
@@ -343,24 +348,24 @@ def _topology_conditional_entries() -> dict[str, dict[str, Any]]:
     extra: dict[str, dict[str, Any]] = {}
 
     if yaml_has_multi_datacenter(path):
-        pass
-        # from ydb.tests.stability.nemesis.internal.nemesis.runners import (
-        #     ClusterDataCenterIptablesBlockPortsNemesis,
-        #     ClusterDataCenterRouteUnreachableNemesis,
-        #     ClusterDataCenterStopNodesNemesis,
-        # )
+        # StopNodes only (self-recovering stop/start pulse). Route/iptables/DNS variants stay off:
+        # they need explicit extract and don't fit the inject-only weighted-scheduler path.
+        from ydb.tests.stability.nemesis.internal.nemesis.runners import (
+            ClusterDataCenterStopNodesNemesis,
+        )
 
-        # for wire, cls, sched in (
-        #     ("DataCenterStopNodesNemesis", ClusterDataCenterStopNodesNemesis, 600),
-        #     ("DataCenterRouteUnreachableNemesis", ClusterDataCenterRouteUnreachableNemesis, 600),
-        #     ("DataCenterIptablesBlockPortsNemesis", ClusterDataCenterIptablesBlockPortsNemesis, 600),
-        # ):
-        #     extra[wire] = {
-        #         "runner": cls(),
-        #         "schedule": sched,
-        #         "ui_group": _DATACENTER_UI_GROUP,
-        #         "planner_factory": _dc_fanout_planner_factory,
-        #     }
+        extra["DataCenterStopNodesNemesis"] = {
+            "runner": ClusterDataCenterStopNodesNemesis(),
+            "schedule": 600,
+            "ui_group": _DATACENTER_UI_GROUP,
+            "planner_factory": _dc_fanout_planner_factory,
+            "target_kind": TargetKind.DATACENTER,
+            "impact_scope": ImpactScope.DATACENTER,
+            "guard_mode": GuardMode.FULL,  # reserves the whole realm (mirror-3-dc sacrificial DC)
+            "auto_recovery_sec": 240,
+            "weight": 0.3,  # heavy + rare relative to node kills
+            "supports_manual": False,
+        }
 
     if yaml_has_bridge_piles_section(path):
         from ydb.tests.stability.nemesis.internal.nemesis.runners import (

@@ -15,13 +15,32 @@ from ydb.tests.stability.nemesis.internal.nemesis.catalog import (
     impact_scope_for,
     target_kind_for,
 )
-from ydb.tests.stability.nemesis.internal.nemesis.chaos_dispatch import DispatchCommand
-from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_target import ChaosTarget
+from ydb.tests.stability.nemesis.internal.nemesis.chaos_dispatch import DispatchCommand, fanout
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_target import ChaosTarget, TargetKind
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.cluster_inventory import ClusterInventory
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import FailureModelGuard, GuardMode
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.nemesis_planner_base import NemesisPlannerBase
 
 logger = logging.getLogger(__name__)
+
+
+def datacenter_inject_fanout(
+    nemesis_type: str, target: ChaosTarget, inventory
+) -> list[DispatchCommand]:
+    """Inject the DC fault on every host of ``target``'s datacenter (one shared scenario).
+
+    The scheduler already chose and reserved this DC, so we fan out to exactly its hosts
+    rather than let the round-robin ``DataCenterFanoutPlanner`` pick a different one."""
+    dc = target.group_id
+    hosts = [
+        t.host for t in inventory.entities(TargetKind.DATACENTER) if t.group_id == dc
+    ] or [target.host]
+    return fanout(
+        nemesis_type,
+        [ChaosTarget.for_datacenter(h, dc) for h in hosts],
+        "inject",
+        {"datacenter": dc},
+    )
 
 
 class ChaosOrchestratorStore:
@@ -88,6 +107,23 @@ class ChaosOrchestratorStore:
             return []
         return planner.scheduled_tick(candidates)
 
+    def plan_inject_target(
+        self, nemesis_type: str, target: ChaosTarget
+    ) -> list[DispatchCommand]:
+        """Inject command(s) for one already-chosen ``target`` (weighted scheduler path).
+
+        The scheduler has already reserved the failure budget, so this skips the legacy
+        ``filter_safe`` pre-filter. A DATACENTER target fans out to every host in the chosen
+        DC (the round-robin fanout planner would pick its own DC, not this one); anything else
+        goes to its planner as a single-target tick.
+        """
+        if target.kind is TargetKind.DATACENTER and self._inventory is not None:
+            return datacenter_inject_fanout(nemesis_type, target, self._inventory)
+        planner = self._planners.get(nemesis_type)
+        if planner is None:
+            return []
+        return planner.scheduled_tick([target])
+
     def plan_disable_schedule(self, nemesis_type: str) -> list[DispatchCommand]:
         planner = self._planners.get(nemesis_type)
         if planner is None:
@@ -109,4 +145,5 @@ class ChaosOrchestratorStore:
 __all__ = [
     "ChaosOrchestratorStore",
     "DispatchCommand",
+    "datacenter_inject_fanout",
 ]

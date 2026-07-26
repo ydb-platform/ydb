@@ -169,6 +169,20 @@ def recovery_sec_for(nemesis_type: str) -> float | None:
         return DEFAULT_RECOVERY_SEC
 
 
+def weight_for(nemesis_type: str) -> float:
+    """Relative selection weight for the weighted scheduler (unannotated -> 1.0).
+
+    Higher = picked more often. ``<= 0`` mutes the type (never scheduled)."""
+    spec = NEMESIS_TYPES.get(nemesis_type)
+    if spec is None:
+        return 1.0
+    try:
+        w = float(spec.get("weight", 1.0))
+    except (TypeError, ValueError):
+        return 1.0
+    return w if w > 0 else 0.0
+
+
 def supports_manual_for(nemesis_type: str) -> bool:
     """Whether UI/API manual inject on a host/target is supported for this type.
 

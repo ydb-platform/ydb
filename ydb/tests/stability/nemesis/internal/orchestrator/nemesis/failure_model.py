@@ -22,6 +22,7 @@ import enum
 import logging
 import threading
 import time
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -68,6 +69,9 @@ _HOST_LEVEL_SCOPES = frozenset(
 # Fallback recovery window (seconds) when a nemesis type has no ``auto_recovery_sec`` annotation.
 # Conservatively longer than a systemd restart so a node stays "impaired" until it likely rejoined.
 DEFAULT_RECOVERY_SEC: float = 120.0
+
+# Sentinel lease from ``reserve`` when the guard is disabled (fail-open); ``release`` ignores it.
+_DISABLED_LEASE = "__disabled__"
 
 
 @dataclass(frozen=True)
@@ -246,6 +250,10 @@ class FailureModelGuard:
     def _synthetic_key(host: str) -> str:
         return f"__host__:{host}"
 
+    def footprint_for(self, target: ChaosTarget, scope: ImpactScope) -> frozenset[str]:
+        """Fail-domain racks ``target`` consumes at ``scope`` (empty for tablets)."""
+        return frozenset(self._racks_for_target(target, scope))
+
     # -- impairment bookkeeping (call under _lock) --------------------------
 
     def _purge_expired(self, now: float) -> None:
@@ -330,6 +338,63 @@ class FailureModelGuard:
             scope,
         )
         return [t.host for t in targets]
+
+    # -- lease-based budget API ---------------------------------------------
+
+    def fits(self, racks: frozenset[str]) -> bool:
+        """True if adding ``racks`` keeps the budget within tolerance (read-only, fail-open)."""
+        if not self.enabled:
+            return True
+        now = time.monotonic()
+        with self._lock:
+            return self._is_tolerable(self._active_racks(now) | set(racks))
+
+    def reserve(
+        self,
+        racks: frozenset[str],
+        recovery_sec: float | None = None,
+        identity_key: str | None = None,
+    ) -> str | None:
+        """Atomically claim ``racks`` under one lock; return a lease id, or None if it exceeds
+        the budget. ``recovery_sec`` auto-expires the lease after that many seconds; ``None``
+        holds it until :meth:`release`. ``identity_key`` records which target the lease covers so
+        it shows up in :meth:`active_identities` (schedulers skip already-impaired targets).
+        A disabled guard returns a sentinel lease (fail-open)."""
+        if not self.enabled:
+            return _DISABLED_LEASE
+        now = time.monotonic()
+        deadline = None if recovery_sec is None else now + float(recovery_sec)
+        with self._lock:
+            if not self._is_tolerable(self._active_racks(now) | set(racks)):
+                return None
+            lease_id = uuid.uuid4().hex
+            self._impairments.append(
+                _Impairment(
+                    execution_id=lease_id,
+                    racks=set(racks),
+                    identity_key=identity_key or f"lease:{lease_id}",
+                    deadline=deadline,
+                )
+            )
+            return lease_id
+
+    def active_identities(self) -> set[str]:
+        """Identity keys of every non-expired impairment (empty when disabled, fail-open)."""
+        if not self.enabled:
+            return set()
+        now = time.monotonic()
+        with self._lock:
+            return self._touched_keys(now)
+
+    def release(self, lease_id: str | None) -> bool:
+        if not self.enabled or not lease_id or lease_id == _DISABLED_LEASE:
+            return False
+        with self._lock:
+            before = len(self._impairments)
+            self._impairments = [
+                imp for imp in self._impairments if imp.execution_id != lease_id
+            ]
+            return len(self._impairments) != before
 
     def record_inject(
         self,

@@ -192,6 +192,136 @@ class TestFailureModelGuard:
         )
 
 
+class TestFailureBudgetLease:
+    """Per-candidate lease API (footprint_for / fits / reserve / release) for the new scheduler."""
+
+    def test_footprint_for_node_is_single_rack(self, block42_topology):
+        guard = FailureModelGuard(block42_topology)
+        fp = guard.footprint_for(ChaosTarget.for_node("h1", node_id=1), ImpactScope.NODE)
+        assert fp == frozenset({"r1"}), (
+            f"a node footprint must be exactly its host's rack; got {fp}"
+        )
+
+    def test_footprint_for_datacenter_covers_all_its_racks(self, mirror3dc_topology):
+        guard = FailureModelGuard(mirror3dc_topology)
+        fp = guard.footprint_for(
+            ChaosTarget.for_datacenter("h1", "dc1"), ImpactScope.DATACENTER
+        )
+        assert fp == frozenset({"r1", "r2"}), (
+            f"a datacenter footprint must cover every rack in the DC; got {fp}"
+        )
+
+    def test_tablet_footprint_consumes_no_budget(self, block42_topology):
+        guard = FailureModelGuard(block42_topology)
+        fp = guard.footprint_for(ChaosTarget.for_tablet("h1", tablet_id=7), ImpactScope.NODE)
+        assert fp == frozenset(), f"a tablet footprint must be empty; got {fp}"
+        lease = guard.reserve(fp)
+        assert lease is not None, "reserving an empty footprint must always succeed"
+        assert guard.snapshot()["impaired_racks"] == [], (
+            f"reserving a tablet footprint must not impair any rack; snapshot={guard.snapshot()}"
+        )
+
+    def test_fits_is_read_only(self, block42_topology):
+        guard = FailureModelGuard(block42_topology)
+        fp = guard.footprint_for(ChaosTarget.for_node("h1", node_id=1), ImpactScope.NODE)
+        assert guard.fits(fp) and guard.fits(fp), "fits must be repeatable and not consume budget"
+        assert guard.snapshot()["impaired_racks"] == [], (
+            f"fits must not mutate the impaired set; snapshot={guard.snapshot()}"
+        )
+        assert guard.reserve(fp) is not None, "budget untouched by fits, so reserve must still fit"
+
+    def test_reserve_release_block42_budget(self, block42_topology):
+        guard = FailureModelGuard(block42_topology)
+        fp1 = guard.footprint_for(ChaosTarget.for_node("h1", node_id=1), ImpactScope.NODE)
+        fp2 = guard.footprint_for(ChaosTarget.for_node("h2", node_id=2), ImpactScope.NODE)
+        fp3 = guard.footprint_for(ChaosTarget.for_node("h3", node_id=3), ImpactScope.NODE)
+
+        l1 = guard.reserve(fp1)
+        l2 = guard.reserve(fp2)
+        assert l1 and l2, "block-4-2 must admit two distinct fail domains"
+
+        assert guard.reserve(fp3) is None, (
+            "a third distinct domain must exceed the block-4-2 budget; "
+            f"snapshot={guard.snapshot()}"
+        )
+        assert not guard.fits(fp3), "fits must agree with reserve that a third domain does not fit"
+
+        assert guard.release(l2) is True, "releasing an active lease must report success"
+        l3 = guard.reserve(fp3)
+        assert l3 is not None, (
+            f"after releasing one domain a third must fit again; snapshot={guard.snapshot()}"
+        )
+
+    def test_reserve_is_atomic_never_exceeds_budget(self, block42_topology):
+        """Sequential reservations of every rack must stop exactly at the budget."""
+        guard = FailureModelGuard(block42_topology)
+        leases = []
+        for host, rack_node in (("h1", 1), ("h2", 2), ("h3", 3), ("h4", 4)):
+            fp = guard.footprint_for(
+                ChaosTarget.for_node(host, node_id=rack_node), ImpactScope.NODE
+            )
+            leases.append(guard.reserve(fp))
+        granted = [x for x in leases if x is not None]
+        assert len(granted) == 2, (
+            f"block-4-2 must grant exactly 2 leases across 4 distinct racks; granted={leases}"
+        )
+        assert len(guard.snapshot()["impaired_racks"]) == 2, (
+            f"impaired set must never exceed the budget; snapshot={guard.snapshot()}"
+        )
+
+    def test_datacenter_footprint_mirror3dc_sacrificial_realm(self, mirror3dc_topology):
+        guard = FailureModelGuard(mirror3dc_topology)
+        dc1 = guard.footprint_for(
+            ChaosTarget.for_datacenter("h1", "dc1"), ImpactScope.DATACENTER
+        )
+        node_dc2 = guard.footprint_for(ChaosTarget.for_node("h3", node_id=3), ImpactScope.NODE)
+        node_dc3 = guard.footprint_for(ChaosTarget.for_node("h5", node_id=5), ImpactScope.NODE)
+
+        ldc = guard.reserve(dc1)
+        assert ldc is not None, "a whole DC must fit as the sacrificial realm on an empty budget"
+
+        lextra = guard.reserve(node_dc2)
+        assert lextra is not None, (
+            f"one extra domain in another realm must fit after sacrificing dc1; "
+            f"snapshot={guard.snapshot()}"
+        )
+
+        assert guard.reserve(node_dc3) is None, (
+            "a domain in a third realm must be rejected (1 realm + 1 domain budget); "
+            f"snapshot={guard.snapshot()}"
+        )
+
+        assert guard.release(ldc) is True
+        lthird = guard.reserve(node_dc3)
+        assert lthird is not None, (
+            f"after releasing dc1, single domains in dc2 and dc3 must both fit; "
+            f"snapshot={guard.snapshot()}"
+        )
+
+    def test_reserve_records_identity_for_active_identities(self, block42_topology):
+        guard = FailureModelGuard(block42_topology)
+        target = ChaosTarget.for_node("h1", node_id=1)
+        fp = guard.footprint_for(target, ImpactScope.NODE)
+        assert guard.active_identities() == set(), "no reservations means no active identities"
+        lease = guard.reserve(fp, identity_key=target.identity_key())
+        assert lease is not None
+        assert target.identity_key() in guard.active_identities(), (
+            "a reserved target's identity must be reported so schedulers skip re-hitting it; "
+            f"active={guard.active_identities()}"
+        )
+        assert guard.release(lease) is True
+        assert target.identity_key() not in guard.active_identities(), (
+            "releasing the lease must drop its identity from the active set"
+        )
+
+    def test_release_of_disabled_or_unknown_lease_is_noop(self, block42_topology):
+        guard = FailureModelGuard(block42_topology)
+        assert guard.release(None) is False, "releasing a None lease must be a no-op"
+        assert guard.release("never-issued") is False, (
+            "releasing an unknown lease id must be a no-op, not raise"
+        )
+
+
 class TestSerialStaggeredPlanner:
     def test_dispatches_only_to_owner_host(self):
         planner = SerialStaggeredInjectPlanner("SerialKillNodeNemesis", target_kind="node")

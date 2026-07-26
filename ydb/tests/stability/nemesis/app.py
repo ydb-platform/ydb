@@ -5,6 +5,11 @@ import ydb.tests.stability.nemesis.routers.agent_router as agent_router
 from ydb.tests.stability.nemesis.internal.orchestrator.orchestrator_warden_checker import OrchestratorWardenChecker
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.schedule_loop import OrchestratorNemesisSchedule
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_state import ChaosOrchestratorStore
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.weighted_scheduler import WeightedNemesisScheduler
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.recovery_probe import (
+    RecoveryProbe,
+    healthcheck_recovery,
+)
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import (
     ClusterTopologyModel,
     FailureModelGuard,
@@ -116,6 +121,25 @@ def initialize_app():
             failure_guard=failure_guard,
         )
 
+        # Weighted boundary-walking scheduler (started on demand via /api/scheduler/start).
+        # Needs the failure model + inventory; recovery is fact-based via the healthcheck probe.
+        if failure_guard is not None and inventory is not None:
+            probe = RecoveryProbe(
+                guard=failure_guard,
+                recovered=healthcheck_recovery(orchestrator_router.healthcheck_reporter),
+            )
+            orchestrator_router.weighted_scheduler = WeightedNemesisScheduler(
+                guard=failure_guard,
+                inventory=inventory,
+                plan_inject=orchestrator_router.chaos_store.plan_inject_target,
+                dispatch=lambda cmd: orchestrator_router.nemesis_schedule.dispatch_command(
+                    cmd, track_history=True
+                ),
+                recovery_probe=probe,
+            )
+        else:
+            orchestrator_router.weighted_scheduler = None
+
     current_app.config["NEMESIS_INITIALIZED"] = True
 
 
@@ -127,6 +151,9 @@ def cleanup_app(exception=None):
         rep = orchestrator_router.healthcheck_reporter
         if rep:
             rep.stop_healthchecks()
+
+        if orchestrator_router.weighted_scheduler:
+            orchestrator_router.weighted_scheduler.stop()
 
         if orchestrator_router.nemesis_schedule:
             orchestrator_router.nemesis_schedule.shutdown_disable_all()

@@ -23,6 +23,12 @@ from tools.context import (  # noqa: E402
     validate_context,
 )
 from tools.detect_type import detect_type  # noqa: E402
+from tools.dig_runs import (  # noqa: E402
+    build_dig_sql,
+    rows_from_mcp_json,
+    summarize_olap_rows,
+    summarize_tpcc_rows,
+)
 from tools.metrics_delta import metrics_delta  # noqa: E402
 from tools.result_json import merge_result  # noqa: E402
 from tools.run_dir import ensure_run_dir, write_json  # noqa: E402
@@ -69,6 +75,166 @@ class MetricsDeltaTests(unittest.TestCase):
         self.assertIn("tpmc_regression", m["flags"])
 
 
+class DigRunsTests(unittest.TestCase):
+    def test_build_tpcc_sql_and_summarize(self):
+        ctx = load_context(ROOT / "fixtures" / "sample_tpcc.json")
+        plan = build_dig_sql(ctx, neighbors=True, days_before=35)
+        self.assertEqual(plan["kind"], "tpcc")
+        self.assertEqual(plan["days_before"], 35)
+        self.assertIn("perfomance/tpcc", plan["sql"])
+        self.assertIn("ydb_cli_", plan["sql"])
+        self.assertIn("git_branch", plan["sql"])
+        # Pack run_type "default" → mart ydb_cli_serializable_default
+        self.assertEqual(plan["selection"]["run_type"], "ydb_cli_serializable_default")
+        raw = {
+            "result_sets": [
+                {
+                    "columns": [
+                        {"name": "cluster"},
+                        {"name": "run_type"},
+                        {"name": "warehouses"},
+                        {"name": "git_branch"},
+                        {"name": "timestamp"},
+                        {"name": "tpmC"},
+                        {"name": "lat90"},
+                        {"name": "efficiency"},
+                        {"name": "version"},
+                    ],
+                    "rows": [
+                        [
+                            "perf9",
+                            "ydb_cli_serializable_default",
+                            16000,
+                            "origin/main",
+                            "2026-07-15T10:00:00Z",
+                            200000,
+                            4000,
+                            0.9,
+                            "aaa1111",
+                        ],
+                        [
+                            "perf9",
+                            "ydb_cli_snapshot_latency",
+                            12000,
+                            "origin/main",
+                            "2026-07-15T12:00:00Z",
+                            50000,
+                            40,
+                            0.9,
+                            "aaa1111",
+                        ],
+                        [
+                            "perf9",
+                            "ydb_cli_serializable_default",
+                            16000,
+                            "origin/main",
+                            "2026-07-16T10:00:00Z",
+                            179657,
+                            5174,
+                            0.85,
+                            "e5c6883d5449",
+                        ],
+                        [
+                            "perf3",
+                            "ydb_cli_serializable_default",
+                            16000,
+                            "origin/main",
+                            "2026-07-16T11:00:00Z",
+                            210000,
+                            4100,
+                            0.9,
+                            "e5c6883d5449",
+                        ],
+                    ],
+                }
+            ]
+        }
+        rows = rows_from_mcp_json(raw)
+        self.assertEqual(len(rows), 4)
+        summary = summarize_tpcc_rows(rows, selection=plan["selection"])
+        # Focus suite only — latency row must not inflate slice / jump
+        self.assertEqual(summary["slice_count"], 2)
+        self.assertIsNotNone(summary["largest_lat_step"])
+        self.assertGreater(summary["largest_lat_step"]["lat_delta"], 0)
+        self.assertTrue(any(p["cluster"] == "perf3" for p in summary["peer_clusters_latest"]))
+        self.assertTrue(any(c["suite"].startswith("ydb_cli_snapshot_latency") for c in summary["cross_run_type"]))
+
+    def test_build_olap_sql_neighbors(self):
+        ctx = load_context(ROOT / "fixtures" / "sample_olap.json")
+        plan = build_dig_sql(ctx, neighbors=True, days_before=40)
+        self.assertEqual(plan["kind"], "olap")
+        self.assertIn("fast_results_siutes", plan["sql"])
+        self.assertIn("StartsWith(Suite", plan["sql"])
+        self.assertIn("Branch", plan["sql"])
+        # Peer DBs: no DbAlias filter in neighbors mode
+        self.assertNotIn("DbAlias =", plan["sql"])
+        raw = {
+            "result_sets": [
+                {
+                    "columns": [
+                        {"name": "Branch"},
+                        {"name": "Version"},
+                        {"name": "DbAlias"},
+                        {"name": "Suite"},
+                        {"name": "RunTs"},
+                        {"name": "YdbSumMeans"},
+                        {"name": "FailCount"},
+                        {"name": "Report"},
+                    ],
+                    "rows": [
+                        [
+                            "origin/main",
+                            "aaaaaaa",
+                            "sas_small_column",
+                            "TpchParallelS100T10",
+                            "2026-07-01T05:00:00Z",
+                            100.0,
+                            0,
+                            None,
+                        ],
+                        [
+                            "origin/main",
+                            "bbbbbbb",
+                            "sas_small_column",
+                            "TpchParallelS100T10",
+                            "2026-07-08T05:00:00Z",
+                            120.0,
+                            5,
+                            None,
+                        ],
+                        [
+                            "origin/main",
+                            "bbbbbbb",
+                            "sas_big_column",
+                            "TpchParallelS100T10",
+                            "2026-07-08T06:00:00Z",
+                            110.0,
+                            0,
+                            None,
+                        ],
+                        [
+                            "origin/main",
+                            "bbbbbbb",
+                            "sas_small_column",
+                            "UploadTpch100",
+                            "2026-07-08T07:00:00Z",
+                            50.0,
+                            1,
+                            None,
+                        ],
+                    ],
+                }
+            ]
+        }
+        rows = rows_from_mcp_json(raw)
+        summary = summarize_olap_rows(rows, selection=plan["selection"])
+        self.assertEqual(summary["slice_count"], 2)
+        self.assertIsNotNone(summary["largest_fail_step"])
+        self.assertGreater(summary["largest_fail_step"]["delta"], 0)
+        self.assertTrue(any(p["DbAlias"] == "sas_big_column" for p in summary["peer_dbs"]))
+        self.assertTrue(any(c["suite"] == "UploadTpch100" for c in summary["cross_suite"]))
+
+
 class ValidateTests(unittest.TestCase):
     def test_ok_minimal_olap_fail(self):
         with tempfile.TemporaryDirectory() as td:
@@ -80,6 +246,7 @@ class ValidateTests(unittest.TestCase):
                 {"introduced_in_window": False, "conclusion": "unchanged"},
             )
             write_json(d / "priors.json", {"prior_scans": []})
+            write_json(d / "dig_runs.json", {"kind": "olap", "summary": {"slice_count": 2}})
             md = """# Perf duty — x
 
 ## Заключение
@@ -340,6 +507,7 @@ https://github.com/ydb-platform/ydb/commit/f88e100
             write_json(out / "detect_type.json", {"analysis_types": ["olap_fail"]})
             write_json(out / "focus.json", {"fetched": False, "fatal": {}})
             write_json(out / "code_bisect.json", {"introduced_in_window": None})
+            write_json(out / "dig_runs.json", {"kind": "olap", "summary": {}})
             proc = subprocess.run(
                 [sys.executable, str(run), "validate", "-o", str(out)],
                 check=False,

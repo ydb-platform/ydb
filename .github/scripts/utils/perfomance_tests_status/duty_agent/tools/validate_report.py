@@ -138,6 +138,26 @@ def validate_analysis_md(
             if not (out_dir / "priors.json").is_file():
                 warnings.append("missing priors.json — давность may be weak; run prepare")
 
+    # TPC-C / OLAP: must dig mart history (pack suite_history alone is not enough)
+    tpcc = any(str(t).startswith("tpcc_") for t in types)
+    olap_needs_dig = any(t in ("olap_slow", "olap_fail") for t in types)
+    if (tpcc or olap_needs_dig) and out_dir:
+        if not (out_dir / "dig_runs.json").is_file():
+            if not re.search(r"dig-runs skipped|dig.runs не|без dig-runs", bl):
+                kind = "tpcc" if tpcc else "olap"
+                errors.append(
+                    f"{kind}: missing dig_runs.json — run `dutyctl dig-runs` "
+                    "(neighbors + ~35d history via MCP ydb_query; widen --days-before if edged) "
+                    "or explain 'dig-runs skipped' with reason"
+                )
+    if tpcc and out_dir:
+        if not (out_dir / "dig_prs.json").is_file():
+            if not re.search(r"dig-prs skipped|dig.prs не|без dig-prs", bl):
+                errors.append(
+                    "tpcc: missing dig_prs.json — run `dutyctl dig-prs` on the latency jump "
+                    "window (or explain 'dig-prs skipped')"
+                )
+
     # Surface 2005 without fatal
     if re.search(r"code:\s*2005|cluster unavailable|connection with node", bl):
         has_fatal = bool(

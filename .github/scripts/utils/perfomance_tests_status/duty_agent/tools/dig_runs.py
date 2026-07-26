@@ -1,0 +1,727 @@
+"""Build / summarize dig queries against perfomance/tpcc and olap marts (Now report sources)."""
+
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any
+
+QUERIES_DIR = Path(__file__).resolve().parent.parent / "queries"
+
+# Default lookback: pack suite_history is short; mart dig must be wider for correlations.
+DEFAULT_DAYS_BEFORE = 35
+DEFAULT_DAYS_AFTER = 3
+
+# Map UI db alias → cluster column in perfomance/tpcc (best-effort).
+TPCC_DB_TO_CLUSTER = {
+    "perf3": "perf3",
+    "perf4": "perf4",
+    "perf9": "perf9",
+}
+
+# Suite family → related Suite prefixes for OLAP neighbor dig (correlation).
+OLAP_RELATED_PREFIXES: dict[str, tuple[str, ...]] = {
+    "UploadTpch": ("UploadTpch", "Tpch"),
+    "Tpch": ("Tpch", "UploadTpch"),
+    "Tpcds": ("Tpcds",),
+    "Clickbench": ("Clickbench",),
+    "WorkloadManager": ("WorkloadManager",),
+    "Upload": ("Upload",),
+}
+
+
+def _parse_ts(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    s = str(value).strip().replace("Z", "+00:00")
+    try:
+        dt = datetime.fromisoformat(s)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _iso(dt: datetime) -> str:
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _escape_ydb_str(s: str) -> str:
+    return s.replace("\\", "\\\\").replace("'", "\\'")
+
+
+def _branch_clause(column: str, branch: str) -> str:
+    b = _escape_ydb_str(branch)
+    return (
+        f"({column} = '{b}' OR {column} = 'origin/{b}' "
+        f"OR EndsWith(CAST({column} AS String), '/{b}'))"
+    )
+
+
+def _olap_family(suite: str) -> str:
+    for prefix in (
+        "UploadTpch",
+        "Tpch",
+        "Tpcds",
+        "Clickbench",
+        "WorkloadManager",
+        "Upload",
+    ):
+        if suite.startswith(prefix):
+            return prefix
+    return suite
+
+
+def selection_from_ctx(ctx: dict[str, Any]) -> dict[str, Any]:
+    sel = ctx.get("selection") or {}
+    fr = sel.get("focus_run") or {}
+    suite = str(sel.get("suite") or "")
+    run_type = sel.get("run_type")
+    warehouses = sel.get("warehouses")
+    if "@" in suite:
+        left, _, right = suite.partition("@")
+        if warehouses is None and right.isdigit():
+            warehouses = int(right)
+        suite_rt = f"ydb_cli_{left}" if not str(left).startswith("ydb_cli_") else left
+        # Pack often stores short run_type ("default"); mart uses ydb_cli_*
+        if (
+            run_type is None
+            or not str(run_type).startswith("ydb_cli_")
+            or str(run_type) in ("default", "latency")
+        ):
+            run_type = suite_rt
+    db = str(sel.get("db") or "")
+    cluster = TPCC_DB_TO_CLUSTER.get(db, db)
+    branch = str(sel.get("branch") or "main")
+    focus_ts = _parse_ts(fr.get("ts") or fr.get("day"))
+    family = sel.get("family") or (_olap_family(suite) if suite else None)
+    return {
+        "kind": str((ctx.get("report") or {}).get("kind") or ""),
+        "cluster": cluster,
+        "db": db,
+        "branch": branch,
+        "suite": suite,
+        "run_type": run_type,
+        "warehouses": warehouses,
+        "focus_sha": fr.get("sha"),
+        "focus_label": fr.get("label"),
+        "focus_ts": _iso(focus_ts) if focus_ts else None,
+        "family": family,
+    }
+
+
+def window_from_focus(
+    focus_ts: str | None,
+    *,
+    days_before: int = DEFAULT_DAYS_BEFORE,
+    days_after: int = DEFAULT_DAYS_AFTER,
+) -> tuple[str, str]:
+    dt = _parse_ts(focus_ts) or datetime.now(timezone.utc)
+    since = dt - timedelta(days=int(days_before))
+    until = dt + timedelta(days=int(days_after))
+    return _iso(since), _iso(until)
+
+
+def build_tpcc_sql(
+    *,
+    since: str,
+    until: str,
+    cluster: str | None = None,
+    run_type: str | None = None,
+    warehouses: int | None = None,
+    branch: str | None = None,
+    neighbors: bool = True,
+) -> str:
+    """SQL for mart dig.
+
+    neighbors=True (default): all ydb_cli_* run_types on **all clusters**, same branch.
+    neighbors=False / slice_only: only the alert run_type@warehouses@cluster.
+    """
+    clauses = [
+        f"timestamp >= Timestamp('{_escape_ydb_str(since)}')",
+        f"timestamp <= Timestamp('{_escape_ydb_str(until)}')",
+        "run_type LIKE 'ydb_cli_%'",
+    ]
+    if branch:
+        clauses.append(_branch_clause("git_branch", branch))
+    if not neighbors:
+        if run_type:
+            clauses.append(f"run_type = '{_escape_ydb_str(str(run_type))}'")
+        if warehouses is not None:
+            clauses.append(f"warehouses = {int(warehouses)}")
+        if cluster:
+            clauses.append(f"cluster = '{_escape_ydb_str(cluster)}'")
+
+    where = " AND ".join(clauses)
+    return f"""SELECT
+  cluster,
+  run_type,
+  warehouses,
+  COALESCE(CAST(git_branch AS String), '') AS git_branch,
+  timestamp,
+  git_commit_timestamp,
+  tpmC,
+  newOrderLatency90 AS lat90,
+  efficiency,
+  version
+FROM `perfomance/tpcc`
+WHERE {where}
+ORDER BY cluster, run_type, warehouses, timestamp;
+"""
+
+
+def build_olap_sql(
+    *,
+    since: str,
+    until: str,
+    db_alias: str | None = None,
+    suite: str | None = None,
+    branch: str | None = None,
+    neighbors: bool = True,
+) -> str:
+    """SQL for OLAP mart dig.
+
+    neighbors=True: same branch; related suite families + all DbAlias (peer clusters).
+    slice_only: focus Suite + DbAlias (+ branch).
+    """
+    clauses = [
+        f"RunTs >= Timestamp('{_escape_ydb_str(since)}')",
+        f"RunTs <= Timestamp('{_escape_ydb_str(until)}')",
+    ]
+    if branch:
+        clauses.append(_branch_clause("Branch", branch))
+    if not neighbors:
+        if suite:
+            clauses.append(f"Suite = '{_escape_ydb_str(suite)}'")
+        if db_alias:
+            clauses.append(f"DbAlias = '{_escape_ydb_str(db_alias)}'")
+    elif suite:
+        fam = _olap_family(suite)
+        prefixes = OLAP_RELATED_PREFIXES.get(fam, (fam,))
+        or_parts = [
+            f"StartsWith(Suite, '{_escape_ydb_str(p)}')" for p in prefixes
+        ]
+        # Always include exact focus suite
+        or_parts.append(f"Suite = '{_escape_ydb_str(suite)}'")
+        clauses.append("(" + " OR ".join(or_parts) + ")")
+        # all DbAlias on branch — do not filter db_alias
+
+    where = " AND ".join(clauses)
+    return f"""SELECT
+  Branch,
+  Version,
+  DbAlias,
+  Suite,
+  RunTs,
+  YdbSumMeans,
+  GrossTime,
+  SuccessCount,
+  FailCount,
+  FailTests,
+  Report
+FROM `perfomance/olap/fast_results_siutes`
+WHERE {where}
+ORDER BY RunTs, DbAlias, Suite;
+"""
+
+
+def build_dig_sql(
+    ctx: dict[str, Any],
+    *,
+    neighbors: bool = True,
+    days_before: int = DEFAULT_DAYS_BEFORE,
+    days_after: int = DEFAULT_DAYS_AFTER,
+) -> dict[str, Any]:
+    sel = selection_from_ctx(ctx)
+    since, until = window_from_focus(
+        sel.get("focus_ts"),
+        days_before=days_before,
+        days_after=days_after,
+    )
+    kind = sel.get("kind") or "olap"
+    if kind == "tpcc":
+        sql = build_tpcc_sql(
+            since=since,
+            until=until,
+            cluster=sel.get("cluster"),
+            run_type=sel.get("run_type"),
+            warehouses=sel.get("warehouses"),
+            branch=sel.get("branch"),
+            neighbors=neighbors,
+        )
+        table = "perfomance/tpcc"
+    else:
+        sql = build_olap_sql(
+            since=since,
+            until=until,
+            db_alias=sel.get("db"),
+            suite=sel.get("suite"),
+            branch=sel.get("branch"),
+            neighbors=neighbors,
+        )
+        table = "perfomance/olap/fast_results_siutes"
+    return {
+        "kind": kind,
+        "table": table,
+        "since": since,
+        "until": until,
+        "days_before": days_before,
+        "days_after": days_after,
+        "selection": sel,
+        "neighbors": neighbors,
+        "sql": sql,
+        "mcp_hint": (
+            "Run SQL via MCP user-ydb-qa → ydb_query, save JSON to dig_runs_raw.json, "
+            "then: dutyctl dig-runs -c CONTEXT -o OUT --from-json dig_runs_raw.json. "
+            "If jump sits at the edge of the window, re-run with --days-before 60|90."
+        ),
+    }
+
+
+def rows_from_mcp_json(payload: Any) -> list[dict[str, Any]]:
+    """Accept MCP {result_sets:[{columns,rows}]} or list[dict] or {rows:…}."""
+    if isinstance(payload, list):
+        if payload and isinstance(payload[0], dict) and "columns" not in payload[0]:
+            return [r for r in payload if isinstance(r, dict)]
+        if payload and isinstance(payload[0], dict) and "columns" in payload[0]:
+            return _result_set_to_rows(payload[0])
+        return []
+    if not isinstance(payload, dict):
+        return []
+    if "result_sets" in payload:
+        sets = payload.get("result_sets") or []
+        if sets:
+            return _result_set_to_rows(sets[0])
+    if "columns" in payload and "rows" in payload:
+        return _result_set_to_rows(payload)
+    if isinstance(payload.get("rows"), list):
+        rows = payload["rows"]
+        if rows and isinstance(rows[0], dict):
+            return rows
+    return []
+
+
+def _result_set_to_rows(rs: dict[str, Any]) -> list[dict[str, Any]]:
+    cols = rs.get("columns") or []
+    names: list[str] = []
+    for c in cols:
+        if isinstance(c, dict):
+            names.append(str(c.get("name") or c.get("id") or f"c{len(names)}"))
+        else:
+            names.append(str(c))
+    out: list[dict[str, Any]] = []
+    for row in rs.get("rows") or []:
+        if isinstance(row, dict):
+            out.append(row)
+            continue
+        if isinstance(row, (list, tuple)):
+            out.append({names[i]: row[i] if i < len(row) else None for i in range(len(names))})
+    return out
+
+
+def _num(v: Any) -> float | None:
+    if v is None:
+        return None
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _branch_ok(b: str, branch: str) -> bool:
+    b = (b or "").lower()
+    bl = branch.lower()
+    return bl in b or b.endswith("/" + bl) or b == bl
+
+
+def _largest_metric_step(
+    series: list[dict[str, Any]],
+    metric: str,
+) -> dict[str, Any] | None:
+    step = None
+    for a, b in zip(series, series[1:]):
+        va, vb = _num(a.get(metric)), _num(b.get(metric))
+        if va is None or vb is None:
+            continue
+        delta = vb - va
+        if step is None or abs(delta) > abs(step["delta"]):
+            step = {
+                "metric": metric,
+                "from_ts": a.get("timestamp") or a.get("RunTs"),
+                "to_ts": b.get("timestamp") or b.get("RunTs"),
+                "from_version": a.get("version") or a.get("Version"),
+                "to_version": b.get("version") or b.get("Version"),
+                "from": va,
+                "to": vb,
+                "delta": delta,
+            }
+    return step
+
+
+def summarize_tpcc_rows(
+    rows: list[dict[str, Any]],
+    *,
+    selection: dict[str, Any],
+) -> dict[str, Any]:
+    cluster = selection.get("cluster")
+    branch = selection.get("branch") or "main"
+    focus_sha = str(selection.get("focus_sha") or "")[:7]
+    want_rt = str(selection.get("run_type") or "")
+    want_wh = selection.get("warehouses")
+
+    def ts_key(r: dict[str, Any]) -> str:
+        return str(r.get("timestamp") or "")
+
+    def match_focus_suite(r: dict[str, Any]) -> bool:
+        if str(r.get("run_type") or "") != want_rt:
+            return False
+        if want_wh is not None and int(r.get("warehouses") or -1) != int(want_wh):
+            return False
+        return True
+
+    focus_slice = [
+        r
+        for r in rows
+        if str(r.get("cluster") or "") == str(cluster)
+        and _branch_ok(str(r.get("git_branch") or ""), branch)
+        and match_focus_suite(r)
+    ]
+    focus_slice.sort(key=ts_key)
+
+    # Jump on focus suite only (do not mix latency@12k with default@20k)
+    jump = None
+    for a, b in zip(focus_slice, focus_slice[1:]):
+        la, lb = _num(a.get("lat90")), _num(b.get("lat90"))
+        if la is None or lb is None:
+            continue
+        delta = lb - la
+        if jump is None or abs(delta) > abs(jump["lat_delta"]):
+            jump = {
+                "from_ts": a.get("timestamp"),
+                "to_ts": b.get("timestamp"),
+                "from_version": a.get("version"),
+                "to_version": b.get("version"),
+                "from_lat90": la,
+                "to_lat90": lb,
+                "lat_delta": delta,
+                "from_tpmc": _num(a.get("tpmC")),
+                "to_tpmc": _num(b.get("tpmC")),
+            }
+
+    focus_row = None
+    for r in reversed(focus_slice):
+        ver = str(r.get("version") or "")
+        if focus_sha and ver.startswith(focus_sha):
+            focus_row = r
+            break
+    if focus_row is None and focus_slice:
+        focus_row = focus_slice[-1]
+
+    other_clusters: dict[str, list[dict[str, Any]]] = {}
+    for r in rows:
+        c = str(r.get("cluster") or "")
+        if c == str(cluster):
+            continue
+        if not _branch_ok(str(r.get("git_branch") or ""), branch):
+            continue
+        other_clusters.setdefault(c, []).append(r)
+    for c in other_clusters:
+        other_clusters[c].sort(key=ts_key)
+
+    peer_snapshot = []
+    for c, lst in sorted(other_clusters.items()):
+        if not lst:
+            continue
+        same_rt = [r for r in lst if match_focus_suite(r)]
+        pool = same_rt or lst
+        series = [
+            {
+                "timestamp": r.get("timestamp"),
+                "version": str(r.get("version") or "")[:7],
+                "lat90": _num(r.get("lat90")),
+                "tpmC": _num(r.get("tpmC")),
+            }
+            for r in pool
+        ]
+        last = pool[-1]
+        peer_jump = _largest_metric_step(
+            [
+                {
+                    "timestamp": r.get("timestamp"),
+                    "version": r.get("version"),
+                    "lat90": _num(r.get("lat90")),
+                }
+                for r in pool
+            ],
+            "lat90",
+        )
+        peer_snapshot.append(
+            {
+                "cluster": c,
+                "timestamp": last.get("timestamp"),
+                "version": last.get("version"),
+                "lat90": _num(last.get("lat90")),
+                "tpmC": _num(last.get("tpmC")),
+                "run_type": last.get("run_type"),
+                "warehouses": last.get("warehouses"),
+                "n_runs_in_window": len(pool),
+                "largest_lat_step": (
+                    {
+                        "from_version": peer_jump["from_version"],
+                        "to_version": peer_jump["to_version"],
+                        "from_lat90": peer_jump["from"],
+                        "to_lat90": peer_jump["to"],
+                        "lat_delta": peer_jump["delta"],
+                    }
+                    if peer_jump
+                    else None
+                ),
+                "recent": series[-4:],
+            }
+        )
+
+    # Cross run_type on focus cluster+branch
+    by_suite: dict[str, list[dict[str, Any]]] = {}
+    for r in rows:
+        if str(r.get("cluster") or "") != str(cluster):
+            continue
+        if not _branch_ok(str(r.get("git_branch") or ""), branch):
+            continue
+        key = f"{r.get('run_type')}@{r.get('warehouses')}"
+        by_suite.setdefault(key, []).append(r)
+    cross: list[dict[str, Any]] = []
+    for key, lst in sorted(by_suite.items()):
+        lst = sorted(lst, key=ts_key)
+        series = [
+            {
+                "timestamp": r.get("timestamp"),
+                "version": str(r.get("version") or "")[:7],
+                "lat90": _num(r.get("lat90")),
+                "tpmC": _num(r.get("tpmC")),
+            }
+            for r in lst
+        ]
+        step = None
+        for a, b in zip(series, series[1:]):
+            if a["lat90"] is None or b["lat90"] is None:
+                continue
+            d = b["lat90"] - a["lat90"]
+            if step is None or abs(d) > abs(step["lat_delta"]):
+                step = {
+                    "from_version": a["version"],
+                    "to_version": b["version"],
+                    "from_lat90": a["lat90"],
+                    "to_lat90": b["lat90"],
+                    "lat_delta": d,
+                }
+        cross.append(
+            {
+                "suite": key,
+                "n": len(series),
+                "largest_lat_step": step,
+                "runs": series[-8:],
+            }
+        )
+
+    edge_hint = None
+    if jump and focus_slice:
+        first_ts = focus_slice[0].get("timestamp")
+        if jump.get("from_ts") == first_ts:
+            edge_hint = (
+                "largest lat step starts at the first point in the dig window — "
+                "re-run dig-runs with larger --days-before (60/90)"
+            )
+
+    return {
+        "slice_runs": [
+            {
+                "timestamp": r.get("timestamp"),
+                "version": r.get("version"),
+                "lat90": _num(r.get("lat90")),
+                "tpmC": _num(r.get("tpmC")),
+                "efficiency": _num(r.get("efficiency")),
+                "cluster": r.get("cluster"),
+                "git_branch": r.get("git_branch"),
+                "run_type": r.get("run_type"),
+                "warehouses": r.get("warehouses"),
+            }
+            for r in focus_slice
+        ],
+        "largest_lat_step": jump,
+        "focus_row": focus_row,
+        "peer_clusters_latest": peer_snapshot,
+        "cross_run_type": cross,
+        "row_count": len(rows),
+        "slice_count": len(focus_slice),
+        "window_edge_hint": edge_hint,
+    }
+
+
+def summarize_olap_rows(
+    rows: list[dict[str, Any]],
+    *,
+    selection: dict[str, Any],
+) -> dict[str, Any]:
+    db = selection.get("db")
+    suite = selection.get("suite")
+    branch = selection.get("branch") or "main"
+
+    def ts_key(r: dict[str, Any]) -> str:
+        return str(r.get("RunTs") or "")
+
+    filtered = [
+        r for r in rows if _branch_ok(str(r.get("Branch") or ""), branch)
+    ]
+
+    focus_slice = [
+        r
+        for r in filtered
+        if str(r.get("DbAlias") or "") == str(db)
+        and (not suite or str(r.get("Suite") or "") == suite)
+    ]
+    focus_slice.sort(key=ts_key)
+
+    fail_jump = _largest_metric_step(
+        [
+            {
+                "RunTs": r.get("RunTs"),
+                "Version": r.get("Version"),
+                "FailCount": _num(r.get("FailCount")),
+            }
+            for r in focus_slice
+        ],
+        "FailCount",
+    )
+    ydb_jump = _largest_metric_step(
+        [
+            {
+                "RunTs": r.get("RunTs"),
+                "Version": r.get("Version"),
+                "YdbSumMeans": _num(r.get("YdbSumMeans")),
+            }
+            for r in focus_slice
+        ],
+        "YdbSumMeans",
+    )
+
+    # Cross suite on same DbAlias
+    by_suite: dict[str, list[dict[str, Any]]] = {}
+    for r in filtered:
+        if str(r.get("DbAlias") or "") != str(db):
+            continue
+        by_suite.setdefault(str(r.get("Suite") or ""), []).append(r)
+    cross_suite: list[dict[str, Any]] = []
+    for sname, lst in sorted(by_suite.items()):
+        lst = sorted(lst, key=ts_key)
+        series = [
+            {
+                "RunTs": r.get("RunTs"),
+                "Version": str(r.get("Version") or "")[:7],
+                "FailCount": _num(r.get("FailCount")),
+                "YdbSumMeans": _num(r.get("YdbSumMeans")),
+            }
+            for r in lst
+        ]
+        fj = _largest_metric_step(
+            [{"RunTs": x["RunTs"], "Version": x["Version"], "FailCount": x["FailCount"]} for x in series],
+            "FailCount",
+        )
+        cross_suite.append(
+            {
+                "suite": sname,
+                "n": len(series),
+                "largest_fail_step": fj,
+                "runs": series[-6:],
+            }
+        )
+
+    # Peer DbAlias for same Suite
+    peer_dbs: list[dict[str, Any]] = []
+    by_db: dict[str, list[dict[str, Any]]] = {}
+    for r in filtered:
+        if suite and str(r.get("Suite") or "") != suite:
+            continue
+        d = str(r.get("DbAlias") or "")
+        if d == str(db):
+            continue
+        by_db.setdefault(d, []).append(r)
+    for d, lst in sorted(by_db.items()):
+        lst = sorted(lst, key=ts_key)
+        last = lst[-1]
+        fj = _largest_metric_step(
+            [
+                {
+                    "RunTs": r.get("RunTs"),
+                    "Version": r.get("Version"),
+                    "FailCount": _num(r.get("FailCount")),
+                }
+                for r in lst
+            ],
+            "FailCount",
+        )
+        peer_dbs.append(
+            {
+                "DbAlias": d,
+                "n_runs_in_window": len(lst),
+                "latest": {
+                    "RunTs": last.get("RunTs"),
+                    "Version": last.get("Version"),
+                    "FailCount": last.get("FailCount"),
+                    "YdbSumMeans": _num(last.get("YdbSumMeans")),
+                },
+                "largest_fail_step": fj,
+            }
+        )
+
+    edge_hint = None
+    if fail_jump and focus_slice and fail_jump.get("from_ts") == focus_slice[0].get("RunTs"):
+        edge_hint = (
+            "largest fail step starts at the first point in the dig window — "
+            "re-run dig-runs with larger --days-before (60/90)"
+        )
+
+    return {
+        "slice_runs": [
+            {
+                "RunTs": r.get("RunTs"),
+                "Version": r.get("Version"),
+                "Suite": r.get("Suite"),
+                "FailCount": r.get("FailCount"),
+                "YdbSumMeans": _num(r.get("YdbSumMeans")),
+                "Report": r.get("Report"),
+            }
+            for r in focus_slice
+        ],
+        "largest_fail_step": fail_jump,
+        "largest_ydb_step": ydb_jump,
+        "cross_suite": cross_suite,
+        "peer_dbs": peer_dbs,
+        "row_count": len(rows),
+        "slice_count": len(focus_slice),
+        "window_edge_hint": edge_hint,
+    }
+
+
+def summarize_dig(
+    *,
+    kind: str,
+    rows: list[dict[str, Any]],
+    selection: dict[str, Any],
+    meta: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    out: dict[str, Any] = {
+        "kind": kind,
+        "selection": selection,
+        "meta": meta or {},
+        "summary": {},
+        "note": (
+            "Facts from perfomance mart (neighbors: other run_type/suites + peer "
+            "clusters, same branch). Agent interprets correlations; widen window if edged."
+        ),
+    }
+    if kind == "tpcc":
+        out["summary"] = summarize_tpcc_rows(rows, selection=selection)
+    else:
+        out["summary"] = summarize_olap_rows(rows, selection=selection)
+    return out

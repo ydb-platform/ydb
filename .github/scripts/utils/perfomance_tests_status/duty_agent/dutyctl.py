@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Perf duty toolbox (facts only) — agent owns root cause.
 
-Minimal CLI:
+CLI:
   init-token     load SANDBOX_TOKEN from YAV
   prepare        detect-type + focus + priors (+ metrics if slow/tpcc)
+  dig-runs       SQL + summarize runs from perfomance/tpcc|olap marts
+  dig-prs        product PRs / hot areas in sha window
   bisect         crash-path window + focus PR files
   validate       lint analysis.md
   write-result   merge problems.json → result.json
-
-Issue search / PR dig beyond bisect: use ``gh`` directly (see AGENTS.md).
 """
 
 from __future__ import annotations
@@ -33,6 +33,12 @@ from tools.context import (  # noqa: E402
 )
 from tools.contrast import build_contrast  # noqa: E402
 from tools.detect_type import detect_type  # noqa: E402
+from tools.dig_prs import dig_prs_window  # noqa: E402
+from tools.dig_runs import (  # noqa: E402
+    build_dig_sql,
+    rows_from_mcp_json,
+    summarize_dig,
+)
 from tools.github_pr import resolve_sha  # noqa: E402
 from tools.history import analyze_history  # noqa: E402
 from tools.metrics_delta import metrics_delta  # noqa: E402
@@ -231,6 +237,147 @@ def cmd_prepare(args: argparse.Namespace) -> int:
         return 0 if ok else 1
     finally:
         loaded.close()
+
+
+def cmd_dig_runs(args: argparse.Namespace) -> int:
+    """Build mart SQL (Now sources) and/or summarize MCP JSON → dig_runs.json."""
+    loaded = _load_ctx(args.context)
+    try:
+        ctx = loaded.ctx
+        out_dir = ensure_run_dir(args.out_dir, ctx)
+        plan = build_dig_sql(
+            ctx,
+            neighbors=not args.slice_only,
+            days_before=int(args.days_before),
+            days_after=int(args.days_after),
+        )
+        sql_path = out_dir / "dig_runs.sql"
+        sql_path.write_text(plan["sql"], encoding="utf-8")
+        write_json(out_dir / "dig_runs_plan.json", {k: v for k, v in plan.items() if k != "sql"})
+
+        if not args.from_json:
+            print(f"wrote {sql_path}")
+            print(
+                f"table={plan['table']} since={plan['since']} until={plan['until']} "
+                f"days_before={plan['days_before']} neighbors={plan['neighbors']}"
+            )
+            print(plan["mcp_hint"])
+            print("--- SQL ---")
+            print(plan["sql"])
+            merge_result(
+                out_dir,
+                ctx=ctx,
+                status="partial",
+                warnings=["dig-runs: SQL ready — run via MCP ydb_query, then --from-json"],
+            )
+            return 0
+
+        raw_path = Path(args.from_json)
+        payload = json.loads(raw_path.read_text(encoding="utf-8"))
+        rows = rows_from_mcp_json(payload)
+        dig = summarize_dig(
+            kind=str(plan["kind"]),
+            rows=rows,
+            selection=plan["selection"],
+            meta={
+                "since": plan["since"],
+                "until": plan["until"],
+                "table": plan["table"],
+                "days_before": plan["days_before"],
+                "days_after": plan["days_after"],
+                "neighbors": plan["neighbors"],
+            },
+        )
+        dig["sql_path"] = str(sql_path)
+        dig["raw_path"] = str(raw_path)
+        write_json(out_dir / "dig_runs.json", dig)
+        summary = dig.get("summary") or {}
+        print(f"wrote {out_dir / 'dig_runs.json'}")
+        jump = summary.get("largest_lat_step") or summary.get("largest_fail_step")
+        print(
+            f"rows={summary.get('row_count')} slice={summary.get('slice_count')} "
+            f"jump={jump}"
+        )
+        if summary.get("window_edge_hint"):
+            print(f"HINT: {summary['window_edge_hint']}")
+        return 0
+    finally:
+        loaded.close()
+
+
+def cmd_dig_prs(args: argparse.Namespace) -> int:
+    """Product PRs + hot areas between base…head (default: jump / history window)."""
+    loaded = _load_ctx(args.context) if args.context else None
+    try:
+        out_dir = ensure_run_dir(args.out_dir, loaded.ctx if loaded else None)
+        base = args.base_sha
+        head = args.head_sha
+        if (not base or not head) and (out_dir / "history.json").is_file():
+            hist = json.loads((out_dir / "history.json").read_text(encoding="utf-8"))
+            appeared = hist.get("appeared") or {}
+            base = base or appeared.get("prev_green_sha")
+            head = head or appeared.get("first_fail_sha") or appeared.get("focus_sha")
+        if (not base or not head) and (out_dir / "dig_runs.json").is_file():
+            dig = json.loads((out_dir / "dig_runs.json").read_text(encoding="utf-8"))
+            jump = (dig.get("summary") or {}).get("largest_lat_step") or {}
+            # versions are often full shas
+            if not base and jump.get("from_version"):
+                base = str(jump["from_version"])[:40]
+            if not head and jump.get("to_version"):
+                head = str(jump["to_version"])[:40]
+        if (not base or not head) and loaded:
+            hist = analyze_history(loaded.ctx)
+            write_json(out_dir / "history.json", hist)
+            appeared = hist.get("appeared") or {}
+            base = base or appeared.get("prev_green_sha")
+            head = head or appeared.get("first_fail_sha") or appeared.get("focus_sha")
+        # metrics_delta history for tpcc jump 21→23 style
+        if (not base or not head) and (out_dir / "metrics_delta.json").is_file():
+            md = json.loads((out_dir / "metrics_delta.json").read_text(encoding="utf-8"))
+            labels = (md.get("history_tail") or {}).get("labels") or []
+            versions = (md.get("history_tail") or {}).get("versions") or []
+            lat = (md.get("history_tail") or {}).get("lat90") or []
+            if len(versions) >= 2 and len(lat) == len(versions):
+                best_i = None
+                best_d = 0.0
+                for i in range(len(lat) - 1):
+                    try:
+                        d = float(lat[i + 1]) - float(lat[i])
+                    except (TypeError, ValueError):
+                        continue
+                    if best_i is None or abs(d) > abs(best_d):
+                        best_i, best_d = i, d
+                if best_i is not None:
+                    base = base or str(versions[best_i])
+                    head = head or str(versions[best_i + 1])
+                    print(
+                        f"dig-prs: using largest lat step "
+                        f"{labels[best_i] if best_i < len(labels) else best_i} → "
+                        f"{labels[best_i+1] if best_i+1 < len(labels) else best_i+1} "
+                        f"(Δlat={best_d:.0f})"
+                    )
+
+        if not base or not head:
+            print(
+                "dig-prs: need --base-sha and --head-sha (or history/metrics_delta in -o)",
+                file=sys.stderr,
+            )
+            return 2
+
+        result = dig_prs_window(str(base), str(head))
+        write_json(out_dir / "dig_prs.json", result)
+        print(f"wrote {out_dir / 'dig_prs.json'}")
+        if result.get("conclusion"):
+            print(result["conclusion"])
+        for hp in (result.get("hot_prs") or [])[:8]:
+            print(
+                f"  hot PR #{hp.get('pr')} areas={hp.get('areas')} "
+                f"{hp.get('title', '')[:80]}"
+            )
+        return 0 if not result.get("error") else 1
+    finally:
+        if loaded:
+            loaded.close()
 
 
 def cmd_bisect(args: argparse.Namespace) -> int:
@@ -451,7 +598,9 @@ def main(argv: list[str] | None = None) -> int:
         argv = [target] + argv[1:]
 
     ap = argparse.ArgumentParser(
-        description="Perf duty toolbox — prepare | bisect | validate | write-result",
+        description=(
+            "Perf duty toolbox — prepare | dig-runs | dig-prs | bisect | validate | write-result"
+        ),
     )
     sub = ap.add_subparsers(dest="cmd", required=True)
 
@@ -472,6 +621,47 @@ def main(argv: list[str] | None = None) -> int:
     )
     add_out(p)
     p.set_defaults(func=cmd_prepare)
+
+    p = sub.add_parser(
+        "dig-runs",
+        help="SQL against perfomance/tpcc|olap (+ summarize MCP JSON)",
+    )
+    p.add_argument("--context", "-c", type=Path, required=True)
+    p.add_argument(
+        "--from-json",
+        type=Path,
+        default=None,
+        help="MCP ydb_query JSON result to summarize → dig_runs.json",
+    )
+    p.add_argument(
+        "--slice-only",
+        action="store_true",
+        help="filter only focus cluster/suite (default: neighbors — other run_types/suites + peer clusters, same branch)",
+    )
+    p.add_argument(
+        "--days-before",
+        type=int,
+        default=35,
+        help="mart lookback days before focus run (default 35; use 60/90 if jump is at window edge)",
+    )
+    p.add_argument(
+        "--days-after",
+        type=int,
+        default=3,
+        help="mart lookforward days after focus run (default 3)",
+    )
+    add_out(p)
+    p.set_defaults(func=cmd_dig_runs)
+
+    p = sub.add_parser(
+        "dig-prs",
+        help="product PRs + hot areas in base…head (jump window)",
+    )
+    p.add_argument("--context", "-c", type=Path, default=None)
+    p.add_argument("--base-sha", default=None)
+    p.add_argument("--head-sha", default=None)
+    add_out(p)
+    p.set_defaults(func=cmd_dig_prs)
 
     p = sub.add_parser("bisect", help="crash-path window + focus PR files")
     p.add_argument("--context", "-c", type=Path, default=None)

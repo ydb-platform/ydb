@@ -130,6 +130,8 @@ Minimal CLI. Artifacts under `--out-dir` / auto `run_id`.
 |---------|---------|
 | `init-token` | YAV → `SANDBOX_TOKEN` |
 | `prepare` | detect-type + focus(+fatal) + priors + metrics (tpcc/slow) |
+| `dig-runs` | Mart history (~35d+): TPC-C all run_types + peer clusters; OLAP related suites + peer DbAlias (same branch) |
+| `dig-prs` | product PRs + hot areas in jump window |
 | `bisect` | path window prev…first-fail + focus PR files |
 | `validate` | lint `analysis.md` |
 | `write-result` | merge `problems.json` → `result.json` |
@@ -270,7 +272,10 @@ metrics-delta (ydb / query times) → first-bad wave → bisect dirs that can af
 
 ### `tpcc_tpmc` / `tpcc_lat`
 
-metrics-delta + history → capped? WH change? → DataLens link → sha window product PRs touching storage/query path → often **candidate** not owner; cluster/infra allowed if no code signal.
+`dig-runs` on `perfomance/tpcc` / olap (neighbors, ~35d; widen if edge) → largest step →
+`dig-prs` on that window → metrics-delta + DataLens → hot PR flags on/off →
+often **candidate** / `wait_next_wave` only after dig.
+**Forbidden:** stop at pack `suite_history` only, «no Allure», or blame alert-commit PR without mart + interval dig.
 
 Agent **decides** which subset of tools to run per problem; core does not force one global path.
 

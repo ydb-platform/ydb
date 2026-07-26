@@ -62,11 +62,3 @@ For step-by-step instructions on setting up and using backup collections, see:
 {% include [_includes/backup_and_recovery/cli_overlay.md](../_includes/backup_and_recovery/cli_overlay.md) %}
 
 {% include [_includes/backup_and_recovery/others_overlay.md](../_includes/backup_and_recovery/others_overlay.md) %}
-
-## Backup of system tablets {#system-tablet-backup}
-
-The system tablet backup mechanism provides incremental copying of cluster metadata to the local file system of the cluster hosts.
-
-For conceptual information and how it works, see [Backup concepts](../../concepts/backup.md#system-tablet-backup).
-
-For step-by-step instructions on enabling and restoring, see [Recipes for backing up system tablets](../../recipes/system-tablet-backup/index.md).

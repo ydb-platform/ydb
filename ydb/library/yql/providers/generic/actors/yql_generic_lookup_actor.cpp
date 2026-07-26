@@ -282,10 +282,11 @@ namespace NYql::NDq {
 
         void Handle(TEvError::TPtr ev) {
             const auto& error = ev->Get()->Error;
-            Send(ParentId, new IDqComputeActorAsyncInput::TEvAsyncInputError(
-                        /*inputId=*/-1, /* will be filled by LookupTransform actor */
-                        NConnector::ErrorToIssues(error),
-                        NConnector::ErrorToDqStatus(error));
+            Send(ParentId,
+                 new IDqComputeActorAsyncInput::TEvAsyncInputError(
+                     /*inputId=*/-1, /* will be filled by LookupTransform actor */
+                     NConnector::ErrorToIssues(error),
+                     NConnector::ErrorToDqStatus(error)));
         }
 
         void Handle(TEvLookupRetry::TPtr ev) {

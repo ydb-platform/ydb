@@ -218,6 +218,17 @@ def span(
         raise
 
 
+# Root CLI stages — on re-run keep only the latest node of each title.
+DEDUPE_ROOT_TITLES = frozenset(
+    {
+        "prepare",
+        "dig-runs",
+        "dig-prs",
+        "bisect",
+    }
+)
+
+
 def _strip_artifact_nodes(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Drop auto rollups (including historical duplicates with same/different ids)."""
     keep: list[dict[str, Any]] = []
@@ -226,6 +237,24 @@ def _strip_artifact_nodes(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
             continue
         keep.append(n)
     return keep
+
+
+def _dedupe_root_stages(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep a single latest prepare/dig-runs/dig-prs/bisect (re-runs append otherwise)."""
+    last_i: dict[str, int] = {}
+    for i, n in enumerate(nodes):
+        t = str(n.get("title") or "")
+        if t in DEDUPE_ROOT_TITLES:
+            last_i[t] = i
+    if not last_i:
+        return nodes
+    out: list[dict[str, Any]] = []
+    for i, n in enumerate(nodes):
+        t = str(n.get("title") or "")
+        if t in DEDUPE_ROOT_TITLES and last_i.get(t) != i:
+            continue
+        out.append(n)
+    return out
 
 
 def _detail_is_placeholder(detail: Any) -> bool:
@@ -328,7 +357,11 @@ def _sync_live_stages_from_files(tree: dict[str, Any], out_dir: Path) -> None:
             h = _short_sha(dig_prs.get("head") or dig_prs.get("head_sha"))
             n_prod = len(dig_prs.get("product_prs") or [])
             win = f"{b}…{h}" if b or h else "—"
-            n["detail"] = f"окно {win}; product PR={n_prod}; горячих={len(hot)}"
+            src = dig_prs.get("window_source")
+            src_bit = f"; source={src}" if src else ""
+            n["detail"] = (
+                f"окно {win}; product PR={n_prod}; горячих={len(hot)}{src_bit}"
+            )
         if title == "dig-runs" and isinstance(dig_runs, dict):
             s = dig_runs.get("summary") or {}
             fail = s.get("largest_fail_step") or {}
@@ -363,7 +396,9 @@ def _sync_live_stages_from_files(tree: dict[str, Any], out_dir: Path) -> None:
 def rebuild_from_artifacts(out_dir: Path) -> dict[str, Any]:
     """Keep live dig nodes; replace a single artifacts rollup (never append duplicates)."""
     tree = load_tree(out_dir)
-    tree["nodes"] = _strip_artifact_nodes(list(tree.get("nodes") or []))
+    tree["nodes"] = _dedupe_root_stages(
+        _strip_artifact_nodes(list(tree.get("nodes") or []))
+    )
     _sync_live_stages_from_files(tree, out_dir)
     art = add_node(
         tree,

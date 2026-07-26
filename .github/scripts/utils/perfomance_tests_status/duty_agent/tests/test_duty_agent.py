@@ -35,6 +35,7 @@ from tools.trace import (  # noqa: E402
     record as trace_record,
     rebuild_from_artifacts,
     render_ascii_tree,
+    _dedupe_root_stages,
 )
 from tools.context import (  # noqa: E402
     ContextError,
@@ -989,6 +990,22 @@ https://proxy.sandbox.yandex-team.ru/1/index.html
         ascii_ = render_ascii_tree(tree)
         self.assertIn("Подготовка", ascii_)
         self.assertIn("тип разбора", ascii_)
+
+    def test_dedupe_root_stages_keeps_latest(self):
+        nodes = [
+            {"title": "dig-runs", "detail": "old", "children": []},
+            {"title": "H1", "kind": "hypothesis", "children": []},
+            {"title": "dig-runs", "detail": "new", "children": [{"title": "mart summarize"}]},
+            {"title": "dig-prs", "detail": "a", "children": []},
+            {"title": "dig-prs", "detail": "b source=last_stable_FailCount0", "children": []},
+        ]
+        out = _dedupe_root_stages(nodes)
+        titles = [n["title"] for n in out]
+        self.assertEqual(titles.count("dig-runs"), 1)
+        self.assertEqual(titles.count("dig-prs"), 1)
+        self.assertEqual(out[titles.index("dig-runs")]["detail"], "new")
+        self.assertIn("last_stable", out[titles.index("dig-prs")]["detail"])
+        self.assertIn("H1", titles)
 
 
 class BaselineTests(unittest.TestCase):

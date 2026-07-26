@@ -1407,6 +1407,30 @@ def attach_suite_query_catalogs(
     return n_hot_q, n_ok_q
 
 
+def collapse_in_progress_suite_dupes(
+    inbox_by_id: dict[str, dict], ok_slices: list[dict]
+) -> tuple[dict[str, dict], list[dict]]:
+    """Drop standalone hot/ok rows when the same suite has in_progress(+finished)."""
+
+    def suite_triple(r: dict) -> tuple[str, str, str]:
+        return (r.get("branch") or "", r.get("db") or "", r.get("suite") or "")
+
+    in_prog = {
+        suite_triple(r)
+        for r in inbox_by_id.values()
+        if r.get("issue") == "in_progress" and r.get("suite") and r.get("suite") != "—"
+    }
+    if not in_prog:
+        return inbox_by_id, ok_slices
+    collapsed = {
+        i: r
+        for i, r in inbox_by_id.items()
+        if r.get("issue") == "in_progress" or suite_triple(r) not in in_prog
+    }
+    ok_kept = [r for r in ok_slices if suite_triple(r) not in in_prog]
+    return collapsed, ok_kept
+
+
 def attach_finished_snapshots(data: dict) -> int:
     """Attach last finished-run twin onto in_progress stubs (for All wave view dive)."""
     twins: dict[tuple[str, str, str], dict] = {}
@@ -1446,6 +1470,20 @@ def attach_finished_snapshots(data: dict) -> int:
             "history": twin.get("history"),
         }
         n += 1
+    # Same suite must not stay as hot/ok + in_progress twin (Wave=finished unwrap → 2 inbox rows).
+    by_id: dict[str, dict] = {}
+    for r in data.get("inbox") or []:
+        rid = r.get("id") or id(r)
+        prev = by_id.get(rid)
+        if prev is None or STATUS_ORDER.get(r.get("status") or "", 0) > STATUS_ORDER.get(
+            prev.get("status") or "", 0
+        ):
+            by_id[rid] = r
+    by_id, ok_kept = collapse_in_progress_suite_dupes(by_id, list(data.get("ok") or []))
+    data["inbox"] = list(by_id.values())
+    data["ok"] = ok_kept
+    if n:
+        refresh_summary_counts(data)
     return n
 
 

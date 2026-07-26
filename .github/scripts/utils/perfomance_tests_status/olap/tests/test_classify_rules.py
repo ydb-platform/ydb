@@ -24,6 +24,7 @@ from classify_rules import (  # noqa: E402
     resolve_compare_row,
     short_cell_status,
 )
+from generate import collapse_in_progress_suite_dupes  # noqa: E402
 
 
 def _side(status="ok", n_fail=0, n_slow=0, n_soft=0, n_nodata=0):
@@ -204,6 +205,37 @@ class LabelPaintConsistencyTests(unittest.TestCase):
         self.assertEqual(a, "soft 2")
         self.assertEqual(b, "ok")
         self.assertEqual(compare_delta_olap(prev, now, react), "same")
+
+
+class CollapseInProgressDupesTests(unittest.TestCase):
+    def test_drops_hot_and_ok_when_in_progress_covers_suite(self):
+        suite = "Clickbench"
+        hot = {
+            "id": "main_db_suite",
+            "issue": "failing",
+            "branch": "main",
+            "db": "sas_big_column",
+            "suite": suite,
+        }
+        ip = {
+            "id": "in_progress_main_db_suite",
+            "issue": "in_progress",
+            "branch": "main",
+            "db": "sas_big_column",
+            "suite": suite,
+            "finished": {"issue": "failing", "status": "regression"},
+        }
+        ok = {
+            "id": "ok_main_db_suite",
+            "issue": "ok",
+            "branch": "main",
+            "db": "sas_big_column",
+            "suite": suite,
+        }
+        by_id, oks = collapse_in_progress_suite_dupes({"h": hot, "ip": ip}, [ok])
+        self.assertIn("ip", by_id)
+        self.assertNotIn("h", by_id)
+        self.assertEqual(oks, [])
 
 
 class WaveCompareRowFilterTests(unittest.TestCase):

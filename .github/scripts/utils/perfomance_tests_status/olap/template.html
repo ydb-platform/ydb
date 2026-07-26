@@ -687,10 +687,13 @@ function unwrapFinishedTwin(r) {
     : ((fin.status && fin.status !== 'in_progress') ? fin.status : 'ok');
   return {
     ...fin,
+    id: fin.id || r.id,
     branch: r.branch || fin.branch,
     db: r.db || fin.db,
     family: r.family != null ? r.family : fin.family,
     suite: r.suite || fin.suite,
+    ci_version: fin.ci_version || r.ci_version,
+    wave: fin.wave || r.wave,
     issue,
   };
 }
@@ -1165,7 +1168,7 @@ function candidateRows() {
       if (!r.finished) continue;
       r = unwrapFinishedTwin(r);
     }
-    const k = rowKey(r);
+    const k = (r.suite && r.suite !== '—') ? suiteKey(r) : rowKey(r);
     if (seen.has(k)) continue;
     seen.add(k);
     rows.push(r);
@@ -1682,7 +1685,7 @@ function compareElevatedOkRows() {
       if (!r.finished) continue;
       r = unwrapFinishedTwin(r);
     }
-    const k = rowKey(r);
+    const k = (r.suite && r.suite !== '—') ? suiteKey(r) : rowKey(r);
     if (seen.has(k)) continue;
     if (!getCompareId(r.branch, r.db)) continue;
     if (!isHotIssue(effectiveIssue(r))) continue;
@@ -1692,11 +1695,12 @@ function compareElevatedOkRows() {
   return out;
 }
 function mergeRowPools(...pools) {
+  // Dedupe by suite (not row id): hot + unwrapped in_progress twin share suite, differ by id.
   const seen = new Set();
   const out = [];
   for (const pool of pools) {
     for (const r of (pool || [])) {
-      const k = rowKey(r);
+      const k = (r.suite && r.suite !== '—') ? suiteKey(r) : rowKey(r);
       if (seen.has(k)) continue;
       seen.add(k);
       out.push(r);

@@ -79,7 +79,7 @@ namespace NActors {
         };
         SetNonBlock(*Socket, false);
         EngineHandle = Proxy->Common->UringEngineV2->Register(Socket, SelfId(),
-            Proxy->Common->Settings.ChecksumInterconnectSessionV2, Params.PeerScopeId, onDisconnectCallback,
+            Proxy->Common->Settings.V2.ChecksumEvents, Params.PeerScopeId, onDisconnectCallback,
             SelfId().NodeId() < Proxy->PeerNodeId, ClockSkew, PingRTT);
         if (!EngineHandle) {
             LOG_ERROR_IC_SESSION("ICS99", "v2 io_uring engine failed to register the connection");
@@ -153,7 +153,7 @@ namespace NActors {
     }
 
     void TInterconnectSessionTCPv2::EnqueueOutgoing(TAutoPtr<IEventHandle> ev) {
-        if (Proxy->Common->Settings.EnablePreserializeInV2) {
+        if (Proxy->Common->Settings.V2.EnablePreserializeEvents) {
             ev->Preserialize();
         }
         Proxy->Common->UringEngineV2->Send(EngineHandle, std::unique_ptr<IEventHandle>(ev.Release()));

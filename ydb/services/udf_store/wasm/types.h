@@ -28,7 +28,20 @@ struct TWasmUdfDescriptor {
     TString CreateExport;
     TString CallExport;
     TString DestroyExport;
+    // For Plain: wasm export if different from Name (also set for plain object methods).
+    TString ExportName;
 };
+
+//! Wasm export invoked for a plain binding (ExportName / CallExport / Name).
+inline TStringBuf PlainWasmExport(const TWasmUdfDescriptor& descriptor) {
+    if (!descriptor.ExportName.empty()) {
+        return descriptor.ExportName;
+    }
+    if (!descriptor.CallExport.empty()) {
+        return descriptor.CallExport;
+    }
+    return descriptor.Name;
+}
 
 struct TWasmObjectMethodDescriptor {
     TString Name;

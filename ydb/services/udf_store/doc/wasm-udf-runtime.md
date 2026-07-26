@@ -123,6 +123,10 @@ Host path (`TWasmConfiguredCallable`):
 
 Имена методов становятся YQL-именами функций (`Prefix::Apply`) и должны быть уникальны в манифесте.
 
+При `create_export` хост также синтезирует **`New` → ui64`** (plain), если имя свободно. Methods с `yql_binding: "plain"` вызывают `export` напрямую (например `Snapshot(ctx) → string`). Optional `"export"` на `functions[]` — wasm-имя ≠ YQL `name`.
+
+Shared context между фильтрами/модулями: реестр в library (`ctx_lib`) + передача `uint64` handle; SELECT stats через `Ctx::Snapshot($ctx)` после форсированного прогона фильтров (см. [adr-shared-wasm-context.md](./adr-shared-wasm-context.md)).
+
 ---
 
 ## 5. AOT-компиляция

@@ -38,7 +38,7 @@ TWasmModuleStatePtr BuildModuleStateFromManifest(const TWasmLoadParams& params) 
                 state->Exports.insert(descriptor.DestroyExport);
             }
         } else {
-            state->Exports.insert(descriptor.Name);
+            state->Exports.insert(TString(PlainWasmExport(descriptor)));
         }
     }
     return state;

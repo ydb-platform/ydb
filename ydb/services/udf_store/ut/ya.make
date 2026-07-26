@@ -16,6 +16,7 @@ SRCS(
     compartment_manager_ut.cpp
     object_framework_ut.cpp
     objects_abi_ut.cpp
+    shared_ctx_ut.cpp
     throw_exception_ut.cpp
     with_helpers_ut.cpp
     ../wasm/manifest.cpp

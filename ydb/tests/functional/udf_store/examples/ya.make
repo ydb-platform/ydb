@@ -1,5 +1,8 @@
 RECURSE(
     add
+    ctx
+    ctx_lib
+    filters
     helpers
     md5
     prefix

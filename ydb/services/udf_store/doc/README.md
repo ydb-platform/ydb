@@ -7,6 +7,7 @@
 |---|---|
 | [wasm-udf-runtime.md](./wasm-udf-runtime.md) | Архитектура: storage → AOT → catalog → per-query compartment → Run |
 | [adr-wasm-udf-objects.md](./adr-wasm-udf-objects.md) | ADR: objects / TypeConfig / static object_framework / ui64 |
+| [adr-shared-wasm-context.md](./adr-shared-wasm-context.md) | ADR: shared ctx handle + Snapshot for SELECT |
 | [pitfalls-and-open-issues.md](./pitfalls-and-open-issues.md) | Известные ловушки, уже найденные баги, открытые вопросы |
 | [examples-and-tests.md](./examples-and-tests.md) | Примеры, функциональные/unit тесты, как гонять |
 

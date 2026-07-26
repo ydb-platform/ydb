@@ -13,6 +13,9 @@
 | `add/` | Минимальный UDF без libs | `[]` |
 | `throw/` | Host `ThrowException` | `[]` |
 | `prefix/` | Objects + TypeConfig (`Prefix::Apply`) | `["sdk"]` + PEERDIR `object_framework` |
+| `ctx_lib/` | Shared context registry (library) | — |
+| `ctx/` | `Ctx::New` / `Ctx::Snapshot(ctx)` | `["sdk", "ctx_lib"]` |
+| `filters/` | `Filters::ApplyA/B(ctx, x)` mutate shared ctx | `["sdk", "ctx_lib"]` |
 
 Сборка:
 
@@ -24,7 +27,10 @@ ya make --target-platform=clang18-emscripten-wasm64 --build profile \
   ydb/tests/functional/udf_store/examples/md5 \
   ydb/tests/functional/udf_store/examples/add \
   ydb/tests/functional/udf_store/examples/throw \
-  ydb/tests/functional/udf_store/examples/prefix
+  ydb/tests/functional/udf_store/examples/prefix \
+  ydb/tests/functional/udf_store/examples/ctx_lib \
+  ydb/tests/functional/udf_store/examples/ctx \
+  ydb/tests/functional/udf_store/examples/filters
 ```
 
 `webassembly_udf.inc` + `sdk/ld_plugin.py` вырезают sdk-архивы из линковки UDF (sdk подаётся отдельно через store).
@@ -42,6 +48,12 @@ Prefix (objects):
 1. upload library `sdk`
 2. upload UDF `prefix` + `manifest.json` (`objects[]`)
 3. `$fn = YQL::Udf(AsAtom("Prefix.Apply"), Void(), Void(), AsAtom("pre-")); SELECT $fn("x");` → `pre-x`
+
+Shared context + Snapshot:
+
+1. upload library `sdk`, then `ctx_lib`
+2. upload UDF `ctx` + `filters`
+3. See `examples/ctx/query.sql` — ListMap filters, then `Ctx::Snapshot($ctx)` (не в одной строке SELECT с фильтрами)
 
 ---
 
@@ -87,6 +99,7 @@ Upload helper: `ENV(YDB_UPLOAD_UDF_PATH=...)`, поддерживает `--kind 
 | `compartment_manager_ut` | catalog register/resolve, TLS guard |
 | `object_framework_ut` | static registry create/get/destroy, 2 objects |
 | `objects_abi_ut` | WAT create/call exports (ui64 handles) |
+| `shared_ctx_ut` | two filters mutate shared ctx; Snapshot → `a=2;b=1` |
 | `throw_exception_ut` | host ThrowException → reason `fail(); ex: … boom-from-wasm` |
 | `with_helpers_ut` | Empty+AddSdk(sdk_stub)+helpers+module, `scale(7)==21` |
 | `blob_chunks_ut` | chunk split/join |
@@ -95,7 +108,7 @@ Upload helper: `ENV(YDB_UPLOAD_UDF_PATH=...)`, поддерживает `--kind 
 ./ya make --build relwithdebinfo -tA ydb/services/udf_store/ut -F '*WithHelpers*'
 ./ya make --build relwithdebinfo -tA ydb/services/udf_store/ut -F '*ThrowException*'
 ./ya make --build relwithdebinfo -tA ydb/services/udf_store/ut -F '*ObjectFramework*'
-./ya make --build relwithdebinfo -tA ydb/services/udf_store/ut -F '*ObjectsAbi*'
+./ya make --build relwithdebinfo -tA ydb/services/udf_store/ut -F '*SharedCtx*'
 ```
 
 ---

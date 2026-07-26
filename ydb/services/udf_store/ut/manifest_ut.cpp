@@ -79,12 +79,49 @@ Y_UNIT_TEST(ParseObjectsTypeConfigCallable) {
 
     const auto parsed = ParseManifest(manifest);
     UNIT_ASSERT_VALUES_EQUAL(parsed.Objects.size(), 1u);
-    UNIT_ASSERT_VALUES_EQUAL(parsed.Functions.size(), 1u);
-    UNIT_ASSERT_VALUES_EQUAL(parsed.Functions[0].Name, "Apply");
-    UNIT_ASSERT(parsed.Functions[0].Binding == EWasmUdfBinding::TypeConfigCallable);
-    UNIT_ASSERT_VALUES_EQUAL(parsed.Functions[0].CreateExport, "prefix_create");
-    UNIT_ASSERT_VALUES_EQUAL(parsed.Functions[0].CallExport, "prefix_apply");
-    UNIT_ASSERT_VALUES_EQUAL(parsed.Functions[0].DestroyExport, "prefix_destroy");
+    // New (from create_export) + Apply
+    UNIT_ASSERT_VALUES_EQUAL(parsed.Functions.size(), 2u);
+    UNIT_ASSERT_VALUES_EQUAL(parsed.Functions[0].Name, "New");
+    UNIT_ASSERT_VALUES_EQUAL(parsed.Functions[0].ExportName, "prefix_create");
+    UNIT_ASSERT(parsed.Functions[0].Binding == EWasmUdfBinding::Plain);
+    UNIT_ASSERT(parsed.Functions[0].Result == EUdfValueType::Uint64);
+    UNIT_ASSERT_VALUES_EQUAL(parsed.Functions[1].Name, "Apply");
+    UNIT_ASSERT(parsed.Functions[1].Binding == EWasmUdfBinding::TypeConfigCallable);
+    UNIT_ASSERT_VALUES_EQUAL(parsed.Functions[1].CreateExport, "prefix_create");
+    UNIT_ASSERT_VALUES_EQUAL(parsed.Functions[1].CallExport, "prefix_apply");
+    UNIT_ASSERT_VALUES_EQUAL(parsed.Functions[1].DestroyExport, "prefix_destroy");
+}
+
+Y_UNIT_TEST(ParseObjectsPlainSnapshot) {
+    const TString manifest = R"({
+        "module_name": "Ctx",
+        "objects": [
+            {
+                "name": "Ctx",
+                "create_export": "ctx_create",
+                "destroy_export": "ctx_destroy",
+                "methods": [
+                    {
+                        "name": "Snapshot",
+                        "export": "ctx_snapshot",
+                        "yql_binding": "plain",
+                        "argument_types": [
+                            {"value": "uint64", "tag": "concrete_type"}
+                        ],
+                        "result_type": {"value": "string", "tag": "concrete_type"}
+                    }
+                ]
+            }
+        ]
+    })";
+
+    const auto parsed = ParseManifest(manifest);
+    UNIT_ASSERT_VALUES_EQUAL(parsed.Functions.size(), 2u);
+    UNIT_ASSERT_VALUES_EQUAL(parsed.Functions[0].Name, "New");
+    UNIT_ASSERT_VALUES_EQUAL(TString(PlainWasmExport(parsed.Functions[0])), "ctx_create");
+    UNIT_ASSERT_VALUES_EQUAL(parsed.Functions[1].Name, "Snapshot");
+    UNIT_ASSERT(parsed.Functions[1].Binding == EWasmUdfBinding::Plain);
+    UNIT_ASSERT_VALUES_EQUAL(TString(PlainWasmExport(parsed.Functions[1])), "ctx_snapshot");
 }
 
 Y_UNIT_TEST(RejectTypeConfigOnPlainFunctions) {

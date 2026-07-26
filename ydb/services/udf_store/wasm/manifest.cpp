@@ -98,6 +98,9 @@ TWasmUdfDescriptor ParseFunctionDescriptor(const NJson::TJsonValue& functionNode
     descriptor.Args = ParseArgumentTypes(functionNode);
     descriptor.Result = ParseTypedValue(functionNode["result_type"], "result_type");
     descriptor.Binding = ParseBinding(functionNode);
+    if (functionNode.Has("export")) {
+        descriptor.ExportName = functionNode["export"].GetString();
+    }
     if (descriptor.Binding == EWasmUdfBinding::TypeConfigCallable) {
         ythrow yexception()
             << "type_config_callable is only supported under objects[].methods, not functions[]";
@@ -165,6 +168,16 @@ void ExpandObjectsIntoFunctions(TWasmManifest& manifest) {
     }
 
     for (const auto& object : manifest.Objects) {
+        if (!object.CreateExport.empty() && knownNames.insert("New").second) {
+            TWasmUdfDescriptor createFn;
+            createFn.Name = "New";
+            createFn.ExportName = object.CreateExport;
+            createFn.Binding = EWasmUdfBinding::Plain;
+            createFn.Result = EUdfValueType::Uint64;
+            createFn.Args = {};
+            manifest.Functions.push_back(std::move(createFn));
+        }
+
         for (const auto& method : object.Methods) {
             if (!knownNames.insert(method.Name).second) {
                 ythrow yexception()
@@ -179,6 +192,9 @@ void ExpandObjectsIntoFunctions(TWasmManifest& manifest) {
             descriptor.CreateExport = object.CreateExport;
             descriptor.CallExport = method.Export;
             descriptor.DestroyExport = object.DestroyExport;
+            if (descriptor.Binding == EWasmUdfBinding::Plain) {
+                descriptor.ExportName = method.Export;
+            }
             if (descriptor.Binding == EWasmUdfBinding::TypeConfigCallable
                 && descriptor.CreateExport.empty())
             {

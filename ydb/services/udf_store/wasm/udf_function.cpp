@@ -209,7 +209,8 @@ TUnboxedValue TWasmUdfFunction::Run(
             "Query WASM compartment is not initialized");
 
         auto* compartment = queryHandle->Compartment.get();
-        const auto exportKey = MakeExportKey(State_->ModuleName, Descriptor_.Name);
+        const TString exportName(PlainWasmExport(Descriptor_));
+        const auto exportKey = MakeExportKey(State_->ModuleName, exportName);
         auto* exportIt = queryHandle->Exports.FindPtr(exportKey);
         Y_ENSURE(exportIt, "Missing WASM export binding for " << exportKey);
 
@@ -235,7 +236,7 @@ TUnboxedValue TWasmUdfFunction::Run(
         InvokeUdfExport(
             compartment,
             *exportIt,
-            Descriptor_.Name,
+            exportName,
             std::bit_cast<uintptr_t>(&context),
             resultOffset,
             argOffsets);

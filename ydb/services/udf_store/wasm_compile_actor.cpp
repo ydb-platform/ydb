@@ -199,7 +199,7 @@ void TWasmCompileActor::ValidateExports() {
             requireExport(descriptor.CallExport);
             requireExport(descriptor.DestroyExport);
         } else {
-            requireExport(descriptor.Name);
+            requireExport(TString(NWasm::PlainWasmExport(descriptor)));
         }
     }
 }

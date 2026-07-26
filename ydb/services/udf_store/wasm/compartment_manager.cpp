@@ -113,7 +113,7 @@ TQueryCompartmentHandlePtr TWasmCompartmentManager::Acquire(
                 BindExport(*handle, artifact->ModuleName, function.CallExport);
                 BindExport(*handle, artifact->ModuleName, function.DestroyExport);
             } else {
-                BindExport(*handle, artifact->ModuleName, function.Name);
+                BindExport(*handle, artifact->ModuleName, TString(PlainWasmExport(function)));
             }
         }
     }

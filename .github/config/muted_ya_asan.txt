@@ -470,6 +470,8 @@ ydb/core/kqp/ut/join KqpJoinOrder.Chain65Nodes
 ydb/core/kqp/ut/olap KqpOlapOptimizer.SpecialSliceToOneLayer
 ydb/core/kqp/ut/olap KqpOlapOptimizer.TilingPlusPlusTtlDeletion
 ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.IndexesActualization-QueryService
+ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.MinMaxIndexAppliedToDataAfterCompaction-QueryService-SchemeObjectDisabled
+ydb/core/kqp/ut/olap/types KqpOlapJson.CompactionVariants[10,true,1024,1000,100,0.5]
 ydb/core/kqp/ut/olap/types KqpOlapJson.SimpleExistsVariants[10,false,1024,1000,0,0.5]
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceYQLUpsertFail
 ydb/core/kqp/ut/query unittest.[*/*] chunk
@@ -779,6 +781,7 @@ ydb/tests/fq/yt/kqp_yt_file/part9 test.py.test[aggregate-group_by_expr-]
 ydb/tests/fq/yt/kqp_yt_file/part9 test.py.test[aggregate-group_by_rollup_aggr_expr-]
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
 ydb/tests/functional/blobstorage test_node_warden_cache.py.TestNodeWardenCacheFile.test_cache_file_lifecycle_and_restart
+ydb/tests/functional/config test_distconf_sentinel_node_status.py.TestKiKiMRDistConfSelfHealReplicasSpecificVolume.test_state_storage
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_capacity_metrics
 ydb/tests/functional/kqp/kqp_indexes ConsistentIndexRead.InteractiveTx
 ydb/tests/functional/kqp/kqp_indexes unittest.sole chunk

@@ -42,6 +42,10 @@ PTS = ROOT.parent
 if str(PTS) not in sys.path:
     sys.path.insert(0, str(PTS))
 
+from common.duty_issues import (  # noqa: E402
+    attach_tickets_to_report,
+    fetch_open_duty_issues,
+)
 from common.report_config import cfg_float, cfg_int, load_report_config  # noqa: E402
 
 _CFG = load_report_config(ROOT)
@@ -1694,6 +1698,16 @@ def main():
         n_fin = attach_finished_snapshots(data)
         if n_fin:
             print(f"finished snapshots on in_progress: {n_fin}")
+
+    issues, iss_warn = fetch_open_duty_issues(kind="olap")
+    if iss_warn:
+        print(f"known_issues: {iss_warn}", flush=True)
+    n_tick = attach_tickets_to_report(data, issues, kind="olap")
+    print(
+        f"known_issues: open={len(data.get('known_issues') or [])} "
+        f"suites_with_tickets={n_tick}",
+        flush=True,
+    )
 
     out = Path(args.output)
     render_html(data, out)

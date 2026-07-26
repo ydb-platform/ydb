@@ -351,6 +351,13 @@
   .pill.watch { background: #fffdf5; color: #9a6700; box-shadow: inset 0 0 0 1.5px #d4a72c; }
   .pill.slow { background: #e8590c; color: #fff; }
   .pill.fail { background: #ffebe9; color: var(--bad); }
+  a.pill.ticket {
+    display: inline-block; background: #ddf4ff; color: #0969da; text-decoration: none;
+    font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 999px;
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    vertical-align: middle; margin: 2px 2px 0 0;
+  }
+  a.pill.ticket:hover { filter: brightness(0.97); box-shadow: inset 0 0 0 1px #0969da66; }
   .pill.qok { background: #dafbe1; color: var(--ok); }
   .pill.nodata { background: var(--miss-bg); color: var(--miss); box-shadow: inset 0 0 0 1px #8250df66; }
   .pill.noruns { background: #f6f8fa; color: var(--muted); box-shadow: inset 0 0 0 1px var(--border); }
@@ -1093,6 +1100,19 @@ function fmtFail(r) {
   if (r == null) return '—';
   return (r * 100).toFixed(0) + '%';
 }
+function ticketPillsHtml(tickets, { maxTitle = 72 } = {}) {
+  if (!tickets || !tickets.length) return '';
+  return tickets.map(t => {
+    const title = String(t.title || '');
+    const short = title.length > maxTitle ? title.slice(0, maxTitle - 1) + '…' : title;
+    const qhint = (t.queries && t.queries.length)
+      ? ` · ${t.queries.slice(0, 6).join(', ')}` : '';
+    return `<a class="pill ticket" href="${esc(t.url || '#')}" target="_blank" rel="noopener" ` +
+      `title="${esc(title + qhint)}" onclick="event.stopPropagation()">` +
+      `#${esc(t.number)} · ${esc(short)}</a>`;
+  }).join(' ');
+}
+
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
@@ -1940,47 +1960,6 @@ function dbsForBranch(branch) {
   return [];
 }
 
-/** True if cell matches at least one active React channel (fail/hard/soft/nodata). */
-function cellMatchesReact(live) {
-  if (!live) return false;
-  const s = reactSignals();
-  const any = s.fail || s.hard || s.soft || s.nodata;
-  if (!any) return true; // all channels off → show full grid (infra-only mode)
-  const st = live.compare ? (live.delta_status || live.status) : (live.status || '');
-  if (s.fail && ((live.n_fail || 0) > 0
-      || st === 'broken' || st === 'failing' || st === 'fail' || st === 'both'
-      // Python often stores suite-level fail as status=regression (shared with slow).
-      || (st === 'regression' && (live.n_slow || 0) === 0))) {
-    return true;
-  }
-  if (s.hard && ((live.n_slow || 0) > 0
-      || st === 'regression' || st === 'slower' || st === 'slow' || st === 'both')) {
-    return true;
-  }
-  if (s.soft && ((live.n_soft || 0) > 0 || st === 'watch')) return true;
-  if (s.nodata && ((live.n_nodata || 0) > 0 || st === 'nodata' || st === 'noruns'
-      || live.paint === 'nodata' || live.paint === 'noruns')) return true;
-  // Coverage / wave issues stay visible regardless of react channels.
-  if (st === 'missing' || st === 'stale' || st === 'in_progress') return true;
-  return false;
-}
-
-/** Db row stays if any suite on it matches React (same rules as inbox) or a cell does. */
-function dbMatchesReact(branch, db) {
-  const s = reactSignals();
-  if (!(s.fail || s.hard || s.soft || s.nodata)) return true;
-  const pools = [candidateRows(), DATA.ok || []];
-  for (const pool of pools) {
-    for (const r of pool) {
-      if (branch && r.branch !== branch) continue;
-      if (r.db !== db) continue;
-      if (!itemInWindow(r)) continue;
-      if (rowMatchesReact(r)) return true;
-    }
-  }
-  return false;
-}
-
 function renderHeatmap() {
   const h = DATA.heatmap || { dbs: [], families: [], cells: {}, branches: [] };
   let br = selectedBranch();
@@ -1995,19 +1974,15 @@ function renderHeatmap() {
       html += `<div class="empty">Нет кластеров с прогонами ветки ${esc(branch)}</div>`;
       continue;
     }
-    // Precompute lives; hide DbAlias rows with no React-matching suite (inbox-aligned).
+    // Always show every DbAlias row. React only paints hot channels (fail/hard/soft/
+    // nodata); ok / no runs cells stay visible so the grid never collapses to empty.
     const rowLives = [];
     for (const db of dbs) {
-      if (!dbMatchesReact(branch, db)) continue;
       const lives = {};
       for (const fam of h.families) {
         lives[fam] = liveCell(branch, db, fam);
       }
       rowLives.push({ db, lives });
-    }
-    if (!rowLives.length) {
-      html += `<div class="empty">Нет строк под React-фильтр (fail/hard/soft/no data) · ${esc(branch)}</div>`;
-      continue;
     }
     html += `<table class="heat"><thead><tr><th>DbAlias</th>`;
     for (const fam of h.families) html += `<th>${esc(fam)}</th>`;
@@ -2071,15 +2046,9 @@ function renderHeatmap() {
         if (branch) document.getElementById('fBranch').value = branch;
         fDb.value = db;
         fFam.value = fam;
-        // Prefer fail/slow *counts* over status string: Python uses status=regression
-        // for both failing and slower, which used to force Issue=slower → empty inbox.
-        try {
-          const live = liveCell(branch, db, fam);
-          fIssue.value = issueFilterFromLive(live);
-        } catch (err) {
-          console.error('liveCell failed', err);
-          fIssue.value = '';
-        }
+        // Always all hot: cell = db×family slice. Auto-picking Issue=failing hides
+        // issue=both/slower suites (and React.hard-off zeros n_slow in liveCell).
+        fIssue.value = '';
       }
       renderAll();
       if (!same) {
@@ -2098,20 +2067,24 @@ function issueFilterFromLive(live) {
   const nNd = live.n_nodata || 0;
   // Query gaps → nodata filter. Empty cell (noruns) → leave issue empty (inbox: no runs).
   if (st === 'noruns' || (st === 'nodata' && !nNd && live.paint === 'noruns')) return '';
-  if (st === 'nodata' || (nNd > 0 && !nf && !ns && !nSoft
-      && !['missing', 'broken', 'failing', 'both', 'regression', 'slower'].includes(st))) {
-    return 'nodata';
+  // Cell aggregates many suites. Any multi-signal label (fail+nodata, fail+slow, …)
+  // must open Issue=all hot — a single Issue value hides the other suites.
+  const buckets = new Set();
+  if (nNd > 0 || st === 'nodata') buckets.add('nodata');
+  if (nf > 0 || st === 'broken' || st === 'failing' || st === 'fail'
+      || st === 'both' || (st === 'regression' && nf > 0)) {
+    buckets.add('failing');
   }
-  if (st === 'in_progress') return 'in_progress';
-  if (st === 'missing') return 'missing';
-  if (st === 'stale') return 'stale';
-  if (st === 'both' || (nf > 0 && ns > 0)) return 'both';
-  if (nf > 0 || st === 'broken' || st === 'failing' || st === 'fail') return 'failing';
-  if (ns > 0 || st === 'slower' || st === 'slow') return 'slower';
-  // Python: fail_status "regression" and dur "regression" share the same status word.
-  if (st === 'regression') return nf > 0 ? 'failing' : 'slower';
-  // soft / watch (incl. compare "ok → soft") — not generic ok
-  if (st === 'watch' || nSoft > 0) return 'watch';
+  if (ns > 0 || st === 'slower' || st === 'slow' || st === 'both'
+      || (st === 'regression' && !(nf > 0))) {
+    buckets.add('slower');
+  }
+  if (nSoft > 0 || st === 'watch') buckets.add('watch');
+  if (st === 'in_progress') buckets.add('in_progress');
+  if (st === 'missing') buckets.add('missing');
+  if (st === 'stale') buckets.add('stale');
+  if (buckets.size > 1) return '';
+  if (buckets.size === 1) return [...buckets][0];
   if (st === 'ok') return 'ok';
   return '';
 }
@@ -2236,6 +2209,25 @@ function filteredInbox() {
       if (!hasNodataSignal(r)) return false;
     } else if (issue === 'in_progress') {
       if (r.issue !== 'in_progress') return false;
+    } else if (issue === 'failing') {
+      // both/broken carry fails — exact issue==="failing" used to hide them after heatmap drill.
+      const ei = effectiveIssue(r);
+      if (!hasFailSignal(r) && r.issue !== 'failing' && ei !== 'failing'
+          && r.issue !== 'both' && ei !== 'both' && r.issue !== 'broken' && ei !== 'broken') {
+        return false;
+      }
+    } else if (issue === 'slower') {
+      const ei = effectiveIssue(r);
+      if (!hasHardSlowSignal(r) && r.issue !== 'slower' && ei !== 'slower'
+          && r.issue !== 'both' && ei !== 'both') {
+        return false;
+      }
+    } else if (issue === 'both') {
+      const ei = effectiveIssue(r);
+      if (r.issue !== 'both' && ei !== 'both'
+          && !(hasFailSignal(r) && hasHardSlowSignal(r))) {
+        return false;
+      }
     } else if (issue) {
       if (r.issue !== issue && effectiveIssue(r) !== issue) return false;
     } else if (!drill) {
@@ -3267,6 +3259,13 @@ function buildDutyContext(item, diveId) {
     suite_history: compactHist(data.history || item.history, 24),
     compare: { wave_id: getCompareId(item.branch, item.db) || null },
     hints: { react, wave_view: waveView() },
+    known_tickets: (item.tickets || []).map(t => ({
+      number: t.number,
+      title: t.title,
+      url: t.url,
+      fingerprint: t.fingerprint || null,
+      queries: t.queries || [],
+    })),
   };
 }
 
@@ -3348,9 +3347,11 @@ function diveHtml(r, id) {
     r.history = data.history || r.history;
   }
 
+  const ticketsHtml = ticketPillsHtml(r.tickets);
   return `<div class="dive">
     ${waveNote}
     ${summaryHtml}
+    ${ticketsHtml ? `<div style="margin:0 0 8px">${ticketsHtml}</div>` : ''}
     <div>
       <div class="muted" style="margin-bottom:6px"><b>Last runs</b> · клик = compare baseline (синхрон с heatmap) · latest = now и сбрасывает compare · % = fail rate${fin ? ' <span class="pill nodata">finished</span>' : ''}</div>
       <div class="runs">${runs}</div>
@@ -3443,6 +3444,7 @@ function renderInbox() {
     const focusHint = focusRun
       ? `focus ${focusRun.label || focusRun.ci_version || ''}`
       : '';
+    const ticketsRow = ticketPillsHtml(r.tickets);
     return `
       <tr class="row" data-idx="${idx}" data-id="${id}">
         <td>${statusCellHtml(primary, nowCounts, prevCounts, prevLabel)}</td>
@@ -3450,6 +3452,7 @@ function renderInbox() {
           <div class="muted">${esc(r.branch)}</div></td>
         <td>${esc(r.suite)} <span class="pill">${esc(r.family)}</span>
           <div class="muted mono">${esc(civ)}</div>
+          ${ticketsRow ? `<div style="margin-top:3px">${ticketsRow}</div>` : ''}
           ${(() => {
             const nd = view ? [] : listedNodata(r);
             const bits = [];

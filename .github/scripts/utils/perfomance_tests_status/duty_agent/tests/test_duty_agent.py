@@ -640,9 +640,80 @@ VERIFY Groups.end на разбираемом прогоне — тот же [#2
 VERIFY Groups.end
 #### Важно
 1. Корневая причина = VERIFY
+
+<!-- perf-duty-match
+kind: olap
+fingerprint: Groups.end
+keys:
+  - Groups.end
+  - read.cpp
+affected:
+  - suite: UploadTpch100
+    db: sas_big_column
+    queries: [Query03]
+-->
 """
             r = validate_analysis_md(md, out_dir=d)
             self.assertTrue(r["ok"], r["errors"])
+
+    def test_update_known_requires_match_block(self):
+        with tempfile.TemporaryDirectory() as td:
+            d = Path(td)
+            write_json(d / "detect_type.json", {"analysis_types": ["olap_fail"]})
+            write_json(d / "focus.json", {"fetched": True, "fatal": {"signals": ["verify"]}})
+            write_json(
+                d / "code_bisect.json",
+                {"introduced_in_window": False, "conclusion": "unchanged"},
+            )
+            write_json(d / "priors.json", {"prior_scans": []})
+            write_json(d / "dig_runs.json", {"kind": "olap", "summary": {"slice_count": 2}})
+            md = """# Perf duty — x
+
+## Заключение
+- **Итог:** VERIFY Groups.end abort
+- **Решение:** update_known
+- **Виновник:** unknown
+- **Уверенность:** высокая
+- **Давность:** на разбираемом прогоне
+- **Механика:** OnReadResult AFL_VERIFY → SIGABRT
+
+## Проблемы
+### P1 — Groups.end
+- Тип: olap_fail
+- Логи: kikimr__stderr VERIFY; kikimr__logs disconnect
+- Код ([`f88e100`](https://github.com/ydb-platform/ydb/commit/f88e100)): `ydb/core/x.cpp`
+- Гипотеза проверена: yes
+- Тикет: [#29944](https://github.com/ydb-platform/ydb/issues/29944)
+
+## Что дальше
+1. comment
+
+## Материалы для issue
+### Title
+```
+Comment only
+```
+### Body
+#### Фактура
+| Branch | `main` |
+| Version | `main.f88e100` |
+| CI version | `trunk.r1` |
+| Suite | `UploadTpch100` |
+| DB / cluster | `sas_big_column` |
+| Allure / Sandbox | https://proxy.sandbox.yandex-team.ru/12923171727/index.html |
+| Fingerprint | `Groups.end` |
+| Search keys | `Groups.end` |
+#### Кратко
+x
+#### Важно
+1. x
+"""
+            r = validate_analysis_md(md, out_dir=d)
+            self.assertFalse(r["ok"])
+            self.assertTrue(
+                any("perf-duty-match" in e for e in r["errors"]),
+                r["errors"],
+            )
 
     def test_open_ticket_requires_title_body(self):
         md = """# Perf duty — x

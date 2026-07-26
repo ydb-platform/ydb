@@ -69,7 +69,7 @@
 ## Материалы для issue
 
 При `open_ticket` / `update_known` блок **Title + Body** копируется в GitHub **целиком**.  
-Цель Body: человек понимает баг; **следующий duty-агент находит issue** по стабильным ключам (`gh search issues "fline|file.cpp:NN|symbol"`).
+Цель Body: человек понимает баг; **следующий duty-агент и отчёты OLAP/TPC-C** находят issue по машиночитаемому блоку `perf-duty-match` (keys + affected), не только по suite в Title. Label на issue **не нужен** — generate ищет open issues по тексту `perf-duty-match` в body.
 
 Title: коротко + уникальный fingerprint (`file.cpp:NN` / symbol / suite).
 
@@ -131,6 +131,25 @@ Coredump (если был): `https://coredumps.yandex-team.ru/v3/cores/<uuid>` +
 3. Не тот же баг, что [#N](url) (если применимо).
 4. Один тикет на корневую причину; следствия — в этом же issue.
 5. Нестабильность на том же Version (если есть зелёный соседний прогон).
+
+<!-- perf-duty-match
+kind: olap
+fingerprint: workers_pool.cpp:117
+keys:
+  - workers_pool.cpp:117
+  - AFL_VERIFY(found)
+  - PutTaskResults
+affected:
+  - suite: UploadTpch1000
+    db: sas_big_column
+    queries: [Query03, Query01, Query05]
+-->
+
+**Обязательный** скрытый блок `<!-- perf-duty-match … -->` (в конце Body):
+
+- `keys` — стабильные токены ошибки (**без** обязательного suite); по ним агент ищет дубликаты в других suite/query.
+- `affected` — проявления `suite` / `db` / `queries`; при `update_known` **дописывай** новые suite/query сюда (`dutyctl annotate-issue` или правка body), не плоди issue.
+- Отчёты OLAP/TPC-C ищут open issues с `perf-duty-match` в body, матчят inbox по `affected` и показывают `#N · title`.
 
 ---
 

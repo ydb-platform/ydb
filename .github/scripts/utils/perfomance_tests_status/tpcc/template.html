@@ -48,6 +48,13 @@
     display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 999px;
     background: #eaeef2; color: var(--muted); font-weight: 600;
   }
+  a.pill.ticket {
+    display: inline-block; background: #ddf4ff; color: #0969da; text-decoration: none;
+    font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 999px;
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    vertical-align: middle; margin: 2px 2px 0 0;
+  }
+  a.pill.ticket:hover { filter: brightness(0.97); box-shadow: inset 0 0 0 1px #0969da66; }
   .counters {
     display: flex; flex-wrap: nowrap; gap: 10px; margin: 0 0 16px;
     max-width: 100%; min-width: 0;
@@ -555,12 +562,17 @@ function resolveDisplayMetrics(item) {
   const n = (hist.labels || []).length;
   if (!n) return { ...alert, note: 'no history for compare' };
   const nowIdx = lastCompletedHistIndex(hist);
-  const cmpIdx = findHistIndexForWave(hist, wave);
+  const cmpIdx = findHistIndexForWave(hist, wave, { preferUsable: true });
   if (cmpIdx < 0 || nowIdx < 0) {
     return { ...alert, note: `compare ${wave.day || cmpId} not in history` };
   }
   const markers = hist.markers || [];
-  const lat_base = hist.lat90[cmpIdx] == null ? null : Number(hist.lat90[cmpIdx]);
+  // Never use lat-cap (32768) as compare baseline — looks like a fake −55% win.
+  let lat_base = hist.lat90[cmpIdx] == null ? null : Number(hist.lat90[cmpIdx]);
+  if (!histPointUsableForCompare(hist, cmpIdx)
+      || (lat_base != null && lat_base >= 30000)) {
+    lat_base = null;
+  }
   const tpmc_base = hist.tpmc[cmpIdx] == null ? null : Number(hist.tpmc[cmpIdx]);
   const lat_now_raw = hist.lat90[nowIdx] == null ? null : Number(hist.lat90[nowIdx]);
   const tpmc_now = hist.tpmc[nowIdx] == null ? null : Number(hist.tpmc[nowIdx]);
@@ -772,6 +784,19 @@ function metricCellHtml(base, now, pctVal, unit, dm, isWorse) {
     <div class="delta ${dCls}">${deltaTxt}</div>
   </div>`;
 }
+function ticketPillsHtml(tickets, { maxTitle = 72 } = {}) {
+  if (!tickets || !tickets.length) return '';
+  return tickets.map(t => {
+    const title = String(t.title || '');
+    const short = title.length > maxTitle ? title.slice(0, maxTitle - 1) + '…' : title;
+    const qhint = (t.queries && t.queries.length)
+      ? ` · ${t.queries.slice(0, 6).join(', ')}` : '';
+    return `<a class="pill ticket" href="${esc(t.url || '#')}" target="_blank" rel="noopener" ` +
+      `title="${esc(title + qhint)}" onclick="event.stopPropagation()">` +
+      `#${esc(t.number)} · ${esc(short)}</a>`;
+  }).join(' ');
+}
+
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
@@ -881,25 +906,68 @@ function badgeClass(r) {
   if (r.status === 'regression') return 'regression';
   return r.status || 'ok';
 }
-function findHistIndexForWave(hist, wave) {
+/** True when a hist point can be a lat/tpmC compare baseline (not cap / synthetic). */
+function histPointUsableForCompare(hist, i) {
+  if (!hist || i < 0) return false;
+  const m = (hist.markers || [])[i] || 'ok';
+  if (m === 'capped' || m === 'missing' || m === 'in_progress') return false;
+  const lat = hist.lat90 ? hist.lat90[i] : null;
+  if (lat != null && Number.isFinite(Number(lat)) && Number(lat) >= 30000) return false;
+  const tpmc = hist.tpmc ? hist.tpmc[i] : null;
+  return lat != null || tpmc != null;
+}
+/**
+ * Index of wave day (or sha) in hist.
+ * preferUsable: last non-capped point of the day — for compare baseline / chart marks.
+ * Without it: last point of the day (may be lat-cap) — for wave coverage / prev7 anchor.
+ */
+function findHistIndexForWave(hist, wave, opts) {
   if (!hist || !wave) return -1;
+  const preferUsable = !!(opts && opts.preferUsable);
   const day = wave.day || wave.id || wave.ci_version;
   const days = hist.days || [];
+  let lastAny = -1;
   for (let i = days.length - 1; i >= 0; i--) {
-    if (days[i] === day) return i;
+    if (days[i] !== day) continue;
+    if (lastAny < 0) lastAny = i;
+    if (!preferUsable || histPointUsableForCompare(hist, i)) return i;
   }
+  if (lastAny >= 0) return lastAny; // day exists but only capped/synthetic — caller nulls lat
   const sha = (wave.sha8 && wave.sha8 !== '—') ? String(wave.sha8).slice(0, 8) : '';
   if (sha) {
     const vers = hist.versions || [];
+    let lastSha = -1;
     for (let i = vers.length - 1; i >= 0; i--) {
-      if (vers[i] && String(vers[i]).slice(0, 8) === sha) return i;
+      if (!vers[i] || String(vers[i]).slice(0, 8) !== sha) continue;
+      if (lastSha < 0) lastSha = i;
+      if (!preferUsable || histPointUsableForCompare(hist, i)) return i;
     }
+    if (lastSha >= 0) return lastSha;
   }
   const labels = hist.labels || [];
+  let lastLab = -1;
   for (let i = labels.length - 1; i >= 0; i--) {
-    if (day && String(labels[i]).startsWith(day)) return i;
+    if (!(day && String(labels[i]).startsWith(day))) continue;
+    if (lastLab < 0) lastLab = i;
+    if (!preferUsable || histPointUsableForCompare(hist, i)) return i;
   }
+  if (lastLab >= 0) return lastLab;
   return -1;
+}
+/** All hist indices for a calendar day (run cards · cmp highlight). */
+function histIndicesForDay(hist, day) {
+  const out = [];
+  if (!hist || !day) return out;
+  const days = hist.days || [];
+  for (let i = 0; i < days.length; i++) {
+    if (days[i] === day) out.push(i);
+  }
+  if (out.length) return out;
+  const labels = hist.labels || [];
+  for (let i = 0; i < labels.length; i++) {
+    if (String(labels[i] || '').startsWith(day)) out.push(i);
+  }
+  return out;
 }
 /** Median prev-N baseline ending just before idx (same window as alert rules). */
 function baselineBeforeIndex(hist, idx) {
@@ -989,13 +1057,17 @@ function classifySlicePairwise(item, wave) {
     return { status: 'missing', kind: 'missing', n_lat: 0, n_tpmc: 0, n_broken: 0, lat_pct: null, tpmc_pct: null };
   }
   const hist = sliceHistory(item);
-  const cmpIdx = findHistIndexForWave(hist, wave);
+  const cmpIdx = findHistIndexForWave(hist, wave, { preferUsable: true });
   const nowIdx = lastCompletedHistIndex(hist);
   if (cmpIdx < 0 || nowIdx < 0) {
     return { status: 'nodata', kind: 'nodata', n_lat: 0, n_tpmc: 0, n_broken: 0, lat_pct: null, tpmc_pct: null };
   }
   const markers = hist.markers || [];
-  const lat_base = hist.lat90[cmpIdx] == null ? null : Number(hist.lat90[cmpIdx]);
+  let lat_base = hist.lat90[cmpIdx] == null ? null : Number(hist.lat90[cmpIdx]);
+  if (!histPointUsableForCompare(hist, cmpIdx)
+      || (lat_base != null && lat_base >= 30000)) {
+    lat_base = null;
+  }
   const tpmc_base = hist.tpmc[cmpIdx] == null ? null : Number(hist.tpmc[cmpIdx]);
   const lat_now_raw = hist.lat90[nowIdx] == null ? null : Number(hist.lat90[nowIdx]);
   const tpmc_now = hist.tpmc[nowIdx] == null ? null : Number(hist.tpmc[nowIdx]);
@@ -1861,7 +1933,7 @@ function mountHistory(item, id) {
   <div class="muted" style="margin-top:6px">
     Сырые прогоны · цвет vs median mavg(prev${win}) · тёмно-красный = lat cap ·
     синий = synthetic in_progress · оранжевый = synthetic missing ·
-    <b>тёмная рамка</b> = now · <b>оранжевая</b> = compare ·
+    <b>тёмная рамка</b> = now · <b>оранжевая</b> = все прогоны compare-дня ·
     <b>клик по столбцу → Allure report</b> (если есть; иначе DataLens)
     ${dashUrl ? ` · <a href="${esc(dashUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">DataLens</a>` : ''}
     ${(tpmcBase != null || latBase != null)
@@ -1871,10 +1943,29 @@ function mountHistory(item, id) {
 
   function paint() {
     destroyCharts(id + '_');
+    const cmpDay = cmpWave ? (cmpWave.day || cmpWave.id || cmpWave.ci_version || '') : '';
+    // All run-date bars of the selected day (= cmp cards); numeric baseline still preferUsable.
+    const runCmpDayIdxs = (cmpWave && cmpDay) ? histIndicesForDay(histRun, cmpDay) : [];
+    const runCmpVers = new Set(
+      runCmpDayIdxs.map(i => String((histRun.versions || [])[i] || '').slice(0, 8)).filter(Boolean)
+    );
     function markIndices(hist) {
       const nowIdx = (hist.labels || []).length ? (hist.labels.length - 1) : -1;
-      const cmpIdx = cmpWave ? findHistIndexForWave(hist, cmpWave) : -1;
-      return { now: nowIdx, compare: cmpIdx };
+      let compareIdxs = [];
+      if (cmpWave && cmpDay) {
+        if (hist === histRun) {
+          compareIdxs = runCmpDayIdxs.slice();
+        } else {
+          // Same SHAs as run-date cmp cards (not "every commit that calendar day").
+          const vers = hist.versions || [];
+          for (let i = 0; i < vers.length; i++) {
+            const v = String(vers[i] || '').slice(0, 8);
+            if (v && runCmpVers.has(v)) compareIdxs.push(i);
+          }
+          if (!compareIdxs.length) compareIdxs = histIndicesForDay(hist, cmpDay);
+        }
+      }
+      return { now: nowIdx, compareIdxs };
     }
     function bar(cid, hist, vals, label, colors, alertBase, unit) {
       const el = document.getElementById(cid);
@@ -1885,17 +1976,18 @@ function mountHistory(item, id) {
       }
       const markers = hist.markers || [];
       const marks = markIndices(hist);
+      const cmpSet = new Set(marks.compareIdxs || []);
       const nBars = (hist.labels || []).length;
       const valueFont = nBars > 24 ? '8px sans-serif' : (nBars > 14 ? '9px sans-serif' : '10px sans-serif');
       const unitSuffix = unit ? ` ${unit}` : '';
       const fmtU = (v) => (v == null || Number.isNaN(v)) ? '—' : `${fmt(v)}${unitSuffix}`;
-      // Keep status fill; now = dark border, compare = orange (OLAP parity).
+      // Keep status fill; now = dark border, all compare-day bars = orange.
       const bg = colors;
       const borderColors = (hist.labels || []).map((_, i) => (
-        i === marks.now ? '#1f2328' : (i === marks.compare ? '#9a6700' : 'transparent')
+        i === marks.now ? '#1f2328' : (cmpSet.has(i) ? '#9a6700' : 'transparent')
       ));
       const borderWidths = (hist.labels || []).map((_, i) => (
-        (i === marks.now || i === marks.compare) ? 3 : 0
+        (i === marks.now || cmpSet.has(i)) ? 3 : 0
       ));
       charts[cid] = new Chart(el, {
         type: 'bar',
@@ -1930,7 +2022,7 @@ function mountHistory(item, id) {
                   const bits = [];
                   const i = it.dataIndex;
                   if (i === marks.now) bits.push('now');
-                  if (i === marks.compare) bits.push('compare wave');
+                  if (cmpSet.has(i)) bits.push('compare day');
                   const m = markers[i];
                   if (m === 'in_progress') bits.push('SYNTHETIC · day-wave in progress');
                   else if (m === 'missing') bits.push('SYNTHETIC · missing in completed wave');
@@ -2208,6 +2300,13 @@ function buildDutyContext(item, diveId) {
     compare: { wave_id: getCompareId(item.branch, item.db) || null },
     links: { datalens: dash },
     hints: { react, wave_view: waveView() },
+    known_tickets: (item.tickets || []).map(t => ({
+      number: t.number,
+      title: t.title,
+      url: t.url,
+      fingerprint: t.fingerprint || null,
+      queries: t.queries || [],
+    })),
   };
 }
 
@@ -2287,9 +2386,11 @@ function diveHtml(r, id) {
     dashLink ? `Dashboard: ${dashLink}` : null,
   ].filter(Boolean).join(' · ');
 
+  const ticketsHtml = ticketPillsHtml(r.tickets);
   return `<div class="dive" data-dive-branch="${esc(r.branch || '')}" data-dive-db="${esc(r.db || '')}" data-dive-latest-day="${esc(latestDay)}">
     ${waveNote}
     ${reasonHtml}
+    ${ticketsHtml ? `<div style="margin:0 0 8px">${ticketsHtml}</div>` : ''}
     <div class="muted" style="margin-bottom:6px">${linksRow}</div>
     <div>
       <div class="muted" style="margin-bottom:6px"><b>Compare runs</b> (${nCmp} + now · ${nDays}d; клик = day-baseline; now очищает)${fin ? ' <span class="pill">finished</span>' : ''}</div>
@@ -2326,6 +2427,7 @@ function renderInbox() {
     const badgeCls = badgeClass(r);
     const latWorse = dm.lat_pct != null && dm.lat_pct >= 10;
     const tpmcWorse = dm.tpmc_pct != null && dm.tpmc_pct <= -10;
+    const ticketsRow = ticketPillsHtml(r.tickets);
     return `
       <tr class="row" data-idx="${idx}" data-id="${id}">
         <td><span class="badge ${esc(badgeCls)}">${statusLbl}</span>
@@ -2333,7 +2435,8 @@ function renderInbox() {
         <td><span class="cluster">${esc(r.db)}</span>
           <div class="muted">${esc(r.branch)}</div></td>
         <td>${esc(r.suite)} <span class="pill">${esc(r.family)}</span>
-          <div class="muted">${esc(r.wh_label || '')} WH · ${esc(r.wave || r.version || '')}</div></td>
+          <div class="muted">${esc(r.wh_label || '')} WH · ${esc(r.wave || r.version || '')}</div>
+          ${ticketsRow ? `<div style="margin-top:3px">${ticketsRow}</div>` : ''}</td>
         <td>${metricCellHtml(dm.lat_base, dm.lat_now, dm.lat_pct, 'ms', dm, latWorse)}</td>
         <td>${metricCellHtml(dm.tpmc_base, dm.tpmc_now, dm.tpmc_pct, '', dm, tpmcWorse)}</td>
         <td class="muted">${esc(r.last_ts || '—')}

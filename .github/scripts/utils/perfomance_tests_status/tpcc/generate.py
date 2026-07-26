@@ -28,6 +28,10 @@ PTS = ROOT.parent
 if str(PTS) not in sys.path:
     sys.path.insert(0, str(PTS))
 
+from common.duty_issues import (  # noqa: E402
+    attach_tickets_to_report,
+    fetch_open_duty_issues,
+)
 from common.report_config import cfg_float, cfg_int, cfg_str, load_report_config  # noqa: E402
 
 _CFG = load_report_config(ROOT)
@@ -1183,6 +1187,15 @@ def main():
         "reports_input": str(reports_path) if reports_path else None,
         "reports_matched": reports_matched,
     }
+    issues, iss_warn = fetch_open_duty_issues(kind="tpcc")
+    if iss_warn:
+        print(f"known_issues: {iss_warn}", flush=True)
+    n_tick = attach_tickets_to_report(data, issues, kind="tpcc")
+    print(
+        f"known_issues: open={len(data.get('known_issues') or [])} "
+        f"suites_with_tickets={n_tick}",
+        flush=True,
+    )
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     json_path = args.output.with_suffix(".json")

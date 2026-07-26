@@ -341,13 +341,18 @@ If any checkbox fails → dig again (loop), do not polish a hollow report.
 
 **Issue = copy-paste + findable:** при `open_ticket` / `update_known` обязательны `### Title` и `### Body`.  
 В Body **первым** идёт `#### Фактура`: branch, Version, CI version, suite, db, Allure URL, fingerprint/`fline`, Search keys.  
-Без стабильных Search keys следующий агент issue не найдёт. Шаблон: [`REPORT_TEMPLATE.md`](REPORT_TEMPLATE.md).
+В конце Body — обязательный скрытый блок `<!-- perf-duty-match -->` (`keys` + `affected` suite/db/queries).  
+Label **не нужен**: generate / `known-issues` ищут open issues по `perf-duty-match` в body. Без блока / keys issue не подцепят. Шаблон: [`REPORT_TEMPLATE.md`](REPORT_TEMPLATE.md).
 
 **Перед `open_ticket`:**  
-`gh search issues "<Search keys>" --repo ydb-platform/ydb`  
-(и по `fline=…` / `file.cpp:NN` / symbol). Если нашлось — `update_known`, не плодить дубликат.
+1. Ключи из fingerprint (`file.cpp:NN`, `AFL_VERIFY(…)`, symbol) — **не** suite alone.  
+2. `dutyctl known-issues --keys 'read.cpp:59' 'range.Offset'` (или `gh` + parse блоков).  
+3. Если hit → `update_known`: `dutyctl annotate-issue --issue N --suite … --db … --queries …` (расширяет `affected` + comment), не плодить дубликат.  
+4. Context `known_tickets` из Save dashboard — стартовые кандидаты.
 
-**Как следующий агент ищет:** те же ключи из Фактура / Title (`workers_pool.cpp:117`, `AFL_VERIFY(found)`, suite@db).
+**Как следующий агент ищет:** overlap `keys` в open issues с блоком `perf-duty-match`. Suite/query только в `affected` (растёт при новых проявлениях).
+
+**Backfill:** уже открытые [#47862](https://github.com/ydb-platform/ydb/issues/47862) / [#47870](https://github.com/ydb-platform/ydb/issues/47870) / [#47871](https://github.com/ydb-platform/ydb/issues/47871) — один раз `dutyctl annotate-issue` (блок в body), иначе generate их не покажет.
 
 ```markdown
 # Perf duty — {suite} @ {db} — {focus_label}
@@ -403,9 +408,21 @@ If any checkbox fails → dig again (loop), do not polish a hollow report.
 
 #### Важно
 1. …
+
+<!-- perf-duty-match
+kind: olap
+fingerprint: file.cpp:NN
+keys:
+  - file.cpp:NN
+  - AFL_VERIFY(…)
+affected:
+  - suite: {suite}
+    db: {db}
+    queries: [Query…]
+-->
 ```
 
-Also update `$OUT/problems.json`.
+Also update `$OUT/problems.json`. При `update_known` — расширь `affected` в GitHub issue (`annotate-issue`), не только analysis.md.
 
 ## Ход разбора (дерево под кат)
 

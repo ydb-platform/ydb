@@ -19,7 +19,10 @@ Frozen incident pack from OLAP or TPC-C Now HTML dive (`Save` / `Copy context`).
   "sticky_query": null,
   "suite_history": { },
   "links": { "datalens": null },
-  "hints": { }
+  "hints": { },
+  "known_tickets": [
+    { "number": 47871, "title": "…", "url": "https://github.com/…/issues/47871", "queries": ["Query12"] }
+  ]
 }
 ```
 
@@ -30,6 +33,7 @@ Frozen incident pack from OLAP or TPC-C Now HTML dive (`Save` / `Copy context`).
 | `suite_now` | fail_rate / ydb + `n_nodata` / `query_counts` | lat / tpmc |
 | `selection.focus_run.success` | SuccessCount for coverage gaps | optional |
 | `queries` / `sticky_query` | fail + slow + **nodata samples** + soft | empty / null |
+| `known_tickets` | open issues with `perf-duty-match` block, matched to suite@db via `affected` | same |
 
 See also `dutyctl detect-type` seeds: `olap_fail`, `olap_slow`, `olap_nodata`, `tpcc_tpmc`, `tpcc_lat`, `mixed`.  
 **Nodata must be packed** (`query_counts.nodata` and/or `queries[].kind=nodata`) — otherwise duty can miss coverage gaps when `issue=ok`.

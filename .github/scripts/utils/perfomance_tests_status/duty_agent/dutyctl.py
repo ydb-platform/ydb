@@ -8,6 +8,8 @@ CLI:
   dig-baseline   fetch plans/logs from good historical run (baseline_candidate)
   dig-prs        product PRs in mart pr_window (suite-stable streak→focus / jump)
   bisect         crash-path window + focus PR files
+  known-issues   search open perf-duty issues by match keys
+  annotate-issue expand affected / upsert perf-duty-match on a GitHub issue
   validate       lint analysis.md
   inject-trace   rebuild action tree + inject <details> into analysis.md
   trace-note     append a manual node to the action tree (hypothesis / dig)
@@ -1099,6 +1101,78 @@ def cmd_validate(args: argparse.Namespace) -> int:
     return 1
 
 
+def cmd_known_issues(args: argparse.Namespace) -> int:
+    """List open perf-duty issues whose keys overlap --keys."""
+    from tools.known_issues import search_open_by_keys
+
+    keys = list(args.keys or [])
+    if not keys:
+        print("known-issues: pass --keys TOKEN [TOKEN…]", file=sys.stderr)
+        return 2
+    hits = search_open_by_keys(keys, kind=args.kind)
+    if args.json:
+        print(json.dumps(hits, ensure_ascii=False, indent=2))
+    else:
+        if not hits:
+            print("no open matches")
+        for h in hits:
+            print(
+                f"#{h.get('number')} {h.get('title')}\n"
+                f"  {h.get('url')}\n"
+                f"  fingerprint={h.get('fingerprint')} keys={h.get('keys')}\n"
+                f"  affected={h.get('affected')}"
+            )
+    out = getattr(args, "out_dir", None)
+    if out:
+        out_p = Path(out)
+        out_p.mkdir(parents=True, exist_ok=True)
+        write_json(out_p / "known_issues.json", {"keys": keys, "hits": hits})
+        print(f"wrote {out_p / 'known_issues.json'}", file=sys.stderr)
+    return 0
+
+
+def cmd_annotate_issue(args: argparse.Namespace) -> int:
+    """Upsert perf-duty-match block and expand affected on a GitHub issue."""
+    from tools.known_issues import expand_affected_on_issue, render_match_block
+
+    queries = []
+    if args.queries:
+        for part in args.queries:
+            queries.extend([q.strip() for q in part.split(",") if q.strip()])
+    keys = list(args.keys or [])
+    comment = args.comment
+    if comment is None and args.suite:
+        qbit = ",".join(queries) if queries else "—"
+        comment = (
+            f"also seen on `{args.suite}`"
+            + (f".{queries[0]}" if len(queries) == 1 else f" ({qbit})" if queries else "")
+            + (f" @ `{args.db}`" if args.db else "")
+            + (f", label=`{args.label}`" if args.label else "")
+        )
+    try:
+        block = expand_affected_on_issue(
+            int(args.issue),
+            suite=args.suite,
+            db=args.db,
+            queries=queries,
+            kind=args.kind,
+            fingerprint=args.fingerprint,
+            keys=keys or None,
+            comment=comment if not args.no_comment else None,
+        )
+    except Exception as e:  # noqa: BLE001
+        print(f"annotate-issue: {e}", file=sys.stderr)
+        return 1
+    print(f"updated #{args.issue}")
+    print(render_match_block(
+        kind=str(block.get("kind") or args.kind or "olap"),
+        fingerprint=str(block.get("fingerprint") or ""),
+        keys=list(block.get("keys") or []),
+        affected=list(block.get("affected") or []),
+    ))
+    return 0
+
+
 def cmd_write_result(args: argparse.Namespace) -> int:
     out_dir = ensure_run_dir(args.out_dir, None)
     ctx = None
@@ -1198,18 +1272,11 @@ def main(argv: list[str] | None = None) -> int:
         "scan-fatal": "prepare",
         "metrics-delta": "prepare",
         "code-bisect": "bisect",
-        "issue-search": None,
+        "issue-search": "known-issues",
         "pr-files": "bisect",
     }
     if argv and argv[0] in aliases:
         target = aliases[argv[0]]
-        if target is None:
-            print(
-                f"{argv[0]} removed. Use: gh search issues … (see AGENTS.md).\n"
-                f"Core CLI: prepare | bisect | validate | write-result",
-                file=sys.stderr,
-            )
-            return 2
         print(
             f"note: `{argv[0]}` folded into `{target}` — running `{target}`",
             file=sys.stderr,
@@ -1220,7 +1287,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         description=(
             "Perf duty toolbox — prepare | dig-runs | dig-baseline | dig-prs | bisect | "
-            "inject-trace | validate | write-result"
+            "known-issues | annotate-issue | inject-trace | validate | write-result"
         ),
     )
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -1369,6 +1436,42 @@ def main(argv: list[str] | None = None) -> int:
     )
     add_out(p)
     p.set_defaults(func=cmd_trace_note)
+
+    p = sub.add_parser(
+        "known-issues",
+        help="search open perf-duty issues by match keys (before open_ticket)",
+    )
+    p.add_argument(
+        "--keys",
+        nargs="+",
+        required=True,
+        help="fingerprint tokens, e.g. read.cpp:59 'range.Offset <= i.Offset'",
+    )
+    p.add_argument("--kind", default=None, help="olap | tpcc filter")
+    p.add_argument("--json", action="store_true")
+    add_out(p)
+    p.set_defaults(func=cmd_known_issues)
+
+    p = sub.add_parser(
+        "annotate-issue",
+        help="upsert perf-duty-match + expand affected on GitHub issue (update_known)",
+    )
+    p.add_argument("--issue", type=int, required=True, help="issue number")
+    p.add_argument("--suite", required=True)
+    p.add_argument("--db", default=None)
+    p.add_argument(
+        "--queries",
+        nargs="*",
+        default=None,
+        help="Query03 Query04  or  Query03,Query04",
+    )
+    p.add_argument("--kind", default="olap", help="olap | tpcc")
+    p.add_argument("--fingerprint", default=None)
+    p.add_argument("--keys", nargs="*", default=None, help="required if issue has no block yet")
+    p.add_argument("--label", default=None, help="run label for comment")
+    p.add_argument("--comment", default=None, help="override issue comment body")
+    p.add_argument("--no-comment", action="store_true")
+    p.set_defaults(func=cmd_annotate_issue)
 
     p = sub.add_parser("write-result", help="merge problems.json → result.json")
     p.add_argument("--context", "-c", type=Path, default=None)

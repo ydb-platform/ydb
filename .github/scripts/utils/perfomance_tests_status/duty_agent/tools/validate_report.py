@@ -3,8 +3,15 @@
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 from typing import Any
+
+_PTS = Path(__file__).resolve().parents[2]
+if str(_PTS) not in sys.path:
+    sys.path.insert(0, str(_PTS))
+
+from common.duty_issues import parse_match_block  # noqa: E402
 
 from .run_dir import read_json
 from .trace import TRACE_MARK_END, TRACE_MARK_START
@@ -606,6 +613,34 @@ def validate_analysis_md(
                     warnings.append(
                         f"{resolution}: ### Body should include #### Важно (3–5 bullets)"
                     )
+                # Machine block for dashboard / cross-suite match
+                match = parse_match_block(body)
+                if not match:
+                    errors.append(
+                        f"{resolution}: ### Body must include <!-- perf-duty-match --> "
+                        "with keys: and affected: (suite/db/queries) — see REPORT_TEMPLATE.md"
+                    )
+                else:
+                    if not match.get("keys"):
+                        errors.append(
+                            f"{resolution}: perf-duty-match must list keys: "
+                            "(stable error tokens, not only suite name)"
+                        )
+                    if not match.get("affected"):
+                        errors.append(
+                            f"{resolution}: perf-duty-match must list affected: "
+                            "with at least one suite (+ db/queries)"
+                        )
+                    else:
+                        bad_aff = [
+                            a
+                            for a in match["affected"]
+                            if not a.get("suite")
+                        ]
+                        if bad_aff:
+                            errors.append(
+                                f"{resolution}: perf-duty-match affected entries need suite:"
+                            )
 
     # Bare #123 / unlinked issue|PR — require markdown links
     # (skip fenced code: Title paste often has "#29944" as plain GitHub title text)

@@ -81,9 +81,13 @@ void ReadMessagesAndAssertOrderedBySeqNo(TTopicClient& client,
         ui64 SeqNo;
         std::string Data;
     };
-    std::vector<TMessageInfo> messages;
-    messages.reserve(expectedCount);
-    NThreading::TPromise<void> donePromise = NThreading::NewPromise<void>();
+    // Handlers may still run after Close(); keep shared ownership so late callbacks are safe.
+    struct TState {
+        std::vector<TMessageInfo> Messages;
+        NThreading::TPromise<void> DonePromise = NThreading::NewPromise<void>();
+    };
+    auto state = std::make_shared<TState>();
+    state->Messages.reserve(expectedCount);
 
     TTopicReadSettings topicSettings(topicPath);
     topicSettings.ReadFromTimestamp(TInstant::Zero());
@@ -93,32 +97,35 @@ void ReadMessagesAndAssertOrderedBySeqNo(TTopicClient& client,
         .AutoPartitioningSupport(true)
         .AppendTopics(topicSettings);
 
-    readSettings.EventHandlers_.SimpleDataHandlers([&](TReadSessionEvent::TDataReceivedEvent& ev) {
+    readSettings.EventHandlers_.SimpleDataHandlers([state, expectedCount](TReadSessionEvent::TDataReceivedEvent& ev) {
         for (auto& msg : ev.GetMessages()) {
-            messages.push_back(TMessageInfo{
+            if (state->Messages.size() >= expectedCount) {
+                break;
+            }
+            state->Messages.push_back(TMessageInfo{
                 msg.GetPartitionSession()->GetPartitionId(),
                 TString(msg.GetProducerId()),
                 msg.GetSeqNo(),
                 TString(msg.GetData()),
             });
         }
-        if (messages.size() >= expectedCount) {
-            donePromise.SetValue();
+        if (state->Messages.size() >= expectedCount) {
+            state->DonePromise.TrySetValue();
         }
     }, true);
 
     auto readSession = client.CreateReadSession(readSettings);
-    UNIT_ASSERT_C(donePromise.GetFuture().Wait(timeout),
-        "Expected to read " << expectedCount << " messages within " << timeout << ", got " << messages.size());
+    UNIT_ASSERT_C(state->DonePromise.GetFuture().Wait(timeout),
+        "Expected to read " << expectedCount << " messages within " << timeout << ", got " << state->Messages.size());
     readSession->Close(TDuration::Seconds(5));
 
-    UNIT_ASSERT_VALUES_EQUAL_C(messages.size(), expectedCount,
-        "Read message count mismatch: got " << messages.size() << ", expected " << expectedCount);
+    UNIT_ASSERT_VALUES_EQUAL_C(state->Messages.size(), expectedCount,
+        "Read message count mismatch: got " << state->Messages.size() << ", expected " << expectedCount);
 
     // SeqNo ordering is guaranteed within one producer stream.
     // Multiple producers can write into the same partition with independent seqNo sequences.
     std::map<std::pair<ui64, std::string>, std::vector<ui64>> byPartitionAndProducer;
-    for (const auto& m : messages) {
+    for (const auto& m : state->Messages) {
         UNIT_ASSERT_VALUES_EQUAL(m.Data, expectedPayload);
         byPartitionAndProducer[{m.PartitionId, m.ProducerId}].push_back(m.SeqNo);
     }

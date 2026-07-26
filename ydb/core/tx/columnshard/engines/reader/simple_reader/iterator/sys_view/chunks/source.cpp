@@ -72,10 +72,13 @@ bool TSourceData::DoStartFetchingAccessor(
     return true;
 }
 
-NCommon::TPKSortPermutation TSourceData::DoBuildPKSortPermutation() const {
-    // column records are emitted before index records while their entity ids interleave
+const NCommon::TPKSortPermutation& TSourceData::GetChunksPKOrder() const {
+    if (ChunksPKOrder) {
+        return *ChunksPKOrder;
+    }
+    ChunksPKOrder.emplace();
     if (!HasAppData() || !AppDataVerified().ColumnShardConfig.GetEnableSysViewOrderByLimitPushdown()) {
-        return {};
+        return *ChunksPKOrder;
     }
     const auto& records = GetPortionAccessor().GetRecordsVerified();
     const auto& indexes = GetPortionAccessor().GetIndexesVerified();
@@ -87,16 +90,14 @@ NCommon::TPKSortPermutation TSourceData::DoBuildPKSortPermutation() const {
     for (auto&& index : indexes) {
         positions.emplace_back(index.GetAddress(), positions.size());
     }
-    if (std::is_sorted(positions.begin(), positions.end())) {
-        return {};
+    if (!std::is_sorted(positions.begin(), positions.end())) {
+        std::sort(positions.begin(), positions.end());
+        ChunksPKOrder->reserve(positions.size());
+        for (auto&& position : positions) {
+            ChunksPKOrder->emplace_back(position.second);
+        }
     }
-    std::sort(positions.begin(), positions.end());
-    NCommon::TPKSortPermutation result;
-    result.reserve(positions.size());
-    for (auto&& position : positions) {
-        result.emplace_back(position.second);
-    }
-    return result;
+    return *ChunksPKOrder;
 }
 
 std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnId, const ui32 recordsCount) const {
@@ -113,22 +114,24 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
     }
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexStats::Rows::ColumnId) {
         auto builder = NArrow::MakeBuilder(arrow::uint64());
-        for (auto&& i : GetPortionAccessor().GetRecordsVerified()) {
-            NArrow::Append<arrow::UInt64Type>(*builder, i.GetMeta().GetRecordsCount());
-        }
-        for (auto&& i : GetPortionAccessor().GetIndexesVerified()) {
-            NArrow::Append<arrow::UInt64Type>(*builder, i.GetRecordsCount());
-        }
+        ForEachChunkInPKOrder(
+            [&](const TColumnRecord& record) {
+                NArrow::Append<arrow::UInt64Type>(*builder, record.GetMeta().GetRecordsCount());
+            },
+            [&](const TIndexChunk& index) {
+                NArrow::Append<arrow::UInt64Type>(*builder, index.GetRecordsCount());
+            });
         return NArrow::FinishBuilder(std::move(builder));
     }
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexStats::RawBytes::ColumnId) {
         auto builder = NArrow::MakeBuilder(arrow::uint64());
-        for (auto&& i : GetPortionAccessor().GetRecordsVerified()) {
-            NArrow::Append<arrow::UInt64Type>(*builder, i.GetMeta().GetRawBytes());
-        }
-        for (auto&& i : GetPortionAccessor().GetIndexesVerified()) {
-            NArrow::Append<arrow::UInt64Type>(*builder, i.GetRawBytes());
-        }
+        ForEachChunkInPKOrder(
+            [&](const TColumnRecord& record) {
+                NArrow::Append<arrow::UInt64Type>(*builder, record.GetMeta().GetRawBytes());
+            },
+            [&](const TIndexChunk& index) {
+                NArrow::Append<arrow::UInt64Type>(*builder, index.GetRawBytes());
+            });
         return NArrow::FinishBuilder(std::move(builder));
     }
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexStats::PortionId::ColumnId) {
@@ -136,75 +139,81 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
     }
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexStats::ChunkIdx::ColumnId) {
         auto builder = NArrow::MakeBuilder(arrow::uint64());
-        for (auto&& i : GetPortionAccessor().GetRecordsVerified()) {
-            NArrow::Append<arrow::UInt64Type>(*builder, i.GetChunkIdx());
-        }
-        for (auto&& i : GetPortionAccessor().GetIndexesVerified()) {
-            NArrow::Append<arrow::UInt64Type>(*builder, i.GetChunkIdx());
-        }
+        ForEachChunkInPKOrder(
+            [&](const TColumnRecord& record) {
+                NArrow::Append<arrow::UInt64Type>(*builder, record.GetChunkIdx());
+            },
+            [&](const TIndexChunk& index) {
+                NArrow::Append<arrow::UInt64Type>(*builder, index.GetChunkIdx());
+            });
         return NArrow::FinishBuilder(std::move(builder));
     }
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexStats::EntityName::ColumnId) {
         auto builder = NArrow::MakeBuilder(arrow::utf8());
-        for (auto&& i : GetPortionAccessor().GetRecordsVerified()) {
-            const auto colName = Schema->GetIndexInfo().GetColumnFieldVerified(i.GetEntityId())->name();
-            NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(colName.data(), colName.size()));
-        }
-        for (auto&& i : GetPortionAccessor().GetIndexesVerified()) {
-            const auto idxName = Schema->GetIndexInfo().GetIndexVerified(i.GetEntityId())->GetIndexName();
-            NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(idxName.data(), idxName.size()));
-        }
+        ForEachChunkInPKOrder(
+            [&](const TColumnRecord& record) {
+                const auto colName = Schema->GetIndexInfo().GetColumnFieldVerified(record.GetEntityId())->name();
+                NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(colName.data(), colName.size()));
+            },
+            [&](const TIndexChunk& index) {
+                const auto idxName = Schema->GetIndexInfo().GetIndexVerified(index.GetEntityId())->GetIndexName();
+                NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(idxName.data(), idxName.size()));
+            });
         return NArrow::FinishBuilder(std::move(builder));
     }
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexStats::InternalEntityId::ColumnId) {
         auto builder = NArrow::MakeBuilder(arrow::uint32());
-        for (auto&& i : GetPortionAccessor().GetRecordsVerified()) {
-            NArrow::Append<arrow::UInt32Type>(*builder, i.GetEntityId());
-        }
-        for (auto&& i : GetPortionAccessor().GetIndexesVerified()) {
-            NArrow::Append<arrow::UInt32Type>(*builder, i.GetEntityId());
-        }
+        ForEachChunkInPKOrder(
+            [&](const TColumnRecord& record) {
+                NArrow::Append<arrow::UInt32Type>(*builder, record.GetEntityId());
+            },
+            [&](const TIndexChunk& index) {
+                NArrow::Append<arrow::UInt32Type>(*builder, index.GetEntityId());
+            });
         return NArrow::FinishBuilder(std::move(builder));
     }
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexStats::BlobId::ColumnId) {
         auto builder = NArrow::MakeBuilder(arrow::utf8());
-        for (auto&& i : GetPortionAccessor().GetRecordsVerified()) {
-            const TString blobIdStr = GetPortionAccessor().GetBlobId(i.BlobRange.GetBlobIdxVerified()).ToStringNew();
-            NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(blobIdStr.data(), blobIdStr.size()));
-        }
-        for (auto&& i : GetPortionAccessor().GetIndexesVerified()) {
-            if (auto range = i.GetBlobRangeOptional()) {
-                const TString blobIdStr = GetPortionAccessor().GetBlobId(range->GetBlobIdxVerified()).ToStringNew();
+        ForEachChunkInPKOrder(
+            [&](const TColumnRecord& record) {
+                const TString blobIdStr = GetPortionAccessor().GetBlobId(record.BlobRange.GetBlobIdxVerified()).ToStringNew();
                 NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(blobIdStr.data(), blobIdStr.size()));
-            } else {
-                const TString blobIdStr = "__INPLACE";
-                NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(blobIdStr.data(), blobIdStr.size()));
-            }
-        }
+            },
+            [&](const TIndexChunk& index) {
+                if (auto range = index.GetBlobRangeOptional()) {
+                    const TString blobIdStr = GetPortionAccessor().GetBlobId(range->GetBlobIdxVerified()).ToStringNew();
+                    NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(blobIdStr.data(), blobIdStr.size()));
+                } else {
+                    const TString blobIdStr = "__INPLACE";
+                    NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(blobIdStr.data(), blobIdStr.size()));
+                }
+            });
         return NArrow::FinishBuilder(std::move(builder));
     }
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexStats::BlobRangeOffset::ColumnId) {
         auto builder = NArrow::MakeBuilder(arrow::uint64());
-        for (auto&& i : GetPortionAccessor().GetRecordsVerified()) {
-            NArrow::Append<arrow::UInt64Type>(*builder, i.GetBlobRange().GetOffset());
-        }
-        for (auto&& i : GetPortionAccessor().GetIndexesVerified()) {
-            if (auto range = i.GetBlobRangeOptional()) {
-                NArrow::Append<arrow::UInt64Type>(*builder, range->GetOffset());
-            } else {
-                NArrow::Append<arrow::UInt64Type>(*builder, 0);
-            }
-        }
+        ForEachChunkInPKOrder(
+            [&](const TColumnRecord& record) {
+                NArrow::Append<arrow::UInt64Type>(*builder, record.GetBlobRange().GetOffset());
+            },
+            [&](const TIndexChunk& index) {
+                if (auto range = index.GetBlobRangeOptional()) {
+                    NArrow::Append<arrow::UInt64Type>(*builder, range->GetOffset());
+                } else {
+                    NArrow::Append<arrow::UInt64Type>(*builder, 0);
+                }
+            });
         return NArrow::FinishBuilder(std::move(builder));
     }
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexStats::BlobRangeSize::ColumnId) {
         auto builder = NArrow::MakeBuilder(arrow::uint64());
-        for (auto&& i : GetPortionAccessor().GetRecordsVerified()) {
-            NArrow::Append<arrow::UInt64Type>(*builder, i.GetBlobRange().GetSize());
-        }
-        for (auto&& i : GetPortionAccessor().GetIndexesVerified()) {
-            NArrow::Append<arrow::UInt64Type>(*builder, i.GetDataSize());
-        }
+        ForEachChunkInPKOrder(
+            [&](const TColumnRecord& record) {
+                NArrow::Append<arrow::UInt64Type>(*builder, record.GetBlobRange().GetSize());
+            },
+            [&](const TIndexChunk& index) {
+                NArrow::Append<arrow::UInt64Type>(*builder, index.GetDataSize());
+            });
         return NArrow::FinishBuilder(std::move(builder));
     }
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexStats::Activity::ColumnId) {
@@ -216,32 +225,34 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
     }
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexStats::TierName::ColumnId) {
         auto builder = NArrow::MakeBuilder(arrow::utf8());
-        for (auto&& i : GetPortionAccessor().GetRecordsVerified()) {
-            const TString tierName = Portion->GetEntityStorageId(i.GetEntityId(), Schema->GetIndexInfo());
-            NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(tierName.data(), tierName.size()));
-        }
-        for (auto&& i : GetPortionAccessor().GetIndexesVerified()) {
-            const TString tierName = Portion->GetEntityStorageId(i.GetEntityId(), Schema->GetIndexInfo());
-            NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(tierName.data(), tierName.size()));
-        }
+        ForEachChunkInPKOrder(
+            [&](const TColumnRecord& record) {
+                const TString tierName = Portion->GetEntityStorageId(record.GetEntityId(), Schema->GetIndexInfo());
+                NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(tierName.data(), tierName.size()));
+            },
+            [&](const TIndexChunk& index) {
+                const TString tierName = Portion->GetEntityStorageId(index.GetEntityId(), Schema->GetIndexInfo());
+                NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(tierName.data(), tierName.size()));
+            });
         return NArrow::FinishBuilder(std::move(builder));
     }
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexStats::EntityType::ColumnId) {
         auto builder = NArrow::MakeBuilder(arrow::utf8());
-        for (auto&& i : GetPortionAccessor().GetRecordsVerified()) {
-            Y_UNUSED(i);
-            const TString type = "COL";
-            NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(type.data(), type.size()));
-        }
-        for (auto&& i : GetPortionAccessor().GetIndexesVerified()) {
-            Y_UNUSED(i);
-            const TString type = "IDX";
-            NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(type.data(), type.size()));
-        }
+        ForEachChunkInPKOrder(
+            [&](const TColumnRecord& record) {
+                Y_UNUSED(record);
+                const TString type = "COL";
+                NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(type.data(), type.size()));
+            },
+            [&](const TIndexChunk& index) {
+                Y_UNUSED(index);
+                const TString type = "IDX";
+                NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(type.data(), type.size()));
+            });
         return NArrow::FinishBuilder(std::move(builder));
     }
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexStats::ChunkDetails::ColumnId) {
-        auto builder = NArrow::MakeBuilder(arrow::utf8());
+        std::vector<TString> details;
         const auto& records = GetPortionAccessor().GetRecordsVerified();
         for (auto it = records.begin(); it != records.end();) {
             auto accessor = OriginalData ? OriginalData->ExtractAccessorOptional(it->GetEntityId()) : nullptr;
@@ -252,16 +263,16 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
                     if (it->GetMeta().HasAdditionalAccessorData()) {
                         data = it->GetMeta().GetAdditionalAccessorData()->DebugJson().GetStringRobust();
                     }
-                    NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(data.data(), data.size()));
+                    details.emplace_back(data);
                     ++it;
                 }
             } else {
-                const auto addChunkInfo = [&builder](const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& chunk) {
+                const auto addChunkInfo = [&details](const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& chunk) {
                     AFL_VERIFY(chunk->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsPartialArray);
                     const NArrow::NAccessor::TSubColumnsPartialArray* arr =
                         static_cast<const NArrow::NAccessor::TSubColumnsPartialArray*>(chunk.get());
                     const TString data = arr->GetHeader().DebugJson().GetStringRobust();
-                    NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(data.data(), data.size()));
+                    details.emplace_back(data);
                 };
 
                 AFL_VERIFY(it->GetChunkIdx() == 0);
@@ -317,7 +328,14 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
                     }
                 }
             }
-            NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(data.data(), data.size()));
+            details.emplace_back(data);
+        }
+        auto builder = NArrow::MakeBuilder(arrow::utf8());
+        const auto& order = GetChunksPKOrder();
+        AFL_VERIFY(order.empty() || order.size() == details.size())("order", order.size())("details", details.size());
+        for (ui32 idx = 0; idx < details.size(); ++idx) {
+            const TString& value = details[order.empty() ? idx : order[idx]];
+            NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(value.data(), value.size()));
         }
         return NArrow::FinishBuilder(std::move(builder));
     }

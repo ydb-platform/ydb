@@ -209,7 +209,10 @@ def cmd_prepare(args: argparse.Namespace) -> int:
         # 4) metrics when relevant
         want_metrics = bool(
             args.metrics
-            or any(t in ("olap_slow", "tpcc_tpmc", "tpcc_lat", "mixed") for t in types)
+            or any(
+                t in ("olap_slow", "olap_nodata", "tpcc_tpmc", "tpcc_lat", "mixed")
+                for t in types
+            )
             or (ctx.get("report") or {}).get("kind") == "tpcc"
         )
         if want_metrics:

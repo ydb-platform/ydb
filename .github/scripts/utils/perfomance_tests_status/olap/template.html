@@ -1131,13 +1131,22 @@ function metricCellHtml(base, now, pctVal, unit, baseHint, kind) {
     <div class="delta ${dCls}">${absStr === '—' ? 'Δ —' : 'Δ ' + absStr}</div>
   </div>`;
 }
-/** One badge = worst real signal. Color always matches label / queries line. */
+/** Append soft/nodata to a primary badge so coverage gaps are not hidden behind fail/slow. */
+function badgeExtraCounts(nSoft, nNodata) {
+  const s = reactSignals();
+  const bits = [];
+  if (s.soft && nSoft) bits.push(`soft ${nSoft}`);
+  if (s.nodata && nNodata) bits.push(`no data ${nNodata}`);
+  return bits.length ? ` · ${bits.join(' · ')}` : '';
+}
+/** One badge = worst real signal + visible soft/nodata extras. Color = primary signal. */
 function inboxPrimaryStatus(status, issue, nowCounts, failRateNow) {
   const R = alertRules();
   const nFail = nowCounts.fail || 0;
   const nSlow = nowCounts.slow || 0;
   const nSoft = nowCounts.soft || 0;
   const nNodata = nowCounts.nodata || 0;
+  const extra = badgeExtraCounts(nSoft, nNodata);
   const fr = failRateNow == null ? null : Number(failRateNow);
   if (issue === 'missing') return { cls: 'missing', lbl: 'missing' };
   if (issue === 'in_progress') return { cls: 'in_progress', lbl: 'in progress' };
@@ -1146,19 +1155,24 @@ function inboxPrimaryStatus(status, issue, nowCounts, failRateNow) {
     if (nFail) bits.push(`fail ${nFail}`);
     if (nSlow) bits.push(`slow ${nSlow}`);
     if (fr != null && fr >= R.failHot) bits.push(fmtFail(fr));
-    return { cls: 'broken', lbl: bits.length ? `broken · ${bits.join(' · ')}` : 'broken' };
+    return { cls: 'broken', lbl: (bits.length ? `broken · ${bits.join(' · ')}` : 'broken') + extra };
   }
   if (nFail || issue === 'failing' || (fr != null && fr >= R.failHot)) {
-    if (nFail) return { cls: 'failing', lbl: `fail ${nFail}` };
-    return { cls: 'failing', lbl: fr != null ? `fail rate ${fmtFail(fr)}` : 'failing' };
+    const core = nFail
+      ? `fail ${nFail}`
+      : (fr != null ? `fail rate ${fmtFail(fr)}` : 'failing');
+    return { cls: 'failing', lbl: core + extra };
   }
   if (nSlow || status === 'regression' || issue === 'slower' || issue === 'both') {
-    return { cls: 'slower', lbl: nSlow ? `slow ${nSlow}` : 'slow' };
+    return { cls: 'slower', lbl: (nSlow ? `slow ${nSlow}` : 'slow') + extra };
   }
   const sReact = reactSignals();
   // Soft only when React.soft is on — else nodata counts win the badge color.
   if (sReact.soft && (status === 'watch' || issue === 'watch' || nSoft)) {
-    return { cls: 'watch', lbl: nSoft ? `soft ${nSoft}` : 'soft' };
+    const softLbl = nSoft ? `soft ${nSoft}` : 'soft';
+    // nodata still visible when soft is primary
+    const ndOnly = (sReact.nodata && nNodata) ? ` · no data ${nNodata}` : '';
+    return { cls: 'watch', lbl: softLbl + ndOnly };
   }
   // Server keeps many nodata suites as status/issue=ok — badge must follow counts.
   if (status === 'nodata' || issue === 'nodata' || nNodata) {
@@ -3130,7 +3144,8 @@ function dutySafeName(s) {
   return String(s || 'suite').replace(/[^\w.\-]+/g, '_').slice(0, 80);
 }
 
-/** Frozen incident pack for duty_agent (schema perf-duty-context/v1). */
+/** Frozen incident pack for duty_agent (schema perf-duty-context/v1).
+ *  Must include nodata/soft counts — duty_agent seeds olap_nodata from these. */
 function buildDutyContext(item, diveId) {
   const view = suiteViewAtFocus(item, diveId);
   const data = diveData(item);
@@ -3140,8 +3155,10 @@ function buildDutyContext(item, diveId) {
   const react = [...document.querySelectorAll('.react-btn[aria-pressed="true"]')]
     .map(b => b.dataset.react).filter(Boolean);
   const queries = [];
+  const seenQ = new Set();
   const pushQ = (q, kind) => {
-    if (!q || !q.test) return;
+    if (!q || !q.test || seenQ.has(q.test)) return;
+    seenQ.add(q.test);
     queries.push({
       test: q.test,
       kind,
@@ -3151,16 +3168,43 @@ function buildDutyContext(item, diveId) {
       fail_rate_late: q.fail_rate_late != null ? q.fail_rate_late : null,
     });
   };
+  const catalog = data.queries || item.queries || [];
+  const query_counts = { fail: 0, slow: 0, soft: 0, nodata: 0, ok: 0, total: 0 };
   if (view) {
+    query_counts.fail = (view.fails || []).length;
+    query_counts.slow = (view.slows || []).length;
+    query_counts.soft = (view.softs || []).length;
+    query_counts.nodata = (view.nodatas || []).length;
+    query_counts.total = catalog.length || (
+      query_counts.fail + query_counts.slow + query_counts.soft + query_counts.nodata
+    );
+    query_counts.ok = Math.max(
+      0,
+      query_counts.total - query_counts.fail - query_counts.slow - query_counts.soft - query_counts.nodata
+    );
     (view.fails || []).forEach(q => pushQ(q, 'fail'));
     (view.slows || []).forEach(q => pushQ(q, 'slow'));
+    (view.softs || []).slice(0, 12).forEach(q => pushQ(q, 'watch'));
+    (view.nodatas || []).slice(0, 24).forEach(q => pushQ(q, 'nodata'));
   } else {
+    for (const q of catalog) {
+      query_counts.total++;
+      const k = q.kind || 'ok';
+      if (k === 'fail' || k === 'both') query_counts.fail++;
+      if (k === 'slow' || k === 'both') query_counts.slow++;
+      if (k === 'watch') query_counts.soft++;
+      if (k === 'nodata' || k === 'missing' || k === 'in_progress') query_counts.nodata++;
+      if (k === 'ok') query_counts.ok++;
+    }
     (data.bad_queries || item.bad_queries || []).forEach(q => pushQ(q, 'fail'));
     (data.slow_queries || item.slow_queries || []).forEach(q => pushQ(q, 'slow'));
+    catalog.filter(q => q.kind === 'watch').slice(0, 12).forEach(q => pushQ(q, 'watch'));
+    catalog.filter(q => q.kind === 'nodata' || q.kind === 'missing')
+      .slice(0, 24).forEach(q => pushQ(q, 'nodata'));
   }
   let sticky_detail = null;
   if (sticky) {
-    const q = (data.queries || []).find(x => x.test === sticky);
+    const q = catalog.find(x => x.test === sticky);
     if (q) {
       sticky_detail = {
         test: q.test,
@@ -3192,6 +3236,8 @@ function buildDutyContext(item, diveId) {
         ts: focusRun.ts || null,
         fail_rate: focusRun.fail_rate != null ? focusRun.fail_rate : null,
         ydb: focusRun.ydb != null ? focusRun.ydb : null,
+        success: focusRun.success != null ? focusRun.success : null,
+        fail: focusRun.fail != null ? focusRun.fail : null,
         report: reportUrl,
       } : null,
     },
@@ -3203,11 +3249,19 @@ function buildDutyContext(item, diveId) {
       ydb_now: view ? view.ydb_now : item.ydb_now,
       ydb_base: view ? view.ydb_base : item.ydb_base,
       ydb_pct: view ? view.ydb_pct : item.ydb_pct,
+      n_fail: query_counts.fail,
+      n_slow: query_counts.slow,
+      n_soft: query_counts.soft,
+      n_nodata: query_counts.nodata,
+      n_ok: query_counts.ok,
+      n_queries: query_counts.total,
+      query_counts,
       reasons: item.reasons || [],
       ci_version: (view && view.ci_version) || item.ci_version || item.wave || null,
       last_ts: (view && view.last_ts) || item.last_ts || null,
     },
-    queries: queries.slice(0, 40),
+    // fail/slow first, then soft/nodata samples (cap keeps pack small)
+    queries: queries.slice(0, 60),
     sticky_query: sticky,
     sticky_detail,
     suite_history: compactHist(data.history || item.history, 24),
@@ -3279,7 +3333,9 @@ function diveHtml(r, id) {
                ? `${(view.ydb_now - view.ydb_base) > 0 ? '+' : ''}${fmt(view.ydb_now - view.ydb_base)} (${pct(view.ydb_pct)})`
                : '—'
            }</b></div>
-         <div class="muted" style="font-size:11px">queries now: fail ${view.fails.length} · slow ${view.slows.length} · ${report}</div>
+         <div class="muted" style="font-size:11px">queries now: ${esc(fmtFS(
+           view.fails.length, view.slows.length, (view.softs || []).length, (view.nodatas || []).length
+         ) || 'ok')} · ${report}</div>
        </div>`
     : `<div class="muted">${esc((r.reasons || []).join(' · '))} · ${report}</div>`;
 

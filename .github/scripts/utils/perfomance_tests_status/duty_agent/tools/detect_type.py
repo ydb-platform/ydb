@@ -8,6 +8,98 @@ from typing import Any
 from .context import kind_of
 
 
+def _as_int(v: Any) -> int | None:
+    if v is None or v == "":
+        return None
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        try:
+            return int(float(v))
+        except (TypeError, ValueError):
+            return None
+
+
+def _query_counts(ctx: dict[str, Any]) -> dict[str, int]:
+    """Fail/slow/soft/nodata/ok/total from suite_now or queries list."""
+    suite_now = ctx.get("suite_now") or {}
+    qc = suite_now.get("query_counts")
+    if isinstance(qc, dict) and any(qc.get(k) is not None for k in ("nodata", "fail", "total")):
+        return {
+            "fail": _as_int(qc.get("fail")) or 0,
+            "slow": _as_int(qc.get("slow")) or 0,
+            "soft": _as_int(qc.get("soft")) or 0,
+            "nodata": _as_int(qc.get("nodata")) or 0,
+            "ok": _as_int(qc.get("ok")) or 0,
+            "total": _as_int(qc.get("total")) or 0,
+        }
+    out = {"fail": 0, "slow": 0, "soft": 0, "nodata": 0, "ok": 0, "total": 0}
+    for key, dest in (
+        ("n_fail", "fail"),
+        ("n_slow", "slow"),
+        ("n_soft", "soft"),
+        ("n_nodata", "nodata"),
+        ("n_ok", "ok"),
+        ("n_queries", "total"),
+    ):
+        n = _as_int(suite_now.get(key))
+        if n is not None:
+            out[dest] = n
+    queries = list(ctx.get("queries") or [])
+    if queries and not out["total"]:
+        for q in queries:
+            if not isinstance(q, dict):
+                continue
+            out["total"] += 1
+            k = str(q.get("kind") or "ok").lower()
+            if k in ("fail", "both"):
+                out["fail"] += 1
+            if k in ("slow", "both"):
+                out["slow"] += 1
+            if k in ("watch", "soft"):
+                out["soft"] += 1
+            if k in ("nodata", "missing", "in_progress"):
+                out["nodata"] += 1
+            if k == "ok":
+                out["ok"] += 1
+    elif queries and out["nodata"] == 0:
+        # Counts present but nodata may only be in the sample list
+        for q in queries:
+            if isinstance(q, dict) and str(q.get("kind") or "").lower() in (
+                "nodata",
+                "missing",
+                "in_progress",
+            ):
+                out["nodata"] += 1
+    return out
+
+
+def _legacy_nodata_gap(ctx: dict[str, Any], counts: dict[str, int]) -> bool:
+    """Old Save packs omitted nodata queries — infer incomplete coverage."""
+    if counts.get("nodata"):
+        return False
+    suite_now = ctx.get("suite_now") or {}
+    status = str(suite_now.get("status") or suite_now.get("issue") or "").lower()
+    if status in ("failing", "fail", "broken", "error", "regression", "slower", "both"):
+        return False
+    fr = (ctx.get("selection") or {}).get("focus_run") or {}
+    success = _as_int(fr.get("success"))
+    fail = _as_int(fr.get("fail")) or 0
+    # Explicit incomplete SuccessCount (Tpcds-style 26/100) with no fails.
+    if success is not None and success > 0 and success < 40 and fail == 0:
+        return True
+    # Huge "improvement" on ok suite + empty query list → almost always partial means.
+    if list(ctx.get("queries") or []):
+        return False
+    ydb_pct = suite_now.get("ydb_pct")
+    try:
+        if ydb_pct is not None and float(ydb_pct) < -40:
+            return True
+    except (TypeError, ValueError):
+        pass
+    return False
+
+
 def detect_type(ctx: dict[str, Any]) -> dict[str, Any]:
     """Best-effort seed; agent may reclassify after fetch."""
     kind = kind_of(ctx)
@@ -16,21 +108,33 @@ def detect_type(ctx: dict[str, Any]) -> dict[str, Any]:
     sticky = ctx.get("sticky_query")
     reasons = [str(r) for r in (suite_now.get("reasons") or [])]
     reasons_l = " ".join(reasons).lower()
+    counts = _query_counts(ctx)
 
     analysis_types: list[str] = []
     problems_seed: list[dict[str, Any]] = []
 
     if kind == "olap":
         fail_queries = [
-            q for q in queries if isinstance(q, dict) and str(q.get("kind") or "") == "fail"
+            q for q in queries if isinstance(q, dict) and str(q.get("kind") or "") in ("fail", "both")
         ]
         slow_queries = [
-            q for q in queries if isinstance(q, dict) and str(q.get("kind") or "") == "slow"
+            q for q in queries if isinstance(q, dict) and str(q.get("kind") or "") in ("slow", "both")
+        ]
+        nodata_queries = [
+            q
+            for q in queries
+            if isinstance(q, dict)
+            and str(q.get("kind") or "") in ("nodata", "missing", "in_progress")
         ]
         status = str(suite_now.get("status") or suite_now.get("issue") or "").lower()
         sn_kind = str(suite_now.get("kind") or "").lower()
 
-        has_fail = bool(fail_queries) or status in ("failing", "fail", "error") or sn_kind == "fail"
+        has_fail = (
+            bool(fail_queries)
+            or counts["fail"] > 0
+            or status in ("failing", "fail", "error", "broken", "both")
+            or sn_kind in ("fail", "both")
+        )
         # ydb_* is wall time: positive ydb_pct = slower (regression); negative = faster.
         # Do not match bare "slow" in reasons — pack text often says "slow 0".
         reasons_say_slow = bool(
@@ -38,6 +142,7 @@ def detect_type(ctx: dict[str, Any]) -> dict[str, Any]:
         )
         has_slow = (
             bool(slow_queries)
+            or counts["slow"] > 0
             or sn_kind == "slow"
             or reasons_say_slow
             or (
@@ -45,6 +150,15 @@ def detect_type(ctx: dict[str, Any]) -> dict[str, Any]:
                 and isinstance(suite_now.get("ydb_pct"), (int, float))
                 and float(suite_now["ydb_pct"]) > 5
             )
+        )
+        has_nodata = (
+            bool(nodata_queries)
+            or counts["nodata"] > 0
+            or sn_kind == "nodata"
+            or status == "nodata"
+            or "nodata" in reasons_l
+            or "no data" in reasons_l
+            or _legacy_nodata_gap(ctx, counts)
         )
 
         if has_fail:
@@ -104,6 +218,25 @@ def detect_type(ctx: dict[str, Any]) -> dict[str, Any]:
                     }
                 )
 
+        if has_nodata:
+            analysis_types.append("olap_nodata")
+            n_nd = counts["nodata"] or len(nodata_queries)
+            sample = [str(q.get("test")) for q in nodata_queries[:8] if q.get("test")]
+            title = f"no data ×{n_nd}" if n_nd else "no data (coverage gap)"
+            if sample:
+                title += ": " + ", ".join(sample[:5])
+            problems_seed.append(
+                {
+                    "id": "seed_suite_nodata",
+                    "analysis_type": "olap_nodata",
+                    "title": title,
+                    "n_nodata": n_nd or None,
+                    "sample": sample,
+                    "query_counts": counts,
+                    "status": "seed",
+                }
+            )
+
         if not analysis_types:
             analysis_types.append("olap_fail")
             problems_seed.append(
@@ -118,7 +251,10 @@ def detect_type(ctx: dict[str, Any]) -> dict[str, Any]:
     elif kind == "tpcc":
         lat_pct = suite_now.get("lat_pct")
         tpmc_pct = suite_now.get("tpmc_pct")
-        capped = bool(suite_now.get("capped_now") or (ctx.get("selection") or {}).get("focus_run", {}).get("lat_capped"))
+        capped = bool(
+            suite_now.get("capped_now")
+            or (ctx.get("selection") or {}).get("focus_run", {}).get("lat_capped")
+        )
         sn_kind = str(suite_now.get("kind") or "").lower()
 
         lat_bad = False
@@ -191,6 +327,7 @@ def detect_type(ctx: dict[str, Any]) -> dict[str, Any]:
         "rollup": rollup,
         "analysis_types": analysis_types,
         "problems_seed": problems_seed,
+        "query_counts": counts if kind == "olap" else None,
         "suite_now_status": suite_now.get("status") or suite_now.get("issue"),
         "sticky_query": sticky,
         "reasons": reasons,

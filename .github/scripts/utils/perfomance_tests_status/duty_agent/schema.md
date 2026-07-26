@@ -27,10 +27,12 @@ Frozen incident pack from OLAP or TPC-C Now HTML dive (`Save` / `Copy context`).
 |-------|------|-------|
 | `report.kind` | `olap` | `tpcc` |
 | `selection.focus_run.report` | usually sandbox URL | usually sandbox URL (joined from `tests_results`; null only on join miss) |
-| `suite_now` | fail_rate / ydb | lat / tpmc |
-| `queries` / `sticky_query` | yes | empty / null |
+| `suite_now` | fail_rate / ydb + `n_nodata` / `query_counts` | lat / tpmc |
+| `selection.focus_run.success` | SuccessCount for coverage gaps | optional |
+| `queries` / `sticky_query` | fail + slow + **nodata samples** + soft | empty / null |
 
-See also `dutyctl detect-type` seeds: `olap_fail`, `olap_slow`, `tpcc_tpmc`, `tpcc_lat`, `mixed`.
+See also `dutyctl detect-type` seeds: `olap_fail`, `olap_slow`, `olap_nodata`, `tpcc_tpmc`, `tpcc_lat`, `mixed`.  
+**Nodata must be packed** (`query_counts.nodata` and/or `queries[].kind=nodata`) — otherwise duty can miss coverage gaps when `issue=ok`.
 
 ---
 

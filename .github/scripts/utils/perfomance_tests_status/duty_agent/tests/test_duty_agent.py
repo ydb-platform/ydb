@@ -69,6 +69,71 @@ class DetectTypeTests(unittest.TestCase):
         self.assertIn("tpcc_tpmc", det["analysis_types"])
         self.assertIn("tpcc_lat", det["analysis_types"])
 
+    def test_olap_nodata_from_query_counts(self):
+        ctx = load_context(FIXTURES / "sample_olap.json")
+        ctx = json.loads(json.dumps(ctx))
+        ctx["suite_now"] = {
+            **ctx["suite_now"],
+            "issue": "ok",
+            "status": "ok",
+            "fail_rate_now": 0,
+            "ydb_pct": -71.0,
+            "n_nodata": 73,
+            "n_ok": 26,
+            "n_queries": 99,
+            "query_counts": {
+                "fail": 0,
+                "slow": 0,
+                "soft": 0,
+                "nodata": 73,
+                "ok": 26,
+                "total": 99,
+            },
+        }
+        ctx["queries"] = [
+            {"test": "Query27", "kind": "nodata"},
+            {"test": "Query28", "kind": "nodata"},
+        ]
+        ctx["selection"]["focus_run"] = {
+            **(ctx["selection"].get("focus_run") or {}),
+            "success": 26,
+            "fail": 0,
+            "ydb": 51518.0,
+        }
+        det = detect_type(ctx)
+        self.assertIn("olap_nodata", det["analysis_types"])
+        self.assertEqual(det["query_counts"]["nodata"], 73)
+        self.assertTrue(
+            any(p.get("analysis_type") == "olap_nodata" for p in det["problems_seed"])
+        )
+
+    def test_olap_nodata_legacy_pack_empty_queries(self):
+        """Old Save omitted nodata queries — still seed from SuccessCount / ydb collapse."""
+        ctx = load_context(FIXTURES / "sample_olap.json")
+        ctx = json.loads(json.dumps(ctx))
+        ctx["suite_now"] = {
+            "issue": "ok",
+            "status": "ok",
+            "fail_rate_now": 0,
+            "ydb_pct": -71.0,
+            "ydb_now": 51518.0,
+            "ydb_base": 178000.0,
+            "reasons": [],
+        }
+        ctx["queries"] = []
+        ctx["sticky_query"] = None
+        ctx["selection"]["focus_run"] = {
+            "label": "2026-07-26_4ec357a",
+            "sha": "4ec357a",
+            "success": 26,
+            "fail": 0,
+            "ydb": 51518.0,
+            "report": "https://proxy.sandbox.yandex-team.ru/12927819679/index.html",
+        }
+        det = detect_type(ctx)
+        self.assertIn("olap_nodata", det["analysis_types"])
+        self.assertNotIn("olap_fail", det["analysis_types"])
+
 
 class MetricsDeltaTests(unittest.TestCase):
     def test_tpcc_flags(self):
@@ -239,6 +304,112 @@ class DigRunsTests(unittest.TestCase):
 
 
 class ValidateTests(unittest.TestCase):
+    def test_olap_nodata_must_be_discussed(self):
+        with tempfile.TemporaryDirectory() as td:
+            d = Path(td)
+            write_json(
+                d / "detect_type.json",
+                {
+                    "analysis_types": ["olap_nodata"],
+                    "query_counts": {"nodata": 73, "ok": 26, "total": 99},
+                    "problems_seed": [
+                        {"id": "seed_suite_nodata", "analysis_type": "olap_nodata", "title": "no data ×73"}
+                    ],
+                },
+            )
+            write_json(
+                d / "problems.json",
+                {"items": [{"id": "p_fail_only", "analysis_type": "olap_fail", "title": "other suite fail"}]},
+            )
+            write_json(d / "dig_runs.json", {"kind": "olap", "summary": {"slice_count": 1}})
+            md = """# Perf duty — x
+
+## Заключение
+- **Итог:** только fail соседнего suite
+- **Решение:** wait_next_wave
+- **Виновник:** unknown
+- **Уверенность:** низкая
+- **Давность:** на прогоне 2026-07-26_4ec357a
+- **Механика:** code 2005
+
+## Проблемы
+### P1 — other
+- Тип: olap_fail
+- Что сломалось: fail
+- Почему / механика: x
+- Логи: kikimr__stderr empty; kikimr__logs connection lost
+- Код ([`4ec357a`](https://github.com/ydb-platform/ydb/commit/4ec357a)): n/a
+- Кто (если есть): unknown
+- Давность: этот прогон
+- Гипотеза проверена: partial
+- Связанный issue: нет
+- Тикет: нет
+
+## Что дальше
+1. ждать
+
+## Материалы для issue
+https://proxy.sandbox.yandex-team.ru/12927819679/index.html
+[`4ec357a`](https://github.com/ydb-platform/ydb/commit/4ec357a)
+"""
+            r = validate_analysis_md(md, out_dir=d)
+            self.assertFalse(r["ok"], r)
+            blob = " ".join(r["errors"])
+            self.assertIn("olap_nodata", blob)
+
+    def test_olap_nodata_ok_with_report_lag_branch(self):
+        with tempfile.TemporaryDirectory() as td:
+            d = Path(td)
+            write_json(
+                d / "detect_type.json",
+                {"analysis_types": ["olap_nodata"], "query_counts": {"nodata": 73, "ok": 26}},
+            )
+            write_json(
+                d / "problems.json",
+                {
+                    "items": [
+                        {
+                            "id": "p1",
+                            "analysis_type": "olap_nodata",
+                            "title": "Tpcds1 no data ×73",
+                        }
+                    ]
+                },
+            )
+            write_json(d / "dig_runs.json", {"kind": "olap", "summary": {"slice_count": 1}})
+            md = """# Perf duty — x
+
+## Заключение
+- **Итог:** Now nodata 73; в Allure эти query ok — в базу ещё не доехали
+- **Решение:** wait_next_wave
+- **Виновник:** unknown
+- **Уверенность:** высокая
+- **Давность:** прогон 2026-07-26_4ec357a
+- **Механика:** лаг выгрузки daily/mart после успешного отчёта
+
+## Проблемы
+### P1 — nodata lag
+- Тип: olap_nodata
+- Что сломалось: в Now нет Query27+
+- Почему / механика: в отчёте ok → данные ещё не доехали в базу
+- Логи: не копали (ветка lag)
+- Код ([`4ec357a`](https://github.com/ydb-platform/ydb/commit/4ec357a)): n/a
+- Кто (если есть): unknown
+- Давность: этот прогон
+- Гипотеза проверена: yes
+- Связанный issue: нет
+- Тикет: нет
+
+## Что дальше
+1. refresh mart
+
+## Материалы для issue
+https://proxy.sandbox.yandex-team.ru/12927819679/index.html
+[`4ec357a`](https://github.com/ydb-platform/ydb/commit/4ec357a)
+"""
+            r = validate_analysis_md(md, out_dir=d)
+            self.assertTrue(r["ok"], r["errors"])
+
     def test_ok_minimal_olap_fail(self):
         with tempfile.TemporaryDirectory() as td:
             d = Path(td)

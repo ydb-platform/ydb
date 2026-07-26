@@ -53,6 +53,34 @@ def validate_analysis_md(
     bl = body.lower()
     types = _analysis_types(out_dir)
     olap_fail = "olap_fail" in types
+    olap_nodata = "olap_nodata" in types
+    # Also force nodata gate from context / detect query_counts (legacy packs).
+    if out_dir and not olap_nodata:
+        for name in ("detect_type.json", "context.json"):
+            p = out_dir / name
+            if not p.is_file():
+                continue
+            blob = read_json(p)
+            qc = blob.get("query_counts") or (blob.get("suite_now") or {}).get("query_counts") or {}
+            n_nd = qc.get("nodata") if isinstance(qc, dict) else None
+            if n_nd is None:
+                n_nd = (blob.get("suite_now") or {}).get("n_nodata")
+            try:
+                if n_nd is not None and int(n_nd) > 0:
+                    olap_nodata = True
+                    break
+            except (TypeError, ValueError):
+                pass
+            if any(
+                isinstance(q, dict) and str(q.get("kind") or "") in ("nodata", "missing")
+                for q in (blob.get("queries") or [])
+            ):
+                olap_nodata = True
+                break
+            seed = blob.get("problems_seed") or []
+            if any(str(s.get("analysis_type") or "") == "olap_nodata" for s in seed if isinstance(s, dict)):
+                olap_nodata = True
+                break
 
     if not body.strip():
         return {"ok": False, "errors": ["analysis.md is empty"], "warnings": []}
@@ -148,9 +176,61 @@ def validate_analysis_md(
             if not (out_dir / "priors.json").is_file():
                 warnings.append("missing priors.json — давность may be weak; run prepare")
 
+    # Nodata: must discuss gap + report-first branch (lag vs real missing).
+    if olap_nodata:
+        if not re.search(
+            r"no\s*data|nodata|successcount|success\s*count|покрыт|выгрузк|query_counts|n_nodata",
+            bl,
+        ):
+            errors.append(
+                "olap_nodata: analysis must discuss no-data / incomplete SuccessCount / "
+                "coverage gap (do not treat suite as clean ok)"
+            )
+        if not re.search(r"allure|отч[её]т|sandbox\.yandex|proxy\.sandbox", bl):
+            errors.append(
+                "olap_nodata: first step is Allure/report check for the missing queries — "
+                "mention the report outcome in analysis.md"
+            )
+        lag_branch = bool(
+            re.search(
+                r"не\s*доехал|ещ[её]\s*не\s*доехал|доехал|лаг\s*выгруз|в\s*базу|"
+                r"в\s*отч[её]те\s*(вс[её]\s*)?(ok|ок|passed|успеш)|"
+                r"отч[её]т\w*\s*(ok|ок|passed|зелён)",
+                bl,
+            )
+        )
+        report_gap_branch = bool(
+            re.search(
+                r"в\s*отч[её]те\s*(тоже\s*)?(нет|nodata|missing|fail|дыр)|"
+                r"отч[её]т\w*\s*тоже\s*(нет|дыр|пуст)|"
+                r"нет\s*в\s*allure|в\s*allure\s*(нет|fail|skipped)",
+                bl,
+            )
+        )
+        if not lag_branch and not report_gap_branch:
+            errors.append(
+                "olap_nodata: state the branch after report check — "
+                "«в отчёте ok → в базу ещё не доехали» OR "
+                "«в отчёте тоже нет → логи / журналы на кластере»"
+            )
+        if out_dir and (out_dir / "problems.json").is_file():
+            probs = read_json(out_dir / "problems.json")
+            items = probs if isinstance(probs, list) else list((probs or {}).get("items") or [])
+            if items and not any(
+                "nodata" in str(it.get("analysis_type") or "").lower()
+                or "nodata" in str(it.get("title") or "").lower()
+                or "no data" in str(it.get("title") or "").lower()
+                for it in items
+                if isinstance(it, dict)
+            ):
+                errors.append(
+                    "olap_nodata: problems.json must include a nodata/no-data problem "
+                    "(not only fail/slow seeds)"
+                )
+
     # TPC-C / OLAP: must dig mart history (pack suite_history alone is not enough)
     tpcc = any(str(t).startswith("tpcc_") for t in types)
-    olap_needs_dig = any(t in ("olap_slow", "olap_fail") for t in types)
+    olap_needs_dig = any(t in ("olap_slow", "olap_fail", "olap_nodata") for t in types)
     if (tpcc or olap_needs_dig) and out_dir:
         if not (out_dir / "dig_runs.json").is_file():
             if not re.search(r"dig-runs skipped|dig.runs не|без dig-runs", bl):

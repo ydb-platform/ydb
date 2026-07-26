@@ -121,8 +121,25 @@ Put a clear line in the report: **Давность:** …
 |------|----------|
 | `olap_fail` | Allure + **stderr + cluster logs** + **dig-runs** (when suite went red / peers) + bisect |
 | `olap_slow` | **dig-runs** + metrics_delta + dig-prs/bisect |
+| `olap_nodata` | Pack `query_counts` / nodata samples / incomplete `SuccessCount`. **First:** Allure/report for those queries — then branch (lag vs real gap). |
 | `tpcc_tpmc` / `tpcc_lat` | Allure focus (+ stderr/logs when URL present) + **dig-runs** (`perfomance/tpcc`, `Report` from `tests_results`) + **dig-prs** + metrics + DataLens |
 | `mixed` | split problems |
+
+### OLAP nodata (mandatory when seeded)
+
+`detect_type` seeds `olap_nodata` when Now has query gaps or incomplete SuccessCount.  
+**Forbidden:** ignore nodata because `suite_now.issue=ok`, or jump straight to IC/crash logs, or chase only a sibling-suite fail on the same Allure.
+
+**Playbook (order matters):**
+
+1. **Список дыр** — какие query в Now `nodata` / какой `SuccessCount` (из pack `query_counts` / samples).  
+2. **Открыть Allure/report** того же прогона (`focus_run.report`) и проверить **именно эти** query:
+   - **В отчёте они ok / passed** → вывод: **в базу (mart / daily) данные ещё не доехали** (лаг выгрузки/агрегации). Не копать stderr/кластер как продуктовую аварию. Решение обычно `wait_next_wave` / `no_action` + перепроверить mart на следующем refresh.  
+   - **В отчёте тоже нет / skipped / failed / нет кейса** → это уже реальный gap прогона: копать `kikimr__stderr` + `kikimr__logs`, при необходимости журналы на кластере (хосты из логов). Дальше — как `olap_fail` / инфраструктура.  
+3. **dig-runs** — сверить Now vs mart `SuccessCount` / `YdbSumMeans` на том же Version/Report (подтверждает lag или устойчивую дыру).  
+4. В `analysis.md` явно написать ветку: «отчёт ok → не доехали» **или** «в отчёте тоже нет → логи/кластер».
+
+`validate` fails if nodata is seeded but report-check branch is missing from the write-up.
 
 ### Harness (read for yourself — filter candidates; do not dump into report)
 
@@ -155,11 +172,12 @@ Put a clear line in the report: **Давность:** …
 
 ### OLAP playbook (mandatory dig-runs)
 
-1. `prepare` → Allure focus + fatal + pack history.  
-2. **Read logs** from `focus.json` (fail: stderr + kikimr__logs) before blocking on mart.  
-3. `dig-runs` (~35d+, ydb_client) → related suites (e.g. UploadTpch↔Tpch) + **peer DbAlias**, same branch. See when FailCount / YdbSumMeans jumped; whether peers/other suites correlate.  
-4. Metrics (slow) + bisect/dig-prs as needed.  
-5. Use harness paths above when mechanism depends on upload vs query suite.
+1. `prepare` → Allure focus + fatal + pack history. **Read `detect_type.json` `query_counts` / `olap_nodata` seed first.**  
+2. If `olap_nodata` (or `n_nodata>0`): **сначала отчёт** по этим query (см. playbook nodata выше). Логи/кластер — только если в отчёте тоже дыра. Не подменять nodata чужим fail с того же Allure.  
+3. **Read logs** from `focus.json` when `olap_fail` **or** nodata branch = «в отчёте тоже нет» (`kikimr__stderr` + `kikimr__logs`).  
+4. `dig-runs` (~35d+, ydb_client) → related suites + **peer DbAlias**. Для nodata — Now vs mart SuccessCount/YdbSumMeans.  
+5. Metrics + bisect/dig-prs as needed (fail/slow; для «не доехали» bisect обычно не нужен).  
+6. Use harness paths above when mechanism depends on upload vs query suite.
 
 ## Evidence bar (culprit)
 
@@ -175,6 +193,7 @@ For each problem, you can answer yes:
 
 - [ ] TPC-C / OLAP: `dig_runs.json` from mart (neighbors + ≥~month if needed), not only pack metrics  
 - [ ] TPC-C: `dig_prs.json` on the **jump** window (not only PR of alert commit)  
+- [ ] OLAP nodata: checked Allure/report for those queries; wrote branch «не доехали» **or** «в отчёте тоже нет → логи/кластер»  
 - [ ] Correlations checked: other run_type/suite and peer cluster on same branch  
 - [ ] Read cluster logs **and** execution stderr (OLAP fail), or documented empty  
 - [ ] Mechanism stated (not only fingerprint)  

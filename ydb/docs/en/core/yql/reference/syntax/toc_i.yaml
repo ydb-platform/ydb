@@ -22,6 +22,7 @@ items:
 - { name: CREATE BACKUP COLLECTION,     href: create-backup-collection.md,   when: feature_backup_collections }
 - { name: CREATE GROUP,                 href: create-group.md,               when: feature_user_and_group }
 - { name: CREATE STREAMING QUERY,       href: create-streaming-query.md,     when: feature_federated_queries }
+- { name: CREATE EXTERNAL TABLE,        href: create-external-table.md,      when: feature_federated_queries }
 - { name: CREATE OBJECT TYPE SECRET,    href: create-object-type-secret.md,  when: feature_federated_queries}
 - { name: CREATE OBJECT TYPE SECRET_ACCESS,    href: create-object-type-secret-access.md,  when: feature_federated_queries}
 - { name: CREATE OBJECT TYPE SECRET,    href: create-object-type-secret.md,  when: feature_federated_queries }

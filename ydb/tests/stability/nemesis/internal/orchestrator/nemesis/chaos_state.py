@@ -13,9 +13,10 @@ from ydb.tests.stability.nemesis.internal.nemesis.catalog import (
     build_planner,
     guard_mode_for,
     impact_scope_for,
+    recovery_mode_for,
     target_kind_for,
 )
-from ydb.tests.stability.nemesis.internal.nemesis.chaos_dispatch import DispatchCommand, fanout
+from ydb.tests.stability.nemesis.internal.nemesis.chaos_dispatch import DispatchCommand, dispatch, fanout
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_target import ChaosTarget, TargetKind
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.cluster_inventory import ClusterInventory
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import FailureModelGuard, GuardMode
@@ -114,15 +115,36 @@ class ChaosOrchestratorStore:
 
         The scheduler has already reserved the failure budget, so this skips the legacy
         ``filter_safe`` pre-filter. A DATACENTER target fans out to every host in the chosen
-        DC (the round-robin fanout planner would pick its own DC, not this one); anything else
-        goes to its planner as a single-target tick.
+        DC (the round-robin fanout planner would pick its own DC, not this one); toggle faults
+        (``recovery: extract``) are dispatched directly so a stateful planner's cross-tick
+        bookkeeping can't fight the scheduler; anything else goes to its planner's single-target
+        tick.
         """
         if target.kind is TargetKind.DATACENTER and self._inventory is not None:
             return datacenter_inject_fanout(nemesis_type, target, self._inventory)
+        if recovery_mode_for(nemesis_type) == "extract":
+            return self._direct_commands(nemesis_type, target, "inject")
         planner = self._planners.get(nemesis_type)
         if planner is None:
             return []
         return planner.scheduled_tick([target])
+
+    def plan_extract_target(
+        self, nemesis_type: str, target: ChaosTarget
+    ) -> list[DispatchCommand]:
+        """Extract command for one chosen ``target`` (weighted-scheduler toggle recovery).
+
+        Bypasses the planner's cross-tick state — the scheduler owns which target is broken;
+        the agent-side actor restores from its own stored state on extract."""
+        return self._direct_commands(nemesis_type, target, "extract")
+
+    def _direct_commands(
+        self, nemesis_type: str, target: ChaosTarget, action: str
+    ) -> list[DispatchCommand]:
+        planner = self._planners.get(nemesis_type)
+        attr = "PAYLOAD_INJECT" if action == "inject" else "PAYLOAD_EXTRACT"
+        payload = dict(getattr(planner, attr, {}) or {}) if planner is not None else {}
+        return [dispatch(nemesis_type, target, action, payload)]
 
     def plan_disable_schedule(self, nemesis_type: str) -> list[DispatchCommand]:
         planner = self._planners.get(nemesis_type)
@@ -146,4 +168,5 @@ __all__ = [
     "ChaosOrchestratorStore",
     "DispatchCommand",
     "datacenter_inject_fanout",
+    "dispatch",
 ]

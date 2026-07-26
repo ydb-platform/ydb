@@ -132,6 +132,7 @@ def initialize_app():
                 guard=failure_guard,
                 inventory=inventory,
                 plan_inject=orchestrator_router.chaos_store.plan_inject_target,
+                plan_extract=orchestrator_router.chaos_store.plan_extract_target,
                 dispatch=lambda cmd: orchestrator_router.nemesis_schedule.dispatch_command(
                     cmd, track_history=True
                 ),

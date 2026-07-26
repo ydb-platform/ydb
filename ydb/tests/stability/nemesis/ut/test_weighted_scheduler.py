@@ -10,7 +10,11 @@ from pathlib import Path
 import pytest
 import yaml
 
-from ydb.tests.stability.nemesis.internal.nemesis.catalog import weight_for as catalog_weight_for
+from ydb.tests.stability.nemesis.internal.nemesis.catalog import (
+    NEMESIS_TYPES,
+    recovery_mode_for,
+    weight_for as catalog_weight_for,
+)
 from ydb.tests.stability.nemesis.internal.nemesis.chaos_dispatch import dispatch as build_dispatch
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_state import (
     datacenter_inject_fanout,
@@ -23,6 +27,8 @@ from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model imp
 )
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.weighted_scheduler import (
     WeightedNemesisScheduler,
+    _STABILITY_PROFILE,
+    default_enabled_types,
 )
 
 
@@ -201,7 +207,7 @@ class TestProfile:
 
 class TestCatalogWeights:
     def test_weight_for_reads_registry_and_defaults(self):
-        assert catalog_weight_for("KillNodeNemesis") == 3.0, "annotated weight must be read from the registry"
+        assert catalog_weight_for("KillSlotDaemonNemesis") == 3.0, "annotated weight must be read from the registry"
         assert catalog_weight_for("no-such-nemesis") == 1.0, "unknown types default to weight 1.0"
 
 
@@ -251,6 +257,93 @@ class TestStatus:
         sched = _make_scheduler(_guard("block-4-2"), FakeInventory(_nodes()), [],
                                 recovery_probe=FakeProbe())
         assert sched.status()["recovery_probe"] == {"tracked": 0, "stuck": 0}
+
+
+class RecordingProbe:
+    def __init__(self) -> None:
+        self.tracked: list = []
+
+    def start(self) -> None:
+        pass
+
+    def stop(self) -> None:
+        pass
+
+    def snapshot(self) -> dict:
+        return {"tracked": len(self.tracked)}
+
+    def track(self, lease_id, target, nemesis_type, timeout_sec=None, recover_action=None):
+        self.tracked.append((lease_id, target, nemesis_type, timeout_sec, recover_action))
+
+
+class TestToggleRecovery:
+    def _toggle_scheduler(self, guard, dispatched, probe, **overrides):
+        return _make_scheduler(
+            guard, FakeInventory(_nodes()), dispatched,
+            enabled_types=["Toggle"],
+            recovery_mode_for=lambda t: "extract",
+            recovery_sec_for=lambda t: 90.0,
+            plan_extract=lambda ntype, target: [build_dispatch(ntype, target, "extract", {})],
+            recovery_probe=probe,
+            max_per_tick=1, rng=ScriptedRandom(randint=1),
+            **overrides,
+        )
+
+    def test_toggle_tick_holds_budget_and_tracks_extract_action(self):
+        guard = _guard("block-4-2")
+        dispatched: list = []
+        probe = RecordingProbe()
+        sched = self._toggle_scheduler(guard, dispatched, probe)
+
+        assert sched.tick() == 1
+        injects = [c for c in dispatched if c.action == "inject"]
+        assert len(injects) == 1, f"exactly one inject must be dispatched; got {dispatched}"
+        assert len(guard.snapshot()["impaired_racks"]) == 1, (
+            "a toggle fault must hold the budget (recovery_sec=None), not expire on a timer"
+        )
+        assert len(probe.tracked) == 1
+        lease, target, ntype, timeout, action = probe.tracked[0]
+        assert ntype == "Toggle" and timeout == 90.0
+        assert action is not None, "toggle faults must be tracked with a recover_action"
+
+        # Running the recover_action must dispatch an extract for the same target.
+        action()
+        extracts = [c for c in dispatched if c.action == "extract"]
+        assert len(extracts) == 1 and extracts[0].target.host == target.host, (
+            f"recover_action must extract the injected target; got {dispatched}"
+        )
+
+    def test_toggle_type_muted_when_extract_not_wired(self):
+        guard = _guard("block-4-2")
+        # No plan_extract / no probe -> a toggle fault can never auto-extract, so it must never
+        # be offered (else it would stay broken forever).
+        sched = _make_scheduler(
+            guard, FakeInventory(_nodes()), [],
+            enabled_types=["Toggle"],
+            recovery_mode_for=lambda t: "extract",
+        )
+        assert sched._menu() == [], "toggle types must be filtered out with no way to extract"
+        assert sched.tick() == 0
+
+
+class TestDefaultProfile:
+    def test_default_profile_is_curated_and_registered(self):
+        enabled = default_enabled_types()
+        assert enabled, "the default profile must not be empty"
+        assert set(enabled) <= set(_STABILITY_PROFILE)
+        assert all(t in NEMESIS_TYPES for t in enabled), (
+            "every profile entry must be a registered nemesis type"
+        )
+        for t in ("KillNodeNemesis", "KillSlotDaemonNemesis", "StopStartNodeNemesis",
+                  "SafelyBreakDiskNemesis", "TimeSkewNemesis"):
+            assert t in enabled, f"{t} must be in the default stability profile"
+
+    def test_toggle_members_are_extract_mode(self):
+        for t in ("StopStartNodeNemesis", "SafelyBreakDiskNemesis",
+                  "SafelyCleanupDisksNemesis", "TimeSkewNemesis"):
+            assert recovery_mode_for(t) == "extract", f"{t} must recover via extract"
+        for t in ("KillNodeNemesis", "KillSlotDaemonNemesis"):
+            assert recovery_mode_for(t) == "self", f"{t} is self-recovering"
 
 
 class TestLifecycle:

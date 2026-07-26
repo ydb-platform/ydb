@@ -129,6 +129,57 @@ class TestRecoveryProbe:
         assert probe.tick() == [], "a forgotten lease must not be polled or reported"
 
 
+class TestToggleAutoExtract:
+    def test_toggle_fault_extracts_then_releases_after_hold(self):
+        guard = _guard()
+        clock = FakeClock()
+        extracted: list[str] = []
+        probe = RecoveryProbe(
+            guard=guard,
+            recovered=lambda t: (_ for _ in ()).throw(AssertionError("healthcheck must not run")),
+            min_hold_sec=30.0,
+            clock=clock,
+        )
+        target, lease = _reserve(guard, "h1", 1)
+        probe.track(
+            lease, target, "TimeSkewNemesis", timeout_sec=90.0,
+            recover_action=lambda: extracted.append(target.host),
+        )
+        assert guard.snapshot()["impaired_racks"] == ["r1"]
+
+        clock.advance(60.0)  # past min-hold, before the hold window closes
+        assert probe.tick() == []
+        assert extracted == [], "must not extract before the hold elapses"
+        assert guard.snapshot()["impaired_racks"] == ["r1"], "budget held through the hold window"
+
+        clock.advance(40.0)  # now past the 90s hold
+        assert probe.tick() == []
+        assert extracted == ["h1"], "hold elapsed -> extract dispatched exactly once"
+        assert guard.snapshot()["impaired_racks"] == [], "extract must release the budget"
+        assert probe.pending() == []
+
+    def test_toggle_fault_never_reports_stuck(self):
+        guard = _guard()
+        clock = FakeClock()
+        stuck_seen: list[StuckFault] = []
+        probe = RecoveryProbe(
+            guard=guard,
+            recovered=lambda t: False,
+            on_stuck=stuck_seen.append,
+            min_hold_sec=0.0,
+            clock=clock,
+        )
+        target, lease = _reserve(guard, "h1", 1)
+        probe.track(
+            lease, target, "StopStartNodeNemesis", timeout_sec=50.0,
+            recover_action=lambda: None,
+        )
+        clock.advance(1000.0)  # far past the hold
+        assert probe.tick() == [], "a toggle fault is recovered by extract, never reported stuck"
+        assert stuck_seen == []
+        assert guard.snapshot()["impaired_racks"] == [], "released by extract, not held as stuck"
+
+
 class TestHealthcheckRecovery:
     def test_recovered_when_endpoint_answers(self):
         reporter = type("R", (), {"last_results": {}})()

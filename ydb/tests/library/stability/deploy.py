@@ -459,12 +459,12 @@ class StressUtilDeployer:
                     )
                     logging.info(f"Nemesis schedules response: {body}")
                     return True
-                nemesis_log.append(f"Unexpected schedule response: {body}")
-                logging.warning(f"Unexpected /api/schedule/all response: {body}")
+                nemesis_log.append(f"Unexpected scheduler response: {body}")
+                logging.warning(f"Unexpected {url} response: {body}")
                 return False
         except Exception as exc:
-            nemesis_log.append(f"Failed to {action.lower()} schedules: {exc}")
-            logging.error(f"Error calling /api/schedule/all: {exc}")
+            nemesis_log.append(f"Failed to {action.lower()} scheduler: {exc}")
+            logging.error(f"Error calling {url}: {exc}")
             return False
 
     # ------------------------------------------------------------------

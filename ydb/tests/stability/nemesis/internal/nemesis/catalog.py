@@ -169,6 +169,21 @@ def recovery_sec_for(nemesis_type: str) -> float | None:
         return DEFAULT_RECOVERY_SEC
 
 
+def recovery_mode_for(nemesis_type: str) -> str:
+    """How the weighted scheduler recovers this fault and frees its budget.
+
+    ``"self"`` (default) — the fault heals on its own (SIGKILL + systemd restart, stop/start
+    pulse); the recovery probe releases the lease once healthcheck sees the host answer again.
+    ``"extract"`` — a toggle fault (clock skew, broken disk, stopped node) that stays broken
+    until told otherwise; the probe holds the lease for ``auto_recovery_sec`` then dispatches an
+    explicit extract and releases.
+    """
+    spec = NEMESIS_TYPES.get(nemesis_type)
+    if spec is None:
+        return "self"
+    return "extract" if spec.get("recovery") == "extract" else "self"
+
+
 def weight_for(nemesis_type: str) -> float:
     """Relative selection weight for the weighted scheduler (unannotated -> 1.0).
 

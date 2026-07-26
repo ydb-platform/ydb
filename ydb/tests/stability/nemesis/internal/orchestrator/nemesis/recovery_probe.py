@@ -54,6 +54,7 @@ class _Pending:
     timeout_sec: float
     min_hold_sec: float
     stuck_reported: bool = False
+    recover_action: Callable[[], None] | None = None
 
 
 def healthcheck_recovery(
@@ -103,7 +104,16 @@ class RecoveryProbe:
         target: ChaosTarget,
         nemesis_type: str,
         timeout_sec: float | None = None,
+        recover_action: Callable[[], None] | None = None,
     ) -> None:
+        """Track a reserved fault until its budget can be released.
+
+        ``recover_action`` distinguishes the two recovery classes:
+        - ``None`` (self-recovering): released once ``recovered(target)`` is true; a fault that
+          overshoots ``timeout_sec`` is reported stuck and keeps holding budget.
+        - callable (toggle): after holding for ``timeout_sec`` the probe runs the action
+          (dispatch an extract) and releases the budget — no healthcheck, never stuck.
+        """
         if not lease_id:
             return
         timeout = float(timeout_sec) if timeout_sec is not None else self._default_timeout_sec
@@ -115,6 +125,7 @@ class RecoveryProbe:
                 reserved_at=self._clock(),
                 timeout_sec=timeout,
                 min_hold_sec=min(self._min_hold_sec, timeout),
+                recover_action=recover_action,
             )
 
     def forget(self, lease_id: str) -> None:
@@ -130,6 +141,10 @@ class RecoveryProbe:
         for p in items:
             held = now - p.reserved_at
             if held < p.min_hold_sec:
+                continue
+            if p.recover_action is not None:
+                if held >= p.timeout_sec:
+                    self._auto_extract(p, held)
                 continue
             try:
                 is_recovered = self._recovered(p.target)
@@ -167,6 +182,20 @@ class RecoveryProbe:
                 except Exception:
                     logger.exception("on_stuck callback raised")
         return stuck
+
+    def _auto_extract(self, p: _Pending, held: float) -> None:
+        """Toggle fault held long enough: dispatch its extract and release the budget."""
+        try:
+            p.recover_action()
+        except Exception:
+            logger.exception("auto-extract action raised for %s", p.target.identity_key())
+        self._guard.release(p.lease_id)
+        with self._lock:
+            self._pending.pop(p.lease_id, None)
+        logger.info(
+            "auto-extracted: %s (%s) after %.0fs hold; budget released",
+            p.target.host, p.nemesis_type, held,
+        )
 
     def pending(self) -> list[_Pending]:
         with self._lock:

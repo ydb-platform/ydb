@@ -157,7 +157,7 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         # SIGKILL + systemd restart + rejoin: 20s was well under real re-replication, so the
         # probe cried "stuck" too early (and the timer freed budget before the node was back).
         "auto_recovery_sec": 120,
-        "weight": 3.0,
+        "weight": 1.0,
     }
     # out["DnsNemesis"] = {
     #     "runner": DnsNemesis(),
@@ -212,6 +212,10 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "impact_scope": ImpactScope.NODE,
         "guard_mode": GuardMode.PREFILTER_ONLY,
         "supports_manual": False,
+        # Toggle fault: skew the clock, then the scheduler dispatches extract (re-enable ntp).
+        "recovery": "extract",
+        "auto_recovery_sec": 120,
+        "weight": 1.0,
     }
 
     # --- tablet chaos (temporarily disabled: BYPASS / not in failure-model budget) ---
@@ -272,7 +276,7 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "impact_scope": ImpactScope.NODE,
         "guard_mode": GuardMode.FULL,
         "auto_recovery_sec": 90,
-        "weight": 2.0,
+        "weight": 3.0,
     }
     out["KillNodeDaemonNemesis"] = {
         "runner": ClusterKillNodeDaemonNemesis(),
@@ -306,12 +310,18 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
     }
 
     # --- disk / rolling / stop-start / suspend ------------------------------
-    for wire, cls, sched, scope, tkind in (
-        ("SafelyBreakDiskNemesis", ClusterSafelyBreakDiskNemesis, 400, ImpactScope.DISK, TargetKind.DISK),
-        ("SafelyCleanupDisksNemesis", ClusterSafelyCleanupDisksNemesis, 400, ImpactScope.DISK, TargetKind.DISK),
-        # ("RollingUpdateClusterNemesis", ClusterRollingUpdateNemesis, 120, ImpactScope.NODE, TargetKind.NODE),
-        ("StopStartNodeNemesis", ClusterStopStartNodeNemesis, 400, ImpactScope.NODE, TargetKind.NODE),
-        ("SuspendNodeNemesis", ClusterSuspendNodeNemesis, 800, ImpactScope.NODE, TargetKind.NODE),
+    # Toggle faults (``recovery: extract``): the pinned planner injects the scheduler-chosen
+    # target; the weighted scheduler holds the budget for ``auto_recovery_sec`` then dispatches
+    # an extract so the agent-side actor restores its stored state.
+    for wire, cls, sched, scope, tkind, extra in (
+        ("SafelyBreakDiskNemesis", ClusterSafelyBreakDiskNemesis, 400, ImpactScope.DISK, TargetKind.DISK,
+         {"recovery": "extract", "auto_recovery_sec": 120, "weight": 0.5}),
+        ("SafelyCleanupDisksNemesis", ClusterSafelyCleanupDisksNemesis, 400, ImpactScope.DISK, TargetKind.DISK,
+         {"recovery": "extract", "auto_recovery_sec": 90, "weight": 0.4}),
+        # ("RollingUpdateClusterNemesis", ClusterRollingUpdateNemesis, 120, ImpactScope.NODE, TargetKind.NODE, {}),
+        ("StopStartNodeNemesis", ClusterStopStartNodeNemesis, 400, ImpactScope.NODE, TargetKind.NODE,
+         {"recovery": "extract", "auto_recovery_sec": 90, "weight": 2.0}),
+        ("SuspendNodeNemesis", ClusterSuspendNodeNemesis, 800, ImpactScope.NODE, TargetKind.NODE, {}),
     ):
         out[wire] = {
             "runner": cls(),
@@ -321,6 +331,7 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
             "target_kind": tkind,
             "impact_scope": scope,
             "guard_mode": GuardMode.PREFILTER_ONLY,
+            **extra,
         }
 
     # --- host reboot --------------------------------------------------------

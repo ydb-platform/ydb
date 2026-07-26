@@ -4,8 +4,10 @@ Walks the failure-model boundary: each tick breaks a random number of things (``
 each fault by weight from whatever currently fits the budget, reserving it atomically, then sleeps
 a randomized interval. Replaces the per-type schedule threads in ``schedule_loop.py``.
 
-Recovery is timer-based here (the reserved budget auto-expires); Phase 2 swaps in real recovery
-probes that release leases by fact.
+Budget is released by the :class:`RecoveryProbe`, per the type's :func:`recovery_mode_for`:
+self-recovering faults are released once healthcheck sees the host answer again; toggle faults
+are held for their ``auto_recovery_sec`` then actively extracted. Without a probe (or a disabled,
+fail-open guard) self-recovering faults fall back to the reserve timer so budget never sticks.
 """
 
 from __future__ import annotations
@@ -17,8 +19,8 @@ from typing import Callable, Sequence
 
 from ydb.tests.stability.nemesis.internal.nemesis.catalog import (
     NEMESIS_TYPES,
-    guard_mode_for,
     impact_scope_for,
+    recovery_mode_for as catalog_recovery_mode_for,
     recovery_sec_for,
     target_kind_for,
     weight_for as catalog_weight_for,
@@ -28,16 +30,28 @@ from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_target impo
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import (
     DEFAULT_RECOVERY_SEC,
     FailureModelGuard,
-    GuardMode,
     ImpactScope,
 )
 
 logger = logging.getLogger(__name__)
 
+# Curated stability chaos profile: datacenter stop, node kill, slot kill, node stop/start, disk
+# break/cleanup, clock skew. Filtered to what the cluster actually registers (e.g. the DC type
+# only exists on multi-DC clusters). Toggle members are recovered via timed extract.
+_STABILITY_PROFILE: tuple[str, ...] = (
+    "DataCenterStopNodesNemesis",
+    "KillNodeNemesis",
+    "KillSlotDaemonNemesis",
+    "StopStartNodeNemesis",
+    "SafelyBreakDiskNemesis",
+    "SafelyCleanupDisksNemesis",
+    "TimeSkewNemesis",
+)
+
 
 def default_enabled_types() -> list[str]:
-    """FULL-mode types (stateless, one-target injection) — the natural fit for weighted picking."""
-    return [t for t in NEMESIS_TYPES if guard_mode_for(t) is GuardMode.FULL]
+    """The stability chaos profile, restricted to types registered for this cluster."""
+    return [t for t in _STABILITY_PROFILE if t in NEMESIS_TYPES]
 
 
 class WeightedNemesisScheduler:
@@ -49,11 +63,13 @@ class WeightedNemesisScheduler:
         plan_inject: Callable[[str, ChaosTarget], list[DispatchCommand]],
         dispatch: Callable[[DispatchCommand], None],
         recovery_probe=None,
+        plan_extract: Callable[[str, ChaosTarget], list[DispatchCommand]] | None = None,
         enabled_types: Sequence[str] | None = None,
         weight_for: Callable[[str], float] | None = None,
         scope_for: Callable[[str], ImpactScope] = impact_scope_for,
         kind_for: Callable[[str], TargetKind] = target_kind_for,
         recovery_sec_for: Callable[[str], float | None] = recovery_sec_for,
+        recovery_mode_for: Callable[[str], str] = catalog_recovery_mode_for,
         base_interval: float = 60.0,
         jitter: float = 0.5,
         max_per_tick: int = 3,
@@ -63,12 +79,14 @@ class WeightedNemesisScheduler:
         self._guard = guard
         self._inventory = inventory
         self._plan_inject = plan_inject
+        self._plan_extract = plan_extract
         self._dispatch = dispatch
         self._recovery_probe = recovery_probe
         self._weight_for = weight_for or catalog_weight_for
         self._scope_for = scope_for
         self._kind_for = kind_for
         self._recovery_sec_for = recovery_sec_for
+        self._recovery_mode_for = recovery_mode_for
         self._default_recovery_sec = float(default_recovery_sec)
         self._rng = rng or random.Random()
         self._cfg_lock = threading.Lock()
@@ -123,14 +141,21 @@ class WeightedNemesisScheduler:
 
     # -- tick ---------------------------------------------------------------
 
+    def _can_extract(self) -> bool:
+        return self._plan_extract is not None and self._recovery_probe is not None
+
     def _menu(self) -> list[tuple[str, ChaosTarget, frozenset[str], float]]:
         with self._cfg_lock:
             enabled = list(self._enabled)
         impaired = self._guard.active_identities()
+        can_extract = self._can_extract()
         menu: list[tuple[str, ChaosTarget, frozenset[str], float]] = []
         for nemesis_type in enabled:
             weight = self._weight_for(nemesis_type)
             if weight <= 0:
+                continue
+            # A toggle fault with no way to auto-extract would stay broken forever — don't offer it.
+            if self._recovery_mode_for(nemesis_type) == "extract" and not can_extract:
                 continue
             scope = self._scope_for(nemesis_type)
             kind = self._kind_for(nemesis_type)
@@ -172,23 +197,44 @@ class WeightedNemesisScheduler:
             recovery = self._recovery_sec_for(nemesis_type)
             if recovery is None:
                 recovery = self._default_recovery_sec
-            # With a recovery probe, hold the budget (recovery_sec=None) until the fault is
-            # observed recovered; the probe releases by fact. Tablets (empty footprint), a disabled
-            # (fail-open) guard, and the probe-less path fall back to the timer so budget never sticks.
-            use_probe = self._recovery_probe is not None and bool(racks) and self._guard.enabled
+            # The probe releases the budget by fact, so hold it (recovery_sec=None):
+            #   extract  — toggle fault; probe holds `recovery`s then dispatches the extract.
+            #   self     — probe releases once healthcheck sees the host answer again.
+            # A disabled (fail-open) guard, empty footprint, or missing probe falls back to the
+            # reserve timer so self-recovering budget never sticks.
+            by_extract = (
+                self._recovery_mode_for(nemesis_type) == "extract" and self._can_extract()
+            )
+            by_healthcheck = (
+                not by_extract
+                and self._recovery_probe is not None
+                and bool(racks)
+                and self._guard.enabled
+            )
             lease = self._guard.reserve(
                 racks,
-                recovery_sec=None if use_probe else recovery,
+                recovery_sec=None if (by_extract or by_healthcheck) else recovery,
                 identity_key=target.identity_key(),
             )
             if lease is None:
                 break
             for cmd in self._plan_inject(nemesis_type, target):
                 self._dispatch(cmd)
-            if use_probe:
+            if by_extract:
+                self._recovery_probe.track(
+                    lease, target, nemesis_type, timeout_sec=recovery,
+                    recover_action=self._extract_action(nemesis_type, target),
+                )
+            elif by_healthcheck:
                 self._recovery_probe.track(lease, target, nemesis_type, timeout_sec=recovery)
             added += 1
         return added
+
+    def _extract_action(self, nemesis_type: str, target: ChaosTarget) -> Callable[[], None]:
+        def _recover() -> None:
+            for cmd in self._plan_extract(nemesis_type, target):
+                self._dispatch(cmd)
+        return _recover
 
     # -- loop ---------------------------------------------------------------
 

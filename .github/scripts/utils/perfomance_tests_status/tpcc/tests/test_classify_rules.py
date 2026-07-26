@@ -15,6 +15,7 @@ from classify_rules import (  # noqa: E402
     resolve_compare_row,
     tpcc_hard_band,
 )
+from generate import collapse_in_progress_suite_dupes  # noqa: E402
 
 
 def _side(
@@ -89,6 +90,49 @@ class CompareDeltaTpccTests(unittest.TestCase):
         prev = _side("ok")
         now = _side("ok", lat_pct=5.0)
         self.assertEqual(compare_delta_tpcc(prev, now), "same")
+
+
+class CollapseInProgressDupesTests(unittest.TestCase):
+    def test_drops_hot_and_ok_when_in_progress_covers_suite(self):
+        suite = "serializable_default@20000"
+        hot = {
+            "id": "main_perf4_suite",
+            "issue": "lat",
+            "branch": "main",
+            "db": "perf4",
+            "suite": suite,
+            "wh_label": "20k",
+        }
+        ip = {
+            "id": "in_progress_main_perf4_suite",
+            "issue": "in_progress",
+            "branch": "main",
+            "db": "perf4",
+            "suite": suite,
+            "wh_label": "20k",
+            "finished": {"issue": "lat", "status": "regression"},
+        }
+        ok = {
+            "id": "ok_main_perf4_suite",
+            "issue": "ok",
+            "branch": "main",
+            "db": "perf4",
+            "suite": suite,
+        }
+        other = {
+            "id": "main_perf3_other",
+            "issue": "lat",
+            "branch": "main",
+            "db": "perf3",
+            "suite": "snapshot_default@20000",
+        }
+        by_id, oks = collapse_in_progress_suite_dupes(
+            {"h": hot, "ip": ip, "o": other}, [ok]
+        )
+        self.assertIn("ip", by_id)
+        self.assertIn("o", by_id)
+        self.assertNotIn("h", by_id)
+        self.assertEqual(oks, [])
 
 
 class WaveCompareRowFilterTests(unittest.TestCase):

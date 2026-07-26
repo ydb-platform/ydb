@@ -529,7 +529,7 @@ function candidateRows() {
       if (!r.finished) continue;
       r = unwrapFinishedTwin(r);
     }
-    const k = rowKey(r);
+    const k = (r.suite && r.suite !== '—') ? suiteKey(r) : rowKey(r);
     if (seen.has(k)) continue;
     seen.add(k);
     rows.push(r);
@@ -586,11 +586,12 @@ function compareElevatedOkRows() {
   return out;
 }
 function mergeRowPools(...pools) {
+  // Dedupe by suite (not row id): hot + unwrapped in_progress twin share suite, differ by id.
   const seen = new Set();
   const out = [];
   for (const pool of pools) {
     for (const r of (pool || [])) {
-      const k = rowKey(r);
+      const k = (r.suite && r.suite !== '—') ? suiteKey(r) : rowKey(r);
       if (seen.has(k)) continue;
       seen.add(k);
       out.push(r);
@@ -904,10 +905,18 @@ function unwrapFinishedTwin(r) {
     : ((fin.status && fin.status !== 'in_progress') ? fin.status : 'ok');
   return {
     ...fin,
+    // Identity / labels from parent when twin omits them (avoid blank "WH" + dup rows).
+    id: fin.id || r.id,
     branch: r.branch || fin.branch,
     db: r.db || fin.db,
+    cluster: r.cluster || fin.cluster || r.db || fin.db,
     family: r.family != null ? r.family : fin.family,
     suite: r.suite || fin.suite,
+    run_type: fin.run_type || r.run_type,
+    warehouses: fin.warehouses != null ? fin.warehouses : r.warehouses,
+    wh_label: (fin.wh_label != null && fin.wh_label !== '') ? fin.wh_label : r.wh_label,
+    wave: fin.wave || r.wave,
+    version: fin.version || r.version,
     issue,
   };
 }

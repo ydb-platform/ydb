@@ -469,6 +469,34 @@ def build_waves(points: list[dict], lookback_start: datetime, branches: set[str]
     return by_br_cl
 
 
+def collapse_in_progress_suite_dupes(
+    inbox_by_id: dict[str, dict], ok_slices: list[dict]
+) -> tuple[dict[str, dict], list[dict]]:
+    """Drop standalone hot/ok rows when the same suite has in_progress(+finished).
+
+    Otherwise Wave=finished unwraps the twin and inbox shows two identical LAT↑ rows
+    (one with wh_label, one blank after unwrap).
+    """
+
+    def suite_triple(r: dict) -> tuple[str, str, str]:
+        return (r.get("branch") or "", r.get("db") or "", r.get("suite") or "")
+
+    in_prog = {
+        suite_triple(r)
+        for r in inbox_by_id.values()
+        if r.get("issue") == "in_progress" and r.get("suite") and r.get("suite") != "—"
+    }
+    if not in_prog:
+        return inbox_by_id, ok_slices
+    collapsed = {
+        i: r
+        for i, r in inbox_by_id.items()
+        if r.get("issue") == "in_progress" or suite_triple(r) not in in_prog
+    }
+    ok_kept = [r for r in ok_slices if suite_triple(r) not in in_prog]
+    return collapsed, ok_kept
+
+
 def expected_suites(by_br_cl: dict[tuple[str, str], list[dict]]) -> dict[tuple[str, str], set[str]]:
     out: dict[tuple[str, str], set[str]] = {}
     for key, waves in by_br_cl.items():
@@ -645,6 +673,9 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
                     "n": fin.get("n") or 0,
                     "last_ts": fin.get("last_ts"),
                     "version": fin.get("version") or "",
+                    "warehouses": fin.get("warehouses") if fin.get("warehouses") is not None else wh_i,
+                    "wh_label": fin.get("wh_label") or (wh_label(wh_i) if wh_i is not None else "—"),
+                    "wave": fin.get("wave") or "",
                     "history": history_view(pts) if pts else None,
                     "history_by_commit": history_by_commit_view(pts) if pts else None,
                 }
@@ -708,6 +739,9 @@ def build_now_report(points: list[dict], since: datetime) -> dict:
         prev = by_id.get(r["id"])
         if prev is None or STATUS_ORDER.get(r["status"], 0) > STATUS_ORDER.get(prev["status"], 0):
             by_id[r["id"]] = r
+
+    by_id, ok_slices = collapse_in_progress_suite_dupes(by_id, ok_slices)
+
     all_hot = list(by_id.values())
 
     cells = {}

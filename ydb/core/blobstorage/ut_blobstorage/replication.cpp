@@ -7,6 +7,8 @@
 
 #include <ydb/core/blobstorage/ut_blobstorage/lib/ut_helpers.h>
 
+#include <util/random/fast.h>
+
 #define SINGLE_THREAD 1
 
 #define Ctest Cnull
@@ -16,6 +18,50 @@ enum class EState {
     FORMAT,
     OFFLINE,
 };
+
+namespace {
+
+    struct TReplicationBlobSpec {
+        TLogoBlobID Id;
+        ui32 Seed;
+    };
+
+    TString MakeBlobData(ui32 size, ui32 seed) {
+        TReallyFastRng32 rng(seed);
+        TString data = TString::Uninitialized(size);
+        char *buffer = data.Detach();
+        for (ui32 i = 0; i < size; ++i) {
+            buffer[i] = static_cast<char>(rng.GenRand());
+        }
+        return data;
+    }
+
+    std::optional<std::tuple<ui32, ui32, ui32>> FindVSlotForVDisk(const NKikimrBlobStorage::TBaseConfig& baseConfig,
+            const TVDiskID& vdiskId) {
+        for (const auto& vslot : baseConfig.GetVSlot()) {
+            const TVDiskID current(vslot.GetGroupId(), vslot.GetGroupGeneration(), vslot.GetFailRealmIdx(),
+                vslot.GetFailDomainIdx(), vslot.GetVDiskIdx());
+            if (current == vdiskId) {
+                const auto& id = vslot.GetVSlotId();
+                return std::make_tuple(id.GetNodeId(), id.GetPDiskId(), id.GetVSlotId());
+            }
+        }
+        return std::nullopt;
+    }
+
+    void CheckBlobViaProxy(TEnvironmentSetup& env, ui32 groupId, const TLogoBlobID& id, const TString& data) {
+        const TActorId edge = env.Runtime->AllocateEdgeActor(env.Settings.ControllerNodeId);
+        env.Runtime->WrapInActorContext(edge, [&] {
+            SendToBSProxy(edge, groupId, new TEvBlobStorage::TEvGet(id, 0, 0, TInstant::Max(),
+                NKikimrBlobStorage::EGetHandleClass::FastRead));
+        });
+        auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(edge);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->ResponseSz, 1);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses[0].Status, NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses[0].Buffer.ConvertToString(), data);
+    }
+
+} // anonymous namespace
 
 TString DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::vector<EState>& states,
         bool detainReplication = false) {
@@ -354,6 +400,55 @@ Y_UNIT_TEST_SUITE(Replication) {
 
     Y_UNIT_TEST(ReplStuck_mirror3dc) {
         DoTestCase(TBlobStorageGroupType::ErasureMirror3dc, {E::OK, E::FORMAT, E::OK, E::OK, E::OFFLINE, E::OK, E::OK, E::OFFLINE, E::OK}, true);
+    }
+
+    Y_UNIT_TEST(Block42PeerReplicationAfterVDiskRecreate) {
+        constexpr ui32 NumBlobs = 1000;
+        constexpr ui32 MinBlobSize = 100;
+        constexpr ui32 MaxBlobSize = 1_MB;
+
+        TEnvironmentSetup env(TEnvironmentSetup::TSettings{
+            .NodeCount = 8,
+            .VDiskReplPausedAtStart = true,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+            .ControllerNodeId = 1,
+        });
+
+        env.CreateBoxAndPool(1, 1);
+        env.Sim(TDuration::Minutes(1));
+        env.UpdateSettings(false, false);
+
+        const ui32 groupId = env.GetGroups().front();
+        auto groupInfo = env.GetGroupInfo(groupId);
+
+        TVector<TReplicationBlobSpec> blobs;
+        blobs.reserve(NumBlobs);
+
+        TReallyFastRng32 rng(1);
+        for (ui32 i = 0; i < NumBlobs; ++i) {
+            const ui32 size = MinBlobSize + rng.GenRand() % (MaxBlobSize - MinBlobSize + 1);
+            const ui32 seed = rng.GenRand();
+            const TLogoBlobID id(1, 1, i + 1, 0, size, 0);
+            env.PutBlob(groupId, id, MakeBlobData(size, seed));
+            blobs.push_back({id, seed});
+        }
+
+        const TVDiskID targetVDiskId = groupInfo->GetVDiskId(0);
+        const TActorId targetVDiskActorId = groupInfo->GetActorId(0);
+        const auto baseConfig = env.FetchBaseConfig();
+        const auto location = FindVSlotForVDisk(baseConfig, targetVDiskId);
+        UNIT_ASSERT(location);
+
+        const auto [nodeId, pdiskId, vslotId] = *location;
+        env.Wipe(nodeId, pdiskId, vslotId, targetVDiskId);
+        env.Sim(TDuration::Seconds(30));
+
+        env.CommenceReplication();
+        env.WaitForVDiskRepl(targetVDiskActorId, targetVDiskId);
+
+        for (const auto& blob : blobs) {
+            CheckBlobViaProxy(env, groupId, blob.Id, MakeBlobData(blob.Id.BlobSize(), blob.Seed));
+        }
     }
 }
 

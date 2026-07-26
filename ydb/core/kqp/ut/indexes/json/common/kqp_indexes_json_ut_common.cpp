@@ -519,7 +519,7 @@ void TestJsonCorpus(TTestJsonCorpusOptions tOpts, TPredicateBuilderOptions pOpts
 
     TJsonCorpus corpus(TCorpusOptions{.RowCount = tOpts.RowCount, .Seed = tOpts.Seed});
 
-    corpus.UpsertRange(db, "TestTable", jsonType, 0, tOpts.RowCount / 2);
+    UpsertJsonCorpusRange(corpus, db, "TestTable", jsonType, 0, tOpts.RowCount / 2);
     {
         auto result = db.ExecuteQuery(R"(
                 ALTER TABLE TestTable ADD INDEX json_idx GLOBAL USING json ON (Text)
@@ -527,7 +527,7 @@ void TestJsonCorpus(TTestJsonCorpusOptions tOpts, TPredicateBuilderOptions pOpts
                           .ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
-    corpus.UpsertRange(db, "TestTable", jsonType, tOpts.RowCount / 2, tOpts.RowCount / 2);
+    UpsertJsonCorpusRange(corpus, db, "TestTable", jsonType, tOpts.RowCount / 2, tOpts.RowCount / 2);
 
     auto execQ = [&](const std::string& sql, const std::optional<TParams>& params) {
         if (params) {

@@ -47,6 +47,11 @@ struct TBasicUnknownFieldsCollector : public NProtobufJson::IUnknownFieldsCollec
     }
 
     void OnUnknownField(const TString& key, const google::protobuf::Descriptor& value) override {
+        for (int i = 0, end = value.reserved_name_count(); i < end; ++i) {
+            if (value.reserved_name(i) == key) {
+                return;
+            }
+        }
         UnknownKeys[BuildPath(key)] = {key, value.full_name()};
     }
 

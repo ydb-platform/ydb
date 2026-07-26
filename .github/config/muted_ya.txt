@@ -21,7 +21,6 @@ ydb/core/kafka_proxy/ut KafkaProtocol.TopicsCompactionGapFromRetention
 ydb/core/kafka_proxy/ut unittest.sole chunk
 ydb/core/kqp/ut/federated_query/datastreams HasPathDatastreams.CdcStreamMatches
 ydb/core/kqp/ut/federated_query/datastreams HasPathDatastreams.DirectTopicMatches
-ydb/core/kqp/ut/federated_query/datastreams HasPathDatastreams.ExternalTableMatches
 ydb/core/kqp/ut/federated_query/datastreams HasPathDatastreams.FederatedEdsPathMatches
 ydb/core/kqp/ut/federated_query/datastreams HasPathDatastreams.FederatedTopicRemoteNameMatches
 ydb/core/kqp/ut/federated_query/datastreams unittest.[*/*] chunk
@@ -70,7 +69,6 @@ ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_empty_partiti
 ydb/tests/fq/streaming test_watermarks.py.TestWatermarksInYdb.test_idle_partition_gt_timeout[shared-False]
 ydb/tests/functional/blobstorage test_node_warden_cache.py.TestNodeWardenCacheFile.test_cache_file_lifecycle_and_restart
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_disk_creation
-ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_disk_creation_name_with_symbols
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_multiple_disks_creation
 ydb/tests/functional/query_cache/warmup test_warmup.py.TestCompileCacheViewPeerWarnings.test_peer_scan_warnings_increment_on_dead_peer
 ydb/tests/functional/query_cache/warmup test_warmup.py.TestWarmupRestart.test_warmup_basic

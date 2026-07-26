@@ -49,6 +49,8 @@ private:
 
     virtual std::shared_ptr<arrow::Array> BuildArrayAccessor(const ui64 columnId, const ui32 recordsCount) const override;
 
+    virtual NCommon::TPKSortPermutation DoBuildPKSortPermutation() const override;
+
     virtual void InitUsedRawBytes() override {
         AFL_VERIFY(!UsedRawBytes);
         UsedRawBytes = GetPortionAccessor().GetColumnRawBytes(GetContext()->GetAllUsageColumns()->GetColumnIds(), false);

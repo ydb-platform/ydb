@@ -1,4 +1,5 @@
 #include "helpers/local.h"
+#include "helpers/plan_step.h"
 #include "helpers/query_executor.h"
 #include "helpers/typed_local.h"
 #include "helpers/writer.h"
@@ -385,6 +386,149 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
                 const auto& expected = allRows[allRows.size() - 1 - i];
                 UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[i].at("TabletId")), GetUint64(expected.at("TabletId")));
                 UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[i].at("PortionId")), GetUint64(expected.at("PortionId")));
+            }
+        }
+    }
+
+    Y_UNIT_TEST(StatsSysViewOrderByPKWithIndexes) {
+        const TString tablePath = "/Root/olapStore/olapTable";
+        const ui32 insertRowsCount = 10;
+        const ui32 limitSweepMax = 64;
+
+        auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true).SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        settings.AppConfig.MutableColumnShardConfig()->SetEnableSysViewOrderByLimitPushdown(true);
+        TKikimrRunner kikimr(settings);
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+
+        auto helper = TLocalHelper(kikimr);
+        helper.CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+        helper.SetForcedCompaction();
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        const auto executeSchemeQuery = [&](const TString& query) {
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        };
+
+        // Indexes and columns share one schema entity id counter: the index created here gets the id
+        // right after the initial columns and new_column_ui64 gets a greater one. A portion emits its
+        // column chunks before its index chunks, so its rows interleave on InternalEntityId.
+        const auto prepareInterleavedPortions = [&]() {
+            // bulk upsert requires every column of the current schema, so write before ADD COLUMN
+            WriteTestData(kikimr, tablePath, 1000000, 300000000, 1000);
+            executeSchemeQuery(
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_level, TYPE=MIN_MAX, FEATURES=`{"column_name" : "level"}`);)");
+            executeSchemeQuery("ALTER TABLESTORE `/Root/olapStore` ADD COLUMN new_column_ui64 Uint64;");
+            {
+                auto db = kikimr.GetQueryClient();
+                TStringBuilder insertQuery;
+                insertQuery << "INSERT INTO `" << tablePath << "` (timestamp, uid, resource_id, level, new_column_ui64) VALUES";
+                for (ui32 rowIdx = 0; rowIdx < insertRowsCount; ++rowIdx) {
+                    insertQuery << (rowIdx ? "," : "") << " (Timestamp('1970-01-01T00:00:0" << rowIdx % 10 << "Z'), 'uid_" << rowIdx
+                                << "', '" << rowIdx << "', " << rowIdx << ", " << rowIdx << "u)";
+                }
+                insertQuery << ";";
+                auto result = db.ExecuteQuery(insertQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+            // compaction merges the batches into a portion carrying both the index chunk and the
+            // new_column_ui64 record; actualization is the fallback that rewrites any leftover
+            // portion with the index
+            csController->WaitCompactions(TDuration::Seconds(5));
+            executeSchemeQuery("ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
+            AdvancePlanStep(kikimr);
+            csController->WaitActualization(TDuration::Seconds(10));
+        };
+        prepareInterleavedPortions();
+
+        // ORDER BY must be a PK prefix of the sys view (PathId, TabletId, PortionId, InternalEntityId, ChunkIdx)
+        // so that the scan is executed as sorted and KQP relies on the shard output order.
+        const auto buildStatsQuery = [&](const bool desc, const std::optional<ui32> limit) {
+            const TString direction = desc ? " DESC" : "";
+            TStringBuilder query;
+            query << "SELECT PathId, TabletId, PortionId, InternalEntityId, ChunkIdx, EntityType, EntityName" << Endl
+                  << "FROM `" << tablePath << "/.sys/primary_index_stats`" << Endl
+                  << "ORDER BY PathId" << direction << ", TabletId" << direction << ", PortionId" << direction << ", InternalEntityId"
+                  << direction << ", ChunkIdx" << direction << Endl;
+            if (limit) {
+                query << "LIMIT " << *limit << Endl;
+            }
+            return TString(query);
+        };
+
+        using TRowKey = std::tuple<ui64, ui64, ui64, ui64, ui64>;
+        const auto readKeys = [](const auto& rows) {
+            std::vector<TRowKey> keys;
+            for (auto&& row : rows) {
+                keys.emplace_back(GetUint64(row.at("PathId")), GetUint64(row.at("TabletId")), GetUint64(row.at("PortionId")),
+                    GetUint32(row.at("InternalEntityId")), GetUint64(row.at("ChunkIdx")));
+            }
+            return keys;
+        };
+        const auto keyToString = [](const TRowKey& key) {
+            return TStringBuilder() << "(" << std::get<0>(key) << "," << std::get<1>(key) << "," << std::get<2>(key) << ","
+                                    << std::get<3>(key) << "," << std::get<4>(key) << ")";
+        };
+
+        auto fullRows = ExecuteScanQuery(tableClient, buildStatsQuery(false, std::nullopt));
+        auto keys = readKeys(fullRows);
+        UNIT_ASSERT(keys.size());
+
+        {
+            // the test scenario must actually produce a portion where an index entity id is below a
+            // column entity id, otherwise nothing is exercised
+            THashMap<std::pair<ui64, ui64>, std::pair<ui64, ui64>> colMaxIdxMinByPortion;
+            for (ui32 i = 0; i < fullRows.size(); ++i) {
+                const auto portion = std::make_pair(std::get<1>(keys[i]), std::get<2>(keys[i]));
+                const ui64 entityId = std::get<3>(keys[i]);
+                auto& [colMax, idxMin] = colMaxIdxMinByPortion.try_emplace(portion, 0, Max<ui64>()).first->second;
+                if (GetUtf8(fullRows[i].at("EntityType")) == "IDX") {
+                    idxMin = Min(idxMin, entityId);
+                } else {
+                    colMax = Max(colMax, entityId);
+                }
+            }
+            bool interleaved = false;
+            for (auto&& [_, colMaxIdxMin] : colMaxIdxMinByPortion) {
+                interleaved = interleaved || colMaxIdxMin.second < colMaxIdxMin.first;
+            }
+            TStringBuilder rowsDump;
+            for (ui32 i = 0; i < fullRows.size(); ++i) {
+                rowsDump << keyToString(keys[i]) << GetUtf8(fullRows[i].at("EntityType")) << ":" << GetUtf8(fullRows[i].at("EntityName"))
+                         << ";";
+            }
+            UNIT_ASSERT_C(interleaved, "expected a portion with an index entity id below a column entity id, got: " << rowsDump);
+        }
+
+        auto sortedKeys = keys;
+        std::sort(sortedKeys.begin(), sortedKeys.end());
+        for (ui32 i = 0; i < keys.size(); ++i) {
+            UNIT_ASSERT_C(keys[i] == sortedKeys[i],
+                TStringBuilder() << "unsorted ASC output at row " << i << ": " << keyToString(keys[i]) << " != " << keyToString(sortedKeys[i]));
+        }
+
+        {
+            auto rows = ExecuteScanQuery(tableClient, buildStatsQuery(true, std::nullopt));
+            auto descKeys = readKeys(rows);
+            std::reverse(descKeys.begin(), descKeys.end());
+            UNIT_ASSERT_VALUES_EQUAL(descKeys.size(), sortedKeys.size());
+            for (ui32 i = 0; i < descKeys.size(); ++i) {
+                UNIT_ASSERT_C(descKeys[i] == sortedKeys[i],
+                    TStringBuilder() << "unsorted DESC output at row " << i << ": " << keyToString(descKeys[i]) << " != "
+                                     << keyToString(sortedKeys[i]));
+            }
+        }
+
+        for (ui32 limit = 1; limit <= Min<ui32>(keys.size(), limitSweepMax); ++limit) {
+            auto rows = ExecuteScanQuery(tableClient, buildStatsQuery(false, limit));
+            auto limitKeys = readKeys(rows);
+            UNIT_ASSERT_VALUES_EQUAL(limitKeys.size(), limit);
+            for (ui32 i = 0; i < limit; ++i) {
+                UNIT_ASSERT_C(limitKeys[i] == sortedKeys[i],
+                    TStringBuilder() << "wrong row for limit " << limit << " at " << i << ": " << keyToString(limitKeys[i]) << " != "
+                                     << keyToString(sortedKeys[i]));
             }
         }
     }

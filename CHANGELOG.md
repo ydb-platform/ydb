@@ -76,6 +76,7 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 25538:added basic monitoring tests and separate events file [#25538](https://github.com/ydb-platform/ydb/pull/25538) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 25458:Сейчас при автопартициронировании топиков учитывается скорость записи различными producer-ами: партиция делится не пополам, а стараемся разделить партицию таким образом, что бы producer-ы распределились по новым партициям равномерно с учетом скорости записи. [#25458](https://github.com/ydb-platform/ydb/pull/25458) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 25387:Change the audit logging logic from AllowedList checking to DenyList checking [#25387](https://github.com/ydb-platform/ydb/pull/25387) ([Andrei Rykov](https://github.com/StekPerepolnen))
+* 30697:Add keyvalue grpc api v2 [#30697](https://github.com/ydb-platform/ydb/pull/30697) ([kruall](https://github.com/kruall))
 
 ### Bug fixes
 
@@ -146,12 +147,18 @@ https://github.com/ydb-platform/ydb/issues/25454 [#25536](https://github.com/ydb
 * 25515:Fixed fault for checkpoint on not drained channels [#25515](https://github.com/ydb-platform/ydb/pull/25515) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 25412:https://github.com/ydb-platform/ydb/issues/23180 [#25412](https://github.com/ydb-platform/ydb/pull/25412) ([Vasily Gerasimov](https://github.com/UgnineSirdis))
 * 25408:Fixed tests:
+* None:CreateStreamingQueryMatchRecognize
+* 30925:Fixes crashes when cache mode in_memory enabled (#30932) [#30925](https://github.com/ydb-platform/ydb/pull/30925) ([Ivan Nikolaev](https://github.com/lex007in))
+* 30917:#30836
+Constrain reader advancement beyond writer position in mpcm ring queue [#30917](https://github.com/ydb-platform/ydb/pull/30917) ([kruall](https://github.com/kruall))
+* 30837:Remove needles loop which can trigger high cpu consumption
+#30836 [#30837](https://github.com/ydb-platform/ydb/pull/30837) ([kruall](https://github.com/kruall))
+* 30754:https://github.com/ydb-platform/ydb/issues/30753
 
-* TestRetryLimiter 
-* RestoreScriptPhysicalGraphOnRetry 
-* CreateStreamingQueryMatchRecognize 
+Fix dsproxy getting max huge blob size across all VDisks instead of min. [#30754](https://github.com/ydb-platform/ydb/pull/30754) ([Semyon Danilov](https://github.com/SammyVimes))
+* 30421:https://github.com/ydb-platform/ydb/issues/30422
 
-Also increased default test logs level [#25408](https://github.com/ydb-platform/ydb/pull/25408) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+Fix last level compaction strategy based on SST creation time [#30421](https://github.com/ydb-platform/ydb/pull/30421) ([Semyon Danilov](https://github.com/SammyVimes))
 
 ### YDB UI
 

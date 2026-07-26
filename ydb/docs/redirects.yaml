@@ -97,7 +97,9 @@ common:
   - from: /devops/manual/maintenance-without-downtime.md
     to: /devops/concepts/maintenance-without-downtime.md
   - from: /devops/manual/backup-and-recovery.md
-    to: /devops/backup-and-recovery.md
+    to: /devops/backup-and-recovery/index.md
+  - from: /devops/backup-and-recovery.md
+    to: /devops/backup-and-recovery/index.md
   - from: /devops/manual/static-group-move.md
     to: /devops/configuration-management/configuration-v1/static-group-move.md
   - from: /devops/manual/system-views.md
@@ -136,10 +138,6 @@ common:
     to: /devops/concepts/versioning.md
   - from: /devops/manual/maintenance-without-downtime.md
     to: /devops/concepts/maintenance-without-downtime.md
-
-  # Redirect for backup-and-recovery
-  - from: /devops/manual/backup-and-recovery.md
-    to: /devops/backup-and-recovery.md
 
   # Redirect for deprecated instructions
   - from: /devops/manual/state-storage-move.md
@@ -546,6 +544,10 @@ ru:
     to: /reference/ydb-sdk/observability/tracing/opentelemetry.md
   - from: /integrations/sql-dialect-converter.md
     to: /integrations/sql-translation/sql-dialect-converter.md
+  - from: /devops/deployment-options/manual/initial-deployment.md
+    to: /devops/deployment-options/manual/initial-deployment/index.md
+  - from: /devops/deployment-options/ansible/initial-deployment.md
+    to: /devops/deployment-options/ansible/initial-deployment/index.md
 
 en:
   - from: /reference/ydb-sdk/recipes/debug-jaeger.md
@@ -556,14 +558,12 @@ en:
     to: /recipes/ydb-sdk/debug-prometheus.md
   - from: /reference/ydb-sdk/recipes/debug.md
     to: /recipes/ydb-sdk/debug.md
-  - from: /devops/deployment-options/manual/initial-deployment.md
-    to: /devops/deployment-options/manual/initial-deployment/index.md
   - from: /devops/manual/initial-deployment.md
     to: /devops/deployment-options/manual/initial-deployment/index.md
   - from: /cluster/system-requirements.md
     to: /devops/system-requirements.md
   - from: /devops/observability/initial-deployment.md
-    to: /devops/deployment-options/manual/initial-deployment.md
+    to: /devops/deployment-options/manual/initial-deployment/index.md
   - from: /maintenance/manual/index.md
     to: /devops/deployment-options/manual/index.md
   - from: /public-materials/videos/2017.md

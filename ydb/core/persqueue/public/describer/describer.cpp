@@ -3,6 +3,9 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 
+#include <library/cpp/containers/absl/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
+
 #include <util/generic/algorithm.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_DESCRIBER
@@ -38,7 +41,7 @@ TString MakeLbUserTopicPath(const TString& lbUserDatabaseRoot, const TString& to
 
 class TDescribeActor : public TActorBootstrapped<TDescribeActor> {
 public:
-    TDescribeActor(const NActors::TActorId& parent, const TString& databasePath, const std::unordered_set<TString>&& topicPaths, const TDescribeSettings& settings)
+    TDescribeActor(const NActors::TActorId& parent, const TString& databasePath, absl::flat_hash_set<TString>&& topicPaths, const TDescribeSettings& settings)
         : Parent(parent)
         , DatabasePath(databasePath)
         , TopicPaths(std::move(topicPaths))
@@ -54,7 +57,7 @@ public:
         DoRequest(TopicPaths);
     }
 
-    void DoRequest(const std::unordered_set<TString>& topicPath) {
+    void DoRequest(const absl::flat_hash_set<TString>& topicPath) {
         YDB_LOG_DEBUG("Create request with",
             {"logPrefix", LOG_PREFIX},
             {"topicPaths", JoinRange(", ", topicPath.begin(), topicPath.end())},
@@ -89,7 +92,7 @@ public:
             {"logPrefix", LOG_PREFIX});
         auto& result = ev->Get()->Request;
 
-        std::unordered_set<TString> unknownPaths;
+        absl::flat_hash_set<TString> unknownPaths;
 
         for (size_t i = 0; i < result->ResultSet.size(); ++i) {
             const auto& entry = result->ResultSet[i];
@@ -247,7 +250,7 @@ public:
             // Same local→global pattern as for the original topic paths.
             RetryWithSyncVersion = false;
 
-            std::unordered_set<TString> newPath;
+            absl::flat_hash_set<TString> newPath;
             newPath.reserve(LbRootPaths.size());
             for (const auto& [path, _] : LbRootPaths) {
                 newPath.insert(path);
@@ -260,7 +263,7 @@ public:
             RetryWithSyncVersion = false;
             RetryWithCDC = true;
 
-            std::unordered_set<TString> newPath;
+            absl::flat_hash_set<TString> newPath;
             newPath.reserve(CDCPaths.size());
             for (auto& [path, _] : CDCPaths) {
                 newPath.insert(path);
@@ -324,10 +327,10 @@ private:
 private:
     const NActors::TActorId Parent;
     const TString DatabasePath;
-    const std::unordered_set<TString> TopicPaths;
+    const absl::flat_hash_set<TString> TopicPaths;
     const TDescribeSettings Settings;
     // normalized path -> original path
-    std::unordered_map<TString, TString> PathToOriginalPath;
+    absl::flat_hash_map<TString, TString> PathToOriginalPath;
 
     bool RetryWithSyncVersion = false;
     bool UsedSyncVersion = false;
@@ -339,18 +342,18 @@ private:
         TString OriginalPath;
         TString CdcStreamName;
     };
-    std::unordered_map<TString, TCDCTopicInfo> CDCPaths;
+    absl::flat_hash_map<TString, TCDCTopicInfo> CDCPaths;
     // LbUserDatabaseRoot-prefixed path -> original topic path
     struct TLbRootTopicInfo {
         TString OriginalPath;
     };
-    std::unordered_map<TString, TLbRootTopicInfo> LbRootPaths;
-    std::unordered_map<TString, TTopicInfo> Result;
+    absl::flat_hash_map<TString, TLbRootTopicInfo> LbRootPaths;
+    absl::flat_hash_map<TString, TTopicInfo> Result;
 };
 
 } // namespace
 
-NActors::IActor* CreateDescriberActor(const NActors::TActorId& parent, const TString& databasePath, const std::unordered_set<TString>&& topicPaths, const TDescribeSettings& settings) {
+NActors::IActor* CreateDescriberActor(const NActors::TActorId& parent, const TString& databasePath, absl::flat_hash_set<TString>&& topicPaths, const TDescribeSettings& settings) {
     return new TDescribeActor(parent, databasePath, std::move(topicPaths), settings);
 }
 

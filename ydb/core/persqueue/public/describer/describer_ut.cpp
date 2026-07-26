@@ -28,14 +28,14 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         driver.Stop(true);
     }
 
-    void CreateActor(NActors::TTestActorRuntime& runtime, std::unordered_set<TString>&& topics) {
+    void CreateActor(NActors::TTestActorRuntime& runtime, absl::flat_hash_set<TString>&& topics) {
         auto edgeId = runtime.AllocateEdgeActor();
         auto describerId = runtime.Register(NDescriber::CreateDescriberActor(edgeId, "/Root", std::move(topics)));
         runtime.EnableScheduleForActor(describerId);
         runtime.DispatchEvents();
     }
 
-    std::unordered_map<TString, NDescriber::TTopicInfo> WaitResult(NActors::TTestActorRuntime& runtime) {
+    absl::flat_hash_map<TString, NDescriber::TTopicInfo> WaitResult(NActors::TTestActorRuntime& runtime) {
         auto ev = runtime.GrabEdgeEvent<NDescriber::TEvDescribeTopicsResponse>();
         return std::move(ev->Topics);
     }

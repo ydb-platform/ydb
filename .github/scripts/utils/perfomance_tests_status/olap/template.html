@@ -358,7 +358,7 @@
     </span>
     <span class="sep"></span>
     <span class="lbl">React</span>
-    <span id="reactBar" style="display:inline-flex;gap:4px">
+    <span id="reactBar" style="display:inline-flex;gap:4px" title="Каналы сигналов: inbox + скрытие строк heatmap без совпадений">
       <button type="button" class="react-btn" data-react="fail" aria-pressed="true">fail</button>
       <button type="button" class="react-btn" data-react="hard" aria-pressed="false">hard</button>
       <button type="button" class="react-btn" data-react="soft" aria-pressed="false">soft</button>
@@ -1257,14 +1257,32 @@ function liveCellNow(branch, db, fam) {
     return rowMatchesReact(r);
   });
   if (!rows.length) {
+    // No suite matched active React channels in this cell.
+    // Do not surface soft/nodata here unless those channels are on — otherwise
+    // fail-only mode still paints yellow "soft" from ok/watch fallbacks.
     const oks = okRowsForCell(branch, db, fam);
     if (oks.length) {
-      const watch = oks.some(r => r.issue === 'watch' || r.status === 'watch');
+      const watch = s.soft && oks.some(r => r.issue === 'watch' || r.status === 'watch');
+      const nd = s.nodata && oks.some(r => hasNodataSignal(r));
+      if (watch) {
+        return {
+          status: 'watch',
+          n_hot: 0, n_fail: 0, n_slow: 0,
+          n_soft: oks.filter(r => r.issue === 'watch' || r.status === 'watch').length,
+          n_nodata: 0, n_queries: 0,
+        };
+      }
+      if (nd) {
+        return {
+          status: 'nodata',
+          n_hot: 0, n_fail: 0, n_slow: 0, n_soft: 0,
+          n_nodata: oks.filter(r => hasNodataSignal(r)).length,
+          n_queries: 0,
+        };
+      }
       return {
-        status: watch ? 'watch' : 'ok',
-        n_hot: 0, n_fail: 0, n_slow: 0,
-        n_soft: watch ? oks.filter(r => r.issue === 'watch' || r.status === 'watch').length : 0,
-        n_nodata: 0, n_queries: 0,
+        status: 'ok',
+        n_hot: 0, n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 0, n_queries: 0,
       };
     }
     return { status: 'nodata', n_hot: 0, n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 0, n_queries: 0 };
@@ -1605,6 +1623,46 @@ function dbsForBranch(branch) {
   return [];
 }
 
+/** True if cell matches at least one active React channel (fail/hard/soft/nodata). */
+function cellMatchesReact(live) {
+  if (!live) return false;
+  const s = reactSignals();
+  const any = s.fail || s.hard || s.soft || s.nodata;
+  if (!any) return true; // all channels off → show full grid (infra-only mode)
+  const st = live.compare ? (live.delta_status || live.status) : (live.status || '');
+  if (s.fail && ((live.n_fail || 0) > 0
+      || st === 'broken' || st === 'failing' || st === 'fail' || st === 'both'
+      // Python often stores suite-level fail as status=regression (shared with slow).
+      || (st === 'regression' && (live.n_slow || 0) === 0))) {
+    return true;
+  }
+  if (s.hard && ((live.n_slow || 0) > 0
+      || st === 'regression' || st === 'slower' || st === 'slow' || st === 'both')) {
+    return true;
+  }
+  if (s.soft && ((live.n_soft || 0) > 0 || st === 'watch')) return true;
+  if (s.nodata && ((live.n_nodata || 0) > 0 || st === 'nodata')) return true;
+  // Coverage / wave issues stay visible regardless of react channels.
+  if (st === 'missing' || st === 'stale' || st === 'in_progress') return true;
+  return false;
+}
+
+/** Db row stays if any suite on it matches React (same rules as inbox) or a cell does. */
+function dbMatchesReact(branch, db) {
+  const s = reactSignals();
+  if (!(s.fail || s.hard || s.soft || s.nodata)) return true;
+  const pools = [candidateRows(), DATA.ok || []];
+  for (const pool of pools) {
+    for (const r of pool) {
+      if (branch && r.branch !== branch) continue;
+      if (r.db !== db) continue;
+      if (!itemInWindow(r)) continue;
+      if (rowMatchesReact(r)) return true;
+    }
+  }
+  return false;
+}
+
 function renderHeatmap() {
   const h = DATA.heatmap || { dbs: [], families: [], cells: {}, branches: [] };
   let br = selectedBranch();
@@ -1619,13 +1677,27 @@ function renderHeatmap() {
       html += `<div class="empty">Нет кластеров с прогонами ветки ${esc(branch)}</div>`;
       continue;
     }
+    // Precompute lives; hide DbAlias rows with no React-matching suite (inbox-aligned).
+    const rowLives = [];
+    for (const db of dbs) {
+      if (!dbMatchesReact(branch, db)) continue;
+      const lives = {};
+      for (const fam of h.families) {
+        lives[fam] = liveCell(branch, db, fam);
+      }
+      rowLives.push({ db, lives });
+    }
+    if (!rowLives.length) {
+      html += `<div class="empty">Нет строк под React-фильтр (fail/hard/soft/no data) · ${esc(branch)}</div>`;
+      continue;
+    }
     html += `<table class="heat"><thead><tr><th>DbAlias</th>`;
     for (const fam of h.families) html += `<th>${esc(fam)}</th>`;
     html += `<th>Compare</th><th>Last wave</th></tr></thead><tbody>`;
-    for (const db of dbs) {
+    for (const { db, lives } of rowLives) {
       html += `<tr><td><span class="cluster">${esc(db)}</span></td>`;
       for (const fam of h.families) {
-        const live = liveCell(branch, db, fam);
+        const live = lives[fam];
         const st = live.status || 'ok';
         const tip = live.compare && live.prev
           ? `compare → now: ${shortCellStatus(live.prev.status, live.prev.n_fail, live.prev.n_slow, live.prev.n_soft, live.prev.n_nodata)} → ${shortCellStatus(live.delta_status, live.n_fail, live.n_slow, live.n_soft, live.n_nodata)}`

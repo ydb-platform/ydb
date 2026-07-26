@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: yarl
-Version: 1.12.1
+Version: 1.13.1
 Summary: Yet another URL library
 Home-page: https://github.com/aio-libs/yarl
 Author: Andrew Svetlov
@@ -261,6 +261,60 @@ Changelog
     WARNING: Don't drop the next directive!
 
 .. towncrier release notes start
+
+1.13.1
+======
+
+*(2024-09-27)*
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved performance of calling ``yarl.URL.build()`` with ``authority`` -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1163 <https://github.com/aio-libs/yarl/issues/1163>`__.
+
+
+----
+
+
+1.13.0
+======
+
+*(2024-09-26)*
+
+
+Bug fixes
+---------
+
+- Started rejecting ASCII hostnames with invalid characters. For host strings that
+  look like authority strings, the exception message includes advice on what to do
+  instead -- by `@mjpieters <https://github.com/sponsors/mjpieters>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#880 <https://github.com/aio-libs/yarl/issues/880>`__, `#954 <https://github.com/aio-libs/yarl/issues/954>`__.
+
+- Fixed IPv6 addresses missing brackets when the ``~yarl.URL`` was converted to a string -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1157 <https://github.com/aio-libs/yarl/issues/1157>`__, `#1158 <https://github.com/aio-libs/yarl/issues/1158>`__.
+
+
+Features
+--------
+
+- Added ``~yarl.URL.host_subcomponent`` which returns the ``3986#section-3.2.2`` host subcomponent -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  The only current practical difference between ``~yarl.URL.raw_host`` and ``~yarl.URL.host_subcomponent`` is that IPv6 addresses are returned bracketed.
+
+  *Related issues and pull requests on GitHub:*
+  `#1159 <https://github.com/aio-libs/yarl/issues/1159>`__.
+
+
+----
+
 
 1.12.1
 ======

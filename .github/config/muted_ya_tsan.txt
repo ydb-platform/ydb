@@ -82,7 +82,6 @@ ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery22
 ydb/core/kqp/executer_actor/ut unittest.sole chunk
 ydb/core/kqp/rm_service/ut KqpRm.ConcurrentChannels
 ydb/core/kqp/rm_service/ut KqpRm.ConcurrentTasks
-ydb/core/kqp/ut/indexes/fulltext unittest.[*/*] chunk
 ydb/core/kqp/ut/opt unittest.[*/*] chunk
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/query KqpAnalyzeOperations.AnalyzeOperationsLifecycle
@@ -135,32 +134,9 @@ ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Int8
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.ColumnType_Utf8_LongValue
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.MessageField_WriteTimestamp
 ydb/core/transfer/ut/column_table unittest.sole chunk
-ydb/core/transfer/ut/functional Transfer.AlterLambdaOnWork
-ydb/core/transfer/ut/functional Transfer.AlterTargetDirectory
-ydb/core/transfer/ut/functional Transfer.Alter_WithSecret
 ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Remote
-ydb/core/transfer/ut/functional Transfer.CheckCurrentDateTime
-ydb/core/transfer/ut/functional Transfer.CreateAndAlterTransferInDirectory
-ydb/core/transfer/ut/functional Transfer.ErrorInMultiLine
 ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
-ydb/core/transfer/ut/functional Transfer.MessageField_Attributes_Local
 ydb/core/transfer/ut/functional Transfer.MessageField_Attributes_Remote
-ydb/core/transfer/ut/functional Transfer.MessageField_CreateTimestamp_Local
-ydb/core/transfer/ut/functional Transfer.MessageField_CreateTimestamp_Remote
-ydb/core/transfer/ut/functional Transfer.MessageField_Key
-ydb/core/transfer/ut/functional Transfer.MessageField_Key_Empty
-ydb/core/transfer/ut/functional Transfer.MessageField_Partition_Local
-ydb/core/transfer/ut/functional Transfer.MessageField_Partition_Remote
-ydb/core/transfer/ut/functional Transfer.MessageField_WriteTimestamp_Local
-ydb/core/transfer/ut/functional Transfer.MessageField_WriteTimestamp_Remote
-ydb/core/transfer/ut/functional Transfer.PauseAndResumeTransfer
-ydb/core/transfer/ut/functional Transfer.ReadFromCDC_Local
-ydb/core/transfer/ut/functional Transfer.ReadFromCDC_Remote
-ydb/core/transfer/ut/functional Transfer.TargetTableWithoutDirectory
-ydb/core/transfer/ut/functional Transfer.TargetTableWriteInsideDirectory
-ydb/core/transfer/ut/functional Transfer.TargetTableWriteOutsideDirectory
-ydb/core/transfer/ut/functional Transfer.WriteToNotExists
-ydb/core/transfer/ut/functional Transfer.WriteToNotTable
 ydb/core/transfer/ut/row_table Transfer_RowTable.ComplexKey
 ydb/core/transfer/ut/row_table unittest.sole chunk
 ydb/core/tx/columnshard/backup/iscan/ut IScan.MultiExport

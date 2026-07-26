@@ -660,7 +660,11 @@ function statusSeverity(st) {
   })[st] || 0;
 }
 function shortCellStatus(st, nFail, nSlow, nSoft, nNodata) {
-  // Counts first — same order as fmtFS / legend (slow N fail M).
+  // Coverage beats query counts — avoid blue "in progress" cell labeled "fail N".
+  if (st === 'missing') return 'missing';
+  if (st === 'stale') return 'stale';
+  if (st === 'in_progress') return 'in progress';
+  // Counts next — same order as fmtFS / legend (slow N fail M).
   // Do NOT map status "regression" → "slow" when only fails are present.
   const fs = fmtFS(nFail || 0, nSlow || 0, nSoft || 0, nNodata || 0);
   if (fs) {
@@ -670,20 +674,44 @@ function shortCellStatus(st, nFail, nSlow, nSoft, nNodata) {
   if (st === 'broken' || st === 'failing' || st === 'fail') return 'fail';
   if (st === 'regression' || st === 'slower' || st === 'slow') return 'hot';
   if (st === 'watch') return 'soft';
-  if (st === 'missing') return 'missing';
-  if (st === 'stale') return 'stale';
-  if (st === 'in_progress') return 'in progress';
   if (st === 'nodata') return 'no data';
   if (st === 'both') return 'fail+slow';
   return 'ok';
 }
+/** Synthetic in_progress → finished twin for classify/compare (keeps branch/db/suite). */
+function unwrapFinishedTwin(r) {
+  if (!r || r.issue !== 'in_progress' || !r.finished) return r;
+  const fin = r.finished;
+  const issue = (fin.issue && fin.issue !== 'in_progress')
+    ? fin.issue
+    : ((fin.status && fin.status !== 'in_progress') ? fin.status : 'ok');
+  return {
+    ...fin,
+    branch: r.branch || fin.branch,
+    db: r.db || fin.db,
+    family: r.family != null ? r.family : fin.family,
+    suite: r.suite || fin.suite,
+    issue,
+  };
+}
+/**
+ * Row for compare pool:
+ * - in_progress + finished → twin (real was/now vs compare wave)
+ * - in_progress + no twin + Wave=finished → skip
+ * - in_progress + no twin + Wave=all → keep (coverage stub)
+ */
+function rowForCompare(r) {
+  if (!r || r.issue !== 'in_progress') return r;
+  if (r.finished) return unwrapFinishedTwin(r);
+  if (waveView() === 'finished') return null;
+  return r;
+}
 function allSuiteRows(branch, db, fam) {
   const out = [];
   const seen = new Set();
-  const mode = waveView();
-  for (const r of [...(DATA.inbox || []), ...(DATA.ok || [])]) {
-    // Match candidateRows: finished wave must not pull synthetic in_progress into compare.
-    if (mode === 'finished' && r.issue === 'in_progress') continue;
+  for (const raw of [...(DATA.inbox || []), ...(DATA.ok || [])]) {
+    const r = rowForCompare(raw);
+    if (!r) continue;
     if (branch && r.branch !== branch) continue;
     if (r.db !== db || r.family !== fam) continue;
     if (!r.suite || r.suite === '—') continue;
@@ -744,6 +772,10 @@ function classifySuiteAtWave(item, wave) {
  */
 function classifySuiteNowVsWaveBaseline(item, wave) {
   if (!wave) return null;
+  // Prefer finished twin metrics over synthetic in_progress coverage stub.
+  if (item.issue === 'in_progress' && item.finished) {
+    return classifySuiteNowVsWaveBaseline(unwrapFinishedTwin(item), wave);
+  }
   if (item.issue === 'missing' || item.issue === 'in_progress' || item.issue === 'stale') {
     return {
       status: item.issue,
@@ -1126,8 +1158,13 @@ function candidateRows() {
   const mode = waveView();
   const seen = new Set();
   const rows = [];
-  for (const r of (DATA.inbox || [])) {
-    if (mode === 'finished' && r.issue === 'in_progress') continue;
+  for (const raw of (DATA.inbox || [])) {
+    let r = raw;
+    // Finished wave: use finished twin when present (do not drop the suite).
+    if (mode === 'finished' && r.issue === 'in_progress') {
+      if (!r.finished) continue;
+      r = unwrapFinishedTwin(r);
+    }
     const k = rowKey(r);
     if (seen.has(k)) continue;
     seen.add(k);
@@ -1639,8 +1676,12 @@ function compareElevatedOkRows() {
   const mode = waveView();
   const out = [];
   const seen = new Set();
-  for (const r of (DATA.ok || [])) {
-    if (mode === 'finished' && r.issue === 'in_progress') continue;
+  for (const raw of (DATA.ok || [])) {
+    let r = raw;
+    if (mode === 'finished' && r.issue === 'in_progress') {
+      if (!r.finished) continue;
+      r = unwrapFinishedTwin(r);
+    }
     const k = rowKey(r);
     if (seen.has(k)) continue;
     if (!getCompareId(r.branch, r.db)) continue;
@@ -1676,8 +1717,13 @@ function inboxPool(issue) {
   if (issue === 'nodata') {
     const seen = new Set();
     const out = [];
-    for (const r of [...(DATA.inbox || []), ...(DATA.ok || [])]) {
-      if (waveView() === 'finished' && r.issue === 'in_progress') continue;
+    const mode = waveView();
+    for (const raw of [...(DATA.inbox || []), ...(DATA.ok || [])]) {
+      let r = raw;
+      if (mode === 'finished' && r.issue === 'in_progress') {
+        if (!r.finished) continue;
+        r = unwrapFinishedTwin(r);
+      }
       const k = rowKey(r);
       if (seen.has(k)) continue;
       seen.add(k);

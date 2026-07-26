@@ -140,27 +140,42 @@ def classify_duration(
     }
 
 
-def olap_hard_band(side: dict | None) -> int:
+# Mirror olap/template.html reactState defaults (fail on, hard/soft/nodata off).
+DEFAULT_REACT = {"fail": True, "hard": False, "soft": False, "nodata": False}
+# Full hard paint (fail + hard slow) — used when UI React hard is on.
+REACT_FAIL_HARD = {"fail": True, "hard": True, "soft": False, "nodata": False}
+
+
+def _react(signals: dict | None) -> dict:
+    return dict(DEFAULT_REACT if signals is None else signals)
+
+
+def olap_hard_band(side: dict | None, react: dict | None = None) -> int:
+    """Hard band for compare paint; same React toggles as template.html fmtFS."""
     if not side:
         return 0
+    s = _react(react)
     st = side.get("status") or ""
-    if st in ("broken", "failing", "fail", "both"):
+    fails = (side.get("n_fail") or 0) if s.get("fail") else 0
+    slows = (side.get("n_slow") or 0) if s.get("hard") else 0
+    if s.get("fail") and st in ("broken", "failing", "fail", "both"):
         return 2
-    fails = side.get("n_fail") or 0
-    slows = side.get("n_slow") or 0
     if fails > 0:
         return 2
-    if slows > 0 or st in ("regression", "slower", "slow"):
+    if s.get("hard") and (slows > 0 or st in ("regression", "slower", "slow")):
         return 1
     return 0
 
 
-def compare_delta_olap(prev: dict, now: dict) -> str:
-    """Significant hard compare paint; opposing fail/slow → mixed."""
-    pb = olap_hard_band(prev)
-    nb = olap_hard_band(now)
-    pf, ps = prev.get("n_fail") or 0, prev.get("n_slow") or 0
-    nf, ns = now.get("n_fail") or 0, now.get("n_slow") or 0
+def compare_delta_olap(prev: dict, now: dict, react: dict | None = None) -> str:
+    """Significant hard compare paint; opposing fail/slow → mixed. React-filtered."""
+    s = _react(react)
+    pb = olap_hard_band(prev, s)
+    nb = olap_hard_band(now, s)
+    pf = (prev.get("n_fail") or 0) if s.get("fail") else 0
+    ps = (prev.get("n_slow") or 0) if s.get("hard") else 0
+    nf = (now.get("n_fail") or 0) if s.get("fail") else 0
+    ns = (now.get("n_slow") or 0) if s.get("hard") else 0
     fail_up, fail_down = nf > pf, nf < pf
     slow_up, slow_down = ns > ps, ns < ps
     if (fail_up and slow_down) or (fail_down and slow_up):
@@ -170,3 +185,100 @@ def compare_delta_olap(prev: dict, now: dict) -> str:
     if fail_down or slow_down or nb < pb:
         return "better"
     return "same"
+
+
+def fmt_fs(
+    n_fail: int = 0,
+    n_slow: int = 0,
+    n_soft: int = 0,
+    n_nodata: int = 0,
+    react: dict | None = None,
+) -> str:
+    """Mirror template.html fmtFS (order: slow, fail, soft, no data)."""
+    s = _react(react)
+    bits: list[str] = []
+    if s.get("hard") and n_slow:
+        bits.append(f"slow {n_slow}")
+    if s.get("fail") and n_fail:
+        bits.append(f"fail {n_fail}")
+    if s.get("soft") and n_soft:
+        bits.append(f"soft {n_soft}")
+    if s.get("nodata") and n_nodata:
+        bits.append(f"no data {n_nodata}")
+    return " ".join(bits)
+
+
+def short_cell_status(
+    st: str,
+    n_fail: int = 0,
+    n_slow: int = 0,
+    n_soft: int = 0,
+    n_nodata: int = 0,
+    react: dict | None = None,
+) -> str:
+    """Mirror template.html shortCellStatus for label/paint consistency checks."""
+    # Coverage beats query counts (same as JS).
+    if st == "missing":
+        return "missing"
+    if st == "stale":
+        return "stale"
+    if st == "in_progress":
+        return "in progress"
+    fs = fmt_fs(n_fail, n_slow, n_soft, n_nodata, react)
+    if fs:
+        if st == "broken":
+            return f"broken {fs}"
+        return fs
+    if st in ("broken", "failing", "fail"):
+        return "fail"
+    if st in ("regression", "slower", "slow"):
+        return "hot"
+    if st == "watch":
+        return "soft"
+    if st == "nodata":
+        return "no data"
+    if st == "both":
+        return "fail+slow"
+    return "ok"
+
+
+def compare_cell_paint_status(prev: dict, now: dict, react: dict | None = None) -> str:
+    """Mirror liveCell status class: delta-* or raw now.status when same."""
+    delta = compare_delta_olap(prev, now, react)
+    if delta == "same":
+        return now.get("status") or "ok"
+    return f"delta-{delta}"
+
+
+def unwrap_finished_twin(row: dict) -> dict:
+    """Mirror template.html unwrapFinishedTwin."""
+    fin = row.get("finished") or {}
+    issue = fin.get("issue")
+    if not issue or issue == "in_progress":
+        st = fin.get("status")
+        issue = st if st and st != "in_progress" else "ok"
+    out = dict(fin)
+    for k in ("branch", "db", "family", "suite"):
+        out[k] = row.get(k) if row.get(k) is not None else fin.get(k)
+    out["issue"] = issue
+    return out
+
+
+def resolve_compare_row(row: dict, wave_view: str) -> dict | None:
+    """Mirror template.html rowForCompare: twin / skip / keep coverage stub."""
+    if row.get("issue") != "in_progress":
+        return row
+    if row.get("finished"):
+        return unwrap_finished_twin(row)
+    if wave_view == "finished":
+        return None
+    return row
+
+
+def include_row_in_compare(
+    issue: str | None, wave_view: str, *, has_finished: bool = False
+) -> bool:
+    """True if row enters compare pool (after optional twin unwrap)."""
+    if issue == "in_progress" and wave_view == "finished" and not has_finished:
+        return False
+    return True

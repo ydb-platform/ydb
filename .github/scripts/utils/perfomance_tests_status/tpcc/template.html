@@ -522,8 +522,13 @@ function candidateRows() {
   const mode = waveView();
   const seen = new Set();
   const rows = [];
-  for (const r of (DATA.inbox || [])) {
-    if (mode === 'finished' && r.issue === 'in_progress') continue;
+  for (const raw of (DATA.inbox || [])) {
+    let r = raw;
+    // Finished wave: use finished twin when present (do not drop the suite).
+    if (mode === 'finished' && r.issue === 'in_progress') {
+      if (!r.finished) continue;
+      r = unwrapFinishedTwin(r);
+    }
     const k = rowKey(r);
     if (seen.has(k)) continue;
     seen.add(k);
@@ -565,8 +570,12 @@ function compareElevatedOkRows() {
   const mode = waveView();
   const out = [];
   const seen = new Set();
-  for (const r of (DATA.ok || [])) {
-    if (mode === 'finished' && r.issue === 'in_progress') continue;
+  for (const raw of (DATA.ok || [])) {
+    let r = raw;
+    if (mode === 'finished' && r.issue === 'in_progress') {
+      if (!r.finished) continue;
+      r = unwrapFinishedTwin(r);
+    }
     const k = rowKey(r);
     if (seen.has(k)) continue;
     if (!getCompareId(r.branch, r.db)) continue;
@@ -860,6 +869,10 @@ function classifySlicePairwise(item, wave) {
  */
 function classifySliceNowVsWaveBaseline(item, wave) {
   if (!wave) return null;
+  // Prefer finished twin metrics over synthetic in_progress coverage stub.
+  if (item.issue === 'in_progress' && item.finished) {
+    return classifySliceNowVsWaveBaseline(unwrapFinishedTwin(item), wave);
+  }
   if (item.issue === 'missing' || item.issue === 'in_progress' || item.issue === 'stale') {
     return {
       status: item.issue,
@@ -882,13 +895,40 @@ function classifySliceNowVsWaveBaseline(item, wave) {
   const capped = markers[nowIdx] === 'capped' || (lat_now_raw != null && lat_now_raw >= 30000);
   return pairToHeatStatus(classifyPairValues(latBase, tpmcBase, capped ? null : lat_now_raw, tpmc_now, capped));
 }
+/** Synthetic in_progress → finished twin for classify/compare (keeps branch/db/suite). */
+function unwrapFinishedTwin(r) {
+  if (!r || r.issue !== 'in_progress' || !r.finished) return r;
+  const fin = r.finished;
+  const issue = (fin.issue && fin.issue !== 'in_progress')
+    ? fin.issue
+    : ((fin.status && fin.status !== 'in_progress') ? fin.status : 'ok');
+  return {
+    ...fin,
+    branch: r.branch || fin.branch,
+    db: r.db || fin.db,
+    family: r.family != null ? r.family : fin.family,
+    suite: r.suite || fin.suite,
+    issue,
+  };
+}
+/**
+ * Row for compare pool:
+ * - in_progress + finished → twin (real was/now vs compare wave)
+ * - in_progress + no twin + Wave=finished → skip
+ * - in_progress + no twin + Wave=all → keep (coverage stub)
+ */
+function rowForCompare(r) {
+  if (!r || r.issue !== 'in_progress') return r;
+  if (r.finished) return unwrapFinishedTwin(r);
+  if (waveView() === 'finished') return null;
+  return r;
+}
 function allSliceRows(branch, db, fam) {
   const out = [];
   const seen = new Set();
-  const mode = waveView();
-  for (const r of [...(DATA.inbox || []), ...(DATA.ok || [])]) {
-    // Match candidateRows: finished wave must not pull synthetic in_progress into compare.
-    if (mode === 'finished' && r.issue === 'in_progress') continue;
+  for (const raw of [...(DATA.inbox || []), ...(DATA.ok || [])]) {
+    const r = rowForCompare(raw);
+    if (!r) continue;
     if (branch && r.branch !== branch) continue;
     if (r.db !== db || r.family !== fam) continue;
     if (!r.suite || r.suite === '—') continue;

@@ -6,6 +6,39 @@ Used by unit tests; tpcc/generate.py keeps its own Now classify_slice.
 from __future__ import annotations
 
 
+def unwrap_finished_twin(row: dict) -> dict:
+    """Mirror template.html unwrapFinishedTwin."""
+    fin = row.get("finished") or {}
+    issue = fin.get("issue")
+    if not issue or issue == "in_progress":
+        st = fin.get("status")
+        issue = st if st and st != "in_progress" else "ok"
+    out = dict(fin)
+    for k in ("branch", "db", "family", "suite"):
+        out[k] = row.get(k) if row.get(k) is not None else fin.get(k)
+    out["issue"] = issue
+    return out
+
+
+def resolve_compare_row(row: dict, wave_view: str) -> dict | None:
+    """Mirror template.html rowForCompare."""
+    if row.get("issue") != "in_progress":
+        return row
+    if row.get("finished"):
+        return unwrap_finished_twin(row)
+    if wave_view == "finished":
+        return None
+    return row
+
+
+def include_row_in_compare(
+    issue: str | None, wave_view: str, *, has_finished: bool = False
+) -> bool:
+    if issue == "in_progress" and wave_view == "finished" and not has_finished:
+        return False
+    return True
+
+
 def tpcc_hard_band(side: dict | None) -> int:
     if not side:
         return 0

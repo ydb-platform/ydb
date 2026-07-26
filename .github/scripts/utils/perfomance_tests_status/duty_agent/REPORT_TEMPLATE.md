@@ -1,12 +1,18 @@
 # Perf duty — {suite} @ {db} — {label}
 
 ## Заключение
-- **Итог:** <что случилось; по-русски>
-- **Решение:** `investigate_further` — продолжить разбор (…); или `open_ticket` / `update_known` / `wait_next_wave` / `no_action` + пояснение по-русски
+Каждый пункт — **1–2 коротких предложения**. Не сваливать sha/PR/давность/гонку в один абзац.
+
+- **Итог:** <симптом → корневая причина одной фразой; если не смешивать с известным тикетом — скажи явно>
+- **Решение:** `open_ticket` | `update_known` | `investigate_further` | `wait_next_wave` | `no_action` — <что сделать>
 - **Виновник:** `unknown` | `@{login}` / [PR #N](https://github.com/ydb-platform/ydb/pull/N) — <доказательство>
-- **Уверенность:** высокая | средняя | низкая
-- **Давность:** <с каких пор могло проявляться; со ссылками>
-- **Механика:** <как система дошла до поломки>
+  - При `unknown` авторов истории файла **не** пиши как виновников; если упоминаешь PR введения строки — пометь «история кода, не виновник»
+- **Уверенность:** высокая | средняя | низкая — <на чём высокая / где только следствие>
+- **Давность:** раздели явно:
+  - подтверждено на разбираемом прогоне `…`;
+  - suite/метрика красные с `…` (если fline раньше не смотрели — так и напиши);
+  - строка в коде с [PR](url) / даты
+- **Механика:** <поведение системы → поломка> без лишних sha
 
 ## Проблемы
 
@@ -16,58 +22,93 @@
 - Почему / механика: …
 - Логи: `kikimr__stderr` …; `kikimr__logs` … (или явно пусто)
 - Код ([`{sha}`](https://github.com/ydb-platform/ydb/commit/{sha})): [файл](blob-url) / функция …
-- Кто (если есть): … + доказательство
+- Кто (если есть): … + доказательство (или `unknown`)
 - Давность: …
 - Гипотеза проверена: `yes` | `no` | `partial`
 - Связанный issue: [#{N}](https://github.com/ydb-platform/ydb/issues/{N}) или нет
+- Тикет: отдельный | тот же, что P1 | комментарий в #{N}
 
 ## Кандидаты PR (если есть)
 Не список голых ссылок. Таблица:
 
 | Влито (UTC) | PR | Title | Автор | Почему |
 |--|--|--|--|--|
-| 2026-07-22 11:11 | [#46638](https://github.com/ydb-platform/ydb/pull/46638) | Decouple WorkloadManager and Kqp | @zverevgeny | … |
+| 2026-07-22 11:11 | [#46638](https://github.com/ydb-platform/ydb/pull/46638) | … | @login | … |
 
 Поля из `dig_prs.json`: `merged_at`, `pr_url`, `pr_title`, `author_login`.
 
 ## Что дальше
-1. …
+1. … (для `open_ticket`: «вставить Title+Body из блока ниже»)
+2. Перед заведением: `gh search issues "<search keys>" --repo ydb-platform/ydb`
 
 ## Материалы для issue
-### Окружение
+
+При `open_ticket` / `update_known` блок **Title + Body** копируется в GitHub **целиком**.  
+Цель Body: человек понимает баг; **следующий duty-агент находит issue** по стабильным ключам (`gh search issues "fline|file.cpp:NN|symbol"`).
+
+Title: коротко + уникальный fingerprint (`file.cpp:NN` / symbol / suite).
+
+### Title
+```
+{OLAP|TPC-C}: {fingerprint/symbol} ({file.cpp:NN}) on {suite}
+```
+
+### Body
+
+#### Фактура
+Обязательная таблица — первая в Body. Значения копируй из context (`selection.*`, `suite_now.*`).
+
+| Поле | Значение |
+|--|--|
+| Kind | `olap` \| `tpcc` |
+| Branch | `{branch}` (напр. `main`) |
+| Version | `main.{sha}` (как в mart / Allure Version) |
+| CI version | `{ci_version}` (напр. `trunk.r20455406`) |
+| Suite | `{suite}` |
+| DB / cluster | `{db}` |
+| Run label | `{label}` |
+| Run time (UTC) | `{ts}` |
+| Commit | [`{sha}`](https://github.com/ydb-platform/ydb/commit/{sha}) |
+| Allure / Sandbox | https://proxy.sandbox.yandex-team.ru/{id}/index.html |
+| Failed tests | `Suite.Query…` |
+| Fingerprint | `verification=found` / `fline=workers_pool.cpp:117` / иной стабильный токен из stderr |
+| Symbol / path | `TWorkersPool::PutTaskResults` · `ydb/core/…/workers_pool.cpp:117` |
+| Search keys | `` `workers_pool.cpp:117` `` `` `AFL_VERIFY(found)` `` `` `PutTaskResults` `` `` `UploadTpch1000` `` `` `sas_big_column` `` |
+
+`Search keys` — точные строки для `gh search issues "…" --repo ydb-platform/ydb`. Без них следующий агент тикет не найдёт.
+
+#### Кратко
+1–3 предложения: что сломалось, корневая причина, с чем не смешивать.
+
+#### Отчёты (соседи)
+| Дата / label | Commit | Отчёт | FailCount / заметка |
+|--|--|--|--|
+| **{label}** (разбираем) | … | https://proxy.sandbox… | … |
+| соседний на том же sha / prior | … | https://proxy.sandbox… | … |
+
+#### Код
 | | |
 |--|--|
-| Suite / DB | … |
-| Разбираемый прогон | label · время · CI |
-| Commit | [sha](https://github.com/ydb-platform/ydb/commit/…) |
+| Место падения | [path:line @ sha](blob-url) |
+| Менялся ли файл в окне | да/нет |
+| Когда файл меняли последний раз | commit / PR |
+| Связанный issue | нет / не [#N](url) |
 
-### Отчёты Sandbox / Allure
-| Дата / label | Commit | Отчёт | Упавшие тесты |
-|--|--|--|--|
-| … (разбираем) | … | https://proxy.sandbox… | … |
-| … | … | https://proxy.sandbox… | … |
-
-### Код и тикеты
-- Место падения (ссылка на файл@commit)
-- Менялся ли файл между соседними commit
-- Когда файл меняли последний раз
-- Связанные issue / PR
-
-### Доказательства из логов
+#### Доказательства из логов
 ```
-<короткая цитата VERIFY / fatal>
+<цитата VERIFY / fatal — целиком ключевые строки, без «…» посередине fingerprint>
 ```
 
-### Что важно для формулировки issue
-1. …
+#### Важно
+1. Корневая причина — …, не «просто 2005».
+2. Воспроизведение: branch / Version / suite @ db / Allure URL (см. Фактура).
+3. Не тот же баг, что [#N](url) (если применимо).
+4. Один тикет на корневую причину; следствия — в этом же issue.
+5. Нестабильность на том же Version (если есть зелёный соседний прогон).
 
 ---
 
-Язык отчёта: обычный русский. Английский — только термины продукта (`VERIFY`, имена файлов, `code: 2005`).  
-Не писать: фокус, волна, RC, last touch, path, priors, sticky, prev-green, «метрика зелёный» без пояснения.  
-Не писать блоки «отпадает / отброшено» про PR алерта и прочие ложные следы (молча не включать), кроме явного «проверь кандидата» / сравнения с прошлым отчётом.  
-Не писать механику/пути тестов, если это не сужает продуктовую причину.  
-Вместо этого: «разбираемый прогон», «прогон `YYYY-MM-DD_sha`», «когда файл меняли последний раз», «корневая причина».  
+Язык: обычный русский. Английский — только термины (`VERIFY`, имена файлов, `code: 2005`).  
+Не писать: фокус, волна, RC, last touch, priors, sticky, prev-green, jargon агента.  
 Issue / PR / commit / sandbox — markdown-ссылками.  
-Кандидаты PR: дата влития + ссылка + title + автор (не голый список #N).  
 Quality: self-check → `dutyctl validate` → `write-result`. См. `AGENTS.md`.

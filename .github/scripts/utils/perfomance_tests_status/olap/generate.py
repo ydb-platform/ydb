@@ -1470,7 +1470,7 @@ def attach_finished_snapshots(data: dict) -> int:
             "history": twin.get("history"),
         }
         n += 1
-    # Same suite must not stay as hot/ok + in_progress twin (Wave=finished unwrap → 2 inbox rows).
+    # Same suite must not stay as hot/ok + in_progress (Wave=finished unwrap → 2 inbox rows).
     by_id: dict[str, dict] = {}
     for r in data.get("inbox") or []:
         rid = r.get("id") or id(r)
@@ -1479,10 +1479,11 @@ def attach_finished_snapshots(data: dict) -> int:
             prev.get("status") or "", 0
         ):
             by_id[rid] = r
+    before = len(by_id) + len(data.get("ok") or [])
     by_id, ok_kept = collapse_in_progress_suite_dupes(by_id, list(data.get("ok") or []))
     data["inbox"] = list(by_id.values())
     data["ok"] = ok_kept
-    if n:
+    if n or (before != len(by_id) + len(ok_kept)):
         refresh_summary_counts(data)
     return n
 

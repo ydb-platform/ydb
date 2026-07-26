@@ -24,6 +24,16 @@ RESOLUTIONS = (
 )
 
 
+def _issue_body_section(body: str, heading: str) -> str:
+    """Text under #### {heading} until the next #### / ### heading."""
+    m = re.search(
+        rf"^####\s+{re.escape(heading)}\s*\n(.*?)(?=^####\s|^###\s|\Z)",
+        body,
+        re.I | re.M | re.S,
+    )
+    return m.group(1) if m else ""
+
+
 def _analysis_types(out_dir: Path | None) -> list[str]:
     if not out_dir or not (out_dir / "detect_type.json").is_file():
         return []
@@ -203,8 +213,9 @@ def validate_analysis_md(
                         )
 
     lines = body.splitlines()
-    if len(lines) > 120:
-        warnings.append(f"analysis.md is long ({len(lines)} lines); prefer clarity ≤~80")
+    # Title+Body paste block makes reports longer; soft cap excludes that expectation
+    if len(lines) > 160:
+        warnings.append(f"analysis.md is long ({len(lines)} lines); prefer clarity ≤~120")
 
     if out_dir and (out_dir / "problems.json").is_file():
         probs = read_json(out_dir / "problems.json")
@@ -216,6 +227,15 @@ def validate_analysis_md(
     if "### P" in body or "### p" in body.lower():
         if not re.search(r"гипотеза проверена|hypothesis", bl):
             errors.append("Each problem should state Гипотеза проверена: yes|no|partial")
+
+    # Заключение: avoid one mega-bullet (hard to scan / hard to paste into issue)
+    for label in ("Итог", "Давность", "Виновник", "Summary", "Since", "Culprit"):
+        m = re.search(rf"\*\*{label}:\*\*\s*(.+)", body)
+        if m and len(m.group(1).strip()) > 420:
+            warnings.append(
+                f"Заключение **{label}:** too long (>420 chars) — "
+                "split into short sentences; keep sha/PR history out of Итог"
+            )
 
     # Human report language: no agent-internal English micro-phrases
     jargon = [
@@ -242,6 +262,8 @@ def validate_analysis_md(
 
     # Issue materials: sandbox report URL (OLAP) or explicit metrics-only / DataLens (TPC-C)
     tpcc_only = bool(types) and all(t.startswith("tpcc_") for t in types)
+    resolution = (res_m.group(1).lower() if res_m else "")
+    needs_paste = resolution in ("open_ticket", "update_known")
     if "## Материалы для issue" in body or "## Materials" in body:
         has_sandbox = bool(re.search(r"proxy\.sandbox\.yandex-team\.ru/\d+", body))
         has_tpcc_alt = bool(
@@ -264,9 +286,87 @@ def validate_analysis_md(
             errors.append(
                 "Материалы для issue: нужны ссылки на commit/blob/issue/PR на github.com/ydb-platform/ydb"
             )
+        # Copy-paste gate: Title + Body ready for GitHub
+        if needs_paste:
+            has_title = bool(
+                re.search(r"^###\s+(Title|Заголовок)\s*$", body, re.I | re.M)
+            )
+            has_body = bool(re.search(r"^###\s+(Body|Тело)\s*$", body, re.I | re.M))
+            if not has_title or not has_body:
+                errors.append(
+                    f"{resolution}: Материалы для issue must have ### Title and ### Body "
+                    "(ready to paste into GitHub; see REPORT_TEMPLATE.md)"
+                )
+            else:
+                title_m = re.search(
+                    r"^###\s+(?:Title|Заголовок)\s*\n+(?:```[^\n]*\n)?([^\n`]+)",
+                    body,
+                    re.I | re.M,
+                )
+                if title_m and len(title_m.group(1).strip()) < 12:
+                    errors.append(
+                        f"{resolution}: ### Title must be a real issue title (≥12 chars), not a stub"
+                    )
+                # Body paste must lead with Фактура so the next agent can gh-search the issue
+                if not re.search(r"^####\s+Фактура\s*$", body, re.I | re.M):
+                    errors.append(
+                        f"{resolution}: ### Body must include #### Фактура "
+                        "(branch, Version/CI, suite@db, Allure URL, fingerprint, Search keys) "
+                        "— see REPORT_TEMPLATE.md"
+                    )
+                else:
+                    facts = _issue_body_section(body, "Фактура")
+                    fl = facts.lower()
+                    if not re.search(r"\bbranch\b|ветк", fl):
+                        errors.append(
+                            f"{resolution}: Фактура must include Branch / ветка запуска"
+                        )
+                    if not re.search(
+                        r"ci\s*version|trunk\.r\d+|version\s*\||\bmain\.[0-9a-f]{7,}\b",
+                        fl,
+                    ):
+                        errors.append(
+                            f"{resolution}: Фактура must include Version / CI version "
+                            "(e.g. main.<sha>, trunk.r…)"
+                        )
+                    if not re.search(r"proxy\.sandbox\.yandex-team\.ru/\d+", facts):
+                        if not (tpcc_only and re.search(r"datalens|sandbox/allure|report:\s*null", fl)):
+                            errors.append(
+                                f"{resolution}: Фактура must include Allure/Sandbox report URL"
+                            )
+                    if not re.search(r"suite|db\b|cluster|db\s*/", fl):
+                        errors.append(
+                            f"{resolution}: Фактура must include Suite and DB/cluster"
+                        )
+                    if not re.search(
+                        r"search\s*keys|ключ\w*\s*поиска|"
+                        r"fline\s*=|"
+                        r"\w+\.cpp:\d+|"
+                        r"afl_verify|verification\s*=",
+                        fl,
+                    ):
+                        errors.append(
+                            f"{resolution}: Фактура must include Fingerprint / Search keys "
+                            "(stable tokens for `gh search issues`, e.g. file.cpp:117)"
+                        )
+                if not re.search(r"^####\s+Кратко\s*$", body, re.I | re.M):
+                    warnings.append(
+                        f"{resolution}: ### Body should include #### Кратко "
+                        "(1–3 sentences for the issue lead)"
+                    )
+                if not re.search(
+                    r"^####\s+(Важно|Что важно)",
+                    body,
+                    re.I | re.M,
+                ):
+                    warnings.append(
+                        f"{resolution}: ### Body should include #### Важно (3–5 bullets)"
+                    )
 
     # Bare #123 / unlinked issue|PR — require markdown links
-    no_links = re.sub(r"\[[^\]]*\]\([^)]+\)", "", body)
+    # (skip fenced code: Title paste often has "#29944" as plain GitHub title text)
+    no_fences = re.sub(r"```.*?```", "", body, flags=re.S)
+    no_links = re.sub(r"\[[^\]]*\]\([^)]+\)", "", no_fences)
     bare_nums = re.findall(r"(?:^|[^/\w])#(\d+)\b", no_links)
     if bare_nums:
         errors.append(

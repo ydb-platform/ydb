@@ -257,7 +257,7 @@ class ValidateTests(unittest.TestCase):
 - **Решение:** update_known
 - **Виновник:** unknown — bisect path unchanged; known issue
 - **Уверенность:** высокая
-- **Давность:** первый fail на [`f88e100`](https://github.com/ydb-platform/ydb/commit/f88e100); [#29944](https://github.com/ydb-platform/ydb/issues/29944) с 2025-12
+- **Давность:** подтверждено на [`f88e100`](https://github.com/ydb-platform/ydb/commit/f88e100); [#29944](https://github.com/ydb-platform/ydb/issues/29944) с 2025-12
 - **Механика:** OnReadResult AFL_VERIFY → SIGABRT → соседи видят 2005
 
 ## Проблемы
@@ -271,24 +271,70 @@ class ValidateTests(unittest.TestCase):
 - Давность: в прошлых прогонах был поверхностный 2005; VERIFY на разбираемом прогоне
 - Гипотеза проверена: yes — evidence in stderr
 - Связанный issue: [#29944](https://github.com/ydb-platform/ydb/issues/29944)
+- Тикет: комментарий в [#29944](https://github.com/ydb-platform/ydb/issues/29944)
 
 ## Что дальше
 1. Комментарий в [#29944](https://github.com/ydb-platform/ydb/issues/29944)
 
 ## Материалы для issue
-### Окружение
-| Suite | x |
-### Отчёты Sandbox / Allure
-https://proxy.sandbox.yandex-team.ru/12923171727/index.html
-### Код
+### Title
+```
+Comment: UploadTpch VERIFY Groups.end matches #29944
+```
+### Body
+#### Фактура
+| Поле | Значение |
+|--|--|
+| Branch | `main` |
+| Version | `main.f88e100` |
+| CI version | `trunk.r1` |
+| Suite | `UploadTpch100` |
+| DB / cluster | `sas_big_column` |
+| Allure / Sandbox | https://proxy.sandbox.yandex-team.ru/12923171727/index.html |
+| Fingerprint | `fline=read.cpp:NN`; `Groups.end` |
+| Search keys | `Groups.end` · `read.cpp` · `UploadTpch100` |
+#### Кратко
+VERIFY Groups.end на разбираемом прогоне — тот же [#29944](https://github.com/ydb-platform/ydb/issues/29944).
+#### Код
 [`f88e100`](https://github.com/ydb-platform/ydb/commit/f88e100)
-### Доказательства из логов
+#### Доказательства из логов
 VERIFY Groups.end
-### Что важно для формулировки issue
+#### Важно
 1. Корневая причина = VERIFY
 """
             r = validate_analysis_md(md, out_dir=d)
             self.assertTrue(r["ok"], r["errors"])
+
+    def test_open_ticket_requires_title_body(self):
+        md = """# Perf duty — x
+
+## Заключение
+- **Итог:** new abort
+- **Решение:** open_ticket
+- **Виновник:** unknown
+- **Уверенность:** высокая
+- **Давность:** на разбираемом прогоне
+- **Механика:** AFL_VERIFY → SIGABRT
+
+## Проблемы
+### P1 — x
+- Тип: olap_fail
+- Логи: kikimr__stderr VERIFY; kikimr__logs disconnect
+- Код ([`abc1234`](https://github.com/ydb-platform/ydb/commit/abc1234)): `ydb/core/x.cpp`
+- Гипотеза проверена: yes
+
+## Что дальше
+1. open issue
+
+## Материалы для issue
+### Окружение
+| Suite | x |
+https://proxy.sandbox.yandex-team.ru/12923171727/index.html
+https://github.com/ydb-platform/ydb/commit/abc1234
+"""
+        r = validate_analysis_md(md)
+        self.assertFalse(r["ok"])
+        self.assertTrue(any("Title" in e and "Body" in e for e in r["errors"]), r["errors"])
 
     def test_reject_2005_only_olap_fail(self):
         with tempfile.TemporaryDirectory() as td:

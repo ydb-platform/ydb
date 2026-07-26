@@ -9,6 +9,8 @@ on:
       - 'dev-*'
       - 'rc-*'
       - 'q-stable-*'
+    paths-ignore:
+      - 'ydb/docs/**'
     types:
       - 'opened'
       - 'synchronize'

@@ -1755,7 +1755,7 @@ function mountHistory(item, id) {
   <div class="muted" style="margin-top:6px">
     Сырые прогоны · цвет vs median mavg(prev${win}) · тёмно-красный = lat cap ·
     синий = synthetic in_progress · оранжевый = synthetic missing ·
-    <b>жирная рамка</b> = now · <span style="color:#9a6700">рамка</span> = cmp ·
+    <b>жирная рамка</b> = now или cmp ·
     <b>клик по столбцу → DataLens</b>
     ${dashUrl ? ` (<a href="${esc(dashUrl)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">открыть</a>)` : ''}
     ${(tpmcBase != null || latBase != null)
@@ -1783,18 +1783,14 @@ function mountHistory(item, id) {
       const valueFont = nBars > 24 ? '8px sans-serif' : (nBars > 14 ? '9px sans-serif' : '10px sans-serif');
       const unitSuffix = unit ? ` ${unit}` : '';
       const fmtU = (v) => (v == null || Number.isNaN(v)) ? '—' : `${fmt(v)}${unitSuffix}`;
-      // Keep status fill; selection = bold border (blue/amber fill looked like "ok"/watch).
+      // Keep status fill; selection = bold dark border (same for now + cmp).
       const bg = colors;
-      const borderColors = (hist.labels || []).map((_, i) => {
-        if (i === marks.now) return '#1f2328';
-        if (i === marks.compare) return '#9a6700';
-        return 'transparent';
-      });
-      const borderWidths = (hist.labels || []).map((_, i) => {
-        if (i === marks.now) return 3;
-        if (i === marks.compare) return 3;
-        return 0;
-      });
+      const borderColors = (hist.labels || []).map((_, i) => (
+        (i === marks.now || i === marks.compare) ? '#1f2328' : 'transparent'
+      ));
+      const borderWidths = (hist.labels || []).map((_, i) => (
+        (i === marks.now || i === marks.compare) ? 3 : 0
+      ));
       charts[cid] = new Chart(el, {
         type: 'bar',
         data: {

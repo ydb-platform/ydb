@@ -2101,7 +2101,7 @@ function mountQueryHistory(item, diveId, testName) {
     }</div>
     <div class="muted" style="margin-bottom:6px">
       график = <b>каждый запуск</b> · цвет vs <b>median mavg(prev${win})</b> · клик → report${nReports ? ` (${nReports})` : ''}
-      · <b>жирная рамка</b> = now/focus · <span style="color:#9a6700">рамка</span> = cmp
+      · <b>жирная рамка</b> = now/focus или cmp
       ${alertLine ? `<div class="muted">${esc(alertLine)} · fail ${fmtFail(q.fail_rate_late)}</div>` : ''}
     </div>
     <label class="muted" style="display:inline-flex;gap:6px;align-items:center;margin-bottom:8px;cursor:pointer">
@@ -2133,16 +2133,12 @@ function mountQueryHistory(item, diveId, testName) {
     // Keep status fill (red/green/…); selection = bold border only (blue fill looked like "ok").
     const yColors = colorsVsMedianMavg(hist.ydb, win);
     const fColors = failColors(hist.fail_rate);
-    const borderColors = (hist.labels || []).map((_, i) => {
-      if (i === marks.now) return '#1f2328';
-      if (i === marks.compare) return '#9a6700';
-      return 'transparent';
-    });
-    const borderWidths = (hist.labels || []).map((_, i) => {
-      if (i === marks.now) return 3;
-      if (i === marks.compare) return 3;
-      return 0;
-    });
+    const borderColors = (hist.labels || []).map((_, i) => (
+      (i === marks.now || i === marks.compare) ? '#1f2328' : 'transparent'
+    ));
+    const borderWidths = (hist.labels || []).map((_, i) => (
+      (i === marks.now || i === marks.compare) ? 3 : 0
+    ));
     function runChart(cid, vals, label, colors) {
       const el = document.getElementById(cid);
       if (!el) return;
@@ -2272,7 +2268,7 @@ function mountQueryHistory(item, diveId, testName) {
               ctx.restore();
             }
             vline(marks.now, '#1f2328', 'now');
-            vline(marks.compare, '#9a6700', 'cmp');
+            vline(marks.compare, '#1f2328', 'cmp');
             if (!showBase || !cid.endsWith('_ydb') || alertBase == null) return;
             const y = chart.scales.y.getPixelForValue(alertBase);
             if (y < top || y > bottom) return;

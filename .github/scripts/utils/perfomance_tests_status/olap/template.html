@@ -299,6 +299,43 @@
   .react-btn[data-react="nodata"][aria-pressed="true"] { background: #656d76; }
   .react-btn:hover, .wave-btn:hover { filter: brightness(0.97); }
   .wave-btn[aria-pressed="true"] { color: #fff; border-color: transparent; background: var(--info); }
+
+  /* Floating Save / Copy context — visible when a dive row is open */
+  .duty-fab-wrap {
+    position: fixed; right: 20px; bottom: 20px; z-index: 1200;
+    display: none; flex-direction: column-reverse; align-items: flex-end; gap: 12px;
+  }
+  .duty-fab-wrap.visible { display: flex; }
+  .duty-fab {
+    width: 68px; height: 68px; border-radius: 50%; border: 3px solid #fff;
+    background: linear-gradient(145deg, #e5534b 0%, #a40e26 100%);
+    color: #fff; cursor: pointer;
+    box-shadow: 0 8px 28px #cf222e88, 0 2px 8px #0004;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: transform .15s ease, filter .15s ease, box-shadow .15s ease;
+  }
+  .duty-fab:hover { transform: scale(1.08); filter: brightness(1.06); }
+  .duty-fab:active { transform: scale(0.96); }
+  .duty-fab svg { width: 34px; height: 34px; display: block; }
+  .duty-fab-copy {
+    width: 48px; height: 48px; border-width: 2px;
+    background: linear-gradient(145deg, #54aeff 0%, #0969da 100%);
+    box-shadow: 0 6px 18px #0969da66, 0 2px 6px #0003;
+  }
+  .duty-fab-copy svg { width: 22px; height: 22px; }
+  .duty-fab-toast {
+    position: absolute; right: 80px; bottom: 18px;
+    background: #24292f; color: #fff; font-size: 13px; font-weight: 650;
+    padding: 8px 12px; border-radius: 8px; white-space: nowrap;
+    box-shadow: 0 4px 16px #0004; pointer-events: none;
+  }
+  .duty-fab-toast.fail { background: #a40e26; }
+  .duty-fab-hint {
+    position: absolute; right: 80px; bottom: 52px;
+    background: #fff; color: var(--text); font-size: 12px; font-weight: 650;
+    padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border);
+    box-shadow: 0 4px 14px #0002; white-space: nowrap; pointer-events: none;
+  }
 </style>
 </head>
 <body>
@@ -382,6 +419,33 @@
     </label>
   </div>
   <div id="inbox"></div>
+</div>
+
+<div id="dutyFab" class="duty-fab-wrap" aria-hidden="true">
+  <span class="duty-fab-hint">Save context</span>
+  <span class="duty-fab-toast" hidden></span>
+  <button type="button" class="duty-fab" id="dutyFabSave"
+    title="Save context — скачать JSON инцидента для duty_agent"
+    aria-label="Save context">
+    <!-- floppy + alert badge = save error pack -->
+    <svg viewBox="0 0 48 48" aria-hidden="true">
+      <path fill="currentColor" d="M8 6h24l8 8v28H8V6z"/>
+      <path fill="#fff" d="M14 6h16v13H14z" opacity=".95"/>
+      <path fill="#fff" d="M14 30h20v10H14z" opacity=".92"/>
+      <circle cx="36" cy="14" r="11" fill="#fff"/>
+      <path fill="#a40e26" d="M36 6.5l8.5 15h-17L36 6.5z"/>
+      <rect x="34.6" y="12" width="2.8" height="5.5" rx="1" fill="#fff"/>
+      <rect x="34.6" y="19" width="2.8" height="2.4" rx="1" fill="#fff"/>
+    </svg>
+  </button>
+  <button type="button" class="duty-fab duty-fab-copy" id="dutyFabCopy"
+    title="Copy context — скопировать JSON в буфер"
+    aria-label="Copy context">
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="9" y="9" width="11" height="11" rx="2"/>
+      <path d="M5 15V5a2 2 0 0 1 2-2h10"/>
+    </svg>
+  </button>
 </div>
 
 <!-- Huge payload as JSON text (not JS AST) — much faster than const DATA = {...} -->
@@ -2530,9 +2594,52 @@ async function copyDutyJson(obj) {
 }
 
 function flashDutyBtn(btn, okMsg, failMsg, ok) {
+  const wrap = document.getElementById('dutyFab');
+  const toast = wrap && wrap.querySelector('.duty-fab-toast');
+  if (toast) {
+    toast.textContent = ok ? okMsg : failMsg;
+    toast.hidden = false;
+    toast.classList.toggle('fail', !ok);
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => { toast.hidden = true; }, 1800);
+    return;
+  }
   const prev = btn.textContent;
   btn.textContent = ok ? okMsg : failMsg;
   setTimeout(() => { btn.textContent = prev; }, 1600);
+}
+
+let dutyFabRows = [];
+function syncDutyFab(rows) {
+  if (rows) dutyFabRows = rows;
+  const wrap = document.getElementById('dutyFab');
+  if (!wrap) return;
+  const open = document.querySelector('#inbox tr.row.open');
+  const on = !!open;
+  wrap.classList.toggle('visible', on);
+  wrap.setAttribute('aria-hidden', on ? 'false' : 'true');
+  if (open) wrap.dataset.openId = open.dataset.id || '';
+  else delete wrap.dataset.openId;
+}
+async function dutyFabAction(mode) {
+  const wrap = document.getElementById('dutyFab');
+  const id = wrap && wrap.dataset.openId;
+  if (!id) return;
+  const idx = Number(document.querySelector(`#inbox tr.row[data-id="${id}"]`)?.dataset.idx);
+  const item = dutyFabRows[idx];
+  if (!item) return;
+  const pack = buildDutyContext(item, id);
+  const sel = pack.selection || {};
+  const sha = (sel.focus_run && (sel.focus_run.sha || sel.focus_run.label)) || 'run';
+  const fname = `perf-duty-olap-${dutySafeName(sel.suite)}-${dutySafeName(sha)}.json`;
+  const btn = document.getElementById(mode === 'save' ? 'dutyFabSave' : 'dutyFabCopy');
+  if (mode === 'save') {
+    downloadDutyJson(fname, pack);
+    flashDutyBtn(btn, 'Saved ✓', 'Save failed', true);
+  } else {
+    const ok = await copyDutyJson(pack);
+    flashDutyBtn(btn, ok ? 'Copied ✓' : 'Copy failed', 'Copy failed', ok);
+  }
 }
 
 function dutySafeName(s) {
@@ -2711,8 +2818,7 @@ function diveHtml(r, id) {
     </div>
     <div class="toolbar" style="margin:0">
       <button type="button" class="btn" data-hist="${id}">Show suite history</button>
-      <button type="button" class="btn" data-ctx-dl="${id}" title="Download perf-duty-context/v1 JSON">Save context</button>
-      <button type="button" class="btn" data-ctx-cp="${id}" title="Copy incident pack JSON">Copy context</button>
+      <span class="muted" style="font-size:12px">Save / Copy context → красная кнопка справа внизу</span>
     </div>
     <div id="${id}_hist"></div>
   </div>`;
@@ -2821,6 +2927,14 @@ function renderInbox() {
     tr.addEventListener('click', () => {
       const id = tr.dataset.id;
       const detail = root.querySelector(`tr.detail[data-detail="${id}"]`);
+      // One open dive at a time — FAB targets the visible row.
+      root.querySelectorAll('tr.row.open').forEach(other => {
+        if (other === tr) return;
+        other.classList.remove('open');
+        const od = root.querySelector(`tr.detail[data-detail="${other.dataset.id}"]`);
+        if (od) od.classList.add('hidden');
+        destroyCharts(other.dataset.id + '_');
+      });
       const open = tr.classList.toggle('open');
       detail.classList.toggle('hidden', !open);
       if (!open) destroyCharts(id + '_');
@@ -2833,8 +2947,10 @@ function renderInbox() {
         }
         restoreDiveQueryFocus(item, id);
       }
+      syncDutyFab(rows);
     });
   });
+  syncDutyFab(rows);
   root.querySelectorAll('button[data-hist]').forEach(btn => {
     btn.addEventListener('click', (ev) => {
       ev.stopPropagation();
@@ -2842,26 +2958,6 @@ function renderInbox() {
       const idx = Number(root.querySelector(`tr.row[data-id="${id}"]`)?.dataset.idx);
       const item = rows[idx];
       if (item) mountHistory(item, id);
-    });
-  });
-  root.querySelectorAll('button[data-ctx-dl], button[data-ctx-cp]').forEach(btn => {
-    btn.addEventListener('click', async (ev) => {
-      ev.stopPropagation();
-      const id = btn.dataset.ctxDl || btn.dataset.ctxCp;
-      const idx = Number(root.querySelector(`tr.row[data-id="${id}"]`)?.dataset.idx);
-      const item = rows[idx];
-      if (!item) return;
-      const pack = buildDutyContext(item, id);
-      const sel = pack.selection || {};
-      const sha = (sel.focus_run && (sel.focus_run.sha || sel.focus_run.label)) || 'run';
-      const fname = `perf-duty-olap-${dutySafeName(sel.suite)}-${dutySafeName(sha)}.json`;
-      if (btn.dataset.ctxDl != null) {
-        downloadDutyJson(fname, pack);
-        flashDutyBtn(btn, 'Saved', 'Save failed', true);
-      } else {
-        const ok = await copyDutyJson(pack);
-        flashDutyBtn(btn, 'Copied', 'Copy failed', ok);
-      }
     });
   });
   function bindQPicks(scope) {
@@ -2913,6 +3009,7 @@ function renderInbox() {
         // Keep the same query selected under the new Last-runs focus.
         restoreDiveQueryFocus(r, diveId);
       });
+      syncDutyFab(curRows);
     });
   });
 }
@@ -3006,6 +3103,8 @@ function refreshDbFilter() {
 }
 
 setupFilters();
+document.getElementById('dutyFabSave')?.addEventListener('click', () => dutyFabAction('save'));
+document.getElementById('dutyFabCopy')?.addEventListener('click', () => dutyFabAction('copy'));
 renderAll();
 </script>
 </body>

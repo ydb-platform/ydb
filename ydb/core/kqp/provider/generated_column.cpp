@@ -9,7 +9,7 @@
 #include <yql/essentials/sql/v1/lexer/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
-#include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/sql/v1/translation/sql.h>
 
 #include <util/generic/hash_set.h>
 #include <util/string/ascii.h>

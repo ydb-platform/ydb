@@ -49,6 +49,15 @@ message TS3BackendSettings {
         TAsyncMode AsyncMode = 2;
         TSyncMode SyncMode = 3;
     }
+
+    // When set, the actual S3 endpoint is fetched periodically from this URL
+    // (HTTP GET to http://<BalancerHost>/, body is plain-text hostname).
+    // Existing Settings.Endpoint is used only as a fallback before the first
+    // balancer reply. S3 requests get re-routed through a per-node, per-tablet
+    // router actor managed by Node Warden.
+    optional string BalancerHost = 4;
+    optional uint32 BalancerRefreshSecMin = 5 [default = 10];
+    optional uint32 BalancerRefreshSecMax = 6 [default = 15];
 }
 
 message TBlobDepotConfig {

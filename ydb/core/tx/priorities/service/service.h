@@ -3,6 +3,7 @@
 #include "manager.h"
 
 #include <ydb/core/tx/priorities/usage/events.h>
+#include <ydb/core/tx/priorities/usage/service.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
@@ -55,5 +56,12 @@ public:
 
     void Bootstrap();
 };
+
+template <class TQueuePolicy>
+NActors::IActor* CreateService(const TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> queueSignals) {
+    using TOperator = TServiceOperatorImpl<TQueuePolicy>;
+    TOperator::Register(config);
+    return new TDistributor(config, TOperator::GetQueueName(), queueSignals);
+}
 
 }   // namespace NKikimr::NPrioritiesQueue

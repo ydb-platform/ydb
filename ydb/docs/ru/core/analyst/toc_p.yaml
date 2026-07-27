@@ -10,5 +10,9 @@ items:
     include:
       mode: link
       path: practical-guides/toc_p.yaml
+  - name: Оптимизация аналитических запросов
+    href: optimizing.md
+  - name: Типичные OLAP сценарии
+    href: scenarios.md
   - name: Ограничения
     href: limitations.md

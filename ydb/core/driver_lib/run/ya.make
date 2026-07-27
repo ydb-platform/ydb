@@ -200,6 +200,7 @@ IF (OS_LINUX AND YDB_EMBEDDED_NBS_ENABLED)
     PEERDIR(
         ydb/core/nbs/cloud/blockstore/bootstrap
         ydb/core/nbs/cloud/blockstore/config/protos
+        ydb/core/nbs/cloud/blockstore/libs/storage/dbs_controller
         ydb/core/nbs/cloud/blockstore/libs/storage/ss_proxy
         ydb/core/nbs/cloud/blockstore/libs/storage/volume
 

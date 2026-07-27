@@ -65,7 +65,6 @@ ydb/core/http_proxy/ut TestMalformedRequest.InvalidHttpStartLine2
 ydb/core/http_proxy/ut TestMalformedRequest.InvalidHttpStartLine3
 ydb/core/http_proxy/ut TestMalformedRequest.InvalidHttpStartLine4
 ydb/core/http_proxy/ut TestMalformedRequest.InvalidHttpStartLine5
-ydb/core/http_proxy/ut TestMalformedRequest.InvalidHttpStartLine6
 ydb/core/http_proxy/ut TestMalformedRequest.InvalidHttpStartLine7
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.BadRequestUnknownMethod
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.CreateDeleteStream
@@ -184,7 +183,6 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessage_Deduplicat
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessage_Deduplication_Compatibility_WithUserSettings
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessage_TableImplementation
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSendMessage_WithUserSettings
-ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSetQueueAttributes
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestSetQueueAttributes_TableImplementation
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestTagQueue
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestTagQueueMultipleQueriesInflight
@@ -423,7 +421,6 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestSendMessageBadQ
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestSendMessageBatch
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestSendMessageBatchEmpty
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestSendMessageBatchLong
-ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestSendMessageTooBig
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestSetQueueAttributesBasic
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestSetQueueAttributesFifoImmutable
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestSetQueueAttributesInvalidValues
@@ -494,7 +491,6 @@ ydb/core/kqp/ut/runtime unittest.[*/*] chunk
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs+IsOlap+UseAdmin
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs+IsOlap-UseAdmin
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs-IsOlap+UseAdmin
-ydb/core/kqp/ut/scheme KqpAcl.AclInterruptInheritance
 ydb/core/kqp/ut/scheme KqpAcl.AclTemporaryInterruptInheritance+IsOlap
 ydb/core/kqp/ut/scheme KqpAcl.AclTemporaryInterruptInheritance-IsOlap
 ydb/core/kqp/ut/scheme KqpConstraints.AlterTableSetDropDefaultAsyncIndexOnColumn-EnableCompileTimeDefaults
@@ -571,7 +567,6 @@ ydb/core/statistics/service/ut ColumnStatistics.ManyColumns
 ydb/core/statistics/service/ut unittest.[*/*] chunk
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.BigBatchSize_Local
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.BigBatchSize_Remote
-ydb/core/transfer/ut/column_table unittest.sole chunk
 ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Local
 ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Remote
 ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
@@ -579,7 +574,6 @@ ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_ColumnTable
 ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_LocalRead_TopicAutoPartitioning
 ydb/core/transfer/ut/large unittest.sole chunk
 ydb/core/tx/columnshard/backup/async_jobs/ut unittest.sole chunk
-ydb/core/tx/columnshard/backup/iscan/ut IScan.ShouldRejectParquetExportWithEncryption
 ydb/core/tx/columnshard/data_accessor/ut unittest.sole chunk
 ydb/core/tx/columnshard/ut_rw TColumnShardTestReadWrite.CompactionSplitGranuleStrKey_PKUtf8
 ydb/core/tx/columnshard/ut_rw TColumnShardTestReadWrite.CompactionSplitGranule_PKDatetime
@@ -604,7 +598,6 @@ ydb/core/tx/datashard/build_index/ut TTxDataShardSampleKScan.DimensionMismatchEr
 ydb/core/tx/datashard/build_index/ut TTxDataShardSampleKScan.NullEmbedding
 ydb/core/tx/datashard/build_index/ut TTxDataShardSampleKScan.RunScan
 ydb/core/tx/datashard/build_index/ut TTxDataShardSampleKScan.SkipForeign
-ydb/core/tx/datashard/build_index/ut TTxDataShardValidateUniqueIndexScan.BadRequest
 ydb/core/tx/datashard/build_index/ut TTxDataShardValidateUniqueIndexScan.RunScan
 ydb/core/tx/datashard/build_index/ut unittest.sole chunk
 ydb/core/tx/datashard/ut_export ExportS3BufferTest.MinBufferSizeWithCompressionAndEncryption-parquet
@@ -675,10 +668,8 @@ ydb/public/sdk/cpp/tests/integration/bulk_upsert BulkUpsert.RetryOverheadOnHappy
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.PeriodicTask/0
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.PeriodicTask/1
 ydb/services/persqueue_v1/ut TPersQueueTest.ConsumerAvailabilityPeriodCleanup
-ydb/services/persqueue_v1/ut/new_schemecache_ut TPersQueueNewSchemeCacheTest.TestWriteStat1stClassTopicAPI
 ydb/services/scheme_secret/ut/fast DescribeSchemaSecretsService.FailWithoutGrants
 ydb/services/scheme_secret/ut/fast DescribeSchemaSecretsService.GetUpdatedValue
-ydb/services/scheme_secret/ut/fast DescribeSchemaSecretsService.GroupGrants
 ydb/services/test_shard/ut unittest.sole chunk
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_NoConnectionStringRelativeTableTopicTransferPath
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_NoConnectionStringRelativeTopicAbsoluteTransferPath
@@ -694,7 +685,6 @@ ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_WithConnectionStr
 ydb/services/ydb/backup_ut BackupRestore.ReplicasAreNotBackedUp+UseSchemeSecret
 ydb/services/ydb/backup_ut BackupRestore.ReplicasAreNotBackedUp-UseSchemeSecret
 ydb/services/ydb/backup_ut BackupRestore.RestoreReplicationThatDoesNotUseSecret
-ydb/tests/compatibility/common test_compatibility.py.TestCompatibility.test_simple[restart_stable-26-3-1_to_stable-26-3-1-row]
 ydb/tests/compatibility/common test_system_views.py.TestSystemViewsRegistry.test_domain_sys_dir[restart_stable-26-3-1_to_prestable-26-4]
 ydb/tests/compatibility/indexes test_bloom_filter_index.py.TestBloomFilterIndex.test_bloom_filter_survives_version_change[restart_prestable-26-4_to_prestable-26-4]
 ydb/tests/compatibility/indexes test_bloom_filter_index.py.TestBloomFilterIndex.test_bloom_filter_survives_version_change[restart_prestable-26-4_to_stable-26-3-1]
@@ -812,10 +802,10 @@ ydb/tests/functional/tpc/large py3test.[test_tpcds.py] chunk
 ydb/tests/functional/tpc/large py3test.[test_tpch_spilling.py] chunk
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[14]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[49]
+ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[53]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[64]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[14]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[64]
-ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[85]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[10]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[11]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[12]

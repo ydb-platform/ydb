@@ -28,6 +28,7 @@ jobs:
           # Open PR: head как раньше.
           ref: ${{ github.event.pull_request.merged && github.event.pull_request.merge_commit_sha || github.event.pull_request.head.sha }}
           fetch-depth: 0
+          allow-unsafe-pr-checkout: true
 
       - name: Fetch merge base ref
         run: |

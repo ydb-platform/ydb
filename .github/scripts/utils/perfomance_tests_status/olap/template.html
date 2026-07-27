@@ -141,6 +141,7 @@
   .run-card:hover { border-color: var(--info); }
   .run-card.active { border-color: var(--info); box-shadow: 0 0 0 2px #0969da33; background: #f6f8fa; }
   .run-card.cmp { border-color: #9a6700; box-shadow: 0 0 0 2px #9a670033; }
+  /* Compare pills: default = fail pink↔green; typed accents below. */
   .pill.delta-better {
     background: linear-gradient(90deg, #ffebe9 0%, #ffebe9 40%, #dafbe1 60%, #dafbe1 100%);
     color: #1a7f37; box-shadow: inset 0 0 0 1px #1a7f3766;
@@ -157,9 +158,21 @@
     background: linear-gradient(90deg, #dafbe1 0%, #dafbe1 40%, #fbefff 60%, #fbefff 100%);
     color: var(--miss); box-shadow: inset 0 0 0 1px #8250df66;
   }
-  .pill.delta-soft {
+  .pill.delta-better.delta-slow, .pill.delta-better-slow {
+    background: linear-gradient(90deg, #fff1e5 0%, #fff1e5 40%, #dafbe1 60%, #dafbe1 100%);
+    color: #1a7f37; box-shadow: inset 0 0 0 1px #bc4c0066;
+  }
+  .pill.delta-worse.delta-slow, .pill.delta-worse-slow {
+    background: linear-gradient(90deg, #dafbe1 0%, #dafbe1 40%, #fff1e5 60%, #fff1e5 100%);
+    color: var(--regress); box-shadow: inset 0 0 0 1px #bc4c0066;
+  }
+  .pill.delta-better.delta-soft, .pill.delta-better-soft, .pill.delta-soft {
     background: linear-gradient(90deg, #fff8c5 0%, #fff8c5 40%, #dafbe1 60%, #dafbe1 100%);
-    color: #9a6700;
+    color: #9a6700; box-shadow: inset 0 0 0 1px #9a670066;
+  }
+  .pill.delta-worse.delta-soft, .pill.delta-worse-soft {
+    background: linear-gradient(90deg, #dafbe1 0%, #dafbe1 40%, #fff8c5 60%, #fff8c5 100%);
+    color: #9a6700; box-shadow: inset 0 0 0 1px #9a670066;
   }
   .heat-legend {
     display: flex; flex-wrap: wrap; gap: 8px 14px; padding: 8px 12px 12px;
@@ -2755,10 +2768,6 @@ function mountQueryHistory(item, diveId, testName) {
 function kindSev(k) {
   return ({ ok: 0, nodata: 1, watch: 2, slow: 3, fail: 4, both: 5, missing: 4 })[k] || 0;
 }
-/** Compare pill severity — nodata participates (ok↔no data gets purple gradient). */
-function kindHardSev(k) {
-  return ({ ok: 0, watch: 0, nodata: 1, slow: 1, fail: 2, both: 3, missing: 2 })[k] || 0;
-}
 function kindLabelShort(k) {
   if (k === 'nodata') return 'no data';
   if (k === 'watch') return 'soft';
@@ -2767,6 +2776,50 @@ function kindLabelShort(k) {
   if (k === 'both') return 'fail+slow';
   if (k === 'missing') return 'missing';
   return 'ok';
+}
+/** Solid pill class for a single-side kind. */
+function kindSolidPillCls(k) {
+  if (k === 'fail' || k === 'both') return 'fail';
+  if (k === 'slow') return 'slow';
+  if (k === 'watch') return 'watch';
+  if (k === 'nodata' || k === 'missing') return 'nodata';
+  return 'qok';
+}
+/** Tone for compare gradient endpoints (was → now). */
+function kindTone(k) {
+  if (k === 'fail' || k === 'both') return { bg: '#ffebe9', fg: '#cf222e' };
+  if (k === 'slow') return { bg: '#fff1e5', fg: '#bc4c00' };
+  if (k === 'watch') return { bg: '#fff8c5', fg: '#9a6700' };
+  if (k === 'nodata' || k === 'missing') return { bg: '#fbefff', fg: '#8250df' };
+  return { bg: '#dafbe1', fg: '#1a7f37' };
+}
+/** Accent class for the error type that defines the gradient (fail/slow/soft/nodata). */
+function kindAccentCls(k) {
+  if (k === 'fail' || k === 'both') return 'delta-fail';
+  if (k === 'slow') return 'delta-slow';
+  if (k === 'watch') return 'delta-soft';
+  if (k === 'nodata' || k === 'missing') return 'delta-nodata';
+  return '';
+}
+/** Compare query pill paint: gradient was→now by error type (not always fail-pink). */
+function queryComparePillPaint(prevKind, nowKind) {
+  const pk = prevKind || 'ok';
+  const nk = nowKind || 'ok';
+  if (pk === nk) return { cls: kindSolidPillCls(nk), style: '' };
+  const a = kindTone(pk);
+  const b = kindTone(nk);
+  const d = kindSev(nk) - kindSev(pk);
+  const dir = d < 0 ? 'delta-better' : (d > 0 ? 'delta-worse' : 'delta-same');
+  // Accent = non-ok side (prefer the worse kind when both hot).
+  const accentKind = kindSev(nk) >= kindSev(pk) ? nk : pk;
+  const accent = kindAccentCls(accentKind === 'ok' ? (pk === 'ok' ? nk : pk) : accentKind);
+  const cls = [dir, accent].filter(Boolean).join(' ');
+  const style = [
+    `background:linear-gradient(90deg,${a.bg} 0%,${a.bg} 40%,${b.bg} 60%,${b.bg} 100%)`,
+    `color:${b.fg}`,
+    `box-shadow:inset 0 0 0 1px ${b.fg}66`,
+  ].join(';');
+  return { cls, style };
 }
 function metricsAtHistIndex(q, idx, baseEndIdx) {
   const h = q.history || {};
@@ -2957,10 +3010,8 @@ function queryPillHtml(q, diveId, item, data) {
     if (pi >= 0) prevM = metricsAtHistIndex(q, pi);
     else prevM = { kind: 'nodata', ydb_pct: null };
   }
-  let cls = (nowM.kind === 'fail' || nowM.kind === 'both') ? 'fail'
-    : (nowM.kind === 'slow' ? 'slow'
-    : (nowM.kind === 'watch' ? 'watch'
-    : (nowM.kind === 'nodata' ? 'nodata' : 'qok')));
+  let cls = kindSolidPillCls(nowM.kind || 'ok');
+  let styleAttr = '';
   const extras = [];
   if ((nowM.kind === 'fail' || nowM.kind === 'both') && nowM.error_class) extras.push(nowM.error_class);
   if (!q.history) extras.push('no hist');
@@ -2968,13 +3019,9 @@ function queryPillHtml(q, diveId, item, data) {
     ? `<span class="q-extra">${esc(extras.join(' · '))}</span>`
     : '<span class="q-extra"></span>';
   if (prevM) {
-    const dHard = kindHardSev(nowM.kind) - kindHardSev(prevM.kind);
-    const hardKinds = new Set(['fail', 'both', 'slow', 'missing']);
-    const nodataOnly = dHard !== 0
-      && (prevM.kind === 'nodata' || nowM.kind === 'nodata')
-      && !hardKinds.has(prevM.kind) && !hardKinds.has(nowM.kind);
-    if (dHard < 0) cls = nodataOnly ? 'delta-better delta-nodata' : 'delta-better';
-    else if (dHard > 0) cls = nodataOnly ? 'delta-worse delta-nodata' : 'delta-worse';
+    const paint = queryComparePillPaint(prevM.kind || 'ok', nowM.kind || 'ok');
+    cls = paint.cls;
+    styleAttr = paint.style ? ` style="${paint.style}"` : '';
     const was = querySideLabel(prevM);
     const now = querySideLabel(nowM);
     const tip = [
@@ -2983,7 +3030,7 @@ function queryPillHtml(q, diveId, item, data) {
       `now: ${querySideTitle(nowM, wave && !cmpIsFocus ? 'до cmp (compare-ось)' : 'до now')}`,
       'alert в графике справа = другая ось: last vs median prev7 до now',
     ].join('\n');
-    return `<button type="button" class="pill q-pill-cmp ${cls}" data-qpick="${diveId}" data-test="${esc(q.test)}" title="${esc(tip)}">
+    return `<button type="button" class="pill q-pill-cmp ${cls}"${styleAttr} data-qpick="${diveId}" data-test="${esc(q.test)}" title="${esc(tip)}">
       <span class="q-name">${esc(q.test)}</span>
       <span class="q-cmp-mid">
         <span class="q-was">${esc(was)}</span>
@@ -3033,8 +3080,10 @@ function buildQueryBlockHtml(item, diveId) {
           <span class="pill watch">soft</span>
           <span class="pill slow">hard slow</span>
           <span class="pill fail">fail</span>
-          <span class="pill delta-better">worse→better</span>
-          <span class="pill delta-worse">better→worse</span>
+          <span class="pill delta-better delta-fail">fail→ok</span>
+          <span class="pill delta-better delta-slow">slow→ok</span>
+          <span class="pill delta-better delta-soft">soft→ok</span>
+          <span class="pill delta-better delta-nodata">no data→ok</span>
           <span class="pill nodata">no data</span>
         </div>
         ${pctNote}

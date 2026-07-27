@@ -1,13 +1,14 @@
 # Grafana dashboards for {{ ydb-short-name }}
 
-This page describes Grafana dashboards for {{ ydb-short-name }}. For information about how to install dashboards, see [{#T}](../../../devops/observability/monitoring.md#prometheus-grafana).
+This page describes Grafana dashboards for {{ ydb-short-name }}.
+
+Instructions on how to install and configure dashboards are provided in the [YDB cluster monitoring setup](../../../devops/observability/monitoring.md#prometheus-grafana) section.
 
 ## DB status {#dbstatus}
 
 General database dashboard.
 
-Download the [dbstatus.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/dbstatus.json) file with the **DB status** dashboard.
-
+Download the **DB status** dashboard template: [dbstatus.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/dbstatus.json).
 
 ## DB overview {#dboverview}
 
@@ -24,111 +25,205 @@ General database dashboard by categories:
 - DataShard details
 - Latency
 
-Download the [dboverview.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/dboverview.json) file with the **DB overview** dashboard.
+Download the **DB overview** dashboard template: [dboverview.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/dboverview.json).
+
+## YDB Essential Metrics {#ydbessentials}
+
+Dashboard for monitoring key database metrics.
+
+### Health section {#ydbessentials-health}
+
+This section contains graphs showing the status of cluster and database components.
+
+| Name | Description |
+| --- | --- |
+| Nodes count | Number of running YDB nodes, pcs. |
+| Nodes uptime | Uptime of each node since startup; helps detect restarts and unstable nodes, in seconds. |
+| VDisks count | Number of available VDisks in the cluster, pcs. |
+
+### Saturation section {#ydbessentials-saturation}
+
+This section contains graphs showing database resource utilization.
+
+| Name | Description |
+| --- | --- |
+| CPU by thread pool (dynnodes) | CPU consumption by dynamic nodes per [execution pool](../../../devops/configuration-management/configuration-v2/config-settings.md#tuneconfig), in CPU cores. |
+| CPU utilization (dynnodes) | CPU utilization by dynamic nodes per [execution pool](../../../devops/configuration-management/configuration-v2/config-settings.md#tuneconfig), in %. |
+| Elapsed Time vs CPU Time | Ratio of real operation execution time (`ElapsedMicrosec`) to CPU time (`CpuMicrosec`) by node. A sustained excess above 100% means sessions are spending time waiting rather than actively working: typically this is I/O wait or CPU overcommit on the hypervisor side. |
+| RSS size by node | Amount of RAM (Resident set size) consumed by each dynamic node, showing cgroup memory limits, in bytes. |
+| Storage usage | Logical database size and its configured limit, in bytes. |
+| Overloaded shard count | Number of [overloaded DataShards](../../../troubleshooting/performance/schemas/overloaded-shards.md) by CPU load ranges — from 50% to 100%, pcs. |
+
+### Traffic section {#ydbessentials-traffic}
+
+This section contains graphs characterizing database load.
+
+| Name | Description |
+| --- | --- |
+| Queries per second by latency buckets | Number of queries per second broken down by latency ranges (from 1 ms to +∞). Each range is highlighted with a separate color — from green for fast queries to purple for slow ones. Allows estimating latency distribution and overall RPS, in qps. |
+| Transactions per second by latency buckets | Number of transactions per second broken down by latency ranges (from 1 ms to +∞). Each range is highlighted with a separate color — from green for fast transactions to purple for slow ones. Allows estimating latency distribution and overall TPS, in tps. |
+| Rows read, uploaded, updated, deleted | Number of table row operations per second: read, create, update, and delete, in ops/s. |
+| Session count by dynnode | Number of active sessions on each dynamic node, pcs. |
+
+### Latency section {#ydbessentials-latency}
+
+This section contains graphs showing query and transaction execution time.
+
+| Name | Description |
+| --- | --- |
+| Query latency percentiles (ms) | Database query execution time at percentiles p50, p90, p95, p99, in milliseconds. |
+| Transaction latency percentiles (ms) | Database transaction execution time at percentiles p50, p90, p95, p99, in milliseconds. |
+
+### Errors section {#ydbessentials-errors}
+
+This section contains graphs showing the number of errors occurring.
+
+| Name | Description |
+| --- | --- |
+| YQL Issues per second | Number of YQL query execution errors by error type, in errors/s. |
+| gRPC response errors per second | Number of gRPC responses with errors broken down by status, in errors/s. |
+
+Download the **YDB Essential Metrics** dashboard template: [ydb-essentials.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/ydb-essentials.json).
 
 ## Actors {#actors}
 
-CPU utilization in an actor system.
+CPU consumption in the actor system.
 
 | Name | Description |
-|---|---|
-| CPU by execution pool (us) | CPU utilization in different execution pools across all nodes, microseconds per second (one million indicates utilization of a single core) |
-| Actor count | Number of actors (by actor type) |
-| CPU | CPU utilization in different execution pools (by actor type) |
-| Events | Actor system event handling metrics |
+| --- | --- |
+| CPU by execution pool (us) | CPU consumption in various execution pools on all nodes, microseconds per second (one million corresponds to one core consumption). |
+| Actor count | Number of actors (by actor type). |
+| CPU | CPU consumption in various execution pools (by actor type). |
+| Events | Event processing metrics in the actor system. |
 
-Download the [actors.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/actors.json) file with the **Actors** dashboard.
+Download the **Actors** dashboard template: [actors.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/actors.json).
 
 ## CPU {#cpu}
 
-CPU utilization in execution pools.
+CPU consumption in [execution pools](../../../devops/configuration-management/configuration-v2/config-settings.md#tuneconfig).
 
 | Name | Description |
-|---|---|
-| CPU by execution pool | CPU utilization in different execution pools across all nodes, microseconds per second (one million indicates utilization of a single core) |
+| --- | --- |
+| CPU by execution pool | CPU consumption in various execution pools on all nodes, microseconds per second (one million corresponds to consumption of one core) |
 | Actor count | Number of actors (by actor type) |
-| CPU | CPU utilization in each execution pool |
-| Events | Event handling metrics in each execution pool |
+| CPU | CPU consumption in various execution pools |
+| Events | Event processing metrics in various execution pools |
 
-Download the [cpu.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/cpu.json) file with the **CPU** dashboard.
+Download the **CPU** dashboard template: [cpu.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/cpu.json).
 
 ## gRPC {#grpc}
 
 gRPC layer metrics.
 
 | Name | Description |
-|---|---|
-| Requests | Number of requests received by a database per second (by gRPC method type) |
-| Request bytes | Size of database requests, bytes per second (by gRPC method type) |
-| Response bytes | Size of database responses, bytes per second (by gRPC method type) |
-| Dropped requests | Number of requests per second with processing terminated at the transport layer due to an error (by gRPC method type) |
-| Dropped responses | Number of responses per second with sending terminated at the transport layer due to an error (by gRPC method type) |
-| Requests in flight | Number of requests that a database is simultaneously handling (by gRPC method type) |
-| Request bytes in flight | Size of requests that a database is simultaneously handling (by gRPC method type) |
+| --- | --- |
+| Requests | Number of requests received by the database per second (by gRPC method type) |
+| Request bytes | Size of requests received by the database, bytes per second (by gRPC method type) |
+| Response bytes | Size of responses sent by the database, bytes per second (by gRPC method type) |
+| Dropped requests | Number of requests per second whose processing was terminated at the transport layer due to an error (by gRPC method type) |
+| Dropped responses | Number of responses per second whose sending was terminated at the transport layer due to an error (by gRPC method type) |
+| Requests in flight | Number of requests being processed simultaneously by the database (by gRPC method type) |
+| Request bytes in flight | Size of requests being processed simultaneously by the database (by gRPC method type) |
 
-Download the [grpc.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/grpc.json) file with the **gRPC API** dashboard.
+Download the **gRPC** dashboard template: [grpc.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/grpc.json).
 
 ## Query engine {#queryengine}
 
-Information about the query engine.
+Information about the query execution engine.
 
 | Name | Description |
-|---|---|
-| Requests | Number of incoming requests per second (by request type) |
-| Request bytes | Size of incoming requests, bytes per second (query, parameters, total) |
+| --- | --- |
+| Requests | Number of incoming requests per second (by query type) |
+| Request bytes | Size of incoming requests, bytes per second (`query, parameters, total`) |
 | Responses | Number of responses per second (by response type) |
-| Response bytes | Response size, bytes per second (total, query result) |
-| Sessions | Information about running sessions |
-| Latencies | Request execution time histograms for different types of requests |
+| Response bytes | Response sizes, bytes per second (`total, query result`) |
+| Sessions | Information about established sessions |
+| Latencies | Histograms of query execution times for various query types |
 
-Download the [queryengine.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/queryengine.json) file with the **Query engine** dashboard.
+Download the **Query engine** dashboard template: [queryengine.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/queryengine.json).
 
 ## TxProxy {#txproxy}
 
-Information about transactions from the DataShard transaction proxy layer.
+Information about transactions from the `DataShard transaction proxy` level.
 
 | Name | Description |
-|---|---|
+| --- | --- |
 | Transactions | Datashard transaction metrics |
-| Latencies | Execution time histograms for different stages of datashard transactions |
+| Latencies | Histograms of execution times of various stages of datashard transactions |
 
-Download the [txproxy.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/txproxy.json) file with the **TxProxy** dashboard.
+Download the **TxProxy** dashboard template: [txproxy.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/txproxy.json).
 
 ## DataShard {#datashard}
 
-DataShard tablet metrics.
+Metrics of the `DataShard` tablet.
 
 | Name | Description |
-|---|---|
-| Operations | Datashard operation statistics for different types of operations |
+| --- | --- |
+| Operations | Statistics of operations with the datashard for different operation types |
 | Transactions | Information about datashard tablet transactions (by transaction type) |
-| Latencies | Execution time histograms for different stages of custom transactions |
-| Tablet latencies | Tablet transaction execution time histograms |
-| Compactions | Information about LSM compaction operations performed |
-| ReadSets | Information about ReadSets that are sent when executing a customer transaction |
+| Latencies | Histograms of execution times of various stages of user transactions |
+| Tablet latencies | Histograms of tablet transaction execution times |
+| Compactions | Information about performed LSM compaction operations |
+| ReadSets | Information about transferred ReadSets during user transaction execution |
 | Other | Other metrics |
 
-Download the [datashard.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/datashard.json) file with the **DataShard** dashboard.
+Download the **DataShard** dashboard template: [datashard.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/datashard.json).
 
 ## Database Hive {#database-hive-detailed}
 
-[Hive](../../../contributor/hive.md) metrics for the selected database.
+Metrics of the [Hive](../../../contributor/hive.md) tablet of the selected database.
 
-The dashboard includes the following filters:
+The dashboard contains the following filters:
 
-* database – selects the database for which metrics are displayed;
-* ds – selects the Prometheus data source the dashboard will use;
-* Tx type – determines the transaction type for which "`{Tx type}` average time" panel is displayed.
+- `database` — used to select the database whose metrics should be displayed;
+- `ds` — used to select the Prometheus source whose data should be displayed on the dashboard;
+- `Tx type` — defines the transaction type for which graphs will be displayed on the "`{Tx type}` `average time`" panel.
 
 | Name | Description |
-|---|---|
-| CPU usage by HIVE_ACTOR, HIVE_BALANCER_ACTOR | CPU time utilized by `HIVE_ACTOR` and `HIVE_BALANCER_ACTOR`, two of the most important actors of the Hive tablet. |
-| Self-ping time | Time it takes Hive to respond to itself. High values indicate heavy load (and low responsiveness) of the Hive. |
-| Local transaction times | CPU time utilized by various local transaction types in Hive. Shows the structure of Hive load based on different activities. |
+| --- | --- |
+| CPU usage by HIVE_ACTOR, HIVE_BALANCER_ACTOR | CPU time consumed by `HIVE_ACTOR` and `HIVE_BALANCER_ACTOR` — the two most important Hive actors. |
+| Self-ping time | Response time of the Hive tablet to its own requests. High values indicate heavy load (and slow responsiveness) of Hive. |
+| Local transaction times | CPU time consumed for executing various types of local transactions in Hive. Shows the load structure on Hive. |
 | Tablet count | Total number of tablets in the database. |
-| Event queue size | Size of the incoming event queue in Hive. Consistently high values indicate Hive cannot process events fast enough. |
-| `{Tx type}` average time | Average execution time of a single local transaction of the type specified in the `Tx type` selector on the dashboard. |
+| Event queue size | Size of the incoming event queue. Consistently high values indicate that Hive is not keeping up with processing events at the required speed. |
+| {Tx type} average time | Average execution time of one local transaction of the type selected in the `Tx type` filter. |
 | Versions | Versions of {{ ydb-short-name }} running on cluster nodes. |
-| Hive node | Node where the database Hive is running. |
+| Hive node | Node on which Hive is running. |
 
-Download the [database-hive-detailed.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/database-hive-detailed.json) file with the **Database Hive** dashboard.
+Download the **Database Hive** dashboard template: [database-hive-detailed.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/database-hive-detailed.json).
+
+## Topic {#topic}
+
+The dashboard displays graphs for metrics of a single topic. The topic name is set in the `topic` filter at the top of the dashboard. Below are the panels and metric descriptions.
+
+| Name | Description |
+| --- | --- |
+| Total incoming records (bytes) per second | Number of bytes per second written to the topic using the `Ydb::TopicService::StreamWrite` method |
+| Total incoming records (count) per second | Number of messages per second written using the `Ydb::TopicService::StreamWrite` method |
+| Write latency | Write duration: time from message creation to its writing to the topic. Percentage of messages for which the write duration fell within intervals <100 ms, <200 ms, etc. |
+| Partition throttling | Write throttling duration – waiting for available write quota. Percentage of messages for which the write throttling duration fell within intervals <1 ms, <5 ms, etc. |
+| Partition quota usage | Topic partition write quota utilization, % |
+| Write sessions active | Number of open write sessions to the topic |
+| Write sessions created | Number of write sessions created per second to the topic |
+
+Download the **Topic** dashboard template: [topic.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/topic.json).
+
+## Topic — Consumer {#topic-consumer}
+
+The dashboard displays graphs for metrics of a single topic and its associated consumer. The topic is selected in the `topic` filter, the consumer in the `consumer` filter. The panels and metric descriptions are listed below.
+
+| Name | Description |
+| --- | --- |
+| Total incoming records (bytes) per second | Number of bytes per second written to the topic using the `Ydb::TopicService::StreamWrite` method |
+| Total outgoing records (bytes) per second | Number of bytes per second read from the topic by the consumer using the `Ydb::TopicService::StreamRead` method |
+| Total incoming records (count) per second | Number of messages per second written to the topic using the `Ydb::TopicService::StreamWrite` method |
+| Total outgoing records (count) per second | Number of messages per second read from the topic by the consumer using the `Ydb::TopicService::StreamRead` method |
+| End-to-end latency | End-to-end duration: time from message creation to its reading. Percentage of messages for which the end-to-end duration fell within intervals <100 ms, <200 ms, etc. |
+| Read latency max | Maximum (across all partitions) difference between the current time and the write time of the last message in the topic, ms |
+| Unread messages max | Maximum (across all partitions) difference between the last offset in the partition and the last read offset, in messages |
+| Read idle time max | Maximum idle time (how long the consumer did not read from the partition) across all topic partitions, ms |
+| Uncommitted messages max | Maximum (across all partitions) difference between the last offset in the partition and the last committed offset, in messages |
+| Committed read lag max | Maximum (across all partitions) difference between the current time and the write time of the last committed message in the topic, ms |
+| Partition sessions started | Number of topic read sessions started by the consumer per second |
+
+Download the **Topic — Consumer** dashboard template: [topic-consumer.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/topic-consumer.json).

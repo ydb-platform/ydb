@@ -84,6 +84,28 @@ void ValidateParamsAreUnique(const TResolvedParamBindings& paramBindings, const 
     }
 }
 
+TVector<std::pair<TString, TString>> BuildParametersToAdd(
+    const TCgiParameters& requestParameters,
+    const THashMap<TString, TString>& clusterInfo,
+    const TResolvedParamBindings& paramBindings)
+{
+    TVector<std::pair<TString, TString>> parametersToAdd = BuildNonIdentityRequestParamValues(requestParameters);
+
+    for (auto& paramValue : BuildRequestParamValues(requestParameters, paramBindings.RequestMappings)) {
+        parametersToAdd.push_back(std::move(paramValue));
+    }
+
+    for (auto& paramValue : BuildClusterInfoParamValues(clusterInfo, paramBindings.ClusterInfoMappings)) {
+        parametersToAdd.push_back(std::move(paramValue));
+    }
+
+    for (auto& paramValue : BuildStaticParamValues(paramBindings.StaticMappings)) {
+        parametersToAdd.push_back(std::move(paramValue));
+    }
+
+    return parametersToAdd;
+}
+
 TVector<std::pair<TString, TString>> BuildRequestParamValues(
     const TCgiParameters& requestParameters,
     const TVector<std::pair<TString, TString>>& requestMappings)

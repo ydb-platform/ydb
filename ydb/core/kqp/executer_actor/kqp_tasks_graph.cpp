@@ -3733,7 +3733,6 @@ void TKqpTasksGraph::CountReadTasksFromSource(TStageInfo& stageInfo, size_t reso
     const auto& stageId = stageInfo.Id;
     const auto& stage = stageInfo.Meta.GetStage(stageId);
     const auto& externalSource = stage.GetSources(0).GetExternalSource();
-
     // TODO: can it have any inputs at all?
     std::list<TStageId> inputs;
     for (const auto& input : stage.GetInputs()) {

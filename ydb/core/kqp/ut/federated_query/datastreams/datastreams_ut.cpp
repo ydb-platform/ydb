@@ -2391,6 +2391,97 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             ExecQuery(query, EStatus::GENERIC_ERROR);
         }
     }
+
+    Y_UNIT_TEST_F(RestartQueryAfterPartitionIncrease, TStreamingTestFixture) {
+        // Start a streaming query on a topic with 1 partition, stop the query,
+        // increase the partition count to 20, restart WITHOUT recompilation
+        // (no FORCE flag, SQL is unchanged), write data to every new partition,
+        // and verify all messages appear in the output topic.
+
+        constexpr char inputTopicName[] = "restartAfterPartIncInputTopic";
+        constexpr char outputTopicName[] = "restartAfterPartIncOutputTopic";
+        constexpr char sourceName[] = "restartAfterPartIncSource";
+        constexpr char queryName[] = "restartAfterPartIncQuery";
+
+        // Create the input topic with exactly 1 partition
+        CreateTopic(inputTopicName, NYdb::NTopic::TCreateTopicSettings()
+            .PartitioningSettings(/* minActivePartitions */ 1, /* maxActivePartitions */ 1));
+        CreateTopic(outputTopicName);
+        CreatePqSource(sourceName);
+
+        // Create and start a streaming query
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $in = SELECT value FROM `{source}`.`{input_topic}` WITH (
+                    FORMAT = "json_each_row",
+                    SCHEMA = (value String NOT NULL)
+                )
+                WHERE value LIKE "%data%";
+                INSERT INTO `{source}`.`{output_topic}` SELECT value FROM $in;
+            END DO;)",
+            "query_name"_a = queryName,
+            "source"_a = sourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        WriteTopicMessage(inputTopicName, R"({"value": "my_data"})", 0);
+        const std::vector<std::string> expectedMessages0(1, "my_data");
+        ReadTopicMessages(outputTopicName, expectedMessages0,
+            TInstant::Now() - TDuration::Seconds(100),
+            /* sort */ true);
+
+        // Let the query reach a stable checkpoint before stopping
+        Sleep(TDuration::Seconds(2));
+
+        // Stop the query before altering the topic partition count
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);)",
+            "query_name"_a = queryName
+        ));
+        Sleep(TDuration::MilliSeconds(500));
+
+        // Increase the partition count from 1 to 20 via the Topic API (not SQL,
+        // to avoid PQ-gateway session-related issues during schema changes)
+        {
+            auto alterSettings = NYdb::NTopic::TAlterTopicSettings();
+            alterSettings
+                .BeginAlterPartitioningSettings()
+                    .MinActivePartitions(20)
+                    .MaxActivePartitions(20)
+                .EndAlterTopicPartitioningSettings();
+            const auto result = GetTopicClient()->AlterTopic(inputTopicName, alterSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        // Restart WITHOUT recompilation: no FORCE flag, SQL body is unchanged
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);)",
+            "query_name"_a = queryName
+        ));
+
+        // Give the query time to reconnect to all 20 partitions and checkpoint
+        Sleep(TDuration::Seconds(2));
+
+        // Write one message to each of the 20 partitions
+        constexpr ui32 messageCount = 20;
+        for (ui32 i = 0; i < messageCount; ++i) {
+            WriteTopicMessage(inputTopicName, R"({"value": "my_data"})", i);
+        }
+
+        // All 20 messages must appear in the output topic (order may vary)
+        const std::vector<std::string> expectedMessages(messageCount + 1, "my_data");
+        ReadTopicMessages(outputTopicName, expectedMessages,
+            TInstant::Now() - TDuration::Seconds(100),
+            /* sort */ true);
+
+        // Cleanup
+        ExecQuery(fmt::format(R"(
+            DROP STREAMING QUERY `{query_name}`;)",
+            "query_name"_a = queryName
+        ));
+    }
 }
 
 } // namespace NKikimr::NKqp

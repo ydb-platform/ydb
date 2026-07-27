@@ -995,7 +995,7 @@ FROM `{table_name}`"""
 
     @pytest.mark.parametrize("use_partition_balancing", [True, False], ids=["partition_balancing", "no_partition_balancing"])
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_restart_query(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, use_partition_balancing) -> None:
+    def test_restart_query22(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, use_partition_balancing) -> None:
         inp, out, endpoint = self.get_io_names(kikimr, "test_restart_query", local_topics, entity_name, partitions_count=10)
 
         name = f"test_restart_query_{local_topics!s:.1}{use_partition_balancing!s:.1}"
@@ -1789,3 +1789,70 @@ FROM `{table_name}`"""
         kikimr.ydb_client.query(f"""
             DROP STREAMING QUERY `{query_name}`;
         """)
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_restart_query_after_partition_increase(
+        self: StreamingTestBase,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+        local_topics: bool,
+    ) -> None:
+        """
+        Start a query on a topic with 1 partition, stop the query, increase partition
+        count to 10, restart the query WITHOUT recompilation (no FORCE / no SQL change),
+        write data to random partitions, verify all messages appear in the output.
+        """
+        inp, out, endpoint = self.get_io_names(
+            kikimr,
+            f"test_restart_after_part_inc{local_topics!s:.1}",
+            local_topics,
+            entity_name,
+            partitions_count=1,
+        )
+
+        name = f"test_restart_after_part_inc_{local_topics!s:.1}"
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $in = SELECT value FROM {inp}
+                WITH (
+                    FORMAT="json_each_row",
+                    SCHEMA=(value String NOT NULL))
+                WHERE value LIKE "%data%";
+                INSERT INTO {out} SELECT value FROM $in;
+            END DO;'''
+
+        path = f"/Root/{name}"
+        kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out))
+        self.wait_completed_checkpoints(kikimr, path)
+
+        # Stop the query before altering the topic partition count
+        logger.debug(f"stopping query {name}")
+        kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = FALSE);")
+        time.sleep(0.5)
+
+        # Increase partition count from 1 to 20 via the Topic API (not SQL, to avoid PQ gateway session issues)
+        logger.debug(f"altering topic {self.input_topic} partition count to 20")
+        self.get_ydb_client(kikimr, local_topics).driver.topic_client.alter_topic(
+            self.input_topic, set_min_active_partitions=20
+        )
+
+        # Restart WITHOUT recompilation: no FORCE flag, SQL is unchanged
+        logger.debug(f"restarting query {name} without recompilation")
+        kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = TRUE);")
+        self.wait_completed_checkpoints(kikimr, path, timeout=30)
+
+        # Write data with random partition keys so messages land on different partitions
+        message_count = 20
+        for _ in range(message_count):
+            self.write_stream(
+                ['{"value": "my_data"}'],
+                topic_path=None,
+                partition_key=''.join(random.choices(string.digits, k=8)),
+                endpoint=endpoint,
+            )
+
+        expected_data = ["my_data" for _ in range(message_count)]
+        assert self.read_stream(message_count, topic_path=self.output_topic, endpoint=endpoint) == expected_data
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")

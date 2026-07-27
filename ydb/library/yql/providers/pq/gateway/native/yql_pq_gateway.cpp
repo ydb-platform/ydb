@@ -74,6 +74,20 @@ public:
     }
 
     TAsyncDescribeFederatedTopicResult DescribeFederatedTopic(const TString& sessionId, const TString& cluster, const TString& database, const TString& path, const TString& token) final {
+        if (sessionId.empty()) {
+            // No persistent session is required for non-CM describes.
+            // Create a temporary session on-the-fly using the gateway's own resources.
+            static auto tempSession = MakeIntrusive<TPqSession>(
+                sessionId,
+                TString{},
+                CmConnections,
+                YdbDriver,
+                ClusterConfigs,
+                CredentialsFactory,
+                LocalTopicClientFactory
+            );
+            return tempSession->DescribeFederatedTopic(cluster, database, path, token);
+        }
         return GetExistingSession(sessionId)->DescribeFederatedTopic(cluster, database, path, token);
     }
 

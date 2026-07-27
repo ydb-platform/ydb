@@ -154,7 +154,15 @@ NThreading::TFuture<IPqGateway::TListStreams> TPqSession::ListStreams(const TStr
 IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopic(const TString& cluster, const TString& requestedDatabase, const TString& requestedPath, const TString& token) {
     const auto* config = ClusterConfigs->FindPtr(cluster);
     if (!config) {
-        ythrow yexception() << "Pq cluster `" << cluster << "` does not exist";
+        // For local (non-federated) topics the cluster name is empty.
+        // If a LocalTopicClientFactory is available, use an empty cluster config
+        // which routes through the local factory path below.
+        if (cluster.empty() && LocalTopicClientFactory) {
+            static const TPqClusterConfig defaultLocalConfig;
+            config = &defaultLocalConfig;
+        } else {
+            ythrow yexception() << "Pq cluster `" << cluster << "` does not exist";
+        }
     }
 
     TString database = requestedDatabase;
@@ -167,6 +175,16 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopi
         database = "/logbroker-federation/" + requestedPath.substr(0, pos);
         path = requestedPath.substr(pos + 1);
     }
+
+    Cerr << "Describing PQ topic config->GetEndpoint() " 
+        << config->GetEndpoint() 
+        << " cluster " << cluster 
+        << " database " << database 
+        << " path " << path 
+         << " UseSsl " << config->GetUseSsl() 
+         << " token " << token
+         << " config->GetAddBearerToToken() " << config->GetAddBearerToToken()
+         << Endl;
 
     std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory = CredentialsFactory->Create(token, config->GetAddBearerToToken());
     if (!config->GetEndpoint() && LocalTopicClientFactory) {
@@ -208,6 +226,8 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopi
     }
     YQL_ENSURE(config->GetEndpoint(), "Can't describe topic `" << cluster << "`.`" << path << "`: no endpoint, and local topics are not enabled");
 
+Cerr << "GetAllClusterInfo " <<  Endl;
+
     with_lock (Mutex) {
         return GetYdbFederatedPqClient(cluster, database, *config, credentialsProviderFactory)
             .GetAllClusterInfo()
@@ -216,6 +236,9 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopi
                 cluster, database, path,
                 topicSettings = GetYdbPqClientOptions(database, *config, credentialsProviderFactory)
             ](const auto& futureClusterInfo) mutable {
+
+                Cerr << "GetAllClusterInfo ok " <<  Endl;
+
                 auto allClustersInfo = futureClusterInfo.GetValue();
                 Y_ENSURE(!allClustersInfo.empty());
                 std::vector<TAsyncDescribeTopicResult> futures;
@@ -231,6 +254,7 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopi
                         futures.emplace_back(NThreading::MakeErrorFuture<TDescribeTopicResult>(std::make_exception_ptr(NThreading::TFutureException() << "Cluster " << clusterInfo.Name << " is unavailable for read")));
                     } else {
                         clusterInfo.AdjustTopicClientSettings(topicSettings);
+                         Cerr << "DescribeTopic " <<  Endl;
                         futures.emplace_back(TTopicClient(ydbDriver, topicSettings).DescribeTopic(clusterTopicPath));
                     }
                     results.emplace_back(std::move(clusterInfo));

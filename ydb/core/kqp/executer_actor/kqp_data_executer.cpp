@@ -27,7 +27,9 @@
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
 #include <ydb/library/yql/dq/tasks/dq_connection_builder.h>
+#include <ydb/library/yql/providers/pq/gateway/abstract/yql_pq_gateway.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
+#include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
 #include <ydb/library/wilson_ids/wilson.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
@@ -390,6 +392,7 @@ public:
                 hFunc(TEvSaveScriptExternalEffectResponse, HandleResolve);
                 hFunc(TEvSaveScriptPhysicalGraphResponse, HandleResolve);
                 hFunc(TEvDescribeSecretsResponse, HandleResolve);
+                hFunc(TEvPrivate::TEvDescribePqTopic, HandleResolve);
                 hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandlePartitionStats);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 hFunc(TEvKqpBuffer::TEvError, Handle);
@@ -506,7 +509,8 @@ private:
     }
 
     bool WaitRequired() const {
-        return SecretSnapshotRequired || ResourceSnapshotRequired || SaveScriptExternalEffectRequired;
+        return SecretSnapshotRequired || ResourceSnapshotRequired
+            || SaveScriptExternalEffectRequired || TopicPartitionSnapshotRequired;
     }
 
     void HandleResolve(TEvDescribeSecretsResponse::TPtr& ev) {
@@ -539,6 +543,31 @@ private:
         }
     }
 
+    void HandleResolve(TEvPrivate::TEvDescribePqTopic::TPtr& ev) {
+        if (!ev->Get()->ErrorMessage.empty()) {
+            YDB_LOG_ERROR("Failed to describe PQ topic for partition count refresh",
+                {"marker", "KQPDATA"},
+                {"actorId", SelfId()},
+                {"txId", TxId},
+                {"ctx", *GetUserRequestContext()},
+                {"error", ev->Get()->ErrorMessage},
+                {"traceId", TraceId()});
+            ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
+                YqlIssue({}, NYql::TIssuesIds::KIKIMR_SCHEME_ERROR,
+                    TStringBuilder() << "Failed to describe topic for partition count refresh: "
+                                     << ev->Get()->ErrorMessage));
+            return;
+        }
+
+        if (--PendingTopicDescribes == 0) {
+            PatchPqPartitionCount(ev->Get()->PartitionsCount);
+            TopicPartitionSnapshotRequired = false;
+            if (!WaitRequired()) {
+                Execute();
+            }
+        }
+    }
+
     void HandleResolve(TEvSaveScriptExternalEffectResponse::TPtr& ev) {
         YQL_ENSURE(ev->Get()->Status == Ydb::StatusIds::SUCCESS, "failed to save script external effect with issues: " << ev->Get()->Issues.ToOneLineString());
 
@@ -560,6 +589,21 @@ private:
                 if (stage.SourcesSize() > 0 && stage.GetSources(0).GetTypeCase() == NKqpProto::TKqpSource::kExternalSource) {
                     ResourceSnapshotRequired = true;
                     HasExternalSources = true;
+
+                    // For restored streaming queries with PQ sources, asynchronously fetch
+                    // the current partition count so we can update the task graph before
+                    // RestoreTasksGraph() is called (avoids SCHEME_ERROR on first partition check).
+                    if (Request.QueryPhysicalGraph
+                        && FederatedQuerySetup
+                        && FederatedQuerySetup->PqGatewayFactory)
+                    {
+                        const auto& extSrc = stage.GetSources(0).GetExternalSource();
+                        if (extSrc.GetType() == "PqSource") {
+                            TopicPartitionSnapshotRequired = true;
+                            ++PendingTopicDescribes;
+                            DescribePqSourceTopic(extSrc);
+                        }
+                    }
                 }
                 if (requestContext->CurrentExecutionId) {
                     for (const auto& sink : stage.GetSinks()) {
@@ -1342,6 +1386,101 @@ private:
     }
 
 private:
+    // Fires an async DescribeFederatedTopic for the given PQ external source stage.
+    // On completion, sends TEvPrivate::TEvDescribePqTopic to SelfId().
+    void DescribePqSourceTopic(const NKqpProto::TKqpExternalSource& extSrc) {
+        NYql::NPq::NProto::TDqPqTopicSource topicSource;
+        YQL_ENSURE(extSrc.GetSettings().UnpackTo(&topicSource),
+            "Failed to unpack TDqPqTopicSource from external source settings");
+
+        // const TString cluster   = topicSource.FederatedClustersSize() > 0
+        //                               ? topicSource.GetFederatedClusters(0).GetName()
+        //                               : TString{};
+
+        const TString cluster = extSrc.GetSourceName();
+        // For local topics the endpoint is empty and the Database field in the source
+        // proto stores a YQL cluster alias (e.g. "local"), not a real YDB path.
+        // Use the executer's own Database (e.g. "/Root") so the local RPC handler can
+        // route the request to the correct tenant.
+        const TString database  = topicSource.GetEndpoint().empty()
+                                      ? Database
+                                      : topicSource.GetDatabase();
+        const TString topicPath = topicSource.GetTopicPath();
+        const TString token     = /*UserToken ? UserToken->GetSerializedToken() : */TString{"{\"no_auth\":\"\"}"};
+        // Session id is not required for non-CM calls; an empty string is fine.
+        const TString sessionId;
+        auto gateway = FederatedQuerySetup->PqGatewayFactory->CreatePqGateway();
+
+        {
+            NYql::TPqClusterConfig clusterConfig;
+            clusterConfig.SetName(cluster);
+            clusterConfig.SetClusterType(NYql::TPqClusterConfig::CT_DATA_STREAMS);
+            clusterConfig.SetEndpoint(topicSource.GetEndpoint());
+            clusterConfig.SetToken(token);
+            clusterConfig.SetDatabase(topicSource.GetDatabase());
+            clusterConfig.SetUseSsl(topicSource.GetUseSsl());
+
+           // State_->Configuration->AddCluster(cluster, State_->DatabaseIds, State_->Types->Credentials, State_->DbResolver, properties);
+            gateway->AddCluster(clusterConfig);
+        }
+        YDB_LOG_DEBUG("Describing PQ topic",
+            {"cluster", cluster},
+            {"database=", database},
+            {"topicPath=", topicPath},
+            {"token=", token},
+            {"sessionId=", sessionId});
+        gateway->DescribeFederatedTopic(sessionId, cluster, database, topicPath, token)
+            .Subscribe([
+                actorSystem = TActivationContext::ActorSystem(),
+                selfId      = SelfId(),
+                gateway = gateway](const auto& future)
+            {
+                try {
+                    const auto& result = future.GetValue();
+                    ui32 totalPartitions = 0;
+                    for (const auto& clusterInfo : result) {
+                        totalPartitions += clusterInfo.PartitionsCount;
+                    }
+                    actorSystem->Send(selfId,
+                        new TEvPrivate::TEvDescribePqTopic(totalPartitions));
+                } catch (const std::exception& ex) {
+                    actorSystem->Send(selfId,
+                        new TEvPrivate::TEvDescribePqTopic(TString(ex.what())));
+                }
+            });
+    }
+
+    // Updates TopicPartitionsCount in each task's ReadRanges that belong to PQ source stages.
+    // This ensures ExtractPartitionsFromParams() passes its consistency YQL_ENSURE and the
+    // read actor immediately sees the up-to-date partition count on restoration.
+    void PatchPqPartitionCount(ui32 newPartitionsCount) {
+        if (!Request.QueryPhysicalGraph || newPartitionsCount == 0) {
+            return;
+        }
+
+        auto* mutableGraph = const_cast<NKikimrKqp::TQueryPhysicalGraph*>(Request.QueryPhysicalGraph.get());
+        for (int taskIdx = 0; taskIdx < static_cast<int>(mutableGraph->TasksSize()); ++taskIdx) {
+            auto* task = mutableGraph->MutableTasks(taskIdx);
+            auto* dqTask = task->MutableDqTask();
+            bool hasPqRanges = false;
+            for (int rangeIdx = 0; rangeIdx < static_cast<int>(dqTask->ReadRangesSize()); ++rangeIdx) {
+                NYql::NPq::NProto::TDqReadTaskParams params;
+                if (!params.ParseFromString(dqTask->GetReadRanges(rangeIdx))) {
+                    continue;
+                }
+                if (params.PartitioningParamsSize() == 0) {
+                    continue;
+                }
+                hasPqRanges = true;
+                for (int ppIdx = 0; ppIdx < static_cast<int>(params.PartitioningParamsSize()); ++ppIdx) {
+                    params.MutablePartitioningParams(ppIdx)->SetTopicPartitionsCount(newPartitionsCount);
+                }
+                dqTask->SetReadRanges(rangeIdx, params.SerializeAsString());
+            }
+            (void)hasPqRanges;
+        }
+    }
+
     TShardIdToTableInfoPtr ShardIdToTableInfo;
     TVector<NKikimr::TTableId> TableIdsForSnapshot;
 
@@ -1349,6 +1488,8 @@ private:
     bool SecretSnapshotRequired = false;
     bool ResourceSnapshotRequired = false;
     bool SaveScriptExternalEffectRequired = false;
+    bool TopicPartitionSnapshotRequired = false;
+    ui32 PendingTopicDescribes = 0;
 
     const bool ReadOnlyTx;
     bool ImmediateTx = false;

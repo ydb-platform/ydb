@@ -216,8 +216,6 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
 
         YQL_CLOG(TRACE, CoreDq) << "Assign stage to aggregation ";
     } else if (input->Kind == EOperator::TableLookup) {
-        using namespace NYql;
-        using namespace NYql::NNodes;
         auto lookup = CastOperator<TOpTableLookup>(input);
         auto& exprCtx = ctx.ExprCtx;
 
@@ -226,21 +224,21 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
         const auto newStageId = props.StageGraph.AddStage();
         input->Props.StageId = newStageId;
 
-        TVector<TCoAtom> columnAtoms;
+        TVector<NYql::NNodes::TCoAtom> columnAtoms;
         for (const auto& column : lookup->FetchColumns) {
-            columnAtoms.push_back(Build<TCoAtom>(exprCtx, lookup->Pos).Value(column).Done());
+            columnAtoms.push_back(NYql::NNodes::Build<NYql::NNodes::TCoAtom>(exprCtx, lookup->Pos).Value(column).Done());
         }
-        auto columnsNode = Build<TCoAtomList>(exprCtx, lookup->Pos).Add(columnAtoms).Done().Ptr();
+        auto columnsNode = NYql::NNodes::Build<NYql::NNodes::TCoAtomList>(exprCtx, lookup->Pos).Add(columnAtoms).Done().Ptr();
 
-        TVector<const TItemExprType*> keyItems;
+        TVector<const NYql::TItemExprType*> keyItems;
         for (const auto& key : lookup->LookupKeys) {
             const auto* keyType = lookup->GetInput()->GetIUType(key);
             Y_ENSURE(keyType, "Lookup key type is not available");
-            keyItems.push_back(exprCtx.MakeType<TItemExprType>(key.GetFullName(), keyType));
+            keyItems.push_back(exprCtx.MakeType<NYql::TItemExprType>(key.GetFullName(), keyType));
         }
-        const auto* keyStructType = exprCtx.MakeType<TStructExprType>(keyItems);
-        const auto* keyListType = exprCtx.MakeType<TListExprType>(keyStructType);
-        auto inputTypeNode = ExpandType(lookup->Pos, *keyListType, exprCtx);
+        const auto* keyStructType = exprCtx.MakeType<NYql::TStructExprType>(keyItems);
+        const auto* keyListType = exprCtx.MakeType<NYql::TListExprType>(keyStructType);
+        auto inputTypeNode = NYql::ExpandType(lookup->Pos, *keyListType, exprCtx);
 
         TKqpStreamLookupSettings settings;
         settings.Strategy = EStreamLookupStrategyType::LookupRows;

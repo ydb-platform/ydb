@@ -34,4 +34,4 @@ For more details, see the [{#T}](../streaming-query/streaming-query.md) section 
 
 You can also read data from a topic using a regular `SELECT`, specifying `STREAMING = "TRUE"` in the `WITH` clause. Without the `LIMIT` limit, such a query runs indefinitely, returning results to the client as messages arrive. Unlike streaming queries, it does not create a persistent schema object and does not recover from failures, so it is primarily intended for debugging and checking data in a topic.
 
-For more details, see the [{#T}](../../yql/reference/syntax/select/streaming.md) section.
+For more details, see the [{#T}](topics.md) section.

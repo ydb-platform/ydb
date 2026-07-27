@@ -24,18 +24,18 @@ View structure:
 | Column | Description | Data type | Instantaneous/Cumulative |
 | --- | --- | --- | --- |
 | `OwnerId` | Identifier of the table's SchemeShard.<br/>Key: `0`. | `Uint64` | Instantaneous |
-| `PathId` | Path identifier in SchemeShard.<br/>Key: `1`. | `Uint64` | Instant |
+| `PathId` | Path identifier in SchemeShard.<br/>Key: `1`. | `Uint64` | Instantaneous |
 | `PartIdx` | Partition sequence number.<br/>Key: `2`. | `Uint64` | Instantaneous |
 | `FollowerId` | Identifier of the [replica](../concepts/glossary.md#tablet-follower) of the partition tablet. A value of 0 means the leader.<br/>Key: `3`. | `Uint32` | Instant |
 | `DataSize` | Approximate size of partition data in bytes. | `Uint64` | Instantaneous |
 | `RowCount` | Approximate number of rows. | `Uint64` | Instant |
 | `IndexSize` | Size of the partition index in bytes. | `Uint64` | Instantaneous |
-| `CPUCores` | Instantaneous load value on the partition (fraction of CPU core time spent by the partition actor). | `Double` | Instant |
-| `TabletId` | Partition tablet ID. | `Uint64` | Instant |
-| `Path` | Full path to the table. | `Utf8` | Instant |
-| `NodeId` | ID of the node currently serving the partition. | `Uint32` | Instant |
+| `CPUCores` | Instantaneous load value on the partition (fraction of CPU core time spent by the partition actor). | `Double` | Instantaneous |
+| `TabletId` | Partition tablet ID. | `Uint64` | Instantaneous |
+| `Path` | Full path to the table. | `Utf8` | Instantaneous |
+| `NodeId` | ID of the node currently serving the partition. | `Uint32` | Instantaneous |
 | `StartTime` | The last start time of the partition tablet. | `Timestamp` | Instantaneous |
-| `AccessTime` | Last read moment from the partition. | `Timestamp` | Instant |
+| `AccessTime` | Last read moment from the partition. | `Timestamp` | Instantaneous |
 | `UpdateTime` | Last write moment to the partition. | `Timestamp` | Instantaneous |
 | `RowReads` | Number of reads by key. | `Uint64` | Cumulative |
 | `RowUpdates` | Number of rows written. | `Uint64` | Cumulative |
@@ -47,9 +47,9 @@ View structure:
 | `CoordinatedTxCompleted` | Number of completed [distributed transactions](../concepts/glossary.md#transactions). | `Uint64` | Cumulative |
 | `TxRejectedByOverload` | Number of transactions cancelled due to [high load](../troubleshooting/performance/queries/overloaded-errors.md). | `Uint64` | Cumulative |
 | `TxRejectedByOutOfStorage` | Number of transactions cancelled due to insufficient storage space. | `Uint64` | Cumulative |
-| `TxCompleteLag` | Transaction execution delay (how much transactions lag behind the scheduled time). | `Interval` | Instant |
-| `LastTtlRunTime` | Last start time of TTL-based partition cleanup | `Timestamp` | Instant |
-| `LastTtlRowsProcessed` | Number of partition rows checked during the last TTL cleanup | `Uint64` | Instant |
+| `TxCompleteLag` | Transaction execution delay (how much transactions lag behind the scheduled time). | `Interval` | Instantaneous |
+| `LastTtlRunTime` | Last start time of TTL-based partition cleanup | `Timestamp` | Instantaneous |
+| `LastTtlRowsProcessed` | Number of partition rows checked during the last TTL cleanup | `Uint64` | Instantaneous |
 | `LastTtlRowsErased` | Number of rows deleted from the partition during the last TTL cleanup | `Uint64` | Instantaneous |
 | `LocksAcquired` | Number of set [locks](../contributor/datashard-locks-and-change-visibility.md). | `Uint64` | Cumulative |
 | `LocksWholeShard` | Number of acquired [whole-shard locks](../contributor/datashard-locks-and-change-visibility.md#whole-shard-locks). | `Uint64` | Cumulative |

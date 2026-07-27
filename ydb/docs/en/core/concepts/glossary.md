@@ -836,7 +836,7 @@ Technically, DS-proxy is implemented as an [actor service](#actor-service) launc
 
 **Node warden** or `BS_NODE` is an [actor service](#actor-service) on each cluster node that launches [PDisks](#pdisk), [VDisks](#vdisk), and [DS proxies](#ds-proxy) of [static storage groups](#static-group) when the node starts. It also interacts with the [DS controller](#ds-controller) to launch PDisk, VDisk, and DS proxies of [dynamic groups](#dynamic-group). DS proxies of dynamic groups are launched on demand: node warden processes undelivered messages to DS proxies, launches the corresponding DS proxies, and receives group configuration from the DS controller.
 
-#### Fail realm {#fail-realm}
+#### Failure realm {#fail-realm}
 
 A **fail realm** is a set of [failure domains](#fail-domain) that can fail simultaneously due to a common cause. A correlated failure of two [VDisks](#vdisk) in the same fail realm is more likely than a failure of two VDisks from different fail realms.
 
@@ -863,7 +863,7 @@ Below are the terms related to the implementation of [distributed transactions](
 
 #### Deterministic transactions {#deterministic-transactions}
 
-Distributed transactions in {{ ydb-short-name }} are inspired by the research paper [Building Deterministic Transaction Processing Systems without Deterministic Thread Scheduling](http://cs-www.cs.yale.edu/homes/dna/papers/transactions-wodet11.pdf) by Alexander Thomson and Daniel J. Abadi from Yale University. The paper introduces the concept of **deterministic transaction processing**, which allows efficient processing of distributed transactions. The original paper imposed restrictions on the types of operations that could be performed in this way. Since these restrictions hindered real user scenarios, {{ ydb-short-name }} evolved its algorithms to handle them, using deterministic transactions as stages of user transaction execution with additional orchestration and locking.
+Distributed transactions in {{ ydb-short-name }} are inspired by the research paper [Building Deterministic Transaction Processing Systems without Deterministic Thread Scheduling](http://cs-www.cs.yale.edu/homes/dna/papers/transactions-wodet11.pdf) by Alexander Thomson and Daniel J. Abadi from Yale University. The paper introduces the concept of **deterministic transaction processing**, which allows efficient processing of distributed transactions. The original paper imposed restrictions on the types of operations that could be performed in this way. Since these restrictions hindered real user scenarios, {{ ydb-short-name }} developed algorithms to overcome these restrictions, using deterministic transactions as stages of user transaction execution with additional orchestration and locking.
 
 #### Optimistic locking {#optimistic-locking}
 

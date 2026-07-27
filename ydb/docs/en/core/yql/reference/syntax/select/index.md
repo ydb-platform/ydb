@@ -30,7 +30,7 @@ The result of the `SELECT` query is computed as follows:
 {% endif %}
 
 * is computed [SAMPLE](sample.md) / [TABLESAMPLE](sample.md)
-* [FLATTEN COLUMNS](flatten.md#flatten-columns) or [](flatten.md) is performed; aliases specified in `FLATTEN BY` become visible after this point.
+* [FLATTEN COLUMNS](flatten.md#flatten-columns) or [FLATTEN BY](flatten.md) is performed; aliases specified in `FLATTEN BY` become visible after this point.
 
 {% if feature_join %}
 

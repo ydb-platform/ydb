@@ -40,7 +40,7 @@ A **Hybrid node** is a process that simultaneously performs both the roles of a 
 
 #### Static node {#static-node}
 
-**static nodes** are configured manually during initial cluster initialization or reconfiguration. Typically, they serve as [storage nodes](#storage-node), but they can technically be configured as [database nodes](#database-node).
+**Static nodes** are configured manually during initial cluster initialization or reconfiguration. Typically, they serve as [storage nodes](#storage-node), but they can technically be configured as [database nodes](#database-node).
 
 #### Dynamic node {#dynamic}
 
@@ -114,7 +114,7 @@ The implementation of distributed transactions is discussed in a separate articl
 
 ### Sessions
 
-Logical connections to the database that store the context needed for executing queries and managing transactions. Sessions are described in more detail in the section [{#T}](query_execution/execution_process.md#sessions).
+Logical connections to the database that store the context needed for executing queries and managing transactions. Sessions are described in more detail in the section [{#T}](query_execution/index.md#sessions).
 
 ### Client-side timeout {#client-timeout}
 
@@ -340,7 +340,7 @@ For more information, see [{#T}](datamodel/backup-collection.md).
 
 ### Resource pool {#resource-pool}
 
-**Resource pool** is a schema object that describes the limits imposed on resources (CPU, RAM, etc.) available for executing queries in this resource pool. A query is always executed in some resource pool. By `default`, all queries are executed in a resource pool named , which does not impose any limits. For more information about using resource pools, see [{#T}](../dev/resource-consumption-management.md).
+**Resource pool** is a schema object that describes the limits imposed on resources (CPU, RAM, etc.) available for executing queries in this resource pool. A query is always executed in some resource pool. By default, all queries are executed in a resource pool named `default`, which does not impose any limits. For more information about using resource pools, see [{#T}](../dev/resource-consumption-management.md).
 
 ### Resource pool classifier {#resource-pool-classifier}
 
@@ -798,7 +798,7 @@ Technically, the DS proxy is implemented as an [actor service](#actor-service) l
 
 **Node warden** or `BS_NODE` is an [actor service](#actor-service) on each cluster node that launches [PDisks](#pdisk), [VDisks](#vdisk), and [DS proxies](#ds-proxy) of [static storage groups](#static-group) when the node starts. It also interacts with the [DS controller](#ds-controller) to launch PDisk, VDisk, and DS proxies of [dynamic groups](#dynamic-group). The DS proxy of dynamic groups is launched on demand: node warden processes undelivered messages to DS proxies, launches the corresponding DS proxies, and receives group configuration from the DS controller.
 
-#### Fail realm {#fail-realm}
+#### Failure realm {#fail-realm}
 
 A **fail realm** is a set of [failure domains](#fail-domain) that can fail simultaneously due to a common cause. A correlated failure of two [VDisks](#vdisk) in the same fail realm is more likely than a failure of two VDisks from different fail realms.
 

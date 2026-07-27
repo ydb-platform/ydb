@@ -307,6 +307,90 @@ def _hive_readonly_devui_cases(tablet_id, secure_path_mode):
     )
 
 
+# Every Hive DevUI `page=` handler that mutates cluster state. The Hive non-admin whitelist is
+# empty by design, so each one of these must be admin-only and reachable only under /app/secure.
+_HIVE_MUTATING_PAGES = (
+    # Node management
+    'SetDown&node=1&down=0',
+    'SetFreeze&node=1&freeze=0',
+    'KickNode&node=1',
+    'DrainNode&node=1&wait=0',
+    # Balancing
+    'Rebalance',
+    'RebalanceFromScratch',
+    'StorageRebalance',
+    'ReassignTablet&tablet=all&wait=0',
+    # Migration
+    'InitMigration',
+    'QueryMigration',
+    # Tablet lifecycle
+    'MoveTablet',
+    'StopTablet',
+    'ResumeTablet',
+    'CreateTablet',
+    'ResetTablet',
+    'DeleteTablet',
+    'UpdateResources',
+    # Domain management
+    'StopDomain',
+    'SetDomain',
+    # Forms and logs over the same handlers
+    'ManualOperations',
+    'Settings',
+    'TabletAvailability',
+    'Subactors',
+    'OperationsLog',
+)
+
+# Concrete mutating payload shapes for the handlers that dispatch on parameters rather than
+# on `page=` alone.
+_HIVE_MUTATING_PAGES_WITH_PAYLOAD = (
+    'Settings&BootQueueUpdatePeriod=1000',
+    'TabletAvailability&node=1&changetype=DataShard&maxcount=1',
+    'TabletAvailability&node=1&resettype=DataShard',
+    'Subactors&stop=1',
+)
+
+# Handlers that are safe to actually invoke as an administrator: they only render, or they set
+# state that is already the default. Used to prove the secure path lets an administrator through
+# without performing a destructive operation on the test cluster.
+_HIVE_ADMIN_REACHABLE_PAGES = (
+    'Settings',
+    'Subactors',
+    'OperationsLog&max=10',
+    'ManualOperations',
+    'QueryMigration',
+    'SetDown&node=1&down=0',
+    'SetFreeze&node=1&freeze=0',
+)
+
+
+def _hive_non_admin_expectations():
+    """Identities that must never reach a Hive DevUI mutating handler on the secure path."""
+    _, _, admin_allowed = tablet_devui_sid_matrix()
+    return {token: status for token, status in admin_allowed.items() if token != 'root@builtin'}
+
+
+def _hive_all_mutating_pages_cases(tablet_id, secure_path_mode):
+    """Deny-side coverage for the full handler list.
+
+    Only denials are asserted here, so no mutating operation is ever executed against the
+    cluster: on the legacy path every identity is rejected once the flag is on, and on the
+    secure path every non-admin identity is rejected in both modes.
+    """
+    q = f'TabletID={tablet_id}'
+    all_forbidden, monitoring_allowed, _ = tablet_devui_sid_matrix()
+    expected_on_app = tablet_devui_expected_on_app(secure_path_mode, monitoring_allowed, all_forbidden)
+    non_admins = _hive_non_admin_expectations()
+    cases = []
+    for page in _HIVE_MUTATING_PAGES + _HIVE_MUTATING_PAGES_WITH_PAYLOAD:
+        if secure_path_mode:
+            # With the flag on nothing is reachable on the legacy path, root included.
+            cases += _hive_endpoint_cases([f'/tablets/app?{q}&page={page}'], expected_on_app)
+        cases += _hive_endpoint_cases([f'/tablets/app/secure?{q}&page={page}'], non_admins)
+    return cases
+
+
 def _hive_mutating_devui_cases(tablet_id, secure_path_mode):
     q = f'TabletID={tablet_id}'
     all_forbidden, monitoring_allowed, admin_allowed = tablet_devui_sid_matrix()
@@ -381,6 +465,66 @@ def test_hive_tablet_devui_mon_paths_with_enforce_user_token_and_secure_path_mod
             f'Expected POST {endpoint_path} with token={_hive_token_desc(token)} '
             f'to return {expected_status}, got {status}'
         )
+
+
+def test_hive_all_mutating_devui_pages_are_admin_only(
+    ydb_cluster_with_enforce_user_token_and_hive_tablet,
+):
+    cluster = ydb_cluster_with_enforce_user_token_and_hive_tablet
+    tid = cluster.hive_tablet_id
+
+    for endpoint_path, token, expected_status in _hive_all_mutating_pages_cases(tid, secure_path_mode=False):
+        status = _hive_post_status(cluster, endpoint_path, token)
+        assert status == expected_status, (
+            f'Expected POST {endpoint_path} with token={_hive_token_desc(token)} '
+            f'to return {expected_status}, got {status}'
+        )
+
+
+def test_hive_all_mutating_devui_pages_are_admin_only_with_secure_path_mode(
+    ydb_cluster_with_enforce_user_token_secure_devui_flag_and_hive_tablet,
+):
+    cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_hive_tablet
+    tid = cluster.hive_tablet_id
+
+    for endpoint_path, token, expected_status in _hive_all_mutating_pages_cases(tid, secure_path_mode=True):
+        status = _hive_post_status(cluster, endpoint_path, token)
+        assert status == expected_status, (
+            f'Expected POST {endpoint_path} with token={_hive_token_desc(token)} '
+            f'to return {expected_status}, got {status}'
+        )
+
+
+def test_hive_secure_path_lets_administrator_through(
+    ydb_cluster_with_enforce_user_token_secure_devui_flag_and_hive_tablet,
+):
+    """The deny sweep above must not pass merely because every request is rejected."""
+    cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_hive_tablet
+    tid = cluster.hive_tablet_id
+
+    for page in _HIVE_ADMIN_REACHABLE_PAGES:
+        endpoint_path = f'/tablets/app/secure?TabletID={tid}&page={page}'
+        status = _hive_get_status(cluster, endpoint_path, 'root@builtin')
+        assert status not in (401, 403), (
+            f'Expected GET {endpoint_path} with token=root@builtin to pass the access check, got {status}'
+        )
+
+
+def test_hive_devui_links_use_secure_path(
+    ydb_cluster_with_enforce_user_token_secure_devui_flag_and_hive_tablet,
+):
+    """Hive builds its DevUI links in JS, so the page must publish the flag hive.js reads."""
+    cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_hive_tablet
+    tid = cluster.hive_tablet_id
+    response = requests.get(
+        f'{_hive_mon_base_url(cluster)}/tablets/app/secure?TabletID={tid}',
+        headers={'Authorization': 'root@builtin'},
+        verify=False,
+    )
+
+    assert response.status_code == 200, response.text
+    assert 'window.FeatureFlags.EnableTabletDevUiSecurePath = true;' in response.text
+    assert '/cms/hive.js' in response.text
 
 
 def _schemeshard_endpoint_cases(endpoint_paths, token_statuses):

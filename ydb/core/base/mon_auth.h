@@ -21,7 +21,9 @@ inline constexpr TStringBuf TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH = "app/secure
 // True if `pathInfo` is exactly `/app/secure` or starts with `/app/secure/`.
 bool IsTabletDevUiSecurePath(TStringBuf pathInfo);
 
-// True if the tablet type uses `/app/secure` and EnableTabletDevUiSecurePath is set.
+// True if the tablet type exposes an `/app/secure` subtree and EnableTabletDevUiSecurePath is set.
+// Such a tablet may still serve part of its DevUI on plain `/app/` (e.g. SchemeShard keeps its
+// read-only pages there and moves only admin actions).
 bool UsesTabletDevUiSecurePath(const TAppData* appData, TTabletTypes::EType type);
 
 bool IsTabletDevUiAppPageAdminOnly(const TAppData* appData, TTabletTypes::EType type);

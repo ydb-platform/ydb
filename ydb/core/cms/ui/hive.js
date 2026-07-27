@@ -10,8 +10,12 @@ function makeMonUrl(path) {
     return getMonRootPath() + path;
 }
 
+function isTabletDevUiSecurePathEnabled() {
+    return Boolean(window.FeatureFlags && window.FeatureFlags.EnableTabletDevUiSecurePath);
+}
+
 function getTabletDevUiPath() {
-    return window.FeatureFlags.enableTabletDevUiSecurePath ? 'app/secure' : 'app';
+    return isTabletDevUiSecurePathEnabled() ? 'app/secure' : 'app';
 }
 
 function makeTabletDevUiUrl(queryAndMaybeHash) {

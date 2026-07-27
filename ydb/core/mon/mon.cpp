@@ -63,7 +63,7 @@ bool HasJsonContent(const NHttp::THttpIncomingRequest* request) {
     return false;
 }
 
-TString GetDatabase(NHttp::THttpIncomingRequest* request) {
+TString GetDatabase(const NHttp::THttpIncomingRequest* request) {
     NHttp::TUrlParameters urlParams(request->URL);
     TString database = urlParams["database"];
     if (database) {

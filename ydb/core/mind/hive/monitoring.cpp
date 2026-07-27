@@ -23,8 +23,11 @@ static constexpr i64 REASSIGN_CONFIRMATION_ERROR_MARGIN = 10;
 static void AppendTabletDevUiMonScript(IOutputStream& out, TStringBuf pathInfo, const TAppData* appData) {
     const TStringBuf monRoot = IsTabletDevUiSecurePath(pathInfo) ? TStringBuf("../..") : TStringBuf("..");
     const bool enableSecurePath = UsesTabletDevUiSecurePath(appData, TTabletTypes::Hive);
+    // The flag must be published before hive.js is used, so that every DevUI link
+    // built by hiveAppUrl()/makeTabletDevUiUrl() points to the secure subpath.
+    out << "<script>window.FeatureFlags = window.FeatureFlags || {};"
+        << "window.FeatureFlags.EnableTabletDevUiSecurePath = " << (enableSecurePath ? "true" : "false") << ";</script>";
     out << "<script src=\"" << monRoot << "/cms/hive.js\"></script>";
-    out << "<script>EnableTabletDevUiSecurePath=" << (enableSecurePath ? "true" : "false") << ";</script>";
 }
 
 TLoggedMonTransaction::TLoggedMonTransaction(const NMon::TEvRemoteHttpInfo::TPtr& ev, THive* self) {

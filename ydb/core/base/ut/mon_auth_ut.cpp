@@ -76,6 +76,7 @@ Y_UNIT_TEST_SUITE(TabletDevUiMonAccess) {
         for (const auto type : {
             TTabletTypes::DataShard,
             TTabletTypes::BSController,
+            TTabletTypes::Hive,
         }) {
             fixture.SetEnableTabletDevUiSecurePath(false);
             UNIT_ASSERT(!IsTabletDevUiAppPageAdminOnly(fixture.GetAppData(), type));
@@ -88,6 +89,7 @@ Y_UNIT_TEST_SUITE(TabletDevUiMonAccess) {
             TTabletTypes::Hive,
             TTabletTypes::GraphShard,
             TTabletTypes::SchemeShard,
+            TTabletTypes::BSController,
             TTabletTypes::Coordinator,
         }) {
             fixture.SetEnableTabletDevUiSecurePath(false);

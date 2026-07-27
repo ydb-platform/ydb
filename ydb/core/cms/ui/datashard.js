@@ -13,8 +13,12 @@ function makeMonUrl(path) {
     return getMonRootPath() + path;
 }
 
+function isTabletDevUiSecurePathEnabled() {
+    return Boolean(window.FeatureFlags && window.FeatureFlags.EnableTabletDevUiSecurePath);
+}
+
 function getTabletDevUiPath() {
-    return EnableTabletDevUiSecurePath ? 'app/secure' : 'app';
+    return isTabletDevUiSecurePathEnabled() ? 'app/secure' : 'app';
 }
 
 function makeTabletDevUiUrl(queryAndMaybeHash) {
@@ -22,6 +26,7 @@ function makeTabletDevUiUrl(queryAndMaybeHash) {
 }
 
 function detectTabletDevUiModeAndRun(onReady) {
+    window.FeatureFlags = window.FeatureFlags || {};
     window.FeatureFlags.EnableTabletDevUiSecurePath = false;
 
     $.get(makeMonUrl('/viewer/capabilities'))

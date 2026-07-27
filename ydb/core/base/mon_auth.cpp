@@ -28,7 +28,7 @@ bool UsesTabletDevUiSecurePath(const TAppData* appData, TTabletTypes::EType type
     if (!appData) {
         return false;
     }
-    // Tablets that use the `/app/secure` DevUI path.
+    // Tablets that expose an `/app/secure` DevUI subtree.
     constexpr std::array tabletTypes = {
         TTabletTypes::DataShard,
         TTabletTypes::Hive,
@@ -45,10 +45,10 @@ bool IsTabletDevUiAppPageAdminOnly(const TAppData* appData, TTabletTypes::EType 
     if (!appData) {
         return false;
     }
-
     constexpr std::array tabletTypes = {
         TTabletTypes::DataShard,
         TTabletTypes::BSController,
+        TTabletTypes::Hive,
     };
 
     return appData->FeatureFlags.GetEnableTabletDevUiSecurePath() &&

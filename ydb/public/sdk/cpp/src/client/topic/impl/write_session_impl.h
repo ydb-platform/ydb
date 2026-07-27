@@ -336,6 +336,8 @@ private:
         std::shared_ptr<TDeferredPublicationAckState> AckState;
         uint64_t IntPublicationId = 0;
         std::optional<std::string> ExtPublicationId;
+        // Number of StreamWrite acks still expected for this seqNo (duplicate seqNo => > 1).
+        ui64 UnackedCount = 0;
     };
 
     THandleResult OnErrorImpl(NYdb::TPlainStatus&& status); // true - should Start(), false - should Close(), empty - no action
@@ -527,7 +529,7 @@ protected:
 
     std::unordered_map<TTransactionId, TTransactionInfoPtr, THash<TTransactionId>> Txs;
     std::unordered_map<ui64, TTransactionId> WrittenInTx; // SeqNo -> TxId
-    std::unordered_map<ui64, TDeferredInFlightWrite> WrittenInDeferred; // SeqNo -> deferred write meta
+    std::unordered_map<ui64, TDeferredInFlightWrite> WrittenInDeferred; // SeqNo -> deferred write meta (+ UnackedCount)
 };
 
 } // namespace NYdb::NTopic

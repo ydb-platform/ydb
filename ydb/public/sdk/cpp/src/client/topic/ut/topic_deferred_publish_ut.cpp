@@ -54,6 +54,22 @@ void WaitForWriteAcks(NTopic::IWriteSession& session, size_t expectedAcks = 1) {
     }
 }
 
+void WaitForWriteAckMessages(NTopic::IWriteSession& session, size_t expectedAckMessages) {
+    size_t acks = 0;
+    while (acks < expectedAckMessages) {
+        UNIT_ASSERT_C(
+            session.WaitEvent().Wait(TDuration::Seconds(30)),
+            "timeout waiting write ack messages");
+        for (auto& event : session.GetEvents()) {
+            if (auto* acksEvent = std::get_if<NTopic::TWriteSessionEvent::TAcksEvent>(&event)) {
+                acks += acksEvent->Acks.size();
+            } else if (auto* closed = std::get_if<NTopic::TSessionClosedEvent>(&event)) {
+                UNIT_FAIL("Write session closed unexpectedly: " << closed->GetIssues().ToString());
+            }
+        }
+    }
+}
+
 class TDeferredWriteHelper {
 public:
     explicit TDeferredWriteHelper(NTopic::TTopicClient& client, const std::string& topicPath)
@@ -68,10 +84,17 @@ public:
         Close(TDuration::Seconds(10));
     }
 
-    void WriteDeferred(const std::string& payload, const NTopic::TDeferredPublication& publication) {
+    void WriteDeferred(
+        const std::string& payload,
+        const NTopic::TDeferredPublication& publication,
+        std::optional<uint64_t> seqNo = std::nullopt)
+    {
         Token_ = WaitForWriteToken(*Session_);
         NTopic::TWriteMessage message(payload);
         message.DeferredPublication(publication);
+        if (seqNo.has_value()) {
+            message.SeqNo(*seqNo);
+        }
         Session_->Write(std::move(*Token_), std::move(message));
         Token_.reset();
     }
@@ -305,6 +328,35 @@ Y_UNIT_TEST(PublishMakesDataVisibleViaProducer) {
     const auto messages = ReadMessages(topicClient, topicPath, TEST_CONSUMER, 1);
     UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1u);
     UNIT_ASSERT_VALUES_EQUAL(messages[0], payload);
+}
+
+// Regression: duplicate seqNo used to drop the second OnAck (map erased on first ack),
+// leaving WaitAllAcks / Publish stuck. Server returns two acks (second is ALREADY_WRITTEN).
+Y_UNIT_TEST(PublishCompletesAfterDuplicateSeqNoWrites) {
+    TTopicSdkTestSetup setup("PublishCompletesAfterDuplicateSeqNoWrites", MakeDeferredPublishEnabledSettings());
+    TDriver driver(setup.MakeDriverConfig());
+    NTopic::TTopicClient topicClient(driver);
+    TDeferredPublishClient deferredClient(driver);
+
+    const std::string extId = "ext-sdk-dup-seqno";
+    const auto topicPath = setup.GetFullTopicPath();
+
+    auto begin = deferredClient.BeginPublication(extId).GetValueSync();
+    UNIT_ASSERT_C(begin.IsSuccess(), begin.GetIssues().ToString());
+    const auto& publication = begin.GetPublication();
+
+    TDeferredWriteHelper writer(topicClient, topicPath);
+    writer.WriteDeferred("payload-1", publication, /*seqNo=*/1);
+    writer.WriteDeferred("payload-2", publication, /*seqNo=*/1);
+    WaitForWriteAckMessages(writer.Session(), /*expectedAckMessages=*/2);
+
+    auto publishFuture = deferredClient.Publish(publication);
+    UNIT_ASSERT_C(
+        publishFuture.Wait(TDuration::Seconds(15)),
+        "Publish did not complete within 15s after duplicate seqNo writes "
+        "(deferred WriteCount/AckCount likely stuck)");
+    const auto publish = publishFuture.GetValue();
+    UNIT_ASSERT_C(publish.IsSuccess(), publish.GetIssues().ToString());
 }
 
 Y_UNIT_TEST(StreamWriteAllowsOmitExtPublicationId) {

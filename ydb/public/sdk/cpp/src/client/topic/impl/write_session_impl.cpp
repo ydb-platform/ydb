@@ -700,7 +700,7 @@ void TWriteSessionImpl::TrySignalAllAcksReceived(ui64 seqNo)
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     if (auto deferredIt = WrittenInDeferred.find(seqNo); deferredIt != WrittenInDeferred.end()) {
-        const auto& deferred = deferredIt->second;
+        auto& deferred = deferredIt->second;
         ui64 writeCount = 0;
         ui64 ackCount = 0;
         if (deferred.AckState) {
@@ -708,6 +708,10 @@ void TWriteSessionImpl::TrySignalAllAcksReceived(ui64 seqNo)
         }
         LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
                  MakeOnAckDeferredLogMessage(seqNo, deferred, writeCount, ackCount));
+        Y_ABORT_UNLESS(deferred.UnackedCount > 0);
+        if (--deferred.UnackedCount == 0) {
+            WrittenInDeferred.erase(deferredIt);
+        }
         return;
     }
 
@@ -802,14 +806,17 @@ void TWriteSessionImpl::WriteInternal(TContinuationToken&&, TWriteMessage&& mess
                     "Write after Publish/Cancel is not allowed for this deferred publication");
                 return;
             }
-            WrittenInDeferred[seqNo] = TDeferredInFlightWrite{
-                .AckState = ackState,
-                .IntPublicationId = deferred->IntPublicationId,
-                .ExtPublicationId = deferred->ExtPublicationId,
-            };
+            auto& inFlight = WrittenInDeferred[seqNo];
+            if (!inFlight.AckState) {
+                inFlight.AckState = ackState;
+                inFlight.IntPublicationId = deferred->IntPublicationId;
+                inFlight.ExtPublicationId = deferred->ExtPublicationId;
+            }
+            ++inFlight.UnackedCount;
             LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
                      LogPrefixImpl() << "OnWrite: seqNo=" << seqNo
-                                     << ", intPublicationId=" << deferred->IntPublicationId);
+                                     << ", intPublicationId=" << deferred->IntPublicationId
+                                     << ", UnackedCount=" << inFlight.UnackedCount);
         }
 
         CurrentBatch.Add(
@@ -1423,13 +1430,11 @@ bool TWriteSessionImpl::CleanupOnAcknowledgedImpl(uint64_t id) {
             Y_ABORT_UNLESS(!SentOriginalMessages.empty());
             Y_ABORT_UNLESS(SentOriginalMessages.front().Id == id + i);
             WrittenInTx.erase(SentOriginalMessages.front().Id);
-            WrittenInDeferred.erase(SentOriginalMessages.front().Id);
             SentOriginalMessages.pop();
         }
     } else {
         Y_ABORT_UNLESS(sentFront.Id == id);
         WrittenInTx.erase(id);
-        WrittenInDeferred.erase(id);
         SentOriginalMessages.pop();
     }
 
@@ -2144,7 +2149,7 @@ void TWriteSessionImpl::CancelDeferredPublications()
     std::unordered_map<std::shared_ptr<TDeferredPublicationAckState>, ui64> unackedByState;
     for (const auto& [_, deferred] : WrittenInDeferred) {
         if (deferred.AckState) {
-            ++unackedByState[deferred.AckState];
+            unackedByState[deferred.AckState] += deferred.UnackedCount;
         }
     }
     WrittenInDeferred.clear();

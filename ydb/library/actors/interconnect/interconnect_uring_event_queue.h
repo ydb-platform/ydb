@@ -15,6 +15,21 @@ namespace NActors {
         };
         static_assert(sizeof(TEventPayload) <= sizeof(TActorId));
 
+        struct TEventPayload2 {
+            ui64 ReceivedTimestamp; // GetCycleCountFast()
+            ui64 SeqNo;
+        };
+        static_assert(sizeof(TEventPayload2) <= sizeof(TScopeId));
+
+    public:
+        struct TRecord {
+            std::unique_ptr<IEventHandle> Ev;
+            ui64 Conn;
+            TIntrusivePtr<IReceiveCallback> Callback;
+            ui64 ReceivedTimestamp;
+            ui64 SeqNo;
+        };
+
     public:
         TIncomingEventQueue() {
             Stub.NextLinkPtr.store(0, std::memory_order_relaxed);
@@ -24,15 +39,19 @@ namespace NActors {
             Y_DEBUG_ABORT_UNLESS(IsEmpty()); // ensure this event queue has been properly drained by owner
         }
 
-        bool Push(std::unique_ptr<IEventHandle> ev, ui64 conn, TIntrusivePtr<IReceiveCallback> replyCallback) {
-            // store some metadata in event's unmatching fields
-            new(const_cast<TActorId*>(&ev->InterconnectSession)) TEventPayload{
-                .Conn = conn,
-                .Callback = std::move(replyCallback),
-            };
-            reinterpret_cast<ui64&>(const_cast<TScopeId&>(ev->OriginScopeId)) = GetCycleCountFast();
+        bool Push(TRecord&& record) {
+            IEventHandle *last = record.Ev.release();
 
-            IEventHandle *last = ev.release();
+            // store some metadata in event's unmatching fields
+            new(const_cast<TActorId*>(&last->InterconnectSession)) TEventPayload{
+                .Conn = record.Conn,
+                .Callback = std::move(record.Callback),
+            };
+            new(const_cast<TScopeId*>(&last->OriginScopeId)) TEventPayload2{
+                .ReceivedTimestamp = record.ReceivedTimestamp,
+                .SeqNo = record.SeqNo,
+            };
+
             last->NextLinkPtr.store(0, std::memory_order_relaxed);
             IEventHandle *prev = Head.exchange(last, std::memory_order_acq_rel);
             prev->NextLinkPtr.store(reinterpret_cast<uintptr_t>(last), std::memory_order_release);
@@ -46,14 +65,19 @@ namespace NActors {
             return tail == &Stub && !next && tail == head;
         }
 
-        std::tuple<std::unique_ptr<IEventHandle>, ui64, TIntrusivePtr<IReceiveCallback>, ui64> Pop() {
+        std::optional<TRecord> Pop() {
             auto decompose = [&](IEventHandle *ev) {
                 auto& payload = reinterpret_cast<TEventPayload&>(const_cast<TActorId&>(ev->InterconnectSession));
                 ui64 conn = payload.Conn;
                 TIntrusivePtr<IReceiveCallback> callback = std::move(payload.Callback);
                 payload.~TEventPayload();
-                const ui64 timestamp = reinterpret_cast<const ui64&>(ev->OriginScopeId);
-                return std::make_tuple(std::unique_ptr<IEventHandle>(ev), conn, std::move(callback), timestamp);
+
+                auto& payload2 = reinterpret_cast<TEventPayload2&>(const_cast<TScopeId&>(ev->OriginScopeId));
+                ui64 receivedTimestamp = payload2.ReceivedTimestamp;
+                ui64 seqNo = payload2.SeqNo;
+                payload2.~TEventPayload2();
+
+                return TRecord{std::unique_ptr<IEventHandle>(ev), conn, std::move(callback), receivedTimestamp, seqNo};
             };
 
             for (;;) {
@@ -66,7 +90,7 @@ namespace NActors {
                         if (head = Head.load(std::memory_order_acquire); tail != head) {
                             continue;
                         } else {
-                            return {};
+                            return std::nullopt;
                         }
                     }
                     Tail.store(next, std::memory_order_relaxed);

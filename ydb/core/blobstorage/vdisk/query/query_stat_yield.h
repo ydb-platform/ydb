@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all_snap.h>
+#include <ydb/core/util/actor_monotonic_time_provider.h>
 
 #include <optional>
 #include <variant>
@@ -15,12 +16,23 @@ namespace NKikimr {
     };
 
     struct TDbStatYieldChecker {
-        TDbStatYieldChecker(std::optional<TDbStatYieldPolicy> policy)
+        TDbStatYieldChecker(
+                std::optional<TDbStatYieldPolicy> policy,
+                TIntrusivePtr<NMonotonic::IMonotonicTimeProvider> monotonicTimeProvider = {})
             : Policy(std::move(policy))
-            , PhaseStart(TActivationContext::Monotonic())
-        {}
+            , MonotonicTimeProvider(std::move(monotonicTimeProvider))
+            , PhaseStart(TMonotonic::Zero())
+        {
+            if (Policy) {
+                if (!MonotonicTimeProvider) {
+                    MonotonicTimeProvider = CreateActorSystemMonotonicTimeProvider();
+                }
+                PhaseStart = MonotonicTimeProvider->Now();
+            }
+        }
 
         std::optional<TDbStatYieldPolicy> Policy;
+        TIntrusivePtr<NMonotonic::IMonotonicTimeProvider> MonotonicTimeProvider;
         TMonotonic PhaseStart;
 
         ui64 Step = 0;
@@ -29,8 +41,9 @@ namespace NKikimr {
             ++Step;
             if (Policy && Policy->StepsBeforeMeasures && Step >= Policy->StepsBeforeMeasures) {
                 Step = 0;
-                if (TActivationContext::Monotonic() - PhaseStart > Policy->QuantDuration) {
-                    PhaseStart = TActivationContext::Monotonic();
+                const TMonotonic now = MonotonicTimeProvider->Now();
+                if (now - PhaseStart > Policy->QuantDuration) {
+                    PhaseStart = now;
                     return true;
                 }
             }
@@ -60,8 +73,14 @@ namespace NKikimr {
             TKey Key;
         };
 
-        // Position inside the level (SST) part: the next key to process
+        // Position inside the level (SST) part.
         struct TLevelPosition {
+            using TUnsortedLevelDiscriminator = ui64;
+            using TSortedLevelDiscriminator = TKey;
+
+            // Pair (Level, Discriminator) unambiguously specifies the processed SST
+            ui32 Level = 0;
+            std::variant<TUnsortedLevelDiscriminator, TSortedLevelDiscriminator> Discriminator;
             TKey Key;
         };
 

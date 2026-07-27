@@ -11,32 +11,36 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     // TraverseFreshSegment
     // Traverses a single fresh segment. May yield mid-traversal and resume
-    // from yielded position later.
+    // from the yielded position later.
+    //
     ////////////////////////////////////////////////////////////////////////////
     template <class TAggr, class TKey, class TMemRec>
     std::optional<TDbStatYeildedState<TKey, TMemRec>> TraverseFreshSegment(
-            const TIntrusivePtr<THullCtx> &hullCtx,
-            TAggr *aggr,
-            const char *segName,
-            const ::NKikimr::TFreshSegmentSnapshot<TKey, TMemRec> &seg,
+            const TIntrusivePtr<THullCtx>& hullCtx,
+            TAggr* aggr,
+            const char* segmentName,
+            const ::NKikimr::TFreshSegmentSnapshot<TKey, TMemRec>& segment,
             typename TDbStatYeildedState<TKey, TMemRec>::EFreshSegment segmentType,
-            std::optional<typename TDbStatYeildedState<TKey, TMemRec>::TFreshIterator> resumeIt,
+            const std::optional<TKey>& resumeKey,
             TDbStatYieldChecker& yeildChecker)
     {
         using TYeildedState = TDbStatYeildedState<TKey, TMemRec>;
         using TFreshSegmentSnapshot = ::NKikimr::TFreshSegmentSnapshot<TKey, TMemRec>;
-        using TIterator = typename TFreshSegmentSnapshot::TIteratorWOMerge;
+        using TFreshIterator = typename TFreshSegmentSnapshot::TIteratorWOMerge;
 
-        TIterator it = resumeIt ? *resumeIt : TIterator(hullCtx, &seg);
-        if (!resumeIt) {
-            it.SeekToFirst();
+        TFreshIterator freshIterator(hullCtx, &segment);
+        if (resumeKey) {
+            freshIterator.Seek(*resumeKey);
+        } else {
+            freshIterator.SeekToFirst();
         }
 
-        while (it.Valid()) {
-            aggr->UpdateFresh(segName, it.GetUnmergedKey(), it.GetUnmergedMemRec());
-            it.Next();
-            if (it.Valid() && yeildChecker.StepAndCheckForYield()) {
-                return TYeildedState{typename TYeildedState::TFreshPosition{segmentType, it}};
+        while (freshIterator.Valid()) {
+            aggr->UpdateFresh(segmentName, freshIterator.GetUnmergedKey(), freshIterator.GetUnmergedMemRec());
+            freshIterator.Next();
+            if (freshIterator.Valid() && yeildChecker.StepAndCheckForYield()) {
+                return TYeildedState{typename TYeildedState::TFreshPosition{
+                    segmentType, freshIterator.GetUnmergedKey()}};
             }
         }
         return std::nullopt;
@@ -48,31 +52,36 @@ namespace NKikimr {
     // for gathering info disregarding garbage collection.
     //
     // Execution may be yielded if according policy is passed and later resumed
-    // from saved state. 
+    // from saved state.
     ////////////////////////////////////////////////////////////////////////////
     template <class TAggr, class TKey, class TMemRec>
     std::optional<TDbStatYeildedState<TKey, TMemRec>> TraverseDbWithoutMerge(
-            const TIntrusivePtr<THullCtx> &hullCtx,
-            TAggr *aggr,
-            const ::NKikimr::TLevelIndexSnapshot<TKey, TMemRec> &snap,
+            const TIntrusivePtr<THullCtx>& hullCtx,
+            TAggr* aggr,
+            const ::NKikimr::TLevelIndexSnapshot<TKey, TMemRec>& snap,
             std::optional<TDbStatYeildedState<TKey, TMemRec>> yeildedState = std::nullopt,
-            std::optional<TDbStatYieldPolicy> yeildPolicy = std::nullopt)
+            std::optional<TDbStatYieldPolicy> yeildPolicy = std::nullopt,
+            TIntrusivePtr<NMonotonic::IMonotonicTimeProvider> monotonicTimeProvider = {})
     {
         using TYeildedState = TDbStatYeildedState<TKey, TMemRec>;
         using TFreshSegmentSnapshot = ::NKikimr::TFreshSegmentSnapshot<TKey, TMemRec>;
-        using TSstIterator = typename TYeildedState::TSstIterator;
-        using TMemIterator = typename TYeildedState::TMemIterator;
+        using TLevelSliceSnapshot = ::NKikimr::TLevelSliceSnapshot<TKey, TMemRec>;
+        using TSstIterator = typename TLevelSliceSnapshot::TSstIterator;
         using TLevelSegment = ::NKikimr::TLevelSegment<TKey, TMemRec>;
+        using TMemIterator = typename TLevelSegment::TMemIterator;
         using TLevelSstPtr = typename TLevelSegment::TLevelSstPtr;
         using EFreshSegment = typename TYeildedState::EFreshSegment;
+        using TLevelPosition = typename TYeildedState::TLevelPosition;
+        using TUnsortedLevelDiscriminator = typename TLevelPosition::TUnsortedLevelDiscriminator;
+        using TSortedLevelDiscriminator = typename TLevelPosition::TSortedLevelDiscriminator;
 
-        TDbStatYieldChecker yeildChecker(std::move(yeildPolicy));
+        TDbStatYieldChecker yeildChecker(std::move(yeildPolicy), std::move(monotonicTimeProvider));
 
         // Description of a single fresh segment to traverse
         struct TSegmentDescription {
             const char* Name;
             EFreshSegment Type;
-            const TFreshSegmentSnapshot& Seg;
+            const TFreshSegmentSnapshot& Segment;
         };
         const TSegmentDescription segments[] = {
             {"FCur", EFreshSegment::Cur, snap.FreshSnap.Cur},
@@ -83,59 +92,103 @@ namespace NKikimr {
         // Figure out where to (re)start traversal
         size_t startFreshSegmentIdx = 0;
         bool resumeLevels = false;
-        std::optional<typename TYeildedState::TFreshIterator> freshResumeIt;
-        std::optional<TSstIterator> sstResumeIt;
-        std::optional<TMemIterator> memResumeIt;
+        std::optional<TKey> freshResumeKey;
+        std::optional<TLevelPosition> levelResumePosition;
 
         if (yeildedState) {
-            if (auto* fresh = std::get_if<typename TYeildedState::TFreshPosition>(&yeildedState->Position)) {
-                startFreshSegmentIdx = static_cast<size_t>(fresh->Segment);
-                freshResumeIt = fresh->Iterator;
+            using TFreshPosition = typename TYeildedState::TFreshPosition;
+            if (TFreshPosition* freshPosition = std::get_if<TFreshPosition>(&yeildedState->Position)) {
+                startFreshSegmentIdx = static_cast<size_t>(freshPosition->Segment);
+                freshResumeKey = freshPosition->Key;
             } else {
-                auto& level = std::get<typename TYeildedState::TLevelPosition>(yeildedState->Position);
+                levelResumePosition = std::get<TLevelPosition>(yeildedState->Position);
                 resumeLevels = true;
-                sstResumeIt = level.SstIt;
-                memResumeIt = level.MemIt;
             }
         }
 
+        auto sstSortsBeforeSavedPosition = [](const TLevelSstPtr& levelSstPtr,
+                const TLevelPosition& savedPosition) -> bool {
+            if (levelSstPtr.Level != savedPosition.Level) {
+                return levelSstPtr.Level < savedPosition.Level;
+            }
+            if (levelSstPtr.Level == 0) {
+                return levelSstPtr.SstPtr->VolatileOrderId <
+                    std::get<TUnsortedLevelDiscriminator>(savedPosition.Discriminator);
+            }
+            return levelSstPtr.SstPtr->FirstKey() <
+                std::get<TSortedLevelDiscriminator>(savedPosition.Discriminator);
+        };
+        auto sstMatchesSavedPosition = [](const TLevelSstPtr& levelSstPtr,
+                const TLevelPosition& savedPosition) -> bool {
+            if (levelSstPtr.Level != savedPosition.Level) {
+                return false;
+            }
+            if (levelSstPtr.Level == 0) {
+                return levelSstPtr.SstPtr->VolatileOrderId ==
+                    std::get<TUnsortedLevelDiscriminator>(savedPosition.Discriminator);
+            }
+            const TKey& firstKey = levelSstPtr.SstPtr->FirstKey();
+            const TKey& savedFirstKey = std::get<TSortedLevelDiscriminator>(savedPosition.Discriminator);
+            return !(firstKey < savedFirstKey) && !(savedFirstKey < firstKey);
+        };
+        auto makeLevelPosition = [](const TLevelSstPtr& levelSstPtr, const TKey& nextKey) -> TLevelPosition {
+            TLevelPosition position;
+            position.Level = levelSstPtr.Level;
+            position.Key = nextKey;
+            if (levelSstPtr.Level == 0) {
+                position.Discriminator = TUnsortedLevelDiscriminator(levelSstPtr.SstPtr->VolatileOrderId);
+            } else {
+                position.Discriminator = TSortedLevelDiscriminator(levelSstPtr.SstPtr->FirstKey());
+            }
+            return position;
+        };
+
         // Traverse Fresh
         if (!resumeLevels) {
-            for (size_t i = startFreshSegmentIdx; i < Y_ARRAY_SIZE(freshSegs); ++i) {
-                const TSegmentDescription& description = freshSegs[i];
-                std::optional<typename TYeildedState::TFreshIterator> resumeIt;
-                if (i == startFreshSegmentIdx) {
-                    resumeIt = std::move(freshResumeIt);
+            for (size_t segmentIdx = startFreshSegmentIdx; segmentIdx < std::size(segments); ++segmentIdx) {
+                const TSegmentDescription &description = segments[segmentIdx];
+                std::optional<TKey> resumeKey;
+                if (segmentIdx == startFreshSegmentIdx) {
+                    resumeKey = freshResumeKey;
                 }
-                if (auto yielded = TraverseFreshSegment(hullCtx, aggr, description.Name, description.Seg,
-                        description.Type, std::move(resumeIt), yeildChecker)) {
+                if (std::optional<TYeildedState> yielded = TraverseFreshSegment(hullCtx, aggr, description.Name,
+                        description.Segment, description.Type, resumeKey, yeildChecker)) {
                     return yielded;
                 }
             }
         }
 
         // Traverse SSTs
-        TSstIterator it = resumeLevels ? *sstResumeIt : TSstIterator(&snap.SliceSnap);
-        if (!resumeLevels) {
-            it.SeekToFirst();
-        }
-        while (it.Valid()) {
-            TLevelSstPtr p = it.Get();
-            TMemIterator c = (resumeLevels && memResumeIt) ? *memResumeIt : TMemIterator(p.SstPtr.Get());
-            if (!(resumeLevels && memResumeIt)) {
-                c.SeekToFirst();
+        TSstIterator sstIterator(&snap.SliceSnap);
+        sstIterator.SeekToFirst();
+
+        // When resuming the level phase, skip SSTs that are ordered strictly before the
+        // saved position.
+        if (resumeLevels) {
+            while (sstIterator.Valid() &&
+                    sstSortsBeforeSavedPosition(sstIterator.Get(), *levelResumePosition)) {
+                sstIterator.Next();
             }
-            // consume the resume state only for the first SST after a resume
+        }
+
+        while (sstIterator.Valid()) {
+            TLevelSstPtr levelSstPtr = sstIterator.Get();
+            TMemIterator memIterator(levelSstPtr.SstPtr.Get());
+            if (resumeLevels && sstMatchesSavedPosition(levelSstPtr, *levelResumePosition)) {
+                memIterator.Seek(levelResumePosition->Key);
+            } else {
+                memIterator.SeekToFirst();
+            }
+            // resume applies only to the first matching SST
             resumeLevels = false;
-            memResumeIt.reset();
-            while (c.Valid()) {
-                aggr->UpdateLevel(p, c.GetCurKey(), c.GetMemRec());
-                c.Next();
-                if (c.Valid() && yeildChecker.StepAndCheckForYield()) {
-                    return TYeildedState{typename TYeildedState::TLevelPosition{it, c}};
+            while (memIterator.Valid()) {
+                aggr->UpdateLevel(levelSstPtr, memIterator.GetCurKey(), memIterator.GetMemRec());
+                memIterator.Next();
+                if (memIterator.Valid() && yeildChecker.StepAndCheckForYield()) {
+                    return TYeildedState{makeLevelPosition(levelSstPtr, memIterator.GetCurKey())};
                 }
             }
-            it.Next();
+            sstIterator.Next();
         }
 
         aggr->Finish();

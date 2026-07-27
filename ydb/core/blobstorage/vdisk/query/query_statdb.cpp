@@ -250,8 +250,8 @@ namespace NKikimr {
     }
 
     template <>
-    void TLevelIndexStatActor<TKeyLogoBlob, TMemRecLogoBlob>::CalculateStat(IOutputStream &str,
-                                                                            bool pretty) {
+    void TLevelIndexStatActor<TKeyLogoBlob, TMemRecLogoBlob>::PrepareStat(IOutputStream &str,
+                                                                          bool pretty) {
         // aggregation class
         struct TAggr {
             using TLevelSegment = ::NKikimr::TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob>;
@@ -285,15 +285,13 @@ namespace NKikimr {
             bool Pretty;
         };
 
-        // run aggregation
-        TAggr aggr(str, pretty);
-        TraverseDbWithoutMerge(HullCtx, &aggr, Snapshot);
+        SetAggregator(std::make_shared<TAggr>(str, pretty));
     }
 
     template <>
     void TLevelIndexStatActor<TKeyLogoBlob, TMemRecLogoBlob,
             TEvGetLogoBlobIndexStatRequest, TEvGetLogoBlobIndexStatResponse
-    >::CalculateStat(std::unique_ptr<TEvGetLogoBlobIndexStatResponse> &result) {
+    >::PrepareStat(std::unique_ptr<TEvGetLogoBlobIndexStatResponse> &result) {
         // aggregation class
         struct TAggr {
             using TLevelSegment = ::NKikimr::TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob>;
@@ -326,14 +324,12 @@ namespace NKikimr {
             std::unique_ptr<TEvGetLogoBlobIndexStatResponse> &Result;
         };
 
-        // run aggregation
-        TAggr aggr(result);
-        TraverseDbWithoutMerge(HullCtx, &aggr, Snapshot);
+        SetAggregator(std::make_shared<TAggr>(result));
     }
 
     template <>
-    void TLevelIndexStatActor<TKeyBlock, TMemRecBlock>::CalculateStat(IOutputStream &str,
-                                                                      bool pretty) {
+    void TLevelIndexStatActor<TKeyBlock, TMemRecBlock>::PrepareStat(IOutputStream &str,
+                                                                    bool pretty) {
         // aggregation class
         struct TAggr {
             using TLevelSegment = ::NKikimr::TLevelSegment<TKeyBlock, TMemRecBlock>;
@@ -412,14 +408,12 @@ namespace NKikimr {
         };
 
 
-        // run aggregation
-        TAggr aggr(str, pretty);
-        TraverseDbWithoutMerge(HullCtx, &aggr, Snapshot);
+        SetAggregator(std::make_shared<TAggr>(str, pretty));
     }
 
     template <>
-    void TLevelIndexStatActor<TKeyBarrier, TMemRecBarrier>::CalculateStat(IOutputStream &str,
-                                                                          bool pretty) {
+    void TLevelIndexStatActor<TKeyBarrier, TMemRecBarrier>::PrepareStat(IOutputStream &str,
+                                                                        bool pretty) {
         // aggregation class
         struct TAggr {
             using TLevelSegment = ::NKikimr::TLevelSegment<TKeyBarrier, TMemRecBarrier>;
@@ -513,9 +507,7 @@ namespace NKikimr {
         };
 
 
-        // run aggregation
-        TAggr aggr(str, pretty);
-        TraverseDbWithoutMerge(HullCtx, &aggr, Snapshot);
+        SetAggregator(std::make_shared<TAggr>(str, pretty));
     }
 
 } // NKikimr

@@ -3,6 +3,8 @@ LIBRARY()
 SRCS(
     activeactors.h
     address_classifier.cpp
+    actor_monotonic_time_provider.cpp
+    actor_monotonic_time_provider.h
     backoff.cpp
     cache.cpp
     cache.h

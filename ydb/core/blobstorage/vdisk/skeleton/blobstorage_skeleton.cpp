@@ -628,53 +628,23 @@ namespace NKikimr {
                 return {NKikimrProto::ERROR, "empty TabletID"};
             }
 
-            if (!checksum) {
-                if (checksumType && *checksumType != NKikimrBlobStorage::TChecksumType::NoChecksum) {
-                    YDB_LOG_ERROR_CTX_COMP(ctx, BS_VDISK_PUT, "Buffer checksum type is set without checksum;",
-                        {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
-                        {"evPrefix", evPrefix},
-                        {"id", id},
-                        {"checksumType", static_cast<ui32>(*checksumType)},
-                        {"marker", "BSVS46"});
-                    return {NKikimrProto::ERROR, "checksum type without checksum"};
+            const bool checksumValid = [&] {
+                if (!checksum) {
+                    return !checksumType || *checksumType == NKikimrBlobStorage::TChecksumType::NoChecksum;
                 }
-            }
-
-            if (checksum) {
-                const auto effectiveChecksumType = checksumType.value_or(NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob);
-                switch (effectiveChecksumType) {
-                    case NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob:
-                        break;
-
-                    case NKikimrBlobStorage::TChecksumType::NoChecksum:
-                        YDB_LOG_ERROR_CTX_COMP(ctx, BS_VDISK_PUT, "Buffer checksum is set with NoChecksum type;",
-                            {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
-                            {"evPrefix", evPrefix},
-                            {"id", id},
-                            {"marker", "BSVS47"});
-                        return {NKikimrProto::ERROR, "checksum with NoChecksum type"};
-
-                    default:
-                        YDB_LOG_ERROR_CTX_COMP(ctx, BS_VDISK_PUT, "Unsupported buffer checksum type;",
-                            {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
-                            {"evPrefix", evPrefix},
-                            {"id", id},
-                            {"checksumType", static_cast<ui32>(effectiveChecksumType)},
-                            {"marker", "BSVS48"});
-                        return {NKikimrProto::ERROR, "unsupported checksum type"};
+                if (checksumType.value_or(NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob)
+                        != NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob) {
+                    return false;
                 }
-
-                const ui64 calculatedChecksum = CalculateXxh3Hash(buffer.Begin(), buffer.GetSize()).second;
-                if (*checksum != calculatedChecksum) {
-                    YDB_LOG_ERROR_CTX_COMP(ctx, BS_VDISK_PUT, "Buffer checksum mismatch;",
-                        {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
-                        {"evPrefix", evPrefix},
-                        {"id", id},
-                        {"expectedChecksum", *checksum},
-                        {"calculatedChecksum", calculatedChecksum},
-                        {"marker", "BSVS45"});
-                    return {NKikimrProto::ERROR, "buffer checksum mismatch"};
-                }
+                return *checksum == CalculateXxh3Hash(buffer.Begin(), buffer.GetSize()).second;
+            }();
+            if (!checksumValid) {
+                YDB_LOG_ERROR_CTX_COMP(ctx, BS_VDISK_PUT, "Buffer checksum mismatch;",
+                    {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                    {"evPrefix", evPrefix},
+                    {"id", id},
+                    {"marker", "BSVS45"});
+                return {NKikimrProto::ERROR, "buffer checksum mismatch"};
             }
 
             auto status = Hull->CheckLogoBlob(ctx, id, ignoreBlock, issueKeepFlag, extraBlockChecks, writtenBeyondBarrier);

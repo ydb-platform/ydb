@@ -248,7 +248,7 @@ namespace NKikimr {
                             ui32 ResponseSize;
                             bool Success = true;
 
-                            ui64 GetChecksum(TRope& data) const {
+                            std::optional<ui64> ExtractChecksumInplace(TRope& data) const {
                                 Y_ABORT_UNLESS(data.GetSize() >= ResponseSize);
                                 const ui32 writtenSize = data.GetSize();
 
@@ -265,7 +265,7 @@ namespace NKikimr {
 
                                     case EBlobHeaderMode::OLD_HEADER:
                                     case EBlobHeaderMode::NO_HEADER:
-                                        return CalculateXxh3Hash(data.Begin(), data.GetSize()).second;
+                                        return std::nullopt;
                                 }
 
                                 Y_ABORT("unexpected blob header mode");
@@ -276,17 +276,26 @@ namespace NKikimr {
                                     IngrPtr, Keep, DoNotKeep);
                                 Success = false;
                             }
-                            void operator()(TRcBuf&& buffer) const {
+                            void operator()(TRcBuf&& buffer) {
                                 TRope data(std::move(buffer));
-                                const ui64 checksum = GetChecksum(data);
-                                Result->AddResult(NKikimrProto::OK, Id, Shift, std::move(data), CookiePtr,
-                                    IngrPtr, Keep, DoNotKeep, &checksum, NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob);
+                                this->operator()(data);
                             }
-                            void operator()(const TRope& data) const {
-                                TRope resultData(data);
-                                const ui64 checksum = GetChecksum(resultData);
-                                Result->AddResult(NKikimrProto::OK, Id, Shift, std::move(resultData), CookiePtr,
-                                    IngrPtr, Keep, DoNotKeep, &checksum, NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob);
+                            void operator()(const TRope& data) {
+                                TRope dataCopy(data);
+                                this->operator()(std::move(dataCopy));
+                            }
+                            void operator()(TRope&& data) {
+                                std::optional<ui64> checksum = ExtractChecksumInplace(data);
+                                ui64 calculatedChecksum = CalculateXxh3Hash(data.Begin(), data.GetSize()).second;
+                                if (checksum.has_value() && (*checksum != calculatedChecksum)) {
+                                    Result->AddResult(NKikimrProto::CORRUPTED, Id, Shift, static_cast<ui32>(Size), CookiePtr,
+                                    IngrPtr, Keep, DoNotKeep);
+                                    Success = false;
+                                    return;
+                                }
+                                Y_ASSERT(!checksum || *checksum == calculatedChecksum);
+                                Result->AddResult(NKikimrProto::OK, Id, Shift, std::move(data), CookiePtr,
+                                    IngrPtr, Keep, DoNotKeep, &calculatedChecksum, NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob);
                             }
                         };
                         const ui32 partSize = GType.PartSize(it->Id);

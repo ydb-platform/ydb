@@ -210,6 +210,7 @@ public:
 
             TRope resultBuffer = ev.GetBlobData(result);
             ui32 resultShift = result.HasShift() ? result.GetShift() : 0;
+            TString errorReason = record.GetErrorReason();
 
             if (!NDsProxyGetImpl::ValidateVDiskGetResponseChecksum(replyStatus, result, resultBuffer)) {
                 DSP_LOG_ERROR_SX(logCtx, "BPG68", "Error in ValidateVDiskGetResponseChecksum on TEvVGetResult, blobId# " << blobId
@@ -217,7 +218,8 @@ public:
                         << " checksumType# " << static_cast<ui32>(result.GetChecksumType()));
                 NKikimrBlobStorage::TQueryResult *mutableResult = ev.Record.MutableResult(i);
                 replyStatus = NKikimrProto::ERROR;
-                mutableResult->SetStatus(NKikimrProto::ERROR);
+                errorReason = "buffer checksum mismatch";
+                mutableResult->SetStatus(NKikimrProto::CORRUPTED);
             }
 
             // Currently CRC can be checked only if blob part is fully read
@@ -260,7 +262,7 @@ public:
                     || replyStatus == NKikimrProto::CORRUPTED) {
                 DSP_LOG_DEBUG_SX(logCtx, "BPG60", "Got# " << NKikimrProto::EReplyStatus_Name(replyStatus).data()
                     << " orderNumber# " << orderNumber << " vDiskId# " << vdisk.ToString());
-                Blackboard.AddErrorResponse(blobId, orderNumber, record.GetErrorReason());
+                Blackboard.AddErrorResponse(blobId, orderNumber, errorReason);
             } else if (replyStatus == NKikimrProto::NOT_YET) {
                 DSP_LOG_DEBUG_SX(logCtx, "BPG67", "Got# NOT_YET orderNumber# " << orderNumber
                         << " vDiskId# " << vdisk.ToString());

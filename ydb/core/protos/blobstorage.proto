@@ -18,7 +18,6 @@ option java_package = "ru.yandex.kikimr.proto";
 enum TChecksumType {
     NoChecksum = 0;
     XXH3_64BitBlob = 1;
-    XXH3_64BitBlobAndLogoBlobId = 2;
 }
 
 message TMessageId {

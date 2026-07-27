@@ -12,7 +12,6 @@ ELSE()
 ENDIF()
 
 PEERDIR(
-    ydb/core/blobstorage/base
     ydb/core/blobstorage/dsproxy
 #    ydb/core/blobstorage/ut_vdisk/lib
     ydb/core/testlib/default

@@ -252,11 +252,11 @@ struct TEnvironmentSetup {
         return TAppData::TimeProvider->Now();
     }
 
-    TString GenerateRandomString(ui32 len) {
+    static TString GenerateRandomString(ui32 len, ui64 seed) {
         TString res = TString::Uninitialized(len);
         char *p = res.Detach();
         char *end = p + len;
-        TReallyFastRng32 rng(RandomNumber<ui64>());
+        TReallyFastRng32 rng(seed);
         for (; p + sizeof(ui32) < end; p += sizeof(ui32)) {
             WriteUnaligned<ui32>(p, rng());
         }
@@ -264,6 +264,10 @@ struct TEnvironmentSetup {
             *p = rng();
         }
         return res;
+    }
+
+    TString GenerateRandomString(ui32 len) {
+        return GenerateRandomString(len, RandomNumber<ui64>());
     }
 
     ui32 GetNumDataCenters() const {

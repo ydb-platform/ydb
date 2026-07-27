@@ -31,8 +31,6 @@ bool ValidateVDiskGetResponseChecksum(NKikimrProto::EReplyStatus replyStatus,
             return true;
         case NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob:
             return result.HasChecksum() && result.GetChecksum() == CalculateXxh3Hash(resultBuffer.Begin(), resultBuffer.GetSize()).second;
-        case NKikimrBlobStorage::TChecksumType::XXH3_64BitBlobAndLogoBlobId:
-            return false;
         default:
             return false;
     }

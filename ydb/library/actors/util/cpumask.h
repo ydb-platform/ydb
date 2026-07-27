@@ -11,6 +11,9 @@ using TCpuId = ui32;
 
 // Simple data structure to operate with set of cpus
 struct TCpuMask {
+    // Keep malformed text input from requesting an unbounded allocation.
+    static constexpr TCpuId MaxParsedCpuId = 64 * 1024 - 1;
+
     TStackVec<bool, 1024> Cpus;
 
     // Creates empty mask
@@ -39,6 +42,9 @@ struct TCpuMask {
                     StringSplitter(s).Split('-').CollectInto(&l, &r);
                 } else {
                     l = r = FromString<TCpuId>(s);
+                }
+                if (l > r || r > MaxParsedCpuId) {
+                    ythrow yexception() << "invalid cpu range '" << s << "'";
                 }
                 if (r >= Cpus.size()) {
                     Cpus.resize(r + 1, false);

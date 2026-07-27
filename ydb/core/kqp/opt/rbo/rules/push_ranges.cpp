@@ -225,27 +225,14 @@ TIndexScore ScoreKeyOrder(const IPredicateRangeExtractor::TBuildResult& result, 
     return score;
 }
 
-// if (index.Type != TIndexDescription::EType::GlobalAsync
-//     && index.Type != TIndexDescription::EType::GlobalJson
-//     && index.Type != TIndexDescription::EType::GlobalJsonCompact
-//     && index.Type != TIndexDescription::EType::LocalMinMax
-//     && index.Type != TIndexDescription::EType::LocalBloomFilter
-//     && index.Type != TIndexDescription::EType::LocalBloomNgramFilter
-//     && index.State == TIndexDescription::EIndexState::Ready)
-
 bool IsSelectableIndex(const TIndexDescription& index) {
-    if (index.State != TIndexDescription::EIndexState::Ready) {
-        return false;
-    }
-    switch (index.Type) {
-        case TIndexDescription::EType::GlobalSync:
-        case TIndexDescription::EType::GlobalSyncUnique:
-            return true;
-        default:
-            // Async indexes are not consistent with the main table, all the other kinds are either
-            // local (no impl table to read) or need a specialized read operator.
-            return false;
-    }
+    return index.Type != TIndexDescription::EType::GlobalAsync
+        && index.Type != TIndexDescription::EType::GlobalJson
+        && index.Type != TIndexDescription::EType::GlobalJsonCompact
+        && index.Type != TIndexDescription::EType::LocalMinMax
+        && index.Type != TIndexDescription::EType::LocalBloomFilter
+        && index.Type != TIndexDescription::EType::LocalBloomNgramFilter
+        && index.State == TIndexDescription::EIndexState::Ready;
 }
 
 bool IsCovering(const TOpRead& read, const TKikimrTableMetadata& indexMeta) {

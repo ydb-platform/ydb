@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    dbg_counters.cpp
     public.cpp
     trace_helpers.cpp
     vchunk_counters.cpp

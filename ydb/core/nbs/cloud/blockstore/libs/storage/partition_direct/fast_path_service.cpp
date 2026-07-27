@@ -1,5 +1,6 @@
 #include "fast_path_service.h"
 
+#include "counters_helper.h"
 #include "direct_block_group.h"
 #include "partition_direct_events_private.h"
 #include "region_geometry.h"
@@ -76,23 +77,6 @@ void DumpToFile(
     for (const auto& dump: dumps) {
         file.Write(dump.Dump.data(), dump.Dump.size());
     }
-}
-
-NMonitoring::TDynamicCounterPtr MakeCountersChain(
-    NMonitoring::TDynamicCounterPtr counters,
-    const TString& ddiskPool,
-    ui64 tabletId)
-{
-    if (!counters) {
-        return nullptr;
-    }
-
-    NMonitoring::TDynamicCounterPtr result =
-        GetServiceCounters(std::move(counters), "nbs_partitions");
-    result = result->GetSubgroup("ddiskPool", ddiskPool);
-    result = result->GetSubgroup("tabletId", ToString(tabletId));
-    result = result->GetSubgroup("subsystem", "interface");
-    return result;
 }
 
 TVector<TRegionPtr> CreateRegions(

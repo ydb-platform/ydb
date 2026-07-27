@@ -4,6 +4,7 @@ GENERATE_ENUM_SERIALIZATION(ddisk_data_copier.h)
 GENERATE_ENUM_SERIALIZATION(direct_block_group_impl.h)
 
 SRCS(
+    counters_helper.cpp
     ddisk_data_copier.cpp
     direct_block_group_impl.cpp
     direct_block_group.cpp
@@ -35,6 +36,7 @@ SRCS(
 PEERDIR(
     ydb/core/nbs/cloud/blockstore/bootstrap
     ydb/core/nbs/cloud/blockstore/config/protos
+    ydb/core/nbs/cloud/blockstore/libs/diagnostics
     ydb/core/nbs/cloud/blockstore/libs/storage/api
     ydb/core/nbs/cloud/blockstore/libs/storage/core
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map

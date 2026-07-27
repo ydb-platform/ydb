@@ -1,5 +1,6 @@
 #include "partition_direct_actor.h"
 
+#include "counters_helper.h"
 #include "direct_block_group_impl.h"
 #include "fast_path_service.h"
 #include "load_actor_adapter.h"
@@ -179,6 +180,11 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
     auto executors =
         nbsService->ExecutorPool.GetExecutors(DirectBlockGroupsCount);
 
+    NMonitoring::TDynamicCounterPtr dbgCountersRoot = MakeCountersChain(
+        AppData()->Counters,
+        StorageConfig->GetDDiskPoolName(),
+        TabletID());
+
     for (ui32 dbgIndex = 0; dbgIndex < DirectBlockGroupsCount; dbgIndex++) {
         const auto& conn =
             directBlockGroupsConnections.GetDirectBlockGroupConnections(
@@ -192,6 +198,13 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
         for (const auto& connection: conn.GetConnections()) {
             persistentBufferDDiskIds.push_back(NBsController::TDDiskId(
                 connection.GetPersistentBufferDDiskId()));
+        }
+
+        NMonitoring::TDynamicCounterPtr dbgCounters;
+        if (dbgCountersRoot) {
+            dbgCounters = dbgCountersRoot->GetSubgroup(
+                "directBlockGroup",
+                ToString(dbgIndex));
         }
 
         auto directBlockGroup = std::make_shared<TDirectBlockGroup>(
@@ -208,7 +221,8 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
                 TActivationContext::ActorSystem(),
                 NTransport::CreateTransportActor(
                     VolumeConfig.GetDiskId(),
-                    dbgIndex)));
+                    dbgIndex)),
+            std::move(dbgCounters));
 
         directBlockGroups.emplace_back(std::move(directBlockGroup));
     }

@@ -29,6 +29,10 @@ items:
   href: vector-indexes-kmeans-tree-type.md
 - name: Fulltext indexes
   href: fulltext-indexes.md
+- name: Hybrid search
+  href: hybrid-search.md
+- name: JSON indexes
+  href: json-indexes.md
 - name: Local indexes
   href: local-indexes/index.md
   include:
@@ -55,3 +59,7 @@ items:
   href: terraform.md
 - name: Custom attributes
   href: custom-attributes.md
+- name: Resource consumption management
+  href: resource-consumption-management.md
+- name: Structure and limitations of a shared topic reader
+  href: shared-consumer-internals.md

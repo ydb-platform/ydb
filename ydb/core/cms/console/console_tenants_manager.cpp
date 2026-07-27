@@ -1171,6 +1171,7 @@ public:
             case NKikimrProto::RESTART:
             case NKikimrProto::NOT_YET:
             case NKikimrProto::NO_GROUP:
+            case NKikimrProto::NOT_FOUND:
             case NKikimrProto::UNKNOWN:
                 YDB_LOG_ERROR_CTX(ctx, "TScaleRecommenderManip got error reply during configuring hive",
                     {"tenantPath", Tenant->Path},

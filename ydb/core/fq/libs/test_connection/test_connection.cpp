@@ -102,7 +102,7 @@ class TTestConnectionActor : public NActors::TActorBootstrapped<TTestConnectionA
     ::NFq::TControlPlaneStorageConfig ControlPlaneStorageConfig;
     NConfig::TCommonConfig CommonConfig;
     NFq::TYqSharedResources::TPtr SharedResouces;
-    NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+    NYql::IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
     NPq::NConfigurationManager::IConnections::TPtr CmConnections;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
     TCounters Counters;
@@ -120,7 +120,7 @@ public:
         const NConfig::TCommonConfig& commonConfig,
         const ::NFq::TSigner::TPtr& signer,
         const NFq::TYqSharedResources::TPtr& sharedResources,
-        const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
+        const NYql::IStructuredTokenCredentialsFactory::TPtr& credentialsFactory,
         const NPq::NConfigurationManager::IConnections::TPtr& cmConnections,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const NYql::IHTTPGateway::TPtr& httpGateway,
@@ -252,7 +252,7 @@ NActors::IActor* CreateTestConnectionActor(
         const NConfig::TCommonConfig& commonConfig,
         const ::NFq::TSigner::TPtr& signer,
         const NFq::TYqSharedResources::TPtr& sharedResources,
-        const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
+        const NYql::IStructuredTokenCredentialsFactory::TPtr& credentialsFactory,
         const NPq::NConfigurationManager::IConnections::TPtr& cmConnections,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const NYql::IHTTPGateway::TPtr& httpGateway,

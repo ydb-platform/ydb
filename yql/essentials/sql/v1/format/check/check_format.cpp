@@ -2,7 +2,6 @@
 
 #include "ast.h"
 
-#include <util/string/builder.h>
 #include <yql/essentials/sql/v1/format/sql_format.h>
 
 #include <yql/essentials/sql/v1/lexer/lexer.h>
@@ -14,9 +13,12 @@
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
 
+#include <yql/essentials/sql/v1/translation/sql.h>
 #include <yql/essentials/sql/sql.h>
-#include <yql/essentials/sql/v1/sql.h>
+
 #include <yql/essentials/utils/yql_panic.h>
+
+#include <util/string/builder.h>
 
 namespace NSQLFormat {
 
@@ -133,8 +135,14 @@ TMaybe<TString> CheckedFormat(
     };
 
     NSQLTranslationV1::TParsers parsers = {
-        .Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(),
-        .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(),
+        .Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(
+            /*isAmbiguityError=*/false,
+            /*isAmbiguityDebugging=*/false,
+            settings.MaxParseTreeDepth),
+        .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
+            /*isAmbiguityError=*/false,
+            /*isAmbiguityDebugging=*/false,
+            settings.MaxParseTreeDepth),
     };
 
     auto formatter = NSQLFormat::MakeSqlFormatter(lexers, parsers, settings);

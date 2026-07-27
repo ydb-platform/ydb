@@ -50,6 +50,6 @@ void TNodeWarden::StopAggregator(const TActorId& vdiskServiceId) {
     if (RunningVDiskServiceIds.erase(vdiskServiceId)) {
         const TActorId groupStatAggregatorId = MakeGroupStatAggregatorId(vdiskServiceId);
         TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, groupStatAggregatorId, {}, nullptr, 0));
-        PerAggregatorInfo.erase(groupStatAggregatorId);
+        PerAggregatorInfo.erase(vdiskServiceId);
     }
 }

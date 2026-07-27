@@ -47,17 +47,27 @@ namespace NKikimr::NBsController {
                 return i32(MaxSlots) - NumSlots;
             }
 
+            bool HasFixedSlotSize() const {
+                return SlotSizeInBytes != 0;
+            }
+
+            ui32 GetOwnerWeight(ui32 groupSizeInUnits) const {
+                return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, SlotSizeInUnits, SlotSizeInBytes);
+            }
+
             // the less the better
             double GetPickerScore(ui32 groupSizeInUnits) const {
                 double penalty = 0;
-                ui32 vu = groupSizeInUnits ?: 1;
-                ui32 pu = SlotSizeInUnits ?: 1;
-                if (vu > pu) {
-                    // double-unit vdisk occupies two single pdisk slots
-                    penalty += TImpl::GroupSizeInUnitsLargerThanPDiskPenalty;
-                } else if (vu < pu) {
-                    // single-unit vdisk occupies double-unit pdisk slot (storage waste)
-                    penalty += TImpl::GroupSizeInUnitsSmallerThanPDiskPenalty;
+                if (!HasFixedSlotSize()) {
+                    ui32 vu = groupSizeInUnits ?: 1;
+                    ui32 pu = SlotSizeInUnits ?: 1;
+                    if (vu > pu) {
+                        // double-unit vdisk occupies two single pdisk slots
+                        penalty += TImpl::GroupSizeInUnitsLargerThanPDiskPenalty;
+                    } else if (vu < pu) {
+                        // single-unit vdisk occupies double-unit pdisk slot (storage waste)
+                        penalty += TImpl::GroupSizeInUnitsSmallerThanPDiskPenalty;
+                    }
                 }
                 if (!MaxSlots) {
                     return NumSlots + penalty;
@@ -170,6 +180,26 @@ namespace NKikimr::NBsController {
                 }
             }
 
+            ui32 GetSlotsNeeded(const TPDiskInfo& pdisk) const {
+                return pdisk.GetOwnerWeight(GroupSizeInUnits);
+            }
+
+            bool HasEnoughSpace(const TPDiskInfo& pdisk) const {
+                if (pdisk.SpaceAvailable < RequiredSpace) {
+                    return false;
+                }
+                if (pdisk.SlotSizeInBytes && RequiredSpace > 0) {
+                    const ui64 slotsNeeded = GetSlotsNeeded(pdisk);
+                    if (slotsNeeded > Max<ui64>() / pdisk.SlotSizeInBytes) {
+                        return false;
+                    }
+                    if (pdisk.SlotSizeInBytes * slotsNeeded < static_cast<ui64>(RequiredSpace)) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+
             bool DiskIsUsable(const TPDiskInfo& pdisk) const {
                 if (!pdisk.Usable) {
                     return false; // disk is not usable in this case
@@ -180,13 +210,13 @@ namespace NKikimr::NBsController {
                 if (RequireOperational && !pdisk.Operational) {
                     return false;
                 }
-                if (pdisk.SpaceAvailable < RequiredSpace) {
+                if (!HasEnoughSpace(pdisk)) {
                     return false;
                 }
                 if (pdisk.BridgePileId != BridgePileId) {
                     return false;
                 }
-                if (auto slotsNeeded = i32(TPDiskConfig::GetOwnerWeight(GroupSizeInUnits, pdisk.SlotSizeInUnits)); pdisk.FreeSlots() < slotsNeeded) {
+                if (pdisk.FreeSlots() < i32(GetSlotsNeeded(pdisk))) {
                     return false;
                 }
                 return true;
@@ -1131,7 +1161,7 @@ namespace NKikimr::NBsController {
 
                         s << std::exchange(minus, "") << "s[" << pdisk->NumSlots << "/" << pdisk->MaxSlots << "]";
                     }
-                    if (pdisk->SpaceAvailable < diskManager.RequiredSpace) {
+                    if (!diskManager.HasEnoughSpace(*pdisk)) {
                         totalStats.NotEnoughSpace++;
                         domainStats.NotEnoughSpace++;
                         diskIsOk = false;
@@ -1253,7 +1283,7 @@ namespace NKikimr::NBsController {
                     const auto it = PDisks.find(pdiskId);
                     Y_ABORT_UNLESS(it != PDisks.end());
                     TPDiskInfo& pdisk = it->second;
-                    pdisk.NumSlots -= TPDiskConfig::GetOwnerWeight(groupSizeInUnits, pdisk.SlotSizeInUnits);
+                    pdisk.NumSlots -= pdisk.GetOwnerWeight(groupSizeInUnits);
                     pdisk.EraseGroup(groupId);
                 }
                 ui32 numZero = 0;
@@ -1261,7 +1291,7 @@ namespace NKikimr::NBsController {
                     if (!group[i]) {
                         ++numZero;
                         TPDiskInfo *pdisk = result->at(i);
-                        pdisk->NumSlots += TPDiskConfig::GetOwnerWeight(groupSizeInUnits, pdisk->SlotSizeInUnits);
+                        pdisk->NumSlots += pdisk->GetOwnerWeight(groupSizeInUnits);
                         pdisk->InsertGroup(groupId);
                     }
                 }
@@ -1359,14 +1389,14 @@ namespace NKikimr::NBsController {
                     const auto it = PDisks.find(pdiskId);
                     Y_ABORT_UNLESS(it != PDisks.end());
                     TPDiskInfo& pdisk = it->second;
-                    pdisk.NumSlots -= TPDiskConfig::GetOwnerWeight(groupSizeInUnits, pdisk.SlotSizeInUnits);;
+                    pdisk.NumSlots -= pdisk.GetOwnerWeight(groupSizeInUnits);
                     pdisk.EraseGroup(groupId);
                 }
                 {
                     const auto it = PDisks.find(*result);
                     Y_ABORT_UNLESS(it != PDisks.end());
                     TPDiskInfo& pdisk = it->second;
-                    pdisk.NumSlots += TPDiskConfig::GetOwnerWeight(groupSizeInUnits, pdisk.SlotSizeInUnits);;
+                    pdisk.NumSlots += pdisk.GetOwnerWeight(groupSizeInUnits);
                     pdisk.InsertGroup(groupId);
                     groupDefinition[vdisk.FailRealm][vdisk.FailDomain][vdisk.VDisk] = *result;
                 }

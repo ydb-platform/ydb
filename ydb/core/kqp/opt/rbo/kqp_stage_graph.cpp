@@ -127,6 +127,10 @@ TExprNode::TPtr TShuffleConnection::BuildConnection(TExprNode::TPtr inputStage, 
     // clang-format on
 }
 
+TVector<TInfoUnit> TShuffleConnection::GetUsedIUs() const {
+    return Keys;
+}
+
 NJson::TJsonValue TShuffleConnection::ToJson() const {
     auto json = TConnection::ToJson();
     Y_ENSURE(HashFuncType, "Hash function type must be assigned before building explain JSON.");
@@ -161,6 +165,15 @@ TExprNode::TPtr TMergeConnection::BuildConnection(TExprNode::TPtr inputStage, TP
         .Build()
     .Done().Ptr();
     // clang-format on
+}
+
+TVector<TInfoUnit> TMergeConnection::GetUsedIUs() const {
+    TVector<TInfoUnit> result;
+    result.reserve(Order.size());
+    for (const auto& sortElement : Order) {
+        result.push_back(sortElement.SortColumn);
+    }
+    return result;
 }
 
 NJson::TJsonValue TMergeConnection::ToJson() const {

@@ -410,6 +410,7 @@ class TJsonNodes : public TViewerPipeClient {
                     pDiskState.SetTotalSize(pdisk.GetTotalSize());
                     pDiskState.SetAvailableSize(pdisk.GetAvailableSize());
                     pDiskState.SetExpectedSlotCount(pdisk.GetExpectedSlotCount());
+                    pDiskState.SetExpectedSlotSize(pdisk.GetExpectedSlotSize());
                 }
             }
             if (VDisks.empty() && !SysViewVDisks.empty()) {

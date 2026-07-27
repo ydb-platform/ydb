@@ -35,7 +35,10 @@ enum ESysViewType {
     EAuthOwners = 28;
     EAuthPermissions = 29;
     EAuthEffectivePermissions = 30;
-    reserved 31 to 33; // EPgTables, EInformationSchemaTables, EPgClass (removed)
+    // Kept for backward compatibility: 31-33 were persisted by older versions.
+    EPgTables = 31;
+    EInformationSchemaTables = 32;
+    EPgClass = 33;
     EShowCreate = 34;
     ECompileCacheQueries = 35;
     EStorePrimaryIndexStats = 36;

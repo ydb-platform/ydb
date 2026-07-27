@@ -1,11 +1,11 @@
 """Base implementation."""
 
 import asyncio
-import collections
 import contextlib
 import functools
 import itertools
 import socket
+from collections import defaultdict
 from collections.abc import Sequence
 
 from . import _staggered
@@ -209,18 +209,9 @@ async def _connect_sock(
                     raise OSError(f"no matching local address with {family=} found")
         await loop.sock_connect(sock, address)
         return sock
-    except (RuntimeError, OSError) as exc:
-        my_exceptions.append(exc)
-        if sock is not None:
-            if open_sockets is not None:
-                open_sockets.remove(sock)
-            try:
-                sock.close()
-            except OSError as e:
-                my_exceptions.append(e)
-                raise
-        raise
-    except:
+    except BaseException as exc:
+        if isinstance(exc, (RuntimeError, OSError)):
+            my_exceptions.append(exc)
         if sock is not None:
             if open_sockets is not None:
                 open_sockets.remove(sock)
@@ -239,14 +230,9 @@ def _interleave_addrinfos(
 ) -> list[AddrInfoType]:
     """Interleave list of addrinfo tuples by family."""
     # Group addresses by family
-    addrinfos_by_family: collections.OrderedDict[int, list[AddrInfoType]] = (
-        collections.OrderedDict()
-    )
+    addrinfos_by_family: defaultdict[int, list[AddrInfoType]] = defaultdict(list)
     for addr in addrinfos:
-        family = addr[0]
-        if family not in addrinfos_by_family:
-            addrinfos_by_family[family] = []
-        addrinfos_by_family[family].append(addr)
+        addrinfos_by_family[addr[0]].append(addr)
     addrinfos_lists = list(addrinfos_by_family.values())
 
     reordered: list[AddrInfoType] = []

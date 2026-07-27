@@ -40,6 +40,7 @@ extern "C" {
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/core/issue/yql_issue.h>
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/public/issue/yql_warning.h>
 #include <yql/essentials/core/sql_types/yql_callable_names.h>
 #include <yql/essentials/utils/log/log_level.h>
@@ -2517,7 +2518,7 @@ public:
                 return nullptr;
             }
         } else if (name == "warning") {
-            if (auto langver = NYql::MakeLangVersion(2026, 01);
+            if (auto langver = NYql::NFeature::PgPragmaWarning.MinLangVer;
                 !NYql::IsBackwardCompatibleFeatureAvailable(
                     Settings_.LangVer, langver, Settings_.BackportMode))
             {

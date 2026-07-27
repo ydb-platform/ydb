@@ -128,7 +128,9 @@ public:
     // Starts the DBG and returns a future that resolves when the locked-session
     // quorum is reached for the first time. Intended only to gate the
     // synchronous start.
-    virtual NThreading::TFuture<void> Run(IPartitionDirectService* service) = 0;
+    virtual NThreading::TFuture<void> Run(
+        ITraceService* traceService,
+        IPartitionDirectService* service) = 0;
 
     virtual NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
         ui32 vChunkIndex,
@@ -221,7 +223,7 @@ public:
         NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) = 0;
 
     // Builds this DBG's monitoring snapshot on the executor thread (like Dump).
-    virtual NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() = 0;
+    virtual NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() const = 0;
 };
 
 using IDirectBlockGroupPtr = std::shared_ptr<IDirectBlockGroup>;

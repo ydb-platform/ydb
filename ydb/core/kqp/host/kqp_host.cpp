@@ -1918,8 +1918,12 @@ private:
             configuration.DisablePragma(configuration.UseRuntimeListing, false, "Runtime listing is not supported for streaming queries, pragma value was ignored");
             configuration.DisablePragma(configuration.AtomicUploadCommit, false, "Atomic upload commit is not supported for streaming queries, pragma value was ignored");
             configuration.DefaultOutputKeyFlushTimeout = TDuration::Minutes(1);
-        } else if (queryType != EKikimrQueryType::Script) {
-            configuration.DisablePragma(configuration.AtomicUploadCommit, false, "");
+        } else {
+            if (queryType != EKikimrQueryType::Script) {
+                configuration.DisablePragma(configuration.AtomicUploadCommit, false, "");
+            }
+
+            configuration.ChangeDefaultPragmaValue(configuration.UseRuntimeListing, true);
         }
         configuration.WriteThroughDqIntegration = true;
         configuration.Init(FederatedQuerySetup->S3GatewayConfig, TypesCtx);
@@ -2035,6 +2039,9 @@ private:
         state->EnableTopicsPredicatePushdown = Config->FeatureFlags.GetEnableTopicsPredicatePushdown();
         state->ForbidYqlSysColumnsAndSystemMetadata = QueryServiceConfig.GetStreamingQueries().GetForbidYqlSysColumnsAndSystemMetadata();
         state->EnablePqConstraintsTransformer = Config->_KqpYqlConstraintsTransformerEnabled.Get().GetOrElse(false);
+        state->EnableWatermarks = Config->GetEnableWatermarks();
+        state->EnableWatermarksAdvanced = Config->GetEnableWatermarksAdvanced();
+        state->EnableStreamingPartitionBalancing = Config->GetEnableStreamingPartitionBalancing();
         state->Types = TypesCtx.Get();
         state->DbResolver = FederatedQuerySetup->DatabaseAsyncResolver;
         state->FunctionRegistry = FuncRegistry;

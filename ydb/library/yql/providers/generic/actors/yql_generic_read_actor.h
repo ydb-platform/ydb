@@ -19,7 +19,7 @@ namespace NYql::NDq {
         const THashMap<TString, TString>& taskParams,
         const TVector<TString>& readRanges,
         const NActors::TActorId& computeActorId,
-        ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+        IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
         const NKikimr::NMiniKQL::THolderFactory& holderFactory,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc);
 

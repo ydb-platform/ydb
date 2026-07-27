@@ -196,6 +196,20 @@ void TTransaction::Detach()
     YT_UNUSED_FUTURE(req->Invoke());
 }
 
+void TTransaction::Abandon(TGuard<NThreading::TSpinLock>* /*guard*/)
+{
+    YT_ASSERT_SPINLOCK_AFFINITY(SpinLock_);
+
+    if (State_ == ETransactionState::Abandoned) {
+        return;
+    }
+
+    // Like Detach, but sends no request: the server tx is left to expire on its own.
+    State_ = ETransactionState::Abandoned;
+
+    YT_LOG_DEBUG("Transaction abandoned");
+}
+
 void TTransaction::SubscribeCommitted(const TCommittedHandler& handler)
 {
     Committed_.Subscribe(handler);
@@ -346,7 +360,15 @@ TFuture<TTransactionCommitResult> TTransaction::Commit(const TTransactionCommitO
                     if (rspOrError.IsOK() && State_ == ETransactionState::Committing) {
                         State_ = ETransactionState::Committed;
                     } else if (!rspOrError.IsOK()) {
-                        YT_UNUSED_FUTURE(DoAbort(&guard));
+                        if (Type_ == ETransactionType::Master &&
+                            Client_->GetOptions().AbandonMasterTransactionsOnFailedCommit)
+                        {
+                            // Keep the (possibly transient/ambiguous) failed commit's
+                            // transaction alive for a retrier instead of aborting it.
+                            Abandon(&guard);
+                        } else {
+                            YT_UNUSED_FUTURE(DoAbort(&guard));
+                        }
                         THROW_ERROR_EXCEPTION("Error committing transaction %v",
                             GetId())
                             << rspOrError;
@@ -1190,7 +1212,8 @@ TFuture<void> TTransaction::SendPing()
                         State_ != ETransactionState::Flushed &&
                         State_ != ETransactionState::FlushedModifications &&
                         State_ != ETransactionState::Aborted &&
-                        State_ != ETransactionState::Detached)
+                        State_ != ETransactionState::Detached &&
+                        State_ != ETransactionState::Abandoned)
                     {
                         State_ = ETransactionState::Aborted;
                         fireAborted = true;

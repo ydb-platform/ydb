@@ -121,6 +121,10 @@ private:
             return false;
         }
 
+        if (HasNodesToCalculate(operation.Ptr())) {
+            return false;
+        }
+
         return true;
     }
 

@@ -1,8 +1,5 @@
-import binascii
 import hmac as hmaca
 from base64 import b64decode, b64encode
-
-from scramp.exceptions import ScramException
 
 
 def hmac(hf, key, msg):
@@ -22,11 +19,19 @@ def b64enc(binary):
 
 
 def b64dec(string):
-    try:
-        return b64decode(string, validate=True)
-    except binascii.Error as e:
-        raise ScramException("Invalid base64 encoding.") from e
+    return b64decode(string, validate=True)
 
 
 def uenc(string):
     return string.encode("utf-8")
+
+
+class IterationCount(int):
+    def __new__(cls, value, minimum, maximum):
+        if value is None:
+            value = minimum
+        if value < minimum:
+            raise ValueError(f"The value must not be < {minimum}")
+        if value > maximum:
+            raise ValueError(f"The value must not be > {maximum}")
+        return super().__new__(cls, value)

@@ -30,6 +30,7 @@ TJournalWriterPerformanceCounters::TJournalWriterPerformanceCounters(const NProf
     MediumWrittenBytes = profiler.Counter("/medium_written_bytes");
     JournalWrittenBytes = profiler.Counter("/journal_written_bytes");
     IORequestCount = profiler.Counter("/io_request_count");
+    PipelinedFlushCount = profiler.Counter("/pipelined_flush_count");
 }
 
 ////////////////////////////////////////////////////////////////////////////////

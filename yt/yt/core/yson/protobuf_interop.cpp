@@ -578,6 +578,11 @@ public:
         return Underlying_->is_packed() && !IsYsonMap();
     }
 
+    bool IsPackable() const
+    {
+        return Underlying_->is_packable();
+    }
+
     bool IsRequired() const
     {
         return Underlying_->is_required() || Required_;
@@ -2665,7 +2670,15 @@ private:
     template <class T>
     void ParseFixedPacked(ui64 length, const TProtobufField* field, auto&& func)
     {
-        YT_ASSERT(length % sizeof(T) == 0);
+        if (length % sizeof(T) != 0) {
+            THROW_ERROR_EXCEPTION(EErrorCode::InvalidProtobufWireFormat,
+                "Packed field %v has length %v which is not a multiple of the element size %v",
+                YPathStack_.GetHumanReadablePath(),
+                length,
+                sizeof(T))
+                << TErrorAttribute("ypath", YPathStack_.GetPath())
+                << TErrorAttribute("proto_field", field->GetFullName());
+        }
         for (auto index = 0u; index < length / sizeof(T); ++index) {
             T unsignedValue;
             auto readResult = false;
@@ -2695,7 +2708,15 @@ private:
         const void* data = nullptr;
         int size = 0;
         CodedStream_.GetDirectBufferPointer(&data, &size);
-        YT_ASSERT(length <= static_cast<ui64>(size));
+        if (length > static_cast<ui64>(size)) {
+            THROW_ERROR_EXCEPTION(EErrorCode::InvalidProtobufWireFormat,
+                "Packed field %v has length %v exceeding the remaining buffer size %v",
+                YPathStack_.GetHumanReadablePath(),
+                length,
+                size)
+                << TErrorAttribute("ypath", YPathStack_.GetPath())
+                << TErrorAttribute("proto_field", field->GetFullName());
+        }
         ArrayInputStream array(data, length);
         CodedInputStream in(&array);
         size_t index = 0;
@@ -2729,6 +2750,21 @@ private:
         int tag,
         WireFormatLite::WireType wireType)
     {
+        // Reject a wire type incompatible with the field's declared type;
+        // left unchecked it could be misparsed and abort.
+        auto canonicalWireType = WireFormat::WireTypeForFieldType(field->GetType());
+        bool correctlyPacked = field->IsPackable() &&
+            wireType == WireFormatLite::WIRETYPE_LENGTH_DELIMITED;
+        if (wireType != canonicalWireType && !correctlyPacked) {
+            THROW_ERROR_EXCEPTION(EErrorCode::InvalidProtobufWireFormat,
+                "Invalid wire type %v for field %v; expected %v",
+                static_cast<int>(wireType),
+                YPathStack_.GetHumanReadablePath(),
+                static_cast<int>(canonicalWireType))
+                << TErrorAttribute("ypath", YPathStack_.GetPath())
+                << TErrorAttribute("proto_field", field->GetFullName());
+        }
+
         auto storeEnumAsInt = [this, field] (auto value) {
             const auto* enumType = field->GetEnumType();
             if (field->IsEnumValueCheckStrict() && !enumType->FindLiteralByValue(value)) {

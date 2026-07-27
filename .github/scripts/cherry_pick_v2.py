@@ -56,6 +56,10 @@ class BackportResult:
         return len(self.conflict_files) > 0
 
 
+class ChangesAlreadyAppliedError(Exception):
+    """Raised when all requested commits are already present in the target branch."""
+
+
 def run_git(repo_path: str, cmd: List[str], logger, check=True) -> subprocess.CompletedProcess:
     """Run git command"""
     result = subprocess.run(
@@ -129,6 +133,15 @@ def create_pr_source(pull: Any, allow_unmerged: bool, logger) -> Source:
         body_item=f"* PR {pull.html_url}",
         author=pull.user.login,
         pull_requests=[pull]
+    )
+
+
+def is_empty_cherry_pick(output: str) -> bool:
+    """Detects git empty cherry-pick when patch is already present in the branch."""
+    output_lower = output.lower()
+    return (
+        'now empty' in output_lower
+        or 'nothing added to commit' in output_lower
     )
 
 
@@ -494,6 +507,17 @@ def process_branch(
             output = (result.stdout or '') + (('\n' + result.stderr) if result.stderr else '')
             
             if result.returncode != 0:
+                if is_empty_cherry_pick(output):
+                    run_git(repo_path, ['cherry-pick', '--skip'], logger, check=False)
+                    logger.info(
+                        "Commit %s is already present in %s, skipping",
+                        commit_sha[:7], target_branch
+                    )
+                    cherry_pick_logs.append(
+                        f"=== Cherry-picking {commit_sha[:7]} ===\n"
+                        f"Skipped: changes already present in branch\n{output}"
+                    )
+                    continue
                 if "conflict" in output.lower():
                     conflicts = detect_conflicts(repo_path, logger)
                     if conflicts:
@@ -510,6 +534,20 @@ def process_branch(
                 cherry_pick_logs.append(f"=== Cherry-picking {commit_sha[:7]} ===\n{output}")
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"Cherry-pick failed for commit {commit_sha[:7]}: {e}")
+
+    ahead_result = run_git(
+        repo_path, ['rev-list', '--count', f'{target_branch}..HEAD'], logger, check=False
+    )
+    if ahead_result.returncode != 0:
+        raise RuntimeError(
+            f"Failed to count commits ahead of {target_branch}: "
+            f"{(ahead_result.stderr or ahead_result.stdout or '').strip()}"
+        )
+    commits_ahead = int((ahead_result.stdout or '0').strip() or 0)
+    if commits_ahead == 0:
+        raise ChangesAlreadyAppliedError(
+            f"All requested changes are already present in {target_branch}"
+        )
     
     # Push branch
     run_git(repo_path, ['push', '--set-upstream', 'origin', dev_branch_name], logger)
@@ -781,6 +819,12 @@ def main():
                     repo_name, repo, token, sources, workflow_triggerer, workflow_url, summary_path, logger
                 )
                 results.append(result)
+            except ChangesAlreadyAppliedError as e:
+                logger.info("Branch %s skipped: %s", target_branch, e)
+                if summary_path:
+                    with open(summary_path, 'a') as f:
+                        f.write(f"Branch `{target_branch}`: skipped (changes already present)\n\n")
+                skipped_branches.append((target_branch, "changes already present"))
             except Exception as e:
                 has_errors = True
                 error_msg = f"UNEXPECTED_ERROR: Branch {target_branch} - {type(e).__name__}: {e}"

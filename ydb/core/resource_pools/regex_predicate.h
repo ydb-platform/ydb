@@ -12,17 +12,15 @@ class TRegExMatch;
 namespace NKikimr::NResourcePool {
 
 ///
-/// A compiled regex predicate for classifier matching.
-///
-/// Stores both the original user pattern and the compiled regex
-/// (anchored as ^(?:pattern)$). Reusable for any regex-typed
-/// classifier field (HAS_APP_NAME and future matchers).
+/// A compiled predicate for classifier matching. Built from a user-facing
+/// glob (`*`, `?` wildcards; other characters — including regex metachars —
+/// are literal).
 ///
 struct TRegexPredicate {
     TString Pattern;
     std::shared_ptr<TRegExMatch> Compiled;
 
-    static TRegexPredicate Compile(TStringBuf pattern);
+    static TRegexPredicate FromGlob(TStringBuf glob);
 
     bool Match(const TString& value) const;
 };

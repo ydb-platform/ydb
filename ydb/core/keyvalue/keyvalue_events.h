@@ -42,6 +42,10 @@ namespace TEvKeyValue {
         EvGetStorageChannelStatusResponse,
         EvAcquireLockResponse,
 
+        EvAdvanceMoveDataResult = EvResponse + 512,
+        EvBlobCopied,
+        EvCheckTrash,
+
         EvEnd
     };
 
@@ -287,6 +291,63 @@ namespace TEvKeyValue {
         {}
     };
 
+    struct TEvAdvanceMoveDataResult : public TEventLocal<TEvAdvanceMoveDataResult, EvAdvanceMoveDataResult> {
+        enum class EResult {
+            COPY_BLOB,
+            YIELD,
+            REPEAT,
+            CHECK_TRASH,
+            WAIT_FOR_GC,
+            FINISH,
+        };
+        EResult Result;
+        const TLogoBlobID BlobId;
+
+        explicit TEvAdvanceMoveDataResult(EResult result)
+            : Result(result)
+        {}
+
+        explicit TEvAdvanceMoveDataResult(const TLogoBlobID& blobId)
+            : Result(EResult::COPY_BLOB)
+            , BlobId(blobId)
+        {}
+
+        static std::unique_ptr<TEvAdvanceMoveDataResult> CopyBlob(const TLogoBlobID& blobId) {
+            return std::make_unique<TEvAdvanceMoveDataResult>(blobId);
+        }
+
+        static std::unique_ptr<TEvAdvanceMoveDataResult> Yield() {
+            return std::make_unique<TEvAdvanceMoveDataResult>(EResult::YIELD);
+        }
+
+        static std::unique_ptr<TEvAdvanceMoveDataResult> Repeat() {
+            return std::make_unique<TEvAdvanceMoveDataResult>(EResult::REPEAT);
+        }
+
+        static std::unique_ptr<TEvAdvanceMoveDataResult> CheckTrash() {
+            return std::make_unique<TEvAdvanceMoveDataResult>(EResult::CHECK_TRASH);
+        }
+
+        static std::unique_ptr<TEvAdvanceMoveDataResult> WaitForGC() {
+            return std::make_unique<TEvAdvanceMoveDataResult>(EResult::WAIT_FOR_GC);
+        }
+
+        static std::unique_ptr<TEvAdvanceMoveDataResult> Finish() {
+            return std::make_unique<TEvAdvanceMoveDataResult>(EResult::FINISH);
+        }
+    };
+
+    struct TEvBlobCopied : public TEventLocal<TEvBlobCopied, EvBlobCopied> {
+        const TLogoBlobID BlobId;
+        const TLogoBlobID NewBlobId;
+
+        TEvBlobCopied(const TLogoBlobID& blobId, const TLogoBlobID& newBlobId)
+            : BlobId(blobId)
+            , NewBlobId(newBlobId)
+        {}
+    };
+
+    struct TEvCheckTrash : public TEventLocal<TEvCheckTrash, EvCheckTrash> {};
 }
 
 } // NKikimr

@@ -16,6 +16,7 @@
 #include "device_test_tool_ddisk_test.h"
 #include "device_test_tool_ddisk_client_server.h"
 #include "device_test_tool_driveestimator.h"
+#include "device_test_tool_interconnect_test.h"
 #include "device_test_tool_pb_test.h"
 #include "device_test_tool_pdisk_test.h"
 #include "device_test_tool_trim_test.h"
@@ -85,6 +86,15 @@ static void ServerSignalHandler(int) {
 static void InstallServerSignalHandler() {
     signal(SIGINT, ServerSignalHandler);
     signal(SIGTERM, ServerSignalHandler);
+}
+
+static void InterconnectServerSignalHandler(int) {
+    NKikimr::InterconnectServerStopEvent.Signal();
+}
+
+static void InstallInterconnectServerSignalHandler() {
+    signal(SIGINT, InterconnectServerSignalHandler);
+    signal(SIGTERM, InterconnectServerSignalHandler);
 }
 
 static const char* ydb_logo =
@@ -157,7 +167,9 @@ int main(int argc, char **argv) {
     // DDisk client/server options are hidden from the auto-generated --help list and
     // re-rendered below as a dedicated "DDisk client/server options" section. Keep the
     // section text in sync with the option definitions here.
-    opts.AddLongOption("server", "run as DDisk server with the given node ID (sets up PDisks/DDisks, listens via interconnect)")
+    opts.AddLongOption("server", "run as DDisk server with the given node ID (sets up PDisks/DDisks, listens via interconnect); "
+            "if the config has no DDiskTestList but has InterconnectTestList, runs as an interconnect load responder instead "
+            "(for testing interconnect over a real network between two ydb_stress_tool instances)")
         .RequiredArgument("NODE_ID").StoreResult(&serverNodeId).Hidden();
     opts.AddLongOption("client", "client node ID; in server mode this is the expected client's ID (used in the nameserver), in client mode this is the client's own ID")
         .RequiredArgument("NODE_ID").StoreResult(&clientNodeId).Hidden();
@@ -165,7 +177,7 @@ int main(int argc, char **argv) {
         .RequiredArgument("HOST:PORT").AppendTo(&clientEndpoints).Hidden();
     opts.AddLongOption("ic-port", "interconnect port for server to listen on (server only)")
         .RequiredArgument("PORT").StoreResult(&icPort).Hidden();
-    opts.AddLongOption("num-server-devices", "number of devices per server (default 1)")
+    opts.AddLongOption("num-server-devices", "number of devices per server (default 1); ignored in interconnect server/client mode")
         .RequiredArgument("N").DefaultValue("1").Hidden();
     bool useUring = false;
     opts.AddLongOption("use-uring", "use io_uring transport for interconnect instead of epoll (Linux 5.19+)")
@@ -184,7 +196,9 @@ int main(int argc, char **argv) {
         TStringBuilder ddiskHelp;
         ddiskHelp
             << row("server NODE_ID",
-                   "run as DDisk server with the given node ID (sets up PDisks/DDisks, listens via interconnect)")
+                   "run as DDisk server with the given node ID (sets up PDisks/DDisks, listens via interconnect); "
+                   "if the config has InterconnectTestList instead of DDiskTestList, runs as an interconnect load "
+                   "responder for the network interconnect test (see InterconnectTestList in README)")
             << row("client NODE_ID",
                    "client node ID; in server mode this is the expected client's ID (used in the nameserver), "
                    "in client mode this is the client's own ID")
@@ -193,11 +207,11 @@ int main(int argc, char **argv) {
             << row("ic-port PORT",
                    "interconnect port for server to listen on (server only)")
             << row("num-server-devices N",
-                   "number of devices per server (default 1)")
+                   "number of devices per server (default 1); ignored for InterconnectTestList")
             << row("use-uring",
                    "use io_uring transport for interconnect instead of epoll (Linux 5.19+)");
 
-        opts.AddSection("DDisk client/server options", ddiskHelp);
+        opts.AddSection("DDisk / Interconnect client/server options", ddiskHelp);
     }
 
     TOptsParseResult res(&opts, argc, argv);
@@ -205,6 +219,9 @@ int main(int argc, char **argv) {
     // Server mode is selected by --server. Client mode by --client without --server.
     // In server mode, --client is also required and provides the expected client's NodeID
     // so the interconnect handshake can resolve the peer in the static nameserver table.
+    // Both modes are shared between DDisk (real device paths, PDisk/DDisk actors) and
+    // Interconnect (no device paths, just a load responder / load actor) tests; which
+    // one is used is decided later based on the config file contents.
     const bool serverMode = res.Has("server");
     const bool clientMode = !serverMode && res.Has("client");
     if (serverMode) {
@@ -218,10 +235,6 @@ int main(int argc, char **argv) {
         }
         if (clientNodeId == serverNodeId) {
             Cerr << "Error: --server and --client NODE_IDs must differ" << Endl;
-            return 1;
-        }
-        if (paths.empty()) {
-            Cerr << "Error: --server requires at least one --path" << Endl;
             return 1;
         }
         if (!icPort) {
@@ -240,7 +253,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    if (!clientMode && paths.empty()) {
+    if (!clientMode && !serverMode && paths.empty()) {
         Cerr << "Error: at least one --path must be specified" << Endl;
         return 1;
     }
@@ -249,8 +262,11 @@ int main(int argc, char **argv) {
         Cout << ydb_logo << Flush;
     }
 
-    // For client mode, paths can be empty; use a dummy for TPerfTestConfig
-    if (clientMode && paths.empty()) {
+    const bool pathsProvided = !paths.empty();
+
+    // For client mode, and for server mode when running as an interconnect
+    // responder (no real devices), paths can be empty; use a dummy for TPerfTestConfig.
+    if ((clientMode || serverMode) && paths.empty()) {
         paths.push_back("unused");
     }
 
@@ -287,10 +303,77 @@ int main(int argc, char **argv) {
         }
     }
 
-    // Client-server mode dispatch
+    // Client-server mode dispatch. Two independent flavors share --server/--client/
+    // --endpoint/--ic-port: DDisk (real device paths, PDisk/DDisk actors) is used when
+    // the config has DDiskTestList; Interconnect (no device paths, just a load
+    // responder / load actor talking over a real network connection) is used when the
+    // config has InterconnectTestList instead. This lets a second ydb_stress_tool
+    // instance on another host act as the interconnect load responder.
     if (serverMode || clientMode) {
-        if (protoTests.DDiskTestListSize() == 0) {
-            Cerr << "Error: --server/--client mode requires DDiskTestList in config" << Endl;
+        const bool hasDDiskTests = protoTests.DDiskTestListSize() > 0;
+        const bool hasInterconnectTests = protoTests.InterconnectTestListSize() > 0;
+
+        if (!hasDDiskTests && !hasInterconnectTests) {
+            Cerr << "Error: --server/--client mode requires DDiskTestList or InterconnectTestList in config" << Endl;
+            return 1;
+        }
+        if (hasDDiskTests && hasInterconnectTests) {
+            Cerr << "Error: --server/--client mode requires exactly one of DDiskTestList or InterconnectTestList in config" << Endl;
+            return 1;
+        }
+
+        if (hasInterconnectTests) {
+            // Interconnect network test: no real device paths are used.
+            NDevicePerfTest::TInterconnectTest testProto = protoTests.GetInterconnectTestList(0);
+
+            if (serverMode) {
+                InstallInterconnectServerSignalHandler();
+                auto printer = MakeIntrusive<NKikimr::TResultPrinter>(config.OutputFormat, config.RunCount);
+                THolder<NKikimr::TPerfTest> test(new NKikimr::TInterconnectServer(config, serverNodeId, clientNodeId, icPort, useUring));
+                test->SetPrinter(printer);
+                test->RunTest();
+                return 0;
+            }
+
+            if (clientMode) {
+                // Build server peer list. Server with index i (0-based) gets NodeId = i + 1.
+                // Config's InterconnectLoad.NodeHops entries should reference these NodeIds
+                // to route traffic to the corresponding remote server.
+                TVector<NKikimr::TInterconnectPeer> serverPeers;
+                serverPeers.reserve(clientEndpoints.size());
+                for (size_t i = 0; i < clientEndpoints.size(); ++i) {
+                    try {
+                        auto [host, port] = ParseHostPort(clientEndpoints[i]);
+                        serverPeers.push_back({static_cast<ui32>(i + 1), host, port});
+                    } catch (const yexception& ex) {
+                        Cerr << "Error: --endpoint #" << (i + 1) << ": " << ex.what() << Endl;
+                        return 1;
+                    }
+                }
+                for (const auto& peer : serverPeers) {
+                    if (peer.NodeId == clientNodeId) {
+                        Cerr << "Error: --client NODE_ID (" << clientNodeId
+                             << ") collides with server NodeId " << peer.NodeId
+                             << "; client NodeId must differ from all server NodeIds" << Endl;
+                        return 1;
+                    }
+                }
+
+                auto printer = MakeIntrusive<NKikimr::TResultPrinter>(config.OutputFormat, config.RunCount);
+                for (ui32 run = 0; run < config.RunCount; ++run) {
+                    THolder<NKikimr::TPerfTest> test(
+                        new NKikimr::TInterconnectClient(config, testProto, clientNodeId, serverPeers, useUring));
+                    test->SetPrinter(printer);
+                    test->RunTest();
+                }
+                printer->EndTest();
+                return 0;
+            }
+        }
+
+        // DDisk test: real device paths (--path) are required.
+        if (serverMode && !pathsProvided) {
+            Cerr << "Error: --server requires at least one --path (DDisk mode)" << Endl;
             return 1;
         }
         NDevicePerfTest::TDDiskTest testProto = protoTests.GetDDiskTestList(0);
@@ -316,6 +399,14 @@ int main(int argc, char **argv) {
                     serverPeers.push_back({static_cast<ui32>(i + 1), host, port});
                 } catch (const yexception& ex) {
                     Cerr << "Error: --endpoint #" << (i + 1) << ": " << ex.what() << Endl;
+                    return 1;
+                }
+            }
+            for (const auto& peer : serverPeers) {
+                if (peer.NodeId == clientNodeId) {
+                    Cerr << "Error: --client NODE_ID (" << clientNodeId
+                         << ") collides with server NodeId " << peer.NodeId
+                         << "; client NodeId must differ from all server NodeIds" << Endl;
                     return 1;
                 }
             }
@@ -615,5 +706,16 @@ int main(int argc, char **argv) {
         }
     }
     printer->EndTest();
+
+    for (ui32 i = 0; i < protoTests.InterconnectTestListSize(); ++i) {
+        NDevicePerfTest::TInterconnectTest testProto = protoTests.GetInterconnectTestList(i);
+        for (ui32 run = 0; run < config.RunCount; ++run) {
+            THolder<NKikimr::TPerfTest> test(new NKikimr::TInterconnectTest(config, testProto));
+            test->SetPrinter(printer);
+            test->RunTest();
+        }
+    }
+    printer->EndTest();
+
     return 0;
 }

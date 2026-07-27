@@ -118,6 +118,13 @@ struct LastLevel: ICompactionUnit<TKey, TPortion> {
         auto [begin, end] = Borders(p);
         return std::distance(begin, end);
     }
+
+    NJson::TJsonValue DoSerializeToJsonVisual() const override {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("Candidates", Candidates.size());
+        result.InsertValue("Portions", Portions.size());
+        return result;
+    }
 };
 
 template <std::totally_ordered TKey, typename TPortion>
@@ -174,6 +181,12 @@ struct Accumulator: ICompactionUnit<TKey, TPortion> {
 
     TOptimizationPriority DoGetUsefulMetric() const override {
         return BuildPriority(0);
+    }
+
+    NJson::TJsonValue DoSerializeToJsonVisual() const override {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("Portions", Portions.size());
+        return result;
     }
 };
 
@@ -254,6 +267,13 @@ struct MiddleLevel: ICompactionUnit<TKey, TPortion> {
 
     TOptimizationPriority DoGetUsefulMetric() const override {
         return BuildPriority();
+    }
+
+    NJson::TJsonValue DoSerializeToJsonVisual() const override {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("Height", Intersections.GetMaxCount());
+        result.InsertValue("Portions", PortionById.size());
+        return result;
     }
 };
 

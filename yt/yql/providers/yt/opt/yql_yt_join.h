@@ -55,9 +55,9 @@ const TTypeAnnotationNode* AsDictKeyType(const TVector<const TTypeAnnotationNode
 void SwapJoinType(TPositionHandle pos, TExprNode::TPtr& joinType, TExprContext& ctx);
 const TStructExprType* MakeOutputJoinColumns(const THashMap<TString, const TTypeAnnotationNode*>& columnTypes,
     const TJoinLabel& label, TExprContext& ctx);
-const TTypeAnnotationNode* UnifyJoinKeyType(TPositionHandle pos, const TVector<const TTypeAnnotationNode*>& types, TExprContext& ctx);
+const TTypeAnnotationNode* UnifyJoinKeyType(TPositionHandle pos, const TVector<const TTypeAnnotationNode*>& types, TExprContext& ctx, const TTypeAnnotationContext& typesCtx);
 TVector<const TTypeAnnotationNode*> UnifyJoinKeyType(TPositionHandle pos, const TVector<const TTypeAnnotationNode*>& left,
-    const TVector<const TTypeAnnotationNode*>& right, TExprContext& ctx);
+    const TVector<const TTypeAnnotationNode*>& right, TExprContext& ctx, const TTypeAnnotationContext& typesCtx);
 TExprNode::TPtr RemapNonConvertibleItems(const TExprNode::TPtr& input, const TJoinLabel& label,
     const TExprNode& keys, const TVector<const TTypeAnnotationNode*>& unifiedKeyTypes,
     TExprNode::TListType& columnNodes, TExprNode::TListType& columnNodesForSkipNull, TExprContext& ctx);

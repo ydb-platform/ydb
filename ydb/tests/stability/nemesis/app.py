@@ -93,8 +93,8 @@ def initialize_app():
         inventory = None
         try:
             topology = ClusterTopologyModel(cluster_yaml_path())
-            failure_guard = FailureModelGuard(topology)
             inventory = ClusterInventory(topology, agent_hosts=loaded_hosts)
+            failure_guard = FailureModelGuard(topology, total_slots=len(inventory.slots))
             logger.info("Failure model guard: %s", failure_guard.snapshot())
         except Exception as e:
             logger.warning("Failure model guard disabled (init failed): %s", e)

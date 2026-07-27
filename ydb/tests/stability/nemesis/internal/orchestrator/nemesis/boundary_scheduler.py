@@ -30,6 +30,7 @@ from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_target impo
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import (
     DEFAULT_RECOVERY_SEC,
     FailureModelGuard,
+    Footprint,
     GuardMode,
     ImpactScope,
 )
@@ -152,12 +153,12 @@ class BoundaryNemesisScheduler:
 
     def _menu(
         self, bypass_used: frozenset[tuple[str, str]] = frozenset()
-    ) -> list[tuple[str, ChaosTarget, frozenset[str]]]:
+    ) -> list[tuple[str, ChaosTarget, Footprint]]:
         with self._cfg_lock:
             enabled = list(self._enabled)
         impaired = self._guard.active_identities()
         can_extract = self._can_extract()
-        menu: list[tuple[str, ChaosTarget, frozenset[str]]] = []
+        menu: list[tuple[str, ChaosTarget, Footprint]] = []
         for nemesis_type in enabled:
             # A toggle fault with no way to auto-extract would stay broken forever — don't offer it.
             if self._recovery_mode_for(nemesis_type) == "extract" and not can_extract:
@@ -176,13 +177,13 @@ class BoundaryNemesisScheduler:
                     # regardless of what's impaired. Deduped per (type, target) — tablet types all
                     # share one control-host target, so this keeps each firing at most once a tick.
                     if (nemesis_type, key) not in bypass_used:
-                        menu.append((nemesis_type, target, frozenset()))
+                        menu.append((nemesis_type, target, Footprint()))
                     continue
                 if key in impaired:
                     continue
-                racks = self._guard.footprint_for(target, scope)
-                if self._guard.fits(racks):
-                    menu.append((nemesis_type, target, racks))
+                footprint = self._guard.footprint_for(target, scope)
+                if self._guard.fits(footprint):
+                    menu.append((nemesis_type, target, footprint))
         return menu
 
     def tick(self) -> int:
@@ -195,7 +196,7 @@ class BoundaryNemesisScheduler:
             menu = self._menu(frozenset(bypass_used))
             if not menu:
                 break
-            nemesis_type, target, racks = self._rng.choice(menu)
+            nemesis_type, target, footprint = self._rng.choice(menu)
             if self._mode_for(nemesis_type) is GuardMode.BYPASS:
                 # No budget to reserve and no probe to track — just fire and remember it fired.
                 for cmd in self._plan_inject(nemesis_type, target):
@@ -209,19 +210,21 @@ class BoundaryNemesisScheduler:
             # The probe releases the budget by fact, so hold it (recovery_sec=None):
             #   extract  — toggle fault; probe holds `recovery`s then dispatches the extract.
             #   self     — probe releases once healthcheck sees the host answer again.
-            # A disabled (fail-open) guard, empty footprint, or missing probe falls back to the
-            # reserve timer so self-recovering budget never sticks.
+            # A disabled (fail-open) guard, no rack footprint (slots/tablets), or missing probe
+            # falls back to the reserve timer so self-recovering budget never sticks. Slot kills
+            # take this timer path deliberately: host healthcheck can't observe an individual
+            # slot's restart, so the recovery window is the honest signal.
             by_extract = (
                 self._recovery_mode_for(nemesis_type) == "extract" and self._can_extract()
             )
             by_healthcheck = (
                 not by_extract
                 and self._recovery_probe is not None
-                and bool(racks)
+                and bool(footprint.racks)
                 and self._guard.enabled
             )
             lease = self._guard.reserve(
-                racks,
+                footprint,
                 recovery_sec=None if (by_extract or by_healthcheck) else recovery,
                 identity_key=target.identity_key(),
             )

@@ -23,6 +23,7 @@ from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_target impo
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import (
     ClusterTopologyModel,
     FailureModelGuard,
+    Footprint,
     GuardMode,
     ImpactScope,
 )
@@ -299,8 +300,8 @@ class TestBypass:
     def test_bypass_fires_even_when_budget_is_full(self):
         guard = _guard("block-4-2")
         # Reserve the whole block-4-2 budget so no budgeted fault could fit.
-        assert guard.reserve(frozenset({"r1"}), recovery_sec=None, identity_key="x1")
-        assert guard.reserve(frozenset({"r2"}), recovery_sec=None, identity_key="x2")
+        assert guard.reserve(Footprint(racks=frozenset({"r1"})), recovery_sec=None, identity_key="x1")
+        assert guard.reserve(Footprint(racks=frozenset({"r2"})), recovery_sec=None, identity_key="x2")
         dispatched: list = []
         sched = self._bypass_scheduler(
             guard, dispatched, [ChaosTarget.for_tablet("h1")], ["KillHive"],
@@ -335,6 +336,64 @@ class TestBypass:
         assert sched.tick() == 1, (
             "one BYPASS type on one target fires once per tick even at a higher cap; the "
             "(type, target) dedup empties the menu after the first inject"
+        )
+
+
+class TestSlotScheduling:
+    """Slot kills draw from the separate 30% slot budget, not the erasure/rack budget."""
+
+    def _slots(self, n: int) -> list[ChaosTarget]:
+        return [ChaosTarget.for_slot("h1", slot_idx=i) for i in range(n)]
+
+    def _slot_scheduler(self, guard, dispatched, targets, **overrides):
+        return _make_scheduler(
+            guard, FakeInventory(targets), dispatched,
+            enabled_types=["KillSlot"],
+            scope_for=lambda t: ImpactScope.SLOT,
+            kind_for=lambda t: TargetKind.SLOT,
+            mode_for=lambda t: GuardMode.FULL,
+            **overrides,
+        )
+
+    def test_tick_caps_slots_at_thirty_percent(self):
+        # 10 slots -> max_slots = floor(0.3*10) = 3, even with 5 candidates and a cap of 5.
+        guard = FailureModelGuard(
+            ClusterTopologyModel(_write_topology(
+                [{"name": "h1", "location": {"rack": "r1", "data_center": "dc1"}}], "block-4-2",
+            )),
+            total_slots=10,
+        )
+        dispatched: list = []
+        sched = self._slot_scheduler(
+            guard, dispatched, self._slots(5),
+            max_per_tick=5, rng=ScriptedRandom(randint=5),
+        )
+        injected = sched.tick()
+        assert injected == 3, (
+            f"a single tick must stop at the 30% slot budget (3 of 10); injected={injected}, "
+            f"snapshot={guard.snapshot()}"
+        )
+        assert guard.snapshot()["impaired_slots"] == 3
+        assert guard.snapshot()["impaired_racks"] == [], (
+            "slot kills must never consume an erasure/rack fail-domain"
+        )
+
+    def test_slot_kill_does_not_spend_rack_budget(self):
+        # A full slot budget must leave the block-4-2 rack budget completely untouched.
+        guard = FailureModelGuard(
+            ClusterTopologyModel(_write_topology(
+                [{"name": "h1", "location": {"rack": "r1", "data_center": "dc1"}}], "block-4-2",
+            )),
+            total_slots=3,  # max_slots = 1
+        )
+        dispatched: list = []
+        sched = self._slot_scheduler(
+            guard, dispatched, self._slots(3),
+            max_per_tick=3, rng=ScriptedRandom(randint=3),
+        )
+        assert sched.tick() == 1, "the slot budget of 1 caps a single slot kill per tick"
+        assert guard.fits(Footprint(racks=frozenset({"r1"}))), (
+            "a rack fault must still fit while the slot budget is exhausted (independent budgets)"
         )
 
 

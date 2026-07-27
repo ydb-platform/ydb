@@ -264,14 +264,15 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         }
 
     # --- daemon kills -------------------------------------------------------
-    # SIGKILL + no-op extract: systemd auto-restarts the daemon, so the guard releases the rack
-    # on a timer (auto_recovery_sec) covering restart + rejoin, not on an explicit extract.
+    # SIGKILL + no-op extract: systemd auto-restarts the daemon, so the guard releases the slot
+    # on a timer (auto_recovery_sec) covering restart + rejoin, not on an explicit extract. A slot
+    # is a dynamic node — it draws from the separate 30% slot budget, not the erasure/rack budget.
     out["KillSlotDaemonNemesis"] = {
         "runner": ClusterKillSlotDaemonNemesis(),
         "schedule": 120,
         "ui_group": _UI_GROUP,
         "target_kind": TargetKind.SLOT,
-        "impact_scope": ImpactScope.NODE,
+        "impact_scope": ImpactScope.SLOT,
         "guard_mode": GuardMode.FULL,
         "auto_recovery_sec": 90,
     }
@@ -301,7 +302,7 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "ui_group": _UI_GROUP,
         "planner_factory": _serial_staggered_slot_planner_factory,
         "target_kind": TargetKind.SLOT,
-        "impact_scope": ImpactScope.NODE,
+        "impact_scope": ImpactScope.SLOT,
         "guard_mode": GuardMode.PREFILTER_ONLY,
     }
 

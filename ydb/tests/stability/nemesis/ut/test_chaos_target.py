@@ -198,8 +198,8 @@ class TestFailureBudgetLease:
     def test_footprint_for_node_is_single_rack(self, block42_topology):
         guard = FailureModelGuard(block42_topology)
         fp = guard.footprint_for(ChaosTarget.for_node("h1", node_id=1), ImpactScope.NODE)
-        assert fp == frozenset({"r1"}), (
-            f"a node footprint must be exactly its host's rack; got {fp}"
+        assert fp.racks == frozenset({"r1"}) and fp.slots == 0, (
+            f"a node footprint must be exactly its host's rack, no slots; got {fp}"
         )
 
     def test_footprint_for_datacenter_covers_all_its_racks(self, mirror3dc_topology):
@@ -207,14 +207,14 @@ class TestFailureBudgetLease:
         fp = guard.footprint_for(
             ChaosTarget.for_datacenter("h1", "dc1"), ImpactScope.DATACENTER
         )
-        assert fp == frozenset({"r1", "r2"}), (
+        assert fp.racks == frozenset({"r1", "r2"}), (
             f"a datacenter footprint must cover every rack in the DC; got {fp}"
         )
 
     def test_tablet_footprint_consumes_no_budget(self, block42_topology):
         guard = FailureModelGuard(block42_topology)
         fp = guard.footprint_for(ChaosTarget.for_tablet("h1", tablet_id=7), ImpactScope.NODE)
-        assert fp == frozenset(), f"a tablet footprint must be empty; got {fp}"
+        assert not fp, f"a tablet footprint must be empty (no racks, no slots); got {fp}"
         lease = guard.reserve(fp)
         assert lease is not None, "reserving an empty footprint must always succeed"
         assert guard.snapshot()["impaired_racks"] == [], (
@@ -320,6 +320,75 @@ class TestFailureBudgetLease:
         assert guard.release("never-issued") is False, (
             "releasing an unknown lease id must be a no-op, not raise"
         )
+
+
+class TestSlotBudget:
+    """Slots (dynamic nodes) draw from a separate 30% budget, not the erasure/rack budget."""
+
+    def _slot_fp(self, guard):
+        return guard.footprint_for(
+            ChaosTarget.for_slot("h1", slot_idx=1), ImpactScope.SLOT
+        )
+
+    def test_slot_footprint_is_slot_not_rack(self, block42_topology):
+        guard = FailureModelGuard(block42_topology, total_slots=10)
+        fp = self._slot_fp(guard)
+        assert fp.slots == 1 and fp.racks == frozenset(), (
+            f"a slot kill must consume one slot and zero racks; got {fp}"
+        )
+
+    def test_slot_kind_target_never_touches_racks(self, block42_topology):
+        # Even annotated NODE scope, a SLOT-kind target must not eat a rack fail-domain.
+        guard = FailureModelGuard(block42_topology, total_slots=10)
+        fp = guard.footprint_for(ChaosTarget.for_slot("h1", slot_idx=1), ImpactScope.NODE)
+        assert fp.slots == 1 and fp.racks == frozenset(), (
+            f"a SLOT-kind target must draw from the slot budget regardless of scope; got {fp}"
+        )
+
+    def test_slot_budget_caps_at_thirty_percent(self, block42_topology):
+        guard = FailureModelGuard(block42_topology, total_slots=10)  # max = floor(0.3*10) = 3
+        assert guard.snapshot()["max_slots"] == 3
+        leases = [
+            guard.reserve(
+                guard.footprint_for(ChaosTarget.for_slot("h1", slot_idx=i), ImpactScope.SLOT),
+                identity_key=f"slot:{i}",
+            )
+            for i in range(3)
+        ]
+        assert all(leases), "the first 30% of slots must all reserve"
+        assert guard.snapshot()["impaired_slots"] == 3
+        overflow = guard.reserve(
+            guard.footprint_for(ChaosTarget.for_slot("h1", slot_idx=3), ImpactScope.SLOT),
+            identity_key="slot:3",
+        )
+        assert overflow is None, "a 4th slot must exceed the 30% budget"
+        assert guard.snapshot()["impaired_racks"] == [], (
+            "slot reservations must never impair a rack fail-domain"
+        )
+
+    def test_slot_and_rack_budgets_are_independent(self, block42_topology):
+        # Fill the slot budget, then a node (rack) fault must still fit — dimensions don't cross.
+        guard = FailureModelGuard(block42_topology, total_slots=3)  # max_slots = floor(0.9)->1
+        assert guard.snapshot()["max_slots"] == 1
+        slot = guard.reserve(self._slot_fp(guard), identity_key="slot:1")
+        assert slot is not None
+        assert guard.reserve(self._slot_fp(guard), identity_key="slot:2") is None, (
+            "the slot budget is full at 1, so a second slot must be rejected"
+        )
+        node_fp = guard.footprint_for(ChaosTarget.for_node("h1", node_id=1), ImpactScope.NODE)
+        assert guard.fits(node_fp) and guard.reserve(node_fp) is not None, (
+            "a rack fault must still fit while the slot budget is exhausted (independent budgets)"
+        )
+
+    def test_slot_budget_fails_open_when_no_slots_known(self, block42_topology):
+        guard = FailureModelGuard(block42_topology, total_slots=0)
+        assert guard.snapshot()["max_slots"] == 0
+        # With no slot total, the slot dimension never blocks (fail-open).
+        for i in range(5):
+            fp = guard.footprint_for(ChaosTarget.for_slot("h1", slot_idx=i), ImpactScope.SLOT)
+            assert guard.reserve(fp, identity_key=f"slot:{i}") is not None, (
+                "unknown slot total must fail open, never blocking slot chaos"
+            )
 
 
 class TestSerialStaggeredPlanner:

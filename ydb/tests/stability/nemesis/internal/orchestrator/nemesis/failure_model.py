@@ -8,6 +8,10 @@ simultaneous-failure budget (fail domain = rack, fail realm = datacenter):
     block-4-2   : any 2 domains
     none        : 0
 
+Only static (storage) node loss touches this erasure budget. Dynamic-node (slot) kills draw
+from a separate, independent budget: up to a fraction (default 30%) of the cluster's slots may
+be down at once. A :class:`Footprint` carries both dimensions so one lease covers either.
+
 Unrelated to the runner-side ``scope=`` metrics argument in ``monitored_actor.py``.
 
 Each recorded impairment carries an optional recovery deadline, so faults that recover
@@ -41,6 +45,7 @@ class ImpactScope(enum.Enum):
     """Topology level a nemesis affects (orchestrator-side annotation)."""
 
     NODE = "node"
+    SLOT = "slot"
     DISK = "disk"
     RACK = "rack"
     DATACENTER = "datacenter"
@@ -61,7 +66,8 @@ class GuardMode(enum.Enum):
     BYPASS = "bypass"
 
 
-# Scopes that collapse to "one fail domain = the host's rack".
+# Scopes that collapse to "one fail domain = the host's rack" (static storage nodes).
+# SLOT is deliberately excluded: dynamic-node kills draw from the separate slot budget.
 _HOST_LEVEL_SCOPES = frozenset(
     {ImpactScope.NODE, ImpactScope.DISK, ImpactScope.RACK}
 )
@@ -70,8 +76,29 @@ _HOST_LEVEL_SCOPES = frozenset(
 # Conservatively longer than a systemd restart so a node stays "impaired" until it likely rejoined.
 DEFAULT_RECOVERY_SEC: float = 120.0
 
+# Fraction of the cluster's dynamic-node slots that may be down simultaneously (separate from the
+# erasure/rack budget). Killing a slot doesn't reduce storage redundancy, so it's cheap chaos.
+DEFAULT_SLOT_FRACTION: float = 0.3
+
 # Sentinel lease from ``reserve`` when the guard is disabled (fail-open); ``release`` ignores it.
 _DISABLED_LEASE = "__disabled__"
+
+
+@dataclass(frozen=True)
+class Footprint:
+    """What one fault consumes from the budget: fail-domain racks and/or dynamic-node slots.
+
+    Rack faults (static nodes, disks, datacenters) fill ``racks``; a slot (dynamic node) kill
+    fills ``slots`` and leaves ``racks`` empty; a tablet touches neither. The two dimensions are
+    checked independently by the guard.
+    """
+
+    racks: frozenset[str] = frozenset()
+    slots: int = 0
+
+    def __bool__(self) -> bool:
+        """True if this represents a real impairment (used to decide fact-based recovery)."""
+        return bool(self.racks) or self.slots > 0
 
 
 @dataclass(frozen=True)
@@ -201,22 +228,37 @@ class _Impairment:
     racks: set[str]
     identity_key: str
     deadline: float | None
+    slots: int = 0
 
 
 class FailureModelGuard:
-    """Tracks impaired fail domains (racks) and filters candidates against the failure model.
+    """Tracks impaired fail domains (racks) + dynamic-node slots against the failure model.
 
     Safety is applied at plan time via :meth:`filter_safe` (no dispatch-time veto).
     ``record_inject`` / ``record_extract`` update the touched set after dispatch.
-    Tablet targets contribute no fail-domain racks.
+    Tablet targets contribute nothing; slot (dynamic node) targets contribute no rack but
+    draw from a separate slot budget (``total_slots`` × ``slot_fraction``).
 
     Assumes a single active nemesis in MVP (no allocate/reserve locks across types).
     """
 
-    def __init__(self, topology: ClusterTopologyModel) -> None:
+    def __init__(
+        self,
+        topology: ClusterTopologyModel,
+        *,
+        total_slots: int = 0,
+        slot_fraction: float = DEFAULT_SLOT_FRACTION,
+    ) -> None:
         self._topology = topology
         self._lock = threading.Lock()
         self._impairments: list[_Impairment] = []
+        self._total_slots = max(0, int(total_slots))
+        self._slot_fraction = float(slot_fraction)
+        # ≥1 when the cluster has any slots so slot chaos still runs on small test clusters;
+        # 0 means no slots known -> the slot budget fails open (never blocks).
+        self._max_slots = (
+            max(1, int(self._total_slots * self._slot_fraction)) if self._total_slots > 0 else 0
+        )
 
     @property
     def enabled(self) -> bool:
@@ -237,8 +279,13 @@ class FailureModelGuard:
         rack = self._topology.rack_of(host)
         return {rack if rack is not None else self._synthetic_key(host)}
 
+    @staticmethod
+    def _is_slot(target: ChaosTarget, scope: ImpactScope) -> bool:
+        """A dynamic-node (slot) fault — draws from the slot budget, not a rack fail-domain."""
+        return scope is ImpactScope.SLOT or target.kind is TargetKind.SLOT
+
     def _racks_for_target(self, target: ChaosTarget, scope: ImpactScope) -> set[str]:
-        if target.kind is TargetKind.TABLET:
+        if target.kind is TargetKind.TABLET or self._is_slot(target, scope):
             return set()
         if target.kind is TargetKind.DATACENTER or scope == ImpactScope.DATACENTER:
             dc = target.group_id or self._topology.dc_of(target.host)
@@ -250,9 +297,15 @@ class FailureModelGuard:
     def _synthetic_key(host: str) -> str:
         return f"__host__:{host}"
 
-    def footprint_for(self, target: ChaosTarget, scope: ImpactScope) -> frozenset[str]:
-        """Fail-domain racks ``target`` consumes at ``scope`` (empty for tablets)."""
-        return frozenset(self._racks_for_target(target, scope))
+    def footprint_for(self, target: ChaosTarget, scope: ImpactScope) -> Footprint:
+        """What ``target`` consumes at ``scope``: fail-domain racks and/or one slot.
+
+        Empty for tablets; one slot (no rack) for dynamic-node kills; the host's rack(s)
+        otherwise (static node / disk / datacenter)."""
+        return Footprint(
+            racks=frozenset(self._racks_for_target(target, scope)),
+            slots=1 if self._is_slot(target, scope) else 0,
+        )
 
     # -- impairment bookkeeping (call under _lock) --------------------------
 
@@ -267,6 +320,16 @@ class FailureModelGuard:
         for imp in self._impairments:
             active |= imp.racks
         return active
+
+    def _active_slots(self, now: float) -> int:
+        self._purge_expired(now)
+        return sum(imp.slots for imp in self._impairments)
+
+    def _slots_ok(self, add_slots: int, now: float) -> bool:
+        """Whether ``add_slots`` more slots stay within the 30% cluster budget (fail-open at 0)."""
+        if add_slots <= 0 or self._max_slots <= 0:
+            return True
+        return self._active_slots(now) + add_slots <= self._max_slots
 
     def _touched_keys(self, now: float) -> set[str]:
         self._purge_expired(now)
@@ -341,39 +404,44 @@ class FailureModelGuard:
 
     # -- lease-based budget API ---------------------------------------------
 
-    def fits(self, racks: frozenset[str]) -> bool:
-        """True if adding ``racks`` keeps the budget within tolerance (read-only, fail-open)."""
+    def fits(self, footprint: Footprint) -> bool:
+        """True if adding ``footprint`` keeps both budgets within tolerance (read-only, fail-open)."""
         if not self.enabled:
             return True
         now = time.monotonic()
         with self._lock:
-            return self._is_tolerable(self._active_racks(now) | set(racks))
+            return self._is_tolerable(
+                self._active_racks(now) | set(footprint.racks)
+            ) and self._slots_ok(footprint.slots, now)
 
     def reserve(
         self,
-        racks: frozenset[str],
+        footprint: Footprint,
         recovery_sec: float | None = None,
         identity_key: str | None = None,
     ) -> str | None:
-        """Atomically claim ``racks`` under one lock; return a lease id, or None if it exceeds
-        the budget. ``recovery_sec`` auto-expires the lease after that many seconds; ``None``
-        holds it until :meth:`release`. ``identity_key`` records which target the lease covers so
-        it shows up in :meth:`active_identities` (schedulers skip already-impaired targets).
-        A disabled guard returns a sentinel lease (fail-open)."""
+        """Atomically claim ``footprint`` (racks and/or slots) under one lock; return a lease id,
+        or None if it exceeds either budget. ``recovery_sec`` auto-expires the lease after that
+        many seconds; ``None`` holds it until :meth:`release`. ``identity_key`` records which target
+        the lease covers so it shows up in :meth:`active_identities` (schedulers skip already-impaired
+        targets). A disabled guard returns a sentinel lease (fail-open)."""
         if not self.enabled:
             return _DISABLED_LEASE
         now = time.monotonic()
         deadline = None if recovery_sec is None else now + float(recovery_sec)
         with self._lock:
-            if not self._is_tolerable(self._active_racks(now) | set(racks)):
+            if not self._is_tolerable(self._active_racks(now) | set(footprint.racks)):
+                return None
+            if not self._slots_ok(footprint.slots, now):
                 return None
             lease_id = uuid.uuid4().hex
             self._impairments.append(
                 _Impairment(
                     execution_id=lease_id,
-                    racks=set(racks),
+                    racks=set(footprint.racks),
                     identity_key=identity_key or f"lease:{lease_id}",
                     deadline=deadline,
+                    slots=footprint.slots,
                 )
             )
             return lease_id
@@ -464,6 +532,8 @@ class FailureModelGuard:
                 "enabled": self.enabled,
                 "erasure": self._topology.tolerance.erasure,
                 "impaired_racks": active,
+                "impaired_slots": self._active_slots(now),
+                "max_slots": self._max_slots,
                 "touched_targets": touched,
                 "tracked_executions": len(self._impairments),
             }
@@ -472,9 +542,11 @@ class FailureModelGuard:
 __all__ = [
     "ImpactScope",
     "GuardMode",
+    "Footprint",
     "FailureTolerance",
     "HostTopology",
     "ClusterTopologyModel",
     "FailureModelGuard",
     "DEFAULT_RECOVERY_SEC",
+    "DEFAULT_SLOT_FRACTION",
 ]

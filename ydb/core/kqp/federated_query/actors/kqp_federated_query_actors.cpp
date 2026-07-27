@@ -347,8 +347,12 @@ public:
     }
 
     void SendRequest() {
+        YDB_LOG_DEBUG("Sending Authorize request",
+                {"serviceAccountId", ServiceAccountId},
+                {"permission", Permission});
+
         const auto setupRequest = [&](auto& request) {
-            request->Request.set_permission("iam.serviceAccounts.use");
+            request->Request.set_permission(Permission);
             auto& resourcePath = *request->Request.add_resource_path();
             resourcePath.set_type("iam.serviceAccount");
             resourcePath.set_id(ServiceAccountId);
@@ -417,6 +421,7 @@ public:
     const TString Token;
     bool EnableAccessServiceV2Interface;
     TBackoff Backoff = TBackoff(/*maxRetries=*/10, /*initialDelay=*/TDuration::MilliSeconds(100), /*maxDelay=*/TDuration::Seconds(10));
+    static inline const TString Permission = "iam.serviceAccounts.use";
 };
 }
 

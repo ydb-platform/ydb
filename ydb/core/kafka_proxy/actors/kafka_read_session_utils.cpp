@@ -1,8 +1,6 @@
 #include "kafka_read_session_utils.h"
 #include <ydb/core/base/appdata.h>
 
-#include <cstring>
-
 namespace NKafka {
 
 EBalancingMode GetBalancingMode(const TJoinGroupRequestData& request) {
@@ -34,8 +32,7 @@ std::optional<TConsumerProtocolSubscription> GetSubscriptions(const TJoinGroupRe
         return std::nullopt;
     }
 
-    TKafkaVersion version;
-    memcpy(&version, metadata.value().data(), sizeof(version));
+    TKafkaVersion version = *(TKafkaVersion*)(metadata.value().data() + sizeof(TKafkaVersion));
 
     TBuffer buffer(metadata.value().data() + sizeof(TKafkaVersion), metadata.value().size_bytes() - sizeof(TKafkaVersion));
     TKafkaReadable readable(buffer);

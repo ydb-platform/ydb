@@ -23,6 +23,9 @@ END()
 
 RECURSE(
     benchmark
-    fuzz_targets
     ut
+)
+
+RECURSE_FOR_TESTS(
+    fuzz_targets
 )

@@ -151,7 +151,6 @@ RECURSE(
     expr_nodes_gen
     extract_predicate
     facade
-    fuzz_targets
     peephole_opt
     qplayer
     services
@@ -160,4 +159,7 @@ RECURSE(
     url_preprocessing
 )
 
-RECURSE_FOR_TESTS(ut)
+RECURSE_FOR_TESTS(
+    fuzz_targets
+    ut
+)

@@ -98,13 +98,13 @@ END()
 
 RECURSE(
     engines
-    fuzz_targets
     splitter
     tools/visualize_portions
     tools/memory_tests
 )
 
 RECURSE_FOR_TESTS(
+    fuzz_targets
     ut_rw
     ut_schema
     backup

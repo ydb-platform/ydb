@@ -4,7 +4,6 @@ RECURSE(
     ast
     core
     docs
-    fuzz_targets
     minikql
     parser
     protos
@@ -16,4 +15,8 @@ RECURSE(
     types
     udfs
     utils
+)
+
+RECURSE_FOR_TESTS(
+    fuzz_targets
 )

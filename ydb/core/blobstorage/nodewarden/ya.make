@@ -72,11 +72,8 @@ PEERDIR(
 
 END()
 
-RECURSE(
-    fuzz_targets
-)
-
 RECURSE_FOR_TESTS(
+    fuzz_targets
     ut
     ut_sequence
 )

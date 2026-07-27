@@ -63,7 +63,6 @@ RECURSE(
     expr_nodes
     federated_query
     finalize_script_service
-    fuzz_targets
     gateway
     host
     node_service
@@ -79,6 +78,7 @@ RECURSE(
 )
 
 RECURSE_FOR_TESTS(
+    fuzz_targets
     ut
     common/result_set_format/ut
     tools/hash_test

@@ -24,10 +24,10 @@ PEERDIR(
 END()
 
 RECURSE(
-    fuzz_targets
     ordered_maps
 )
 
 RECURSE_FOR_TESTS(
+    fuzz_targets
     ut
 )

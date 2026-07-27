@@ -102,7 +102,6 @@ RECURSE(
     computation
     datetime
     dom
-    fuzz_targets
     invoke_builtins
     jsonpath
     perf
@@ -112,6 +111,7 @@ RECURSE(
 
 RECURSE_FOR_TESTS(
     benchmark
+    fuzz_targets
     ut
     sanitizer_ut
     udf_value_test_support

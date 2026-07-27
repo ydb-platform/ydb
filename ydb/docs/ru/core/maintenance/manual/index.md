@@ -6,6 +6,7 @@
 
   * [{#T}](../../devops/configuration-management/configuration-v2/cluster-expansion.md).
   * [{#T}](adding_storage_groups.md).
+  * [{#T}](disk-add/index.md).
 
 * Обслуживание:
 

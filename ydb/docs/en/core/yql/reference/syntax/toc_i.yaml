@@ -26,7 +26,6 @@ items:
 - { name: CREATE STREAMING QUERY,       href: create-streaming-query.md,     when: feature_federated_queries }
 - { name: CREATE OBJECT TYPE SECRET,    href: create-object-type-secret.md,  when: feature_federated_queries}
 - { name: CREATE OBJECT TYPE SECRET_ACCESS,    href: create-object-type-secret-access.md,  when: feature_federated_queries}
-- { name: CREATE OBJECT TYPE SECRET,    href: create-object-type-secret.md,  when: feature_federated_queries }
 - { name: CREATE RESOURCE POOL,         href: create-resource-pool.md }
 - { name: CREATE RESOURCE POOL CLASSIFIER, href: create-resource-pool-classifier.md }
 - { name: CREATE SECRET,                 href: create-secret.md}

@@ -303,11 +303,11 @@ The following query outputs information about all active queries in the system:
 
 ```yql
 select
-    Query,          -- Query
-    WmPoolId,       -- Pool ID
-    WmState,        -- Query status in WM
-    WmEnterTime,    -- Time when the query transitioned to PENDING or DELAYED status
-    WmExitTime      -- Time when the query was submitted for execution
+    Query,          -- Запрос
+    WmPoolId,       -- Идентификатор пула
+    WmState,        -- Статус запроса в WM
+    WmEnterTime,    -- Время, когда запрос перешел в статус PENDING или DELAYED
+    WmExitTime      -- Время, когда запрос передан на выполнение
 from `.sys/query_sessions`
 where State = 'EXECUTING'
 ```

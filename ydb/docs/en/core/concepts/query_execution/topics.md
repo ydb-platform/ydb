@@ -148,7 +148,19 @@ FROM
 
 ### Service fields {#system-metadata}
 
-When reading, you can request service fields:
+When reading, you can request service fields and [user message attributes](../datamodel/topic.md#message):
+
+| Field | [Type](../../yql/reference/types/index.md) | Description |
+| --- | --- | --- |
+| `__ydb_create_time` | `Timestamp` | Message creation time |
+| `__ydb_write_time` | `Timestamp` | Message write time to topic |
+| `__ydb_offset` | `Uint64` | Message offset in partition |
+| `__ydb_partition_id` | `Uint64` | Partition number |
+| `__ydb_message_group_id` | `String` | Message group ID |
+| `__ydb_seq_no` | `Uint64` | Message sequence number within group |
+| `__ydb_user_attributes` | `Dict<String,String>` | [User message attributes](../datamodel/topic.md#message) |
+
+Example of using service fields:
 
 
 ```yql
@@ -179,6 +191,20 @@ WHERE
         AND __ydb_offset >= 1000
         AND __ydb_offset <= 1100
         AND __ydb_write_time > CurrentUtcTimestamp() - Interval("PT2H");
+```
+
+
+Example of using custom attributes:
+
+
+```yql
+SELECT
+    COUNT(*) AS ErrorCount
+FROM
+    input_topic  -- local topic; for external: ext_source.input_topic
+WHERE
+    __ydb_user_attributes["type"] = "log"
+        AND __ydb_user_attributes["level"] = "error";
 ```
 
 
@@ -214,13 +240,13 @@ FROM
 
 {% note warning %}
 
-Reading and writing [user attributes](../datamodel/topic.md#message) are not supported.
+Writing [custom attributes](../datamodel/topic.md#message) via YQL is not supported.
 
 {% endnote %}
 
 {% note warning %}
 
-Transactional writes via YQL/`INSERT INTO` are not supported — partial query results may appear in the topic.
+Transactional writing via YQL/`INSERT INTO` is not supported — partial query results may appear in the topic.
 
 {% endnote %}
 

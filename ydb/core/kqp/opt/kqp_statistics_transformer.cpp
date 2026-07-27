@@ -163,7 +163,10 @@ void InferStatisticsForReadTableVectorIndex(const TExprNode::TPtr& input, TKqpSt
         return;
     }
 
-    double nRows = 1;
+    // Literal TopK gives the exact bound; a query parameter isn't known at plan time,
+    // so fall back to a typical KNN TopK.
+    constexpr double DefaultTopK = 16;
+    double nRows = DefaultTopK;
     if (auto literal = read.TopK().Maybe<TCoUint64>()) {
         nRows = FromString<double>(literal.Cast().Literal().Value());
     }

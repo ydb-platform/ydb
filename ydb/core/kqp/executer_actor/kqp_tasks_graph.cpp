@@ -1124,9 +1124,11 @@ void TKqpTasksGraph::BuildVectorSearchChannels(const TStageInfo& stageInfo, ui32
     settings->SetIndexLevels(vectorSearch.GetLevels());
     {
         // TopK (LIMIT) may be a literal or a query parameter; resolve it to a value here.
+        // Saturate to ui32: the pushdown chain is ui32, and a larger LIMIT just means "all".
         const auto guard = TxAlloc->TypeEnv.BindAllocator();
-        settings->SetTopK((ui32)ExtractPhyValue(stageInfo, vectorSearch.GetTopK(),
-            TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod((ui32)0)).Get<ui64>());
+        const ui64 raw = ExtractPhyValue(stageInfo, vectorSearch.GetTopK(),
+            TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod((ui32)0)).Get<ui64>();
+        settings->SetTopK(static_cast<ui32>(std::min<ui64>(raw, Max<ui32>())));
     }
     settings->SetLevelTop(vectorSearch.GetLevelTop());
     settings->SetVectorColumnIndex(vectorSearch.GetVectorColumnIndex());

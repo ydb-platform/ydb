@@ -1052,6 +1052,11 @@ private:
     // Build a candidate (output row + distance to the target) from a read row
     // whose first OutputColumns elements are the output columns in order.
     void AddCandidate(NUdf::TUnboxedValue& value) {
+        // LIMIT 0: keeps TopK >= 1 below, so front() sees a non-empty heap and
+        // PushBoundedMaxHeap never gets cap == 0.
+        if (TopK == 0) {
+            return;
+        }
         auto embedding = value.GetElement(Settings.GetVectorColumnIndex());
         double distance = std::numeric_limits<double>::max();
         if (embedding.IsString() || embedding.IsEmbedded()) {
@@ -1062,7 +1067,7 @@ private:
         // is even materialized -- bounding peak memory at ~TopK rows regardless of
         // shard count (matters most for non-covered reads with large main rows).
         auto cmp = [](const TCandidate& a, const TCandidate& b) { return a.Distance < b.Distance; };
-        if (Candidates.size() >= TopK && (TopK == 0 || distance >= Candidates.front().Distance)) {
+        if (Candidates.size() >= TopK && distance >= Candidates.front().Distance) {
             return;
         }
         // Build a fresh output struct holder in OutputColumns order.

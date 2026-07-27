@@ -22,10 +22,12 @@ void TWritePortionInfoWithBlobsConstructor::TBlobInfo::AddChunk(
 
 void TWritePortionInfoWithBlobsResult::TBlobInfo::RegisterBlobId(TWritePortionInfoWithBlobsResult& owner, const TUnifiedBlobId& blobId) {
     AFL_VERIFY(!BlobId);
+    AFL_VERIFY(blobId.BlobSize() == ResultBlob.size())("blob_id", blobId.BlobSize())("data", ResultBlob.size());
     BlobId = blobId;
     const TBlobRangeLink16::TLinkId idx = owner.GetPortionConstructor().RegisterBlobId(blobId);
     for (auto&& i : Chunks) {
         owner.GetPortionConstructor().RegisterBlobIdx(i, idx);
+        TBlobRange::Validate(blobId, owner.GetPortionConstructor().GetBlobRangeByAddressVerified(i)).Validate();
     }
 }
 

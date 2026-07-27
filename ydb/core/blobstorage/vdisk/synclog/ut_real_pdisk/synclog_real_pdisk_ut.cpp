@@ -6,6 +6,7 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_config.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_space_color.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_dblogcutter.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_config.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
@@ -422,12 +423,19 @@ public:
     bool CutRequested = false;
     bool CutReachedInterruptedLsn = false;
     bool StartupTokenBeforeCut = false;
+    bool CaptureCheckSpaceResult = false;
+    bool CheckSpaceResultReceived = false;
     ui32 InterruptedWrites = 0;
     ui32 RestartNo = 0;
     ui32 CutRequestsAfterRestart = 0;
     ui64 InterruptedLsn = 0;
     ui64 LastCutFirstLsnToKeep = 0;
     i64 MaxLogChunkCount = 0;
+    NPDisk::TOwner CutOwner = {};
+    NPDisk::TOwnerRound CutOwnerRound = {};
+    NKikimrProto::EReplyStatus CheckSpaceStatus = {};
+    NPDisk::TStatusFlags CheckSpaceLogStatusFlags = {};
+    TString CheckSpaceErrorReason;
     TString Details;
     std::function<bool(TAutoPtr<IEventHandle>&)> PreFilter;
 
@@ -527,6 +535,59 @@ public:
         }
     }
 
+    void WaitForCommonLogChunkReclaim(
+            NKikimrBlobStorage::TPDiskSpaceColor::E maxAcceptableColor) {
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+
+        if (ObservedOutOfSpace()) {
+            return;
+        }
+        UNIT_ASSERT_C(CutOwner && CutOwnerRound,
+            "test did not capture the owner of the recovery log cut"
+            << " interruptedWrites# " << InterruptedWrites);
+
+        auto lastColor = TColor::BLACK;
+        NPDisk::TStatusFlags lastFlags = {};
+        auto sendCheckSpace = [&] {
+            Runtime.Send(new IEventHandle(Storage.PDiskServiceId, Edge,
+                new NPDisk::TEvCheckSpace(CutOwner, CutOwnerRound)), NodeIndex);
+        };
+
+        CaptureCheckSpaceResult = true;
+        CheckSpaceResultReceived = false;
+        sendCheckSpace();
+        const bool quotaReturned = PumpUntil([&] {
+            if (!CheckSpaceResultReceived) {
+                return false;
+            }
+            CheckSpaceResultReceived = false;
+            UNIT_ASSERT_C(CheckSpaceStatus == NKikimrProto::OK,
+                "TEvCheckSpace failed"
+                << " owner# " << ui32(CutOwner)
+                << " ownerRound# " << CutOwnerRound
+                << " status# " << NKikimrProto::EReplyStatus_Name(CheckSpaceStatus)
+                << " error# " << CheckSpaceErrorReason);
+
+            lastFlags = CheckSpaceLogStatusFlags;
+            lastColor = StatusFlagToSpaceColor(lastFlags);
+            if (lastColor <= maxAcceptableColor) {
+                return true;
+            }
+            sendCheckSpace();
+            return false;
+        }, 600, TDuration::MilliSeconds(10));
+        CaptureCheckSpaceResult = false;
+
+        UNIT_ASSERT_C(quotaReturned,
+            "common-log quota was not returned after recovery log cut"
+            << " owner# " << ui32(CutOwner)
+            << " ownerRound# " << CutOwnerRound
+            << " logStatusFlags# " << NPDisk::StatusFlagsToString(lastFlags)
+            << " logSpaceColor# " << TColor::E_Name(lastColor)
+            << " maxAcceptableColor# " << TColor::E_Name(maxAcceptableColor)
+            << " interruptedWrites# " << InterruptedWrites);
+    }
+
 private:
     TVector<std::pair<TActorId, TActorId>> Registrations;
     THolder<TTestRuntimeCallbackGuard> CallbackGuard;
@@ -554,6 +615,9 @@ private:
 
             case TEvBlobStorage::EvAskForCutLog:
                 if (ObserveAfterRestart) {
+                    const auto *msg = ev->Get<NPDisk::TEvAskForCutLog>();
+                    CutOwner = msg->Owner;
+                    CutOwnerRound = msg->OwnerRound;
                     CutRequested = true;
                     ++CutRequestsAfterRestart;
                 }
@@ -566,6 +630,17 @@ private:
                     if (InterruptedLsn && msg->FirstLsnToKeep >= InterruptedLsn + 1) {
                         CutReachedInterruptedLsn = true;
                     }
+                }
+                break;
+
+            case TEvBlobStorage::EvCheckSpaceResult:
+                if (CaptureCheckSpaceResult && ev->Recipient == Edge) {
+                    const auto *msg = ev->Get<NPDisk::TEvCheckSpaceResult>();
+                    CheckSpaceStatus = msg->Status;
+                    CheckSpaceLogStatusFlags = msg->LogStatusFlags;
+                    CheckSpaceErrorReason = msg->ErrorReason;
+                    CheckSpaceResultReceived = true;
+                    return true;
                 }
                 break;
 
@@ -597,6 +672,8 @@ private:
                     InterruptedLsn = msg->Results.front().Lsn;
                     CutRequested = false;
                     CutReachedInterruptedLsn = false;
+                    CutOwner = {};
+                    CutOwnerRound = {};
                     return true;
                 }
                 break;
@@ -1572,6 +1649,11 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
         testConfig.ChunkSize = 64_KB;
         testConfig.DiskSize = 128_MB;
         testConfig.MaxCommonLogChunks = 5;
+        // LIGHT_ORANGE or better means that at least four of the five common-log
+        // chunks are free, leaving enough headroom for the next LocalSyncData
+        // record to allocate up to two log chunks.
+        constexpr auto maxAcceptableLogColor =
+            NKikimrBlobStorage::TPDiskSpaceColor::LIGHT_ORANGE;
         testConfig.EnableSmallDiskOptimization = false;
         testConfig.RunSyncer = true;
         testConfig.GroupId = TGroupID(EGroupConfigurationType::Dynamic, DomainId, 2).GetRaw();
@@ -1601,6 +1683,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
             "target VDisk did not become ready after interrupted LocalSyncData"
             << " interruptedLsn# " << env.InterruptedLsn);
         env.WaitForCut();
+        env.WaitForCommonLogChunkReclaim(maxAcceptableLogColor);
 
         // Repeat the same interrupted recovery window. Without the cut wait, these duplicate
         // LocalSyncData writes eventually exhaust common log chunks.
@@ -1613,6 +1696,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
                     << " iteration# " << i
                     << " interruptedWrites# " << env.InterruptedWrites);
                 env.WaitForCut();
+                env.WaitForCommonLogChunkReclaim(maxAcceptableLogColor);
             }
         }
         UNIT_ASSERT_C(!env.LocalSyncDataOutOfSpace && !env.OtherOutOfSpace,

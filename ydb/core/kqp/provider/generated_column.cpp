@@ -258,6 +258,28 @@ TGeneratedFindings CollectFindings(const TExprNode::TPtr& root) {
     return findings;
 }
 
+bool UsesWholeRow(const TExprNode& node, const TExprNode* rowArg, TNodeSet& visited) {
+    if (&node == rowArg) {
+        return true;
+    }
+
+    if (!visited.insert(&node).second) {
+        return false;
+    }
+
+    if (node.IsCallable("Member") && node.ChildrenSize() == 2 && node.Child(0) == rowArg && node.Child(1)->IsAtom()) {
+        return false;
+    }
+
+    for (const auto& child : node.Children()) {
+        if (UsesWholeRow(*child, rowArg, visited)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 bool EmitOutOfRowError(const TGeneratedFindings& findings, bool readsDataIsSubquery,
     const TString& columnName, TExprContext& ctx, TPositionHandle pos)
 {
@@ -327,6 +349,16 @@ TExprNode::TPtr CompileGeneratedExpr(const TString& sqlText, const TString& colu
 
     const TGeneratedFindings body = CollectFindings(checks.ProjectionLambda->TailPtr());
     if (EmitOutOfRowError(body, /* readsDataIsSubquery */ true, columnName, ctx, checks.ProjectionLambda->Pos())) {
+        return nullptr;
+    }
+
+    TNodeSet visited;
+    if (checks.ProjectionLambda->Head().ChildrenSize() != 1
+        || UsesWholeRow(checks.ProjectionLambda->Tail(), &checks.ProjectionLambda->Head().Head(), visited))
+    {
+        ctx.AddError(TIssue(ctx.GetPosition(checks.ProjectionLambda->Pos()), TStringBuilder()
+            << "Generated column " << columnName << " expression must reference columns by name,"
+            << " but it uses the whole row (for example TableRow() or JoinTableRow())"));
         return nullptr;
     }
 

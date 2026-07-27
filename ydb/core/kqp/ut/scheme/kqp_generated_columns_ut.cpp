@@ -948,6 +948,50 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
         });
     }
 
+    Y_UNIT_TEST(WholeRowReferenceRejected) {
+        CheckGeneratedColumnsRejected({
+            {GeneratedColumnDDL("TableRow().a"), "uses the whole row"},
+            {GeneratedColumnDDL("TableRow().a * 10"), "uses the whole row"},
+            {GeneratedColumnDDL("JoinTableRow().a"), "uses the whole row"},
+            {GeneratedColumnDDL("k + TableRow().a"), "uses the whole row"},
+            {GeneratedColumnDDL("TableRow().a", "PRAGMA EnableSystemColumns='false';\n"), "uses the whole row"},
+            {GeneratedColumnDDL("CAST(TableRow() AS String)"), "uses the whole row"},
+            {GeneratedColumnDDL("CAST(ListLength(StructMembers(TableRow())) AS Int32)"), "uses the whole row"},
+            {GeneratedColumnDDL("CAST(Yson::SerializeText(Yson::From(TableRow())) AS Int32)"), "uses the whole row"},
+        });
+    }
+
+    Y_UNIT_TEST(WholeRowSelfReferenceRejected) {
+        CheckGeneratedColumnsRejected({
+            {R"(
+                CREATE TABLE TestTable (
+                    k Int32,
+                    v Int32 GENERATED ALWAYS AS (TableRow().v) STORED,
+                    PRIMARY KEY (k)
+                );
+            )",
+                "uses the whole row"},
+            {R"(
+                CREATE TABLE TestTable (
+                    k Int32,
+                    g1 Int32 GENERATED ALWAYS AS (k + 1) STORED,
+                    g2 Int32 GENERATED ALWAYS AS (TableRow().g1 + 1) STORED,
+                    PRIMARY KEY (k)
+                );
+            )",
+                "uses the whole row"},
+            {R"(
+                CREATE TABLE TestTable (
+                    k Int32,
+                    a Int32,
+                    v Int32 GENERATED ALWAYS AS (TableRow().a) VIRTUAL,
+                    PRIMARY KEY (k)
+                );
+            )",
+                "uses the whole row"},
+        });
+    }
+
     Y_UNIT_TEST(AggregateFunctionVariantsRejected) {
         CheckGeneratedColumnsRejected({
             {GeneratedColumnDDL("MIN(a)"), "aggregate function"},

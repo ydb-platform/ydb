@@ -607,6 +607,9 @@ public:
                 ythrow yexception() << "non-nullable field " << Meta::Name << " was serialized as null";
             }
         }
+        if (static_cast<size_t>(length) > readable.left()) {
+            ythrow yexception() << "array field " << Meta::Name << " is longer than the remaining input";
+        }
         value.resize(length);
 
         for (int i = 0; i < length; ++i) {

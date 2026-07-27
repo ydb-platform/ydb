@@ -237,6 +237,20 @@ Y_UNIT_TEST_SUITE(KafkaMessagesInt) {
         UNIT_ASSERT_EQUAL(result, value);
     }
 
+    Y_UNIT_TEST(TKafkaArray_RejectsLengthLargerThanRemainingInput) {
+        TKafkaWriteBuffer buffer(BUFFER_SIZE);
+        TKafkaWritable writable(buffer);
+        writable << TKafkaInt32{2};
+
+        TKafkaReadable readable(buffer.GetFrontBuffer());
+        Meta_TKafkaArray::Type result;
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            NKafka::NPrivate::Read<Meta_TKafkaArray>(readable, 3, result),
+            yexception,
+            "array field value is longer than the remaining input");
+    }
+
     Y_UNIT_TEST(TKafkaArray_PresentVersion_TaggedVersion) {
         TString v = "some value";
         SIMPLE_HEAD(TKafkaArray, { v });

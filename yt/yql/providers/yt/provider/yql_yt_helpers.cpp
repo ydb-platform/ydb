@@ -2277,6 +2277,54 @@ bool HasNonEmptyKeyFilter(const NNodes::TYtSection& section) {
            AnyOf(NYql::GetAllSettingValues(section.Settings().Ref(), EYtSettingType::KeyFilter2), hasChildren);
 }
 
+TYtPath RemoveYtQLFilters(TYtPath path, TExprContext& ctx) {
+    if (path.QLFilter().Maybe<TCoVoid>()) {
+        return path;
+    }
+
+    return Build<TYtPath>(ctx, path.Pos())
+        .InitFrom(path)
+        .QLFilter<TCoVoid>().Build()
+        .Done();
+}
+
+TYtSection RemoveYtQLFilters(TYtSection section, TExprContext& ctx) {
+    bool hasUpdated = false;
+    TVector<TYtPath> updatedPaths;
+    updatedPaths.reserve(section.Paths().Size());
+    for (const auto& path : section.Paths()) {
+        updatedPaths.push_back(RemoveYtQLFilters(path, ctx));
+        hasUpdated = hasUpdated || updatedPaths.back().Raw() != path.Raw();
+    }
+
+    if (!hasUpdated) {
+        return section;
+    }
+
+    return Build<TYtSection>(ctx, section.Pos())
+        .InitFrom(section)
+        .Paths()
+            .Add(updatedPaths)
+        .Build()
+        .Done();
+}
+
+TYtSectionList RemoveYtQLFilters(TYtSectionList sections, TExprContext& ctx) {
+    bool hasUpdated = false;
+    TVector<TYtSection> updatedSections;
+    updatedSections.reserve(sections.Size());
+    for (const auto& section : sections) {
+        updatedSections.push_back(RemoveYtQLFilters(section, ctx));
+        hasUpdated = hasUpdated || updatedSections.back().Raw() != section.Raw();
+    }
+
+    if (!hasUpdated) {
+        return sections;
+    }
+
+    return Build<TYtSectionList>(ctx, sections.Pos()).Add(updatedSections).Done();
+}
+
 TYtReadTable ConvertContentInputToRead(TExprBase input, TMaybeNode<TCoNameValueTupleList> settings, TExprContext& ctx, TMaybeNode<TCoAtomList> customFields) {
     TExprNode::TPtr world;
     TVector<TYtSection> sections;

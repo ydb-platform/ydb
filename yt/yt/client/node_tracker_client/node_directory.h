@@ -10,9 +10,8 @@
 
 #include <yt/yt/core/yson/public.h>
 
-#include <yt/yt/core/misc/property.h>
-
 #include <library/cpp/yt/misc/enum.h>
+#include <library/cpp/yt/misc/property.h>
 
 #include <library/cpp/yt/threading/copyable_atomic.h>
 #include <library/cpp/yt/threading/rw_spin_lock.h>

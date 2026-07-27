@@ -7,12 +7,13 @@
 
 #include <yt/yt/core/misc/error.h>
 #include <yt/yt/core/misc/parser_helpers.h>
-#include <yt/yt/core/misc/property.h>
 
 #include <library/cpp/yt/coding/varint.h>
 #include <library/cpp/yt/coding/zig_zag.h>
 
 #include <library/cpp/yt/containers/static_ring_queue.h>
+
+#include <library/cpp/yt/misc/property.h>
 
 #include <library/cpp/yt/yson_string/format.h>
 

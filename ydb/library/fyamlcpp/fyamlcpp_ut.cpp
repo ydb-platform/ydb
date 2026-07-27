@@ -542,4 +542,24 @@ c: bar
         }
     }
 
+    Y_UNIT_TEST(SetTag) {
+        const char *yaml = R"(
+test:
+  field_1: 1
+  field_2: 2
+)";
+
+        auto doc = NFyaml::TDocument::Parse(yaml);
+
+        auto node = doc.Root().Map().at("test");
+
+        UNIT_ASSERT(node);
+
+        for (int i = 0; i < 10; i++) {
+            auto tag = TString("!tag") + ToString(i);
+            node.SetTag(tag);
+
+            UNIT_ASSERT_VALUES_EQUAL(node.Tag(), tag);
+        }
+    }
 }

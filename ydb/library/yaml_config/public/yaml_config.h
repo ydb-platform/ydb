@@ -110,13 +110,13 @@ struct TIncompatibilityRule {
         TString Name;
         std::variant<std::monostate, THashSet<TString>> Values;
         bool Negated = false;
-        
+
         bool Matches(const TLabel& label, const TString& actualLabelName) const;
     };
-    
+
     TVector<TLabelPattern> Patterns;
     TString RuleName;
-    
+
     enum class ESource {
         BuiltIn,
         UserDefined
@@ -128,19 +128,19 @@ class TIncompatibilityRules {
 public:
     static constexpr const char* UNSET_LABEL_MARKER = "$unset";
     static constexpr const char* EMPTY_LABEL_MARKER = "$empty";
-    
+
     static TIncompatibilityRules GetDefaultRules();
-    
+
     void AddRule(TIncompatibilityRule rule);
     void RemoveRule(const TString& ruleName);
-    
+
     bool IsCompatible(const TVector<TLabel>& combination,
                      const TVector<std::pair<TString, TSet<TLabel>>>& labelNames) const;
-    
+
     bool IsCompatible(const TMap<TString, TString>& labels) const;
-    
+
     void MergeWith(const TIncompatibilityRules& userRules);
-    
+
     size_t GetRuleCount() const { return RulesByName.size(); }
     size_t GetDisabledCount() const { return DisabledRules.size(); }
 
@@ -149,7 +149,7 @@ public:
 private:
     TMap<TString, TIncompatibilityRule> RulesByName;
     THashSet<TString> DisabledRules;
-    
+
     friend TIncompatibilityRules ParseIncompatibilityRules(const NFyaml::TNodeRef& root);
 };
 
@@ -244,6 +244,15 @@ void AppendDatabaseConfig(NFyaml::TDocument& config, NFyaml::TDocument& database
 NFyaml::TDocument FuseConfigs(const TString& baseConfig, const TString& consoleConfig);
 
 /**
+ * Resolves per-database config selectors in isolation.
+ * Applies matching selectors from the database config's own selector_config,
+ * strips selector_config and allowed_labels from the document,
+ * and preserves all existed YAML tags on 'config' nodes at all levels for downstream merging.
+ * No-op if the document has no selector_config or allowed_labels.
+ */
+void ResolveDatabaseConfig(NFyaml::TDocument& doc, const TSet<TNamedLabel>& labels);
+
+/**
  * Parses config version
  */
 ui64 GetVersion(const TString& config);
@@ -319,12 +328,17 @@ TString ReplaceMetadata(const TString& config, const TMainMetadata& metadata);
 /**
  * Takes valid MainConfig and increases version exactly by one
  */
- TString UpgradeMainConfigVersion(const TString& config);
+TString UpgradeMainConfigVersion(const TString& config);
 
 /**
- * Takes valid MainConfig and increases version exactly by one
+ * Takes valid StorageConfig and increases version exactly by one
  */
 TString UpgradeStorageConfigVersion(const TString& config);
+
+/**
+ * Takes valid DatabaseConfig and increases version exactly by one
+ */
+TString UpgradeDatabaseConfigVersion(const TString& config);
 
 /**
  * Replaces metadata in database config

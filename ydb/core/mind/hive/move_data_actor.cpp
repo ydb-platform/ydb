@@ -21,7 +21,7 @@ public:
     std::vector<TStorageGroupId> Groups;
     TString PoolName;
     std::vector<TPipeClient> PipeClients;
-    i64 MoveDatasInFlight = 0;
+    i64 MoveDataInFlight = 0;
     THive* Hive;
 
     TMoveDataActor(std::vector<TTabletId> tablets, const std::vector<TStorageGroupId>& groups, const TString& poolName, ui64 maxInFlight, THive* hive)
@@ -57,11 +57,11 @@ public:
         pipeConfig.CheckAliveness = true;
         PipeClients[index] = {Register(NTabletPipe::CreateClient(SelfId(), tablet, pipeConfig)), tablet};
         NTabletPipe::SendData(SelfId(), PipeClients[index].Client, new TEvTablet::TEvMoveData(Groups));
-        ++MoveDatasInFlight;
+        ++MoveDataInFlight;
     }
 
     void CheckCompletion() {
-        if (MoveDatasInFlight == 0 && NextTablet == Tablets.end()) {
+        if (MoveDataInFlight == 0 && NextTablet == Tablets.end()) {
             Send(Hive->SelfId(), new TEvPrivate::TEvMoveDataComplete(PoolName, true));
             return PassAway();
         }
@@ -80,7 +80,7 @@ public:
         for (size_t i = 0; i < PipeClients.size(); ++i) {
             if (PipeClients[i].Tablet == tablet) {
                 NTabletPipe::CloseClient(SelfId(), PipeClients[i].Client);
-                --MoveDatasInFlight;
+                --MoveDataInFlight;
                 Hive->Execute(Hive->CreateRestartTablet(ToFullTabletId(tablet)));
                 if (NextTablet != Tablets.end()) {
                     SendMoveData(i, *(NextTablet++));
@@ -110,7 +110,7 @@ public:
         for (size_t i = 0; i < PipeClients.size(); ++i) {
             if (PipeClients[i].Tablet == tablet) {
                 NTabletPipe::CloseClient(SelfId(), PipeClients[i].Client);
-                --MoveDatasInFlight;
+                --MoveDataInFlight;
                 SendMoveData(i, tablet);
                 break;
             }

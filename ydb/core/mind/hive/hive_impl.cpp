@@ -4272,9 +4272,9 @@ void THive::Handle(TEvHive::TEvShrinkStoragePool::TPtr& ev) {
         THolder<NKikimrBlobStorage::TEvControllerSelectGroups::TGroupParameters> item = pool.BuildRefreshRequest();
         ++pool.RefreshRequestInFlight;
         THolder<TEvBlobStorage::TEvControllerSelectGroups> request = MakeHolder<TEvBlobStorage::TEvControllerSelectGroups>();
-        NKikimrBlobStorage::TEvControllerSelectGroups& record = request->Record;
-        record.SetReturnAllMatchingGroups(true);
-        record.MutableGroupParameters()->AddAllocated(std::move(item).Release());
+        NKikimrBlobStorage::TEvControllerSelectGroups& selectRecord = request->Record;
+        selectRecord.SetReturnAllMatchingGroups(true);
+        selectRecord.MutableGroupParameters()->AddAllocated(std::move(item).Release());
         SendToBSControllerPipe(request.Release());
     }
 }

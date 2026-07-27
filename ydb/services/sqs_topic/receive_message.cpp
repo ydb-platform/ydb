@@ -39,10 +39,15 @@
 
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/mlp/mlp.h>
+#include <ydb/core/persqueue/public/pq_rl_helpers.h>
+
+#include <ydb/services/sqs_topic/billing.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/string_utils/base64/base64.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SQS
 
 using namespace NActors;
 using namespace NKikimrClient;
@@ -53,15 +58,21 @@ namespace NKikimr::NSqsTopic::V1 {
 
 
 
-    class TReceiveMessageActor: public TQueueUrlHolder, public TGrpcActorBase<TReceiveMessageActor, TEvSqsTopicReceiveMessageRequest> {
+    class TReceiveMessageActor:
+        public TQueueUrlHolder,
+        public TGrpcActorBase<TReceiveMessageActor, TEvSqsTopicReceiveMessageRequest>,
+        private NPQ::TRlHelpers,
+        public TCdcStreamCompatible {
     protected:
         using TBase = TGrpcActorBase<TReceiveMessageActor, TEvSqsTopicReceiveMessageRequest>;
         using TProtoRequest = typename TBase::TProtoRequest;
+        using EWakeupTag = NPQ::TRlHelpers::EWakeupTag;
 
     public:
         TReceiveMessageActor(NKikimr::NGRpcService::IRequestOpCtx* request)
             : TQueueUrlHolder(ParseQueueUrl(GetRequest<TProtoRequest>(request).queue_url()))
             , TBase(request, TQueueUrlHolder::GetTopicPath().value_or(""))
+            , NPQ::TRlHelpers({}, request, NBilling::READ_BLOCK_SIZE, false)
         {
         }
 
@@ -69,6 +80,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
         void Bootstrap(const NActors::TActorContext& ctx) {
             TBase::Bootstrap(ctx);
+            NPQ::TRlHelpers::Bootstrap(this->SelfId(), ctx);
 
             if (this->Request().queue_url().empty()) {
                 return this->ReplyWithError(MakeError(NSQS::NErrors::MISSING_PARAMETER, "No QueueUrl parameter."));
@@ -81,9 +93,12 @@ namespace NKikimr::NSqsTopic::V1 {
             if (!readerSettings.Defined()) {
                 return;
             }
+            ReaderSettings_ = std::move(readerSettings);
 
-            std::unique_ptr<IActor> actorPtr{NKikimr::NPQ::NMLP::CreateReader(this->SelfId(), std::move(*readerSettings))};
-            ReaderActorId_ = ctx.RegisterWithSameMailbox(actorPtr.release());
+            NACLib::TUserToken token(this->Request_->GetSerializedToken());
+            ShouldBeCharged_ = FindPtr(AppData(ctx)->PQConfig.GetNonChargeableUser(), token.GetUserSID()) == nullptr;
+
+            this->SendDescribeProposeRequest(ctx);
             this->Become(&TReceiveMessageActor::StateWork);
         }
 
@@ -122,6 +137,15 @@ namespace NKikimr::NSqsTopic::V1 {
                 }
             }
 
+            if (request.has_receive_request_attempt_id()) {
+                const auto& attemptId = request.receive_request_attempt_id();
+                if (attemptId.size() > 128 || !NSQS::IsAlphaNumAndPunctuation(attemptId)) {
+                    ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE,
+                        R"(Invalid parameter "ReceiveRequestAttemptId". It is expected to be no longer than 128 characters and consist of alphanum and punctuation characters.)"));
+                    return Nothing();
+                }
+            }
+
             NKikimr::NPQ::NMLP::TReaderSettings settings{
                 .DatabasePath = this->QueueUrl_->Database,
                 .TopicName = FullTopicPath_,
@@ -131,15 +155,33 @@ namespace NKikimr::NSqsTopic::V1 {
                 .MaxNumberOfMessage = static_cast<ui32>(maxNumberOfMessages),
                 .UserToken = this->Request_->GetInternalToken(),
             };
+            // Only client-supplied receive-request-attempt-id enables replay semantics; an
+            // auto-generated id would be unique per request and never replayed.
+            if (this->QueueUrl_->Fifo && request.has_receive_request_attempt_id()) {
+                settings.ReceiveAttemptId = request.receive_request_attempt_id();
+            }
             return settings;
         }
 
         void StateWork(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
-                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCacheNavigateResponse); // override for testing
+                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCacheNavigateResponse);
                 HFunc(NKikimr::NPQ::NMLP::TEvReadResponse, Handle);
+                HFunc(TEvents::TEvWakeup, HandleWakeupTag);
                 default:
                     TBase::StateWork(ev);
+            }
+        }
+
+        void HandleWakeupTag(TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
+            switch (static_cast<EWakeupTag>(ev->Get()->Tag)) {
+                case EWakeupTag::RlAllowed:
+                    return SendReply(ctx);
+                case EWakeupTag::RlNoResource:
+                    return ReplyWithError(MakeError(NSQS::NErrors::THROTTLING_EXCEPTION, "Request was throttled by the rate limiter"));
+                default:
+                    OnWakeup(static_cast<EWakeupTag>(ev->Get()->Tag));
+                    return;
             }
         }
 
@@ -197,10 +239,7 @@ namespace NKikimr::NSqsTopic::V1 {
             result.set_message_id(GenerateMessageId(message.MessageId));
 
             if (!NSQS::DeserializeUserAttributes(result, message.Attributes)) {
-                LOG_WARN_S(
-                    ctx,
-                    NKikimrServices::SQS,
-                    "Unable to deserialize message attributes");
+                YDB_LOG_WARN_CTX(ctx, "Unable to deserialize message attributes");
             }
 
             result.set_receipt_handle(SerializeReceipt(message.MessageId));
@@ -212,6 +251,7 @@ namespace NKikimr::NSqsTopic::V1 {
         void Handle(NKikimr::NPQ::NMLP::TEvReadResponse::TPtr& ev, const TActorContext& ctx) {
             ReaderActorId_ = {};
             auto& response = *ev->Get();
+
             switch (response.Status) {
                 case Ydb::StatusIds::SUCCESS: {
                     break;
@@ -249,24 +289,84 @@ namespace NKikimr::NSqsTopic::V1 {
                     });
             }
 
-            Ydb::Ymq::V1::ReceiveMessageResult result;
+            ui64 payloadSize = 0;
+            Result_.Clear();
             for (auto& message : response.Messages) {
+                payloadSize += message.Data.size();
                 Ydb::Ymq::V1::Message m = ConvertMessage(std::move(message), ctx);
-                *result.add_messages() = std::move(m);
+                *Result_.add_messages() = std::move(m);
             }
 
-            return this->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
+            if (ShouldBeCharged_ && IsQuotaRequired()) {
+                const ui64 ru = NBilling::CalcRu(
+                    CalcRuConsumption(payloadSize), NBilling::READ_BASE_COST, NBilling::READ_COST_PER_BLOCK, Fifo_, false);
+                Y_ABORT_UNLESS(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, ctx));
+                return;
+            }
+
+            return SendReply(ctx);
+        }
+
+        void SendReply(const TActorContext& ctx) {
+            return this->ReplyWithResult(Ydb::StatusIds::SUCCESS, Result_, ctx);
         }
 
         void Die(const TActorContext& ctx) override {
             if (ReaderActorId_) {
                 ctx.Send(ReaderActorId_, new TEvents::TEvPoison);
             }
+            NPQ::TRlHelpers::PassAway(this->SelfId());
             this->TBase::Die(ctx);
         }
 
         void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-            Y_UNUSED(ev);
+            // Second navigate: resolve the rate-limiter path from the database
+            // serverless attributes, then start the reader.
+            if (TBase::IsRlPathNavigateResponse(ev)) {
+                if (auto rlContext = this->ExtractRlContext(ev)) {
+                    SetRlContext(*rlContext);
+                }
+                CreateReader();
+                return;
+            }
+
+            const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
+            Y_ABORT_UNLESS(result->ResultSet.size() == 1);
+            const auto& response = result->ResultSet.front();
+            if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+                if (response.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
+                    if (this->ProcessCdc(response)) {
+                        return;
+                    }
+                    return this->ReplyWithError(MakeError(NSQS::NErrors::UNSUPPORTED_OPERATION, TStringBuilder() << "Reading from the Changefeed is not supported"));
+                }
+                if (response.Kind != NSchemeCache::TSchemeCacheNavigate::KindTopic) {
+                    return this->ReplyWithError(MakeError(NSQS::NErrors::NON_EXISTENT_QUEUE, TStringBuilder() << "Queue name used by another scheme object"));
+                }
+                // ok
+            } else if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown) {
+                return this->ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE, std::format("The specified queue doesn't exist")));
+            } else {
+                return this->ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
+                                                TStringBuilder() << "Failed to describe topic: " << response.Status));
+            }
+
+            if (ShouldBeCharged_) {
+                // Always put in request units metering mode
+                SetMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS);
+                Fifo_ = QueueUrl_->Fifo;
+
+                // RU-metered topics need the rate-limiter path, which is not carried
+                // by DoLocalRpc requests. Resolve it from the database attributes
+                // before reading so the charge in Handle(TEvReadResponse) can fire.
+                this->SendRlPathNavigate();
+            } else {
+                CreateReader();
+            }
+        }
+
+        void CreateReader() {
+            ReaderActorId_ = this->ActorContext().RegisterWithSameMailbox(NKikimr::NPQ::NMLP::CreateReader(this->SelfId(), std::move(*ReaderSettings_)));
         }
 
     private:
@@ -276,7 +376,11 @@ namespace NKikimr::NSqsTopic::V1 {
         }
 
     private:
+        bool ShouldBeCharged_{};
         TActorId ReaderActorId_;
+        TMaybe<NKikimr::NPQ::NMLP::TReaderSettings> ReaderSettings_;
+        Ydb::Ymq::V1::ReceiveMessageResult Result_;
+        bool Fifo_{};
     };
 
     std::unique_ptr<NActors::IActor> CreateReceiveMessageActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {

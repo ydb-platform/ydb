@@ -2892,7 +2892,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
         """docs_search get action returns Markdown content of the requested page."""
         handler, call_count = self._make_tool_handler(
             "docs_search",
-            {"action": "get", "language": "en", "path": "core/concepts/architecture.md"},
+            {"action": "get", "language": "en", "path": "core/concepts/architecture/index.md"},
             "Page content retrieved."
         )
         self._set_handler(handler)
@@ -3130,13 +3130,13 @@ class _ToolTestBase(BaseAiInteractiveTest):
     def test_docs_search_get_resolves_variables(self):
         """docs_search get expands {{ variable }} placeholders via presets.yaml.
 
-        architecture.md contains ``{{ ydb-short-name }}`` which must be
+        architecture/index.md contains ``{{ ydb-short-name }}`` which must be
         replaced with "YDB" by TTemplateResolver before the page is returned.
         The raw template marker must not survive in the output.
         """
         handler, call_count = self._make_tool_handler(
             "docs_search",
-            {"action": "get", "language": "en", "path": "core/concepts/architecture.md"},
+            {"action": "get", "language": "en", "path": "core/concepts/architecture/index.md"},
             "Variables resolved."
         )
         self._set_handler(handler)

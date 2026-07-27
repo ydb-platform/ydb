@@ -1,6 +1,7 @@
 #include "accessor.h"
 #include "constructor.h"
 
+#include <ydb/core/formats/arrow/accessor/common/additional_data.h>
 #include <ydb/core/formats/arrow/accessor/composite_serial/accessor.h>
 #include <ydb/core/formats/arrow/accessor/plain/constructor.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
@@ -31,9 +32,10 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
         for (ui32 i = 0; i < (ui32)proto.GetKeyColumns().size(); ++i) {
             std::shared_ptr<TColumnLoader> columnLoader = std::make_shared<TColumnLoader>(
                 externalInfo.GetDefaultSerializer(), headerConclusion->GetColumnStats().GetAccessorConstructor(i), schema->field(i), nullptr, 0);
-            std::shared_ptr<IChunkedArray> chunk = std::make_shared<TDeserializeChunkedArray>(externalInfo.GetRecordsCount(), columnLoader,
-                TStringBuf(originalData.data() + currentIndex, proto.GetKeyColumns(i).GetSize()), true);
-            columns.emplace_back(chunk);
+            const TStringBuf columnBlob(originalData.data() + currentIndex, proto.GetKeyColumns(i).GetSize());
+            auto additionalData = NArrow::NAccessor::BuildAdditionalAccessorData(proto.GetKeyColumns(i).GetAdditionalAccessorData());
+            columns.emplace_back(std::make_shared<TDeserializeChunkedArray>(
+                externalInfo.GetRecordsCount(), columnLoader, columnBlob, true, std::move(additionalData)));
             currentIndex += proto.GetKeyColumns(i).GetSize();
         }
         columnKeysContainer = std::make_shared<TGeneralContainer>(schema, std::move(columns));

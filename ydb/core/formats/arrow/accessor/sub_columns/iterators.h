@@ -1,5 +1,6 @@
 #pragma once
 #include "columns_storage.h"
+#include "types.h"
 #include "others_storage.h"
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
@@ -13,15 +14,19 @@ private:
     ui32 KeyIndex = 0;
     bool IsValidFlag = false;
     bool HasValueFlag = false;
-    std::string_view RawValue;
     bool IsColumnKeyFlag = false;
+    std::shared_ptr<const IValueArrowCodec> Codec;
+    // Current physical position as (array, local index)
+    const arrow::Array* CurrentArray = nullptr;
+    ui32 LocalIndex = 0;
 
     void InitFromIterator(const TColumnsData::TIterator& iterator) {
         RecordIndex = iterator.GetCurrentRecordIndex();
         KeyIndex = RemappedKey.value_or(iterator.GetKeyIndex());
         IsValidFlag = true;
         HasValueFlag = iterator.HasValue();
-        RawValue = iterator.GetRawValue();
+        CurrentArray = &iterator.GetArray();
+        LocalIndex = iterator.GetLocalIndex();
     }
 
     void InitFromIterator(const TOthersData::TIterator& iterator) {
@@ -29,7 +34,8 @@ private:
         KeyIndex = RemapKeys.size() ? RemapKeys[iterator.GetKeyIndex()] : iterator.GetKeyIndex();
         IsValidFlag = true;
         HasValueFlag = iterator.HasValue();
-        RawValue = iterator.GetRawValue();
+        CurrentArray = &iterator.GetArray();
+        LocalIndex = iterator.GetLocalIndex();
     }
 
     bool Initialize() {
@@ -63,14 +69,17 @@ private:
     }
 
 public:
-    TGeneralIterator(TColumnsData::TIterator&& iterator, const std::optional<ui32> remappedKey = {})
+    TGeneralIterator(TColumnsData::TIterator&& iterator, const EValueType valueType, const std::optional<ui32> remappedKey = {})
         : Iterator(iterator)
-        , RemappedKey(remappedKey) {
+        , RemappedKey(remappedKey)
+        , Codec(GetCodecForValueType(valueType)) {
         Initialize();
     }
+
     TGeneralIterator(TOthersData::TIterator&& iterator, const std::vector<ui32>& remapKeys = {})
         : Iterator(iterator)
-        , RemapKeys(remapKeys) {
+        , RemapKeys(remapKeys)
+        , Codec(GetCodecForValueType(EValueType::BinaryJson)) {
         Initialize();
     }
     bool IsColumnKey() const {
@@ -149,9 +158,26 @@ public:
         return KeyIndex;
     }
 
-    std::string_view GetRawValue() const {
+    // Re-encode the current value to BinaryJson.
+    NBinaryJson::TBinaryJson GetValueAsBinaryJson() const {
         AFL_VERIFY(IsValidFlag);
-        return RawValue;
+        return Codec->ReadValueView(*CurrentArray, LocalIndex).ToBinaryJson();
+    }
+
+    EValueType GetValueType() const {
+        return Codec->GetValueType();
+    }
+    const arrow::Array& GetArray() const {
+        AFL_VERIFY(IsValidFlag);
+        return *CurrentArray;
+    }
+    ui32 GetLocalIndex() const {
+        AFL_VERIFY(IsValidFlag);
+        return LocalIndex;
+    }
+    ui32 GetValueSize() const {
+        AFL_VERIFY(IsValidFlag);
+        return Codec->GetElementSize(*CurrentArray, LocalIndex);
     }
 
     NJson::TJsonValue GetValue() const;
@@ -181,7 +207,7 @@ public:
         : ColumnsData(columnsData)
         , OthersData(othersData) {
         for (ui32 i = 0; i < ColumnsData.GetStats().GetColumnsCount(); ++i) {
-            Iterators.emplace_back(ColumnsData.BuildIterator(i));
+            Iterators.emplace_back(ColumnsData.BuildIterator(i), ColumnsData.GetStats().GetValueType(i));
         }
         Iterators.emplace_back(OthersData.BuildIterator());
         for (auto&& i : Iterators) {
@@ -294,7 +320,7 @@ public:
             }
         }
         for (ui32 i = 0; i < ColumnsData.GetStats().GetColumnsCount(); ++i) {
-            Iterators.emplace_back(ColumnsData.BuildIterator(i), remapColumns[i]);
+            Iterators.emplace_back(ColumnsData.BuildIterator(i), ColumnsData.GetStats().GetValueType(i), remapColumns[i]);
         }
         Iterators.emplace_back(OthersData.BuildIterator(), remapOthers);
         for (auto&& i : Iterators) {
@@ -325,7 +351,7 @@ public:
             while (SortedIterators.size() && SortedIterators.front()->GetRecordIndex() == recordIndex) {
                 std::pop_heap(SortedIterators.begin(), SortedIterators.end(), TIteratorsComparator());
                 auto& itColumn = *SortedIterators.back();
-                kvActor(Addresses[itColumn.GetKeyIndex()].GetOriginalIndex(), itColumn.GetRawValue(), itColumn.IsColumnKey());
+                kvActor(Addresses[itColumn.GetKeyIndex()].GetOriginalIndex(), itColumn, itColumn.IsColumnKey());
                 if (!itColumn.Next()) {
                     SortedIterators.pop_back();
                 } else {

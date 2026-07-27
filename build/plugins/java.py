@@ -168,6 +168,24 @@ def _ADD_CLASSPATH_CLASH_CHECK(unit: ymake.Unit, *args: tuple[str, ...]):
 
 
 @ymake.macro
+def _ADD_CLASSPATH_CLASH_CHECK_IF_UBERJAR(unit: ymake.Unit, *args: tuple[str, ...]):
+    uberjar_val = (unit.get('MAKE_UBERJAR_VALUE') or '').lower()
+    if uberjar_val and uberjar_val not in ('yes', 'no'):
+        ymake.report_configure_error('MAKE_UBERJAR: "yes" or "no" required')
+    if uberjar_val == 'yes':
+        _ADD_CLASSPATH_CLASH_CHECK(unit, *args)
+
+
+@ymake.macro
+def _ADD_CLASSPATH_CLASH_CHECK_IF_NOT_UBERJAR(unit: ymake.Unit, *args: tuple[str, ...]):
+    uberjar_val = (unit.get('MAKE_UBERJAR_VALUE') or '').lower()
+    if uberjar_val and uberjar_val not in ('yes', 'no'):
+        ymake.report_configure_error('MAKE_UBERJAR: "yes" or "no" required')
+    if uberjar_val != 'yes':
+        _ADD_CLASSPATH_CLASH_CHECK(unit, *args)
+
+
+@ymake.macro
 def _ADD_DETEKT_REPORT_CHECK(unit: ymake.Unit, *args: tuple[str, ...]):
     if unit.get('WITH_KOTLIN_VALUE') == 'yes' and unit.get('WITH_KOTLINC_PLUGIN_DETEKT') == 'yes':
         unit.onadd_check(['detekt.report'] + list(args))

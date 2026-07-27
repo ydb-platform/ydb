@@ -87,11 +87,12 @@ public:
     const THashSet<ui64>& GetPendingComputeTasks();
     TMaybe<ui64> GetActualNodeIdForTask(ui64 taskId) const;
 
-    ui32 GetnScanTasks();
-    ui32 GetnComputeTasks();
-
     void PropagateChannelsUpdates(const THashMap<TActorId, THashSet<ui64>>& updates);
     void CollectTaskChannelsUpdates(const TKqpTasksGraph::TTaskType& task, THashMap<TActorId, THashSet<ui64>>& updates);
+
+    auto GetUnassignedTasksCount() const {
+        return UnassignedTasks.size();
+    }
 
 private:
 
@@ -110,7 +111,7 @@ private:
 private:
     const ui64 TxId;
     const TActorId ExecuterId;
-    TVector<ui64> ComputeTasks;
+    TVector<ui64> UnassignedTasks;
     THashMap<ui64 /* shardId */, TVector<ui64 /* taskId */>> TasksPerNode;
     TString Database;
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
@@ -128,8 +129,6 @@ private:
     TKqpTasksGraph& TasksGraph;
     ui64 MkqlMemoryLimit;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
-    ui32 nComputeTasks = 0;
-    ui32 nScanTasks = 0;
 
     THashMap<TActorId, TProgressStat> PendingComputeActors; // Running compute actors (pure and DS)
     THashSet<ui64> PendingComputeTasks; // Not started yet, waiting resources

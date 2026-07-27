@@ -8,6 +8,7 @@
 
 #include <yt/yt/core/misc/error.h>
 #include <yt/yt/core/misc/collection_helpers.h>
+#include <yt/yt/core/misc/protobuf_helpers.h>
 
 #include <yt/yt/core/yson/stream.h>
 #include <yt/yt/core/yson/string.h>
@@ -517,7 +518,7 @@ void Serialize(
     const T& message,
     NYson::IYsonConsumer* consumer)
 {
-    consumer->OnStringScalar(message.SerializeAsStringOrThrow());
+    consumer->OnStringScalar(SerializeProtoToString(message));
 }
 
 template <class T, class TTag, TStrongTypedefOptions Options>
@@ -746,7 +747,10 @@ void Deserialize(
 {
     std::string string;
     Deserialize(string, node);
-    message.ParseFromStringOrThrow(string);
+    if (!TryDeserializeProto(&message, TRef::FromString(string))) {
+        THROW_ERROR_EXCEPTION("Error parsing protobuf message from string")
+            << TErrorAttribute("protobuf_type", message.GetTypeName());
+    }
 }
 
 template <class T, class TTag, TStrongTypedefOptions Options>

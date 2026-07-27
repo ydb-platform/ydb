@@ -574,6 +574,7 @@ class TImportFileClient::TImpl {
 public:
     explicit TImpl(const TDriver& driver, const TClientCommand::TConfig& rootConfig,
                                      const TImportFileSettings& settings);
+    ~TImpl();
     TStatus Import(const TVector<TString>& filePaths, const TString& dbPath);
 
 private:
@@ -673,6 +674,21 @@ TImportFileClient::TImpl::TImpl(const TDriver& driver, const TClientCommand::TCo
         RetryPool->Start(Settings.Threads_);
     }
     RequestsInflight = std::make_unique<std::counting_semaphore<>>(Settings.MaxInFlightRequests_);
+}
+
+TImportFileClient::TImpl::~TImpl() {
+    if (FileProgressPool) {
+        FileProgressPool->Stop();
+    }
+    if (RetryPool) {
+        RetryPool->Stop();
+    }
+    if (ProcessingPool) {
+        ProcessingPool->Stop();
+    }
+    if (TableClient) {
+        TableClient->Stop().Wait();
+    }
 }
 
 TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, const TString& dbPath) {

@@ -3,6 +3,7 @@
 #include "yaml_config_helpers.h"
 
 #include <ydb/core/protos/key.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -78,6 +79,71 @@ pdisk_key_config:
         UNIT_ASSERT_VALUES_EQUAL("c2FtcGxlLXBpbgo=", key.pin());
     }
 
+    Y_UNIT_TEST(FeatureFlagsWithTriboolAsBoolKeepsLaterFlags) {
+        // Regression: EnableMvcc (tag 47) is a Tribool enum. A YAML boolean given
+        // to it used to abort the whole FeatureFlags json->proto merge (which walks
+        // fields in tag order), silently dropping every feature flag with a higher
+        // tag, e.g. EnableArrowFormatAtDatashard (tag 49).
+        TString config = R"(
+feature_flags:
+  enable_mvcc: true
+  enable_arrow_format_at_datashard: true
+)";
+        NKikimrConfig::TAppConfig cfg = Parse(config, false);
+
+        UNIT_ASSERT(cfg.HasFeatureFlags());
+        UNIT_ASSERT_C(cfg.GetFeatureFlags().GetEnableArrowFormatAtDatashard(),
+            "EnableArrowFormatAtDatashard (tag 49) was dropped because a Tribool "
+            "flag given as a YAML bool aborted the FeatureFlags parse");
+    }
+
+    Y_UNIT_TEST(FeatureFlagsWithoutTriboolParseFully) {
+        // Control: without the Tribool-as-bool trigger the same high-tag flag
+        // parses fine, isolating enable_mvcc as the cause.
+        TString config = R"(
+feature_flags:
+  enable_arrow_format_at_datashard: true
+)";
+        NKikimrConfig::TAppConfig cfg = Parse(config, false);
+
+        UNIT_ASSERT(cfg.HasFeatureFlags());
+        UNIT_ASSERT(cfg.GetFeatureFlags().GetEnableArrowFormatAtDatashard());
+    }
+
+    Y_UNIT_TEST(TriboolFeatureFlagAcceptsYamlBool) {
+        // A Tribool feature flag may be written as a YAML boolean; true maps to
+        // VALUE_TRUE and false maps to VALUE_FALSE.
+        TString configTrue = R"(
+feature_flags:
+  enable_mvcc: true
+)";
+        NKikimrConfig::TAppConfig cfgTrue = Parse(configTrue, false);
+        UNIT_ASSERT(cfgTrue.HasFeatureFlags());
+        UNIT_ASSERT_VALUES_EQUAL((int)cfgTrue.GetFeatureFlags().GetEnableMvcc(),
+            (int)NKikimrConfig::TFeatureFlags::VALUE_TRUE);
+
+        TString configFalse = R"(
+feature_flags:
+  enable_mvcc: false
+)";
+        NKikimrConfig::TAppConfig cfgFalse = Parse(configFalse, false);
+        UNIT_ASSERT(cfgFalse.HasFeatureFlags());
+        UNIT_ASSERT_VALUES_EQUAL((int)cfgFalse.GetFeatureFlags().GetEnableMvcc(),
+            (int)NKikimrConfig::TFeatureFlags::VALUE_FALSE);
+    }
+
+    Y_UNIT_TEST(TriboolFeatureFlagAcceptsEnumName) {
+        // The explicit enum spelling keeps working alongside the boolean form.
+        TString config = R"(
+feature_flags:
+  enable_mvcc: VALUE_FALSE
+)";
+        NKikimrConfig::TAppConfig cfg = Parse(config, false);
+        UNIT_ASSERT(cfg.HasFeatureFlags());
+        UNIT_ASSERT_VALUES_EQUAL((int)cfg.GetFeatureFlags().GetEnableMvcc(),
+            (int)NKikimrConfig::TFeatureFlags::VALUE_FALSE);
+    }
+
     Y_UNIT_TEST(PdiskCategoryFromString) {
         UNIT_ASSERT_VALUES_EQUAL(PdiskCategoryFromString("0"), 0ull);
         UNIT_ASSERT_VALUES_EQUAL(PdiskCategoryFromString("ROT"), 0ull);
@@ -120,6 +186,83 @@ pdisk_key_config:
             "host_configs: [{nvme: [disk1, disk2]}, {host_config_id: 2}], hosts: [{host: fqdn1, host_config_id: 2}, "
             "{host: fqdn2, host_config_id: 2}]}";
         UNIT_CHECK_GENERATED_EXCEPTION(Parse(config, false), yexception);
+    }
+
+    Y_UNIT_TEST(ExpectedSlotSizeIsMutuallyExclusiveWithLegacySlotSettings) {
+        TString withExpectedSlotCount = R"(
+host_configs:
+- host_config_id: 1
+  drive:
+  - path: disk1
+    type: SSD
+    expected_slot_count: 4
+    expected_slot_size: 100000
+hosts:
+- host: fqdn1
+  host_config_id: 1
+)";
+        UNIT_CHECK_GENERATED_EXCEPTION(Parse(withExpectedSlotCount, true), yexception);
+
+        TString withSlotSizeInUnits = R"(
+host_configs:
+- host_config_id: 1
+  drive:
+  - path: disk1
+    type: SSD
+    slot_size_in_units: 2
+    expected_slot_size: 100000
+hosts:
+- host: fqdn1
+  host_config_id: 1
+)";
+        UNIT_CHECK_GENERATED_EXCEPTION(Parse(withSlotSizeInUnits, true), yexception);
+    }
+
+    Y_UNIT_TEST(ExpectedSlotSizeRequiresMaxSlots) {
+        TString withoutMaxSlots = R"(
+host_configs:
+- host_config_id: 1
+  drive:
+  - path: disk1
+    type: SSD
+    expected_slot_size: 100000
+hosts:
+- host: fqdn1
+  host_config_id: 1
+)";
+        UNIT_CHECK_GENERATED_EXCEPTION(Parse(withoutMaxSlots, true), yexception);
+
+        TString withMaxSlots = R"(
+host_configs:
+- host_config_id: 1
+  drive:
+  - path: disk1
+    type: SSD
+    expected_slot_size: 100000
+    max_slots: 8
+hosts:
+- host: fqdn1
+  host_config_id: 1
+)";
+        NKikimrConfig::TAppConfig cfg = Parse(withMaxSlots, true);
+        const auto& drive = cfg.GetBlobStorageConfig().GetDefineHostConfig(0).GetDrive(0);
+        UNIT_ASSERT_VALUES_EQUAL(drive.GetPDiskConfig().GetExpectedSlotSize(), 100000);
+        UNIT_ASSERT_VALUES_EQUAL(drive.GetPDiskConfig().GetMaxSlots(), 8);
+    }
+
+    Y_UNIT_TEST(MaxSlotsRequiresExpectedSlotSize) {
+        TString withoutExpectedSlotSize = R"(
+host_configs:
+- host_config_id: 1
+  drive:
+  - path: disk1
+    type: SSD
+    max_slots: 8
+hosts:
+- host: fqdn1
+  host_config_id: 1
+)";
+        UNIT_CHECK_GENERATED_EXCEPTION(Parse(withoutExpectedSlotSize, true), yexception);
     }
 
     Y_UNIT_TEST(StoragePoolTypesWithDefaultDomainName) {

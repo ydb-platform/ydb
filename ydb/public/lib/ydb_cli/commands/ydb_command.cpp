@@ -16,15 +16,15 @@ TYdbCommand::TYdbCommand(const TString& name, const std::initializer_list<TStrin
     : TLeafCommand(name, aliases, description)
 {}
 
-TDriver TYdbCommand::CreateDriver(TConfig& config) {
-    return TDriver(config.CreateDriverConfigWithBuildInfo());
+TScopedDriver TYdbCommand::CreateDriver(TConfig& config) {
+    return TScopedDriver(TDriver(config.CreateDriverConfigWithBuildInfo()));
 }
 
-TDriver TYdbCommand::CreateDriver(TConfig& config, std::unique_ptr<TLogBackend>&& loggingBackend) {
+TScopedDriver TYdbCommand::CreateDriver(TConfig& config, std::unique_ptr<TLogBackend>&& loggingBackend) {
     auto driverConfig = config.CreateDriverConfigWithBuildInfo();
     driverConfig.SetLog(std::move(loggingBackend));
 
-    return TDriver(driverConfig);
+    return TScopedDriver(TDriver(driverConfig));
 }
 
 bool TYdbReadOnlyCommand::Prompt(TConfig& config) {

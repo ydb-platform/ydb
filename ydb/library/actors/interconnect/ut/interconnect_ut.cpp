@@ -162,6 +162,37 @@ private:
     std::atomic<size_t> Received = 0;
 };
 
+class TConnectionSubscriberActor : public TActorBootstrapped<TConnectionSubscriberActor> {
+public:
+    explicit TConnectionSubscriberActor(ui32 peerNodeId)
+        : PeerNodeId(peerNodeId)
+    {}
+
+    void Bootstrap() {
+        Become(&TThis::StateFunc);
+        Send(TActivationContext::InterconnectProxy(PeerNodeId), new TEvents::TEvSubscribe);
+    }
+
+    bool IsConnected() const {
+        return Connected.load(std::memory_order_acquire);
+    }
+
+private:
+    void Handle(TEvInterconnect::TEvNodeConnected::TPtr&) {
+        Connected.store(true, std::memory_order_release);
+    }
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvInterconnect::TEvNodeConnected, Handle)
+        cFunc(TEvInterconnect::TEvNodeDisconnected::EventType, PassAway)
+        cFunc(TEvents::TSystem::Poison, PassAway)
+    )
+
+private:
+    const ui32 PeerNodeId;
+    std::atomic<bool> Connected = false;
+};
+
 class TBurstSenderActor : public TActorBootstrapped<TBurstSenderActor> {
 public:
     TBurstSenderActor(TActorId recipient, size_t messages, size_t payloadSize)
@@ -525,6 +556,36 @@ private:
     std::shared_ptr<THandshakeFailureLogCounters> OutgoingHandshakeFailures;
 };
 
+struct TSubscriberLivenessLogState {
+    std::atomic<ui32> Warnings = 0;
+    TMutex Mutex;
+    TString LastWarning;
+};
+
+class TSubscriberLivenessLogBackend : public TLogBackend {
+public:
+    explicit TSubscriberLivenessLogBackend(std::shared_ptr<TSubscriberLivenessLogState> state)
+        : State(std::move(state))
+    {}
+
+    void WriteData(const TLogRecord& rec) override {
+        const TStringBuf line(rec.Data, rec.Len);
+        if (rec.Priority == TLOG_WARNING &&
+                line.Contains("Subscriber liveness check found leaked subscriptions")) {
+            with_lock (State->Mutex) {
+                State->LastWarning = line;
+            }
+            State->Warnings.fetch_add(1, std::memory_order_release);
+        }
+    }
+
+    void ReopenLog() override {
+    }
+
+private:
+    std::shared_ptr<TSubscriberLivenessLogState> State;
+};
+
 } // namespace
 
 class TSenderActor : public TActorBootstrapped<TSenderActor> {
@@ -666,6 +727,59 @@ private:
     std::atomic<size_t> Received;
 };
 
+struct TEvTcpEmptyRecordWithPayload
+    : TEventPB<TEvTcpEmptyRecordWithPayload, NInterconnectTest::TEvTestSerialization, 0x10002>
+{};
+
+class TSingleEventSenderActor : public TActorBootstrapped<TSingleEventSenderActor> {
+public:
+    TSingleEventSenderActor(TActorId recipient, IEventBase* event)
+        : Recipient(recipient)
+        , Event(event)
+    {}
+
+    void Bootstrap() {
+        Send(Recipient, Event);
+        PassAway();
+    }
+
+private:
+    const TActorId Recipient;
+    IEventBase* const Event;
+};
+
+class TEmptyRecordWithPayloadReceiverActor : public TActorBootstrapped<TEmptyRecordWithPayloadReceiverActor> {
+public:
+    TEmptyRecordWithPayloadReceiverActor(TString expectedPayload)
+        : ExpectedPayload(std::move(expectedPayload))
+    {}
+
+    void Bootstrap() {
+        Become(&TThis::StateFunc);
+    }
+
+    void Handle(TEvTcpEmptyRecordWithPayload::TPtr& ev) {
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.ByteSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload().size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].GetSize(), ExpectedPayload.size());
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].ConvertToString(), ExpectedPayload);
+        Received.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    size_t GetReceived() const noexcept {
+        return Received.load(std::memory_order_relaxed);
+    }
+
+private:
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvTcpEmptyRecordWithPayload, Handle);
+    )
+
+private:
+    const TString ExpectedPayload;
+    std::atomic<size_t> Received = 0;
+};
+
 namespace {
 
 TTestICCluster::Flags GetKernelLivenessFlags(bool withRdma) {
@@ -689,6 +803,39 @@ void WaitForRdmaQpRts(TTestICCluster& cluster, ui32 nodeId, ui32 peerNodeId, TSt
             return false;
         }
     }, description);
+}
+
+void RunTcpEmptyProtoRecordWithPayloadRoundTrip(bool enableExternalDataChannel) {
+    const TString payload(5000, 'x');
+    auto settingsCustomizer = [enableExternalDataChannel](ui32, TInterconnectSettings& settings) {
+        settings.EnableExternalDataChannel = enableExternalDataChannel;
+    };
+
+    TTestICCluster cluster(2, TChannelsConfig(), nullptr, nullptr, TTestICCluster::DISABLE_RDMA,
+        {}, TDuration::Seconds(30), TNode::DefaultInflight(), settingsCustomizer);
+
+    auto* receiverPtr = new TEmptyRecordWithPayloadReceiverActor(payload);
+    const TActorId recipient = cluster.RegisterActor(receiverPtr, 1);
+
+    auto* event = new TEvTcpEmptyRecordWithPayload;
+    event->AddPayload(TRope(payload));
+    UNIT_ASSERT_VALUES_EQUAL(event->Record.ByteSize(), 0);
+    UNIT_ASSERT(event->AllowExternalDataChannel());
+
+    cluster.RegisterActor(new TSingleEventSenderActor(recipient, event), 2);
+
+    WaitForCondition(TDuration::Seconds(10), [&] {
+        return receiverPtr->GetReceived() == 1;
+    }, "TCP empty protobuf record with payload delivery");
+
+    UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 2, 1, "Params.UseExternalDataChannel"),
+        enableExternalDataChannel ? 1ULL : 0ULL);
+    if (enableExternalDataChannel) {
+        UNIT_ASSERT_C(WaitForSessionCounter(cluster, 1, 2, "XdcSections") > 0,
+            "payload was not received through XDC sections");
+    } else {
+        UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 1, 2, "XdcSections"), 0ULL);
+    }
 }
 
 ui64 MeasureIdleGeneratedPackets(bool enableKernelLiveness, bool withRdma) {
@@ -995,6 +1142,79 @@ void RunKernelLivenessReconnectLocalFallbackNotApplied(bool withRdma) {
     UNIT_ASSERT_VALUES_EQUAL(WaitForSessionCounter(cluster, 2, 1, "Params.UseKernelLiveness"), 0ULL);
 }
 
+void RunSubscriberLivenessCheck(bool useSessionV2, TDuration checkInterval) {
+    if (useSessionV2 && !TUringContext::IsAvailable()) {
+        Cerr << "io_uring not available; skipping" << Endl;
+        return;
+    }
+
+    auto settingsCustomizer = [=](ui32, TInterconnectSettings& settings) {
+        settings.SubscriberLivenessCheckInterval = checkInterval;
+        settings.EnableInterconnectSessionV2 = useSessionV2;
+    };
+    auto logState = std::make_shared<TSubscriberLivenessLogState>();
+    auto loggerSettings = MakeIntrusive<NLog::TSettings>(
+        TActorId(0, "logger"),
+        static_cast<NLog::EComponent>(NActorsServices::LOGGER),
+        NLog::PRI_DEBUG,
+        NLog::PRI_DEBUG,
+        0U);
+    loggerSettings->Append(
+        NActorsServices::EServiceCommon_MIN,
+        NActorsServices::EServiceCommon_MAX,
+        NActorsServices::EServiceCommon_Name);
+    loggerSettings->SetAllowDrop(false);
+    loggerSettings->SetThrottleDelay(TDuration::Zero());
+    auto logBackendFactory = [logState] {
+        return TAutoPtr<TLogBackend>(new TSubscriberLivenessLogBackend(logState));
+    };
+    TTestICCluster cluster(2, TChannelsConfig(), nullptr, loggerSettings,
+        useSessionV2 ? TTestICCluster::EMPTY : TTestICCluster::DISABLE_RDMA,
+        {}, TDuration::Seconds(2), TNode::DefaultInflight(), settingsCustomizer, logBackendFactory);
+
+    auto* subscriber = new TConnectionSubscriberActor(1);
+    const TActorId subscriberId = cluster.RegisterActor(subscriber, 2);
+
+    WaitForCondition(TDuration::Seconds(10), [&] {
+        return subscriber->IsConnected();
+    }, "subscriber connected");
+    WaitForCondition(TDuration::Seconds(10), [&] {
+        try {
+            return GetSessionCounter(cluster, 2, 1, "Subscribers.size()") == 1;
+        } catch (const TPatternNotFound&) {
+            return false;
+        }
+    }, "live subscriber registered");
+
+    if (checkInterval != TDuration::Zero()) {
+        Sleep(3 * checkInterval);
+        UNIT_ASSERT_VALUES_EQUAL(GetSessionCounter(cluster, 2, 1, "Subscribers.size()"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(logState->Warnings.load(std::memory_order_acquire), 0);
+    }
+
+    cluster.KillActor(2, subscriberId);
+    if (checkInterval != TDuration::Zero()) {
+        WaitForCondition(TDuration::Seconds(10), [&] {
+            try {
+                return GetSessionCounter(cluster, 2, 1, "Subscribers.size()") == 0;
+            } catch (const TPatternNotFound&) {
+                return false;
+            }
+        }, "dead subscriber removed");
+        WaitForCondition(TDuration::Seconds(10), [&] {
+            return logState->Warnings.load(std::memory_order_acquire) == 1;
+        }, "leaked subscriber warning");
+        with_lock (logState->Mutex) {
+            UNIT_ASSERT_STRING_CONTAINS(logState->LastWarning, "activity# manual");
+            UNIT_ASSERT_STRING_CONTAINS(logState->LastWarning, "actors# 1");
+        }
+    } else {
+        Sleep(TDuration::MilliSeconds(300));
+        UNIT_ASSERT_VALUES_EQUAL(GetSessionCounter(cluster, 2, 1, "Subscribers.size()"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(logState->Warnings.load(std::memory_order_acquire), 0);
+    }
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(Interconnect) {
@@ -1003,6 +1223,22 @@ Y_UNIT_TEST_SUITE(Interconnect) {
         RunScopeClassCounterRebindTest(TScopeId(0, 1), "system");
         RunScopeClassCounterRebindTest(TScopeId(1, 42), "same_tenant");
         RunScopeClassCounterRebindTest(TScopeId(2, 42), "other_tenant");
+    }
+
+    Y_UNIT_TEST(SubscriberLivenessCheck) {
+        RunSubscriberLivenessCheck(false, TDuration::MilliSeconds(100));
+    }
+
+    Y_UNIT_TEST(SubscriberLivenessCheckV2) {
+        RunSubscriberLivenessCheck(true, TDuration::MilliSeconds(100));
+    }
+
+    Y_UNIT_TEST(SubscriberLivenessCheckDisabled) {
+        RunSubscriberLivenessCheck(false, TDuration::Zero());
+    }
+
+    Y_UNIT_TEST(SubscriberLivenessCheckDisabledV2) {
+        RunSubscriberLivenessCheck(true, TDuration::Zero());
     }
 
     Y_UNIT_TEST(RdmaRetryWatchdogPendingSessionsAggregated) {
@@ -1236,6 +1472,14 @@ Y_UNIT_TEST_SUITE(Interconnect) {
             return recipientOnNode1Ptr->GetReceived() > receivedOnNode1Before
                 && recipientOnNode2Ptr->GetReceived() > receivedOnNode2Before;
         }, "bidirectional delivery after simultaneous RDMA reconnect");
+    }
+
+    Y_UNIT_TEST(TcpXdcEmptyProtoRecordWithPayloadRoundTrip) {
+        RunTcpEmptyProtoRecordWithPayloadRoundTrip(true);
+    }
+
+    Y_UNIT_TEST(TcpInlineEmptyProtoRecordWithPayloadRoundTrip) {
+        RunTcpEmptyProtoRecordWithPayloadRoundTrip(false);
     }
 
     Y_UNIT_TEST(KernelLivenessMixedConfigFallback) {

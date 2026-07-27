@@ -12,6 +12,16 @@
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
+namespace {
+
+////////////////////////////////////////////////////////////////////////////////
+
+constexpr auto SlowRequestTime = TDuration::Seconds(1);
+
+////////////////////////////////////////////////////////////////////////////////
+
+}   // namespace
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TReadSingleLocationRequestExecutor::TReadSingleLocationRequestExecutor(
@@ -35,7 +45,6 @@ TReadSingleLocationRequestExecutor::TReadSingleLocationRequestExecutor(
     , CallContext(std::move(callContext))
     , Request(std::move(request))
     , TraceId(std::move(traceId))
-    , HedgingDelay(DirectBlockGroup->GetOracle()->GetReadHedgingDelay())
     , RequestTimeout(DirectBlockGroup->GetOracle()->GetReadRequestTimeout())
     , ReadHint(std::move(readHint))
 {
@@ -57,6 +66,7 @@ TReadSingleLocationRequestExecutor::~TReadSingleLocationRequestExecutor()
 
 void TReadSingleLocationRequestExecutor::Run()
 {
+    StartAt = TInstant::Now();
     ScheduleRequestTimeout();
 
     StartReading();
@@ -65,11 +75,8 @@ void TReadSingleLocationRequestExecutor::Run()
 TString TReadSingleLocationRequestExecutor::Print()
 {
     TStringBuilder result;
-    result << LogTitle.GetWithTime();
-    result << "c:" << ReadHint.HostMask.Print();
-    result << ",r:" << Requested.Print();
-    result << ",f:" << Failed.Print();
-    result << (Promise.IsReady() ? ",Replied" : ",NotReplied");
+    result << LogTitle.GetWithTime() << " " << ExtendedDebugState() << " "
+           << (Promise.IsReady() ? ",Replied" : ",NotReplied");
 
     return result;
 }
@@ -91,18 +98,14 @@ void TReadSingleLocationRequestExecutor::StartReading()
     auto host = candidates.First();
     if (!host) {
         if (Requested == Failed) {
-            Reply(MakeError(
-                E_REJECTED,
-                TStringBuilder() << "Can't read. r:" << Requested.Print()
-                                 << ",f:" << Failed.Print()));
+            Reply(MakeError(E_REJECTED, ExtendedDebugState()));
         } else {
             LOG_DEBUG(
                 *ActorSystem,
                 NKikimrServices::NBS_PARTITION,
-                "%s Read started from all available hosts. r:%s,f:%s",
+                "%s Read started from all available hosts. %s",
                 LogTitle.GetWithTime().c_str(),
-                Requested.Print().c_str(),
-                Failed.Print().c_str());
+                ExtendedDebugState().c_str());
         }
         return;
     }
@@ -110,21 +113,26 @@ void TReadSingleLocationRequestExecutor::StartReading()
 
     const bool fromDDisk = ReadHint.Lsn == 0;
 
+    const size_t tryCount = Requested.Count();
+    NActors::NLog::EPriority printPriority =
+        tryCount == 1 ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_TRACE;
+    if (!Failed.Empty()) {
+        printPriority = NActors::NLog::PRI_INFO;
+    }
+
     LOG_LOG(
         *ActorSystem,
-        Requested.Count() == 1 ? NActors::NLog::PRI_DEBUG
-                               : NActors::NLog::PRI_INFO,
+        printPriority,
         NKikimrServices::NBS_PARTITION,
-        "%s Will read from %s of %s",
+        "%s Will read from %s of %s, try %lu",
         LogTitle.GetWithTime().c_str(),
         fromDDisk ? "DDisk" : "PBuffer",
-        PrintHostIndex(*host).c_str());
+        PrintHostIndex(*host).c_str(),
+        tryCount);
 
-    auto onReadResponse = [self = shared_from_this(), host = *host]   //
-        (const NThreading::TFuture<TDBGReadBlocksResponse>& f)
-    {
-        self->OnReadResponse(host, f.GetValue());
-    };
+    ScheduleHedging(DirectBlockGroup->GetOracle()->GetReadHedgingDelay(
+        *host,
+        ReadHint.Lsn == 0 ? EDataLocation::DDisk : EDataLocation::PBuffer));
 
     auto future = fromDDisk ? DirectBlockGroup->ReadBlocksFromDDisk(
                                   VChunkConfig.GetVChunkIndex(),
@@ -139,9 +147,12 @@ void TReadSingleLocationRequestExecutor::StartReading()
                                   ReadHint.VChunkRange,
                                   Request->Sglist,
                                   TraceId);
-    future.Subscribe(std::move(onReadResponse));
-
-    ScheduleHedging();
+    future.Subscribe(
+        [self = shared_from_this(), host = *host]   //
+        (const NThreading::TFuture<TDBGReadBlocksResponse>& f)
+        {
+            self->OnReadResponse(host, f.GetValue());   //
+        });
 }
 
 void TReadSingleLocationRequestExecutor::OnReadResponse(
@@ -157,12 +168,11 @@ void TReadSingleLocationRequestExecutor::OnReadResponse(
     LOG_WARN(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "%s %s: %s, r:%s,f:%s",
+        "%s %s: %s, %s",
         LogTitle.GetWithTime().c_str(),
         PrintHostIndex(host).c_str(),
         FormatError(response.Error).c_str(),
-        Requested.Print().c_str(),
-        Failed.Print().c_str());
+        ExtendedDebugState().c_str());
 
     StartReading();
 }
@@ -173,19 +183,31 @@ void TReadSingleLocationRequestExecutor::Reply(NProto::TError error)
         return;
     }
 
+    const auto duration = TInstant::Now() - StartAt;
+    if (duration > SlowRequestTime) {
+        LOG_INFO(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "%s [?] Slow request %s",
+            LogTitle.GetWithTime().c_str(),
+            ExtendedDebugState().c_str());
+    }
+
     if (HasError(error)) {
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "%s Error: %s",
+            "%s [!] Reply error: %s %s",
             LogTitle.GetWithTime().c_str(),
-            FormatError(error).c_str());
+            FormatError(error).c_str(),
+            ExtendedDebugState().c_str());
     } else {
         LOG_DEBUG(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "%s OK",
-            LogTitle.GetWithTime().c_str());
+            "%s Reply OK %s",
+            LogTitle.GetWithTime().c_str(),
+            ExtendedDebugState().c_str());
     }
 
     ReadHint.Lock.Disarm();
@@ -194,21 +216,22 @@ void TReadSingleLocationRequestExecutor::Reply(NProto::TError error)
     Promise.TrySetValue(TResponse{.Error = std::move(error)});
 }
 
-void TReadSingleLocationRequestExecutor::ScheduleHedging()
+void TReadSingleLocationRequestExecutor::ScheduleHedging(TDuration hedgingDelay)
 {
-    if (!HedgingDelay) {
+    if (!hedgingDelay) {
         return;
     }
 
     LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "%s Schedule OnHedgingTimeout %s",
+        "%s Schedule OnHedgingTimeout %s %s",
         LogTitle.GetWithTime().c_str(),
-        FormatDuration(HedgingDelay).c_str());
+        ExtendedDebugState().c_str(),
+        FormatDuration(hedgingDelay).c_str());
 
     DirectBlockGroup->Schedule(
-        HedgingDelay,
+        hedgingDelay,
         [weakSelf = weak_from_this()]()
         {
             if (auto self = weakSelf.lock()) {
@@ -251,7 +274,7 @@ void TReadSingleLocationRequestExecutor::OnHedgingTimeout()
         NKikimrServices::NBS_PARTITION,
         "%s OnHedgingTimeout %s",
         LogTitle.GetWithTime().c_str(),
-        Print().c_str());
+        ExtendedDebugState().c_str());
 
     const bool allRetriesAreSpent = ReadHint.HostMask == Requested;
     if (!allRetriesAreSpent) {
@@ -268,10 +291,20 @@ void TReadSingleLocationRequestExecutor::OnRequestTimeout()
     LOG_WARN(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "%s OnRequestTimeout.",
-        LogTitle.GetWithTime().c_str());
+        "%s OnRequestTimeout. %s",
+        LogTitle.GetWithTime().c_str(),
+        ExtendedDebugState().c_str());
 
     Reply(MakeError(E_TIMEOUT, "Request timeout"));
+}
+
+TString TReadSingleLocationRequestExecutor::ExtendedDebugState() const
+{
+    TStringBuilder result;
+    result << "a:" << ReadHint.HostMask.Print();
+    result << ",r:" << Requested.Print();
+    result << ",f:" << Failed.Print();
+    return result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

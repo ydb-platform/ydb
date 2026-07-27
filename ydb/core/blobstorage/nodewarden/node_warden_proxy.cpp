@@ -126,8 +126,23 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
     // subscribe for group information changes through distconf cache
     Send(SelfId(), new TEvNodeWardenQueryCache(Sprintf("G%08" PRIx32, groupId), true));
 
-    group.ProxyId = as->Register(proxy.release(), TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
-    as->RegisterLocalService(MakeBlobStorageProxyID(groupId), group.ProxyId);
+    auto id = as->Register(proxy.release(), TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
+
+    // determine if we want to inject BS errors
+    if (Cfg->BlobStorageConfig.GetServiceSet().HasFailureInjectionConfig()) {
+        auto const& fiConfig = Cfg->BlobStorageConfig.GetServiceSet().GetFailureInjectionConfig();
+        if (fiConfig.GetFailureProbability() > 0) {
+            const auto gid = TGroupId::FromValue(groupId);
+            if (IsDynamicGroup(gid) || fiConfig.GetIncludeStaticGroups()) {
+                id = as->Register(
+                    CreateBlobStorageGroupFailureInjectingActor(id, gid, fiConfig),
+                    TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
+            }
+        }
+    }
+
+    group.ProxyId = id;
+    as->RegisterLocalService(MakeBlobStorageProxyID(groupId), id);
 }
 
 void TNodeWarden::StartVirtualGroupAgent(ui32 groupId) {

@@ -51,6 +51,20 @@ Y_UNIT_TEST_SUITE(THostRolesTest)
         UNIT_ASSERT(list.GetPrimary().Get(2));
         UNIT_ASSERT_VALUES_EQUAL(4u, list.GetActive().Count());
     }
+
+    Y_UNIT_TEST(ShouldAppendRole)
+    {
+        THostRoles roles(2);
+        roles.SetRole(0, EHostRole::Primary);
+        roles.SetRole(1, EHostRole::HandOff);
+
+        roles.AppendRole(EHostRole::None);
+
+        UNIT_ASSERT_VALUES_EQUAL(3u, roles.HostCount());
+        UNIT_ASSERT(roles.GetRole(0) == EHostRole::Primary);
+        UNIT_ASSERT(roles.GetRole(1) == EHostRole::HandOff);
+        UNIT_ASSERT(roles.GetRole(2) == EHostRole::None);
+    }
 }
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

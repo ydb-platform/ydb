@@ -22,7 +22,11 @@ bool CheckNonNullKeys(const TIntrusivePtr<IOperator> &input, const TVector<TInfo
 
 namespace NKikimr {
 namespace NKqp {
-    
+
+bool TInlineGenericInExistsSubplanRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Filter;
+}
+
 TIntrusivePtr<IOperator> TInlineGenericInExistsSubplanRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     if (input->Kind != EOperator::Filter) {
         return input;

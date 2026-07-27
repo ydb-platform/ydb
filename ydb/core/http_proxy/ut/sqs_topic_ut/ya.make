@@ -13,7 +13,9 @@ PEERDIR(
     ydb/core/base
     ydb/core/http_proxy
     ydb/core/http_proxy/ut/datastreams_fixture
+    ydb/core/metering
     ydb/core/persqueue/ut/common
+    ydb/core/quoter/public
     ydb/core/testlib/default
     ydb/public/sdk/cpp/src/library/kafka
     ydb/library/aclib

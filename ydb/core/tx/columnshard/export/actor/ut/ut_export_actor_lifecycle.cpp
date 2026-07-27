@@ -1,8 +1,11 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/tx/columnshard/bg_tasks/events/local.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/export/session/session.h>
+#include <ydb/core/tx/columnshard/export/session/task.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/operations/write_data.h>
@@ -21,6 +24,44 @@ namespace NKikimr {
 
 using namespace NColumnShard;
 using namespace NTxUT;
+
+Y_UNIT_TEST_SUITE(ExportSessionStateMachine) {
+    static std::shared_ptr<NOlap::NExport::TSession> MakeExportSession() {
+        NKikimrSchemeOp::TBackupTask backupTask;
+        backupTask.SetTableName("test_table");
+        backupTask.SetTableId(1);
+        backupTask.MutableS3Settings()->SetBucket("test");
+        backupTask.MutableS3Settings()->SetEndpoint("localhost:9000");
+
+        auto task =
+            std::make_shared<NOlap::NExport::TExportTask>(NOlap::NExport::TIdentifier(NColumnShard::TSchemeShardLocalPathId::FromRawValue(1)),
+                /*columns=*/std::vector<std::pair<TString, NScheme::TTypeInfo>>{}, backupTask, /*txId=*/std::optional<ui64>{ 42 });
+
+        return std::make_shared<NOlap::NExport::TSession>(task);
+    }
+
+    Y_UNIT_TEST(FinishGuardedAfterAbort) {
+        auto session = MakeExportSession();
+        session->Confirm();
+        UNIT_ASSERT(session->IsConfirmed());
+
+        session->Abort("Aborted by user");
+        UNIT_ASSERT(!session->IsStarted());
+        UNIT_ASSERT(session->IsReadyForRemoveOnFinished());
+
+        UNIT_ASSERT(!session->IsStarted());
+    }
+
+    Y_UNIT_TEST(DoubleAbortIsNoOp) {
+        auto session = MakeExportSession();
+        session->Confirm();
+        session->Abort("first abort");
+        UNIT_ASSERT(session->IsAborted());
+
+        session->Abort("second abort");
+        UNIT_ASSERT(session->IsAborted());
+    }
+}
 
 namespace {
 
@@ -197,6 +238,7 @@ Y_UNIT_TEST_SUITE(TExportActorLifecycle) {
         runtime.SimulateSleep(TDuration::Seconds(1));
 
         UNIT_ASSERT_VALUES_EQUAL(GetExportActorsAliveCounter(runtime), 0);
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
     }
 
     Y_UNIT_TEST(AliveCounterReturnsToZeroAfterExportCancel) {
@@ -240,6 +282,7 @@ Y_UNIT_TEST_SUITE(TExportActorLifecycle) {
         runtime.SimulateSleep(TDuration::Seconds(1));
 
         UNIT_ASSERT_VALUES_EQUAL(GetExportActorsAliveCounter(runtime), 0);
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
     }
 
     Y_UNIT_TEST(SaveSessionProgressSurvivesTabletReboot) {
@@ -277,6 +320,7 @@ Y_UNIT_TEST_SUITE(TExportActorLifecycle) {
         runtime.SimulateSleep(TDuration::Seconds(1));
 
         UNIT_ASSERT_VALUES_EQUAL(GetExportActorsAliveCounter(runtime), 0);
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
     }
 
     Y_UNIT_TEST(RepeatedCopyExportDropCycle) {
@@ -325,6 +369,7 @@ Y_UNIT_TEST_SUITE(TExportActorLifecycle) {
 
         UNIT_ASSERT_VALUES_EQUAL(GetExportActorsAliveCounter(runtime), 0);
         UNIT_ASSERT_C(csControllerGuard->GetFinishedExportsCount() >= kCycleCount, "expected at least " << kCycleCount << " finished exports");
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
     }
 
     Y_UNIT_TEST(CancelDuringSlowS3Operations) {
@@ -381,8 +426,157 @@ Y_UNIT_TEST_SUITE(TExportActorLifecycle) {
         runtime.SimulateSleep(TDuration::Seconds(1));
 
         UNIT_ASSERT_VALUES_EQUAL(GetExportActorsAliveCounter(runtime), 0);
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
 
         blockExportBatch.Stop().Unblock();
+    }
+
+    Y_UNIT_TEST(CancelDuringProgressSaveDoesNotCrash) {
+        Aws::S3::S3Client s3Client = NTestUtils::MakeS3Client();
+        NTestUtils::CreateBucket("test", s3Client);
+
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+
+        const ui64 tableId = 1;
+        const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)), NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) };
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        auto planStep = PrepareTablet(runtime, tableId, schema, 2);
+        ui64 txId = 111;
+
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        std::vector<ui64> writeIds;
+        ui64 writeId = 1;
+        UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({ 0, 5 }, schema), schema, true, &writeIds));
+        planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+        PlanCommit(runtime, sender, planStep, txId);
+
+        const NOlap::TSnapshot backupSnapshot(planStep.Val(), txId);
+        const auto txBody = MakeBackupTxBody(tableId, backupSnapshot);
+        const ui64 backupTxId = ++txId;
+
+        std::atomic<int> localTxCompletedCount{ 0 };
+        NActors::TBlockEvents<NOlap::NBackground::TEvLocalTransactionCompleted> blockLocalTxCompleted(runtime, [&](const auto& /*ev*/) {
+            return localTxCompletedCount.fetch_add(1) >= 1;
+        });
+
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
+            new TEvColumnShard::TEvProposeTransaction(NKikimrTxColumnShard::TX_KIND_BACKUP, sender, backupTxId, txBody.SerializeAsString()));
+
+        TestWaitCondition(runtime, "blocked_local_tx_cursor_finished", [&]() {
+            return !blockLocalTxCompleted.empty();
+        }, TDuration::Seconds(30));
+
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvDataShard::TEvCancelBackup(backupTxId, tableId));
+
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+
+        UNIT_ASSERT_GE(blockLocalTxCompleted.size(), 2u);
+
+        blockLocalTxCompleted.Unblock(1);
+        runtime.SimulateSleep(TDuration::MilliSeconds(100));
+
+        blockLocalTxCompleted.Stop().Unblock();
+
+        runtime.SimulateSleep(TDuration::Seconds(2));
+
+        UNIT_ASSERT_VALUES_EQUAL(GetExportActorsAliveCounter(runtime), 0);
+    }
+
+    Y_UNIT_TEST(PlanAfterDuplicateProposeDoesNotCrash) {
+        Aws::S3::S3Client s3Client = NTestUtils::MakeS3Client();
+        NTestUtils::CreateBucket("test", s3Client);
+
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+
+        const ui64 tableId = 1;
+        const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)), NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) };
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        auto planStep = PrepareTablet(runtime, tableId, schema, 2);
+        ui64 txId = 111;
+
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        RunBackupExport(runtime, sender, csControllerGuard, txId, planStep, tableId, schema);
+        TestWaitCondition(runtime, "export", [&]() {
+            return NTestUtils::GetObjectKeys("test", s3Client).size() == 3;
+        });
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(GetExportActorsAliveCounter(runtime), 0);
+
+        const ui64 backupTxId = txId;
+
+        std::vector<ui64> writeIds;
+        ui64 writeId = 100;
+        UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({ 0, 5 }, schema), schema, true, &writeIds));
+        auto commitPlanStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+        PlanCommit(runtime, sender, commitPlanStep, txId);
+
+        const NOlap::TSnapshot backupSnapshot(commitPlanStep.Val(), txId);
+        const auto txBody = MakeBackupTxBody(tableId, backupSnapshot);
+
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
+            new TEvColumnShard::TEvProposeTransaction(NKikimrTxColumnShard::TX_KIND_BACKUP, sender, backupTxId, txBody.SerializeAsString()));
+        auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
+        UNIT_ASSERT_EQUAL(ev->Get()->Record.GetTxId(), backupTxId);
+        const TPlanStep dupPlanStep{ ev->Get()->Record.GetMinStep() };
+
+        PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(dupPlanStep, backupTxId), false);
+
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(GetExportActorsAliveCounter(runtime), 0);
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
+    }
+
+    Y_UNIT_TEST(CancelAfterDuplicateProposeDoesNotCrash) {
+        Aws::S3::S3Client s3Client = NTestUtils::MakeS3Client();
+        NTestUtils::CreateBucket("test", s3Client);
+
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+
+        const ui64 tableId = 1;
+        const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)), NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) };
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
+        auto planStep = PrepareTablet(runtime, tableId, schema, 2);
+        ui64 txId = 111;
+
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        RunBackupExport(runtime, sender, csControllerGuard, txId, planStep, tableId, schema);
+        TestWaitCondition(runtime, "export", [&]() {
+            return NTestUtils::GetObjectKeys("test", s3Client).size() == 3;
+        });
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(GetExportActorsAliveCounter(runtime), 0);
+
+        const ui64 backupTxId = txId;
+
+        std::vector<ui64> writeIds;
+        ui64 writeId = 100;
+        UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({ 0, 5 }, schema), schema, true, &writeIds));
+        auto commitPlanStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+        PlanCommit(runtime, sender, commitPlanStep, txId);
+
+        const NOlap::TSnapshot backupSnapshot(commitPlanStep.Val(), txId);
+        const auto txBody = MakeBackupTxBody(tableId, backupSnapshot);
+
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
+            new TEvColumnShard::TEvProposeTransaction(NKikimrTxColumnShard::TX_KIND_BACKUP, sender, backupTxId, txBody.SerializeAsString()));
+        auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
+        UNIT_ASSERT_EQUAL(ev->Get()->Record.GetTxId(), backupTxId);
+
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvDataShard::TEvCancelBackup(backupTxId, tableId));
+
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(GetExportActorsAliveCounter(runtime), 0);
     }
 }
 

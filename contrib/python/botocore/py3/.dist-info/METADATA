@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: botocore
-Version: 1.35.99
+Version: 1.36.26
 Summary: Low-level, data-driven core of boto 3.
 Home-page: https://github.com/boto/botocore
 Author: Amazon Web Services
@@ -27,7 +27,7 @@ Requires-Dist: python-dateutil (<3.0.0,>=2.1)
 Requires-Dist: urllib3 (<1.27,>=1.25.4) ; python_version < "3.10"
 Requires-Dist: urllib3 (!=2.2.0,<3,>=1.25.4) ; python_version >= "3.10"
 Provides-Extra: crt
-Requires-Dist: awscrt (==0.22.0) ; extra == 'crt'
+Requires-Dist: awscrt (==0.23.8) ; extra == 'crt'
 
 botocore
 ========
@@ -68,11 +68,11 @@ Assuming that you have Python and ``virtualenv`` installed, set up your environm
 
     $ git clone https://github.com/boto/botocore.git
     $ cd botocore
-    $ virtualenv venv
+    $ python -m venv .venv
     ...
-    $ . venv/bin/activate
-    $ pip install -r requirements.txt
-    $ pip install -e .
+    $ source .venv/bin/activate
+    $ python -m pip install -r requirements.txt
+    $ python -m pip install -e .
 
 .. code-block:: sh
 

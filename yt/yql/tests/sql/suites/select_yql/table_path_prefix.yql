@@ -5,5 +5,16 @@ USE plato;
 PRAGMA YqlSelect = 'force';
 PRAGMA TablePathPrefix = '//';
 
+INSERT INTO @Input (subkey) VALUES ('192837');
+
+COMMIT;
+
+$x = 'In' || 'put';
+
 SELECT * FROM Input ORDER BY subkey;
 SELECT * FROM `Input` ORDER BY subkey;
+SELECT * FROM $x ORDER BY subkey;
+
+SELECT * FROM @Input ORDER BY subkey;
+SELECT * FROM @`Input` ORDER BY subkey;
+SELECT * FROM @$x ORDER BY subkey;

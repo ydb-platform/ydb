@@ -1,9 +1,21 @@
 #include "columnshard_splitter.h"
 
-#include <ydb/core/tx/columnshard/splitter/settings.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/protos/config.pb.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
 
 namespace NKikimr::NEvWrite {
+
+namespace {
+
+ui64 GetBulkUpsertShardWriteChunkLimit() {
+    if (AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert()) {
+        return AppDataVerified().ColumnShardConfig.GetBulkUpsertShardWriteChunkLimitBytes();
+    }
+    return NColumnShard::TLimits::GetMaxBlobSize() * 0.875;
+}
+
+}   // namespace
 
 NKikimr::NEvWrite::IShardsSplitter::TYdbConclusionStatus TColumnShardShardsSplitter::DoSplitData(
     const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry, const IEvWriteDataAccessor& data) {
@@ -61,9 +73,7 @@ NKikimr::NEvWrite::IShardsSplitter::TYdbConclusionStatus TColumnShardShardsSplit
     const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<NSharding::IShardingBase>& sharding) {
     Y_ABORT_UNLESS(batch);
 
-    auto split = sharding->SplitByShards(batch, AppDataVerified().FeatureFlags.GetEnableWritePortionsOnInsert()
-                                                    ? NOlap::NSplitter::TSplitSettings().GetExpectedPortionSize()
-                                                    : NColumnShard::TLimits::GetMaxBlobSize() * 0.875);
+    auto split = sharding->SplitByShards(batch, GetBulkUpsertShardWriteChunkLimit());
     if (split.IsFail()) {
         return TYdbConclusionStatus::Fail(Ydb::StatusIds::SCHEME_ERROR, split.GetErrorMessage());
     }

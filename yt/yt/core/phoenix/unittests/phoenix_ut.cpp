@@ -13,6 +13,8 @@
 
 #include <library/cpp/testing/gtest_extensions/assertions.h>
 
+#include <library/cpp/yt/string/stream.h>
+
 #include <util/stream/mem.h>
 
 namespace NYT::NPhoenix {
@@ -29,9 +31,8 @@ using NYT::Load;
 template <class T>
 std::string Serialize(const T& value, int version = 0)
 {
-    // TODO(babenko): migrate to std::string
-    TString buffer;
-    TStringOutput output(buffer);
+    std::string buffer;
+    TStdStringOutput output(buffer);
     TSaveContext context(&output, version);
     Save(context, value);
     context.Finish();
@@ -41,9 +42,8 @@ std::string Serialize(const T& value, int version = 0)
 template <class F>
 std::string MakeBuffer(F&& func)
 {
-    // TODO(babenko): migrate to std::string
-    TString buffer;
-    TStringOutput output(buffer);
+    std::string buffer;
+    TStdStringOutput output(buffer);
     TSaveContext context(&output);
     func(context);
     context.Finish();

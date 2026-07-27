@@ -443,8 +443,7 @@ void ToProto(
     ToProto(protoReplicationCard->mutable_replication_card_collocation_id(), replicationCard.ReplicationCardCollocationId);
 
     for (auto it : GetSortedIterators(replicationCard.SecondaryIndices)) {
-        auto* protoIndexInfo = protoReplicationCard->add_secondary_indices();
-        ToProto(protoIndexInfo, it->second);
+        ToProto(protoReplicationCard->add_secondary_indices(), it->second);
     }
 }
 

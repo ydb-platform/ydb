@@ -54,4 +54,26 @@ public:
     virtual ~IStage2ColumnStatisticEval() = default;
 };
 
+// Base class for classes that manage evaluation of a statistic computed over
+// a tuple of columns (a declared multi-column statistic) in TAnalyzeActor.
+class IMultiColumnStatisticEval {
+public:
+    using TPtr = std::unique_ptr<IMultiColumnStatisticEval>;
+
+    static TVector<EStatType> SupportedMultiColumnTypes();
+    static TPtr MaybeCreate(
+        EStatType,
+        std::vector<TString> columnNames,
+        std::vector<ui32> columnIds,
+        ui64 rowCount);
+
+    virtual EStatType GetType() const = 0;
+    virtual const std::vector<ui32>& GetColumnIds() const = 0;
+    virtual size_t EstimateSize() const = 0;
+    virtual void AddAggregations(TSelectBuilder&) = 0;
+    virtual void Merge(const TVector<NYdb::TValue>& aggColumns) = 0;
+    virtual TString ExtractData(const TVector<NYdb::TValue>& aggColumns) = 0;
+    virtual ~IMultiColumnStatisticEval() = default;
+};
+
 }

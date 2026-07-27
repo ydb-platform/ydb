@@ -56,7 +56,7 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
 
         TString chunkerRes;
         TCoroutineChunkSerializer chunker;
-        chunker.SetSerializingEvent(&msg);
+        chunker.SetSerializingEvent(&msg, true);
         while (!chunker.IsComplete()) {
             char buffer[4096];
             auto range = chunker.FeedBuf(buffer, sizeof(buffer));
@@ -79,6 +79,32 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
             for (size_t size2 = 0; size2 < 10000; size2 += step2) {
                 TestSerializeDeserialize<TEvent, TEvent>(size1, size2);
             }
+        }
+    }
+
+    Y_UNIT_TEST(CoroutineSerializerChunkSizesAroundSlopBoundary) {
+        TEvMessageWithPayload msg;
+        msg.Record.SetMeta("hello, world!");
+        msg.Record.AddPayloadId(msg.AddPayload(MakeStringRope(MakeString(256))));
+        msg.Record.AddSomeData(MakeString(128));
+
+        auto serializer = MakeHolder<TAllocChunkSerializer>();
+        UNIT_ASSERT(msg.SerializeToArcadiaStream(serializer.Get()));
+        const TString expected = serializer->Release(msg.CreateSerializationInfo(false))->GetString();
+        UNIT_ASSERT_VALUES_EQUAL(expected.size(), msg.CalculateSerializedSize());
+
+        for (size_t chunkSize = 1; chunkSize <= 32; ++chunkSize) {
+            TString actual;
+            TCoroutineChunkSerializer chunker;
+            chunker.SetSerializingEvent(&msg, true);
+            while (!chunker.IsComplete()) {
+                TString buffer(chunkSize, '\0');
+                for (const auto& [data, size] : chunker.FeedBuf(buffer.begin(), buffer.size())) {
+                    actual.append(data, size);
+                }
+            }
+            UNIT_ASSERT(chunker.IsSuccessfull());
+            UNIT_ASSERT_VALUES_EQUAL_C(actual, expected, "chunkSize# " << chunkSize);
         }
     }
 

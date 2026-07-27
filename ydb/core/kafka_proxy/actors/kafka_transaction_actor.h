@@ -48,8 +48,15 @@ namespace NKafka {
                 TxnTimeoutMs(txnTimeoutMs),
                 CreatedAt(TAppData::TimeProvider->Now()) {};
 
-            TStringBuilder LogPrefix() const {
-                return TStringBuilder() << "KafkaTransactionActor{TransactionalId=" << TransactionalId << "; ProducerId=" << ProducerInstanceId.Id << "; ProducerEpoch=" << ProducerInstanceId.Epoch << "}: ";
+
+            NStructuredLog::TStructuredMessage LogPrefix() const {
+                return YDB_LOG_CREATE_MESSAGE(
+                    {"actorClassName", "KafkaTransactionActor"},
+                    {"selfId", SelfId()},
+                    {"transactionalId", TransactionalId},
+                    {"producerId", ProducerInstanceId.Id},
+                    {"producerEpoch", ProducerInstanceId.Epoch},
+                    {"databasePath", DatabasePath});
             }
 
         private:
@@ -65,7 +72,9 @@ namespace NKafka {
                         HFunc(TEvents::TEvPoison, Handle);
                     }
                 } catch (const yexception& y) {
-                    KAFKA_LOG_CRIT("Critical error happened. Reason: " << y.what());
+                    YDB_LOG_CRIT_COMP(NKikimrServices::KAFKA_PROXY, "Critical error happened",
+                        {LogPrefix()},
+                        {"reason", y.what()});
                     if (EndTxnRequestPtr) {
                         SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::UNKNOWN_SERVER_ERROR, y.what());
                     }

@@ -42,7 +42,10 @@ namespace NKikimr::NTestShard {
                 }
                 return TString(sb);
             };
-            Y_VERIFY_S(info.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED
+            // every pending transition from CONFIRMED state immediately sets ConfirmedKeyIndex -> Max<size_t>()
+            const bool shouldBeConfirmed = info.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED
+                && info.PendingState == ::NTestShard::TStateServer::CONFIRMED;
+            Y_VERIFY_S(shouldBeConfirmed
                 ? info.ConfirmedKeyIndex < ConfirmedKeys.size() && ConfirmedKeys[info.ConfirmedKeyIndex] == key
                 : info.ConfirmedKeyIndex == Max<size_t>(), makeError());
             info.ConfirmedKeyIndex = Max<size_t>();

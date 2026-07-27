@@ -469,8 +469,7 @@ private:
             TNetworkAddress netAddress;
             if (Config_->UnixDomainSocketPath) {
                 // NB(gritukan): Unix domain socket path cannot be longer than 108 symbols, so let's try to shorten it.
-                // TODO(babenko): switch to std::string
-                netAddress = TNetworkAddress::CreateUnixDomainSocketAddress(NFS::GetShortestPath(std::string(*Config_->UnixDomainSocketPath)));
+                netAddress = TNetworkAddress::CreateUnixDomainSocketAddress(NFS::GetShortestPath(*Config_->UnixDomainSocketPath));
             } else {
                 netAddress = GetLocalBusAddress(*Config_->Port);
             }

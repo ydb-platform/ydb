@@ -196,10 +196,14 @@ Y_UNIT_TEST_SUITE(Backup) {
         AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 0);
         planStep = ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, txBody.SerializeAsString(), ++txId);
         AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 1);
+        SubscribeTxCompletion(runtime, sender, txId);
         PlanTx(runtime, sender, NOlap::TSnapshot(planStep, txId));
+        WaitNotifyTxCompletions(runtime, sender, { txId });
         TestWaitCondition(runtime, "export", [&]() {
             return NTestUtils::GetObjectKeys("test", s3Client).size() == 3;
         });
+
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
     }
 
     Y_UNIT_TEST(ParallelBackupWithPerTableTracking) {
@@ -376,6 +380,8 @@ Y_UNIT_TEST_SUITE(Backup) {
             // Verify that the TxIds are different (per-table tracking)
             UNIT_ASSERT_UNEQUAL(backupTxId1, backupTxId2);
         }
+
+        VerifyNoBackupOrRestoreArtifacts(runtime, csControllerGuard.operator->());
     }
 }
 

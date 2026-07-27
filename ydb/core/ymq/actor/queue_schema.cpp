@@ -498,6 +498,7 @@ void TCreateQueueSchemaActorV2::RegisterMakeTopicActor(const TString& workingDir
     if (ValidatedAttributes_.ReceiveMessageWaitTimeSeconds) {
         params.DefaultReceiveMessageWaitTimeMs = SecondsToMs(*ValidatedAttributes_.ReceiveMessageWaitTimeSeconds);
     }
+    params.ReadRequestAttemptIdPeriodMs = Cfg().GetGroupsReadAttemptIdsPeriodMs();
     if (ValidatedAttributes_.RedrivePolicy.MaxReceiveCount) {
         params.MaxReceiveCount = *ValidatedAttributes_.RedrivePolicy.MaxReceiveCount;
     }
@@ -506,6 +507,7 @@ void TCreateQueueSchemaActorV2::RegisterMakeTopicActor(const TString& workingDir
     }
     params.AccountName = AccountName_;
     params.FolderId = FolderId_;
+    params.QueueName = QueuePath_.QueueName;
 
     auto request = BuildCreateTopicTx(workingDir, dirName, IsFifo_, params);
     Register(NPQ::NSchema::CreateCreateTopicActor(SelfId(), {

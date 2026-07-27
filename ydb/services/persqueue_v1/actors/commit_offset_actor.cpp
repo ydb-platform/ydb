@@ -9,6 +9,8 @@
 #include <ydb/public/api/protos/ydb_persqueue_v1.pb.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_READ_PROXY
+
 namespace NKikimr::NGRpcProxy::V1 {
 
 using namespace PersQueue::V1;
@@ -114,7 +116,8 @@ void TCommitOffsetActor::Die(const TActorContext& ctx) {
 }
 
 void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "CommitOffset auth ok, got " << ev->Get()->TopicAndTablets.size() << " topics");
+    YDB_LOG_DEBUG_CTX(ctx, "CommitOffset auth ok, got topics",
+        {"topicAndTabletsSize", ev->Get()->TopicAndTablets.size()});
     TopicAndTablets = std::move(ev->Get()->TopicAndTablets);
     if (TopicAndTablets.empty()) {
         AnswerError("empty list of topics", PersQueue::ErrorCode::UNKNOWN_TOPIC, ctx);
@@ -188,7 +191,8 @@ void TCommitOffsetActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev
 void TCommitOffsetActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
     auto& record = ev->Get()->Record;
     if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "strict CommitOffset failed. Kqp error: " << ev->Get()->Record);
+        YDB_LOG_DEBUG_CTX(ctx, "Strict CommitOffset failed. Kqp",
+            {"error", ev->Get()->Record});
 
         Ydb::Topic::CommitOffsetResult result;
         Request().SendResult(result, record.GetYdbStatus());
@@ -217,7 +221,7 @@ void TCommitOffsetActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActo
     const auto& partitionResult = ev->Get()->Record.GetPartitionResponse();
     AFL_ENSURE(!partitionResult.HasCmdReadResult());
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "CommitOffset, commit done.");
+    YDB_LOG_DEBUG_CTX(ctx, "CommitOffset, commit done");
 
     Ydb::Topic::CommitOffsetResult result;
     Request().SendResult(result, Ydb::StatusIds::SUCCESS);
@@ -252,9 +256,9 @@ void TCommitOffsetActor::SendCommit(const TTopicInitInfo& topic, const Ydb::Topi
         commit->SetSessionId(commitRequest->read_session_id());
     }
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "strict CommitOffset, partition " << commitRequest->partition_id()
-                        << " committing to position " << commitRequest->offset() /*<< " prev " << CommittedOffset
-                        << " end " << EndOffset << " by cookie " << readId*/);
+    YDB_LOG_DEBUG_CTX(ctx, "Strict CommitOffset, partition committing to position prev end by cookie",
+        {"partitionId", commitRequest->partition_id()},
+        {"offset", commitRequest->offset()});
 
     TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
     req->Record.Swap(&request);

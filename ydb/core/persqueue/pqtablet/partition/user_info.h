@@ -173,7 +173,7 @@ public:
     TVector<NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperation<ui64>>> AvgReadBytes;
 
     NSlidingWindow::TSlidingWindow<NSlidingWindow::TMaxOperation<ui64>> WriteLagMs;
-    ui64 ConsumerBatchProcessorCPUUsage = 0;
+    ui64 ConsumerBatchRecompressionCpuElapsedMicrosec = 0;
 
     std::shared_ptr<TPercentileCounter> ReadTimeLag;
     bool NoConsumer = false;
@@ -196,7 +196,8 @@ public:
         const TString& DbId,
         const TString& DbPath,
         const bool isServerless,
-        const TString& FolderId);
+        const TString& FolderId,
+        bool isSupportive);
 
     void Init(TActorId tabletActor, TActorId partitionActor, const TActorContext& ctx);
 
@@ -294,6 +295,7 @@ private:
     TString DbPath;
     bool IsServerless;
     TString FolderId;
+    bool IsSupportive;
     mutable ui64 CurReadRuleGeneration;
 
     TInstant LastReadMetricsUpdateTime;

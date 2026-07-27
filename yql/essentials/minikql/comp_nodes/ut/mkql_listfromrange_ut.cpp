@@ -19,7 +19,7 @@ TRuntimeNode MakeList(TSetup<UseLLVM>& setup, T Start, T End, i64 Step, const au
     const auto step = pb.NewDataLiteral<NUdf::EDataSlot::Interval>(
         NUdf::TStringRef((const char*)&Step, sizeof(Step)));
 
-    return pb.Collect(pb.ToFlow(pb.ListFromRange(start, end, step)));
+    return pb.Collect(pb.ToFlow(pb.ListFromRange(start, end, step), {}));
 }
 } // namespace
 
@@ -385,12 +385,75 @@ Y_UNIT_TEST_LLVM(TestResverseUnsignedShorts) {
     const auto to = NTest::ConvertValueToLiteralNode(pb, ui16(59990U));
     const auto step = NTest::ConvertValueToLiteralNode(pb, i16(-2));
 
-    const auto dates = pb.Collect(pb.ToFlow(pb.ListFromRange(from, to, step)));
+    const auto dates = pb.Collect(pb.ToFlow(pb.ListFromRange(from, to, step), {}));
 
     const auto graph = setup.BuildGraph(dates);
     const auto list = graph->GetValue();
     AssertUnboxedValueElementEqual(list, TVector<ui16>{60000U, 59998U, 59996U, 59994U, 59992U});
 }
+
+namespace {
+template <bool UseLLVM>
+void TestFloatStep(TSetup<UseLLVM>& setup, float startVal, float endVal, float stepVal, ui64 expectedLength) {
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    const auto start = NTest::ConvertValueToLiteralNode(pb, startVal);
+    const auto end = NTest::ConvertValueToLiteralNode(pb, endVal);
+    const auto step = NTest::ConvertValueToLiteralNode(pb, stepVal);
+
+    const auto range = pb.ListFromRange(start, end, step);
+
+    const auto graph = setup.BuildGraph(range);
+    const auto list = graph->GetValue();
+    UNIT_ASSERT_VALUES_EQUAL(list.GetListLength(), expectedLength);
+
+    TVector<float> vector(expectedLength);
+    for (size_t i = 0; i < expectedLength; ++i) {
+        vector[i] = startVal + i * stepVal;
+    }
+    AssertUnboxedValueElementEqual(list, vector);
+}
+} // namespace
+
+Y_UNIT_TEST_LLVM(TestFloatSmallStepNoInfiniteLoop) {
+    TSetup<LLVM> setup;
+    TestFloatStep(setup, 1.0f, 2.0f, 1e-6f, 1000000);
+}
+
+Y_UNIT_TEST_LLVM(TestFloatSmallNegativeStepNoInfiniteLoop) {
+    TSetup<LLVM> setup;
+    TestFloatStep(setup, 2.0f, 1.0f, -1e-6f, 1000000);
+}
+
+Y_UNIT_TEST_LLVM(TestFloatNegativeStep) {
+    TSetup<LLVM> setup;
+    TestFloatStep(setup, 1.0f, 2.0f, -1e-8f, 0);
+}
+
+Y_UNIT_TEST_LLVM(TestFloatWithInfinityEnd) {
+    TSetup<LLVM> setup;
+    TestFloatStep(setup, 0.0f, INFINITY, 1.0f, 0);
+}
+Y_UNIT_TEST_LLVM(TestFloatWithNegativeInfinityStart) {
+    TSetup<LLVM> setup;
+    TestFloatStep(setup, -INFINITY, 2.0f, 1.0f, 0);
+}
+
+Y_UNIT_TEST_LLVM(TestFloatWithInfinityStep) {
+    TSetup<LLVM> setup;
+    TestFloatStep(setup, 1.0f, 2.0f, INFINITY, 0);
+}
+
+Y_UNIT_TEST_LLVM(TestFloatWithExtraLargeStep) {
+    TSetup<LLVM> setup;
+    TestFloatStep(setup, -0.0000000000000000000000000000000116082984f, 0.0000000000000000096245773f, 6925700880000000000000000000000.0f, 1);
+}
+
+Y_UNIT_TEST_LLVM(TestFloatWithLargeNegativeStep) {
+    TSetup<LLVM> setup;
+    TestFloatStep(setup, -0.000000000346562223f, -277088.812f, -23368489200000.0f, 1);
+}
+
 } // Y_UNIT_TEST_SUITE(TMiniKQLListFromRangeTest)
 } // namespace NMiniKQL
 } // namespace NKikimr

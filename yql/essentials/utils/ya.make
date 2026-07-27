@@ -34,6 +34,8 @@ SRCS(
     runnable.h
     sort.cpp
     sort.h
+    strong_alias.cpp
+    strong_alias.h
     swap_bytes.cpp
     swap_bytes.h
     time_provider.h

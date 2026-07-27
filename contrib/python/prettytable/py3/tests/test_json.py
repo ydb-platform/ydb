@@ -6,9 +6,7 @@ from prettytable import PrettyTable, from_json
 class TestJSONOutput:
     def test_json_output(self, helper_table: PrettyTable) -> None:
         result = helper_table.get_json_string()
-        assert (
-            result.strip()
-            == """
+        assert result.strip() == """
 [
     [
         "",
@@ -35,12 +33,9 @@ class TestJSONOutput:
         "Field 3": "value9"
     }
 ]""".strip()
-        )
         options = {"fields": ["Field 1", "Field 3"]}
         result = helper_table.get_json_string(**options)
-        assert (
-            result.strip()
-            == """
+        assert result.strip() == """
 [
     [
         "Field 1",
@@ -59,7 +54,6 @@ class TestJSONOutput:
         "Field 3": "value9"
     }
 ]""".strip()
-        )
 
     def test_json_output_options(self, helper_table: PrettyTable) -> None:
         result = helper_table.get_json_string(

@@ -17,4 +17,22 @@ TTaskResourceEstimation BuildInitialTaskResources(const TDqTask& task) {
     return ret;
 }
 
+void EstimateTaskResources(TTaskResourceEstimation& ret, const TTaskResourceEstimationParams& params, ui32 tasksCount) {
+    ui64 totalChannels = std::max(tasksCount, (ui32)1) * std::max(ret.ChannelBuffersCount, (ui32)1);
+    ui64 optimalChannelBufferSizeEstimation = totalChannels * params.ChannelBufferSize;
+
+    optimalChannelBufferSizeEstimation = std::min(optimalChannelBufferSizeEstimation, params.MaxTotalChannelBuffersSize);
+
+    ret.ChannelBufferMemoryLimit = std::max(params.MinChannelBufferSize, optimalChannelBufferSizeEstimation / totalChannels);
+
+    if (ret.HeavyProgram) {
+        ret.MkqlProgramMemoryLimit = params.MkqlHeavyProgramMemoryLimit / std::max(tasksCount, (ui32)1);
+    } else {
+        ret.MkqlProgramMemoryLimit = params.MkqlLightProgramMemoryLimit / std::max(tasksCount, (ui32)1);
+    }
+
+    ret.TotalMemoryLimit = ret.ChannelBuffersCount * ret.ChannelBufferMemoryLimit
+        + ret.MkqlProgramMemoryLimit;
+}
+
 } // namespace NKikimr::NKqp

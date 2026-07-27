@@ -25,7 +25,7 @@ def discover_cases():
 
 
 TSpec = collections.namedtuple(
-    'TSpec', ['program', 'canonize_ast', 'cfg', 'xfail', 'langver', 'files', 'diff_tool', 'scan_udfs', 'extra_env', 'secure_params']
+    'TSpec', ['program', 'canonize_ast', 'cfg', 'xfail', 'langver', 'files', 'diff_tool', 'scan_udfs', 'extra_env', 'secure_params', 'patch_cfg_file']
 )
 
 
@@ -71,6 +71,8 @@ def make_test(case):
             scan_udfs = True
         elif item[0] == 'disable_scan_udfs':
             scan_udfs = False
+    patch_file_name = yql_utils.get_gateway_cfg_patch(cfg)
+    patch_file_path = os.path.join(DATA_PATH, patch_file_name) if patch_file_name else None
 
     # 4. Build the environment for the YQL runner process.
     extra_env = dict(os.environ)
@@ -96,10 +98,11 @@ def make_test(case):
         scan_udfs=scan_udfs,
         extra_env=extra_env,
         secure_params=secure_params,
+        patch_cfg_file=patch_file_path,
     )
 
 
-def facade_runner(prov, cfg_dir, binary=None, secure_params={}):
+def facade_runner(prov, cfg_dir, binary=None, secure_params={}, patch_cfg_file=None):
     """Returns a factory that creates YQLRun instances with the given fixed parameters."""
 
     def make(langver, gateway_config=None, extra_args=[]):
@@ -120,7 +123,8 @@ def facade_runner(prov, cfg_dir, binary=None, secure_params={}):
             gateway_config=gateway_config,
             extra_args=extra_args,
             langver=langver,
-            secure_params=secure_params
+            secure_params=secure_params,
+            patch_cfg_file=patch_cfg_file
         )
 
     return make

@@ -16,7 +16,6 @@ class FunctionalTestBase:
                 "enable_resource_pools",
                 "enable_resource_pools_counters",
                 "enable_table_pg_types",
-                "enable_pg_syntax",
                 "enable_forced_compactions"
             ],
             use_in_memory_pdisks=True,

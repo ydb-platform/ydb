@@ -191,7 +191,7 @@ pqconfig:
 pqcluster_discovery_config:
   enabled: false
 table_service_config:
-  sql_version: {ydb_yql_syntax_version}
+  sql_version: 1
   resource_manager:
     mkql_light_program_memory_limit: 65536
     mkql_heavy_program_memory_limit: 1048576

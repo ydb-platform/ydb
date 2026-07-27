@@ -163,6 +163,14 @@ i64 TAsyncSemaphore::GetFree() const
     return FreeSlots_;
 }
 
+int TAsyncSemaphore::GetWaiterCount() const
+{
+    auto guard = ReaderGuard(SpinLock_);
+
+    return std::ssize(Waiters_);
+}
+
+
 TFuture<void> TAsyncSemaphore::GetReadyEvent()
 {
     auto guard = WriterGuard(SpinLock_);

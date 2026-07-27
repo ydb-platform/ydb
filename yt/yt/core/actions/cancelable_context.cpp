@@ -46,8 +46,11 @@ public:
                     return;
                 }
 
-                TCurrentInvokerGuard guard(this);
-                callback();
+                {
+                    TCurrentInvokerGuard currentInvokerGuard(this);
+                    TCurrentCancelableContextGuard currentCancelableContextGuard(Context_);
+                    callback();
+                }
             }));
     }
 
@@ -117,7 +120,7 @@ void TCancelableContext::Cancel(const TError& error)
         PropagateToFutures_.swap(propagateToFutures);
     }
 
-    Handlers_.FireAndClear(error);
+    Handlers_.Fire(error);
 
     for (const auto& weakContext : propagateToContexts) {
         if (auto context = weakContext.Lock()) {
@@ -137,18 +140,12 @@ IInvokerPtr TCancelableContext::CreateInvoker(IInvokerPtr underlyingInvoker)
 
 void TCancelableContext::SubscribeCanceled(const TCallback<void(const TError&)>& callback)
 {
-    auto guard = Guard(SpinLock_);
-    if (Canceled_) {
-        guard.Release();
-        callback(CancelationError_);
-        return;
-    }
     Handlers_.Subscribe(callback);
 }
 
-void TCancelableContext::UnsubscribeCanceled(const TCallback<void(const TError&)>& /*callback*/)
+void TCancelableContext::UnsubscribeCanceled(const TCallback<void(const TError&)>& callback)
 {
-    YT_ABORT();
+    Handlers_.Unsubscribe(callback);
 }
 
 void TCancelableContext::PropagateTo(const TCancelableContextPtr& context)

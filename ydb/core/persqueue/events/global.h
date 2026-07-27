@@ -131,9 +131,12 @@ namespace NKikimr::TEvPersQueue {
 
     struct TEvGetPartitionsLocation: public TEventPB<TEvGetPartitionsLocation,
             NKikimrPQ::TGetPartitionsLocation, EvGetPartitionsLocation> {
-            TEvGetPartitionsLocation(const TVector<ui64>& partitionIds = {}) {
+            TEvGetPartitionsLocation(const TVector<ui64>& partitionIds = {}, TDuration timeout = {}) {
                 for (const auto& p : partitionIds) {
                     Record.AddPartitions(p);
+                }
+                if (timeout) {
+                    Record.SetTimeoutMs(timeout.MilliSeconds());
                 }
             }
     };

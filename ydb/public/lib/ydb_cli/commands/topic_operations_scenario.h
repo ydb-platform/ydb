@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/public/lib/ydb_cli/common/command.h>
+#include <ydb/public/lib/ydb_cli/common/scoped_driver.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/fwd.h>
@@ -141,7 +142,7 @@ protected:
     bool AnyIncomingMessages() const;
     bool AnyOutgoingMessages() const;
 
-    std::unique_ptr<TDriver> Driver;
+    std::unique_ptr<TScopedDriver> Driver;
     std::shared_ptr<TLog> Log;
     std::shared_ptr<std::atomic_bool> ErrorFlag;
     std::shared_ptr<TTopicWorkloadStatsCollector> StatsCollector;

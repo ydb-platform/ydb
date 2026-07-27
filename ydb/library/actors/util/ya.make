@@ -4,6 +4,8 @@ SRCS(
     affinity.cpp
     affinity.h
     cpu_load_log.h
+    cpu_topology.cpp
+    cpu_topology.h
     cpumask.h
     datetime.h
     defs.h
@@ -42,7 +44,7 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/containers/absl_flat_hash
+    library/cpp/containers/absl
     library/cpp/deprecated/atomic
 )
 

@@ -191,13 +191,13 @@ THostIndex TInflightInfo::RequestFlush(
     Y_ABORT_UNLESS(false);
 }
 
-void TInflightInfo::ConfirmFlush(THostRoute route)
+void TInflightInfo::ConfirmFlush(THostIndex host)
 {
     Y_ABORT_UNLESS(State == EState::PBufferFlushing);
-    Y_ABORT_UNLESS(FlushRequested.Get(route.DestinationHostIndex));
-    Y_ABORT_UNLESS(!FlushConfirmed.Get(route.DestinationHostIndex));
+    Y_ABORT_UNLESS(FlushRequested.Get(host));
+    Y_ABORT_UNLESS(!FlushConfirmed.Get(host));
 
-    FlushConfirmed.Set(route.DestinationHostIndex);
+    FlushConfirmed.Set(host);
 
     if (FlushDesired == FlushConfirmed) {
         SetState(EState::PBufferFlushed);
@@ -208,13 +208,13 @@ void TInflightInfo::ConfirmFlush(THostRoute route)
     }
 }
 
-void TInflightInfo::FlushFailed(THostRoute route)
+void TInflightInfo::FlushFailed(THostIndex host)
 {
     Y_ABORT_UNLESS(State == EState::PBufferFlushing);
-    Y_ABORT_UNLESS(FlushRequested.Get(route.DestinationHostIndex));
-    Y_ABORT_UNLESS(!FlushConfirmed.Get(route.DestinationHostIndex));
+    Y_ABORT_UNLESS(FlushRequested.Get(host));
+    Y_ABORT_UNLESS(!FlushConfirmed.Get(host));
 
-    FlushRequested.Reset(route.DestinationHostIndex);
+    FlushRequested.Reset(host);
     ReadyQueue->Register(Lsn, IReadyQueue::EQueueType::Flush);
 }
 
@@ -295,7 +295,9 @@ void TInflightInfo::RemoveHosts(THostMask removed)
     EraseConfirmed = EraseConfirmed.Exclude(removed);
 
     // Check if flush became complete after removing hosts.
-    if (State == EState::PBufferFlushing && FlushDesired == FlushConfirmed) {
+    const bool flushDone =
+        !FlushConfirmed.Empty() && FlushDesired == FlushConfirmed;
+    if (State == EState::PBufferFlushing && flushDone) {
         SetState(EState::PBufferFlushed);
     }
 

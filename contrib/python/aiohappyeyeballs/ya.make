@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(2.6.2)
+VERSION(2.7.1)
 
 LICENSE(Python-2.0)
 

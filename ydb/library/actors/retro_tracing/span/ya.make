@@ -6,7 +6,7 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/opentelemetry-proto
+    contrib/proto/opentelemetry
     ydb/library/actors/wilson
 )
 

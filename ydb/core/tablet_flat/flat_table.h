@@ -18,7 +18,7 @@
 #include "util_basics.h"
 
 #include <ydb/core/scheme/scheme_tablecell.h>
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
 #include <util/generic/deque.h>

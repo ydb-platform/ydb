@@ -36,6 +36,17 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
     }
 
+    Y_UNIT_TEST(AnalyzeMultiColumnStatistics) {
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareMultiColumnColumnTable(env, "Database", "Table", 4);
+
+        Analyze(runtime, tableInfo.SaTabletId, {tableInfo.PathId});
+
+        CheckMultiColumnStatisticsProbes(env, runtime, tableInfo.PathId, {2, 3});
+    }
+
     Y_UNIT_TEST(AnalyzeEmptyTable) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();

@@ -78,12 +78,14 @@ inline void SendWithUndeliveryTracking(
     ui64 cookie,
     NWilson::TTraceId traceId)
 {
+    int flags = NActors::IEventHandle::FlagForwardOnNondelivery |
+                NActors::IEventHandle::FlagSubscribeOnSession;
     auto ev = std::make_unique<NActors::IEventHandle>(
         recipient,
         ctx.SelfID,
         event.release(),
-        NActors::IEventHandle::FlagForwardOnNondelivery,   // flags
-        cookie,                                            // cookie
+        flags,
+        cookie,        // cookie
         &ctx.SelfID,   // forwardOnNondelivery
         std::move(traceId));
 

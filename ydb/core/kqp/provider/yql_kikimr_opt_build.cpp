@@ -596,7 +596,7 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
         }
 
         const bool needMainTableRead = bool(tableOp & KikimrReadOps())
-            || !del.ReturningColumns().Empty(); // For RETURNING row existence must be checked. 
+            || !del.ReturningColumns().Empty(); // For RETURNING row existence must be checked.
 
         txRes.AddWriteOpToQueryBlock(node, tableData.Metadata->Name, tableData.Metadata->Indexes, needMainTableRead, false, {});
         if (!del.ReturningColumns().Empty()) {

@@ -303,7 +303,6 @@ namespace NKikimr {
             }
             Become(&TThis::StateEjected);
         } else {
-            SetSystemFlag(ESystemFlag::MailboxProcessingFinished);
             ApplyGroupInfo(std::exchange(Info, {}), std::exchange(NodeLayoutInfo, {}), std::exchange(StoragePoolCounters, {}));
             CheckDeadlines();
         }

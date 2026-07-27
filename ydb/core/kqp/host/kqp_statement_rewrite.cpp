@@ -154,12 +154,14 @@ namespace {
         const auto& insertData = writeArgs.Get(3);
         YQL_ENSURE(insertData.Ptr()->Content() != "Void");
 
+        sessionCtx->SetInternalTypeAnnTransformer(NOpt::CreateKqpTypeAnnotationTransformer(cluster, sessionCtx->TablesPtr(), sessionCtx->ConfigPtr()));
+
         auto typeTransformer = NYql::TTransformationPipeline(&typeCtx)
             .AddServiceTransformers()
             .AddExpressionEvaluation(funcRegistry)
             .AddPreTypeAnnotation()
             .AddIOAnnotation()
-            .AddTypeAnnotationTransformer(NOpt::CreateKqpTypeAnnotationTransformer(cluster, sessionCtx->TablesPtr(), typeCtx, sessionCtx->ConfigPtr()))
+            .AddTypeAnnotationTransformer()
             .Build(false);
 
         return TPrepareRewriteInfo{

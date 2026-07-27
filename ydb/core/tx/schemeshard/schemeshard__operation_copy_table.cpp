@@ -276,8 +276,10 @@ public:
         if (srcPathId != InvalidPathId && context.SS->PathsById.contains(srcPathId)) {
             auto srcPath = context.SS->PathsById.at(srcPathId);
 
-            srcPath->PathState = TPathElement::EPathState::EPathStateNoChanges;
-            srcPath->LastTxId = InvalidTxId;
+            Y_VERIFY_S(!srcPath->Dropped(),
+                "TCopyTable TPropose::HandleReply: source path is dropped at plan step"
+                << ", srcPathId: " << srcPathId
+                << ", StepDropped: " << srcPath->StepDropped);
             context.SS->PersistPath(db, srcPathId);
             context.SS->ClearDescribePathCaches(srcPath);
 

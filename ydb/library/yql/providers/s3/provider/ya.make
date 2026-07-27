@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     yql_s3_datasink.cpp
+    yql_s3_datasink_constraints.cpp
     yql_s3_datasink_execution.cpp
     yql_s3_datasink_type_ann.cpp
     yql_s3_datasource.cpp

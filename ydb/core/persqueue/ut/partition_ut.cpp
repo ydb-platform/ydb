@@ -1,5 +1,6 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
+#include <ydb/core/persqueue/common/key.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/pqtablet/partition/partition.h>
 #include <ydb/core/persqueue/pqtablet/partition/blob_key_filter.h>
@@ -187,6 +188,15 @@ protected:
         TMaybe<TPartitionId> Partition;
     };
 
+    /// Optional payload for TEvTxCommit (defaults match the old SendCommitTx(step, txId) behaviour).
+    struct TSendCommitTxOptions {
+        TMaybe<NKikimrPQ::TTransaction> SerializedTx;
+        TMaybe<NKikimrPQ::TPQTabletConfig> TabletConfig;
+        TMaybe<NKikimrPQ::TBootstrapConfig> BootstrapConfig;
+        TMaybe<NKikimrPQ::TPartitions> PartitionsData;
+        TEvPQ::TMessageGroupsPtr ExplicitMessageGroups;
+    };
+
     struct TChangePartitionConfigMatcher {
         TMaybe<TPartitionId> Partition;
     };
@@ -282,7 +292,7 @@ protected:
                            const TActorId& suppPartitionId = {});
     void WaitCalcPredicateResult(const TCalcPredicateMatcher& matcher = TCalcPredicateMatcher::EmptyMatcher());
 
-    void SendCommitTx(ui64 step, ui64 txId);
+    void SendCommitTx(ui64 step, ui64 txId, const TSendCommitTxOptions& options = {});
     void SendRollbackTx(ui64 step, ui64 txId);
     void WaitCommitTxDone(const TTxDoneMatcher& matcher = {});
     void WaitRollbackTxDone(const TTxDoneMatcher& matcher = {});
@@ -326,6 +336,27 @@ protected:
                                TString message,
                                const TActorId& suppPartitionId);
     void WaitForCalcPredicateResult(ui64 txId, bool predicate);
+
+    // OldPlanStep*: partition meta ahead of commit (stale SerializedTx persist before TEvTxDone).
+    static constexpr ui64 StaleReplayMetaPlanStep = 99999;
+    static constexpr ui64 StaleReplayMetaTxId = 55555;
+
+    void CreatePartitionStaleReplayAhead(const TPartitionId& partition, ui64 begin, ui64 end);
+
+    NKikimrPQ::TTransaction MakeStaleSerializedTxBody(
+        const TPartitionId& partition,
+        ui64 step,
+        ui64 txId) const;
+
+    void AssertNoUnexpectedStaleMetaTxDone(const TString& reason) const;
+
+    THolder<TEvKeyValue::TEvRequest> GrabStaleMetaKvRequest(const TString& failReason) const;
+
+    void AssertStaleMetaKvHasTxKey(
+        const TEvKeyValue::TEvRequest& kv,
+        ui64 txId,
+        ui32 originalPartitionId,
+        const TString& failCtx) const;
 
     TMaybe<TTestContext> Ctx;
     TMaybe<TFinalizer> Finalizer;
@@ -1088,9 +1119,14 @@ void TPartitionFixture::WaitCalcPredicateResult(const TCalcPredicateMatcher& mat
     }
 }
 
-void TPartitionFixture::SendCommitTx(ui64 step, ui64 txId)
+void TPartitionFixture::SendCommitTx(ui64 step, ui64 txId, const TSendCommitTxOptions& options)
 {
-    auto event = MakeHolder<TEvPQ::TEvTxCommit>(step, txId);
+    TEvPQ::TMessageGroupsPtr explicitMessageGroups = options.ExplicitMessageGroups;
+    auto event = MakeHolder<TEvPQ::TEvTxCommit>(step, txId, std::move(explicitMessageGroups));
+    event->SerializedTx = options.SerializedTx;
+    event->TabletConfig = options.TabletConfig;
+    event->BootstrapConfig = options.BootstrapConfig;
+    event->PartitionsData = options.PartitionsData;
     Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
 }
 
@@ -1119,6 +1155,60 @@ void TPartitionFixture::WaitCommitTxDone(const TTxDoneMatcher& matcher)
 void TPartitionFixture::WaitRollbackTxDone(const TTxDoneMatcher& matcher)
 {
     WaitCommitTxDone(matcher);
+}
+
+void TPartitionFixture::CreatePartitionStaleReplayAhead(const TPartitionId& partition, ui64 begin, ui64 end)
+{
+    CreatePartition({
+        .Partition = partition,
+        .Begin = begin,
+        .End = end,
+        .PlanStep = StaleReplayMetaPlanStep,
+        .TxId = StaleReplayMetaTxId,
+    });
+}
+
+NKikimrPQ::TTransaction TPartitionFixture::MakeStaleSerializedTxBody(
+    const TPartitionId& partition,
+    ui64 step,
+    ui64 txId) const
+{
+    NKikimrPQ::TTransaction tx;
+    tx.SetKind(NKikimrPQ::TTransaction::KIND_DATA);
+    tx.SetTxId(txId);
+    tx.SetState(NKikimrPQ::TTransaction::EXECUTED);
+    tx.SetStep(step);
+    auto* operation = tx.AddOperations();
+    operation->SetPartitionId(partition.InternalPartitionId);
+    return tx;
+}
+
+void TPartitionFixture::AssertNoUnexpectedStaleMetaTxDone(const TString& reason) const
+{
+    // Poll > 0 sim time: absence of TEvTxDone must be observable, not "instant Grab".
+    UNIT_ASSERT_C(!Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvTxDone>(TDuration::MilliSeconds(200)), reason);
+}
+
+THolder<TEvKeyValue::TEvRequest> TPartitionFixture::GrabStaleMetaKvRequest(const TString& failReason) const
+{
+    auto kv = Ctx->Runtime->GrabEdgeEvent<TEvKeyValue::TEvRequest>(TDuration::Seconds(10));
+    UNIT_ASSERT_C(kv, failReason);
+    return kv;
+}
+
+void TPartitionFixture::AssertStaleMetaKvHasTxKey(
+    const TEvKeyValue::TEvRequest& kv,
+    ui64 txId,
+    ui32 originalPartitionId,
+    const TString& failCtx) const
+{
+    const TString expectedKey = GetTxKey(txId, originalPartitionId);
+    for (ui32 i = 0; i < kv.Record.CmdWriteSize(); ++i) {
+        if (kv.Record.GetCmdWrite(i).GetKey() == expectedKey) {
+            return;
+        }
+    }
+    UNIT_ASSERT_C(false, failCtx << ": missing CmdWrite for serialized tx key " << expectedKey);
 }
 
 void TPartitionFixture::SendChangePartitionConfig(const TConfigParams& config)
@@ -2328,17 +2418,63 @@ Y_UNIT_TEST_F(CorrectRange_Multiple_Consumers, TPartitionFixture)
 
 Y_UNIT_TEST_F(OldPlanStep, TPartitionFixture)
 {
+    // Partition meta is ahead of the commit (stale replay). Tablet always sends SerializedTx on commit;
+    // partition must persist tx KV before TEvTxDone (stable-25-4 -> stable-26-1).
     const TPartitionId partition{3};
-    const ui64 begin = 0;
-    const ui64 end = 10;
-
     const ui64 step = 12345;
     const ui64 txId = 67890;
 
-    CreatePartition({.Partition=partition, .Begin=begin, .End=end, .PlanStep=99999, .TxId=55555});
+    CreatePartitionStaleReplayAhead(partition, 0, 10);
 
-    SendCommitTx(step, txId);
+    auto serializedTxBody = MakeStaleSerializedTxBody(partition, step, txId);
+    SendCommitTx(step, txId, {.SerializedTx = std::move(serializedTxBody)});
+
+    AssertNoUnexpectedStaleMetaTxDone("TEvTxDone must not precede KV response for stale commit with SerializedTx");
+
+    auto kv = GrabStaleMetaKvRequest("expected KV request with stale tx meta persist");
+    AssertStaleMetaKvHasTxKey(*kv, txId, partition.OriginalPartitionId, "first KV");
+
+    AssertNoUnexpectedStaleMetaTxDone("TEvTxDone must not arrive before SendCmdWriteResponse");
+
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+
     WaitCommitTxDone({.TxId=txId, .Partition=TPartitionId(partition)});
+}
+
+Y_UNIT_TEST_F(OldPlanStep_SecondStaleCommitWhileKvInflight, TPartitionFixture)
+{
+    // Two stale commits: second arrives while first KV response is still pending — must not crash
+    // (TryAppendStaleTxMetaWrites runs again only after InFlight is cleared on write complete).
+    const TPartitionId partition{3};
+    const ui64 step = 12345;
+    const ui64 txId1 = 67890;
+    const ui64 txId2 = 67891;
+
+    CreatePartitionStaleReplayAhead(partition, 0, 10);
+
+    auto body = MakeStaleSerializedTxBody(partition, step, txId1);
+    SendCommitTx(step, txId1, {.SerializedTx = std::move(body)});
+
+    AssertNoUnexpectedStaleMetaTxDone("TEvTxDone before first KV");
+
+    auto kv = GrabStaleMetaKvRequest("expected first stale-meta KV request");
+    AssertStaleMetaKvHasTxKey(*kv, txId1, partition.OriginalPartitionId, "first KV");
+
+    body = MakeStaleSerializedTxBody(partition, step, txId2);
+    SendCommitTx(step, txId2, {.SerializedTx = std::move(body)});
+
+    AssertNoUnexpectedStaleMetaTxDone("TEvTxDone must not appear while first KV unanswered");
+
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+
+    WaitCommitTxDone({.TxId=txId1, .Partition=TPartitionId(partition)});
+
+    kv = GrabStaleMetaKvRequest("expected second stale-meta KV after first completes");
+    AssertStaleMetaKvHasTxKey(*kv, txId2, partition.OriginalPartitionId, "second KV");
+
+    SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);
+
+    WaitCommitTxDone({.TxId=txId2, .Partition=TPartitionId(partition)});
 }
 
 Y_UNIT_TEST_F(IncorrectRange, TPartitionFixture)

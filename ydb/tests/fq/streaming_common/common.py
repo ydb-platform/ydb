@@ -67,8 +67,8 @@ def get_ydb_config(request):
 
 
 class YdbClient:
-    def __init__(self, endpoint: str, database: str):
-        driver_config = ydb.DriverConfig(endpoint, database, auth_token="root@builtin")
+    def __init__(self, endpoint: str, database: str, token: str = "root@builtin"):
+        driver_config = ydb.DriverConfig(endpoint, database, auth_token=token)
         self.driver = ydb.Driver(driver_config)
         self.session_pool = ydb.QuerySessionPool(self.driver)
 

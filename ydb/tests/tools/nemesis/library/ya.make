@@ -9,6 +9,7 @@ PY_SRCS(
     catalog.py
     datacenter.py
     disk.py
+    host.py
     node.py
     tablet.py
     monitor.py

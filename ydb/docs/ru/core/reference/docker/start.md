@@ -48,10 +48,11 @@ docker run "${docker_args[@]}"
 
 ### Переопределение файла конфигурации
 
-По умолчанию при запуске контейнера Docker для {{ ydb-short-name }} используется встроенный [файл конфигурации](../configuration/index.md), который обеспечивает стандартные параметры работы. Для переопределения файла конфигурации при запуске контейнера можно использовать аргумент `--config-path`, указав путь к своему файлу конфигурации, который предварительно примонтирован в контейнер:
+По умолчанию при запуске контейнера Docker для {{ ydb-short-name }} используется встроенный [файл конфигурации](../configuration/index.md), который обеспечивает стандартные параметры работы. Чтобы использовать свой конфиг, смонтируйте его в `/ydb_data/cluster/kikimr_configs/config.yaml`:
 
 ```bash
-docker run "${docker_args[@]}" --config-path /path/to/your/config/file
+docker run "${docker_args[@]}" \
+  -v $(pwd)/ydb_config/my-ydb-config.yaml:/ydb_data/cluster/kikimr_configs/config.yaml
 ```
 
 Для пользователей, не имеющих опыта работы с Docker, важно понимать, как правильно монтировать файл конфигурации в контейнер. Ниже приведен пошаговый пример:
@@ -87,7 +88,7 @@ docker run "${docker_args[@]}" --config-path /path/to/your/config/file
 
 4. Отредактируйте скопированный файл конфигурации `ydb_config/my-ydb-config.yaml` по своему усмотрению.
 
-5. При запуске контейнера используйте флаг `-v` для монтирования директории с вашим файлом конфигурации в контейнер:
+5. При запуске контейнера смонтируйте отредактированный файл конфигурации в `/ydb_data/cluster/kikimr_configs/config.yaml`:
 
    ```bash
    docker_args=(
@@ -101,20 +102,14 @@ docker run "${docker_args[@]}" --config-path /path/to/your/config/file
        -p 8765:8765
        -v $(pwd)/ydb_certs:/ydb_certs
        -v $(pwd)/ydb_data:/ydb_data
-       -v $(pwd)/ydb_config:/ydb_config
+       -v $(pwd)/ydb_config/my-ydb-config.yaml:/ydb_data/cluster/kikimr_configs/config.yaml
        -e GRPC_TLS_PORT=2135
        -e GRPC_PORT=2136
        -e MON_PORT=8765
        {{ ydb_local_docker_image}}:{{ ydb_local_docker_image_tag }}
    )
    
-   docker run "${docker_args[@]}" --config-path /ydb_config/my-ydb-config.yaml
+   docker run "${docker_args[@]}"
    ```
 
-В этом примере:
-
-- `$(pwd)/ydb_config` - локальная директория на вашем компьютере с файлом конфигурации
-- `/ydb_config` - директория внутри контейнера, куда будет смонтирована ваша локальная директория
-- `/ydb_config/my-ydb-config.yaml` - путь к файлу конфигурации внутри контейнера
-
-Таким образом, ваш локальный файл конфигурации становится доступным внутри контейнера по указанному пути.
+В этом примере локальный файл `ydb_config/my-ydb-config.yaml` подменяет конфигурацию по умолчанию внутри контейнера.

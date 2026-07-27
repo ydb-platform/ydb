@@ -162,6 +162,7 @@ void UploadData(const NJson::TJsonValue& json, const NTable::TScheme::TTableInfo
     }
 
     TVector<TRawTypeValue> key(table->KeyColumns.size());
+    TVector<bool> keyFound(table->KeyColumns.size(), false);
     TVector<NTable::TUpdateOp> ops;
 
     if (!json.IsMap()) {
@@ -182,6 +183,7 @@ void UploadData(const NJson::TJsonValue& json, const NTable::TScheme::TTableInfo
 
         if (column.KeyOrder != Max<ui32>()) {
             key.at(column.KeyOrder) = MakeTypeValueFromJson(column.PType.GetTypeId(), value, pool);
+            keyFound.at(column.KeyOrder) = true;
         } else {
             ops.emplace_back(NIceDb::TUpdateOp(
                 column.Id,
@@ -191,8 +193,8 @@ void UploadData(const NJson::TJsonValue& json, const NTable::TScheme::TTableInfo
         }
     }
 
-    for (size_t i = 0; i < key.size(); ++i) {
-        if (key[i].IsEmpty()) {
+    for (size_t i = 0; i < keyFound.size(); ++i) {
+        if (!keyFound[i]) {
             ui32 keyColId = table->KeyColumns.at(i);
             const auto& col = table->Columns.at(keyColId);
             throw yexception() << "Key column " << col.Name << " is missing in table " << table->Name;

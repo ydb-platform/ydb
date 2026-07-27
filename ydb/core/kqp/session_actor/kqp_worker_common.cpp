@@ -1,5 +1,7 @@
 #include "kqp_worker_common.h"
 
+#include <ydb/library/security/util.h>
+
 namespace NKikimr::NKqp {
 
 using namespace NYql;
@@ -112,9 +114,9 @@ void SlowLogQuery(const TActorContext &ctx, const TKikimrConfiguration* config, 
         }
 
         Y_DEBUG_ABORT_UNLESS(extractQueryText);
-        auto queryText = extractQueryText();
+        auto protectedQueryText = NKikimr::ProtectQueryForLoggingIfSensitive(extractQueryText());
 
-        auto paramsText = TStringBuilder()
+        auto paramsSize = TStringBuilder()
             << ToString(parametersSize)
             << 'b';
 
@@ -128,8 +130,8 @@ void SlowLogQuery(const TActorContext &ctx, const TKikimrConfiguration* config, 
             << ", status: " << status
             << ", user: " << username
             << ", results: " << resultsSize << 'b'
-            << ", text: \"" << EscapeC(queryText) << '"'
-            << ", parameters: " << paramsText);
+            << ", text: \"" << EscapeC(protectedQueryText) << '"'
+            << ", parameters: " << paramsSize);
     }
 }
 

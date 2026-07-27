@@ -227,6 +227,10 @@ struct TEvPQ {
         EvMLPPurgeResponse,
         EvMLPConsumerStatus,
         EvUpdateReadMetrics,
+        EvMLPUpdateExternalLockedMessageGroupsId,
+        EvMLPGetRuntimeAttributesRequest,
+        EvMLPGetRuntimeAttributesResponse,
+        EvRewindCommitResult,
         EvEnd,
     };
 
@@ -1729,6 +1733,15 @@ struct TEvPQ {
             Record.SetMessages(messages);
             Record.SetUseForReading(useForReading);
         }
+    };
+
+    struct TEvRewindCommitResult: public TEventLocal<TEvRewindCommitResult, EvRewindCommitResult> {
+        explicit TEvRewindCommitResult(NYdb::TStatus status)
+            : Status(std::move(status))
+        {
+        }
+
+        NYdb::TStatus Status;
     };
 };
 

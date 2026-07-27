@@ -283,7 +283,8 @@ class BalancingStrategy(IBalancingStrategy):
 
         weight_from = self.cluster_info.get_vslot_weight_on_pdisk(vslot.GroupId, pdisk_id)
 
-        common.print_if_verbose(self.args, 'Checking to relocate vdisk from vslot %s on pdisk %s with slot usage %d' % (vslot_id, pdisk_id, pdisk_usage[pdisk_id]), file=sys.stdout)
+        common.print_if_verbose(self.args, 'Checking to relocate vdisk from vslot %s on pdisk %s with slot usage %d, try_blocking=%s' %
+                                (vslot_id, pdisk_id, pdisk_usage[pdisk_id], try_blocking), file=sys.stdout)
 
         current_usage = pdisk_usage[pdisk_id]
         if not self.args.only_from_overpopulated_pdisks:
@@ -566,6 +567,18 @@ class GroupVSlotsBalancingStrategy(BalancingStrategy):
         return True
 
 
+def is_vslot_size_mismatch(vslot, cluster_info):
+    pdisk_id = common.get_pdisk_id(vslot.VSlotId)
+    slot_size_in_units = cluster_info.pdisk_slot_size_in_units_map.get(pdisk_id, 0)
+
+    group = cluster_info.group_map.get(vslot.GroupId)
+    group_size_in_units = group.GroupSizeInUnits if group is not None else 0
+
+    pu = slot_size_in_units or 1
+    vu = group_size_in_units or 1
+    return pu != vu
+
+
 def balance_iteration(args, strategy, iteration_number):
     if strategy.calculate_extra_info():
         common.print_status(args, success=False, error_reason='Failed to calculate extra info')
@@ -591,7 +604,21 @@ def balance_iteration(args, strategy, iteration_number):
         time.sleep(Constants.WAITING_TIME)
         return None
 
-    vslots_ordered_groups_to_reassign = strategy.order_candidate_vslots(candidate_vslots)
+    mismatching_vslots = []
+    matching_vslots = []
+    for v in candidate_vslots:
+        if is_vslot_size_mismatch(v, strategy.cluster_info):
+            mismatching_vslots.append(v)
+        else:
+            matching_vslots.append(v)
+
+    if mismatching_vslots:
+        vslots_ordered_groups_to_reassign = (
+            strategy.order_candidate_vslots(mismatching_vslots) +
+            strategy.order_candidate_vslots(matching_vslots)
+        )
+    else:
+        vslots_ordered_groups_to_reassign = strategy.order_candidate_vslots(candidate_vslots)
     common.print_if_verbose(args, f"Found {len(candidate_vslots)} candidate vslots, {len(vslots_ordered_groups_to_reassign)} groups to reassign", file=sys.stdout)
     was_sent = False
     for vslots in vslots_ordered_groups_to_reassign:

@@ -4008,6 +4008,12 @@ bool IsSqlWithNothingOrNullOpsEnabled(const TOptimizeContext& optCtx) {
     return !IsOptimizerDisabled<OptName>(*optCtx.Types);
 }
 
+bool IsRewriteSwitchOverExtractMembersAllowed(const TOptimizeContext& optCtx) {
+    YQL_ENSURE(optCtx.Types);
+    static const char OptName[] = "RewriteSwitchOverExtractMembers";
+    return IsOptimizerEnabled<OptName>(*optCtx.Types) && !IsOptimizerDisabled<OptName>(*optCtx.Types);
+}
+
 } // namespace
 
 void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
@@ -6007,7 +6013,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         return node;
     };
 
-    map["Switch"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+    map["Switch"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         TExprNode::TPtr flatMap;
         for (auto i = 3U; !flatMap && i < node->ChildrenSize(); ++++i) {
             flatMap = FindNode(node->Child(i)->TailPtr(),
@@ -6053,6 +6059,8 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                 .Build();
         }
 
+        const bool rewriteExtractMembersAllowed = IsRewriteSwitchOverExtractMembersAllowed(optCtx);
+
         for (ui32 i = 2; i < node->ChildrenSize(); i += 2) {
             if (node->Child(i)->ChildrenSize() != 1) {
                 return node;
@@ -6072,8 +6080,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                 ordered = ordered || lambda->GetConstraint<TSortedConstraintNode>();
                 lambdas.emplace_back();
                 castStructs.emplace_back();
-            }
-            else if (TCoFlatMapBase::Match(lambda->Child(1))) {
+            } else if (TCoFlatMapBase::Match(lambda->Child(1))) {
                 ordered = ordered || TCoOrderedFlatMap::Match(lambda->Child(1)) || lambda->GetConstraint<TSortedConstraintNode>();
                 auto flatMapInput = lambda->Child(1)->Child(0);
                 const TTypeAnnotationNode* castType = nullptr;
@@ -6118,8 +6125,16 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                 }
                 lambdas.push_back(std::move(flatMapLambda));
                 castStructs.push_back(castType ? ExpandType(flatMapInput->Pos(), *castType, ctx) : TExprNode::TPtr());
-            }
-            else {
+            } else if (rewriteExtractMembersAllowed && TCoExtractMembers::Match(lambda->Child(1))) {
+                ordered = ordered || lambda->GetConstraint<TSortedConstraintNode>();
+                const auto* extractMembersInput = lambda->Child(1)->Child(0);
+                if (&SkipCallables(*extractMembersInput, {"Unordered"}) != &lambda->Head().Head()) { // ExtractMembers input == Switch lambda arg
+                    return node;
+                }
+
+                lambdas.emplace_back();
+                castStructs.push_back(ExpandType(extractMembersInput->Pos(), GetSeqItemType(*lambda->Child(1)->GetTypeAnn()), ctx));
+            } else {
                 return node;
             }
         }
@@ -6167,11 +6182,40 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                         .Seal()
                     .Seal()
                     .Build();
+            } else if (rewriteExtractMembersAllowed && castStructs.front()) {
+                res = ctx.Builder(node->Pos())
+                    .Callable("ExtractMembers")
+                        .Add(0, res)
+                        .List(1)
+                            .Do([&](TExprNodeBuilder& b) -> TExprNodeBuilder& {
+                                for (ui32 i = 0; const auto& m : castStructs.front()->ChildrenList()) {
+                                    b.Add(i++, m->HeadPtr());
+                                }
+                                return b;
+                            })
+                        .Seal()
+                    .Seal()
+                    .Build();
             }
             return res;
         }
 
         const auto outVarType = ExpandType(node->Pos(), GetSeqItemType(*node->GetTypeAnn()), ctx);
+        const auto castToTargetType = [&](TExprNodePtr& body) {
+            switch (targetType) {
+                case ETypeAnnotationKind::Flow:
+                    body = ctx.NewCallable(node->Pos(), "ToFlow", {std::move(body)});
+                    break;
+                case ETypeAnnotationKind::Stream:
+                    body = ctx.NewCallable(node->Pos(), "ToStream", {std::move(body)});
+                    break;
+                case ETypeAnnotationKind::List:
+                    body = ctx.NewCallable(node->Pos(), "ToList", {std::move(body)});
+                    break;
+                default:
+                    break;
+            }
+        };
 
         TExprNode::TListType updatedLambdas;
         for (size_t i = 0; i < lambdas.size(); ++i) {
@@ -6207,22 +6251,24 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                     .Seal()
                     .Build();
                 if (lambdas[i]->GetTypeAnn()->GetKind() != targetType) {
-                    switch (targetType) {
-                        case ETypeAnnotationKind::Flow:
-                            body = ctx.NewCallable(node->Pos(), "ToFlow", {std::move(body)});
-                            break;
-                        case ETypeAnnotationKind::Stream:
-                            body = ctx.NewCallable(node->Pos(), "ToStream", {std::move(body)});
-                            break;
-                        case ETypeAnnotationKind::List:
-                            body = ctx.NewCallable(node->Pos(), "ToList", {std::move(body)});
-                            break;
-                        default:
-                            break;
-                    }
+                    castToTargetType(body);
                 }
-            }
-            else {
+            } else if (rewriteExtractMembersAllowed && castStructs[i]) {
+                body = ctx.Builder(node->Pos())
+                    .Callable("Just")
+                        .Callable(0, "Variant")
+                            .Callable(0, "CastStruct")
+                                .Add(0, arg)
+                                .Add(1, castStructs[i])
+                            .Seal()
+                            .Atom(1, i)
+                            .Add(2, outVarType)
+                        .Seal()
+                    .Seal()
+                    .Build();
+
+                castToTargetType(body);
+            } else {
                 body = ctx.Builder(node->Pos())
                     .Callable("Variant")
                         .Add(0, arg)

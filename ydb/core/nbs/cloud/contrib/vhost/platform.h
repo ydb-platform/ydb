@@ -1,5 +1,7 @@
 #pragma once
 
+#include "vhost/nbs2_rename.h"
+
 #include <stdlib.h>
 #include <stdint.h>
 #include <stddef.h>

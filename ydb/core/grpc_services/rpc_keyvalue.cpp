@@ -555,6 +555,8 @@ Ydb::StatusIds::StatusCode PullStatus(const TResult &result) {
         return Ydb::StatusIds::PRECONDITION_FAILED;
     case NKikimrKeyValue::Statuses::RSTATUS_BLOCKED:
         return Ydb::StatusIds::UNAVAILABLE;
+    case NKikimrKeyValue::Statuses::RSTATUS_BAD_REQUEST:
+        return Ydb::StatusIds::BAD_REQUEST;
     default:
         return Ydb::StatusIds::INTERNAL_ERROR;
     }

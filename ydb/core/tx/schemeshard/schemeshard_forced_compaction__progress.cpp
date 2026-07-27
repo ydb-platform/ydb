@@ -63,6 +63,7 @@ struct TSchemeShard::TForcedCompaction::TTxProgress: public TRwTxBase {
         }
         Self->ForcedCompactionsDoneShardsToPersist.clear();
         Self->CancellingForcedCompactions.clear();
+        Self->ForcedCompactionNeedsImmediatePersist = false;
         SideEffects.ApplyOnExecute(Self, txc, ctx);
     }
 

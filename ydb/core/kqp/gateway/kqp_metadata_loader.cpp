@@ -476,7 +476,8 @@ TTableMetadataResult GetLoadTableMetadataResult(const NSchemeCache::TSchemeCache
         EKind::KindExternalDataSource,
         EKind::KindView,
         EKind::KindSysView,
-        EKind::KindTopic
+        EKind::KindTopic,
+        EKind::KindCdcStream,
     }, entry.Kind)) {
         return ResultFromError<TResult>(YqlIssue({}, TIssuesIds::KIKIMR_SCHEME_ERROR, "Path is not a table or topic"));
     }
@@ -496,6 +497,7 @@ TTableMetadataResult GetLoadTableMetadataResult(const NSchemeCache::TSchemeCache
             result = GetSysViewMetadataResult(entry, cluster, tableName);
             break;
         case EKind::KindTopic:
+        case EKind::KindCdcStream:
             result = GetTopicMetadataResult(entry, cluster, database, tableName, userToken);
             break;
         default:

@@ -1,0 +1,305 @@
+dstool -e <endpoint> --mon-port <mon_port> --verbose cluster balance --only-from-overpopulated-pdisks --storage-pool=test-pool --max-iterations=1
+Exit Status: 0
+===== stdout =====
+
+Start balancing iteration 1
+Number of used slots -> number pdisks: 0=>1 9=>1
+Found 8 candidate vslots, 2 groups to reassign
+Checking to relocate vdisk from vslot (1, 1001, 1005) on pdisk (1, 1001) with slot usage 9, try_blocking=False
+Relocated vdisk from pdisk [1:1001] to pdisk [1:1002] with slot usages (9 -> 0)
+
+===== stderr =====
+INFO: using random hosts
+INFO: using random hosts
+
+===== grpc_calls =====
+=== Invoke BlobStorageConfig ===
+Domain: 1
+Request {
+  Command {
+    ReassignGroupDisk {
+      GroupId: 2147483653
+      GroupGeneration: 1
+    }
+  }
+  Rollback: true
+}
+
+=== Invoke BlobStorageConfig ===
+Domain: 1
+Request {
+  Command {
+    ReassignGroupDisk {
+      GroupId: 2147483653
+      GroupGeneration: 1
+    }
+  }
+}
+
+===== http_calls =====
+GET viewer/json/vdiskinfo?... (mocked)
+GET viewer/json/vdiskinfo?... (mocked)
+
+===== mock_base_config =====
+
+TBaseConfig {
+PDisk {
+  NodeId: 1
+  PDiskId: 1001
+  PDiskConfig {
+    ExpectedSlotCount: 8
+    SlotSizeInUnits: 1
+  }
+  BoxId: 1
+  DriveStatus: ACTIVE
+  ExpectedSlotCount: 8
+  PDiskMetrics {
+    EnforcedDynamicSlotSize: 0
+    SlotCount: 8
+    SlotSizeInUnits: 1
+  }
+}
+PDisk {
+  NodeId: 1
+  PDiskId: 1002
+  PDiskConfig {
+    ExpectedSlotCount: 8
+    SlotSizeInUnits: 1
+  }
+  BoxId: 1
+  DriveStatus: ACTIVE
+  ExpectedSlotCount: 8
+  PDiskMetrics {
+    EnforcedDynamicSlotSize: 0
+    SlotCount: 8
+    SlotSizeInUnits: 1
+  }
+}
+VSlot {
+  VSlotId {
+    NodeId: 1
+    PDiskId: 1001
+    VSlotId: 1001
+  }
+  GroupId: 2147483649
+  GroupGeneration: 1
+  VDiskMetrics {
+    AvailableSize: 0
+    AllocatedSize: 0
+  }
+  Status: "READY"
+}
+VSlot {
+  VSlotId {
+    NodeId: 1
+    PDiskId: 1001
+    VSlotId: 1002
+  }
+  GroupId: 2147483650
+  GroupGeneration: 1
+  VDiskMetrics {
+    AvailableSize: 0
+    AllocatedSize: 0
+  }
+  Status: "READY"
+}
+VSlot {
+  VSlotId {
+    NodeId: 1
+    PDiskId: 1001
+    VSlotId: 1003
+  }
+  GroupId: 2147483651
+  GroupGeneration: 1
+  VDiskMetrics {
+    AvailableSize: 0
+    AllocatedSize: 0
+  }
+  Status: "READY"
+}
+VSlot {
+  VSlotId {
+    NodeId: 1
+    PDiskId: 1001
+    VSlotId: 1004
+  }
+  GroupId: 2147483652
+  GroupGeneration: 1
+  VDiskMetrics {
+    AvailableSize: 0
+    AllocatedSize: 0
+  }
+  Status: "READY"
+}
+VSlot {
+  VSlotId {
+    NodeId: 1
+    PDiskId: 1001
+    VSlotId: 1005
+  }
+  GroupId: 2147483653
+  GroupGeneration: 1
+  VDiskMetrics {
+    AvailableSize: 0
+    AllocatedSize: 0
+  }
+  Status: "READY"
+}
+VSlot {
+  VSlotId {
+    NodeId: 1
+    PDiskId: 1001
+    VSlotId: 1006
+  }
+  GroupId: 2147483654
+  GroupGeneration: 1
+  VDiskMetrics {
+    AvailableSize: 0
+    AllocatedSize: 0
+  }
+  Status: "READY"
+}
+VSlot {
+  VSlotId {
+    NodeId: 1
+    PDiskId: 1001
+    VSlotId: 1007
+  }
+  GroupId: 2147483655
+  GroupGeneration: 1
+  VDiskMetrics {
+    AvailableSize: 0
+    AllocatedSize: 0
+  }
+  Status: "READY"
+}
+VSlot {
+  VSlotId {
+    NodeId: 1
+    PDiskId: 1001
+    VSlotId: 1008
+  }
+  GroupId: 2147483656
+  GroupGeneration: 1
+  VDiskMetrics {
+    AvailableSize: 0
+    AllocatedSize: 0
+  }
+  Status: "READY"
+}
+Group {
+  GroupId: 2147483649
+  GroupGeneration: 1
+  ErasureSpecies: "none"
+  VSlotId {
+    NodeId: 1
+    PDiskId: 1001
+    VSlotId: 1001
+  }
+  BoxId: 1
+  StoragePoolId: 1
+}
+Group {
+  GroupId: 2147483650
+  GroupGeneration: 1
+  ErasureSpecies: "none"
+  VSlotId {
+    NodeId: 1
+    PDiskId: 1001
+    VSlotId: 1002
+  }
+  BoxId: 1
+  StoragePoolId: 1
+}
+Group {
+  GroupId: 2147483651
+  GroupGeneration: 1
+  ErasureSpecies: "none"
+  VSlotId {
+    NodeId: 1
+    PDiskId: 1001
+    VSlotId: 1003
+  }
+  BoxId: 1
+  StoragePoolId: 1
+}
+Group {
+  GroupId: 2147483652
+  GroupGeneration: 1
+  ErasureSpecies: "none"
+  VSlotId {
+    NodeId: 1
+    PDiskId: 1001
+    VSlotId: 1004
+  }
+  BoxId: 1
+  StoragePoolId: 1
+}
+Group {
+  GroupId: 2147483653
+  GroupGeneration: 1
+  ErasureSpecies: "none"
+  VSlotId {
+    NodeId: 1
+    PDiskId: 1001
+    VSlotId: 1005
+  }
+  BoxId: 1
+  StoragePoolId: 1
+  GroupSizeInUnits: 2
+}
+Group {
+  GroupId: 2147483654
+  GroupGeneration: 1
+  ErasureSpecies: "none"
+  VSlotId {
+    NodeId: 1
+    PDiskId: 1001
+    VSlotId: 1006
+  }
+  BoxId: 1
+  StoragePoolId: 1
+  GroupSizeInUnits: 1
+}
+Group {
+  GroupId: 2147483655
+  GroupGeneration: 1
+  ErasureSpecies: "none"
+  VSlotId {
+    NodeId: 1
+    PDiskId: 1001
+    VSlotId: 1007
+  }
+  BoxId: 1
+  StoragePoolId: 1
+  GroupSizeInUnits: 1
+}
+Group {
+  GroupId: 2147483656
+  GroupGeneration: 1
+  ErasureSpecies: "none"
+  VSlotId {
+    NodeId: 1
+    PDiskId: 1001
+    VSlotId: 1008
+  }
+  BoxId: 1
+  StoragePoolId: 1
+  GroupSizeInUnits: 1
+}
+Node {
+  NodeId: 1
+  HostKey {
+    Fqdn: "localhost"
+    IcPort: 19001
+  }
+}
+}
+
+DefineStoragePool {
+BoxId: 1
+StoragePoolId: 1
+Name: "test-pool"
+ErasureSpecies: "none"
+Kind: "hdd"
+}

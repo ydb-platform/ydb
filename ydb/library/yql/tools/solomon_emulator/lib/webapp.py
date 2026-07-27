@@ -48,6 +48,10 @@ class SolomonEmulator(object):
         self._config = config
         self._api_calls = 0
         self._data = MultiShard()
+        # Per-shard count of upcoming /api/v2/push requests that must be answered with a
+        # retriable (non-terminal) error before the shard starts accepting writes again.
+        # Used by tests to exercise the write actor's retry path.
+        self._push_failures = {}
 
     def _get_shard(self, project, cluster, service):
         return self._data.get_or_create(project, cluster, service)
@@ -71,6 +75,13 @@ class SolomonEmulator(object):
         project = request.rel_url.query['project']
         cluster = request.rel_url.query['cluster']
         service = request.rel_url.query['service']
+
+        key = (project, cluster, service)
+        remaining = self._push_failures.get(key, 0)
+        if remaining > 0:
+            self._push_failures[key] = remaining - 1
+            logger.debug(f"injecting transient push failure for {key}, {remaining - 1} left")
+            return web.HTTPServiceUnavailable(text="Injected transient failure")
 
         shard = self._get_shard(project, cluster, service)
         content_type = request.headers['content-type']
@@ -202,6 +213,15 @@ class SolomonEmulator(object):
 
         return web.Response(status=200)
 
+    async def fail_push(self, request):
+        project = request.rel_url.query['project']
+        cluster = request.rel_url.query['cluster']
+        service = request.rel_url.query['service']
+        count = int(request.rel_url.query.get('count', 1))
+
+        self._push_failures[(project, cluster, service)] = count
+        return web.Response(status=200)
+
     async def get_api_calls(self, request):
         return web.json_response({"api_calls": self._api_calls})
 
@@ -212,8 +232,10 @@ class SolomonEmulator(object):
 
         if project is None and cluster is None and service is None:
             self._data.clear()
+            self._push_failures = {}
         else:
             self._data.delete(project, cluster, service)
+            self._push_failures.pop((project, cluster, service), None)
         return web.Response(status=200)
 
     async def cleanup_api_calls(self, request):
@@ -341,7 +363,8 @@ def create_web_app(emulator):
         web.post("/monitoring/v2/data/write", emulator.data_write),
         web.post("/metrics/post", emulator.metrics_post),
         web.post("/cleanup", emulator.cleanup),
-        web.post("/cleanup/api/calls", emulator.cleanup_api_calls)
+        web.post("/cleanup/api/calls", emulator.cleanup_api_calls),
+        web.post("/fail/push", emulator.fail_push)
     ])
 
     return webapp

@@ -438,7 +438,7 @@ struct TEvSaveTxnProducerResponse : public NActors::TEventLocal<TEvSaveTxnProduc
 
     TEvSaveTxnProducerResponse(EStatus status, const TString& message) :
         Status(status),
-        Message(std::move(message))
+        Message(message)
     {}
 
     EStatus Status;

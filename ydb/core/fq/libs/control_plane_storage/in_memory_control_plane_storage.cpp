@@ -5,6 +5,8 @@
 
 #include <ranges>
 
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::YQ_CONTROL_PLANE_STORAGE
+
 namespace NFq {
 
 class TInMemoryControlPlaneStorageActor : public NActors::TActor<TInMemoryControlPlaneStorageActor>,
@@ -38,7 +40,7 @@ class TInMemoryControlPlaneStorageActor : public NActors::TActor<TInMemoryContro
             TString Tenant;
             TString Scope;
             TString QueryId;
-    
+
             std::strong_ordering operator<=>(const TKey& other) const = default;
         };
 
@@ -57,7 +59,7 @@ class TInMemoryControlPlaneStorageActor : public NActors::TActor<TInMemoryContro
             TString Scope;
             TString QueryId;
             TString JobId;
-    
+
             std::strong_ordering operator<=>(const TKey& other) const = default;
         };
 
@@ -116,7 +118,7 @@ class TInMemoryControlPlaneStorageActor : public NActors::TActor<TInMemoryContro
         struct TKey {
             TString ResultId;
             i32 ResultSetId;
-    
+
             std::strong_ordering operator<=>(const TKey& other) const = default;
         };
 
@@ -134,7 +136,7 @@ class TInMemoryControlPlaneStorageActor : public NActors::TActor<TInMemoryContro
         struct TKey {
             TString Tenant;
             ui32 NodeId;
-    
+
             std::strong_ordering operator<=>(const TKey& other) const = default;
         };
 
@@ -149,7 +151,7 @@ class TInMemoryControlPlaneStorageActor : public NActors::TActor<TInMemoryContro
     struct TComputeDatabases {
         struct TKey {
             TString Scope;
-    
+
             std::strong_ordering operator<=>(const TKey& other) const = default;
         };
 
@@ -244,8 +246,11 @@ private:
             , ResponseStr(responseStr)
         {
             Self.Cleanup();
-            CPS_LOG_I(RequestStr);
-            CPS_LOG_T(RequestStr << ":" << LogPrefix);
+            YDB_LOG_INFO("",
+                {"requestStr", RequestStr});
+            YDB_LOG_TRACE("Dump requestStr, logPrefix",
+                {"requestStr", RequestStr},
+                {"logPrefix", LogPrefix});
 
             RequestCounters.IncInFly();
             RequestCounters.Common->RequestBytes->Add(Event.GetByteSize());
@@ -273,7 +278,11 @@ private:
             Y_ABORT_UNLESS(!Failed, "Can not fail twice");
             Failed = true;
 
-            CPS_LOG_W(RequestStr << ":" << LogPrefix << logInfo << " FAILED: " << issues.ToOneLineString());
+            YDB_LOG_WARN("",
+                {"requestStr", RequestStr},
+                {"logPrefix", LogPrefix},
+                {"logInfo", logInfo},
+                {"FAILED", issues.ToOneLineString()});
             Self.SendResponseIssues<TEvResponse>(EventPtr->Sender, issues, EventPtr->Cookie, TInstant::Now() - StartTime, RequestCounters);
         }
 
@@ -459,7 +468,7 @@ private:
     }
 
     void Handle(TEvControlPlaneStorage::TEvListQueriesRequest::TPtr& ev) {
-        LOG_YQ_CONTROL_PLANE_STORAGE_CRIT("Unimplemented " << __LINE__);
+        YDB_LOG_CRIT("Unimplemented");
         SendEmptyResponse<
             TEvControlPlaneStorage::TEvListQueriesRequest::TPtr,
             FederatedQuery::ListQueriesResult,
@@ -477,7 +486,7 @@ private:
     }
 
     void Handle(TEvControlPlaneStorage::TEvModifyQueryRequest::TPtr& ev) {
-        LOG_YQ_CONTROL_PLANE_STORAGE_CRIT("Unimplemented " << __LINE__);
+        YDB_LOG_CRIT("Unimplemented");
         SendEmptyAuditResponse<
             TEvControlPlaneStorage::TEvModifyQueryRequest::TPtr,
             FederatedQuery::ModifyQueryResult,
@@ -486,7 +495,7 @@ private:
     }
 
     void Handle(TEvControlPlaneStorage::TEvDeleteQueryRequest::TPtr& ev) {
-        LOG_YQ_CONTROL_PLANE_STORAGE_CRIT("Unimplemented " << __LINE__);
+        YDB_LOG_CRIT("Unimplemented");
         SendEmptyAuditResponse<
             TEvControlPlaneStorage::TEvDeleteQueryRequest::TPtr,
             FederatedQuery::DeleteQueryResult,
@@ -495,7 +504,7 @@ private:
     }
 
     void Handle(TEvControlPlaneStorage::TEvControlQueryRequest::TPtr& ev) {
-        LOG_YQ_CONTROL_PLANE_STORAGE_CRIT("Unimplemented " << __LINE__);
+        YDB_LOG_CRIT("Unimplemented");
         SendEmptyAuditResponse<
             TEvControlPlaneStorage::TEvControlQueryRequest::TPtr,
             FederatedQuery::ControlQueryResult,
@@ -544,7 +553,7 @@ private:
     }
 
     void Handle(TEvControlPlaneStorage::TEvListJobsRequest::TPtr& ev) {
-        LOG_YQ_CONTROL_PLANE_STORAGE_CRIT("Unimplemented " << __LINE__);
+        YDB_LOG_CRIT("Unimplemented");
         SendEmptyResponse<
             TEvControlPlaneStorage::TEvListJobsRequest::TPtr,
             FederatedQuery::ListJobsResult,
@@ -630,7 +639,7 @@ private:
     }
 
     void Handle(TEvControlPlaneStorage::TEvModifyConnectionRequest::TPtr& ev) {
-        LOG_YQ_CONTROL_PLANE_STORAGE_CRIT("Unimplemented " << __LINE__);
+        YDB_LOG_CRIT("Unimplemented");
         SendEmptyAuditResponse<
             TEvControlPlaneStorage::TEvModifyConnectionRequest::TPtr,
             FederatedQuery::ModifyConnectionResult,
@@ -639,7 +648,7 @@ private:
     }
 
     void Handle(TEvControlPlaneStorage::TEvDeleteConnectionRequest::TPtr& ev) {
-        LOG_YQ_CONTROL_PLANE_STORAGE_CRIT("Unimplemented " << __LINE__);
+        YDB_LOG_CRIT("Unimplemented");
         SendEmptyAuditResponse<
             TEvControlPlaneStorage::TEvDeleteConnectionRequest::TPtr,
             FederatedQuery::DeleteConnectionResult,
@@ -745,7 +754,7 @@ private:
     }
 
     void Handle(TEvControlPlaneStorage::TEvDescribeBindingRequest::TPtr& ev) {
-        LOG_YQ_CONTROL_PLANE_STORAGE_CRIT("Unimplemented " << __LINE__);
+        YDB_LOG_CRIT("Unimplemented");
         SendEmptyResponse<
             TEvControlPlaneStorage::TEvDescribeBindingRequest::TPtr,
             FederatedQuery::DescribeBindingResult,
@@ -753,7 +762,7 @@ private:
     }
 
     void Handle(TEvControlPlaneStorage::TEvModifyBindingRequest::TPtr& ev) {
-        LOG_YQ_CONTROL_PLANE_STORAGE_CRIT("Unimplemented " << __LINE__);
+        YDB_LOG_CRIT("Unimplemented");
         SendEmptyAuditResponse<
             TEvControlPlaneStorage::TEvModifyBindingRequest::TPtr,
             FederatedQuery::ModifyBindingResult,
@@ -762,7 +771,7 @@ private:
     }
 
     void Handle(TEvControlPlaneStorage::TEvDeleteBindingRequest::TPtr& ev) {
-        LOG_YQ_CONTROL_PLANE_STORAGE_CRIT("Unimplemented " << __LINE__);
+        YDB_LOG_CRIT("Unimplemented");
         SendEmptyAuditResponse<
             TEvControlPlaneStorage::TEvDeleteBindingRequest::TPtr,
             FederatedQuery::DeleteBindingResult,
@@ -771,7 +780,7 @@ private:
     }
 
     void Handle(TEvControlPlaneStorage::TEvDescribeJobRequest::TPtr& ev) {
-        LOG_YQ_CONTROL_PLANE_STORAGE_CRIT("Unimplemented " << __LINE__);
+        YDB_LOG_CRIT("Unimplemented");
         SendEmptyResponse<
             TEvControlPlaneStorage::TEvDescribeJobRequest::TPtr,
             FederatedQuery::DescribeJobResult,
@@ -862,7 +871,7 @@ private:
     }
 
     void Handle(TEvControlPlaneStorage::TEvGetQueryStatusRequest::TPtr& ev) {
-        LOG_YQ_CONTROL_PLANE_STORAGE_CRIT("Unimplemented " << __LINE__);
+        YDB_LOG_CRIT("Unimplemented");
         SendEmptyResponse<
             TEvControlPlaneStorage::TEvGetQueryStatusRequest::TPtr,
             FederatedQuery::GetQueryStatusResult,
@@ -870,7 +879,7 @@ private:
     }
 
     void Handle(TEvControlPlaneStorage::TEvCreateRateLimiterResourceRequest::TPtr& ev) {
-        LOG_YQ_CONTROL_PLANE_STORAGE_CRIT("Unimplemented " << __LINE__);
+        YDB_LOG_CRIT("Unimplemented");
         SendEmptyResponse<
             TEvControlPlaneStorage::TEvCreateRateLimiterResourceRequest::TPtr,
             Fq::Private::CreateRateLimiterResourceResult,
@@ -878,7 +887,7 @@ private:
     }
 
     void Handle(TEvControlPlaneStorage::TEvDeleteRateLimiterResourceRequest::TPtr& ev) {
-        LOG_YQ_CONTROL_PLANE_STORAGE_CRIT("Unimplemented " << __LINE__);
+        YDB_LOG_CRIT("Unimplemented");
         SendEmptyResponse<
             TEvControlPlaneStorage::TEvDeleteRateLimiterResourceRequest::TPtr,
             Fq::Private::DeleteRateLimiterResourceResult,
@@ -886,12 +895,12 @@ private:
     }
 
     void Handle(TEvQuotaService::TQuotaUsageRequest::TPtr& ev) {
-        LOG_YQ_CONTROL_PLANE_STORAGE_CRIT("Unimplemented " << __LINE__);
+        YDB_LOG_CRIT("Unimplemented");
         Send(ev->Sender, new TEvQuotaService::TQuotaUsageResponse(ev->Get()->SubjectType, ev->Get()->SubjectId, ev->Get()->MetricName, 0));
     }
 
     void Handle(TEvQuotaService::TQuotaLimitChangeRequest::TPtr& ev) {
-        LOG_YQ_CONTROL_PLANE_STORAGE_CRIT("Unimplemented " << __LINE__);
+        YDB_LOG_CRIT("Unimplemented");
         Send(ev->Sender, new TEvQuotaService::TQuotaLimitChangeResponse(ev->Get()->SubjectType, ev->Get()->SubjectId, ev->Get()->MetricName, ev->Get()->Limit, ev->Get()->LimitRequested));
     }
 
@@ -942,15 +951,16 @@ private:
 #undef HANDLE_CPS_REQUEST_IMPL
 
     void Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
-        LOG_YQ_CONTROL_PLANE_STORAGE_CRIT("Unimplemented " << __LINE__);
+        YDB_LOG_CRIT("Unimplemented");
         TStringStream str;
         Send(ev->Sender, new NActors::NMon::TEvHttpInfoRes(str.Str()));
     }
 
     template<typename TRequest, typename TResult, typename TEvResult>
     void SendEmptyResponse(TRequest& ev, std::string logText) {
-        LOG_YQ_CONTROL_PLANE_STORAGE_CRIT("SendEmptyResponse");
-        CPS_LOG_I(logText);
+        YDB_LOG_CRIT("SendEmptyResponse");
+        YDB_LOG_INFO("",
+            {"logText", logText});
 
         TResult result = {};
         auto event = std::make_unique<TEvResult>(result);
@@ -959,8 +969,9 @@ private:
 
     template<typename TRequest, typename TResult, typename TEvResult, typename TAuditDetails>
     void SendEmptyAuditResponse(TRequest& ev, std::string logText) {
-        LOG_YQ_CONTROL_PLANE_STORAGE_CRIT("SendEmptyAuditResponse");
-        CPS_LOG_I(logText);
+        YDB_LOG_CRIT("SendEmptyAuditResponse");
+        YDB_LOG_INFO("",
+            {"logText", logText});
 
         TResult result = {};
         TAuditDetails auditDetails = {};
@@ -1108,12 +1119,20 @@ private:
             task.QueryId = key.QueryId;
 
             if (query.Owner) {
-                CPS_LOG_T("Task (Query): " << task.QueryId <<  " Lease TIMEOUT, RetryCounterUpdatedAt " << taskInternal.RetryLimiter.RetryCounterUpdatedAt << " LastSeenAt: " << query.LastSeenAt);
+                YDB_LOG_TRACE("Task Lease TIMEOUT, RetryCounterUpdatedAt",
+                    {"queryId", task.QueryId},
+                    {"retryCounterUpdatedAt", taskInternal.RetryLimiter.RetryCounterUpdatedAt},
+                    {"lastSeenAt", query.LastSeenAt});
                 taskInternal.ShouldAbortTask = !taskInternal.RetryLimiter.UpdateOnRetry(query.LastSeenAt, Config->TaskLeaseRetryPolicy, ctx.StartTime);
             }
             task.RetryCount = taskInternal.RetryLimiter.RetryCount;
 
-            CPS_LOG_T("Task (Query): " << task.QueryId <<  " RetryRate: " << taskInternal.RetryLimiter.RetryRate << " RetryCounter: " << taskInternal.RetryLimiter.RetryCount << " At: " << taskInternal.RetryLimiter.RetryCounterUpdatedAt << (taskInternal.ShouldAbortTask ? " ABORTED" : ""));
+            YDB_LOG_TRACE("Task",
+                {"queryId", task.QueryId},
+                {"retryRate", taskInternal.RetryLimiter.RetryRate},
+                {"retryCounter", taskInternal.RetryLimiter.RetryCount},
+                {"at", taskInternal.RetryLimiter.RetryCounterUpdatedAt},
+                {"abortStatus", (taskInternal.ShouldAbortTask ? " ABORTED" : "")});
 
             if (tasks.size() >= tasksBatchSize) {
                 break;

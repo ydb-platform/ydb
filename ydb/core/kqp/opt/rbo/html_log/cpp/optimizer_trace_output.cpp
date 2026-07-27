@@ -18,6 +18,7 @@
 #include <util/system/thread.h>
 #include <util/system/types.h>
 
+#include <algorithm>
 #include <exception>
 #include <fstream>
 #include <mutex>
@@ -32,6 +33,8 @@ namespace optimizer_trace {
 namespace {
 
 std::string MakeRandomBase64UrlSuffix();
+
+constexpr std::size_t TraceHtmlSniffBytes = 4 * 1024 * 1024;
 
 struct TTraceHttpEndpoint {
     std::string Host;
@@ -357,10 +360,30 @@ std::string MakeTraceFileInDirectory(const TFsPath& directory) {
     return (directory / MakeTraceFileName()).GetPath();
 }
 
-bool IsNonEmptyFile(const std::string& filename) {
+bool LooksLikeOptimizerTraceHtml(const std::string& content) {
+    return content.find("optimizer-trace-app") != std::string::npos ||
+        content.find("optimizer-trace-data") != std::string::npos;
+}
+
+bool IsOptimizerTraceHtmlFile(const std::string& filename) {
     TFileStat stat;
     const TFsPath path(filename);
-    return path.Stat(stat) && stat.IsFile() && stat.Size > 0;
+    if (!path.Stat(stat) || !stat.IsFile() || stat.Size == 0) {
+        return false;
+    }
+
+    std::ifstream in(filename, std::ios::binary);
+    if (!in.is_open()) {
+        return false;
+    }
+
+    const std::size_t bytesToRead = static_cast<std::size_t>(
+        std::min<ui64>(stat.Size, static_cast<ui64>(TraceHtmlSniffBytes))
+    );
+    std::string prefix(bytesToRead, '\0');
+    in.read(prefix.data(), static_cast<std::streamsize>(prefix.size()));
+    prefix.resize(static_cast<std::size_t>(in.gcount()));
+    return LooksLikeOptimizerTraceHtml(prefix);
 }
 
 struct TTraceFileOutput {
@@ -400,7 +423,7 @@ std::optional<TTraceFileOutput> ResolveTraceFileOutput(const std::string& output
     const std::string tracePath = NormalizeTracePath(output);
     return TTraceFileOutput{
         .Path = tracePath,
-        .AppendToExisting = IsNonEmptyFile(tracePath)
+        .AppendToExisting = IsOptimizerTraceHtmlFile(tracePath)
     };
 }
 

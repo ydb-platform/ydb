@@ -64,18 +64,18 @@ class Nodes(object):
                     cmd=cmd,
                     retcode=retcode,
                 )
-                self._logger.critical(
-                    "{status_line}"
-                    "stdout is:\n"
-                    "{out}\n"
-                    "stderr is:\n"
-                    "{err}".format(
-                        status_line=status_line,
-                        out=out,
-                        err=err
-                    )
-                )
                 if check_retcode:
+                    self._logger.critical(
+                        "{status_line}"
+                        "stdout is:\n"
+                        "{out}\n"
+                        "stderr is:\n"
+                        "{err}".format(
+                            status_line=status_line,
+                            out=out,
+                            err=err
+                        )
+                    )
                     if retry_attempts > 0:
                         new_jobs.append((cmd, subprocess.Popen(cmd), host))
                     else:

@@ -36,6 +36,9 @@ TVector<ISubOperation::TPtr> CreateColumnTableWithLocalIndexes(TOperationId next
 
         indexConfigs.reserve(normalizedSchema.GetIndexes().size());
         for (const auto& indexProto : normalizedSchema.GetIndexes()) {
+            if (indexProto.GetImplementationCase() == NKikimrSchemeOp::TOlapIndexDescription::kMaxIndex) {
+                continue;
+            }
             NKikimrSchemeOp::TIndexCreationConfig indexConfig;
             if (!NOlap::ConvertOlapIndexToCreationConfig(indexProto, columnIdToName, indexConfig)) {
                 return {CreateReject(nextId, NKikimrScheme::StatusSchemeError,
@@ -54,7 +57,7 @@ TVector<ISubOperation::TPtr> CreateColumnTableWithLocalIndexes(TOperationId next
         scheme.SetInternal(true);
         *scheme.MutableCreateTableIndex() = std::move(indexConfig);
 
-        result.push_back(CreateNewLocalIndex(NextPartId(nextId, result), scheme));
+        result.push_back(CreateNewColumnTableLocalIndex(NextPartId(nextId, result), scheme));
     }
 
     return result;

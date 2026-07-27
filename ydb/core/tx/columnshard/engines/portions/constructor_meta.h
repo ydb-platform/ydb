@@ -23,6 +23,7 @@ private:
     std::optional<ui32> ColumnBlobBytes;
     std::optional<ui32> IndexRawBytes;
     std::optional<ui32> IndexBlobBytes;
+    std::optional<ui32> BsIndexBlobBytes;
     std::optional<ui32> NumSlices;
 
     std::optional<ui32> DeletionsCount;

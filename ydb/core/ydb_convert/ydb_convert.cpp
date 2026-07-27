@@ -879,7 +879,7 @@ const TString& GetAclName(const TString& name) {
 } // namespace
 
 const THashMap<TString, TACLAttrs> AccessMap_  = {
-    { YDB_DATABASE_CONNECT, TACLAttrs(EAccessRights::ConnectDatabase, EInheritanceType::InheritNone) },
+    { YDB_DATABASE_CONNECT, TACLAttrs(EAccessRights::ConnectDatabase) },
     { YDB_TABLES_MODIFY, TACLAttrs(EAccessRights(UpdateRow | EraseRow)) },
     { YDB_TABLES_READ, TACLAttrs(EAccessRights::SelectRow | EAccessRights::ReadAttributes) },
     { YDB_GENERIC_LIST, EAccessRights::GenericList},

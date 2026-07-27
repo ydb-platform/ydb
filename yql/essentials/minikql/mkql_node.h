@@ -45,7 +45,7 @@ struct TRuntimeNode {
     using TList = TSmallVec<TRuntimeNode>;
 
     TRuntimeNode()
-        : Data(nullptr, true)
+        : Data(/*ptr=*/nullptr, /*mark=*/true)
     {
     }
 
@@ -265,7 +265,7 @@ public:
 
 private:
     explicit TSingularType(TTypeType* type)
-        : TType(SingularKind, type, true)
+        : TType(SingularKind, type, /*supportsPresort=*/true)
     {
     }
 
@@ -1172,7 +1172,7 @@ public:
 
 private:
     explicit TAnyType(TTypeType* type)
-        : TType(EKind::Any, type, false)
+        : TType(EKind::Any, type, /*supportsPresort=*/false)
     {
     }
 
@@ -1430,7 +1430,7 @@ public:
 
 private:
     TResourceType(TTypeType* type, TInternName tag)
-        : TType(EKind::Resource, type, false)
+        : TType(EKind::Resource, type, /*supportsPresort=*/false)
         , Tag_(tag)
     {
     }

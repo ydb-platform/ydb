@@ -87,6 +87,7 @@ bool IsCreate(ETxType t) {
         case TxCreateFullBackupOp:
         case TxCreateSecret:
         case TxCreateStreamingQuery:
+        case TxCreateTestShardSet:
             return true; // IsCreate
         case TxIncrementalRestoreFinalize:
             return false; // IsCreate
@@ -133,6 +134,7 @@ bool IsCreate(ETxType t) {
         case TxDropSysView:
         case TxDropStreamingQuery:
         case TxDropSecret:
+        case TxDropTestShardSet:
             return false; // IsCreate
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -226,6 +228,7 @@ bool IsDrop(ETxType t) {
         case TxDropSysView:
         case TxDropSecret:
         case TxDropStreamingQuery:
+        case TxDropTestShardSet:
             return true; // IsDrop
         case TxIncrementalRestoreFinalize:
             return false; // IsDrop
@@ -276,6 +279,7 @@ bool IsDrop(ETxType t) {
         case TxCreateFullBackupOp:
         case TxCreateSecret:
         case TxCreateStreamingQuery:
+        case TxCreateTestShardSet:
             return false; // IsDrop
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -359,6 +363,7 @@ bool CanDeleteParts(ETxType t) {
         case TxDropBlobDepot:
         case TxDropContinuousBackup:
         case TxDropBackupCollection:
+        case TxDropTestShardSet:
             return true; // CanDeleteParts
         case TxDropTableIndex:
         case TxDropLocalIndex:
@@ -417,6 +422,7 @@ bool CanDeleteParts(ETxType t) {
         case TxCreateSecret:
         case TxDropSecret:
         case TxCreateStreamingQuery:
+        case TxCreateTestShardSet:
             return false; // CanDeleteParts
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -600,6 +606,8 @@ ETxType ConvertToTxType(NKikimrSchemeOp::EOperationType opType) {
         case NKikimrSchemeOp::ESchemeOpDropStreamingQuery: return TxDropStreamingQuery;
         case NKikimrSchemeOp::ESchemeOpTruncateTable: return TxTruncateTable;
         case NKikimrSchemeOp::ESchemeOpPrepareIndexValidation: return TxPrepareIndexValidation;
+        case NKikimrSchemeOp::ESchemeOpCreateTestShardSet: return TxCreateTestShardSet;
+        case NKikimrSchemeOp::ESchemeOpDropTestShardSet: return TxDropTestShardSet;
         // Fan out to TxChangePathState sub-ops; the wrapper type is never persisted.
         case NKikimrSchemeOp::ESchemeOpIncrementalRestoreLockTargets: return TxChangePathState;
         case NKikimrSchemeOp::ESchemeOpIncrementalRestoreUnlockTargets: return TxChangePathState;

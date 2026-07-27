@@ -425,10 +425,10 @@ public:
             case EType::GlobalFulltextPlain:
             case EType::GlobalFulltextRelevance:
             case EType::GlobalJson:
-                return true;
             case EType::GlobalFulltextCompact:
             case EType::GlobalFulltextCompactRelevance:
             case EType::GlobalJsonCompact:
+                return true;
             case EType::LocalBloomFilter:
             case EType::LocalBloomNgramFilter:
             case EType::LocalMinMax:
@@ -455,6 +455,31 @@ public:
                 return {};
         }
         return {};
+    }
+};
+
+struct TMultiColumnStatisticsDescription {
+    TString Name;
+    TVector<TString> Columns;
+    TVector<TString> Types;
+
+    TMultiColumnStatisticsDescription() = default;
+
+    explicit TMultiColumnStatisticsDescription(const NKikimrSchemeOp::TMultiColumnStatisticsDescription& message)
+        : Name(message.GetName())
+    {
+        for (const auto& column : message.GetColumnNames()) {
+            Columns.push_back(column);
+        }
+        for (const auto type : message.GetTypes()) {
+            switch (type) {
+                case NKikimrSchemeOp::EMultiColumnStatisticsType::COUNT_MIN_SKETCH:
+                    Types.push_back("COUNT_MIN_SKETCH");
+                    break;
+                default:
+                    break;
+            }
+        }
     }
 };
 
@@ -837,6 +862,8 @@ struct TKikimrTableMetadata : public TThrRefBase {
     // Indexes and ImplTables must be in same order
     TVector<TIndexDescription> Indexes;
     TVector<TIntrusivePtr<TKikimrTableMetadata>> ImplTables;
+
+    TVector<TMultiColumnStatisticsDescription> MultiColumnStatistics;
 
     TVector<TColumnFamily> ColumnFamilies;
     TTableSettings TableSettings;
@@ -1382,7 +1409,7 @@ struct TSecretSettings {
     TString Name;
     TString Value;
     TString ValueParamName; // when set, the value is taken from parameter at execution
-    bool InheritPermissions = false;
+    std::optional<bool> InheritPermissions; // Not set means the option is not specified explicitly
 };
 
 struct TKikimrListPathItem {
@@ -1551,8 +1578,6 @@ public:
 
     virtual NThreading::TFuture<TTableMetadataResult> LoadTableMetadata(
         const TString& cluster, const TString& table, TLoadTableMetadataSettings settings) = 0;
-
-    virtual NThreading::TFuture<TGenericResult> SetConstraint(const TString& tableName, TVector<TSetColumnConstraintSettings>&& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> AlterDatabase(const TString& cluster, const TAlterDatabaseSettings& settings) = 0;
 

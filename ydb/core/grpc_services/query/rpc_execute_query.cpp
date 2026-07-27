@@ -71,6 +71,9 @@ bool FillTxSettings(const Ydb::Query::TransactionSettings& from, Ydb::Table::Tra
         case Ydb::Query::TransactionSettings::kReadCommittedReadWrite:
             to.mutable_read_committed_read_write();
             break;
+        case Ydb::Query::TransactionSettings::kStrictSerializableReadWrite:
+            to.mutable_strict_serializable_read_write();
+            break;
         default:
             issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
                 "Invalid tx_settings"));
@@ -469,6 +472,12 @@ private:
             if (kqpResponse.HasTxMeta()) {
                 hasTrailingMessage = true;
                 response.mutable_tx_meta()->set_id(kqpResponse.GetTxMeta().id());
+            }
+
+            if (kqpResponse.HasCommitTimestamp()) {
+                hasTrailingMessage = true;
+                response.mutable_commit_timestamp()->set_plan_step(kqpResponse.GetCommitTimestamp().plan_step());
+                response.mutable_commit_timestamp()->set_tx_id(kqpResponse.GetCommitTimestamp().tx_id());
             }
         }
 

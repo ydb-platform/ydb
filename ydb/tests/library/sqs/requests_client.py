@@ -79,19 +79,22 @@ class SqsChangeMessageVisibilityParams(object):
 
 
 class SqsHttpApi(object):
-    def __init__(self, server, port, user, raise_on_error=False, timeout=REQUEST_TIMEOUT, security_token=None, force_private=False, iam_token=None, folder_id=None):
-        self.__auth_headers = auth_headers(user, security_token, iam_token)
+    def __init__(self, server, port, user, raise_on_error=False, timeout=REQUEST_TIMEOUT, security_token=None, force_private=False, iam_token=None, folder_id=None, extra_headers=None):
+        headers = auth_headers(user, security_token, iam_token)
+        if extra_headers is not None:
+            headers.update(extra_headers)
+        self.__auth_headers = headers
         if not server.startswith('http'):
             server = 'http://' + server
         self.__request = requests.Request(
             'POST',
             "{}:{}".format(server, port),
-            headers=auth_headers(user, security_token, iam_token)
+            headers=headers
         )
         self.__private_request = requests.Request(
             'POST',
             "{}:{}/private".format(server, port),
-            headers=auth_headers(user, security_token, iam_token)
+            headers=headers
         )
         self.__session = requests.Session()
         self.__raise_on_error = raise_on_error

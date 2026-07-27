@@ -8,7 +8,7 @@
 
 ### Бесплатное использование
 
-Корпоративная СУБД Яндекса (Продукт) может использоваться бесплатно [на условиях лицензионного соглашения](https://ясубд.рф/cond/) в следующих целях:
+Корпоративная СУБД Яндекса (Продукт) может использоваться бесплатно [на условиях лицензионного соглашения](https://yandex.ru/legal/ydb_nc_eula/) в следующих целях:
 
 - для оценки и изучения свойств Продукта;
 - в рамках процессов разработки и тестирования программного обеспечения, использующего или встраивающего функции Продукта;
@@ -17,7 +17,7 @@
 
 ### Коммерческое использование
 
-Для коммерческого использования Корпоративной СУБД Яндекса необходимо приобретение лицензии, [текст лицензионного соглашения](https://ясубд.рф/cond-commercial/). Цены на лицензии доступны [по запросу](https://ydb.yandex.ru/#form).
+Для коммерческого использования Корпоративной СУБД Яндекса необходимо приобретение лицензии, [текст лицензионного соглашения](https://yandex.ru/legal/ydb_comm_eula/). Цены на лицензии доступны [по запросу](https://ydb.yandex.ru/#form).
 
 ## Скачивание дистрибутивов
 
@@ -29,62 +29,97 @@
 
 #|
 || **Версия** | **Дата выпуска** | **Скачать** | **Контрольные суммы** | **Список изменений** ||
-|| **v25.2** |  |  |  |  ||
-|| v.25.2.1.ent.4 | 12.02.2026 |
+|| **v25.4** |  |  |  |  ||
+|| v.25.4.1.ent.2 | 17.06.2026 |
 
-[Дистрибутив](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.2.1.ent.4/ydbd-enterpise-25.2.1.ent.4-stable-linux-amd64.tar.xz)
-[Отладочные символы](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.2.1.ent.4/ydbd-enterpise-25.2.1.ent.4-stable-linux-amd64-debug.tar.xz)
+[Дистрибутив](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.4.1.ent.2/ydbd-enterpise-25.4.1.ent.2-stable-linux-amd64.tar.xz)
+[Отладочные символы](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.4.1.ent.2/ydbd-enterpise-25.4.1.ent.2-stable-linux-amd64-debug.tar.xz)
 
 |
 
-[К дистрибутиву](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.2.1.ent.4/checksums.txt)
-[К отладочным символам](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.2.1.ent.4/checksums.debug.txt)
+[К дистрибутиву](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.4.1.ent.2/checksums.txt)
+[К отладочным символам](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.4.1.ent.2/checksums.debug.txt)
+
+| [См. список](../changelog-enterprise.md#25-4-1-ent-2) ||
+|| **v25.3** |  |  |  |  ||
+|| v.25.3.1.ent.3 | 11.06.2026 |
+
+[Дистрибутив](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.3.1.ent.3/ydbd-enterpise-25.3.1.ent.3-stable-linux-amd64.tar.xz)
+[Отладочные символы](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.3.1.ent.3/ydbd-enterpise-25.3.1.ent.3-stable-linux-amd64-debug.tar.xz)
+
+|
+
+[К дистрибутиву](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.3.1.ent.3/checksums.txt)
+[К отладочным символам](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.3.1.ent.3/checksums.debug.txt)
+
+| [См. список](../changelog-enterprise.md#25-3-1-ent-3) ||
+|| **v25.2** |  |  |  |  ||
+|| v.25.2.1.ent.13 | 11.06.2026 |
+
+[Дистрибутив](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.2.1.ent.13/ydbd-enterpise-25.2.1.ent.13-stable-linux-amd64.tar.xz)
+[Отладочные символы](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.2.1.ent.13/ydbd-enterpise-25.2.1.ent.13-stable-linux-amd64-debug.tar.xz)
+
+|
+
+[К дистрибутиву](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.2.1.ent.13/checksums.txt)
+[К отладочным символам](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.2.1.ent.13/checksums.debug.txt)
+
+| [См. список](../changelog-enterprise.md#25-2-1-ent-13) ||
+|| v.25.2.1.ent.4 | 12.02.2026 |
+
+[Дистрибутив](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.2.1.ent.4/ydbd-enterpise-25.2.1.ent.4-stable-linux-amd64.tar.xz)
+[Отладочные символы](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.2.1.ent.4/ydbd-enterpise-25.2.1.ent.4-stable-linux-amd64-debug.tar.xz)
+
+|
+
+[К дистрибутиву](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.2.1.ent.4/checksums.txt)
+[К отладочным символам](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.2.1.ent.4/checksums.debug.txt)
 
 | [См. список](../changelog-enterprise.md#25-2-1-ent-4) ||
 || **v25.1** |  |  |  |  ||
 || v.25.1.4.ent.8 | 12.02.2026 |
 
-[Дистрибутив](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.1.4.ent.8/ydbd-enterpise-25.1.4.ent.8-stable-linux-amd64.tar.xz)
-[Отладочные символы](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.1.4.ent.8/ydbd-enterpise-25.1.4.ent.8-stable-linux-amd64-debug.tar.xz)
+[Дистрибутив](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.1.4.ent.8/ydbd-enterpise-25.1.4.ent.8-stable-linux-amd64.tar.xz)
+[Отладочные символы](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.1.4.ent.8/ydbd-enterpise-25.1.4.ent.8-stable-linux-amd64-debug.tar.xz)
 
 |
 
-[К дистрибутиву](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.1.4.ent.8/checksums.txt)
-[К отладочным символам](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.1.4.ent.8/checksums.debug.txt)
+[К дистрибутиву](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.1.4.ent.8/checksums.txt)
+[К отладочным символам](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.1.4.ent.8/checksums.debug.txt)
 
 | [См. список](../changelog-enterprise.md#25-1-4-ent-8) ||
 || v.25.1.4.ent.3 | 25.11.2025 |
 
-[Дистрибутив](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.1.4.ent.3/ydbd-enterpise-25.1.4.ent.3-stable-linux-amd64.tar.xz)
-[Отладочные символы](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.1.4.ent.3/ydbd-enterpise-25.1.4.ent.3-stable-linux-amd64-debug.tar.xz)
+[Дистрибутив](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.1.4.ent.3/ydbd-enterpise-25.1.4.ent.3-stable-linux-amd64.tar.xz)
+[Отладочные символы](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.1.4.ent.3/ydbd-enterpise-25.1.4.ent.3-stable-linux-amd64-debug.tar.xz)
 
 |
 
-[К дистрибутиву](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.1.4.ent.3/checksums.txt)
-[К отладочным символам](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.1.4.ent.3/checksums.debug.txt)
+[К дистрибутиву](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.1.4.ent.3/checksums.txt)
+[К отладочным символам](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.1.4.ent.3/checksums.debug.txt)
 
 | [См. список](../changelog-enterprise.md#25-1-4-ent-3) ||
 || **v24.4** |  |  |  |  ||
 || v.24.4.4.20 | 01.11.2025 |
 
-[Дистрибутив](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/24.4.4.ent.20/ydbd-enterpise-24.4.4.ent.20-stable-linux-amd64.tar.xz)
-[Отладочные символы](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/24.4.4.ent.20/ydbd-enterpise-24.4.4.ent.20-stable-linux-amd64-debug.tar.xz)
+[Дистрибутив](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/24.4.4.ent.20/ydbd-enterpise-24.4.4.ent.20-stable-linux-amd64.tar.xz)
+[Отладочные символы](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/24.4.4.ent.20/ydbd-enterpise-24.4.4.ent.20-stable-linux-amd64-debug.tar.xz)
 
 |
 
-[К дистрибутиву](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/24.4.4.ent.20/checksums.txt)
-[К отладочным символам](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/24.4.4.ent.20/checksums.debug.txt)
+[К дистрибутиву](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/24.4.4.ent.20/checksums.txt)
+[К отладочным символам](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/24.4.4.ent.20/checksums.debug.txt)
 
 | [См. список](../changelog-enterprise.md#24-4-4-20) ||
 || v.24.4.4.15 | 19.09.2025 |
 
-[Дистрибутив](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/24.4.4.ent.15/ydbd-enterpise-24.4.4.ent.15-stable-linux-amd64.tar.xz)
-[Отладочные символы](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/24.4.4.ent.15/ydbd-enterpise-24.4.4.ent.15-stable-linux-amd64-debug.tar.xz)
+[Дистрибутив](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/24.4.4.ent.15/ydbd-enterpise-24.4.4.ent.15-stable-linux-amd64.tar.xz)
+[Отладочные символы](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/24.4.4.ent.15/ydbd-enterpise-24.4.4.ent.15-stable-linux-amd64-debug.tar.xz)
 
 |
 
-[К дистрибутиву](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/24.4.4.ent.15/checksums.txt)
-[К отладочным символам](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/24.4.4.ent.15/checksums.debug.txt)
+[К дистрибутиву](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/24.4.4.ent.15/checksums.txt)
+[К отладочным символам](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/24.4.4.ent.15/checksums.debug.txt)
 
 | [См. список](../changelog-enterprise.md#24-4-4-15) ||
 || v.24.4.4.13 | 29.07.2025 |
@@ -155,8 +190,13 @@
 
 #|
 || **Версия** | **Дата выпуска** | **Скачать** | **Список изменений** ||
+|| **v25.4** |  |  |  |  ||
+|| v.25.4.1.ent.2 | 17.06.2026 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterpise:25.4.1.ent.2` | [См. список](../changelog-enterprise.md#25-4-1-ent-2) ||
+|| **v25.3** |  |  |  |  ||
+|| v.25.3.1.ent.3 | 11.06.2026 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterpise:25.3.1.ent.3` | [См. список](../changelog-enterprise.md#25-3-1-ent-3) ||
 || **v25.2** |  |  |  |  ||
-|| v.25.2.1.ent.4 | 12.02.2026 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterpise:25.2.1.ent.4` | [См. список](../changelog-enterprise.md#25-1-4-ent-4) ||
+|| v.25.2.1.ent.13 | 11.06.2026 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterpise:25.2.1.ent.13` | [См. список](../changelog-enterprise.md#25-2-1-ent-13) ||
+|| v.25.2.1.ent.4 | 12.02.2026 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterpise:25.2.1.ent.4` | [См. список](../changelog-enterprise.md#25-2-1-ent-4) ||
 || **v25.1** |  |  |  |  ||
 || v.25.1.4.ent.8 | 12.02.2026 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterpise:25.1.4.ent.8` | [См. список](../changelog-enterprise.md#25-1-4-ent-8) ||
 || v.25.1.4.ent.3 | 25.11.2025 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterpise:25.1.4.ent.3` | [См. список](../changelog-enterprise.md#25-1-4-ent-3) ||

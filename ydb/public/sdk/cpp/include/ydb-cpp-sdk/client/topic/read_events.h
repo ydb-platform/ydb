@@ -98,7 +98,8 @@ struct TReadSessionEvent {
                                 TWriteSessionMeta::TPtr meta,
                                 TMessageMeta::TPtr messageMeta,
                                 uint64_t uncompressedSize,
-                                std::string messageGroupId);
+                                std::string messageGroupId,
+                                uint64_t logicalMessageCount = 1);
             uint64_t Offset;
             std::string ProducerId;
             uint64_t SeqNo;
@@ -108,6 +109,7 @@ struct TReadSessionEvent {
             TMessageMeta::TPtr MessageMeta;
             uint64_t UncompressedSize;
             std::string MessageGroupId;
+            uint64_t LogicalMessageCount;
         };
 
         class TMessageBase: public TPrintable<TMessageBase> {
@@ -123,6 +125,9 @@ struct TReadSessionEvent {
 
             //! Message offset.
             uint64_t GetOffset() const;
+
+            //! Number of logical messages covered by this message.
+            uint64_t GetLogicalMessageCount() const;
 
             //! Producer id.
             const std::string& GetProducerId() const;

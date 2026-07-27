@@ -131,12 +131,13 @@ arrow::Datum DoConvertScalar(TType* type, const T& value, arrow::MemoryPool& poo
             case NUdf::EDataSlot::Utf8:
             case NUdf::EDataSlot::Yson:
             case NUdf::EDataSlot::Json:
-            case NUdf::EDataSlot::JsonDocument: {
+            case NUdf::EDataSlot::JsonDocument:
+            case NUdf::EDataSlot::DyNumber: {
                 const auto& str = value.AsStringRef();
                 std::shared_ptr<arrow::Buffer> buffer(ARROW_RESULT(arrow::AllocateBuffer(str.Size(), &pool)));
                 std::memcpy(buffer->mutable_data(), str.Data(), str.Size());
                 std::shared_ptr<arrow::Scalar> scalar;
-                if (slot == NUdf::EDataSlot::String || slot == NUdf::EDataSlot::Yson || slot == NUdf::EDataSlot::JsonDocument) {
+                if (slot == NUdf::EDataSlot::String || slot == NUdf::EDataSlot::Yson || slot == NUdf::EDataSlot::JsonDocument || slot == NUdf::EDataSlot::DyNumber) {
                     scalar = std::make_shared<arrow::BinaryScalar>(buffer, arrow::binary());
                 } else {
                     // NOTE: Do not use |arrow::BinaryScalar| for utf8 and json types directly.
@@ -192,6 +193,13 @@ arrow::Datum DoConvertScalar(TType* type, const T& value, arrow::MemoryPool& poo
                 *reinterpret_cast<NYql::NDecimal::TInt128*>(buffer->mutable_data()) = value.GetInt128();
                 return arrow::Datum(std::make_shared<TPrimitiveDataType<NYql::NDecimal::TInt128>::TScalarResult>(buffer));
             }
+            case NUdf::EDataSlot::Uuid: {
+                std::shared_ptr<arrow::Buffer> buffer(ARROW_RESULT(arrow::AllocateBuffer(UuidBinarySize, &pool)));
+                const auto ref = value.AsStringRef();
+                MKQL_ENSURE(ref.Size() == UuidBinarySize, "Wrong Uuid size: " << ref.Size());
+                std::memcpy(buffer->mutable_data(), ref.Data(), ref.Size());
+                return arrow::Datum(std::make_shared<arrow::FixedSizeBinaryScalar>(std::move(buffer), GetUuidArrowType()));
+            }
             default:
                 MKQL_ENSURE(false, "Unsupported data slot " << slot);
         }
@@ -221,7 +229,7 @@ arrow::Datum ConvertScalar(TType* type, const NUdf::TBlockItem& value, arrow::Me
 arrow::Datum MakeArrayFromScalar(const arrow::Scalar& scalar, size_t len, TType* type, arrow::MemoryPool& pool) {
     MKQL_ENSURE(len > 0, "Invalid block size");
     auto reader = MakeBlockReader(TTypeInfoHelper(), type);
-    auto builder = MakeArrayBuilder(TTypeInfoHelper(), type, pool, len, nullptr);
+    auto builder = MakeArrayBuilder(TTypeInfoHelper(), type, pool, len, /*pgBuilder=*/nullptr);
 
     auto scalarItem = reader->GetScalarItem(scalar);
     builder->Add(scalarItem, len);

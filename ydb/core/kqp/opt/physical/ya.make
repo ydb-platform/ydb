@@ -3,7 +3,6 @@ LIBRARY()
 SRCS(
     kqp_opt_phy_build_stage.cpp
     kqp_opt_phy_limit.cpp
-    kqp_olap_filter_inspection.cpp
     kqp_opt_phy_olap_agg.cpp
     kqp_opt_phy_olap_distinct.cpp
     kqp_opt_phy_olap_filter.cpp

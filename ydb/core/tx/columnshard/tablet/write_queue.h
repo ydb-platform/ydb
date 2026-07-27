@@ -25,7 +25,7 @@ private:
     const NKikimrDataEvents::ELockMode LockMode;
     const NEvWrite::EModificationType ModificationType;
     const EOperationBehaviour Behaviour;
-    const TMonotonic Created = TMonotonic::Now();
+    const TMonotonic Created = NActors::TActivationContext::Monotonic();
     const std::optional<TDuration> Timeout;
     const ui64 TxId;
     const bool IsBulk;

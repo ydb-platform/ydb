@@ -1,11 +1,32 @@
 function createTraceRuntime() {
+    function tracePrimaryIndex(selection) {
+        selection = Array.isArray(selection) ? selection : [];
+        var index = Math.floor(Number(selection[0]));
+        return Number.isFinite(index) && index >= 0 ? index : 0;
+    }
+
+    function defineDerivedTraceIndex(bucket) {
+        Object.defineProperty(bucket, 'activeTraceIndex', {
+            enumerable: true,
+            configurable: true,
+            get: function() {
+                return tracePrimaryIndex(this.activeTraceSelection);
+            },
+            set: function(index) {
+                index = Math.floor(Number(index));
+                this.activeTraceSelection = [Number.isFinite(index) && index >= 0 ? index : 0];
+            }
+        });
+        return bucket;
+    }
+
     function collapsedIndicators() {
         return { stages: {}, groups: {}, rules: {} };
     }
 
     function traceBucket() {
-        return {
-            activeTraceIndex: 0,
+        return defineDerivedTraceIndex({
+            activeTraceSelection: [0],
             activeTraceLoaded: false,
             traceStoreStatus: { state: 'unloaded', title: '', message: '' },
             stageCount: 0,
@@ -14,9 +35,9 @@ function createTraceRuntime() {
             uiState: TraceState.emptyUiState(),
             ruleFeatureCache: {},
             showEmptyStages: false,
-            nodeColumnSelections: {},
-            nodeColumnWidths: {},
-            nodeColumnAutoWidths: {},
+            pinnedFieldSelections: {},
+            pinnedFieldWidths: {},
+            pinnedFieldAutoWidths: {},
             diffFieldSelections: {},
             diffFieldSelectionsHydrated: {},
             traceSessions: {},
@@ -24,7 +45,7 @@ function createTraceRuntime() {
             treeMaterializers: {},
             rulePaneScrollSessions: {},
             ruleInfoTabSessions: {}
-        };
+        });
     }
 
     function virtualizationBucket() {
@@ -262,6 +283,7 @@ function createTraceRuntime() {
             activeHighlightTimer: null,
             lastSearchQuery: '',
             searchMatches: [],
+            restoredSearchIndicatorMatches: null,
             currentSearchMatchIndex: -1,
             searchNavigationMatchIndex: -1,
             activeSearchMatchRecord: null,
@@ -319,7 +341,7 @@ function createTraceRuntime() {
     function resizeBucket() {
         return {
             ruleResizeDrag: null,
-            nodeColumnResizeDrag: null,
+            pinnedFieldResizeDrag: null,
             deferredFrameWork: {
                 treeMaterializers: false,
                 traceAnchor: false,
@@ -913,7 +935,12 @@ function createTraceRuntime() {
     function createTraceSwitchStateService() {
         return {
             activeTraceIndex: function() {
-                return state.trace.activeTraceIndex || 0;
+                return tracePrimaryIndex(state.trace.activeTraceSelection);
+            },
+            activeTraceSelection: function() {
+                return Array.isArray(state.trace.activeTraceSelection)
+                    ? state.trace.activeTraceSelection.slice()
+                    : [tracePrimaryIndex(state.trace.activeTraceSelection)];
             },
             clearVisualOwner: function(ownerId) {
                 if (ownerId && state.visual.traceSwitchOwnerId !== ownerId) return false;
@@ -924,10 +951,18 @@ function createTraceRuntime() {
                 options = options || {};
                 index = Math.floor(Number(index));
                 if (!Number.isFinite(index) || index < 0) index = 0;
-                state.trace.activeTraceIndex = index;
+                state.trace.activeTraceSelection = [index];
                 state.trace.activeTraceLoaded = options.loaded === true;
                 RuntimeEpochs.bump(state.epochs, 'trace');
-                return state.trace.activeTraceIndex;
+                return tracePrimaryIndex(state.trace.activeTraceSelection);
+            },
+            setActiveTraceSelection: function(selection, options) {
+                options = options || {};
+                selection = normalizeTraceSelection(selection);
+                state.trace.activeTraceSelection = selection.slice();
+                state.trace.activeTraceLoaded = options.loaded === true;
+                RuntimeEpochs.bump(state.epochs, 'trace');
+                return tracePrimaryIndex(state.trace.activeTraceSelection);
             },
             setTraceLoaded: function(loaded) {
                 state.trace.activeTraceLoaded = loaded !== false;
@@ -949,8 +984,12 @@ function createTraceRuntime() {
                 return state.visual.traceSwitchOwnerId;
             },
             state: function() {
+                var selection = Array.isArray(state.trace.activeTraceSelection)
+                    ? state.trace.activeTraceSelection.slice()
+                    : [tracePrimaryIndex(state.trace.activeTraceSelection)];
                 return {
-                    activeTraceIndex: state.trace.activeTraceIndex,
+                    activeTraceIndex: tracePrimaryIndex(selection),
+                    activeTraceSelection: selection,
                     activeTraceLoaded: state.trace.activeTraceLoaded,
                     traceStoreStatus: state.trace.traceStoreStatus,
                     visualOwnerId: state.visual.traceSwitchOwnerId
@@ -2115,6 +2154,265 @@ function normalizeTraceData(trace, index) {
     return TraceSchema.normalizeTraceData(trace, index);
 }
 
+function normalizeTraceSelection(selection, traces) {
+    traces = Array.isArray(traces) ? traces : traceDataTraces();
+    selection = Array.isArray(selection) ? selection : [selection];
+    var result = [];
+    var seen = {};
+    for (var i = 0; i < selection.length; i++) {
+        var index = Math.floor(Number(selection[i]));
+        if (!Number.isFinite(index) || index < 0 || index >= traces.length || seen[index]) continue;
+        seen[index] = true;
+        result.push(index);
+    }
+    if (!result.length && traces.length) {
+        var current = traceRuntime().activeTraceSelection;
+        var fallback = Array.isArray(current) ? Math.floor(Number(current[0])) : 0;
+        fallback = Math.max(0, Math.min(traces.length - 1, fallback));
+        result.push(fallback);
+    }
+    return result;
+}
+
+function activeTraceSelection() {
+    return normalizeTraceSelection(traceRuntime().activeTraceSelection);
+}
+
+function traceSelectionKey(selection) {
+    selection = normalizeTraceSelection(selection);
+    return selection.length === 1 ? String(selection[0]) : 'combo:' + selection.join(',');
+}
+
+function activeTraceSelectionKey() {
+    return traceSelectionKey(activeTraceSelection());
+}
+
+function traceTitleForIndex(index, traces) {
+    traces = Array.isArray(traces) ? traces : traceDataTraces();
+    var trace = traces[index] ? normalizeTraceData(traces[index], index) : null;
+    return trace && trace.title || ('Trace ' + (index + 1));
+}
+
+function traceSelectionTitle(selection, traces) {
+    traces = Array.isArray(traces) ? traces : traceDataTraces();
+    selection = normalizeTraceSelection(selection, traces);
+    if (selection.length <= 1) return traceTitleForIndex(selection[0] || 0, traces);
+    var first = traceTitleForIndex(selection[0], traces);
+    var second = traceTitleForIndex(selection[1], traces);
+    if (selection.length === 2) return '2 traces: ' + first + ' + ' + second;
+    return selection.length + ' traces: ' + first + ' + ' + (selection.length - 1) + ' more';
+}
+
+function copyTraceStageArray(values, si) {
+    return Array.isArray(values) && Array.isArray(values[si]) ? values[si].slice() : [];
+}
+
+function copyTraceGroups(values, si) {
+    var groups = Array.isArray(values) && Array.isArray(values[si]) ? values[si] : [];
+    return groups.map(function(group) {
+        group = group || {};
+        return {
+            name: String(group.name || ''),
+            ri: Array.isArray(group.ri) ? group.ri.slice() : []
+        };
+    });
+}
+
+function mergeTraceFeatureAvailability(target, source) {
+    source = source || {};
+    return {
+        fields: !!(target.fields || source.fields),
+        pinned: !!(target.pinned || source.pinned),
+        info: !!(target.info || source.info)
+    };
+}
+
+function pushUniqueByKey(items, item, keyName) {
+    if (!item) return;
+    keyName = keyName || 'key';
+    var key = String(item[keyName] || '');
+    if (!key) return;
+    for (var i = 0; i < items.length; i++) {
+        if (String(items[i] && items[i][keyName] || '') === key) return;
+    }
+    var copy = {};
+    for (var prop in item) {
+        if (Object.prototype.hasOwnProperty.call(item, prop)) copy[prop] = item[prop];
+    }
+    items.push(copy);
+}
+
+function pushUniqueString(items, value) {
+    value = String(value || '');
+    if (value && items.indexOf(value) < 0) items.push(value);
+}
+
+function clonePinnedFieldPreset(preset, traceTitle) {
+    if (!preset || typeof preset !== 'object') return null;
+    var copy = {};
+    for (var key in preset) {
+        if (!Object.prototype.hasOwnProperty.call(preset, key)) continue;
+        copy[key] = Array.isArray(preset[key]) ? preset[key].slice() : preset[key];
+    }
+    if (traceTitle && copy.label) copy.label = traceTitle + ' / ' + copy.label;
+    else if (traceTitle && copy.name) copy.name = traceTitle + ' / ' + copy.name;
+    return copy;
+}
+
+function copyRegistryRecordFields(record) {
+    var copy = {};
+    if (!record || typeof record !== 'object') return copy;
+    for (var key in record) {
+        if (Object.prototype.hasOwnProperty.call(record, key)) copy[key] = record[key];
+    }
+    return copy;
+}
+
+function mergePayloadRegistriesForSelection(normalizedTraces, selection) {
+    var registry = null;
+    var allSame = true;
+    for (var i = 0; i < normalizedTraces.length; i++) {
+        var current = normalizedTraces[i] && normalizedTraces[i].payloadRegistry || null;
+        if (!current) continue;
+        if (!registry) registry = current;
+        else if (registry !== current) allSame = false;
+    }
+    if (allSame) return { registry: registry, remapTileId: function(_, tileId) { return tileId; } };
+
+    var merged = TracePayloadRegistry.create();
+    for (var ti = 0; ti < normalizedTraces.length; ti++) {
+        var source = normalizedTraces[ti] && normalizedTraces[ti].payloadRegistry || null;
+        if (!source) continue;
+        var prefix = 'trace-' + selection[ti] + ':';
+        var blocks = source.blocks || {};
+        for (var blockId in blocks) {
+            if (!Object.prototype.hasOwnProperty.call(blocks, blockId)) continue;
+            var block = copyRegistryRecordFields(blocks[blockId]);
+            block.id = prefix + blockId;
+            TracePayloadRegistry.registerBlock(merged, block);
+        }
+        var tiles = source.tiles || {};
+        for (var tileId in tiles) {
+            if (!Object.prototype.hasOwnProperty.call(tiles, tileId)) continue;
+            var tile = copyRegistryRecordFields(tiles[tileId]);
+            tile.id = prefix + (tile.id || tile.tileId || tileId);
+            tile.blockId = prefix + (tile.blockId || tile.payloadBlockId || '');
+            TracePayloadRegistry.registerTile(merged, tile);
+        }
+    }
+    return {
+        registry: merged,
+        remapTileId: function(sourceOrdinal, tileId) {
+            return tileId ? 'trace-' + selection[sourceOrdinal] + ':' + tileId : tileId;
+        },
+        remapBlockId: function(sourceOrdinal, blockId) {
+            return blockId ? 'trace-' + selection[sourceOrdinal] + ':' + blockId : blockId;
+        }
+    };
+}
+
+function copyPayloadRefForComposite(ref, sourceOrdinal, registryMerge) {
+    if (!ref || typeof ref !== 'object') return ref || null;
+    var copy = {};
+    for (var key in ref) {
+        if (Object.prototype.hasOwnProperty.call(ref, key)) copy[key] = ref[key];
+    }
+    if (registryMerge && registryMerge.remapTileId) {
+        if (copy.tileId) copy.tileId = registryMerge.remapTileId(sourceOrdinal, copy.tileId);
+        if (copy.blockId && registryMerge.remapBlockId) {
+            copy.blockId = registryMerge.remapBlockId(sourceOrdinal, copy.blockId);
+        }
+    }
+    return copy;
+}
+
+function normalizedTraceStageCount(trace) {
+    trace = trace || {};
+    return Math.max(
+        (trace.stageNames || []).length,
+        (trace.groups || []).length,
+        (trace.ruleNames || []).length,
+        (trace.planTrees || []).length,
+        (trace.ruleTypes || []).length,
+        (trace.ruleText || []).length,
+        (trace.ruleInfo || []).length,
+        (trace.sourceBlockIds || []).length,
+        (trace.tilePayloadRefs || []).length
+    );
+}
+
+function composeSelectedTraceData(selection) {
+    var rawTraces = traceDataTraces();
+    selection = normalizeTraceSelection(selection, rawTraces);
+    if (selection.length <= 1) return normalizeTraceData(rawTraces[selection[0] || 0], selection[0] || 0);
+
+    var normalized = selection.map(function(index) {
+        return normalizeTraceData(rawTraces[index], index);
+    });
+    var registryMerge = mergePayloadRegistriesForSelection(normalized, selection);
+    var composite = {
+        schemaVersion: 2,
+        traceIndex: selection[0],
+        title: traceSelectionTitle(selection, rawTraces),
+        stageNames: [],
+        groups: [],
+        ruleNames: [],
+        ruleTypes: [],
+        ruleText: [],
+        planTrees: [],
+        ruleInfo: [],
+        sourceBlockIds: [],
+        tilePayloadRefs: [],
+        tileFeatures: [],
+        nodeFields: [],
+        pinnedFields: [],
+        declaredPinnedFields: [],
+        pinnedFieldPresets: [],
+        diffFieldPresets: [],
+        traceFeatureAvailability: { fields: false, pinned: false, info: false },
+        payloadRegistry: registryMerge.registry
+    };
+
+    for (var ti = 0; ti < normalized.length; ti++) {
+        var trace = normalized[ti];
+        var traceTitle = trace.title || traceTitleForIndex(selection[ti], rawTraces);
+        composite.traceFeatureAvailability = mergeTraceFeatureAvailability(
+            composite.traceFeatureAvailability,
+            trace.traceFeatureAvailability
+        );
+        (trace.nodeFields || []).forEach(function(field) { pushUniqueByKey(composite.nodeFields, field, 'key'); });
+        (trace.pinnedFields || []).forEach(function(key) { pushUniqueString(composite.pinnedFields, key); });
+        (trace.declaredPinnedFields || trace.pinnedFields || []).forEach(function(key) {
+            pushUniqueString(composite.declaredPinnedFields, key);
+        });
+        (trace.pinnedFieldPresets || []).forEach(function(preset) {
+            var cloned = clonePinnedFieldPreset(preset, traceTitle);
+            if (cloned) composite.pinnedFieldPresets.push(cloned);
+        });
+        (trace.diffFieldPresets || []).forEach(function(preset) {
+            var cloned = clonePinnedFieldPreset(preset, traceTitle);
+            if (cloned) composite.diffFieldPresets.push(cloned);
+        });
+
+        for (var si = 0; si < normalizedTraceStageCount(trace); si++) {
+            var stageName = trace.stageNames[si] || ('Stage ' + (si + 1));
+            composite.stageNames.push(traceTitle + ' / ' + stageName);
+            composite.groups.push(copyTraceGroups(trace.groups, si));
+            composite.ruleNames.push(copyTraceStageArray(trace.ruleNames, si));
+            composite.ruleTypes.push(copyTraceStageArray(trace.ruleTypes, si));
+            composite.ruleText.push(copyTraceStageArray(trace.ruleText, si));
+            composite.planTrees.push(copyTraceStageArray(trace.planTrees, si));
+            composite.ruleInfo.push(copyTraceStageArray(trace.ruleInfo, si));
+            composite.sourceBlockIds.push(copyTraceStageArray(trace.sourceBlockIds, si));
+            composite.tileFeatures.push(copyTraceStageArray(trace.tileFeatures, si));
+            composite.tilePayloadRefs.push(copyTraceStageArray(trace.tilePayloadRefs, si).map(function(ref) {
+                return copyPayloadRefForComposite(ref, ti, registryMerge);
+            }));
+        }
+    }
+    return composite;
+}
+
 function emptyUiState() {
     return TraceState.emptyUiState();
 }
@@ -2153,7 +2451,7 @@ function createInitialUiState() {
     return state;
 }
 
-function loadTraceData(index) {
+function loadTraceData(selection) {
     bumpRuntimeEpoch('trace');
     bumpRuntimeEpoch('render');
     bumpRuntimeEpoch('search');
@@ -2163,11 +2461,11 @@ function loadTraceData(index) {
     bumpRuntimeEpoch('fullscreen');
     bumpRuntimeEpoch('resize');
     var traces = traceDataTraces();
-    index = Math.max(0, Math.min(traces.length - 1, Number(index) || 0));
+    selection = normalizeTraceSelection(selection, traces);
     var traceState = traceRuntime();
-    traceState.activeTraceIndex = index;
+    traceState.activeTraceSelection = selection.slice();
 
-    var trace = normalizeTraceData(traces[index], index);
+    var trace = composeSelectedTraceData(selection);
     traceState.traceStore = TraceStore.create(trace, {
         traceGeneration: currentRuntimeEpoch().trace
     });
@@ -2181,25 +2479,28 @@ function loadTraceData(index) {
     traceState.activeTraceLoaded = true;
 }
 
-var SESSION_TRACE_KEY = 'otv_activeTraceIndex';
+var SESSION_TRACE_SELECTION_KEY = 'otv_activeTraceSelection';
 
-function saveActiveTraceIndexToSession(index) {
-    try { sessionStorage.setItem(SESSION_TRACE_KEY, String(index)); } catch (e) {}
+function saveActiveTraceSelectionToSession(selection) {
+    try {
+        sessionStorage.setItem(
+            SESSION_TRACE_SELECTION_KEY,
+            normalizeTraceSelection(selection).join(',')
+        );
+    } catch (e) {}
 }
 
 function ensureActiveTraceLoaded() {
     if (!traceRuntime().activeTraceLoaded) {
         try {
-            var saved = sessionStorage.getItem(SESSION_TRACE_KEY);
+            var saved = sessionStorage.getItem(SESSION_TRACE_SELECTION_KEY);
             if (saved !== null) {
-                var idx = Number(saved);
                 var traces = traceDataTraces();
-                if (idx > 0 && idx < traces.length) {
-                    traceRuntime().activeTraceIndex = idx;
-                }
+                var selection = normalizeTraceSelection(String(saved).split(','), traces);
+                traceRuntime().activeTraceSelection = selection;
             }
         } catch (e) {}
-        loadTraceData(traceRuntime().activeTraceIndex);
+        loadTraceData(activeTraceSelection());
     }
 }
 
@@ -2307,7 +2608,7 @@ function effectiveRuleOpen(si, gi, ri) {
 function effectiveRuleFeature(si, gi, ri, feature) {
     var rule = ruleState(si, gi, ri);
     if (!feature || !rule) return false;
-    if (feature === 'pinned' && pinnedColumnCount() === 0) return false;
+    if (feature === 'pinned' && pinnedFieldCount() === 0) return false;
     return !!rule[feature];
 }
 
@@ -2342,7 +2643,25 @@ function stageVisible(si) { return showEmptyStages() || stageHasRules(si); }
 function groupCount(si) { return TraceStore.groupCount(currentTraceStore(), si); }
 function groupRuleCount(si, gi) { return TraceStore.groupRuleCount(currentTraceStore(), si, gi); }
 function rawRuleIndex(si, gi, ri) { return TraceStore.rawRuleIndex(currentTraceStore(), si, gi, ri); }
-function nodeColumnSelectionKey() {
+function currentRuleSessionKey(ref) {
+    if (!ref) return '';
+    var selectionKey = '';
+    try {
+        selectionKey = activeTraceSelectionKey();
+    } catch (err) {}
+
+    var handle = '';
+    try {
+        handle = TraceStore.ruleHandleForRef(currentTraceStore(), ref) || '';
+    } catch (err2) {}
+    if (!handle) {
+        try {
+            handle = ruleKey(ref.si, ref.gi, ref.ri);
+        } catch (err3) {}
+    }
+    return handle ? ((selectionKey || 'trace') + ':' + handle) : '';
+}
+function pinnedFieldSelectionKey() {
     var store = currentTraceStore();
     return 'trace:' + (store && store.traceIndex !== undefined ? store.traceIndex : traceRuntime().activeTraceIndex || 0);
 }
@@ -2351,12 +2670,16 @@ function traceNodeFields() {
     return TraceStore.nodeFields(currentTraceStore());
 }
 
-function traceDefaultNodeColumnKeys() {
-    return TraceStore.nodeColumns(currentTraceStore()).slice();
+function traceDefaultPinnedFieldKeys() {
+    return TraceStore.pinnedFields(currentTraceStore()).slice();
 }
 
-function traceNodeColumnPresets() {
-    return TraceStore.nodeColumnPresets(currentTraceStore());
+function tracePinnedFieldPresets() {
+    return TraceStore.pinnedFieldPresets(currentTraceStore());
+}
+
+function traceDiffFieldPresets() {
+    return TraceStore.diffFieldPresets(currentTraceStore());
 }
 
 function traceNodeFieldAvailableMap() {
@@ -2366,20 +2689,20 @@ function traceNodeFieldAvailableMap() {
     return available;
 }
 
-var NODE_COLUMN_STORAGE_KEY = 'optimizerTraceNodeColumns';
-var NODE_COLUMN_STORAGE_MAX_ENTRIES = 32;
-var NODE_COLUMN_WIDTH_STORAGE_KEY = 'optimizerTraceNodeColumnWidths';
+var PINNED_FIELD_STORAGE_KEY = 'optimizerTracePinnedFields';
+var PINNED_FIELD_STORAGE_MAX_ENTRIES = 32;
+var PINNED_FIELD_WIDTH_STORAGE_KEY = 'optimizerTracePinnedFieldWidths';
 var DIFF_FIELD_STORAGE_KEY = 'optimizerTraceDiffFields';
 var DIFF_FIELD_STORAGE_MAX_ENTRIES = 32;
-var NODE_COLUMN_WIDTH_DEFAULT = 72;
-var NODE_COLUMN_WIDTH_MIN = 44;
-var NODE_COLUMN_WIDTH_MAX = 260;
-var NODE_COLUMN_WIDTH_AUTO_MAX = 180;
-var NODE_COLUMN_WIDTH_TEXT_PX = 7;
-var NODE_COLUMN_WIDTH_VALUE_PADDING = 18;
-var NODE_COLUMN_WIDTH_HEADER_PADDING = 34;
+var PINNED_FIELD_WIDTH_DEFAULT = 72;
+var PINNED_FIELD_WIDTH_MIN = 44;
+var PINNED_FIELD_WIDTH_MAX = 260;
+var PINNED_FIELD_WIDTH_AUTO_MAX = 180;
+var PINNED_FIELD_WIDTH_TEXT_PX = 7;
+var PINNED_FIELD_WIDTH_VALUE_PADDING = 18;
+var PINNED_FIELD_WIDTH_HEADER_PADDING = 34;
 
-function nodeColumnStorage() {
+function pinnedFieldStorage() {
     try {
         return typeof window !== 'undefined' && window.localStorage ? window.localStorage : null;
     } catch (e) {
@@ -2388,10 +2711,10 @@ function nodeColumnStorage() {
 }
 
 /**
- * Column selections persist per field schema, not per trace index, so the
- * same kind of trace keeps its curated columns across reloads and files.
+ * Pinned field selections persist per field schema, not per trace index, so the
+ * same kind of trace keeps its curated fields across reloads and files.
  */
-function nodeColumnSchemaSignature() {
+function pinnedFieldSchemaSignature() {
     var fields = traceNodeFields();
     if (!fields.length) return '';
     var keys = [];
@@ -2399,35 +2722,35 @@ function nodeColumnSchemaSignature() {
     return keys.join('\n');
 }
 
-function readStoredNodeColumnSelections() {
-    var storage = nodeColumnStorage();
+function readStoredPinnedFieldSelections() {
+    var storage = pinnedFieldStorage();
     if (!storage) return {};
     try {
-        var parsed = JSON.parse(storage.getItem(NODE_COLUMN_STORAGE_KEY) || 'null');
+        var parsed = JSON.parse(storage.getItem(PINNED_FIELD_STORAGE_KEY) || 'null');
         return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
     } catch (e) {
         return {};
     }
 }
 
-function persistNodeColumnSelection(keys) {
-    var storage = nodeColumnStorage();
-    var signature = nodeColumnSchemaSignature();
+function persistPinnedFieldSelection(keys) {
+    var storage = pinnedFieldStorage();
+    var signature = pinnedFieldSchemaSignature();
     if (!storage || !signature) return;
     try {
-        var stored = readStoredNodeColumnSelections();
+        var stored = readStoredPinnedFieldSelections();
         delete stored[signature];
         if (Array.isArray(keys)) stored[signature] = keys.slice();
         var signatures = Object.keys(stored);
-        for (var i = 0; signatures.length - i > NODE_COLUMN_STORAGE_MAX_ENTRIES; i++) {
+        for (var i = 0; signatures.length - i > PINNED_FIELD_STORAGE_MAX_ENTRIES; i++) {
             delete stored[signatures[i]];
         }
-        storage.setItem(NODE_COLUMN_STORAGE_KEY, JSON.stringify(stored));
+        storage.setItem(PINNED_FIELD_STORAGE_KEY, JSON.stringify(stored));
     } catch (e) {}
 }
 
 function readStoredDiffFieldSelections() {
-    var storage = nodeColumnStorage();
+    var storage = pinnedFieldStorage();
     if (!storage) return {};
     try {
         var parsed = JSON.parse(storage.getItem(DIFF_FIELD_STORAGE_KEY) || 'null');
@@ -2438,8 +2761,8 @@ function readStoredDiffFieldSelections() {
 }
 
 function persistDiffFieldSelection(keys) {
-    var storage = nodeColumnStorage();
-    var signature = nodeColumnSchemaSignature();
+    var storage = pinnedFieldStorage();
+    var signature = pinnedFieldSchemaSignature();
     if (!storage || !signature) return;
     try {
         var stored = readStoredDiffFieldSelections();
@@ -2453,29 +2776,29 @@ function persistDiffFieldSelection(keys) {
     } catch (e) {}
 }
 
-function clampNodeColumnWidth(width) {
+function clampPinnedFieldWidth(width) {
     width = Number(width);
-    if (!Number.isFinite(width)) return NODE_COLUMN_WIDTH_DEFAULT;
-    return Math.max(NODE_COLUMN_WIDTH_MIN, Math.min(NODE_COLUMN_WIDTH_MAX, Math.round(width)));
+    if (!Number.isFinite(width)) return PINNED_FIELD_WIDTH_DEFAULT;
+    return Math.max(PINNED_FIELD_WIDTH_MIN, Math.min(PINNED_FIELD_WIDTH_MAX, Math.round(width)));
 }
 
-function readStoredNodeColumnWidths() {
-    var storage = nodeColumnStorage();
+function readStoredPinnedFieldWidths() {
+    var storage = pinnedFieldStorage();
     if (!storage) return {};
     try {
-        var parsed = JSON.parse(storage.getItem(NODE_COLUMN_WIDTH_STORAGE_KEY) || 'null');
+        var parsed = JSON.parse(storage.getItem(PINNED_FIELD_WIDTH_STORAGE_KEY) || 'null');
         return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
     } catch (e) {
         return {};
     }
 }
 
-function persistNodeColumnWidths(widths) {
-    var storage = nodeColumnStorage();
-    var signature = nodeColumnSchemaSignature();
+function persistPinnedFieldWidths(widths) {
+    var storage = pinnedFieldStorage();
+    var signature = pinnedFieldSchemaSignature();
     if (!storage || !signature) return;
     try {
-        var stored = readStoredNodeColumnWidths();
+        var stored = readStoredPinnedFieldWidths();
         delete stored[signature];
         var next = {};
         var available = traceNodeFieldAvailableMap();
@@ -2483,40 +2806,40 @@ function persistNodeColumnWidths(widths) {
         widths = widths && typeof widths === 'object' ? widths : {};
         for (var key in widths) {
             if (!Object.prototype.hasOwnProperty.call(widths, key) || !available[key]) continue;
-            var width = clampNodeColumnWidth(widths[key]);
+            var width = clampPinnedFieldWidth(widths[key]);
             next[key] = width;
             hasWidths = true;
         }
         if (hasWidths) stored[signature] = next;
         var signatures = Object.keys(stored);
-        for (var i = 0; signatures.length - i > NODE_COLUMN_STORAGE_MAX_ENTRIES; i++) {
+        for (var i = 0; signatures.length - i > PINNED_FIELD_STORAGE_MAX_ENTRIES; i++) {
             delete stored[signatures[i]];
         }
-        storage.setItem(NODE_COLUMN_WIDTH_STORAGE_KEY, JSON.stringify(stored));
+        storage.setItem(PINNED_FIELD_WIDTH_STORAGE_KEY, JSON.stringify(stored));
     } catch (e) {}
 }
 
-function hydrateNodeColumnSelection() {
-    var signature = nodeColumnSchemaSignature();
+function hydratePinnedFieldSelection() {
+    var signature = pinnedFieldSchemaSignature();
     if (!signature) return;
     var trace = traceRuntime();
-    var selectionKey = nodeColumnSelectionKey();
-    if (!trace.nodeColumnSelectionsHydrated) trace.nodeColumnSelectionsHydrated = {};
-    if (trace.nodeColumnSelectionsHydrated[selectionKey]) return;
-    trace.nodeColumnSelectionsHydrated[selectionKey] = true;
-    if (!trace.nodeColumnSelections ||
-            Object.prototype.hasOwnProperty.call(trace.nodeColumnSelections, selectionKey)) {
+    var selectionKey = pinnedFieldSelectionKey();
+    if (!trace.pinnedFieldSelectionsHydrated) trace.pinnedFieldSelectionsHydrated = {};
+    if (trace.pinnedFieldSelectionsHydrated[selectionKey]) return;
+    trace.pinnedFieldSelectionsHydrated[selectionKey] = true;
+    if (!trace.pinnedFieldSelections ||
+            Object.prototype.hasOwnProperty.call(trace.pinnedFieldSelections, selectionKey)) {
         return;
     }
-    var stored = readStoredNodeColumnSelections()[signature];
-    if (Array.isArray(stored)) trace.nodeColumnSelections[selectionKey] = stored.slice();
+    var stored = readStoredPinnedFieldSelections()[signature];
+    if (Array.isArray(stored)) trace.pinnedFieldSelections[selectionKey] = stored.slice();
 }
 
 function hydrateDiffFieldSelection() {
-    var signature = nodeColumnSchemaSignature();
+    var signature = pinnedFieldSchemaSignature();
     if (!signature) return;
     var trace = traceRuntime();
-    var selectionKey = nodeColumnSelectionKey();
+    var selectionKey = pinnedFieldSelectionKey();
     if (!trace.diffFieldSelectionsHydrated) trace.diffFieldSelectionsHydrated = {};
     if (trace.diffFieldSelectionsHydrated[selectionKey]) return;
     trace.diffFieldSelectionsHydrated[selectionKey] = true;
@@ -2526,28 +2849,28 @@ function hydrateDiffFieldSelection() {
     if (Array.isArray(stored)) trace.diffFieldSelections[selectionKey] = stored.slice();
 }
 
-function hydrateNodeColumnWidths() {
-    var signature = nodeColumnSchemaSignature();
+function hydratePinnedFieldWidths() {
+    var signature = pinnedFieldSchemaSignature();
     if (!signature) return;
     var trace = traceRuntime();
-    var selectionKey = nodeColumnSelectionKey();
-    if (!trace.nodeColumnWidthsHydrated) trace.nodeColumnWidthsHydrated = {};
-    if (trace.nodeColumnWidthsHydrated[selectionKey]) return;
-    trace.nodeColumnWidthsHydrated[selectionKey] = true;
-    if (!trace.nodeColumnWidths) trace.nodeColumnWidths = {};
-    if (Object.prototype.hasOwnProperty.call(trace.nodeColumnWidths, selectionKey)) return;
-    var stored = readStoredNodeColumnWidths()[signature];
+    var selectionKey = pinnedFieldSelectionKey();
+    if (!trace.pinnedFieldWidthsHydrated) trace.pinnedFieldWidthsHydrated = {};
+    if (trace.pinnedFieldWidthsHydrated[selectionKey]) return;
+    trace.pinnedFieldWidthsHydrated[selectionKey] = true;
+    if (!trace.pinnedFieldWidths) trace.pinnedFieldWidths = {};
+    if (Object.prototype.hasOwnProperty.call(trace.pinnedFieldWidths, selectionKey)) return;
+    var stored = readStoredPinnedFieldWidths()[signature];
     if (stored && typeof stored === 'object' && !Array.isArray(stored)) {
-        trace.nodeColumnWidths[selectionKey] = stored;
+        trace.pinnedFieldWidths[selectionKey] = stored;
     }
 }
 
-function activeNodeColumnKeys() {
-    hydrateNodeColumnSelection();
+function activePinnedFieldKeys() {
+    hydratePinnedFieldSelection();
     var trace = traceRuntime();
-    var key = nodeColumnSelectionKey();
-    var selected = trace.nodeColumnSelections && trace.nodeColumnSelections[key];
-    var defaults = traceDefaultNodeColumnKeys();
+    var key = pinnedFieldSelectionKey();
+    var selected = trace.pinnedFieldSelections && trace.pinnedFieldSelections[key];
+    var defaults = traceDefaultPinnedFieldKeys();
     var source = Array.isArray(selected) ? selected : defaults;
     var available = traceNodeFieldAvailableMap();
     var result = [];
@@ -2561,8 +2884,8 @@ function activeNodeColumnKeys() {
     return result;
 }
 
-function activeNodeColumnKeySet() {
-    var keys = activeNodeColumnKeys();
+function activePinnedFieldKeySet() {
+    var keys = activePinnedFieldKeys();
     var set = {};
     for (var i = 0; i < keys.length; i++) set[keys[i]] = true;
     return set;
@@ -2571,7 +2894,7 @@ function activeNodeColumnKeySet() {
 function activeDiffFieldKeys() {
     hydrateDiffFieldSelection();
     var trace = traceRuntime();
-    var key = nodeColumnSelectionKey();
+    var key = pinnedFieldSelectionKey();
     var selected = trace.diffFieldSelections && trace.diffFieldSelections[key];
     var source = Array.isArray(selected) ? selected : [];
     var available = traceNodeFieldAvailableMap();
@@ -2586,78 +2909,78 @@ function activeDiffFieldKeys() {
     return result;
 }
 
-function nodeColumnWidthMap() {
-    hydrateNodeColumnWidths();
+function pinnedFieldWidthMap() {
+    hydratePinnedFieldWidths();
     var trace = traceRuntime();
-    var selectionKey = nodeColumnSelectionKey();
-    if (!trace.nodeColumnWidths) trace.nodeColumnWidths = {};
-    if (!trace.nodeColumnWidths[selectionKey]) trace.nodeColumnWidths[selectionKey] = {};
-    return trace.nodeColumnWidths[selectionKey];
+    var selectionKey = pinnedFieldSelectionKey();
+    if (!trace.pinnedFieldWidths) trace.pinnedFieldWidths = {};
+    if (!trace.pinnedFieldWidths[selectionKey]) trace.pinnedFieldWidths[selectionKey] = {};
+    return trace.pinnedFieldWidths[selectionKey];
 }
 
-function nodeColumnAutoWidthCache() {
+function pinnedFieldAutoWidthCache() {
     var trace = traceRuntime();
-    if (!trace.nodeColumnAutoWidths) trace.nodeColumnAutoWidths = {};
-    return trace.nodeColumnAutoWidths;
+    if (!trace.pinnedFieldAutoWidths) trace.pinnedFieldAutoWidths = {};
+    return trace.pinnedFieldAutoWidths;
 }
 
-function nodeColumnAutoWidthCacheKey(key) {
+function pinnedFieldAutoWidthCacheKey(key) {
     var epoch = currentRuntimeEpoch();
     var materialization = currentTraceStore().materialization || {};
-    return nodeColumnSelectionKey() + '\n' +
-        nodeColumnSchemaSignature() + '\n' +
+    return pinnedFieldSelectionKey() + '\n' +
+        pinnedFieldSchemaSignature() + '\n' +
         String(epoch && epoch.trace || 0) + '\n' +
         String(Math.max(0, Math.floor(Number(materialization.generation)) || 0)) + '\n' +
         String(key || '');
 }
 
-function estimateNodeColumnTextWidth(text, paddingPx) {
-    return Math.ceil(String(text == null ? '' : text).length * NODE_COLUMN_WIDTH_TEXT_PX + paddingPx);
+function estimatePinnedFieldTextWidth(text, paddingPx) {
+    return Math.ceil(String(text == null ? '' : text).length * PINNED_FIELD_WIDTH_TEXT_PX + paddingPx);
 }
 
-function includeNodeColumnMeasuredText(state, text, paddingPx) {
+function includePinnedFieldMeasuredText(state, text, paddingPx) {
     text = String(text == null ? '' : text);
     if (!text) return false;
-    state.width = Math.max(state.width, estimateNodeColumnTextWidth(text, paddingPx));
-    if (state.width >= NODE_COLUMN_WIDTH_AUTO_MAX) {
-        state.width = NODE_COLUMN_WIDTH_AUTO_MAX;
+    state.width = Math.max(state.width, estimatePinnedFieldTextWidth(text, paddingPx));
+    if (state.width >= PINNED_FIELD_WIDTH_AUTO_MAX) {
+        state.width = PINNED_FIELD_WIDTH_AUTO_MAX;
         return true;
     }
     return false;
 }
 
-function measureNodeColumnTree(node, store, key, state) {
+function measurePinnedFieldTree(node, store, key, state) {
     if (!node) return true;
-    if (includeNodeColumnMeasuredText(
+    if (includePinnedFieldMeasuredText(
             state,
-            TraceStore.nodeColumnValue(store, node, key),
-            NODE_COLUMN_WIDTH_VALUE_PADDING)) {
+            TraceStore.pinnedFieldValue(store, node, key),
+            PINNED_FIELD_WIDTH_VALUE_PADDING)) {
         return false;
     }
     var children = Array.isArray(node.c) ? node.c : [];
     for (var i = 0; i < children.length; i++) {
-        if (measureNodeColumnTree(children[i], store, key, state) === false) return false;
+        if (measurePinnedFieldTree(children[i], store, key, state) === false) return false;
     }
     return true;
 }
 
-function autoNodeColumnWidthForKey(key) {
+function autoPinnedFieldWidthForKey(key) {
     key = String(key || '');
-    if (!key) return NODE_COLUMN_WIDTH_DEFAULT;
-    var cache = nodeColumnAutoWidthCache();
-    var cacheKey = nodeColumnAutoWidthCacheKey(key);
+    if (!key) return PINNED_FIELD_WIDTH_DEFAULT;
+    var cache = pinnedFieldAutoWidthCache();
+    var cacheKey = pinnedFieldAutoWidthCacheKey(key);
     if (Object.prototype.hasOwnProperty.call(cache, cacheKey)) return cache[cacheKey];
 
     var store = currentTraceStore();
     var state = {
         width: Math.max(
-            NODE_COLUMN_WIDTH_DEFAULT,
-            estimateNodeColumnTextWidth(
+            PINNED_FIELD_WIDTH_DEFAULT,
+            estimatePinnedFieldTextWidth(
                 TraceStore.nodeFieldLabel(store, key),
-                NODE_COLUMN_WIDTH_HEADER_PADDING))
+                PINNED_FIELD_WIDTH_HEADER_PADDING))
     };
-    if (state.width >= NODE_COLUMN_WIDTH_AUTO_MAX) {
-        state.width = NODE_COLUMN_WIDTH_AUTO_MAX;
+    if (state.width >= PINNED_FIELD_WIDTH_AUTO_MAX) {
+        state.width = PINNED_FIELD_WIDTH_AUTO_MAX;
     } else {
         var done = false;
         for (var si = 0; si < currentStageCount() && !done; si++) {
@@ -2671,57 +2994,57 @@ function autoNodeColumnWidthForKey(key) {
                         continue;
                     }
                     var tree = TraceStore.materializeRuleTree(store, handle);
-                    done = measureNodeColumnTree(tree, store, key, state) === false;
+                    done = measurePinnedFieldTree(tree, store, key, state) === false;
                 }
             }
         }
     }
-    cache[cacheKey] = clampNodeColumnWidth(Math.min(NODE_COLUMN_WIDTH_AUTO_MAX, state.width));
+    cache[cacheKey] = clampPinnedFieldWidth(Math.min(PINNED_FIELD_WIDTH_AUTO_MAX, state.width));
     return cache[cacheKey];
 }
 
-function nodeColumnManualWidthForKey(key) {
+function pinnedFieldManualWidthForKey(key) {
     key = String(key || '');
     if (!key) return null;
-    var map = nodeColumnWidthMap();
+    var map = pinnedFieldWidthMap();
     return Object.prototype.hasOwnProperty.call(map, key)
-        ? clampNodeColumnWidth(map[key])
+        ? clampPinnedFieldWidth(map[key])
         : null;
 }
 
-function nodeColumnWidthForKey(key) {
+function pinnedFieldWidthForKey(key) {
     key = String(key || '');
-    if (!key) return NODE_COLUMN_WIDTH_DEFAULT;
-    var manualWidth = nodeColumnManualWidthForKey(key);
-    return manualWidth === null ? autoNodeColumnWidthForKey(key) : manualWidth;
+    if (!key) return PINNED_FIELD_WIDTH_DEFAULT;
+    var manualWidth = pinnedFieldManualWidthForKey(key);
+    return manualWidth === null ? autoPinnedFieldWidthForKey(key) : manualWidth;
 }
 
-function activeNodeColumnWidthTotal() {
-    var keys = activeNodeColumnKeys();
+function activePinnedFieldWidthTotal() {
+    var keys = activePinnedFieldKeys();
     var total = 0;
-    for (var i = 0; i < keys.length; i++) total += nodeColumnWidthForKey(keys[i]);
+    for (var i = 0; i < keys.length; i++) total += pinnedFieldWidthForKey(keys[i]);
     return total;
 }
 
-function setNodeColumnWidth(key, width) {
+function setPinnedFieldWidth(key, width) {
     key = String(key || '');
     var available = traceNodeFieldAvailableMap();
     if (!key || !available[key]) return false;
-    var nextWidth = clampNodeColumnWidth(width);
-    var map = nodeColumnWidthMap();
-    var current = nodeColumnWidthForKey(key);
+    var nextWidth = clampPinnedFieldWidth(width);
+    var map = pinnedFieldWidthMap();
+    var current = pinnedFieldWidthForKey(key);
     if (current === nextWidth) return false;
-    if (nextWidth === autoNodeColumnWidthForKey(key)) {
+    if (nextWidth === autoPinnedFieldWidthForKey(key)) {
         delete map[key];
     } else {
         map[key] = nextWidth;
     }
-    persistNodeColumnWidths(map);
+    persistPinnedFieldWidths(map);
     bumpRuntimeEpoch('render');
     return true;
 }
 
-function setNodeColumnSelection(keys) {
+function setPinnedFieldSelection(keys) {
     var available = traceNodeFieldAvailableMap();
     var next = [];
     var seen = {};
@@ -2732,11 +3055,11 @@ function setNodeColumnSelection(keys) {
         seen[fieldKey] = true;
         next.push(fieldKey);
     }
-    var current = activeNodeColumnKeys();
+    var current = activePinnedFieldKeys();
     if (next.join('\n') === current.join('\n')) return false;
 
-    traceRuntime().nodeColumnSelections[nodeColumnSelectionKey()] = next;
-    persistNodeColumnSelection(next);
+    traceRuntime().pinnedFieldSelections[pinnedFieldSelectionKey()] = next;
+    persistPinnedFieldSelection(next);
     bumpRuntimeEpoch('render');
     return true;
 }
@@ -2755,15 +3078,15 @@ function setDiffFieldSelection(keys) {
     var current = activeDiffFieldKeys();
     if (next.join('\n') === current.join('\n')) return false;
 
-    traceRuntime().diffFieldSelections[nodeColumnSelectionKey()] = next;
+    traceRuntime().diffFieldSelections[pinnedFieldSelectionKey()] = next;
     persistDiffFieldSelection(next);
     bumpRuntimeEpoch('diff');
     return true;
 }
 
-function reorderNodeColumn(key, dropIndex) {
+function reorderPinnedField(key, dropIndex) {
     key = String(key || '');
-    var keys = activeNodeColumnKeys().slice();
+    var keys = activePinnedFieldKeys().slice();
     var fromIndex = keys.indexOf(key);
     if (fromIndex === -1 || keys.length < 2) return false;
 
@@ -2778,19 +3101,19 @@ function reorderNodeColumn(key, dropIndex) {
 
     keys.splice(fromIndex, 1);
     keys.splice(insertIndex, 0, key);
-    return setNodeColumnSelection(keys);
+    return setPinnedFieldSelection(keys);
 }
 
-function setNodeColumnVisible(key, visible) {
+function setPinnedFieldVisible(key, visible) {
     key = String(key || '');
     var available = traceNodeFieldAvailableMap();
     if (!key || !available[key]) return false;
 
-    var next = activeNodeColumnKeys().slice();
+    var next = activePinnedFieldKeys().slice();
     var index = next.indexOf(key);
     if (visible && index === -1) next.push(key);
     if (!visible && index !== -1) next.splice(index, 1);
-    return setNodeColumnSelection(next);
+    return setPinnedFieldSelection(next);
 }
 
 function setDiffFieldVisible(key, visible) {
@@ -2805,12 +3128,12 @@ function setDiffFieldVisible(key, visible) {
     return setDiffFieldSelection(next);
 }
 
-function setAllNodeColumnsVisible(visible) {
-    if (!visible) return setNodeColumnSelection([]);
+function setAllPinnedFieldsVisible(visible) {
+    if (!visible) return setPinnedFieldSelection([]);
     var fields = traceNodeFields();
     var keys = [];
     for (var i = 0; i < fields.length; i++) keys.push(fields[i].key);
-    return setNodeColumnSelection(keys);
+    return setPinnedFieldSelection(keys);
 }
 
 function setAllDiffFieldsVisible(visible) {
@@ -2821,33 +3144,42 @@ function setAllDiffFieldsVisible(visible) {
     return setDiffFieldSelection(keys);
 }
 
-function soloNodeColumn(key) {
-    return setNodeColumnSelection([key]);
+function soloPinnedField(key) {
+    return setPinnedFieldSelection([key]);
 }
 
 function soloDiffField(key) {
     return setDiffFieldSelection([key]);
 }
 
-function setNodeColumnPreset(index) {
+function setPinnedFieldPreset(index) {
     index = Number(index);
     if (!Number.isInteger(index) || index < 0) return false;
-    var presets = traceNodeColumnPresets();
+    var presets = tracePinnedFieldPresets();
     var preset = presets[index];
     if (!preset) return false;
-    return setNodeColumnSelection(preset && preset.keys || []);
+    return setPinnedFieldSelection(preset && preset.keys || []);
 }
 
-function resetNodeColumnsToDefault() {
-    hydrateNodeColumnSelection();
+function setDiffFieldPreset(index) {
+    index = Number(index);
+    if (!Number.isInteger(index) || index < 0) return false;
+    var presets = traceDiffFieldPresets();
+    var preset = presets[index];
+    if (!preset) return false;
+    return setDiffFieldSelection(preset && preset.keys || []);
+}
+
+function resetPinnedFieldsToDefault() {
+    hydratePinnedFieldSelection();
     var trace = traceRuntime();
-    var selectionKey = nodeColumnSelectionKey();
-    if (!trace.nodeColumnSelections ||
-            !Object.prototype.hasOwnProperty.call(trace.nodeColumnSelections, selectionKey)) {
+    var selectionKey = pinnedFieldSelectionKey();
+    if (!trace.pinnedFieldSelections ||
+            !Object.prototype.hasOwnProperty.call(trace.pinnedFieldSelections, selectionKey)) {
         return false;
     }
-    delete trace.nodeColumnSelections[selectionKey];
-    persistNodeColumnSelection(null);
+    delete trace.pinnedFieldSelections[selectionKey];
+    persistPinnedFieldSelection(null);
     bumpRuntimeEpoch('render');
     return true;
 }
@@ -2855,7 +3187,7 @@ function resetNodeColumnsToDefault() {
 function resetDiffFieldsToDefault() {
     hydrateDiffFieldSelection();
     var trace = traceRuntime();
-    var selectionKey = nodeColumnSelectionKey();
+    var selectionKey = pinnedFieldSelectionKey();
     if (!trace.diffFieldSelections ||
             !Object.prototype.hasOwnProperty.call(trace.diffFieldSelections, selectionKey)) {
         return false;
@@ -2866,33 +3198,33 @@ function resetDiffFieldsToDefault() {
     return true;
 }
 
-function nodeColumnsAreDefault() {
-    hydrateNodeColumnSelection();
+function pinnedFieldsAreDefault() {
+    hydratePinnedFieldSelection();
     var trace = traceRuntime();
-    var selectionKey = nodeColumnSelectionKey();
-    return !trace.nodeColumnSelections ||
-        !Object.prototype.hasOwnProperty.call(trace.nodeColumnSelections, selectionKey);
+    var selectionKey = pinnedFieldSelectionKey();
+    return !trace.pinnedFieldSelections ||
+        !Object.prototype.hasOwnProperty.call(trace.pinnedFieldSelections, selectionKey);
 }
 
 function diffFieldsAreDefault() {
     hydrateDiffFieldSelection();
     var trace = traceRuntime();
-    var selectionKey = nodeColumnSelectionKey();
+    var selectionKey = pinnedFieldSelectionKey();
     return !trace.diffFieldSelections ||
         !Object.prototype.hasOwnProperty.call(trace.diffFieldSelections, selectionKey);
 }
 
-function pinnedColumnCount() { return activeNodeColumnKeys().length; }
+function pinnedFieldCount() { return activePinnedFieldKeys().length; }
 /**
- * Identity of the current column selection as rendered into rule trees.
+ * Identity of the current pinned field selection as rendered into rule trees.
  * Stored in rule render state so lazy visibility scans re-render trees
- * whose columns (and column-suppressed metadata rows) are out of date.
+ * whose pinned fields (and pinned-field-suppressed metadata rows) are out of date.
  */
-function nodeColumnRenderSignature() {
-    var keys = activeNodeColumnKeys();
+function pinnedFieldRenderSignature() {
+    var keys = activePinnedFieldKeys();
     var parts = [];
     for (var i = 0; i < keys.length; i++) {
-        parts.push(keys[i] + ':' + nodeColumnWidthForKey(keys[i]));
+        parts.push(keys[i] + ':' + pinnedFieldWidthForKey(keys[i]));
     }
     return parts.join('\n');
 }
@@ -2901,8 +3233,8 @@ function diffFieldSelectionSignature() {
     return activeDiffFieldKeys().join('\n');
 }
 
-function tracePinnedColumnKey(col) {
-    var keys = activeNodeColumnKeys();
+function tracePinnedFieldKey(col) {
+    var keys = activePinnedFieldKeys();
     return keys[col] || '';
 }
 function ruleKey(si, gi, ri) { return RuleRefs.key(si, gi, ri); }
@@ -2926,19 +3258,19 @@ function traceRuleInfo(si, rawIdx) {
     var store = currentTraceStore();
     return TraceStore.materializeRuleInfo(store, TraceStore.ruleHandle(store, si, rawIdx));
 }
-function tracePinnedColumnName(col) {
-    return TraceStore.nodeFieldLabel(currentTraceStore(), tracePinnedColumnKey(col));
+function tracePinnedFieldName(col) {
+    return TraceStore.nodeFieldLabel(currentTraceStore(), tracePinnedFieldKey(col));
 }
 
-function traceNodeColumnValue(node, col) {
-    var keys = activeNodeColumnKeys();
-    return TraceStore.nodeColumnValue(currentTraceStore(), node, keys[col] || '');
+function tracePinnedFieldValue(node, col) {
+    var keys = activePinnedFieldKeys();
+    return TraceStore.pinnedFieldValue(currentTraceStore(), node, keys[col] || '');
 }
 
 function traceNodeFieldRows(node) {
     var store = currentTraceStore();
     var rows = TraceStore.nodeFieldRows(store, node);
-    var excludeKeys = activeNodeColumnKeySet();
+    var excludeKeys = activePinnedFieldKeySet();
     var result = [];
     for (var i = 0; i < rows.length; i++) {
         var row = rows[i];

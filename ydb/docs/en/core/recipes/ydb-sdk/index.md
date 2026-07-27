@@ -13,15 +13,15 @@ Contents:
   - [Metadata service](auth-metadata.md)
   - [Using environment variables](auth-env.md)
   - [Using login and password](auth-static.md)
-- [Balancing](balancing.md)
+- [Load balancing](balancing.md)
 
   - [Uniform random selection](balancing-random-choice.md)
   - [Prefer nearest datacenter](balancing-prefer-local.md)
   - [Prefer availability zone](balancing-prefer-location.md)
-- [Retrying queries](retry.md)
-- [Setting session pool size](session-pool-limit.md)
-- [Inserting data](upsert.md)
-- [Batch data insertion](bulk-upsert.md)
+- [Retry query execution](retry.md)
+- [Set session pool size](session-pool-limit.md)
+- [Data insert](upsert.md)
+- [Batch data insert](bulk-upsert.md)
 - [Setting transaction execution mode](tx-control.md)
 - [Configuring table TTL (Time to Live)](ttl.md)
 - [Vector search](vector-search.md)
@@ -33,9 +33,9 @@ Contents:
   - [Leader election](leader-election.md)
 - [Problem diagnostics](debug.md)
 
-  - [Enabling logging](debug-logs.md)
-  - [Connecting metrics to Prometheus](debug-prometheus.md)
-  - [Tracing with OpenTelemetry](debug-otel-tracing.md)
+  - [Enable logging](debug-logs.md)
+  - [Connect metrics to Prometheus](debug-prometheus.md)
+  - [Tracing with OpenTelemetry](debug-otel.md)
 
 See also:
 

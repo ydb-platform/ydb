@@ -560,6 +560,10 @@
       {
         "name": "WmExitTime",
         "type": "Timestamp?"
+      },
+      {
+        "name": "TraceId",
+        "type": "Utf8?"
       }
     ],
     "primary_key": [
@@ -583,6 +587,26 @@
       {
         "name": "ResourcePool",
         "type": "Utf8?"
+      },
+      {
+        "name": "HasAppName",
+        "type": "Utf8?"
+      },
+      {
+        "name": "Action",
+        "type": "Utf8?"
+      },
+      {
+        "name": "HasFullScan",
+        "type": "Utf8?"
+      },
+      {
+        "name": "HasPath",
+        "type": "Utf8?"
+      },
+      {
+        "name": "HasStream",
+        "type": "Bool?"
       }
     ],
     "primary_key": [
@@ -918,10 +942,6 @@
   "top_queries_by_cpu_time_one_hour": {
     "columns": [
       {
-        "name": "RequestUnits",
-        "type": "Uint64?"
-      },
-      {
         "name": "IntervalEnd",
         "type": "Timestamp?"
       },
@@ -1031,6 +1051,14 @@
       },
       {
         "name": "Type",
+        "type": "Utf8?"
+      },
+      {
+        "name": "RequestUnits",
+        "type": "Uint64?"
+      },
+      {
+        "name": "TraceId",
         "type": "Utf8?"
       }
     ],
@@ -1042,10 +1070,6 @@
   "top_queries_by_cpu_time_one_minute": {
     "columns": [
       {
-        "name": "RequestUnits",
-        "type": "Uint64?"
-      },
-      {
         "name": "IntervalEnd",
         "type": "Timestamp?"
       },
@@ -1155,6 +1179,14 @@
       },
       {
         "name": "Type",
+        "type": "Utf8?"
+      },
+      {
+        "name": "RequestUnits",
+        "type": "Uint64?"
+      },
+      {
+        "name": "TraceId",
         "type": "Utf8?"
       }
     ],
@@ -1166,10 +1198,6 @@
   "top_queries_by_duration_one_hour": {
     "columns": [
       {
-        "name": "RequestUnits",
-        "type": "Uint64?"
-      },
-      {
         "name": "IntervalEnd",
         "type": "Timestamp?"
       },
@@ -1279,6 +1307,14 @@
       },
       {
         "name": "Type",
+        "type": "Utf8?"
+      },
+      {
+        "name": "RequestUnits",
+        "type": "Uint64?"
+      },
+      {
+        "name": "TraceId",
         "type": "Utf8?"
       }
     ],
@@ -1290,10 +1326,6 @@
   "top_queries_by_duration_one_minute": {
     "columns": [
       {
-        "name": "RequestUnits",
-        "type": "Uint64?"
-      },
-      {
         "name": "IntervalEnd",
         "type": "Timestamp?"
       },
@@ -1403,6 +1435,14 @@
       },
       {
         "name": "Type",
+        "type": "Utf8?"
+      },
+      {
+        "name": "RequestUnits",
+        "type": "Uint64?"
+      },
+      {
+        "name": "TraceId",
         "type": "Utf8?"
       }
     ],
@@ -1414,10 +1454,6 @@
   "top_queries_by_read_bytes_one_hour": {
     "columns": [
       {
-        "name": "RequestUnits",
-        "type": "Uint64?"
-      },
-      {
         "name": "IntervalEnd",
         "type": "Timestamp?"
       },
@@ -1527,6 +1563,14 @@
       },
       {
         "name": "Type",
+        "type": "Utf8?"
+      },
+      {
+        "name": "RequestUnits",
+        "type": "Uint64?"
+      },
+      {
+        "name": "TraceId",
         "type": "Utf8?"
       }
     ],
@@ -1538,10 +1582,6 @@
   "top_queries_by_read_bytes_one_minute": {
     "columns": [
       {
-        "name": "RequestUnits",
-        "type": "Uint64?"
-      },
-      {
         "name": "IntervalEnd",
         "type": "Timestamp?"
       },
@@ -1651,6 +1691,14 @@
       },
       {
         "name": "Type",
+        "type": "Utf8?"
+      },
+      {
+        "name": "RequestUnits",
+        "type": "Uint64?"
+      },
+      {
+        "name": "TraceId",
         "type": "Utf8?"
       }
     ],
@@ -1662,10 +1710,6 @@
   "top_queries_by_request_units_one_hour": {
     "columns": [
       {
-        "name": "RequestUnits",
-        "type": "Uint64?"
-      },
-      {
         "name": "IntervalEnd",
         "type": "Timestamp?"
       },
@@ -1775,6 +1819,14 @@
       },
       {
         "name": "Type",
+        "type": "Utf8?"
+      },
+      {
+        "name": "RequestUnits",
+        "type": "Uint64?"
+      },
+      {
+        "name": "TraceId",
         "type": "Utf8?"
       }
     ],
@@ -1786,10 +1838,6 @@
   "top_queries_by_request_units_one_minute": {
     "columns": [
       {
-        "name": "RequestUnits",
-        "type": "Uint64?"
-      },
-      {
         "name": "IntervalEnd",
         "type": "Timestamp?"
       },
@@ -1899,6 +1947,14 @@
       },
       {
         "name": "Type",
+        "type": "Utf8?"
+      },
+      {
+        "name": "RequestUnits",
+        "type": "Uint64?"
+      },
+      {
+        "name": "TraceId",
         "type": "Utf8?"
       }
     ],

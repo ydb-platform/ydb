@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 class Workload():
-    def __init__(self, endpoint, database, duration, partitions_count, prefix):
+    def __init__(self, endpoint: str, database: str, duration: int, partitions_count: int, prefix: str):
         self.database = database
         self.endpoint = endpoint
         self.driver = ydb.Driver(ydb.DriverConfig(endpoint, database))
@@ -85,7 +85,7 @@ class Workload():
                         {source}`{self.input_topic}` WITH (
                             FORMAT = 'json_each_row',
                             SCHEMA (time Uint64 NOT NULL, level String NOT NULL),
-                            WATERMARK = SystemMetadata('write_time') - Interval('PT0S'),
+                            WATERMARK = __ydb_write_time - Interval('PT0S'),
                             WATERMARK_GRANULARITY = "PT1S"
                         )
                 );

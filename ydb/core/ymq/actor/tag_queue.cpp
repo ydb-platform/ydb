@@ -37,7 +37,6 @@ public:
             map.emplace(t.GetKey(), t.GetValue());
         }
 
-        SourceAddress_ = Request().GetSourceAddress();
         IsCloudEventsEnabled_ = Cfg().HasCloudEventsConfig() && Cfg().GetCloudEventsConfig().GetEnableCloudEvents();
     }
 
@@ -168,7 +167,6 @@ private:
     TString TagsJson_;
     bool IsCloudEventsEnabled_;
     TString CustomQueueName_ = "";
-    TString SourceAddress_ = "";
 };
 
 IActor* CreateTagQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {

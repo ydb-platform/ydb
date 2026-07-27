@@ -68,6 +68,7 @@ TConclusionStatus TReadMetadata::Init(
 
     StatsMode = readDescription.StatsMode;
     DeduplicationPolicy = readDescription.DeduplicationPolicy;
+    GroupedMemoryLimiterOperator = readDescription.GroupedMemoryLimiterOperator;
     return TConclusionStatus::Success();
 }
 

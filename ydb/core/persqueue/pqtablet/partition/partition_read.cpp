@@ -207,6 +207,37 @@ void TPartition::ProcessHasDataRequests(const TActorContext& ctx) {
     }
 }
 
+void TPartition::FailStaleSessionReadRequests(const TString& user, const TActorContext& ctx) {
+    const auto now = ctx.Now();
+
+    auto forgetSubscription = [&](const TString& clientId) {
+        if (InitDone && !clientId.empty()) {
+            UsersInfoStorage->GetOrCreate(clientId, ctx).ForgetSubscription(GetEndOffset(), now);
+        }
+    };
+
+    for (auto it = HasDataRequests.begin(); it != HasDataRequests.end();) {
+        if (it->ClientId != user) {
+            ++it;
+            continue;
+        }
+        auto response = MakeHasDataInfoResponse(0, it->Cookie);
+        response->Record.SetSessionInvalidated(true);
+        ctx.Send(it->Sender, response.Release());
+
+        forgetSubscription(it->ClientId);
+        it = HasDataRequests.erase(it);
+    }
+
+    for (auto dlIt = HasDataDeadlines.begin(); dlIt != HasDataDeadlines.end();) {
+        if (dlIt->Request.ClientId == user) {
+            dlIt = HasDataDeadlines.erase(dlIt);
+        } else {
+            ++dlIt;
+        }
+    }
+}
+
 void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorContext& ctx) {
     auto& record = ev->Get()->Record;
     PQ_ENSURE(record.HasSender());
@@ -216,6 +247,21 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
     auto cookie = record.HasCookie() ? TMaybe<ui64>(record.GetCookie()) : TMaybe<ui64>();
     auto readTimestamp = GetReadFrom(record.GetMaxTimeLagMs(), record.GetReadTimestampMs(), TInstant::Zero(), ctx);
     TActorId sender = ActorIdFromProto(record.GetSender());
+
+    if (InitDone && !record.GetSessionId().empty()) {
+        auto& userInfo = UsersInfoStorage->GetOrCreate(record.GetClientId(), ctx);
+        if (!userInfo.NoConsumer) {
+            // Prefer pending session: CommitTransaction clears it before persist applies to UsersInfoStorage.
+            const TUserInfoBase* pending = GetPendingUserIfExists(record.GetClientId());
+            const TString& session = pending ? pending->Session : userInfo.Session;
+            if (session != record.GetSessionId()) {
+                auto response = MakeHasDataInfoResponse(0, cookie);
+                response->Record.SetSessionInvalidated(true);
+                ctx.Send(sender, response.Release());
+                return;
+            }
+        }
+    }
 
     THasDataReq req{++HasDataReqNum, (ui64)record.GetOffset(), sender, cookie,
         record.HasClientId() && InitDone ? record.GetClientId() : "", readTimestamp};
@@ -358,7 +404,7 @@ static void AddResultBlob(T* read, const TClientBlob& blob, ui64 offset) {
             cc->SetTotalSize(blob.PartData->TotalSize);
     }
 
-    cc->SetMessageCount(blob.MessageCount);
+    cc->SetLogicalMessageCount(blob.LogicalMessageCount);
     cc->SetIsBatch(blob.IsBatch);
 }
 
@@ -521,7 +567,7 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
 
                 if (res.IsLastPart()) {
                     PartNo = 0;
-                    Offset += res.MessageCount;
+                    Offset += res.LogicalMessageCount;
                     if (ReachedLastOffset()) {
                         needStop = true;
                         break;
@@ -650,7 +696,7 @@ TReadAnswer TReadInfo::FormAnswer(
 
             const ui64 resultOffset = writeBlob.IsLastPart()
                 && cachedBlobOffset <= Offset
-                && Offset < cachedBlobOffset + writeBlob.MessageCount
+                && Offset < cachedBlobOffset + writeBlob.LogicalMessageCount
                     ? cachedBlobOffset
                     : Offset;
 
@@ -664,8 +710,8 @@ TReadAnswer TReadInfo::FormAnswer(
             AddResultBlob(readResult, writeBlob, resultOffset);
             if (writeBlob.IsLastPart()) {
                 PartNo = 0;
-                Offset = resultOffset + writeBlob.MessageCount;
-                cachedBlobOffset += writeBlob.MessageCount;
+                Offset = resultOffset + writeBlob.LogicalMessageCount;
+                cachedBlobOffset += writeBlob.LogicalMessageCount;
             } else {
                 ++PartNo;
             }

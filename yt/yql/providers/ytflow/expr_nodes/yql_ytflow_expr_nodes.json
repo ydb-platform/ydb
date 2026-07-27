@@ -128,6 +128,23 @@
             ]
         },
         {
+            "Name": "TYtflowHoppingAggregate",
+            "Base": "TYtflowOpBase",
+            "Match": {"Type": "Callable", "Name": "YtflowHoppingAggregate!"},
+            "Children": [
+                {"Index": 4, "Name": "Keys", "Type": "TCoAtomList"},
+                {"Index": 5, "Name": "UpdateStateLambda", "Type": "TCoLambda"},
+                {"Index": 6, "Name": "PostprocessLambda", "Type": "TCoLambda"},
+                {"Index": 7, "Name": "Column", "Type": "TCoAtom"},
+                {"Index": 8, "Name": "Hop", "Type": "TCoAtom"},
+                {"Index": 9, "Name": "Interval", "Type": "TCoAtom"},
+                {"Index": 10, "Name": "Delay", "Type": "TCoAtom"},
+                {"Index": 11, "Name": "ItemType", "Type": "TExprBase"},
+                {"Index": 12, "Name": "InitLambda", "Type": "TCoLambda"},
+                {"Index": 13, "Name": "SaveLambda", "Type": "TCoLambda"}
+            ]
+        },
+        {
             "Name": "TYtflowLookupJoinScope",
             "Base": "TExprBase",
             "Match": {"Type": "Tuple"},

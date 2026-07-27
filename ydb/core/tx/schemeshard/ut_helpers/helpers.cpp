@@ -20,10 +20,16 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/util/pb.h>
 
+#include <ydb/library/login/hashes_checker/hashes_checker.h>
+
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
+#include <library/cpp/json/json_writer.h>
+#include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <openssl/sha.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
@@ -1126,6 +1132,10 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(DropStreamingQuery, NKikimrSchemeOp::EOperationType::ESchemeOpDropStreamingQuery, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
     DROP_BY_PATH_ID_HELPERS(DropStreamingQuery, NKikimrSchemeOp::EOperationType::ESchemeOpDropStreamingQuery)
 
+    // test shard
+    GENERIC_HELPERS(CreateTestShardSet, NKikimrSchemeOp::EOperationType::ESchemeOpCreateTestShardSet, &NKikimrSchemeOp::TModifyScheme::MutableCreateTestShardSet)
+    GENERIC_HELPERS(DropTestShardSet, NKikimrSchemeOp::EOperationType::ESchemeOpDropTestShardSet, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
+
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS
     #undef GENERIC_HELPERS
@@ -1226,6 +1236,18 @@ namespace NSchemeShardUT_Private {
     {
         AsyncAssignBlockStoreVolume(runtime, txId, parentPath, name, mountToken, tokenVersion);
         TestModificationResults(runtime, txId, expectedResults);
+    }
+
+    TString CreateTestShardSetConfig(const TString& name, ui64 count) {
+        return TStringBuilder() << R"(
+                Name: ")" << name << R"("
+                Count: )" << count << R"(
+                StorageConfig {
+                }
+                CmdInitialize {
+                    MaxDataBytes: 1000
+                }
+            )";
     }
 
     TEvSchemeShard::TEvCancelTx *CancelTxRequest(ui64 txId, ui64 targetTxId) {
@@ -2313,7 +2335,7 @@ namespace NSchemeShardUT_Private {
         UNIT_ASSERT(event);
 
         Cerr << "BUILDINDEX RESPONSE LIST: " << event->ToString() << Endl;
-        UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), 400000, event->Record.GetIssues());
+        UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), Ydb::StatusIds::SUCCESS, event->Record.GetIssues());
         return event->Record;
     }
 
@@ -2332,7 +2354,7 @@ namespace NSchemeShardUT_Private {
         UNIT_ASSERT(event);
 
         Cerr << "BUILDINDEX RESPONSE Get: " << event->ToString() << Endl;
-        UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), 400000, event->Record.GetIssues());
+        UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), Ydb::StatusIds::SUCCESS, event->Record.GetIssues());
         return event->Record;
     }
 
@@ -2543,21 +2565,44 @@ namespace NSchemeShardUT_Private {
         return TPathId(record.GetSchemeShardId(), record.GetSubDomainPathId());
     }
 
-    void CreateAlterLoginCreateUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, const TString& user, const TString& password, const TVector<TExpectedResult>& expectedResults) {
-        auto modifyTx = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
-        auto transaction = modifyTx->Record.AddTransaction();
-        transaction->SetWorkingDir(database);
-        transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterLogin);
+    TTestPasswordHashes MakeTestPasswordHashes(const TString& password) {
+        // Deterministically derive a new-format password hash from the plain password.
+        //
+        // We generate a SHA-256 (scram-sha-256) hash only: argon is a legacy format now.
+        // SchemeShard verifies a SASL PLAIN login by a plain string comparison of the supplied
+        // hash against the stored one, so we don't need a real scram computation here: we just build a
+        // pseudo hash of the required byte lengths that is a stable function of the password.
+        const auto& scram = NLogin::HashesRegistry.HashNamesMap.at("scram-sha-256");
 
-        auto createUser = transaction->MutableAlterLogin()->MutableCreateUser();
-        createUser->SetUser(user);
-        createUser->SetPassword(password);
+        const auto deriveBytes = [&password](const TString& tag, size_t size) {
+            TString result;
+            TString block = tag + password;
+            while (result.size() < size) {
+                unsigned char digest[SHA256_DIGEST_LENGTH];
+                SHA256(reinterpret_cast<const unsigned char*>(block.data()), block.size(), digest);
+                result.append(reinterpret_cast<const char*>(digest), sizeof(digest));
+                block.assign(reinterpret_cast<const char*>(digest), sizeof(digest));
+            }
 
-        AsyncSend(runtime, TTestTxConfig::SchemeShard, modifyTx.release());
-        TestModificationResults(runtime, txId, expectedResults);
+            result.resize(size);
+            return result;
+        };
+
+        const TString saltB64 = Base64Encode(deriveBytes("salt:", scram.SaltSize));
+        const TString storedKeyB64 = Base64Encode(deriveBytes("stored:", scram.HashSize));
+        const TString serverKeyB64 = Base64Encode(deriveBytes("server:", scram.HashSize));
+
+        NJson::TJsonValue hashes;
+        hashes["scram-sha-256"] = ToString(scram.IterationsCount) + ":" + saltB64 + "$" + storedKeyB64 + ":" + serverKeyB64;
+        hashes["version"] = NLogin::HASHES_JSON_SCHEMA_VERSION;
+
+        return {
+            .HashedPassword = Base64Encode(NJson::WriteJson(hashes, false)),
+            .ScramServerKey = serverKeyB64,
+        };
     }
 
-    void CreateAlterLoginCreateUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, const TString& user, const TString& hashedPassword, const TString& hashedPasswordOldFormat, const TVector<TExpectedResult>& expectedResults) {
+    void CreateAlterLoginCreateUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, const TString& user, const TString& hashedPassword, const TVector<TExpectedResult>& expectedResults) {
         auto modifyTx = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
         auto transaction = modifyTx->Record.AddTransaction();
         transaction->SetWorkingDir(database);
@@ -2565,8 +2610,6 @@ namespace NSchemeShardUT_Private {
 
         auto createUser = transaction->MutableAlterLogin()->MutableCreateUser();
         createUser->SetUser(user);
-        createUser->SetIsHashedPassword(true);
-        createUser->SetPassword(hashedPasswordOldFormat);
         createUser->SetHashedPassword(hashedPassword);
 
         AsyncSend(runtime, TTestTxConfig::SchemeShard, modifyTx.release());
@@ -2637,23 +2680,10 @@ namespace NSchemeShardUT_Private {
         TestModificationResults(runtime, txId, expectedResults);
     }
 
-    NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime, const TString& user, const TString& password) {
-        TActorId sender = runtime.AllocateEdgeActor();
-        auto evLogin = new TEvSchemeShard::TEvLogin();
-        evLogin->Record.SetUser(user);
-        evLogin->Record.SetPassword(password);
-
-        if (auto ldapDomain = runtime.GetAppData().AuthConfig.GetLdapAuthenticationDomain(); user.EndsWith("@" + ldapDomain)) {
-            evLogin->Record.SetExternalAuth(ldapDomain);
-        }
-        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, evLogin);
-        TAutoPtr<IEventHandle> handle;
-        auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvLoginResult>(handle);
-        UNIT_ASSERT(event);
-        return event->Record;
-    }
-
-    NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime, const TString& user, NLoginProto::ESaslAuthMech::SaslAuthMech authMech, NLoginProto::EHashType::HashType hashType, const TString& hash, const TString& authMessage) {
+    NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime, const TString& user,
+        NLoginProto::ESaslAuthMech::SaslAuthMech authMech, NLoginProto::EHashType::HashType hashType,
+        const TString& hash, const TString& authMessage)
+    {
         TActorId sender = runtime.AllocateEdgeActor();
         auto evLogin = new TEvSchemeShard::TEvLogin();
         evLogin->Record.SetUser(user);
@@ -2670,19 +2700,17 @@ namespace NSchemeShardUT_Private {
         return event->Record;
     }
 
-    NKikimrScheme::TEvLoginResult LoginFinalize(
-        TTestActorRuntime& runtime,
-        const NLogin::TLoginProvider::TLoginUserRequest& request,
-        const NLogin::TLoginProvider::TPasswordCheckResult& checkResult,
-        const TString& passwordHash,
-        const bool needUpdateCache
-    ) {
-        const auto evLoginFinalize = new NSchemeShard::TEvPrivate::TEvLoginFinalize(
-            request, checkResult, runtime.AllocateEdgeActor(), passwordHash, needUpdateCache
-        );
-        AsyncSend(runtime, TTestTxConfig::SchemeShard, evLoginFinalize);
+    NKikimrScheme::TEvLoginResult LoginExternal(TTestActorRuntime& runtime, const TString& user) {
+        // External (LDAP) authentication: the password is verified by LDAP, not by YDB, so it is passed through as is.
+        const auto ldapDomain = runtime.GetAppData().AuthConfig.GetLdapAuthenticationDomain();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        auto evLogin = new TEvSchemeShard::TEvLogin();
+        evLogin->Record.SetUser(user);
+        evLogin->Record.SetExternalAuth(ldapDomain);
+        ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, evLogin);
         TAutoPtr<IEventHandle> handle;
-        const auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvLoginResult>(handle);
+        auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvLoginResult>(handle);
         UNIT_ASSERT(event);
         return event->Record;
     }
@@ -2706,21 +2734,6 @@ namespace NSchemeShardUT_Private {
         ModifyUser(runtime, txId, database, [user, isEnabled](auto* alterUser) {
             alterUser->SetUser(std::move(user));
             alterUser->SetCanLogin(isEnabled);
-        });
-    }
-
-    void ChangePasswordUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, const TString& user, const TString& password) {
-        ModifyUser(runtime, txId, database, [user, password](auto* alterUser) {
-            alterUser->SetUser(std::move(user));
-            alterUser->SetPassword(std::move(password));
-        });
-    }
-
-    void ChangePasswordHashUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, const TString& user, const TString& hash) {
-        ModifyUser(runtime, txId, database, [user, hash](auto* alterUser) {
-            alterUser->SetUser(std::move(user));
-            alterUser->SetPassword(std::move(hash));
-            alterUser->SetIsHashedPassword(true);
         });
     }
 
@@ -3463,4 +3476,198 @@ namespace NSchemeShardUT_Private {
 
         return ev->Record;
     }
+
+    NKikimrSetColumnConstraint::TEvCreateResponse TestSetColumnConstraint(
+        TTestActorRuntime& runtime,
+        ui64 txId,
+        ui64 schemeShard,
+        const TString& dbName,
+        const TString& tablePath,
+        const TVector<TString>& notNullColumns,
+        const TString& userSID,
+        bool skipSettings)
+    {
+        // We can't do `GetRequest`, because it is not implemented at the time of writing the test
+        auto request = MakeHolder<TEvSetColumnConstraint::TEvCreateRequest>();
+        request->Record.SetTxId(txId);
+        request->Record.SetDatabaseName(dbName);
+
+        if (userSID != "") {
+            request->Record.SetUserSID(userSID);
+        }
+
+        if (!skipSettings) {
+            NKikimrSetColumnConstraint::TSetColumnConstraintSettings settings;
+            settings.SetTablePath(tablePath);
+            for (const auto& col : notNullColumns) {
+                settings.AddNotNullColumns(col);
+            }
+
+            *request->Record.MutableSettings() = std::move(settings);
+        }
+
+        auto sender = runtime.AllocateEdgeActor();
+        ForwardToTablet(runtime, schemeShard, sender, request.Release());
+
+        TAutoPtr<IEventHandle> handle;
+        auto* event = runtime.GrabEdgeEvent<TEvSetColumnConstraint::TEvCreateResponse>(handle);
+        UNIT_ASSERT(event);
+        return event->Record;
+    }
+
+    NKikimrSetColumnConstraint::TEvCreateResponse TestSetColumnConstraint(
+        TTestActorRuntime& runtime,
+        ui64 txId,
+        ui64 schemeShard,
+        const TString& dbName,
+        const TString& tablePath,
+        const TVector<TString>& notNullColumns)
+    {
+        return TestSetColumnConstraint(runtime, txId, schemeShard, dbName, tablePath, notNullColumns, "", false);
+    }
+
+    NKikimrSetColumnConstraint::TEvCreateResponse TestSetColumnConstraintWithoutSettings(
+        TTestActorRuntime& runtime,
+        ui64 txId,
+        ui64 schemeShard,
+        const TString& dbName,
+        const TString& tablePath,
+        const TVector<TString>& notNullColumns)
+    {
+        return TestSetColumnConstraint(runtime, txId, schemeShard, dbName, tablePath, notNullColumns, "", true);
+    }
+
+    NKikimrSetColumnConstraint::TEvCreateResponse TestSetColumnConstraint(
+        TTestActorRuntime& runtime,
+        ui64 txId,
+        ui64 schemeShard,
+        const TString& dbName,
+        const TString& tablePath,
+        const TVector<TString>& notNullColumns,
+        const TString& userSID)
+    {
+        return TestSetColumnConstraint(runtime, txId, schemeShard, dbName, tablePath, notNullColumns, userSID, false);
+    }
+
+    void AsyncSetColumnConstraint(
+        TTestActorRuntime& runtime,
+        ui64 txId,
+        ui64 schemeShard,
+        const TString& dbName,
+        const TString& tablePath,
+        const TVector<TString>& notNullColumns)
+    {
+        NKikimrSetColumnConstraint::TSetColumnConstraintSettings settings;
+        settings.SetTablePath(tablePath);
+        for (const auto& col : notNullColumns) {
+            settings.AddNotNullColumns(col);
+        }
+
+        auto sender = runtime.AllocateEdgeActor();
+        auto request = MakeHolder<TEvSetColumnConstraint::TEvCreateRequest>(txId, dbName, std::move(settings));
+        ForwardToTablet(runtime, schemeShard, sender, request.Release());
+    }
+
+    TEvSetColumnConstraint::TEvListRequest* ListSetColumnConstraintRequest(const TString& dbName, ui64 pageSize, const TString& pageToken) {
+        return new TEvSetColumnConstraint::TEvListRequest(dbName, pageSize, pageToken);
+    }
+
+    NKikimrSetColumnConstraint::TEvListResponse TestListSetColumnConstraint(TTestActorRuntime& runtime, ui64 schemeShard, const TString &dbName) {
+        return TestListSetColumnConstraint(runtime, schemeShard, dbName, 100, "", Ydb::StatusIds::SUCCESS);
+    }
+
+    NKikimrSetColumnConstraint::TEvListResponse TestListSetColumnConstraint(
+        TTestActorRuntime& runtime, ui64 schemeShard, const TString &dbName,
+        ui64 pageSize, const TString& pageToken, Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        auto sender = runtime.AllocateEdgeActor();
+        auto request = ListSetColumnConstraintRequest(dbName, pageSize, pageToken);
+
+        ForwardToTablet(runtime, schemeShard, sender, request);
+
+        TAutoPtr<IEventHandle> handle;
+        TEvSetColumnConstraint::TEvListResponse* event = runtime.GrabEdgeEvent<TEvSetColumnConstraint::TEvListResponse>(handle);
+        UNIT_ASSERT(event);
+
+        Cerr << "SET COLUMN CONSTRAINT RESPONSE LIST: " << event->ToString() << Endl;
+        UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), expectedStatus, event->Record.GetIssues());
+        return event->Record;
+    }
+
+    NKikimrSetColumnConstraint::TEvForgetResponse TestForgetSetColumnConstraint(
+        TTestActorRuntime& runtime,
+        ui64 schemeshardId,
+        ui64 txId,
+        const TString& dbName,
+        ui64 operationId,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        ForwardToTablet(runtime, schemeshardId, runtime.AllocateEdgeActor(), new TEvSetColumnConstraint::TEvForgetRequest(txId, dbName, operationId));
+
+        TAutoPtr<IEventHandle> handle;
+        auto ev = runtime.GrabEdgeEvent<TEvSetColumnConstraint::TEvForgetResponse>(handle);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(ev->Record.GetStatus(), expectedStatus, ev->Record.GetIssues());
+
+        return ev->Record;
+    }
+
+    NKikimrSetColumnConstraint::TEvForgetResponse TestForgetSetColumnConstraint(
+        TTestActorRuntime& runtime,
+        ui64 txId,
+        const TString& dbName,
+        ui64 operationId,
+        Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        return TestForgetSetColumnConstraint(runtime, TTestTxConfig::SchemeShard, txId, dbName, operationId, expectedStatus);
+    }
+
+    NKikimrSetColumnConstraint::TEvCancelResponse TestCancelSetColumnConstraint(
+        TTestActorRuntime& runtime,
+        ui64 schemeShard,
+        ui64 txId,
+        const TString& dbName,
+        ui64 operationId)
+    {
+        auto request = MakeHolder<TEvSetColumnConstraint::TEvCancelRequest>(txId, dbName, operationId);
+
+        auto sender = runtime.AllocateEdgeActor();
+        ForwardToTablet(runtime, schemeShard, sender, request.Release());
+
+        TAutoPtr<IEventHandle> handle;
+        auto* event = runtime.GrabEdgeEvent<TEvSetColumnConstraint::TEvCancelResponse>(handle);
+        UNIT_ASSERT(event);
+        return event->Record;
+    }
+
+    void TestCheckColumnsNotNull(
+        TTestActorRuntime& runtime,
+        const TString& tablePath,
+        const std::map<TString, bool>& expectedColumnNotNullStates)
+    {
+        const auto describeResult = DescribePath(runtime, tablePath);
+        const auto& columns = describeResult.GetPathDescription().GetTable().GetColumns();
+
+        std::map<TString, bool> currentNotNull;
+
+        for (const auto& column : columns) {
+            currentNotNull[column.GetName()] = column.GetNotNull();
+        }
+
+        for (const auto& [columnName, expectedNotNullValue] : expectedColumnNotNullStates) {
+            auto it = currentNotNull.find(columnName);
+            UNIT_ASSERT_C(
+                it != currentNotNull.end(),
+                TStringBuilder()
+                    << "[CheckColumnsNotNull] Column `" << columnName << "` not found. "
+                    << describeResult.ShortDebugString());
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                it->second,
+                expectedNotNullValue,
+                TStringBuilder()
+                    << "[CheckColumnsNotNull] Column `" << columnName << "` not null state mismatch. "
+                    << describeResult.ShortDebugString());
+        }
+    }
 }
+

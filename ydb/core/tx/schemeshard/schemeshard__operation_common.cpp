@@ -8,6 +8,7 @@
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/test_tablet/events.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/replication/controller/public_events.h>
@@ -17,16 +18,16 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr targetPath, TShardIdx shardIdx, TOperationContext& context)
+THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr targetPath, TShardIdx shardIdx, TSchemeShard* ss)
 {
-    auto tablePartitionConfig = context.SS->GetTablePartitionConfigWithAlterData(targetPath->PathId);
-    const auto& shard = context.SS->ShardInfos[shardIdx];
+    auto tablePartitionConfig = ss->GetTablePartitionConfigWithAlterData(targetPath->PathId);
+    const auto& shard = ss->ShardInfos[shardIdx];
 
     if (shard.TabletType == ETabletType::BlockStorePartition ||
         shard.TabletType == ETabletType::BlockStorePartition2 ||
         shard.TabletType == ETabletType::BlockStorePartitionDirect)
     {
-        auto it = context.SS->BlockStoreVolumes.FindPtr(targetPath->PathId);
+        auto it = ss->BlockStoreVolumes.FindPtr(targetPath->PathId);
         Y_ABORT_UNLESS(it, "Missing BlockStoreVolume while creating BlockStorePartition tablet");
         auto volume = *it;
         /*const auto* volumeConfig = &volume->VolumeConfig;
@@ -37,20 +38,20 @@ THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr target
 
     THolder<TEvHive::TEvCreateTablet> ev = MakeHolder<TEvHive::TEvCreateTablet>(ui64(shardIdx.GetOwnerId()), ui64(shardIdx.GetLocalId()), shard.TabletType, shard.BindedChannels);
 
-    TPathId domainId = context.SS->ResolvePathIdForDomain(targetPath);
+    TPathId domainId = ss->ResolvePathIdForDomain(targetPath);
 
-    TPathElement::TPtr domainEl = context.SS->PathsById.at(domainId);
+    TPathElement::TPtr domainEl = ss->PathsById.at(domainId);
     auto objectDomain = ev->Record.MutableObjectDomain();
     if (domainEl->IsRoot()) {
-        objectDomain->SetSchemeShard(context.SS->ParentDomainId.OwnerId);
-        objectDomain->SetPathId(context.SS->ParentDomainId.LocalPathId);
+        objectDomain->SetSchemeShard(ss->ParentDomainId.OwnerId);
+        objectDomain->SetPathId(ss->ParentDomainId.LocalPathId);
     } else {
         objectDomain->SetSchemeShard(domainId.OwnerId);
         objectDomain->SetPathId(domainId.LocalPathId);
     }
 
-    Y_ABORT_UNLESS(context.SS->SubDomains.contains(domainId));
-    TSubDomainInfo::TPtr subDomain = context.SS->SubDomains.at(domainId);
+    Y_ABORT_UNLESS(ss->SubDomains.contains(domainId));
+    TSubDomainInfo::TPtr subDomain = ss->SubDomains.at(domainId);
 
     TPathId resourcesDomainId;
     if (subDomain->GetResourcesDomainId()) {
@@ -226,7 +227,7 @@ bool TCreateParts::HandleReply(TEvHive::TEvCreateTabletReply::TPtr& ev, TOperati
         context.OnComplete.UnbindMsgFromPipe(OperationId, hive, shardIdx);
 
         auto path = context.SS->PathsById.at(txState.TargetPathId);
-        auto request = CreateEvCreateTablet(path, shardIdx, context);
+        auto request = CreateEvCreateTablet(path, shardIdx, context.SS);
 
         LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     DebugHint() << " CreateRequest"
@@ -260,6 +261,9 @@ bool TCreateParts::HandleReply(TEvHive::TEvCreateTabletReply::TPtr& ev, TOperati
             break;
         case ETabletType::BackupController:
             context.SS->TabletCounters->Simple()[COUNTER_BACKUP_CONTROLLER_TABLET_COUNT].Add(1);
+            break;
+        case ETabletType::TestShard:
+            context.SS->TabletCounters->Simple()[COUNTER_TEST_SHARD_COUNT].Add(1);
             break;
         default:
             break;
@@ -351,7 +355,7 @@ bool TCreateParts::ProgressState(TOperationContext& context) {
             context.OnComplete.BindMsgToPipe(OperationId, context.SS->GetGlobalHive(), shard.Idx, ev.Release());
         } else {
             auto path = context.SS->PathsById.at(txState->TargetPathId);
-            auto ev = CreateEvCreateTablet(path, shard.Idx, context);
+            auto ev = CreateEvCreateTablet(path, shard.Idx, context.SS);
 
             auto hiveToRequest = context.SS->ResolveHive(shard.Idx);
 
@@ -1238,6 +1242,35 @@ void ValidateNoTransactionOnPaths(TOperationId operationId, const THashSet<TPath
             continue;
         }
         Y_VERIFY_S(false, "unexpected transaction: " << otherTxId << " found on the subdomain being deleted by transaction " << operationId.GetTxId());
+    }
+}
+
+void AbortRelatedOperations(TOperationId operationId, const THashSet<TTxId>& relatedTx, TOperationContext& context, TStringBuf logPrefix) {
+    const TTabletId ssId = context.SS->SelfTabletId();
+
+    for (auto otherTxId: relatedTx) {
+        if (otherTxId == operationId.GetTxId()) {
+            continue;
+        }
+
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     logPrefix
+                         << ", dependent transaction: " << operationId.GetTxId()
+                         << ", parent transaction: " << otherTxId
+                         << ", at schemeshard: " << ssId);
+
+        context.OnComplete.Dependence(otherTxId, operationId.GetTxId());
+
+        Y_ABORT_UNLESS(context.SS->Operations.contains(otherTxId));
+        auto otherOperation = context.SS->Operations.at(otherTxId);
+        // AbortUnsafe marks parts as done; clear active barriers first to avoid
+        // IsDoneBarrier() VERIFY when a blocked part is force-aborted.
+        otherOperation->ForceClearBarriers();
+        for (ui32 partId = 0; partId < otherOperation->Parts.size(); ++partId) {
+            if (auto part = otherOperation->Parts.at(partId)) {
+                part->AbortUnsafe(operationId.GetTxId(), context);
+            }
+        }
     }
 }
 

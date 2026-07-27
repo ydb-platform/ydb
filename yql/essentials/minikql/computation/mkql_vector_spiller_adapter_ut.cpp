@@ -64,8 +64,8 @@ Y_UNIT_TEST(VectorOfExactChunkSize) {
     TScopedAlloc Alloc(__LOCATION__);
     size_t vectorSize = 5;
 
-    RunTestForSingleVector<int>(vectorSize, vectorSize, false);
-    RunTestForSingleVector<char>(vectorSize, vectorSize, false);
+    RunTestForSingleVector<int>(vectorSize, vectorSize, /*sizeInBytes=*/false);
+    RunTestForSingleVector<char>(vectorSize, vectorSize, /*sizeInBytes=*/false);
 }
 
 Y_UNIT_TEST(VectorLargerThanChunkSize) {
@@ -73,8 +73,8 @@ Y_UNIT_TEST(VectorLargerThanChunkSize) {
     size_t vectorSize = 10;
     size_t chunkSize = 3;
 
-    RunTestForSingleVector<int>(vectorSize, chunkSize, false);
-    RunTestForSingleVector<char>(vectorSize, chunkSize, false);
+    RunTestForSingleVector<int>(vectorSize, chunkSize, /*sizeInBytes=*/false);
+    RunTestForSingleVector<char>(vectorSize, chunkSize, /*sizeInBytes=*/false);
 }
 
 Y_UNIT_TEST(VectorLargerThanChunkSizePrime) {
@@ -82,8 +82,8 @@ Y_UNIT_TEST(VectorLargerThanChunkSizePrime) {
     size_t vectorSize = 10;
     size_t chunkSizeBytes = 7;
 
-    RunTestForSingleVector<int>(vectorSize, chunkSizeBytes, true);
-    RunTestForSingleVector<char>(vectorSize, chunkSizeBytes, true);
+    RunTestForSingleVector<int>(vectorSize, chunkSizeBytes, /*sizeInBytes=*/true);
+    RunTestForSingleVector<char>(vectorSize, chunkSizeBytes, /*sizeInBytes=*/true);
 }
 
 Y_UNIT_TEST(VectorLessThanChunkSize) {
@@ -91,8 +91,8 @@ Y_UNIT_TEST(VectorLessThanChunkSize) {
     size_t vectorSize = 5;
     size_t chunkSize = 10;
 
-    RunTestForSingleVector<int>(vectorSize, chunkSize, false);
-    RunTestForSingleVector<char>(vectorSize, chunkSize, false);
+    RunTestForSingleVector<int>(vectorSize, chunkSize, /*sizeInBytes=*/false);
+    RunTestForSingleVector<char>(vectorSize, chunkSize, /*sizeInBytes=*/false);
 }
 } // Y_UNIT_TEST_SUITE(TVectorSpillerAdapterTest_SingleVector)
 

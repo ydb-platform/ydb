@@ -94,7 +94,7 @@ public:
     }
 
 private:
-    TExprNodeBuilder(TPositionHandle pos, TExprNodeBuilder* parent, const TExprNodePtr& container);
+    TExprNodeBuilder(TPositionHandle pos, TExprNodeBuilder* parent, TExprNodePtr container);
     TExprNodeBuilder(TPositionHandle pos, TExprNodeReplaceBuilder* parentReplacer);
     TExprNodePtr FindArgument(const TStringBuf& name);
 

@@ -14,6 +14,7 @@ SRCS(
     message_delay_stats_ut.cpp
     sha256_ut.cpp
     metering_ut.cpp
+    source_address_ut.cpp
 )
 
 YQL_LAST_ABI_VERSION()

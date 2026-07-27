@@ -11,6 +11,10 @@ public:
     void SetName(const char* name);
     TString GetName() const override;
     std::unique_ptr<NWilson::TSpan> MakeWilsonSpan() override;
+    void DemandTraceOnEnd();
+
+protected:
+    void OnEnd() override;
 
 public:
     constexpr static size_t MaxNameSize = 64 - sizeof(ui32);

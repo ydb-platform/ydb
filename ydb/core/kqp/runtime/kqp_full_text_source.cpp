@@ -88,6 +88,8 @@
 
 #include <cmath>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE
+
 namespace NKikimr::NKqp {
 
 using namespace NYql;
@@ -654,6 +656,8 @@ public:
  * used for efficient columnar transfer of Uint64 doc_ids.
  */
 class TIndexTableImplReader : public TTableReader<TIndexTableImplReader> {
+    bool IsCompact = false;
+
 public:
     TIndexTableImplReader(const TIntrusivePtr<TKqpCounters>& counters,
         const TTableId& tableId,
@@ -664,8 +668,10 @@ public:
         const TString& poolId,
         const TVector<NScheme::TTypeInfo>& keyColumnTypes,
         const TVector<NScheme::TTypeInfo>& resultColumnTypes,
-        const TVector<i32>& resultColumnIds)
+        const TVector<i32>& resultColumnIds,
+        bool isCompact)
         : TTableReader(counters, tableId, tablePath, snapshot, logPrefix, database, poolId, keyColumnTypes, resultColumnTypes, resultColumnIds)
+        , IsCompact(isCompact)
     {}
 
     // Prefix values are a per-query binding, not table-reader state: they are owned by the source
@@ -728,8 +734,8 @@ public:
             const int numPrefix = static_cast<int>(prefixColumnNames.size());
             YQL_ENSURE(keyColumns.size() == numPrefix + 3);
             YQL_ENSURE(keyColumns[numPrefix].GetName() == TokenColumn);
-            YQL_ENSURE(keyColumns[numPrefix + 1].GetName() == MaxIdColumn);
-            YQL_ENSURE(keyColumns[numPrefix + 2].GetName() == GenColumn);
+            YQL_ENSURE(keyColumns[numPrefix + 1].GetName() == GenColumn);
+            YQL_ENSURE(keyColumns[numPrefix + 2].GetName() == MaxIdColumn);
             auto addCol = [&](const char* str) {
                 for (auto& column: columns) {
                     if (column.GetName() == str) {
@@ -776,9 +782,13 @@ public:
         TIntrusivePtr<TIndexTableImplReader> reader = MakeIntrusive<TIndexTableImplReader>(
             counters, FromProto(info.GetTable()), info.GetTable().GetPath(), snapshot, logPrefix,
             settings->GetDatabase(), settings->GetPoolId(),
-            keyColumnTypes, resultColumnTypes, resultColumnIds);
+            keyColumnTypes, resultColumnTypes, resultColumnIds, isCompact);
         reader->SetUseArrowFormat(useArrowFormat);
         return reader;
+    }
+
+    bool GetIsCompact() {
+        return IsCompact;
     }
 };
 
@@ -913,60 +923,90 @@ template <typename TDocId>
 class TCompactTokenStream: public TTokenStream<TDocId> {
     bool WithFreq = false;
     std::deque<std::unique_ptr<TEvDataShard::TEvReadResult>> Results;
+    std::vector<std::unique_ptr<TEvDataShard::TEvReadResult>> DeltaResults;
     size_t ResultIdx = 0;
     size_t RowIdx = 0; // position within Results[ResultIdx]
+    size_t DeltaResultIdx = 0;
+    size_t DeltaRowIdx = 0;
+    bool HasDeltas = false;
 
     bool Started = false;
     NFulltext::TMultiDeltaReader Reader;
 
     ui64 CurDocId = 0;
     ui32 CurFreq = 0;
-    ui64 MaxDocId = 0;
     ui64 Bytes = 0;
     ui64 Rows = 0;
 
     bool StartReader() {
         while (!Started) {
-            if (ResultIdx >= Results.size()) {
-                return false;
-            }
-            if (RowIdx >= Results[ResultIdx]->GetRowsCount()) {
+            if (RowIdx > 0 && RowIdx >= Results[ResultIdx]->GetRowsCount()) {
+                if (DeltaRowIdx > 0) {
+                    DeltaResultIdx++;
+                    DeltaRowIdx = 0;
+                }
                 ResultIdx++;
                 RowIdx = 0;
-                if (ResultIdx >= Results.size()) {
-                    return false;
-                }
             }
-            // row = { max_id, gen, added, segment }
+            if (ResultIdx >= Results.size()) {
+                if (this->ReadFinished && HasDeltas) {
+                    // Deltas may contain items with larger IDs than the last batch, consume them too
+                    HasDeltas = false;
+                    Reader.SetMaxId((ui64)std::numeric_limits<TDocId>::max());
+                    Started = true;
+                    Reader.Start();
+                    if (Reader.Read(CurDocId, CurFreq)) {
+                        break;
+                    }
+                    FreeReader();
+                }
+                return false;
+            }
+            // row = { gen, max_id, added, segment }
             auto row = Results[ResultIdx]->GetCells(RowIdx);
             RowIdx++;
-            NTableIndex::NFulltext::TGen gen = row[1].AsValue<NTableIndex::NFulltext::TGen>();
+            NTableIndex::NFulltext::TGen gen = row[0].AsValue<NTableIndex::NFulltext::TGen>();
+            TDocId maxId = row[1].AsValue<TDocId>();
             bool added = row[2].AsValue<bool>();
-            TConstArrayRef<ui8> buf((const ui8*)row[3].Data(), row[3].Size());
-            Reader.Add(added, buf);
+            TConstArrayRef<ui8> seg((const ui8*)row[3].Data(), row[3].Size());
+            Reader.Add(added, seg);
             if (gen == std::numeric_limits<NTableIndex::NFulltext::TGen>::max()) {
-                // This is the last segment, we can start reading
+                // This is the last segment, we can start reading, but only up to its maxId
+                Reader.SetMaxId((ui64)maxId);
                 Started = true;
                 Reader.Start();
                 if (!Reader.Read(CurDocId, CurFreq)) {
                     // Segment may be logically empty, then we have to switch to the next one
                     FreeReader();
                 }
+            } else {
+                // This is a delta segment from updates
+                DeltaRowIdx++;
+                HasDeltas = true;
             }
         }
         return true;
     }
 
     void FreeReader() {
-        Reader.Reset(WithFreq, std::is_signed<TDocId>::value);
+        // Only the last segment is static and max_id-partitioned
+        Reader.Pop();
+        Reader.Stop();
         Started = false;
-        if (RowIdx >= Results[ResultIdx]->GetRowsCount()) {
-            Results.erase(Results.begin(), Results.begin()+ResultIdx+1);
-            RowIdx = 0;
-            ResultIdx = 0;
-        } else if (ResultIdx > 0) {
+        YQL_ENSURE(DeltaResultIdx <= ResultIdx);
+        while (DeltaResultIdx > 0) {
+            // Save DeltaResults separately - we need them alive to handle deltas
+            DeltaResults.push_back(std::move(Results.front()));
+            Results.pop_front();
+            DeltaResultIdx--;
+            ResultIdx--;
+        }
+        if (ResultIdx > 0) {
             Results.erase(Results.begin(), Results.begin()+ResultIdx);
             ResultIdx = 0;
+        }
+        if (!HasDeltas && DeltaResults.size()) {
+            DeltaResults.clear();
         }
     }
 public:
@@ -980,7 +1020,7 @@ public:
     }
 
     TDocId GetMaxKey() const override {
-        return (TDocId)MaxDocId;
+        return (TDocId)CurDocId;
     }
 
     std::pair<ui64, ui64> GetStats() const override {
@@ -1002,8 +1042,6 @@ public:
                 Bytes += cell.Size();
             }
         }
-        auto lastRow = result->GetCells(result->GetRowsCount()-1);
-        MaxDocId = lastRow[0].AsValue<TDocId>();
         Results.push_back(std::move(result));
         StartReader();
     }
@@ -1130,8 +1168,23 @@ public:
         RangesToRead.clear();
 
         TCell tokenCell(Word.data(), Word.size());
+        if (Reader->GetIsCompact()) {
+            // With the compact format, we always have to read all rows with __ydb_gen < MAX (these are updates)
+            TVector<TCell> fromCells = MakePrefixedKey(tokenCell, TCell::Make<NTableIndex::NFulltext::TGen>(0));
+            TVector<TCell> toCells = MakePrefixedKey(tokenCell, TCell::Make<NTableIndex::NFulltext::TGen>(std::numeric_limits<NTableIndex::NFulltext::TGen>::max()-1));
+            auto range = TTableRange(fromCells, true /*fromInclusive*/, toCells, false /*toInclusive*/);
+            auto rangePartition = Reader->GetRangePartitioning(range);
+            for (const auto& [shardId, range] : rangePartition) {
+                RangesToRead.emplace_back(shardId, std::move(range));
+            }
+        }
+
         TVector<TCell> fromCells = MakePrefixedKey(tokenCell, TCell::Make<TDocId>(StartReadKeyFrom));
         TVector<TCell> toCells = MakePrefixedKey(tokenCell);
+        if (Reader->GetIsCompact()) {
+            // With the compact format, we always have to read all rows with __ydb_gen < MAX (these are updates)
+            fromCells.insert(fromCells.end()-1, TCell::Make<NTableIndex::NFulltext::TGen>(std::numeric_limits<NTableIndex::NFulltext::TGen>::max()));
+        }
         auto range = TTableRange(fromCells, StartReadKeyFromInclusive, toCells, false /*toInclusive*/);
 
         auto rangePartition = Reader->GetRangePartitioning(range);
@@ -1193,14 +1246,7 @@ public:
         return stream->GetMaxKey();
     }
 
-    void FinishTokenStream(ui64 tokenIndex) {
-        YQL_ENSURE(tokenIndex < Streams.size(), "Token index out of bounds");
-        auto& stream = Streams[tokenIndex];
-        stream->SetReadFinished();
-        if (stream->IsEof()) {
-            FinishedTokens++;
-        }
-    }
+    virtual void FinishTokenStream(ui64 tokenIndex) = 0;
 
     virtual bool Done() const = 0;
 
@@ -1272,7 +1318,20 @@ public:
         auto& stream = Streams[tokenIndex];
         bool wasEmpty = stream->GetUnprocessedDocumentCount() == 0;
         stream->AddResult(std::move(msg));
-        if (wasEmpty) {
+        if (wasEmpty && stream->GetUnprocessedDocumentCount() > 0) {
+            ReadyStreams.push_back(tokenIndex);
+        }
+    }
+
+    void FinishTokenStream(ui64 tokenIndex) override {
+        YQL_ENSURE(tokenIndex < Streams.size(), "Token index out of bounds");
+        auto& stream = Streams[tokenIndex];
+        bool wasEmpty = stream->GetUnprocessedDocumentCount() == 0;
+        stream->SetReadFinished();
+        if (stream->IsEof()) {
+            FinishedTokens++;
+        } else if (wasEmpty) {
+            // Compact token may become non-empty after it's marked with ReadFinished
             ReadyStreams.push_back(tokenIndex);
         }
     }
@@ -1423,7 +1482,19 @@ public:
         auto& stream = Streams[tokenIndex];
         bool wasEmpty = stream->GetUnprocessedDocumentCount() == 0;
         stream->AddResult(std::move(msg));
-        if (wasEmpty) {
+        if (wasEmpty && stream->GetUnprocessedDocumentCount() > 0) {
+            MergeQueue.push(THeapEntry(tokenIndex, stream->GetLeastDocId()));
+        }
+    }
+
+    void FinishTokenStream(ui64 tokenIndex) override {
+        YQL_ENSURE(tokenIndex < Streams.size(), "Token index out of bounds");
+        auto& stream = Streams[tokenIndex];
+        bool wasEmpty = stream->GetUnprocessedDocumentCount() == 0;
+        stream->SetReadFinished();
+        if (stream->IsEof()) {
+            FinishedTokens++;
+        } else if (wasEmpty && stream->GetUnprocessedDocumentCount() > 0) {
             MergeQueue.push(THeapEntry(tokenIndex, stream->GetLeastDocId()));
         }
     }
@@ -2056,7 +2127,10 @@ public:
             }
         }
 
-        CA_LOG_D("Sending ack for read #" << readId << " seqno = " << readInfo.LastSeqNo);
+        YDB_LOG_DEBUG("Sending read ack for sequence number",
+            {"logPrefix", this->LogPrefix},
+            {"readId", readId},
+            {"lastSeqNo", readInfo.LastSeqNo});
 
         bool newPipe = PipesCreated.insert(shardId).second;
         TlsActivationContext->Send(new NActors::IEventHandle(
@@ -2075,11 +2149,14 @@ public:
         auto readId = request->Record.GetReadId();
         const bool needToCreatePipe = PipesCreated.insert(shardId).second;
 
-        CA_LOG_D(TStringBuilder() << "Send EvRead (full text source) to shardId=" << shardId
-            << ", readId = " << record.GetReadId()
-            << ", snapshot=(txid=" << record.GetSnapshot().GetTxId() << ", step=" << record.GetSnapshot().GetStep() << ")"
-            << ", lockTxId=" << record.GetLockTxId()
-            << ", lockNodeId=" << record.GetLockNodeId());
+        YDB_LOG_DEBUG("Sending EvRead request from full text source",
+            {"logPrefix", this->LogPrefix},
+            {"shardId", shardId},
+            {"readId", record.GetReadId()},
+            {"snapshotTxId", record.GetSnapshot().GetTxId()},
+            {"step", record.GetSnapshot().GetStep()},
+            {"lockTxId", record.GetLockTxId()},
+            {"lockNodeId", record.GetLockNodeId()});
 
         TlsActivationContext->Send(new NActors::IEventHandle(
             NKikimr::MakePipePerNodeCacheID(false),
@@ -2565,6 +2642,7 @@ private:
             YQL_ENSURE(Settings->GetQuerySettings().GetQuery().size() > 0, "Expected non-empty query");
             const auto& expr = Settings->GetQuerySettings().GetQuery();
 
+            THashMap<TStringBuf, TWordStatePtr> seen;
             for (const auto& column : Settings->GetQuerySettings().GetColumns()) {
                 for (const auto& analyzer : Settings->GetIndexDescription().GetSettings().columns()) {
                     if (analyzer.analyzers().use_filter_ngram() || analyzer.analyzers().use_filter_edge_ngram()) {
@@ -2575,9 +2653,16 @@ private:
                         size_t wordIndex = 0;
                         for (const auto& term: NFulltext::BuildSearchTermsStructured(expr, analyzer.analyzers())) {
                             YQL_ENSURE(IndexTableReader);
-                            auto word = MakeIntrusive<TWordState>(wordIndex++, term.Token, IndexTableReader, PrefixCells);
-                            word->Required = term.Required;
-                            Words.emplace_back(std::move(word));
+                            auto wordIt = seen.find(term.Token);
+                            if (wordIt != seen.end()) {
+                                // Don't add duplicate words
+                                wordIt->second->Required = wordIt->second->Required || term.Required;
+                            } else {
+                                auto word = MakeIntrusive<TWordState>(wordIndex++, term.Token, IndexTableReader, PrefixCells);
+                                word->Required = term.Required;
+                                seen[word->Word] = word;
+                                Words.emplace_back(std::move(word));
+                            }
                         }
                     }
                 }
@@ -2766,8 +2851,12 @@ private:
                 }
             }
             if (IsNgram && bestTokenLimit < Words.size()) {
-                CA_LOG_I("Selecting " << bestTokenLimit << " balanced ngrams out of " << Words.size()
-                    << " (imbalance: " << Words[byFreq[0]]->Frequency << " vs " << Words[byFreq[bestTokenLimit]]->Frequency << ")");
+                YDB_LOG_INFO("Selecting balanced ngrams from token frequency list",
+                    {"logPrefix", this->LogPrefix},
+                    {"bestTokenLimit", bestTokenLimit},
+                    {"wordCount", Words.size()},
+                    {"maxFrequency", Words[byFreq[0]]->Frequency},
+                    {"cutoffFrequency", Words[byFreq[bestTokenLimit]]->Frequency});
                 TVector<TWordStatePtr> newWords;
                 for (size_t i = 0; i < bestTokenLimit; i++) {
                     newWords.emplace_back(std::move(Words[byFreq[i]]));
@@ -2775,8 +2864,12 @@ private:
                 }
                 std::swap(Words, newWords);
             } else if (MainTableReader->GetWithRelevance() && bestTokenLimit < Words.size() && defaultOperator == EDefaultOperator::And) {
-                CA_LOG_I("Selecting " << bestTokenLimit << " balanced tokens out of " << Words.size()
-                    << " (imbalance: " << Words[byFreq[0]]->Frequency << " vs " << Words[byFreq[bestTokenLimit]]->Frequency << ")");
+                YDB_LOG_INFO("Selecting balanced tokens from token frequency list",
+                    {"logPrefix", this->LogPrefix},
+                    {"bestTokenLimit", bestTokenLimit},
+                    {"wordCount", Words.size()},
+                    {"maxFrequency", Words[byFreq[0]]->Frequency},
+                    {"cutoffFrequency", Words[byFreq[bestTokenLimit]]->Frequency});
 
                 needL2Layer = true;
                 TVector<TWordStatePtr> newWords;
@@ -3224,7 +3317,9 @@ public:
     // Handle broken pipe to a datashard tablet.
     // Resets pipe tracking and schedules a retry for all reads on that shard.
     void HandleError(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-        CA_LOG_E("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
+        YDB_LOG_ERROR("Received TEvDeliveryProblem from datashard",
+            {"logPrefix", this->LogPrefix},
+            {"tablet", ev->Get()->TabletId});
 
         ui64 shardId = ev->Get()->TabletId;
         ReadsState.UntrackPipe(shardId);
@@ -3239,12 +3334,16 @@ public:
     //   - If relevance mode: read stats + dict tables, then proceed to StartWordReads.
     //   - If plain mode: go directly to StartWordReads.
     void HandleResolve(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
-        CA_LOG_D("TEvResolveKeySetResult was received for table.");
+        YDB_LOG_DEBUG("Received TEvResolveKeySetResult",
+            {"logPrefix", this->LogPrefix});
         ResolveInProgress = false;
 
         if (ev->Get()->Request->ErrorCount > 0) {
             for(const auto& entry : ev->Get()->Request->ResultSet) {
-                CA_LOG_E("Table " << entry.KeyDescription->TableId << " error status: " << entry.Status);
+                YDB_LOG_ERROR("Table resolve error",
+                    {"logPrefix", this->LogPrefix},
+                    {"tableId", entry.KeyDescription->TableId},
+                    {"status", entry.Status});
             }
 
             TString errorMsg = TStringBuilder() << "Failed to get partitioning for table. ";
@@ -3343,7 +3442,10 @@ public:
         absl::flat_hash_map<ui64, std::pair<ui64, std::deque<TOwnedTableRange>>> byShard;
         absl::flat_hash_map<ui64, std::vector<TDocInfoPtr>> docsByReadId;
         for (auto& doc : docInfos) {
-            TVector<TCell> rowIdCells = {TCell::Make(doc->DocumentNumId)};
+            // Row-id indexes (plain, relevance and compact alike) store the full __ydb_row_id as the
+            // doc id, so it is the unique-index lookup key directly.
+            ui64 rowId = doc->DocumentNumId;
+            TVector<TCell> rowIdCells = {TCell::Make(rowId)};
             TTableRange range(rowIdCells, true, rowIdCells, true, false /*not a point*/);
             auto partitions = UniqueIndexReader->GetRangePartitioning(range);
             YQL_ENSURE(partitions.size() == 1, "Expected single partition for __ydb_row_id resolve, got " << partitions.size());
@@ -3378,6 +3480,7 @@ public:
         absl::flat_hash_map<TDocId, TDocInfoPtr> docsByRowId;
         docsByRowId.reserve(docs.size());
         for (auto& doc : docs) {
+            // The doc id is the full __ydb_row_id, which is exactly the unique-index row's first key cell.
             docsByRowId.emplace(doc->DocumentNumId, doc);
         }
 
@@ -3578,7 +3681,9 @@ public:
         L1MergedDocuments.insert(L1MergedDocuments.end(), l1matched.begin(), l1matched.end());
 
         std::vector<TDocInfoPtr> matches = L2MergeAlgo->FindMatches();
-        CA_LOG_D("L2Merge done: " << L2MergeAlgo->Done());
+        YDB_LOG_DEBUG("Running L2 merge step",
+            {"logPrefix", this->LogPrefix},
+            {"done", L2MergeAlgo->Done()});
         MergeL2MatchFrequencies(matches);
         FetchDocumentDetails(matches);
     }
@@ -3759,12 +3864,14 @@ public:
         NYql::IssuesFromMessage(record.GetStatus().GetIssues(), shardIssues);
         const TString tablePath = GetReadTablePath(static_cast<EReadKind>(readInfo.ReadKind));
 
-        CA_LOG_W("Read result error, ReadId=" << readId
-            << ", ShardId=" << shardId
-            << ", ReadKind=" << ReadKindName(static_cast<EReadKind>(readInfo.ReadKind))
-            << ", Table=" << tablePath
-            << ", Status=" << Ydb::StatusIds::StatusCode_Name(statusCode)
-            << ", Issues=[" << shardIssues.ToOneLineString() << "]");
+        YDB_LOG_WARN("Read result returned an error",
+            {"logPrefix", this->LogPrefix},
+            {"readId", readId},
+            {"shardId", shardId},
+            {"readKind", ReadKindName(static_cast<EReadKind>(readInfo.ReadKind))},
+            {"table", tablePath},
+            {"status", Ydb::StatusIds::StatusCode_Name(statusCode)},
+            {"issues", shardIssues.ToOneLineString()});
 
         switch (statusCode) {
             case Ydb::StatusIds::OVERLOADED: {
@@ -3808,30 +3915,29 @@ public:
 
         auto& readInfo = *it;
 
-        CA_LOG_D("Recv TEvReadResult (full text source)"
-            << ", Cookie=" << readInfo.Cookie
-            << ", ReadKind=" << (ui32)readInfo.ReadKind
-            << ", ShardId=" << readInfo.ShardId
-            << ", ReadId=" << record.GetReadId()
-            << ", SeqNo=" << record.GetSeqNo()
-            << ", Status=" << Ydb::StatusIds::StatusCode_Name(record.GetStatus().GetCode())
-            << ", Finished=" << record.GetFinished()
-            << ", RowCount=" << record.GetRowCount()
-            << ", ResultFormat=" << NKikimrDataEvents::EDataFormat_Name(record.GetResultFormat())
-            << ", TxLocks= " << [&]() {
-                TStringBuilder builder;
-                for (const auto& lock : record.GetTxLocks()) {
-                    builder << lock.ShortDebugString();
-                }
-                return builder;
-            }()
-            << ", BrokenTxLocks= " << [&]() {
-                TStringBuilder builder;
-                for (const auto& lock : record.GetBrokenTxLocks()) {
-                    builder << lock.ShortDebugString();
-                }
-                return builder;
-            }());
+        TStringBuilder txLocks;
+        for (const auto& lock : record.GetTxLocks()) {
+            txLocks << lock.ShortDebugString();
+        }
+
+        TStringBuilder borkenTxlocks;
+        for (const auto& lock : record.GetBrokenTxLocks()) {
+            borkenTxlocks << lock.ShortDebugString();
+        }
+
+        YDB_LOG_DEBUG("Received TEvReadResult from full text source",
+            {"logPrefix", this->LogPrefix},
+            {"cookie", readInfo.Cookie},
+            {"readKind", (ui32)readInfo.ReadKind},
+            {"shardId", readInfo.ShardId},
+            {"readId", record.GetReadId()},
+            {"seqNo", record.GetSeqNo()},
+            {"status", Ydb::StatusIds::StatusCode_Name(record.GetStatus().GetCode())},
+            {"finished", record.GetFinished()},
+            {"rowCount", record.GetRowCount()},
+            {"resultFormat", NKikimrDataEvents::EDataFormat_Name(record.GetResultFormat())},
+            {"txLocks", txLocks},
+            {"brokenTxLocks", borkenTxlocks});
 
         if (record.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
             HandleReadResultError(readId, readInfo, record);
@@ -3893,11 +3999,11 @@ static NScheme::TTypeId GetDocIdTypeId(const NKikimrKqp::TKqpFullTextSourceSetti
     if (settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompact ||
         settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance ||
         settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJsonCompact) {
-        // Compact key is [prefix..., __ydb_token, __ydb_max_id, __ydb_generation]; the doc-id type
+        // Compact key is [prefix..., __ydb_token, __ydb_generation, __ydb_max_id]; the doc-id type
         // is that of __ydb_max_id, which sits right after the prefix columns and the token.
         const int numPrefix = settings->GetQuerySettings().GetPrefixColumns().size();
         YQL_ENSURE(keyColumns.size() == numPrefix + 3);
-        idx = numPrefix + 1; // __ydb_max_id
+        idx = numPrefix + 2; // __ydb_max_id (after __ydb_generation)
     }
     return static_cast<NScheme::TTypeId>(keyColumns[idx].GetTypeId());
 }

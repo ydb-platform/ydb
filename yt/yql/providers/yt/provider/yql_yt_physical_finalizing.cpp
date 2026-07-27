@@ -730,7 +730,10 @@ private:
             if (IsBeingExecuted(*writer)) {
                 continue;
             }
-            if (!TYtMap::Match(writer) && !TYtMerge::Match(writer)) {
+            if (!TYtMap::Match(writer) && !TYtMerge::Match(writer) && !TYtPersist::Match(writer)) {
+                continue;
+            }
+            if (TYtPersist::Match(writer) && !NYql::HasSetting(*writer->Child(TYtPersist::idx_Settings), EYtSettingType::PruneUnusedColumns)) {
                 continue;
             }
             if (writer->GetTypeAnn()->Cast<TTupleExprType>()->GetItems()[1]->Cast<TListExprType>()->GetItemType()->GetKind() == ETypeAnnotationKind::Variant) {
@@ -751,7 +754,7 @@ private:
 
             bool good = true;
             THashSet<TString> usedColumns;
-            if (NYql::HasSetting(*writer->Child(TYtTransientOpBase::idx_Settings), EYtSettingType::KeepSorted)) {
+            if (NYql::HasSetting(*writer->Child(TYtTransientOpBase::idx_Settings), EYtSettingType::KeepSorted) || TYtPersist::Match(writer)) {
                 for (size_t i = 0; i < rowSpec.SortedBy.size(); ++i) {
                     usedColumns.insert(rowSpec.SortedBy[i]);
                 }
@@ -843,6 +846,7 @@ private:
                 distinct = distinct->FilterFields(ctx, [&columns](const TPartOfConstraintBase::TPathType& path) { return !path.empty() && columns.contains(path.front()); });
             }
 
+            const ui64 nativeTypeCompatibility = GetNativeYtTypeCompatibility(TYtTransientOpBase(writer).DataSink().Cluster().StringValue(), *State_->Configuration);
             TExprNode::TPtr newOp;
             if (auto maybeMap = TMaybeNode<TYtMap>(writer)) {
                 TYtMap map = maybeMap.Cast();
@@ -879,7 +883,7 @@ private:
                     .Seal()
                     .Build();
 
-                TYtOutTableInfo mapOut(outStructType, State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
+                TYtOutTableInfo mapOut(outStructType, nativeTypeCompatibility);
 
                 if (ctx.IsConstraintEnabled<TSortedConstraintNode>()) {
                     if (auto sorted = outTable.Ref().GetConstraint<TSortedConstraintNode>()) {
@@ -931,10 +935,10 @@ private:
                     .Mapper(std::move(mapper))
                     .Done().Ptr();
             }
-            else  {
+            else if (TYtMerge::Match(writer)) {
                 auto merge = TYtMerge(writer);
                 auto prevRowSpec = TYqlRowSpecInfo(merge.Output().Item(0).RowSpec());
-                TYtOutTableInfo mergeOut(outStructType, prevRowSpec.GetNativeYtTypeFlags());
+                TYtOutTableInfo mergeOut(outStructType, nativeTypeCompatibility);
                 mergeOut.RowSpec->CopySortness(ctx, prevRowSpec, useNativeYtDefaultColumnOrder, TYqlRowSpecInfo::ECopySort::WithDesc);
                 mergeOut.SetUnique(distinct, merge.Pos(), ctx);
                 mergeOut.RowSpec->SetConstraints(outTable.Ref().GetConstraintSet());
@@ -960,6 +964,63 @@ private:
                     .Build()
                     .Output()
                         .Add(mergeOut.ToExprNode(ctx, merge.Pos()).Cast<TYtOutTable>())
+                    .Build()
+                    .Done().Ptr();
+            } else {
+                YQL_ENSURE(TYtPersist::Match(writer));
+
+                auto persist = TYtPersist(writer);
+
+                auto prevRowSpec = TYqlRowSpecInfo(persist.Output().Item(0).RowSpec());
+                TYtOutTableInfo mergeOut(outStructType, prevRowSpec.GetNativeYtTypeFlags());
+                mergeOut.RowSpec->CopySortness(ctx, prevRowSpec, useNativeYtDefaultColumnOrder, TYqlRowSpecInfo::ECopySort::WithDesc);
+                mergeOut.SetUnique(distinct, persist.Pos(), ctx);
+                mergeOut.RowSpec->SetConstraints(outTable.Ref().GetConstraintSet());
+
+                if (auto nativeType = prevRowSpec.GetNativeYtType()) {
+                    mergeOut.RowSpec->CopyTypeOrders(*nativeType, useNativeYtDefaultColumnOrder);
+                }
+
+                TSet<TStringBuf> columnSet;
+                for (auto& column: columns) {
+                    columnSet.insert(column);
+                }
+                if (mergeOut.RowSpec->HasAuxColumns()) {
+                    for (auto item: mergeOut.RowSpec->GetAuxColumns()) {
+                        columnSet.insert(item.first);
+                    }
+                }
+
+                auto persistInput = Build<TYtPath>(ctx, persist.Pos())
+                    .InitFrom(persist.Input().Item(0).Paths().Item(0))
+                    .Table<TYtOutput>()
+                        .Operation<TYtMerge>()
+                            .World<TCoWorld>().Build()
+                            .DataSink(persist.DataSink())
+                            .Input()
+                                .Add(UpdateInputFields(persist.Input().Item(0), std::move(columnSet), ctx, false))
+                            .Build()
+                            .Output()
+                                .Add(mergeOut.ToExprNode(ctx, persist.Pos()).Cast<TYtOutTable>())
+                            .Build()
+                            .Settings().Build()
+                        .Build()
+                        .OutIndex().Value(0).Build()
+                    .Build()
+                    .Done();
+
+                newOp = Build<TYtPersist>(ctx, persist.Pos())
+                    .InitFrom(persist)
+                    .Input()
+                        .Add()
+                            .Paths()
+                                .Add(persistInput)
+                            .Build()
+                            .Settings().Build()
+                        .Build()
+                    .Build()
+                    .Output()
+                        .Add(mergeOut.ToExprNode(ctx, persist.Pos()).Cast<TYtOutTable>())
                     .Build()
                     .Done().Ptr();
             }
@@ -1036,6 +1097,13 @@ private:
                             newOp = Build<TYtTryFirst>(ctx, writer->Pos())
                                 .First(newOpFirst ? std::move(newOpFirst) : mayTry.Cast().First().Ptr())
                                 .Second(newOpSecond ? std::move(newOpSecond) : mayTry.Cast().Second().Ptr())
+                                .Done().Ptr();
+                        }
+                    } else if (const auto maybePersist = TExprBase(writer).Maybe<TYtPersist>()) {
+                        if (!NYql::HasSetting(maybePersist.Cast().Settings().Ref(), EYtSettingType::Unordered)) {
+                            newOp = Build<TYtPersist>(ctx, writer->Pos())
+                                .InitFrom(maybePersist.Cast())
+                                .Settings(NYql::AddSetting(maybePersist.Cast().Settings().Ref(), EYtSettingType::Unordered, {}, ctx))
                                 .Done().Ptr();
                         }
                     } else {
@@ -1928,7 +1996,7 @@ private:
             bool hasPublish = false;
             for (auto& item : x.second) {
                 auto reader = std::get<0>(item);
-                if (TYtPublish::Match(reader) || TYtCopy::Match(reader) || TYtMerge::Match(reader) || TYtSort::Match(reader)) {
+                if (TYtPublish::Match(reader) || TYtCopy::Match(reader) || TYtMerge::Match(reader) || TYtSort::Match(reader) || TYtPersist::Match(reader)) {
                     const auto opIndex = FromString<size_t>(std::get<2>(item)->Child(TYtOutput::idx_OutIndex)->Content());
                     ++outUsage[opIndex];
                     hasPublish = hasPublish || TYtPublish::Match(reader);
@@ -1939,8 +2007,7 @@ private:
             }
 
             const TYtOutputOpBase operation = GetRealOperation(TExprBase(x.first));
-            const bool canUpdateOp = !IsBeingExecuted(*x.first) && !operation.Maybe<TYtCopy>();
-            const bool canChangeNativeTypeForOp = !operation.Maybe<TYtMerge>() && !operation.Maybe<TYtSort>();
+            const bool canUpdateOp = !IsBeingExecuted(*x.first) && !operation.Maybe<TYtCopy>() && !operation.Maybe<TYtPersist>();
 
             auto origOutput = operation.Output().Ptr();
             auto newOutput = origOutput;
@@ -1970,7 +2037,7 @@ private:
                             TExprNode::TPtr newTable = ctx.ChangeChild(table.Ref(), TYtOutTable::idx_RowSpec,
                                 outRowSpec->ToExprNode(ctx, table.RowSpec().Pos()).Ptr());
 
-                            if (canUpdateOp && outUsage[opIndex] <= 1 && (!diffNativeType || canChangeNativeTypeForOp)) {
+                            if (!diffNativeType && canUpdateOp && outUsage[opIndex] <= 1) {
                                 YQL_CLOG(INFO, ProviderYt) << "AlignPublishTypes: change " << opIndex << " output of " << operation.Ref().Content();
                                 newOutput = ctx.ChangeChild(*newOutput, opIndex, std::move(newTable));
                             } else if (diffNativeType) {
@@ -2977,6 +3044,8 @@ private:
                     usage.UsedByMerges[outIndex].push_back(std::get<0>(item));
                 }
 
+            } else if (TYtPersist::Match(std::get<0>(item))) {
+                usage.PublishUsage[outIndex].emplace();
             } else if (EColumnGroupMode::Single == mode) {
                 usage.FullUsage[outIndex] = true;
             } else {
@@ -3013,12 +3082,12 @@ private:
         std::vector<const TExprNode*> withMergeDeps;
 
         for (auto writer: opDepsOrder) {
-            if (TYtEquiJoin::Match(writer) || IsBeingExecuted(*writer)) {
+            if (TYtEquiJoin::Match(writer) || TYtPersist::Match(writer) || IsBeingExecuted(*writer)) {
                 continue;
             }
             const auto& readers = opDeps.at(writer);
 
-            // Check all counsumers are known
+            // Check all consumers are known
             auto& processed = ProcessedCalculateColumnGroups[writer];
             if (processed.size() == readers.size() &&
                 AllOf(readers, [&processed](const auto& item) {
@@ -3231,6 +3300,7 @@ THashSet<TStringBuf> TYtPhysicalFinalizingTransformer::OPS_WITH_SORTED_OUTPUT = 
     TYtReduce::CallableName(),
     TYtFill::CallableName(),
     TYtDqProcessWrite::CallableName(),
+    TYtPersist::CallableName(),
     TYtTryFirst::CallableName(),
 };
 

@@ -2,8 +2,8 @@
 
 #include <yql/essentials/public/udf/udf_helpers.h>
 
-#include <yql/essentials/sql/v1/context.h>
-#include <yql/essentials/sql/v1/sql_translation.h>
+#include <yql/essentials/sql/v1/translation/context.h>
+#include <yql/essentials/sql/v1/translation/sql_translation.h>
 #include <yql/essentials/sql/v1/reflect/sql_reflect.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
@@ -216,7 +216,7 @@ private:
         const auto& suffix = msg.GetRule_unary_subexpr_suffix2();
         const bool suffixIsEmpty = suffix.GetBlock1().empty() && !suffix.HasBlock2();
         if (suffixIsEmpty) {
-            if (auto simpleType = LookupSimpleType(func, true, false); simpleType) {
+            if (auto simpleType = LookupSimpleType(func, /*flexibleTypes=*/true, /*isPgType=*/false); simpleType) {
                 Freqs_[std::make_pair("TYPE", func)] += 1;
             }
         }

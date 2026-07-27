@@ -3,7 +3,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/persqueue/writer/writer.h>
-#include <ydb/library/kafka/kafka_records.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 
 namespace {
     using namespace NKafka;

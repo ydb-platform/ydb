@@ -198,6 +198,9 @@ public:
         std::optional<ui32> ForceGroupGeneration; // work only with this specific group generation and nothing else
         bool DoSendDeathNote = true; // unschedules DSProxy timeout on termination, be careful with disabling
 
+        bool EnableStorageRetroTraceGeneration = false;
+        bool EnableStorageRetroTraceCollectionSlowRequests = false;
+
         std::optional<TMessageRelevanceWatcher> ExternalRelevanceWatcher = std::nullopt;
     };
 
@@ -229,24 +232,29 @@ public:
         , ExecutionRelay(std::move(params.Common.ExecutionRelay))
         , ForceGroupGeneration(params.Common.ForceGroupGeneration)
         , DoSendDeathNote(params.Common.DoSendDeathNote)
+        , EnableStorageRetroTraceCollectionSlowRequests(params.Common.EnableStorageRetroTraceCollectionSlowRequests)
     {
-        if (ParentSpan) {
+        if (NWilson::TSpan* parentWilsonSpan = ParentSpan.GetWilsonSpanPtr()) {
             const NWilson::TTraceId& parentTraceId = ParentSpan.GetTraceId();
             Span = NWilson::TSpan(TWilson::BlobStorage, NWilson::TTraceId::NewTraceId(parentTraceId.GetVerbosity(),
-                parentTraceId.GetTimeToLive()), ParentSpan.GetName());
-            ParentSpan.Link(Span.GetTraceId());
-            Span.Attribute("GroupId", Info->GroupID.GetRawId());
-            Span.Attribute("RestartCounter", RestartCounter);
-            Span.Attribute("database", AppData()->TenantName);
-            Span.Attribute("storagePool", Info->GetStoragePoolName());
-            params.Common.Event->ToSpan(*Span.GetWilsonSpanPtr());
+                    parentTraceId.GetTimeToLive()), params.TypeSpecific.Name);
+            parentWilsonSpan->Link(Span.GetTraceId());
+
+            // if for extra safety
+            if (NWilson::TSpan* wilsonSpan = Span.GetWilsonSpanPtr()) {
+                wilsonSpan->Attribute("GroupId", Info->GroupID.GetRawId());
+                wilsonSpan->Attribute("RestartCounter", RestartCounter);
+                wilsonSpan->Attribute("database", AppData()->TenantName);
+                wilsonSpan->Attribute("storagePool", Info->GetStoragePoolName());
+                params.Common.Event->ToSpan(*wilsonSpan);
+            }
         } else if (ParentSpan.GetRetroSpanPtr()) {
             const NWilson::TTraceId& parentTraceId = ParentSpan.GetTraceId();
             Span = TLazyRetroSpan(TWilson::BlobStorage, NWilson::TTraceId::NewTraceId(TWilson::BlobStorage,
-                    parentTraceId.GetTimeToLive(), true), "DSProxy.RTX");
-        } else {
-            // Span = TLazyRetroSpan(TWilson::BlobStorage, NWilson::TTraceId::NewTraceId(TWilson::BlobStorage, Max<ui32>(), true),
-            //         "DSProxy.RTX");
+                    parentTraceId.GetTimeToLive(), true), "DSProxy.Retro");
+        } else if (params.Common.EnableStorageRetroTraceGeneration) {
+            Span = TLazyRetroSpan(TWilson::BlobStorage, NWilson::TTraceId::NewTraceId(TWilson::BlobStorage, Max<ui32>(), true),
+                    "DSProxy.Retro");
         }
 
         Y_ABORT_UNLESS(CostModel);
@@ -347,6 +355,9 @@ private:
     std::optional<ui32> ForceGroupGeneration;
     ui32 RacingGeneration = 0;
     bool DoSendDeathNote;
+
+protected:
+    const bool EnableStorageRetroTraceCollectionSlowRequests = false;
 };
 
 void Encrypt(char *destination, const char *source, size_t shift, size_t sizeBytes, const TLogoBlobID &id,
@@ -549,6 +560,10 @@ struct TBlobStorageProxyControlWrappers {
 
     TMemorizableControlWrapper LongRequestThresholdMs = LongRequestThresholdDefaultControl;
     TMemorizableControlWrapper MaxPutTimeoutSeconds = MaxPutTimeoutDefaultControl;
+
+    TMemorizableControlWrapper EnableStorageRetroTraceGeneration = EnableStorageRetroTraceGenerationDefaultControl;
+    TMemorizableControlWrapper EnableStorageRetroTraceCollectionSlowRequests =
+            EnableStorageRetroTraceCollectionSlowRequestsDefaultControl;
 
 #define DEVICE_TYPE_SEPECIFIC_MEMORIZABLE_CONTROLS(prefix)              \
     TMemorizableControlWrapper prefix = prefix##DefaultControl;         \

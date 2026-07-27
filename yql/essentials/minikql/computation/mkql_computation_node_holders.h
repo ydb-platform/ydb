@@ -18,6 +18,7 @@
 #include <util/memory/pool.h>
 
 #include <functional>
+#include <new>
 #include <unordered_map>
 #include <unordered_set>
 #include <optional>
@@ -307,7 +308,7 @@ inline int CompareKeys(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedV
     if (isTuple) {
         if (left && right) {
             for (ui32 i = 0; i < types.size(); ++i) {
-                if (const auto cmp = CompareValues(types[i].first, true,
+                if (const auto cmp = CompareValues(types[i].first, /*asc=*/true,
                                                    types[i].second,
                                                    left.GetElement(i), right.GetElement(i))) {
                     return cmp;
@@ -321,7 +322,7 @@ inline int CompareKeys(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedV
 
         return 0;
     } else {
-        return CompareValues(types.front().first, true, types.front().second, left, right);
+        return CompareValues(types.front().first, /*asc=*/true, types.front().second, left, right);
     }
 }
 
@@ -658,10 +659,11 @@ class TDirectArrayHolderInplace final: public TComputationValue<TDirectArrayHold
 public:
     void* operator new(size_t sz) = delete;
     void* operator new[](size_t sz) = delete;
-    void operator delete(void* mem, std::size_t sz) {
-        const auto pSize = static_cast<void*>(static_cast<ui8*>(mem) +
-                                              sizeof(TComputationValue<TDirectArrayHolderInplace>));
-        FreeWithSize(mem, sz + *static_cast<ui64*>(pSize) * sizeof(NUdf::TUnboxedValue));
+    // Destroying delete: reads Size_ member before running the destructor
+    void operator delete(TDirectArrayHolderInplace* self, std::destroying_delete_t) {
+        const auto fullSize = sizeof(TDirectArrayHolderInplace) + self->Size_ * sizeof(NUdf::TUnboxedValue);
+        self->~TDirectArrayHolderInplace();
+        FreeWithSize(self, fullSize);
     }
 
     void operator delete[](void* mem, std::size_t sz) = delete;

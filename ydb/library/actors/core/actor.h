@@ -11,8 +11,8 @@
 #include <util/system/tls.h>
 #include <util/generic/noncopyable.h>
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
 
 namespace NActors {
     class TActorSystem;
@@ -589,7 +589,8 @@ namespace NActors {
         void UnregisterActorTask(TActorTask* task);
         void RegisterEventAwaiter(ui64 cookie, TActorEventAwaiter* awaiter);
         void UnregisterEventAwaiter(ui64 cookie, TActorEventAwaiter* awaiter);
-        bool HandleResumeRunnable(TAutoPtr<IEventHandle>& ev);
+        void HandleCheckActorLiveness(TAutoPtr<IEventHandle>& ev);
+        void HandleResumeRunnable(TAutoPtr<IEventHandle>& ev);
         bool HandleRegisteredEvent(TAutoPtr<IEventHandle>& ev);
 
     public:

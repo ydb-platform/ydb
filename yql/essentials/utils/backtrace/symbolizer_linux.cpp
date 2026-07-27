@@ -100,7 +100,7 @@ auto CreateState(const char* filename) {
         filename,
         0,
         HandleLibBacktraceError,
-        nullptr);
+        /*data=*/nullptr);
 }
 } // namespace
 

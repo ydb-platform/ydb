@@ -8,6 +8,8 @@
 
 #include <library/cpp/protobuf/interop/cast.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::YDB_SDK
+
 namespace NKikimr::NKqp {
 
 namespace {
@@ -97,10 +99,11 @@ protected:
     }
 
     void SendInitMessage() final {
-        LOG_I("Sending init message"
-            << ", ProducerId: " << WriteSettings.ProducerId
-            << ", MessageGroupId: " << WriteSettings.MessageGroupId
-            << ", PartitionId: " << (WriteSettings.PartitionId ? ToString(*WriteSettings.PartitionId) : "null"));
+        YDB_LOG_INFO("Sending init message",
+            {"logPrefix", LogPrefix()},
+            {"producerId", WriteSettings.ProducerId},
+            {"messageGroupId", WriteSettings.MessageGroupId},
+            {"partitionId", (WriteSettings.PartitionId ? ToString(*WriteSettings.PartitionId) : "null")});
 
         TRpcIn message;
 
@@ -165,7 +168,10 @@ private:
         auto& data = ev->Get()->Data;
         const auto seqNo = message.SeqNo_.value_or(MessageSeqNo++);
         const auto size = data.size();
-        LOG_T("Got write message event with seq no: " << seqNo << " and size: " << size);
+        YDB_LOG_TRACE("Got write message event",
+            {"logPrefix", LogPrefix()},
+            {"no", seqNo},
+            {"size", size});
 
         InflightMemory += size;
         InflightMessages.push({seqNo, static_cast<i64>(size)});
@@ -195,7 +201,8 @@ private:
     }
 
     void Handle(TSessionEvents::TEvGetInitSeqNo::TPtr& ev) {
-        LOG_I("Got get init seq no event");
+        YDB_LOG_INFO("Got get init seq no event",
+            {"logPrefix", LogPrefix()});
 
         Y_VALIDATE(!SeqNoPromise, "Can not handle get init seq no twice");
         SeqNoPromise = std::move(ev->Get()->SeqNoPromise);
@@ -209,12 +216,17 @@ private:
         const auto reason = ev->Get()->Reason;
         Y_VALIDATE(sourceType == TEvStreamTopicWriteRequest::EventType, "Unexpected undelivered event: " << sourceType << ", reason: " << reason);
 
-        LOG_E("PQ write service is unavailable, reason: " << reason);
+        YDB_LOG_ERROR("PQ write service is unavailable",
+            {"logPrefix", LogPrefix()},
+            {"reason", reason});
         CloseSession(EStatus::INTERNAL_ERROR, "PQ write service is unavailable, please contact internal support");
     }
 
     void ComputeSessionMessage(const Ydb::Topic::StreamWriteMessage::InitResponse& message) {
-        LOG_I("Session initialized with id: " << message.session_id() << ", used partition: " << message.partition_id());
+        YDB_LOG_INFO("Session initialized with used",
+            {"logPrefix", LogPrefix()},
+            {"id", message.session_id()},
+            {"partition", message.partition_id()});
 
         if (!InitSeqNo.has_value()) {
             InitSeqNo = message.last_seq_no();
@@ -228,7 +240,9 @@ private:
 
     void ComputeSessionMessage(const Ydb::Topic::StreamWriteMessage::WriteResponse& message) {
         const auto partitionId = message.partition_id();
-        LOG_T("Got write response from partition: " << partitionId);
+        YDB_LOG_TRACE("Got write response",
+            {"logPrefix", LogPrefix()},
+            {"fromPartition", partitionId});
 
         const auto& protoStats = message.write_statistics();
         const auto writeStats = MakeIntrusive<TWriteStat>();
@@ -296,21 +310,31 @@ private:
 
     void AddContinuationEvent() {
         if (ContinuationEventInflight) {
-            LOG_T("Continuation event is already inflight, skipping adding");
+            YDB_LOG_TRACE("Continuation event is already inflight, skipping adding",
+                {"logPrefix", LogPrefix()});
             return;
         }
 
         if (InflightMemory >= MaxMemoryUsage) {
-            LOG_T("Max memory usage reached, skipping adding, InflightMemory: " << InflightMemory << ", MaxMemoryUsage: " << MaxMemoryUsage);
+            YDB_LOG_TRACE("Max memory usage reached, skipping adding",
+                {"logPrefix", LogPrefix()},
+                {"inflightMemory", InflightMemory},
+                {"maxMemoryUsage", MaxMemoryUsage});
             return;
         }
 
         if (InflightMessages.size() >= MaxInflightCount) {
-            LOG_T("Max inflight count reached, skipping adding, InflightMessages: " << InflightMessages.size() << ", MaxInflightCount: " << MaxInflightCount);
+            YDB_LOG_TRACE("Max inflight count reached, skipping adding",
+                {"logPrefix", LogPrefix()},
+                {"inflightMessages", InflightMessages.size()},
+                {"maxInflightCount", MaxInflightCount});
             return;
         }
 
-        LOG_T("Adding continuation event, InflightMemory: " << InflightMemory << ", InflightMessages: " << InflightMessages.size());
+        YDB_LOG_TRACE("Adding continuation event,",
+            {"logPrefix", LogPrefix()},
+            {"inflightMemory", InflightMemory},
+            {"inflightMessages", InflightMessages.size()});
         ContinuationEventInflight = true;
         AddOutgoingEvent(TWriteSessionEvent::TReadyToAcceptEvent(IssueContinuationToken()));
     }

@@ -10,7 +10,7 @@
 #include <ydb/core/kafka_proxy/kafka_transactional_producers_initializers.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/public/constants.h>
-#include <ydb/library/kafka/kafka_records.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
@@ -1290,6 +1290,28 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(ReadFetchRecords(msg->Responses[0].Partitions[0].Records).Records.size(), 1);
         }
     } // Y_UNIT_TEST(FetchScenarioWithJoinGroup)
+
+    Y_UNIT_TEST(JoinGroupWithEmptyMetadataScenario) {
+        TInsecureTestServer testServer("2", false, false);
+
+        TString protocolName = "roundrobin";
+
+        TString topicName = "/Root/topic-0";
+        TString group = "consumer-group";
+
+        ui64 minActivePartitions = 10;
+
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+        CreateTopic(pqClient, topicName, minActivePartitions, { group });
+
+        TKafkaTestClient client(testServer.Port);
+
+        client.PlainAuthenticateToKafka();
+
+        std::vector<TString> topics = {topicName};
+        auto msg = client.JoinGroup(topics, group, protocolName, 10000, /* emptyMetadata = */ true);
+        UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::INVALID_REQUEST));
+    } // Y_UNIT_TEST(JoinGroupWithEmptyMetadataScenario)
 
     Y_UNIT_TEST(FetchEmptyTopicScenario) {
         TInsecureTestServer testServer("FetchEmptyTopicScenario");
@@ -2802,53 +2824,73 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         topicFullPath << "/Root/" << topic;
 
         NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
-            CreateTopic(pqClient, topicFullPath, 1, {"consumer1"}, /*retention_sec = */ 1);
+        CreateTopic(pqClient, topicFullPath, 1, {"consumer1"}, /*retention_sec = */ 1);
 
-            NYdb::NTopic::TWriteSessionSettings wSSettings{topicFullPath, "producer1", ""};
-            wSSettings.Codec(NTopic::ECodec::RAW);
-            auto writeSession = pqClient.CreateSimpleBlockingWriteSession(wSSettings);
+        NYdb::NTopic::TWriteSessionSettings wSSettings{topicFullPath, "producer1", ""};
+        wSSettings.Codec(NTopic::ECodec::RAW);
+        auto writeSession = pqClient.CreateSimpleBlockingWriteSession(wSSettings);
 
-            WriteMessagesWithKeys(writeSession, {{"key-1", 7_MB}}, 3);
-            WriteMessagesWithKeys(writeSession, {{"key-new", 100}}, 20);
-            Sleep(TDuration::Seconds(15));
-
-            NYdb::NTopic::TReadSessionSettings rSSettings{.ConsumerName_ = "consumer1"};
-            rSSettings.AppendTopics({topicFullPath});
-            auto readSession = pqClient.CreateReadSession(rSSettings);
-            for (ui32 triesCount = 3; triesCount != 0;) {
-                auto results = Read(readSession, false);
-                if (results.empty()) {
-                    triesCount--;
-                    Sleep(TDuration::MilliSeconds(250));
-                    continue;
+        auto waitStartOffsetAtLeast = [&](ui64 minStartOffset, TDuration timeout, const TString& stage) {
+            const auto deadline = TInstant::Now() + timeout;
+            std::optional<ui64> lastStartOffset;
+            while (TInstant::Now() < deadline) {
+                auto describe = pqClient.DescribeTopic(
+                    topicFullPath,
+                    NYdb::NTopic::TDescribeTopicSettings().IncludeStats(true)).GetValueSync();
+                UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+                const auto& partitions = describe.GetTopicDescription().GetPartitions();
+                UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 1);
+                const auto& stats = partitions[0].GetPartitionStats();
+                UNIT_ASSERT(stats.has_value());
+                lastStartOffset = stats->GetStartOffset();
+                Cerr << "===[" << stage << "] startOffset=" << *lastStartOffset
+                     << " endOffset=" << stats->GetEndOffset() << Endl;
+                if (*lastStartOffset >= minStartOffset) {
+                    return;
                 }
-                for (auto& dataEvent : results) {
-                    for (const auto& msg : dataEvent.GetMessages()) {
-                        UNIT_ASSERT_GE(msg.GetOffset(), 1);
-                        break;
-                    }
-                }
+                Sleep(TDuration::MilliSeconds(500));
             }
-            auto msg = client.AlterConfigs(
-                {TTopicConfig(topic, 1, std::nullopt, std::nullopt, {{"cleanup.policy", "compact"}})});
-            UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ErrorCode, NONE_ERROR);
-            WriteMessagesWithKeys(writeSession, {{"key-1", 6_MB}}, 10);
-            Sleep(TDuration::Seconds(10));
-            for (ui32 triesCount = 3; triesCount != 0;) {
-                auto results = Read(readSession, false);
-                if (results.empty()) {
-                    triesCount--;
-                    Sleep(TDuration::MilliSeconds(250));
-                    continue;
+            UNIT_ASSERT_C(
+                false,
+                TStringBuilder() << "Timed out waiting for startOffset >= " << minStartOffset
+                                 << " at stage " << stage
+                                 << ", last startOffset="
+                                 << (lastStartOffset ? ToString(*lastStartOffset) : "n/a"));
+        };
+
+        WriteMessagesWithKeys(writeSession, {{"key-1", 7_MB}}, 3);
+        WriteMessagesWithKeys(writeSession, {{"key-new", 100}}, 20);
+        waitStartOffsetAtLeast(1, TDuration::Seconds(60), "retention");
+
+        auto msg = client.AlterConfigs(
+            {TTopicConfig(topic, 1, std::nullopt, std::nullopt, {{"cleanup.policy", "compact"}})});
+        UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].ErrorCode, NONE_ERROR);
+        WriteMessagesWithKeys(writeSession, {{"key-1", 6_MB}}, 10);
+        waitStartOffsetAtLeast(2, TDuration::Seconds(60), "compaction");
+
+        NYdb::NTopic::TReadSessionSettings rSSettings{.ConsumerName_ = "consumer1"};
+        rSSettings.AppendTopics({topicFullPath});
+        auto readSession = pqClient.CreateReadSession(rSSettings);
+        bool seenMessage = false;
+        for (ui32 triesCount = 30; triesCount != 0 && !seenMessage; --triesCount) {
+            auto results = Read(readSession, false);
+            if (results.empty()) {
+                Sleep(TDuration::MilliSeconds(500));
+                continue;
+            }
+            for (auto& dataEvent : results) {
+                for (const auto& message : dataEvent.GetMessages()) {
+                    UNIT_ASSERT_GT(message.GetOffset(), 1);
+                    seenMessage = true;
+                    break;
                 }
-                for (auto& dataEvent : results) {
-                    for (const auto& msg : dataEvent.GetMessages()) {
-                        UNIT_ASSERT_GT(msg.GetOffset(), 1);
-                        break;
-                    }
+                if (seenMessage) {
+                    break;
                 }
             }
         }
+        UNIT_ASSERT_C(seenMessage, "No messages read after compaction gap");
+    }
 
     Y_UNIT_TEST(DescribeConfigsScenario) {
         TInsecureTestServer testServer("2");
@@ -5266,6 +5308,34 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         UNIT_ASSERT_VALUES_EQUAL(TString(record2.Key.value().data(), record2.Key.value().size()), "key2");
     }
 
+    Y_UNIT_TEST(ReadWithMlpConsumerShouldReturnConsumerNotFound) {
+        TInsecureTestServer testServer("2", false, false);
+
+        TString topicName = TStringBuilder() << "/Root/topic-mlp-" << RandomNumber<ui64>();
+        TString mlpConsumerName = "mlp-consumer";
+        TString protocolName = "roundrobin";
+
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+        auto createResult = pqClient.CreateTopic(
+            topicName,
+            NYdb::NTopic::TCreateTopicSettings()
+                .PartitioningSettings(1, 100)
+                .BeginAddSharedConsumer(mlpConsumerName)
+                .EndAddConsumer()
+        ).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(createResult.IsTransportError(), false);
+        UNIT_ASSERT_VALUES_EQUAL(createResult.GetStatus(), EStatus::SUCCESS);
+
+        TKafkaTestClient client(testServer.Port);
+        client.PlainAuthenticateToKafka();
+
+        std::vector<TString> topics = { topicName };
+        auto joinResponse = client.JoinGroup(topics, mlpConsumerName, protocolName, 10000);
+        UNIT_ASSERT_VALUES_EQUAL(
+            joinResponse->ErrorCode,
+            static_cast<TKafkaInt16>(EKafkaErrors::GROUP_ID_NOT_FOUND));
+    }
+
     Y_UNIT_TEST(CheckReadOffsetMetricUpdateWhenCommit) {
         TInsecureTestServer testServer("1", false, true);
         TKafkaTestClient kafkaClient(testServer.Port);
@@ -5358,6 +5428,79 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         Cerr << ">>>>> COUNTERS: " << countersStr.Str() << Endl;
         UNIT_ASSERT_VALUES_EQUAL(committed_lag_counter->Val(), desired_committed_lag);
         UNIT_ASSERT_VALUES_EQUAL(read_lag_counter->Val(), desired_read_lag);
+    }
+
+    Y_UNIT_TEST(CheckWriteLagMetricNotBrokenWhenCommitAfterSessionRestart) {
+        TInsecureTestServer testServer("1", false, true);
+        TKafkaTestClient kafkaClient(testServer.Port);
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+        TString topicName = "topic";
+        testServer.KikimrServer->GetServer().GetRuntime()->GetAppData().PQConfig.SetBalancerWakeupIntervalSec(1);
+        TString fullTopicName = "/Root/topic";
+        TString consumerName = "my-consumer";
+        ui64 minActivePartitions = 1;
+
+        CreateTopic(pqClient, topicName, minActivePartitions, {consumerName});
+
+        NYdb::NTopic::TWriteSessionSettings wsSettings;
+        wsSettings.Path(topicName).ProducerId("12345").PartitionId(0);
+        auto writer = pqClient.CreateSimpleBlockingWriteSession(wsSettings);
+        writer->Write(NYdb::NTopic::TWriteMessage("Data-12345"));
+        writer->Write(NYdb::NTopic::TWriteMessage("Data-67890"));
+        writer->Write(NYdb::NTopic::TWriteMessage("Data-38t54"));
+        writer->Write(NYdb::NTopic::TWriteMessage("Data-3rgeij"));
+        writer->Close();
+
+        {
+            NKikimr::NFlatTests::TFlatMsgBusClient kikimrClient(*(testServer.KikimrServer->ServerSettings));
+            auto pathDescr = kikimrClient.Ls(fullTopicName)->Record.GetPathDescription().GetPersQueueGroup();
+            auto tabletId = pathDescr.GetPartitions(0).GetTabletId();
+            kikimrClient.KillTablet(testServer.KikimrServer->GetServer(), tabletId);
+        }
+
+        std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> offsets;
+        std::vector<NKafka::TEvKafka::PartitionConsumerOffset> partitionsAndOffsets;
+        partitionsAndOffsets.emplace_back(0, 2, "additional-info");
+        offsets[topicName] = partitionsAndOffsets;
+        {
+            const TInstant deadline = TInstant::Now() + TDuration::Seconds(30);
+            bool committed = false;
+            while (TInstant::Now() < deadline) {
+                auto msg = kafkaClient.OffsetCommit(consumerName, offsets);
+                if (!msg->Topics.empty() && !msg->Topics[0].Partitions.empty() &&
+                    msg->Topics[0].Partitions[0].ErrorCode == static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR)) {
+                    committed = true;
+                    break;
+                }
+                Sleep(TDuration::MilliSeconds(200));
+            }
+            UNIT_ASSERT_C(committed, "Failed to commit offset after tablet restart");
+        }
+
+        auto counters = testServer.KikimrServer->GetRuntime()->GetAppData(0).Counters;
+        auto dbGroup = GetServiceCounters(counters, "topics", false);
+        auto group = dbGroup->GetSubgroup("host", "")
+                                ->GetSubgroup("database", "/Root")
+                                ->GetSubgroup("cloud_id", "somecloud")
+                                ->GetSubgroup("folder_id", "somefolder")
+                                ->GetSubgroup("database_id", "root")
+                                ->GetSubgroup("topic", "topic")
+                                ->GetSubgroup("consumer", "my-consumer");
+        auto write_lag_counter = group->GetNamedCounter("name", "topic.partition.write.lag_milliseconds_max", false);
+
+        const i64 saneUpperBoundMs = TDuration::Days(1).MilliSeconds();
+        const TInstant deadline = TInstant::Now() + TDuration::Seconds(5);
+        while (TInstant::Now() < deadline) {
+            if (write_lag_counter->Val() > 0) {
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(100));
+        }
+
+        TStringStream countersStr;
+        dbGroup->OutputPlainText(countersStr);
+        Cerr << ">>>>> COUNTERS: " << countersStr.Str() << Endl;
+        UNIT_ASSERT_LT_C(write_lag_counter->Val(), saneUpperBoundMs, "write lag metric is unexpectedly huge: " << write_lag_counter->Val());
     }
 
     Y_UNIT_TEST(ProduceMetrics) {

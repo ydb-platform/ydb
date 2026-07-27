@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/grpc_services/rpc_deferrable.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
@@ -53,20 +54,27 @@ protected:
         return this->Request_->GetSerializedToken().empty() ? nullptr : new NACLib::TUserToken(this->Request_->GetSerializedToken());
     }
 
+    TString GetDatabase() const {
+        return CanonizePath(this->Request_->GetDatabaseName().GetOrElse(""));
+    }
+
     void ReplyWithError(Ydb::StatusIds::StatusCode status, const TString& messageText) {
+        ReplyWithError(status, messageText, AsIssueCode(status));
+    }
+
+    void ReplyWithError(Ydb::StatusIds::StatusCode status, const TString& messageText, Ydb::PersQueue::ErrorCode::ErrorCode issueCode) {
         if (IsDead) {
             return;
         }
 
-        this->Request_->RaiseIssue(FillIssue(messageText, AsIssueCode(status)));
+        this->Request_->RaiseIssue(FillIssue(messageText, issueCode));
         this->Request_->ReplyWithYdbStatus(status);
         this->Die(this->ActorContext());
 
         IsDead = true;
     }
 
-    template<class TProtoResult>
-    void ReplyWithResult(Ydb::StatusIds::StatusCode status, const TProtoResult& result) {
+    void ReplyWithResult(Ydb::StatusIds::StatusCode status, const google::protobuf::Message& result) {
         if (IsDead) {
             return;
         }

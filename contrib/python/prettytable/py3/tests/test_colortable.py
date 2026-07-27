@@ -157,7 +157,7 @@ class TestColorTableRendering:
         table.header = with_header
         table.add_row([1, 2, 3, 4, 5, 6])
 
-        expected = header_str + "\n" + body_str + "\x1b[0m"
+        expected = f"{header_str}\n{body_str}\x1b[0m"
         result = str(table)
 
         assert expected == result
@@ -170,7 +170,7 @@ class TestColorTableRendering:
         table.title = "Theme Test"
         table.add_row([1, 2, 3, 4, 5, 6])
 
-        for theme_name, theme in vars(Themes).items():
+        for theme in vars(Themes).values():
             if isinstance(theme, Theme):
                 table.theme = theme
                 result = str(table)

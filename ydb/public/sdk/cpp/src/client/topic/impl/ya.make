@@ -27,13 +27,12 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/kafka
+    ydb/public/sdk/cpp/src/library/kafka
     ydb/public/sdk/cpp/src/library/grpc/client
     library/cpp/monlib/dynamic_counters
     library/cpp/threading/future/subscription
     library/cpp/monlib/metrics
     library/cpp/string_utils/url
-    ydb/library/persqueue
     ydb/public/sdk/cpp/src/library/persqueue/obfuscate
     ydb/public/api/grpc/draft
     ydb/public/api/grpc

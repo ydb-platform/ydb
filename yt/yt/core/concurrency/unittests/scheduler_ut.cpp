@@ -262,6 +262,83 @@ TEST_W(TSchedulerTest, WaitForCancelableInvoker2)
         .Run()).ThrowOnError();
 }
 
+TEST_W(TSchedulerTest, ContextCancelationCancelsWaitingFiber)
+{
+    auto context = New<TCancelableContext>();
+    auto invoker = context->CreateInvoker(Queue1->GetInvoker());
+
+    auto started = NewPromise<void>();
+    auto promise = NewPromise<void>();
+    auto future = promise.ToFuture();
+
+    auto asyncResult = BIND([=] {
+            started.Set();
+            WaitFor(future)
+                .ThrowOnError();
+        })
+        .AsyncVia(invoker)
+        .Run();
+
+    WaitFor(started.ToFuture())
+        .ThrowOnError();
+
+    constexpr auto CancelationCode = TErrorCode(42);
+    context->Cancel(TError(CancelationCode, "Canceled by context"));
+
+    auto result = WaitFor(asyncResult);
+    EXPECT_FALSE(result.IsOK());
+    EXPECT_EQ(CancelationCode, result.GetCode());
+}
+
+TEST_W(TSchedulerTest, ContextCancelationCancelsSubsequentWaits)
+{
+    auto context = New<TCancelableContext>();
+    auto invoker = context->CreateInvoker(Queue1->GetInvoker());
+
+    auto started = NewPromise<void>();
+    auto firstPromise = NewPromise<void>();
+    auto secondPromise = NewPromise<void>();
+
+    // Once the context cancels the fiber, every subsequent wait -- even on a
+    // future that is never resolved (secondPromise) -- must be canceled at once,
+    // because the whole fiber is canceled, not just the single await. Otherwise
+    // the second WaitFor would hang.
+    auto asyncResult = BIND([=] {
+            started.Set();
+            EXPECT_THROW(WaitFor(firstPromise.ToFuture()).ThrowOnError(), TFiberCanceledException);
+            EXPECT_THROW(WaitFor(secondPromise.ToFuture()).ThrowOnError(), TFiberCanceledException);
+        })
+        .AsyncVia(invoker)
+        .Run();
+
+    WaitFor(started.ToFuture())
+        .ThrowOnError();
+    context->Cancel(TError("Canceled by context"));
+
+    WaitFor(asyncResult)
+        .ThrowOnError();
+}
+
+TEST_W(TSchedulerTest, CurrentCancelableContextFollowsFiberAcrossSwitchTo)
+{
+    auto context = New<TCancelableContext>();
+    auto invoker = context->CreateInvoker(Queue1->GetInvoker());
+    auto otherInvoker = Queue2->GetInvoker();
+
+    WaitFor(BIND([=] {
+            // Running under the cancelable invoker: the context is current.
+            EXPECT_EQ(TryGetCurrentCancelableContext(), context.Get());
+
+            // Switching to an unrelated invoker must not rebind the current
+            // cancelable context -- it is fiber-local, not invoker-bound.
+            SwitchTo(otherInvoker);
+            EXPECT_EQ(TryGetCurrentCancelableContext(), context.Get());
+        })
+        .AsyncVia(invoker)
+        .Run())
+        .ThrowOnError();
+}
+
 TEST_W(TSchedulerTest, TerminatedCaught)
 {
     auto context = New<TCancelableContext>();

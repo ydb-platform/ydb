@@ -16,7 +16,8 @@ struct ITvmService
     virtual const TTvmServiceConfigPtr& GetConfig() = 0;
 
     //! Our TVM id.
-    virtual TTvmId GetSelfTvmId() = 0;
+    virtual std::optional<TTvmId> TryGetSelfTvmId() = 0;
+    virtual TTvmId GetSelfTvmIdOrThrow() = 0;
 
     //! Get TVM service ticket from us to serviceAlias. Service mapping must be in config.
     //! Throws on failure.

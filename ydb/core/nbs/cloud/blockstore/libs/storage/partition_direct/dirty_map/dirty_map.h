@@ -13,6 +13,8 @@
 #include <util/generic/set.h>
 #include <util/generic/vector.h>
 
+#include <span>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 class TVChunkConfig;
@@ -59,19 +61,24 @@ struct TReadHint
     [[nodiscard]] TString DebugPrint() const;
 };
 
+////////////////////////////////////////////////////////////////////////////////
+
 struct TPBufferSegment
 {
     ui64 Lsn = 0;
     TBlockRange64 Range;
 
-    [[nodiscard]] TString DebugPrint() const;
+    static TVector<ui64> MakeLsnVector(
+        std::span<const TPBufferSegment> segments);
+
+    [[nodiscard]] TString DebugPrint(bool brief) const;
 };
 
 struct TFlushHint
 {
     TVector<TPBufferSegment> Segments;
 
-    [[nodiscard]] TString DebugPrint() const;
+    [[nodiscard]] TString DebugPrint(bool brief) const;
 };
 
 class TFlushHints
@@ -96,11 +103,22 @@ private:
     THints Hints;
 };
 
+////////////////////////////////////////////////////////////////////////////////
+struct TEraseSegment
+{
+    ui32 Generation = 0;
+    ui64 Lsn = 0;
+
+    [[nodiscard]] TString DebugPrint(bool brief) const;
+};
+
+using TEraseSegments = TVector<TEraseSegment>;
+
 struct TEraseHint
 {
-    TVector<TPBufferSegment> Segments;
+    TEraseSegments Segments;
 
-    [[nodiscard]] TString DebugPrint() const;
+    [[nodiscard]] TString DebugPrint(bool brief) const;
 };
 
 class TEraseHints
@@ -108,7 +126,7 @@ class TEraseHints
 public:
     using THints = TMap<THostIndex, TEraseHint>;
 
-    void AddHint(THostIndex host, ui64 lsn, TBlockRange64 range);
+    void AddHint(THostIndex host, ui64 lsn);
 
     [[nodiscard]] bool Empty() const;
 
@@ -120,6 +138,8 @@ public:
 private:
     THints Hints;
 };
+
+////////////////////////////////////////////////////////////////////////////////
 
 class TDDiskState
 {
@@ -203,6 +223,7 @@ public:
         Standard,
         Belated
     };
+
     TBlocksDirtyMap(
         const TVChunkConfig& vChunkConfig,
         ui32 blockSize,
@@ -239,10 +260,7 @@ public:
         const TVector<ui64>& eraseOk,
         const TVector<ui64>& eraseFailed);
 
-    void UpdateBelatedEraseQueue(
-        THostMask completedWrites,
-        ui64 lsn,
-        TBlockRange64 range);
+    void UpdateBelatedEraseQueue(THostMask completedWrites, ui64 lsn);
 
     // Sets a mark on the ddisk to which offset it contains data and can be read
     // from it.
@@ -265,6 +283,7 @@ public:
     [[nodiscard]] std::optional<ui64> GetSafeBarrierForErase() const;
     [[nodiscard]] const TPBufferCounters& GetPBufferCounters(
         THostIndex host) const;
+    [[nodiscard]] ui64 GetPBufferUsedSize(THostIndex host) const;
 
     // ILockableRanges implementation
     void LockPBuffer(ui64 lsn) override;
@@ -303,6 +322,16 @@ private:
     using TInflightDDiskReadsMap =
         TBlockRangeMap<ILockableRanges::TLockRangeHandle, THostMask>;
 
+    struct TInfoEraseBelated
+    {
+        ui64 Lsn{};
+        THostMask Hosts;
+
+        bool operator<(const TInfoEraseBelated& other) const;
+    };
+
+    void ResizeHosts(size_t newHostCount);
+
     [[nodiscard]] THostMask FilterLocations(
         THostMask mask,
         TBlockRange64 range) const;
@@ -317,7 +346,6 @@ private:
     const ui32 BlockSize;
     const ui64 BlockCount;
 
-    THostMask DesiredPBuffers;
     THostMask DesiredDDisks;
     THostMask DisabledHosts;
 
@@ -336,15 +364,6 @@ private:
     // Using TSet for O(1) min LSN access.
     TSet<ui64> ReadyToErase;
 
-    struct TInfoEraseBelated
-    {
-        ui64 Lsn{};
-        THostMask Hosts;
-        TBlockRange64 Range;
-
-        bool operator<(const TInfoEraseBelated& other) const;
-    };
-
     TSet<TInfoEraseBelated> ReadyToEraseBelated;
 
     // In-flight reads and the locks they create.
@@ -357,6 +376,11 @@ private:
     // PBuffers space usage counters.
     TVector<TPBufferCounters> PBufferCounters;
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+TVector<ui64> MakeLsnVector(std::span<const TPBufferSegment> segments);
+TVector<ui64> MakeLsnVector(std::span<const TEraseSegment> segments);
 
 ////////////////////////////////////////////////////////////////////////////////
 

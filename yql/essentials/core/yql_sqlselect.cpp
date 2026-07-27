@@ -33,7 +33,7 @@ TExprNode::TPtr ExpandYqlTraitsFactory(
 
     // clang-format off
     TExprNode::TPtr traits = ctxExpr.Builder(factory->Pos())
-        .Apply(std::move(traitsFactory))
+        .Apply(traitsFactory)
             .With(0, std::move(listType))
             .With(1, std::move(extractor))
         .Seal()
@@ -69,7 +69,7 @@ TExprNode::TPtr ExpandResultType(
     // clang-format off
     TExprNode::TPtr init = ctxExpr.Builder(traits->Pos())
         .Apply(traits->Child(1))
-            .With(0, std::move(body))
+            .With(0, body)
         .Seal()
         .Build();
     // clang-format on
@@ -287,7 +287,7 @@ TExprNode::TPtr ExpandSqlWindowCall(
 
             // clang-format off
             traits = ctxExpr.Builder(factory->Pos())
-                .Apply(std::move(factory))
+                .Apply(factory)
                     .With(0, std::move(listType))
                     .With(1, std::move(extractor))
                     .With(2, std::move(offset))
@@ -297,7 +297,7 @@ TExprNode::TPtr ExpandSqlWindowCall(
         } else {
             // clang-format off
             traits = ctxExpr.Builder(factory->Pos())
-                .Apply(std::move(factory))
+                .Apply(factory)
                     .With(0, std::move(listType))
                     .With(1, std::move(extractor))
                 .Seal()

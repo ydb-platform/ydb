@@ -49,6 +49,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyState(NTabletFlatExecutor::TTran
 
         NIceDb::TNiceDb db(txc.DB);
         Self->PersistSetColumnConstraintState(db, operationInfo);
+        Self->PersistSetColumnConstraintResetSubState(db, operationInfo);
     }
 }
 

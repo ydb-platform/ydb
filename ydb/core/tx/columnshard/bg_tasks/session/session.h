@@ -40,6 +40,9 @@ public:
         if (!LogicContainer.DeserializeFromString(record.GetLogicDescription())) {
             return TConclusionStatus::Fail("cannot parse logic description");
         }
+        if (!LogicContainer) {
+            return TConclusionStatus::Fail("logic container is empty after deserialization");
+        }
         if (!LogicContainer->DeserializeProgressFromString(record.GetProgress())) {
             return TConclusionStatus::Fail("cannot parse progress");
         }

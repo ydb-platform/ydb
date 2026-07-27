@@ -24,5 +24,7 @@ items:
   include:
     mode: link
     path: observability/toc_p.yaml
+- name: Backup and Restore
+  href: backup-and-recovery/index.md
 - name: Backup and recovery
   href: backup-and-recovery.md

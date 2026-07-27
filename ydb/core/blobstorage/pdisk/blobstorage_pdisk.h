@@ -328,10 +328,12 @@ struct TEvYardResizeResult : TEventLocal<TEvYardResizeResult, TEvBlobStorage::Ev
 struct TEvChangeExpectedSlotCount : TEventLocal<TEvChangeExpectedSlotCount, TEvBlobStorage::EvChangeExpectedSlotCount> {
     ui32 ExpectedSlotCount;
     ui32 SlotSizeInUnits;
+    ui64 ExpectedSlotSize;
 
-    TEvChangeExpectedSlotCount(ui32 expectedSlotCount, ui32 slotSizeInUnits)
+    TEvChangeExpectedSlotCount(ui32 expectedSlotCount, ui32 slotSizeInUnits, ui64 expectedSlotSize = 0)
         : ExpectedSlotCount(expectedSlotCount)
         , SlotSizeInUnits(slotSizeInUnits)
+        , ExpectedSlotSize(expectedSlotSize)
     {}
 
     TString ToString() const {
@@ -344,6 +346,7 @@ struct TEvChangeExpectedSlotCount : TEventLocal<TEvChangeExpectedSlotCount, TEvB
         str << "EvChangeExpectedSlotCount ";
         str << " ExpectedSlotCount# " << record.ExpectedSlotCount;
         str << " SlotSizeInUnits# " << record.SlotSizeInUnits;
+        str << " ExpectedSlotSize# " << record.ExpectedSlotSize;
         str << "}";
         return str.Str();
     }
@@ -1959,17 +1962,10 @@ struct TPDiskCtx {
     {}
 };
 
-#define P_LOG(LEVEL, MARKER, ...) \
+#define YDB_LOG_P_LOG(LEVEL, MARKER, ...) \
     do { \
         if (PCtx && PCtx->ActorSystem) { \
-            STLOGX(*PCtx->ActorSystem, LEVEL, BS_PDISK, MARKER, __VA_ARGS__, (PDiskId, PCtx->PDiskId)); \
-        } \
-    } while (false)
-
-#define S_LOG(LEVEL, MARKER, ...) \
-    do { \
-        if (PCtx && PCtx->ActorSystem) { \
-            STLOGX(*PCtx->ActorSystem, LEVEL, BS_PDISK_SHRED, MARKER, __VA_ARGS__, (PDiskId, PCtx->PDiskId)); \
+            YDB_LOG_CTX_COMP(*PCtx->ActorSystem, LEVEL, BS_PDISK, MARKER, __VA_ARGS__, {"PDiskId", PCtx->PDiskId}); \
         } \
     } while (false)
 

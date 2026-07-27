@@ -1410,10 +1410,8 @@ private:
         if (!query.AstResult) {
             settingsBuilder.SetKqpTablePathPrefix(SessionCtx->Config()._KqpTablePathPrefix.Get().GetRef())
                 .SetIsEnableExternalDataSources(SessionCtx->Config().FeatureFlags.GetEnableExternalDataSources())
-                .SetIsEnablePgConstsToParams(SessionCtx->Config().GetEnablePgConstsToParams())
                 .SetQueryParameters(query.ParameterTypes)
                 .SetApplicationName(ApplicationName)
-                .SetIsEnablePgSyntax(SessionCtx->Config().FeatureFlags.GetEnablePgSyntax())
                 .SetFromConfig(SessionCtx->Config());
             NSQLTranslation::TTranslationSettings effectiveSettings;
             auto astRes = ParseQuery(
@@ -1527,7 +1525,6 @@ private:
         TMaybe<TSqlVersion> sqlVersion;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, Cluster, query.Text, SessionCtx->Config().GetYqlBindingsMode(), GUCSettings);
         settingsBuilder.SetSqlAutoCommit(false)
-            .SetUsePgParser(settings.UsePgParser)
             .SetFromConfig(SessionCtx->Config());
 
         auto compileResult = CompileYqlQuery(query, isSql, ctx, sqlVersion, settingsBuilder);
@@ -1658,6 +1655,7 @@ private:
             YQL_ENSURE(*settings.ConcurrentResults || queryType == EKikimrQueryType::Query);
             SessionCtx->Query().ConcurrentResults = *settings.ConcurrentResults;
         }
+        SessionCtx->Query().IsolateEffects = settings.UsePessimisticLocks;
         if (settings.RuntimeParameterSizeLimitSatisfied) {
             SessionCtx->Query().RuntimeParameterSizeLimitSatisfied = settings.RuntimeParameterSizeLimitSatisfied;
         }
@@ -1683,7 +1681,6 @@ private:
         if (!expr) {
             TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, Cluster, query.Text, SessionCtx->Config().GetYqlBindingsMode(), GUCSettings);
             settingsBuilder.SetSqlAutoCommit(false)
-                .SetUsePgParser(settings.UsePgParser)
                 .SetFromConfig(SessionCtx->Config())
                 .SetValidateViewStatement(!settings.IsInternalCall.GetOrElse(false))
                 .SetYqlSelect(settings.YqlSelect);
@@ -1712,7 +1709,6 @@ private:
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, Cluster, query.Text, SessionCtx->Config().GetYqlBindingsMode(), GUCSettings);
         settingsBuilder
             .SetSqlAutoCommit(false)
-            .SetUsePgParser(settings.UsePgParser)
             .SetFromConfig(SessionCtx->Config());
         auto compileResult = CompileQuery(query, /* isSql */ true, ctx, sqlVersion, settingsBuilder);
         YQL_ENSURE(compileResult.NeedToSplit);
@@ -1815,7 +1811,6 @@ private:
         TMaybe<TSqlVersion> sqlVersion;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, Cluster, script.Text, SessionCtx->Config().GetYqlBindingsMode(), GUCSettings);
         settingsBuilder.SetSqlAutoCommit(true)
-            .SetUsePgParser(settings.UsePgParser)
             .SetFromConfig(SessionCtx->Config());
         auto compileResult = CompileYqlQuery(script, true, ctx, sqlVersion, settingsBuilder);
         YQL_ENSURE(!compileResult.NeedToSplit);
@@ -1845,7 +1840,6 @@ private:
         TMaybe<TSqlVersion> sqlVersion;
         TKqpTranslationSettingsBuilder settingsBuilder(SessionCtx->Query().Type, Cluster, script.Text, SessionCtx->Config().GetYqlBindingsMode(), GUCSettings);
         settingsBuilder.SetSqlAutoCommit(true)
-            .SetUsePgParser(settings.UsePgParser)
             .SetFromConfig(SessionCtx->Config());
         auto compileResult = CompileYqlQuery(script, true, ctx, sqlVersion, settingsBuilder);
         YQL_ENSURE(!compileResult.NeedToSplit);
@@ -1924,8 +1918,12 @@ private:
             configuration.DisablePragma(configuration.UseRuntimeListing, false, "Runtime listing is not supported for streaming queries, pragma value was ignored");
             configuration.DisablePragma(configuration.AtomicUploadCommit, false, "Atomic upload commit is not supported for streaming queries, pragma value was ignored");
             configuration.DefaultOutputKeyFlushTimeout = TDuration::Minutes(1);
-        } else if (queryType != EKikimrQueryType::Script) {
-            configuration.DisablePragma(configuration.AtomicUploadCommit, false, "");
+        } else {
+            if (queryType != EKikimrQueryType::Script) {
+                configuration.DisablePragma(configuration.AtomicUploadCommit, false, "");
+            }
+
+            configuration.ChangeDefaultPragmaValue(configuration.UseRuntimeListing, true);
         }
         configuration.WriteThroughDqIntegration = true;
         configuration.Init(FederatedQuerySetup->S3GatewayConfig, TypesCtx);
@@ -2039,7 +2037,11 @@ private:
         state->EnableUserAttributesInTopicQuery = Config->FeatureFlags.GetEnableUserAttributesInTopicQuery();
         state->StreamingTopicsReadByDefault = false;
         state->EnableTopicsPredicatePushdown = Config->FeatureFlags.GetEnableTopicsPredicatePushdown();
+        state->ForbidYqlSysColumnsAndSystemMetadata = QueryServiceConfig.GetStreamingQueries().GetForbidYqlSysColumnsAndSystemMetadata();
         state->EnablePqConstraintsTransformer = Config->_KqpYqlConstraintsTransformerEnabled.Get().GetOrElse(false);
+        state->EnableWatermarks = Config->GetEnableWatermarks();
+        state->EnableWatermarksAdvanced = Config->GetEnableWatermarksAdvanced();
+        state->EnableStreamingPartitionBalancing = Config->GetEnableStreamingPartitionBalancing();
         state->Types = TypesCtx.Get();
         state->DbResolver = FederatedQuerySetup->DatabaseAsyncResolver;
         state->FunctionRegistry = FuncRegistry;
@@ -2054,6 +2056,7 @@ private:
             if (const auto disposition = requestContext->StreamingDisposition) {
                 state->Disposition = *disposition;
             }
+            state->WatermarkLateEventsPolicy = requestContext->WatermarkLateEventsPolicy;
         }
 
         TypesCtx->AddDataSource(NYql::PqProviderName, NYql::CreatePqDataSource(state, state->Gateway));

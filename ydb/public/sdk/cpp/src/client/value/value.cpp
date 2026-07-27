@@ -1437,6 +1437,11 @@ public:
         }
     }
 
+    uint32_t GetVariantIndex() const {
+        CheckKind(ETypeKind::Variant, "GetVariantIndex");
+        return GetProto().variant_index();
+    }
+
     void CloseVariant() {
         PopPath();
         TypeParser_.CloseVariant();
@@ -2042,6 +2047,10 @@ void TValueParser::CloseDict() {
 
 void TValueParser::OpenVariant() {
     Impl_->OpenVariant();
+}
+
+uint32_t TValueParser::GetVariantIndex() const {
+    return Impl_->GetVariantIndex();
 }
 
 void TValueParser::CloseVariant() {

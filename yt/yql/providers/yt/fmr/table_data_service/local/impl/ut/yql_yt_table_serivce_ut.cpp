@@ -49,4 +49,21 @@ Y_UNIT_TEST_SUITE(TLocalTableServiceTest)
         UNIT_ASSERT(tableDataService->Put(group, chunkId, "12345").GetValueSync());
         UNIT_ASSERT(!tableDataService->Put(group, "other_chunk_id", "678910111213").GetValueSync());
     }
+    Y_UNIT_TEST(OverwriteDoesNotInflateDataWeight) {
+        ILocalTableDataService::TPtr tableDataService = MakeLocalTableDataService();
+        UNIT_ASSERT(tableDataService->Put(group, chunkId, "12345").GetValueSync());
+        UNIT_ASSERT(tableDataService->Put(group, chunkId, "678").GetValueSync());
+        auto stats = tableDataService->GetStatistics().GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(stats.KeysNum, 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.DataWeight, 3);
+    }
+    Y_UNIT_TEST(OverwriteRepeatedlyStaysUnderMaxDataWeight) {
+        ui64 maxDataWeight = 5;
+        ILocalTableDataService::TPtr tableDataService = MakeLocalTableDataService(TTableDataServiceSettings{maxDataWeight});
+        for (int i = 0; i < 5; ++i) {
+            UNIT_ASSERT(tableDataService->Put(group, chunkId, "12345").GetValueSync());
+        }
+        auto stats = tableDataService->GetStatistics().GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(stats.DataWeight, 5);
+    }
 }

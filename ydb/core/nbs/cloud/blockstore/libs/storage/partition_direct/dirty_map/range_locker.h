@@ -36,6 +36,7 @@ public:
     TRangeLock& operator=(TRangeLock&& other) noexcept;
 
     void Arm();
+    void Disarm();
 
 private:
     friend class TBlocksDirtyMap;

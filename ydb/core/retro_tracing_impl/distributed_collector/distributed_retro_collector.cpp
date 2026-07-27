@@ -10,12 +10,27 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/monotonic.h>
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_wrapper.h>
 
 namespace NKikimr {
 
 namespace {
+
+constexpr ui64 DefaultMaxBatchSize = 64;
+constexpr ui64 MinMaxBatchSize = 1;
+constexpr ui64 MaxMaxBatchSize = 100000;
+
+constexpr TDuration DefaultBatchFlushInterval = TDuration::MilliSeconds(500);
+constexpr ui64 MinBatchFlushIntervalMs = 1;
+constexpr ui64 MaxBatchFlushIntervalMs = 3600000;
+
+constexpr TDuration DefaultDeduplicationTTL = TDuration::Seconds(10);
+constexpr ui64 MinDeduplicationTTLSec = 1;
+constexpr ui64 MaxDeduplicationTTLSec = 3600;
 
 struct TEvPrivate {
     enum EEv {
@@ -28,6 +43,12 @@ struct TEvPrivate {
 class TDistributedRetroCollector : public NActors::TActorBootstrapped<TDistributedRetroCollector> {
 public:
     void Bootstrap() {
+        if (AppData() && AppData()->Icb) {
+            TIntrusivePtr<NKikimr::TControlBoard>& icb = AppData()->Icb;
+            TControlBoard::RegisterSharedControl(MaxBatchSize, icb->RetroTracingControls.MaxBatchSize);
+            TControlBoard::RegisterSharedControl(BatchFlushIntervalMs, icb->RetroTracingControls.BatchFlushIntervalMs);
+            TControlBoard::RegisterSharedControl(DeduplicationTTLSec, icb->RetroTracingControls.DeduplicationTTLSec);
+        }
         Become(&TThis::StateFunc);
     }
 
@@ -50,7 +71,7 @@ private:
             return;
         }
 
-        if (PendingTraceIds.size() >= MaxBatchSize) {
+        if (PendingTraceIds.size() >= static_cast<size_t>(static_cast<i64>(MaxBatchSize))) {
             return;
         }
 
@@ -58,7 +79,8 @@ private:
         RecentlyObserved[hex] = NActors::TMonotonic::Now();
 
         if (!std::exchange(FlushScheduled, true)) {
-            Schedule(BatchFlushInterval, new TEvPrivate::TEvFlushBatch());
+            Schedule(TDuration::MilliSeconds(static_cast<i64>(BatchFlushIntervalMs)),
+                    new TEvPrivate::TEvFlushBatch());
         }
     }
 
@@ -87,9 +109,10 @@ private:
     }
 
     void EvictExpiredEntries(NActors::TMonotonic now) {
+        const TDuration deduplicationTTL = TDuration::Seconds(static_cast<i64>(DeduplicationTTLSec));
         auto it = RecentlyObserved.begin();
         while (it != RecentlyObserved.end()) {
-            if (now - it->second > DeduplicationTTL) {
+            if (now - it->second > deduplicationTTL) {
                 it = RecentlyObserved.erase(it);
             } else {
                 ++it;
@@ -106,10 +129,11 @@ private:
     }
 
 private:
-    // TODO: on-line configuration
-    static constexpr ui32 MaxBatchSize = 64;
-    static constexpr TDuration BatchFlushInterval = TDuration::MilliSeconds(500);
-    static constexpr TDuration DeduplicationTTL = TDuration::Seconds(10);
+    TControlWrapper MaxBatchSize = TControlWrapper(DefaultMaxBatchSize, MinMaxBatchSize, MaxMaxBatchSize);
+    TControlWrapper BatchFlushIntervalMs =
+            TControlWrapper(DefaultBatchFlushInterval.MilliSeconds(), MinBatchFlushIntervalMs, MaxBatchFlushIntervalMs);
+    TControlWrapper DeduplicationTTLSec =
+            TControlWrapper(DefaultDeduplicationTTL.Seconds(), MinDeduplicationTTLSec, MaxDeduplicationTTLSec);
 
     std::vector<NWilson::TTraceId> PendingTraceIds;
     bool FlushScheduled = false;

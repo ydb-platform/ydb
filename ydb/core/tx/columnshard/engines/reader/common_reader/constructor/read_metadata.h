@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
+#include <ydb/core/tx/columnshard/engines/reader/common/scan_memory_limiter.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/stats.h>
 
 #include <ydb/library/formats/arrow/replace_key.h>
@@ -188,6 +189,7 @@ public:
 
     NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE;
     std::shared_ptr<ITableMetadataAccessor> TableMetadataAccessor;
+    EScanGroupedMemoryLimiterOperator GroupedMemoryLimiterOperator = EScanGroupedMemoryLimiterOperator::Scan;
     std::shared_ptr<TReadStats> ReadStats;
 
     TReadMetadata(const std::shared_ptr<const TVersionedIndex>& schemaIndex, const TReadDescription& read);
@@ -197,6 +199,10 @@ public:
 
     bool OrderByLimitAllowed() const {
         return TableMetadataAccessor->OrderByLimitAllowed() && !GetFakeSort();
+    }
+
+    EScanGroupedMemoryLimiterOperator GetGroupedMemoryLimiterOperator() const {
+        return GroupedMemoryLimiterOperator;
     }
 
     virtual std::vector<TNameTypeInfo> GetKeyYqlSchema() const override {

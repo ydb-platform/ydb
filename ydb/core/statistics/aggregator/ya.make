@@ -17,6 +17,10 @@ SRCS(
     tx_aggr_stat_response.cpp
     tx_analyze.cpp
     tx_analyze_deadline.cpp
+    tx_analyze_op_cancel.cpp
+    tx_analyze_op_forget.cpp
+    tx_analyze_op_get.cpp
+    tx_analyze_op_list.cpp
     tx_analyze_shard_delivery_problem.cpp
     tx_analyze_shard_request.cpp
     tx_analyze_shard_response.cpp

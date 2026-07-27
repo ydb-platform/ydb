@@ -682,7 +682,7 @@ namespace NKikimr {
             ratio->IndexBytesTotal = ratio->IndexBytesKeep = info.IdxTotalSize;
             ratio->InplacedDataTotal = ratio->InplacedDataKeep = info.InplaceDataTotalSize;
             ratio->HugeDataTotal = ratio->HugeDataKeep = info.HugeDataTotalSize;
-            LevelSegment->StorageRatio.Set(ratio);
+            LevelSegment->StorageRatio.Set(ratio, TInstant::Zero());
 
             // write out place holder
             TIdxDiskPlaceHolder placeHolder(SstId);

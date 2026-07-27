@@ -17,6 +17,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_state.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
 
@@ -35,6 +36,7 @@ class TVChunk
 public:
     TVChunk(
         NActors::TActorSystem* actorSystem,
+        ITraceService* traceService,
         IPartitionDirectService* partitionDirectService,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
@@ -59,14 +61,25 @@ public:
 
     void SetHostState(THostIndex hostIndex, EHostState state);
 
+    // If the current count of hosts in the config is less than the desired
+    // host count, update the config and persist it in the tablet.
+    void UpdateHostCount(size_t newHostCount);
+
     [[nodiscard]] const TVChunkConfig& GetConfig() const;
+    [[nodiscard]] TExecutorPtr GetExecutor() const;
     [[nodiscard]] ui64 GetPBufferUsedSize(THostIndex hostIndex) const;
-    [[nodiscard]] TString DebugPrintDirtyMap();
 
     // This vchunk's contribution to the tablet-wide cleanup watermark: the
     // smallest lsn still held in PBuffers, or nullopt when nothing is inflight.
+    // Until the dirty map is restored it returns 0 (the blocking bound), so
+    // the cleanup cannot erase records that are not accounted for yet.
     // Must run on the executor thread.
     [[nodiscard]] std::optional<ui64> GetSafeBarrierForErase() const;
+
+    [[nodiscard]] TString DebugPrintDirtyMap();
+
+    // Snapshot for the mon page. Must run on the executor thread.
+    [[nodiscard]] TVChunkSnapshot BuildMonSnapshot();
 
     // IWriteClient implementation
     void OnWriteBlocksResponse(
@@ -101,6 +114,7 @@ private:
         TCallContextPtr callContext,
         std::shared_ptr<TReadBlocksLocalRequest> request,
         std::shared_ptr<NWilson::TSpan> span);
+    void OnReadBlocksResponse(const IReadRequestExecutor::TResponse& response);
 
     void DoWriteBlocksLocal(std::shared_ptr<TWriteRequestBundle> bundle);
     void DoFlush(bool force);
@@ -140,6 +154,7 @@ private:
     [[nodiscard]] TString PrintInflight() const;
 
     NActors::TActorSystem* const ActorSystem = nullptr;
+    ITraceService* const TraceService = nullptr;
     IPartitionDirectService* const PartitionDirectService = nullptr;
     const TExecutorPtr Executor;
     const TThreadChecker ExecutorThreadChecker{Executor};
@@ -159,6 +174,7 @@ private:
     size_t InflightWritesCount = 0;
     size_t InflightFlushesCount = 0;
     bool CleaningUpScheduled = false;
+    bool Stopped = false;
 
     TVector<IRequestExecutorWeakPtr> Inflight;
 

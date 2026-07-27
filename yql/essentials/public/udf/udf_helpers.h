@@ -420,7 +420,7 @@ public:
         sb << "[";
         AppendPolyArgsItem<TUserTypes...>(sb);
         sb << "[{cmd=error;message=\"Expected types: ";
-        AppendTypeNames<TUserTypes...>(sb, true);
+        AppendTypeNames<TUserTypes...>(sb, /*first=*/true);
         sb << "\"};{}]";
         sb << "]";
         return sb;
@@ -438,7 +438,7 @@ private:
 
         sb << typeName;
         if constexpr (sizeof...(TTail)) {
-            AppendTypeNames<TTail...>(sb, false);
+            AppendTypeNames<TTail...>(sb, /*first=*/false);
         }
     }
 

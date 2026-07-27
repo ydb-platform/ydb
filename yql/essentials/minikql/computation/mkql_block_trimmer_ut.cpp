@@ -54,7 +54,7 @@ Y_UNIT_TEST_SUITE(TBlockTrimmerTest) {
 Y_UNIT_TEST(TestFixedSize) {
     TBlockTrimmerTestData data;
 
-    const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
+    const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, /*optional=*/false);
 
     size_t itemSize = NMiniKQL::CalcMaxBlockItemSize(int64Type);
     size_t blockLen = NMiniKQL::CalcBlockLen(itemSize);
@@ -64,7 +64,7 @@ Y_UNIT_TEST(TestFixedSize) {
     constexpr auto sliceSize = 1024;
     static_assert(testSize % sliceSize == 0);
 
-    auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), int64Type, *data.ArrowPool, blockLen, nullptr);
+    auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), int64Type, *data.ArrowPool, blockLen, /*pgBuilder=*/nullptr);
     auto reader = MakeBlockReader(NMiniKQL::TTypeInfoHelper(), int64Type);
     auto trimmer = MakeBlockTrimmer(NMiniKQL::TTypeInfoHelper(), int64Type, data.ArrowPool);
 
@@ -91,7 +91,7 @@ Y_UNIT_TEST(TestFixedSize) {
 Y_UNIT_TEST(TestString) {
     TBlockTrimmerTestData data;
 
-    const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, false);
+    const auto stringType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::String, /*optional=*/false);
 
     size_t itemSize = NMiniKQL::CalcMaxBlockItemSize(stringType);
     size_t blockLen = NMiniKQL::CalcBlockLen(itemSize);
@@ -102,7 +102,7 @@ Y_UNIT_TEST(TestString) {
     constexpr auto sliceSize = 128;
     static_assert(testSize % sliceSize == 0);
 
-    auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), stringType, *data.ArrowPool, blockLen, nullptr);
+    auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), stringType, *data.ArrowPool, blockLen, /*pgBuilder=*/nullptr);
     auto reader = MakeBlockReader(NMiniKQL::TTypeInfoHelper(), stringType);
     auto trimmer = MakeBlockTrimmer(NMiniKQL::TTypeInfoHelper(), stringType, data.ArrowPool);
 
@@ -137,7 +137,7 @@ Y_UNIT_TEST(TestString) {
 Y_UNIT_TEST(TestOptional) {
     TBlockTrimmerTestData data;
 
-    const auto optionalInt64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, true);
+    const auto optionalInt64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, /*optional=*/true);
 
     size_t itemSize = NMiniKQL::CalcMaxBlockItemSize(optionalInt64Type);
     size_t blockLen = NMiniKQL::CalcBlockLen(itemSize);
@@ -147,7 +147,7 @@ Y_UNIT_TEST(TestOptional) {
     constexpr auto sliceSize = 1024;
     static_assert(testSize % sliceSize == 0);
 
-    auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), optionalInt64Type, *data.ArrowPool, blockLen, nullptr);
+    auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), optionalInt64Type, *data.ArrowPool, blockLen, /*pgBuilder=*/nullptr);
     auto reader = MakeBlockReader(NMiniKQL::TTypeInfoHelper(), optionalInt64Type);
     auto trimmer = MakeBlockTrimmer(NMiniKQL::TTypeInfoHelper(), optionalInt64Type, data.ArrowPool);
 
@@ -182,7 +182,7 @@ Y_UNIT_TEST(TestOptional) {
 Y_UNIT_TEST(TestExternalOptional) {
     TBlockTrimmerTestData data;
 
-    const auto doubleOptInt64Type = data.PgmBuilder.NewOptionalType(data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, true));
+    const auto doubleOptInt64Type = data.PgmBuilder.NewOptionalType(data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, /*optional=*/true));
 
     size_t itemSize = NMiniKQL::CalcMaxBlockItemSize(doubleOptInt64Type);
     size_t blockLen = NMiniKQL::CalcBlockLen(itemSize);
@@ -192,7 +192,7 @@ Y_UNIT_TEST(TestExternalOptional) {
     constexpr auto sliceSize = 1024;
     static_assert(testSize % sliceSize == 0);
 
-    auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), doubleOptInt64Type, *data.ArrowPool, blockLen, nullptr);
+    auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), doubleOptInt64Type, *data.ArrowPool, blockLen, /*pgBuilder=*/nullptr);
     auto reader = MakeBlockReader(NMiniKQL::TTypeInfoHelper(), doubleOptInt64Type);
     auto trimmer = MakeBlockTrimmer(NMiniKQL::TTypeInfoHelper(), doubleOptInt64Type, data.ArrowPool);
 
@@ -241,7 +241,7 @@ Y_UNIT_TEST(TestTuple) {
     std::vector<NMiniKQL::TType*> types;
     types.push_back(data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64));
     types.push_back(data.PgmBuilder.NewDataType(NUdf::EDataSlot::String));
-    types.push_back(data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, true));
+    types.push_back(data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, /*optional=*/true));
     const auto tupleType = data.PgmBuilder.NewTupleType(types);
 
     size_t itemSize = NMiniKQL::CalcMaxBlockItemSize(tupleType);
@@ -253,7 +253,7 @@ Y_UNIT_TEST(TestTuple) {
     constexpr auto sliceSize = 128;
     static_assert(testSize % sliceSize == 0);
 
-    auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), tupleType, *data.ArrowPool, blockLen, nullptr);
+    auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), tupleType, *data.ArrowPool, blockLen, /*pgBuilder=*/nullptr);
     auto reader = MakeBlockReader(NMiniKQL::TTypeInfoHelper(), tupleType);
     auto trimmer = MakeBlockTrimmer(NMiniKQL::TTypeInfoHelper(), tupleType, data.ArrowPool);
 
@@ -306,7 +306,7 @@ Y_UNIT_TEST(TestTzDate) {
     TBlockTrimmerTestData data;
     using TDtLayout = TDataType<TTzDatetime>::TLayout;
 
-    const auto tzDatetimeType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::TzDatetime, false);
+    const auto tzDatetimeType = data.PgmBuilder.NewDataType(NUdf::EDataSlot::TzDatetime, /*optional=*/false);
 
     size_t itemSize = NMiniKQL::CalcMaxBlockItemSize(tzDatetimeType);
     size_t blockLen = NMiniKQL::CalcBlockLen(itemSize);
@@ -316,7 +316,7 @@ Y_UNIT_TEST(TestTzDate) {
     constexpr auto sliceSize = 1024;
     static_assert(testSize % sliceSize == 0);
 
-    auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), tzDatetimeType, *data.ArrowPool, blockLen, nullptr);
+    auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), tzDatetimeType, *data.ArrowPool, blockLen, /*pgBuilder=*/nullptr);
     auto reader = MakeBlockReader(NMiniKQL::TTypeInfoHelper(), tzDatetimeType);
     auto trimmer = MakeBlockTrimmer(NMiniKQL::TTypeInfoHelper(), tzDatetimeType, data.ArrowPool);
 
@@ -357,7 +357,7 @@ Y_UNIT_TEST(TestResource) {
     constexpr auto sliceSize = 1024;
     static_assert(testSize % sliceSize == 0);
 
-    auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), resourceType, *data.ArrowPool, blockLen, nullptr);
+    auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), resourceType, *data.ArrowPool, blockLen, /*pgBuilder=*/nullptr);
     auto reader = MakeBlockReader(NMiniKQL::TTypeInfoHelper(), resourceType);
     auto trimmer = MakeBlockTrimmer(NMiniKQL::TTypeInfoHelper(), resourceType, data.ArrowPool);
 

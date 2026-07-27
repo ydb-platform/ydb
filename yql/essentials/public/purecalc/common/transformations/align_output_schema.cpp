@@ -63,7 +63,7 @@ public:
         auto status = TryConvertTo(output, *actualType, *expectedType, ctx, TypeCtx_);
 
         if (status.Level == IGraphTransformer::TStatus::Repeat) {
-            status = IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+            status = IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
         }
 
         return status;

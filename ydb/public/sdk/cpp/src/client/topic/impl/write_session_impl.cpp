@@ -30,6 +30,18 @@ namespace {
 
 using TTxId = std::pair<std::string_view, std::string_view>;
 
+constexpr std::string_view MESSAGE_ATTRIBUTE_KEY = "__key";
+
+std::optional<std::string> GetMessageKey(const std::vector<std::pair<std::string, std::string>>& messageMeta) {
+    for (const auto& [key, value] : messageMeta) {
+        if (key == MESSAGE_ATTRIBUTE_KEY) {
+            return value;
+        }
+    }
+
+    return std::nullopt;
+}
+
 bool ValidateWriteSessionSettings(const TWriteSessionSettings& settings, NYdb::NIssue::TIssues& issues) {
     if (!settings.BatchInnerCodec_.has_value()) {
         return true;
@@ -102,7 +114,6 @@ TWriteSessionImpl::TWriteSessionImpl(
     , Client(std::move(client))
     , Connections(std::move(connections))
     , DbDriverState(std::move(dbDriverState))
-    , PrevToken(DbDriverState->CredentialsProvider ? DbDriverState->CredentialsProvider->GetAuthInfo() : "")
     , MaxBlockMessageCount(Settings.BatchFlushMessageCount_)
     , InitSeqNoPromise(NThreading::NewPromise<uint64_t>())
     , WakeupInterval(
@@ -1346,6 +1357,7 @@ void TWriteSessionImpl::CompressImpl(TBlock&& block_) {
             .Codec = codec,
             .Payloads = blockPtr->OriginalDataRefs,
             .CreatedAt = blockPtr->CreatedAt,
+            .MessageKeys = blockPtr->MessageKeys,
             .Data = blockPtr->Data,
             .CodecID = blockPtr->CodecID,
             .Compressed = blockPtr->Compressed,
@@ -1508,6 +1520,7 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
             block.OriginalMemoryUsage += datum.size();
             block.OriginalDataRefs.emplace_back(datum);
             block.CreatedAt.emplace_back(createTs);
+            block.MessageKeys.emplace_back(GetMessageKey(currMessage.MessageMeta));
             if (CurrentBatch.Messages[i].Codec.has_value()) {
                 Y_ABORT_UNLESS(CurrentBatch.Messages.size() == 1);
                 block.CodecID = static_cast<ui32>(*currMessage.Codec);
@@ -1572,11 +1585,54 @@ void TWriteSessionImpl::UpdateTokenIfNeededImpl() {
 
     LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefixImpl() << "Write session: try to update token");
 
-    if (!DbDriverState->CredentialsProvider || UpdateTokenInProgress || !SessionEstablished) {
+    auto credentialsProvider = DbDriverState->GetCredentialsProvider();
+    if (!credentialsProvider || UpdateTokenInProgress || !SessionEstablished || Aborting) {
         return;
     }
 
-    auto token = DbDriverState->CredentialsProvider->GetAuthInfo();
+    auto authInfo = credentialsProvider->GetAuthInfoAsync();
+    if (authInfo.IsReady()) {
+        UpdateTokenImpl(authInfo);
+        return;
+    }
+    UpdateTokenInProgress = true;
+    try {
+        authInfo.Subscribe([cbContext = SelfContext](const auto& future) {
+            if (auto self = cbContext->LockShared()) try {
+                self->Connections->ScheduleCallback(TDuration::Zero(), [cbContext, future](bool ok) {
+                    if (auto self = cbContext->LockShared()) {
+                        if (!ok) {
+                            self->UpdateTokenInProgress = false;
+                            return;
+                        }
+                        std::lock_guard guard(self->Lock);
+                        self->UpdateTokenImpl(future);
+                    }
+                });
+            } catch (...) {
+                self->UpdateTokenInProgress = false;
+            }
+        });
+    } catch (...) {
+        UpdateTokenInProgress = false;
+    }
+}
+
+void TWriteSessionImpl::UpdateTokenImpl(const NThreading::TFuture<std::string>& future) {
+    Y_ABORT_UNLESS(Lock.IsLocked());
+
+    UpdateTokenInProgress = false;
+    if (!SessionEstablished || Aborting) {
+        return;
+    }
+
+    std::string token;
+    try {
+        token = future.GetValue();
+    } catch (...) {
+        CloseImpl(EStatus::CLIENT_UNAUTHENTICATED, CurrentExceptionMessage());
+        return;
+    }
     if (token == PrevToken) {
         return;
     }

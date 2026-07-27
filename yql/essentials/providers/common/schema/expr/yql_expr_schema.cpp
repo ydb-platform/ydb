@@ -258,12 +258,12 @@ public:
 
 void SaveStructTypeToYson(NYson::TYsonConsumerBase& writer, const TStructExprType* type, const TMaybe<TColumnOrder>& columns, const TStructMemberMapper& mapper, bool extendedForm) {
     TExprTypeSaver<TYqlTypeYsonSaverImpl> saver(writer, extendedForm);
-    saver.SaveStructType(type, columns, mapper, true);
+    saver.SaveStructType(type, columns, mapper, /*physical=*/true);
 }
 
 void SaveStructTypeToYsonWithLogicalNames(NYson::TYsonConsumerBase& writer, const TStructExprType* type, const TMaybe<TColumnOrder>& columns, const TStructMemberMapper& mapper, bool extendedForm) {
     TExprTypeSaver<TYqlTypeYsonSaverImpl> saver(writer, extendedForm);
-    saver.SaveStructType(type, columns, mapper, false);
+    saver.SaveStructType(type, columns, mapper, /*physical=*/false);
 }
 
 void WriteTypeToYson(NYson::TYsonConsumerBase& writer, const TTypeAnnotationNode* type, bool extendedForm) {
@@ -465,14 +465,14 @@ void WriteResOrPullType(NYson::TYsonConsumerBase& writer, const TTypeAnnotationN
     if (columns.Size() == 0 ||
         type->GetKind() != ETypeAnnotationKind::List ||
         type->Cast<TListExprType>()->GetItemType()->GetKind() != ETypeAnnotationKind::Struct) {
-        WriteTypeToYson(writer, type, true);
+        WriteTypeToYson(writer, type, /*extendedForm=*/true);
     } else {
         writer.OnBeginList();
         writer.OnListItem();
         writer.OnStringScalar("ListType");
         writer.OnListItem();
 
-        SaveStructTypeToYsonWithLogicalNames(writer, type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>(), columns, {}, true);
+        SaveStructTypeToYsonWithLogicalNames(writer, type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>(), columns, {}, /*extendedForm=*/true);
 
         writer.OnEndList();
     }

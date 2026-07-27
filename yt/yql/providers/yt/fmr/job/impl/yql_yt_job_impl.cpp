@@ -1,5 +1,6 @@
 #include <library/cpp/threading/future/core/future.h>
 #include <library/cpp/yson/node/node_io.h>
+#include <library/cpp/yson/zigzag.h>
 
 #include <util/folder/tempdir.h>
 #include <util/generic/buffer.h>
@@ -10,6 +11,7 @@
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_fmr_sorting_block_reader.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_job_impl.h>
+#include <yt/yql/providers/yt/fmr/utils/yson_block_iterator/impl/yql_yt_key_hash_block_iterator.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_reader.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_sorted_writer.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_writer.h>
@@ -25,6 +27,9 @@
 #include <yql/essentials/utils/log/log.h>
 
 namespace NYql::NFmr {
+
+namespace {
+} // namespace
 
 class TFmrJob: public IFmrJob {
 public:
@@ -296,13 +301,13 @@ public:
     virtual std::variant<TFmrError, TStatistics> Map(
         const TMapTaskParams& params,
         const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections,
-        std::shared_ptr<std::atomic<bool>> /* cancelFlag */,
+        std::shared_ptr<std::atomic<bool>> cancelFlag,
         const TMaybe<TString>& jobEnvironmentDir,
         const std::vector<TFileInfo>& jobFiles,
         const std::vector<TYtResourceInfo>& jobYtResources,
         const std::vector<TFmrResourceTaskInfo>& jobFmrResources
     ) override {
-        auto mapJobFunc = [&, this] () {
+        auto mapJobFunc = [&, this, cancelFlag] () {
             TFmrUserJobSettings userJobSettings = Settings_.FmrUserJobSettings;
             TFmrUserJob mapJob;
             // deserialize map job and fill params
@@ -313,7 +318,7 @@ public:
             if (DirectTableDataService_) {
                 mapJob.SetDirectTableDataService(DirectTableDataService_);
             }
-            return JobLauncher_->LaunchJob(mapJob, jobEnvironmentDir, jobFiles, jobYtResources, jobFmrResources);
+            return JobLauncher_->LaunchJob(mapJob, jobEnvironmentDir, jobFiles, jobYtResources, jobFmrResources, cancelFlag);
         };
         return HandleFmrJob(mapJobFunc, ETaskType::Map);
     }
@@ -383,13 +388,13 @@ public:
     std::variant<TFmrError, TStatistics> Reduce(
         const TReduceTaskParams& params,
         const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections,
-        std::shared_ptr<std::atomic<bool>> /* cancelFlag */,
+        std::shared_ptr<std::atomic<bool>> cancelFlag,
         const TMaybe<TString>& jobEnvironmentDir,
         const std::vector<TFileInfo>& jobFiles,
         const std::vector<TYtResourceInfo>& jobYtResources,
         const std::vector<TFmrResourceTaskInfo>& jobFmrResources
     ) override {
-        auto reduceFunc = [&, this] () {
+        auto reduceFunc = [&, this, cancelFlag] () {
             TFmrUserJobSettings userJobSettings = Settings_.FmrUserJobSettings;
             TFmrUserJob reduceJob;
             // deserialize reduce job and fill params
@@ -400,20 +405,20 @@ public:
             if (DirectTableDataService_) {
                 reduceJob.SetDirectTableDataService(DirectTableDataService_);
             }
-            return JobLauncher_->LaunchJob(reduceJob, jobEnvironmentDir, jobFiles, jobYtResources, jobFmrResources);
+            return JobLauncher_->LaunchJob(reduceJob, jobEnvironmentDir, jobFiles, jobYtResources, jobFmrResources, cancelFlag);
         };
         return HandleFmrJob(reduceFunc, ETaskType::Reduce);
     }
 
     std::variant<TFmrError, TStatistics> Fill(
         const TFillTaskParams& params,
-        std::shared_ptr<std::atomic<bool>> /* cancelFlag */,
+        std::shared_ptr<std::atomic<bool>> cancelFlag,
         const TMaybe<TString>& jobEnvironmentDir,
         const std::vector<TFileInfo>& jobFiles,
         const std::vector<TYtResourceInfo>& jobYtResources,
         const std::vector<TFmrResourceTaskInfo>& jobFmrResources
     ) override {
-        auto fillJobFunc = [&, this] () {
+        auto fillJobFunc = [&, this, cancelFlag] () {
             TFmrUserJobSettings userJobSettings = Settings_.FmrUserJobSettings;
             TFmrUserJob fillJob;
             TStringStream serializedJobStateStream(params.SerializedFillJobState);
@@ -423,9 +428,132 @@ public:
             if (DirectTableDataService_) {
                 fillJob.SetDirectTableDataService(DirectTableDataService_);
             }
-            return JobLauncher_->LaunchJob(fillJob, jobEnvironmentDir, jobFiles, jobYtResources, jobFmrResources);
+            return JobLauncher_->LaunchJob(fillJob, jobEnvironmentDir, jobFiles, jobYtResources, jobFmrResources, cancelFlag);
         };
         return HandleFmrJob(fillJobFunc, ETaskType::Fill);
+    }
+
+    std::variant<TFmrError, TStatistics> MapReduceMap(
+        const TMapReduceMapTaskParams& params,
+        const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections,
+        std::shared_ptr<std::atomic<bool>> cancelFlag,
+        const TMaybe<TString>& jobEnvironmentDir,
+        const std::vector<TFileInfo>& jobFiles,
+        const std::vector<TYtResourceInfo>& jobYtResources,
+        const std::vector<TFmrResourceTaskInfo>& jobFmrResources
+    ) override {
+        if (params.SerializedMapJobState.empty()) {
+            // Identity (TCoVoid) mapper: sort input by reduce-by columns and write to intermediate.
+            // _yql_key_hash is used only to determine physical ordering of rows but is never stored
+            // in the row data — the codec must not see it.
+            auto identityJobFunc = [&, this, cancelFlag] () -> TStatistics {
+                const auto& sortColumns = params.Output.SortingColumns;
+                YQL_ENSURE(!sortColumns.Columns.empty(), "MapReduceMap identity sort columns must be set");
+
+                auto writerSettings = Settings_.FmrWriterSettings;
+                auto tableDataServiceWriter = MakeIntrusive<TFmrTableDataServiceSortedWriter>(
+                    params.Output.TableId, params.Output.PartId,
+                    TableDataService_, params.Output.SerializedColumnGroups,
+                    writerSettings, sortColumns
+                );
+                TMaybe<TMutex> mutex = TMutex();
+                std::vector<IBlockIterator::TPtr> blockIterators;
+
+                // The full sort columns are [_yql_key_hash, ...reduceBy, ...extra tiebreaker
+                // columns] (e.g. "_yql_sort" for joins). Inner iterators track only the reduce key
+                // columns; TKeyHashAddingBlockIterator computes _yql_key_hash from those columns
+                // (not the tiebreaker columns, which vary within a group) and inserts it into the
+                // binary YSON.
+                Y_ENSURE(sortColumns.Columns[0] == TString(YqlKeyHashColumn),
+                         "First sort column must be _yql_key_hash in MapReduceMap identity path");
+                const size_t numReduceKeyColumns = params.ReduceOperationSpec.ReduceBy.Columns.size();
+                Y_ENSURE(numReduceKeyColumns + 1 <= sortColumns.Columns.size(),
+                         "reduceBy columns must fit within the sort columns after _yql_key_hash");
+                std::vector<TString> reduceKeyColumns(sortColumns.Columns.begin() + 1, sortColumns.Columns.begin() + 1 + numReduceKeyColumns);
+                std::vector<ESortOrder> reduceKeySortOrders(sortColumns.SortOrders.begin() + 1, sortColumns.SortOrders.begin() + 1 + numReduceKeyColumns);
+
+                for (const auto& inputRef : params.Input.Inputs) {
+                    IBlockIterator::TPtr inner;
+                    if (auto fmrInput = std::get_if<TFmrTableInputRef>(&inputRef)) {
+                        inner = MakeIntrusive<TTableDataServiceBlockIterator>(
+                            fmrInput->TableId, fmrInput->TableRanges, TableDataService_,
+                            reduceKeyColumns, reduceKeySortOrders,
+                            fmrInput->Columns, fmrInput->SerializedColumnGroups,
+                            fmrInput->IsFirstRowInclusive, fmrInput->IsLastRowInclusive,
+                            fmrInput->FirstRowKeys, fmrInput->LastRowKeys,
+                            Settings_.FmrReaderSettings.ReadAheadChunks
+                        );
+                    } else {
+                        auto ytTableTaskRef = std::get<TYtTableTaskRef>(inputRef);
+                        auto ytReaders = GetYtTableReaders(YtJobService_, ytTableTaskRef, clusterConnections);
+                        inner = MakeIntrusive<TYtBlockIterator>(
+                            ytReaders, reduceKeyColumns, TYtBlockIteratorSettings(), reduceKeySortOrders
+                        );
+                    }
+                    blockIterators.emplace_back(MakeIntrusive<TKeyHashAddingBlockIterator>(
+                        std::move(inner), sortColumns.Columns, sortColumns.SortOrders, numReduceKeyColumns
+                    ));
+                }
+                auto& parseRecordSettings = Settings_.ParseRecordSettings;
+                NYT::TRawTableReaderPtr sortingReader = MakeIntrusive<TFmrSortingBlockReader>(blockIterators);
+                ParseRecords(sortingReader, tableDataServiceWriter, parseRecordSettings.LocalSortBlockCount, parseRecordSettings.LocalSortBlockSize, cancelFlag, mutex);
+                tableDataServiceWriter->Flush();
+                return TStatistics({{params.Output, tableDataServiceWriter->GetStats()}});
+            };
+            return HandleFmrJob(identityJobFunc, ETaskType::MapReduceMap);
+        }
+
+        // Explicit mapper: single-phase approach.
+        // The mapper writes into an in-memory blob queue (TQueueWriteTableDataService) instead
+        // of TDS. After the mapper finishes, DoFmrJob() feeds the blobs through
+        // TKeyHashAddingBlockIterator and TFmrSortingBlockReader directly into the final
+        // sorted TDS partition — no intermediate TDS write/read.
+        auto mapReduceMapJobFunc = [&, this, cancelFlag] () -> TStatistics {
+            const auto& sortColumns = params.Output.SortingColumns;
+            YQL_ENSURE(!sortColumns.Columns.empty(), "MapReduceMap sort columns must be set");
+
+            TFmrUserJobSettings userJobSettings = Settings_.FmrUserJobSettings;
+            TFmrUserJob mapReduceMapJob;
+            TStringStream serializedJobStateStream(params.SerializedMapJobState);
+            mapReduceMapJob.Load(serializedJobStateStream);
+
+            mapReduceMapJob.SetSettings(userJobSettings);
+            if (VanillaInfo_.Defined()) {
+                mapReduceMapJob.SetVanillaInfo(*VanillaInfo_);
+            }
+            if (Discovery_) {
+                mapReduceMapJob.SetTableDataServiceDiscovery(Discovery_);
+            }
+            mapReduceMapJob.SetTaskInputTables(params.Input);
+            // Index 0 = intermediate shuffle-bound table, 1..K = direct map-bypass outputs,
+            // matching the mapper's Variant<Tuple<T0..TK>> tag order.
+            std::vector<TFmrTableOutputRef> mapOutputTables{params.Output};
+            mapOutputTables.insert(mapOutputTables.end(), params.DirectOutputs.begin(), params.DirectOutputs.end());
+            mapReduceMapJob.SetTaskFmrOutputTables(mapOutputTables);
+            // Needed so DoFmrJob() can tell reduceBy (hash) columns apart from any trailing
+            // tiebreaker columns in Output.SortingColumns (e.g. "_yql_sort" for joins).
+            mapReduceMapJob.SetReduceOperationSpec(params.ReduceOperationSpec);
+            mapReduceMapJob.SetClusterConnections(clusterConnections);
+            mapReduceMapJob.SetYtJobService(YtJobService_);
+            mapReduceMapJob.SetFmrJobType(EFmrJobType::Map);
+            mapReduceMapJob.SetIsMapReduceMap(true);
+            if (TvmSettings_) {
+                mapReduceMapJob.SetTvmSettings(*TvmSettings_);
+            }
+            if (DirectTableDataService_) {
+                mapReduceMapJob.SetDirectTableDataService(DirectTableDataService_);
+            }
+            YQL_CLOG(INFO, FastMapReduce) << "MapReduceMap explicit mapper: calling LaunchJob"
+                << " numInputs=" << params.Input.Inputs.size()
+                << " outputTableId=" << params.Output.TableId
+                << " outputPartId=" << params.Output.PartId;
+            auto mapResult = JobLauncher_->LaunchJob(mapReduceMapJob, jobEnvironmentDir, jobFiles, jobYtResources, jobFmrResources, cancelFlag);
+            if (auto* err = std::get_if<TFmrError>(&mapResult)) {
+                ythrow yexception() << "MapReduceMap (mapper) failed: " << err->ErrorMessage;
+            }
+            return std::get<TStatistics>(mapResult);
+        };
+        return HandleFmrJob(mapReduceMapJobFunc, ETaskType::MapReduceMap);
     }
 
     std::variant<TFmrError, TString> Pull(
@@ -579,6 +707,8 @@ TJobResult RunJobImpl(
             return job->Reduce(taskParams, task->ClusterConnections, cancelFlag, task->JobEnvironmentDir, task->Files, task->YtResources, task->FmrResources);
         } else if constexpr (std::is_same_v<T, TFillTaskParams>) {
             return job->Fill(taskParams, cancelFlag, task->JobEnvironmentDir, task->Files, task->YtResources, task->FmrResources);
+        } else if constexpr (std::is_same_v<T, TMapReduceMapTaskParams>) {
+            return job->MapReduceMap(taskParams, task->ClusterConnections, cancelFlag, task->JobEnvironmentDir, task->Files, task->YtResources, task->FmrResources);
         } else if constexpr (std::is_same_v<T, TPullTaskParams>) {
             auto pullResult = job->Pull(taskParams, cancelFlag);
             if (auto* err = std::get_if<TFmrError>(&pullResult)) {
@@ -668,6 +798,7 @@ void FillReduceFmrJob(
     reduceJob.SetYtJobService(jobService);
     reduceJob.SetFmrJobType(EFmrJobType::Reduce);
     reduceJob.SetReduceOperationSpec(reduceTaskParams.ReduceOperationSpec);
+    reduceJob.SetIsMapReduceReducer(true);
 }
 
 void FillFillFmrJob(
@@ -687,6 +818,35 @@ void FillFillFmrJob(
     fillJob.SetTaskFmrOutputTables(fillTaskParams.Output);
     fillJob.SetYtJobService(jobService);
     fillJob.SetFmrJobType(EFmrJobType::Map);
+}
+
+void FillMapReduceMapFmrJob(
+    TFmrUserJob& mapReduceMapJob,
+    const TMapReduceMapTaskParams& params,
+    const std::unordered_map<TFmrTableId, TClusterConnection>& clusterConnections,
+    ITableDataServiceDiscovery::TPtr discovery,
+    TMaybe<TVanillaInfo> vanillaInfo,
+    const TFmrUserJobSettings& userJobSettings,
+    IYtJobService::TPtr jobService
+) {
+    mapReduceMapJob.SetSettings(userJobSettings);
+    if (vanillaInfo.Defined()) {
+        mapReduceMapJob.SetVanillaInfo(*vanillaInfo);
+    }
+    mapReduceMapJob.SetTableDataServiceDiscovery(std::move(discovery));
+    mapReduceMapJob.SetTaskInputTables(params.Input);
+    // SortingColumns were chosen by the coordinator (identity → [_yql_key_hash, ...reduceBy],
+    // real mapper → [...reduceBy]). Use them as-is; TFmrUserJob picks the right writer.
+    // Index 0 = intermediate shuffle-bound table, 1..K = direct map-bypass outputs.
+    std::vector<TFmrTableOutputRef> mapOutputTables{params.Output};
+    mapOutputTables.insert(mapOutputTables.end(), params.DirectOutputs.begin(), params.DirectOutputs.end());
+    mapReduceMapJob.SetTaskFmrOutputTables(mapOutputTables);
+    // Needed so DoFmrJob() can tell reduceBy (hash) columns apart from any trailing
+    // tiebreaker columns in Output.SortingColumns (e.g. "_yql_sort" for joins).
+    mapReduceMapJob.SetReduceOperationSpec(params.ReduceOperationSpec);
+    mapReduceMapJob.SetClusterConnections(clusterConnections);
+    mapReduceMapJob.SetYtJobService(jobService);
+    mapReduceMapJob.SetFmrJobType(EFmrJobType::Map);
 }
 
 TFmrJobSettings GetJobSettingsFromTask(TTask::TPtr task) {
@@ -721,6 +881,7 @@ TFmrJobSettings GetJobSettingsFromTask(TTask::TPtr task) {
     auto& fmrUserJobSettings = resultSettings.FmrUserJobSettings;
     fmrUserJobSettings.QueueSizeLimit = jobProcessSettings["queue_size_limit"].AsInt64();
     fmrUserJobSettings.ThreadPoolSize = jobProcessSettings["num_threads"].AsInt64();
+    fmrUserJobSettings.WriterSettings = resultSettings.FmrWriterSettings;
 
     resultSettings.YtWriterSettings.MaxRowWeight = jobIoSettings["yt_table_writer"]["max_row_weight"].AsInt64();
 

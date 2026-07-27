@@ -12,6 +12,7 @@
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/common/kqp_tx.h>
+#include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/simple/temp_tables.h>
@@ -26,7 +27,13 @@
 #include <map>
 #include <memory>
 
-namespace NKikimr::NKqp {
+namespace NKikimr {
+
+namespace NWorkloadManager {
+class IQueryClassifier;
+} // namespace NWorkloadManager
+
+namespace NKqp {
 
 class TKqpQueryCache;
 
@@ -122,6 +129,7 @@ public:
         UserRequestContext->PoolId = RequestEv->GetPoolId();
         UserRequestContext->PoolConfig = RequestEv->GetPoolConfig();
         UserRequestContext->DatabaseId = RequestEv->GetDatabaseId();
+        QueryClassifier = RequestEv->GetWmQueryClassifier();
 
         if (RequestEv->GetSaveQueryPhysicalGraph() && !QueryPhysicalGraph) {
             YQL_ENSURE(QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_SCRIPT);
@@ -144,6 +152,7 @@ public:
     TActorId Sender;
     ui64 ProxyRequestId = 0;
     std::unique_ptr<TEvKqp::TEvQueryRequest> RequestEv;
+    std::shared_ptr<NWorkloadManager::IQueryClassifier> QueryClassifier;
     ui64 ParametersSize = 0;
     TPreparedQueryHolder::TConstPtr PreparedQuery;
     TKqpCompileResult::TConstPtr CompileResult;
@@ -185,6 +194,8 @@ public:
     TQueryTxId TxId; // User tx
     bool Commit = false;
     bool Commited = false;
+
+    std::optional<TCommitTimestamp> CommitTimestamp;
 
     NTopic::TTopicOperations TopicOperations;
     TDuration CpuTime;
@@ -299,6 +310,10 @@ public:
 
     bool HasKafkaApiOperations() const {
         return RequestEv->HasKafkaApiOperations();
+    }
+
+    bool HasDeferredPublication() const {
+        return RequestEv->HasDeferredPublication();
     }
 
     bool GetQueryKeepInCache() const {
@@ -425,6 +440,10 @@ public:
         return RequestEv->GetKafkaApiOperations();
     }
 
+    const ::NKikimrKqp::TTopicDeferredPublicationRequest& GetDeferredPublicationFromRequest() const {
+        return RequestEv->GetDeferredPublication();
+    }
+
     bool NeedPersistentSnapshot() const {
         auto type = GetType();
         return (
@@ -490,6 +509,7 @@ public:
     bool ShouldAcquireLocks(const TKqpPhyTxHolder::TConstPtr& tx) {
         Y_UNUSED(tx);
         if (*TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SERIALIZABLE &&
+                *TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE &&
                 *TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW &&
                 *TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW) {
             return false;
@@ -687,6 +707,7 @@ public:
 
     //// Topic ops ////
     void FillTopicOperations();
+    void FillDeferredPublicationOperations();
     bool TryMergeTopicOffsets(const NTopic::TTopicOperations &operations, TString& message);
     std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigate();
     bool IsAccessDenied(const NSchemeCache::TSchemeCacheNavigate& response, TString& message);
@@ -696,5 +717,6 @@ public:
 
 };
 
+} //namespace NKqp
 
-}
+} //namespace NKikimr

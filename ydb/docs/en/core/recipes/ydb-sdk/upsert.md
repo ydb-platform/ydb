@@ -1,8 +1,152 @@
-# Inserting data
+# Data insertion
 
-Below are examples of using the {{ ydb-short-name }} SDK built-in tools to perform inserts:
+Below are code examples using the {{ ydb-short-name }} SDK's built-in data insertion capabilities:
 
 {% list tabs %}
+
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/query/client.h>
+
+    void UpsertSeries(NYdb::NQuery::TQueryClient& client) {
+      NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync(
+          [](NYdb::NQuery::TSession session) {
+              constexpr auto query = R"(
+                  DECLARE $seriesData AS List<Struct<
+                      series_id: Uint64,
+                      title: Utf8,
+                      series_info: Utf8,
+                      comment: Optional<Utf8>
+                  >>;
+
+                  UPSERT INTO series
+                  (
+                      series_id,
+                      title,
+                      series_info,
+                      comment
+                  )
+                  SELECT
+                      series_id,
+                      title,
+                      series_info,
+                      comment
+                  FROM AS_TABLE($seriesData);
+              )";
+
+              auto params = NYdb::TParamsBuilder()
+                  .AddParam("$seriesData")
+                      .BeginList()
+                      .AddListItem()
+                          .BeginStruct()
+                          .AddMember("series_id").Uint64(1)
+                          .AddMember("title").Utf8("IT Crowd")
+                          .AddMember("series_info").Utf8(
+                              "The IT Crowd is a British sitcom produced by Channel 4, written by Graham Linehan, produced by "
+                              "Ash Atalla and starring Chris O'Dowd, Richard Ayoade, Katherine Parkinson, and Matt Berry.")
+                          .AddMember("comment").OptionalUtf8(std::nullopt)
+                          .EndStruct()
+                      .AddListItem()
+                          .BeginStruct()
+                          .AddMember("series_id").Uint64(2)
+                          .AddMember("title").Utf8("Silicon Valley")
+                          .AddMember("series_info").Utf8(
+                              "Silicon Valley is an American comedy television series created by Mike Judge, John Altschuler and "
+                              "Dave Krinsky. The series focuses on five young men who founded a startup company in Silicon Valley.")
+                          .AddMember("comment").OptionalUtf8("lorem ipsum")
+                          .EndStruct()
+                      .EndList()
+                      .Build()
+                  .Build();
+
+              return session.ExecuteQuery(
+                  query,
+                  NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(),
+                  params).GetValueSync();
+          },
+          NYdb::NQuery::TRetryOperationSettings()
+              .Idempotent(true)
+      ));
+    }
+    ```
+
+  - userver
+
+    ```cpp
+    #include <userver/ydb/io/supported_types.hpp>
+    #include <userver/ydb/table.hpp>
+
+    struct SeriesData final {
+        std::uint64_t series_id;
+        ydb::Utf8 title;
+        ydb::Utf8 series_info;
+        std::optional<ydb::Utf8> comment;
+    };
+
+    void UpsertSeries(ydb::TableClient& client) {
+        auto builder = client.GetBuilder();
+        builder.Add(
+            "$seriesData",
+            std::vector<SeriesData>{
+                {
+                    .series_id = 1,
+                    .title = ydb::Utf8{"IT Crowd"},
+                    .series_info = ydb::Utf8{
+                        "The IT Crowd is a British sitcom produced by Channel 4, written by Graham Linehan, produced by "
+                        "Ash Atalla and starring Chris O'Dowd, Richard Ayoade, Katherine Parkinson, and Matt Berry."
+                    },
+                    .comment = std::nullopt,
+                },
+                {
+                    .series_id = 2,
+                    .title = ydb::Utf8{"Silicon Valley"},
+                    .series_info = ydb::Utf8{
+                        "Silicon Valley is an American comedy television series created by Mike Judge, John Altschuler and "
+                        "Dave Krinsky. The series focuses on five young men who founded a startup company in Silicon Valley."
+                    },
+                    .comment = ydb::Utf8{"lorem ipsum"},
+                },
+            }
+        );
+
+        client.ExecuteQuery(
+            ydb::OperationSettings{
+                .tx_mode = ydb::TransactionMode::kSerializableRW,
+                .is_idempotent = true,
+            },
+            ydb::Query{R"(
+                DECLARE $seriesData AS List<Struct<
+                    series_id: Uint64,
+                    title: Utf8,
+                    series_info: Utf8,
+                    comment: Optional<Utf8>
+                >>;
+
+                UPSERT INTO series
+                (
+                    series_id,
+                    title,
+                    series_info,
+                    comment
+                )
+                SELECT
+                    series_id,
+                    title,
+                    series_info,
+                    comment
+                FROM AS_TABLE($seriesData);
+            )"},
+            std::move(builder)
+        );
+    }
+    ```
+
+  {% endlist %}
 
 - Go
 
@@ -136,48 +280,173 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools to perfo
 
 - Java
 
+  The [UPSERT INTO](../../yql/reference/syntax/upsert_into.md) operation inserts a row or updates an existing one by primary key without a prior read. For bulk non‑atomic loading, see [batch insert](./bulk-upsert.md). The table schema is described in the [Tables](../../concepts/datamodel/table.md) section.
+
   {% list tabs %}
 
   - Native SDK
 
-    Use `SessionRetryContext` and `TableSession.executeDataQuery` with a `$seriesData` parameter of type `List<Struct<...>>`. Build values for `AS_TABLE($seriesData)` the same way as row structs in the [batch insert](./bulk-upsert.md) example.
-
     ```java
-    SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
+    import java.util.ArrayList;
+    import java.util.List;
 
-    String yql = """
-            PRAGMA TablePathPrefix("/local");
-            DECLARE $seriesData AS List<Struct<
-                series_id: Uint64,
-                title: Utf8,
-                series_info: Utf8,
-                comment: Optional<Utf8>
-            >>;
-            UPSERT INTO series
-            SELECT series_id, title, series_info, comment FROM AS_TABLE($seriesData);
-            """;
+    import tech.ydb.common.transaction.TxMode;
+    import tech.ydb.core.grpc.GrpcTransport;
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.result.ResultSetReader;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
+    import tech.ydb.table.query.Params;
+    import tech.ydb.table.values.ListType;
+    import tech.ydb.table.values.ListValue;
+    import tech.ydb.table.values.OptionalType;
+    import tech.ydb.table.values.PrimitiveType;
+    import tech.ydb.table.values.PrimitiveValue;
+    import tech.ydb.table.values.StructType;
+    import tech.ydb.table.values.Value;
 
-    Params params = Params.of("$seriesData", seriesDataListValue);
+    public class UpsertExample {
+        public static void main(String[] args) {
+            String connectionString = System.getenv().getOrDefault(
+                    "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
 
-    retryCtx.supplyResult(session -> session.executeDataQuery(yql, TxControl.serializableRw(), params))
-            .join();
+            try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
+                 QueryClient queryClient = QueryClient.newClient(transport).build()) {
+
+                SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+
+                // Create the table if it does not exist yet (DDL — without transaction)
+                retryCtx.supplyResult(session -> QueryReader.readFrom(session.createQuery("""
+                        CREATE TABLE IF NOT EXISTS series (
+                            series_id Uint64,
+                            title Text,
+                            series_info Text,
+                            comment Text,
+                            PRIMARY KEY (series_id)
+                        );
+                        """, TxMode.NONE, Params.empty())
+                )).join().getValue();
+
+                // Preparing data for UPSERT via AS_TABLE($seriesData)
+                StructType rowType = StructType.of(
+                        "series_id", PrimitiveType.Uint64,
+                        "title", PrimitiveType.Text,
+                        "series_info", PrimitiveType.Text,
+                        "comment", OptionalType.of(PrimitiveType.Text)
+                );
+
+                List<Value<?>> rows = new ArrayList<>();
+                rows.add(rowType.newValue(
+                        "series_id", PrimitiveValue.newUint64(1),
+                        "title", PrimitiveValue.newText("IT Crowd"),
+                        "series_info", PrimitiveValue.newText(
+                                "The IT Crowd is a British sitcom produced by Channel 4..."),
+                        "comment", OptionalType.of(PrimitiveType.Text).emptyValue()
+                ));
+                rows.add(rowType.newValue(
+                        "series_id", PrimitiveValue.newUint64(2),
+                        "title", PrimitiveValue.newText("Silicon Valley"),
+                        "series_info", PrimitiveValue.newText(
+                                "Silicon Valley is an American comedy television series..."),
+                        "comment", OptionalType.of(PrimitiveType.Text).newValue(
+                                PrimitiveValue.newText("lorem ipsum"))
+                ));
+
+                ListValue seriesData = ListType.of(rowType).newValue(rows);
+                Params params = Params.of("$seriesData", seriesData);
+
+                String upsertQuery = """
+                        DECLARE $seriesData AS List<Struct<
+                            series_id: Uint64,
+                            title: Utf8,
+                            series_info: Utf8,
+                            comment: Optional<Utf8>
+                        >>;
+                        UPSERT INTO series (series_id, title, series_info, comment)
+                        SELECT series_id, title, series_info, comment FROM AS_TABLE($seriesData);
+                        """;
+
+                retryCtx.supplyResult(session -> QueryReader.readFrom(
+                        session.createQuery(upsertQuery, TxMode.SERIALIZABLE_RW, params)
+                )).join().getValue();
+
+                // Check: should be 2 rows
+                QueryReader countReader = retryCtx.supplyResult(session -> QueryReader.readFrom(
+                        session.createQuery("SELECT COUNT(*) AS cnt FROM series", TxMode.NONE, Params.empty())
+                )).join().getValue();
+
+                ResultSetReader rs = countReader.getResultSet(0);
+                if (rs.next()) {
+                    System.out.println("Строк в таблице series: " + rs.getColumn("cnt").getUint64());
+                }
+            }
+        }
+    }
     ```
 
   - JDBC
 
     ```java
-    try (Connection conn = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local");
-         PreparedStatement ps = conn.prepareStatement(
-                 """
-                 REPLACE INTO series (series_id, title, series_info, comment)
-                 SELECT series_id, title, series_info, comment FROM AS_TABLE($seriesData);
-                 """
-         )) {
-        // Set $seriesData according to the query type (see JDBC driver documentation)
+    import java.sql.Connection;
+    import java.sql.DriverManager;
+    import java.sql.PreparedStatement;
+    import java.sql.ResultSet;
+    import java.sql.SQLException;
+    import java.sql.Statement;
+
+    public class JdbcUpsertExample {
+        public static void main(String[] args) throws SQLException {
+            String url = System.getenv().getOrDefault(
+                    "YDB_JDBC_URL", "jdbc:ydb:grpc://localhost:2136/local");
+
+            try (Connection conn = DriverManager.getConnection(url)) {
+                // Create the table (DDL runs in autocommit mode)
+                try (Statement stmt = conn.createStatement()) {
+                    stmt.execute("""
+                            CREATE TABLE IF NOT EXISTS series (
+                                series_id Uint64,
+                                title Text,
+                                series_info Text,
+                                comment Text,
+                                PRIMARY KEY (series_id)
+                            );
+                            """);
+                }
+
+                // REPLACE INTO — equivalent to UPSERT with full row replacement
+                String replaceSql = """
+                        REPLACE INTO series (series_id, title, series_info, comment)
+                        VALUES (?, ?, ?, ?);
+                        """;
+
+                try (PreparedStatement ps = conn.prepareStatement(replaceSql)) {
+                    ps.setLong(1, 1);
+                    ps.setString(2, "IT Crowd");
+                    ps.setString(3, "The IT Crowd is a British sitcom produced by Channel 4...");
+                    ps.setNull(4, java.sql.Types.VARCHAR);
+                    ps.executeUpdate();
+
+                    ps.setLong(1, 2);
+                    ps.setString(2, "Silicon Valley");
+                    ps.setString(3, "Silicon Valley is an American comedy television series...");
+                    ps.setString(4, "lorem ipsum");
+                    ps.executeUpdate();
+                }
+
+                // Check row count
+                try (Statement stmt = conn.createStatement();
+                     ResultSet rs = stmt.executeQuery("SELECT COUNT(*) AS cnt FROM series")) {
+                    if (rs.next()) {
+                        System.out.println("Строк в таблице series: " + rs.getLong("cnt"));
+                    }
+                }
+            }
+        }
     }
     ```
 
-    In Spring Boot, Hibernate, JOOQ, and other JDBC stacks, the driver also tries to optimize **large** sequences of inserts and updates: when needed, **UPSERT**, `INSERT`, `UPDATE`, and `DELETE` are **batched** on the driver side (including large batches from ORMs).
+
+    In Spring Boot, Hibernate, JOOQ, and other frameworks built on JDBC, the driver also tries to optimize **large** sequences of inserts and modifications: when an **UPSERT** is needed, `INSERT`, `UPDATE`, `DELETE` are automatically **batched** on the driver side (including large ORM batches).
 
   {% endlist %}
 
@@ -187,7 +456,8 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools to perfo
 
   - Native SDK
 
-    Use `QuerySessionPool` and `execute_with_retries` with a parameterized YQL query. The query uses the container type `List<Struct<...>>`, so you can pass several rows in one call.
+    Data insertion uses `QuerySessionPool` and the `execute_with_retries` method with a parameterized YQL query. The query operates on the container type `List<Struct<...>>`, allowing multiple rows to be sent in a single call.
+
 
     ```python
     import os
@@ -296,7 +566,8 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools to perfo
 
   - SQLAlchemy
 
-    When using {{ ydb-short-name }} through SQLAlchemy, use the `ydb_sqlalchemy.upsert` helper to build an `UPSERT INTO` statement from a table and values. You can insert one row or several rows in one call:
+    When using {{ ydb-short-name }} with SQLAlchemy for data insertion, the `ydb_sqlalchemy.upsert` function is used, which builds a `UPSERT INTO` query based on the table and supplied values. You can insert either a single row or multiple rows in one call:
+
 
     ```python
     import os
@@ -338,6 +609,39 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools to perfo
 
   {% endlist %}
 
+- C#
+
+  ```C#
+  using Ydb.Sdk.Ado;
+  using Ydb.Sdk.Ado.YdbType;
+
+  await using var dataSource = new YdbDataSource("Host=localhost;Port=2136;Database=/local");
+  await using var connection = await dataSource.OpenRetryableConnectionAsync();
+
+  var seriesData = new List<YdbStruct>
+  {
+      new()
+      {
+          { "series_id", 1UL, YdbDbType.Uint64 },
+          { "title", "IT Crowd", YdbDbType.Text },
+          { "series_info", "The IT Crowd is a British sitcom produced by Channel 4.", YdbDbType.Text },
+          { "comment", null, YdbDbType.Text },
+      },
+      new()
+      {
+          { "series_id", 2UL, YdbDbType.Uint64 },
+          { "title", "Silicon Valley", YdbDbType.Text },
+          { "series_info", "Silicon Valley is an American comedy television series.", YdbDbType.Text },
+          { "comment", "lorem ipsum", YdbDbType.Text },
+      },
+  };
+
+  var command = new YdbCommand("UPSERT INTO series SELECT * FROM AS_TABLE($series_data)", connection);
+  command.Parameters.Add(new YdbParameter("$series_data", seriesData));
+
+  await command.ExecuteNonQueryAsync();
+  ```
+
 - JavaScript
 
   ```javascript
@@ -356,5 +660,147 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools to perfo
   await sql`UPSERT INTO users SELECT * FROM AS_TABLE(${users})`
   ```
 
+- Rust
+
+  ```rust
+  use ydb::{
+      ydb_params, ydb_struct, AccessTokenCredentials, ClientBuilder, Value, YdbResult,
+  };
+
+  fn series_row(
+      series_id: u64,
+      title: &str,
+      series_info: &str,
+      comment: Option<&str>,
+  ) -> YdbResult<Value> {
+      let comment_val = match comment {
+          None => Value::optional_from(Value::Text(String::new()), None)?,
+          Some(s) => Value::optional_from(
+              Value::Text(String::new()),
+              Some(Value::Text(s.into())),
+          )?,
+      };
+      Ok(ydb_struct!(
+          "series_id" => series_id,
+          "title" => title,
+          "series_info" => series_info,
+          "comment" => comment_val,
+      ))
+  }
+
+  #[tokio::main]
+  async fn main() -> YdbResult<()> {
+      let client = ClientBuilder::new_from_connection_string(
+          "grpc://localhost:2136?database=local",
+      )?
+      .with_credentials(AccessTokenCredentials::from("..."))
+      .client()?;
+
+      client.wait().await?;
+
+      let example = series_row(0, "", "", None)?;
+      let series_data = Value::list_from(
+          example,
+          vec![
+              series_row(
+                  1,
+                  "IT Crowd",
+                  "The IT Crowd is a British sitcom...",
+                  None,
+              )?,
+              series_row(
+                  2,
+                  "Silicon Valley",
+                  "Silicon Valley is an American comedy...",
+                  Some("lorem ipsum"),
+              )?,
+          ],
+      )?;
+
+      client
+          .query_client()
+          .exec(
+              r#"
+              PRAGMA TablePathPrefix("/local");
+              UPSERT INTO series
+              (
+                  series_id,
+                  title,
+                  series_info,
+                  comment
+              )
+              SELECT
+                  series_id,
+                  title,
+                  series_info,
+                  comment
+              FROM AS_TABLE($seriesData);
+              "#,
+          )
+          .params(ydb_params!("$seriesData" => series_data))
+          .await?;
+
+      Ok(())
+  }
+  ```
+
+- PHP
+
+  ```php
+  <?php
+
+  use YdbPlatform\Ydb\Session;
+  use YdbPlatform\Ydb\Ydb;
+
+  $ydb = new Ydb($config);
+
+  $yql = <<<'EOS'
+  PRAGMA TablePathPrefix("/local");
+  DECLARE $seriesData AS List<Struct<
+      series_id: Uint64,
+      title: Utf8,
+      series_info: Utf8,
+      comment: Optional<Utf8>
+  >>;
+
+  UPSERT INTO series
+  (
+      series_id,
+      title,
+      series_info,
+      comment
+  )
+  SELECT
+      series_id,
+      title,
+      series_info,
+      comment
+  FROM AS_TABLE($seriesData);
+  EOS;
+
+  $seriesData = [
+      [
+          'series_id' => 1,
+          'title' => 'IT Crowd',
+          'series_info' => 'The IT Crowd is a British sitcom...',
+          'comment' => null,
+      ],
+      [
+          'series_id' => 2,
+          'title' => 'Silicon Valley',
+          'series_info' => 'Silicon Valley is an American comedy...',
+          'comment' => 'lorem ipsum',
+      ],
+  ];
+
+  $ydb->table()->retryTransaction(
+      function (Session $session) use ($yql, $seriesData) {
+          return $session->prepare($yql)->execute([
+              'seriesData' => $seriesData,
+          ]);
+      },
+      true
+  );
+  ```
 
 {% endlist %}

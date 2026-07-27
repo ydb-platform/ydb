@@ -80,3 +80,69 @@ Each `DDiskTestList` entry contains one or more `DDiskLoad` sources.
 - `IsReadLoad` - if `true`, run read load; if `false`, run write load.
 - `SQPoll` / `IOPoll` - enable io_uring SQPOLL / IOPOLL for direct I/O.
 
+### Parameters for `InterconnectTestList`
+These describe network load generated through the actors library interconnect
+subsystem (`ydb/library/actors/interconnect/load.h`), reusing the same
+`TInterconnectLoad` load actor used by the `InterconnectLoad` load type of the
+regular YDB load actor service.
+
+By default (no `--server`/`--client` options), the stress tool runs a single
+node; the load actor and its counterpart (the load responder) both live in the
+same process, and traffic is routed through loopback using `NodeHops`, so no
+real network connection is required to generate and measure interconnect
+traffic.
+
+To measure interconnect performance over a **real network** between two
+hosts, run two copies of `ydb_stress_tool`:
+
+- On the **second** (remote) host, start a responder-only instance. Its
+  `--server NODE_ID` must match the NodeId that the client will assign this
+  server via `--endpoint` (see below) -- for a single server this is `1`:
+  ```
+  ydb_stress_tool --cfg cfg.txt --server 1 --client 2 --ic-port 19001
+  ```
+  This registers the interconnect load responder for node 1 and listens on
+  port 19001 for an incoming connection from the client (node 2). No device
+  `--path` is required.
+
+- On the **first** host, run the actual `InterconnectTestList` from the config
+  as a client that connects out to the responder:
+  ```
+  ydb_stress_tool --cfg cfg.txt --client 2 --endpoint remote-host:19001
+  ```
+  The client's own NodeId is `2` (from `--client`, must differ from all
+  server NodeIds); the server passed via `--endpoint` is assigned NodeId `1`
+  (the i-th `--endpoint` gets NodeId `i + 1`, matching the `--server NODE_ID`
+  used on the remote host). The config's `InterconnectLoad.NodeHops` must
+  reference this NodeId (e.g. `NodeHops: [1]`) so that load messages are
+  routed to the remote responder over the network instead of looping back
+  locally.
+
+  Optional: `--use-uring` selects the io_uring transport instead of epoll for
+  the interconnect connection itself (Linux 5.19+).
+
+Each `InterconnectTestList` entry contains one or more `InterconnectLoad`
+sources, run sequentially. Detailed periodic throughput/RTT statistics are
+logged to stderr via the `INTERCONNECT_SPEED_TEST` log component at `NOTICE`
+level; the tool's own result table only prints a short summary row per test.
+
+#### Parameters for `InterconnectLoad`
+- `Tag` - a unique numeric identifier for the load source.
+- `Name` - a human readable name for the load, shown in the results table.
+- `DurationSeconds` - the duration of the load application in seconds.
+- `DelayBeforeMeasurementsSeconds` - warm-up period (default 15s); throughput/RTT
+  samples generated before this delay has elapsed are excluded from the
+  reported statistics.
+- `InFlyMax` - the maximum number of concurrently in-flight messages.
+- `NodeHops` - the sequence of node ids the message is routed through before
+  coming back to the load actor. For a single-node run use `[1]` (loopback to
+  the local node).
+- `SizeMin` / `SizeMax` - the min/max payload size in bytes for each message.
+- `IntervalMinUs` / `IntervalMaxUs` - min/max interval between sent messages,
+  in microseconds; `0/0` means messages are sent as fast as `InFlyMax` allows.
+- `SoftLoad` - if `true`, keeps a steady send rate regardless of response
+  latency; if `false`, waits for a response (or timeout) before scheduling the
+  next send interval.
+- `UseProtobufWithPayload` - if `true`, stores the payload in a separate rope
+  buffer instead of inline in the protobuf message.
+

@@ -58,10 +58,9 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
             } else {
                 auto& sid = Self->LoginProvider.Sids[defaultUser.GetName()];
                 db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
-                                                                   Schema::LoginSids::SidHash,
                                                                    Schema::LoginSids::PasswordHashes,
                                                                    Schema::LoginSids::CreatedAt>(
-                                                                    sid.Type, sid.ArgonHash, sid.PasswordHashes, ToMicroSeconds(sid.CreatedAt));
+                                                                    sid.Type, sid.PasswordHashes, ToMicroSeconds(sid.CreatedAt));
                 if (owner.empty()) {
                     owner = defaultUser.GetName();
                 }
@@ -377,7 +376,8 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
         Self->ParentDomainEffectiveACLVersion = effectiveACLVersion;
         Self->ParentDomainCachedEffectiveACL.Init(Self->ParentDomainEffectiveACL);
 
-        newPath->CachedEffectiveACL.Update(Self->ParentDomainCachedEffectiveACL, newPath->ACL, newPath->IsContainer());
+        newPath->CachedEffectiveACL.Update(Self->ParentDomainCachedEffectiveACL, newPath->ACL,
+            newPath->IsContainer(), /*isTenantRoot*/ true);
 
         TPathId resourcesDomainId = Self->ParentDomainId;
         if (record.HasResourcesDomainOwnerId() && record.HasResourcesDomainPathId()) {

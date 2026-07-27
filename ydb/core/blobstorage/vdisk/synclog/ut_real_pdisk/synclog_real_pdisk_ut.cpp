@@ -127,6 +127,36 @@ TString MakeLocalSyncDataBlockPayload(ui32 minPayloadBytes) {
     return result;
 }
 
+void DispatchFor(TTestActorRuntime& runtime, TDuration timeout) {
+    TDispatchOptions options;
+    const TDuration oldDispatchTimeout = runtime.SetDispatchTimeout(TDuration::MilliSeconds(10));
+    try {
+        runtime.DispatchEvents(options, timeout);
+    } catch (const TEmptyEventQueueException&) {
+    }
+    runtime.SetDispatchTimeout(oldDispatchTimeout);
+}
+
+template <typename TPredicate>
+bool PumpUntil(TTestActorRuntime& runtime, TPredicate&& predicate, ui32 iterations, TDuration step) {
+    bool ok = predicate();
+    for (ui32 i = 0; i < iterations && !ok; ++i) {
+        DispatchFor(runtime, step);
+        ok = predicate();
+    }
+    return ok;
+}
+
+bool WaitVDiskReady(TTestActorRuntime& runtime, const TActorId& vdiskActorId, const TVDiskID& vdiskId,
+        const TActorId& edge) {
+    return PumpUntil(runtime, [&] {
+        runtime.Send(new IEventHandle(vdiskActorId, edge,
+            new TEvBlobStorage::TEvVStatus(vdiskId), IEventHandle::FlagTrackDelivery), NodeIndex);
+        auto res = runtime.GrabEdgeEvent<TEvBlobStorage::TEvVStatusResult>(edge, TDuration::Seconds(1));
+        return res && res->Get()->Record.GetStatus() == NKikimrProto::OK;
+    }, 60, TDuration::MilliSeconds(100));
+}
+
 TIntrusivePtr<TBlobStorageGroupInfo> MakeGroupInfo(ui32 nodeId, ui32 groupId, TBlobStorageGroupType::EErasureSpecies erasure) {
     const TBlobStorageGroupType groupType(erasure);
     const ui32 numVDisks = groupType.BlobSubgroupSize();
@@ -170,6 +200,93 @@ struct TRealStorage {
     TActorId Edge;
     TActorId PutQueue;
 };
+
+struct TSyncLogFootprint {
+    ui32 MemPages = 0;
+    ui32 DiskChunks = 0;
+    ui32 DiskPages = 0;
+    ui32 DiskIndexRecs = 0;
+    ui32 AppendBlockSize = 0;
+    ui32 ChunkSize = 0;
+    ui64 LastLsn = 0;
+
+    TString ToString() const {
+        return TStringBuilder()
+            << "{MemPages# " << MemPages
+            << " DiskChunks# " << DiskChunks
+            << " DiskPages# " << DiskPages
+            << " DiskIndexRecs# " << DiskIndexRecs
+            << " AppendBlockSize# " << AppendBlockSize
+            << " ChunkSize# " << ChunkSize
+            << " LastLsn# " << LastLsn
+            << "}";
+    }
+};
+
+TSyncLogFootprint GetSyncLogFootprint(const NSyncLog::TSyncLogSnapshotPtr& snapshot) {
+    UNIT_ASSERT_C(snapshot, "SyncLog snapshot is null");
+
+    TSyncLogFootprint footprint;
+    footprint.AppendBlockSize = snapshot->AppendBlockSize;
+    footprint.MemPages = snapshot->MemSnapPtr ? snapshot->MemSnapPtr->Size() : 0;
+    if (snapshot->MemSnapPtr && !snapshot->MemSnapPtr->Empty()) {
+        footprint.LastLsn = Max(footprint.LastLsn, snapshot->MemSnapPtr->GetLastLsn());
+    }
+
+    if (snapshot->DiskSnapPtr) {
+        footprint.ChunkSize = snapshot->DiskSnapPtr->ChunkSize;
+
+        TString serialized;
+        TStringOutput output(serialized);
+        snapshot->DiskSnapPtr->Serialize(output,
+            NSyncLog::TDeltaToDiskRecLog(snapshot->DiskSnapPtr->IndexBulk));
+
+        const char *pos = serialized.data();
+        const char *end = pos + serialized.size();
+        auto read = [&](auto& value) {
+            UNIT_ASSERT_C(static_cast<size_t>(end - pos) >= sizeof(value),
+                "truncated serialized SyncLog disk snapshot"
+                << " footprint# " << footprint.ToString()
+                << " serializedSize# " << serialized.size());
+            memcpy(&value, pos, sizeof(value));
+            pos += sizeof(value);
+        };
+
+        ui32 chunksNum = 0;
+        read(chunksNum);
+        THashSet<TChunkIdx> chunks;
+        for (ui32 chunk = 0; chunk < chunksNum; ++chunk) {
+            ui32 chunkIdx = 0;
+            ui64 lastRealLsn = 0;
+            ui32 indexRecsNum = 0;
+            read(chunkIdx);
+            read(lastRealLsn);
+            read(indexRecsNum);
+            chunks.insert(chunkIdx);
+            footprint.LastLsn = Max(footprint.LastLsn, lastRealLsn);
+
+            footprint.DiskIndexRecs += indexRecsNum;
+            for (ui32 indexRec = 0; indexRec < indexRecsNum; ++indexRec) {
+                ui64 firstLsn = 0;
+                ui16 offsetInPages = 0;
+                ui16 pagesNum = 0;
+                read(firstLsn);
+                read(offsetInPages);
+                read(pagesNum);
+                Y_UNUSED(firstLsn);
+                Y_UNUSED(offsetInPages);
+                footprint.DiskPages += pagesNum;
+            }
+        }
+        footprint.DiskChunks = chunks.size();
+        UNIT_ASSERT_C(pos == end,
+            "unexpected tail in serialized SyncLog disk snapshot"
+            << " tailBytes# " << end - pos
+            << " serializedSize# " << serialized.size());
+    }
+
+    return footprint;
+}
 
 class TTestRuntimeCallbackGuard {
 public:
@@ -360,30 +477,16 @@ public:
     }
 
     void DispatchFor(TDuration timeout) {
-        TDispatchOptions options;
-        const TDuration oldDispatchTimeout = Runtime.SetDispatchTimeout(TDuration::MilliSeconds(10));
-        try {
-            Runtime.DispatchEvents(options, timeout);
-        } catch (const TEmptyEventQueueException&) {
-        }
-        Runtime.SetDispatchTimeout(oldDispatchTimeout);
+        NKikimr::DispatchFor(Runtime, timeout);
     }
 
     template <typename TPredicate>
     bool PumpUntil(TPredicate predicate, ui32 iterations, TDuration step) {
-        for (ui32 i = 0; i < iterations && !predicate(); ++i) {
-            DispatchFor(step);
-        }
-        return predicate();
+        return NKikimr::PumpUntil(Runtime, std::move(predicate), iterations, step);
     }
 
     bool WaitReady() {
-        return PumpUntil([&] {
-            Runtime.Send(new IEventHandle(VDiskActorId, Edge,
-                new TEvBlobStorage::TEvVStatus(VDiskId), IEventHandle::FlagTrackDelivery), NodeIndex);
-            auto res = Runtime.GrabEdgeEvent<TEvBlobStorage::TEvVStatusResult>(Edge, TDuration::Seconds(1));
-            return res && res->Get()->Record.GetStatus() == NKikimrProto::OK;
-        }, 60, TDuration::MilliSeconds(100));
+        return WaitVDiskReady(Runtime, VDiskActorId, VDiskId, Edge);
     }
 
     void SendInterruptedLocalSyncData() {
@@ -528,6 +631,535 @@ private:
 } // namespace
 
 Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
+
+    Y_UNIT_TEST(SyncLogUsesMemAndDiskLimits) {
+        /*
+        * This test intentionally goes through a real VDisk and a real PDisk instead of sending
+        * synthetic TEvSyncLogPut events directly to SyncLog. The point is to verify that the configured
+        * SyncLog memory and disk limits are honored on the production VDisk path. The group must use a
+        * real replicated erasure species because SyncLog ignores ordinary put records for ErasureNone.
+        *
+        * VCollectGarbage with a large DoNotKeep list is used as a compact way to generate many ordinary
+        * SyncLog records without depending on large blob payloads. The observer tracks real PDisk log
+        * commits and requires a SyncLog commit with deleted chunks, so the final footprint check cannot
+        * pass without exercising disk pressure. The final settling loop accounts for SyncLog's async
+        * cleanup: after disk overflow has removed old chunks, the memory snapshot can still contain the
+        * tail of the last batch until the next SyncLog action.
+        */
+        TTestActorRuntime runtime(1, false);
+        TRealPDiskTestConfig testConfig;
+        testConfig.ChunkSize = 512_KB;
+        testConfig.SyncLogAdvisedIndexedBlockSize = 1_KB;
+        testConfig.SyncLogMaxMemAmount = 16_KB;
+        testConfig.SyncLogMaxDiskAmount = 2 * testConfig.ChunkSize;
+        testConfig.MaxLogoBlobDataSize = 192_KB;
+        testConfig.MinHugeBlobInBytes = 64_KB;
+        testConfig.MilestoneHugeBlobInBytes = 128_KB;
+        testConfig.AdvanceEntryPointTimeout = TDuration::Hours(1);
+        testConfig.RecoveryLogCutterFirstDuration = TDuration::Hours(1);
+        testConfig.RecoveryLogCutterRegularDuration = TDuration::Hours(1);
+        testConfig.PDiskPathSuffix = "synclog_real_limits.dat";
+
+        auto storage = SetupRealPDiskAndRealVDisk(runtime, TBlobStorageGroupType::ErasureMirror3of4, testConfig);
+        const auto& info = storage.Info;
+        const TActorId edge = storage.Edge;
+        const TActorId putQueue = storage.PutQueue;
+        const TVDiskID vdiskId = info->GetVDiskId(0);
+        const TActorId vdiskActorId = info->GetActorId(0);
+
+        TActorId syncLogId;
+        TActorId syncLogKeeperId;
+        bool gotOwner = false;
+        NPDisk::TOwner owner = 0;
+        NPDisk::TOwnerRound ownerRound = 0;
+        ui64 maxObservedDataLsn = 0;
+        ui32 syncLogDataCommits = 0;
+        ui32 syncLogDeleteCommits = 0;
+        ui32 syncLogCommitDoneEvents = 0;
+        TString lastPDiskErrorReason;
+
+        auto observePDiskLog = [&](const NPDisk::TEvLog& msg) {
+            const ui32 signature = msg.Signature.GetUnmasked();
+            const bool syncLogEntryPointCommit = signature == TLogSignature::SignatureSyncLogIdx &&
+                msg.CommitRecord.IsStartingPoint;
+
+            if (!syncLogEntryPointCommit) {
+                if (!gotOwner) {
+                    owner = msg.Owner;
+                    gotOwner = true;
+                } else if (msg.Owner != owner) {
+                    return;
+                }
+                ownerRound = msg.OwnerRound;
+                maxObservedDataLsn = Max(maxObservedDataLsn, msg.Lsn);
+                return;
+            }
+
+            if (!gotOwner || msg.Owner != owner) {
+                return;
+            }
+            if (msg.CommitRecord.CommitChunks) {
+                ++syncLogDataCommits;
+            }
+            if (msg.CommitRecord.DeleteChunks) {
+                ++syncLogDeleteCommits;
+            }
+        };
+
+        auto previousObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (!ev) {
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+
+            switch (ev->GetTypeRewrite()) {
+                case TEvBlobStorage::EvSyncLogPut:
+                    if (!syncLogId) {
+                        syncLogId = ev->Recipient;
+                    } else if (!syncLogKeeperId && ev->Recipient != syncLogId) {
+                        syncLogKeeperId = ev->Recipient;
+                    }
+                    break;
+
+                case TEvBlobStorage::EvLog:
+                    if (ev->Recipient == storage.PDiskServiceId) {
+                        observePDiskLog(*ev->Get<NPDisk::TEvLog>());
+                    }
+                    break;
+
+                case TEvBlobStorage::EvMultiLog:
+                    if (ev->Recipient == storage.PDiskServiceId) {
+                        for (const auto& item : ev->Get<NPDisk::TEvMultiLog>()->Logs) {
+                            observePDiskLog(*item.Event);
+                        }
+                    }
+                    break;
+
+                case TEvBlobStorage::EvLogResult: {
+                    const auto *msg = ev->Get<NPDisk::TEvLogResult>();
+                    if (msg->Status != NKikimrProto::OK) {
+                        lastPDiskErrorReason = msg->ErrorReason;
+                    }
+                    break;
+                }
+
+                case TEvBlobStorage::EvSyncLogCommitDone:
+                    ++syncLogCommitDoneEvents;
+                    break;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto previousEventFilter = runtime.SetEventFilter(
+            [](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
+                return false;
+            });
+        TTestRuntimeCallbackGuard runtimeCallbackGuard(runtime,
+            std::move(previousObserver), std::move(previousEventFilter));
+
+        ui32 nextStep = 1;
+        ui64 nextCookie = 1;
+        const TString data = MakeData(1);
+
+        auto writeTargetRecords = [&](ui64 tabletId, ui32 records) {
+            const ui32 batchSize = 64;
+            for (ui32 firstRecord = 0; firstRecord < records; firstRecord += batchSize) {
+                const ui32 batch = Min(batchSize, records - firstRecord);
+                auto multiPut = std::make_unique<TEvBlobStorage::TEvVMultiPut>(vdiskId, TInstant::Max(),
+                    NKikimrBlobStorage::EPutHandleClass::TabletLog, false);
+
+                for (ui32 i = 0; i < batch; ++i) {
+                    const TLogoBlobID blobId(TLogoBlobID(tabletId, 1, nextStep++, 0, data.size(), nextCookie++), 1);
+                    multiPut->AddVPut(blobId, TRcBuf(data), nullptr, false, false, false, nullptr, {}, false);
+                }
+
+                runtime.Send(new IEventHandle(putQueue, edge, multiPut.release()), NodeIndex);
+                auto putResult = runtime.GrabEdgeEvent<TEvBlobStorage::TEvVMultiPutResult>(edge,
+                    TDuration::Seconds(120));
+                UNIT_ASSERT_C(putResult, "no put result; firstRecord# " << firstRecord
+                    << " lastPDiskError# " << lastPDiskErrorReason);
+                UNIT_ASSERT_C(putResult->Get()->Record.GetStatus() == NKikimrProto::OK,
+                    "put status# " << NKikimrProto::EReplyStatus_Name(putResult->Get()->Record.GetStatus())
+                    << " firstRecord# " << firstRecord
+                    << " lastPDiskError# " << lastPDiskErrorReason);
+                UNIT_ASSERT_VALUES_EQUAL(putResult->Get()->Record.ItemsSize(), batch);
+                for (ui32 i = 0; i < batch; ++i) {
+                    UNIT_ASSERT_C(putResult->Get()->Record.GetItems(i).GetStatus() == NKikimrProto::OK,
+                        "put item# " << i << " status# "
+                        << NKikimrProto::EReplyStatus_Name(putResult->Get()->Record.GetItems(i).GetStatus())
+                        << " firstRecord# " << firstRecord
+                        << " lastPDiskError# " << lastPDiskErrorReason);
+                }
+                DispatchFor(runtime, TDuration::MilliSeconds(1));
+            }
+        };
+
+        auto requestFootprint = [&] {
+            runtime.Send(new IEventHandle(syncLogKeeperId, edge,
+                new NSyncLog::TEvSyncLogSnapshot()), NodeIndex);
+            auto res = runtime.GrabEdgeEvent<NSyncLog::TEvSyncLogSnapshotResult>(edge, TDuration::Seconds(5));
+            UNIT_ASSERT(res);
+            return GetSyncLogFootprint(res->Get()->SnapshotPtr);
+        };
+
+        UNIT_ASSERT_C(WaitVDiskReady(runtime, vdiskActorId, vdiskId, edge), "target VDisk did not become ready");
+
+        writeTargetRecords(42, 16);
+        UNIT_ASSERT_C(PumpUntil(runtime, [&] {
+            return syncLogId && syncLogKeeperId && gotOwner && maxObservedDataLsn;
+        }, 200, TDuration::MilliSeconds(10)),
+            "failed to discover SyncLog actor, SyncLogKeeper actor, PDisk owner, or data LSN");
+
+        ui32 nextCollectCounter = 1;
+        auto collectDoNotKeep = [&](ui64 tabletId, ui32 records) {
+            const ui32 batchSize = 2048;
+            for (ui32 firstRecord = 0; firstRecord < records; firstRecord += batchSize) {
+                const ui32 batch = Min(batchSize, records - firstRecord);
+                UNIT_ASSERT(batch);
+                TVector<TLogoBlobID> doNotKeep;
+                doNotKeep.reserve(batch);
+                for (ui32 i = 0; i < batch; ++i) {
+                    doNotKeep.emplace_back(tabletId, 1, nextStep++, 0, 1, nextCookie++);
+                }
+
+                auto collect = std::make_unique<TEvBlobStorage::TEvVCollectGarbage>(tabletId, 1,
+                    nextCollectCounter++, 0, false, 0, 0, false, nullptr, &doNotKeep, vdiskId,
+                    TInstant::Max());
+                runtime.Send(new IEventHandle(putQueue, edge, collect.release()), NodeIndex);
+                auto collectResult = runtime.GrabEdgeEvent<TEvBlobStorage::TEvVCollectGarbageResult>(edge,
+                    TDuration::Seconds(120));
+                UNIT_ASSERT_C(collectResult, "no collect result; firstRecord# " << firstRecord
+                    << " lastPDiskError# " << lastPDiskErrorReason);
+                UNIT_ASSERT_C(collectResult->Get()->Record.GetStatus() == NKikimrProto::OK,
+                    "collect status# " << NKikimrProto::EReplyStatus_Name(collectResult->Get()->Record.GetStatus())
+                    << " firstRecord# " << firstRecord
+                    << " lastPDiskError# " << lastPDiskErrorReason);
+                DispatchFor(runtime, TDuration::MilliSeconds(1));
+            }
+        };
+
+        auto waitForSyncLogCommit = [&](ui32 previousDataCommits) {
+            UNIT_ASSERT_C(PumpUntil(runtime, [&] {
+                return syncLogDataCommits > previousDataCommits &&
+                    syncLogCommitDoneEvents >= syncLogDataCommits;
+            }, 1000, TDuration::MilliSeconds(10)),
+                "SyncLog commit did not settle; previousDataCommits# " << previousDataCommits
+                << " dataCommits# " << syncLogDataCommits
+                << " commitDone# " << syncLogCommitDoneEvents
+                << " lastPDiskError# " << lastPDiskErrorReason);
+        };
+
+        auto requestSyncLogCut = [&] {
+            runtime.Send(new IEventHandle(syncLogId, edge,
+                new NPDisk::TEvCutLog(owner, ownerRound, maxObservedDataLsn + 1, 0, 0, 0, 0)), NodeIndex);
+            DispatchFor(runtime, TDuration::MilliSeconds(1));
+        };
+
+        for (ui32 pressureIterations = 0; syncLogDeleteCommits < 1 && pressureIterations < 96;
+                ++pressureIterations) {
+            const ui32 previousDataCommits = syncLogDataCommits;
+            collectDoNotKeep(43, 2048);
+            requestSyncLogCut();
+            waitForSyncLogCommit(previousDataCommits);
+        }
+
+        UNIT_ASSERT_C(syncLogDeleteCommits,
+            "test did not exercise SyncLog disk pressure");
+
+        auto expectedMaxMemPages = [&](const TSyncLogFootprint& currentFootprint) {
+            UNIT_ASSERT_C(currentFootprint.AppendBlockSize,
+                "SyncLog snapshot has zero AppendBlockSize"
+                << " footprint# " << currentFootprint.ToString());
+            return Max<ui32>(2, testConfig.SyncLogMaxMemAmount / currentFootprint.AppendBlockSize);
+        };
+
+        auto expectedMaxDiskChunks = [&](const TSyncLogFootprint& currentFootprint) {
+            UNIT_ASSERT_C(currentFootprint.ChunkSize,
+                "SyncLog snapshot has zero ChunkSize"
+                << " footprint# " << currentFootprint.ToString());
+            return Max<ui32>(2, testConfig.SyncLogMaxDiskAmount / currentFootprint.ChunkSize);
+        };
+
+        auto expectedMaxDiskPages = [&](const TSyncLogFootprint& currentFootprint) {
+            UNIT_ASSERT_C(currentFootprint.AppendBlockSize,
+                "SyncLog snapshot has zero AppendBlockSize"
+                << " footprint# " << currentFootprint.ToString());
+            return expectedMaxDiskChunks(currentFootprint) *
+                (currentFootprint.ChunkSize / currentFootprint.AppendBlockSize);
+        };
+
+        TSyncLogFootprint footprint;
+        bool footprintWithinLimits = false;
+        for (ui32 i = 0; i < 32 && !footprintWithinLimits; ++i) {
+            footprint = requestFootprint();
+            const bool memWithinLimits = footprint.MemPages <= expectedMaxMemPages(footprint);
+            const bool diskWithinLimits = footprint.DiskChunks <= expectedMaxDiskChunks(footprint) &&
+                footprint.DiskPages <= expectedMaxDiskPages(footprint);
+            footprintWithinLimits = memWithinLimits && diskWithinLimits;
+            if (!footprintWithinLimits) {
+                if (diskWithinLimits && !memWithinLimits) {
+                    collectDoNotKeep(44, 1);
+                    DispatchFor(runtime, TDuration::MilliSeconds(10));
+                } else {
+                    const ui32 previousDataCommits = syncLogDataCommits;
+                    collectDoNotKeep(44, 512);
+                    requestSyncLogCut();
+                    waitForSyncLogCommit(previousDataCommits);
+                }
+            }
+        }
+
+        const ui32 maxMemPages = expectedMaxMemPages(footprint);
+        const ui32 maxDiskChunks = expectedMaxDiskChunks(footprint);
+        const ui32 maxDiskPages = expectedMaxDiskPages(footprint);
+
+        UNIT_ASSERT_C(footprintWithinLimits,
+            "SyncLog exceeded configured limits under pressure"
+            << " footprint# " << footprint.ToString()
+            << " expectedMaxMemPages# " << maxMemPages
+            << " expectedMaxDiskChunks# " << maxDiskChunks
+            << " expectedMaxDiskPages# " << maxDiskPages
+            << " dataCommits# " << syncLogDataCommits
+            << " deleteCommits# " << syncLogDeleteCommits
+            << " commitDone# " << syncLogCommitDoneEvents
+            << " lastPDiskError# " << lastPDiskErrorReason);
+    }
+
+    Y_UNIT_TEST(SyncLogMemOverflowSwapsDoNotFragmentDiskIndex) {
+        /*
+         * Reproduces a production incident: a group loses one VDisk (node is down), so SyncLog gets
+         * no sync confirmations and is never trimmed; with a small SyncLogMaxMemAmount and a large
+         * SyncLogMaxDiskAmount the keeper hits memory overflow on nearly every put batch and swaps
+         * only the overflow excess -- typically a single page -- to the disk sync log. Every such
+         * tiny append adds a separate TDiskIndexRecord (TOneChunkIndex never merges neighboring
+         * appends; IndexBulk only splits large ones), and the whole index is re-serialized into the
+         * SyncLog entry point and written into the PDisk common log on every commit. In production
+         * this produced entry points of several megabytes (IndexRecsNum ~ number of disk pages)
+         * rewritten several times per second per VDisk, which exhausted PDisk log chunks.
+         *
+         * The test drives many small writes through a real VDisk while no group neighbor ever
+         * confirms sync (RunSyncer is false for every group member, which models the dead node),
+         * lets memory-overflow-driven commits move data to disk, and then requires the disk index
+         * to stay dense: on average an append must cover at least minAvgPagesPerAppend pages.
+         * Before BuildSwapSnap started swapping down to a low watermark instead of swapping only
+         * the excess, this produced one index record per page, matching the production pattern.
+         */
+        TTestActorRuntime runtime(1, false);
+        TRealPDiskTestConfig testConfig;
+        testConfig.ChunkSize = 512_KB;
+        testConfig.SyncLogAdvisedIndexedBlockSize = 1_MB;
+        testConfig.SyncLogMaxMemAmount = 256_KB;
+        testConfig.SyncLogMaxDiskAmount = 8 * 512_KB;
+        testConfig.MaxLogoBlobDataSize = 192_KB;
+        testConfig.MinHugeBlobInBytes = 64_KB;
+        testConfig.MilestoneHugeBlobInBytes = 128_KB;
+        testConfig.AdvanceEntryPointTimeout = TDuration::Hours(1);
+        testConfig.RecoveryLogCutterFirstDuration = TDuration::Hours(1);
+        testConfig.RecoveryLogCutterRegularDuration = TDuration::Hours(1);
+        testConfig.PDiskPathSuffix = "synclog_real_index_fragmentation.dat";
+
+        auto storage = SetupRealPDiskAndRealVDisk(runtime, TBlobStorageGroupType::ErasureMirror3of4, testConfig);
+        const auto& info = storage.Info;
+        const TActorId edge = storage.Edge;
+        const TActorId putQueue = storage.PutQueue;
+        const TVDiskID vdiskId = info->GetVDiskId(0);
+        const TActorId vdiskActorId = info->GetActorId(0);
+
+        TActorId syncLogId;
+        TActorId syncLogKeeperId;
+        bool gotOwner = false;
+        NPDisk::TOwner owner = 0;
+        ui64 maxObservedDataLsn = 0;
+        ui32 entryPointCommits = 0;
+        ui64 entryPointBytesMax = 0;
+        ui32 syncLogCommitDoneEvents = 0;
+        TString lastPDiskErrorReason;
+
+        auto observePDiskLog = [&](const NPDisk::TEvLog& msg) {
+            const ui32 signature = msg.Signature.GetUnmasked();
+            const bool syncLogEntryPointCommit = signature == TLogSignature::SignatureSyncLogIdx &&
+                msg.CommitRecord.IsStartingPoint;
+
+            if (!syncLogEntryPointCommit) {
+                if (!gotOwner) {
+                    owner = msg.Owner;
+                    gotOwner = true;
+                } else if (msg.Owner != owner) {
+                    return;
+                }
+                maxObservedDataLsn = Max(maxObservedDataLsn, msg.Lsn);
+                return;
+            }
+
+            if (!gotOwner || msg.Owner != owner) {
+                return;
+            }
+            ++entryPointCommits;
+            entryPointBytesMax = Max<ui64>(entryPointBytesMax, msg.Data.size());
+        };
+
+        auto previousObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (!ev) {
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+
+            switch (ev->GetTypeRewrite()) {
+                case TEvBlobStorage::EvSyncLogPut:
+                    if (!syncLogId) {
+                        syncLogId = ev->Recipient;
+                    } else if (!syncLogKeeperId && ev->Recipient != syncLogId) {
+                        syncLogKeeperId = ev->Recipient;
+                    }
+                    break;
+
+                case TEvBlobStorage::EvLog:
+                    if (ev->Recipient == storage.PDiskServiceId) {
+                        observePDiskLog(*ev->Get<NPDisk::TEvLog>());
+                    }
+                    break;
+
+                case TEvBlobStorage::EvMultiLog:
+                    if (ev->Recipient == storage.PDiskServiceId) {
+                        for (const auto& item : ev->Get<NPDisk::TEvMultiLog>()->Logs) {
+                            observePDiskLog(*item.Event);
+                        }
+                    }
+                    break;
+
+                case TEvBlobStorage::EvLogResult: {
+                    const auto *msg = ev->Get<NPDisk::TEvLogResult>();
+                    if (msg->Status != NKikimrProto::OK) {
+                        lastPDiskErrorReason = msg->ErrorReason;
+                    }
+                    break;
+                }
+
+                case TEvBlobStorage::EvSyncLogCommitDone:
+                    ++syncLogCommitDoneEvents;
+                    break;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto previousEventFilter = runtime.SetEventFilter(
+            [](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
+                return false;
+            });
+        TTestRuntimeCallbackGuard runtimeCallbackGuard(runtime,
+            std::move(previousObserver), std::move(previousEventFilter));
+
+        ui32 nextStep = 1;
+        ui64 nextCookie = 1;
+        const TString data = MakeData(1);
+
+        auto writeTargetRecords = [&](ui64 tabletId, ui32 records) {
+            const ui32 batchSize = 64;
+            for (ui32 firstRecord = 0; firstRecord < records; firstRecord += batchSize) {
+                const ui32 batch = Min(batchSize, records - firstRecord);
+                auto multiPut = std::make_unique<TEvBlobStorage::TEvVMultiPut>(vdiskId, TInstant::Max(),
+                    NKikimrBlobStorage::EPutHandleClass::TabletLog, false);
+
+                for (ui32 i = 0; i < batch; ++i) {
+                    const TLogoBlobID blobId(TLogoBlobID(tabletId, 1, nextStep++, 0, data.size(), nextCookie++), 1);
+                    multiPut->AddVPut(blobId, TRcBuf(data), nullptr, false, false, false, nullptr, {}, false);
+                }
+
+                runtime.Send(new IEventHandle(putQueue, edge, multiPut.release()), NodeIndex);
+                auto putResult = runtime.GrabEdgeEvent<TEvBlobStorage::TEvVMultiPutResult>(edge,
+                    TDuration::Seconds(120));
+                UNIT_ASSERT_C(putResult, "no put result; firstRecord# " << firstRecord
+                    << " lastPDiskError# " << lastPDiskErrorReason);
+                UNIT_ASSERT_C(putResult->Get()->Record.GetStatus() == NKikimrProto::OK,
+                    "put status# " << NKikimrProto::EReplyStatus_Name(putResult->Get()->Record.GetStatus())
+                    << " firstRecord# " << firstRecord
+                    << " lastPDiskError# " << lastPDiskErrorReason);
+                DispatchFor(runtime, TDuration::MilliSeconds(1));
+            }
+        };
+
+        ui32 nextCollectCounter = 1;
+        auto collectDoNotKeep = [&](ui64 tabletId, ui32 records) {
+            TVector<TLogoBlobID> doNotKeep;
+            doNotKeep.reserve(records);
+            for (ui32 i = 0; i < records; ++i) {
+                doNotKeep.emplace_back(tabletId, 1, nextStep++, 0, 1, nextCookie++);
+            }
+
+            auto collect = std::make_unique<TEvBlobStorage::TEvVCollectGarbage>(tabletId, 1,
+                nextCollectCounter++, 0, false, 0, 0, false, nullptr, &doNotKeep, vdiskId,
+                TInstant::Max());
+            runtime.Send(new IEventHandle(putQueue, edge, collect.release()), NodeIndex);
+            auto collectResult = runtime.GrabEdgeEvent<TEvBlobStorage::TEvVCollectGarbageResult>(edge,
+                TDuration::Seconds(120));
+            UNIT_ASSERT_C(collectResult, "no collect result; lastPDiskError# " << lastPDiskErrorReason);
+            UNIT_ASSERT_C(collectResult->Get()->Record.GetStatus() == NKikimrProto::OK,
+                "collect status# " << NKikimrProto::EReplyStatus_Name(collectResult->Get()->Record.GetStatus())
+                << " lastPDiskError# " << lastPDiskErrorReason);
+            DispatchFor(runtime, TDuration::MilliSeconds(1));
+        };
+
+        auto requestFootprint = [&] {
+            runtime.Send(new IEventHandle(syncLogKeeperId, edge,
+                new NSyncLog::TEvSyncLogSnapshot()), NodeIndex);
+            auto res = runtime.GrabEdgeEvent<NSyncLog::TEvSyncLogSnapshotResult>(edge, TDuration::Seconds(5));
+            UNIT_ASSERT(res);
+            return GetSyncLogFootprint(res->Get()->SnapshotPtr);
+        };
+
+        UNIT_ASSERT_C(WaitVDiskReady(runtime, vdiskActorId, vdiskId, edge), "target VDisk did not become ready");
+
+        writeTargetRecords(42, 16);
+        UNIT_ASSERT_C(PumpUntil(runtime, [&] {
+            return syncLogId && syncLogKeeperId && gotOwner && maxObservedDataLsn;
+        }, 200, TDuration::MilliSeconds(10)),
+            "failed to discover SyncLog actor, SyncLogKeeper actor, PDisk owner, or data LSN");
+
+        // sanity check of the geometry: the invariant below is only meaningful when memory
+        // holds substantially more pages than the required average append size
+        TSyncLogFootprint footprint = requestFootprint();
+        UNIT_ASSERT(footprint.AppendBlockSize);
+        const ui32 maxMemPages = Max<ui32>(2, testConfig.SyncLogMaxMemAmount / footprint.AppendBlockSize);
+        UNIT_ASSERT_C(maxMemPages >= 16,
+            "test geometry is degenerate, SyncLog memory holds too few pages: " << maxMemPages);
+
+        // Never send NPDisk::TEvCutLog here: all commits must be driven by memory overflow,
+        // exactly like on a loaded VDisk whose group neighbor is down.
+        const ui32 targetDiskPages = 128;
+        const ui32 recordsPerBatch = 128;
+        for (ui32 i = 0; i < 1500 && footprint.DiskPages < targetDiskPages; ++i) {
+            collectDoNotKeep(43, recordsPerBatch);
+            if ((i + 1) % 8 == 0) {
+                footprint = requestFootprint();
+            }
+        }
+
+        // let the last commit settle and take the final snapshot
+        UNIT_ASSERT_C(PumpUntil(runtime, [&] {
+            return entryPointCommits && syncLogCommitDoneEvents >= entryPointCommits;
+        }, 300, TDuration::MilliSeconds(10)),
+            "SyncLog commit did not settle; entryPointCommits# " << entryPointCommits
+            << " commitDone# " << syncLogCommitDoneEvents
+            << " lastPDiskError# " << lastPDiskErrorReason);
+        footprint = requestFootprint();
+
+        UNIT_ASSERT_C(footprint.DiskPages >= targetDiskPages,
+            "test did not push enough SyncLog data to disk"
+            << " footprint# " << footprint.ToString()
+            << " lastPDiskError# " << lastPDiskErrorReason);
+        UNIT_ASSERT(entryPointCommits > 0 && footprint.DiskIndexRecs > 0);
+
+        // The regression itself: overflow-driven swaps must be batched, otherwise the disk index
+        // degenerates into one record per page and the entry point (the full index re-serialized
+        // into the PDisk common log on every commit) grows unbounded together with commit rate.
+        const ui32 minAvgPagesPerAppend = 4;
+        UNIT_ASSERT_C(footprint.DiskPages >= footprint.DiskIndexRecs * minAvgPagesPerAppend,
+            "SyncLog disk index is fragmented by tiny memory-overflow swaps"
+            << " avgPagesPerAppend# " << (footprint.DiskPages / footprint.DiskIndexRecs)
+            << " footprint# " << footprint.ToString()
+            << " entryPointCommits# " << entryPointCommits
+            << " entryPointBytesMax# " << entryPointBytesMax);
+    }
 
     Y_UNIT_TEST(SyncLogDuplicateFreeChunkRealPDiskWithoutRestart) {
         /*
@@ -792,23 +1424,6 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
         TTestRuntimeCallbackGuard runtimeCallbackGuard(runtime,
             std::move(previousObserver), std::move(previousEventFilter));
 
-        auto dispatchFor = [&](TDuration timeout) {
-            TDispatchOptions options;
-            const TDuration oldDispatchTimeout = runtime.SetDispatchTimeout(TDuration::MilliSeconds(10));
-            try {
-                runtime.DispatchEvents(options, timeout);
-            } catch (const TEmptyEventQueueException&) {
-            }
-            runtime.SetDispatchTimeout(oldDispatchTimeout);
-        };
-
-        auto pumpUntil = [&](auto predicate, ui32 iterations, TDuration step) {
-            for (ui32 i = 0; i < iterations && !predicate(); ++i) {
-                dispatchFor(step);
-            }
-            return predicate();
-        };
-
         auto releasePostponedFreeChunkEvents = [&] {
             while (!postponedFreeChunkEvents.empty()) {
                 TAutoPtr<IEventHandle> ev(postponedFreeChunkEvents.front().Release());
@@ -817,22 +1432,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
             }
         };
 
-        auto sendVStatus = [&] {
-            runtime.Send(new IEventHandle(vdiskActorId, edge, new TEvBlobStorage::TEvVStatus(vdiskId),
-                IEventHandle::FlagTrackDelivery), NodeIndex);
-            return runtime.GrabEdgeEvent<TEvBlobStorage::TEvVStatusResult>(edge, TDuration::Seconds(1));
-        };
-
-        auto waitReady = [&] {
-            return pumpUntil([&] {
-                if (auto res = sendVStatus()) {
-                    return res->Get()->Record.GetStatus() == NKikimrProto::OK;
-                }
-                return false;
-            }, 60, TDuration::MilliSeconds(100));
-        };
-
-        UNIT_ASSERT_C(waitReady(), "target VDisk did not become ready");
+        UNIT_ASSERT_C(WaitVDiskReady(runtime, vdiskActorId, vdiskId, edge), "target VDisk did not become ready");
 
         ui32 nextStep = 1;
         ui64 nextCookie = 1;
@@ -885,25 +1485,25 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
                         << NKikimrProto::EReplyStatus_Name(putResult->Get()->Record.GetItems(i).GetStatus())
                         << " lastPDiskError# " << lastPDiskErrorReason);
                 }
-                dispatchFor(TDuration::MilliSeconds(1));
+                DispatchFor(runtime, TDuration::MilliSeconds(1));
             }
         };
 
         auto requestSyncLogCut = [&] {
             runtime.Send(new IEventHandle(syncLogId, edge,
                 new NPDisk::TEvCutLog(owner, ownerRound, maxObservedDataLsn + 1, 0, 0, 0, 0)), NodeIndex);
-            dispatchFor(TDuration::MilliSeconds(1));
+            DispatchFor(runtime, TDuration::MilliSeconds(1));
         };
 
         writeTargetRecords(42, 50'000, "initial real-pdisk sync-log fill");
 
-        UNIT_ASSERT_C(pumpUntil([&] {
+        UNIT_ASSERT_C(PumpUntil(runtime, [&] {
             return syncLogId && syncLogKeeperId && gotOwner && maxObservedDataLsn;
         }, 300, TDuration::MilliSeconds(10)),
             "failed to discover SyncLog, SyncLogKeeper, PDisk owner, or data LSN");
 
         requestSyncLogCut();
-        UNIT_ASSERT_C(pumpUntil([&] {
+        UNIT_ASSERT_C(PumpUntil(runtime, [&] {
             return observedSyncLogDataCommit && syncLogCommitDoneEvents;
         }, 3000, TDuration::MilliSeconds(10)),
             "initial writes did not move SyncLog data to real PDisk chunks");
@@ -912,7 +1512,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
         writeTargetRecords(42, 55'000, "pre-race real-pdisk sync-log fill");
         postponeNextSyncLogDataCommit = true;
         requestSyncLogCut();
-        UNIT_ASSERT_C(pumpUntil([&] {
+        UNIT_ASSERT_C(PumpUntil(runtime, [&] {
             return dataCommitPostponed;
         }, 3000, TDuration::MilliSeconds(10)),
             "failed to postpone a natural SyncLog data commit before the large swap; "
@@ -924,7 +1524,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
             TAutoPtr<IEventHandle> ev(postponedDataCommit.Release());
             runtime.Send(ev, NodeIndex);
         }
-        UNIT_ASSERT_C(pumpUntil([&] {
+        UNIT_ASSERT_C(PumpUntil(runtime, [&] {
             return syncLogCommitDoneEvents > commitDoneBeforePostponedDataCommit ||
                 observedAppendToDeletedChunk || observedBpd77;
         }, 3000, TDuration::MilliSeconds(10)),

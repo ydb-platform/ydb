@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from datetime import date, datetime, timezone, tzinfo
 from enum import Enum
 from typing import Any
+from urllib.parse import quote, urlencode
 
 from clickhouse_connect import common
 from clickhouse_connect.driver import tzutil
@@ -22,7 +23,7 @@ class DT64Param:
     def __init__(self, value: datetime):
         self.value = value
 
-    def format(self, tz: tzinfo, top_level: bool) -> str:
+    def format(self, tz: tzinfo | None, top_level: bool) -> str:
         value = self.value
         if tz:
             value = value.astimezone(tz)
@@ -68,22 +69,22 @@ def finalize_query(query: str, parameters: Sequence | dict[str, Any] | None, ser
     return query % tuple(format_query_value(v, server_tz) for v in parameters)
 
 
+def _unwrap_outer(type_str: str) -> tuple[str, tuple]:
+    """Strip LowCardinality/Nullable wrappers and return (base_name, args)"""
+    base = type_str.strip()
+    if base[:15].lower() == "lowcardinality(":
+        base = base[15:-1]
+    if base[:9].lower() == "nullable(":
+        base = base[9:-1]
+    base_name, values, _ = parse_callable(base)
+    return base_name, values
+
+
 def _extract_tz_from_type(type_str: str) -> tzinfo | None:
-    """Extract timezone from a ClickHouse type hint like DateTime64(6, 'UTC').
-
-    Handles LowCardinality/Nullable wrappers and container types
-    (Array, Tuple, Map). Returns None if no timezone is found or parsing fails.
-    """
+    """Resolve the timezone named in a ClickHouse type hint."""
     try:
-        base = type_str.strip()
-        if base.startswith("LowCardinality"):
-            base = base[15:-1]
-        if base.startswith("Nullable"):
-            base = base[9:-1]
-
-        base_name, values, _ = parse_callable(base)
-
-        if base_name in ("DateTime", "DateTime64"):
+        base_name, values = _unwrap_outer(type_str)
+        if base_name.lower() in ("datetime", "datetime64"):
             for v in values:
                 if isinstance(v, str) and v.startswith("'") and v.endswith("'"):
                     try:
@@ -104,16 +105,36 @@ def _extract_tz_from_type(type_str: str) -> tzinfo | None:
         return None
 
 
+def _promote_datetime64(type_str: str, value):
+    """Wrap values bound to a DateTime64 hint in DT64Param to preserve precision."""
+    if value is None or "datetime64" not in type_str.lower():
+        return value
+    try:
+        base_name, values = _unwrap_outer(type_str)
+        base_name = base_name.lower()
+        if base_name == "datetime64":
+            return DT64Param(value) if isinstance(value, datetime) else value
+        if base_name == "array" and values and isinstance(value, (list, tuple)):
+            inner = str(values[0])
+            return type(value)(_promote_datetime64(inner, x) for x in value)
+        if base_name == "tuple" and isinstance(value, tuple) and len(values) == len(value):
+            return tuple(_promote_datetime64(str(t), x) for t, x in zip(values, value))
+        return value
+    except Exception:
+        return value
+
+
 def bind_query(
     query: str,
     parameters: Sequence | dict[str, Any] | None,
     server_tz: tzinfo | None = None,
-) -> tuple[str, dict[str, str]]:
+) -> tuple[str | bytes, dict[str, str]]:
     query = query.rstrip(";")
     if not parameters:
         return query, {}
 
     binary_binds = None
+    bound_params: dict[str, str] = {}
 
     if isinstance(parameters, dict):
         params_copy = dict_copy(parameters)
@@ -121,9 +142,13 @@ def bind_query(
         for key in binary_binds.keys():
             del params_copy[key]
 
+        matches = external_bind_re.findall(query)
+        placeholder_names = {name for name, _ in matches}
         final_params = {}
         for k, v in params_copy.items():
-            if k.endswith("_64"):
+            # The _64 suffix is a precision hint, not part of the name, unless the
+            # query binds the full name itself.
+            if k.endswith("_64") and k not in placeholder_names:
                 if isinstance(v, datetime):
                     k = k[:-3]
                     v = DT64Param(v)
@@ -131,7 +156,6 @@ def bind_query(
                     k = k[:-3]
                     v = [DT64Param(x) for x in v]
             final_params[k] = v
-        matches = external_bind_re.findall(query)
         if not matches:
             query, bound_params = finalize_query(query, final_params, server_tz), {}
         else:
@@ -147,6 +171,7 @@ def bind_query(
                     hint_tz = _extract_tz_from_type(type_str)
                     if hint_tz is not None:
                         tz = hint_tz
+                    v = _promote_datetime64(type_str, v)
                 bound_params[f"param_{k}"] = format_bind_value(v, tz)
     else:
         query, bound_params = finalize_query(query, parameters, server_tz), {}
@@ -162,14 +187,39 @@ def bind_query(
                     break
                 binary_indexes[item_index + len(key)] = key, v
                 item_index += len(key)
-        query = b""
+        binary_out = b""
         start = 0
         for loc in sorted(binary_indexes.keys()):
             key, value = binary_indexes[loc]
-            query += binary_query[start:loc] + value + key
+            binary_out += binary_query[start:loc] + value + key
             start = loc
-        query += binary_query[start:]
+        binary_out += binary_query[start:]
+        return binary_out, bound_params
     return query, bound_params
+
+
+# Server-side bind parameters are urlencoded into the request URL. Once the encoded length
+# passes this budget the client routes them through multipart form data instead, keeping
+# oversized payloads out of the URL where proxies (nginx, ALB, CloudFront) reject them with
+# HTTP 414. The threshold leaves ample headroom under common request line limits.
+MAX_URL_BIND_PARAM_LENGTH = 4096
+
+
+def use_form_encoding(query: str | bytes, bind_params: dict[str, str], force_form: bool = False) -> bool:
+    if force_form:
+        return True
+    # Binary binds embed bytes into the query, which the form path cannot round-trip; leave
+    # those on the default path unless form encoding is explicitly requested.
+    if isinstance(query, bytes):
+        return False
+    if not bind_params:
+        return False
+    # Raw length is a lower bound on the encoded length, so large payloads short-circuit
+    # without materializing the encoded string.
+    if sum(len(k) + len(str(v)) for k, v in bind_params.items()) > MAX_URL_BIND_PARAM_LENGTH:
+        return True
+    # Measure with quote so spaces count as %20, matching the longer of the two client encodings.
+    return len(urlencode(bind_params, quote_via=quote)) > MAX_URL_BIND_PARAM_LENGTH
 
 
 def format_str(value: str):
@@ -180,7 +230,11 @@ def escape_str(value: str):
     return "".join(f"{BS}{c}" if c in must_escape else c for c in value)
 
 
-def format_query_value(value: Any, server_tz: tzinfo = timezone.utc):
+def escape_bytes(value):
+    return "".join(f"{BS}x{b:02x}" for b in value)
+
+
+def format_query_value(value: Any, server_tz: tzinfo | None = timezone.utc):
     """
     Format Python values in a ClickHouse query
     :param value: Python object
@@ -191,6 +245,8 @@ def format_query_value(value: Any, server_tz: tzinfo = timezone.utc):
         return "NULL"
     if isinstance(value, str):
         return format_str(value)
+    if isinstance(value, (bytes, bytearray)):
+        return f"'{escape_bytes(value)}'"
     if isinstance(value, DT64Param):
         return value.format(server_tz, False)
     if isinstance(value, datetime):
@@ -215,11 +271,11 @@ def format_query_value(value: Any, server_tz: tzinfo = timezone.utc):
     return value
 
 
-def str_query_value(value: Any, server_tz: tzinfo = timezone.utc):
+def str_query_value(value: Any, server_tz: tzinfo | None = timezone.utc):
     return str(format_query_value(value, server_tz))
 
 
-def format_bind_value(value: Any, server_tz: tzinfo = timezone.utc, top_level: bool = True):
+def format_bind_value(value: Any, server_tz: tzinfo | None = timezone.utc, top_level: bool = True):
     """
     Format Python values in a ClickHouse query
     :param value: Python object
@@ -238,6 +294,10 @@ def format_bind_value(value: Any, server_tz: tzinfo = timezone.utc, top_level: b
             # At the top levels, strings must not be surrounded by quotes
             return escape_str(value)
         return format_str(value)
+    if isinstance(value, (bytes, bytearray)):
+        if top_level:
+            return escape_bytes(value)
+        return f"'{escape_bytes(value)}'"
     if isinstance(value, DT64Param):
         return value.format(server_tz, top_level)
     if isinstance(value, datetime):
@@ -261,4 +321,8 @@ def format_bind_value(value: Any, server_tz: tzinfo = timezone.utc, top_level: b
         return f"{{{', '.join(pairs)}}}"
     if isinstance(value, Enum):
         return recurse(value.value)
+    if isinstance(value, (uuid.UUID, ipaddress.IPv4Address, ipaddress.IPv6Address)):
+        if top_level:
+            return str(value)
+        return f"'{value}'"
     return str(value)

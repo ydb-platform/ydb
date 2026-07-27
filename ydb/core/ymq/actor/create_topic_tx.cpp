@@ -70,6 +70,23 @@ Ydb::Topic::CreateTopicRequest BuildCreateTopicTx(
         }
     }
 
+    if (!params.QueueName.empty()) {
+        (*request.mutable_attributes())["_sqs_queue_name"] = params.QueueName;
+    }
+    if (!params.AccountName.empty()) {
+        (*request.mutable_attributes())["_sqs_account_name"] = params.AccountName;
+    }
+    if (!params.CloudId.empty()) {
+        (*request.mutable_attributes())["_sqs_cloud_id"] = params.CloudId;
+    }
+    if (!params.FolderId.empty()) {
+        (*request.mutable_attributes())["_sqs_folder_id"] = params.FolderId;
+    }
+    if (params.ReadRequestAttemptIdPeriodMs) {
+        (*consumer->mutable_attributes())["_sqs_read_request_attempt_id_period_ms"] = ToString(params.ReadRequestAttemptIdPeriodMs);
+    }
+    (*request.mutable_attributes())["_sqs_export_metrics"] = "true";
+
     return request;
 }
 

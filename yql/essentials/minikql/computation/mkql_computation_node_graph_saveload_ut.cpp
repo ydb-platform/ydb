@@ -123,7 +123,7 @@ Y_UNIT_TEST(TestSqueezeSaveLoad) {
         auto streamNode = inStream.Build();
 
         auto pgmReturn = pgmBuilder.Squeeze(
-            TRuntimeNode(streamNode, false),
+            TRuntimeNode(streamNode, /*isImmediate=*/false),
             NTest::ConvertValueToLiteralNode(pgmBuilder, ui32(1)),
             [&](TRuntimeNode item, TRuntimeNode state) {
                 return pgmBuilder.Add(item, state);
@@ -142,7 +142,7 @@ Y_UNIT_TEST(TestSqueezeSaveLoad) {
 
         auto graph = setup.BuildGraph(pgmReturn, {streamNode});
         auto streamValue = NUdf::TUnboxedValuePod(new TStreamWithYield(streamItems, yieldPos, startIndex));
-        graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), std::move(streamValue));
+        graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), streamValue);
         return graph;
     };
 
@@ -188,7 +188,7 @@ Y_UNIT_TEST(TestSqueeze1SaveLoad) {
         auto streamNode = inStream.Build();
 
         auto pgmReturn = pgmBuilder.Squeeze1(
-            TRuntimeNode(streamNode, false),
+            TRuntimeNode(streamNode, /*isImmediate=*/false),
             [](TRuntimeNode item) {
                 return item;
             },
@@ -209,7 +209,7 @@ Y_UNIT_TEST(TestSqueeze1SaveLoad) {
 
         auto graph = setup.BuildGraph(pgmReturn, {streamNode});
         auto streamValue = NUdf::TUnboxedValuePod(new TStreamWithYield(streamItems, yieldPos, startIndex));
-        graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), std::move(streamValue));
+        graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), streamValue);
         return graph;
     };
 
@@ -280,7 +280,7 @@ Y_UNIT_TEST(TestHoppingSaveLoad) {
         ui64 delay = 20;
 
         auto pgmReturn = pgmBuilder.HoppingCore(
-            TRuntimeNode(streamNode, false),
+            TRuntimeNode(streamNode, /*isImmediate=*/false),
             [&](TRuntimeNode item) { // timeExtractor
                 return pgmBuilder.Member(item, "time");
             },
@@ -332,11 +332,11 @@ Y_UNIT_TEST(TestHoppingSaveLoad) {
             auto structValues = graph->GetHolderFactory().CreateDirectArrayHolder(2, itemsPtr);
             itemsPtr[timeIndex] = NUdf::TUnboxedValuePod(item.first);
             itemsPtr[sumIndex] = NUdf::TUnboxedValuePod(item.second);
-            streamItems.emplace_back(std::move(structValues));
+            streamItems.emplace_back(structValues);
         }
 
         auto streamValue = NUdf::TUnboxedValuePod(new TStreamWithYield(streamItems, yieldPos, startIndex));
-        graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), std::move(streamValue));
+        graph->GetEntryPoint(0, /*require=*/true)->SetValue(graph->GetContext(), streamValue);
         return graph;
     };
 

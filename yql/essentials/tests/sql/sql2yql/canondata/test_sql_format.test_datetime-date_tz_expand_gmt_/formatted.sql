@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     CAST(Date('2000-01-01') AS TzDate),
     CAST(Datetime('2000-01-01T01:02:03Z') AS TzDatetime),

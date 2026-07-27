@@ -10,6 +10,8 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/location.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CHOOSE_PROXY
+
 //TODO: add here bucket counter for speed - find out borders from grpc
 ////////////////////////////////////////////
 namespace NKikimr {
@@ -379,7 +381,6 @@ public:
         const ui32 localNodeId = ctx.SelfID.NodeId();
         //choose random proxy
         TStringBuilder s;
-        s << "ChooseProxyResponses [preferLocal " << preferLocalProxy << " localId " << localNodeId << "]:";
         for (auto& resp : PerNodeResponse) {
             if (!resp.second)
                 continue;
@@ -397,8 +398,12 @@ public:
             totalWeight += weight;
         }
 
-        s << " : result " << cookie << " " << name;
-        LOG_DEBUG(ctx, NKikimrServices::CHOOSE_PROXY, "%s", s.c_str());
+        YDB_LOG_DEBUG_CTX(ctx, "ChooseProxyResponses",
+            {"preferLocal", preferLocalProxy},
+            {"localId", localNodeId},
+            {"nodes", s.c_str()},
+            {"cookie", cookie},
+            {"name", name});
 
         if (name.empty()) {
             response->Record.SetStatus(NMsgBusProxy::MSTATUS_ERROR);

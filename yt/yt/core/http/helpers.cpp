@@ -16,7 +16,10 @@
 
 #include <yt/yt/core/ytree/fluent.h>
 
+#include <library/cpp/yt/string/stream.h>
+
 #include <util/stream/buffer.h>
+#include <util/stream/mem.h>
 
 #include <util/generic/buffer.h>
 
@@ -49,9 +52,8 @@ void FillYTError(
     const THeadersPtr& headers,
     const TError& error)
 {
-    // TODO(babenko): migrate to std::string
-    TString errorString;
-    TStringOutput errorStringOutput(errorString);
+    std::string errorString;
+    TStdStringOutput errorStringOutput(errorString);
 
     auto consumer = CreateJsonConsumer(&errorStringOutput);
 
@@ -108,8 +110,7 @@ TError ParseYTError(
         errorHeader = rsp->GetHeaders()->Find(XYTErrorHeaderName);
     }
 
-    // TODO(babenko): migrate to std::string
-    TString errorString;
+    std::string errorString;
     if (errorHeader) {
         errorString = *errorHeader;
     } else {
@@ -118,7 +119,7 @@ TError ParseYTError(
         errorString = ToString(rsp->ReadAll());
     }
 
-    TStringInput errorStringInput(errorString);
+    TMemoryInput errorStringInput(errorString);
 
     std::unique_ptr<IBuildingYsonConsumer<TError>> buildingConsumer;
     CreateBuildingYsonConsumer(&buildingConsumer, EYsonType::Node);

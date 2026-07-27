@@ -123,8 +123,8 @@ bool IsSuitableToExtractAndPushRanges(const TIntrusivePtr<IOperator>& input) {
     }
 
     const auto read = CastOperator<TOpRead>(maybeRead);
-    // Currently supported only for cs.
-    return !read->GetRanges() && read->GetTableStorageType() == NYql::EStorageType::ColumnStorage;
+    const auto tableType = read->GetTableStorageType();
+    return !read->GetRanges() && (tableType == NYql::EStorageType::ColumnStorage || tableType == NYql::EStorageType::RowStorage);
 }
 
 TPredicateExtractorSettings PrepareExtractorSettings(TKqpOptimizeContext& kqpCtx) {
@@ -190,6 +190,11 @@ const TStructExprType* PrepareSchemeType(const TOpRead& read, const TStructExprT
 
 } // anonymous namespace
 
+bool TPushRangesRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
+    return input->Kind == EOperator::Filter &&
+        input->Children.front()->Kind == EOperator::Source;
+}
+
 TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& rboCtx, TPlanProps& props) {
     Y_UNUSED(props);
     auto& kqpCtx = rboCtx.KqpCtx;
@@ -212,6 +217,11 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
     // Check for table.
     const auto tableDesc = kqpCtx.Tables->EnsureTableExists(kqpCtx.Cluster, tablePath, read->Pos, ctx);
     if (!tableDesc) {
+        return input;
+    }
+
+    const auto tableKind = tableDesc->Metadata->Kind;
+    if (tableKind != EKikimrTableKind::Olap && tableKind != EKikimrTableKind::Datashard) {
         return input;
     }
 
@@ -247,9 +257,16 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
     YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Extracted ranges: " << KqpExprToPrettyString(*ranges, ctx);
     YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Pruned lambda: " << KqpExprToPrettyString(*buildResult.PrunedLambda, ctx);
 
+    TOpRead::TRangeInfo rangeInfo{
+        .ComputeNode = ranges,
+        .KeyColumns = keyColumns,
+        .UsedPrefixLen = buildResult.UsedPrefixLen,
+        .ExpectedMaxRanges = buildResult.ExpectedMaxRanges
+            ? TMaybe<size_t>(*buildResult.ExpectedMaxRanges)
+            : TMaybe<size_t>(),
+    };
     auto newRead = MakeIntrusive<TOpRead>(read->Alias, read->Columns, read->GetOutputIUs(), read->StorageType, read->TableCallable, read->OlapFilterLambda,
-                                          read->Limit, ranges, TExpression(originalLambda, &ctx, &props), read->SortDir, read->Props, read->Pos);
+                                          read->Limit, std::move(rangeInfo), TExpression(originalLambda, &ctx, &props), read->SortDir, read->Props, read->Pos);
     return MakeIntrusive<TOpFilter>(newRead, filter->Pos, filter->Props, TExpression(buildResult.PrunedLambda, &ctx, &props));
 }
-
 } // namespace NKikimr::NKqp

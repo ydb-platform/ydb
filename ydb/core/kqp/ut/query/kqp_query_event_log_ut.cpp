@@ -150,11 +150,6 @@ void SetKqpRequestLevel(TKikimrRunner& kikimr, NLog::EPriority prio) {
     kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_REQUEST, prio);
 }
 
-TStringBuf LogSince(const TStringStream& logStream, size_t offset) {
-    const TStringBuf blob = logStream.Str();
-    return offset < blob.size() ? blob.SubStr(offset) : TStringBuf{};
-}
-
 // Drives KqpProxy with an explicit UserToken — SDK clients can't set the
 // SID, but metadata-service local RPCs do exactly this internally.
 void SendKqpQueryAsUser(TTestActorRuntime& runtime,
@@ -184,11 +179,9 @@ Y_UNIT_TEST_SUITE(KqpQueryEventLog) {
 // DEBUG with the full per-query field set.
 Y_UNIT_TEST(ExecuteSuccessAtDebugLogsCompleted) {
     TStringStream logStream;
-    size_t logStart = 0;
     {
         TKikimrRunner kikimr(MakeStreamSettings(logStream));
         SetKqpRequestLevel(kikimr, NLog::EPriority::PRI_DEBUG);
-        logStart = logStream.Size();
 
         auto db = kikimr.GetQueryClient();
         auto result = db.ExecuteQuery(
@@ -197,7 +190,7 @@ Y_UNIT_TEST(ExecuteSuccessAtDebugLogsCompleted) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
     const auto fullLog = logStream.Str();
-    const auto entries = CollectReqJson(LogSince(logStream, logStart));
+    const auto entries = CollectReqJson(fullLog);
     DumpEntries("ExecuteSuccessAtDebug", entries, fullLog);
     UNIT_ASSERT_C(!entries.empty(), "expected REQ_JSON entries on DEBUG");
 
@@ -232,11 +225,9 @@ Y_UNIT_TEST(ExecuteSuccessAtDebugLogsCompleted) {
 // emit the full envelope at WARN.
 Y_UNIT_TEST(SuccessSilentAtWarnButFailureLogged) {
     TStringStream logStream;
-    size_t logStart = 0;
     {
         TKikimrRunner kikimr(MakeStreamSettings(logStream));
         SetKqpRequestLevel(kikimr, NLog::EPriority::PRI_WARN);
-        logStart = logStream.Size();
 
         auto db = kikimr.GetQueryClient();
         {
@@ -253,7 +244,7 @@ Y_UNIT_TEST(SuccessSilentAtWarnButFailureLogged) {
         }
     }
     const auto fullLog = logStream.Str();
-    const auto entries = CollectReqJson(LogSince(logStream, logStart));
+    const auto entries = CollectReqJson(fullLog);
     DumpEntries("SuccessSilentAtWarn", entries, fullLog);
 
     bool foundFailure = false;
@@ -278,22 +269,25 @@ Y_UNIT_TEST(SuccessSilentAtWarnButFailureLogged) {
 // WARN failure with empty query text must still carry issues (dataChunks==0 path).
 Y_UNIT_TEST(FailureWithEmptyQueryTextLogsIssuesAtWarn) {
     TStringStream logStream;
-    size_t logStart = 0;
     {
         TKikimrRunner kikimr(MakeStreamSettings(logStream));
         SetKqpRequestLevel(kikimr, NLog::EPriority::PRI_WARN);
-        logStart = logStream.Size();
 
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         const auto edge = runtime.AllocateEdgeActor();
         SendKqpQueryAsUser(runtime, edge, "user@domain", "");
     }
-    const auto entries = CollectReqJson(LogSince(logStream, logStart));
-    DumpEntries("FailureWithEmptyQueryTextLogsIssuesAtWarn", entries, logStream.Str());
+    const auto fullLog = logStream.Str();
+    const auto entries = CollectReqJson(fullLog);
+    DumpEntries("FailureWithEmptyQueryTextLogsIssuesAtWarn", entries, fullLog);
 
     bool found = false;
     for (const auto& e : entries) {
         if (e.Event != "completed" || e.Part != 1) {
+            continue;
+        }
+        // Whole-log scan now sees startup/background requests too — scope to ours.
+        if (e.Json["user"].GetStringSafe("") != "user@domain") {
             continue;
         }
         const auto& req = e.Json["request"];
@@ -316,11 +310,9 @@ Y_UNIT_TEST(FailureWithEmptyQueryTextLogsIssuesAtWarn) {
 // fields appear only in part=1.
 Y_UNIT_TEST(ExtraFieldsOnlyInFirstPart) {
     TStringStream logStream;
-    size_t logStart = 0;
     {
         TKikimrRunner kikimr(MakeStreamSettings(logStream));
         SetKqpRequestLevel(kikimr, NLog::EPriority::PRI_TRACE);
-        logStart = logStream.Size();
 
         auto db = kikimr.GetQueryClient();
 
@@ -337,7 +329,7 @@ Y_UNIT_TEST(ExtraFieldsOnlyInFirstPart) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
     const auto fullLog = logStream.Str();
-    const auto entries = CollectReqJson(LogSince(logStream, logStart));
+    const auto entries = CollectReqJson(fullLog);
     DumpEntries("ExtraFieldsOnlyInFirstPart", entries, fullLog);
 
     bool sawPart1OfMulti = false;
@@ -400,11 +392,9 @@ Y_UNIT_TEST(ExtraFieldsOnlyInFirstPart) {
 // Multi-part FAILURE keeps issues in part==1 only — no per-chunk duplication.
 Y_UNIT_TEST(IssuesOnlyInFirstPartOnFailure) {
     TStringStream logStream;
-    size_t logStart = 0;
     {
         TKikimrRunner kikimr(MakeStreamSettings(logStream));
         SetKqpRequestLevel(kikimr, NLog::EPriority::PRI_TRACE);
-        logStart = logStream.Size();
 
         auto db = kikimr.GetQueryClient();
 
@@ -421,7 +411,7 @@ Y_UNIT_TEST(IssuesOnlyInFirstPartOnFailure) {
         UNIT_ASSERT_C(!bad.IsSuccess(), "syntax-broken query must fail");
     }
     const auto fullLog = logStream.Str();
-    const auto entries = CollectReqJson(LogSince(logStream, logStart));
+    const auto entries = CollectReqJson(fullLog);
     DumpEntries("IssuesOnlyInFirstPartOnFailure", entries, fullLog);
 
     TString targetReqId;
@@ -470,11 +460,9 @@ Y_UNIT_TEST(IssuesOnlyInFirstPartOnFailure) {
 // Long issues span multiple chunks instead of being silently truncated to 1 KB.
 Y_UNIT_TEST(LongIssuesChunkedAcrossPartsOnFailure) {
     TStringStream logStream;
-    size_t logStart = 0;
     {
         TKikimrRunner kikimr(MakeStreamSettings(logStream));
         SetKqpRequestLevel(kikimr, NLog::EPriority::PRI_TRACE);
-        logStart = logStream.Size();
 
         TStringBuilder bad;
         for (size_t i = 0; i < 10000; ++i) {
@@ -485,13 +473,16 @@ Y_UNIT_TEST(LongIssuesChunkedAcrossPartsOnFailure) {
             sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_C(!fail.IsSuccess(), "missing-table query must fail");
     }
-    const auto entries = CollectReqJson(LogSince(logStream, logStart));
-    DumpEntries("LongIssuesChunkedAcrossPartsOnFailure", entries, logStream.Str());
+    const auto fullLog = logStream.Str();
+    const auto entries = CollectReqJson(fullLog);
+    DumpEntries("LongIssuesChunkedAcrossPartsOnFailure", entries, fullLog);
 
     TString targetReqId;
     for (const auto& e : entries) {
         const auto status = e.Json["request"]["status"].GetStringSafe("");
-        if (e.Part == 1 && !status.empty() && status != "SUCCESS") {
+        // Only our long broken SQL fans out into a multi-part failure — that
+        // Total>1 keeps startup/background single-part failures out of scope.
+        if (e.Total > 1 && e.Part == 1 && !status.empty() && status != "SUCCESS") {
             targetReqId = e.Json["req_id"].GetStringSafe("");
             break;
         }
@@ -519,11 +510,9 @@ Y_UNIT_TEST(LongIssuesChunkedAcrossPartsOnFailure) {
 // At WARN long issues are truncated to 1 KB inside a single envelope — no multi-part.
 Y_UNIT_TEST(LongIssuesTruncatedAtWarn) {
     TStringStream logStream;
-    size_t logStart = 0;
     {
         TKikimrRunner kikimr(MakeStreamSettings(logStream));
         SetKqpRequestLevel(kikimr, NLog::EPriority::PRI_WARN);
-        logStart = logStream.Size();
 
         TStringBuilder bad;
         for (size_t i = 0; i < 10000; ++i) {
@@ -534,8 +523,9 @@ Y_UNIT_TEST(LongIssuesTruncatedAtWarn) {
             sql, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_C(!fail.IsSuccess(), "missing-table query must fail");
     }
-    const auto entries = CollectReqJson(LogSince(logStream, logStart));
-    DumpEntries("LongIssuesTruncatedAtWarn", entries, logStream.Str());
+    const auto fullLog = logStream.Str();
+    const auto entries = CollectReqJson(fullLog);
+    DumpEntries("LongIssuesTruncatedAtWarn", entries, fullLog);
 
     bool found = false;
     for (const auto& e : entries) {
@@ -544,6 +534,11 @@ Y_UNIT_TEST(LongIssuesTruncatedAtWarn) {
         }
         const auto& req = e.Json["request"];
         if (req["status"].GetStringSafe("") == "SUCCESS") {
+            continue;
+        }
+        // Whole-log scan sees startup/background WARN failures too — ours is the
+        // only one whose SQL carries the giant missing-table marker.
+        if (!req["data"].GetStringSafe("").Contains("zzzz")) {
             continue;
         }
         UNIT_ASSERT_VALUES_EQUAL_C(e.Total, 1, e.RawLine);
@@ -565,11 +560,9 @@ Y_UNIT_TEST(LongQueryTruncatedAtDebug) {
     constexpr size_t QUERY_TEXT_LIMIT = 6 * 1024;
 
     TStringStream logStream;
-    size_t logStart = 0;
     {
         TKikimrRunner kikimr(MakeStreamSettings(logStream));
         SetKqpRequestLevel(kikimr, NLog::EPriority::PRI_DEBUG);
-        logStart = logStream.Size();
 
         auto db = kikimr.GetQueryClient();
 
@@ -587,7 +580,7 @@ Y_UNIT_TEST(LongQueryTruncatedAtDebug) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
     const auto fullLog = logStream.Str();
-    const auto entries = CollectReqJson(LogSince(logStream, logStart));
+    const auto entries = CollectReqJson(fullLog);
     DumpEntries("LongQueryTruncatedAtDebug", entries, fullLog);
 
     bool sawTruncated = false;
@@ -615,11 +608,9 @@ Y_UNIT_TEST(LongQueryTruncatedAtDebug) {
 
 Y_UNIT_TEST(MetadataSystemUserSuccessSilentButFailureLogged) {
     TStringStream logStream;
-    size_t logStart = 0;
     {
         TKikimrRunner kikimr(MakeStreamSettings(logStream));
         SetKqpRequestLevel(kikimr, NLog::EPriority::PRI_DEBUG);
-        logStart = logStream.Size();
 
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         const auto edge = runtime.AllocateEdgeActor();
@@ -638,7 +629,7 @@ Y_UNIT_TEST(MetadataSystemUserSuccessSilentButFailureLogged) {
         UNIT_ASSERT_C(control.IsSuccess(), control.GetIssues().ToString());
     }
     const auto fullLog = logStream.Str();
-    const auto entries = CollectReqJson(LogSince(logStream, logStart));
+    const auto entries = CollectReqJson(fullLog);
     DumpEntries("MetadataSystemUserSuccessSilentButFailureLogged", entries, fullLog);
 
     bool metaSuccessSeen = false;
@@ -677,11 +668,9 @@ Y_UNIT_TEST(MetadataSystemUserSuccessSilentButFailureLogged) {
 // pushed to the client are accounted, not just the empty ExecuteQuery payload.
 Y_UNIT_TEST(StreamingBigResultReportsResultsSize) {
     TStringStream logStream;
-    size_t logStart = 0;
     {
         TKikimrRunner kikimr(MakeStreamSettings(logStream));
         SetKqpRequestLevel(kikimr, NLog::EPriority::PRI_DEBUG);
-        logStart = logStream.Size();
 
         auto db = kikimr.GetQueryClient();
         auto it = db.StreamExecuteQuery(R"(
@@ -696,7 +685,7 @@ Y_UNIT_TEST(StreamingBigResultReportsResultsSize) {
         UNIT_ASSERT_C(streamPart.IsSuccess(), streamPart.GetIssues().ToString());
     }
     const auto fullLog = logStream.Str();
-    const auto entries = CollectReqJson(LogSince(logStream, logStart));
+    const auto entries = CollectReqJson(fullLog);
     DumpEntries("StreamingBigResultReportsResultsSize", entries, fullLog);
 
     bool found = false;

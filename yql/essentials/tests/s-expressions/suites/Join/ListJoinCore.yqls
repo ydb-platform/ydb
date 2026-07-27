@@ -4,13 +4,13 @@
 
 (let i32 (DataType 'Int32))
 (let optI32 (OptionalType i32))
-(let leftRow1  (AsStruct '('"_yql_table_index" (Uint32 '0)) '('"_yql_ljc_key_key" (Int32 '9)) '('"_yql_ljc_left_input_a" (Just (Int32 '1))) '('"_yql_ljc_right_input_b" (Nothing optI32))))
-(let rightRow1 (AsStruct '('"_yql_table_index" (Uint32 '1)) '('"_yql_ljc_key_key" (Int32 '9)) '('"_yql_ljc_left_input_a" (Nothing optI32)) '('"_yql_ljc_right_input_b" (Just (Int32 '3)))))
-(let leftRow2  (AsStruct '('"_yql_table_index" (Uint32 '0)) '('"_yql_ljc_key_key" (Int32 '9)) '('"_yql_ljc_left_input_a" (Just (Int32 '2))) '('"_yql_ljc_right_input_b" (Nothing optI32))))
-(let rightRow2 (AsStruct '('"_yql_table_index" (Uint32 '1)) '('"_yql_ljc_key_key" (Int32 '9)) '('"_yql_ljc_left_input_a" (Nothing optI32)) '('"_yql_ljc_right_input_b" (Just (Int32 '4)))))
+(let leftRow1  (AsStruct '('"_yql_table_index" (Uint32 '0)) '('"_yql_ljc_key_0" (Int32 '9)) '('"_yql_ljc_left_a" (Just (Int32 '1))) '('"_yql_ljc_right_b" (Nothing optI32))))
+(let rightRow1 (AsStruct '('"_yql_table_index" (Uint32 '1)) '('"_yql_ljc_key_0" (Int32 '9)) '('"_yql_ljc_left_a" (Nothing optI32)) '('"_yql_ljc_right_b" (Just (Int32 '3)))))
+(let leftRow2  (AsStruct '('"_yql_table_index" (Uint32 '0)) '('"_yql_ljc_key_0" (Int32 '9)) '('"_yql_ljc_left_a" (Just (Int32 '2))) '('"_yql_ljc_right_b" (Nothing optI32))))
+(let rightRow2 (AsStruct '('"_yql_table_index" (Uint32 '1)) '('"_yql_ljc_key_0" (Int32 '9)) '('"_yql_ljc_left_a" (Nothing optI32)) '('"_yql_ljc_right_b" (Just (Int32 '4)))))
 (let stream (Iterator (AsList leftRow1 rightRow1 leftRow2 rightRow2)))
 
-(let keyType (StructType '('"key" i32)))
+(let keyType i32)
 (let leftInputType (StructType '('"a" i32)))
 (let rightInputType (StructType '('"b" i32)))
 

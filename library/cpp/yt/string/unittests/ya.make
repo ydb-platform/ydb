@@ -6,6 +6,7 @@ SRCS(
     enum_ut.cpp
     format_ut.cpp
     guid_ut.cpp
+    stream_ut.cpp
     string_ut.cpp
 )
 

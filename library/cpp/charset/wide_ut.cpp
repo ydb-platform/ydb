@@ -10,6 +10,8 @@
 
 #include <algorithm>
 
+extern const int TStringUseCow;
+
 namespace {
     //! three UTF8 encoded russian letters (A, B, V)
     const char yandexCyrillicAlphabet[] =
@@ -264,10 +266,12 @@ void TConversionTest::TestRecodeIntoString() {
     TUtf16String copy = sUnicode; // increase ref-counter
     wres = NDetail::Recode<char>(UTF8Text, sUnicode, CODES_UTF8);
     UNIT_ASSERT(sUnicode == UnicodeText); // same content
+    if (TStringUseCow) {
 #ifndef TSTRING_IS_STD_STRING
-    UNIT_ASSERT(sUnicode.data() != wdata);      // re-allocated (shared buffer supplied)
-    UNIT_ASSERT(sUnicode.data() == wres.data());      // same buffer
+        UNIT_ASSERT(sUnicode.data() != wdata);      // re-allocated (shared buffer supplied)
+        UNIT_ASSERT(sUnicode.data() == wres.data());      // same buffer
 #endif
+    }
     UNIT_ASSERT(sUnicode.size() == wres.size());      // same content
 }
 

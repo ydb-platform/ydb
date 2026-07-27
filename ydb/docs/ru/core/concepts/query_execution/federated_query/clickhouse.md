@@ -1,5 +1,7 @@
 # Работа с базами данных ClickHouse
 
+{% include [!](_includes/experimental_connectors_warning.md) %}
+
 В этом разделе описана основная информация про работу с внешней базой данных [ClickHouse](https://clickhouse.com).
 
 Для работы с внешней базой данных ClickHouse необходимо выполнить следующие шаги:

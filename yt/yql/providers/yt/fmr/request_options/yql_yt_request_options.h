@@ -42,7 +42,8 @@ enum EOperationType {
     Sort = 7,
     Reduce = 8,
     Pull = 9,
-    Fill = 10
+    Fill = 10,
+    MapReduce = 11
 };
 
 enum class ETaskType {
@@ -56,7 +57,8 @@ enum class ETaskType {
     LocalSort = 7,
     Reduce = 8,
     Pull = 9,
-    Fill = 10
+    Fill = 10,
+    MapReduceMap = 11
 };
 
 enum class EFmrComponent {
@@ -98,9 +100,21 @@ public:
 
 EFmrErrorReason ParseFmrReasonFromErrorMessage(const TString& errorMessage);
 
+struct TFmrWriterSettings {
+    ui64 ChunkSize = 1024 * 1024;
+    ui64 MaxInflightChunks = 4;
+    ui64 MaxRowWeight = 1024 * 1024 * 16;
+    bool SkipSortedCheck = false;
+
+    void Save(IOutputStream* buffer) const;
+    void Load(IInputStream* buffer);
+    bool operator==(const TFmrWriterSettings&) const = default;
+};
+
 struct TFmrUserJobSettings {
     ui64 ThreadPoolSize = 3;
     ui64 QueueSizeLimit = 100;
+    TFmrWriterSettings WriterSettings;
 
     void Save(IOutputStream* buffer) const;
     void Load(IInputStream* buffer);
@@ -136,6 +150,12 @@ struct TFmrTvmSpec {
 struct TYtTableRef {
     NYT::TRichYPath RichPath; // Path to yt table
     TMaybe<TString> FilePath; // Path to file corresponding to yt table, filled for file gateway
+    // 0-based position of this table among ALL of the operation's original Map/PROCESS inputs, in
+    // the same order used to build the job's TableNames/InputSpec (see TInputInfo::Group, which
+    // drives InputGroups directly from execCtx->InputTables_ and is unrelated to this field). Always
+    // unique per original input position — needed for TableName() to resolve correctly even when two
+    // inputs share a RichPath (self-reference, e.g. PROCESS Input1, Input1 USING ...).
+    ui32 TableIndex = 0;
 
     TString GetPath() const;
     TString GetCluster() const;
@@ -150,6 +170,10 @@ struct TYtTableRef {
 struct TYtTableTaskRef {
     std::vector<NYT::TRichYPath> RichPaths;
     std::vector<TString> FilePaths;
+    // Parallel to RichPaths/FilePaths: TableIndices[i] is the original TYtTableRef::TableIndex that
+    // RichPaths[i]/FilePaths[i] came from, since a single task ref can bundle physical paths from
+    // several original tables.
+    std::vector<ui32> TableIndices;
 
     void Save(IOutputStream* buffer) const;
     void Load(IInputStream* buffer);
@@ -186,6 +210,9 @@ struct TFmrTableRef {
     TString SerializedColumnGroups = TString();
     std::vector<ESortOrder> SortOrder = {};
     std::vector<TString> SortColumns = {};
+    // 0-based position of this table among ALL of the operation's original Map/PROCESS inputs (see
+    // TYtTableRef::TableIndex) — unique per original input position.
+    ui32 TableIndex = 0;
 
     bool operator==(const TFmrTableRef&) const = default;
 };
@@ -211,6 +238,11 @@ struct TFmrTableInputRef {
     TMaybe<bool> IsLastRowInclusive;
     TMaybe<TString> FirstRowKeys; // Binary YSON MAP
     TMaybe<TString> LastRowKeys;  // Binary YSON MAP
+
+    // The original input position (see TFmrTableRef::TableIndex) this ref's TableId came from. A
+    // single TFmrTableInputRef always covers ranges of one physical table at one original input
+    // position, so one value suffices.
+    ui32 TableIndex = 0;
 
     void Save(IOutputStream* buffer) const;
     void Load(IInputStream* buffer);
@@ -506,11 +538,46 @@ struct TReduceTaskParams {
     std::vector<TFmrTableOutputRef> Output;
     TString SerializedReduceJobState;
     TReduceOperationSpec ReduceOperationSpec;
+    // Whether Input's rows are sorted by [_yql_key_hash, ...ReduceOperationSpec.SortBy] (true for
+    // a MapReduce operation's reduce stage, which shuffles via a synthetic hash column) or by
+    // ReduceOperationSpec.SortBy alone (a plain Reduce operation, which reads real YT-sorted
+    // input with no hash column at all).
+    bool SortByHasKeyHashPrefix = false;
 };
 
-using TOperationParams = std::variant<TUploadOperationParams, TDownloadOperationParams, TMergeOperationParams, TSortedMergeOperationParams, TMapOperationParams, TSortedUploadOperationParams, TSortOperationParams, TReduceOperationParams, TPullOperationParams, TFillOperationParams>;
+// Service column added by map stage to hash-route rows to the correct reducer.
+static constexpr TStringBuf YqlKeyHashColumn = "_yql_key_hash";
 
-using TTaskParams = std::variant<TUploadTaskParams, TDownloadTaskParams, TMergeTaskParams, TSortedMergeTaskParams, TMapTaskParams, TSortedUploadTaskParams, TLocalSortTaskParams, TReduceTaskParams, TPullTaskParams, TFillTaskParams>;
+// Build sort columns for the MapReduceMap intermediate table:
+// _yql_key_hash first (integer comparison for routing), then the actual reduce-by columns.
+TSortingColumns MakeMapReduceIntermediateSortColumns(const TSortingColumns& reduceBy);
+
+struct TMapReduceOperationParams {
+    std::vector<TOperationTableRef> Input;
+    std::vector<TFmrTableRef> Output;
+    // Extra tables written directly by the map stage, bypassing reduce. Corresponds to mapper
+    // Variant<Tuple<T0..TK>> tuple items 1..K (item 0 feeds the shuffle/reduce stage).
+    std::vector<TFmrTableRef> DirectMapOutput;
+    TString SerializedMapJobState;
+    TString SerializedReduceJobState;
+    TReduceOperationSpec ReduceOperationSpec;
+};
+
+// Task for the map stage: apply mapper, compute _yql_key_hash, local-sort by hash+keys.
+struct TMapReduceMapTaskParams {
+    TTaskTableInputRef Input;
+    TFmrTableOutputRef Output;           // intermediate FMR table (one per map task)
+    // Per-task refs for TMapReduceOperationParams::DirectMapOutput. Each direct output receives
+    // its own distinct PartId (generated by the coordinator) to prevent chunk stats collision,
+    // even though all outputs are written by the same job run.
+    std::vector<TFmrTableOutputRef> DirectOutputs;
+    TString SerializedMapJobState;
+    TReduceOperationSpec ReduceOperationSpec; // tells worker which columns to hash and sort by
+};
+
+using TOperationParams = std::variant<TUploadOperationParams, TDownloadOperationParams, TMergeOperationParams, TSortedMergeOperationParams, TMapOperationParams, TSortedUploadOperationParams, TSortOperationParams, TReduceOperationParams, TPullOperationParams, TFillOperationParams, TMapReduceOperationParams>;
+
+using TTaskParams = std::variant<TUploadTaskParams, TDownloadTaskParams, TMergeTaskParams, TSortedMergeTaskParams, TMapTaskParams, TSortedUploadTaskParams, TLocalSortTaskParams, TReduceTaskParams, TPullTaskParams, TFillTaskParams, TMapReduceMapTaskParams>;
 
 struct TFileInfo {
     TString LocalPath; // Path to local file, filled in worker.

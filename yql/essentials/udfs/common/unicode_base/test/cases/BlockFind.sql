@@ -1,4 +1,3 @@
-
 pragma UseBlocks;
 
 SELECT

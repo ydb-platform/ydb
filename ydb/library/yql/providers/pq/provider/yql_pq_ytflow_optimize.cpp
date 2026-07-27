@@ -73,10 +73,8 @@ public:
             return read;
         }
 
-        return Build<TCoUnordered>(ctx, read->Pos())
-            .Input<TPqReadTopic>()
-                .InitFrom(maybeReadTopic.Cast())
-                .Build()
+        return Build<TPqReadTopic>(ctx, read->Pos())
+            .InitFrom(maybeReadTopic.Cast())
             .Done().Ptr();
     }
 

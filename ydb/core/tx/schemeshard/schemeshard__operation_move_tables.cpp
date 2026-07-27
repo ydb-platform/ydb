@@ -60,6 +60,17 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, cons
 
     TPath dstPath = TPath::Resolve(dstStr, context.SS);
 
+    // Dropping a column table is currently incompatible with move-table (KIKIMR-22715).
+    if (dstPath.IsResolved()
+            && !dstPath.IsDeleted()
+            && dstPath.Base()->IsColumnTable()
+            && dstPath.IsUnderDeleting()
+            && !AppData()->FeatureFlags.GetEnableMoveWithColumnTableReplace())
+    {
+        return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed,
+            "Unsupported: feature flag EnableMoveWithColumnTableReplace is off")};
+    }
+
     result.push_back(CreateMoveTable(NextPartId(nextId, result), MoveTableTask(srcPath, dstPath)));
 
     for (auto& child: srcPath.Base()->GetChildren()) {
@@ -85,8 +96,12 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, cons
         const bool isLocalIndex = context.SS->Indexes.contains(srcChildPath.Base()->PathId) &&
             TTableIndexInfo::IsLocalIndex(context.SS->Indexes.at(srcChildPath.Base()->PathId)->Type);
         if (isLocalIndex) {
-            const TString srcIndexPath = srcPath.PathString() + "/" + name;
-            result.push_back(CreateMoveLocalIndex(NextPartId(nextId, result), MoveLocalIndexTask(dstPath.PathString(), srcIndexPath, name)));
+            if (srcPath.Base()->IsColumnTable()) {
+                const TString srcIndexPath = srcPath.PathString() + "/" + name;
+                result.push_back(CreateMoveColumnTableLocalIndex(NextPartId(nextId, result), MoveLocalIndexTask(dstPath.PathString(), srcIndexPath, name)));
+            } else {
+                result.push_back(CreateMoveTableIndex(NextPartId(nextId, result), MoveTableIndexTask(srcChildPath, dstIndexPath)));
+            }
             continue;
         } else {
             result.push_back(CreateMoveTableIndex(NextPartId(nextId, result), MoveTableIndexTask(srcChildPath, dstIndexPath)));

@@ -55,9 +55,9 @@ NYql::TAstParseResult SqlToYql(const TTranslators& translators, const TString& q
                 return result;
             }
 
-            return translators.V0->TextToAst(query, parsedSettings, warningRules, nullptr);
+            return translators.V0->TextToAst(query, parsedSettings, warningRules, /*stmtParseInfo=*/nullptr);
         case 1:
-            return translators.V1->TextToAst(query, parsedSettings, warningRules, nullptr);
+            return translators.V1->TextToAst(query, parsedSettings, warningRules, /*stmtParseInfo=*/nullptr);
         default:
             result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
                                                   TStringBuilder() << "Unknown SQL syntax version: " << parsedSettings.SyntaxVersion));

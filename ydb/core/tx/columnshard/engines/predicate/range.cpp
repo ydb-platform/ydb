@@ -51,11 +51,13 @@ std::set<ui32> TPKRangeFilter::GetColumnIds(const TIndexInfo& indexInfo) const {
     std::set<ui32> result;
     for (auto&& i : PredicateFrom.GetColumnNames()) {
         result.emplace(indexInfo.GetColumnIdVerified(i));
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("predicate_column", i);
+        YDB_LOG_TRACE_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"predicateColumn", i});
     }
     for (auto&& i : PredicateTo.GetColumnNames()) {
         result.emplace(indexInfo.GetColumnIdVerified(i));
-        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("predicate_column", i);
+        YDB_LOG_TRACE_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"predicateColumn", i});
     }
     return result;
 }
@@ -137,7 +139,9 @@ TPKRangeFilter::EUsageClass TPKRangeFilter::GetUsageClass(
 
 TConclusion<TPKRangeFilter> TPKRangeFilter::Build(TPredicateContainer&& from, TPredicateContainer&& to) {
     if (!from.CrossRanges(to)) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "cannot_build_predicate_range")("error", "predicates from/to not intersected");
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+            {"event", "cannot_build_predicate_range"},
+            {"error", "predicates from/to not intersected"});
         return TConclusionStatus::Fail("predicates from/to not intersected");
     }
     return TPKRangeFilter(std::move(from), std::move(to));

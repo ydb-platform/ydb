@@ -409,6 +409,14 @@ namespace NKikimr::NHttpProxy::NSQS {
                                                     XML_ELEM_CONT("StringValue", value.string_value());
                                                 } else if (!value.binary_value().empty()) {
                                                     XML_ELEM_CONT("BinaryValue", Base64Encode(value.binary_value()));
+                                                } else if (value.string_list_values_size()) {
+                                                    for (const auto& item : value.string_list_values()) {
+                                                        XML_ELEM_CONT("StringListValue", item);
+                                                    }
+                                                } else if (value.binary_list_values_size()) {
+                                                    for (const auto& item : value.binary_list_values()) {
+                                                        XML_ELEM_CONT("BinaryListValue", Base64Encode(item));
+                                                    }
                                                 }
                                             }
                                         }

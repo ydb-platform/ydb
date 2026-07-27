@@ -14,7 +14,7 @@ void CheckWindowFunctionAst(const TString& selectBody, bool useSortForPartitions
 
     TStringBuilder query;
     query << "--!syntax_v1\n"
-          << "PRAGMA ydb.OptUseSortForPartitionsByKeys = \""
+          << "PRAGMA ydb.WindowFunctionsV2 = \""
           << (useSortForPartitionsByKeys ? "true" : "false") << "\";\n\n"
           << selectBody;
 

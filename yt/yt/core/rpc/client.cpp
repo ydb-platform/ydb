@@ -1,4 +1,5 @@
 #include "client.h"
+
 #include "private.h"
 #include "dispatcher.h"
 #include "message.h"
@@ -92,6 +93,8 @@ TClientRequest::TClientRequest(const TClientRequest& other)
     , MultiplexingBand_(other.MultiplexingBand_)
     , ClientAttachmentsStreamingParameters_(other.ClientAttachmentsStreamingParameters_)
     , ServerAttachmentsStreamingParameters_(other.ServerAttachmentsStreamingParameters_)
+    , RequestAttachmentsDptParameters_(other.RequestAttachmentsDptParameters_)
+    , ResponseAttachmentsDptParameters_(other.ResponseAttachmentsDptParameters_)
     , User_(other.User_)
     , UserTag_(other.UserTag_)
 { }
@@ -186,6 +189,26 @@ const TStreamingParameters& TClientRequest::ServerAttachmentsStreamingParameters
 TStreamingParameters& TClientRequest::ServerAttachmentsStreamingParameters()
 {
     return ServerAttachmentsStreamingParameters_;
+}
+
+const TDirectPlacementTransferParameters& TClientRequest::RequestAttachmentsDptParameters() const
+{
+    return RequestAttachmentsDptParameters_;
+}
+
+TDirectPlacementTransferParameters& TClientRequest::RequestAttachmentsDptParameters()
+{
+    return RequestAttachmentsDptParameters_;
+}
+
+const TDirectPlacementTransferParameters& TClientRequest::ResponseAttachmentsDptParameters() const
+{
+    return ResponseAttachmentsDptParameters_;
+}
+
+TDirectPlacementTransferParameters& TClientRequest::ResponseAttachmentsDptParameters()
+{
+    return ResponseAttachmentsDptParameters_;
 }
 
 NConcurrency::IAsyncZeroCopyOutputStreamPtr TClientRequest::GetRequestAttachmentsStream() const
@@ -482,6 +505,13 @@ void TClientRequest::PrepareHeader()
         ToProto(Header_.mutable_server_attachments_streaming_parameters(), ServerAttachmentsStreamingParameters_);
     }
 
+    if (RequestAttachmentsDptParameters_.Enabled) {
+        ToProto(Header_.mutable_request_attachments_dpt_parameters(), RequestAttachmentsDptParameters_);
+    }
+    if (ResponseAttachmentsDptParameters_.Enabled) {
+        ToProto(Header_.mutable_response_attachments_dpt_parameters(), ResponseAttachmentsDptParameters_);
+    }
+
     if (!User_.empty() && User_ != RootUserName) {
         Header_.set_user(User_);
     }
@@ -554,6 +584,30 @@ size_t TClientResponse::GetTotalSize() const
     return ResponseMessage_.ByteSize();
 }
 
+const std::vector<TSharedRef>& TClientResponse::Attachments() const
+{
+    if (!Attachments_) {
+        // Not yet available. When the attachments are delivered via direct placement
+        // transfer, the client must drive the transfer to completion first (see
+        // #TryGetResponseAttachmentsTransfer); otherwise they are simply empty.
+        YT_VERIFY(!ResponseAttachmentsTransfer_);
+        Attachments_.emplace();
+    }
+    return *Attachments_;
+}
+
+std::vector<TSharedRef>& TClientResponse::Attachments()
+{
+    return const_cast<std::vector<TSharedRef>&>(std::as_const(*this).Attachments());
+}
+
+IDirectPlacementTransferPtr TClientResponse::TryGetResponseAttachmentsTransfer()
+{
+    // The stored transfer is the RPC-layer wrapper installed in #Deserialize, so
+    // this is safe to call any number of times. Running it must happen exactly once.
+    return ResponseAttachmentsTransfer_;
+}
+
 void TClientResponse::HandleError(TError error)
 {
     auto prevState = State_.exchange(EState::Done);
@@ -622,7 +676,9 @@ const IInvokerPtr& TClientResponse::GetInvoker()
         : TDispatcher::Get()->GetLightInvoker();
 }
 
-TFuture<void> TClientResponse::Deserialize(TSharedRefArray responseMessage) noexcept
+TFuture<void> TClientResponse::Deserialize(
+    TSharedRefArray responseMessage,
+    NYT::NBus::IDirectPlacementTransferPtr attachmentsTransfer) noexcept
 {
     YT_ASSERT(responseMessage);
     YT_ASSERT(!ResponseMessage_);
@@ -658,6 +714,27 @@ TFuture<void> TClientResponse::Deserialize(TSharedRefArray responseMessage) noex
             "Error deserializing response body"));
     }
 
+    if (attachmentsTransfer) {
+        // The response attachments are delivered via direct placement transfer
+        // (used only without attachment compression): expose them lazily. They
+        // become available once the client drives the transfer to completion (see
+        // #TryGetResponseAttachmentsTransfer). A weak ref avoids a cycle.
+        auto memoryUsageTracker = ClientContext_->GetMemoryUsageTracker();
+        ResponseAttachmentsTransfer_ = CreateChainedDirectPlacementTransfer(
+            std::move(attachmentsTransfer),
+            BIND([weakThis = MakeWeak(this), memoryUsageTracker] (std::vector<TSharedRef>&& attachments) {
+                auto this_ = weakThis.Lock();
+                if (!this_) {
+                    return;
+                }
+                for (auto& attachment : attachments) {
+                    attachment = TrackMemory(memoryUsageTracker, attachment);
+                }
+                this_->Attachments_ = std::move(attachments);
+            }));
+        return OKFuture;
+    }
+
     auto compressedAttachments = TRange(ResponseMessage_.Begin() + 2, ResponseMessage_.End());
     auto memoryUsageTracker = ClientContext_->GetMemoryUsageTracker();
 
@@ -667,11 +744,11 @@ TFuture<void> TClientResponse::Deserialize(TSharedRefArray responseMessage) noex
     } else {
         return AsyncDecompressAttachments(compressedAttachments, attachmentCodecId)
             .AsUnique().Apply(BIND([this, this_ = MakeStrong(this)] (std::vector<TSharedRef>&& decompressedAttachments) {
-                Attachments_ = std::move(decompressedAttachments);
                 auto memoryUsageTracker = ClientContext_->GetMemoryUsageTracker();
-                for (auto& attachment : Attachments_) {
+                for (auto& attachment : decompressedAttachments) {
                     attachment = TrackMemory(memoryUsageTracker, attachment);
                 }
+                Attachments_ = std::move(decompressedAttachments);
             }));
     }
 }
@@ -683,7 +760,10 @@ void TClientResponse::HandleAcknowledgement()
     State_.compare_exchange_strong(expected, EState::Ack);
 }
 
-void TClientResponse::HandleResponse(TSharedRefArray message, const std::string& address)
+void TClientResponse::HandleResponse(
+    TSharedRefArray message,
+    const std::string& address,
+    NYT::NBus::IDirectPlacementTransferPtr attachmentsTransfer)
 {
     auto prevState = State_.exchange(EState::Done);
     YT_ASSERT(prevState == EState::Sent || prevState == EState::Ack);
@@ -691,16 +771,20 @@ void TClientResponse::HandleResponse(TSharedRefArray message, const std::string&
     GetInvoker()->Invoke(BIND(&TClientResponse::DoHandleResponse,
         MakeStrong(this),
         Passed(std::move(message)),
-        address));
+        address,
+        Passed(std::move(attachmentsTransfer))));
 }
 
-void TClientResponse::DoHandleResponse(TSharedRefArray message, const std::string& address)
+void TClientResponse::DoHandleResponse(
+    TSharedRefArray message,
+    const std::string& address,
+    NYT::NBus::IDirectPlacementTransferPtr attachmentsTransfer)
 {
     NProfiling::TWallTimer timer;
 
     Address_ = address;
 
-    Deserialize(std::move(message))
+    Deserialize(std::move(message), std::move(attachmentsTransfer))
         .Subscribe(BIND([timer, this, this_ = MakeStrong(this)] (const TError& error) {
             Finish(error);
 

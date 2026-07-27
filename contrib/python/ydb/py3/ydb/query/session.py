@@ -18,6 +18,7 @@ from . import base
 from .base import QueryExplainResultFormat
 
 from .. import _apis, issues, _utilities
+from ..opentelemetry.tracing import SpanName, create_ydb_span, set_peer_attributes, span_finish_callback
 from ..settings import BaseRequestSettings
 from ..connection import _RpcState as RpcState, EndpointKey
 from .._grpc.grpcwrapper import common_utils
@@ -30,7 +31,7 @@ from .transaction import QueryTxContext
 from .._constants import DEFAULT_INITIAL_RESPONSE_TIMEOUT, DEFAULT_LONG_STREAM_TIMEOUT
 
 if TYPE_CHECKING:
-    from ..driver import Driver as SyncDriver
+    from ..driver import Driver as SyncDriver, DriverConfig
     from ..aio.driver import Driver as AsyncDriver
 
 
@@ -46,7 +47,28 @@ def wrapper_create_session(
     issues._process_response(message.status)
     session._session_id = message.session_id
     session._node_id = message.node_id
+    session._peer = _resolve_peer(session._driver, message.node_id)
     return session
+
+
+def _resolve_peer(driver, node_id):
+    """Look up network.peer.* / ydb.node.dc for a node in the driver's endpoint map."""
+    if node_id is None:
+        return None
+    store = getattr(driver, "_store", None)
+    if store is None:
+        return None
+    by_node = getattr(store, "connections_by_node_id", None)
+    if not by_node:
+        return None
+    connection = by_node.get(node_id)
+    if connection is None:
+        return None
+    return (
+        getattr(connection, "peer_address", None),
+        getattr(connection, "peer_port", None),
+        getattr(connection, "peer_location", None),
+    )
 
 
 def wrapper_delete_session(
@@ -69,6 +91,7 @@ class BaseQuerySession(abc.ABC, Generic[DriverT]):
     # Session data
     _session_id: Optional[str] = None
     _node_id: Optional[int] = None
+    _peer: Optional[tuple] = None
     _closed: bool = False
     _invalidated: bool = False
 
@@ -83,6 +106,10 @@ class BaseQuerySession(abc.ABC, Generic[DriverT]):
         )
 
         self._last_query_stats = None
+
+    @property
+    def _driver_config(self) -> Optional["DriverConfig"]:
+        return getattr(self._driver, "_driver_config", None)
 
     @property
     def session_id(self) -> Optional[str]:
@@ -391,8 +418,10 @@ class QuerySession(BaseQuerySession["SyncDriver"]):
         if self._closed:
             raise RuntimeError("Session is already closed.")
 
-        self._create_call(settings=settings)
-        self._attach()
+        with create_ydb_span(SpanName.CREATE_SESSION, self._driver_config).attach_context() as span:
+            self._create_call(settings=settings)
+            set_peer_attributes(span, self._peer)
+            self._attach()
 
         return self
 
@@ -458,20 +487,27 @@ class QuerySession(BaseQuerySession["SyncDriver"]):
         """
         self._check_session_ready_to_use()
 
-        stream_it = self._execute_call(
-            query=query,
-            parameters=parameters,
-            commit_tx=True,
-            syntax=syntax,
-            exec_mode=exec_mode,
-            stats_mode=stats_mode,
-            schema_inclusion_mode=schema_inclusion_mode,
-            result_set_format=result_set_format,
-            arrow_format_settings=arrow_format_settings,
-            concurrent_result_sets=concurrent_result_sets,
-            settings=settings,
+        span = create_ydb_span(
+            SpanName.EXECUTE_QUERY,
+            self._driver_config,
+            node_id=self._node_id,
+            peer=self._peer,
         )
 
+        with span.attach_context(end_on_exit=False):
+            stream_it = self._execute_call(
+                query=query,
+                parameters=parameters,
+                commit_tx=True,
+                syntax=syntax,
+                exec_mode=exec_mode,
+                stats_mode=stats_mode,
+                schema_inclusion_mode=schema_inclusion_mode,
+                result_set_format=result_set_format,
+                arrow_format_settings=arrow_format_settings,
+                concurrent_result_sets=concurrent_result_sets,
+                settings=settings,
+            )
         return base.SyncResponseContextIterator(
             stream_it,
             lambda resp: base.wrap_execute_query_response(
@@ -481,6 +517,7 @@ class QuerySession(BaseQuerySession["SyncDriver"]):
                 settings=self._settings,
             ),
             on_error=self._on_execute_stream_error,
+            on_finish=span_finish_callback(span),
         )
 
     def explain(

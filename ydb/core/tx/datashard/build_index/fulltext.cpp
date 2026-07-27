@@ -21,6 +21,8 @@
 #include <util/generic/algorithm.h>
 #include <util/string/builder.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
+
 namespace NKikimr::NDataShard {
 using namespace NTableIndex::NFulltext;
 using namespace NKikimr::NFulltext;
@@ -34,7 +36,7 @@ using namespace NKikimr::NFulltext;
  * Destination columns with a FulltextPlain index: <prefix columns>, __ydb_token, <PK columns>, <data columns>
  * Destination columns with a FulltextRelevance index: <prefix columns>, __ydb_token, <PK columns>, __ydb_freq
  * Destination columns with a FulltextCompact/FulltextCompactRelevance/JsonCompact index:
- *   __ydb_token, __ydb_max_id, __ydb_generation (always max), __ydb_added (always true), __ydb_segment
+ *   __ydb_token, __ydb_generation (always max), __ydb_max_id, __ydb_added (always true), __ydb_segment
  *
  * Request:
  * - The client sends TEvBuildFulltextIndexRequest with:
@@ -151,7 +153,8 @@ public:
             RequestedRange = TableRange;
         }
 
-        LOG_I("Create " << Debug());
+        YDB_LOG_INFO("Scan actor created",
+            {"debug", Debug()});
 
         Y_ENSURE(Request.settings().columns().size() == 1);
         TextColumn = Request.settings().columns().at(0).column();
@@ -256,13 +259,13 @@ public:
         case NKikimrTxDataShard::EFulltextIndexType::JsonCompact:
             {
                 Ydb::Type type;
-                NScheme::ProtoFromTypeInfo(KeyTypes.at(0), type);
-                uploadTypes->emplace_back(MaxIdColumn, type);
+                type.set_type_id(NTableIndex::NFulltext::GenType);
+                uploadTypes->emplace_back(GenColumn, type);
             }
             {
                 Ydb::Type type;
-                type.set_type_id(NTableIndex::NFulltext::GenType);
-                uploadTypes->emplace_back(GenColumn, type);
+                NScheme::ProtoFromTypeInfo(KeyTypes.at(0), type);
+                uploadTypes->emplace_back(MaxIdColumn, type);
             }
             {
                 Ydb::Type type;
@@ -313,7 +316,8 @@ public:
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final
     {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
-        LOG_I("Prepare " << Debug());
+        YDB_LOG_INFO("Scan actor prepared",
+            {"debug", Debug()});
 
         Driver = driver;
         Uploader.SetOwner(SelfId());
@@ -323,7 +327,9 @@ public:
 
     EScan Seek(TLead& lead, ui64 seq) final
     {
-        LOG_T("Seek " << seq << " " << Debug());
+        YDB_LOG_TRACE("Seek",
+            {"seekSequence", seq},
+            {"debug", Debug()});
 
         if (seq) {
             return Uploader.CanFinish()
@@ -349,8 +355,6 @@ public:
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) final
     {
-        // LOG_T("Feed " << Debug());
-
         ++ReadRows;
         ReadBytes += CountRowCellBytes(key, *row);
 
@@ -552,12 +556,12 @@ public:
         TVector<TCell> uploadKey(::Reserve(state.Prefix.size() + 3));
         uploadKey.insert(uploadKey.end(), state.Prefix.begin(), state.Prefix.end());
         uploadKey.push_back(TCell(state.Token));
+        uploadKey.push_back(TCell::Make(std::numeric_limits<NTableIndex::NFulltext::TGen>::max()));
         if (KeyTypeId == NScheme::NTypeIds::Uint64 || KeyTypeId == NScheme::NTypeIds::Int64) {
             uploadKey.push_back(TCell::Make(state.Segment.GetMaxId()));
         } else {
             uploadKey.push_back(TCell::Make((ui32)state.Segment.GetMaxId()));
         }
-        uploadKey.push_back(TCell::Make(std::numeric_limits<NTableIndex::NFulltext::TGen>::max()));
         TVector<TCell> uploadValue(::Reserve(2));
         uploadValue.push_back(TCell::Make(true));
         uploadValue.push_back(TCell((const char*)segment.data(), segment.size()));
@@ -585,7 +589,8 @@ public:
 
     EScan PageFault() final
     {
-        LOG_T("PageFault " << Debug());
+        YDB_LOG_TRACE("Page fault",
+            {"debug", Debug()});
         return EScan::Feed;
     }
 
@@ -594,13 +599,16 @@ public:
         FlushAllTokens();
 
         if (JsonErrors > 0) {
-            LOG_W("Invalid JSON encountered in " << JsonErrors << " rows " << Debug());
+            YDB_LOG_WARN("Invalid JSON in scanned rows",
+                {"invalidJsonRowCount", JsonErrors},
+                {"debug", Debug()});
         }
-        LOG_D("Exhausted ReadRows: " << ReadRows
-            << " DocCount: " << DocCount
-            << " posting added: " << PostingEntriesAdded
-            << " docs added: " << DocsEntriesAdded
-            << " " << Debug());
+        YDB_LOG_DEBUG("Posting scan range exhausted",
+            {"readRowCount", ReadRows},
+            {"docCount", DocCount},
+            {"postingEntriesAdded", PostingEntriesAdded},
+            {"docEntriesAdded", DocsEntriesAdded},
+            {"debug", Debug()});
 
         // call Seek to wait uploads
         return EScan::Reset;
@@ -628,15 +636,17 @@ public:
         Uploader.Finish(record, status);
 
         if (Response->Record.GetStatus() == NKikimrIndexBuilder::DONE) {
-            LOG_N("Done " << Debug()
-                << " posting added: " << PostingEntriesAdded
-                << " docs added: " << DocsEntriesAdded
-                << " " << Response->Record.ShortDebugString());
+            YDB_LOG_NOTICE("Posting scan completed successfully",
+                {"debug", Debug()},
+                {"postingEntriesAdded", PostingEntriesAdded},
+                {"docEntriesAdded", DocsEntriesAdded},
+                {"responseRecord", Response->Record.ShortDebugString()});
         } else {
-            LOG_E("Failed " << Debug()
-                << " posting added: " << PostingEntriesAdded
-                << " docs added: " << DocsEntriesAdded
-                << " " << Response->Record.ShortDebugString());
+            YDB_LOG_ERROR("Posting scan failed",
+                {"debug", Debug()},
+                {"postingEntriesAdded", PostingEntriesAdded},
+                {"docEntriesAdded", DocsEntriesAdded},
+                {"responseRecord", Response->Record.ShortDebugString()});
         }
         Send(ResponseActorId, Response.Release());
 
@@ -666,24 +676,28 @@ protected:
             HFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             default:
-                LOG_E("StateWork unexpected event type: " << ev->GetTypeRewrite()
-                    << " event: " << ev->ToString() << " " << Debug());
+                YDB_LOG_ERROR("Unexpected event in scan actor",
+                    {"eventType", ev->GetTypeRewrite()},
+                    {"eventDetails", ev->ToString()},
+                    {"debug", Debug()});
         }
     }
 
     void HandleWakeup(const NActors::TActorContext& /*ctx*/)
     {
-        LOG_D("Retry upload " << Debug());
+        YDB_LOG_DEBUG("Retrying row upload",
+            {"debug", Debug()});
 
         Uploader.RetryUpload();
     }
 
     void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev, const TActorContext& ctx)
     {
-        LOG_D("Handle TEvUploadRowsResponse " << Debug()
-            << " posting added: " << PostingEntriesAdded
-            << " docs added: " << DocsEntriesAdded
-            << " ev->Sender: " << ev->Sender.ToString());
+        YDB_LOG_DEBUG("Received row upload response for posting entries",
+            {"debug", Debug()},
+            {"postingEntriesAdded", PostingEntriesAdded},
+            {"docEntriesAdded", DocsEntriesAdded},
+            {"senderActorId", ev->Sender});
 
         if (!Driver) {
             return;
@@ -721,12 +735,16 @@ protected:
         }
 
         if (auto retryAfter = Uploader.GetRetryAfter(); retryAfter) {
-            LOG_N("Got retriable error, " << Debug() << " " << Uploader.GetUploadStatus().ToString());
+            YDB_LOG_NOTICE("Row upload failed with retriable error",
+                {"debug", Debug()},
+                {"uploadStatus", Uploader.GetUploadStatus()});
             ctx.Schedule(*retryAfter, new TEvents::TEvWakeup());
             return;
         }
 
-        LOG_N("Got error, abort scan, " << Debug() << " " << Uploader.GetUploadStatus().ToString());
+        YDB_LOG_NOTICE("Row upload failed, aborting scan",
+            {"debug", Debug()},
+            {"uploadStatus", Uploader.GetUploadStatus()});
 
         Driver->Touch(EScan::Final);
     }
@@ -779,9 +797,10 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
         auto response = MakeHolder<TEvDataShard::TEvBuildFulltextIndexResponse>();
         FillScanResponseCommonFields(*response, id, TabletID(), seqNo);
 
-        LOG_N("Starting TBuildFulltextIndexScan TabletId: " << TabletID()
-            << " " << request.ShortDebugString()
-            << " row version " << rowVersion);
+        YDB_LOG_NOTICE("Starting fulltext index build scan",
+            {"tabletId", TabletID()},
+            {"request", request.ShortDebugString()},
+            {"rowVersion", rowVersion});
 
         // Note: it's very unlikely that we have volatile txs before this snapshot
         if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
@@ -797,9 +816,10 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
         };
         auto trySendBadRequest = [&] {
             if (response->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
-                LOG_E("Rejecting TBuildFulltextIndexScan bad request TabletId: " << TabletID()
-                    << " " << request.ShortDebugString()
-                    << " with response " << response->Record.ShortDebugString());
+                YDB_LOG_ERROR("Rejecting invalid fulltext index build scan request",
+                    {"tabletId", TabletID()},
+                    {"request", request.ShortDebugString()},
+                    {"responseRecord", response->Record.ShortDebugString()});
                 ctx.Send(ev->Sender, std::move(response));
                 return true;
             } else {
@@ -825,9 +845,11 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
         const auto& userTable = **userTableIt;
 
         // 2. Validating request fields
-        if (!request.HasSnapshotStep() || !request.HasSnapshotTxId()) {
-            badRequest(TStringBuilder() << "Missing snapshot");
-        } else {
+        // The snapshot is optional: live-table scans (plain/relevance/compact over the main table)
+        // always carry one, but the compact rowid-mode posting fill scans the transient seq-keyed
+        // row-id source table - a build impl table that is immutable once the prepass completed and so
+        // needs no snapshot (mirrors the dictionary scan over the 0build impl table, fulltext_dict.cpp).
+        if (request.HasSnapshotStep() || request.HasSnapshotTxId()) {
             const TSnapshotKey snapshotKey(pathId, rowVersion.Step, rowVersion.TxId);
             if (!SnapshotManager.FindAvailable(snapshotKey)) {
                 badRequest(TStringBuilder() << "Unknown snapshot for path id " << pathId.OwnerId << ":" << pathId.LocalPathId
@@ -874,6 +896,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
             badRequest(TStringBuilder() << "Prefix columns are not supported for JSON indexes");
         }
 
+        // Compact builds scan a table with a single integer key holding the doc id: either the main
+        // table (single-integer-PK case) or, for an arbitrary-PK main table, the row-id source table
+        // built by the rowid-mode prepass (a generic secondary-index build keyed by __ydb_row_id).
         if (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompact ||
             request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance ||
             request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::JsonCompact) {

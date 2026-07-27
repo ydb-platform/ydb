@@ -523,6 +523,191 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
 
         UNIT_ASSERT_VALUES_EQUAL(response.AvailableTasksCount, 0);
     }
+
+    Y_UNIT_TEST(MapReduceOperationAccepted) {
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
+
+        TMapReduceOperationParams mapReduceParams{
+            .Input = {TYtTableRef{"Cluster", "Path", "File_path"}},
+            .Output = {TFmrTableRef{{"TestCluster", "TestOutput"}}},
+            .SerializedMapJobState = "map_state",
+            .SerializedReduceJobState = "reduce_state",
+            .ReduceOperationSpec = TReduceOperationSpec{
+                .ReduceBy = TSortingColumns{.Columns = {"key"}, .SortOrders = {ESortOrder::Ascending}},
+                .SortBy = TSortingColumns{},
+                .ReduceType = SortedReduce
+            }
+        };
+
+        auto request = setup.CreateOperationRequest(EOperationType::MapReduce, mapReduceParams);
+        auto response = coordinator->StartOperation(request).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(response.Status, EOperationStatus::Accepted);
+    }
+
+    Y_UNIT_TEST(MapReduceOperationCompletesTwoStages) {
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
+
+        TMapReduceOperationParams mapReduceParams{
+            .Input = {TYtTableRef{"Cluster", "Path", "File_path"}},
+            .Output = {TFmrTableRef{{"TestCluster", "TestOutput"}}},
+            .SerializedMapJobState = "map_state",
+            .SerializedReduceJobState = "reduce_state",
+            .ReduceOperationSpec = TReduceOperationSpec{
+                .ReduceBy = TSortingColumns{.Columns = {"key"}, .SortOrders = {ESortOrder::Ascending}},
+                .SortBy = TSortingColumns{},
+                .ReduceType = SortedReduce
+            }
+        };
+
+        auto request = setup.CreateOperationRequest(EOperationType::MapReduce, mapReduceParams);
+        auto startResponse = coordinator->StartOperation(request).GetValueSync();
+        TString operationId = startResponse.OperationId;
+        UNIT_ASSERT_VALUES_EQUAL(startResponse.Status, EOperationStatus::Accepted);
+
+        std::atomic<ui64> mapTaskCount{0};
+        std::atomic<ui64> reduceTaskCount{0};
+
+        auto func = [&](TTask::TPtr task, std::shared_ptr<std::atomic<bool>> /*cancelFlag*/) {
+            TStatistics stats;
+            if (task->TaskType == ETaskType::MapReduceMap) {
+                ++mapTaskCount;
+                // Return sorted chunk stats for the intermediate table. The sorted partitioner
+                // requires proper YSON with all key columns (_yql_key_hash + reduce-by columns).
+                const auto& mapParams = std::get<TMapReduceMapTaskParams>(task->TaskParams);
+                TFmrTableOutputRef outputRef{mapParams.Output.TableId, mapParams.Output.PartId};
+
+                NYT::TNode firstKey;
+                firstKey[TString(YqlKeyHashColumn)] = NYT::TNode(0LL);
+                firstKey["key"] = NYT::TNode("");
+
+                NYT::TNode lastKey;
+                lastKey[TString(YqlKeyHashColumn)] = NYT::TNode(0LL);
+                lastKey["key"] = NYT::TNode("z");
+
+                TTableChunkStats chunkStats{
+                    .PartId = mapParams.Output.PartId,
+                    .PartIdChunkStats = {TChunkStats{
+                        .Rows = 1,
+                        .DataWeight = 1,
+                        .SortedChunkStats = TSortedChunkStats{
+                            .IsSorted = true,
+                            .FirstRowKeys = firstKey,
+                            .LastRowKeys = lastKey
+                        }
+                    }}
+                };
+                stats.OutputTables[outputRef] = chunkStats;
+            } else if (task->TaskType == ETaskType::Reduce) {
+                ++reduceTaskCount;
+            }
+            return TJobResult{.TaskStatus = ETaskStatus::Completed, .Stats = stats};
+        };
+
+        auto worker = setup.GetFmrWorker(coordinator, 3, func);
+        Sleep(TDuration::Seconds(8));
+
+        auto getResponse = coordinator->GetOperation({operationId}).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(getResponse.Status, EOperationStatus::Completed);
+        UNIT_ASSERT_VALUES_EQUAL(mapTaskCount.load(), 1u);  // one map task for the single YT input partition
+        UNIT_ASSERT(reduceTaskCount.load() >= 1u);          // at least one reduce task
+    }
+
+    Y_UNIT_TEST(MapReduceReduceStageFailureFails) {
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
+
+        TMapReduceOperationParams mapReduceParams{
+            .Input = {TYtTableRef{"Cluster", "Path", "File_path"}},
+            .Output = {TFmrTableRef{{"TestCluster", "TestOutput"}}},
+            .SerializedMapJobState = "map_state",
+            .SerializedReduceJobState = "reduce_state",
+            .ReduceOperationSpec = TReduceOperationSpec{
+                .ReduceBy = TSortingColumns{.Columns = {"key"}, .SortOrders = {ESortOrder::Ascending}},
+                .SortBy = TSortingColumns{},
+                .ReduceType = SortedReduce
+            }
+        };
+
+        auto request = setup.CreateOperationRequest(EOperationType::MapReduce, mapReduceParams);
+        auto startResponse = coordinator->StartOperation(request).GetValueSync();
+        TString operationId = startResponse.OperationId;
+
+        auto func = [&](TTask::TPtr task, std::shared_ptr<std::atomic<bool>> /*cancelFlag*/) {
+            TStatistics stats;
+            if (task->TaskType == ETaskType::MapReduceMap) {
+                const auto& mapParams = std::get<TMapReduceMapTaskParams>(task->TaskParams);
+                TFmrTableOutputRef outputRef{mapParams.Output.TableId, mapParams.Output.PartId};
+
+                NYT::TNode firstKey;
+                firstKey[TString(YqlKeyHashColumn)] = NYT::TNode(0LL);
+                firstKey["key"] = NYT::TNode("");
+
+                NYT::TNode lastKey;
+                lastKey[TString(YqlKeyHashColumn)] = NYT::TNode(0LL);
+                lastKey["key"] = NYT::TNode("z");
+
+                TTableChunkStats chunkStats{
+                    .PartId = mapParams.Output.PartId,
+                    .PartIdChunkStats = {TChunkStats{
+                        .Rows = 1,
+                        .DataWeight = 1,
+                        .SortedChunkStats = TSortedChunkStats{
+                            .IsSorted = true,
+                            .FirstRowKeys = firstKey,
+                            .LastRowKeys = lastKey
+                        }
+                    }}
+                };
+                stats.OutputTables[outputRef] = chunkStats;
+                return TJobResult{.TaskStatus = ETaskStatus::Completed, .Stats = stats};
+            } else if (task->TaskType == ETaskType::Reduce) {
+                throw TFmrNonRetryableJobException() << "Reduce stage failed";
+            }
+            return TJobResult{.TaskStatus = ETaskStatus::Completed, .Stats = stats};
+        };
+
+        auto worker = setup.GetFmrWorker(coordinator, 3, func);
+        Sleep(TDuration::Seconds(8));
+
+        auto getResponse = coordinator->GetOperation({operationId}).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(getResponse.Status, EOperationStatus::Failed);
+    }
+
+    Y_UNIT_TEST(MapReduceMapStageFailureFails) {
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
+
+        TMapReduceOperationParams mapReduceParams{
+            .Input = {TYtTableRef{"Cluster", "Path", "File_path"}},
+            .Output = {TFmrTableRef{{"TestCluster", "TestOutput"}}},
+            .SerializedMapJobState = "map_state",
+            .SerializedReduceJobState = "reduce_state",
+            .ReduceOperationSpec = TReduceOperationSpec{
+                .ReduceBy = TSortingColumns{.Columns = {"key"}, .SortOrders = {ESortOrder::Ascending}},
+                .SortBy = TSortingColumns{},
+                .ReduceType = SortedReduce
+            }
+        };
+
+        auto request = setup.CreateOperationRequest(EOperationType::MapReduce, mapReduceParams);
+        auto startResponse = coordinator->StartOperation(request).GetValueSync();
+        TString operationId = startResponse.OperationId;
+
+        auto func = [&](TTask::TPtr task, std::shared_ptr<std::atomic<bool>> /*cancelFlag*/) {
+            if (task->TaskType == ETaskType::MapReduceMap) {
+                throw TFmrNonRetryableJobException() << "Map stage failed";
+            }
+            return TJobResult{.TaskStatus = ETaskStatus::Completed, .Stats = TStatistics()};
+        };
+
+        auto worker = setup.GetFmrWorker(coordinator, 3, func);
+        Sleep(TDuration::Seconds(4));
+
+        auto getResponse = coordinator->GetOperation({operationId}).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(getResponse.Status, EOperationStatus::Failed);
+    }
 }
 
 } // namespace NYql::NFmr

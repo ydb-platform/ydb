@@ -1,4 +1,3 @@
-/* syntax version 1 */
 $merge_dicts = ($dict1, $dict2) -> {
     RETURN SetUnion(
         $dict1, $dict2, ($_key, $a, $b) -> {

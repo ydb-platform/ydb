@@ -256,8 +256,8 @@ TExprNode::TPtr BuildNormalRangeLambdaRaw(TPositionHandle pos, const TTypeAnnota
     const bool isTzKey = keySlot && (NUdf::GetDataTypeInfo(*keySlot).Features & NUdf::EDataTypeFeatures::TzDateType);
     const bool isIntegralOrDateKey = keySlot && (NUdf::GetDataTypeInfo(*keySlot).Features &
         (NUdf::EDataTypeFeatures::IntegralType | NUdf::EDataTypeFeatures::DateType));
-    const auto downKey = isTzKey ? TzRound(key, keyType, true, ctx) : key;
-    const auto upKey = isTzKey ? TzRound(key, keyType, false, ctx) : key;
+    const auto downKey = isTzKey ? TzRound(key, keyType, /*down=*/true, ctx) : key;
+    const auto upKey = isTzKey ? TzRound(key, keyType, /*down=*/false, ctx) : key;
     if (op == "!=") {
         TRangeBoundary left;
         TRangeBoundary right;

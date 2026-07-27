@@ -162,4 +162,6 @@ TMaybe<TVector<TString>> BuildLayersPaths(const TExprNode::TPtr& input, const TS
 
 bool CanReplaceParentOutputHash(const TExprNode& node);
 
+ui64 GetNativeYtTypeCompatibility(const TString& cluster, const TYtSettings& config);
+
 };

@@ -254,7 +254,7 @@ public:
     virtual TUnboxedValue NewVariant(ui32 index, TUnboxedValue&& value) const = 0;
 
     inline TUnboxedValue NewEmptyList() const {
-        return NewList(nullptr, 0);
+        return NewList(/*items=*/nullptr, 0);
     }
 };
 

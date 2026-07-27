@@ -213,6 +213,11 @@ public:
                         return TStringBuilder() << what << " SpecializedIndexDescription is not empty for index type LocalMinMax";
                     }
                     return std::nullopt;
+                case NKikimrSchemeOp::EIndexTypeLocalCountMinSketch:
+                    if (!std::holds_alternative<std::monostate>(info.SpecializedIndexDescription)) {
+                        return TStringBuilder() << what << " SpecializedIndexDescription is not empty for index type LocalCountMinSketch";
+                    }
+                    return std::nullopt;
                 default:
                     return TStringBuilder() << "Unexpected index type " << static_cast<int>(info.Type)
                         << " in TAlterLocalIndex::Propose. Only local bloom filter and min_max types are supported.";
@@ -283,11 +288,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperation::TPtr CreateAlterLocalIndex(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateAlterColumnTableLocalIndex(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TAlterLocalIndex>(id, tx);
 }
 
-ISubOperation::TPtr CreateAlterLocalIndex(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateAlterColumnTableLocalIndex(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TAlterLocalIndex>(id, state);
 }
 

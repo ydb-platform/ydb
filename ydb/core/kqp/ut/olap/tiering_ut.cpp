@@ -4,6 +4,7 @@
 #include "helpers/writer.h"
 
 #include <ydb/core/kqp/ut/common/columnshard.h>
+#include <ydb/core/kqp/ut/common/olap_indexes_enums.h>
 #include <ydb/core/tx/columnshard/data_locks/locks/list.h>
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
@@ -56,7 +57,7 @@ private:
     YDB_ACCESSOR(TString, TablePath, DEFAULT_TABLE_PATH);
 
 public:
-    TTieringTestHelper() {
+    TTieringTestHelper(bool enableLocalIndexAsSchemeObject = true) {
         CsController.emplace(NYDBTest::TControllers::RegisterCSControllerGuard<TCtrl>());
         (*CsController)->SetSkipSpecialCheckForEvict(true);
 
@@ -65,6 +66,8 @@ public:
         runnerSettings.SetColumnShardAlterObjectEnabled(true);
         runnerSettings.FeatureFlags.SetEnableColumnshardBool(true);
         runnerSettings.FeatureFlags.SetEnableColumnStore(true);
+        runnerSettings.FeatureFlags.SetEnableLocalIndexAsSchemeObject(enableLocalIndexAsSchemeObject);
+        
         TestHelper.emplace(runnerSettings);
         // Shorten LongTx delays directly on AppData so MinSnapshotForNewReads advances quickly
         // for tier blob GC to run within the test's WaitCondition window.
@@ -578,8 +581,9 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         UNIT_ASSERT_GT(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("olap-another-bucket").GetSize(), 0);
     }
 
-    Y_UNIT_TEST(TieringForIndexes) {
-        TTieringTestHelper tieringHelper;
+    Y_UNIT_TEST(TieringForIndexes, ELocalIndexAsSchemeObject) {
+        const bool localIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        TTieringTestHelper tieringHelper{localIndexAsSchemeObject};
         auto& csController = tieringHelper.GetCsController();
         auto& olapHelper = tieringHelper.GetOlapHelper();
         auto& testHelper = tieringHelper.GetTestHelper();
@@ -675,6 +679,154 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             }
         }
     }
+    
+    Y_UNIT_TEST(TieringViaIndex, ELocalIndexAsSchemeObject) {
+        const bool localIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        TTieringTestHelper tieringHelper{localIndexAsSchemeObject};
+        auto& csController = tieringHelper.GetCsController();
+        auto& testHelper = tieringHelper.GetTestHelper();
+
+        // "inherit_portion_storage": false(defaults to true in alter object ddl) and 
+        // "storage_id": "__LOCAL_METADATA"(defaults to "__LOCAL_METADATA" in alter object ddl) 
+        // are mandatory because ttl only works with min_max index stored in local database, 
+        // and both of these options move data out of local db            
+        auto createStatus = testHelper.GetSession().ExecuteSchemeQuery(R"(
+        CREATE TABLE `/Root/ColumnWithTTLAndMinMaxIndex` (
+            id Int32 NOT NULL,
+            ts Timestamp NOT NULL,
+            PRIMARY KEY(id)
+        ) PARTITION BY HASH (`id`) 
+        WITH ( STORE = COLUMN );
+        ALTER TABLE `/Root/ColumnWithTTLAndMinMaxIndex` ADD INDEX `min_max_ts` LOCAL USING min_max ON(`ts`);
+        )").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(createStatus.GetStatus(), NYdb::EStatus::SUCCESS, createStatus.GetIssues().ToString());
+
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
+        TString tablePath = "/Root/ColumnWithTTLAndMinMaxIndex";
+        testHelper.SetTiering(tablePath, DEFAULT_TIER_PATH, "ts");
+
+        testHelper.ExecuteQuery(R"(
+            $prev_year = Unwrap(DateTime::MakeTimestamp(
+                DateTime::ShiftYears(DateTime::Split(CurrentUtcTimestamp()), -1)
+            ));
+            $data1 = ListMap(ListFromRange(1, 1500001), ($x) -> { RETURN AsStruct($x AS item); });
+            UPSERT INTO `/Root/ColumnWithTTLAndMinMaxIndex` (`id`, `ts`)
+            SELECT CAST(item AS Int32) AS `id`, $prev_year as `ts` FROM AS_TABLE($data1);
+            UPSERT INTO `/Root/ColumnWithTTLAndMinMaxIndex` (`id`, `ts`)
+            SELECT CAST(item+1 AS Int32) AS `id`, $prev_year as `ts` FROM AS_TABLE($data1);
+            )");
+        csController->WaitCompactions(TDuration::Seconds(10));
+        csController->WaitActualization(TDuration::Seconds(10));
+        tieringHelper.SetTablePath(tablePath);
+        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
+        {
+            NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+            auto selectQuery = TStringBuilder();
+            selectQuery << R"(
+                SELECT TierName, SUM(ColumnRawBytes) as RawBytes, SUM(Rows) AS Rows
+                FROM `)" << tablePath << R"(/.sys/primary_index_portion_stats`
+                WHERE Activity == 1
+                GROUP BY TierName)";
+
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("TierName")), DEFAULT_TIER_PATH);
+        }
+        {
+            NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+            auto rows = ExecuteScanQuery(tableClient, TStringBuilder() << "SELECT COUNT(*) AS cnt FROM `" << tablePath << "`");
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("cnt")), 1500001);
+        }
+
+    }
+
+    Y_UNIT_TEST(TieringDoesntWorkForMinMaxIndexStoredOutsideOfLocalDB, ELocalIndexAsSchemeObject) {
+        const bool localIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        TTieringTestHelper tieringHelper{localIndexAsSchemeObject};
+        auto& testHelper = tieringHelper.GetTestHelper();
+        {
+            auto createStatus = testHelper.GetSession().ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/ColumnWithTTLAndMinMaxIndex` (
+                id Int32 NOT NULL,
+                ts Timestamp NOT NULL,
+                PRIMARY KEY(id)
+            ) PARTITION BY HASH (`id`) 
+            WITH ( STORE = COLUMN );
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(createStatus.GetStatus(), NYdb::EStatus::SUCCESS, createStatus.GetIssues().ToString());            
+        }
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
+        {
+            auto addBadIndex = testHelper.GetSession().ExecuteSchemeQuery(R"(
+                ALTER OBJECT `/Root/ColumnWithTTLAndMinMaxIndex` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_minmax_ts, TYPE=MIN_MAX,
+                        FEATURES=`{"storage_id": "__DEFAULT", "inherit_portion_storage": false, "column_name": "ts"}`);
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(addBadIndex.GetStatus(), NYdb::EStatus::SUCCESS, addBadIndex.GetIssues().ToString());
+            auto addTTL = testHelper.GetSession().ExecuteSchemeQuery(
+                TStringBuilder() << "ALTER TABLE `/Root/ColumnWithTTLAndMinMaxIndex` SET TTL Interval(\"P10D\") TO EXTERNAL DATA SOURCE `" << DEFAULT_TIER_PATH << "` ON `ts`;"
+            ).GetValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL_C(addTTL.GetStatus(), NYdb::EStatus::SUCCESS, addTTL.GetIssues().ToString());   
+            auto dropBadIndex = testHelper.GetSession().ExecuteSchemeQuery(R"(
+                ALTER OBJECT `/Root/ColumnWithTTLAndMinMaxIndex` (TYPE TABLE) SET (ACTION=DROP_INDEX, NAME=index_minmax_ts);
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(dropBadIndex.GetStatus(), NYdb::EStatus::SUCCESS, dropBadIndex.GetIssues().ToString());
+        }
+
+        {
+            auto addBadIndex = testHelper.GetSession().ExecuteSchemeQuery(R"(
+                ALTER OBJECT `/Root/ColumnWithTTLAndMinMaxIndex` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_minmax_ts, TYPE=MIN_MAX,
+                        FEATURES=`{"storage_id": "__DEFAULT", "inherit_portion_storage": true, "column_name": "ts"}`);
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(addBadIndex.GetStatus(), NYdb::EStatus::SUCCESS, addBadIndex.GetIssues().ToString());
+            auto addTTL = testHelper.GetSession().ExecuteSchemeQuery(
+                TStringBuilder() << "ALTER TABLE `/Root/ColumnWithTTLAndMinMaxIndex` SET TTL Interval(\"P10D\") TO EXTERNAL DATA SOURCE `" << DEFAULT_TIER_PATH << "` ON `ts`;"
+            ).GetValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL_C(addTTL.GetStatus(), NYdb::EStatus::SUCCESS, addTTL.GetIssues().ToString());   
+            auto dropBadIndex = testHelper.GetSession().ExecuteSchemeQuery(R"(
+                ALTER OBJECT `/Root/ColumnWithTTLAndMinMaxIndex` (TYPE TABLE) SET (ACTION=DROP_INDEX, NAME=index_minmax_ts);
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(dropBadIndex.GetStatus(), NYdb::EStatus::SUCCESS, dropBadIndex.GetIssues().ToString());
+        }
+
+        {
+            auto addBadIndex = testHelper.GetSession().ExecuteSchemeQuery(R"(
+                ALTER OBJECT `/Root/ColumnWithTTLAndMinMaxIndex` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_minmax_ts, TYPE=MIN_MAX,
+                        FEATURES=`{"storage_id": "__LOCAL_METADATA", "inherit_portion_storage": true, "column_name": "ts"}`);
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(addBadIndex.GetStatus(), NYdb::EStatus::SUCCESS, addBadIndex.GetIssues().ToString());
+            auto addTTL = testHelper.GetSession().ExecuteSchemeQuery(
+                TStringBuilder() << "ALTER TABLE `/Root/ColumnWithTTLAndMinMaxIndex` SET TTL Interval(\"P10D\") TO EXTERNAL DATA SOURCE `" << DEFAULT_TIER_PATH << "` ON `ts`;"
+            ).GetValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL_C(addTTL.GetStatus(), NYdb::EStatus::SUCCESS, addTTL.GetIssues().ToString());   
+            auto dropBadIndex = testHelper.GetSession().ExecuteSchemeQuery(R"(
+                ALTER OBJECT `/Root/ColumnWithTTLAndMinMaxIndex` (TYPE TABLE) SET (ACTION=DROP_INDEX, NAME=index_minmax_ts);
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(dropBadIndex.GetStatus(), NYdb::EStatus::SUCCESS, dropBadIndex.GetIssues().ToString());
+        }
+
+        {
+            auto addFirstIndex = testHelper.GetSession().ExecuteSchemeQuery(R"(
+                ALTER OBJECT `/Root/ColumnWithTTLAndMinMaxIndex` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_minmax_ts, TYPE=MIN_MAX,
+                        FEATURES=`{"storage_id": "__LOCAL_METADATA", "inherit_portion_storage": false, "column_name": "ts"}`);
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(addFirstIndex.GetStatus(), NYdb::EStatus::SUCCESS, addFirstIndex.GetIssues().ToString());
+            auto addTTL = testHelper.GetSession().ExecuteSchemeQuery(
+                TStringBuilder() << "ALTER TABLE `/Root/ColumnWithTTLAndMinMaxIndex` SET TTL Interval(\"P10D\") TO EXTERNAL DATA SOURCE `" << DEFAULT_TIER_PATH << "` ON `ts`;"
+            ).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(addTTL.GetStatus(), NYdb::EStatus::SUCCESS, addTTL.GetIssues().ToString()); 
+            // A second min_max index on column `ts`, which already has `index_minmax_ts`, must be
+            // rejected: a column cannot have two indexes of the same type.
+            auto addDuplicateIndex = testHelper.GetSession().ExecuteSchemeQuery(R"(
+                ALTER OBJECT `/Root/ColumnWithTTLAndMinMaxIndex` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_minmax_ts2, TYPE=MIN_MAX,
+                        FEATURES=`{"storage_id": "__LOCAL_METADATA", "inherit_portion_storage": true, "column_name": "ts"}`);
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL_C(addDuplicateIndex.GetStatus(), NYdb::EStatus::SUCCESS, addDuplicateIndex.GetIssues().ToString());
+
+        }
+        
+    }
+
 
     Y_UNIT_TEST(TieringBoolToS3) {
         TTieringTestHelper tieringHelper;

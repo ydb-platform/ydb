@@ -44,7 +44,7 @@ TVector<ISubOperation::TPtr> DropColumnTableWithLocalIndexes(TOperationId nextId
         dropIndexScheme.SetInternal(true);
         dropIndexScheme.MutableDrop()->SetName(childName);
 
-        result.push_back(CreateDropLocalIndex(NextPartId(nextId, result), dropIndexScheme));
+        result.push_back(CreateDropColumnTableLocalIndex(NextPartId(nextId, result), dropIndexScheme));
     }
 
     return result;

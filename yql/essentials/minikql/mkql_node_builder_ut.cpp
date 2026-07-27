@@ -20,8 +20,8 @@ Y_UNIT_TEST(TestTupleBuilder) {
     TTypeEnvironment env(alloc);
     auto builder = TTupleLiteralBuilder(env);
     const auto tuple = builder
-                           .Add(TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod(true), NUdf::EDataSlot::Bool, env), true))
-                           .Add(TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod(132), NUdf::EDataSlot::Uint32, env), true))
+                           .Add(TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod(true), NUdf::EDataSlot::Bool, env), /*isImmediate=*/true))
+                           .Add(TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod(132), NUdf::EDataSlot::Uint32, env), /*isImmediate=*/true))
                            .Build();
     UNIT_ASSERT_EQUAL(tuple->GetType()->GetKind(), TType::EKind::Tuple);
     UNIT_ASSERT_VALUES_EQUAL(tuple->GetValuesCount(), 2);
@@ -43,14 +43,14 @@ Y_UNIT_TEST(TestStructLiteralBuilder) {
     TScopedAlloc alloc(__LOCATION__);
     TTypeEnvironment env(alloc);
     auto structObj = TStructLiteralBuilder(env)
-                         .Add("Field1", TRuntimeNode(env.GetVoidLazy(), true))
-                         .Add("Field2", TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)234), NUdf::EDataSlot::Uint32, env), true))
+                         .Add("Field1", TRuntimeNode(env.GetVoidLazy(), /*isImmediate=*/true))
+                         .Add("Field2", TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)234), NUdf::EDataSlot::Uint32, env), /*isImmediate=*/true))
                          .Build();
     UNIT_ASSERT_EQUAL(structObj->GetType()->GetKind(), TType::EKind::Struct);
 
     auto structObj2 = TStructLiteralBuilder(env)
-                          .Add("Field2", TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)234), NUdf::EDataSlot::Uint32, env), true))
-                          .Add("Field1", TRuntimeNode(env.GetVoidLazy(), true))
+                          .Add("Field2", TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)234), NUdf::EDataSlot::Uint32, env), /*isImmediate=*/true))
+                          .Add("Field1", TRuntimeNode(env.GetVoidLazy(), /*isImmediate=*/true))
                           .Build();
     UNIT_ASSERT(structObj->GetType()->IsSameType(*structObj2->GetType()));
 }
@@ -59,8 +59,8 @@ Y_UNIT_TEST(TestListLiteralBuilder) {
     TScopedAlloc alloc(__LOCATION__);
     TTypeEnvironment env(alloc);
     auto list = TListLiteralBuilder(env, TDataType::Create(NUdf::TDataType<ui32>::Id, env))
-                    .Add(TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)132), NUdf::EDataSlot::Uint32, env), true))
-                    .Add(TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)234), NUdf::EDataSlot::Uint32, env), true))
+                    .Add(TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)132), NUdf::EDataSlot::Uint32, env), /*isImmediate=*/true))
+                    .Add(TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)234), NUdf::EDataSlot::Uint32, env), /*isImmediate=*/true))
                     .Build();
     UNIT_ASSERT_EQUAL(list->GetType()->GetKind(), TType::EKind::List);
     UNIT_ASSERT_EQUAL(list->GetItemsCount(), 2);
@@ -139,11 +139,11 @@ Y_UNIT_TEST(TestDictLiteralBuilder) {
     auto dict = TDictLiteralBuilder(env, TDataType::Create(NUdf::TDataType<ui32>::Id, env),
                                     TDataType::Create(NUdf::TDataType<char*>::Id, env))
                     .Add(
-                        TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)132), NUdf::EDataSlot::Uint32, env), true),
-                        TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod::Embedded("abc"), NUdf::TDataType<char*>::Id, env), true))
+                        TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)132), NUdf::EDataSlot::Uint32, env), /*isImmediate=*/true),
+                        TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod::Embedded("abc"), NUdf::TDataType<char*>::Id, env), /*isImmediate=*/true))
                     .Add(
-                        TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)234), NUdf::EDataSlot::Uint32, env), true),
-                        TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod::Embedded("def"), NUdf::TDataType<char*>::Id, env), true))
+                        TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)234), NUdf::EDataSlot::Uint32, env), /*isImmediate=*/true),
+                        TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod::Embedded("def"), NUdf::TDataType<char*>::Id, env), /*isImmediate=*/true))
                     .Build();
 
     UNIT_ASSERT_EQUAL(dict->GetType()->GetKind(), TType::EKind::Dict);
@@ -154,16 +154,16 @@ Y_UNIT_TEST(TestCallableBuilder) {
     TScopedAlloc alloc(__LOCATION__);
     TTypeEnvironment env(alloc);
     auto callable1 = TCallableBuilder(env, "func1", TDataType::Create(NUdf::TDataType<ui32>::Id, env))
-                         .Add(TRuntimeNode(env.GetEmptyStructLazy(), true))
-                         .Add(TRuntimeNode(env.GetVoidLazy(), true))
+                         .Add(TRuntimeNode(env.GetEmptyStructLazy(), /*isImmediate=*/true))
+                         .Add(TRuntimeNode(env.GetVoidLazy(), /*isImmediate=*/true))
                          .Build();
 
     UNIT_ASSERT_EQUAL(callable1->GetType()->GetKind(), TType::EKind::Callable);
     UNIT_ASSERT_EQUAL(callable1->GetInputsCount(), 2);
 
     auto callable2 = TCallableBuilder(env, "func2", TDataType::Create(NUdf::TDataType<ui32>::Id, env))
-                         .Add(TRuntimeNode(callable1, false))
-                         .Add(TRuntimeNode(env.GetVoidLazy(), true))
+                         .Add(TRuntimeNode(callable1, /*isImmediate=*/false))
+                         .Add(TRuntimeNode(env.GetVoidLazy(), /*isImmediate=*/true))
                          .Build();
 
     UNIT_ASSERT_EQUAL(callable2->GetType()->GetKind(), TType::EKind::Callable);
@@ -177,11 +177,11 @@ Y_UNIT_TEST(TestCallableBuilderWithNamesAndFlags) {
     TScopedAlloc alloc(__LOCATION__);
     TTypeEnvironment env(alloc);
     auto callable1 = TCallableBuilder(env, "func1", TDataType::Create(NUdf::TDataType<ui32>::Id, env))
-                         .Add(TRuntimeNode(env.GetEmptyStructLazy(), true))
-                         .Add(TRuntimeNode(env.GetVoidLazy(), true))
+                         .Add(TRuntimeNode(env.GetEmptyStructLazy(), /*isImmediate=*/true))
+                         .Add(TRuntimeNode(env.GetVoidLazy(), /*isImmediate=*/true))
                          .SetArgumentName("Arg2")
                          .SetArgumentFlags(NUdf::ICallablePayload::TArgumentFlags::AutoMap)
-                         .Add(TRuntimeNode(env.GetEmptyTupleLazy(), true))
+                         .Add(TRuntimeNode(env.GetEmptyTupleLazy(), /*isImmediate=*/true))
                          .SetArgumentName("Arg3")
                          .Build();
 

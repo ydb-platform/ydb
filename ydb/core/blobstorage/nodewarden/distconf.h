@@ -358,7 +358,7 @@ namespace NKikimr::NStorage {
         std::vector<std::tuple<TActorId, TString, ui64>> ConsoleConfigValidationQ;
 
         // retro trace root-side batching
-        static constexpr TDuration RetroTraceBatchInterval = TDuration::Seconds(2);
+        TControlWrapper RootRetroTraceBatchIntervalSec = TControlWrapper(10, 1, 3600);
         std::vector<NWilson::TTraceId> PendingRetroTraceIds;
         bool RetroTraceBatchFlushScheduled = false;
 
@@ -476,15 +476,34 @@ namespace NKikimr::NStorage {
 
         std::optional<TString> GenerateFirstConfig(NKikimrBlobStorage::TStorageConfig *config, const TString& selfAssemblyUUID);
 
-        void AllocateStaticGroup(NKikimrBlobStorage::TStorageConfig *config, TGroupId groupId, ui32 groupGeneration,
-            TBlobStorageGroupType gtype, const NKikimrBlobStorage::TGroupGeometry& geometry,
-            const NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TPDiskFilter>& pdiskFilters,
-            std::optional<NKikimrBlobStorage::EPDiskType> pdiskType,
-            THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks,
-            const NBsController::TGroupMapper::TForbiddenPDisks& forbid,
-            i64 requiredSpace, NKikimrBlobStorage::TBaseConfig *baseConfig,
-            bool convertToDonor, bool ignoreVSlotQuotaCheck, bool isSelfHealReasonDecommit, TBridgePileId bridgePileId,
-            std::optional<TGroupId> bridgeProxyGroupId);
+        struct TStaticGroupReassignment {
+            std::optional<NKikimrBlobStorage::TVSlotId> SourceSlotId;
+            std::optional<NKikimrBlobStorage::TVSlotId> TargetSlotId;
+        };
+
+        using TStaticGroupReassignments = THashMap<TVDiskIdShort, TStaticGroupReassignment>;
+
+        struct TAllocateStaticGroupParams {
+            NKikimrBlobStorage::TStorageConfig *Config = nullptr;
+            TGroupId GroupId;
+            ui32 GroupGeneration = 0;
+            TBlobStorageGroupType GroupType;
+            THashMap<TVDiskIdShort, NBsController::TPDiskId> ReplacedDisks;
+            NBsController::TGroupMapper::TForbiddenPDisks ForbiddenPDisks;
+            i64 RequiredSpace = 0;
+            const NKikimrBlobStorage::TBaseConfig *BaseConfig = nullptr;
+            bool ConvertToDonor = false;
+            bool IgnoreVSlotQuotaCheck = false;
+            bool AllowUnusableDisks = false;
+            bool SettleOnlyOnOperationalDisks = false;
+            bool IsSelfHealReasonDecommit = false;
+            TBridgePileId BridgePileId;
+            std::optional<TGroupId> BridgeProxyGroupId;
+            bool ApplySelfHealNodeAllowList = false;
+            TStaticGroupReassignments *Reassignments = nullptr;
+        };
+
+        void AllocateStaticGroup(TAllocateStaticGroupParams params);
 
         bool UpdateConfig(NKikimrBlobStorage::TStorageConfig *config);
 
@@ -516,7 +535,9 @@ namespace NKikimr::NStorage {
         bool GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss
             , const NKikimrBlobStorage::TStorageConfig& baseConfig
             , std::unordered_set<ui32>& usedNodes
+            , const std::unordered_set<ui32>& nodesToUse = {}
             , const NKikimrConfig::TDomainsConfig::TStateStorage& oldConfig = {}
+            , bool automaticManagement = true
             , ui32 overrideReplicasInRingCount = 0
             , ui32 overrideRingsCount = 0
             , ui32 replicasSpecificVolume = 200

@@ -9,7 +9,9 @@
 #include <library/cpp/monlib/metrics/metric_registry.h>
 #include <util/generic/map.h>
 #include <util/generic/set.h>
+#include <util/generic/ptr.h>
 #include <util/system/datetime.h>
+#include <util/system/mutex.h>
 
 #include "event_filter.h"
 
@@ -77,10 +79,22 @@ namespace NActors {
         TDuration EventDelay = TDuration::Zero();
         ESocketSendOptimization SocketSendOptimization = ESocketSendOptimization::DISABLED;
         bool RdmaChecksum = true;
+        bool EnableRdmaSendReceive = false;
         ui32 RdmaPayloadCopySizeThreshold = 64 << 10;
         // 5s * 2^8 = 1280s, about 21 minutes with the current RDMA retry base delay.
         ui32 MaxRdmaRetryBackoffLevel = 8;
         bool CollectSubscriptionStackTrace = false;
+        bool UseUring = false;
+        bool EnableUringSQPOLL = false; // only effective when UseUring is set
+        // Enables negotiation and usage of TInterconnectSessionTCPv2 (no session continuation, no encryption).
+        // v2 is used only when both peers have this enabled and encryption is not in effect.
+        bool EnableInterconnectSessionV2 = false;
+        bool ChecksumInterconnectSessionV2 = false;
+        // Use io_uring SQPOLL mode for the v2 data-plane rings (kernel-side submission polling).
+        bool EnableSQPOLLv2 = true;
+        // Preserialize outgoing events on the session mailbox before handing them to the v2 engine (moves
+        // serialization cost off the engine's shard worker thread).
+        bool EnablePreserializeInV2 = false;
     };
 
     struct TWhiteboardSessionStatus {
@@ -123,6 +137,8 @@ namespace NActors {
     using TInitWhiteboardCallback = std::function<void(ui16 icPort, TActorSystem* actorSystem)>;
 
     using TUpdateWhiteboardCallback = std::function<void(const TWhiteboardSessionStatus& data)>;
+
+    class IUringEngine; // shared v2 io_uring data-plane engine (see interconnect_uring_engine.h)
 
     struct TInterconnectProxyCommon : TAtomicRefCount<TInterconnectProxyCommon> {
         TActorId NameserviceId;
@@ -175,6 +191,16 @@ namespace NActors {
         std::function<bool(const TInterconnectProxyCommon::TVersionInfo&, TString&)> ValidateCompatibilityOldFormat;
 
         std::shared_ptr<NInterconnect::NRdma::IMemPool> RdmaMemPool;
+
+        // Shared v2 io_uring data-plane engine for the node (created once at startup when v2 + io_uring
+        // are enabled, and bound to the actor system once it exists). Sessions fetch it and call it
+        // directly.
+        TIntrusivePtr<IUringEngine> UringEngineV2;
+
+        // Out-of-line so translation units that construct/destroy Common do not need the complete
+        // IUringEngine type (it is only complete in interconnect_common.cpp).
+        TInterconnectProxyCommon();
+        ~TInterconnectProxyCommon();
 
         using TPtr = TIntrusivePtr<TInterconnectProxyCommon>;
     };

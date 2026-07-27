@@ -43,6 +43,7 @@ def parse_args():
     parser.add_argument("--checks", required=False, default="")
     parser.add_argument("--header-filter", required=False, default=None)
     parser.add_argument("--collect-build-volume", action="store_true")
+    parser.add_argument("--allow-generated-sources", action="store_true")
     return parser.parse_known_args()
 
 
@@ -102,6 +103,13 @@ def load_fixes(path):
 
 def is_generated(testing_src, build_root):
     return testing_src.startswith(build_root)
+
+
+def source_relative_path(testing_src, source_root, build_root):
+    if is_generated(testing_src, build_root):
+        return os.path.relpath(testing_src, build_root)
+
+    return os.path.relpath(testing_src, source_root)
 
 
 def generate_outputs(output_json):
@@ -177,7 +185,7 @@ def main():
     clang_tidy_bin = args.clang_tidy_bin
     output_json = args.tidy_json
     generate_outputs(output_json)
-    if is_generated(args.testing_src, args.build_root):
+    if is_generated(args.testing_src, args.build_root) and not args.allow_generated_sources:
         return
     if args.header_filter is None:
         # .pb.h files will be excluded because they are not in source_root
@@ -259,7 +267,11 @@ def main():
         build_volume = load_build_volume(statistics_file)
         if build_volume is not None:
             profile[BUILD_VOLUME_PROFILE_KEY] = build_volume
-    testing_src = os.path.relpath(args.testing_src, args.source_root)
+    testing_src = source_relative_path(
+        testing_src=args.testing_src,
+        source_root=args.source_root,
+        build_root=args.build_root,
+    )
     tidy_fixes = load_fixes(fixes_file)
 
     with open(output_json, "wt") as afile:

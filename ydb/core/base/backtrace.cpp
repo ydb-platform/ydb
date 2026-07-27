@@ -1,5 +1,8 @@
 #include "backtrace.h"
 
+#include <library/cpp/svnversion/svnversion.h>
+
+#include <util/stream/output.h>
 #include <util/system/backtrace.h>
 
 #if defined(__linux__) || defined(__APPLE__)
@@ -8,6 +11,23 @@
 #endif
 
 namespace NKikimr {
+
+namespace {
+
+void WriteBuildInfo(IOutputStream* out) {
+    const char* commit = GetProgramCommitId();
+    const char* dirty = GetVCSDirty();
+    const char* release = GetReleaseVersion();
+
+    *out << "build: commit " << (commit && *commit ? commit : "unknown")
+         << (dirty && *dirty ? " (dirty)" : " (clean)");
+    if (release && *release) {
+        *out << ", release " << release;
+    }
+    *out << Endl;
+}
+
+} // namespace
 
 #if defined(__linux__) || defined(__APPLE__)
 
@@ -36,16 +56,30 @@ void FormatBacktraceDwarf(IOutputStream* out, void* const* backtrace, size_t bac
     }
 }
 
+void FormatBacktraceWithBuildInfo(IOutputStream* out, void* const* backtrace, size_t backtraceSize) {
+    WriteBuildInfo(out);
+    FormatBacktraceDwarf(out, backtrace, backtraceSize);
+}
+
 }
 
 void EnableYDBBacktraceFormat() {
-    SetFormatBackTraceFn(FormatBacktraceDwarf);
+    SetFormatBackTraceFn(FormatBacktraceWithBuildInfo);
 }
 
 #else
 
+namespace {
+
+void FormatBacktraceWithBuildInfo(IOutputStream* out, void* const* backtrace, size_t backtraceSize) {
+    WriteBuildInfo(out);
+    FormatBackTrace(out, backtrace, backtraceSize);
+}
+
+}
+
 void EnableYDBBacktraceFormat() {
-    SetFormatBackTraceFn(FormatBackTrace);
+    SetFormatBackTraceFn(FormatBacktraceWithBuildInfo);
 }
 
 #endif

@@ -87,28 +87,82 @@ class TAccessServiceV2 : public NActors::TActor<TAccessServiceV2>, NGrpcActorCli
     using TThis = TAccessServiceV2;
     using TBase = NActors::TActor<TAccessServiceV2>;
 
-    struct TBulkAuthorizeRequest : TGrpcRequest {
-        static constexpr auto Request = &yandex::cloud::priv::accessservice::v2::AccessService::Stub::AsyncBulkAuthorize;
-        using TRequestEventType = TEvAccessService::TEvBulkAuthorizeRequest;
-        using TResponseEventType = TEvAccessService::TEvBulkAuthorizeResponse;
+    struct TAuthenticateRequest : TGrpcRequest {
+        static constexpr auto Request = &yandex::cloud::priv::accessservice::v2::AccessService::Stub::AsyncAuthenticate;
+        using TRequestEventType = TEvAccessService::TEvAuthenticateRequestV2;
+        using TResponseEventType = TEvAccessService::TEvAuthenticateResponseV2;
 
-        static yandex::cloud::priv::accessservice::v2::BulkAuthorizeRequest Obfuscate(const yandex::cloud::priv::accessservice::v2::BulkAuthorizeRequest& p) {
-            yandex::cloud::priv::accessservice::v2::BulkAuthorizeRequest r(p);
-            if (r.iam_token()) {
-                r.set_iam_token(MaskToken(r.iam_token()));
+        static yandex::cloud::priv::accessservice::v2::AuthenticateRequest Obfuscate(const yandex::cloud::priv::accessservice::v2::AuthenticateRequest& request) {
+            yandex::cloud::priv::accessservice::v2::AuthenticateRequest result(request);
+            if (result.iam_token()) {
+                result.set_iam_token(MaskToken(result.iam_token()));
             }
-            if (r.api_key()) {
-                r.set_api_key(MaskToken(r.api_key()));
+            if (result.api_key()) {
+                result.set_api_key(MaskToken(result.api_key()));
             }
-            return r;
+            if (result.refresh_token()) {
+                result.set_refresh_token(MaskToken(result.refresh_token()));
+            }
+            result.clear_iam_cookie();
+            return result;
         }
 
-        static const yandex::cloud::priv::accessservice::v2::BulkAuthorizeResponse& Obfuscate(const yandex::cloud::priv::accessservice::v2::BulkAuthorizeResponse& p) {
-            return p;
+        static const yandex::cloud::priv::accessservice::v2::AuthenticateResponse& Obfuscate(const yandex::cloud::priv::accessservice::v2::AuthenticateResponse& response) {
+            return response;
         }
     };
 
-    void Handle(TEvAccessService::TEvBulkAuthorizeRequest::TPtr& ev) {
+    void Handle(TEvAccessService::TEvAuthenticateRequestV2::TPtr& ev) {
+        MakeCall<TAuthenticateRequest>(std::move(ev));
+    }
+
+    struct TAuthorizeRequest : TGrpcRequest {
+        static constexpr auto Request = &yandex::cloud::priv::accessservice::v2::AccessService::Stub::AsyncAuthorize;
+        using TRequestEventType = TEvAccessService::TEvAuthorizeRequestV2;
+        using TResponseEventType = TEvAccessService::TEvAuthorizeResponseV2;
+
+        static yandex::cloud::priv::accessservice::v2::AuthorizeRequest Obfuscate(const yandex::cloud::priv::accessservice::v2::AuthorizeRequest& request) {
+            yandex::cloud::priv::accessservice::v2::AuthorizeRequest result(request);
+            if (result.iam_token()) {
+                result.set_iam_token(MaskToken(result.iam_token()));
+            }
+            if (result.api_key()) {
+                result.set_api_key(MaskToken(result.api_key()));
+            }
+            return result;
+        }
+
+        static const yandex::cloud::priv::accessservice::v2::AuthorizeResponse& Obfuscate(const yandex::cloud::priv::accessservice::v2::AuthorizeResponse& response) {
+            return response;
+        }
+    };
+
+    void Handle(TEvAccessService::TEvAuthorizeRequestV2::TPtr& ev) {
+        MakeCall<TAuthorizeRequest>(std::move(ev));
+    }
+
+    struct TBulkAuthorizeRequest : TGrpcRequest {
+        static constexpr auto Request = &yandex::cloud::priv::accessservice::v2::AccessService::Stub::AsyncBulkAuthorize;
+        using TRequestEventType = TEvAccessService::TEvBulkAuthorizeRequestV2;
+        using TResponseEventType = TEvAccessService::TEvBulkAuthorizeResponseV2;
+
+        static yandex::cloud::priv::accessservice::v2::BulkAuthorizeRequest Obfuscate(const yandex::cloud::priv::accessservice::v2::BulkAuthorizeRequest& request) {
+            yandex::cloud::priv::accessservice::v2::BulkAuthorizeRequest result(request);
+            if (result.iam_token()) {
+                result.set_iam_token(MaskToken(result.iam_token()));
+            }
+            if (result.api_key()) {
+                result.set_api_key(MaskToken(result.api_key()));
+            }
+            return result;
+        }
+
+        static const yandex::cloud::priv::accessservice::v2::BulkAuthorizeResponse& Obfuscate(const yandex::cloud::priv::accessservice::v2::BulkAuthorizeResponse& response) {
+            return response;
+        }
+    };
+
+    void Handle(TEvAccessService::TEvBulkAuthorizeRequestV2::TPtr& ev) {
         MakeCall<TBulkAuthorizeRequest>(std::move(ev));
     }
 
@@ -122,7 +176,9 @@ public:
 
     void StateWork(TAutoPtr<NActors::IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvAccessService::TEvBulkAuthorizeRequest, Handle);
+            hFunc(TEvAccessService::TEvAuthenticateRequestV2, Handle);
+            hFunc(TEvAccessService::TEvAuthorizeRequestV2, Handle);
+            hFunc(TEvAccessService::TEvBulkAuthorizeRequestV2, Handle);
             cFunc(TEvents::TSystem::PoisonPill, PassAway);
         }
     }
@@ -137,10 +193,17 @@ IActor* CreateAccessServiceV2(const TAccessServiceSettings& settings) {
     return new TAccessServiceV2(settings);
 }
 
-IActor* CreateAccessServiceWithCache(const TAccessServiceSettings& settings) {
-    IActor* accessService = CreateAccessServiceV1(settings);
-    accessService = NGrpcActorClient::CreateGrpcServiceCache<TEvAccessService::TEvAuthenticateRequest, TEvAccessService::TEvAuthenticateResponse>(accessService);
-    accessService = NGrpcActorClient::CreateGrpcServiceCache<TEvAccessService::TEvAuthorizeRequest, TEvAccessService::TEvAuthorizeResponse>(accessService);
+IActor* CreateAccessServiceWithCache(const TAccessServiceSettings& settings, bool enableV2Interface) {
+    IActor* accessService = enableV2Interface
+        ? CreateAccessServiceV2(settings)
+        : CreateAccessServiceV1(settings);
+    if (enableV2Interface) {
+        accessService = NGrpcActorClient::CreateGrpcServiceCache<TEvAccessService::TEvAuthenticateRequestV2, TEvAccessService::TEvAuthenticateResponseV2>(accessService);
+        accessService = NGrpcActorClient::CreateGrpcServiceCache<TEvAccessService::TEvAuthorizeRequestV2, TEvAccessService::TEvAuthorizeResponseV2>(accessService);
+    } else {
+        accessService = NGrpcActorClient::CreateGrpcServiceCache<TEvAccessService::TEvAuthenticateRequest, TEvAccessService::TEvAuthenticateResponse>(accessService);
+        accessService = NGrpcActorClient::CreateGrpcServiceCache<TEvAccessService::TEvAuthorizeRequest, TEvAccessService::TEvAuthorizeResponse>(accessService);
+    }
     return accessService;
 }
 

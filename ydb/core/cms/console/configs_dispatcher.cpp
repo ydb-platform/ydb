@@ -31,16 +31,7 @@
 #include <util/string/join.h>
 #include <util/string/subst.h>
 
-#if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR || defined BLOG_TRACE
-#error log macro definition clash
-#endif
-
-#define BLOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER, stream)
-#define BLOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER, stream)
-#define BLOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER, stream)
-#define BLOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER, stream)
-#define BLOG_ERROR(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER, stream)
-#define BLOG_TRACE(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CONFIGS_DISPATCHER, stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CONFIGS_DISPATCHER
 
 namespace NKikimr::NConsole {
 
@@ -184,9 +175,9 @@ public:
     void UpdateCandidateStartupConfig(TEvConsole::TEvConfigSubscriptionNotification::TPtr &ev);
 
     struct TParsedOpaqueConfig {
-        // Raw JSON section text used for cheap equality between updates.
+        // Raw YAML section text used for cheap equality between updates.
         // !empty() (empty strings aka "section present but empty" treated as absent config and not stored)
-        TString RawJson;
+        TString RawYaml;
         // May be null in the cache (parser produced nothing), but null
         // never placed into an outgoing event — see PopulateWithOpaqueConfigs.
         std::shared_ptr<const ::google::protobuf::Message> Parsed;
@@ -213,7 +204,7 @@ public:
     void Handle(TEvNodeWardenStorageConfig::TPtr &ev);
 
     void ReplyMonJson(TActorId mailbox);
-    
+
     EConfigSource DetermineConfigSource() const {
         if (auto it = Labels.find("config_source"); it != Labels.end()) {
             if (it->second == "seed_nodes") {
@@ -232,14 +223,14 @@ public:
 
     TConfigsDispatcherState GetState() const {
         TConfigsDispatcherState state;
-        
+
         auto configSource = DetermineConfigSource();
         state.ConfigSource = configSource;
-        
+
         if (auto it = Labels.find("config_source"); it != Labels.end()) {
             state.ConfigSourceLabel = it->second;
         }
-        
+
         state.ConfigurationVersion = ConfigurationVersion.value_or("unknown");
 
         state.HasStorageYaml = !StartupStorageYaml.empty();
@@ -249,7 +240,7 @@ public:
         state.LastReplayUsedSeedNodesPath = LastReplayUsedSeedNodesPath;
         state.LastReplayUsedDynamicConfigPath = LastReplayUsedDynamicConfigPath;
         state.Labels = Labels;
-        
+
         return state;
     }
 
@@ -334,7 +325,7 @@ private:
     TVector<TActorId> HttpRequests;
     TActorId CommonSubscriptionClient;
     TDeque<TAutoPtr<IEventHandle>> EventsQueue;
-    
+
     // Observability: Track which replay path was used
     bool LastReplayUsedSeedNodesPath = false;
     bool LastReplayUsedDynamicConfigPath = false;
@@ -383,7 +374,7 @@ TConfigsDispatcher::TConfigsDispatcher(const TConfigsDispatcherInitInfo& initInf
 
 void TConfigsDispatcher::Bootstrap()
 {
-    BLOG_D("TConfigsDispatcher Bootstrap");
+    YDB_LOG_DEBUG("TConfigsDispatcher Bootstrap");
 
     NActors::TMon *mon = AppData()->Mon;
     if (mon) {
@@ -419,7 +410,8 @@ void TConfigsDispatcher::Bootstrap()
 
 void TConfigsDispatcher::EnqueueEvent(TAutoPtr<IEventHandle> &ev)
 {
-    BLOG_D("Enqueue event type: " << ev->GetTypeRewrite());
+    YDB_LOG_DEBUG("Enqueue event",
+        {"type", ev->GetTypeRewrite()});
     EventsQueue.push_back(ev);
 }
 
@@ -427,7 +419,8 @@ void TConfigsDispatcher::ProcessEnqueuedEvents()
 {
     while (!EventsQueue.empty()) {
         TAutoPtr<IEventHandle> &ev = EventsQueue.front();
-        BLOG_D("Dequeue event type: " << ev->GetTypeRewrite());
+        YDB_LOG_DEBUG("Dequeue event",
+            {"type", ev->GetTypeRewrite()});
         TlsActivationContext->Send(ev.Release());
         EventsQueue.pop_front();
     }
@@ -444,8 +437,9 @@ void TConfigsDispatcher::SendUpdateToSubscriber(TSubscription::TPtr subscription
     // Parsed once when UpdateInProcess was built; share the (read-only) result.
     notification->OpaqueConfigs = subscription->UpdateInProcess->OpaqueConfigs;
 
-    BLOG_TRACE("Send TEvConsole::TEvConfigNotificationRequest to " << subscriber
-                << ": " << notification->Record.ShortDebugString());
+    YDB_LOG_TRACE("Send TEvConsole::TEvConfigNotificationRequest",
+        {"subscriber", subscriber},
+        {"ev", notification->Record.ShortDebugString()});
 
     Send(subscriber, notification.Release(), 0, subscription->UpdateInProcessCookie);
 }
@@ -515,7 +509,8 @@ NKikimrConfig::TAppConfig TConfigsDispatcher::ParseYamlProtoConfig()
             f->SetDeprecated(deprecatedPaths.contains(path));
         }
     } catch (const yexception& ex) {
-        BLOG_ERROR("Got invalid config from console error# " << ex.what());
+        // Never deliver a partially-parsed config; fail loudly instead.
+        Y_ABORT("Failed to parse resolved YAML config into proto: %s", ex.what());
     }
 
     return newYamlProtoConfig;
@@ -556,7 +551,7 @@ void TConfigsDispatcher::ReplyMonJson(TActorId mailbox) {
 
     response.InsertValue("unknown_fields", UnknownFieldsToJsonArray(ResolvedConfigUnknownFields));
     response.InsertValue("current_json_config", NJson::ReadJsonFastTree(SecureProto2JsonString(CurrentConfig, NYamlConfig::GetProto2JsonConfig()), true));
-    
+
     auto state = GetState();
     if (auto it = Labels.find("config_source"); it != Labels.end()) {
         response.InsertValue("config_source", it->second);
@@ -585,7 +580,8 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &
     const auto &rec = ev->Get()->Record;
     auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
 
-    BLOG_TRACE("Send TEvConfigNotificationResponse: " << resp->Record.ShortDebugString());
+    YDB_LOG_TRACE("Send",
+        {"ev", resp->Record.ShortDebugString()});
 
     Send(ev->Sender, resp.Release(), 0, ev->Cookie);
 }
@@ -783,7 +779,7 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
                                                     : s == &TThis::StateInit      ? "StateInit"
                                                                                   : "Unknown" ) << Endl;
                                 str << "YamlConfigEnabled: " << YamlConfigEnabled << Endl;
-                                
+
                                 str << Endl << "=== Configuration Source ===" << Endl;
                                 auto state = GetState();
                                 str << state.ToDebugString() << Endl;
@@ -795,7 +791,7 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
                                     str << "Last Replay Path: Not yet executed" << Endl;
                                 }
                                 str << Endl;
-                                
+
                                 str << "Subscriptions: " << Endl;
                                 for (auto &[kinds, subscription] : SubscriptionsByKinds) {
                                     str << "- Kinds: " << KindsToString(kinds) << Endl
@@ -1082,10 +1078,10 @@ try {
     // TODO volatile
 
     auto configSource = DetermineConfigSource();
-    
+
     LastReplayUsedSeedNodesPath = false;
     LastReplayUsedDynamicConfigPath = false;
-    
+
     switch (configSource) {
         case EConfigSource::SeedNodes:
             if (StartupStorageYaml) {
@@ -1098,7 +1094,7 @@ try {
             }
             LastReplayUsedSeedNodesPath = true;
             break;
-            
+
         case EConfigSource::DynamicConfig:
         case EConfigSource::Unknown:
             {
@@ -1171,47 +1167,66 @@ catch (...) {
 THashMap<ui32, TConfigsDispatcher::TParsedOpaqueConfig> TConfigsDispatcher::ParseOpaqueConfigs() const
 {
     THashMap<ui32, TParsedOpaqueConfig> result;
-    if (!YamlConfigEnabled || OpaqueConfigParsers.empty() || ResolvedJsonConfig.empty()) {
+    if (!YamlConfigEnabled || OpaqueConfigParsers.empty() || ResolvedYamlConfig.empty()) {
         return result;
     }
-    // The opaque carrier proto is empty by design — its content lives in the
-    // resolved YAML. Pull each kind's section out and pass it to the end-node
-    // parser that owns the real schema.
-    NJson::TJsonValue resolved;
-    if (!NJson::ReadJsonTree(ResolvedJsonConfig, &resolved)) {
-        return result;
-    }
-    const NJson::TJsonValue* configSection = &resolved;
-    if (const NJson::TJsonValue* c = nullptr; resolved.GetValuePointer("config", &c)) {
-        configSection = c;
-    }
-    const auto* desc = NKikimrConfig::TAppConfig::descriptor();
-    for (const auto& [kind, parser] : OpaqueConfigParsers) {
-        const auto* field = desc->FindFieldByNumber(kind);
-        if (!field) {
-            continue;
+
+    try {
+        // The opaque carrier proto is empty by design — its content lives in the
+        // resolved YAML. Pull each kind's section out and pass it to the end-node
+        // parser that owns the real schema.
+
+        NFyaml::TDocument yamlDoc = NFyaml::TDocument::Parse(ResolvedYamlConfig);
+
+        // ResolvedYamlConfig is the emitted 'config:' sub-tree (see
+        // NYamlConfig::Resolve) — its root IS the config content.
+        auto configSection = yamlDoc.Root();
+        if (configSection.Empty() || configSection.Type() != NFyaml::ENodeType::Mapping) {
+            return result;
         }
-        TString name = field->name();
-        NProtobufJson::ToSnakeCaseDense(&name);
-        const NJson::TJsonValue* section = nullptr;
-        if (!configSection->GetValuePointer(name, &section)) {
-            continue;   // section absent — no config
+
+        auto configMap = configSection.Map();
+        const auto* desc = NKikimrConfig::TAppConfig::descriptor();
+
+        for (const auto& [kind, parser] : OpaqueConfigParsers) {
+
+            const auto* field = desc->FindFieldByNumber(kind);
+            if (!field) {
+                continue;
+            }
+
+            TString name = field->name();
+            NProtobufJson::ToSnakeCaseDense(&name);
+            if (!configMap.Has(name)) {
+                continue;   // section absent — no config
+            }
+
+            TStringStream sectionStream;
+            sectionStream << configMap.at(name);
+            TString sectionYaml = sectionStream.Str();
+
+            TParsedOpaqueConfig entry;
+            entry.RawYaml = std::move(sectionYaml);
+            try {
+                entry.Parsed = parser(entry.RawYaml);
+                result.emplace(kind, std::move(entry));
+            }
+            catch (const std::exception& e) {
+                YDB_LOG_ERROR("Error parsing opaque config",
+                    {"kind", kind},
+                    {"name", name},
+                    {"error", e.what()});
+            }
+            catch (...) {
+                YDB_LOG_ERROR("Error parsing opaque config",
+                    {"kind", kind},
+                    {"name", name},
+                    {"error", "unknown exception"});
+            }
         }
-        TParsedOpaqueConfig entry;
-        entry.RawJson = NJson::WriteJson(section, /*formatOutput=*/ false);
-        if (entry.RawJson.empty()) {
-            continue;   // empty section — treated as "no config"
-        }
-        try {
-            entry.Parsed = parser(entry.RawJson);
-        }
-        catch (const std::exception& e) {
-            BLOG_ERROR("Error parsing opaque config [#" << kind << ":" << name << "]: " << e.what());
-        }
-        catch (...) {
-            BLOG_ERROR("Error parsing opaque config [#" << kind << ":" << name << "]: unknown exception");
-        }
-        result.emplace(kind, std::move(entry));
+    } catch (const std::exception& e) {
+        YDB_LOG_ERROR("Error parsing resolved YAML config",
+            {"error", e.what()});
     }
     return result;
 }
@@ -1302,7 +1317,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
         auto newOpaqueConfigs = ParseOpaqueConfigs();
         for (const auto& [kind, parsed] : newOpaqueConfigs) {
             auto it = CurrentOpaqueConfigs.find(kind);
-            if (it == CurrentOpaqueConfigs.end() || it->second.RawJson != parsed.RawJson) {
+            if (it == CurrentOpaqueConfigs.end() || it->second.RawYaml != parsed.RawYaml) {
                 // config was added or changed
                 affectedOpaqueKinds.insert(kind);
             }
@@ -1325,6 +1340,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
             Y_FOR_EACH_BIT(kind, FilterKinds(kinds)) {
                 if (affectedOpaqueKinds.contains(kind)) {
                     hasAffectedKinds = true;
+                    break;
                 }
             }
             if (!isYamlChanged && !yamlConfigTurnedOff && CurrentStateFunc() != &TThis::StateInit) {
@@ -1339,6 +1355,7 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
             Y_FOR_EACH_BIT(kind, FilterKinds(kinds)) {
                 if (affectedKinds.contains(kind)) {
                     hasAffectedKinds = true;
+                    break;
                 }
             }
             // we try resend all configs if yaml config was turned off
@@ -1370,7 +1387,8 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
 
             for (auto &[subscriber, updates] : subscription->Subscribers) {
                 auto k = kinds;
-                BLOG_TRACE("Sending for kinds: " << KindsToString(k));
+                YDB_LOG_TRACE("Sending",
+                    {"kinds", KindsToString(k)});
                 SendUpdateToSubscriber(subscription, subscriber);
                 ++updates;
             }
@@ -1382,11 +1400,11 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigSubscriptionNotification::T
     }
 
     if (CurrentStateFunc() == &TThis::StateInit) {
-        BLOG_D("Handle TEvConfigSubscriptionNotification: transitioning to StateWork");
+        YDB_LOG_DEBUG("Handle TEvConfigSubscriptionNotification: transitioning to StateWork");
         Become(&TThis::StateWork);
         ProcessEnqueuedEvents();
     }
-    BLOG_D("Handle TEvConfigSubscriptionNotification: exit");
+    YDB_LOG_DEBUG("Handle TEvConfigSubscriptionNotification: exit");
 }
 
 void TConfigsDispatcher::UpdateYamlVersion(const TSubscription::TPtr &subscription) const
@@ -1424,8 +1442,9 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvGetConfigRequest::TPtr 
     }
     resp->Config = trunc;
 
-    BLOG_TRACE("Send TEvConfigsDispatcher::TEvGetConfigResponse"
-        " to " << ev->Sender << ": " << resp->Config->ShortDebugString());
+    YDB_LOG_TRACE("Send",
+        {"sender", ev->Sender},
+        {"ev", resp->Config->ShortDebugString()});
 
     Send(ev->Sender, std::move(resp), 0, ev->Cookie);
 }
@@ -1509,7 +1528,8 @@ void TConfigsDispatcher::Handle(TEvConfigsDispatcher::TEvSetConfigSubscriptionRe
             subscription->UpdateInProcessCookie = ++NextRequestCookie;
             subscription->UpdateInProcessConfigVersion = FilterVersion(CurrentConfig.GetVersion(), kinds);
         }
-        BLOG_TRACE("Sending for kinds: " << KindsToString(kinds));
+        YDB_LOG_TRACE("Sending",
+            {"kinds", KindsToString(kinds)});
         SendUpdateToSubscriber(subscription, subscriber->Subscriber);
         ++(subscriberIt->second);
     }
@@ -1555,23 +1575,29 @@ void TConfigsDispatcher::Handle(TEvConsole::TEvConfigNotificationResponse::TPtr 
 
     // Probably subscription was cleared up due to tenant's change.
     if (!subscription) {
-        BLOG_ERROR("Got notification response for unknown subscription " << ev->Sender);
+        YDB_LOG_ERROR("Got notification response for unknown subscription",
+            {"sender", ev->Sender});
         return;
     }
 
     if (!subscription->UpdateInProcess) {
-        BLOG_D("Notification was ignored for subscription " << ev->Sender);
+        YDB_LOG_DEBUG("Notification was ignored for subscription",
+            {"sender", ev->Sender});
         return;
     }
 
     if (ev->Cookie != subscription->UpdateInProcessCookie) {
-        BLOG_ERROR("Notification cookie mismatch for subscription " << ev->Sender << " " << ev->Cookie << " != " << subscription->UpdateInProcessCookie);
+        YDB_LOG_ERROR("Notification cookie mismatch for subscription",
+            {"sender", ev->Sender},
+            {"cookie", ev->Cookie},
+            {"updateInProcessCookie", subscription->UpdateInProcessCookie});
         // TODO fix clients
         return;
     }
 
     if (!subscription->SubscribersToUpdate.contains(ev->Sender)) {
-        BLOG_ERROR("Notification from unexpected subscriber for subscription " << ev->Sender);
+        YDB_LOG_ERROR("Notification from unexpected subscriber for subscription",
+            {"sender", ev->Sender});
         return;
     }
 

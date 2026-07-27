@@ -72,7 +72,10 @@ TPqMetaExtractorLambda CreatePqMetaExtractorLambda(
     const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv)
 {
-    const auto key = SkipPqSystemPrefix(columnName);
+    auto key = SkipPqSystemPrefix(columnName);
+    if (!key) {
+        key = SkipYdbSystemPrefix(columnName);
+    }
     Y_ENSURE(key, columnName);
 
     if (*key == "user_attributes") {

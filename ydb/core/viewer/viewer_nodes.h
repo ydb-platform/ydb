@@ -410,6 +410,7 @@ class TJsonNodes : public TViewerPipeClient {
                     pDiskState.SetTotalSize(pdisk.GetTotalSize());
                     pDiskState.SetAvailableSize(pdisk.GetAvailableSize());
                     pDiskState.SetExpectedSlotCount(pdisk.GetExpectedSlotCount());
+                    pDiskState.SetExpectedSlotSize(pdisk.GetExpectedSlotSize());
                 }
             }
             if (VDisks.empty() && !SysViewVDisks.empty()) {
@@ -429,9 +430,17 @@ class TJsonNodes : public TViewerPipeClient {
                     NKikimrBlobStorage::EVDiskStatus vDiskStatus;
                     if (NKikimrBlobStorage::EVDiskStatus_Parse(vdisk.GetStatusV2(), &vDiskStatus)) {
                         switch(vDiskStatus) {
-                            case NKikimrBlobStorage::EVDiskStatus::ERROR:
-                                vDiskState.SetVDiskState(NKikimrWhiteboard::EVDiskState::LocalRecoveryError);
+                            case NKikimrBlobStorage::EVDiskStatus::ERROR: {
+                                NKikimrWhiteboard::EVDiskState realVDiskState = NKikimrWhiteboard::EVDiskState::Initial;
+                                if (vdisk.HasState()
+                                        && NKikimrWhiteboard::EVDiskState_Parse(vdisk.GetState(), &realVDiskState)
+                                        && (realVDiskState == NKikimrWhiteboard::EVDiskState::LocalRecoveryError
+                                            || realVDiskState == NKikimrWhiteboard::EVDiskState::SyncGuidRecoveryError
+                                            || realVDiskState == NKikimrWhiteboard::EVDiskState::PDiskError)) {
+                                    vDiskState.SetVDiskState(realVDiskState);
+                                }
                                 break;
+                            }
                             case NKikimrBlobStorage::EVDiskStatus::INIT_PENDING:
                                 vDiskState.SetVDiskState(NKikimrWhiteboard::EVDiskState::Initial);
                                 break;
@@ -1249,6 +1258,15 @@ public:
             return itNode->second;
         }
         return nullptr;
+    }
+
+    void SetNodeDisconnected(TNodeId nodeId) {
+        if (TNode* node = FindNode(nodeId)) {
+            node->DisconnectNode();
+            if (FieldsRequired.test(+ENodeFields::PDisks) || FieldsRequired.test(+ENodeFields::VDisks)) {
+                node->RemapDisks();
+            }
+        }
     }
 
     bool PreFilterDone() const {
@@ -2570,16 +2588,10 @@ public:
                         hasMemoryDetailed |= systemInfo.HasMemoryStats();
                     }
                     for (auto nodeId : nodesWithoutData) {
-                        TNode* node = FindNode(nodeId);
-                        if (node) {
-                            node->DisconnectNode();
-                        }
+                        SetNodeDisconnected(nodeId);
                     }
                 } else {
-                    TNode* node = FindNode(responseNodeId);
-                    if (node) {
-                        node->DisconnectNode();
-                    }
+                    SetNodeDisconnected(responseNodeId);
                 }
             }
             for (const auto& [nodeId, response] : SystemStateResponse) {
@@ -2601,10 +2613,7 @@ public:
                         hasMemoryDetailed |= systemState.GetSystemStateInfo(0).HasMemoryStats();
                     }
                 } else {
-                    TNode* node = FindNode(nodeId);
-                    if (node) {
-                        node->DisconnectNode();
-                    }
+                    SetNodeDisconnected(nodeId);
                 }
             }
             if (!removeNodes.empty()) {
@@ -3054,13 +3063,7 @@ public:
 
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         TNodeId nodeId = ev->Get()->NodeId;
-        TNode* node = FindNode(nodeId);
-        if (node) {
-            node->DisconnectNode();
-            if (FieldsRequired.test(+ENodeFields::PDisks) || FieldsRequired.test(+ENodeFields::VDisks)) {
-                node->RemapDisks();
-            }
-        }
+        SetNodeDisconnected(nodeId);
         TString error("NodeDisconnected");
         {
             auto itSystemStateResponse = SystemStateResponse.find(nodeId);

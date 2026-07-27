@@ -1174,7 +1174,7 @@ void TFixture::SendLongTxLockStatus(const NActors::TActorId& actorId,
                                     NKikimrLongTxService::TEvLockStatus::EStatus status)
 {
     auto event =
-        std::make_unique<NKikimr::NLongTxService::TEvLongTxService::TEvLockStatus>(writeId.KeyId, writeId.NodeId,
+        std::make_unique<NKikimr::NLongTxService::TEvLongTxService::TEvLockStatus>(writeId.GetKeyId(), writeId.GetNodeId(),
                                                                                    status);
     auto& runtime = Setup->GetRuntime();
     runtime.SendToPipe(tabletId, actorId, event.release());

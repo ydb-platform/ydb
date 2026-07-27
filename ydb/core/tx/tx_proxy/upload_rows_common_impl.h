@@ -275,6 +275,13 @@ protected:
         }
     }
 
+    bool IsBulkUpsertValidationEnabled() const {
+        if (!HasAppData()) {
+            return true;
+        }
+        return AppDataVerified().ColumnShardConfig.GetEnableBulkUpsertValidation();
+    }
+
 private:
     virtual void OnBeforeStart(const TActorContext&) {
         // nothing by default
@@ -486,6 +493,10 @@ private:
                 if (NArrow::TArrowToYdbConverter::NeedInplaceConversion(typeInRequest, ci.PType)) {
                     ColumnsToConvertInplace[name] = ci.PType;
                 }
+
+                if (ci.PType.GetTypeId() == NScheme::NTypeIds::Interval) {
+                    ColumnsToConvertInplace[name] = ci.PType;
+                }
             } else if (typeInProto.has_decimal_type()) {
                 if (typeInRequest != ci.PType) {
                 return TConclusionStatus::Fail(Sprintf("Type mismatch, got type %s for column %s, but expected %s",
@@ -643,13 +654,7 @@ private:
         }
 
         if (!defaultColumnsLeft.empty()) {
-            if (AppData(ctx)->FeatureFlags.GetDisableMissingDefaultColumnsInBulkUpsert()) {
-                return TConclusionStatus::Fail(Sprintf("Missing default columns: %s", JoinSeq(", ", defaultColumnsLeft).c_str()));
-            }
-
-            // TODO: Unreachable, delete "MissingDefaultColumns/Count" counter
-            UploadCounters.OnMissingDefaultColumns();
-            LOG_WARN_S(ctx, NKikimrServices::RPC_REQUEST, "Missing default columns: " << JoinSeq(", ", defaultColumnsLeft).c_str());
+            return TConclusionStatus::Fail(Sprintf("Missing default columns: %s", JoinSeq(", ", defaultColumnsLeft).c_str()));
         }
 
         TConclusionStatus res = TConclusionStatus::Success();
@@ -778,6 +783,16 @@ private:
                     // TUploadRowsRPCPublic::ExtractBatch() - converted JsonDocument, DynNumbers, ...
                     if (!ExtractBatch(errorMessage)) {
                         return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, errorMessage, ctx);
+                    }
+
+                    if (!ColumnsToConvertInplace.empty()) {
+                        auto convertResult = NArrow::InplaceConvertColumns(Batch, ColumnsToConvertInplace);
+                        if (!convertResult.ok()) {
+                            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST,
+                                TStringBuilder() << "Cannot convert arrow batch inplace:" << convertResult.status().ToString(), ctx);
+                        }
+
+                        Batch = *convertResult;
                     }
                 }
                 break;

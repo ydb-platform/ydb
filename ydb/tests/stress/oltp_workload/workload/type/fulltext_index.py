@@ -18,19 +18,29 @@ class WorkloadFulltextIndex(WorkloadBase):
         self.limit = 10
         self.query_count = 10
 
-    def _create_table(self, table_path, utf8):
+    def _create_table(self, table_path, utf8, with_prefix=False):
         logger.info(f"Create table {table_path}")
         if utf8:
             texttype = "Utf8"
         else:
             texttype = "String"
-        create_table_sql = f"""
-            CREATE TABLE `{table_path}` (
-                pk Uint64,
-                text {texttype},
-                PRIMARY KEY (pk)
-            );
-        """
+        if with_prefix:
+            create_table_sql = f"""
+                CREATE TABLE `{table_path}` (
+                    pk Uint64,
+                    user_id Uint64,
+                    text {texttype},
+                    PRIMARY KEY (pk)
+                );
+            """
+        else:
+            create_table_sql = f"""
+                CREATE TABLE `{table_path}` (
+                    pk Uint64,
+                    text {texttype},
+                    PRIMARY KEY (pk)
+                );
+            """
         self.client.query(create_table_sql, True)
 
     def _drop_table(self, table_path):
@@ -49,39 +59,62 @@ class WorkloadFulltextIndex(WorkloadBase):
         self.client.query(drop_index_sql, True)
 
     def _create_index(
-        self, index_name, table_path, index_type, tokenizer='standard'
+        self, index_name, table_path, index_type, tokenizer='standard', with_prefix=False
     ):
-        logger.info(f"""Creating index index_type={index_type}, tokenizer={tokenizer}""")
-        create_index_sql = f"""
-            ALTER TABLE `{table_path}`
-            ADD INDEX `{index_name}` GLOBAL USING {index_type}
-            ON (text)
-            WITH (
-                tokenizer={tokenizer},
-                use_filter_lowercase=true,
-                use_filter_snowball=true,
-                language="english"
-            );
-        """
+        logger.info(f"""Creating index index_type={index_type}, tokenizer={tokenizer}, with_prefix={with_prefix}""")
+        if with_prefix:
+            create_index_sql = f"""
+                ALTER TABLE `{table_path}`
+                ADD INDEX `{index_name}` GLOBAL USING {index_type}
+                ON (user_id, text)
+                WITH (
+                    tokenizer={tokenizer},
+                    use_filter_lowercase=true,
+                    use_filter_snowball=true,
+                    language="english"
+                );
+            """
+        else:
+            create_index_sql = f"""
+                ALTER TABLE `{table_path}`
+                ADD INDEX `{index_name}` GLOBAL USING {index_type}
+                ON (text)
+                WITH (
+                    tokenizer={tokenizer},
+                    use_filter_lowercase=true,
+                    use_filter_snowball=true,
+                    language="english"
+                );
+            """
         logger.info(create_index_sql)
         self.client.query(create_index_sql, True)
 
-    def _upsert_values(self, table_path, use_upsert, min_key, max_key):
+    def _upsert_values(self, table_path, use_upsert, min_key, max_key, with_prefix=False):
         logger.info("Upsert values")
         values = []
 
         for key in range(min_key, max_key):
             text = fulltext.get_random_text()
-            values.append(f'({key}, "{text}")')
+            if with_prefix:
+                user_id = (key % 10) + 1  # Distribute across 10 users
+                values.append(f'({key}, {user_id}, "{text}")')
+            else:
+                values.append(f'({key}, "{text}")')
 
         if use_upsert:
             insert = "UPSERT"
         else:
             insert = "INSERT"
-        upsert_sql = f"""
-            {insert} INTO `{table_path}` (pk, text)
-            VALUES {",".join(values)};
-        """
+        if with_prefix:
+            upsert_sql = f"""
+                {insert} INTO `{table_path}` (pk, user_id, text)
+                VALUES {",".join(values)};
+            """
+        else:
+            upsert_sql = f"""
+                {insert} INTO `{table_path}` (pk, text)
+                VALUES {",".join(values)};
+            """
         self.client.query(upsert_sql, False)
 
     def _delete_rows(self, table_path, min_key, max_key):
@@ -91,15 +124,25 @@ class WorkloadFulltextIndex(WorkloadBase):
         """
         self.client.query(delete_sql, False)
 
-    def _select_contains(self, index_name, table_path):
+    def _select_contains(self, index_name, table_path, with_prefix=False):
         query = ' '.join(fulltext.get_random_words(3))
-        select_sql = f"""
-            SELECT `pk`, `text`
-            FROM `{table_path}`
-            VIEW `{index_name}`
-            WHERE FulltextMatch(`text`, "{query}")
-            LIMIT {self.limit};
-        """
+        if with_prefix:
+            user_id = random.randint(1, 10)
+            select_sql = f"""
+                SELECT `pk`, `text`
+                FROM `{table_path}`
+                VIEW `{index_name}`
+                WHERE user_id = {user_id} AND FulltextMatch(`text`, "{query}")
+                LIMIT {self.limit};
+            """
+        else:
+            select_sql = f"""
+                SELECT `pk`, `text`
+                FROM `{table_path}`
+                VIEW `{index_name}`
+                WHERE FulltextMatch(`text`, "{query}")
+                LIMIT {self.limit};
+            """
         res = self.client.query(select_sql, False)
         if len(res) == 0:
             raise Exception("Query returned no resultsets")
@@ -107,16 +150,27 @@ class WorkloadFulltextIndex(WorkloadBase):
         logger.info(f"Selected {n} rows using contains")
         return n
 
-    def _select_relevance(self, index_name, table_path):
+    def _select_relevance(self, index_name, table_path, with_prefix=False):
         query = ' '.join(fulltext.get_random_words(3))
-        select_sql = f"""
-            SELECT `pk`, `text`, FulltextScore(`text`, "{query}") as `rel`
-            FROM `{table_path}`
-            VIEW `{index_name}`
-            WHERE FulltextScore(`text`, "{query}") > 0
-            ORDER BY `rel`
-            LIMIT {self.limit};
-        """
+        if with_prefix:
+            user_id = random.randint(1, 10)
+            select_sql = f"""
+                SELECT `pk`, `text`, FulltextScore(`text`, "{query}") as `rel`
+                FROM `{table_path}`
+                VIEW `{index_name}`
+                WHERE user_id = {user_id} AND FulltextScore(`text`, "{query}") > 0
+                ORDER BY `rel`
+                LIMIT {self.limit};
+            """
+        else:
+            select_sql = f"""
+                SELECT `pk`, `text`, FulltextScore(`text`, "{query}") as `rel`
+                FROM `{table_path}`
+                VIEW `{index_name}`
+                WHERE FulltextScore(`text`, "{query}") > 0
+                ORDER BY `rel`
+                LIMIT {self.limit};
+            """
         res = self.client.query(select_sql, False)
         if len(res) == 0:
             raise Exception("Query returned no resultsets")
@@ -149,17 +203,19 @@ class WorkloadFulltextIndex(WorkloadBase):
             return
         raise Exception("Error getting index status")
 
-    def _check_loop(self, table_path, index_type, tokenizer='standard', utf8=False):
+    def _check_loop(self, table_path, index_type, tokenizer='standard', utf8=False, with_prefix=False):
         if utf8:
             texttype = "Utf8"
         else:
             texttype = "String"
-        index_name = f"{self.index_name_prefix}_{texttype}_{index_type}_{tokenizer}"
+        prefix_suffix = "_prefixed" if with_prefix else ""
+        index_name = f"{self.index_name_prefix}_{texttype}_{index_type}_{tokenizer}{prefix_suffix}"
         self._create_index(
             table_path=table_path,
             index_name=index_name,
             index_type=index_type,
             tokenizer=tokenizer,
+            with_prefix=with_prefix,
         )
         self._wait_index_ready(
             table_path=table_path,
@@ -171,6 +227,7 @@ class WorkloadFulltextIndex(WorkloadBase):
             n += self._select_contains(
                 index_name=index_name,
                 table_path=table_path,
+                with_prefix=with_prefix,
             )
         if n == 0:
             raise Exception(f"No rows selected with {self.query_count} contains queries")
@@ -181,6 +238,7 @@ class WorkloadFulltextIndex(WorkloadBase):
                 n += self._select_relevance(
                     index_name=index_name,
                     table_path=table_path,
+                    with_prefix=with_prefix,
                 )
             if n == 0:
                 raise Exception(f"No rows selected with {self.query_count} relevance queries")
@@ -190,6 +248,7 @@ class WorkloadFulltextIndex(WorkloadBase):
             use_upsert=False,
             min_key=self.row_count+1,
             max_key=self.row_count+3,
+            with_prefix=with_prefix,
         )
         # update the index using upsert
         self._upsert_values(
@@ -197,6 +256,7 @@ class WorkloadFulltextIndex(WorkloadBase):
             use_upsert=True,
             min_key=self.row_count-3,
             max_key=self.row_count+2,
+            with_prefix=with_prefix,
         )
         # delete from index
         self._delete_rows(
@@ -211,6 +271,7 @@ class WorkloadFulltextIndex(WorkloadBase):
                 table_path=table_path,
                 index_type=index_type,
                 tokenizer=tokenizer,
+                with_prefix=with_prefix,
             )
             self.client.replace_index(table_path, index_name+'Rename', index_name)
         self._drop_index(index_name, table_path)
@@ -219,31 +280,39 @@ class WorkloadFulltextIndex(WorkloadBase):
     def _loop(self):
         text_table = self.get_table_path(f"{self.table_name_prefix}_text")
         utf8_table = self.get_table_path(f"{self.table_name_prefix}_utf8")
-        tables = [text_table, utf8_table]
-        self._create_table(text_table, 0)
-        self._create_table(utf8_table, 1)
+        text_table_prefixed = self.get_table_path(f"{self.table_name_prefix}_text_prefixed")
+        utf8_table_prefixed = self.get_table_path(f"{self.table_name_prefix}_utf8_prefixed")
+        tables = [text_table, utf8_table, text_table_prefixed, utf8_table_prefixed]
+        self._create_table(text_table, 0, with_prefix=False)
+        self._create_table(utf8_table, 1, with_prefix=False)
+        self._create_table(text_table_prefixed, 0, with_prefix=True)
+        self._create_table(utf8_table_prefixed, 1, with_prefix=True)
 
         utf8_opts = [0, 1]
         index_type_opts = ['fulltext_plain', 'fulltext_relevance']
         tokenizer_opts = ['standard', 'whitespace']
-        opts = list(product(utf8_opts, index_type_opts, tokenizer_opts))
+        prefix_opts = [False, True]
+        opts = list(product(utf8_opts, index_type_opts, tokenizer_opts, prefix_opts))
         random.shuffle(opts)
         opt_iter = cycle(opts)
 
         while not self.is_stop_requested():
-            [utf8, index_type, tokenizer] = next(opt_iter)
+            [utf8, index_type, tokenizer, with_prefix] = next(opt_iter)
             try:
+                table_idx = utf8 + (2 if with_prefix else 0)
                 self._upsert_values(
-                    table_path=tables[utf8],
+                    table_path=tables[table_idx],
                     use_upsert=True,
                     min_key=0,
                     max_key=self.row_count,
+                    with_prefix=with_prefix,
                 )
                 self._check_loop(
-                    table_path=tables[utf8],
+                    table_path=tables[table_idx],
                     index_type=index_type,
                     tokenizer=tokenizer,
                     utf8=utf8,
+                    with_prefix=with_prefix,
                 )
             except Exception as ex:
                 logger.info(f"ERROR {ex}")

@@ -272,6 +272,7 @@ message ClusterStatusResponse {
         string StartTime = 21;
         bool Dead = 23;
         RegisterNodeRequest.TRusage Rusage = 25;
+        string RequestStartTime = 27;
     }
 
     string Revision = 1;
@@ -282,6 +283,7 @@ message ClusterStatusResponse {
         repeated File Resources = 2;
         string OperationId = 3;
         string UserName = 4;
+        string EnqueueTime = 5;
     }
     repeated WaitInfo WaitList = 4;
 
@@ -294,6 +296,7 @@ message ClusterStatusResponse {
         int64 WaitTime = 3;
         int64 UseCount = 4;
         int64 TryCount = 5;
+        bool Uploaded = 9;
     }
 
     repeated ResourceStat Resource = 5;

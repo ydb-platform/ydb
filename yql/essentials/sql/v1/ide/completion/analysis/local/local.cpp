@@ -313,7 +313,7 @@ private:
         if (auto enclosing = context.Enclosing()) {
             TString path = enclosing->Base->Content;
             if (enclosing->Base->Name == "ID_QUOTED") {
-                path = Unquoted(std::move(path));
+                path = Unquoted(path);
                 enclosing->Position += 1;
             }
             path.resize(context.Cursor.Position - enclosing->Position);
@@ -424,7 +424,7 @@ public:
     TLocalSyntaxContext Analyze(TCompletionInput input) override {
         auto isAnsiLexer = IsAnsiQuery(TString(input.Text));
         auto& engine = GetSpecializedEngine(isAnsiLexer);
-        return engine.Analyze(std::move(input));
+        return engine.Analyze(input);
     }
 
 private:

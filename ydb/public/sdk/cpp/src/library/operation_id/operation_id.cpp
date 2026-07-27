@@ -79,6 +79,12 @@ std::string ProtoToString(const Ydb::TOperationId& proto) {
         case Ydb::TOperationId::FULL_BACKUP:
             res << "ydb://fullbackup";
             break;
+        case Ydb::TOperationId::ANALYZE:
+            res << "ydb://analyze";
+            break;
+        case Ydb::TOperationId::SET_NOT_NULL:
+            res << "ydb://setnotnull";
+            break;
         default:
             Y_ABORT_UNLESS(false, "unexpected kind");
     }
@@ -336,6 +342,14 @@ TOperationId::EKind ParseKind(const std::string_view value) {
 
     if (value.starts_with("fullbackup")) {
         return TOperationId::FULL_BACKUP;
+    }
+
+    if (value.starts_with("analyze")) {
+        return TOperationId::ANALYZE;
+    }
+
+    if (value.starts_with("setnotnull")) {
+        return TOperationId::SET_NOT_NULL;
     }
 
     return TOperationId::UNUSED;

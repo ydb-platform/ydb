@@ -36,7 +36,7 @@ Tokenize(NSQLTranslation::ILexer& lexer, const TString& query) {
 NYql::TIssuePtr Group(TString name, bool isOk, const NYql::TIssues& issues) {
     TString message = name + " is " + (isOk ? "OK" : "FAIL");
 
-    NYql::TIssuePtr grouping = new NYql::TIssue(std::move(message));
+    NYql::TIssuePtr grouping = new NYql::TIssue(message);
     for (const NYql::TIssue& issue : issues) {
         grouping->AddSubIssue(new NYql::TIssue(issue));
     }
@@ -71,9 +71,9 @@ bool CheckLexers(NYql::TPosition pos, const TString& query, NYql::TIssues& issue
 
     if (!(isMainOk == isPureOk && isPureOk == isRegexOk)) {
         NYql::TIssue issue(pos, "Main, Pure, Lexer statuses differ");
-        issue.AddSubIssue(Group("Main", isMainOk, std::move(mainIssues)));
-        issue.AddSubIssue(Group("Pure", isPureOk, std::move(pureIssues)));
-        issue.AddSubIssue(Group("Regex", isRegexOk, std::move(regexIssues)));
+        issue.AddSubIssue(Group("Main", isMainOk, mainIssues));
+        issue.AddSubIssue(Group("Pure", isPureOk, pureIssues));
+        issue.AddSubIssue(Group("Regex", isRegexOk, regexIssues));
         return false;
     }
 

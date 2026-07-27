@@ -4,6 +4,8 @@ PEERDIR(
     ydb/library/conclusion
     ydb/library/actors/core
     ydb/library/services
+    ydb/core/formats/arrow/accessor/composite
+    ydb/core/formats/arrow/accessor/plain
     ydb/core/formats/arrow/accessor/sub_columns
     ydb/core/formats/arrow/filter
 

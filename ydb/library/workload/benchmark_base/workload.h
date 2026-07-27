@@ -20,7 +20,6 @@ public:
     };
     enum class EQuerySyntax {
         YQL /* "yql" */,
-        PG /* "pg"*/
     };
     enum class EDatetimeTypes {
         DateTime32 /* "dt32" */,
@@ -29,7 +28,7 @@ public:
     void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
     void Validate(const ECommandType commandType, int workloadType) override;
     TString GetFullTableName(const char* table) const;
-    static TString GetTablePathQuote(EQuerySyntax syntax);
+    static TString GetTablePathQuote();
     YDB_ACCESSOR_DEF(TString, Path);
     YDB_READONLY(EStoreType, StoreType, EStoreType::Column);
     YDB_READONLY_DEF(TString, S3Endpoint);

@@ -44,12 +44,22 @@ struct TPartitionSchema: public NKikimr::NIceDb::Schema
                 TDirectBlockGroupsConnections;
         };
 
+        // Set while an AddHost is in flight, cleared once it finishes (or is
+        // abandoned). Replayed on restart to recover a half-committed add.
+        struct AddHostInProgress
+            : public Column<5, NKikimr::NScheme::NTypeIds::String>
+        {
+            using Type =
+                ::NYdb::NBS::PartitionDirect::NProto::TAddHostInProgress;
+        };
+
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
             StorageConfig,
             VolumeConfig,
-            DirectBlockGroupsConnections>;
+            DirectBlockGroupsConnections,
+            AddHostInProgress>;
 
         using StoragePolicy = TStoragePolicy<IndexChannel>;
     };

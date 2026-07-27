@@ -27,16 +27,31 @@ class TestYdbTopicWorkload(StressFixture):
             ports.append(node.get_kafka_api_port())
         return ports
 
-    def test(self):
-        kafka_api_ports = self.get_kafka_api_ports()
+    def get_kafka_api_port(self, database):
+        tenant_slots = [
+            slot for slot in self.cluster.slots.values()
+            if getattr(slot, "_tenant_affiliation", None) == database
+        ]
+        if tenant_slots:
+            return tenant_slots[-1].get_kafka_api_port()
+
+        if database == self.database:
+            return self.get_kafka_api_ports()[-1]
+
+        raise RuntimeError(f"Cannot find Kafka proxy port for database {database}")
+
+    def run_workload(self, database):
         yatest.common.execute([
             yatest.common.binary_path(os.environ["YDB_WORKLOAD_PATH"]),
             "--endpoint", self.endpoint,
-            "--database", self.database,
-            "--bootstrap", f"http://localhost:{kafka_api_ports[-1]}",
+            "--database", database,
+            "--bootstrap", f"http://localhost:{self.get_kafka_api_port(database)}",
             "--source-path", "test-topic",
             "--target-path", "target-topic",
             "--consumer", "workload-consumer-0",
             "--num-workers", "2",
             "--duration", "280"
         ])
+
+    def test(self):
+        self.run_workload(self.database)

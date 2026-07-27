@@ -1,7 +1,7 @@
 #include "retro_span.h"
 #include "span_buffer.h"
 
-#include <contrib/libs/opentelemetry-proto/opentelemetry/proto/trace/v1/trace.pb.h>
+#include <contrib/proto/opentelemetry/opentelemetry/proto/trace/v1/trace.pb.h>
 #include <util/stream/str.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
@@ -75,6 +75,9 @@ std::unique_ptr<NWilson::TSpan> TRetroSpan::MakeWilsonSpan() {
 void TRetroSpan::End() {
     EndTs = TInstant::Now();
     WriteSpan(this);
+    if (Flags & NWilson::EFlags::ACTION_ON_END) {
+        OnEnd();
+    }
 }
 
 void TRetroSpan::EndError() {
@@ -121,6 +124,13 @@ TString TRetroSpan::ToString() const {
     str << " IsEnded# " << IsEnded();
     str << "}";
     return str.Str();
+}
+
+void TRetroSpan::EnableActionOnEnd() {
+    Flags |= NWilson::EFlags::ACTION_ON_END;
+}
+
+void TRetroSpan::OnEnd() {
 }
 
 } // namespace NRetroTracing

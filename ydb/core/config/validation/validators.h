@@ -54,6 +54,10 @@ EValidationResult ValidateMonitoringConfig(
     const NKikimrConfig::TAppConfig& config,
     std::vector<TString>& msg);
 
+EValidationResult ValidateClientCertificateAuthorization(
+    const NKikimrConfig::TAppConfig& config,
+    std::vector<TString>& msg);
+
 EValidationResult ValidateDatabaseConfig(
     const NKikimrConfig::TAppConfig& config,
     std::vector<TString>& msg);

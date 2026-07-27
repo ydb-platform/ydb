@@ -2330,8 +2330,6 @@ Y_UNIT_TEST_SUITE(KqpCost) {
 
     Y_UNIT_TEST(BatchOperation_Update) {
         auto appConfig = GetAppConfig(false, false);
-        appConfig.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
-
         auto settings = TKikimrSettings(appConfig)
             .SetWithSampleTables(false);
 
@@ -2364,8 +2362,6 @@ Y_UNIT_TEST_SUITE(KqpCost) {
 
     Y_UNIT_TEST(BatchOperation_Delete) {
         auto appConfig = GetAppConfig(false, false);
-        appConfig.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
-
         auto settings = TKikimrSettings(appConfig)
             .SetWithSampleTables(false);
 
@@ -2397,8 +2393,6 @@ Y_UNIT_TEST_SUITE(KqpCost) {
 
     Y_UNIT_TEST(BatchOperation_RetryIsFree) {
         auto appConfig = GetAppConfig(false, false);
-        appConfig.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
-
         auto settings = TKikimrSettings(appConfig)
             .SetUseRealThreads(false)
             .SetWithSampleTables(false);
@@ -2485,8 +2479,6 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         auto appConfig = GetAppConfig(false, false);
         // Set MaxBatchSize to 1 so each row is processed in a separate batch
         appConfig.MutableTableServiceConfig()->MutableBatchOperationSettings()->SetMaxBatchSize(1);
-        appConfig.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
-
         auto settings = TKikimrSettings(appConfig)
             .SetUseRealThreads(false)
             .SetWithSampleTables(false);
@@ -2572,7 +2564,6 @@ Y_UNIT_TEST_SUITE(KqpCost) {
 
     Y_UNIT_TEST_TWIN(BatchOperation_SecondaryIndex, EnableIndexStreamWrite) {
         auto appConfig = GetAppConfig(false, false);
-        appConfig.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
         appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
 
         auto settings = TKikimrSettings(appConfig)
@@ -2624,7 +2615,6 @@ Y_UNIT_TEST_SUITE(KqpCost) {
 
     Y_UNIT_TEST_TWIN(WriteRowWithIndex, EnableIndexStreamWrite) {
         auto appConfig = GetAppConfig(false, false);
-        appConfig.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
         appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
 
         auto settings = TKikimrSettings(appConfig)

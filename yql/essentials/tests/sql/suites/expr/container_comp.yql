@@ -1,4 +1,3 @@
-/* postgres can not */
 select AsStruct() == AsStruct();
 select AsTuple() == AsTuple();
 select AsTuple(0xffffffffu) == AsTuple(-1);

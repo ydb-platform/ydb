@@ -138,17 +138,6 @@ bool IsKqpPureInputs(const TExprList& inputs) {
     });
 }
 
-bool IsKqpEffectsStage(const TDqStageBase& stage) {
-    return stage.Program().Body().Maybe<TKqpEffects>().IsValid();
-}
-
-bool NeedSinks(const TKikimrTableDescription& table, const TKqpOptimizeContext& kqpCtx) {
-    return (kqpCtx.IsGenericQuery()
-            || (kqpCtx.IsDataQuery() && (table.Metadata->Kind != EKikimrTableKind::Olap || kqpCtx.Config->GetAllowOlapDataQuery())))
-        && (table.Metadata->Kind != EKikimrTableKind::Olap || kqpCtx.Config->GetEnableOlapSink())
-        && (table.Metadata->Kind != EKikimrTableKind::Datashard || kqpCtx.Config->GetEnableOltpSink());
-}
-
 bool CanEnableStreamWrite(const NYql::TKikimrTableDescription& table, const TKqpOptimizeContext& kqpCtx) {
     return table.Metadata->Kind == EKikimrTableKind::Olap
             || (table.Metadata->Kind == EKikimrTableKind::Datashard && kqpCtx.Config->GetEnableStreamWrite());

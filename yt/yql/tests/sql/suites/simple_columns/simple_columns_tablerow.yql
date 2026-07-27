@@ -1,4 +1,3 @@
-/* syntax version 1 */
 PRAGMA SimpleColumns;
 
 SELECT 100500 as magic, TableRow() AS tr FROM plato.Input AS t;

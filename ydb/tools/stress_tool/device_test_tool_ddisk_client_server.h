@@ -11,6 +11,7 @@
 #include <ydb/library/actors/interconnect/interconnect_proxy_wrapper.h>
 #include <ydb/library/actors/interconnect/handshake_broker.h>
 #include <ydb/library/actors/interconnect/poller/poller_actor.h>
+#include <ydb/library/actors/interconnect/poller/uring_poller_actor.h>
 
 #include <util/system/event.h>
 
@@ -27,7 +28,7 @@ struct TInterconnectPeer {
 };
 
 static TInterconnectProxyCommon::TPtr MakeInterconnectCommon(
-        const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, ui32 selfNodeId) {
+        const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, ui32 selfNodeId, bool useUring = false) {
     auto common = MakeIntrusive<TInterconnectProxyCommon>();
     common->NameserviceId = GetNameserviceActorId();
     common->MonCounters = counters->GetSubgroup("nodeId", ToString(selfNodeId));
@@ -41,6 +42,7 @@ static TInterconnectProxyCommon::TPtr MakeInterconnectCommon(
     common->Settings.TotalInflightAmountOfData = 256ull * 1024 * 1024;
     common->Settings.TCPSocketBufferSize = 8 * 1024 * 1024;
     common->Settings.EnableExternalDataChannel = true;
+    common->Settings.UseUring = useUring;
     common->OutgoingHandshakeInflightLimit = 3;
     return common;
 }
@@ -72,6 +74,12 @@ static void SetupInterconnectServices(TActorSystemSetup* setup,
     setup->LocalServices.emplace_back(
         MakePollerActorId(),
         TActorSetupCmd(CreatePollerActor(), TMailboxType::ReadAsFilled, InterconnectPoolId));
+
+    if (common->Settings.UseUring && TUringContext::IsSupported()) {
+        setup->LocalServices.emplace_back(
+            MakeUringPollerActorId(),
+            TActorSetupCmd(CreateUringPollerActor(common->Settings.EnableUringSQPOLL), TMailboxType::ReadAsFilled, InterconnectPoolId));
+    }
 
     setup->LocalServices.emplace_back(
         MakeHandshakeBrokerOutId(),
@@ -107,15 +115,17 @@ struct TDDiskServer : public TPDiskTest<ChunkSize> {
     ui32 ServerNodeId;
     ui32 ClientNodeId;
     ui16 Port;
+    bool UseUring;
     static constexpr ui32 DDiskSlotId = 1;
 
     TDDiskServer(const TPerfTestConfig& cfg, const NDevicePerfTest::TDDiskTest& testProto,
-                 ui32 serverNodeId, ui32 clientNodeId, ui16 port)
+                 ui32 serverNodeId, ui32 clientNodeId, ui16 port, bool useUring = false)
         : TBase(cfg, DefaultPDiskTestProto())
         , DDiskTestProto(testProto)
         , ServerNodeId(serverNodeId)
         , ClientNodeId(clientNodeId)
         , Port(port)
+        , UseUring(useUring)
     {
         // Re-key PDisk actor IDs and the logger to ServerNodeId before Init() runs;
         // otherwise local sends from DDisk -> PDisk/logger get routed through
@@ -193,7 +203,7 @@ struct TDDiskServer : public TPDiskTest<ChunkSize> {
             // Server only accepts incoming connections, but the interconnect handshake still
             // resolves the peer NodeId via the local nameserver, so we must register the
             // client with a placeholder address (port 0; server never initiates connection).
-            auto common = MakeInterconnectCommon(TBase::Counters, ServerNodeId);
+            auto common = MakeInterconnectCommon(TBase::Counters, ServerNodeId, UseUring);
 
             TVector<TInterconnectPeer> peers = {{ClientNodeId, "::", 0}};
             SetupInterconnectServices(TBase::Setup.Get(), common, ServerNodeId,
@@ -245,10 +255,11 @@ struct TDDiskClient : public TPerfTest {
     ui32 ClientNodeId;
     TVector<TInterconnectPeer> ServerPeers;
     ui32 NumDevicesPerServer;
+    bool UseUring;
 
     TDDiskClient(const TPerfTestConfig& cfg, const NDevicePerfTest::TDDiskTest& testProto,
                  ui32 clientNodeId, const TVector<TInterconnectPeer>& serverPeers,
-                 ui32 numDevicesPerServer)
+                 ui32 numDevicesPerServer, bool useUring = false)
         : TPerfTest(cfg)
         , Setup(new TActorSystemSetup())
         , LogSettings(new NActors::NLog::TSettings(NActors::TActorId(clientNodeId, "logger"),
@@ -261,6 +272,7 @@ struct TDDiskClient : public TPerfTest {
         , ClientNodeId(clientNodeId)
         , ServerPeers(serverPeers)
         , NumDevicesPerServer(numDevicesPerServer)
+        , UseUring(useUring)
     {
     }
 
@@ -279,7 +291,7 @@ struct TDDiskClient : public TPerfTest {
             Setup->Scheduler.Reset(new TBasicSchedulerThread(TSchedulerConfig(64, 20)));
 
             // Set up interconnect with all server peers
-            auto common = MakeInterconnectCommon(Counters, ClientNodeId);
+            auto common = MakeInterconnectCommon(Counters, ClientNodeId, UseUring);
 
             SetupInterconnectServices(Setup.Get(), common, ClientNodeId,
                 "::", 0, ServerPeers, /*listen=*/false);

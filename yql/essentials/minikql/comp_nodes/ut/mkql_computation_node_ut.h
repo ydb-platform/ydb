@@ -122,7 +122,7 @@ struct TSetup {
         Explorer.Walk(pgm.GetNode(), Env->GetNodeStack());
         TComputationPatternOpts opts(Alloc.Ref(), *Env, NodeFactory,
                                      FunctionRegistry.Get(), NUdf::EValidateMode::Greedy, NUdf::EValidatePolicy::Exception,
-                                     UseLLVM ? "" : "OFF", graphPerProcess, StatsRegistry.Get(), nullptr, nullptr, nullptr, NYql::UnknownLangVersion, RuntimeSettings);
+                                     UseLLVM ? "" : "OFF", graphPerProcess, StatsRegistry.Get(), /*countersProvider=*/nullptr, /*secureParamsProvider=*/nullptr, /*logProvider=*/nullptr, NYql::UnknownLangVersion, RuntimeSettings);
         Pattern = MakeComputationPattern(Explorer, pgm, entryPoints, opts);
         auto graph = Pattern->Clone(opts.ToComputationOptions(*RandomProvider, *TimeProvider));
         Terminator.Reset(new TBindTerminator(graph->GetTerminator()));
@@ -132,13 +132,13 @@ struct TSetup {
     void RenameCallable(TRuntimeNode pgm, TString originalName, TString newName) {
         const auto renameProvider = [originalName = std::move(originalName), newName = std::move(newName)](TInternName name) -> TCallableVisitFunc {
             if (name == originalName) {
-                return [name, newName = std::move(newName)](TCallable& callable, const TTypeEnvironment& env) {
+                return [name, newName = newName](TCallable& callable, const TTypeEnvironment& env) {
                     TCallableBuilder callableBuilder(env, newName,
-                                                     callable.GetType()->GetReturnType(), false);
+                                                     callable.GetType()->GetReturnType(), /*disableMerge=*/false);
                     for (ui32 i = 0; i < callable.GetInputsCount(); ++i) {
                         callableBuilder.Add(callable.GetInput(i));
                     }
-                    return TRuntimeNode(callableBuilder.Build(), false);
+                    return TRuntimeNode(callableBuilder.Build(), /*isImmediate=*/false);
                 };
             } else {
                 return TCallableVisitFunc();

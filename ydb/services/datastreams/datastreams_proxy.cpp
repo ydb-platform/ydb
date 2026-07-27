@@ -11,6 +11,7 @@
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/protos/grpc_pq_old.pb.h>
 
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/services/datastreams/codes/datastreams_codes.h>
@@ -23,6 +24,8 @@
 #include <util/folder/path.h>
 
 #include <iterator>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_READ_PROXY
 
 using namespace NActors;
 using namespace NKikimrClient;
@@ -329,7 +332,9 @@ namespace NKikimr::NDataStreams::V1 {
                                                 const TActorContext& ctx, const TString& workingDir,
                                                 const TString& name)
     {
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "WorkingDir = " << workingDir << ", name = " << name);
+        YDB_LOG_DEBUG_CTX(ctx, "Fill propose request",
+            {"workingDir", workingDir},
+            {"name", name});
         NKikimrSchemeOp::TModifyScheme& modifyScheme(*proposal.Record.MutableTransaction()->MutableModifyScheme());
         modifyScheme.SetWorkingDir(workingDir);
         modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropPersQueueGroup);
@@ -1501,6 +1506,7 @@ namespace NKikimr::NDataStreams::V1 {
         cmdRead->SetReadTimestampMs(ShardIterator.GetReadTimestamp());
         cmdRead->SetTimeoutMs(READ_TIMEOUT_MS);
         cmdRead->SetExternalOperation(true);
+        cmdRead->SetCanReadBatches(true);
 
         TAutoPtr<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
         req->Record.Swap(&request);
@@ -1587,8 +1593,21 @@ namespace NKikimr::NDataStreams::V1 {
                         "Partition ended");
             }
 
-            const auto& results = readResult.GetResult();
-            for (auto& r : results) {
+            TMaybe<ui64> nextSequenceNumber;
+            TMaybe<ui64> lastWriteTimestampMs;
+            const ui64 readOffset = ShardIterator.GetSequenceNumber();
+
+            for (const auto& r : readResult.GetResult()) {
+                lastWriteTimestampMs = r.GetWriteTimestampMS();
+                const ui64 nextResultOffset = r.GetOffset() + r.GetLogicalMessageCount();
+                if (nextResultOffset <= readOffset) {
+                    nextSequenceNumber = Max(nextSequenceNumber.GetOrElse(readOffset), nextResultOffset);
+                    continue;
+                }
+                if (Result.records_size() >= Limit) {
+                    break;
+                }
+
                 auto proto(NKikimr::GetDeserializedData(r.GetData()));
                 auto record = Result.add_records();
                 record->set_data(proto.GetData());
@@ -1599,12 +1618,17 @@ namespace NKikimr::NDataStreams::V1 {
                 if (proto.GetCodec() > 0) {
                     record->set_codec(proto.GetCodec() + 1);
                 }
+
+                nextSequenceNumber = nextResultOffset;
+                if (Result.records_size() >= Limit) {
+                    break;
+                }
             }
-            if (!results.empty()) {
-                auto last = results.rbegin();
+
+            if (nextSequenceNumber) {
                 shardIterator.SetReadTimestamp(0);
-                shardIterator.SetSequenceNumber(last->GetOffset() + 1);
-                Result.set_millis_behind_latest(TInstant::Now().MilliSeconds() - last->GetWriteTimestampMS());
+                shardIterator.SetSequenceNumber(*nextSequenceNumber);
+                Result.set_millis_behind_latest(TInstant::Now().MilliSeconds() - *lastWriteTimestampMs);
             } else { // remove else?
                 Result.set_millis_behind_latest(0);
             }

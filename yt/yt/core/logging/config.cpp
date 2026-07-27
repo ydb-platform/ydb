@@ -13,6 +13,7 @@
 namespace NYT::NLogging {
 
 using namespace NYTree;
+using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -56,8 +57,12 @@ void TLogWriterConfig::Register(TRegistrar registrar)
         .Default(true);
     registrar.Parameter("enable_host_field", &TThis::EnableHostField)
         .Default(false);
+    registrar.Parameter("enable_native_tags", &TThis::EnableNativeTags)
+        .Default(false);
     registrar.Parameter("json_format", &TThis::JsonFormat)
         .Default();
+    registrar.Parameter("yson_format", &TThis::YsonFormat)
+        .Default(EYsonFormat::Text);
 
     registrar.Postprocessor([] (TThis* config) {
         // COMPAT(max42).

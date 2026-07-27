@@ -287,6 +287,104 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
         }
     }
 
+    Y_UNIT_TEST(ReceiveAttemptIdPartitionRouting) {
+        auto setup = CreateSetup();
+
+        CreateTopic(setup, "/Root/topic1", "mlp-consumer", 2);
+        setup->Write("/Root/topic1", "msg-1", 0);
+
+        auto& runtime = setup->GetRuntime();
+        TString successfulAttemptId;
+
+        for (ui32 attempt = 0; attempt < 20; ++attempt) {
+            const TString receiveAttemptId = TStringBuilder() << "attempt-" << attempt;
+            CreateReaderActor(runtime, {
+                .DatabasePath = "/Root",
+                .TopicName = "/Root/topic1",
+                .Consumer = "mlp-consumer",
+                .WaitTime = TDuration::Seconds(0),
+                .ProcessingTimeout = TDuration::Seconds(30),
+                .MaxNumberOfMessage = 1,
+                .ReceiveAttemptId = receiveAttemptId,
+            });
+
+            auto response = GetReadResponse(runtime);
+            UNIT_ASSERT_VALUES_EQUAL_C(response->Status, Ydb::StatusIds::SUCCESS, response->ErrorDescription);
+            if (response->Messages.size() == 1 && response->Messages[0].Data == "msg-1") {
+                successfulAttemptId = receiveAttemptId;
+                break;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 0);
+        }
+        UNIT_ASSERT(!successfulAttemptId.empty());
+
+        ReloadPQRBTablet(setup, "/Root", "/Root/topic1");
+
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(0),
+            .ProcessingTimeout = TDuration::Seconds(30),
+            .MaxNumberOfMessage = 1,
+            .ReceiveAttemptId = successfulAttemptId,
+        });
+
+        {
+            auto response = GetReadResponse(runtime);
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "msg-1");
+        }
+    }
+
+    Y_UNIT_TEST(ReceiveAttemptIdPartitionRoutingAfterPQReboot) {
+        auto setup = CreateSetup();
+
+        CreateTopic(setup, "/Root/topic1", "mlp-consumer", 1);
+        setup->Write("/Root/topic1", "msg-1", 0);
+
+        auto& runtime = setup->GetRuntime();
+        const TString receiveAttemptId = "attempt-0";
+
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(0),
+            .ProcessingTimeout = TDuration::Seconds(30),
+            .MaxNumberOfMessage = 1,
+            .ReceiveAttemptId = receiveAttemptId,
+        });
+
+        {
+            auto response = GetReadResponse(runtime);
+            UNIT_ASSERT_VALUES_EQUAL_C(response->Status, Ydb::StatusIds::SUCCESS, response->ErrorDescription);
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "msg-1");
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.PartitionId, 0);
+        }
+
+        ReloadPQTablet(setup, "/Root", "/Root/topic1", 0);
+
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(0),
+            .ProcessingTimeout = TDuration::Seconds(30),
+            .MaxNumberOfMessage = 1,
+            .ReceiveAttemptId = receiveAttemptId,
+        });
+
+        {
+            auto response = GetReadResponse(runtime);
+            UNIT_ASSERT_VALUES_EQUAL_C(response->Status, Ydb::StatusIds::SUCCESS, response->ErrorDescription);
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "msg-1");
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.PartitionId, 0);
+        }
+    }
+
 }
 
 } // namespace NKikimr::NPQ::NMLP

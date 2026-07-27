@@ -19,10 +19,6 @@ namespace NYT::NApi {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace NFuture {
-
-////////////////////////////////////////////////////////////////////////////////
-
 namespace NRowModifications {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -79,21 +75,6 @@ using TRowModification = std::variant<
     NRowModifications::TWriteAndLockRow>;
 
 ////////////////////////////////////////////////////////////////////////////////
-
-} // namespace NFuture
-
-////////////////////////////////////////////////////////////////////////////////
-
-//! Either a write or delete.
-struct TRowModification
-{
-    //! Discriminates between writes and deletes.
-    ERowModificationType Type;
-    //! Either a row (for write; versioned or unversioned) or a key (for delete; always unversioned).
-    NTableClient::TTypeErasedRow Row;
-    //! Locks.
-    NTableClient::TLockMask Locks;
-};
 
 struct TModifyRowsOptions
 {
@@ -181,12 +162,6 @@ struct IDynamicTableTransaction
         const NYPath::TYPath& path,
         NTableClient::TNameTablePtr nameTable,
         TSharedRange<TRowModification> modifications,
-        const TModifyRowsOptions& options = {}) = 0;
-
-    virtual void FutureModifyRows(
-        const NYPath::TYPath& path,
-        NTableClient::TNameTablePtr nameTable,
-        TSharedRange<NFuture::TRowModification> modifications,
         const TModifyRowsOptions& options = {}) = 0;
 };
 

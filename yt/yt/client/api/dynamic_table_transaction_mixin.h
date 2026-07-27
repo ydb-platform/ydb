@@ -45,12 +45,6 @@ public:
         TSharedRange<NTableClient::TLegacyKey> keys,
         const std::vector<std::string>& locks,
         NTableClient::ELockType lockType = NTableClient::ELockType::SharedStrong) override;
-
-    void ModifyRows(
-        const NYPath::TYPath& path,
-        NTableClient::TNameTablePtr nameTable,
-        TSharedRange<TRowModification> modifications,
-        const TModifyRowsOptions& options = {}) override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -1,0 +1,24 @@
+{
+    "schema" = <
+        unique_keys = %true;
+        strict = %true;
+    > [
+        {
+            "name" = "hash";
+            "type" = "uint64";
+            "expression" = "farm_hash(key)";
+            "sort_order" = "ascending";
+        };
+        {
+            "name" = "key";
+            "type" = "string";
+            "sort_order" = "ascending";
+        };
+        {
+            "name" = "kv_value";
+            "type" = "int64";
+        };
+    ];
+    "_yql_dynamic" = %true;
+    "_yql_dynamic_native_read" = %true;
+}

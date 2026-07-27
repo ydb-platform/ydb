@@ -24,6 +24,7 @@ DEFINE_ENUM(ETransactionState,
     (Aborted)
     (AbortFailed)
     (Detached)
+    (Abandoned)
 );
 
 class TTransaction
@@ -75,10 +76,10 @@ public:
     void SubscribeAborted(const TAbortedHandler& handler) override;
     void UnsubscribeAborted(const TAbortedHandler& handler) override;
 
-    void FutureModifyRows(
+    void ModifyRows(
         const NYPath::TYPath& path,
         NTableClient::TNameTablePtr nameTable,
-        TSharedRange<NApi::NFuture::TRowModification> modifications,
+        TSharedRange<NApi::TRowModification> modifications,
         const NApi::TModifyRowsOptions& options) override;
 
     using TQueueTransactionMixin::AdvanceQueueConsumer;
@@ -326,6 +327,8 @@ private:
     TFuture<void> DoAbort(
         TGuard<NThreading::TSpinLock>* guard,
         const TTransactionAbortOptions& options = {});
+
+    void Abandon(TGuard<NThreading::TSpinLock>* guard);
 
     void ValidateActive();
     void DoValidateActive();

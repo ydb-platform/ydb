@@ -187,6 +187,7 @@ bool TYtKey::Parse(const TExprNode& key, TExprContext& ctx, bool isOutput) {
 
     } else {
         ctx.AddError(TIssue(ctx.GetPosition(key.Pos()), "Expected String or MrTableRange[Strict]"));
+        return false;
     }
 
     if (key.ChildrenSize() > 1) {
@@ -225,16 +226,6 @@ bool TYtKey::Parse(const TExprNode& key, TExprContext& ctx, bool isOutput) {
                     return false;
                 }
                 ExtraColumns = value;
-            } else if (tag.IsAtom("typeId")) {
-                if (Type != EType::View) {
-                    ctx.AddError(TIssue(ctx.GetPosition(tag.Pos()), "Missed object id."));
-                    return false;
-                }
-                if (const auto viewNode = key.Child(i)->Child(1);
-                    !(viewNode->IsCallable("String") && viewNode->ChildrenSize() == 1 && viewNode->Head().IsAtom("VIEW"))) {
-                    ctx.AddError(TIssue(ctx.GetPosition(viewNode->Pos()), "Expected String 'VIEW'."));
-                    return false;
-                }
             } else {
                 ctx.AddError(TIssue(ctx.GetPosition(tag.Pos()), TStringBuilder() << "Unexpected tag: " << tag.Content()));
                 return false;

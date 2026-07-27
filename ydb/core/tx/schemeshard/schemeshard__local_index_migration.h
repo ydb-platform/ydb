@@ -13,6 +13,10 @@ class TSchemeShard;
 struct TLocalIndexMigrationItem {
     TString WorkingDir;
     NKikimrSchemeOp::TIndexCreationConfig IndexConfig;
+    // Column tables migrate via ESchemeOpAlterColumnTable; row tables migrate via
+    // ESchemeOpAlterTable. For row tables, the engine artifact already exists,
+    // so migration only registers the scheme object.
+    bool IsColumnTable = true;
     TBackoff Backoff{10};
 
     TString DebugString() const;

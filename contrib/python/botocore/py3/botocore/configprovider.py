@@ -13,6 +13,7 @@
 """This module contains the interface for controlling how configuration
 is loaded.
 """
+
 import copy
 import logging
 import os
@@ -50,7 +51,7 @@ logger = logging.getLogger(__name__)
 #: NOTE: Fixing the spelling of this variable would be a breaking change.
 #: Please leave as is.
 BOTOCORE_DEFAUT_SESSION_VARIABLES = {
-    # logical:  config_file, env_var,        default_value, conversion_func
+    # logical:  config_file, env_var, default_value, conversion_func
     'profile': (None, ['AWS_DEFAULT_PROFILE', 'AWS_PROFILE'], None, None),
     'region': ('region', 'AWS_DEFAULT_REGION', 'yandex', None),
     'data_path': ('data_path', 'AWS_DATA_PATH', None, None),
@@ -143,12 +144,6 @@ BOTOCORE_DEFAUT_SESSION_VARIABLES = {
         'auto',
         None,
     ),
-    'sts_regional_endpoints': (
-        'sts_regional_endpoints',
-        'AWS_STS_REGIONAL_ENDPOINTS',
-        'legacy',
-        None,
-    ),
     'retry_mode': ('retry_mode', 'AWS_RETRY_MODE', 'legacy', None),
     'defaults_mode': ('defaults_mode', 'AWS_DEFAULTS_MODE', 'legacy', None),
     # We can't have a default here for v1 because we need to defer to
@@ -167,7 +162,47 @@ BOTOCORE_DEFAUT_SESSION_VARIABLES = {
         False,
         utils.ensure_boolean,
     ),
+    'sigv4a_signing_region_set': (
+        'sigv4a_signing_region_set',
+        'AWS_SIGV4A_SIGNING_REGION_SET',
+        None,
+        None,
+    ),
+    'request_checksum_calculation': (
+        'request_checksum_calculation',
+        'AWS_REQUEST_CHECKSUM_CALCULATION',
+        "when_supported",
+        None,
+    ),
+    'response_checksum_validation': (
+        'response_checksum_validation',
+        'AWS_RESPONSE_CHECKSUM_VALIDATION',
+        "when_supported",
+        None,
+    ),
 }
+
+# Evaluate AWS_STS_REGIONAL_ENDPOINTS settings
+try:
+    # This is not a public interface and is subject to abrupt breaking changes.
+    # Any usage is not advised or supported in external code bases.
+    from botocore.customizations.sts import (
+        sts_default_setting as _sts_default_setting,
+    )
+except ImportError:
+    _sts_default_setting = 'legacy'
+
+_STS_DEFAULT_SETTINGS = {
+    'sts_regional_endpoints': (
+        'sts_regional_endpoints',
+        'AWS_STS_REGIONAL_ENDPOINTS',
+        _sts_default_setting,
+        None,
+    ),
+}
+BOTOCORE_DEFAUT_SESSION_VARIABLES.update(_STS_DEFAULT_SETTINGS)
+
+
 # A mapping for the s3 specific configuration vars. These are the configuration
 # vars that typically go in the s3 section of the config file. This mapping
 # follows the same schema as the previous session variable mapping.
@@ -445,7 +480,7 @@ class ConfigValueStore:
 
     def get_config_variable(self, logical_name):
         """
-        Retrieve the value associeated with the specified logical_name
+        Retrieve the value associated with the specified logical_name
         from the corresponding provider. If no value is found None will
         be returned.
 
@@ -697,7 +732,7 @@ class ChainProvider(BaseProvider):
         return value
 
     def __repr__(self):
-        return '[%s]' % ', '.join([str(p) for p in self._providers])
+        return '[{}]'.format(', '.join([str(p) for p in self._providers]))
 
 
 class InstanceVarProvider(BaseProvider):
@@ -728,10 +763,7 @@ class InstanceVarProvider(BaseProvider):
         return value
 
     def __repr__(self):
-        return 'InstanceVarProvider(instance_var={}, session={})'.format(
-            self._instance_var,
-            self._session,
-        )
+        return f'InstanceVarProvider(instance_var={self._instance_var}, session={self._session})'
 
 
 class ScopedConfigProvider(BaseProvider):
@@ -767,10 +799,7 @@ class ScopedConfigProvider(BaseProvider):
         return scoped_config.get(self._config_var_name)
 
     def __repr__(self):
-        return 'ScopedConfigProvider(config_var_name={}, session={})'.format(
-            self._config_var_name,
-            self._session,
-        )
+        return f'ScopedConfigProvider(config_var_name={self._config_var_name}, session={self._session})'
 
 
 class EnvironmentProvider(BaseProvider):
@@ -878,7 +907,7 @@ class ConstantProvider(BaseProvider):
         return self._value
 
     def __repr__(self):
-        return 'ConstantProvider(value=%s)' % self._value
+        return f'ConstantProvider(value={self._value})'
 
 
 class ConfiguredEndpointProvider(BaseProvider):

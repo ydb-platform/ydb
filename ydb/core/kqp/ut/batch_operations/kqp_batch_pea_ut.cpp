@@ -15,8 +15,6 @@ namespace {
 
 TKikimrSettings GetTestSettings() {
     auto appConfig = NKikimrConfig::TAppConfig();
-    appConfig.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
-
     auto logConfig = TTestLogSettings()
         .AddLogPriority(NKikimrServices::EServiceKikimr::KQP_EXECUTER, NLog::EPriority::PRI_TRACE)
         .AddLogPriority(NKikimrServices::EServiceKikimr::KQP_COMPUTE, NLog::EPriority::PRI_INFO);

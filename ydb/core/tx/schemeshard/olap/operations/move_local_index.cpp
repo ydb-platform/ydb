@@ -389,11 +389,11 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperation::TPtr CreateMoveLocalIndex(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateMoveColumnTableLocalIndex(TOperationId id, const TTxTransaction& tx) {
     return MakeSubOperation<TMoveLocalIndex>(id, tx);
 }
 
-ISubOperation::TPtr CreateMoveLocalIndex(TOperationId id, TTxState::ETxState state) {
+ISubOperation::TPtr CreateMoveColumnTableLocalIndex(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TMoveLocalIndex>(id, state);
 }
 
@@ -473,7 +473,7 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveLocalIndex(TOperationId nextId,
     }
 
     // The move sub-operation
-    result.push_back(CreateMoveLocalIndex(NextPartId(nextId, result), tx));
+    result.push_back(CreateMoveColumnTableLocalIndex(NextPartId(nextId, result), tx));
 
     return result;
 }

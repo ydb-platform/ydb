@@ -990,7 +990,7 @@ namespace {
 
     bool ParseAsyncReplicationSettingsBase(
         TReplicationSettingsBase& dstSettings, const TCoNameValueTupleList& srcSettings, TExprContext& ctx, TPositionHandle pos,
-        const TString& objectName = "replication"
+        bool disableOldSecretCreation, const TString& objectName = "replication"
     ) {
         for (auto setting : srcSettings) {
             auto name = setting.Name().Value();
@@ -1089,14 +1089,40 @@ namespace {
             return false;
         }
 
+        if (disableOldSecretCreation) {
+            auto checkSecret = [&](const TString& secretName) {
+                if (secretName && !secretName.StartsWith('/')) {
+                    ctx.AddError(
+                        TIssue(
+                            ctx.GetPosition(pos),
+                            "Old secrets are disabled for creating new objects. Please use new secrets"
+                        )
+                    );
+                    return false;
+                }
+                return true;
+            };
+
+            if (const auto& x = dstSettings.OAuthToken; x && !checkSecret(x->TokenSecretName)) {
+                return false;
+            }
+            if (const auto& x = dstSettings.StaticCredentials; x && !checkSecret(x->PasswordSecretName)) {
+                return false;
+            }
+            if (const auto& x = dstSettings.IamCredentials; x && !checkSecret(x->InitialToken.TokenSecretName)) {
+                return false;
+            }
+        }
+
         return true;
     }
 
     bool ParseAsyncReplicationSettings(
-        TReplicationSettings& dstSettings, const TCoNameValueTupleList& srcSettings, TExprContext& ctx, TPositionHandle pos
+        TReplicationSettings& dstSettings, const TCoNameValueTupleList& srcSettings, TExprContext& ctx, TPositionHandle pos,
+        bool disableOldSecretCreation
     ) {
 
-        if (!ParseAsyncReplicationSettingsBase(dstSettings, srcSettings, ctx, pos)) {
+        if (!ParseAsyncReplicationSettingsBase(dstSettings, srcSettings, ctx, pos, disableOldSecretCreation)) {
             return false;
         }
 
@@ -1138,9 +1164,10 @@ namespace {
     }
 
     bool ParseTransferSettings(
-        TTransferSettings& dstSettings, const TCoNameValueTupleList& srcSettings, TExprContext& ctx, TPositionHandle pos
+        TTransferSettings& dstSettings, const TCoNameValueTupleList& srcSettings, TExprContext& ctx, TPositionHandle pos,
+        bool disableOldSecretCreation
     ) {
-        if (!ParseAsyncReplicationSettingsBase(dstSettings, srcSettings, ctx, pos, "transfer")) {
+        if (!ParseAsyncReplicationSettingsBase(dstSettings, srcSettings, ctx, pos, disableOldSecretCreation, "transfer")) {
             return false;
         }
 
@@ -3386,7 +3413,13 @@ public:
                 );
             }
 
-            if (!ParseAsyncReplicationSettings(settings.Settings, createReplication.ReplicationSettings(), ctx, createReplication.Pos())) {
+            if (!ParseAsyncReplicationSettings(
+                settings.Settings,
+                createReplication.ReplicationSettings(),
+                ctx,
+                createReplication.Pos(),
+                SessionCtx->Config().FeatureFlags.GetDisableOldSecretCreation())
+            ) {
                 return SyncError();
             }
 
@@ -3442,7 +3475,10 @@ public:
             TAlterReplicationSettings settings;
             settings.Name = TString(alterReplication.Replication());
 
-            if (!ParseAsyncReplicationSettings(settings.Settings, alterReplication.ReplicationSettings(), ctx, alterReplication.Pos())) {
+            if (!ParseAsyncReplicationSettings(
+                settings.Settings, alterReplication.ReplicationSettings(), ctx, alterReplication.Pos(),
+                SessionCtx->Config().FeatureFlags.GetDisableOldSecretCreation())
+            ) {
                 return SyncError();
             }
 
@@ -3497,7 +3533,13 @@ public:
                 createTransfer.TransformLambda()
             };
 
-            if (!ParseTransferSettings(settings.Settings, createTransfer.TransferSettings(), ctx, createTransfer.Pos())) {
+            if (!ParseTransferSettings(
+                settings.Settings,
+                createTransfer.TransferSettings(),
+                ctx,
+                createTransfer.Pos(),
+                SessionCtx->Config().FeatureFlags.GetDisableOldSecretCreation())
+            ) {
                 return SyncError();
             }
 
@@ -3554,7 +3596,9 @@ public:
             settings.Name = TString(alterTransfer.Transfer());
             settings.TranformLambda = alterTransfer.TransformLambda();
 
-            if (!ParseTransferSettings(settings.Settings, alterTransfer.TransferSettings(), ctx, alterTransfer.Pos())) {
+            if (!ParseTransferSettings(settings.Settings, alterTransfer.TransferSettings(), ctx, alterTransfer.Pos(),
+                SessionCtx->Config().FeatureFlags.GetDisableOldSecretCreation())
+            ) {
                 return SyncError();
             }
 

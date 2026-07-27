@@ -286,16 +286,11 @@ Y_UNIT_TEST_SUITE(MoveTable) {
         // Let MoveTable propose execute and register TWaitTxs before an unrelated tx completes.
         runtime.SimulateSleep(TDuration::MilliSeconds(100));
 
-        // Unrelated schema tx on another path while MoveTable is waiting for commitSrcTxId.
-        // Without the fix this completes into TWaitTxs and fails TxIdsToWait.erase(...).
-        // (A concurrent write would hit InsertWriteId collisions; EnsureTables avoids that.)
         TPlanStep lastPlanStep = commitSrcPlanStep;
         {
             constexpr ui64 auxPathId = 99;
             NKikimrTxColumnShard::TSchemaTxBody auxTx;
             Y_ABORT_UNLESS(auxTx.ParseFromString(TTestSchema::CreateTableTxBody(auxPathId, testTable.Schema, testTable.Pk)));
-            // After InitShard ProtectSchemaSeqNo left LastSchemaSeqNo at (0,1); MoveTable propose
-            // used Round=1. EnsureTables needs a higher Round.
             auxTx.MutableSeqNo()->SetRound(2);
             TString auxTxBody;
             Y_PROTOBUF_SUPPRESS_NODISCARD auxTx.SerializeToString(&auxTxBody);
@@ -304,7 +299,6 @@ Y_UNIT_TEST_SUITE(MoveTable) {
             lastPlanStep = auxPlan;
         }
 
-        // Plan src commit after the unrelated schema tx so the step is not ignored as stale.
         PlanCommit(runtime, sender, TPlanStep{ lastPlanStep.Val() + 1 }, commitSrcTxId);
 
         auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);

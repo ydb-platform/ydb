@@ -1343,43 +1343,295 @@
     },
     "test.TestViewer.test_topic_data": {
         "both_offset_and_ts": {
-            "status_code": 401,
-            "text": "Access denied"
+            "status_code": 400,
+            "text": "Only read_timestamp or offset parameter may be specified, not both"
         },
         "no_partition": {
-            "status_code": 401,
-            "text": "Access denied"
+            "status_code": 400,
+            "text": "Parameter 'partition' is necessary"
         },
         "response_compressed": {
-            "status_code": 401,
-            "text": "Access denied"
+            "EndOffset": 21,
+            "Messages": [
+                {
+                    "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
+                    "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTA=",
+                    "Offset": 11,
+                    "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 12,
+                    "StorageSize": 38,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
+                    "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTE=",
+                    "Offset": 12,
+                    "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 13,
+                    "StorageSize": 38,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
+                    "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTI=",
+                    "Offset": 13,
+                    "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 14,
+                    "StorageSize": 38,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
+                    "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTM=",
+                    "Offset": 14,
+                    "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 15,
+                    "StorageSize": 38,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
+                    "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTQ=",
+                    "Offset": 15,
+                    "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 16,
+                    "StorageSize": 38,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": false
         },
         "response_last_offset": {
-            "status_code": 401,
-            "text": "Access denied"
+            "EndOffset": 21,
+            "Messages": [
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
+                    "Message": "bWVzc2FnZS0w",
+                    "Offset": 0,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 1,
+                    "StorageSize": 9,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
+                    "Message": "bWVzc2FnZS0x",
+                    "Offset": 1,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 2,
+                    "StorageSize": 9,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
+                    "Message": "bWVzc2FnZS0y",
+                    "Offset": 2,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 3,
+                    "StorageSize": 9,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": false
         },
         "response_metadata": {
-            "status_code": 401,
-            "text": "Access denied"
+            "EndOffset": 21,
+            "Messages": [
+                {
+                    "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
+                    "Message": "bWVzc2FnZV93aXRoX21ldGE=",
+                    "MessageMetadata": [
+                        {
+                            "Key": "key1",
+                            "Value": "value1"
+                        },
+                        {
+                            "Key": "key2",
+                            "Value": "value2"
+                        }
+                    ],
+                    "Offset": 10,
+                    "OriginalSize": 17,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 11,
+                    "StorageSize": 37,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": false
         },
         "response_not_truncated": {
-            "status_code": 401,
-            "text": "Access denied"
+            "EndOffset": 21,
+            "Messages": [
+                {
+                    "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
+                    "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTk=",
+                    "Offset": 20,
+                    "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 21,
+                    "StorageSize": 38,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": false
         },
         "response_read": {
-            "status_code": 401,
-            "text": "Access denied"
+            "EndOffset": 21,
+            "Messages": [
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
+                    "Message": "bWVzc2FnZS0w",
+                    "Offset": 0,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 1,
+                    "StorageSize": 9,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
+                    "Message": "bWVzc2FnZS0x",
+                    "Offset": 1,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 2,
+                    "StorageSize": 9,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
+                    "Message": "bWVzc2FnZS0y",
+                    "Offset": 2,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 3,
+                    "StorageSize": 9,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
+                    "Message": "bWVzc2FnZS0z",
+                    "Offset": 3,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 4,
+                    "StorageSize": 9,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
+                    "Message": "bWVzc2FnZS00",
+                    "Offset": 4,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 5,
+                    "StorageSize": 9,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": false
         },
         "response_truncated": {
-            "status_code": 401,
-            "text": "Access denied"
+            "EndOffset": 21,
+            "Messages": [
+                {
+                    "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
+                    "Ip": "text",
+                    "Message": "Y29tcHI=",
+                    "Offset": 20,
+                    "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 21,
+                    "StorageSize": 38,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": true
         }
     },
     "test.TestViewer.test_topic_data_cdc": {
         "alter": null,
         "data": {
-            "status_code": 401,
-            "text": "Access denied"
+            "EndOffset": 1,
+            "Messages": [
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Ip": "",
+                    "Message": "eyJ1cGRhdGUiOnsibmFtZSI6ImVsbGV2ZW4ifSwia2V5IjpbMTFdfQ==",
+                    "Offset": 0,
+                    "OriginalSize": 40,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 1,
+                    "StorageSize": 40,
+                    "TimestampDiff": "number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": false
         },
         "insert": {
             "status": "SUCCESS",
@@ -16207,8 +16459,8 @@
     },
     "test.TestViewer.test_waiting_for_cluster_ready": {},
     "test.TestViewer.test_whoami_database": {
-        "status_code": 403,
-        "text": "<html><body><h1>403 Forbidden</h1></body></html>"
+        "status_code": 400,
+        "text": "`database` is required for /viewer/whoami"
     },
     "test.TestViewer.test_whoami_monitoring": {
         "AuthType": "Login",

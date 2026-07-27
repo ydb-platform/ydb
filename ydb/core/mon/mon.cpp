@@ -38,7 +38,7 @@ namespace {
 using namespace NKikimr;
 using NMonitoring::TEvMon;
 
-bool HasJsonContent(NHttp::THttpIncomingRequest* request) {
+bool HasJsonContent(const NHttp::THttpIncomingRequest* request) {
     if (request->Method == "POST") {
         const TStringBuf header = request->ContentType.Before(';');
         return header.empty() || AsciiEqualsIgnoreCase(header, "application/json"); // by default we will try to parse json, no error will be generated if parsing fails
@@ -46,7 +46,7 @@ bool HasJsonContent(NHttp::THttpIncomingRequest* request) {
     return false;
 }
 
-TString GetDatabase(NHttp::THttpIncomingRequest* request) {
+TString GetDatabase(const NHttp::THttpIncomingRequest* request) {
     NHttp::TUrlParameters urlParams(request->URL);
     TString database = urlParams["database"];
     if (database) {
@@ -59,6 +59,25 @@ TString GetDatabase(NHttp::THttpIncomingRequest* request) {
         }
     }
     return {};
+}
+
+void LogAuthorizedHttpRequest(
+    const TAppData* appData,
+    const NGRpcService::TEvRequestAuthAndCheckResult* result,
+    const NHttp::THttpIncomingRequest& request)
+{
+    const TString address = request.Address ? request.Address->ToString() : "";
+    const TString user = (result && result->UserToken) ? result->UserToken->GetUserSID() : "anonymous";
+    const NACLib::TUserToken* userToken = (result && result->UserToken) ? result->UserToken.Get() : nullptr;
+    const TString accessLevel = ToString(GetHighestAccessLevel(appData, userToken));
+    const TString database = result ? result->Database : GetDatabase(&request);
+    ALOG_NOTICE(NActorsServices::HTTP,
+        address
+            << " " << user
+            << " " << request.Method
+            << " " << request.URL
+            << " highest_access_level=" << accessLevel
+            << " database=" << database);
 }
 
 IEventHandle* GetRequestAuthAndCheckHandle(const NActors::TActorId& owner, const TString& database, const TString& ticket, TString peerName) {
@@ -501,12 +520,7 @@ public:
     void SendRequest(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult* result = nullptr) {
         NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
         if (ActorMonPage->Authorizer) {
-            TString user = (result && result->UserToken) ? result->UserToken->GetUserSID() : "anonymous";
-            ALOG_NOTICE(NActorsServices::HTTP,
-                (request->Address ? request->Address->ToString() : "")
-                << " " << user
-                << " " << request->Method
-                << " " << request->URL);
+            LogAuthorizedHttpRequest(AppData(), result, *request);
         }
         TString serializedToken = result && result->UserToken ? result->UserToken->GetSerializedToken() : TString();
         Send(ActorMonPage->TargetActorId, new NMon::TEvHttpInfo(
@@ -1136,11 +1150,7 @@ public:
     void SendRequest(const NKikimr::NGRpcService::TEvRequestAuthAndCheckResult* result = nullptr) {
         NHttp::THttpIncomingRequestPtr request = Event->Get()->Request;
         if (Authorizer) {
-            TString user = (result && result->UserToken) ? result->UserToken->GetUserSID() : "anonymous";
-            ALOG_NOTICE(NActorsServices::HTTP, (request->Address ? request->Address->ToString() : "")
-                << " " << user
-                << " " << request->Method
-                << " " << request->URL);
+            LogAuthorizedHttpRequest(AppData(), result, *request);
         }
         Send(new IEventHandle(Fields.Handler, SelfId(), Event->ReleaseBase().Release(), IEventHandle::FlagTrackDelivery, Event->Cookie));
     }

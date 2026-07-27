@@ -4538,7 +4538,7 @@ bool THive::MoveDataInactiveGroups(TStoragePoolInfo& pool) {
     if (tabletsToMoveData.empty()) {
         return false;
     } else {
-        YDB_LOG_INFO("ShrinkPool: starting compact for tablets",
+        YDB_LOG_INFO("ShrinkPool: starting move data for tablets",
             {"logPrefix", GetLogPrefix()},
             {"tabletsToMoveDataCount", tabletsToMoveData.size()});
         StartMoveDataActor(std::move(tabletsToMoveData), pool.InactiveGroups, pool.Name);

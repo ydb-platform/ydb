@@ -845,12 +845,6 @@ public:
         return Tablets;
     }
 
-    const TTablets &NodeTablets(ui32 nodeId) const {
-        static const TTablets empty;
-        auto it = NodeTabletsByNode.find(nodeId);
-        return it != NodeTabletsByNode.end() ? it->second : empty;
-    }
-
     bool NodeHasRunningSystemTablet(ui32 nodeId) const;
 
     bool HostHasRunningSystemTablet(const TString &hostName) const;

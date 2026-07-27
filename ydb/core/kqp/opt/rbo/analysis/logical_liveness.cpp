@@ -298,6 +298,12 @@ void TOpSort::PropagateLiveness(ILivenessContext& ctx) {
     ctx.AddLiveInput(this, 0, inputLive);
 }
 
+void TOpTableLookup::PropagateLiveness(ILivenessContext& ctx) {
+    TInfoUnitSet inputLive;
+    AddInfoUnits(inputLive, LookupKeys);
+    ctx.AddLiveInput(this, 0, inputLive);
+}
+
 void TOpAggregate::PropagateLiveness(ILivenessContext& ctx) {
     TInfoUnitSet inputLive;
     AddInfoUnits(inputLive, KeyColumns);

@@ -284,6 +284,41 @@ NYql::EStorageType GetStorageType(const TKikimrTableMetadata& meta) {
     }
 }
 
+TVector<TString> FilterPhysicalColumns(const TOpFilter& filter, const TOpRead& read, TPlanProps& props) {
+    THashMap<TString, TString> exposedToPhysical;
+    const size_t count = std::min(read.Columns.size(), read.OutputIUs.size());
+    for (size_t i = 0; i < count; ++i) {
+        exposedToPhysical[read.OutputIUs[i].GetFullName()] = read.Columns[i];
+    }
+
+    TVector<TString> result;
+    THashSet<TString> seen;
+    for (const auto& iu : filter.GetFilterIUs(props)) {
+        const auto it = exposedToPhysical.find(iu.GetFullName());
+        const TString physical = it != exposedToPhysical.end() ? it->second : iu.GetColumnName();
+        if (seen.insert(physical).second) {
+            result.push_back(physical);
+        }
+    }
+    return result;
+}
+
+TVector<TString> BuildIndexReadColumns(const TVector<TString>& pkColumns, const TVector<TString>& filterPhysical) {
+    TVector<TString> result;
+    THashSet<TString> seen;
+    for (const auto& c : pkColumns) {
+        if (seen.insert(c).second) {
+            result.push_back(c);
+        }
+    }
+    for (const auto& c : filterPhysical) {
+        if (seen.insert(c).second) {
+            result.push_back(c);
+        }
+    }
+    return result;
+}
+
 TExprNode::TPtr BuildTableCallable(const TKikimrTableMetadata& meta, TPositionHandle pos, TExprContext& ctx) {
     // clang-format off
     return Build<TKqpTable>(ctx, pos)
@@ -384,6 +419,91 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
                 winnerKeyColumns = std::move(indexKeyColumns);
             }
         }
+    }
+
+    TIntrusivePtr<TKikimrTableMetadata> lookupIndexMeta;
+    IPredicateRangeExtractor::TBuildResult lookupResult;
+    TVector<TString> lookupKeyColumns;
+    TVector<TString> lookupReadColumns;
+
+    if (!kqpCtx.Config->IsAutoIndexSelectionDisabled() && !bestScore.PointCoversKey && !read->Limit) {
+        const auto filterPhysical = FilterPhysicalColumns(*filter, *read, props);
+        for (const auto& index : mainMeta.Indexes) {
+            if (!IsSelectableIndex(index)) {
+                continue;
+            }
+
+            const auto indexMeta = mainMeta.GetIndexMetadata(index.Name).first;
+            if (!indexMeta || IsUselessIndex(indexMeta->KeyColumnNames, mainMeta.KeyColumnNames) || IsCovering(*read, *indexMeta)) {
+                continue;
+            }
+
+            if (!FindTable(kqpCtx, indexMeta->Name)) {
+                continue;
+            }
+
+            const bool evaluable = std::all_of(filterPhysical.begin(), filterPhysical.end(),
+                                               [&](const TString& col) { return indexMeta->Columns.contains(col); });
+            if (!evaluable) {
+                continue;
+            }
+
+            auto indexKeyColumns = ResolveExposedKeyColumns(*read, indexMeta->KeyColumnNames);
+            auto indexResult = extractor->BuildComputeNode(indexKeyColumns, ctx, typeCtx);
+            if (!indexResult.ComputeNode) {
+                continue;
+            }
+
+            const auto score = ScoreKeyOrder(indexResult, indexKeyColumns.size());
+            if (bestScore < score) {
+                bestScore = score;
+                lookupIndexMeta = indexMeta;
+                lookupResult = std::move(indexResult);
+                lookupKeyColumns = std::move(indexKeyColumns);
+                lookupReadColumns = BuildIndexReadColumns(mainMeta.KeyColumnNames, filterPhysical);
+            }
+        }
+    }
+
+    if (lookupIndexMeta) {
+        YQL_CLOG(TRACE, ProviderKqp) << "[NEW RBO] Selected non-covering index " << lookupIndexMeta->Name
+                                     << " for a read of " << tablePath;
+
+        TOpRead::TRangeInfo rangeInfo {
+            .ComputeNode = lookupResult.ComputeNode,
+            .KeyColumns = lookupKeyColumns,
+            .UsedPrefixLen = lookupResult.UsedPrefixLen,
+            .ExpectedMaxRanges = lookupResult.ExpectedMaxRanges
+                ? TMaybe<size_t>(*lookupResult.ExpectedMaxRanges)
+                : TMaybe<size_t>(),
+        };
+
+        TVector<TInfoUnit> indexOutputIUs;
+        indexOutputIUs.reserve(lookupReadColumns.size());
+        for (const auto& col : lookupReadColumns) {
+            indexOutputIUs.emplace_back(TString(), col);
+        }
+
+        auto indexRead = MakeIntrusive<TOpRead>(read->Alias, lookupReadColumns, indexOutputIUs, GetStorageType(*lookupIndexMeta),
+                                                BuildTableCallable(*lookupIndexMeta, read->Pos, ctx), nullptr, nullptr,
+                                                std::move(rangeInfo), std::nullopt, ESortDir::None, read->Props, read->Pos);
+
+        auto indexFilter = MakeIntrusive<TOpFilter>(indexRead, filter->Pos, filter->Props,
+                                                    TExpression(lookupResult.PrunedLambda, &ctx, &props));
+        THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> renameMap;
+        const size_t renameCount = std::min(read->Columns.size(), read->OutputIUs.size());
+        for (size_t i = 0; i < renameCount; ++i) {
+            renameMap[read->OutputIUs[i]] = TInfoUnit(TString(), read->Columns[i]);
+        }
+        indexFilter->RenameUsedIUs(renameMap, ctx);
+
+        TVector<TInfoUnit> lookupKeys;
+        for (const auto& pk : mainMeta.KeyColumnNames) {
+            lookupKeys.emplace_back(TString(), pk);
+        }
+
+        return MakeIntrusive<TOpTableLookup>(indexFilter, read->Pos, read->TableCallable, read->Columns,
+                                             read->GetOutputIUs(), lookupKeys);
     }
 
     const auto& chosen = chosenIndexMeta ? winnerResult : mainResult;

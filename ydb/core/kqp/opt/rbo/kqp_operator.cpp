@@ -1009,7 +1009,47 @@ TString TOpSort::ToString(TExprContext& ctx) {
     }
 
     res << " Phase: " << ToStringPhase(SortPhase);
-    
+
+    return res;
+}
+
+TOpTableLookup::TOpTableLookup(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExprNode::TPtr& table,
+                               const TVector<TString>& fetchColumns, const TVector<TInfoUnit>& outputIUs,
+                               const TVector<TInfoUnit>& lookupKeys)
+    : IUnaryOperator(EOperator::TableLookup, pos, input)
+    , Table(table)
+    , FetchColumns(fetchColumns)
+    , OutputIUs(outputIUs)
+    , LookupKeys(lookupKeys) {
+}
+
+void TOpTableLookup::ComputeOutputIUs() {
+    Props.OutputIUs = OutputIUs;
+}
+
+TVector<TInfoUnit> TOpTableLookup::GetUsedIUs(TPlanProps& props) {
+    Y_UNUSED(props);
+    return LookupKeys;
+}
+
+TString TOpTableLookup::ToString(TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    TStringBuilder res;
+    res << "TableLookup: " << TKqpTable(Table).Path().StringValue() << ", keys: [";
+    for (size_t i = 0; i < LookupKeys.size(); i++) {
+        res << LookupKeys[i].GetFullName();
+        if (i + 1 < LookupKeys.size()) {
+            res << ", ";
+        }
+    }
+    res << "], columns: [";
+    for (size_t i = 0; i < FetchColumns.size(); i++) {
+        res << FetchColumns[i];
+        if (i + 1 < FetchColumns.size()) {
+            res << ", ";
+        }
+    }
+    res << "]";
     return res;
 }
 

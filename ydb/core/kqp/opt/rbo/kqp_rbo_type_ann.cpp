@@ -501,6 +501,37 @@ TStatus ComputeTypes(TIntrusivePtr<TOpSort> sort, TRBOContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus ComputeTypes(TIntrusivePtr<TOpTableLookup> lookup, TRBOContext& ctx) {
+    const auto table = ResolveTable(lookup->Table.Get(), ctx.ExprCtx, ctx.KqpCtx.Cluster, *ctx.KqpCtx.Tables);
+    if (!table.second) {
+        return TStatus::Error;
+    }
+
+    TVector<TCoAtom> columns;
+    for (const auto& column : lookup->FetchColumns) {
+        columns.push_back(Build<TCoAtom>(ctx.ExprCtx, lookup->Pos).Value(column).Done());
+    }
+    const auto columnsList = Build<TCoAtomList>(ctx.ExprCtx, lookup->Pos).Add(columns).Done();
+
+    const TTypeAnnotationNode* rowType = GetReadTableRowType(ctx.ExprCtx, *ctx.KqpCtx.Tables, ctx.KqpCtx.Cluster,
+        table.first, columnsList, ctx.KqpCtx.Config->SystemColumnsEnabled());
+    if (!rowType) {
+        return TStatus::Error;
+    }
+
+    TVector<const TItemExprType*> newItemTypes;
+    for (const auto itemType : rowType->Cast<TStructExprType>()->GetItems()) {
+        const TString columnName = TString(itemType->GetName());
+        const auto it = std::find(lookup->FetchColumns.begin(), lookup->FetchColumns.end(), columnName);
+        const auto columnIndex = std::distance(lookup->FetchColumns.begin(), it);
+        const auto fullName = lookup->OutputIUs[columnIndex].GetFullName();
+        newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(fullName, itemType->GetItemType()));
+    }
+    auto newStructType = ctx.ExprCtx.MakeType<TStructExprType>(newItemTypes);
+    lookup->Type = ctx.ExprCtx.MakeType<TListExprType>(newStructType);
+    return TStatus::Ok;
+}
+
 TStatus ComputeTypes(TIntrusivePtr<IOperator> op, TRBOContext& ctx, TPlanProps& props);
 
 TStatus ComputeTypes(TIntrusivePtr<TOpCBOTree> cboTree, TRBOContext& ctx, TPlanProps& props) {
@@ -540,6 +571,9 @@ TStatus ComputeTypes(TIntrusivePtr<IOperator> op, TRBOContext& ctx, TPlanProps& 
     }
     else if (MatchOperator<TOpSort>(op)) {
         return ComputeTypes(CastOperator<TOpSort>(op), ctx);
+    }
+    else if (MatchOperator<TOpTableLookup>(op)) {
+        return ComputeTypes(CastOperator<TOpTableLookup>(op), ctx);
     }
     else if(MatchOperator<TOpAggregate>(op)) {
         return ComputeTypes(CastOperator<TOpAggregate>(op), ctx);

@@ -2911,13 +2911,13 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             //     WHERE t.SubKey2 = "0"
             //     order by t.SubKey1;
             // )",
-            // R"(
-            //     -- выбирается индекс Index12, point prefix для него 1
-            //     SELECT *
-            //     FROM `/Root/Table`
-            //     WHERE SubKey1 = 1 and SubKey2 > "0"
-            //     ORDER BY Key, SubKey1, SubKey2;
-            // )",
+            R"(
+                -- выбирается индекс Index12, point prefix для него 1
+                SELECT *
+                FROM `/Root/Table`
+                WHERE SubKey1 = 1 and SubKey2 > "0"
+                ORDER BY Key, SubKey1, SubKey2;
+            )",
             R"(
                 -- не выбирается никакой индекс, так как PK основной таблицы имеет самый длинный point prefix
                 SELECT * 
@@ -2925,34 +2925,34 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 WHERE Key = 0 and SubKey1 = 0 And SubKey2 = "0"
                 ORDER BY Key, SubKey1, SubKey2;
             )",
-            // R"(
-            //     -- используется Index212
-            //     SELECT * 
-            //     FROM Table `/Root/Table`
-            //     WHERE Key = 0 and SubKey2 = "1"
-            //     ORDER BY Key, SubKey1, SubKey2;
-            // )",
-            // R"(
-            //     -- должен использоваться Index12
-            //     SELECT * 
-            //     FROM Table 
-            //     WHERE Key >= 0 and SubKey1 = 0 And SubKey2 = "0"
-            //     ORDER BY Key, SubKey1, SubKey2;
-            // )",
-            // R"(
-            //     -- используется Index12
-            //     SELECT * 
-            //     FROM Table 
-            //     WHERE SubKey1 > 0
-            //     ORDER BY Key, SubKey1, SubKey2;
-            // )",
-            // R"(
-            //     -- используется Index21 или Index212
-            //     SELECT * 
-            //     FROM Table 
-            //     WHERE SubKey2 = "1"
-            //     ORDER BY Key, SubKey1, SubKey2;
-            // )",
+            R"(
+                -- используется Index212
+                SELECT * 
+                FROM Table `/Root/Table`
+                WHERE Key = 0 and SubKey2 = "1"
+                ORDER BY Key, SubKey1, SubKey2;
+            )",
+            R"(
+                -- должен использоваться Index12
+                SELECT * 
+                FROM Table 
+                WHERE Key >= 0 and SubKey1 = 0 And SubKey2 = "0"
+                ORDER BY Key, SubKey1, SubKey2;
+            )",
+            R"(
+                -- используется Index12
+                SELECT * 
+                FROM Table 
+                WHERE SubKey1 > 0
+                ORDER BY Key, SubKey1, SubKey2;
+            )",
+            R"(
+                -- используется Index21 или Index212
+                SELECT * 
+                FROM Table 
+                WHERE SubKey2 = "1"
+                ORDER BY Key, SubKey1, SubKey2;
+            )",
             R"(
                 -- используется Index212
                 SELECT Value2 
@@ -2960,37 +2960,37 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 WHERE SubKey2 = "0"
                 ORDER BY Value2;
             )",
-            // R"(
-            //     -- используется Index12
-            //     SELECT * 
-            //     FROM Table 
-            //     WHERE SubKey1 = 0
-            //     ORDER BY Key, SubKey1, SubKey2;
-            // )",
+            R"(
+                -- используется Index12
+                SELECT * 
+                FROM Table 
+                WHERE SubKey1 = 0
+                ORDER BY Key, SubKey1, SubKey2;
+            )",
         };
 
         std::vector<std::string> results = {
             // R"([[[0]];[[0]];[[1]];[[1]]])",
-            // R"([[[0];[1];["1"];["4"];["4"]];[[1];[1];["1"];["8"];["8"]]])",
+            R"([[[0];[1];["1"];["4"];["4"]];[[1];[1];["1"];["8"];["8"]]])",
             R"([[[0];[0];["0"];["1"];["1"]]])",
-            // R"([[[0];[0];["1"];["2"];["2"]];[[0];[1];["1"];["4"];["4"]]])",
-            // R"([[[0];[0];["0"];["1"];["1"]];[[1];[0];["0"];["5"];["5"]]])",
-            // R"([[[0];[1];["0"];["3"];["3"]];[[0];[1];["1"];["4"];["4"]];[[1];[1];["0"];["7"];["7"]];[[1];[1];["1"];["8"];["8"]]])",
-            // R"([[[0];[0];["1"];["2"];["2"]];[[0];[1];["1"];["4"];["4"]];[[1];[0];["1"];["6"];["6"]];[[1];[1];["1"];["8"];["8"]]])",
+            R"([[[0];[0];["1"];["2"];["2"]];[[0];[1];["1"];["4"];["4"]]])",
+            R"([[[0];[0];["0"];["1"];["1"]];[[1];[0];["0"];["5"];["5"]]])",
+            R"([[[0];[1];["0"];["3"];["3"]];[[0];[1];["1"];["4"];["4"]];[[1];[1];["0"];["7"];["7"]];[[1];[1];["1"];["8"];["8"]]])",
+            R"([[[0];[0];["1"];["2"];["2"]];[[0];[1];["1"];["4"];["4"]];[[1];[0];["1"];["6"];["6"]];[[1];[1];["1"];["8"];["8"]]])",
             R"([[["1"]];[["3"]];[["5"]];[["7"]]])",
-            // R"([[[0];[0];["0"];["1"];["1"]];[[0];[0];["1"];["2"];["2"]];[[1];[0];["0"];["5"];["5"]];[[1];[0];["1"];["6"];["6"]]])",
+            R"([[[0];[0];["0"];["1"];["1"]];[[0];[0];["1"];["2"];["2"]];[[1];[0];["0"];["5"];["5"]];[[1];[0];["1"];["6"];["6"]]])",
         };
 
         std::vector<TString> expectedIndexes = {
             // "Index12",
-            // "Index12",
+            "Index12",
             "", // PK
-            // Index212,
-            // "Index12",
-            // "Index12",
-            // "Index21", // or "Index212"
             "Index212",
-            // "Index12",
+            "Index12",
+            "Index12",
+            "Index21", // or "Index212"
+            "Index212",
+            "Index12",
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {

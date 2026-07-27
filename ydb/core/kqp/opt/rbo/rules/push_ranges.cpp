@@ -375,45 +375,14 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
     IPredicateRangeExtractor::TBuildResult winnerResult;
     TVector<TString> winnerKeyColumns;
 
-    auto bestScore = ScoreKeyOrder(mainResult, mainKeyColumns.size());
-
-    if (!kqpCtx.Config->IsAutoIndexSelectionDisabled() && !bestScore.PointCoversKey) {
-        for (const auto& index : mainMeta.Indexes) {
-            if (!IsSelectableIndex(index)) {
-                continue;
-            }
-
-            const auto indexMeta = mainMeta.GetIndexMetadata(index.Name).first;
-            if (!indexMeta || IsUselessIndex(indexMeta->KeyColumnNames, mainMeta.KeyColumnNames) || !IsCovering(*read, *indexMeta)) {
-                continue;
-            }
-
-            if (!FindTable(kqpCtx, indexMeta->Name)) {
-                continue;
-            }
-
-            auto indexKeyColumns = ResolveExposedKeyColumns(*read, indexMeta->KeyColumnNames);
-            auto indexResult = extractor->BuildComputeNode(indexKeyColumns, ctx, typeCtx);
-            if (!indexResult.ComputeNode) {
-                continue;
-            }
-
-            const auto score = ScoreKeyOrder(indexResult, indexKeyColumns.size());
-            if (bestScore < score) {
-                bestScore = score;
-                chosenIndexMeta = indexMeta;
-                winnerResult = std::move(indexResult);
-                winnerKeyColumns = std::move(indexKeyColumns);
-            }
-        }
-    }
-
     TIntrusivePtr<TKikimrTableMetadata> lookupIndexMeta;
     IPredicateRangeExtractor::TBuildResult lookupResult;
     TVector<TString> lookupKeyColumns;
     TVector<TString> lookupReadColumns;
 
-    if (!kqpCtx.Config->IsAutoIndexSelectionDisabled() && !bestScore.PointCoversKey && !read->Limit) {
+    auto bestScore = ScoreKeyOrder(mainResult, mainKeyColumns.size());
+
+    if (!kqpCtx.Config->IsAutoIndexSelectionDisabled() && !bestScore.PointCoversKey) {
         const auto filterPhysical = FilterPhysicalColumns(*filter, *read, props);
         for (const auto& index : mainMeta.Indexes) {
             if (!IsSelectableIndex(index)) {
@@ -421,7 +390,7 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
             }
 
             const auto indexMeta = mainMeta.GetIndexMetadata(index.Name).first;
-            if (!indexMeta || IsUselessIndex(indexMeta->KeyColumnNames, mainMeta.KeyColumnNames) || IsCovering(*read, *indexMeta)) {
+            if (!indexMeta || IsUselessIndex(indexMeta->KeyColumnNames, mainMeta.KeyColumnNames)) {
                 continue;
             }
 
@@ -429,10 +398,16 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
                 continue;
             }
 
-            const bool evaluable = std::all_of(filterPhysical.begin(), filterPhysical.end(),
-                                               [&](const TString& col) { return indexMeta->Columns.contains(col); });
-            if (!evaluable) {
-                continue;
+            const bool covering = IsCovering(*read, *indexMeta);
+            if (!covering) {
+                if (read->Limit) {
+                    continue;
+                }
+                const bool evaluable = std::all_of(filterPhysical.begin(), filterPhysical.end(),
+                                                   [&](const TString& col) { return indexMeta->Columns.contains(col); });
+                if (!evaluable) {
+                    continue;
+                }
             }
 
             auto indexKeyColumns = ResolveExposedKeyColumns(*read, indexMeta->KeyColumnNames);
@@ -442,12 +417,23 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
             }
 
             const auto score = ScoreKeyOrder(indexResult, indexKeyColumns.size());
-            if (bestScore < score) {
-                bestScore = score;
+            const bool tieToCovering = covering && lookupIndexMeta && !(score < bestScore) && !(bestScore < score);
+            if (!(bestScore < score) && !tieToCovering) {
+                continue;
+            }
+
+            bestScore = score;
+            if (covering) {
+                chosenIndexMeta = indexMeta;
+                winnerResult = std::move(indexResult);
+                winnerKeyColumns = std::move(indexKeyColumns);
+                lookupIndexMeta.Reset();
+            } else {
                 lookupIndexMeta = indexMeta;
                 lookupResult = std::move(indexResult);
                 lookupKeyColumns = std::move(indexKeyColumns);
                 lookupReadColumns = BuildIndexReadColumns(mainMeta.KeyColumnNames, filterPhysical);
+                chosenIndexMeta.Reset();
             }
         }
     }

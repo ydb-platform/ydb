@@ -6,7 +6,7 @@
 
 #include "port.h"
 
-namespace NYT::NQueryClient::NUdf {
+namespace NYdb::NUdfStore::NAbi {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -17,4 +17,4 @@ inline void WASM_WEAK ClearValue(TUnversionedValue* value)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NQueryClient::NUdf
+} // namespace NYdb::NUdfStore::NAbi

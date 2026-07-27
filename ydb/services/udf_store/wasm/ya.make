@@ -28,8 +28,6 @@ PEERDIR(
     yql/essentials/public/udf
     yql/essentials/minikql
     library/cpp/json
-    library/cpp/yt/error
-    library/cpp/yt/string
     contrib/restricted/wavm/Lib
 )
 

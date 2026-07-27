@@ -1,7 +1,5 @@
 #pragma once
 
-// Keep in sync with yt/yt/library/query/misc/udf_cpp_abi.h.
-
 #include <stdint.h>
 #include <stddef.h>
 
@@ -9,7 +7,7 @@ struct TExpressionContext;
 struct TUnversionedValue;
 struct TFunctionContext;
 
-namespace NYT::NQueryClient::NUdf {
+namespace NYdb::NUdfStore::NAbi {
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -48,15 +46,15 @@ void ClearValue(TUnversionedValue* value);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT::NQueryClient::NUdf
+} // namespace NYdb::NUdfStore::NAbi
 
 struct TUnversionedValue
 {
     uint16_t Id;
-    NYT::NQueryClient::NUdf::EValueType Type;
-    NYT::NQueryClient::NUdf::EValueFlags Flags;
+    NYdb::NUdfStore::NAbi::EValueType Type;
+    NYdb::NUdfStore::NAbi::EValueFlags Flags;
     uint32_t Length;
-    NYT::NQueryClient::NUdf::TUnversionedValueData Data;
+    NYdb::NUdfStore::NAbi::TUnversionedValueData Data;
 };
 
 //! Allocates #size bytes within #context.

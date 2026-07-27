@@ -5,8 +5,7 @@
 #include <ydb/library/wasm/api/compartment.h>
 #include <ydb/library/wasm/api/pointer.h>
 
-#include <library/cpp/yt/error/error.h>
-#include <library/cpp/yt/string/format_string.h>
+#include <util/generic/yexception.h>
 
 extern "C" char* AllocateBytes(TExpressionContext* context, size_t byteCount) {
     auto* invocationContext = reinterpret_cast<NKikimr::NUdfStore::NWasm::TWasmUdfInvocationContext*>(context);
@@ -14,8 +13,7 @@ extern "C" char* AllocateBytes(TExpressionContext* context, size_t byteCount) {
 }
 
 extern "C" void ThrowException(const char* error) {
-    THROW_ERROR_EXCEPTION("Error while executing UDF")
-        << NYT::TError(NYT::TRuntimeFormat(NYdb::NWasm::PtrFromVM(
-            NYdb::NWasm::GetCurrentCompartment(),
-            error)));
+    ythrow yexception()
+        << "Error while executing UDF: "
+        << NYdb::NWasm::PtrFromVM(NYdb::NWasm::GetCurrentCompartment(), error);
 }

@@ -7,9 +7,6 @@
 #include <ydb/library/wasm/api/type_builder.h>
 #include <ydb/library/wasm/engine/wavm_private_imports.h>
 
-#include <library/cpp/yt/memory/range.h>
-#include <library/cpp/yt/memory/ref.h>
-
 #include <util/generic/yexception.h>
 #include <util/string/printf.h>
 
@@ -17,7 +14,6 @@
 
 namespace NKikimr::NUdfStore::NWasm {
 
-using namespace NYT;
 using namespace NYdb::NWasm;
 
 EUdfValueType ParseValueType(TStringBuf type) {

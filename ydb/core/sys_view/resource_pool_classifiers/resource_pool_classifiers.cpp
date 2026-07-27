@@ -66,7 +66,7 @@ private:
         if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
             ReplyEmptyAndDie();
         }
-        Register(NKqp::NWorkload::CreateDatabaseFetcherActor(SelfId(), TenantName, UserToken, NACLib::EAccessRights::GenericFull));
+        Register(NKqp::NWorkload::CreateDatabaseFetcherActor(SelfId(), TenantName, UserToken, NACLib::EAccessRights::GenericUse));
     }
 
     void Handle(NKqp::NWorkload::TEvFetchDatabaseResponse::TPtr& ev) {

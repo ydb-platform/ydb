@@ -14,6 +14,9 @@ namespace NKikimr {
     }
 
     TIntrusivePtr<NMonotonic::IMonotonicTimeProvider> CreateActorSystemMonotonicTimeProvider() {
+        if (!NActors::TlsActivationContext) {
+            return NMonotonic::CreateDefaultMonotonicTimeProvider();
+        }
         return MakeIntrusive<TActorSystemMonotonicTimeProvider>();
     }
 

@@ -58,6 +58,7 @@ ydb/library/actors/interconnect/ut InterconnectSessionV2.LoadLikeRoundTripWithBa
 ydb/library/actors/interconnect/ut InterconnectSessionV2.LoadLikeRoundTripWithPayload
 ydb/library/actors/interconnect/ut InterconnectSessionV2.PeerStopTriggersDisconnect
 ydb/library/actors/interconnect/ut InterconnectSessionV2.RepeatedDisconnectChurnUnderLoad
+ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut TxUsage.Sinks_Oltp_WriteToTopic_3_Query
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
 ydb/tests/functional/nbs py3test.sole chunk
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_500gb_disk_read_write

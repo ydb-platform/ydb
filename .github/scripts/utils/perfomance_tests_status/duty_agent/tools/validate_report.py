@@ -122,6 +122,7 @@ def validate_analysis_md(
     # Заключение required fields
     if not re.search(r"\*\*Итог:\*\*", body) and not re.search(r"\*\*Summary:\*\*", body, re.I):
         errors.append("Заключение must include **Итог:** (or **Summary:**)")
+    resolution_token: str | None = None
     res_m = re.search(
         r"\*\*(?:Решение|Resolution):\*\*\s*`?([a-z_]+)`?",
         body,
@@ -130,9 +131,11 @@ def validate_analysis_md(
     if not res_m:
         errors.append("Заключение must include **Решение:** with a resolution token")
     else:
-        token = res_m.group(1).lower()
-        if token not in RESOLUTIONS:
-            errors.append(f"unknown resolution `{token}`; want one of {', '.join(RESOLUTIONS)}")
+        resolution_token = res_m.group(1).lower()
+        if resolution_token not in RESOLUTIONS:
+            errors.append(
+                f"unknown resolution `{resolution_token}`; want one of {', '.join(RESOLUTIONS)}"
+            )
 
     if not re.search(r"\*\*(?:Виновник|Culprit):\*\*", body, re.I):
         errors.append("Заключение must include **Виновник:** / **Culprit:** (use unknown if none)")
@@ -205,6 +208,51 @@ def validate_analysis_md(
                     )
             if not (out_dir / "priors.json").is_file():
                 warnings.append("missing priors.json — давность may be weak; run prepare")
+
+            # no_action forbidden for IC/disconnect cascade without process abort
+            if resolution_token == "no_action" and (out_dir / "focus.json").is_file():
+                focus = read_json(out_dir / "focus.json")
+                fatal = focus.get("fatal") or {}
+                sigs = {str(s).lower() for s in (fatal.get("signals") or [])}
+                for c in (focus.get("allure") or {}).get("cases") or []:
+                    for s in ((c.get("attach_analysis") or {}).get("signals") or []):
+                        sigs.add(str(s).lower())
+                abortish = bool(
+                    sigs
+                    & {
+                        "segfault",
+                        "abort",
+                        "verify",
+                        "sigsegv",
+                        "sigabrt",
+                        "asan",
+                        "gwp-asan",
+                    }
+                ) or bool(
+                    re.search(
+                        r"VERIFY failed|AFL_VERIFY|Received signal\s+[116]|GWP-ASan|"
+                        r"Mismatched-size-class",
+                        body,
+                    )
+                )
+                cascade_only = bool(
+                    sigs & {"disconnect", "unavailable", "restart", "node_down"}
+                ) or bool(
+                    re.search(
+                        r"DeadPeer|connection closed by peer|YDBE-02001|"
+                        r"detected disconnected node|INTERCONNECT_",
+                        body,
+                    )
+                )
+                stderr_empty = bool(
+                    re.search(r"stderr empty|stderr пуст|kikimr__stderr[^\n]{0,40}пуст", bl)
+                )
+                if cascade_only and not abortish and stderr_empty:
+                    errors.append(
+                        "no_action forbidden: only IC/disconnect cascade with empty stderr — "
+                        "каскад ≠ корневая причина; use wait_next_wave "
+                        "(see AGENTS.md «Disconnect / IC cascade»)"
+                    )
 
     # Slow / duration growth: must dig plans × iterations + baseline plan (not ydb_pct only).
     if olap_slow:

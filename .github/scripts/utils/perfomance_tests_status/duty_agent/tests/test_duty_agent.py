@@ -805,6 +805,67 @@ todo
         self.assertTrue(any("Механика" in e for e in r["errors"]))
         self.assertTrue(any("Давность" in e or "Since" in e for e in r["errors"]))
 
+    def test_reject_no_action_on_ic_cascade_empty_stderr(self):
+        with tempfile.TemporaryDirectory() as td:
+            d = Path(td)
+            write_json(d / "detect_type.json", {"analysis_types": ["olap_fail"]})
+            write_json(
+                d / "focus.json",
+                {
+                    "fetched": True,
+                    "fatal": {"signals": ["disconnect", "unavailable"]},
+                    "allure": {
+                        "cases": [
+                            {
+                                "name": "TpchParallel.Query03",
+                                "attach_analysis": {
+                                    "signals": ["disconnect"],
+                                    "attachments_fetched": [
+                                        {"name": "kikimr__stderr"},
+                                        {"name": "kikimr__logs"},
+                                    ],
+                                },
+                            }
+                        ]
+                    },
+                },
+            )
+            write_json(
+                d / "code_bisect.json",
+                {"conclusion": "bisect skipped", "introduced_in_window": None},
+            )
+            md = """# Perf duty
+
+## Заключение
+- **Итог:** IC DeadPeer → disconnect; следующий прогон FailCount=0
+- **Решение:** `no_action`
+- **Виновник:** unknown
+- **Уверенность:** высокая
+- **Давность:** на разбираемом прогоне
+- **Механика:** DeadPeer 50001↔50015 → UNAVAILABLE
+
+## Проблемы
+### P1 — IC
+- Тип: olap_fail
+- Логи: kikimr__stderr пустой; kikimr__logs DeadPeer / connection closed by peer
+- Код ([`abc1234`](https://github.com/ydb-platform/ydb/commit/abc1234)): fline нет
+- Гипотеза проверена: yes
+- Тикет: нет
+
+## Что дальше
+1. nothing
+
+## Материалы для issue
+Не копировать. https://proxy.sandbox.yandex-team.ru/12923242686/index.html
+https://github.com/ydb-platform/ydb/commit/abc1234
+"""
+            r = validate_analysis_md(md, out_dir=d)
+            self.assertFalse(r["ok"], r)
+            self.assertTrue(
+                any("no_action forbidden" in e for e in r["errors"]),
+                r["errors"],
+            )
+
 
 class ResultMergeTests(unittest.TestCase):
     def test_merge_problems(self):

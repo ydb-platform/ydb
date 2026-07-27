@@ -92,6 +92,24 @@ Note: `metrics_delta.json` is produced for slow/tpcc (or `prepare --metrics`); p
 
 **Final validation:** do not call `write-result` with `completed` until `validate` exits 0.
 
+### Disconnect / IC cascade ≠ корневая причина (частая ошибка)
+
+Если `kikimr__stderr` **пустой**, а в `kikimr__logs` только `DeadPeer` / `connection closed by peer` / `YDBE-02001` / `detected disconnected node`:
+
+| Понятно | Непонятно |
+|--|--|
+| почему query красные (каскад после обрыва IC / node lost) | **почему** peer закрыл сессию / умерла нода |
+
+- Пиши в **Итог** явно: «каскад понятен; причина close/peer — нет».
+- Гипотеза: `partial` (не `yes`).
+- Решение по умолчанию: **`wait_next_wave`** (нужен повтор с abort/core на стороне peer).
+- **`no_action` запрещён**, пока нет abort/VERIFY/fline **или** явного infra-вердикта с доказательством (не «просто IC»).
+
+### Mart «зелёный позже»
+
+Строка mart / Allure с FailCount=0 **после** красного на том же Version — валидный повтор (не отбрасывай из‑за `report.window` HTML).  
+Но один зелёный **не** превращает IC/disconnect без abort в `no_action`: каскад известен, причина close peer — нет → всё ещё `wait_next_wave` / копай peer.
+
 ## OLAP: logs are not optional
 
 For `olap_fail` / any Allure focus:
@@ -287,6 +305,9 @@ For each problem, you can answer yes:
 - [ ] Давность stated with dates/labels  
 - [ ] Hypothesis verified or explicitly `partial`/`no`  
 - [ ] Culprit only if evidence bar met  
+- [ ] Если только IC/disconnect и stderr empty → в Итоге разделены каскад vs причина; решение **не** `no_action` без причины close peer  
+- [ ] При IC DeadPeer: копнут **peer**-сторону (хост/node из YDBE/DeadPeer), не только клиентский disconnect  
+
 
 If any checkbox fails → dig again (loop), do not polish a hollow report.
 

@@ -1,6 +1,5 @@
 #include "kafka_metadata_service.h"
 
-#include <ydb/core/kafka_proxy/actors/kafka_balancer_actor.h>
 #include <ydb/core/kafka_proxy/kafka_constants.h>
 
 #include <ydb/core/base/appdata.h>

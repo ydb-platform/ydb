@@ -26,7 +26,7 @@ def start(argv):
         "--port", str(http_port),
     ]
 
-    res = ya_common.execute(
+    ya_common.execute(
         cmd,
         wait=False,
         stdout=ya_common.output_path("vm_metadata_emulator.stdout"),

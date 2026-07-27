@@ -28,7 +28,6 @@ public:
     }
 
     void AddArrayElement(const ui32 recordIndex, const arrow::Array& array, const ui32 position) {
-        AFL_VERIFY(GetBuilder().type()->id() == array.type_id())("builder", GetBuilder().type()->ToString())("array", array.type()->ToString());
         AddAt(recordIndex, [&](arrow::ArrayBuilder& builder) { AFL_VERIFY(NArrow::Append(builder, array, position)); });
     }
 };
@@ -49,7 +48,6 @@ public:
     }
 
     void AddArrayElement(const ui32 recordIndex, const arrow::Array& array, const ui32 position) {
-        AFL_VERIFY(GetValueBuilder().type()->id() == array.type_id())("builder", GetValueBuilder().type()->ToString())("array", array.type()->ToString());
         AddAt(recordIndex, [&](arrow::ArrayBuilder& builder) { AFL_VERIFY(NArrow::Append(builder, array, position)); });
     }
 };

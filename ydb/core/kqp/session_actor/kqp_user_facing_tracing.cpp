@@ -715,7 +715,11 @@ void FinishUserFacingSpan(TKqpQueryState& state, bool success, const TString& st
     if (AppData()) {
         userSpan.Attribute("db.namespace", AppData()->TenantName);
     }
-    userSpan.Attribute("db.operation.name", NKikimrKqp::EQueryAction_Name(state.GetAction()));
+    // OTel db semconv: the span name is "{operation} {target}", db.operation.name is the bare
+    // operation — the verb of the root name, never the raw action enum.
+    const size_t verbEnd = rootName.find(' ');
+    userSpan.Attribute("db.operation.name",
+        verbEnd == TString::npos ? rootName : rootName.substr(0, verbEnd));
     if (const TString sanitized = SanitizeQueryText(state.RequestEv->GetQuery())) {
         userSpan.Attribute("db.query.text", sanitized);
     }

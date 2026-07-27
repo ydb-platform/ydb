@@ -25,7 +25,7 @@ template <typename T>
 T* PtrToVM(IWebAssemblyCompartment* compartment, T* data, size_t length)
 {
     if (compartment) {
-        Y_UNUSED(length); // TODO(dtorilov): Check bounds.
+        Y_UNUSED(length);
         return std::bit_cast<T*>(compartment->GetCompartmentOffset(
             std::bit_cast<void*>(std::bit_cast<uintptr_t>(data))));
     }

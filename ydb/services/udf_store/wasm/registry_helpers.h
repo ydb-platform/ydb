@@ -12,8 +12,8 @@
 
 namespace NKikimr::NUdfStore::NWasm {
 
-using EAbiValueType = NYT::NQueryClient::NUdf::EValueType;
-using EAbiValueFlags = NYT::NQueryClient::NUdf::EValueFlags;
+using EAbiValueType = NYdb::NUdfStore::NAbi::EValueType;
+using EAbiValueFlags = NYdb::NUdfStore::NAbi::EValueFlags;
 
 EUdfValueType ParseValueType(TStringBuf type);
 

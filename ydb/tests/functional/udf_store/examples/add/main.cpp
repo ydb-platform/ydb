@@ -1,6 +1,6 @@
 #include <ydb/services/udf_store/wasm/abi/udf_cpp_abi.h>
 
-using namespace NYT::NQueryClient::NUdf;
+using namespace NYdb::NUdfStore::NAbi;
 
 extern "C" {
     __attribute__((visibility("default"))) void add(

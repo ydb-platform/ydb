@@ -671,7 +671,6 @@ private:
             Runtime::initializeGlobal(result, newMemoryBase);
             return Runtime::asObject(result);
         } else if (objectName == "__table_base") {
-            // TODO(dtorilov): Grow table here if needed.
             YT_VERIFY(std::ssize(Compartment_->MemoryLayoutData_.TableBases) == std::ssize(Compartment_->Modules_) + 1);
             Uptr newTableBase = Compartment_->MemoryLayoutData_.TableBases.back();
             auto* result = Runtime::createGlobal(Compartment_->Compartment_, IR::GlobalType{IR::ValueType::i64, false}, "__table_base");
@@ -834,7 +833,7 @@ private:
                 Compartment_->Compartment_,
                 globalType,
                 std::string(objectName));
-            Runtime::initializeGlobal(Runtime::asGlobal(result), static_cast<I64>(0)); // TODO(dtorilov): Set sane value.
+            Runtime::initializeGlobal(Runtime::asGlobal(result), static_cast<I64>(0));
             return result;
         }
 
@@ -873,7 +872,6 @@ private:
             return std::nullopt;
         }
 
-        // TODO(dtorilov): Patch this global after linking.
         for (const auto& exportedDataEntry : IncomingModule_->exports) {
             if (exportedDataEntry.kind != IR::ExternKind::global) {
                 continue;

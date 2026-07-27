@@ -23,14 +23,14 @@ CREATE RESOURCE POOL olap WITH (
     CONCURRENT_QUERY_LIMIT=10,
     QUEUE_SIZE=1000,
     DATABASE_LOAD_CPU_THRESHOLD=80,
-    RESOURCES_WEIGHT=100,
+    RESOURCE_WEIGHT=100,
     QUERY_CPU_LIMIT_PERCENT_PER_NODE=50,
     TOTAL_CPU_LIMIT_PERCENT_PER_NODE=70
 )
 ```
 
 
-You can find the full list of resource pool parameters in the [{#T}](../yql/reference/syntax/create-resource-pool.md#parameters) reference. Some parameters are global for the entire database (for example, `CONCURRENT_QUERY_LIMIT`, `QUEUE_SIZE`, `DATABASE_LOAD_CPU_THRESHOLD`), while others apply only to a single compute node (for example, `QUERY_CPU_LIMIT_PERCENT_PER_NODE`, `TOTAL_CPU_LIMIT_PERCENT_PER_NODE`, `TOTAL_MEMORY_LIMIT_PERCENT_PER_NODE`). CPU can be shared among all pools in case of oversubscription on a single compute node using `RESOURCES_WEIGHT`.
+You can find the full list of resource pool parameters in the [{#T}](../yql/reference/syntax/create-resource-pool.md#parameters) reference. Some parameters are global for the entire database (for example, `CONCURRENT_QUERY_LIMIT`, `QUEUE_SIZE`, `DATABASE_LOAD_CPU_THRESHOLD`), while others apply only to a single compute node (for example, `QUERY_CPU_LIMIT_PERCENT_PER_NODE`, `TOTAL_CPU_LIMIT_PERCENT_PER_NODE`, `TOTAL_MEMORY_LIMIT_PERCENT_PER_NODE`). CPU can be shared among all pools in case of oversubscription on a single compute node using `RESOURCE_WEIGHT`.
 
 ![resource_pools](../_assets/resource_pool.png)
 
@@ -68,18 +68,18 @@ When a query enters a resource pool for which `DATABASE_LOAD_CPU_THRESHOLD` is s
 
 As with `CONCURRENT_QUERY_LIMIT`, when the specified load threshold is exceeded, queries are sent to the waiting queue.
 
-### Resource allocation according to RESOURCES_WEIGHT {#resources_weight}
+### Resource allocation according to RESOURCE_WEIGHT {#resources_weight}
 
 ![resource_pools](../_assets/resources_weight.png)
 
-The `RESOURCES_WEIGHT` parameter only takes effect in case of oversubscription and when there is more than one resource pool in the system. In the current implementation, `RESOURCES_WEIGHT` only affects the allocation of `vCPU` resources. When queries appear in a resource pool, it starts participating in resource allocation. For this, the pools recalculate their limits according to the [Max-min fairness](https://en.wikipedia.org/wiki/Max-min_fairness) algorithm. The actual resource redistribution is performed on each compute node individually, as shown in the figure above.
+The `RESOURCE_WEIGHT` parameter only takes effect in case of oversubscription and when there is more than one resource pool in the system. In the current implementation, `RESOURCE_WEIGHT` only affects the allocation of `vCPU` resources. When queries appear in a resource pool, it starts participating in resource allocation. For this, the pools recalculate their limits according to the [Max-min fairness](https://en.wikipedia.org/wiki/Max-min_fairness) algorithm. The actual resource redistribution is performed on each compute node individually, as shown in the figure above.
 
 Suppose we have a node in the system with $10 vCPU$ available. The following limits are set:
 
 - $TOTAL_CPU_LIMIT_PERCENT_PER_NODE = 30$,
 - $QUERY_CPU_LIMIT_PERCENT_PER_NODE = 50$.
 
-In this case, the resource pool will have a limit of $3 vCPU$ per node and $1.5 vCPU$ per query in this pool (figure *a*). If there are 4 such pools in the system and they all try to use maximum resources, this would amount to $12 vCPU$, which exceeds the limit of available resources on the node ($10 vCPU$). In this case, `RESOURCES_WEIGHT` takes effect, and each pool will be allocated $2.5 vCPU$ (figure *b*).
+In this case, the resource pool will have a limit of $3 vCPU$ per node and $1.5 vCPU$ per query in this pool (figure *a*). If there are 4 such pools in the system and they all try to use maximum resources, this would amount to $12 vCPU$, which exceeds the limit of available resources on the node ($10 vCPU$). In this case, `RESOURCE_WEIGHT` takes effect, and each pool will be allocated $2.5 vCPU$ (figure *b*).
 
 If you need to increase the allocated resources for a specific pool, you can change its weight, for example, to 200. Then this pool will get $3 vCPU$, and the remaining pools will equally share the remaining $7 vCPU$, which amounts to $\frac{7}{3} vCPU$ per pool (figure *c*).
 
@@ -99,7 +99,7 @@ CREATE RESOURCE POOL default WITH (
     CONCURRENT_QUERY_LIMIT=-1,
     QUEUE_SIZE=-1,
     DATABASE_LOAD_CPU_THRESHOLD=-1,
-    RESOURCES_WEIGHT=-1,
+    RESOURCE_WEIGHT=-1,
     TOTAL_MEMORY_LIMIT_PERCENT_PER_NODE=-1,
     QUERY_CPU_LIMIT_PERCENT_PER_NODE=-1,
     TOTAL_CPU_LIMIT_PERCENT_PER_NODE=-1
@@ -200,7 +200,7 @@ CREATE RESOURCE POOL olap WITH (
     CONCURRENT_QUERY_LIMIT=20,
     QUEUE_SIZE=100,
     DATABASE_LOAD_CPU_THRESHOLD=80,
-    RESOURCES_WEIGHT=20,
+    RESOURCE_WEIGHT=20,
     QUERY_CPU_LIMIT_PERCENT_PER_NODE=80,
     TOTAL_CPU_LIMIT_PERCENT_PER_NODE=100
 );
@@ -208,7 +208,7 @@ CREATE RESOURCE POOL olap WITH (
 CREATE RESOURCE POOL the_ceo WITH (
     CONCURRENT_QUERY_LIMIT=20,
     QUEUE_SIZE=100,
-    RESOURCES_WEIGHT=100,
+    RESOURCE_WEIGHT=100,
     QUERY_CPU_LIMIT_PERCENT_PER_NODE=100,
     TOTAL_CPU_LIMIT_PERCENT_PER_NODE=100
 );

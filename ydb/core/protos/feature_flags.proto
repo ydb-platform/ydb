@@ -356,6 +356,7 @@ message TFeatureFlags {
     optional bool EnableHasPredicatesInResourcePoolClassifiers = 303 [default = true];
     optional bool EnableRejectActionInResourcePoolClassifiers = 304 [default = true];
     optional bool EnableMoveWithColumnTableReplace = 305 [default = false];
-    optional bool EnableGeneratedStored = 306 [default = false];
-    optional bool EnableGeneratedVirtual = 307 [default = false];
+    optional bool DisableOldSecrets = 306 [default = false];
+    optional bool EnableGeneratedStored = 307 [default = false];
+    optional bool EnableGeneratedVirtual = 308 [default = false];
 }

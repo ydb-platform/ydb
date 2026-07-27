@@ -1033,7 +1033,7 @@ namespace NActors {
                 // v2 session is incompatible with encryption and needs the io_uring data plane; only
                 // request it when encryption is disabled locally and io_uring is available (buffer rings
                 // are used when present, with a fallback to ordinary buffers on older kernels)
-                request.SetRequestSessionV2(Common->Settings.EnableInterconnectSessionV2 &&
+                request.SetRequestSessionV2(Common->Settings.V2.Enable &&
                     Common->Settings.EncryptionMode == EEncryptionMode::DISABLED &&
                     TUringContext::IsAvailable());
                 request.SetHandshakeId(*HandshakeId);
@@ -1420,7 +1420,7 @@ namespace NActors {
                 // v2 session is used only when both peers enabled it, encryption is not in effect, and
                 // this side has the io_uring data plane available
                 Params.UseSessionV2 = request.GetRequestSessionV2() &&
-                    Common->Settings.EnableInterconnectSessionV2 && !Params.Encryption &&
+                    Common->Settings.V2.Enable && !Params.Encryption &&
                     TUringContext::IsAvailable();
 
                 if (Params.UseExternalDataChannel) {

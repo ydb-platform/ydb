@@ -135,6 +135,7 @@ namespace NActors {
                     memcpy(buffer.UnsafeGetDataMut(), span.data(), span.size());
                     span = {buffer.data(), span.size()};
                     buffer.TrimFront(buffer.size() - span.size());
+                    *bufferProduced = CumulativeProduced + span.size();
                 }
             }
 

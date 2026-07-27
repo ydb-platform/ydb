@@ -530,9 +530,6 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
         runtime.GrabEdgeEventRethrow<NActors::TEvents::TEvWakeup>(edge);
     }
 
-<<<<<<< HEAD
-    class TMockStructuredTokenCredentialsFactory : public NYql::ISecuredServiceAccountCredentialsFactory {
-=======
     Y_UNIT_TEST_TWIN(LookupWithFatalAuthErrors, ListSplitsOrReadError) {
         auto alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true, false);
         NKikimr::NMiniKQL::TMemoryUsageInfo memUsage("TestMemUsage");
@@ -686,8 +683,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
         runtime.GrabEdgeEventRethrow<NActors::TEvents::TEvWakeup>(edge);
     }
 
-    class TMockStructuredTokenCredentialsFactory : public NYql::IStructuredTokenCredentialsFactory {
->>>>>>> 9f8056c1785 (generic provider: fix exception on translating error codes (#47853))
+    class TMockStructuredTokenCredentialsFactory : public NYql::ISecuredServiceAccountCredentialsFactory {
         public:
         TMockStructuredTokenCredentialsFactory(const std::string yqlToken, const TVector<bool>& pattern)
             : YqlToken(yqlToken)

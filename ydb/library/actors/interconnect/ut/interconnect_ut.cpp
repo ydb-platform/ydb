@@ -1150,7 +1150,7 @@ void RunSubscriberLivenessCheck(bool useSessionV2, TDuration checkInterval) {
 
     auto settingsCustomizer = [=](ui32, TInterconnectSettings& settings) {
         settings.SubscriberLivenessCheckInterval = checkInterval;
-        settings.EnableInterconnectSessionV2 = useSessionV2;
+        settings.V2.Enable = useSessionV2;
     };
     auto logState = std::make_shared<TSubscriberLivenessLogState>();
     auto loggerSettings = MakeIntrusive<NLog::TSettings>(

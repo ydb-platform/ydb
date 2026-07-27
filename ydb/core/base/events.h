@@ -201,6 +201,7 @@ struct TKikimrEvents : TEvents {
         ES_SET_COLUMN_CONSTRAINT = 4278,
         ES_EXTERNAL_IDP_PROVIDER = 4279,
         ES_PQ_DEFERRED_PUBLISH = 4280,
+        ES_WORKLOAD_MANAGER = 4281,
     };
 };
 

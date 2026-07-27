@@ -1,6 +1,6 @@
 # Exporting logs to OpenTelemetry
 
-Each {{ ydb-short-name }} SDK writes its own internal logs (driver initialization, session pool, query execution, retries, etc.) through the standard logging facility of its language. Instead of outputting logs only to the console (see [Enable logging](logging.md)), they can be redirected to the [OpenTelemetry](https://opentelemetry.io/) Logs SDK and exported via the standard OTLP protocol to a collector. The collector then forwards the records to the chosen backend for log storage and viewing.
+Each {{ ydb-short-name }} SDK writes its own internal logs (driver initialization, session pool, query execution, retries, etc.) through the standard logging facility of its language. Instead of outputting logs only to the console, they can be redirected to the [OpenTelemetry](https://opentelemetry.io/) Logs SDK and exported via the standard OTLP protocol to a collector. The collector then forwards the records to the chosen backend for log storage and viewing.
 
 The principle is the same in all SDKs:
 

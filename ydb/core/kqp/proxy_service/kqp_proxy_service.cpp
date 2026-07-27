@@ -2088,7 +2088,8 @@ private:
             TActivationContext::ActorSystem()->RegisterLocalService(
                 MakeKqpAccessServiceId(), AccessServiceService);
         } catch(const std::exception& ex) {
-            KQP_PROXY_LOG_E("Failed to start AccessService service actor: " << ex.what());
+            YDB_LOG_ERROR("Failed to start AccessService service actor",
+                    {"exception", ex.what()});
         }
     }
 

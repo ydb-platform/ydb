@@ -369,11 +369,12 @@ public:
     template <typename TEvResponse>
     void HandleAuthorizeResultImpl(typename TEvResponse::TPtr& ev) {
         if (ev->Get()->Status.Ok()) {
-            ALOG_DEBUG(NKikimrServices::KQP_GATEWAY, "Authorize success, response# " << ev->Get()->Response.DebugString());
+            YDB_LOG_DEBUG("Authorize success",
+                    {"response", ev->Get()->Response.DebugString()});
         } else {
-            ALOG_WARN(NKikimrServices::KQP_GATEWAY, "Authorize failure"
-                    << ", status# " << ev->Get()->Status.ToDebugString()
-                    << ", iteration# " << Backoff.GetIteration());
+            YDB_LOG_WARN("Authorize failure",
+                    {"status", ev->Get()->Status.ToDebugString()},
+                    {"iteratiom", Backoff.GetIteration()});
             if (IsRetryableGrpcError(ev->Get()->Status) && Backoff.HasMore()) {
                 auto delay = Backoff.Next();
                 Schedule(delay, new NActors::TEvents::TEvWakeup());

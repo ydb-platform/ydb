@@ -45,16 +45,6 @@ std::expected<std::monostate, TError> GetAvailability(
 
 } // namespace
 
-TFeature TFeature::Finish() && {
-    YQL_ENSURE(
-        MinLangVer == UnknownLangVersion || IsValidLangVersion(MinLangVer),
-        "LangVer: " << FormatLangVersion(MinLangVer));
-    YQL_ENSURE(
-        MaxLangVer == UnknownLangVersion || IsValidLangVersion(MaxLangVer),
-        "LangVer: " << FormatLangVersion(MaxLangVer));
-    return *this;
-}
-
 bool IsAvailableOn(
     TLangVersion current,
     EBackportCompatibleFeaturesMode mode,

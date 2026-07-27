@@ -73,7 +73,6 @@ void CreateSecret(const TString& secretName, const TString& secretValue, TSessio
 
 void TestTruncateTable(const TString& tablePath, bool useQueryClient = false, bool createSecondaryIndex = false) {
     NKikimrConfig::TFeatureFlags featureFlags;
-    featureFlags.SetEnableTruncateTable(true);
     TKikimrRunner kikimr(featureFlags);
     auto db = kikimr.GetTableClient();
     auto session = db.CreateSession().GetValueSync().GetSession();
@@ -4834,7 +4833,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             auto result = session.CreateTable("/Root/TestTable2", builder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid vector_dimension: 100500 should be between 1 and 16384");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid vector_dimension: 100500 should be between 1 and 65536");
         }
 
         // see all validation cases in CreateTableAlterTableVectorIndexInvalidSettings test, here we check only that validation is triggered
@@ -4885,7 +4884,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             auto result = session.AlterTable("/Root/TestTable", alterSettings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid vector_dimension: 100500 should be between 1 and 16384");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid vector_dimension: 100500 should be between 1 and 65536");
         }
 
         // see all validation cases in CreateTableAlterTableVectorIndexInvalidSettings test, here we check only that validation is triggered
@@ -4998,12 +4997,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         check("similarity=inner_product, vector_type=float, vector_dimension=XxX, levels=3, clusters=10",
             "Invalid vector_dimension: xxx");
         check("similarity=inner_product, vector_type=float, vector_dimension=0, levels=3, clusters=10",
-            "Invalid vector_dimension: 0 should be between 1 and 16384");
+            "Invalid vector_dimension: 0 should be between 1 and 65536");
         check("similarity=inner_product, vector_type=float, vector_dimension=1, levels=3, clusters=10", "");
         check("similarity=inner_product, vector_type=float, vector_dimension=10, levels=3, clusters=10", "");
         check("similarity=inner_product, vector_type=float, vector_dimension=16384, levels=3, clusters=10", "");
-        check("similarity=inner_product, vector_type=float, vector_dimension=16385, levels=3, clusters=10",
-            "Invalid vector_dimension: 16385 should be between 1 and 16384");
+        check("similarity=inner_product, vector_type=float, vector_dimension=65536, levels=3, clusters=10", "");
+        check("similarity=inner_product, vector_type=float, vector_dimension=65537, levels=3, clusters=10",
+            "Invalid vector_dimension: 65537 should be between 1 and 65536");
         check("similarity=inner_product, vector_type=float, vector_dimension=999999999999, levels=3, clusters=10",
             "Invalid vector_dimension: 999999999999");
         check("similarity=inner_product, vector_type=float, vector_dimension=99999999999999999999, levels=3, clusters=10",
@@ -5095,7 +5095,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:14:46: Error: Invalid vector_dimension: asdf\n");
         }
 
-        { // vector_dimension=16385 --- out of range
+        { // vector_dimension=65537 --- out of range
             TString query = R"(
                 --!syntax_v1
                 CREATE TABLE `/Root/TestTable` (
@@ -5109,7 +5109,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                         WITH (
                             similarity=inner_product,
                             vector_type=float,
-                            vector_dimension=16385,
+                            vector_dimension=65537,
                             levels=3,
                             clusters=10)
                 );
@@ -5121,10 +5121,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             Cout << result.GetIssues().ToString() << Endl;
 
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:14:46: Error: Invalid vector_dimension: 16385 should be between 1 and 16384\n");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:14:46: Error: Invalid vector_dimension: 65537 should be between 1 and 65536\n");
         }
 
-        { // vector_dimension=16385 clusters=2048 --- post validation error
+        { // vector_dimension=16384 clusters=2048 --- post validation error
             TString query = R"(
                 --!syntax_v1
                 CREATE TABLE `/Root/TestTable` (
@@ -5219,7 +5219,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:9:42: Error: Invalid vector_dimension: asdf\n");
         }
 
-        { // vector_dimension=16385 --- out of range
+        { // vector_dimension=65537 --- out of range
             TString query = R"(
                 --!syntax_v1
                 ALTER TABLE `/Root/TestTable` ADD INDEX vector_idx
@@ -5228,7 +5228,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     WITH (
                         similarity=inner_product,
                         vector_type=float,
-                        vector_dimension=16385,
+                        vector_dimension=65537,
                         levels=3,
                         clusters=10)
             )";
@@ -5239,10 +5239,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             Cout << result.GetIssues().ToString() << Endl;
 
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:9:42: Error: Invalid vector_dimension: 16385 should be between 1 and 16384\n");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:9:42: Error: Invalid vector_dimension: 65537 should be between 1 and 65536\n");
         }
 
-        { // vector_dimension=16385 clusters=2048 --- post validation error
+        { // vector_dimension=16384 clusters=2048 --- post validation error
             TString query = R"(
                 --!syntax_v1
                 ALTER TABLE `/Root/TestTable` ADD INDEX vector_idx
@@ -12940,7 +12940,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 RANK
             );)").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "The rank could not be set automatically, the maximum rank of the resource pool classifier is too high: 9223372036854775807", result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Cannot reset property rank", result.GetIssues().ToString());
     }
 
     TString FetchResourcePoolClassifiers(TTestActorRuntime& runtime, ui32 nodeIndex) {
@@ -13117,11 +13117,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             auto query = R"(
                 ALTER RESOURCE POOL CLASSIFIER MyResourcePoolClassifier
-                    RESET (RANK, MEMBER_NAME);
+                    RESET (MEMBER_NAME);
                 )";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(FetchResourcePoolClassifiers(kikimr), "{\"resource_pool_classifiers\":[{\"rank\":1042,\"name\":\"MyResourcePoolClassifier\",\"config\":{\"member_name\":\"\",\"resource_pool\":\"test_pool\"},\"database\":\"\\/Root\"},{\"rank\":42,\"name\":\"AnotherResourcePoolClassifier\",\"config\":{\"resource_pool\":\"test_pool\"},\"database\":\"\\/Root\"}]}");
+            UNIT_ASSERT_VALUES_EQUAL(FetchResourcePoolClassifiers(kikimr), "{\"resource_pool_classifiers\":[{\"rank\":20,\"name\":\"MyResourcePoolClassifier\",\"config\":{\"member_name\":\"\",\"resource_pool\":\"test_pool\"},\"database\":\"\\/Root\"},{\"rank\":42,\"name\":\"AnotherResourcePoolClassifier\",\"config\":{\"resource_pool\":\"test_pool\"},\"database\":\"\\/Root\"}]}");
         }
     }
 
@@ -15065,6 +15065,37 @@ END DO)",
         }
     }
 
+    Y_UNIT_TEST(CreateExternalDataSourceWithOldSecretDisabled) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableExternalDataSources(true);
+        featureFlags.SetDisableOldSecretCreation(true);
+        featureFlags.SetDisableOldSecrets(true);
+
+        NKqp::TKikimrSettings settings;
+        settings.SetFeatureFlags(featureFlags);
+        settings.AppConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        TKikimrRunner kikimr(settings);
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        static const auto query = R"sql(
+            CREATE EXTERNAL DATA SOURCE `/Root/ExternalDataSource` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="my-bucket",
+                AUTH_METHOD="SERVICE_ACCOUNT",
+                SERVICE_ACCOUNT_ID="mysa",
+                SERVICE_ACCOUNT_SECRET_NAME="OldSecret"
+            );
+        )sql";
+        const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(
+            result.GetIssues().ToString(),
+            "Old secrets are disabled for creating new objects. Please use new secrets",
+            result.GetIssues().ToString());
+    }
+
     Y_UNIT_TEST(SimpleTruncateTableFullPathTableClient) {
         TestTruncateTable("`/Root/TestTable`", false);
     }
@@ -15091,7 +15122,6 @@ END DO)",
 
     Y_UNIT_TEST(TruncateTableEraseRowPermission) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableTruncateTable(true);
         TKikimrRunner kikimr(featureFlags);
 
         auto rootSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
@@ -15155,7 +15185,6 @@ END DO)",
 
     Y_UNIT_TEST(TruncateTableDoesNotResetSerialSequence) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableTruncateTable(true);
         TKikimrRunner kikimr(featureFlags);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -15219,7 +15248,6 @@ END DO)",
 
     Y_UNIT_TEST(TruncateTableWithTtl) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableTruncateTable(true);
         TKikimrRunner kikimr(featureFlags);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -15271,7 +15299,6 @@ END DO)",
 
     Y_UNIT_TEST(TruncateNonExistentTable) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableTruncateTable(true);
         TKikimrRunner kikimr(featureFlags);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

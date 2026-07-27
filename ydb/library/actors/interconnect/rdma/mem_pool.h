@@ -108,6 +108,6 @@ namespace NInterconnect::NRdma {
         virtual void Tick(NMonotonic::TMonotonic time) noexcept = 0;
     };
 
-    std::shared_ptr<IMemPool> CreateDummyMemPool() noexcept;
+    std::shared_ptr<IMemPool> CreateDummyMemPool(bool emulateRegistration = false) noexcept;
     std::shared_ptr<IMemPool> CreateSlotMemPool(NMonitoring::TDynamicCounters* counters, std::optional<TMemPoolSettings> settings) noexcept;
 }

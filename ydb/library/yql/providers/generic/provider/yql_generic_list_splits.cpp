@@ -15,6 +15,7 @@
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/ast/yql_type_string.h>
 #include <yql/essentials/ast/yql_expr.h>
+#include <ydb/library/yql/providers/generic/actors/yql_generic_helpers.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_utils.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_predicate_pushdown.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
@@ -191,9 +192,8 @@ TIssues TGenericListSplitTransformer::ListSplitsFromConnector(const TListSplitRe
     Y_ENSURE(State_->GenericClient);
 
     State_->GenericClient->ListSplits(request).Subscribe([desc, promise, data]
-        (const NConnector::TListSplitsStreamIteratorAsyncResult f3) mutable {
-        NConnector::TListSplitsStreamIteratorAsyncResult f4(f3);
-        auto streamIterResult = f4.ExtractValueSync();
+        (const NConnector::TListSplitsStreamIteratorAsyncResult& future) mutable {
+        auto streamIterResult = ExtractFromConstFuture(future);
 
         // Check transport error
         if (!streamIterResult.Status.Ok()) {
@@ -211,9 +211,8 @@ TIssues TGenericListSplitTransformer::ListSplitsFromConnector(const TListSplitRe
 
         // Pass drainer to the callback because we want him to stay alive until the callback is called
         drainer->Run().Subscribe([desc, promise, data, drainer]
-            (const NThreading::TFuture<NConnector::TListSplitsStreamIteratorDrainer::TBuffer>& f5) mutable {
-            NThreading::TFuture<NConnector::TListSplitsStreamIteratorDrainer::TBuffer> f6(f5);
-            auto drainerResult = f6.ExtractValueSync();
+            (const NThreading::TFuture<NConnector::TListSplitsStreamIteratorDrainer::TBuffer>& future) mutable {
+            auto drainerResult = ExtractFromConstFuture(future);
 
             // check transport and logical errors
             if (drainerResult.Issues) {

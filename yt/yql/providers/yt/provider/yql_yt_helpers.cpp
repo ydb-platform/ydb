@@ -388,14 +388,23 @@ TMaybe<TString> DeriveClusterFromSection(const NNodes::TYtSection& section, ERun
     return result;
 }
 
+bool IsQLFilterCompatibleOperation(const TExprNode& node) {
+    return node.IsCallable({"And", "Or", "Not", "Coalesce", "Exists", "<", "<=", ">", ">=", "==", "!="});
+}
+
+bool IsQLFilterRowMember(const TExprNode& node, const TExprNode* rowArg) {
+    return node.IsCallable("Member") && node.Child(0) == rowArg;
+}
+
 void GetNodesToCalculateFromQLFilter(const TExprNode& qlFilter, TExprNode::TListType &needCalc, TNodeSet &uniqNodes) {
     YQL_ENSURE(qlFilter.IsCallable("YtQLFilter"));
+    const auto rowArg = qlFilter.Child(1)->Child(0)->Child(0);
     const auto lambdaBody = qlFilter.Child(1)->Child(1);
-    VisitExpr(lambdaBody, [&needCalc, &uniqNodes](const TExprNode::TPtr& node) {
-        if (node->IsCallable({"And", "Or", "Not", "Coalesce", "Exists", "<", "<=", ">", ">=", "==", "!="})) {
+    VisitExpr(lambdaBody, [&needCalc, &uniqNodes, rowArg](const TExprNode::TPtr& node) {
+        if (IsQLFilterCompatibleOperation(*node)) {
             return true;
         }
-        if (node->IsCallable("Member")) {
+        if (IsQLFilterRowMember(*node, rowArg)) {
             return false;
         }
         if (uniqNodes.insert(node.Get()).second) {
@@ -405,6 +414,29 @@ void GetNodesToCalculateFromQLFilter(const TExprNode& qlFilter, TExprNode::TList
         }
         return false;
     });
+}
+
+bool HasNodesToCalculateFromQLFilter(const TExprNode& qlFilter) {
+    YQL_ENSURE(qlFilter.IsCallable("YtQLFilter"));
+    bool needCalc = false;
+    const auto rowArg = qlFilter.Child(1)->Child(0)->Child(0);
+    const auto lambdaBody = qlFilter.Child(1)->Child(1);
+    VisitExpr(lambdaBody, [&needCalc, rowArg](const TExprNode::TPtr& node) {
+        if (needCalc) {
+            return false;
+        }
+        if (IsQLFilterCompatibleOperation(*node)) {
+            return true;
+        }
+        if (IsQLFilterRowMember(*node, rowArg)) {
+            return false;
+        }
+        if (NeedCalc(TExprBase(node.Get()))) {
+            needCalc = true;
+        }
+        return false;
+    });
+    return needCalc;
 }
 
 } // unnamed
@@ -798,12 +830,9 @@ TExprNode::TListType GetNodesToCalculate(const TExprNode::TPtr& input) {
                     break;
                 }
             }
-            for (const auto& path: section.Paths()) {
-                const TYtPathInfo pathInfo(path);
-                if (pathInfo.QLFilter) {
-                    GetNodesToCalculateFromQLFilter(*pathInfo.QLFilter, needCalc, uniqNodes);
-                }
-            }
+        }
+        else if (auto maybeQLFilter = TMaybeNode<TYtQLFilter>(node)) {
+            GetNodesToCalculateFromQLFilter(maybeQLFilter.Ref(), needCalc, uniqNodes);
         }
         else if (TMaybeNode<TYtOutput>(node)) {
             // Stop traversing dependent operations
@@ -874,6 +903,12 @@ bool HasNodesToCalculate(const TExprNode::TPtr& input) {
                 default:
                     break;
                 }
+            }
+        }
+        else if (auto maybeQLFilter = TMaybeNode<TYtQLFilter>(node)) {
+            if (HasNodesToCalculateFromQLFilter(maybeQLFilter.Ref())) {
+                needCalc = true;
+                return false;
             }
         }
         else if (TMaybeNode<TYtOutput>(node)) {

@@ -92,6 +92,7 @@ message TActorSystemConfig {
         optional uint32 MaxThreads = 13; // Higher balancing bound, should be not lower than `Threads`
         optional int32 Priority = 16;
         optional int32 MaxAvgPingDeviation = 17;
+        optional uint32 HarmonizerNeedyCpuWindowSeconds = 26 [default = 1]; // Supported for BASIC executors, range is [1, 32]
 
         optional bool HasSharedThread = 18;
         optional bool AllThreadsAreShared = 24;
@@ -548,11 +549,36 @@ message TInterconnectConfig {
     optional uint32 MaxRdmaRetryBackoffLevel = 61 [default = 8]; // 5s * 2^8 = 1280s, about 21 minutes by default
     optional bool UseUring = 62 [default = false];
     optional bool EnableUringSQPOLL = 63 [default = false]; // only effective when UseUring is set
-    optional bool EnableInterconnectSessionV2 = 64 [default = false];
-    optional bool ChecksumInterconnectSessionV2 = 65 [default = false];
-    optional bool EnableSQPOLLv2 = 66 [default = true];
-    optional bool EnablePreserializeInV2 = 67 [default = false];
-    optional uint32 UringEngineThreadsV2 = 68 [default = 4];
+    optional bool EnableRdmaSendReceive = 69 [default = false];
+
+    message TV2Config {
+        optional bool Enable = 1 [default = false];
+        optional bool ChecksumEvents = 2 [default = false];
+
+        // Use io_uring SQPOLL for v2 data-plane rings. If the kernel poller is saturated while shard workers
+        // still have CPU headroom, set this to false so submissions run on the worker threads instead.
+        optional bool EnableSQPOLL = 3 [default = true];
+
+        // If set, this enables event preserialization in IC actor system pool.
+        optional bool EnablePreserializeEvents = 4 [default = false];
+
+        // Number of worker threads of ICv2 thread pool (not counting uring internal ones).
+        optional uint32 UringEngineThreads = 5 [default = 4];
+
+        // io_uring rings per v2 shard worker (each ring may own a SQPOLL thread). Default 1 preserves legacy
+        // 1:1 ring/worker topology. Raise this when poller-bound; raise UringEngineThreads when serializer-bound.
+        optional uint32 UringEngineRingsPerShard = 6 [default = 1];
+
+        // SQPOLL kernel-thread idle timeout (ms) for v2 rings before the poller sleeps. Only effective when
+        // EnableSQPOLLv2 is set. Lower values save idle CPU; higher values keep the poller warm for latency.
+        optional uint32 UringEngineSqThreadIdleMs = 7 [default = 2000];
+
+        // If enabled, rings of different threads share same kernel thread pools and SQ pollers (effectively creating
+        // UringEngineRingsPerShard threads instead of UringEngineRingsPerShard * UringEngineThreads).
+        optional bool ShareRingsAmongThreads = 8 [default = false];
+    }
+
+    optional TV2Config V2Config = 70;
 
     // ballast is added to IC handshake frames to ensure correctness of jumbo frames transmission over network
     optional uint32 HandshakeBallastSize = 14;

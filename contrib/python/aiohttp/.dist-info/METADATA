@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: aiohttp
-Version: 3.10.6
+Version: 3.10.11
 Summary: Async http client/server framework (asyncio)
 Home-page: https://github.com/aio-libs/aiohttp
 Maintainer: aiohttp team <team@aiohttp.org>
@@ -39,7 +39,7 @@ Requires-Dist: attrs >=17.3.0
 Requires-Dist: frozenlist >=1.1.1
 Requires-Dist: multidict <7.0,>=4.5
 Requires-Dist: yarl <2.0,>=1.12.0
-Requires-Dist: async-timeout <5.0,>=4.0 ; python_version < "3.11"
+Requires-Dist: async-timeout <6.0,>=4.0 ; python_version < "3.11"
 Provides-Extra: speedups
 Requires-Dist: brotlicffi ; (platform_python_implementation != "CPython") and extra == 'speedups'
 Requires-Dist: Brotli ; (platform_python_implementation == "CPython") and extra == 'speedups'
@@ -63,6 +63,10 @@ Async http client/server framework
 .. image:: https://codecov.io/gh/aio-libs/aiohttp/branch/master/graph/badge.svg
    :target: https://codecov.io/gh/aio-libs/aiohttp
    :alt: codecov.io status for master branch
+
+.. image:: https://img.shields.io/endpoint?url=https://codspeed.io/badge.json
+   :target: https://codspeed.io/aio-libs/aiohttp
+   :alt: Codspeed.io status for aiohttp
 
 .. image:: https://badge.fury.io/py/aiohttp.svg
    :target: https://pypi.org/project/aiohttp

@@ -570,9 +570,16 @@ namespace NActors {
 
     public:
         using TReceiveFunc = void (IActor::*)(TAutoPtr<IEventHandle>& ev);
+        enum class ESystemFlag : ui64 {
+            // Notify this actor only after an activation that processed one of
+            // its events. Activations of other actors in the same mailbox are
+            // not reported.
+            MailboxProcessingFinished = 1ull << 0,
+        };
 
     private:
         TReceiveFunc StateFunc_;
+        ui64 SystemFlags = 0;
 
     private:
         friend class NDetail::TActorAsyncHandlerPromise;
@@ -589,7 +596,8 @@ namespace NActors {
         void UnregisterActorTask(TActorTask* task);
         void RegisterEventAwaiter(ui64 cookie, TActorEventAwaiter* awaiter);
         void UnregisterEventAwaiter(ui64 cookie, TActorEventAwaiter* awaiter);
-        bool HandleResumeRunnable(TAutoPtr<IEventHandle>& ev);
+        void HandleCheckActorLiveness(TAutoPtr<IEventHandle>& ev);
+        void HandleResumeRunnable(TAutoPtr<IEventHandle>& ev);
         bool HandleRegisteredEvent(TAutoPtr<IEventHandle>& ev);
 
     public:
@@ -689,6 +697,22 @@ namespace NActors {
         } // must not be called for registered actors, see Die method instead
 
     protected:
+        void SetSystemFlag(ESystemFlag flag) noexcept {
+            SystemFlags |= static_cast<ui64>(flag);
+        }
+
+        void ClearSystemFlag(ESystemFlag flag) noexcept {
+            SystemFlags &= ~static_cast<ui64>(flag);
+        }
+
+        ui64 GetSystemFlags() const noexcept {
+            return SystemFlags;
+        }
+
+        bool HasSystemFlag(ESystemFlag flag) const noexcept {
+            return GetSystemFlags() & static_cast<ui64>(flag);
+        }
+
         virtual void Die(const TActorContext& ctx); // would unregister actor so call exactly once and only from inside of message processing
         virtual void PassAway();
 

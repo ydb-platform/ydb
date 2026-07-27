@@ -76,7 +76,7 @@ size_t SerializeTo(TWriterSettings::TMessage& item, ::NKikimrClient::TPersQueueP
 
     cmdWrite.SetSourceId("");
     cmdWrite.SetDisableDeduplication(true);
-    cmdWrite.SetCreateTimeMS(TInstant::Now().MilliSeconds());
+    cmdWrite.SetCreateTimeMS(TAppData::TimeProvider->Now().MilliSeconds());
     cmdWrite.SetUncompressedSize(item.MessageBody.size());
     cmdWrite.SetExternalOperation(true);
     if (item.MessageGroupId) {

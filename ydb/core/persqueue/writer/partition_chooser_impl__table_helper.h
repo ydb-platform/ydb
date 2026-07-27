@@ -12,6 +12,8 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
+#include <library/cpp/time_provider/time_provider.h>
+
 
 namespace NKikimr::NPQ::NPartitionChooser {
 
@@ -179,7 +181,7 @@ public:
         }
 
         if (CreateTime == 0) {
-            CreateTime = TInstant::Now().MilliSeconds();
+            CreateTime = TAppData::TimeProvider->Now().MilliSeconds();
         }
 
         return true;
@@ -228,7 +230,7 @@ public:
                 .Uint64(CreateTime)
                 .Build()
             .AddParam("$AccessTime")
-                .Uint64(TInstant::Now().MilliSeconds())
+                .Uint64(TAppData::TimeProvider->Now().MilliSeconds())
                 .Build()
             .AddParam("$SeqNo")
                 .Uint64(seqNo.value_or(0))

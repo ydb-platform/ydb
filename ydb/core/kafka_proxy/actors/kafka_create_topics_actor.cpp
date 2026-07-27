@@ -175,7 +175,8 @@ void TKafkaCreateTopicsActor::Handle(const NKikimr::NPQ::NSchema::TEvSchemaRespo
     YDB_LOG_DEBUG("Create topics actor. Topic's response received",
         {LogPrefix()},
         {"path", eventPtr->Path},
-        {"status", std::to_string(eventPtr->Status)});
+        {"status", std::to_string(eventPtr->Status)},
+        {"errorMessage", eventPtr->ErrorMessage});
 
     EKafkaErrors status;
     switch(eventPtr->Status) {

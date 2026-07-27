@@ -51,6 +51,9 @@ class ClusterInventory:
             self._agent_hosts = list(topology.hosts.keys())
         self.nodes: dict[int, NodeInfo] = {}
         self.slots: dict[int, SlotInfo] = {}
+        # Set when nodes had to be synthesized from the host list: node/slot ids and ports are then
+        # guesses and there are no slots at all. Reported through ``GET /api/problems``.
+        self.degraded_reason: str | None = None
         self._load_from_harness()
 
     # -- loading ------------------------------------------------------------
@@ -62,6 +65,7 @@ class ClusterInventory:
             cluster = require_external_cluster()
         except Exception as e:  # noqa: BLE001 - inventory must fail open
             logger.warning("ClusterInventory: harness unavailable (%s); host-only candidates", e)
+            self.degraded_reason = f"cluster harness unavailable ({e})"
             self._synthesize_nodes_from_hosts()
             return
 
@@ -91,9 +95,11 @@ class ClusterInventory:
             logger.warning("ClusterInventory: failed to read nodes/slots (%s); host-only", e)
             self.nodes.clear()
             self.slots.clear()
+            self.degraded_reason = f"cannot read nodes/slots from the harness ({e})"
             self._synthesize_nodes_from_hosts()
 
         if not self.nodes:
+            self.degraded_reason = self.degraded_reason or "harness reported no nodes"
             self._synthesize_nodes_from_hosts()
 
         logger.info(

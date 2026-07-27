@@ -248,7 +248,7 @@ class OrchestratorNemesisSchedule:
         """Dispatch a planned command and record FULL-mode impact (no veto)."""
         self.dispatch_command(cmd, track_history=True)
         guard = self._failure_guard
-        if guard is None or not guard.enabled or guard_mode_for(cmd.nemesis_type) is not GuardMode.FULL:
+        if guard is None or guard_mode_for(cmd.nemesis_type) is not GuardMode.FULL:
             return
         scope = impact_scope_for(cmd.nemesis_type)
         if cmd.action == "extract":

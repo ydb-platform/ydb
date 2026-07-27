@@ -30,9 +30,18 @@
       ></nemesis-group-accordion>
     </div>
 
-    <!-- Right Column: Hosts Status, Warden Checks & Schedule History (5 cols) -->
+    <!-- Right Column: Scheduler, Hosts Status, Warden Checks & Schedule History (5 cols) -->
     <div class="col-span-5">
       <div class="sticky top-4 space-y-6">
+        <!-- Nemesis Scheduler (boundary-walking): state, failure budget, problems -->
+        <scheduler-card
+          :scheduler="scheduler"
+          :problems="problems"
+          :is-busy="schedulerBusy"
+          @start="startScheduler"
+          @stop="stopScheduler">
+        </scheduler-card>
+
         <!-- Hosts Status -->
         <div>
           <h2 class="text-xl font-bold mb-4">Hosts Status</h2>
@@ -102,6 +111,7 @@
   import ProcessTypeGroup from './ProcessTypeGroup.js'
   import WardenChecksCard from './WardenChecksCard.js'
   import NemesisGroupAccordion from './NemesisGroupAccordion.js'
+  import SchedulerCard from './SchedulerCard.js'
 
   const { createApp, ref, computed } = Vue
 
@@ -110,7 +120,8 @@
       HostStatusItem,
       ProcessTypeGroup,
       WardenChecksCard,
-      NemesisGroupAccordion
+      NemesisGroupAccordion,
+      SchedulerCard
     },
     setup() {
       const message = ref('Nemesis')
@@ -126,6 +137,9 @@
       const wardenResults = ref({}) // Warden check results per host
       const wardenLoading = ref(false)
       const inventory = ref({ hosts: [], nodes: [], slots: [] })
+      const scheduler = ref({ available: false })
+      const problems = ref({ count: 0, problems: [], by_kind: {} })
+      const schedulerBusy = ref(false)
 
       // Axios interceptor for global error handling
       axios.interceptors.response.use(
@@ -188,6 +202,7 @@
           })
       }
 
+      // Inventory is built once at orchestrator startup, so it is fetched once, not polled.
       function get_inventory() {
         axios.get('/api/inventory')
           .then(response => {
@@ -196,6 +211,51 @@
           .catch(err => {
             console.error('Failed to fetch inventory', err)
           })
+      }
+
+      function get_scheduler() {
+        return axios.get('/api/scheduler')
+          .then(response => {
+            scheduler.value = response.data
+          })
+          .catch(err => {
+            console.error('Failed to fetch scheduler state', err)
+          })
+      }
+
+      function get_problems() {
+        return axios.get('/api/problems')
+          .then(response => {
+            problems.value = response.data
+          })
+          .catch(err => {
+            console.error('Failed to fetch nemesis problems', err)
+          })
+      }
+
+      function post_scheduler(action) {
+        schedulerBusy.value = true
+        return axios.post(`/api/scheduler/${action}`, {})
+          .then(response => {
+            if (response.data && response.data.scheduler) {
+              scheduler.value = response.data.scheduler
+            }
+          })
+          .catch(err => {
+            console.error(`Failed to ${action} scheduler`, err)
+          })
+          .finally(() => {
+            schedulerBusy.value = false
+            get_problems()
+          })
+      }
+
+      function startScheduler() {
+        return post_scheduler('start')
+      }
+
+      function stopScheduler() {
+        return post_scheduler('stop')
       }
 
       function get_process_types() {
@@ -298,16 +358,19 @@
       get_schedule_history()
       get_schedule_status()
       get_warden_results()
+      get_scheduler()
+      get_problems()
 
-      // Poll every 5 seconds
+      // Poll every 5 seconds (inventory is static — fetched once above)
       setInterval(() => {
         get_hosts_health()
-        get_inventory()
         get_all_processes()
         get_healthcheck()
         get_schedule_history()
         get_schedule_status()
         get_warden_results()
+        get_scheduler()
+        get_problems()
       }, 5000)
 
       return {
@@ -324,6 +387,11 @@
         wardenResults,
         wardenLoading,
         inventory,
+        scheduler,
+        problems,
+        schedulerBusy,
+        startScheduler,
+        stopScheduler,
         formatTarget,
         getProcessesByType,
         runWardenChecks

@@ -6,8 +6,11 @@ then sleeps a randomized interval. Replaces the per-type schedule threads in ``s
 
 Budget is released by the :class:`RecoveryProbe`, per the type's :func:`recovery_mode_for`:
 self-recovering faults are released once healthcheck sees the host answer again; toggle faults
-are held for their ``auto_recovery_sec`` then actively extracted. Without a probe (or a disabled,
-fail-open guard) self-recovering faults fall back to the reserve timer so budget never sticks.
+are held for their ``auto_recovery_sec`` then actively extracted. Without a probe, self-recovering
+faults fall back to the reserve timer so budget never sticks.
+
+:meth:`BoundaryNemesisScheduler.stop` drains toggle faults that are still inside their hold
+window through their extract, so switching chaos off never leaves the cluster broken.
 """
 
 from __future__ import annotations
@@ -156,7 +159,10 @@ class BoundaryNemesisScheduler:
     ) -> list[tuple[str, ChaosTarget, Footprint]]:
         with self._cfg_lock:
             enabled = list(self._enabled)
-        impaired = self._guard.active_identities()
+        # One budget snapshot for the whole menu: every candidate is judged against the same state,
+        # and reserve() re-checks atomically before anything is injected.
+        view = self._guard.budget_view()
+        impaired = view.touched
         can_extract = self._can_extract()
         menu: list[tuple[str, ChaosTarget, Footprint]] = []
         for nemesis_type in enabled:
@@ -182,7 +188,7 @@ class BoundaryNemesisScheduler:
                 if key in impaired:
                     continue
                 footprint = self._guard.footprint_for(target, scope)
-                if self._guard.fits(footprint):
+                if view.fits(footprint):
                     menu.append((nemesis_type, target, footprint))
         return menu
 
@@ -210,10 +216,10 @@ class BoundaryNemesisScheduler:
             # The probe releases the budget by fact, so hold it (recovery_sec=None):
             #   extract  — toggle fault; probe holds `recovery`s then dispatches the extract.
             #   self     — probe releases once healthcheck sees the host answer again.
-            # A disabled (fail-open) guard, no rack footprint (slots/tablets), or missing probe
-            # falls back to the reserve timer so self-recovering budget never sticks. Slot kills
-            # take this timer path deliberately: host healthcheck can't observe an individual
-            # slot's restart, so the recovery window is the honest signal.
+            # No rack footprint (slots/tablets) or a missing probe falls back to the reserve timer
+            # so self-recovering budget never sticks. Slot kills take this timer path deliberately:
+            # host healthcheck can't observe an individual slot's restart, so the recovery window
+            # is the honest signal.
             by_extract = (
                 self._recovery_mode_for(nemesis_type) == "extract" and self._can_extract()
             )
@@ -221,7 +227,6 @@ class BoundaryNemesisScheduler:
                 not by_extract
                 and self._recovery_probe is not None
                 and bool(footprint.racks)
-                and self._guard.enabled
             )
             lease = self._guard.reserve(
                 footprint,
@@ -283,6 +288,17 @@ class BoundaryNemesisScheduler:
             t.join(timeout=2.0)
         if self._recovery_probe is not None:
             self._recovery_probe.stop()
+            # Toggle faults still inside their hold window must be extracted here: nothing else
+            # will, so stopping chaos would otherwise leave a node stopped / disk broken / clock
+            # skewed for the rest of the run. Runs after the probe thread is joined so it cannot
+            # extract the same lease concurrently.
+            try:
+                drained = self._recovery_probe.drain_extracts()
+            except Exception:
+                logger.exception("failed to drain pending extracts on stop")
+            else:
+                if drained:
+                    logger.info("scheduler stop: extracted %d in-flight toggle fault(s)", drained)
 
 
 __all__ = ["BoundaryNemesisScheduler", "default_enabled_types"]

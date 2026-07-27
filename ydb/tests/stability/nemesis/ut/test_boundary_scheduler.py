@@ -32,6 +32,7 @@ from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.boundary_schedule
     _STABILITY_PROFILE,
     default_enabled_types,
 )
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.recovery_probe import RecoveryProbe
 
 
 def _write_topology(hosts: list[dict], erasure: str) -> str:
@@ -117,16 +118,16 @@ class TestTick:
         )
         assert len(guard.snapshot()["impaired_racks"]) == 2
 
-    def test_disabled_guard_fills_cap(self):
-        guard = _guard("no-such-erasure")  # unknown -> guard disabled (fail-open)
-        assert not guard.enabled, "unknown erasure must leave the guard disabled"
+    def test_cap_fills_while_the_budget_allows(self):
+        # mirror-3-dc over 4 racks in one DC: the whole DC may be sacrificed, so 3 injects fit.
+        guard = _guard("mirror-3-dc")
         dispatched: list = []
         sched = _make_scheduler(
             guard, FakeInventory(_nodes()), dispatched,
             max_per_tick=3, rng=ScriptedRandom(randint=3),
         )
         injected = sched.tick()
-        assert injected == 3, f"a disabled guard must never block; cap of 3 must fill; got {injected}"
+        assert injected == 3, f"a cap of 3 must fill while the budget allows; got {injected}"
         assert len(dispatched) == 3
 
     def test_menu_offers_every_enabled_type_uniformly(self):
@@ -424,6 +425,62 @@ class TestDefaultProfile:
             assert recovery_mode_for(t) == "extract", f"{t} must recover via extract"
         for t in ("KillNodeNemesis", "KillSlotDaemonNemesis"):
             assert recovery_mode_for(t) == "self", f"{t} is self-recovering"
+
+
+class TestStopDrainsToggleFaults:
+    """``stop()`` (deploy.py's "disable nemesis") must not leave toggle faults applied."""
+
+    def _toggle_scheduler_with_real_probe(self, guard, dispatched):
+        # poll_interval is huge and the probe is never started, so only stop() can extract.
+        probe = RecoveryProbe(
+            guard=guard,
+            recovered=lambda t: False,
+            min_hold_sec=0.0,
+            poll_interval=3600.0,
+        )
+        sched = _make_scheduler(
+            guard, FakeInventory(_nodes()), dispatched,
+            enabled_types=["Toggle"],
+            recovery_mode_for=lambda t: "extract",
+            recovery_sec_for=lambda t: 600.0,  # hold window far longer than the test
+            plan_extract=lambda ntype, target: [build_dispatch(ntype, target, "extract", {})],
+            recovery_probe=probe,
+            max_per_tick=1, rng=ScriptedRandom(randint=1),
+        )
+        return sched, probe
+
+    def test_stop_extracts_faults_still_inside_their_hold_window(self):
+        guard = _guard("block-4-2")
+        dispatched: list = []
+        sched, probe = self._toggle_scheduler_with_real_probe(guard, dispatched)
+
+        assert sched.tick() == 1
+        assert [c.action for c in dispatched] == ["inject"], (
+            f"the tick must only inject so far; got {[c.action for c in dispatched]}"
+        )
+        injected_target = dispatched[0].target
+
+        sched.stop()
+
+        assert [c.action for c in dispatched] == ["inject", "extract"], (
+            "stopping the scheduler must extract the toggle fault it left applied; "
+            f"got {[c.action for c in dispatched]}"
+        )
+        assert dispatched[-1].target.identity_key() == injected_target.identity_key(), (
+            "the extract must target exactly what was injected; "
+            f"injected={injected_target.identity_key()}, extracted={dispatched[-1].target.identity_key()}"
+        )
+        assert guard.snapshot()["impaired_racks"] == [], (
+            f"draining on stop must release the budget too; snapshot={guard.snapshot()}"
+        )
+        assert probe.pending() == [], "nothing may stay tracked after stop"
+
+    def test_stop_without_pending_faults_dispatches_nothing(self):
+        guard = _guard("block-4-2")
+        dispatched: list = []
+        sched, _probe = self._toggle_scheduler_with_real_probe(guard, dispatched)
+        sched.stop()
+        assert dispatched == [], "stop() on an idle scheduler must not dispatch anything"
 
 
 class TestLifecycle:

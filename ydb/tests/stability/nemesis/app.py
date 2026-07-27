@@ -12,8 +12,10 @@ from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.recovery_probe im
 )
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import (
     ClusterTopologyModel,
+    FailureModelConfigError,
     FailureModelGuard,
 )
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_problems import ChaosProblemStore
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.cluster_inventory import ClusterInventory
 from ydb.tests.stability.nemesis.internal.nemesis.cluster_context import cluster_yaml_path
 from ydb.tests.stability.nemesis.internal.orchestrator.install import get_hosts_from_yaml
@@ -88,20 +90,35 @@ def initialize_app():
         orchestrator_router.healthcheck_reporter = HealthCheckReporter(loaded_hosts, store_results=True)
         orchestrator_router.healthcheck_reporter.start_healthchecks()
 
-        # Failure-model guard + inventory: fail open if topology/erasure cannot be parsed.
-        failure_guard = None
-        inventory = None
-        try:
+        # Problems surfaced to the stability test report via GET /api/problems.
+        problems = ChaosProblemStore()
+        orchestrator_router.chaos_problems = problems
+
+        # Failure-model guard + inventory. The topology is normally validated at startup by
+        # require_failure_model_or_die(); parse it here too for embedded/test use, where an
+        # unusable config surfaces as a failed request instead of a dead process. Either way the
+        # guard is live once we get past this line — there is no unguarded mode.
+        topology = current_app.config.get("NEMESIS_TOPOLOGY")
+        if topology is None:
             topology = ClusterTopologyModel(cluster_yaml_path())
-            inventory = ClusterInventory(topology, agent_hosts=loaded_hosts)
-            failure_guard = FailureModelGuard(topology, total_slots=len(inventory.slots))
-            logger.info("Failure model guard: %s", failure_guard.snapshot())
-        except Exception as e:
-            logger.warning("Failure model guard disabled (init failed): %s", e)
-            failure_guard = None
-            inventory = None
+            current_app.config["NEMESIS_TOPOLOGY"] = topology
+        inventory = ClusterInventory(topology, agent_hosts=loaded_hosts)
+        failure_guard = FailureModelGuard(topology, total_slots=len(inventory.slots))
+        logger.info("Failure model guard: %s", failure_guard.snapshot())
         orchestrator_router.failure_guard = failure_guard
         orchestrator_router.cluster_inventory = inventory
+
+        # A synthesized inventory means node/slot targets are guesses (and slot chaos is off) —
+        # not fatal, but it must not stay invisible in the test report.
+        if inventory.degraded_reason:
+            problems.record_inventory_degraded(
+                inventory.degraded_reason,
+                {
+                    "hosts": len(inventory.hosts),
+                    "nodes": len(inventory.nodes),
+                    "slots": len(inventory.slots),
+                },
+            )
 
         orchestrator_router.chaos_store = ChaosOrchestratorStore(
             failure_guard=failure_guard,
@@ -122,24 +139,24 @@ def initialize_app():
         )
 
         # Boundary-walking scheduler (started on demand via /api/scheduler/start).
-        # Needs the failure model + inventory; recovery is fact-based via the healthcheck probe.
-        if failure_guard is not None and inventory is not None:
-            probe = RecoveryProbe(
-                guard=failure_guard,
-                recovered=healthcheck_recovery(orchestrator_router.healthcheck_reporter),
-            )
-            orchestrator_router.nemesis_scheduler = BoundaryNemesisScheduler(
-                guard=failure_guard,
-                inventory=inventory,
-                plan_inject=orchestrator_router.chaos_store.plan_inject_target,
-                plan_extract=orchestrator_router.chaos_store.plan_extract_target,
-                dispatch=lambda cmd: orchestrator_router.nemesis_schedule.dispatch_command(
-                    cmd, track_history=True
-                ),
-                recovery_probe=probe,
-            )
-        else:
-            orchestrator_router.nemesis_scheduler = None
+        # Recovery is fact-based via the healthcheck probe.
+        probe = RecoveryProbe(
+            guard=failure_guard,
+            recovered=healthcheck_recovery(orchestrator_router.healthcheck_reporter),
+            # A fault that never recovers holds its budget forever — report it instead of
+            # leaving it as one ERROR line in the orchestrator log.
+            on_stuck=problems.record_stuck_fault,
+        )
+        orchestrator_router.nemesis_scheduler = BoundaryNemesisScheduler(
+            guard=failure_guard,
+            inventory=inventory,
+            plan_inject=orchestrator_router.chaos_store.plan_inject_target,
+            plan_extract=orchestrator_router.chaos_store.plan_extract_target,
+            dispatch=lambda cmd: orchestrator_router.nemesis_schedule.dispatch_command(
+                cmd, track_history=True
+            ),
+            recovery_probe=probe,
+        )
 
     current_app.config["NEMESIS_INITIALIZED"] = True
 
@@ -158,6 +175,25 @@ def cleanup_app(exception=None):
 
         if orchestrator_router.nemesis_schedule:
             orchestrator_router.nemesis_schedule.shutdown_disable_all()
+
+
+def require_failure_model_or_die(flask_app) -> None:
+    """Parse ``cluster.yaml`` into a failure model before serving, or exit the process.
+
+    The guard is not an optional extra: chaos that ignores the cluster's fault tolerance destroys
+    data and turns every stability failure into noise. So an unusable topology kills the
+    orchestrator at startup — loud, with the reason — instead of degrading into unbounded chaos.
+
+    Called from the ``run`` entry point rather than from :func:`create_app` so that merely importing
+    this module stays free of side effects. Agents don't plan chaos and need no model.
+    """
+    if get_settings().nemesis_type == "agent":
+        return
+    try:
+        flask_app.config["NEMESIS_TOPOLOGY"] = ClusterTopologyModel(cluster_yaml_path())
+    except FailureModelConfigError as e:
+        logger.critical("Refusing to start the nemesis orchestrator: %s", e)
+        raise SystemExit(2) from e
 
 
 def create_app():

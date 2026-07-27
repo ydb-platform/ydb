@@ -144,7 +144,7 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
     #     "planner_cls": NetworkNemesisPlanner,
     #     "target_kind": TargetKind.HOST,
     #     "impact_scope": ImpactScope.NODE,
-    #     "guard_mode": GuardMode.PREFILTER_ONLY,
+    #     "guard_mode": GuardMode.FULL,
     #     "supports_manual": False,
     # }
     out["KillNodeNemesis"] = {
@@ -174,7 +174,7 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         ),
         "target_kind": TargetKind.NODE,
         "impact_scope": ImpactScope.NODE,
-        "guard_mode": GuardMode.PREFILTER_ONLY,
+        "guard_mode": GuardMode.FULL,
         "supports_manual": False,
         "params": [
             {
@@ -209,7 +209,7 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "planner_cls": TimeSkewNemesisPlanner,
         "target_kind": TargetKind.HOST,
         "impact_scope": ImpactScope.NODE,
-        "guard_mode": GuardMode.PREFILTER_ONLY,
+        "guard_mode": GuardMode.FULL,
         "supports_manual": False,
         # Toggle fault: skew the clock, then the scheduler dispatches extract (re-enable ntp).
         "recovery": "extract",
@@ -294,7 +294,7 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "planner_factory": _serial_staggered_node_planner_factory,
         "target_kind": TargetKind.NODE,
         "impact_scope": ImpactScope.NODE,
-        "guard_mode": GuardMode.PREFILTER_ONLY,
+        "guard_mode": GuardMode.FULL,
     }
     out["SerialKillSlotsNemesis"] = {
         "runner": ClusterSerialKillSlotsNemesis(),
@@ -303,7 +303,7 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "planner_factory": _serial_staggered_slot_planner_factory,
         "target_kind": TargetKind.SLOT,
         "impact_scope": ImpactScope.SLOT,
-        "guard_mode": GuardMode.PREFILTER_ONLY,
+        "guard_mode": GuardMode.FULL,
     }
 
     # --- disk / rolling / stop-start / suspend ------------------------------
@@ -327,7 +327,7 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
             "planner_factory": _pinned_planner_factory,
             "target_kind": tkind,
             "impact_scope": scope,
-            "guard_mode": GuardMode.PREFILTER_ONLY,
+            "guard_mode": GuardMode.FULL,
             **extra,
         }
 

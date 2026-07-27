@@ -1,7 +1,7 @@
 """ChaosTarget: unified descriptor of what a chaos inject/extract acts on.
 
 Dispatch still goes to an agent ``host``; ``kind`` + ids say which entity on that host
-(or cluster-wide tablet) is the real target. See CHAOS_TARGET_IMPLEMENTATION_PLAN.md.
+(or cluster-wide tablet) is the real target.
 """
 
 from __future__ import annotations

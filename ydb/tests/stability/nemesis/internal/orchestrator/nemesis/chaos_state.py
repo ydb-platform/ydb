@@ -85,12 +85,7 @@ class ChaosOrchestratorStore:
             # Fallback: host-only candidates from the agent host list.
             candidates = [ChaosTarget.for_host(h) for h in (hosts or [])]
 
-        mode = guard_mode_for(nemesis_type)
-        if (
-            self._failure_guard is not None
-            and self._failure_guard.enabled
-            and mode in (GuardMode.FULL, GuardMode.PREFILTER_ONLY)
-        ):
+        if self._failure_guard is not None and guard_mode_for(nemesis_type) is GuardMode.FULL:
             scope = impact_scope_for(nemesis_type)
             filtered = self._failure_guard.filter_safe(candidates, scope)
             if len(filtered) != len(candidates):

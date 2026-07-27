@@ -1,8 +1,9 @@
-"""Serial-style inject: one tick dispatches to the owner host of a chosen node/slot."""
+"""Serial-style inject: one tick kills K node/slot entities in sequence, ``stagger_sec`` apart."""
 
 from __future__ import annotations
 
 import random
+import uuid
 from typing import ClassVar
 
 from ydb.tests.stability.nemesis.internal.nemesis.chaos_dispatch import DispatchCommand, dispatch
@@ -15,14 +16,19 @@ from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.nemesis_planner_b
 # Lower bound of tools ``schedule_between_kills`` (30, 60) for node serial nemeses.
 DEFAULT_SERIAL_STAGGER_SEC = 30.0
 
+# Upper bound on entities killed within one tick (matches the pre-ChaosTarget planner).
+MAX_ENTITIES_PER_TICK = 4
+
 
 class SerialStaggeredInjectPlanner(NemesisPlannerBase):
     """
-    Each ``scheduled_tick``: pick one node/slot from ``candidates`` and dispatch inject
-    only to that entity's owner host (with optional sleep_before for stagger compatibility).
+    Each ``scheduled_tick``: sample ``K`` distinct node/slot entities (``K`` in
+    1..:data:`MAX_ENTITIES_PER_TICK`, capped by the candidate count) and dispatch one inject per
+    entity **to that entity's own owner host**, with ``payload["sleep_before"] = i * stagger_sec``
+    so the agents kill their daemons one after another instead of all at once.
 
-    Previously fanned out the same node_id to K random hosts; that is incorrect for
-    ChaosTarget — only the owner agent can kill the daemon.
+    The pre-ChaosTarget version fanned the *same* ``node_id`` out to K random hosts, which only
+    worked while the agent resolved the target locally; only the owner agent can kill the daemon.
     """
 
     PAYLOAD_INJECT: ClassVar[dict] = {}
@@ -57,18 +63,33 @@ class SerialStaggeredInjectPlanner(NemesisPlannerBase):
         else:
             return []
 
-        chosen = random.choice(pool)
-        payload: dict = {"sleep_before": 0.0}
-        if chosen.node_id is not None:
-            payload["node_id"] = chosen.node_id
-        if chosen.slot_idx is not None:
-            payload["slot_idx"] = chosen.slot_idx
-        if chosen.ic_port is not None:
-            payload["node_ic_port"] = chosen.ic_port
-
+        k = min(random.randint(1, MAX_ENTITIES_PER_TICK), len(pool))
+        chosen = random.sample(pool, k)
+        scenario_id = str(uuid.uuid4())
+        commands = [
+            dispatch(
+                self._nemesis_type_key,
+                target,
+                "inject",
+                self._payload_for(target, sleep_before=float(i) * self._stagger_sec),
+                scenario_id=scenario_id,
+            )
+            for i, target in enumerate(chosen)
+        ]
         with self._lock:
-            self._last_hosts = [chosen.host]
-        return [dispatch(self._nemesis_type_key, chosen, "inject", payload)]
+            self._last_hosts = [t.host for t in chosen]
+        return commands
+
+    def _payload_for(self, target: ChaosTarget, *, sleep_before: float) -> dict:
+        """Ids the agent needs to find the daemon, plus how long it waits before killing it."""
+        payload: dict = {"sleep_before": sleep_before}
+        if target.node_id is not None:
+            payload["node_id"] = target.node_id
+        if target.slot_idx is not None:
+            payload["slot_idx"] = target.slot_idx
+        if target.ic_port is not None:
+            payload["node_ic_port"] = target.ic_port
+        return payload
 
     def _drain_tracked_hosts(self) -> list[str]:
         out = list(self._last_hosts)

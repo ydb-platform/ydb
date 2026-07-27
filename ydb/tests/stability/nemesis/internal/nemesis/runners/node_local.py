@@ -28,17 +28,26 @@ class KillNodeNemesis(MonitoredAgentActor):
             ic_port = int(payload["node_ic_port"])
 
         if ic_port is None:
-            self._logger.error(
+            # Fail loudly: the orchestrator has already reserved failure budget for this fault,
+            # so a silent no-op would look like injected chaos that never happened.
+            raise ValueError(
                 "KillNodeNemesis: ChaosTarget must include ic_port (or payload.node_ic_port)"
             )
-            return
 
+        # Match the port exactly (not as a prefix of a longer one), and no `xargs -r`: an empty
+        # pid list must fail the command instead of reporting a successful kill of nothing.
         cmd = (
-            "ps aux | grep '\\--ic-port %d' | grep -v grep | awk '{ print $2 }' | "
-            "xargs -r sudo kill -%d" % (ic_port, int(sig))
+            "ps aux | grep -E -- '--ic-port %d($|[^0-9])' | grep -v grep | awk '{ print $2 }' | "
+            "xargs sudo kill -%d" % (ic_port, int(sig))
         )
         self._logger.info("Executing: %s", cmd)
-        subprocess.run(cmd, shell=True, check=False)
+        try:
+            subprocess.check_call(cmd, shell=True)
+        except subprocess.CalledProcessError as e:
+            self._logger.error(
+                "KillNodeNemesis: no process killed on ic_port=%d (rc=%s)", ic_port, e.returncode
+            )
+            raise
         self.on_success_inject_fault()
         self._logger.info("=== INJECT_FAULT SUCCESS: KillNodeNemesis ===")
 

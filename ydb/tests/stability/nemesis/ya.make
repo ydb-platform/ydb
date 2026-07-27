@@ -36,6 +36,7 @@ PY_SRCS(
     internal/orchestrator/nemesis/boundary_scheduler.py
     internal/orchestrator/nemesis/recovery_probe.py
     internal/orchestrator/nemesis/chaos_state.py
+    internal/orchestrator/nemesis/chaos_problems.py
     internal/orchestrator/nemesis/default_planner.py
     internal/orchestrator/nemesis/pinned_first_host_planner.py
     internal/orchestrator/nemesis/serial_staggered_planner.py

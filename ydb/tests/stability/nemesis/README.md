@@ -107,19 +107,38 @@ Planning is entity-based (`ChaosTarget`), not host-only. Dispatch still goes to 
 | `tablet` | Hive / tablet API (usually `guard_mode=BYPASS`) |
 | `datacenter` / `pile` | topology fanout |
 
-**Flow (one active nemesis at a time):**
+**Flow — boundary scheduler** (`boundary_scheduler.py`, what `deploy.py` starts and what drives scheduled chaos):
+
+```text
+tick: cap = rand(1..max_per_tick)
+  → menu of (type, target) that currently fits the budget   (guard.fits)
+  → pick uniformly, guard.reserve(footprint)                 (atomic)
+  → plan_inject → dispatch (payload includes chaos_target)
+  → RecoveryProbe releases the budget by fact
+       self    — healthcheck sees the host answer again (else: stuck, budget kept)
+       extract — hold auto_recovery_sec, then dispatch the extract
+  → stop(): drains still-held toggle faults through their extract
+```
+
+**Flow — legacy per-type schedule** (`schedule_loop.py`, still available via `/api/schedule/*`):
 
 ```text
 ClusterInventory.entities(kind)
   → FailureModelGuard.filter_safe(...)
   → planner.scheduled_tick(candidates)
-  → dispatch (payload includes chaos_target)
-  → record_inject / record_extract
+  → dispatch → record_inject / record_extract
 ```
 
-There is **no** dispatch-time `can_inject` veto. Safety is plan-time `filter_safe` plus post-dispatch accounting. Erasure rules come from `cluster.yaml` (`static_erasure`, `location.rack` / `data_center`): e.g. `block-4-2` ≤ 2 racks, `mirror-3-dc` = 1 full DC + 1 rack elsewhere.
+There is **no** dispatch-time `can_inject` veto. Safety is plan-time (`filter_safe` / `fits`) plus accounting after dispatch (`record_inject` / `reserve`).
 
-**Catalog fields** (in `cluster_entries.py`): `target_kind`, `impact_scope`, `guard_mode` (`FULL` / `PREFILTER_ONLY` / `BYPASS`), optional `auto_recovery_sec`, `supports_manual`.
+**Two independent budgets**, both from `cluster.yaml` (`static_erasure`, `location.rack` / `data_center`):
+
+- *Fail domains* — `block-4-2` ≤ 2 domains, `mirror-3-dc` = 1 full realm + 1 domain elsewhere, `none` = 0. A domain is keyed `"<data_center>/<rack>"`: rack labels are only unique inside a DC (`rack: '1'` in every DC is normal), so the realm is part of the key. Only static-node / disk / DC faults spend this budget.
+- *Slots* — killing a dynamic node does not reduce storage redundancy, so it draws from its own budget: ≤ 30% of the cluster's slots down at once (`total_slots × slot_fraction`, ≥1 on small clusters). Charged by `reserve` (boundary scheduler) and by `record_inject` (legacy loop, manual inject). The one place that ignores it is the `filter_safe` pre-check: a slot candidate carries no fail domain, so it is always admitted there — `reserve` is what actually refuses.
+
+**The failure model is mandatory.** An unusable `cluster.yaml` — missing, unparsable, unknown `static_erasure`, a host without `location.rack`, or (for `mirror-3-dc`) without `location.data_center` — raises `FailureModelConfigError` and the orchestrator refuses to start. There is no unguarded mode: chaos that ignores fault tolerance is worse than no chaos.
+
+**Catalog fields** (in `cluster_entries.py`): `target_kind`, `impact_scope`, `guard_mode` (`FULL` — filtered and accounted for; `BYPASS` — costs no budget, for tablet chaos), optional `recovery`, `auto_recovery_sec`, `supports_manual`.
 
 **Agent contract:** node/slot/disk runners require explicit ids in `chaos_target` (`node_id`, `slot_idx`, `ic_port`) — no hostname guessing.
 
@@ -127,9 +146,10 @@ There is **no** dispatch-time `can_inject` veto. Safety is plan-time `filter_saf
 
 - History shows the target (not only host)
 - Manual Run lists nodes/slots when `supports_manual` and `target_kind` need them; types with `supports_manual: false` (network, time skew, rolling restart, bridge pile) are schedule-only
-- `GET /api/inventory` — hosts/nodes/slots used for planning
-
-More detail: `CHAOS_TARGET_IMPLEMENTATION_PLAN.md`.
+- `GET /api/inventory` — hosts/nodes/slots used for planning (built once at startup)
+- `GET /api/scheduler`, `POST /api/scheduler/start|stop` — boundary scheduler state and profile (`enabled`, `base_interval`, `jitter`, `max_per_tick`; invalid values and unknown type names are rejected with 400)
+- `GET /api/problems` — nemesis-side problems: faults that never recovered (budget still held) and a degraded inventory (harness unavailable → synthesized node ids, no slot chaos). `ydb/tests/stability/tests` fetches this when disabling nemesis and attaches it to the Allure report
+- The UI's Nemesis Scheduler card shows run state, profile, both budgets, the recovery probe and the problem list; the per-type schedule toggles in the accordion belong to the legacy loop
 
 ## Extending Nemesis
 

@@ -12,10 +12,14 @@ import yaml
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_target import ChaosTarget
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import (
     ClusterTopologyModel,
+    FailureModelConfigError,
     FailureModelGuard,
     ImpactScope,
+    fail_domain_key,
 )
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.serial_staggered_planner import (
+    DEFAULT_SERIAL_STAGGER_SEC,
+    MAX_ENTITIES_PER_TICK,
     SerialStaggeredInjectPlanner,
 )
 
@@ -53,6 +57,22 @@ def mirror3dc_topology():
         {"name": "h4", "location": {"rack": "r4", "data_center": "dc2"}},
         {"name": "h5", "location": {"rack": "r5", "data_center": "dc3"}},
         {"name": "h6", "location": {"rack": "r6", "data_center": "dc3"}},
+    ]
+    path = _write_topology_yaml(hosts, "mirror-3-dc")
+    return ClusterTopologyModel(path)
+
+
+@pytest.fixture
+def per_dc_rack_labels_topology():
+    """mirror-3-dc where rack labels restart in every DC (``rack: '1'``, ``'2'`` per realm).
+
+    This is how real ``cluster.yaml`` files label racks, and it is the case that collapsed into a
+    single fail domain when the guard keyed impairments by the bare rack label.
+    """
+    hosts = [
+        {"name": f"{dc}-{name}", "location": {"rack": rack, "data_center": dc}}
+        for dc in ("dc1", "dc2", "dc3")
+        for name, rack in (("a", "1"), ("b", "2"))
     ]
     path = _write_topology_yaml(hosts, "mirror-3-dc")
     return ClusterTopologyModel(path)
@@ -158,7 +178,7 @@ class TestFailureModelGuard:
         # Simulate extract for an untracked execution of n2 (e.g. after restart).
         guard.record_extract("untracked-other", n2, ImpactScope.NODE)
         snap = guard.snapshot()
-        assert "r1" in snap["impaired_racks"], (
+        assert "dc1/r1" in snap["impaired_racks"], (
             "extract fallback by identity must leave n1 impairment intact; "
             f"snapshot={snap}"
         )
@@ -183,8 +203,8 @@ class TestFailureModelGuard:
         guard = FailureModelGuard(block42_topology)
         t = ChaosTarget.for_host("h1")
         guard.record_inject("e1", t, ImpactScope.NODE, recovery_sec=None)
-        assert "r1" in guard.snapshot()["impaired_racks"], (
-            f"host inject on h1 must mark rack r1 impaired; snapshot={guard.snapshot()}"
+        assert "dc1/r1" in guard.snapshot()["impaired_racks"], (
+            f"host inject on h1 must mark fail domain dc1/r1 impaired; snapshot={guard.snapshot()}"
         )
         guard.record_extract("e1", t, ImpactScope.NODE)
         assert guard.snapshot()["impaired_racks"] == [], (
@@ -198,8 +218,8 @@ class TestFailureBudgetLease:
     def test_footprint_for_node_is_single_rack(self, block42_topology):
         guard = FailureModelGuard(block42_topology)
         fp = guard.footprint_for(ChaosTarget.for_node("h1", node_id=1), ImpactScope.NODE)
-        assert fp.racks == frozenset({"r1"}) and fp.slots == 0, (
-            f"a node footprint must be exactly its host's rack, no slots; got {fp}"
+        assert fp.racks == frozenset({"dc1/r1"}) and fp.slots == 0, (
+            f"a node footprint must be exactly its host's fail domain, no slots; got {fp}"
         )
 
     def test_footprint_for_datacenter_covers_all_its_racks(self, mirror3dc_topology):
@@ -207,7 +227,7 @@ class TestFailureBudgetLease:
         fp = guard.footprint_for(
             ChaosTarget.for_datacenter("h1", "dc1"), ImpactScope.DATACENTER
         )
-        assert fp.racks == frozenset({"r1", "r2"}), (
+        assert fp.racks == frozenset({"dc1/r1", "dc1/r2"}), (
             f"a datacenter footprint must cover every rack in the DC; got {fp}"
         )
 
@@ -380,6 +400,34 @@ class TestSlotBudget:
             "a rack fault must still fit while the slot budget is exhausted (independent budgets)"
         )
 
+    def test_record_inject_charges_the_slot_budget(self, block42_topology):
+        # The legacy schedule loop and manual injects go through record_inject, not reserve —
+        # they must spend the same slot budget, otherwise the two paths disagree.
+        guard = FailureModelGuard(block42_topology, total_slots=10)  # max = 3
+        for i in range(3):
+            guard.record_inject(
+                f"exec{i}",
+                ChaosTarget.for_slot("h1", slot_idx=i),
+                ImpactScope.SLOT,
+                recovery_sec=None,
+            )
+        snap = guard.snapshot()
+        assert snap["impaired_slots"] == 3, f"slot injects must charge the slot budget; got {snap}"
+        assert snap["impaired_racks"] == [], "a slot kill still must not spend a fail domain"
+        assert not guard.fits(self._slot_fp(guard)), (
+            "with the slot budget spent by record_inject, a further slot must not fit"
+        )
+
+    def test_record_inject_of_a_tablet_records_nothing(self, block42_topology):
+        guard = FailureModelGuard(block42_topology, total_slots=10)
+        guard.record_inject(
+            "t1", ChaosTarget.for_tablet("h1", tablet_id=1), ImpactScope.NODE, recovery_sec=None
+        )
+        snap = guard.snapshot()
+        assert snap["tracked_executions"] == 0 and snap["impaired_slots"] == 0, (
+            f"a tablet fault consumes neither dimension; got {snap}"
+        )
+
     def test_slot_budget_fails_open_when_no_slots_known(self, block42_topology):
         guard = FailureModelGuard(block42_topology, total_slots=0)
         assert guard.snapshot()["max_slots"] == 0
@@ -391,29 +439,270 @@ class TestSlotBudget:
             )
 
 
-class TestSerialStaggeredPlanner:
-    def test_dispatches_only_to_owner_host(self):
-        planner = SerialStaggeredInjectPlanner("SerialKillNodeNemesis", target_kind="node")
-        candidates = [
-            ChaosTarget.for_node("h1", node_id=1, ic_port=19001),
-            ChaosTarget.for_node("h2", node_id=2, ic_port=19001),
+class TestFailureModelIsMandatory:
+    """An unusable cluster.yaml must raise, not degrade into a guard that permits everything.
+
+    ``app.create_app`` lets this exception kill the orchestrator: unbounded chaos destroys data and
+    turns every stability failure into noise, so no failure model means no nemesis.
+    """
+
+    def test_missing_path_raises(self):
+        for path in ("", None):
+            with pytest.raises(FailureModelConfigError):
+                ClusterTopologyModel(path)
+
+    def test_missing_file_raises(self):
+        with pytest.raises(FailureModelConfigError, match="not found"):
+            ClusterTopologyModel("/nonexistent/cluster.yaml")
+
+    def test_unparsable_yaml_raises(self, tmp_path):
+        bad = tmp_path / "cluster.yaml"
+        bad.write_text("static_erasure: [unclosed\n", encoding="utf-8")
+        with pytest.raises(FailureModelConfigError, match="cannot parse"):
+            ClusterTopologyModel(str(bad))
+
+    def test_non_mapping_document_raises(self, tmp_path):
+        bad = tmp_path / "cluster.yaml"
+        bad.write_text("- just\n- a\n- list\n", encoding="utf-8")
+        with pytest.raises(FailureModelConfigError, match="YAML mapping"):
+            ClusterTopologyModel(str(bad))
+
+    def test_unknown_erasure_raises(self):
+        hosts = [{"name": "h1", "location": {"rack": "r1", "data_center": "dc1"}}]
+        with pytest.raises(FailureModelConfigError, match="static_erasure"):
+            ClusterTopologyModel(_write_topology_yaml(hosts, "no-such-erasure"))
+
+    def test_no_hosts_raises(self):
+        with pytest.raises(FailureModelConfigError, match="hosts"):
+            ClusterTopologyModel(_write_topology_yaml([], "block-4-2"))
+
+    def test_host_without_rack_raises(self):
+        hosts = [
+            {"name": "h1", "location": {"rack": "r1", "data_center": "dc1"}},
+            {"name": "h2", "location": {"data_center": "dc1"}},
         ]
+        with pytest.raises(FailureModelConfigError, match="location.rack"):
+            ClusterTopologyModel(_write_topology_yaml(hosts, "block-4-2"))
+
+    def test_host_without_location_raises(self):
+        with pytest.raises(FailureModelConfigError, match="location"):
+            ClusterTopologyModel(_write_topology_yaml([{"name": "h1"}], "block-4-2"))
+
+    def test_mirror3dc_requires_datacenter(self):
+        # Realms may be sacrificed whole, so a host with an unknown realm is not decidable.
+        hosts = [{"name": f"h{i}", "location": {"rack": f"r{i}"}} for i in (1, 2, 3)]
+        with pytest.raises(FailureModelConfigError, match="data_center"):
+            ClusterTopologyModel(_write_topology_yaml(hosts, "mirror-3-dc"))
+
+    def test_block42_without_datacenter_is_accepted(self):
+        # block-4-2 counts domains regardless of realm, so data_center is optional there.
+        hosts = [{"name": f"h{i}", "location": {"rack": f"r{i}"}} for i in (1, 2, 3)]
+        topology = ClusterTopologyModel(_write_topology_yaml(hosts, "block-4-2"))
+        assert topology.guards
+        assert topology.domain_of("h1") == fail_domain_key(None, "r1")
+
+    def test_erasure_none_parses_and_forbids_everything(self):
+        hosts = [{"name": "h1", "location": {"rack": "r1", "data_center": "dc1"}}]
+        guard = FailureModelGuard(ClusterTopologyModel(_write_topology_yaml(hosts, "none")))
+        assert guard.enabled, "static_erasure=none is a valid model (zero tolerance), not an error"
+        fp = guard.footprint_for(ChaosTarget.for_node("h1", node_id=1), ImpactScope.NODE)
+        assert not guard.fits(fp) and guard.reserve(fp) is None, (
+            "with no redundancy the guard must refuse every fault that touches a fail domain"
+        )
+
+
+class TestFailDomainKeying:
+    """Rack labels repeat per datacenter, so a fail domain must be keyed by (dc, rack).
+
+    Keying by the bare rack label collapsed rack ``1`` of every DC into one domain, and the guard
+    then admitted a fault in every realm at once — exactly what the failure model forbids.
+    """
+
+    def test_key_is_namespaced_by_datacenter(self):
+        assert fail_domain_key("dc1", "1") != fail_domain_key("dc2", "1"), (
+            "rack '1' in two datacenters must be two distinct fail domains"
+        )
+        assert fail_domain_key(None, "1") == "?/1", (
+            f"a host without data_center must still get a stable key; got {fail_domain_key(None, '1')!r}"
+        )
+
+    def test_same_rack_label_per_dc_are_distinct_domains(self, per_dc_rack_labels_topology):
+        topology = per_dc_rack_labels_topology
+        assert topology.domain_of("dc1-a") != topology.domain_of("dc2-a"), (
+            "hosts in different DCs sharing rack label '1' must map to different fail domains; "
+            f"dc1-a={topology.domain_of('dc1-a')!r}, dc2-a={topology.domain_of('dc2-a')!r}"
+        )
+        for dc in ("dc1", "dc2", "dc3"):
+            assert topology.domains_in_dc(dc) == {
+                fail_domain_key(dc, "1"),
+                fail_domain_key(dc, "2"),
+            }, (
+                f"every realm must keep its own two domains; {dc} -> {topology.domains_in_dc(dc)}"
+            )
+
+    def test_mirror3dc_rejects_a_fault_in_a_third_realm(self, per_dc_rack_labels_topology):
+        guard = FailureModelGuard(per_dc_rack_labels_topology)
+        assert guard.enabled
+
+        leases = []
+        for host in ("dc1-a", "dc2-a"):  # rack '1' in two different DCs
+            target = ChaosTarget.for_node(host, node_id=1)
+            fp = guard.footprint_for(target, ImpactScope.NODE)
+            leases.append(guard.reserve(fp, identity_key=target.identity_key()))
+        assert all(leases), (
+            f"one domain per realm in two realms must fit mirror-3-dc; snapshot={guard.snapshot()}"
+        )
+        assert len(guard.snapshot()["impaired_racks"]) == 2, (
+            "the two same-labelled racks must be counted as two domains, not one; "
+            f"snapshot={guard.snapshot()}"
+        )
+
+        third = ChaosTarget.for_node("dc3-a", node_id=1)  # rack '1' again, third realm
+        third_fp = guard.footprint_for(third, ImpactScope.NODE)
+        assert not guard.fits(third_fp), (
+            "mirror-3-dc tolerates 1 realm + 1 domain, so a third realm must not fit; "
+            f"snapshot={guard.snapshot()}"
+        )
+        assert guard.reserve(third_fp, identity_key=third.identity_key()) is None, (
+            f"reserve must refuse the third realm; snapshot={guard.snapshot()}"
+        )
+        assert guard.filter_safe([third], ImpactScope.NODE) == [], (
+            f"filter_safe must agree with reserve; snapshot={guard.snapshot()}"
+        )
+
+    def test_block42_counts_same_label_racks_separately(self):
+        # Two DCs × rack '1'/'2'; block-4-2 tolerates 2 domains total, whatever their labels.
+        hosts = [
+            {"name": f"{dc}-{rack}", "location": {"rack": rack, "data_center": dc}}
+            for dc in ("dc1", "dc2")
+            for rack in ("1", "2")
+        ]
+        guard = FailureModelGuard(ClusterTopologyModel(_write_topology_yaml(hosts, "block-4-2")))
+        granted = []
+        for host in ("dc1-1", "dc2-1", "dc1-2"):
+            target = ChaosTarget.for_node(host, node_id=1)
+            granted.append(
+                guard.reserve(
+                    guard.footprint_for(target, ImpactScope.NODE),
+                    identity_key=target.identity_key(),
+                )
+            )
+        assert [g is not None for g in granted] == [True, True, False], (
+            "rack '1' of dc1 and dc2 are two domains, so the third fault must exceed block-4-2; "
+            f"granted={granted}, snapshot={guard.snapshot()}"
+        )
+
+    def test_datacenter_footprint_covers_only_its_own_realm(self, per_dc_rack_labels_topology):
+        guard = FailureModelGuard(per_dc_rack_labels_topology)
+        fp = guard.footprint_for(ChaosTarget.for_datacenter("dc1-a", "dc1"), ImpactScope.DATACENTER)
+        assert fp.racks == {fail_domain_key("dc1", "1"), fail_domain_key("dc1", "2")}, (
+            "a DC footprint must be that DC's own domains — not a synthetic single-host key, and "
+            f"not another realm's racks; got {set(fp.racks)}"
+        )
+
+    def test_unknown_hosts_get_realm_aware_synthetic_domains(self, per_dc_rack_labels_topology):
+        # A host that cluster.yaml has no rack for (e.g. an agent outside the config) still gets a
+        # realm-namespaced key, so two such hosts are not merged into one sacrificial realm.
+        guard = FailureModelGuard(per_dc_rack_labels_topology)
+        keys = {
+            host: set(
+                guard.footprint_for(ChaosTarget.for_host(host), ImpactScope.NODE).racks
+            ).pop()
+            for host in ("ghost-a", "ghost-b")
+        }
+        assert keys["ghost-a"] != keys["ghost-b"], (
+            f"unknown hosts must not share a fail domain; got {keys}"
+        )
+        assert all(k.startswith("__host__:") for k in keys.values()), keys
+
+
+class TestSyntheticDomainRealms:
+    """Hosts whose realm *is* known but whose rack is not must be attributed to that realm."""
+
+    def test_mirror3dc_counts_unknown_rack_hosts_per_realm(self):
+        # h1/h2 are in cluster.yaml (dc1, dc2); the guard is asked about hosts it has topology for
+        # but through a scope that has no rack — the synthetic key must still carry the realm.
+        hosts = [
+            {"name": "h1", "location": {"rack": "r1", "data_center": "dc1"}},
+            {"name": "h2", "location": {"rack": "r2", "data_center": "dc2"}},
+            {"name": "h3", "location": {"rack": "r3", "data_center": "dc3"}},
+        ]
+        guard = FailureModelGuard(ClusterTopologyModel(_write_topology_yaml(hosts, "mirror-3-dc")))
+        domains = {
+            guard._synthetic_key("h1"),
+            guard._synthetic_key("h2"),
+        }
+        assert domains == {"__host__:dc1/h1", "__host__:dc2/h2"}, (
+            f"synthetic keys must be namespaced by realm; got {domains}"
+        )
+        # One synthetic domain per realm in two realms is still 1 sacrificial realm + 1 domain.
+        assert guard._is_tolerable(domains), f"two realms must be tolerable; domains={domains}"
+        assert not guard._is_tolerable(domains | {guard._synthetic_key("h3")}), (
+            "a third realm must not be tolerable — the old un-namespaced key made all three look "
+            "like one realm"
+        )
+
+
+class TestSerialStaggeredPlanner:
+    def _candidates(self, n: int = 4) -> list[ChaosTarget]:
+        return [
+            ChaosTarget.for_node(f"h{i}", node_id=i, ic_port=19000 + i)
+            for i in range(1, n + 1)
+        ]
+
+    def test_dispatches_only_to_owner_hosts(self):
+        planner = SerialStaggeredInjectPlanner("SerialKillNodeNemesis", target_kind="node")
+        candidates = self._candidates()
+        by_node = {t.node_id: t for t in candidates}
+
         cmds = planner.scheduled_tick(candidates)
-        assert len(cmds) == 1, (
-            f"serial planner must emit exactly one command for one chosen node; got {len(cmds)}"
+        assert 1 <= len(cmds) <= MAX_ENTITIES_PER_TICK, (
+            f"a serial tick must kill between 1 and {MAX_ENTITIES_PER_TICK} entities; got {len(cmds)}"
         )
-        cmd = cmds[0]
-        assert cmd.target.host in {"h1", "h2"}, (
-            f"chosen host must be from candidates; got {cmd.target.host!r}"
+        assert len({c.target.identity_key() for c in cmds}) == len(cmds), (
+            f"entities must be sampled without repetition; got {[c.target.to_dict() for c in cmds]}"
         )
-        assert cmd.target.node_id in {1, 2}, (
-            f"chosen node_id must be from candidates; got {cmd.target.node_id!r}"
+        for cmd in cmds:
+            chosen = by_node.get(cmd.target.node_id)
+            assert chosen is not None, f"node_id must come from the candidates; got {cmd.target!r}"
+            assert cmd.host == chosen.host, (
+                f"dispatch must go to the owner of the chosen node, not a random host; "
+                f"host={cmd.host!r}, owner={chosen.host!r}"
+            )
+            assert cmd.payload.get("node_id") == cmd.target.node_id, (
+                f"payload.node_id must match ChaosTarget.node_id; payload={cmd.payload}"
+            )
+            assert cmd.payload.get("node_ic_port") == chosen.ic_port, (
+                f"payload must carry the entity's own ic_port; payload={cmd.payload}"
+            )
+
+    def test_kills_are_staggered_in_time_within_one_scenario(self):
+        planner = SerialStaggeredInjectPlanner(
+            "SerialKillNodeNemesis", target_kind="node", stagger_sec=7.5
         )
-        assert cmd.payload.get("node_id") == cmd.target.node_id, (
-            f"payload.node_id must match ChaosTarget.node_id; "
-            f"payload={cmd.payload}, target={cmd.target.to_dict()}"
+        # Sample until a tick picks more than one entity, so the stagger is observable.
+        for _ in range(50):
+            cmds = planner.scheduled_tick(self._candidates())
+            if len(cmds) > 1:
+                break
+        assert len(cmds) > 1, "expected at least one multi-entity tick out of 50 samples"
+
+        delays = [c.payload["sleep_before"] for c in cmds]
+        assert delays == [7.5 * i for i in range(len(cmds))], (
+            f"the i-th kill must wait i * stagger_sec so kills are serial, not simultaneous; "
+            f"got {delays}"
         )
-        assert cmd.host == cmd.target.host, (
-            f"dispatch host must be the owner of the chosen node, not a random host; "
-            f"host={cmd.host!r}, target.host={cmd.target.host!r}"
+        assert len({c.scenario_id for c in cmds}) == 1, (
+            "one staggered tick is one scenario, so its commands must share a scenario id"
+        )
+
+    def test_default_stagger_is_used_when_not_overridden(self):
+        planner = SerialStaggeredInjectPlanner("SerialKillNodeNemesis", target_kind="node")
+        for _ in range(50):
+            cmds = planner.scheduled_tick(self._candidates())
+            if len(cmds) > 1:
+                break
+        assert len(cmds) > 1, "expected at least one multi-entity tick out of 50 samples"
+        assert cmds[1].payload["sleep_before"] == DEFAULT_SERIAL_STAGGER_SEC, (
+            f"the default stagger must be {DEFAULT_SERIAL_STAGGER_SEC}s; got {cmds[1].payload}"
         )

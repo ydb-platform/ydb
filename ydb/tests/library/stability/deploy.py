@@ -467,6 +467,63 @@ class StressUtilDeployer:
             logging.error(f"Error calling {url}: {exc}")
             return False
 
+    def _fetch_nemesis_problems(self, nemesis_log: list[str]) -> dict:
+        """Fetch ``GET /api/problems`` — nemesis-side anomalies from the chaos phase.
+
+        These never show up in cluster checks: a fault that never recovered (its failure budget
+        stays held, so the cluster ran degraded and the scheduler did less chaos than asked), or a
+        degraded chaos inventory (synthesized node ids, no slot chaos).
+
+        Returns:
+            The parsed payload, or ``{}`` when the endpoint is unavailable (older orchestrator).
+        """
+        endpoint = self._get_orchestrator_endpoint()
+        url = f"{endpoint}/api/problems"
+        try:
+            req = urllib.request.Request(url, method="GET")
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                body = json.loads(resp.read().decode())
+            return body if isinstance(body, dict) else {}
+        except Exception as exc:
+            nemesis_log.append(f"Could not fetch nemesis problems from {url}: {exc}")
+            logging.warning(f"Could not fetch nemesis problems from {url}: {exc}")
+            return {}
+
+    def _report_nemesis_problems(self, nemesis_log: list[str]) -> int:
+        """Put nemesis-side problems into the log and the Allure report.
+
+        Informational: the chaos side misbehaving does not by itself fail the workload, but it has
+        to be visible when reading the report — a stuck fault explains both a degraded cluster and
+        a suspiciously calm chaos phase.
+
+        Returns:
+            Number of reported problems.
+        """
+        payload = self._fetch_nemesis_problems(nemesis_log)
+        if not payload:
+            return 0
+
+        problems = payload.get("problems") or []
+        if not problems:
+            nemesis_log.append("Nemesis problems: none")
+            return 0
+
+        by_kind = payload.get("by_kind") or {}
+        summary = ", ".join(f"{kind}={count}" for kind, count in sorted(by_kind.items()))
+        nemesis_log.append(f"Nemesis problems: {len(problems)} ({summary})")
+        for problem in problems:
+            nemesis_log.append(
+                f"  [{problem.get('kind')}] x{problem.get('count', 1)} {problem.get('summary')}"
+            )
+        logging.warning(f"Nemesis reported {len(problems)} problem(s): {summary}")
+
+        allure.attach(
+            json.dumps(payload, indent=2, ensure_ascii=False),
+            f"Nemesis Problems ({len(problems)})",
+            attachment_type=allure.attachment_type.JSON,
+        )
+        return len(problems)
+
     # ------------------------------------------------------------------
     # Nemesis install (subprocess)
     # ------------------------------------------------------------------
@@ -648,6 +705,8 @@ class StressUtilDeployer:
                 nemesis_log.append("Nemesis chaos disabled successfully")
             else:
                 nemesis_log.append("Failed to disable nemesis chaos schedules")
+            # After the scheduler stopped: report what misbehaved during the chaos phase.
+            self._report_nemesis_problems(nemesis_log)
         else:
             nemesis_log.append(
                 "Nemesis services not installed, nothing to disable"
@@ -739,7 +798,8 @@ class StressUtilDeployer:
         """Manage nemesis chaos via the orchestrator HTTP API.
 
         * **enable** — install → health-poll → ``POST /api/scheduler/start``
-        * **disable** — ``POST /api/scheduler/stop``
+        * **disable** — ``POST /api/scheduler/stop`` → ``GET /api/problems``, whose stuck faults
+          and inventory degradation are attached to the Allure report
 
         Args:
             enable_nemesis: True to enable chaos, False to disable

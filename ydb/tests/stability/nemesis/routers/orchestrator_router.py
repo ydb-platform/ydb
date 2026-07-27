@@ -19,10 +19,14 @@ from ydb.tests.stability.nemesis.internal.nemesis.catalog import (
     recovery_sec_for,
     target_kind_for,
 )
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_problems import ChaosProblemStore
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_target import ChaosTarget, TargetKind
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.cluster_inventory import ClusterInventory
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import FailureModelGuard, GuardMode
-from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.boundary_scheduler import BoundaryNemesisScheduler
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.boundary_scheduler import (
+    BoundaryNemesisScheduler,
+    default_enabled_types,
+)
 import ydb.tests.stability.nemesis.routers.agent_router as agent_router
 
 
@@ -41,6 +45,7 @@ nemesis_scheduler: BoundaryNemesisScheduler | None = None
 chaos_store: ChaosOrchestratorStore | None = None
 failure_guard: FailureModelGuard | None = None
 cluster_inventory: ClusterInventory | None = None
+chaos_problems: ChaosProblemStore | None = None
 healthcheck_reporter: Any = None
 
 
@@ -190,7 +195,6 @@ def create_host_process():
             not force
             and action == "inject"
             and failure_guard is not None
-            and failure_guard.enabled
             and guard_mode_for(process_type) is GuardMode.FULL
         ):
             scope = impact_scope_for(process_type)
@@ -228,11 +232,7 @@ def create_host_process():
         record_scope = impact_scope_for(process_type) if failure_guard is not None else None
         for cmd in cmds:
             nemesis_schedule.dispatch_command(cmd, track_history=False)
-            if (
-                failure_guard is not None
-                and failure_guard.enabled
-                and guard_mode_for(process_type) is GuardMode.FULL
-            ):
+            if failure_guard is not None and guard_mode_for(process_type) is GuardMode.FULL:
                 if cmd.action == "extract":
                     failure_guard.record_extract(cmd.execution_id, cmd.target, record_scope)
                 elif cmd.action == "inject":
@@ -437,13 +437,61 @@ def get_scheduler():
     return jsonify(_scheduler_state())
 
 
+def _validated_profile(data: dict) -> tuple[dict, str | None]:
+    """Parse/validate a scheduler profile from a request body.
+
+    Returns ``(profile, error)``. Anything malformed is rejected instead of silently degrading
+    the run: an unknown type name would just never be offered, and a bare string in ``enabled``
+    would be split into single-character "types".
+    """
+    profile: dict = {}
+
+    if "enabled" in data:
+        enabled = data["enabled"]
+        if isinstance(enabled, str) or not isinstance(enabled, (list, tuple)):
+            return {}, "'enabled' must be a list of nemesis type names"
+        names = [str(t) for t in enabled]
+        unknown = [t for t in names if t not in NEMESIS_TYPES]
+        if unknown:
+            return {}, (
+                f"unknown nemesis type(s): {', '.join(sorted(unknown))}. "
+                f"See GET /api/process_types; default profile: {', '.join(default_enabled_types())}"
+            )
+        profile["enabled"] = names
+
+    for key, lo, hi in (("base_interval", 0.5, 86400.0), ("jitter", 0.0, 1.0)):
+        if key in data:
+            try:
+                value = float(data[key])
+            except (TypeError, ValueError):
+                return {}, f"'{key}' must be a number"
+            if not lo <= value <= hi:
+                return {}, f"'{key}' must be between {lo} and {hi}"
+            profile[key] = value
+
+    if "max_per_tick" in data:
+        try:
+            cap = int(data["max_per_tick"])
+        except (TypeError, ValueError):
+            return {}, "'max_per_tick' must be an integer"
+        if not 1 <= cap <= 100:
+            return {}, "'max_per_tick' must be between 1 and 100"
+        profile["max_per_tick"] = cap
+
+    unknown_keys = sorted(set(data) - {"enabled", "base_interval", "jitter", "max_per_tick"})
+    if unknown_keys:
+        return {}, f"unknown profile field(s): {', '.join(unknown_keys)}"
+
+    return profile, None
+
+
 @blueprint.route("/api/scheduler/start", methods=["POST"])
 def start_scheduler():
     """Apply an optional profile and start the nemesis scheduler.
 
     Body (all optional): ``enabled`` (list of type names), ``base_interval`` (sec),
     ``jitter`` (0..1), ``max_per_tick`` (int). Omitted fields keep their current value;
-    on a fresh scheduler that means the catalog defaults.
+    on a fresh scheduler that means the catalog defaults. Invalid values are rejected with 400.
     """
     if nemesis_scheduler is None:
         return jsonify(
@@ -454,11 +502,9 @@ def start_scheduler():
     if not isinstance(data, dict):
         return jsonify({"status": "error", "message": "Body must be a JSON object"}), 400
 
-    profile = {
-        k: data[k]
-        for k in ("enabled", "base_interval", "jitter", "max_per_tick")
-        if k in data
-    }
+    profile, error = _validated_profile(data)
+    if error is not None:
+        return jsonify({"status": "error", "message": error}), 400
     try:
         if profile:
             nemesis_scheduler.set_profile(**profile)
@@ -475,6 +521,29 @@ def stop_scheduler():
         return jsonify({"status": "ok", "message": "Scheduler not initialized"})
     nemesis_scheduler.stop()
     return jsonify({"status": "ok", "scheduler": _scheduler_state()})
+
+
+@blueprint.route("/api/problems", methods=["GET"])
+def get_chaos_problems():
+    """Nemesis-side problems for the stability test report.
+
+    Faults that never recovered (their failure budget is still held, so the cluster stays degraded
+    and the scheduler quietly does less chaos) and a failure-model guard that failed open.
+    ``ydb/tests/stability/tests`` polls this when disabling nemesis and attaches it to Allure.
+    """
+    problems = chaos_problems.snapshot() if chaos_problems is not None else []
+    payload = {
+        "count": len(problems),
+        "by_kind": chaos_problems.counts_by_kind() if chaos_problems is not None else {},
+        "problems": problems,
+        "guard_enabled": bool(failure_guard is not None and failure_guard.enabled),
+        "scheduler_running": bool(nemesis_scheduler is not None and nemesis_scheduler.running()),
+    }
+    if failure_guard is not None:
+        payload["failure_budget"] = failure_guard.snapshot()
+    if chaos_problems is not None and chaos_problems.dropped:
+        payload["dropped"] = chaos_problems.dropped
+    return jsonify(payload)
 
 
 @blueprint.route("/api/healthcheck", methods=["GET"])

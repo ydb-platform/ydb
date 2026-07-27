@@ -1,6 +1,7 @@
 """Planner that always runs inject/extract on the first candidate (inventory / YAML order).
 
-tick to the same host matches single-actor harness behavior.
+Stateful cluster nemeses keep their Python state in one agent process, so dispatching every tick
+to the same host matches single-actor harness behavior.
 """
 
 from __future__ import annotations

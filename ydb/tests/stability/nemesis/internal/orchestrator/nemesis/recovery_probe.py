@@ -183,7 +183,31 @@ class RecoveryProbe:
                     logger.exception("on_stuck callback raised")
         return stuck
 
-    def _auto_extract(self, p: _Pending, held: float) -> None:
+    def drain_extracts(self) -> int:
+        """Extract every tracked toggle fault right now, regardless of its remaining hold window.
+
+        Called when chaos is switched off (scheduler ``stop()`` / app teardown): a fault that is
+        still waiting out its hold — stopped node, broken disk, skewed clock — would otherwise
+        never be extracted, and the cluster would stay broken after nemesis was disabled. Nothing
+        else extracts them: the boundary scheduler dispatches toggle injects directly, so the
+        planners' ``extract_all_on_disable`` bookkeeping never saw them.
+
+        Self-recovering faults are left tracked: they heal on their own, and a probe that is
+        started again keeps polling them.
+
+        Returns the number of extracts dispatched.
+        """
+        with self._lock:
+            pending = [p for p in self._pending.values() if p.recover_action is not None]
+        if not pending:
+            return 0
+        logger.info("draining %d pending extract(s) on shutdown", len(pending))
+        now = self._clock()
+        for p in pending:
+            self._auto_extract(p, now - p.reserved_at, reason="drained on shutdown")
+        return len(pending)
+
+    def _auto_extract(self, p: _Pending, held: float, reason: str = "hold elapsed") -> None:
         """Toggle fault held long enough: dispatch its extract and release the budget."""
         try:
             p.recover_action()
@@ -193,8 +217,8 @@ class RecoveryProbe:
         with self._lock:
             self._pending.pop(p.lease_id, None)
         logger.info(
-            "auto-extracted: %s (%s) after %.0fs hold; budget released",
-            p.target.host, p.nemesis_type, held,
+            "auto-extracted: %s (%s) after %.0fs hold (%s); budget released",
+            p.target.host, p.nemesis_type, held, reason,
         )
 
     def pending(self) -> list[_Pending]:

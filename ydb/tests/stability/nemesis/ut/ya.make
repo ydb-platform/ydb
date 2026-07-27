@@ -6,12 +6,14 @@ TEST_SRCS(
     test_chaos_target.py
     test_boundary_scheduler.py
     test_recovery_probe.py
+    test_chaos_problems.py
 )
 
 PEERDIR(
     ydb/tests/stability/nemesis
     contrib/python/PyYAML
     contrib/python/pytest
+    contrib/python/Flask
 )
 
 END()

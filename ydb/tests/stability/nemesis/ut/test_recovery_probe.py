@@ -66,13 +66,13 @@ class TestRecoveryProbe:
         )
         target, lease = _reserve(guard, "h1", 1)
         probe.track(lease, target, "KillNode", timeout_sec=300.0)
-        assert guard.snapshot()["impaired_racks"] == ["r1"]
+        assert guard.snapshot()["impaired_racks"] == ["dc1/r1"]
 
         # Still within min-hold: recovery signal must be ignored.
         recovered_hosts.add("h1")
         clock.advance(10.0)
         assert probe.tick() == []
-        assert guard.snapshot()["impaired_racks"] == ["r1"], "must not release before min-hold"
+        assert guard.snapshot()["impaired_racks"] == ["dc1/r1"], "must not release before min-hold"
 
         # Past min-hold and recovered -> budget released.
         clock.advance(40.0)
@@ -106,7 +106,7 @@ class TestRecoveryProbe:
             f"a fault past its timeout must be reported stuck; got {stuck}"
         )
         assert len(stuck_seen) == 1, "on_stuck must fire exactly once"
-        assert guard.snapshot()["impaired_racks"] == ["r1"], (
+        assert guard.snapshot()["impaired_racks"] == ["dc1/r1"], (
             "a stuck fault must KEEP holding budget, never silently release"
         )
 
@@ -114,7 +114,7 @@ class TestRecoveryProbe:
         clock.advance(60.0)
         assert probe.tick() == []
         assert len(stuck_seen) == 1, "stuck fault must not be re-reported every tick"
-        assert guard.snapshot()["impaired_racks"] == ["r1"]
+        assert guard.snapshot()["impaired_racks"] == ["dc1/r1"]
 
     def test_forget_stops_tracking(self):
         guard = _guard()
@@ -145,12 +145,12 @@ class TestToggleAutoExtract:
             lease, target, "TimeSkewNemesis", timeout_sec=90.0,
             recover_action=lambda: extracted.append(target.host),
         )
-        assert guard.snapshot()["impaired_racks"] == ["r1"]
+        assert guard.snapshot()["impaired_racks"] == ["dc1/r1"]
 
         clock.advance(60.0)  # past min-hold, before the hold window closes
         assert probe.tick() == []
         assert extracted == [], "must not extract before the hold elapses"
-        assert guard.snapshot()["impaired_racks"] == ["r1"], "budget held through the hold window"
+        assert guard.snapshot()["impaired_racks"] == ["dc1/r1"], "budget held through the hold window"
 
         clock.advance(40.0)  # now past the 90s hold
         assert probe.tick() == []
@@ -178,6 +178,68 @@ class TestToggleAutoExtract:
         assert probe.tick() == [], "a toggle fault is recovered by extract, never reported stuck"
         assert stuck_seen == []
         assert guard.snapshot()["impaired_racks"] == [], "released by extract, not held as stuck"
+
+
+class TestDrainExtracts:
+    """Switching chaos off must not leave toggle faults applied."""
+
+    def test_drain_extracts_pending_toggle_faults_before_their_hold_elapsed(self):
+        guard = _guard()
+        clock = FakeClock()
+        extracted: list[str] = []
+        probe = RecoveryProbe(
+            guard=guard, recovered=lambda t: False, min_hold_sec=30.0, clock=clock
+        )
+        target, lease = _reserve(guard, "h1", 1)
+        probe.track(
+            lease, target, "StopStartNodeNemesis", timeout_sec=600.0,
+            recover_action=lambda: extracted.append(target.host),
+        )
+        clock.advance(5.0)  # still deep inside the hold window
+        assert probe.tick() == [] and extracted == [], "nothing is due yet"
+
+        assert probe.drain_extracts() == 1, "the pending toggle fault must be drained"
+        assert extracted == ["h1"], (
+            "drain must dispatch the extract even though the hold window has not elapsed"
+        )
+        assert guard.snapshot()["impaired_racks"] == [], (
+            f"drained fault must release its budget; snapshot={guard.snapshot()}"
+        )
+        assert probe.pending() == [], "drained faults must stop being tracked"
+
+    def test_drain_keeps_self_recovering_faults_tracked(self):
+        guard = _guard()
+        clock = FakeClock()
+        probe = RecoveryProbe(
+            guard=guard, recovered=lambda t: False, min_hold_sec=0.0, clock=clock
+        )
+        target, lease = _reserve(guard, "h1", 1)
+        probe.track(lease, target, "KillNodeNemesis", timeout_sec=300.0)  # no recover_action
+
+        assert probe.drain_extracts() == 0, (
+            "a self-recovering fault has nothing to extract — it must not be drained"
+        )
+        assert [p.lease_id for p in probe.pending()] == [lease], (
+            "self-recovering faults stay tracked so a restarted probe keeps polling them"
+        )
+        assert guard.snapshot()["impaired_racks"] == ["dc1/r1"], (
+            "draining must not release a fault that is still down"
+        )
+
+    def test_drain_is_idempotent(self):
+        guard = _guard()
+        extracted: list[str] = []
+        probe = RecoveryProbe(
+            guard=guard, recovered=lambda t: False, min_hold_sec=0.0, clock=FakeClock()
+        )
+        target, lease = _reserve(guard, "h1", 1)
+        probe.track(
+            lease, target, "TimeSkewNemesis", timeout_sec=120.0,
+            recover_action=lambda: extracted.append(target.host),
+        )
+        assert probe.drain_extracts() == 1
+        assert probe.drain_extracts() == 0, "a second drain must not re-dispatch extracts"
+        assert extracted == ["h1"]
 
 
 class TestHealthcheckRecovery:

@@ -7,6 +7,8 @@ import pytest
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 
 from cluster_config import create_ydb_configurator
+from security_test_helpers import grant_describe_schema_provided
+from security_test_helpers import mon_base_url as get_mon_base_url
 
 pytest_plugins = ['ydb.tests.library.fixtures', 'ydb.tests.library.flavours']
 
@@ -171,8 +173,19 @@ def ydb_cluster_for_mon_endpoints_auth(request, certificates):
     cluster.stop()
 
 
+@pytest.fixture
+def mon_base_url_with_extra_sids_control(ydb_cluster_with_extra_sids_controls):
+    return get_mon_base_url(ydb_cluster_with_extra_sids_controls)
+
+
+@pytest.fixture
+def describe_schema_grants(mon_base_url_with_extra_sids_control):
+    with grant_describe_schema_provided(mon_base_url_with_extra_sids_control):
+        yield
+
+
 @pytest.fixture(scope='module')
-def ydb_cluster_with_external_access_controls(certificates):
+def ydb_cluster_with_extra_sids_controls(certificates):
     configurator = create_ydb_configurator(
         certificates,
         enforce_user_token_requirement=True,

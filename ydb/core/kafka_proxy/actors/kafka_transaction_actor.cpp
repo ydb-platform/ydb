@@ -158,9 +158,9 @@ namespace NKafka {
             {"lastSentToKqpRequest", GetAsStr(LastSentToKqpRequest)});
         const TString metadataDatabasePath = GetMetadataDatabasePath();
         const auto ydbStatus = ev->Get()->Record.GetYdbStatus();
-        bool requestedTableCreation = TryRequestProducerMetadataTablesCreation(ydbStatus, metadataDatabasePath, ResourceDatabasePath, ctx)
-                || TryRequestConsumerMetadataTablesCreation(ydbStatus, metadataDatabasePath, ResourceDatabasePath, ctx);
-        if (requestedTableCreation) {
+        bool producerCreated = TryRequestProducerMetadataTablesCreation(ydbStatus, metadataDatabasePath, ResourceDatabasePath, ctx);
+        bool consumerCreated = TryRequestConsumerMetadataTablesCreation(ydbStatus, metadataDatabasePath, ResourceDatabasePath, ctx);
+        if (producerCreated || consumerCreated) {
             SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::INVALID_TXN_STATE,
                 "Kafka metadata tables are not initialized yet. Please retry.");
             Die(ctx);

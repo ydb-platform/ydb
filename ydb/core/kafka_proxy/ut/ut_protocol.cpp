@@ -4040,7 +4040,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         auto joinResp1 = clientA.ReadResponse<TJoinGroupResponseData>(headerAJoin);
 
-        UNIT_ASSERT_VALUES_EQUAL(joinResp1->ErrorCode, 15);
+        UNIT_ASSERT_VALUES_EQUAL(joinResp1->ErrorCode, (TKafkaInt16)EKafkaErrors::COORDINATOR_NOT_AVAILABLE);
 
         Sleep(TDuration::Seconds(2));
 

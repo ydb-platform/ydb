@@ -48,50 +48,19 @@ EValueType ValueTypeForItem(const NBinaryJson::TBinaryJson& blob) {
     }
 }
 
-// BinaryJson and String share arrow::binary() storage; they differ only in what the bytes mean.
-class TBinaryBackedCodec: public IValueArrowCodec {
-public:
-    std::shared_ptr<arrow::DataType> GetArrowType() const override {
-        return arrow::binary();
-    }
-    std::unique_ptr<arrow::ArrayBuilder> MakeBuilder(const ui32 reserveItems, const ui32 reserveData) const override {
-        return NArrow::MakeBuilder(arrow::binary(), reserveItems, reserveData);
-    }
-};
-
-class TBinaryJsonCodec: public TBinaryBackedCodec {
-public:
-    void AppendFromBinaryJson(arrow::ArrayBuilder& builder, const NBinaryJson::TBinaryJson& blob) const override {
-        AFL_VERIFY(NArrow::Append<arrow::BinaryType>(builder, arrow::util::string_view(blob.data(), blob.size())));
-    }
-};
-
-class TStringCodec: public TBinaryBackedCodec {
-public:
-    void AppendFromBinaryJson(arrow::ArrayBuilder& builder, const NBinaryJson::TBinaryJson& blob) const override {
-        const auto scalar = ExtractStringScalar(blob);
-        AFL_VERIFY(NArrow::Append<arrow::BinaryType>(builder, arrow::util::string_view(scalar.data(), scalar.size())));
-    }
-};
-
-template <class TArrow, auto ExtractScalar>
-class TNativeScalarCodec: public IValueArrowCodec {
-public:
-    std::shared_ptr<arrow::DataType> GetArrowType() const override {
-        return arrow::TypeTraits<TArrow>::type_singleton();
-    }
-    std::unique_ptr<arrow::ArrayBuilder> MakeBuilder(const ui32 reserveItems, const ui32 /*reserveData*/) const override {
-        return NArrow::MakeBuilder(arrow::TypeTraits<TArrow>::type_singleton(), reserveItems, 0);
-    }
-    void AppendFromBinaryJson(arrow::ArrayBuilder& builder, const NBinaryJson::TBinaryJson& blob) const override {
-        AFL_VERIFY(NArrow::Append<TArrow>(builder, ExtractScalar(blob)));
-    }
-};
-
-using TDoubleCodec = TNativeScalarCodec<arrow::DoubleType, ExtractDoubleScalar>;
-using TBoolCodec = TNativeScalarCodec<arrow::BooleanType, ExtractBoolScalar>;
-
 }   // namespace
+
+std::shared_ptr<arrow::DataType> GetArrowTypeForValueType(const EValueType valueType) {
+    switch (valueType) {
+        case EValueType::BinaryJson:
+        case EValueType::String:
+            return arrow::binary();
+        case EValueType::Double:
+            return arrow::float64();
+        case EValueType::Bool:
+            return arrow::boolean();
+    }
+}
 
 bool CanBeDictionaryEncoded(EValueType valueType) {
     return valueType == EValueType::BinaryJson || valueType == EValueType::String;
@@ -131,20 +100,28 @@ ui32 ArrayElementSize(const arrow::Array& array, const i64 index, const EValueTy
     }
 }
 
-std::shared_ptr<const IValueArrowCodec> GetCodecForValueType(const EValueType valueType) {
-    static const std::shared_ptr<const IValueArrowCodec> binaryJson = std::make_shared<TBinaryJsonCodec>();
-    static const std::shared_ptr<const IValueArrowCodec> string = std::make_shared<TStringCodec>();
-    static const std::shared_ptr<const IValueArrowCodec> doubleValue = std::make_shared<TDoubleCodec>();
-    static const std::shared_ptr<const IValueArrowCodec> boolValue = std::make_shared<TBoolCodec>();
+std::unique_ptr<arrow::ArrayBuilder> MakeBuilderForValueType(const EValueType valueType, const ui32 reserveItems, const ui32 reserveData) {
+    // Only variable-length (BinaryJson/String) storage makes use of a data-size reservation.
+    const bool variableLength = valueType == EValueType::BinaryJson || valueType == EValueType::String;
+    return NArrow::MakeBuilder(GetArrowTypeForValueType(valueType), reserveItems, variableLength ? reserveData : 0);
+}
+
+void AppendValueFromBinaryJson(arrow::ArrayBuilder& builder, const NBinaryJson::TBinaryJson& blob, const EValueType valueType) {
     switch (valueType) {
         case EValueType::BinaryJson:
-            return binaryJson;
-        case EValueType::String:
-            return string;
+            AFL_VERIFY(NArrow::Append<arrow::BinaryType>(builder, arrow::util::string_view(blob.data(), blob.size())));
+            return;
+        case EValueType::String: {
+            const auto scalar = ExtractStringScalar(blob);
+            AFL_VERIFY(NArrow::Append<arrow::BinaryType>(builder, arrow::util::string_view(scalar.data(), scalar.size())));
+            return;
+        }
         case EValueType::Double:
-            return doubleValue;
+            AFL_VERIFY(NArrow::Append<arrow::DoubleType>(builder, ExtractDoubleScalar(blob)));
+            return;
         case EValueType::Bool:
-            return boolValue;
+            AFL_VERIFY(NArrow::Append<arrow::BooleanType>(builder, ExtractBoolScalar(blob)));
+            return;
     }
 }
 

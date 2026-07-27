@@ -6,6 +6,7 @@
 #include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
 
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/formats/arrow/arrow_helpers.h>
 
 #include <yql/essentials/types/binary_json/format.h>
 
@@ -14,17 +15,17 @@ namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
 class TEncodingPlainBuilder: public TTrivialArray::TPlainBuilderBase {
 private:
-    std::shared_ptr<const IValueArrowCodec> Codec;
+    EValueType ValueType;
 
 public:
-    TEncodingPlainBuilder(const std::shared_ptr<const IValueArrowCodec>& codec, const ui32 reserveItems, const ui32 reserveData)
-        : TPlainBuilderBase(codec->MakeBuilder(reserveItems, reserveData))
-        , Codec(codec)
+    TEncodingPlainBuilder(const EValueType valueType, const ui32 reserveItems, const ui32 reserveData)
+        : TPlainBuilderBase(MakeBuilderForValueType(valueType, reserveItems, reserveData))
+        , ValueType(valueType)
     {
     }
 
     void AddFromBinaryJson(const ui32 recordIndex, const NBinaryJson::TBinaryJson& blob) {
-        AddAt(recordIndex, [&](arrow::ArrayBuilder& builder) { Codec->AppendFromBinaryJson(builder, blob); });
+        AddAt(recordIndex, [&](arrow::ArrayBuilder& builder) { AppendValueFromBinaryJson(builder, blob, ValueType); });
     }
 
     void AddArrayElement(const ui32 recordIndex, const arrow::Array& array, const ui32 position) {
@@ -34,17 +35,17 @@ public:
 
 class TEncodingSparsedBuilder: public TSparsedArray::TSparsedBuilderBase {
 private:
-    std::shared_ptr<const IValueArrowCodec> Codec;
+    EValueType ValueType;
 
 public:
-    TEncodingSparsedBuilder(const std::shared_ptr<const IValueArrowCodec>& codec, const ui32 reserveItems, const ui32 reserveData)
-        : TSparsedBuilderBase(codec->MakeBuilder(reserveItems, reserveData), codec->GetArrowType(), nullptr, reserveItems)
-        , Codec(codec)
+    TEncodingSparsedBuilder(const EValueType valueType, const ui32 reserveItems, const ui32 reserveData)
+        : TSparsedBuilderBase(MakeBuilderForValueType(valueType, reserveItems, reserveData), GetArrowTypeForValueType(valueType), nullptr, reserveItems)
+        , ValueType(valueType)
     {
     }
 
     void AddFromBinaryJson(const ui32 recordIndex, const NBinaryJson::TBinaryJson& blob) {
-        AddAt(recordIndex, [&](arrow::ArrayBuilder& builder) { Codec->AppendFromBinaryJson(builder, blob); });
+        AddAt(recordIndex, [&](arrow::ArrayBuilder& builder) { AppendValueFromBinaryJson(builder, blob, ValueType); });
     }
 
     void AddArrayElement(const ui32 recordIndex, const arrow::Array& array, const ui32 position) {

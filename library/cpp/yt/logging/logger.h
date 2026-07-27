@@ -468,12 +468,18 @@ void LogStructuredEvent(
 // Tags are supplied via a fluent |.With(name, value)| (or |.With(name, value, "%spec")|)
 // chain; they are carried as structured key/value pairs in the event payload. A single-
 // argument |.With(value)| attaches the value under a statically known key resolved by ADL
-// (e.g. |.With(error)| under the "Error" key):
+// (e.g. |.With(error)| under the "Error" key). |.WithFormat(name, format, args...)| composes
+// one tag out of several values:
 //
 //     YT_TLOG_INFO("Message")
 //         .With("Key", value)
 //         .With("Count", count, "%08x")
+//         .WithFormat("Method", "%v.%v", service, method)
 //         .With(error);
+//
+// |.With(tagList)| splices a #TLoggingTagList -- a set of keyed tags a component builds
+// once (with the same fluent API) and attaches to many events, without collapsing them
+// into a single tag.
 //
 // If the message is not logged then the |.With| chain is not evaluated, so tag value
 // expressions cost nothing.
@@ -498,7 +504,7 @@ void LogStructuredEvent(
             (message));                                               \
         !loggingGuard__.IsEnabled())                                  \
     { } else                                                          \
-        loggingGuard__
+        loggingGuard__.Self()
 
 #ifdef YT_ENABLE_TRACE_LOGGING
 #define YT_TLOG_TRACE(message)                     YT_TLOG_EVENT_FLUENT(Logger, ::NYT::NLogging::ELogLevel::Trace, message)
@@ -545,7 +551,7 @@ void LogStructuredEvent(
             (message));                                                     \
         loggingGuard__.TryEnter();                                          \
         loggingGuard__.Commit())                                            \
-        loggingGuard__
+        loggingGuard__.Self()
 #define YT_TLOG_FATAL_IF(condition, message)       if (condition) [[unlikely]]    YT_TLOG_FATAL(message)
 #define YT_TLOG_FATAL_UNLESS(condition, message)   if (!(condition)) [[unlikely]] YT_TLOG_FATAL(message)
 
@@ -564,7 +570,7 @@ void LogStructuredEvent(
             ::NYT::EErrorCode::Fatal,                                          \
             "Malformed request or incorrect state detected")                   \
             << ::NYT::TErrorAttribute("message", loggingGuard__.Commit()))     \
-        loggingGuard__
+        loggingGuard__.Self()
 #define YT_TLOG_ALERT_AND_THROW_IF(condition, message)     if (condition) [[unlikely]]    YT_TLOG_ALERT_AND_THROW(message)
 #define YT_TLOG_ALERT_AND_THROW_UNLESS(condition, message) if (!(condition)) [[unlikely]] YT_TLOG_ALERT_AND_THROW(message)
 

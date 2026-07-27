@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: idna
-Version: 3.16
+Version: 3.18
 Summary: Internationalized Domain Names in Applications (IDNA)
 Author-email: Kim Davies <kim+pypi@gumleaf.org>
 Requires-Python: >=3.9
@@ -89,6 +89,12 @@ b'xn--knigsgchen-b4a3dun'
 'königsgäßchen'
 ```
 
+When performing a decode operation for display purposes, `decode()`
+accepts a `display=True` argument that leaves any `xn--` label that
+fails to decode unchanged. This is useful for user interface display
+where a domain is in use, the A-label form can be presented when it
+is not a valid IDN.
+
 
 ## Exceptions
 
@@ -119,27 +125,12 @@ $ idna пример.рф
 xn--e1afmkfd.xn--p1ai
 ```
 
-With no mode flag the direction is chosen automatically: inputs
-containing an `xn--` label are decoded, anything else is encoded. Pass
-`-e`/`--encode` or `-d`/`--decode` to force a specific direction.
-
-Multiple domains may be supplied at once, either as positional arguments
-or by piping one domain per line on standard input. When more than
-one domain is supplied without explicitly asking to encode or decode,
-the direction is picked from the first input and that mode is applied
-to every remaining input. Use `-e`/`--encode` or `-d`/`--decode` to
-override the heuristic if the first input is ambiguous.
-
+Mode can be specified with `-e`/`--encode` or `-d`/`--decode`, otherwise
+it will be chosen automatically based on the first input. Multiple
+domains can be supplied either as arguments or through standard input.
 UTS #46 mapping is applied by default, which lets the tool accept
-inputs that aren't strictly valid IDNA 2008 by normalising them first:
-
-```bash
-$ idna ΠΑΡΆΔΕΙΓΜΑ.ΕΛ
-xn--hxajbheg2az3al.xn--qxam
-```
-
-Pass `--strict` to disable UTS #46 and apply IDNA 2008 rules verbatim;
-the same input will then be rejected.
+inputs that aren't strictly valid IDNA 2008 by normalising them first,
+pass `--strict` to disable UTS #46.
 
 Conversion failures are reported on stderr together with the
 offending input; processing continues with the remaining domains and

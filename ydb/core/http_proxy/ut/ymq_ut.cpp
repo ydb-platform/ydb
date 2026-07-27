@@ -377,7 +377,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         const TString queueName = "CreateQueueContentBasedDeduplicationRateLimit.fifo";
         auto json = CreateQueue({
             {"QueueName", queueName},
-            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}, {"ContentBasedDeduplication", "true"}}}
+            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}
         });
         const TString queueUrl = GetByPath<TString>(json, "QueueUrl");
         UNIT_ASSERT(!queueUrl.empty());
@@ -385,11 +385,11 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         const auto description = DescribeMigrationTopicByQueueUrl(*this, queueUrl, queueName);
         UNIT_ASSERT_VALUES_EQUAL(
             description.GetPartitionWriteSpeedMessagesPerSecond(),
-            NKikimr::NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_LIMIT
+            NKikimr::NPQ::FIFO_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND
         );
         UNIT_ASSERT_VALUES_EQUAL(
             description.GetPartitionWriteBurstMessages(),
-            NKikimr::NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_BURST
+            NKikimr::NPQ::FIFO_PARTITION_WRITE_BURST_MESSAGES
         );
     }
 
@@ -417,11 +417,11 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         const auto description = DescribeMigrationTopicByQueueUrl(*this, queueUrl, queueName);
         UNIT_ASSERT_VALUES_EQUAL(
             description.GetPartitionWriteSpeedMessagesPerSecond(),
-            NKikimr::NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_LIMIT
+            NKikimr::NPQ::FIFO_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND
         );
         UNIT_ASSERT_VALUES_EQUAL(
             description.GetPartitionWriteBurstMessages(),
-            NKikimr::NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_BURST
+            NKikimr::NPQ::FIFO_PARTITION_WRITE_BURST_MESSAGES
         );
     }
 
@@ -449,11 +449,11 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         const auto description = DescribeMigrationTopicByQueueUrl(*this, queueUrl, queueName);
         UNIT_ASSERT_VALUES_EQUAL(
             description.GetPartitionWriteSpeedMessagesPerSecond(),
-            NKikimr::NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND
+            NKikimr::NPQ::FIFO_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND
         );
         UNIT_ASSERT_VALUES_EQUAL(
             description.GetPartitionWriteBurstMessages(),
-            NKikimr::NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND
+            NKikimr::NPQ::FIFO_PARTITION_WRITE_BURST_MESSAGES
         );
     }
 

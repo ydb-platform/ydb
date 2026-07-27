@@ -2700,7 +2700,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
         auto json = CreateQueue({
             {"QueueName", queueName},
-            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}, {"ContentBasedDeduplication", "true"}}}
+            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}
         });
         UNIT_ASSERT(!GetByPath<TString>(json, "QueueUrl").empty());
 
@@ -2713,11 +2713,11 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
         UNIT_ASSERT_VALUES_EQUAL(
             description.GetPartitionWriteSpeedMessagesPerSecond(),
-            NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_LIMIT
+            NPQ::FIFO_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND
         );
         UNIT_ASSERT_VALUES_EQUAL(
             description.GetPartitionWriteBurstMessages(),
-            NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_BURST
+            NPQ::FIFO_PARTITION_WRITE_BURST_MESSAGES
         );
 
         driver.Stop(true);
@@ -2747,11 +2747,11 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
         UNIT_ASSERT_VALUES_EQUAL(
             description.GetPartitionWriteSpeedMessagesPerSecond(),
-            NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_LIMIT
+            NPQ::FIFO_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND
         );
         UNIT_ASSERT_VALUES_EQUAL(
             description.GetPartitionWriteBurstMessages(),
-            NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_BURST
+            NPQ::FIFO_PARTITION_WRITE_BURST_MESSAGES
         );
 
         driver.Stop(true);
@@ -2781,11 +2781,11 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
         UNIT_ASSERT_VALUES_EQUAL(
             description.GetPartitionWriteSpeedMessagesPerSecond(),
-            NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND
+            NPQ::FIFO_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND
         );
         UNIT_ASSERT_VALUES_EQUAL(
             description.GetPartitionWriteBurstMessages(),
-            NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND
+            NPQ::FIFO_PARTITION_WRITE_BURST_MESSAGES
         );
 
         driver.Stop(true);

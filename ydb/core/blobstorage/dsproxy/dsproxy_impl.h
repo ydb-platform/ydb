@@ -20,8 +20,6 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     enum {
         EvUpdateResponsiveness = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
         EvUpdateGroupStat,
-        EvStopBatchingPutRequests,
-        EvStopBatchingGetRequests,
         EvConfigureQueryTimeout,
         EvEstablishingSessionTimeout,
         Ev5min,
@@ -30,8 +28,6 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
 
     struct TEvUpdateResponsiveness : TEventLocal<TEvUpdateResponsiveness, EvUpdateResponsiveness> {};
     struct TEvUpdateGroupStat : TEventLocal<TEvUpdateGroupStat, EvUpdateGroupStat> {};
-    struct TEvStopBatchingPutRequests : TEventLocal<TEvStopBatchingPutRequests, EvStopBatchingPutRequests> {};
-    struct TEvStopBatchingGetRequests : TEventLocal<TEvStopBatchingGetRequests, EvStopBatchingGetRequests> {};
     struct TEvConfigureQueryTimeout : TEventLocal<TEvConfigureQueryTimeout, EvConfigureQueryTimeout> {};
     struct TEvEstablishingSessionTimeout : TEventLocal<TEvEstablishingSessionTimeout, EvEstablishingSessionTimeout> {};
 
@@ -91,7 +87,6 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     TDiskResponsivenessTracker ResponsivenessTracker = {ResponsivenessTrackerMaxQueue, ResponsivenessTrackerWindow};
     TDiskResponsivenessTracker::TPerDiskStatsPtr PerDiskStats = MakeIntrusive<TDiskResponsivenessTracker::TPerDiskStats>();
 
-    TEvStopBatchingPutRequests::TPtr StopPutBatchingEvent;
     ui64 BatchedPutRequestCount = 0;
 
     static constexpr ui64 PutHandleClassCount = NKikimrBlobStorage::EPutHandleClass_MAX + 1;
@@ -105,7 +100,6 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     TStackVec<TPutBatchedBucket, PutBatchedBucketCount> PutBatchedBucketQueue;
     THashSet<TLogoBlobID> BatchedPutIds;
 
-    TEvStopBatchingGetRequests::TPtr StopGetBatchingEvent;
     ui64 BatchedGetRequestCount = 0;
 
     static constexpr ui64 GetHandleClassCount = NKikimrBlobStorage::EGetHandleClass_MAX + 1;
@@ -283,8 +277,7 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
 
     void ProcessBatchedPutRequests(TBatchedPutQueue &batchedPuts, NKikimrBlobStorage::EPutHandleClass handleClass,
         TEvBlobStorage::TEvPut::ETactic tactic, bool reduceInterpileTraffic);
-    void Handle(TEvStopBatchingPutRequests::TPtr& ev);
-    void Handle(TEvStopBatchingGetRequests::TPtr& ev);
+    void Handle(TEvents::TEvMailboxProcessingFinished::TPtr&);
 
     // todo: in-fly tracking for cancelation and
     void PushRequest(IActor *actor, TInstant deadline);
@@ -383,8 +376,7 @@ public:
     // State functions
 
     STRICT_STFUNC(StateCommon,
-        hFunc(TEvStopBatchingPutRequests, Handle);
-        hFunc(TEvStopBatchingGetRequests, Handle);
+        hFunc(TEvents::TEvMailboxProcessingFinished, Handle);
         hFunc(TEvDeathNote, Handle);
         hFunc(TEvRequestProxySessionsState, Handle);
         hFunc(TEvBlobStorage::TEvBunchOfEvents, Handle);

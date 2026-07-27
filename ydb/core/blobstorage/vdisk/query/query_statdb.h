@@ -113,15 +113,13 @@ namespace NKikimr {
                 const TActorId &parentId,
                 TLevelIndexSnapshot &&snapshot,
                 typename TRequest::TPtr &ev,
-                std::unique_ptr<TResponse> result,
-                TDbStatYieldPolicy yieldPolicy = {})
+                std::unique_ptr<TResponse> result)
             : TActorBootstrapped<TThis>()
             , HullCtx(hullCtx)
             , ParentId(parentId)
             , Snapshot(std::in_place, std::move(snapshot))
             , Ev(ev)
             , Result(std::move(result))
-            , YieldPolicy(std::move(yieldPolicy))
         {}
 
     private:
@@ -130,7 +128,7 @@ namespace NKikimr {
         std::optional<TLevelIndexSnapshot> Snapshot;
         typename TRequest::TPtr Ev;
         std::unique_ptr<TResponse> Result;
-        const TDbStatYieldPolicy YieldPolicy;
+        const TDbStatYieldPolicy YieldPolicy = TDbStatYieldPolicy{};
         TStringStream Output;
         TTraversal Traversal;
         std::optional<TYieldedState> YieldedState;

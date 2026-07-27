@@ -7,7 +7,7 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_iter.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
 #include <ydb/core/blobstorage/base/vdisk_sync_common.h>
-#include <ydb/core/blobstorage/vdisk/skeleton/blobstorage_takedbsnap.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all_snap_events.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_SYNCER
 

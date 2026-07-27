@@ -1,6 +1,6 @@
 #include "defrag_rewriter.h"
 #include <ydb/core/blobstorage/vdisk/scrub/restore_corrupted_blob_actor.h>
-#include <ydb/core/blobstorage/vdisk/skeleton/blobstorage_takedbsnap.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all_snap_events.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_VDISK_DEFRAG
 

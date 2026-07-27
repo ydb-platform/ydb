@@ -171,7 +171,10 @@ void ValidateGrafanaLoggingSourceConfig(const TSupportLinkEntryConfig& config, c
     const TStringBuf url = config.GetUrl().empty()
         ? GRAFANA_LOGGING_DEFAULT_URL
         : TStringBuf(config.GetUrl());
-    if (url.Contains('?')) {
+    if (url.Contains('{') || url.Contains('}')) {
+        ythrow yexception() << "url template placeholders are not supported for source=" << config.GetSource();
+    }
+    if (HasUrlQuery(url)) {
         ythrow yexception() << "query parameters are not supported in url for source=" << config.GetSource();
     }
     if (!IsAbsoluteUrl(url) && metaSettings.SupportLinks.GrafanaEndpoint.empty()) {

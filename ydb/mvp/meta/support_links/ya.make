@@ -13,6 +13,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/string_utils/url
     ydb/mvp/core
     ydb/mvp/meta/protos
     library/cpp/json

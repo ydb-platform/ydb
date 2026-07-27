@@ -28,6 +28,19 @@ meta:
       - source: grafana/dashboard
         title: Cluster Overview
         url: /d/ydb_cluster/overview
+        link_parameter_mappings:
+          - parameter: cluster_name
+            # Get the value from a request parameter.
+            from_request: cluster
+          - parameter: workspace
+            # Get the value from a cluster info field.
+            from_cluster_info: namespace
+          - parameter: bucket
+            # Use the same value for every link.
+            static_value: support
+          - parameter: dc
+            # Get the value from a cluster info field.
+            from_cluster_info: support_dc
       - source: grafana/dashboard/search
         tag:
           - ui-cluster

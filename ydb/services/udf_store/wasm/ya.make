@@ -13,7 +13,7 @@ SRCS(
 )
 
 ADDINCL(
-    contrib/restricted/wavm/Include
+    contrib/restricted/wavm_llvm16/Include
 )
 
 CFLAGS(
@@ -28,7 +28,7 @@ PEERDIR(
     yql/essentials/public/udf
     yql/essentials/minikql
     library/cpp/json
-    contrib/restricted/wavm/Lib
+    contrib/restricted/wavm_llvm16/Lib
 )
 
 END()

@@ -59,6 +59,9 @@ NMetadata::NModifications::TOperationParsingResult TResourcePoolClassifierManage
             if (property == "resource_pool") {
                 return TConclusionStatus::Fail("Cannot reset required property resource_pool");
             }
+            if (property == "rank") {
+                return TConclusionStatus::Fail("Cannot reset property rank");
+            }
         } else {
             continue;
         }

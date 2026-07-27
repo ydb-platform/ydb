@@ -2,6 +2,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/type_switcher.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_common.h>
 
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
@@ -24,6 +25,17 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 namespace {
+
+    constexpr const char LegacyV1Certificate[] = R"(-----BEGIN CERTIFICATE-----
+MIIBbTCCARMCFBthJdWIg/H6ITeelffnCYoK8fDFMAoGCCqGSM49BAMCMDkxCzAJ
+BgNVBAYTAlJVMQwwCgYDVQQKDANZREIxHDAaBgNVBAMME0xlZ2FjeSBUZXN0IFJv
+b3QgQ0EwHhcNMjYwNzI3MDk0NDU2WhcNMzYwNzI0MDk0NDU2WjA5MQswCQYDVQQG
+EwJSVTEMMAoGA1UECgwDWURCMRwwGgYDVQQDDBNMZWdhY3kgVGVzdCBSb290IENB
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE4zlS2ha5hOd20QJEh17FP/mjkzsO
+PmwF7iY9zJ0HILwBjqxJSCGnNMMdT+A2d+Nry6de3WC6RkR72HTe6gffuTAKBggq
+hkjOPQQDAgNIADBFAiEA/0rBKAconmtFcliTZ0i9HzIkQeG+E/zVMiUvlhwpylYC
+IGfPhGBVwOMnr+uhwtpj4PAOIrlOQD/fBsaRtYuBRdg2
+-----END CERTIFICATE-----)";
 
     class TMockDiscoveryService : public Ydb::Discovery::V1::DiscoveryService::Service {
     public:
@@ -223,6 +235,35 @@ Y_UNIT_TEST_SUITE(CppGrpcClientSimpleTest) {
         UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::TRANSPORT_UNAVAILABLE);
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Client TLS credentials validation failed");
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "root CA PEM:");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "failed to parse certificate #1");
+    }
+
+    Y_UNIT_TEST(LegacyV1TrustAnchorPassesValidation) {
+        auto driver = TDriver(
+            TDriverConfig()
+                .SetEndpoint("localhost:100")
+                .UseSecureConnection(LegacyV1Certificate));
+        auto client = NTable::TTableClient(driver);
+
+        auto result = client.CreateSession().GetValueSync();
+        auto issues = result.GetIssues().ToString();
+
+        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::TRANSPORT_UNAVAILABLE);
+        UNIT_ASSERT(issues.find("Client TLS credentials validation failed") == std::string::npos);
+    }
+
+    Y_UNIT_TEST(MalformedCertificateAfterValidRootPassesValidation) {
+        const std::string rootBundle = std::string(LegacyV1Certificate) + R"(
+-----BEGIN CERTIFICATE-----
+not-base64
+-----END CERTIFICATE-----)";
+        grpc::SslCredentialsOptions sslOptions{
+            .pem_root_certs = NYdb::TStringType{rootBundle},
+        };
+        std::string validationDetail;
+
+        UNIT_ASSERT(NYdbGrpc::ValidateTlsCredentials(sslOptions, validationDetail));
+        UNIT_ASSERT(validationDetail.empty());
     }
 
     Y_UNIT_TEST(EmptyRootCertificateWithoutClientCredentialsKeepsBehavior) {

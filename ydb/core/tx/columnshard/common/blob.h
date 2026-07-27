@@ -224,8 +224,14 @@ struct TBlobRange {
     TBlobRange BuildSubset(const ui32 offset, const ui32 size) const;
 
     bool operator<(const TBlobRange& br) const {
-        if (BlobId != br.BlobId) {
-            return BlobId.GetLogoBlobId().Compare(br.BlobId.GetLogoBlobId()) < 0;
+        // Must be consistent with operator== (LogoBlobId + DsGroup). Ordering by LogoBlobId
+        // only when BlobId differs breaks strict weak ordering for std::sort when the same
+        // LogoBlobId appears with different DsGroup values (see #47871).
+        const auto logoCmp = BlobId.GetLogoBlobId().Compare(br.BlobId.GetLogoBlobId());
+        if (logoCmp != 0) {
+            return logoCmp < 0;
+        } else if (BlobId.GetDsGroup() != br.BlobId.GetDsGroup()) {
+            return BlobId.GetDsGroup() < br.BlobId.GetDsGroup();
         } else if (Offset != br.Offset) {
             return Offset < br.Offset;
         } else {
@@ -245,9 +251,9 @@ struct TBlobRange {
         if (GetBlobId() != br.GetBlobId()) {
             return false;
         }
-        const ui32 right = std::max<ui32>(Offset + Size, br.Offset + br.Size);
+        const ui64 right = std::max<ui64>(ui64(Offset) + Size, ui64(br.Offset) + br.Size);
         const ui32 offset = std::min<ui32>(Offset, br.Offset);
-        const ui32 size = right - offset;
+        const ui64 size = right - offset;
         if (size > limit) {
             return false;
         }

@@ -48,16 +48,19 @@ void IBlobsReadingAction::Start(const THashSet<TBlobRange>& rangesInProgress) {
 
 void IBlobsReadingAction::OnReadResult(const TBlobRange& range, const TString& data) {
     auto it = Groups.find(range);
-    AFL_VERIFY(it != Groups.end());
+    AFL_VERIFY(it != Groups.end())("range", range.ToString());
+    AFL_VERIFY(it->first == range)("group", it->first.ToString())("range", range.ToString());
     AFL_VERIFY(Counters);
     WaitingRangesCount -= it->second.size();
     AFL_VERIFY(WaitingRangesCount >= 0);
     Counters->OnReply(range.Size, TMonotonic::Now() - StartWaitingRanges);
-    AFL_VERIFY(data.size() == range.Size);
+    AFL_VERIFY(data.size() == range.Size)("data", data.size())("range", range.ToString());
+    const TBlobRange& groupRange = it->first;
     for (auto&& i : it->second) {
-        AFL_VERIFY(i.Offset + i.GetBlobSize() <= range.Offset + data.size());
-        AFL_VERIFY(range.Offset <= i.Offset);
-        Replies.emplace(i, data.substr(i.Offset - range.Offset, i.GetBlobSize()));
+        AFL_VERIFY(i.Offset + i.GetBlobSize() <= groupRange.Offset + data.size())
+        ("group", groupRange.ToString())("sub", i.ToString())("data", data.size());
+        AFL_VERIFY(groupRange.Offset <= i.Offset)("group", groupRange.ToString())("sub", i.ToString());
+        Replies.emplace(i, data.substr(i.Offset - groupRange.Offset, i.GetBlobSize()));
     }
     Groups.erase(it);
 }

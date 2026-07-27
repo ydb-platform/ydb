@@ -17,7 +17,7 @@ ADDINCL(
 
 PEERDIR(
     ydb/library/wasm/api
-    contrib/restricted/wavm/Lib
+    contrib/restricted/wavm_llvm16/Lib
     library/cpp/resource
     library/cpp/yt/assert
     library/cpp/yt/compact_containers

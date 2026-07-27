@@ -74,6 +74,13 @@ TString ShardDisplayName(const TStringBuf action, ui64 shardId) {
     return name;
 }
 
+// Presentation-only caps of the renderer (collection-side caps live in kqp_user_facing_trace_data.h).
+constexpr size_t MaxNodesInStageAttribute = 32;   // ydb.tasks_by_node entries; tail collapses to "+N nodes"
+constexpr size_t MaxErrorMessageBytes = 1024;     // issues can nest arbitrarily deep; one line is enough
+// Phase spans one execution can emit outside stages/tasks (Execute, Prepare + 3 resolves,
+// Run, Commit + 3 breakdowns...); only a budget estimate, not a limit.
+constexpr size_t PhaseSpanEstimatePerExecution = 12;
+
 // Global span budget of one query render (see MaxUserFacingSpansPerQuery). Tasks are admitted
 // by the precomputed duration cutoff (global top-K), shard children by the running counter.
 struct TSpanBudget {
@@ -312,7 +319,7 @@ void EmitStageSpans(const NWilson::TTraceId& parent, const TUserFacingTraceExecu
                 TStringBuilder byNode;
                 size_t shown = 0;
                 for (const auto& [nodeId, count] : nodes) {
-                    if (shown == 32) {
+                    if (shown == MaxNodesInStageAttribute) {
                         byNode << ",+" << nodes.size() - shown << " nodes";
                         break;
                     }
@@ -519,7 +526,10 @@ void BuildPhases(NWilson::TSpan& userSpan, const TKqpQueryState& state) {
         size_t fixedSpans = 0;
         TVector<ui64> taskDurations;
         for (const auto& trace : state.QueryStats.UserFacingTraces) {
-            fixedSpans += 10 + trace.ExecStats.StagesSize(); // phases estimate + stage spans
+            // Phases, stage spans and per-shard commit children always render (all bounded),
+            // so they are budgeted as fixed cost rather than admitted per-span.
+            fixedSpans += PhaseSpanEstimatePerExecution + trace.ExecStats.StagesSize()
+                + 2 * trace.ShardCommitAcks.size();
             for (const auto& [stageId, tasks] : trace.TaskStats) {
                 for (const auto& [taskId, task] : tasks) {
                     taskDurations.push_back(task.DurationMs());
@@ -650,9 +660,12 @@ TString SanitizeQueryText(const TString& text) {
     if (NKikimr::ProtectQueryForLoggingIfSensitive(text, protectedText)) {
         return protectedText;
     }
-    NSQLTranslationV1::TLexers lexers;
-    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
-    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
+    static const NSQLTranslationV1::TLexers lexers = [] {
+        NSQLTranslationV1::TLexers l;
+        l.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+        l.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
+        return l;
+    }();
     for (const bool ansi : {false, true}) {
         auto lexer = NSQLTranslationV1::MakeLexer(lexers, ansi);
         NSQLTranslation::TParsedTokenList tokens;
@@ -729,7 +742,7 @@ void FinishUserFacingSpan(TKqpQueryState& state, bool success, const TString& st
         userSpan.EndOk();
     } else {
         // The span status message is what trace UIs surface as the failure reason.
-        userSpan.EndError(errorMessage ? errorMessage.substr(0, 1024) : statusCode);
+        userSpan.EndError(errorMessage ? errorMessage.substr(0, MaxErrorMessageBytes) : statusCode);
     }
 }
 

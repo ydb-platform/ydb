@@ -411,6 +411,8 @@ ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut LocalPartition.Withou
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut unittest.[*/*] chunk
 ydb/public/sdk/cpp/tests/integration/bulk_upsert BulkUpsert.RetryOverheadOnHappyPath
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.PeriodicTask/0
+ydb/public/sdk/cpp/tests/unit/client/driver CppGrpcClientSimpleTest.ConnectWrongPortRetry
+ydb/public/sdk/cpp/tests/unit/client/driver unittest.[*/*] chunk
 ydb/services/persqueue_v1/ut TPersQueueTest.ConsumerAvailabilityPeriodCleanup
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_NoConnectionStringRelativeTableTopicTransferPath
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_NoConnectionStringRelativeTopicAbsoluteTransferPath

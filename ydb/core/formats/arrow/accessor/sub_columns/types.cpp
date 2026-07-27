@@ -48,21 +48,11 @@ EValueType ValueTypeForItem(const NBinaryJson::TBinaryJson& blob) {
     }
 }
 
-TStringBuf BinaryView(const arrow::Array& array, const i64 index) {
-    AFL_VERIFY(array.type()->id() == arrow::Type::BINARY);
-    const auto view = static_cast<const arrow::BinaryArray&>(array).GetView(index);
-    return TStringBuf(view.data(), view.size());
-}
-
 // BinaryJson and String share arrow::binary() storage; they differ only in what the bytes mean.
 class TBinaryBackedCodec: public IValueArrowCodec {
 public:
     std::shared_ptr<arrow::DataType> GetArrowType() const override {
         return arrow::binary();
-    }
-
-    ui32 GetElementSize(const arrow::Array& array, const i64 index) const override {
-        return BinaryView(array, index).size();
     }
     std::unique_ptr<arrow::ArrayBuilder> MakeBuilder(const ui32 reserveItems, const ui32 reserveData) const override {
         return NArrow::MakeBuilder(arrow::binary(), reserveItems, reserveData);
@@ -71,12 +61,6 @@ public:
 
 class TBinaryJsonCodec: public TBinaryBackedCodec {
 public:
-    EValueType GetValueType() const override {
-        return EValueType::BinaryJson;
-    }
-    TJsonValueView ReadValueView(const arrow::Array& array, const i64 index) const override {
-        return TJsonValueView::OfBinaryJson(BinaryView(array, index));
-    }
     void AppendFromBinaryJson(arrow::ArrayBuilder& builder, const NBinaryJson::TBinaryJson& blob) const override {
         AFL_VERIFY(NArrow::Append<arrow::BinaryType>(builder, arrow::util::string_view(blob.data(), blob.size())));
     }
@@ -84,36 +68,17 @@ public:
 
 class TStringCodec: public TBinaryBackedCodec {
 public:
-    EValueType GetValueType() const override {
-        return EValueType::String;
-    }
-    TJsonValueView ReadValueView(const arrow::Array& array, const i64 index) const override {
-        return TJsonValueView::OfString(BinaryView(array, index));
-    }
     void AppendFromBinaryJson(arrow::ArrayBuilder& builder, const NBinaryJson::TBinaryJson& blob) const override {
         const auto scalar = ExtractStringScalar(blob);
         AFL_VERIFY(NArrow::Append<arrow::BinaryType>(builder, arrow::util::string_view(scalar.data(), scalar.size())));
     }
 };
 
-template <class TArrow, EValueType ValueType, auto ExtractScalar, auto MakeView>
+template <class TArrow, auto ExtractScalar>
 class TNativeScalarCodec: public IValueArrowCodec {
-private:
-    using TArray = typename arrow::TypeTraits<TArrow>::ArrayType;
-
 public:
-    EValueType GetValueType() const override {
-        return ValueType;
-    }
     std::shared_ptr<arrow::DataType> GetArrowType() const override {
         return arrow::TypeTraits<TArrow>::type_singleton();
-    }
-    ui32 GetElementSize(const arrow::Array& /*array*/, const i64 /*index*/) const override {
-        return sizeof(typename TArrow::c_type);
-    }
-    TJsonValueView ReadValueView(const arrow::Array& array, const i64 index) const override {
-        AFL_VERIFY(array.type()->id() == TArrow::type_id);
-        return MakeView(static_cast<const TArray&>(array).Value(index));
     }
     std::unique_ptr<arrow::ArrayBuilder> MakeBuilder(const ui32 reserveItems, const ui32 /*reserveData*/) const override {
         return NArrow::MakeBuilder(arrow::TypeTraits<TArrow>::type_singleton(), reserveItems, 0);
@@ -123,13 +88,47 @@ public:
     }
 };
 
-using TDoubleCodec = TNativeScalarCodec<arrow::DoubleType, EValueType::Double, ExtractDoubleScalar, TJsonValueView::OfNumber>;
-using TBoolCodec = TNativeScalarCodec<arrow::BooleanType, EValueType::Bool, ExtractBoolScalar, TJsonValueView::OfBool>;
+using TDoubleCodec = TNativeScalarCodec<arrow::DoubleType, ExtractDoubleScalar>;
+using TBoolCodec = TNativeScalarCodec<arrow::BooleanType, ExtractBoolScalar>;
 
 }   // namespace
 
 bool CanBeDictionaryEncoded(EValueType valueType) {
     return valueType == EValueType::BinaryJson || valueType == EValueType::String;
+}
+
+TJsonValueView ArrayElementToJsonValueView(const arrow::Array& array, const i64 index, const EValueType valueType) {
+    switch (valueType) {
+        case EValueType::String: {
+            const auto view = static_cast<const arrow::BinaryArray&>(array).GetView(index);
+            return TJsonValueView::OfString(TStringBuf(view.data(), view.size()));
+        }
+        case EValueType::Double:
+            return TJsonValueView::OfNumber(static_cast<const arrow::DoubleArray&>(array).Value(index));
+        case EValueType::Bool:
+            return TJsonValueView::OfBool(static_cast<const arrow::BooleanArray&>(array).Value(index));
+        case EValueType::BinaryJson: {
+            const auto view = static_cast<const arrow::BinaryArray&>(array).GetView(index);
+            return TJsonValueView::OfBinaryJson(TStringBuf(view.data(), view.size()));
+        }
+    }
+}
+
+NBinaryJson::TBinaryJson ArrayElementToBinaryJson(const arrow::Array& array, const i64 index, const EValueType valueType) {
+    return ArrayElementToJsonValueView(array, index, valueType).ToBinaryJson();
+}
+
+ui32 ArrayElementSize(const arrow::Array& array, const i64 index, const EValueType valueType) {
+    switch (valueType) {
+        case EValueType::BinaryJson:
+        case EValueType::String:
+            return static_cast<const arrow::BinaryArray&>(array).GetView(index).size();
+        case EValueType::Double:
+            return sizeof(double);
+        case EValueType::Bool:
+            // actually only 1 bit in arrow representation, not 1 byte, but let's not overcomplicate things
+            return 1;
+    }
 }
 
 std::shared_ptr<const IValueArrowCodec> GetCodecForValueType(const EValueType valueType) {

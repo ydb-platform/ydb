@@ -15,21 +15,13 @@
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
 // Conversion between physical arrow storage and logical JsonValue/BinaryJson in-program representation
+// Write path: initialize a typed builder and decode BinaryJson values into it. Reads use the free
+// ArrayElement* functions below instead (monomorphic/inlinable for hot loops).
 class IValueArrowCodec {
 public:
     virtual ~IValueArrowCodec() = default;
 
-    virtual EValueType GetValueType() const = 0;
     virtual std::shared_ptr<arrow::DataType> GetArrowType() const = 0;
-
-    // Read path - wrap the physical element `index` as a logical value view (a native scalar for
-    // Double/Bool/String, or a BinaryJson blob for BinaryJson).
-    // The view aliases `array`, which must outlive it.
-    virtual TJsonValueView ReadValueView(const arrow::Array& array, const i64 index) const = 0;
-    // Approximate size of element `index` for accounting: variable for binary values, fixed for scalar types.
-    virtual ui32 GetElementSize(const arrow::Array& array, const i64 index) const = 0;
-
-    // Write path - initialize builder and write values to it.
     // reserveData makes sense only for variable-length types (BinaryJson and string).
     virtual std::unique_ptr<arrow::ArrayBuilder> MakeBuilder(const ui32 reserveItems, const ui32 reserveData) const = 0;
     virtual void AppendFromBinaryJson(arrow::ArrayBuilder& builder, const NBinaryJson::TBinaryJson& blob) const = 0;
@@ -38,6 +30,12 @@ public:
 bool CanBeDictionaryEncoded(EValueType valueType);
 
 std::shared_ptr<const IValueArrowCodec> GetCodecForValueType(const EValueType valueType);
+
+// Inline-switch reads of physical element `index` per the column's value type: a native scalar for
+// Double/Bool/String, or a BinaryJson blob for BinaryJson. The view aliases `array`, which must outlive it.
+TJsonValueView ArrayElementToJsonValueView(const arrow::Array& array, const i64 index, const EValueType valueType);
+NBinaryJson::TBinaryJson ArrayElementToBinaryJson(const arrow::Array& array, const i64 index, const EValueType valueType);
+ui32 ArrayElementSize(const arrow::Array& array, const i64 index, const EValueType valueType);
 
 // Element type to represent result of merging arrays with arg types
 EValueType MergeValueTypes(const std::optional<EValueType>& acc, const EValueType next);

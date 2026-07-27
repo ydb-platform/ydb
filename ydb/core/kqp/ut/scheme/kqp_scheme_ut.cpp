@@ -12940,7 +12940,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 RANK
             );)").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "The rank could not be set automatically, the maximum rank of the resource pool classifier is too high: 9223372036854775807", result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Cannot reset property rank", result.GetIssues().ToString());
     }
 
     TString FetchResourcePoolClassifiers(TTestActorRuntime& runtime, ui32 nodeIndex) {
@@ -13121,7 +13121,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 )";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(FetchResourcePoolClassifiers(kikimr), "{\"resource_pool_classifiers\":[{\"rank\":1042,\"name\":\"MyResourcePoolClassifier\",\"config\":{\"member_name\":\"\",\"resource_pool\":\"test_pool\"},\"database\":\"\\/Root\"},{\"rank\":42,\"name\":\"AnotherResourcePoolClassifier\",\"config\":{\"resource_pool\":\"test_pool\"},\"database\":\"\\/Root\"}]}");
+            UNIT_ASSERT_VALUES_EQUAL(FetchResourcePoolClassifiers(kikimr), "{\"resource_pool_classifiers\":[{\"rank\":20,\"name\":\"MyResourcePoolClassifier\",\"config\":{\"member_name\":\"\",\"resource_pool\":\"test_pool\"},\"database\":\"\\/Root\"},{\"rank\":42,\"name\":\"AnotherResourcePoolClassifier\",\"config\":{\"resource_pool\":\"test_pool\"},\"database\":\"\\/Root\"}]}");
         }
     }
 

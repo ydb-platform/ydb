@@ -508,7 +508,23 @@ def validate_analysis_md(
     ):
         errors.append(
             "jargon in report: чеклист агента в «Что дальше» — "
-            "пиши шаги для дежурного (тикет / coredump / не смешивать)"
+            "пиши шаги для дежурного (тикет / coredump)"
+        )
+    # Antipattern: "это не #N / не путать / не смешивать с #M"
+    # Use \b before «не» so we don't match the «не» inside «окне».
+    if re.search(
+        r"(?<![А-Яа-яA-Za-z])не\s+смешивать\s+с|"
+        r"(?<![А-Яа-яA-Za-z])не\s+путать\s+с|"
+        r"(?<![А-Яа-яA-Za-z])это\s+\*{0,2}не\*{0,2}\s+\[?#\d|"
+        r"(?<![А-Яа-яA-Za-z])не\s+тот\s+же\s+баг,\s+что\s+\[?#\d|"
+        r"(?<![А-Яа-яA-Za-z])не\s+\[?#\d{3,}\].{0,60}(?<![А-Яа-яA-Za-z])не\s+\[?#\d{3,}",
+        body_for_jargon,
+        re.I,
+    ):
+        errors.append(
+            "antipattern: do not write «это не #N» / «не путать с…» / «не смешивать с…» "
+            "(Title fingerprint + match keys already separate bugs; "
+            "link only the real related issue or write «нет»)"
         )
 
     # Issue materials: sandbox report URL (OLAP) or explicit metrics-only / DataLens (TPC-C)
@@ -558,11 +574,11 @@ def validate_analysis_md(
                     errors.append(
                         f"{resolution}: ### Title must be a real issue title (≥12 chars), not a stub"
                     )
-                # Body paste must lead with Фактура so the next agent can gh-search the issue
+                # Body: short Фактура first; human sections; keys only in perf-duty-match
                 if not re.search(r"^####\s+Фактура\s*$", body, re.I | re.M):
                     errors.append(
                         f"{resolution}: ### Body must include #### Фактура "
-                        "(branch, Version/CI, suite@db, Allure URL, fingerprint, Search keys) "
+                        "(short table: suite/db, branch·version, run, Allure, failed) "
                         "— see REPORT_TEMPLATE.md"
                     )
                 else:
@@ -573,12 +589,13 @@ def validate_analysis_md(
                             f"{resolution}: Фактура must include Branch / ветка запуска"
                         )
                     if not re.search(
-                        r"ci\s*version|trunk\.r\d+|version\s*\||\bmain\.[0-9a-f]{7,}\b",
+                        r"ci\s*version|trunk\.r\d+|version\s*\||\bmain\.[0-9a-f]{7,}\b|"
+                        r"github\.com/ydb-platform/ydb/commit/[0-9a-f]{7,}",
                         fl,
                     ):
                         errors.append(
-                            f"{resolution}: Фактура must include Version / CI version "
-                            "(e.g. main.<sha>, trunk.r…)"
+                            f"{resolution}: Фактура must include Version / commit sha "
+                            "(e.g. main.<sha> or commit link)"
                         )
                     if not re.search(r"proxy\.sandbox\.yandex-team\.ru/\d+", facts):
                         if not (tpcc_only and re.search(r"datalens|sandbox/allure|report:\s*null", fl)):
@@ -589,29 +606,32 @@ def validate_analysis_md(
                         errors.append(
                             f"{resolution}: Фактура must include Suite and DB/cluster"
                         )
-                    if not re.search(
-                        r"search\s*keys|ключ\w*\s*поиска|"
-                        r"fline\s*=|"
-                        r"\w+\.cpp:\d+|"
-                        r"afl_verify|verification\s*=",
-                        fl,
-                    ):
-                        errors.append(
-                            f"{resolution}: Фактура must include Fingerprint / Search keys "
-                            "(stable tokens for `gh search issues`, e.g. file.cpp:117)"
+                    if re.search(r"search\s*keys|ключ\w*\s*поиска|gh\s+search", fl):
+                        warnings.append(
+                            f"{resolution}: keep Search keys / gh search out of Фактура "
+                            "(put tokens in <!-- perf-duty-match --> keys:)"
                         )
-                if not re.search(r"^####\s+Кратко\s*$", body, re.I | re.M):
+                if re.search(r"^####\s+Отчёты\s*\(соседи\)", body, re.I | re.M):
                     warnings.append(
-                        f"{resolution}: ### Body should include #### Кратко "
-                        "(1–3 sentences for the issue lead)"
+                        f"{resolution}: omit #### Отчёты (соседи) from issue Body "
+                        "(see REPORT_TEMPLATE.md)"
                     )
-                if not re.search(
-                    r"^####\s+(Важно|Что важно)",
-                    body,
-                    re.I | re.M,
-                ):
+                if not re.search(r"^####\s+Что сломалось\s*$", body, re.I | re.M):
                     warnings.append(
-                        f"{resolution}: ### Body should include #### Важно (3–5 bullets)"
+                        f"{resolution}: ### Body should include #### Что сломалось"
+                    )
+                if not re.search(r"^####\s+К чему приводит\s*$", body, re.I | re.M):
+                    warnings.append(
+                        f"{resolution}: ### Body should include #### К чему приводит"
+                    )
+                if not re.search(r"^####\s+Детали ошибки\s*$", body, re.I | re.M):
+                    warnings.append(
+                        f"{resolution}: ### Body should include #### Детали ошибки "
+                        "(VERIFY/signal quote, not under details)"
+                    )
+                if not re.search(r"^####\s+Код\s*$", body, re.I | re.M):
+                    warnings.append(
+                        f"{resolution}: ### Body should include #### Код"
                     )
                 # Machine block for dashboard / cross-suite match
                 match = parse_match_block(body)

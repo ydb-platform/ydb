@@ -3,7 +3,7 @@
 ## Заключение
 Каждый пункт — **1–2 коротких предложения**. Не сваливать sha/PR/давность/гонку в один абзац.
 
-- **Итог:** <симптом → корневая причина одной фразой; если не смешивать с известным тикетом — скажи явно>
+- **Итог:** <симптом → механизм одной фразой>
 - **Решение:** `open_ticket` | `update_known` | `investigate_further` | `wait_next_wave` | `no_action` — <что сделать>
 - **Виновник:** `unknown` | `@{login}` / [PR #N](https://github.com/ydb-platform/ydb/pull/N) — <доказательство>
   - При `unknown` авторов истории файла **не** пиши как виновников; если упоминаешь PR введения строки — пометь «история кода, не виновник»
@@ -46,9 +46,9 @@
 Только для дежурного (не чеклист агента). Пример:
 1. Тикет: [#N](url) — комментарий при повторе
 2. Coredump на `<host>` около `<ts>`, если нужно докопать стек
-3. Не смешивать с [#M](url) (другой abort)
 
-Запрещено: `gh search`, «Перед заведением», «скопировать Title/Body», команды `dutyctl`.
+Запрещено: `gh search`, «Перед заведением», «скопировать Title/Body», команды `dutyctl`,  
+списки «это не #N / не смешивать с #M» (fingerprint в Title / match-keys уже разделяет).
 
 ## Ход разбора
 
@@ -69,9 +69,9 @@
 ## Материалы для issue
 
 При `open_ticket` / `update_known` блок **Title + Body** копируется в GitHub **целиком**.  
-Цель Body: человек понимает баг; **следующий duty-агент и отчёты OLAP/TPC-C** находят issue по машиночитаемому блоку `perf-duty-match` (keys + affected), не только по suite в Title. Label на issue **не нужен** — generate ищет open issues по тексту `perf-duty-match` в body.
+Цель Body: **сначала человек**, потом машина. Dashboard / следующий агент находят issue по скрытому `<!-- perf-duty-match -->` (`keys` + `affected`). Label **не нужен**.
 
-Title: коротко + уникальный fingerprint (`file.cpp:NN` / symbol / suite).
+Title: fingerprint + suite (для списка issues и поиска). Не сокращай уникальный `file.cpp:NN` / symbol.
 
 ### Title
 ```
@@ -80,57 +80,43 @@ Title: коротко + уникальный fingerprint (`file.cpp:NN` / symbol
 
 ### Body
 
+Порядок секций **строгий** (всё без `<details>`, кроме опционального хвоста).  
+**Не** писать: «Отчёты (соседи)», `Search keys` / `gh search` в первом экране,  
+и **никогда** абзацы/буллеты «это не #N», «не путать с #M», «не смешивать с #K» — антипаттерн.  
+Fingerprint в Title + `keys` в match-блоке достаточно. В «Код → Связанный issue» — только реально связанный тикет или «нет».  
+В тексте для людей: **node down / connection lost**, не «просто `code: 2005`».
+
 #### Фактура
-Обязательная таблица — первая в Body. Значения копируй из context (`selection.*`, `suite_now.*`).
+Короткая таблица **первая** в Body (из context):
 
-| Поле | Значение |
+| | |
 |--|--|
-| Kind | `olap` \| `tpcc` |
-| Branch | `{branch}` (напр. `main`) |
-| Version | `main.{sha}` (как в mart / Allure Version) |
-| CI version | `{ci_version}` (напр. `trunk.r20455406`) |
-| Suite | `{suite}` |
-| DB / cluster | `{db}` |
-| Run label | `{label}` |
-| Run time (UTC) | `{ts}` |
-| Commit | [`{sha}`](https://github.com/ydb-platform/ydb/commit/{sha}) |
-| Allure / Sandbox | https://proxy.sandbox.yandex-team.ru/{id}/index.html |
-| Failed tests | `Suite.Query…` |
-| Fingerprint | `verification=found` / `fline=workers_pool.cpp:117` / иной стабильный токен из stderr |
-| Symbol / path | `TWorkersPool::PutTaskResults` · `ydb/core/…/workers_pool.cpp:117` |
-| Search keys | `` `workers_pool.cpp:117` `` `` `AFL_VERIFY(found)` `` `` `PutTaskResults` `` `` `UploadTpch1000` `` `` `sas_big_column` `` |
+| Suite / DB | `{suite}` / `{db}` |
+| Branch · Version | `{branch}` · [`{sha}`](https://github.com/ydb-platform/ydb/commit/{sha}) |
+| Run | `{label}` · `{ts}` UTC |
+| Allure | https://proxy.sandbox.yandex-team.ru/{id}/index.html |
+| Failed | Query… (кратко: VERIFY / node down) |
 
-`Search keys` — точные строки для `gh search issues "…" --repo ydb-platform/ydb`. Без них следующий агент тикет не найдёт.
+Без Kind / CI version / Fingerprint / Search keys в этой таблице — они в Title и в `perf-duty-match`.
 
-#### Кратко
-1–3 предложения: что сломалось, корневая причина, с чем не смешивать.
+#### Что сломалось
+1–3 предложения: симптом → место в коде / механизм. Без списка «не путать с …».
 
-#### Отчёты (соседи)
-| Дата / label | Commit | Отчёт | FailCount / заметка |
-|--|--|--|--|
-| **{label}** (разбираем) | … | https://proxy.sandbox… | … |
-| соседний на том же sha / prior | … | https://proxy.sandbox… | … |
+#### К чему приводит
+Буллеты impact: crash/abort ноды; какие query fail; что видит Allure (**node down / connection lost**); suite/кластер до рестарта.
+
+#### Детали ошибки
+Цитата VERIFY / `Received signal N` / backtrace **открытым** code-блоком (не под катом).  
+Host / node; coredump URL или filter.  
+Следствия на том же прогоне (другие query без цитаты VERIFY) — здесь же одной-двумя строками.
 
 #### Код
 | | |
 |--|--|
-| Место падения | [path:line @ sha](blob-url) |
-| Менялся ли файл в окне | да/нет |
-| Когда файл меняли последний раз | commit / PR |
-| Связанный issue | нет / не [#N](url) |
-
-#### Доказательства из логов
-```
-<цитата VERIFY / Received signal N / fatal — целиком ключевые строки, без «…» посередине fingerprint>
-```
-Coredump (если был): `https://coredumps.yandex-team.ru/v3/cores/<uuid>` + 1–2 frame.
-
-#### Важно
-1. Корневая причина — …, не «просто 2005».
-2. Воспроизведение: branch / Version / suite @ db / Allure URL (см. Фактура).
-3. Не тот же баг, что [#N](url) (если применимо).
-4. Один тикет на корневую причину; следствия — в этом же issue.
-5. Нестабильность на том же Version (если есть зелёный соседний прогон).
+| Место падения | [path:line @ sha](blob-url) — краткий контекст |
+| Менялся ли файл в окне | да/нет (+ окно sha…sha) |
+| Когда файл меняли последний раз | commit / PR — при unknown: «история кода, не виновник» |
+| Связанный issue | нет / [#N](url) только если это **тот же** баг (`update_known`) |
 
 <!-- perf-duty-match
 kind: olap
@@ -145,15 +131,15 @@ affected:
     queries: [Query03, Query01, Query05]
 -->
 
-**Обязательный** скрытый блок `<!-- perf-duty-match … -->` (в конце Body):
+**Обязательный** скрытый блок `<!-- perf-duty-match … -->` в конце Body:
 
-- `keys` — стабильные токены ошибки (**без** обязательного suite); по ним агент ищет дубликаты в других suite/query.
-- `affected` — проявления `suite` / `db` / `queries`; при `update_known` **дописывай** новые suite/query сюда (`dutyctl annotate-issue` или правка body), не плоди issue.
-- Отчёты OLAP/TPC-C ищут open issues с `perf-duty-match` в body, матчят inbox по `affected` и показывают `#N · title`.
+- `keys` — стабильные токены ошибки (**без** обязательного suite); сюда же то, что раньше клали в Search keys.
+- `affected` — `suite` / `db` / `queries`; при `update_known` **дописывай** (`dutyctl annotate-issue`), не плоди issue.
+- Generate ищет open issues с `perf-duty-match`, матчит inbox по `affected`, показывает `#N · title`.
 
 ---
 
-Язык: обычный русский. Английский — только термины (`VERIFY`, имена файлов, `code: 2005`).  
-Не писать: фокус, волна, RC, last touch, priors, sticky, prev-green, jargon агента.  
+Язык: обычный русский. Английский — термины (`VERIFY`, имена файлов, SIGSEGV).  
+Не писать: фокус, волна, RC, last touch, priors, sticky, prev-green, jargon агента, `gh search` в Body.  
 Issue / PR / commit / sandbox — markdown-ссылками.  
 Quality: self-check → `dutyctl validate` → `write-result`. См. `AGENTS.md`.

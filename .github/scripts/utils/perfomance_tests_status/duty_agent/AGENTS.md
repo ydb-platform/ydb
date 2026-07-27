@@ -340,9 +340,11 @@ If any checkbox fails → dig again (loop), do not polish a hollow report.
 - Следствия того же abort — не отдельный issue; в P1 перечисли затронутые query одной строкой.
 
 **Issue = copy-paste + findable:** при `open_ticket` / `update_known` обязательны `### Title` и `### Body`.  
-В Body **первым** идёт `#### Фактура`: branch, Version, CI version, suite, db, Allure URL, fingerprint/`fline`, Search keys.  
-В конце Body — обязательный скрытый блок `<!-- perf-duty-match -->` (`keys` + `affected` suite/db/queries).  
-Label **не нужен**: generate / `known-issues` ищут open issues по `perf-duty-match` в body. Без блока / keys issue не подцепят. Шаблон: [`REPORT_TEMPLATE.md`](REPORT_TEMPLATE.md).
+Body (порядок): короткая `#### Фактура` → `#### Что сломалось` → `#### К чему приводит` → `#### Детали ошибки` → `#### Код` → `<!-- perf-duty-match -->`.  
+**Не** писать в Body/отчёте: «Отчёты (соседи)», Search keys / `gh search` в первом экране,  
+и **запрещены** фразы «это не #N», «не путать с…», «не смешивать с…» — антипаттерн (fingerprint уже разделяет).  
+Keys — только в match-блоке. Для людей: **node down / connection lost**, не «просто 2005».  
+Label **не нужен**. Шаблон: [`REPORT_TEMPLATE.md`](REPORT_TEMPLATE.md).
 
 **Перед `open_ticket`:**  
 1. Ключи из fingerprint (`file.cpp:NN`, `AFL_VERIFY(…)`, symbol) — **не** suite alone.  
@@ -374,7 +376,7 @@ Label **не нужен**: generate / `known-issues` ищут open issues по `
 - … + Тикет: отдельный | тот же, что P1 | комментарий в #N
 
 ## Что дальше
-Только **для дежурного-человека** (1–3 пункта): куда смотреть дальше, какой тикет, что не смешивать.
+Только **для дежурного-человека** (1–3 пункта): куда смотреть дальше, какой тикет / coredump. Без «не смешивать с #N».
 **Запрещено** в отчёте: инструкции агенту (`gh search`, «Перед заведением», «скопировать Title/Body», «dutyctl …»).
 Поиск дубликатов / `gh search` — делай **сам до** `open_ticket`, в analysis не пиши.
 
@@ -384,30 +386,27 @@ Label **не нужен**: generate / `known-issues` ищут open issues по `
 
 ### Body
 #### Фактура
-| Branch | main |
-| Version | main.{sha} |
-| CI version | trunk.r… |
-| Suite / DB | … @ … |
-| Allure / Sandbox | https://proxy.sandbox… |
-| Fingerprint | fline=file.cpp:NN / verification=… |
-| Search keys | `file.cpp:NN` `AFL_VERIFY(…)` `Symbol` `Suite` `db` |
+| Suite / DB | … / … |
+| Branch · Version | main · [`sha`](…) |
+| Run | label · ts UTC |
+| Allure | https://proxy.sandbox… |
+| Failed | Query… |
 
-#### Кратко
+#### Что сломалось
 …
 
-#### Отчёты (соседи)
-…
+#### К чему приводит
+- …
+
+#### Детали ошибки
+~~~
+цитата VERIFY / signal / backtrace
+~~~
+Host / coredump …
 
 #### Код
-…
-
-#### Доказательства из логов
-```
-цитата VERIFY / fatal
-```
-
-#### Важно
-1. …
+| Место падения | … |
+| … | … |
 
 <!-- perf-duty-match
 kind: olap

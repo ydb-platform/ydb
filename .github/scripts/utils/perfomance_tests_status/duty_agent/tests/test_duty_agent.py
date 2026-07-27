@@ -622,24 +622,23 @@ Comment: UploadTpch VERIFY Groups.end matches #29944
 ```
 ### Body
 #### Фактура
-| Поле | Значение |
+| | |
 |--|--|
-| Branch | `main` |
-| Version | `main.f88e100` |
-| CI version | `trunk.r1` |
-| Suite | `UploadTpch100` |
-| DB / cluster | `sas_big_column` |
-| Allure / Sandbox | https://proxy.sandbox.yandex-team.ru/12923171727/index.html |
-| Fingerprint | `fline=read.cpp:NN`; `Groups.end` |
-| Search keys | `Groups.end` · `read.cpp` · `UploadTpch100` |
-#### Кратко
+| Suite / DB | `UploadTpch100` / `sas_big_column` |
+| Branch · Version | `main` · [`f88e100`](https://github.com/ydb-platform/ydb/commit/f88e100) |
+| Run | `2026-07-25_f88e100` · `2026-07-25T12:00:00` UTC |
+| Allure | https://proxy.sandbox.yandex-team.ru/12923171727/index.html |
+| Failed | Query03 (VERIFY) |
+#### Что сломалось
 VERIFY Groups.end на разбираемом прогоне — тот же [#29944](https://github.com/ydb-platform/ydb/issues/29944).
-#### Код
-[`f88e100`](https://github.com/ydb-platform/ydb/commit/f88e100)
-#### Доказательства из логов
+#### К чему приводит
+- Abort ноды; в Allure — node down / connection lost.
+#### Детали ошибки
+```
 VERIFY Groups.end
-#### Важно
-1. Корневая причина = VERIFY
+```
+#### Код
+| Место падения | [`f88e100`](https://github.com/ydb-platform/ydb/commit/f88e100) |
 
 <!-- perf-duty-match
 kind: olap
@@ -695,18 +694,23 @@ Comment only
 ```
 ### Body
 #### Фактура
-| Branch | `main` |
-| Version | `main.f88e100` |
-| CI version | `trunk.r1` |
-| Suite | `UploadTpch100` |
-| DB / cluster | `sas_big_column` |
-| Allure / Sandbox | https://proxy.sandbox.yandex-team.ru/12923171727/index.html |
-| Fingerprint | `Groups.end` |
-| Search keys | `Groups.end` |
-#### Кратко
+| | |
+|--|--|
+| Suite / DB | `UploadTpch100` / `sas_big_column` |
+| Branch · Version | `main` · [`f88e100`](https://github.com/ydb-platform/ydb/commit/f88e100) |
+| Run | label · ts UTC |
+| Allure | https://proxy.sandbox.yandex-team.ru/12923171727/index.html |
+| Failed | Query03 |
+#### Что сломалось
 x
-#### Важно
-1. x
+#### К чему приводит
+- x
+#### Детали ошибки
+```
+VERIFY
+```
+#### Код
+| Место падения | x |
 """
             r = validate_analysis_md(md, out_dir=d)
             self.assertFalse(r["ok"])

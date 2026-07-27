@@ -21,11 +21,14 @@ jobs:
       group: ydbdoc-review-${{ github.event.pull_request.number }}
       cancel-in-progress: true
     steps:
-      - name: Checkout PR head
+      - name: Checkout translation source
         uses: actions/checkout@v5
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          # Merged PR (в т.ч. из форка): коммит уже в upstream (main).
+          # Open PR: head как раньше.
+          ref: ${{ github.event.pull_request.merged && github.event.pull_request.merge_commit_sha || github.event.pull_request.head.sha }}
           fetch-depth: 0
+          allow-unsafe-pr-checkout: true
 
       - name: Fetch merge base ref
         run: |
@@ -97,9 +100,9 @@ jobs:
               owner,
               repo,
               issue_number: translationPr.number,
-              labels: ['rebuild_docs', 'ok-to-test'],
+              labels: ['ok-to-test'],
             });
 
             core.info(
-              `Added rebuild_docs and ok-to-test to translation PR #${translationPr.number}`
+              `Added ok-to-test to translation PR #${translationPr.number}`
             );

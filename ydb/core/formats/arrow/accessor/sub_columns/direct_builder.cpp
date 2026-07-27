@@ -1,42 +1,40 @@
 #include "accessor.h"
 #include "columns_storage.h"
 #include "direct_builder.h"
+#include "encoding_builders.h"
 
 #include <util/string/escape.h>
 #include <ydb/core/formats/arrow/accessor/common/chunk_data.h>
 #include <ydb/core/formats/arrow/accessor/dictionary/constructor.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
-#include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 
 #include <contrib/libs/simdjson/include/simdjson.h>
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
-void TColumnElements::BuildSparsedAccessor(const ui32 recordsCount) {
+void TColumnElements::BuildSparsedAccessor(const ui32 recordsCount, const EValueType valueType) {
     AFL_VERIFY(!Accessor);
-    auto recordsBuilder = TSparsedArray::MakeBuilderBinary(RecordIndexes.size(), DataSize);
-    for (ui32 idx = 0; idx < RecordIndexes.size(); ++idx) {
-        const auto& rec = Values[idx];
-        recordsBuilder.AddRecord(RecordIndexes[idx], std::string_view(rec.Data(), rec.Size()));
-    }
-    Accessor = recordsBuilder.Finish(recordsCount);
-}
-
-void TColumnElements::BuildPlainAccessor(const ui32 recordsCount) {
-    AFL_VERIFY(!Accessor);
-    auto builder = TTrivialArray::MakeBuilderBinary(recordsCount, DataSize);
-    for (auto it = RecordIndexes.begin(); it != RecordIndexes.end(); ++it) {
-        const auto& rec = Values[it - RecordIndexes.begin()];
-        builder.AddRecord(*it, std::string_view(rec.Data(), rec.Size()));
+    TEncodingSparsedBuilder builder(GetCodecForValueType(valueType), RecordIndexes.size(), DataSize);
+    for (ui32 i = 0; i < RecordIndexes.size(); ++i) {
+        builder.AddFromBinaryJson(RecordIndexes[i], Values[i]);
     }
     Accessor = builder.Finish(recordsCount);
 }
 
-void TColumnElements::BuildDictionaryAccessor(const ui32 recordsCount) {
-    BuildPlainAccessor(recordsCount);
-    const TChunkConstructionData cData(
-        recordsCount, nullptr, arrow::binary(), NSerialization::TSerializerContainer::GetDefaultSerializer());
+void TColumnElements::BuildPlainAccessor(const ui32 recordsCount, const EValueType valueType) {
+    AFL_VERIFY(!Accessor);
+    TEncodingPlainBuilder builder(GetCodecForValueType(valueType), recordsCount, DataSize);
+    for (ui32 i = 0; i < RecordIndexes.size(); ++i) {
+        builder.AddFromBinaryJson(RecordIndexes[i], Values[i]);
+    }
+    Accessor = builder.Finish(recordsCount);
+}
+
+void TColumnElements::BuildDictionaryAccessor(const ui32 recordsCount, const EValueType valueType) {
+    BuildPlainAccessor(recordsCount, valueType);
+    const TChunkConstructionData cData(recordsCount, nullptr, GetCodecForValueType(valueType)->GetArrowType(),
+        NSerialization::TSerializerContainer::GetDefaultSerializer());
     Accessor = NDictionary::TConstructor().Construct(Accessor, cData).DetachResult();
 }
 
@@ -67,19 +65,20 @@ std::shared_ptr<TSubColumnsArray> TDataBuilder::Finish() {
     };
     std::sort(columnElements.begin(), columnElements.end(), predSortElements);
     std::sort(otherElements.begin(), otherElements.end(), predSortElements);
-    TDictStats columnStats = BuildStats(columnElements, Settings, CurrentRecordIndex, /*allowDictionary*/ true);
+    TDictStats columnStats = BuildStats(columnElements, Settings, CurrentRecordIndex, true);
     {
         ui32 columnIdx = 0;
         for (auto&& i : columnElements) {
+            const EValueType valueType = columnStats.GetValueType(columnIdx);
             switch (columnStats.GetAccessorType(columnIdx)) {
                 case IChunkedArray::EType::Array:
-                    i->BuildPlainAccessor(CurrentRecordIndex);
+                    i->BuildPlainAccessor(CurrentRecordIndex, valueType);
                     break;
                 case IChunkedArray::EType::SparsedArray:
-                    i->BuildSparsedAccessor(CurrentRecordIndex);
+                    i->BuildSparsedAccessor(CurrentRecordIndex, valueType);
                     break;
                 case IChunkedArray::EType::Dictionary:
-                    i->BuildDictionaryAccessor(CurrentRecordIndex);
+                    i->BuildDictionaryAccessor(CurrentRecordIndex, valueType);
                     break;
                 case IChunkedArray::EType::Undefined:
                 case IChunkedArray::EType::SerializedChunkedArray:
@@ -96,8 +95,8 @@ std::shared_ptr<TSubColumnsArray> TDataBuilder::Finish() {
     TOthersData rbOthers = MergeOthers(otherElements, CurrentRecordIndex);
 
     auto records = std::make_shared<TGeneralContainer>(CurrentRecordIndex);
-    for (auto&& i : columnElements) {
-        records->AddField(std::make_shared<arrow::Field>(std::string(i->GetKeyName()), arrow::binary()), i->GetAccessorVerified()).Validate();
+    for (size_t idx = 0; idx < columnElements.size(); ++idx) {
+        records->AddField(columnStats.GetField(idx), columnElements[idx]->GetAccessorVerified()).Validate();
     }
     TColumnsData cData(std::move(columnStats), std::move(records));
     return std::make_shared<TSubColumnsArray>(std::move(cData), std::move(rbOthers), Type, CurrentRecordIndex, Settings);
@@ -125,7 +124,7 @@ TOthersData TDataBuilder::MergeOthers(const std::vector<TColumnElements*>& other
             std::push_heap(heap.begin(), heap.end());
         }
     }
-    return othersBuilder->Finish(TOthersData::TFinishContext(BuildStats(otherKeys, Settings, recordsCount, /*allowDictionary*/ false)));
+    return othersBuilder->Finish(TOthersData::TFinishContext(BuildStats(otherKeys, Settings, recordsCount, false)));
 }
 
 std::string BuildString(const TStringBuf currentPrefix, const TStringBuf key) {

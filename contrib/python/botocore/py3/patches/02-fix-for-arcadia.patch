@@ -1,9 +1,9 @@
 --- contrib/python/botocore/py3/botocore/data/endpoints.json	(index)
 +++ contrib/python/botocore/py3/botocore/data/endpoints.json	(working tree)
 @@ -21165,6 +21165,46 @@
-     "regionRegex" : "^eu\\-isoe\\-\\w+\\-\\d+$",
-     "regions" : { },
-     "services" : { }
+         }
+       }
+     }
 +  }, {
 +    "defaults" : {
 +      "hostname" : "{service}.{region}.{dnsSuffix}",

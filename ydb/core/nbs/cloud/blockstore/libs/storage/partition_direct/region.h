@@ -21,6 +21,7 @@ class TRegion: public std::enable_shared_from_this<TRegion>
 public:
     TRegion(
         NActors::TActorSystem* actorSystem,
+        ITraceService* traceService,
         IPartitionDirectService* partitionDirectService,
         ui32 regionIndex,
         const TVector<IDirectBlockGroupPtr>& directBlockGroups,
@@ -30,7 +31,10 @@ public:
         NMonitoring::TDynamicCounterPtr counters);
 
     void Run();
+
     NThreading::TFuture<void> Stop();
+
+    [[nodiscard]] TVChunkPtr GetVChunk(size_t vChunkIndex) const;
 
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
         TCallContextPtr callContext,

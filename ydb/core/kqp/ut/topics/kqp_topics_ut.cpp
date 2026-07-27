@@ -449,6 +449,276 @@ Y_UNIT_TEST(KafkaWriteOperation_DualWrite) {
     AssertKafkaWriteOperation(txs, TABLETID, 1, 0, false, PRODUCER_ID);
 }
 
+static
+void AddDeferredPublicationOperation(NTopic::TTopicOperations& ops,
+                                     const TString& topic,
+                                     ui32 partition,
+                                     ui64 tabletId,
+                                     NKikimrKqp::TTopicDeferredPublicationRequest::EOp op,
+                                     ui64 intPublicationId,
+                                     const TString& extPublicationId)
+{
+    ops.SetTrackProducerId(true);
+    ops.AddDeferredPublicationOperation(topic, partition, tabletId, op, intPublicationId, extPublicationId);
+}
+
+static
+NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::EOp ExpectedDeferredPublicationOp(
+    NKikimrKqp::TTopicDeferredPublicationRequest::EOp op)
+{
+    switch (op) {
+        case NKikimrKqp::TTopicDeferredPublicationRequest::Publish:
+            return NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::Publish;
+        case NKikimrKqp::TTopicDeferredPublicationRequest::Cancel:
+            return NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::Cancel;
+        case NKikimrKqp::TTopicDeferredPublicationRequest::Unspecified:
+            return NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::Unspecified;
+        default:
+            return NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::Unspecified;
+    }
+}
+
+static
+void AssertDeferredPublicationOperation(const NTopic::TTopicOperationTransactions& txs,
+                                        ui64 tabletId,
+                                        const TString& topic,
+                                        ui32 partition,
+                                        NKikimrKqp::TTopicDeferredPublicationRequest::EOp op,
+                                        bool skipConflictCheck)
+{
+    UNIT_ASSERT(txs.contains(tabletId));
+    const auto& t = txs.at(tabletId);
+    UNIT_ASSERT(t.hasWrite);
+    UNIT_ASSERT_EQUAL(t.tx.OperationsSize(), 1);
+
+    const auto& writeOp = t.tx.GetOperations(0);
+    UNIT_ASSERT_EQUAL(writeOp.GetPath(), topic);
+    UNIT_ASSERT_EQUAL(writeOp.GetPartitionId(), partition);
+    UNIT_ASSERT(writeOp.HasWrite());
+    UNIT_ASSERT(writeOp.GetWrite().HasDeferredPublication());
+    UNIT_ASSERT_EQUAL(writeOp.GetWrite().GetDeferredPublication().GetOp(), ExpectedDeferredPublicationOp(op));
+    UNIT_ASSERT_EQUAL(writeOp.GetWrite().GetSkipConflictCheck(), skipConflictCheck);
+}
+
+Y_UNIT_TEST(DeferredPublication_Publish_SingleDestination) {
+    const TString TOPIC = "topic";
+    const ui32 PARTITION = 0;
+    const ui64 TABLETID = 1'000'000;
+
+    NTopic::TTopicOperations topicOps;
+    AddDeferredPublicationOperation(topicOps, TOPIC, PARTITION, TABLETID,
+        NKikimrKqp::TTopicDeferredPublicationRequest::Publish, 42, "ext-42");
+
+    UNIT_ASSERT(topicOps.HasDeferredPublicationOperations());
+    UNIT_ASSERT(topicOps.HasWriteOperations());
+    UNIT_ASSERT(!topicOps.HasWriteId());
+    UNIT_ASSERT_VALUES_EQUAL(topicOps.GetDeferredPublicationIntId(), 42u);
+    UNIT_ASSERT_VALUES_EQUAL(topicOps.GetDeferredPublicationExtId(), "ext-42");
+
+    NTopic::TTopicOperationTransactions txs;
+    topicOps.BuildTopicTxs(txs);
+    UNIT_ASSERT_EQUAL(txs.size(), 1);
+    AssertDeferredPublicationOperation(txs, TABLETID, TOPIC, PARTITION,
+        NKikimrKqp::TTopicDeferredPublicationRequest::Publish, false);
+}
+
+Y_UNIT_TEST(DeferredPublication_GetExtIdReturnsEmptyWhenOmitted) {
+    NTopic::TTopicOperations topicOps;
+    topicOps.AddDeferredPublicationOperation("topic", 0, 1'000'000,
+        NKikimrKqp::TTopicDeferredPublicationRequest::Publish, 42, "");
+
+    UNIT_ASSERT(topicOps.HasDeferredPublicationOperations());
+    UNIT_ASSERT_VALUES_EQUAL(topicOps.GetDeferredPublicationExtId(), "");
+}
+
+Y_UNIT_TEST(DeferredPublication_Cancel_MultipleDestinations) {
+    const TString TOPIC_A = "topic_A";
+    const TString TOPIC_B = "topic_B";
+    const ui64 TABLETID_A = 1'000'000;
+    const ui64 TABLETID_B = 2'000'000;
+
+    NTopic::TTopicOperations topicOps;
+    AddDeferredPublicationOperation(topicOps, TOPIC_A, 0, TABLETID_A,
+        NKikimrKqp::TTopicDeferredPublicationRequest::Cancel, 7, "ext-7");
+    AddDeferredPublicationOperation(topicOps, TOPIC_B, 1, TABLETID_B,
+        NKikimrKqp::TTopicDeferredPublicationRequest::Cancel, 7, "ext-7");
+
+    const auto recvTabletIds = topicOps.GetReceivingTabletIds();
+    UNIT_ASSERT_EQUAL(recvTabletIds.size(), 2);
+    UNIT_ASSERT(recvTabletIds.contains(TABLETID_A));
+    UNIT_ASSERT(recvTabletIds.contains(TABLETID_B));
+
+    const auto sendTabletIds = topicOps.GetSendingTabletIds();
+    UNIT_ASSERT_EQUAL(sendTabletIds.size(), 2);
+    UNIT_ASSERT(sendTabletIds.contains(TABLETID_A));
+    UNIT_ASSERT(sendTabletIds.contains(TABLETID_B));
+
+    NTopic::TTopicOperationTransactions txs;
+    topicOps.BuildTopicTxs(txs);
+    UNIT_ASSERT_EQUAL(txs.size(), 2);
+    AssertDeferredPublicationOperation(txs, TABLETID_A, TOPIC_A, 0,
+        NKikimrKqp::TTopicDeferredPublicationRequest::Cancel, false);
+    AssertDeferredPublicationOperation(txs, TABLETID_B, TOPIC_B, 1,
+        NKikimrKqp::TTopicDeferredPublicationRequest::Cancel, false);
+}
+
+Y_UNIT_TEST(DeferredPublication_GetSendingTabletIds_IncludesWriteOnlyTablet) {
+    const TString TOPIC = "topic";
+    const ui64 TABLETID = 1'000'000;
+    const bool skipConflictCheck = true;
+    const bool trackProducerId = false;
+
+    NTopic::TTopicOperations topicOps;
+    topicOps.SetSkipConflictCheck(skipConflictCheck);
+    topicOps.SetTrackProducerId(trackProducerId);
+
+    topicOps.AddDeferredPublicationOperation(TOPIC, 0, TABLETID,
+        NKikimrKqp::TTopicDeferredPublicationRequest::Publish, 1, "ext");
+
+    UNIT_ASSERT(ShouldSkipConflictCheck(skipConflictCheck, trackProducerId));
+
+    const auto sendTabletIds = topicOps.GetSendingTabletIds();
+    UNIT_ASSERT_EQUAL(sendTabletIds.size(), 1);
+    UNIT_ASSERT(sendTabletIds.contains(TABLETID));
+}
+
+Y_UNIT_TEST(DeferredPublication_MergeKeepsPublicationId) {
+    NTopic::TTopicOperations lhs;
+    AddDeferredPublicationOperation(lhs, "topic_A", 0, 100,
+        NKikimrKqp::TTopicDeferredPublicationRequest::Publish, 11, "ext-11");
+
+    NTopic::TTopicOperations rhs;
+    AddDeferredPublicationOperation(rhs, "topic_B", 1, 200,
+        NKikimrKqp::TTopicDeferredPublicationRequest::Publish, 11, "ext-11");
+
+    lhs.Merge(rhs);
+
+    UNIT_ASSERT(lhs.HasDeferredPublicationOperations());
+    UNIT_ASSERT_VALUES_EQUAL(lhs.GetDeferredPublicationIntId(), 11u);
+    UNIT_ASSERT_VALUES_EQUAL(lhs.GetDeferredPublicationExtId(), "ext-11");
+    UNIT_ASSERT_VALUES_EQUAL(lhs.GetSize(), 2u);
+}
+
+Y_UNIT_TEST(DeferredPublication_MergeAllowsMissingExtPublicationId) {
+    NTopic::TTopicOperations lhs;
+    lhs.AddDeferredPublicationOperation("topic_A", 0, 100,
+        NKikimrKqp::TTopicDeferredPublicationRequest::Publish, 11, "");
+
+    NTopic::TTopicOperations rhs;
+    AddDeferredPublicationOperation(rhs, "topic_B", 1, 200,
+        NKikimrKqp::TTopicDeferredPublicationRequest::Publish, 11, "ext-11");
+
+    lhs.Merge(rhs);
+
+    UNIT_ASSERT_VALUES_EQUAL(lhs.GetDeferredPublicationIntId(), 11u);
+    UNIT_ASSERT_VALUES_EQUAL(lhs.GetDeferredPublicationExtId(), "ext-11");
+
+    NTopic::TTopicOperations followUp;
+    followUp.AddDeferredPublicationOperation("topic_C", 2, 300,
+        NKikimrKqp::TTopicDeferredPublicationRequest::Publish, 11, "");
+
+    lhs.Merge(followUp);
+    UNIT_ASSERT_VALUES_EQUAL(lhs.GetDeferredPublicationExtId(), "ext-11");
+}
+
+Y_UNIT_TEST(DeferredPublication_MergeConflictsOnDifferentPublicationId) {
+    NTopic::TTopicOperations lhs;
+    AddDeferredPublicationOperation(lhs, "topic_A", 0, 100,
+        NKikimrKqp::TTopicDeferredPublicationRequest::Publish, 11, "ext-11");
+
+    NTopic::TTopicOperations rhs;
+    AddDeferredPublicationOperation(rhs, "topic_B", 1, 200,
+        NKikimrKqp::TTopicDeferredPublicationRequest::Publish, 22, "ext-22");
+
+    UNIT_ASSERT_EXCEPTION(lhs.Merge(rhs), yexception);
+}
+
+Y_UNIT_TEST(DeferredPublication_MergeRejectsTopicWrite) {
+    NTopic::TTopicOperations lhs;
+    AddDeferredPublicationOperation(lhs, "topic_A", 0, 100,
+        NKikimrKqp::TTopicDeferredPublicationRequest::Publish, 11, "ext-11");
+
+    NTopic::TTopicOperations rhs;
+    AddWriteOperation(rhs, "topic_B", 1, 100'001);
+    rhs.SetTabletId("topic_B", 1, 200);
+
+    UNIT_ASSERT_EXCEPTION(lhs.Merge(rhs), yexception);
+}
+
+Y_UNIT_TEST(DeferredPublication_AddRejectsTopicWriteAfterDeferred) {
+    NTopic::TTopicOperations topicOps;
+    AddDeferredPublicationOperation(topicOps, "topic_A", 0, 100,
+        NKikimrKqp::TTopicDeferredPublicationRequest::Publish, 11, "ext-11");
+
+    UNIT_ASSERT_EXCEPTION(
+        AddWriteOperation(topicOps, "topic_B", 1, 100'001),
+        yexception);
+}
+
+Y_UNIT_TEST(DeferredPublication_AddRejectsDeferredAfterTopicWrite) {
+    NTopic::TTopicOperations topicOps;
+    AddWriteOperation(topicOps, "topic_A", 0, 100'001);
+    topicOps.SetTabletId("topic_A", 0, 100);
+
+    UNIT_ASSERT_EXCEPTION(
+        AddDeferredPublicationOperation(topicOps, "topic_B", 1, 200,
+            NKikimrKqp::TTopicDeferredPublicationRequest::Publish, 11, "ext-11"),
+        yexception);
+}
+
+Y_UNIT_TEST(DeferredPublication_ValidateRejectsUnspecifiedOp) {
+    NKikimrKqp::TTopicDeferredPublicationRequest request;
+    request.SetOp(NKikimrKqp::TTopicDeferredPublicationRequest::Unspecified);
+    request.SetIntPublicationId(1);
+    auto* destination = request.AddDestinations();
+    destination->SetPath("topic");
+    destination->SetPartitionId(0);
+    destination->SetTabletId(1);
+
+    UNIT_ASSERT_EXCEPTION(NTopic::ValidateDeferredPublicationRequest(request), yexception);
+}
+
+Y_UNIT_TEST(DeferredPublication_ValidateRejectsEmptyDestinations) {
+    NKikimrKqp::TTopicDeferredPublicationRequest request;
+    request.SetOp(NKikimrKqp::TTopicDeferredPublicationRequest::Publish);
+    request.SetIntPublicationId(1);
+
+    UNIT_ASSERT_EXCEPTION(NTopic::ValidateDeferredPublicationRequest(request), yexception);
+}
+
+Y_UNIT_TEST(DeferredPublication_ValidateRejectsDestinationWithoutPath) {
+    NKikimrKqp::TTopicDeferredPublicationRequest request;
+    request.SetOp(NKikimrKqp::TTopicDeferredPublicationRequest::Publish);
+    request.SetIntPublicationId(1);
+    auto* destination = request.AddDestinations();
+    destination->SetPartitionId(0);
+    destination->SetTabletId(1);
+
+    UNIT_ASSERT_EXCEPTION(NTopic::ValidateDeferredPublicationRequest(request), yexception);
+}
+
+Y_UNIT_TEST(DeferredPublication_ValidateRejectsDestinationWithoutPartitionId) {
+    NKikimrKqp::TTopicDeferredPublicationRequest request;
+    request.SetOp(NKikimrKqp::TTopicDeferredPublicationRequest::Publish);
+    request.SetIntPublicationId(1);
+    auto* destination = request.AddDestinations();
+    destination->SetPath("topic");
+    destination->SetTabletId(1);
+
+    UNIT_ASSERT_EXCEPTION(NTopic::ValidateDeferredPublicationRequest(request), yexception);
+}
+
+Y_UNIT_TEST(DeferredPublication_ValidateRejectsDestinationWithoutTabletId) {
+    NKikimrKqp::TTopicDeferredPublicationRequest request;
+    request.SetOp(NKikimrKqp::TTopicDeferredPublicationRequest::Publish);
+    request.SetIntPublicationId(1);
+    auto* destination = request.AddDestinations();
+    destination->SetPath("topic");
+    destination->SetPartitionId(0);
+
+    UNIT_ASSERT_EXCEPTION(NTopic::ValidateDeferredPublicationRequest(request), yexception);
+}
+
 }
 
 }

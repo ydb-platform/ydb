@@ -1,7 +1,8 @@
 #include "direct_block_group_test_fixture.h"
 
+#include "partition_direct_service_mock.h"
+
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service_mock.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor_ut.h>
 
@@ -63,6 +64,58 @@ void TDBGFixture::DrainRuntime() const
 {
     for (int i = 0; i < MaxDrainIterations && DispatchRuntimeOnce(); ++i) {
     }
+}
+
+TBlockedDetectedState TDBGFixture::GetBlockedDetected(
+    const TExecutorPtr& executor,
+    const std::shared_ptr<TDirectBlockGroup>& dbg,
+    THostIndex hostIndex,
+    TDuration waitTimeout)
+{
+    return RunOnExecutor(
+               executor,
+               [dbg, hostIndex]
+               {
+                   return TBlockedDetectedState{
+                       .DDiskSessionBroken =
+                           dbg->DDiskConnections[hostIndex].SessionState ==
+                           EDDiskSessionState::Broken,
+                       .BlockedGenerationDetected =
+                           dbg->BlockedGenerationDetected};
+               })
+        .GetValue(waitTimeout);
+}
+
+TVector<ui64> TDBGFixture::ReadAllDDiskSeqNos(
+    const TExecutorPtr& executor,
+    const std::shared_ptr<TDirectBlockGroup>& dbg,
+    TDuration waitTimeout)
+{
+    return RunOnExecutor(
+               executor,
+               [&]
+               {
+                   TVector<ui64> result;
+                   for (size_t i = 0; i < DirectBlockGroupHostCount; ++i) {
+                       result.push_back(
+                           dbg->DDiskConnections[i].ConfirmedSessionSeqNo);
+                   }
+                   return result;
+               })
+        .GetValue(waitTimeout);
+}
+
+ui64 TDBGFixture::GetDDiskSessionSeqNo(
+    const TExecutorPtr& executor,
+    const std::shared_ptr<TDirectBlockGroup>& dbg,
+    size_t index,
+    TDuration waitTimeout)
+{
+    return RunOnExecutor(
+               executor,
+               [&]
+               { return dbg->DDiskConnections[index].ConfirmedSessionSeqNo; })
+        .GetValue(waitTimeout);
 }
 
 TExecutorPtr TDBGFixture::MakeExecutor()
@@ -140,8 +193,12 @@ NThreading::TFuture<void> TDBGFixture::RunAndGetInitialReady(
 {
     auto service =
         std::make_shared<TPartitionDirectServiceMock>(dropScheduledCallbacks);
-    Services.push_back(service);
-    return dbg->Run(service.get());
+    if (Service) {
+        OldServices.push_back(std::move(Service));
+    }
+    Service = service;
+
+    return dbg->Run(TraceService.get(), service.get());
 }
 
 void TDBGFixture::WaitReady(

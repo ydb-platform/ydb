@@ -18,6 +18,7 @@
 #include <util/memory/pool.h>
 
 #include <functional>
+#include <new>
 #include <unordered_map>
 #include <unordered_set>
 #include <optional>
@@ -658,10 +659,11 @@ class TDirectArrayHolderInplace final: public TComputationValue<TDirectArrayHold
 public:
     void* operator new(size_t sz) = delete;
     void* operator new[](size_t sz) = delete;
-    void operator delete(void* mem, std::size_t sz) {
-        const auto pSize = static_cast<void*>(static_cast<ui8*>(mem) +
-                                              sizeof(TComputationValue<TDirectArrayHolderInplace>));
-        FreeWithSize(mem, sz + *static_cast<ui64*>(pSize) * sizeof(NUdf::TUnboxedValue));
+    // Destroying delete: reads Size_ member before running the destructor
+    void operator delete(TDirectArrayHolderInplace* self, std::destroying_delete_t) {
+        const auto fullSize = sizeof(TDirectArrayHolderInplace) + self->Size_ * sizeof(NUdf::TUnboxedValue);
+        self->~TDirectArrayHolderInplace();
+        FreeWithSize(self, fullSize);
     }
 
     void operator delete[](void* mem, std::size_t sz) = delete;

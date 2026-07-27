@@ -1,29 +1,29 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: decorator
-Version: 5.1.1
+Version: 5.3.1
 Summary: Decorators for Humans
-Home-page: https://github.com/micheles/decorator
-Author: Michele Simionato
-Author-email: michele.simionato@gmail.com
-License: new BSD License
-Keywords: decorators generic utility
-Platform: All
+Author-email: Michele Simionato <michele.simionato@gmail.com>
+License: BSD-2-Clause
+Keywords: decorators
 Classifier: Development Status :: 5 - Production/Stable
 Classifier: Intended Audience :: Developers
-Classifier: License :: OSI Approved :: BSD License
 Classifier: Natural Language :: English
 Classifier: Operating System :: OS Independent
 Classifier: Programming Language :: Python
-Classifier: Programming Language :: Python :: 3.5
-Classifier: Programming Language :: Python :: 3.6
-Classifier: Programming Language :: Python :: 3.7
 Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Topic :: Software Development :: Libraries
 Classifier: Topic :: Utilities
-Requires-Python: >=3.5
+Requires-Python: >=3.8
+Description-Content-Type: text/x-rst
+License-File: LICENSE.txt
+Dynamic: license-file
 
 Decorators for Humans
 =====================
@@ -59,11 +59,7 @@ Testing
 
 If you have the source code installation you can run the tests with
 
- `$ python src/tests/test.py -v`
-
-or (if you have setuptools installed)
-
- `$ python setup.py test`
+ `$ python tests/test.py -v`
 
 Notice that you may run into trouble if in your system there
 is an older version of the decorator module; in such a case remove the
@@ -109,7 +105,7 @@ operations:
        result = func(*args, **kw)
        dt = time.time() - t0
        if dt > timelimit:
-           logging.warn('%s took %d seconds', func.__name__, dt)
+           logging.warning('%s took %d seconds', func.__name__, dt)
        else:
            logging.info('%s took %d seconds', func.__name__, dt)
        return result
@@ -123,5 +119,3 @@ operations:
        ...
 
 Enjoy!
-
-

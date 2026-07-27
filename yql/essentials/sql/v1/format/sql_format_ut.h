@@ -61,14 +61,14 @@ Y_UNIT_TEST(Materialize) {
         {"use plato;materialize Input into $result;",
          "USE plato;\n\nMATERIALIZE Input INTO $result;\n"},
 
-        {"materialize plato.Input on plato into $result;",
-         "MATERIALIZE plato.Input ON plato INTO $result;\n"},
+        {"materialize plato.Input into $result on plato;",
+         "MATERIALIZE plato.Input INTO $result ON plato;\n"},
 
         {"use plato;materialize Input into $result;select * from $result;",
          "USE plato;\n\nMATERIALIZE Input INTO $result;\n\nSELECT\n\t*\nFROM\n\t$result\n;\n"},
 
-        {"materialize (select * from plato.Input) on plato into $result;",
-         "MATERIALIZE (\n\tSELECT\n\t\t*\n\tFROM\n\t\tplato.Input\n) ON plato INTO $result;\n"},
+        {"materialize (select * from plato.Input) into $result on plato;",
+         "MATERIALIZE (\n\tSELECT\n\t\t*\n\tFROM\n\t\tplato.Input\n) INTO $result ON plato;\n"},
     };
 
     TSetup setup;
@@ -205,12 +205,24 @@ Y_UNIT_TEST(SecretOperations) {
         {// create with more than one setting
          "use plato; create secret `secret-name` with (value=\"secret_value\",inherit_permissions=fALSe);\n",
          "USE plato;\n\nCREATE SECRET `secret-name` WITH (value = 'secret_value', inherit_permissions = FALSE);\n"},
+        {// create if not exists
+         "use plato; create secret if not exists `secret-name` with (value=\"secret_value\");\n",
+         "USE plato;\n\nCREATE SECRET IF NOT EXISTS `secret-name` WITH (value = 'secret_value');\n"},
+        {// create or replace
+         "use plato; create or replace secret `secret-name` with (value=\"secret_value\");\n",
+         "USE plato;\n\nCREATE OR REPLACE SECRET `secret-name` WITH (value = 'secret_value');\n"},
         {// alter
          "use plato; alter secret `secret-name` with (value=\"secret_value\");\n",
          "USE plato;\n\nALTER SECRET `secret-name` WITH (value = 'secret_value');\n"},
+        {// alter if exists
+         "use plato; alter secret if exists `secret-name` with (value=\"secret_value\");\n",
+         "USE plato;\n\nALTER SECRET IF EXISTS `secret-name` WITH (value = 'secret_value');\n"},
         {// drop
          "use plato; drop secret `secret-name`;\n",
          "USE plato;\n\nDROP SECRET `secret-name`;\n"},
+        {// drop if exists
+         "use plato; drop secret if exists `secret-name`;\n",
+         "USE plato;\n\nDROP SECRET IF EXISTS `secret-name`;\n"},
     };
 
     TSetup setup;
@@ -432,6 +444,20 @@ Y_UNIT_TEST(CreateTable) {
         {"create  table\tuser(key int32, val String encoding(off))", "CREATE TABLE user (\n\tkey int32,\n\tval String ENCODING (off)\n);\n"},
         {"create  table\tuser(key int32, val String encoding())", "CREATE TABLE user (\n\tkey int32,\n\tval String ENCODING ()\n);\n"},
         {"create table user(key int32, val String encoding(dict(max_size=100)))", "CREATE TABLE user (\n\tkey int32,\n\tval String ENCODING (dict (max_size = 100))\n);\n"},
+        {"create table user(key int32, val int64 generated always as (key+1) stored)",
+         "CREATE TABLE user (\n\tkey int32,\n\tval int64 GENERATED ALWAYS AS (key + 1) STORED\n);\n"},
+        {"create table user(key int32, val int64 generated always as (key+1) virtual)",
+         "CREATE TABLE user (\n\tkey int32,\n\tval int64 GENERATED ALWAYS AS (key + 1) VIRTUAL\n);\n"},
+        {"create table user(key int32, val int64 generated always as (key+1))",
+         "CREATE TABLE user (\n\tkey int32,\n\tval int64 GENERATED ALWAYS AS (key + 1)\n);\n"},
+        {"create table user(key int32, val int64 as (key+1) stored)",
+         "CREATE TABLE user (\n\tkey int32,\n\tval int64 AS (key + 1) STORED\n);\n"},
+        {"create table user(key int32, val int64 as (key+1))",
+         "CREATE TABLE user (\n\tkey int32,\n\tval int64 AS (key + 1)\n);\n"},
+        {"create table user(key int32, val int64 GeNeRaTeD AlWaYs As (key+1) StOrEd)",
+         "CREATE TABLE user (\n\tkey int32,\n\tval int64 GENERATED ALWAYS AS (key + 1) STORED\n);\n"},
+        {"create table user(key int32, val int64 (not null, generated always as (key+1) stored))",
+         "CREATE TABLE user (\n\tkey int32,\n\tval int64 (NOT NULL, GENERATED ALWAYS AS (key + 1) STORED)\n);\n"},
     };
 
     TSetup setup;
@@ -691,6 +717,18 @@ Y_UNIT_TEST(AlterTable) {
          "ALTER TABLE t\n\tALTER COLUMN c SET ENCODING ()\n;\n"},
         {"alter table t alter column c set encoding(dict(max_size=100))",
          "ALTER TABLE t\n\tALTER COLUMN c SET ENCODING (dict (max_size = 100))\n;\n"},
+        {"alter table user add column val int64 generated always as (key+1) stored",
+         "ALTER TABLE user\n\tADD COLUMN val int64 GENERATED ALWAYS AS (key + 1) STORED\n;\n"},
+        {"alter table user add column val int64 generated always as (key+1) virtual",
+         "ALTER TABLE user\n\tADD COLUMN val int64 GENERATED ALWAYS AS (key + 1) VIRTUAL\n;\n"},
+        {"alter table user add column val int64 generated always as (key+1)",
+         "ALTER TABLE user\n\tADD COLUMN val int64 GENERATED ALWAYS AS (key + 1)\n;\n"},
+        {"alter table user add column val int64 as (key+1) stored",
+         "ALTER TABLE user\n\tADD COLUMN val int64 AS (key + 1) STORED\n;\n"},
+        {"alter table user add val int64 GeNeRaTeD AlWaYs As (key+1) StOrEd",
+         "ALTER TABLE user\n\tADD val int64 GENERATED ALWAYS AS (key + 1) STORED\n;\n"},
+        {"alter table user add column val int64 (not null, generated always as (key+1) stored)",
+         "ALTER TABLE user\n\tADD COLUMN val int64 (NOT NULL, GENERATED ALWAYS AS (key + 1) STORED)\n;\n"},
     };
 
     TSetup setup;

@@ -12,6 +12,7 @@ extern "C" {
 #include "catalog/pg_namespace.h"
 #include "catalog/pg_type.h"
 #include "catalog/pg_type_d.h"
+#include "catalog/pg_collation.h"
 #include "catalog/pg_authid.h"
 #include "access/htup_details.h"
 #include "utils/fmgroids.h"
@@ -129,7 +130,7 @@ bool ByNameProcEquals3(const THeapTupleKey& key1, const THeapTupleKey& key2) {
 }
 
 struct TSysCacheItem {
-    TSysCacheItem(THeapTupleHasher hasher, THeapTupleEquals equals, TupleDesc desc, ui32 numKeys = 1, 
+    TSysCacheItem(THeapTupleHasher hasher, THeapTupleEquals equals, TupleDesc desc, ui32 numKeys = 1,
         THeapTupleHasher hasherRange1 = {}, THeapTupleEquals equalsRange1 = {})
         : NumKeys(numKeys)
         , LookupMap(0, hasher, equals)
@@ -199,7 +200,7 @@ struct TSysCache {
 
     static TSysCache& MutableInstance() {
         return *Singleton<TSysCache>();
-    }    
+    }
 
     TSysCache()
     {
@@ -219,6 +220,7 @@ struct TSysCache {
 
             InitializeProcs();
             InitializeTypes();
+            InitializeCollations();
             InitializeDatabase();
             InitializeAuthId();
             InitializeNameAndOidNamespaces();
@@ -477,12 +479,65 @@ struct TSysCache {
             Y_ENSURE(row->typalign == desc.TypeAlign);
             Y_ENSURE(row->typstorage == storage);
 
-            auto key1 = THeapTupleKey(oid, 0, 0, 0);            
+            auto key1 = THeapTupleKey(oid, 0, 0, 0);
             lookupMap1.emplace(key1, h);
             auto key2 = THeapTupleKey((Datum)desc.Name.c_str(), PG_CATALOG_NAMESPACE, 0, 0);
             lookupMap2.emplace(key2, h);
         });
 
+    }
+
+    void InitializeCollations() {
+        TupleDesc tupleDesc = CreateTemplateTupleDesc(Natts_pg_collation);
+        FillAttr(tupleDesc, Anum_pg_collation_oid, OIDOID);
+        FillAttr(tupleDesc, Anum_pg_collation_collname, NAMEOID);
+        FillAttr(tupleDesc, Anum_pg_collation_collnamespace, OIDOID);
+        FillAttr(tupleDesc, Anum_pg_collation_collowner, OIDOID);
+        FillAttr(tupleDesc, Anum_pg_collation_collprovider, CHAROID);
+        FillAttr(tupleDesc, Anum_pg_collation_collisdeterministic, BOOLOID);
+        FillAttr(tupleDesc, Anum_pg_collation_collencoding, INT4OID);
+        FillAttr(tupleDesc, Anum_pg_collation_collcollate, TEXTOID);
+        FillAttr(tupleDesc, Anum_pg_collation_collctype, TEXTOID);
+        FillAttr(tupleDesc, Anum_pg_collation_colliculocale, TEXTOID);
+        FillAttr(tupleDesc, Anum_pg_collation_collicurules, TEXTOID);
+        FillAttr(tupleDesc, Anum_pg_collation_collversion, TEXTOID);
+
+        auto& cacheItem = Items[COLLOID] = std::make_unique<TSysCacheItem>(OidHasher1, OidEquals1, tupleDesc);
+        auto& lookupMap = cacheItem->LookupMap;
+
+        NPg::EnumCollation([&](ui32 oid, const NPg::TCollationDesc& desc) {
+            Datum values[Natts_pg_collation];
+            bool nulls[Natts_pg_collation];
+            Zero(values);
+            std::fill_n(nulls, Natts_pg_collation, true);
+            std::fill_n(nulls, Anum_pg_collation_collencoding, false); // fixed part of Form_pg_collation
+            FillDatum(Natts_pg_collation, values, nulls, Anum_pg_collation_oid, oid);
+            auto name = MakeFixedString(desc.Name, NAMEDATALEN);
+            FillDatum(Natts_pg_collation, values, nulls, Anum_pg_collation_collname, (Datum)name);
+            FillDatum(Natts_pg_collation, values, nulls, Anum_pg_collation_collnamespace, PG_CATALOG_NAMESPACE);
+            FillDatum(Natts_pg_collation, values, nulls, Anum_pg_collation_collowner, 1);
+            FillDatum(Natts_pg_collation, values, nulls, Anum_pg_collation_collprovider, (char)desc.Provider);
+            FillDatum(Natts_pg_collation, values, nulls, Anum_pg_collation_collisdeterministic, true);
+            FillDatum(Natts_pg_collation, values, nulls, Anum_pg_collation_collencoding, desc.Encoding);
+            if (!desc.Collate.empty()) {
+                FillDatum(Natts_pg_collation, values, nulls, Anum_pg_collation_collcollate, (Datum)MakeVar(desc.Collate));
+            }
+            if (!desc.Ctype.empty()) {
+                FillDatum(Natts_pg_collation, values, nulls, Anum_pg_collation_collctype, (Datum)MakeVar(desc.Ctype));
+            }
+            if (!desc.IcuLocale.empty()) {
+                FillDatum(Natts_pg_collation, values, nulls, Anum_pg_collation_colliculocale, (Datum)MakeVar(desc.IcuLocale));
+            }
+
+            HeapTuple h = heap_form_tuple(tupleDesc, values, nulls);
+            auto row = (Form_pg_collation)GETSTRUCT(h);
+            Y_ENSURE(row->oid == oid);
+            Y_ENSURE(NameStr(row->collname) == desc.Name);
+            Y_ENSURE(row->collprovider == (char)desc.Provider);
+
+            auto key = THeapTupleKey(oid, 0, 0, 0);
+            lookupMap.emplace(key, h);
+        });
     }
 
     static HeapTuple MakePgDatabaseHeapTuple(ui32 oid, const char* name) {

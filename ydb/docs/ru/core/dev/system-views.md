@@ -379,7 +379,7 @@ WHERE ApplicationName = 'my_analytics_app'
 | `Metadata` | Типы параметров запроса в формате JSON. Содержит ключ `parameters` с именами параметров и их типами.<br/>Тип: `Utf8`. |
 | `IsTruncated` | Флаг, указывающий, был ли текст запроса обрезан из-за превышения лимита в 10 КБ.<br/>Тип: `Bool`. |
 | `QueryType` | Тип запроса, значение одно из:<br/>`QUERY_TYPE_SQL_DML` — Table Service<br/>`QUERY_TYPE_SQL_GENERIC_QUERY` — Query Service<br/>`QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY` — Query Service в конкурентном режиме<br/>Для старых записей может быть пустым.<br/>Тип: `Utf8`. |
-| `Syntax` | Синтаксис запроса, значение одно из:<br/>`SYNTAX_YQL_V1` — YQL<br/>`SYNTAX_PG` — PostgreSQL-совместимый синтаксис<br/>`SYNTAX_UNSPECIFIED` — для старых записей без информации о синтаксисе<br/>Тип: `Utf8`. |
+| `Syntax` | Синтаксис запроса, значение одно из:<br/>`SYNTAX_YQL_V1` — YQL<br/>`SYNTAX_UNSPECIFIED` — для старых записей без информации о синтаксисе<br/>`SYNTAX_PG` — устаревшее значение для записей, скомпилированных до удаления экспериментальной PostgreSQL-совместимости; новые запросы с этим синтаксисом не принимаются<br/>Тип: `Utf8`. |
 
 ### Примеры запросов {#compile-cache-queries-examples}
 
@@ -721,9 +721,9 @@ WHERE Sid = "user3"
 
 ### Просмотр информации о потоковых запросах {#streaming_queries}
 
-Системное представление `streaming_queries` содержит информацию о всех созданных [потоковых запросах](../concepts/streaming-query.md).
+Системное представление `streaming_queries` содержит информацию о всех созданных [потоковых запросах](../concepts/streaming-query/streaming-query.md).
 
-Пользователю в данном представлении отображаются только те [потоковые запросы](../concepts/streaming-query.md), на которые ему предоставлено право `ydb.granular.describe_schema`.
+Пользователю в данном представлении отображаются только те [потоковые запросы](../concepts/streaming-query/streaming-query.md), на которые ему предоставлено право `ydb.granular.describe_schema`.
 
 Структура таблицы:
 

@@ -564,9 +564,13 @@ private:
                                                          const TActorId& sender,
                                                          const TActorContext& ctx);
     void HandleWriteRequestForSupportivePartition(const ui64 responseCookie,
-                                                  NWilson::TTraceId traceId,
-                                                  const NKikimrClient::TPersQueuePartitionRequest& req,
-                                                  const TActorContext& ctx);
+                                                   NWilson::TTraceId traceId,
+                                                   const NKikimrClient::TPersQueuePartitionRequest& req,
+                                                   const TActorContext& ctx);
+    void HandleAbortDeferredStagingRequest(const ui64 responseCookie,
+                                           NWilson::TTraceId traceId,
+                                           const NKikimrClient::TPersQueuePartitionRequest& req,
+                                           const TActorContext& ctx);
 
     void ForwardGetOwnershipToSupportivePartitions(const TActorContext& ctx);
 

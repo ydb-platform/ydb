@@ -341,13 +341,6 @@ public:
 
     ~TBucket();
 
-    void RunCallback(const TClosure& callback, TCpuInstant cpuInstant)
-    {
-        YT_LOG_TRACE("Executing callback (EnqueuedAt: %v)", cpuInstant);
-        TCurrentInvokerGuard currentInvokerGuard(this);
-        callback.Run();
-    }
-
     bool IsSerialized() const override
     {
         return false;
@@ -704,8 +697,10 @@ public:
 
         TAction action;
         action.EnqueuedAt = cpuInstant;
-        // Callback keeps raw ptr to bucket to minimize bucket ref count.
-        action.Callback = BIND(&TBucket::RunCallback, Unretained(bucket), std::move(callback), cpuInstant);
+        // Store the callback as-is; the bucket is installed as the current invoker
+        // around execution (see DoOnExecute) instead of wrapping every callback in a
+        // freshly allocated closure. BucketHolder keeps the bucket alive meanwhile.
+        action.Callback = std::move(callback);
         action.BucketHolder = MakeStrong(bucket);
         action.EnqueuedThreadCookie = ThreadCookie();
 
@@ -1229,6 +1224,7 @@ private:
                 SpinLockPause();
 
                 if (request.load(std::memory_order::acquire) == ERequest::None) {
+                    SetCurrentInvoker(threadState.Action.BucketHolder.Get());
                     return std::move(threadState.Action.Callback);
                 } else if (!MainLock_.IsLocked() && MainLock_.TryAcquire()) {
                     break;
@@ -1254,6 +1250,7 @@ private:
 
         NotifyAfterFetch(endInstant, newMinEnqueuedAt);
 
+        SetCurrentInvoker(threadState.Action.BucketHolder.Get());
         return std::move(threadState.Action.Callback);
     }
 };
@@ -1297,6 +1294,11 @@ protected:
 
     TClosure OnExecute() override
     {
+        // Reset the invoker installed for the previously executed callback
+        // (mirrors TSchedulerThread::EndExecute); DoOnExecute installs the bucket
+        // as the current invoker for the next callback.
+        SetCurrentInvoker(nullptr);
+
         bool fetchNext = !TSchedulerThread::IsStopping() || TSchedulerThread::GracefulStop_;
 
         return Queue_->OnExecute(Index_, fetchNext, [&] {

@@ -52,7 +52,8 @@ class IamTokenServicer(iam_token_service_pb2_grpc.IamTokenServiceServicer):
     def __init__(self, token, expires_in):
         self.token = token
         self.expires_in = expires_in
-        self.invocation = 0
+        self.calls = 0
+        self.token_calls = 0
 
     def _pick_token(self):
         return self.token
@@ -66,32 +67,52 @@ class IamTokenServicer(iam_token_service_pb2_grpc.IamTokenServiceServicer):
         return make_response(self._pick_token(), self.expires_in)
 
     def CreateForService(self, request, context):
-        token =self._pick_token()
+        token = self._pick_token()
         logger.debug(
             "IamTokenService.CreateForService called, service_id=%s microservice_id=%s resource_id=%s target_sa=%s token=%s",
             request.service_id, request.microservice_id, request.resource_id, request.target_service_account_id, token
         )
 
         target_sa = request.target_service_account_id
-
-        if target_sa == 'bad':
-            context.set_code(grpc.StatusCode.PERMISSION_DENIED)
-            context.set_details("Reject bad SA")
+        expires_in = self.expires_in
 
         if target_sa == 'flaky':
             if random.random() < 0.1:
                 logger.debug("Simulating random failure")
                 context.set_code(grpc.StatusCode.UNAVAILABLE)
                 context.set_details("Too busy to respond")
+                return iam_token_service_pb2.CreateIamTokenResponse()
 
-        if target_sa == 'odd':
-            self.invocation += 1
-            if self.invocation % 2 != 0:
-                logger.debug("Simulating odd failure")
-                context.set_code(grpc.StatusCode.UNAVAILABLE)
-                context.set_details("Too busy to respond")
+        if target_sa == 'bad':
+            context.set_code(grpc.StatusCode.PERMISSION_DENIED)
+            context.set_details("Reject bad SA")
+            return iam_token_service_pb2.CreateIamTokenResponse()
 
-        return make_response(token, self.expires_in)
+        if target_sa == 'bad-token':
+            return make_response("badtoken@builtin", expires_in)
+
+        if target_sa.startswith('bad-skip-'):
+            skips = int(target_sa.split('-')[-1])
+            self.calls += 1
+            self.calls %= skips + 1
+            expires_in = 0
+            if self.calls == 0:
+                context.set_code(grpc.StatusCode.PERMISSION_DENIED)
+                context.set_details("Reject bad SA")
+                return iam_token_service_pb2.CreateIamTokenResponse()
+
+        if target_sa.startswith('bad-token-skip-'):
+            skips = int(target_sa.split('-')[-1])
+            self.token_calls += 1
+            self.token_calls %= skips + 1
+            expires_in = 0
+            if self.token_calls == 0:
+                return make_response("badtoken@builtin", expires_in)
+
+        if target_sa == 'bad-token':
+            return make_response("badtoken@builtin", expires_in)
+
+        return make_response(token, expires_in)
 
 
 def make_dummy_subject():
@@ -105,7 +126,7 @@ def make_dummy_subject():
 
 class AccessServicer(access_service_pb2_grpc.AccessServiceServicer):
     def __init__(self):
-        self.invocation = 0
+        self.calls = 0
         pass
 
     def Authenticate(self, request, context):
@@ -128,23 +149,25 @@ class AccessServicer(access_service_pb2_grpc.AccessServiceServicer):
                 context.set_details("Don't know about this type: " + resource.type)
                 return access_service_pb2.AuthorizeResponse()
 
-            if resource.id == 'odd':
-                self.invocation += 1
-                if self.invocation % 2 != 0:
-                    context.set_code(grpc.StatusCode.UNAVAILABLE)
-                    context.set_details("Too busy to respond for odd")
-                    return access_service_pb2.AuthorizeResponse()
-
             if resource.id == 'flaky':
                 if random.random() < 0.1:
                     context.set_code(grpc.StatusCode.UNAVAILABLE)
                     context.set_details("Too busy to respond for flaky")
                     return access_service_pb2.AuthorizeResponse()
 
-            if resource.id == 'bad':
+            if resource.id == 'bad-sa':
                 context.set_code(grpc.StatusCode.PERMISSION_DENIED)
                 context.set_details("This one is bad")
                 return access_service_pb2.AuthorizeResponse()
+
+            if resource.id.startswith('bad-skip-'):
+                skips = int(resource.id.split('-')[-1])
+                self.calls += 1
+                self.calls %= skips + 1
+                if self.calls == 0:
+                    context.set_code(grpc.StatusCode.PERMISSION_DENIED)
+                    context.set_details("Reject bad SA")
+                    return access_service_pb2.AuthorizeResponse()
 
             return access_service_pb2.AuthorizeResponse(
                 subject=make_dummy_subject()

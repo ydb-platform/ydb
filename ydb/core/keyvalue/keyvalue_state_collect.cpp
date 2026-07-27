@@ -148,6 +148,11 @@ void TKeyValueState::CompleteGCComplete(const TActorContext &ctx, const TTabletS
         {"trashCount", GetTrashCount()});
     ProcessPostponedTrims(ctx, info);
     PrepareCollectIfNeeded(ctx);
+
+    if (MoveDataTrashCheckingWaitingForGC) {
+        MoveDataTrashCheckingWaitingForGC = false;
+        ctx.Send(ctx.SelfID, new TEvKeyValue::TEvCheckTrash);
+    }
 }
 
 bool TKeyValueState::StartVacuum(ui64 generation, TActorId sender) {

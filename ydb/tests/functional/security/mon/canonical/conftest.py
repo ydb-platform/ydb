@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 import pytest
-import requests
 
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.functional.security.lib.cluster_config import create_ydb_configurator, generate_certificates
+from ydb.tests.functional.security.lib.security_test_helpers import run_viewer_query
 
 TENANT_DATABASE = '/Root/Tenant'
 
@@ -22,25 +22,21 @@ def _create_tenant_database(cluster, database_name):
         storage_pool_units_count={'hdd': 1},
         token='root@builtin',
     )
-    cluster.register_and_start_slots(database_name, count=1)
+    slots = cluster.register_and_start_slots(database_name, count=1)
     cluster.wait_tenant_up(database_name, token='root@builtin')
+    return slots[0]
 
 
-def _grant_describe_schema_on_database(cluster, database_name):
-    node = cluster.nodes[1]
-    base_url = f'https://{node.host}:{node.mon_port}'
-    grant_query = (
+def _grant_describe_schema_on_database(tenant_node, database_name):
+    # Query tenant DB on the tenant slot directly to avoid root-node 307 redirect
+    # through /node/<id>/viewer/query, which can hit the legacy EvHttpInfo path.
+    base_url = f'https://{tenant_node.host}:{tenant_node.mon_port}'
+    run_viewer_query(
+        base_url,
         f"GRANT 'ydb.granular.describe_schema' ON `{database_name}` "
-        f"TO `database@builtin`, `viewer@builtin`, `monitoring@builtin`, `root@builtin`;"
+        f"TO `database@builtin`, `viewer@builtin`, `monitoring@builtin`, `root@builtin`;",
+        database=database_name,
     )
-    grant_response = requests.post(
-        base_url + '/viewer/query',
-        headers={'Authorization': 'root@builtin'},
-        params={'database': database_name, 'query': grant_query, 'schema': 'multi'},
-        verify=False,
-        timeout=30,
-    )
-    assert grant_response.status_code == 200, grant_response.text
 
 
 def _start_mon_endpoints_auth_cluster(
@@ -61,8 +57,8 @@ def _start_mon_endpoints_auth_cluster(
     cluster = KiKiMR(configurator)
     cluster.start()
     if with_schema_grants:
-        _create_tenant_database(cluster, TENANT_DATABASE)
-        _grant_describe_schema_on_database(cluster, TENANT_DATABASE)
+        tenant_node = _create_tenant_database(cluster, TENANT_DATABASE)
+        _grant_describe_schema_on_database(tenant_node, TENANT_DATABASE)
     return cluster
 
 

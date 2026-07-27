@@ -4,7 +4,7 @@
 
 ### Version 26.1.1.20 {#26-1-1-20}
 
-Release date: TBD.
+Release date: July 2, 2026.
 
 #### Functionality
 

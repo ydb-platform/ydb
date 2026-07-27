@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: s3transfer
-Version: 0.10.4
+Version: 0.11.3
 Summary: An Amazon S3 Transfer Manager
 Home-page: https://github.com/boto/s3transfer
 Author: Amazon Web Services
@@ -22,9 +22,9 @@ Classifier: Programming Language :: Python :: 3.13
 Requires-Python: >= 3.8
 License-File: LICENSE.txt
 License-File: NOTICE.txt
-Requires-Dist: botocore (<2.0a.0,>=1.33.2)
+Requires-Dist: botocore (<2.0a.0,>=1.36.0)
 Provides-Extra: crt
-Requires-Dist: botocore[crt] (<2.0a.0,>=1.33.2) ; extra == 'crt'
+Requires-Dist: botocore[crt] (<2.0a.0,>=1.36.0) ; extra == 'crt'
 
 =====================================================
 s3transfer - An Amazon S3 Transfer Manager for Python

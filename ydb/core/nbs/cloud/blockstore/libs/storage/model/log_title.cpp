@@ -121,6 +121,15 @@ TString ToString(const TLogTitle::TDDiskDataCopier& data)
     return stream;
 }
 
+TString ToString(const TLogTitle::TInterconnectTransport& data)
+{
+    TStringBuilder stream;
+
+    stream << "[ic:" << data.DiskId << "/" << data.DBGIndex;
+
+    return stream;
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////

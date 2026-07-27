@@ -6,6 +6,7 @@
 #include <ydb/core/tablet/resource_broker.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
 
 namespace NKikimr::NOlap::NResourceBroker::NSubscribe {
 
@@ -39,8 +40,10 @@ public:
     }
 
     STFUNC(StateWait) {
-        TLogContextGuard gLogging(NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("tablet_id", TabletId)("parent", Parent)(
-            "ev_type", ev->GetTypeName()));
+        YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+            {"tabletId", TabletId},
+            {"parent", Parent},
+            {"evType", ev->GetTypeName()});
         switch (ev->GetTypeRewrite()) {
             cFunc(NActors::TEvents::TEvPoison::EventType, StartStopping);
             hFunc(TEvStartTask, Handle);

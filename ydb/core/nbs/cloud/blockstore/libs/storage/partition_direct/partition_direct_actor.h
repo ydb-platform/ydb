@@ -9,6 +9,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/tablet.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor_pool.h>
@@ -53,7 +54,7 @@ private:
 
     NActors::TActorId LoadActorAdapter;
     bool DDiskBlockGroupAllocated = false;
-    std::shared_ptr<TFastPathService> FastPathService;
+    TFastPathServicePtr FastPathService;
 
     TDirectBlockGroupsConnections DirectBlockGroupsConnections;
 
@@ -73,7 +74,6 @@ public:
         NKikimr::TTabletStorageInfo* info);
 
     ~TPartitionActor() override;
-    void PassAway() override;
 
     static constexpr ui32 LogComponent = NKikimrServices::NBS_PARTITION;
     using TCounters = TPartitionCounters;
@@ -82,9 +82,12 @@ private:
     void StateInit(TAutoPtr<NActors::IEventHandle>& ev);
     STFUNC(StateWork);
 
-    void HandleHttpInfo(
-        NActors::NMon::TEvRemoteHttpInfo::TPtr& ev,
-        const NActors::TActorContext& ctx);
+    // The tablet's own monitoring page, reached via the standard tablet page's
+    // "App" link. The base class passes a null event to ask whether that link
+    // should appear - it always should.
+    bool OnRenderAppHtmlPage(
+        NActors::NMon::TEvRemoteHttpInfo::TPtr ev,
+        const NActors::TActorContext& ctx) override;
 
     void OnDetach(const NActors::TActorContext& ctx) override;
     void OnTabletDead(
@@ -110,11 +113,6 @@ private:
     void CreateBSControllerPipeClient(const NActors::TActorContext& ctx);
 
     void AllocateDDiskBlockGroup(const NActors::TActorContext& ctx);
-
-    void SendAllocateDDiskForAddHost(
-        const NActors::TActorContext& ctx,
-        size_t dbgId,
-        THostIndex newHostIndex);
 
     void HandleControllerAllocateDDiskBlockGroupResult(
         const NKikimr::TEvBlobStorage::
@@ -159,6 +157,10 @@ private:
         const TEvPartitionDirectPrivate::TEvFastPathServiceStopped::TPtr& ev,
         const NActors::TActorContext& ctx);
 
+    void HandlePoisonByBlockedGeneration(
+        const TEvPartitionDirectPrivate::TEvPoison::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
     void HandleAddHostToDBG(
         const TEvPartitionDirectPrivate::TEvAddHostToDBG::TPtr& ev,
         const NActors::TActorContext& ctx);
@@ -167,12 +169,18 @@ private:
     // request is invalid; true if it may proceed.
     bool ValidateAddHostToDBGRequest(
         const NActors::TActorContext& ctx,
-        size_t dbgId);
-
+        size_t dbgId,
+        THostIndex newHostIndex);
     void RejectAddHost(
         const NActors::TActorContext& ctx,
         size_t dbgId,
         const TString& message);
+    void SendAllocateDDiskForAddHost(
+        const NActors::TActorContext& ctx,
+        size_t dbgId,
+        THostIndex newHostIndex);
+
+    [[nodiscard]] TTabletInfo MakeMonTabletInfo() const;
 
     void Start(
         const NActors::TActorContext& ctx,

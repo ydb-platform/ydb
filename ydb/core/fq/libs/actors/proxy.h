@@ -46,7 +46,7 @@ NActors::IActor* CreatePendingFetcher(
     TIntrusivePtr<IRandomProvider> randomProvider,
     NKikimr::NMiniKQL::TComputationNodeFactory dqCompFactory,
     const ::NYql::NCommon::TServiceCounters& serviceCounters,
-    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    NYql::IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
     NYql::IHTTPGateway::TPtr s3Gateway,
     NYql::NConnector::IClient::TPtr clientConnector,
     ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,

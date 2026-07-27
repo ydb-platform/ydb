@@ -5,6 +5,9 @@
 #include <yql/essentials/public/udf/udf_ptr.h>
 #include <yql/essentials/public/udf/udf_type_inspection.h>
 #include <yql/essentials/public/udf/udf_type_size_check.h>
+#include <yql/essentials/public/udf/udf_data_type.h>
+
+#include <util/generic/guid.h>
 
 namespace NYql::NUdf {
 
@@ -144,8 +147,8 @@ public:
     }
 };
 
-template <typename TStringType, bool Nullable>
-class TStringBlockItemComparator: public TBlockItemComparatorBase<TStringBlockItemComparator<TStringType, Nullable>, Nullable> {
+template <bool Nullable>
+class TStringBlockItemComparatorBase: public TBlockItemComparatorBase<TStringBlockItemComparatorBase<Nullable>, Nullable> {
 public:
     i64 DoCompare(TBlockItem lhs, TBlockItem rhs) const {
         return lhs.AsStringRef().Compare(rhs.AsStringRef());
@@ -158,6 +161,18 @@ public:
     bool DoLess(TBlockItem lhs, TBlockItem rhs) const {
         return lhs.AsStringRef() < rhs.AsStringRef();
     }
+};
+
+template <typename TStringType, bool Nullable>
+class TStringBlockItemComparator: public TStringBlockItemComparatorBase<Nullable> {
+};
+
+template <bool Nullable>
+class TUuidBlockItemComparator: public TStringBlockItemComparatorBase<Nullable> {
+};
+
+template <bool Nullable>
+class TFixedSizeBlockItemComparator<TGUID, Nullable>: public TUuidBlockItemComparator<Nullable> {
 };
 
 class TSingularTypeBlockItemComparator: public TBlockItemComparatorBase<TSingularTypeBlockItemComparator, /*Nullable=*/false> {

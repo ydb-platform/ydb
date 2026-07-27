@@ -76,6 +76,9 @@ private:
 
         if (State_->HybridTakesTooLong()) {
             PushSkipStat("TakesTooLong", nodeName);
+            YQL_CLOG(DEBUG, ProviderYt) << "CanReplaceOnHybrid: skip " << nodeName
+                << " by TakesTooLong: timeSpentInHybrid=" << State_->TimeSpentInHybrid
+                << ", limit=" << State_->GetHybridDqTimeSpentLimit();
             return false;
         }
 
@@ -99,6 +102,8 @@ private:
 
         if (operation.Output().Size() != 1U) {
             PushSkipStat("MultipleOutputs", nodeName);
+            YQL_CLOG(DEBUG, ProviderYt) << "CanReplaceOnHybrid: skip " << nodeName
+                << " by MultipleOutputs: outputCount=" << operation.Output().Size();
             return false;
         }
 
@@ -113,6 +118,10 @@ private:
                 PushSkipStat("UnsupportedDqOpSettings", nodeName);
                 PushSettingsToStat(settings, nodeName, "SkipDqOpSettings", DqOpSupportedSettings);
             }
+            return false;
+        }
+
+        if (HasNodesToCalculate(operation.Ptr())) {
             return false;
         }
 
@@ -181,6 +190,10 @@ private:
 
         if (dataSize > sizeLimit || dataChunks > chunksLimit) {
             PushSkipStat("OverLimits", nodeName);
+            YQL_CLOG(DEBUG, ProviderYt) << "CanReadHybrid: skip " << nodeName
+                << " by OverLimits: dataSize=" << dataSize << " (limit=" << sizeLimit << ")"
+                << ", dataChunks=" << dataChunks << " (limit=" << chunksLimit << ")"
+                << ", orderedInput=" << orderedInput;
             return false;
         }
 

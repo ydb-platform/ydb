@@ -100,8 +100,7 @@ public:
             summary.Count(),
             meanValue);
 
-        auto meanWaitTimeConfig = config.TryGetConcrete<TOverloadTrackerMeanWaitTimeConfig>();
-        YT_VERIFY(meanWaitTimeConfig);
+        auto meanWaitTimeConfig = config.GetConcrete<TOverloadTrackerMeanWaitTimeConfig>();
 
         return ProfileAndGetOverloaded(meanValue, meanWaitTimeConfig);
     }
@@ -165,8 +164,7 @@ public:
 
         LastCpuStats_ = cpuStats;
 
-        auto meanWaitTimeConfig = config.TryGetConcrete<TOverloadTrackerMeanWaitTimeConfig>();
-        YT_VERIFY(meanWaitTimeConfig);
+        auto meanWaitTimeConfig = config.GetConcrete<TOverloadTrackerMeanWaitTimeConfig>();
 
         return ProfileAndGetOverloaded(throttlingTime, meanWaitTimeConfig);
     }
@@ -223,8 +221,7 @@ public:
             "(BacklogQueueFillFraction: %v)",
             BacklogQueueFillFraction);
 
-        auto logDropConfig = config.TryGetConcrete<TOverloadTrackerBacklogQueueFillFractionConfig>();
-        YT_VERIFY(logDropConfig);
+        auto logDropConfig = config.GetConcrete<TOverloadTrackerBacklogQueueFillFractionConfig>();
 
         bool overloaded = BacklogQueueFillFraction > logDropConfig->BacklogQueueFillFractionThreshold;
 
@@ -509,10 +506,10 @@ private:
 
             const auto& trackerConfig = trackerIt->second;
 
-            if (trackerConfig.GetCurrentType() != tracker->GetConfigType()) {
+            if (trackerConfig.GetType() != tracker->GetConfigType()) {
                 YT_LOG_ERROR("Incorrect overload controller tracker config type (ExpectedType: %v, ActualType: %v)",
                     tracker->GetConfigType(),
-                    trackerConfig.GetCurrentType());
+                    trackerConfig.GetType());
                 continue;
             }
 

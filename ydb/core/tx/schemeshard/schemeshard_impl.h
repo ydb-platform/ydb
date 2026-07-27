@@ -13,7 +13,6 @@
 #include "schemeshard_forced_compaction.h"
 #include "schemeshard_import.h"
 #include "schemeshard_info_types.h"
-#include "schemeshard_login_helper.h"
 #include "schemeshard_path.h"
 #include "schemeshard_path_element.h"
 #include "schemeshard_private.h"
@@ -239,6 +238,8 @@ public:
     TControlWrapper AllowServerlessStorageBilling;
     TControlWrapper DisablePublicationsOfDropping;
     TControlWrapper FillAllocatePQ;
+    TControlWrapper TolerateOrphanedPaths;
+    bool HasOrphanPlaceholders = false; // in-memory, set by TTxInit
 
     // Shared with NTabletFlatExecutor::TExecutor
     TControlWrapper MaxCommitRedoMB;
@@ -427,8 +428,6 @@ public:
     bool EnableExternalSourceSchemaInference = false;
     bool EnableMoveColumnTable = false;
 
-    bool IsOldArgonHashFormatMigrationCompleted = false;
-
     TShardDeleter ShardDeleter;
 
     // Counter-strike stuff
@@ -444,6 +443,7 @@ public:
     ui32 MaxCdcInitialScanShardsInFlight = 10;
     ui32 MaxRestoreBuildIndexShardsInFlight = 0;
     ui32 MaxBuildIndexShardsInFlight = 0;
+    ui32 MaxStoredIndexBuilds = 0;
 
     TDuration StatsMaxExecuteTime;
     TDuration StatsBatchTimeout;
@@ -819,9 +819,10 @@ public:
     void PersistDropStep(NIceDb::TNiceDb& db, const TPathId pathId, TStepId step, TOperationId opId);
 
     // user attrs
+    void PersistAlterUserAttributes(NIceDb::TNiceDb& db, TPathId pathId);
     void ApplyAndPersistUserAttrs(NIceDb::TNiceDb& db, const TPathId& pathId);
     void PersistUserAttributes(NIceDb::TNiceDb& db, TPathId pathId, TUserAttributes::TPtr oldAttrs, TUserAttributes::TPtr alterAttrs);
-    void PersistAlterUserAttributes(NIceDb::TNiceDb& db, TPathId pathId);
+    void PersistRemoveUserAttributesAlter(NIceDb::TNiceDb& db, TPathElement::TPtr pathElement);
 
     // table index
     void PersistTableIndex(NIceDb::TNiceDb& db, const TPathId& pathId);
@@ -1061,6 +1062,10 @@ public:
     struct TTxMonitoring;
     //OnRenderAppHtmlPage
 
+    struct TTxMoveShardToStoragePool;
+    NTabletFlatExecutor::ITransaction* CreateTxMoveShardToStoragePool(TEvPrivate::TEvMoveShardToStoragePool::TPtr& ev);
+    void Handle(TEvPrivate::TEvMoveShardToStoragePool::TPtr& ev, const TActorContext& ctx);
+
     struct TTxInit;
     NTabletFlatExecutor::ITransaction* CreateTxInit();
 
@@ -1110,9 +1115,6 @@ public:
 
     struct TTxCleanDroppedPaths;
     NTabletFlatExecutor::ITransaction* CreateTxCleanDroppedPaths();
-
-    struct TTxUserHashesMigration;
-    NTabletFlatExecutor::ITransaction* CreateTxUserHashesMigration();
 
     void ScheduleCleanDroppedPaths();
     void Handle(TEvPrivate::TEvCleanDroppedPaths::TPtr& ev, const TActorContext& ctx);
@@ -1260,8 +1262,6 @@ public:
 
     struct TTxLogin;
     NTabletFlatExecutor::ITransaction* CreateTxLogin(TEvSchemeShard::TEvLogin::TPtr &ev);
-    struct TTxLoginFinalize;
-    NTabletFlatExecutor::ITransaction* CreateTxLoginFinalize(TEvPrivate::TEvLoginFinalize::TPtr &ev);
     struct TTxListUsers;
     NTabletFlatExecutor::ITransaction* CreateTxListUsers(TEvSchemeShard::TEvListUsers::TPtr &ev);
 
@@ -1580,7 +1580,6 @@ public:
     void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr &ev, const TActorContext &ctx);
 
     void Handle(TEvSchemeShard::TEvLogin::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvLoginFinalize::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvListUsers::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvProgressTablePartitionsFormatSweep::TPtr& ev, const TActorContext& ctx);
@@ -1922,6 +1921,7 @@ public:
         struct TTxGetSetColumnConstraint;
         struct TTxListSetColumnConstraint;
         struct TTxForgetSetColumnConstraint;
+        struct TTxCancelSetColumnConstraint;
     };
 
     NTabletFlatExecutor::ITransaction* CreateTxCreate(TEvIndexBuilder::TEvCreateRequest::TPtr& ev);
@@ -1975,12 +1975,14 @@ public:
     void Handle(TEvSetColumnConstraint::TEvCreateRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSetColumnConstraint::TEvGetRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSetColumnConstraint::TEvListRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvValidateRowConditionResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSetColumnConstraint::TEvForgetRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvSetColumnConstraint::TEvCancelRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvValidateRowConditionResponse::TPtr& ev, const TActorContext& ctx);
     NTabletFlatExecutor::ITransaction* CreateTxCreateSetColumnConstraint(TEvSetColumnConstraint::TEvCreateRequest::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxGetSetColumnConstraint(TEvSetColumnConstraint::TEvGetRequest::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxListSetColumnConstraint(TEvSetColumnConstraint::TEvListRequest::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxForgetSetColumnConstraint(TEvSetColumnConstraint::TEvForgetRequest::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxCancelSetColumnConstraint(TEvSetColumnConstraint::TEvCancelRequest::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxSetColumnConstraintProgress(TIndexBuildId id);
     NTabletFlatExecutor::ITransaction* CreateTxReplyAllocateSetColumnConstraint(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxReplyModifySetColumnConstraint(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev);
@@ -1992,6 +1994,10 @@ public:
     THashMap<TString, std::shared_ptr<TSetColumnConstraintOperationInfo>> SetColumnConstraintOperationsByUid;
     TSet<std::pair<TInstant, TIndexBuildId>> SetColumnConstraintOperationsByTime;
     THashMap<TTxId, TIndexBuildId> TxIdToSetColumnConstraintOperations;
+    // txIds of concurrent operations (e.g. a backup CopyTable) that a
+    // SetColumnConstraint operation is currently waiting on before it can retry
+    // one of its own internal sub-transactions.
+    THashMap<TTxId, THashSet<TIndexBuildId>> TxIdToDependentSetColumnConstraint;
 
     void PersistCreateSetColumnConstraint(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& indexInfo);
     void PersistSetColumnConstraintState(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& indexInfo);
@@ -2009,6 +2015,7 @@ public:
     void PersistSetColumnConstraintUnlockTxStatus(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo);
     void PersistSetColumnConstraintUnlockTxDone(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo);
     void PersistSetColumnConstraintValidationFailedValue(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo);
+    void PersistSetColumnConstraintCancellation(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo);
     void PersistSetColumnConstraintShardDone(NIceDb::TNiceDb& db, TIndexBuildId operationId, TShardIdx shardIdx, const TSetColumnConstraintOperationInfo& operationInfo);
     void PersistSetColumnConstraintForget(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& info);
     void ForgetSetColumnConstraint(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& info);
@@ -2206,7 +2213,6 @@ public:
     void SetShardsQuota(ui64 value) override;
 
     NLogin::TLoginProvider LoginProvider;
-    TActorId LoginHelper;
 
     THolder<TRootShredManager> RootShredManager = nullptr;
     THolder<TTenantShredManager> TenantShredManager = nullptr;
@@ -2230,8 +2236,6 @@ private:
     const TDomainsInfo::TDomain& GetDomainDescription(const TActorContext &ctx) const;
     NKikimrSubDomains::TProcessingParams CreateRootProcessingParams(const TActorContext &ctx);
     static NTabletPipe::TClientConfig GetPipeClientConfig();
-
-    static bool IsLoginCacheEnabled();
 
 public:
     static const NKikimrConfig::TDomainsConfig& GetDomainsConfig();

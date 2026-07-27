@@ -33,6 +33,11 @@ class TestDataType(RestartToAnotherVersionFixture):
         if store_type == "COLUMN" and min(self.versions) < (26, 1):
             types_not_supported_yet_in_columnshard.add("Bool")
 
+        if store_type == "COLUMN" and min(self.versions) < (26, 3):
+            types_not_supported_yet_in_columnshard.add("DyNumber")
+            types_not_supported_yet_in_columnshard.add("UUID")
+            types_not_supported_yet_in_columnshard.add("Interval")
+
         # not all the types are supported for column tables
         supported_pk_types = pk_types if store_type == "ROW" else {k: v for k, v in pk_types.items() if k not in types_not_supported_yet_in_columnshard}
         supported_non_pk_types = non_pk_types if store_type == "ROW" else {k: v for k, v in non_pk_types.items() if k not in types_not_supported_yet_in_columnshard}
@@ -64,6 +69,11 @@ class TestDataType(RestartToAnotherVersionFixture):
 
         if min(self.versions) >= (25, 4):
             extra_feature_flags.append("enable_columnshard_bool")
+
+        if min(self.versions) >= (26, 3):
+            extra_feature_flags.append("enable_columnshard_interval")
+            extra_feature_flags.append("enable_columnshard_uuid")
+            extra_feature_flags.append("enable_columnshard_dy_number")
 
         yield from self.setup_cluster(
             extra_feature_flags=extra_feature_flags,

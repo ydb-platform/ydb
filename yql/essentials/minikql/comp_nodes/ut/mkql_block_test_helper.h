@@ -30,14 +30,19 @@ public:
     constexpr static size_t SignleIteration = 1;
     constexpr static size_t ManyIterations = 1000;
 
-    explicit TBlockHelper()
+    explicit TBlockHelper(NYql::EDatumValidationMode validationMode = NYql::EDatumValidationMode::Expensive)
         : Setup_(GetNodeTestFactory())
         , Pb_(*Setup_.PgmBuilder)
     {
+        Setup_.RuntimeSettings->DatumValidation.Set(validationMode);
     }
 
     TProgramBuilder& ProgramBuilder() {
         return Pb_;
+    }
+
+    void ValidateDatum(arrow::Datum datum, TMaybe<arrow::ValueDescr> expectedDescription, const TType* type) {
+        ::NKikimr::NMiniKQL::ValidateDatum(datum, expectedDescription, type, Setup_.RuntimeSettings->DatumValidation.Get());
     }
 
     template <typename T>
@@ -55,7 +60,7 @@ public:
     TRuntimeNode ConvertNodeFuzzied(const TVector<T>& nodes) {
         ui64 fuzzId = FuzzerHolder_.ReserveFuzzer();
         auto convertedNode = ConvertNodeWithSpecificFuzzer(nodes, fuzzId);
-        FuzzerHolder_.CreateFuzzers(TFuzzOptions::FuzzAll(), fuzzId, convertedNode.GetStaticType(), Pb_.GetTypeEnvironment());
+        FuzzerHolder_.CreateFuzzers(TFuzzOptions::FuzzAll(), fuzzId, convertedNode.GetStaticType(), Pb_.GetTypeEnvironment(), Setup_.RuntimeSettings->DatumValidation.Get());
         return convertedNode;
     }
 
@@ -109,7 +114,7 @@ public:
     {
         auto blockNode = ConvertNodeFuzzied(data);
         auto blockList = Pb_.NewList(blockNode.GetStaticType(), {blockNode});
-        auto pgmReturn = Pb_.Collect(Pb_.ForwardList(Pb_.FromBlocks(Pb_.ToFlow(blockList))));
+        auto pgmReturn = Pb_.Collect(Pb_.ForwardList(Pb_.FromBlocks(Pb_.ToFlow(blockList, {}))));
         auto graph = Setup_.BuildGraph(pgmReturn);
         auto value = graph->GetValue();
         return {std::move(graph), std::move(value)};

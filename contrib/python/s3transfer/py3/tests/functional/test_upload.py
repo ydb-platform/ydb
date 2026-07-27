@@ -19,9 +19,11 @@ from io import BytesIO
 from botocore.awsrequest import AWSRequest
 from botocore.client import Config
 from botocore.exceptions import ClientError
+from botocore.httpchecksum import DEFAULT_CHECKSUM_ALGORITHM
 from botocore.stub import ANY
 
 from s3transfer.manager import TransferConfig, TransferManager
+from s3transfer.upload import UploadSubmissionTask
 from s3transfer.utils import ChunksizeAdjuster
 from __tests__ import (
     BaseGeneralInterfaceTest,
@@ -142,12 +144,18 @@ class TestNonMultipartUpload(BaseUploadTest):
     __test__ = True
 
     def add_put_object_response_with_default_expected_params(
-        self, extra_expected_params=None, bucket=None
+        self, extra_expected_params=None, bucket=None, include_checksum=True
     ):
         if bucket is None:
             bucket = self.bucket
 
-        expected_params = {'Body': ANY, 'Bucket': bucket, 'Key': self.key}
+        expected_params = {
+            'Body': ANY,
+            'Bucket': bucket,
+            'Key': self.key,
+        }
+        if include_checksum:
+            expected_params["ChecksumAlgorithm"] = DEFAULT_CHECKSUM_ALGORITHM
         if extra_expected_params:
             expected_params.update(extra_expected_params)
         upload_response = self.create_stubbed_responses()[0]
@@ -181,12 +189,51 @@ class TestNonMultipartUpload(BaseUploadTest):
         self.assert_expected_client_calls_were_correct()
         self.assert_put_object_body_was_correct()
 
+    def test_upload_with_default_checksum_when_supported(self):
+        # Reset client to configure `request_checksum_calculation` to "when_supported".
+        self.reset_stubber_with_new_client(
+            {'config': Config(request_checksum_calculation="when_supported")}
+        )
+        self.client.meta.events.register(
+            'before-parameter-build.s3.*', self.collect_body
+        )
+        self._manager = TransferManager(self.client, self.config)
+
+        self.add_put_object_response_with_default_expected_params(
+            include_checksum=True
+        )
+        future = self.manager.upload(
+            self.filename, self.bucket, self.key, self.extra_args
+        )
+        future.result()
+        self.assert_expected_client_calls_were_correct()
+        self.assert_put_object_body_was_correct()
+
+    def test_upload_with_default_checksum_when_required(self):
+        # Reset client to configure `request_checksum_calculation` to "when_required".
+        self.reset_stubber_with_new_client(
+            {'config': Config(request_checksum_calculation="when_required")}
+        )
+        self.client.meta.events.register(
+            'before-parameter-build.s3.*', self.collect_body
+        )
+        self._manager = TransferManager(self.client, self.config)
+
+        self.add_put_object_response_with_default_expected_params(
+            include_checksum=False
+        )
+        future = self.manager.upload(
+            self.filename, self.bucket, self.key, self.extra_args
+        )
+        future.result()
+        self.assert_expected_client_calls_were_correct()
+        self.assert_put_object_body_was_correct()
+
     def test_upload_with_s3express_default_checksum(self):
         s3express_bucket = "mytestbucket--usw2-az6--x-s3"
         self.assertFalse("ChecksumAlgorithm" in self.extra_args)
 
         self.add_put_object_response_with_default_expected_params(
-            extra_expected_params={'ChecksumAlgorithm': 'crc32'},
             bucket=s3express_bucket,
         )
         future = self.manager.upload(
@@ -278,7 +325,12 @@ class TestNonMultipartUpload(BaseUploadTest):
 
     def test_allowed_upload_params_are_valid(self):
         op_model = self.client.meta.service_model.operation_model('PutObject')
-        for allowed_upload_arg in self._manager.ALLOWED_UPLOAD_ARGS:
+        allowed_upload_arg = [
+            arg
+            for arg in self._manager.ALLOWED_UPLOAD_ARGS
+            if arg not in UploadSubmissionTask.PUT_OBJECT_BLOCKLIST
+        ]
+        for allowed_upload_arg in allowed_upload_arg:
             self.assertIn(allowed_upload_arg, op_model.input_shape.members)
 
     def test_upload_with_bandwidth_limiter(self):
@@ -360,14 +412,17 @@ class TestMultipartUpload(BaseUploadTest):
         self.assertEqual(self.sent_bodies, expected_contents)
 
     def add_create_multipart_response_with_default_expected_params(
-        self,
-        extra_expected_params=None,
-        bucket=None,
+        self, extra_expected_params=None, bucket=None, include_checksum=True
     ):
         if bucket is None:
             bucket = self.bucket
 
-        expected_params = {'Bucket': bucket, 'Key': self.key}
+        expected_params = {
+            'Bucket': bucket,
+            'Key': self.key,
+        }
+        if include_checksum:
+            expected_params["ChecksumAlgorithm"] = DEFAULT_CHECKSUM_ALGORITHM
         if extra_expected_params:
             expected_params.update(extra_expected_params)
         response = self.create_stubbed_responses()[0]
@@ -375,9 +430,7 @@ class TestMultipartUpload(BaseUploadTest):
         self.stubber.add_response(**response)
 
     def add_upload_part_responses_with_default_expected_params(
-        self,
-        extra_expected_params=None,
-        bucket=None,
+        self, extra_expected_params=None, bucket=None, include_checksum=True
     ):
         if bucket is None:
             bucket = self.bucket
@@ -393,37 +446,47 @@ class TestMultipartUpload(BaseUploadTest):
                 'Body': ANY,
                 'PartNumber': i + 1,
             }
+            if include_checksum:
+                expected_params["ChecksumAlgorithm"] = (
+                    DEFAULT_CHECKSUM_ALGORITHM
+                )
             if extra_expected_params:
                 expected_params.update(extra_expected_params)
-                # If ChecksumAlgorithm is present stub the response checksums
-                if 'ChecksumAlgorithm' in extra_expected_params:
-                    name = extra_expected_params['ChecksumAlgorithm']
-                    checksum_member = f'Checksum{name.upper()}'
-                    response = upload_part_response['service_response']
-                    response[checksum_member] = 'sum%s==' % (i + 1)
+
+            # If ChecksumAlgorithm is in expected parameters, add checksum to the response
+            checksum_algorithm = expected_params.get('ChecksumAlgorithm')
+            if checksum_algorithm:
+                checksum_member = f'Checksum{checksum_algorithm.upper()}'
+                response = upload_part_response['service_response']
+                response[checksum_member] = f'sum{i+1}=='
 
             upload_part_response['expected_params'] = expected_params
             self.stubber.add_response(**upload_part_response)
 
     def add_complete_multipart_response_with_default_expected_params(
-        self,
-        extra_expected_params=None,
-        bucket=None,
+        self, extra_expected_params=None, bucket=None, include_checksum=True
     ):
         if bucket is None:
             bucket = self.bucket
+
+        num_parts = 3
+        parts = []
+        for part_num in range(1, num_parts + 1):
+            part = {
+                'ETag': f'etag-{part_num}',
+                'PartNumber': part_num,
+            }
+            if include_checksum:
+                part[f"Checksum{DEFAULT_CHECKSUM_ALGORITHM}"] = (
+                    f"sum{part_num}=="
+                )
+            parts.append(part)
 
         expected_params = {
             'Bucket': bucket,
             'Key': self.key,
             'UploadId': self.multipart_id,
-            'MultipartUpload': {
-                'Parts': [
-                    {'ETag': 'etag-1', 'PartNumber': 1},
-                    {'ETag': 'etag-2', 'PartNumber': 2},
-                    {'ETag': 'etag-3', 'PartNumber': 3},
-                ]
-            },
+            'MultipartUpload': {'Parts': parts},
         }
         if extra_expected_params:
             expected_params.update(extra_expected_params)
@@ -539,17 +602,22 @@ class TestMultipartUpload(BaseUploadTest):
         self.stubber.add_response(
             method='create_multipart_upload',
             service_response={'UploadId': self.multipart_id},
-            expected_params={'Bucket': self.bucket, 'Key': self.key},
+            expected_params={
+                'Bucket': self.bucket,
+                'Key': self.key,
+                'ChecksumAlgorithm': 'CRC32',
+            },
         )
         self.stubber.add_response(
             method='upload_part',
-            service_response={'ETag': 'etag-1'},
+            service_response={'ETag': 'etag-1', 'ChecksumCRC32': 'sum1=='},
             expected_params={
                 'Bucket': self.bucket,
                 'Body': ANY,
                 'Key': self.key,
                 'UploadId': self.multipart_id,
                 'PartNumber': 1,
+                'ChecksumAlgorithm': 'CRC32',
             },
         )
         # With the upload part failing this should immediately initiate
@@ -639,13 +707,13 @@ class TestMultipartUpload(BaseUploadTest):
 
         # ChecksumAlgorithm should be passed on the create_multipart call
         self.add_create_multipart_response_with_default_expected_params(
-            extra_expected_params={'ChecksumAlgorithm': 'crc32'},
+            extra_expected_params={'ChecksumAlgorithm': 'CRC32'},
             bucket=s3express_bucket,
         )
 
         # ChecksumAlgorithm should be forwarded and a SHA1 will come back
         self.add_upload_part_responses_with_default_expected_params(
-            extra_expected_params={'ChecksumAlgorithm': 'crc32'},
+            extra_expected_params={'ChecksumAlgorithm': 'CRC32'},
             bucket=s3express_bucket,
         )
 
@@ -700,6 +768,81 @@ class TestMultipartUpload(BaseUploadTest):
         self.add_complete_multipart_response_with_default_expected_params(
             extra_expected_params=params
         )
+        future = self.manager.upload(
+            self.filename, self.bucket, self.key, self.extra_args
+        )
+        future.result()
+        self.assert_expected_client_calls_were_correct()
+
+    def test_multipart_upload_with_full_object_checksum_args(self):
+        checksum_type_param = {
+            'ChecksumType': 'FULL_OBJECT',
+        }
+        params = {
+            'ChecksumCRC32': 'example-checksum-value',
+            'MpuObjectSize': 12345,
+        }
+        params.update(checksum_type_param)
+        self.extra_args.update(params)
+
+        self.add_create_multipart_response_with_default_expected_params(
+            extra_expected_params=checksum_type_param
+        )
+
+        self.add_upload_part_responses_with_default_expected_params()
+        self.add_complete_multipart_response_with_default_expected_params(
+            extra_expected_params=params
+        )
+        future = self.manager.upload(
+            self.filename, self.bucket, self.key, self.extra_args
+        )
+        future.result()
+        self.assert_expected_client_calls_were_correct()
+
+    def test_multipart_upload_with_default_checksum_when_supported(self):
+        # Reset client to configure `request_checksum_calculation` to "when_supported".
+        self.reset_stubber_with_new_client(
+            {'config': Config(request_checksum_calculation="when_supported")}
+        )
+        self.client.meta.events.register(
+            'before-parameter-build.s3.*', self.collect_body
+        )
+        self._manager = TransferManager(self.client, self.config)
+
+        self.add_create_multipart_response_with_default_expected_params(
+            include_checksum=True
+        )
+        self.add_upload_part_responses_with_default_expected_params(
+            include_checksum=True
+        )
+        self.add_complete_multipart_response_with_default_expected_params()
+
+        future = self.manager.upload(
+            self.filename, self.bucket, self.key, self.extra_args
+        )
+        future.result()
+        self.assert_expected_client_calls_were_correct()
+
+    def test_multipart_upload_with_default_checksum_when_required(self):
+        # Reset client to configure `request_checksum_calculation` to "when_required".
+        self.reset_stubber_with_new_client(
+            {'config': Config(request_checksum_calculation="when_required")}
+        )
+        self.client.meta.events.register(
+            'before-parameter-build.s3.*', self.collect_body
+        )
+        self._manager = TransferManager(self.client, self.config)
+
+        self.add_create_multipart_response_with_default_expected_params(
+            include_checksum=False
+        )
+        self.add_upload_part_responses_with_default_expected_params(
+            include_checksum=False
+        )
+        self.add_complete_multipart_response_with_default_expected_params(
+            include_checksum=False
+        )
+
         future = self.manager.upload(
             self.filename, self.bucket, self.key, self.extra_args
         )

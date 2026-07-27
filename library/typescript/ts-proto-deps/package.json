@@ -1,0 +1,20 @@
+{
+  "name": "ts-proto-deps",
+  "version": "0.0.0",
+  "dependencies": {
+    "@bufbuild/protobuf": "2.10.1",
+    "@grpc/grpc-js": "1.14.2",
+    "long": "5.3.2"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.2",
+    "ts-proto": "2.8.3",
+    "typescript": "5.9.3"
+  },
+  "files": [
+    "pnpm-lock.yaml",
+    "tsconfig.json",
+    "tsconfig.cjs.json",
+    "tsconfig.esm.json"
+  ]
+}

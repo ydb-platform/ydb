@@ -390,6 +390,10 @@ namespace NActors {
             TransitToErrorState(description);
         };
 
+        if (Session && msg->RdmaHanshakeResult.HasPreinitedSession()) {
+            return error("Unexpected prepared session while we already has one");
+        }
+
         // If session is not created, then create new one.
         if (!Session) {
             RemoteProgramInfo = std::move(msg->ProgramInfo);
@@ -401,12 +405,12 @@ namespace NActors {
             // Create new session actor.
             ++RdmaRetryWatchdogCookie;
             if (msg->Params.UseSessionV2) {
-                Session = new TInterconnectSessionTCPv2(this, msg->Params);
+                Session = new TInterconnectSessionTCPv2(this);
             } else {
-                Session = new TInterconnectSessionTCP(this, msg->Params);
+                Session = new TInterconnectSessionTCP(this);
             }
             SessionID = RegisterWithSameMailbox(&Session->SessionActor());
-            InvokeSession(&IInterconnectSession::Init);
+            InvokeSession(&IInterconnectSession::Init, msg->Params);
             SessionVirtualId = msg->Self;
             RemoteSessionVirtualId = msg->Peer;
             LOG_INFO_IC("ICP22", "created new session: %s", SessionID.ToString().data());
@@ -552,6 +556,16 @@ namespace NActors {
             kind += " inconclusive";
         }
         UpdateErrorStateLog(TActivationContext::Now(), kind, ev->Get()->Explanation);
+    }
+
+    void TInterconnectProxyTCP::Handle(TEvProxyCall::TPtr& ev) {
+        ICPROXY_PROFILED;
+        if (Session) {
+            ev->Get()->ReportError("Proxy call over owned session is not supported yet");
+        } else {
+            ev->Get()->Call(this);
+        }
+        TlsActivationContext->Send(ev->Forward(ev->Sender));
     }
 
     void TInterconnectProxyTCP::ProcessPendingSessionEvents() {

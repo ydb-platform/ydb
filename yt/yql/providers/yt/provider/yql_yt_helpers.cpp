@@ -388,14 +388,23 @@ TMaybe<TString> DeriveClusterFromSection(const NNodes::TYtSection& section, ERun
     return result;
 }
 
+bool IsQLFilterCompatibleOperation(const TExprNode& node) {
+    return node.IsCallable({"And", "Or", "Not", "Coalesce", "Exists", "<", "<=", ">", ">=", "==", "!="});
+}
+
+bool IsQLFilterRowMember(const TExprNode& node, const TExprNode* rowArg) {
+    return node.IsCallable("Member") && node.Child(0) == rowArg;
+}
+
 void GetNodesToCalculateFromQLFilter(const TExprNode& qlFilter, TExprNode::TListType &needCalc, TNodeSet &uniqNodes) {
     YQL_ENSURE(qlFilter.IsCallable("YtQLFilter"));
+    const auto rowArg = qlFilter.Child(1)->Child(0)->Child(0);
     const auto lambdaBody = qlFilter.Child(1)->Child(1);
-    VisitExpr(lambdaBody, [&needCalc, &uniqNodes](const TExprNode::TPtr& node) {
-        if (node->IsCallable({"And", "Or", "Not", "Coalesce", "Exists", "<", "<=", ">", ">=", "==", "!="})) {
+    VisitExpr(lambdaBody, [&needCalc, &uniqNodes, rowArg](const TExprNode::TPtr& node) {
+        if (IsQLFilterCompatibleOperation(*node)) {
             return true;
         }
-        if (node->IsCallable("Member")) {
+        if (IsQLFilterRowMember(*node, rowArg)) {
             return false;
         }
         if (uniqNodes.insert(node.Get()).second) {
@@ -405,6 +414,29 @@ void GetNodesToCalculateFromQLFilter(const TExprNode& qlFilter, TExprNode::TList
         }
         return false;
     });
+}
+
+bool HasNodesToCalculateFromQLFilter(const TExprNode& qlFilter) {
+    YQL_ENSURE(qlFilter.IsCallable("YtQLFilter"));
+    bool needCalc = false;
+    const auto rowArg = qlFilter.Child(1)->Child(0)->Child(0);
+    const auto lambdaBody = qlFilter.Child(1)->Child(1);
+    VisitExpr(lambdaBody, [&needCalc, rowArg](const TExprNode::TPtr& node) {
+        if (needCalc) {
+            return false;
+        }
+        if (IsQLFilterCompatibleOperation(*node)) {
+            return true;
+        }
+        if (IsQLFilterRowMember(*node, rowArg)) {
+            return false;
+        }
+        if (NeedCalc(TExprBase(node.Get()))) {
+            needCalc = true;
+        }
+        return false;
+    });
+    return needCalc;
 }
 
 } // unnamed
@@ -798,12 +830,9 @@ TExprNode::TListType GetNodesToCalculate(const TExprNode::TPtr& input) {
                     break;
                 }
             }
-            for (const auto& path: section.Paths()) {
-                const TYtPathInfo pathInfo(path);
-                if (pathInfo.QLFilter) {
-                    GetNodesToCalculateFromQLFilter(*pathInfo.QLFilter, needCalc, uniqNodes);
-                }
-            }
+        }
+        else if (auto maybeQLFilter = TMaybeNode<TYtQLFilter>(node)) {
+            GetNodesToCalculateFromQLFilter(maybeQLFilter.Ref(), needCalc, uniqNodes);
         }
         else if (TMaybeNode<TYtOutput>(node)) {
             // Stop traversing dependent operations
@@ -874,6 +903,12 @@ bool HasNodesToCalculate(const TExprNode::TPtr& input) {
                 default:
                     break;
                 }
+            }
+        }
+        else if (auto maybeQLFilter = TMaybeNode<TYtQLFilter>(node)) {
+            if (HasNodesToCalculateFromQLFilter(maybeQLFilter.Ref())) {
+                needCalc = true;
+                return false;
             }
         }
         else if (TMaybeNode<TYtOutput>(node)) {
@@ -1599,8 +1634,8 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
     bool exactCopySort = false;
     bool hasAux = false;
     TVector<std::pair<TYqlRowSpecInfo::TPtr, bool>> rowSpecs;
-    const ui64 outNativeYtTypeFlags = outRowSpec ? outRowSpec->GetNativeYtTypeFlags() : (state->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
-    TYtOutTableInfo outTable(scheme.Cast<TStructExprType>(), outNativeYtTypeFlags);
+    const ui64 nativeTypeCompatibility = GetNativeYtTypeCompatibility(dataSink.Cluster().StringValue(), *state->Configuration);
+    TYtOutTableInfo outTable(scheme.Cast<TStructExprType>(), nativeTypeCompatibility);
     outTable.RowSpec->SetConstraints(opts.Constraints);
     TMaybe<NYT::TNode> outNativeType;
     if (outRowSpec) {
@@ -1727,7 +1762,7 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
             for (size_t i = 0; i < section.Paths().Size(); ++i) {
                 auto path = section.Paths().Item(i);
                 if (rowSpecs[i].second) {
-                    TYtOutTableInfo mapOutTable(scheme.Cast<TStructExprType>(), outNativeYtTypeFlags);
+                    TYtOutTableInfo mapOutTable(scheme.Cast<TStructExprType>(), nativeTypeCompatibility);
                     if (outNativeType) {
                         mapOutTable.RowSpec->CopyTypeOrders(*outNativeType, useNativeYtDefaultColumnOrder);
                     }
@@ -2537,6 +2572,12 @@ bool CanReplaceParentOutputHash(const TExprNode& node) {
     }
 
     return true;
+}
+
+ui64 GetNativeYtTypeCompatibility(const TString& cluster, const TYtSettings& config) {
+    const auto useNativeYtTypes = config.UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES);
+    const auto nativeTypeCompatibility = config.NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
+    return useNativeYtTypes ? nativeTypeCompatibility : NTCF_NONE;
 }
 
 } // NYql

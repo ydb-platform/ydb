@@ -24,7 +24,8 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
     xxx(StorePartitionIds, __VA_ARGS__)             \
     xxx(UpdateVChunkConfig, __VA_ARGS__)            \
     xxx(StartAddHost, __VA_ARGS__)                  \
-    xxx(AddHostToDBG, __VA_ARGS__)
+    xxx(AddHostToDBG, __VA_ARGS__)                  \
+    xxx(Monitoring, __VA_ARGS__)
 
 // BLOCKSTORE_PARTITION_TRANSACTIONS
 
@@ -163,6 +164,32 @@ struct TTxPartition
 
         void Clear()
         {}
+    };
+
+    //
+    // Monitoring: read the local DB contents for the mon page.
+    //
+    struct TMonitoring
+    {
+        const NActors::TActorId Requester;
+
+        // Filled by Prepare.
+        TMaybe<NKikimrBlockStore::TVolumeConfig> VolumeConfig;
+        TMaybe<TDirectBlockGroupsConnections> DirectBlockGroupsConnections;
+        TMaybe<TAddHostInProgress> AddHostInProgress;
+        TVector<TVChunkConfig> VChunkConfigs;
+
+        explicit TMonitoring(NActors::TActorId requester)
+            : Requester(requester)
+        {}
+
+        void Clear()
+        {
+            VolumeConfig.Clear();
+            DirectBlockGroupsConnections.Clear();
+            AddHostInProgress.Clear();
+            VChunkConfigs.clear();
+        }
     };
 };
 

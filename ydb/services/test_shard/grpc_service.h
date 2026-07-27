@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/public/api/grpc/draft/ydb_test_shard_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/ydb_test_shard_v1.grpc.pb.h>
 
 #include <ydb/library/grpc/server/grpc_server.h>
 #include <ydb/library/actors/core/actorid.h>
@@ -9,13 +9,13 @@
 
 namespace NKikimr::NGRpcService {
 
-class TTestShardGRpcService
-        : public NYdbGrpc::TGrpcServiceBase<Ydb::TestShard::V1::TestShardService>
+class TTestShardSetGRpcService
+        : public NYdbGrpc::TGrpcServiceBase<Ydb::TestShardSet::V1::TestShardSetService>
 {
 public:
-    TTestShardGRpcService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
+    TTestShardSetGRpcService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
             NActors::TActorId grpcRequestProxyId);
-    ~TTestShardGRpcService();
+    ~TTestShardSetGRpcService();
 
     void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) override;
 

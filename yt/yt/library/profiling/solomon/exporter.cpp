@@ -166,6 +166,13 @@ void TSolomonExporter::Stop()
     EncodingOffloadThreadPool_->Shutdown();
 }
 
+void TSolomonExporter::Reconfigure(const TSolomonExporterDynamicConfigPtr& dynamicConfig)
+{
+    auto config = Config_->ApplyDynamic(dynamicConfig);
+    OffloadThreadPool_->SetThreadCount(config->ThreadPoolSize);
+    OffloadThreadPool_->SetPollingPeriod(config->ThreadPoolPollingPeriod);
+}
+
 void TSolomonExporter::TransferSensors()
 {
     std::vector<std::pair<TFuture<TSharedRef>, TIntrusivePtr<TRemoteProcess>>> remoteFutures;
@@ -295,7 +302,7 @@ void TSolomonExporter::HandleIndex(TStringBuf prefix, const IRequestPtr& req, co
 
     if (req->GetUrl().Path != prefix && req->GetUrl().Path != prefixWithSlash) {
         rsp->SetStatus(EStatusCode::NotFound);
-        WaitFor(rsp->WriteBody(TSharedRef::FromString("Not found")))
+        WaitFor(rsp->WriteBody(TSharedRef::FromString(std::string("Not found"))))
             .ThrowOnError();
         return;
     }

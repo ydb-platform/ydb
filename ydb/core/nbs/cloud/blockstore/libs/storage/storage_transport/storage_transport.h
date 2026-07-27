@@ -26,6 +26,8 @@ struct THostConnection
 
     [[nodiscard]] NActors::TActorId GetServiceId() const;
     [[nodiscard]] bool IsConnected() const;
+
+    [[nodiscard]] TString DebugPrint() const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

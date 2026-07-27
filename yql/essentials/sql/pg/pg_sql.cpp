@@ -40,6 +40,7 @@ extern "C" {
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/core/issue/yql_issue.h>
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/public/issue/yql_warning.h>
 #include <yql/essentials/core/sql_types/yql_callable_names.h>
 #include <yql/essentials/utils/log/log_level.h>
@@ -2517,7 +2518,7 @@ public:
                 return nullptr;
             }
         } else if (name == "warning") {
-            if (auto langver = NYql::MakeLangVersion(2026, 01);
+            if (auto langver = NYql::NFeature::PgPragmaWarning.MinLangVer;
                 !NYql::IsBackwardCompatibleFeatureAvailable(
                     Settings_.LangVer, langver, Settings_.BackportMode))
             {
@@ -3725,6 +3726,33 @@ public:
         return result;
     }
 
+    bool ExtractCollationName(const CollateClause* value, TString& name) {
+        auto len = ListLength(value->collname);
+        if (len == 0) {
+            AddError("CollateClause: missing collation name");
+            return false;
+        }
+
+        auto x = ListNodeNth(value->collname, len - 1);
+        if (NodeTag(x) != T_String) {
+            NodeNotImplemented(value, x);
+            return false;
+        }
+
+        name = StrVal(x);
+        return true;
+    }
+
+    TAstNode* ParseCollateClause(const CollateClause* value, const TExprSettings& settings) {
+        AT_LOCATION(value);
+        // Collation propagation through arbitrary expressions (COALESCE, CASE, plain
+        // projections, ...) is not implemented - only ParseFuncCall picks up an explicit
+        // COLLATE that directly wraps one of its arguments (see there). Elsewhere COLLATE
+        // only affects collation-sensitive semantics (comparison, case mapping), not the
+        // expression's runtime value, so we just parse through to the wrapped expression.
+        return ParseExpr(value->arg, settings);
+    }
+
     TAstNode* ParseExpr(const Node* node, const TExprSettings& settings) {
         switch (NodeTag(node)) {
             case T_A_Const: {
@@ -3741,6 +3769,9 @@ public:
             }
             case T_TypeCast: {
                 return ParseTypeCast(CAST_NODE(TypeCast, node), settings);
+            }
+            case T_CollateClause: {
+                return ParseCollateClause(CAST_NODE(CollateClause, node), settings);
             }
             case T_BoolExpr: {
                 return ParseBoolExpr(CAST_NODE(BoolExpr, node), settings);
@@ -4265,6 +4296,32 @@ public:
 
         if (rangeFunction) {
             callSettings.push_back(QL(QA("range")));
+        }
+
+        if (!value->agg_star) {
+            TMaybe<TString> collation;
+            for (int i = 0; i < ListLength(value->args); ++i) {
+                auto x = ListNodeNth(value->args, i);
+                if (NodeTag(x) != T_CollateClause) {
+                    continue;
+                }
+
+                TString collationName;
+                if (!ExtractCollationName(CAST_NODE(CollateClause, x), collationName)) {
+                    return nullptr;
+                }
+
+                if (collation && *collation != collationName) {
+                    AddError(TStringBuilder() << "FuncCall: conflicting explicit collations: " << *collation << " and " << collationName);
+                    return nullptr;
+                }
+
+                collation = collationName;
+            }
+
+            if (collation) {
+                callSettings.push_back(QL(QA("collation"), QAX(*collation)));
+            }
         }
 
         args.push_back(QVL(callSettings.data(), callSettings.size()));

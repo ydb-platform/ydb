@@ -32,7 +32,7 @@ SRCS(
     gc_quorum_3dc.cpp
     get.cpp
     get_block.cpp
-    group_reconfiguration.cpp
+    group_mapping.cpp
     incorrect_queries.cpp
     index_restore_get.cpp
     main.cpp
@@ -74,11 +74,12 @@ RECURSE_FOR_TESTS(
     ut_blob_depot
     ut_blob_depot_fat
     ut_bridge
+    ut_bsc_migration
     ut_check_integrity
     ut_comp_defrag
     ut_ddisk
     ut_donor
-    ut_group_reconfiguration
+    ut_group_mapping
     ut_huge
     ut_startup_brokers
     ut_read_only_vdisk
@@ -88,6 +89,7 @@ RECURSE_FOR_TESTS(
     ut_scrub
     ut_statestorage
     ut_vdisk_restart
+    ut_race
     ut_restart_pdisk
     ut_read_only_pdisk
     ut_stop_pdisk

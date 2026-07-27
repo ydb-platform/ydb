@@ -6,6 +6,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/backup/common/fields_wrappers.h>
+#include <ydb/core/protos/data_format_settings.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/ydb_convert/compression.h>
@@ -313,8 +314,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
             backupSettings.SetStorageClass(exportSettings.storage_class());
             backupSettings.SetUseVirtualAddressing(!exportSettings.disable_virtual_addressing());
 
-
-
             backupSettings.SetObjectKeyPattern(ComputeIndexItemPath(ss, item, itemIdx, exportInfo, exportSettings));
 
             switch (exportSettings.scheme()) {
@@ -326,6 +325,22 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
                 break;
             default:
                 Y_ABORT("Unknown scheme");
+            }
+
+            switch (exportSettings.format_case()) {
+            case Ydb::Export::ExportToS3Settings::kParquet:
+                {
+                    auto parquet = backupSettings.MutableExportDataSettings()->MutableParquet();
+                    if (exportSettings.parquet().row_group_size()) {
+                        parquet->SetRowGroupSize(exportSettings.parquet().row_group_size());
+                    }
+                    break;
+                }
+            case Ydb::Export::ExportToS3Settings::kYdbDump:
+            case Ydb::Export::ExportToS3Settings::FORMAT_NOT_SET:
+                // YdbDump format - empty message
+                backupSettings.MutableExportDataSettings()->MutableYdbDump();
+                break;
             }
 
             if (const auto region = exportSettings.region()) {
@@ -351,6 +366,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
             auto& backupSettings = *task.MutableFSSettings();
             backupSettings.SetBasePath(exportSettings.base_path());
             backupSettings.SetPath(ComputeIndexItemPath(ss, item, itemIdx, exportInfo, exportSettings));
+            
+            // TODO: Parquet format support for FS will be added after public API approval
 
             if (const auto compression = exportSettings.compression()) {
                 Y_ABORT_UNLESS(FillCompression(*task.MutableCompression(), compression));

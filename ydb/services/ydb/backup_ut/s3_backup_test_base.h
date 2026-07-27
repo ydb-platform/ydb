@@ -87,6 +87,10 @@ public:
         }
     }
 
+    const THashMap<TString, TString>& GetS3Data() {
+        return S3Mock().GetData();
+    }
+
 protected:
     TS3BackupTestFixture() = default;
 

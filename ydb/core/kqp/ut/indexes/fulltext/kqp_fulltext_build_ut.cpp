@@ -2662,7 +2662,6 @@ Y_UNIT_TEST(Utf8) {
 Y_UNIT_TEST(AddFullTextFlatIndexWithTruncateWithSelect) {
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableFulltextIndex(true);
-    featureFlags.SetEnableTruncateTable(true);
 
     auto kikimr = Kikimr(std::move(featureFlags));
 
@@ -2717,7 +2716,6 @@ Y_UNIT_TEST(AddFullTextFlatIndexWithTruncateWithSelect) {
 Y_UNIT_TEST(AddFullTextRelevanceIndexWithTruncate) {
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableFulltextIndex(true);
-    featureFlags.SetEnableTruncateTable(true);
 
     auto kikimr = Kikimr(std::move(featureFlags));
     kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);

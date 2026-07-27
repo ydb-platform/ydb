@@ -1259,11 +1259,11 @@ TExprNode::TPtr PullUpFlatMapOverEquiJoin(const TExprNode::TPtr& node, TExprCont
         YQL_ENSURE(status == IGraphTransformer::TStatus::Ok);
 
         status = EquiJoinAnnotation(node->Pos(), canaryResultType, canaryLabels,
-                                         *joinTreeWithInputRenames, options, ctx);
+                                         *joinTreeWithInputRenames, options, ctx, *optCtx.Types);
         YQL_ENSURE(status == IGraphTransformer::TStatus::Ok);
 
         status = EquiJoinAnnotation(node->Pos(), noRenamesResultType, actualLabels,
-                                    *joinTree, options, ctx);
+                                    *joinTree, options, ctx, *optCtx.Types);
         YQL_ENSURE(status == IGraphTransformer::TStatus::Ok);
     }
 

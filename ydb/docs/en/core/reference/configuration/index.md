@@ -21,10 +21,10 @@ The following top-level configuration sections are available, listed in alphabet
 || [{#T}](domains_config.md) | No | Cluster domain configuration including Blob Storage and State Storage ||
 || [{#T}](feature_flags.md) | No | Feature flags to enable or disable specific {{ ydb-short-name }} features ||
 || [{#T}](healthcheck_config.md) | No | Health check service thresholds and timeout settings ||
-|| [{#T}](hive.md) | No | Hive component configuration for tablet management ||
+|| [{#T}](hive_config.md) | No | Hive component configuration for tablet management ||
 || [{#T}](host_configs.md) | No | Typical host configurations for cluster nodes ||
 || [{#T}](hosts.md) | Yes | Static cluster nodes configuration ||
-|| [{#T}](kafka.md) | No | [Kafka Proxy](../../reference/kafka-api/index.md) configuration ||
+|| [{#T}](kafka_proxy_config.md) | No | [Kafka Proxy](../../reference/kafka-api/index.md) configuration ||
 || [{#T}](log_config.md) | No | Logging configuration and parameters ||
 || [{#T}](memory_controller_config.md) | No | Memory allocation and limits for database components ||
 || [{#T}](node_broker_config.md) | No | Stable node names configuration ||

@@ -8,6 +8,7 @@ The `kafka_proxy_config` section of the {{ ydb-short-name }} configuration file 
 | --- | --- | --- | --- |
 | `enable_kafka_proxy` | bool | `false` | Enables or disables Kafka Proxy. |
 | `listening_port` | int32 | `9092` | The port on which the Kafka API will be available. |
+| `listening_address` | string | `[::]` | The network address on which Kafka Proxy listens for incoming connections. Use `[::]` to listen on all interfaces (dual-stack, requires IPv6 to be enabled), `127.0.0.1` or `[::1]` to restrict access to localhost. |
 | `transaction_timeout_ms` | uint32 | `300000` (5 minutes) | The maximum timeout for Kafka transactions, after which the transaction will be cancelled. |
 | `auto_create_topics_enable` | bool | `false` | Enables automatic creation of topics when they are accessed. Analogous to [the same option](https://kafka.apache.org/documentation/#brokerconfigs_auto.create.topics.enable) in Apache Kafka. |
 | `auto_create_consumers_enable` | bool | `true` | Enables automatic registration of consumers when they are accessed. |
@@ -22,6 +23,7 @@ The `kafka_proxy_config` section of the {{ ydb-short-name }} configuration file 
 kafka_proxy_config:
   enable_kafka_proxy: true
   listening_port: 9092
+  listening_address: "[::]"
   transaction_timeout_ms: 300000 # 5 minutes
   auto_create_topics_enable: true
   auto_create_consumers_enable: true

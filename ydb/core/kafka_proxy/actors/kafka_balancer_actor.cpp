@@ -30,9 +30,9 @@ void TKafkaBalancerActor::Bootstrap(const NActors::TActorContext& ctx) {
     }
 
     if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions())) {
-        YDB_LOG_DEBUG("EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.", {LogPrefix()});
+        YDB_LOG_DEBUG("EnableKafkaServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.", {LogPrefix()});
         SendResponseFail(ctx, EKafkaErrors::COORDINATOR_NOT_AVAILABLE,
-            "EnableServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
+            "EnableKafkaServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
         return;
     }
     if (!NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions()) {

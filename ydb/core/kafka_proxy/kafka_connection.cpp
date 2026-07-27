@@ -4,7 +4,6 @@
 #include <ydb/core/raw_socket/sock_config.h>
 #include <ydb/core/util/address_classifier.h>
 #include <ydb/core/kafka_proxy/kafka_transactions_coordinator.h>
-#include <ydb/core/kafka_proxy/actors/txn_actor_response_builder.h>
 #include <ydb/core/kafka_proxy/actors/kafka_balancer_actor.h>
 #include <ydb/core/kafka_proxy/actors/kafka_metadata_actor.h>
 
@@ -577,7 +576,7 @@ protected:
         auto r = response->Get();
         if ((r->ErrorCode == EKafkaErrors::COORDINATOR_NOT_AVAILABLE || r->ErrorCode == EKafkaErrors::INVALID_TXN_STATE)
                 && Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions())) {
-            YDB_LOG_DEBUG("EnableServerlessTransactions feature flag changed; closing connection so the client reconnects and rebinds Kafka metadata tables.",
+            YDB_LOG_DEBUG("EnableKafkaServerlessTransactions feature flag changed; closing connection so the client reconnects and rebinds Kafka metadata tables.",
                 {LogPrefix()});
             CloseConnection = true;
         }

@@ -6,8 +6,8 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
 
-#include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/api/protos/ydb_scheme.pb.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
 
 namespace NKafka {
@@ -29,7 +29,7 @@ public:
     void Bootstrap(const NActors::TActorContext& ctx);
 
 private:
-    struct TEvPrivate {
+    struct TEvKafkaMetaService {
         enum EEv {
             EvTableCreated = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
             EvTableAltered,
@@ -101,11 +101,11 @@ private:
 
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvPrivate::TEvTableCreated, Handle);
-            HFunc(TEvPrivate::TEvTableAltered, Handle);
-            HFunc(TEvPrivate::TEvAclModified, Handle);
-            HFunc(TEvPrivate::TEvMigrationRead, Handle);
-            HFunc(TEvPrivate::TEvMigrationWritten, Handle);
+            HFunc(TEvKafkaMetaService::TEvTableCreated, Handle);
+            HFunc(TEvKafkaMetaService::TEvTableAltered, Handle);
+            HFunc(TEvKafkaMetaService::TEvAclModified, Handle);
+            HFunc(TEvKafkaMetaService::TEvMigrationRead, Handle);
+            HFunc(TEvKafkaMetaService::TEvMigrationWritten, Handle);
         }
     }
 
@@ -126,11 +126,11 @@ private:
     void SendMigrationUpsertRequest(const TString& tableName, const Ydb::ResultSet& resultSet);
     static TString YqlType(const Ydb::Type& type);
 
-    void Handle(TEvPrivate::TEvTableCreated::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvTableAltered::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvAclModified::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvMigrationRead::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvPrivate::TEvMigrationWritten::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvKafkaMetaService::TEvTableCreated::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvKafkaMetaService::TEvTableAltered::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvKafkaMetaService::TEvAclModified::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvKafkaMetaService::TEvMigrationRead::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvKafkaMetaService::TEvMigrationWritten::TPtr& ev, const TActorContext& ctx);
     void ReplyIfRequired(const TActorContext& ctx);
 
     const TString DatabasePath;
@@ -144,4 +144,4 @@ private:
 bool TryRequestConsumerMetadataTablesCreation(Ydb::StatusIds::StatusCode status, const TString& databasePath, const TString& sourceDatabasePath, const NActors::TActorContext& ctx);
 bool TryRequestProducerMetadataTablesCreation(Ydb::StatusIds::StatusCode status, const TString& databasePath, const TString& sourceDatabasePath, const NActors::TActorContext& ctx);
 
-} // NKafka
+} // namespace NKafka

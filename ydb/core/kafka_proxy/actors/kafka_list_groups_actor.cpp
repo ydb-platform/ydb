@@ -27,17 +27,17 @@ NActors::IActor* CreateKafkaListGroupsActor(const TContext::TPtr context, const 
 }
 
 void TKafkaListGroupsActor::Bootstrap(const NActors::TActorContext& ctx) {
-    if (!NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions()) {
-        Kqp = std::make_unique<TKqpTxHelper>(Context->ResourceDatabasePath);
-    } else {
-        Kqp = std::make_unique<TKqpTxHelper>(Context->DatabasePath);
-    }
     if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions())) {
         YDB_LOG_DEBUG("EnableKafkaServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.",
             {LogPrefix()});
         SendFailResponse(EKafkaErrors::COORDINATOR_NOT_AVAILABLE, "EnableKafkaServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
         Die(ctx);
         return;
+    }
+    if (!NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions()) {
+        Kqp = std::make_unique<TKqpTxHelper>(Context->ResourceDatabasePath);
+    } else {
+        Kqp = std::make_unique<TKqpTxHelper>(Context->DatabasePath);
     }
     if (NKikimr::AppData()->FeatureFlags.GetEnableKafkaNativeBalancing()) {
         if (!NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions() && Context->ResourceDatabasePath == AppData(ctx)->TenantName) {

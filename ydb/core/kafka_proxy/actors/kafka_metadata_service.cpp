@@ -238,7 +238,7 @@ void TKafkaMetadataService::InitializeTransactionalProducersTable() {
         auto* ttlSettings = request.mutable_ttl_settings();
         auto* columnTtl = ttlSettings->mutable_date_type_column();
         columnTtl->set_column_name("updated_at");
-        columnTtl->set_expire_after_seconds(NKafka::TRANSACTIONAL_ID_EXPIRATION_MS);
+        columnTtl->set_expire_after_seconds(NKafka::TRANSACTIONAL_ID_EXPIRATION_MS / 1000);
     }
 
     SendCreateTableRequest(std::move(request), "kafka_transactional_producers");
@@ -261,7 +261,7 @@ void TKafkaMetadataService::SendCreateTableRequest(Ydb::Table::CreateTableReques
     future.Subscribe([actorSystem, selfId, tableName](const NThreading::TFuture<Ydb::Table::CreateTableResponse>& f) {
         const auto& operation = f.GetValue().operation();
         const TString error = operation.status() == Ydb::StatusIds::SUCCESS ? TString{} : operation.DebugString();
-        actorSystem->Send(selfId, new TEvPrivate::TEvTableCreated(tableName, operation.status(), error));
+        actorSystem->Send(selfId, new TEvKafkaMetaService::TEvTableCreated(tableName, operation.status(), error));
     });
 }
 
@@ -297,7 +297,7 @@ void TKafkaMetadataService::SendAlterTableRequest(Ydb::Table::AlterTableRequest&
     future.Subscribe([actorSystem, selfId, tableName](const NThreading::TFuture<Ydb::Table::AlterTableResponse>& f) {
         const auto& operation = f.GetValue().operation();
         const TString error = operation.status() == Ydb::StatusIds::SUCCESS ? TString{} : operation.DebugString();
-        actorSystem->Send(selfId, new TEvPrivate::TEvTableAltered(tableName, operation.status(), error));
+        actorSystem->Send(selfId, new TEvKafkaMetaService::TEvTableAltered(tableName, operation.status(), error));
     });
 }
 
@@ -335,11 +335,11 @@ void TKafkaMetadataService::SendModifyPermissionsRequest(Ydb::Scheme::ModifyPerm
     future.Subscribe([actorSystem, selfId, tableName](const NThreading::TFuture<Ydb::Scheme::ModifyPermissionsResponse>& f) {
         const auto& operation = f.GetValue().operation();
         const TString error = operation.status() == Ydb::StatusIds::SUCCESS ? TString{} : operation.DebugString();
-        actorSystem->Send(selfId, new TEvPrivate::TEvAclModified(tableName, operation.status(), error));
+        actorSystem->Send(selfId, new TEvKafkaMetaService::TEvAclModified(tableName, operation.status(), error));
     });
 }
 
-void TKafkaMetadataService::Handle(TEvPrivate::TEvTableCreated::TPtr& ev, const TActorContext& ctx) {
+void TKafkaMetadataService::Handle(TEvKafkaMetaService::TEvTableCreated::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
     const auto status = msg->Status;
 
@@ -366,7 +366,7 @@ void TKafkaMetadataService::Handle(TEvPrivate::TEvTableCreated::TPtr& ev, const 
     SendEnableAutopartitioningRequest(msg->TableName);
 }
 
-void TKafkaMetadataService::Handle(TEvPrivate::TEvTableAltered::TPtr& ev, const TActorContext& ctx) {
+void TKafkaMetadataService::Handle(TEvKafkaMetaService::TEvTableAltered::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
     const auto status = msg->Status;
 
@@ -459,7 +459,7 @@ void TKafkaMetadataService::SendMigrationReadRequest(const TString& tableName, c
                 resultSet = std::move(*result.mutable_result_sets(0));
             }
         }
-        actorSystem->Send(selfId, new TEvPrivate::TEvMigrationRead(tableName, operation.status(), error, std::move(resultSet)));
+        actorSystem->Send(selfId, new TEvKafkaMetaService::TEvMigrationRead(tableName, operation.status(), error, std::move(resultSet)));
     });
 }
 
@@ -513,11 +513,11 @@ void TKafkaMetadataService::SendMigrationUpsertRequest(const TString& tableName,
     future.Subscribe([actorSystem, selfId, tableName, rowCount](const NThreading::TFuture<Ydb::Scripting::ExecuteYqlResponse>& f) {
         const auto& operation = f.GetValue().operation();
         const TString error = operation.status() == Ydb::StatusIds::SUCCESS ? TString{} : operation.DebugString();
-        actorSystem->Send(selfId, new TEvPrivate::TEvMigrationWritten(tableName, operation.status(), error, rowCount));
+        actorSystem->Send(selfId, new TEvKafkaMetaService::TEvMigrationWritten(tableName, operation.status(), error, rowCount));
     });
 }
 
-void TKafkaMetadataService::Handle(TEvPrivate::TEvMigrationRead::TPtr& ev, const TActorContext& ctx) {
+void TKafkaMetadataService::Handle(TEvKafkaMetaService::TEvMigrationRead::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
 
     if (msg->Status != Ydb::StatusIds::SUCCESS) {
@@ -539,7 +539,7 @@ void TKafkaMetadataService::Handle(TEvPrivate::TEvMigrationRead::TPtr& ev, const
     SendMigrationUpsertRequest(msg->TableName, msg->ResultSet);
 }
 
-void TKafkaMetadataService::Handle(TEvPrivate::TEvMigrationWritten::TPtr& ev, const TActorContext& ctx) {
+void TKafkaMetadataService::Handle(TEvKafkaMetaService::TEvMigrationWritten::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
 
     if (msg->Status != Ydb::StatusIds::SUCCESS) {
@@ -555,7 +555,7 @@ void TKafkaMetadataService::Handle(TEvPrivate::TEvMigrationWritten::TPtr& ev, co
     SendReadOnlyAclRequest(msg->TableName);
 }
 
-void TKafkaMetadataService::Handle(TEvPrivate::TEvAclModified::TPtr& ev, const TActorContext& ctx) {
+void TKafkaMetadataService::Handle(TEvKafkaMetaService::TEvAclModified::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
     const auto status = msg->Status;
 

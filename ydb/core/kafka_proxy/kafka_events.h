@@ -315,7 +315,7 @@ struct TEvTopicModificationResponse : public NActors::TEventLocal<TEvTopicModifi
 
 struct TEvAddPartitionsToTxnRequest : public TEventLocal<TEvAddPartitionsToTxnRequest, EvAddPartitionsToTxnRequest> {
     TEvAddPartitionsToTxnRequest(const ui64 correlationId, const TMessagePtr<TAddPartitionsToTxnRequestData>& request, const TActorId connectionId,
-                                 const TString& databasePath, const TString& resourceDatabasePath, bool EnableKafkaServerlessTransactionsFlag = 0)
+                                 const TString& databasePath, const TString& resourceDatabasePath, bool EnableKafkaServerlessTransactionsFlag = false)
     : CorrelationId(correlationId)
     , Request(request)
     , ConnectionId(connectionId)
@@ -352,7 +352,7 @@ struct TEvTopicDescribeResponse : public NActors::TEventLocal<TEvTopicDescribeRe
 
 struct TEvAddOffsetsToTxnRequest : public TEventLocal<TEvAddOffsetsToTxnRequest, EvAddOffsetsToTxnRequest> {
     TEvAddOffsetsToTxnRequest(const ui64 correlationId, const TMessagePtr<TAddOffsetsToTxnRequestData>& request, const TActorId connectionId,
-                             const TString& databasePath, const TString& resourceDatabasePath,  bool EnableKafkaServerlessTransactionsFlag = 0)
+                             const TString& databasePath, const TString& resourceDatabasePath,  bool EnableKafkaServerlessTransactionsFlag = false)
     : CorrelationId(correlationId)
     , Request(request)
     , ConnectionId(connectionId)
@@ -371,7 +371,7 @@ struct TEvAddOffsetsToTxnRequest : public TEventLocal<TEvAddOffsetsToTxnRequest,
 
 struct TEvTxnOffsetCommitRequest : public TEventLocal<TEvTxnOffsetCommitRequest, EvTxnOffsetCommitRequest> {
     TEvTxnOffsetCommitRequest(const ui64 correlationId, const TMessagePtr<TTxnOffsetCommitRequestData>& request, const TActorId connectionId,
-                              const TString& databasePath, const TString& resourceDatabasePath, bool EnableKafkaServerlessTransactionsFlag = 0)
+                              const TString& databasePath, const TString& resourceDatabasePath, bool EnableKafkaServerlessTransactionsFlag = false)
     : CorrelationId(correlationId)
     , Request(request)
     , ConnectionId(connectionId)
@@ -390,7 +390,7 @@ struct TEvTxnOffsetCommitRequest : public TEventLocal<TEvTxnOffsetCommitRequest,
 
 struct TEvEndTxnRequest : public TEventLocal<TEvEndTxnRequest, EvEndTxnRequest> {
     TEvEndTxnRequest(const ui64 correlationId, const TMessagePtr<TEndTxnRequestData>& request, const TActorId connectionId,
-                     const TString& databasePath, const TString& resourceDatabasePath, bool EnableKafkaServerlessTransactionsFlag = 0)
+                     const TString& databasePath, const TString& resourceDatabasePath, bool EnableKafkaServerlessTransactionsFlag = false)
     : CorrelationId(correlationId)
     , Request(request)
     , ConnectionId(connectionId)

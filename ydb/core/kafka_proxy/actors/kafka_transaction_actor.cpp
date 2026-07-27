@@ -27,7 +27,7 @@ namespace NKafka {
     void TTransactionActor::Handle(TEvKafka::TEvAddPartitionsToTxnRequest::TPtr& ev, const TActorContext& ctx){
         YDB_LOG_DEBUG("Received ADD_PARTITIONS_TO_TXN request",
             {LogPrefix()});
-        if (ev->Get()->InitialEnableKafkaServerlessTransactionsFlagValue !=  NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions()) {
+        if (ev->Get()->InitialEnableKafkaServerlessTransactionsFlagValue != NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions()) {
             YDB_LOG_DEBUG("EnableKafkaServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.",
             {LogPrefix()});
             SendFailResponse<TAddPartitionsToTxnResponseData>(ev, EKafkaErrors::INVALID_TXN_STATE,
@@ -51,7 +51,7 @@ namespace NKafka {
     void TTransactionActor::Handle(TEvKafka::TEvAddOffsetsToTxnRequest::TPtr& ev, const TActorContext& ctx) {
         YDB_LOG_DEBUG("Received ADD_OFFSETS_TO_TXN request",
             {LogPrefix()});
-        if (ev->Get()->InitialEnableKafkaServerlessTransactionsFlagValue !=  NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions()) {
+        if (ev->Get()->InitialEnableKafkaServerlessTransactionsFlagValue != NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions()) {
             YDB_LOG_DEBUG("EnableKafkaServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.", {LogPrefix()});
             SendFailResponse<TAddOffsetsToTxnResponseData>(ev, EKafkaErrors::INVALID_TXN_STATE,
                 "EnableKafkaServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
@@ -65,7 +65,7 @@ namespace NKafka {
     void TTransactionActor::Handle(TEvKafka::TEvTxnOffsetCommitRequest::TPtr& ev, const TActorContext& ctx) {
         YDB_LOG_DEBUG("Received TXN_OFFSET_COMMIT request",
             {LogPrefix()});
-        if (ev->Get()->InitialEnableKafkaServerlessTransactionsFlagValue !=  NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions()) {
+        if (ev->Get()->InitialEnableKafkaServerlessTransactionsFlagValue != NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions()) {
             YDB_LOG_DEBUG("EnableKafkaServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.", {LogPrefix()});
             SendFailResponse<TTxnOffsetCommitResponseData>(ev, EKafkaErrors::INVALID_TXN_STATE,
                 "EnableKafkaServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
@@ -109,7 +109,7 @@ namespace NKafka {
     void TTransactionActor::Handle(TEvKafka::TEvEndTxnRequest::TPtr& ev, const TActorContext& ctx) {
         YDB_LOG_DEBUG("Received END_TXN request",
             {LogPrefix()});
-        if (ev->Get()->InitialEnableKafkaServerlessTransactionsFlagValue !=  NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions()) {
+        if (ev->Get()->InitialEnableKafkaServerlessTransactionsFlagValue != NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions()) {
             YDB_LOG_DEBUG("EnableKafkaServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.", {LogPrefix()});
             SendFailResponse<TEndTxnResponseData>(ev, EKafkaErrors::INVALID_TXN_STATE,
                 "EnableKafkaServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");

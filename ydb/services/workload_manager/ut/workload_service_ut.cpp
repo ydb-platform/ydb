@@ -997,9 +997,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
             ALTER RESOURCE POOL CLASSIFIER )" << classifierId << R"( RESET (
                 RANK
             );
-        )");
-
-        WaitForFail(ydb, settings, poolId);
+        )", NYdb::EStatus::GENERIC_ERROR, "Cannot reset property rank");
     }
 
     Y_UNIT_TEST(TestExplicitPoolId) {

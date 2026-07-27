@@ -33,7 +33,10 @@ namespace NKikimr {
             return;
         }
 
-        BatchedGetRequestCount++;
+        if (!BatchedGetRequestCount && !BatchedPutRequestCount) {
+            SetSystemFlag(ESystemFlag::MailboxProcessingFinished);
+        }
+        ++BatchedGetRequestCount;
 
         EnsureMonitoring(true);
         LWTRACK(DSProxyGetHandle, ev->Get()->Orbit);
@@ -187,7 +190,10 @@ namespace NKikimr {
             return;
         }
 
-        BatchedPutRequestCount++;
+        if (!BatchedGetRequestCount && !BatchedPutRequestCount) {
+            SetSystemFlag(ESystemFlag::MailboxProcessingFinished);
+        }
+        ++BatchedPutRequestCount;
 
         Send(MonActor, new TEvThroughputAddRequest(ev->Get()->HandleClass, bytes));
         EnableWilsonTracing(ev, Mon->PutSamplePPM);
@@ -695,6 +701,8 @@ namespace NKikimr {
             LWPROBE(DSProxyBatchedGetRequest, BatchedGetRequestCount, GroupId.GetRawId());
             BatchedGetRequestCount = 0;
         }
+
+        ClearSystemFlag(ESystemFlag::MailboxProcessingFinished);
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

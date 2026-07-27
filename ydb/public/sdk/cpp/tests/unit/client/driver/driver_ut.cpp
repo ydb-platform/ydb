@@ -239,6 +239,35 @@ Y_UNIT_TEST_SUITE(CppGrpcClientSimpleTest) {
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "root CA PEM:");
     }
 
+    Y_UNIT_TEST(NonCaTrustAnchorPassesValidation) {
+        const std::string nonCaCertificate = R"(-----BEGIN CERTIFICATE-----
+MIICODCCAd2gAwIBAgIUMizwaqRBfZMqZLAfqOon9LxVUwswCgYIKoZIzj0EAwIw
+RjELMAkGA1UEBhMCUlUxDzANBgNVBAcMBk1vc2NvdzEPMA0GA1UECgwGWWFuZGV4
+MRUwEwYDVQQDDAxMb2NhbGhvc3QgQ0EwHhcNMjUwNTEyMTQxOTEzWhcNMzUwNTEw
+MTQxOTEzWjBDMQswCQYDVQQGEwJSVTEPMA0GA1UEBwwGTW9zY293MQ8wDQYDVQQK
+DAZZYW5kZXgxEjAQBgNVBAMMCWxvY2FsaG9zdDBZMBMGByqGSM49AgEGCCqGSM49
+AwEHA0IABOM5UtoWuYTndtECRIdexT/5o5M7Dj5sBe4mPcydByC8AY6sSUghpzTD
+HU/gNnfja8unXt1gukZEe9h03uoH37mjgaswgagwHQYDVR0OBBYEFD3bqNr1fG99
+dKCFAsKkTHwNHkF+MB8GA1UdIwQYMBaAFMX2CNtuUf7N2udXp3Xn9YdWy9czMCwG
+A1UdEQQlMCOCCWxvY2FsaG9zdIcEfwAAAYcQAAAAAAAAAAAAAAAAAAAAATAMBgNV
+HRMBAf8EAjAAMAsGA1UdDwQEAwIFoDAdBgNVHSUEFjAUBggrBgEFBQcDAQYIKwYB
+BQUHAwIwCgYIKoZIzj0EAwIDSQAwRgIhANIfRVOvxINkIBKeW60zD7BkrYBXWczl
+FmSagrLHbVpDAiEA+HkxWw0d1mFaF5ZQ03DEbeb0gFQQDQCrqk/hS6ofCbs=
+-----END CERTIFICATE-----)";
+
+        auto driver = TDriver(
+            TDriverConfig()
+                .SetEndpoint("localhost:100")
+                .UseSecureConnection(nonCaCertificate));
+        auto client = NTable::TTableClient(driver);
+
+        auto result = client.CreateSession().GetValueSync();
+        auto issues = result.GetIssues().ToString();
+
+        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::TRANSPORT_UNAVAILABLE);
+        UNIT_ASSERT(issues.find("Client TLS credentials validation failed") == std::string::npos);
+    }
+
     Y_UNIT_TEST(EmptyRootCertificateWithoutClientCredentialsKeepsBehavior) {
         auto driver = TDriver(
             TDriverConfig()

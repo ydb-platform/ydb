@@ -8,7 +8,6 @@
 #include <openssl/pem.h>
 #include <openssl/ssl.h>
 #include <openssl/x509.h>
-#include <openssl/x509v3.h>
 
 #include <memory>
 #include <string>
@@ -67,16 +66,8 @@ bool ValidateRootCertificates(const std::string& pemRootCerts, std::string& erro
             return false;
         }
 
-        std::unique_ptr<BASIC_CONSTRAINTS, decltype(&BASIC_CONSTRAINTS_free)> basicConstraints(
-            static_cast<BASIC_CONSTRAINTS*>(X509_get_ext_d2i(cert.get(), NID_basic_constraints, nullptr, nullptr)),
-            &BASIC_CONSTRAINTS_free);
-        const auto isCaCert = basicConstraints && basicConstraints->ca;
-
-        if (!isCaCert) {
-            ERR_clear_error();
-            errorMessage = "root CA PEM: certificate is not a CA (BasicConstraints)";
-            return false;
-        }
+        // Match gRPC trust store semantics: with X509_V_FLAG_PARTIAL_CHAIN an
+        // explicitly trusted non-CA certificate may also be a trust anchor.
         ERR_clear_error();
         ++certsParsed;
     }

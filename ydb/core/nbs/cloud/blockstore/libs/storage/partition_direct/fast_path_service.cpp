@@ -39,7 +39,7 @@ namespace {
 ////////////////////////////////////////////////////////////////////////////////
 
 void DumpToFile(
-    const TString& diskId,
+    const TDiskDescription& diskDescription,
     size_t index,
     const TString& config,
     TMap<size_t, TDBGDumpResponse> debugDumps)
@@ -63,8 +63,12 @@ void DumpToFile(
     auto dirPath = TString("/tmp/dirty_map/");
     NFs::MakeDirectoryRecursive(dirPath);
 
-    auto path = TStringBuilder() << dirPath << diskId << "." << index;
+    auto path = TStringBuilder()
+                << dirPath << diskDescription.DiskId << "." << index;
     TFile file(path, EOpenModeFlag::CreateAlways);
+
+    auto header = diskDescription.Print() + "/n";
+    file.Write(header.data(), header.size());
 
     file.Write(config.data(), config.size());
     file.Write("\n", 1);
@@ -98,6 +102,7 @@ NMonitoring::TDynamicCounterPtr MakeCountersChain(
 TVector<TRegionPtr> CreateRegions(
     ITraceService* traceService,
     IPartitionDirectService* partitionDirectService,
+    const TDiskDescription& diskDescription,
     ui64 blockCount,
     ui32 blockSize,
     const TVector<IDirectBlockGroupPtr>& directBlockGroups,
@@ -115,6 +120,7 @@ TVector<TRegionPtr> CreateRegions(
             TActorContext::ActorSystem(),
             traceService,
             partitionDirectService,
+            diskDescription,
             i,
             directBlockGroups,
             vChunkConfigs,
@@ -133,8 +139,7 @@ TVector<TRegionPtr> CreateRegions(
 TFastPathService::TFastPathService(
     NActors::TActorSystem* actorSystem,
     NActors::TActorId partitionActorId,
-    ui64 tabletId,
-    const TString& diskId,
+    const TDiskDescription& diskDescription,
     ui64 blockCount,
     ui32 blockSize,
     TVector<IDirectBlockGroupPtr> directBlockGroups,
@@ -146,13 +151,14 @@ TFastPathService::TFastPathService(
     : ActorSystem(actorSystem)
     , PartitionActorId(partitionActorId)
     , StorageConfig(std::move(storageConfig))
-    , DiskId(diskId)
+    , DiskDescription(diskDescription)
     , Scheduler(std::move(scheduler))
     , Timer(std::move(timer))
     , DirectBlockGroups(std::move(directBlockGroups))
     , Regions(CreateRegions(
           this,
           this,
+          DiskDescription,
           blockCount,
           blockSize,
           DirectBlockGroups,
@@ -161,14 +167,20 @@ TFastPathService::TFastPathService(
           MakeCountersChain(
               counters,
               StorageConfig->GetDDiskPoolName(),
-              tabletId)))
+              DiskDescription.TabletId)))
+    , LogTitle(
+          GetCycleCount(),
+          TLogTitle::TFastPathService{
+              .DiskId = DiskDescription.DiskId,
+              .TabletId = DiskDescription.TabletId,
+              .Generation = DiskDescription.Generation})
     , TraceSamplePeriod(StorageConfig->GetTraceSamplePeriod())
     , Counters(MakeCountersChain(
           std::move(counters),
           StorageConfig->GetDDiskPoolName(),
-          tabletId))
+          DiskDescription.TabletId))
     , VolumeConfig(std::make_shared<TVolumeConfig>(TVolumeConfig{
-          .DiskId = DiskId,
+          .DiskId = DiskDescription.DiskId,
           .BlockSize = blockSize,
           .BlockCount = blockCount,
           .BlocksPerStripe = StorageConfig->GetStripeSize() / blockSize,
@@ -579,7 +591,7 @@ void TFastPathService::OnDebugDump(size_t dbgIndex, TDBGDumpResponse dump)
 
     try {
         DumpToFile(
-            DiskId,
+            DiskDescription,
             DumpCount,
             StorageConfig->Dump(),
             std::move(DebugDumps));

@@ -7,6 +7,7 @@
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ic_storage_transport.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error_utils.h>
@@ -181,9 +182,7 @@ TDirectBlockGroup::TDirectBlockGroup(
     NActors::TActorSystem* actorSystem,
     TStorageConfigPtr storageConfig,
     TExecutorPtr executor,
-    const TString& diskId,
-    ui64 tabletId,
-    ui32 generation,
+    const TDiskDescription& diskDescription,
     size_t directBlockGroupIndex,
     const TVector<NBsController::TDDiskId>& ddisksIds,
     const TVector<NBsController::TDDiskId>& pbufferIds,
@@ -191,17 +190,17 @@ TDirectBlockGroup::TDirectBlockGroup(
     : ActorSystem(actorSystem)
     , StorageConfig(std::move(storageConfig))
     , Executor(std::move(executor))
-    , TabletId(tabletId)
-    , TabletGeneration(generation)
+    , TabletId(diskDescription.TabletId)
+    , TabletGeneration(diskDescription.Generation)
     , DirectBlockGroupIndex(directBlockGroupIndex)
     , StorageTransport(std::move(storageTransport))
     , LogTitle(
           GetCycleCount(),
           TLogTitle::TDirectBlockGroup{
-              .DiskId = diskId,
-              .DBGIndex = DirectBlockGroupIndex,
-              .TabletId = TabletId,
-              .Generation = TabletGeneration})
+              .DiskId = diskDescription.DiskId,
+              .TabletId = diskDescription.TabletId,
+              .Generation = diskDescription.Generation,
+              .DBGIndex = DirectBlockGroupIndex})
     , Oracle(StorageConfig, this)
 {
     Y_ASSERT(pbufferIds.size() == ddisksIds.size());

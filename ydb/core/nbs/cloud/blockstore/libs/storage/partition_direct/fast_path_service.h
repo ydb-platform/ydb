@@ -10,6 +10,9 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/public.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
 
@@ -29,7 +32,7 @@ private:
     NActors::TActorSystem* const ActorSystem = nullptr;
     const NActors::TActorId PartitionActorId;
     const TStorageConfigPtr StorageConfig;
-    const TString DiskId;
+    const TDiskDescription DiskDescription;
     const ISchedulerPtr Scheduler;
     const ITimerPtr Timer;
     const TVector<IDirectBlockGroupPtr> DirectBlockGroups;
@@ -64,8 +67,7 @@ public:
     TFastPathService(
         NActors::TActorSystem* actorSystem,
         NActors::TActorId partitionActorId,
-        ui64 tabletId,
-        const TString& diskId,
+        const TDiskDescription& diskDescription,
         ui64 blockCount,
         ui32 blockSize,
         TVector<IDirectBlockGroupPtr> directBlockGroups,

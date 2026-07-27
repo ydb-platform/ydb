@@ -54,14 +54,15 @@ message TTabletTypes {
         BlockStorePartitionDirect = 43;
         BlockStoreVolumeDirect = 44;
         NbsLoadTablet = 45;
+        DbsController = 46;
 
         // when adding a new tablet type and keeping parse compatibility with the old version
         // rename existing reserved item to desired one, and add new reserved item to
         // the end of reserved list
-        Reserved46 = 46;
         Reserved47 = 47;
         Reserved48 = 48;
         Reserved49 = 49;
+        Reserved50 = 50;
 
         UserTypeStart = 255;
         TypeInvalid = -1;

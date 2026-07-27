@@ -1,6 +1,7 @@
 #include "cgroup_oom.h"
 
 #include "cgroup_events.h"
+#include "cgroup_oom_trend.h"
 #include "cgroup_v1.h"
 #include "cgroup_v2.h"
 
@@ -11,9 +12,12 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 
-#include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/vector.h>
+#include <util/stream/output.h>
+
+#include <algorithm>
+#include <array>
 
 namespace NActors {
 
@@ -33,35 +37,14 @@ namespace NActors {
 
         enum : ui32 {
             EvPoll = EventSpaceBegin(TEvents::ES_PRIVATE),
-            EvSubscribeCallback,
-            EvUnsubscribeCallback,
             EvSubscribeActor,
             EvUnsubscribeActor,
+            EvReadTrend,
+            EvSubscribeTrendActor,
+            EvUnsubscribeTrendActor,
         };
 
         struct TEvPoll : TEventLocal<TEvPoll, EvPoll> {
-        };
-
-        struct TEvSubscribeCallback : TEventLocal<TEvSubscribeCallback, EvSubscribeCallback> {
-            TCGroupOomSubSystem::TSubscriptionId SubscriptionId;
-            TCGroupOomSubSystem::TCallback Callback;
-
-            TEvSubscribeCallback(
-                    TCGroupOomSubSystem::TSubscriptionId subscriptionId,
-                    TCGroupOomSubSystem::TCallback callback)
-                : SubscriptionId(subscriptionId)
-                , Callback(std::move(callback))
-            {
-            }
-        };
-
-        struct TEvUnsubscribeCallback : TEventLocal<TEvUnsubscribeCallback, EvUnsubscribeCallback> {
-            TCGroupOomSubSystem::TSubscriptionId SubscriptionId;
-
-            explicit TEvUnsubscribeCallback(TCGroupOomSubSystem::TSubscriptionId subscriptionId)
-                : SubscriptionId(subscriptionId)
-            {
-            }
         };
 
         struct TEvSubscribeActor : TEventLocal<TEvSubscribeActor, EvSubscribeActor> {
@@ -82,6 +65,51 @@ namespace NActors {
             }
         };
 
+        struct TEvReadTrend : TEventLocal<TEvReadTrend, EvReadTrend> {
+            TActorId Recipient;
+            ECGroupOomTrendWindow Window;
+            ui64 Cookie;
+
+            TEvReadTrend(
+                    TActorId recipient,
+                    ECGroupOomTrendWindow window,
+                    ui64 cookie)
+                : Recipient(recipient)
+                , Window(window)
+                , Cookie(cookie)
+            {
+            }
+        };
+
+        struct TEvSubscribeTrendActor
+            : TEventLocal<TEvSubscribeTrendActor, EvSubscribeTrendActor>
+        {
+            TActorId ActorId;
+            ECGroupOomTrendWindow Window;
+            TDuration TimeToOomThreshold;
+
+            TEvSubscribeTrendActor(
+                    TActorId actorId,
+                    ECGroupOomTrendWindow window,
+                    TDuration timeToOomThreshold)
+                : ActorId(actorId)
+                , Window(window)
+                , TimeToOomThreshold(timeToOomThreshold)
+            {
+            }
+        };
+
+        struct TEvUnsubscribeTrendActor
+            : TEventLocal<TEvUnsubscribeTrendActor, EvUnsubscribeTrendActor>
+        {
+            TActorId ActorId;
+
+            explicit TEvUnsubscribeTrendActor(TActorId actorId)
+                : ActorId(actorId)
+            {
+            }
+        };
+
         class TCGroupOomActor : public TActorBootstrapped<TCGroupOomActor> {
         public:
             TCGroupOomActor(
@@ -89,6 +117,7 @@ namespace NActors {
                     TCGroupOomConfig config)
                 : Providers(std::move(providers))
                 , Config(std::move(config))
+                , TrendCalculator(Config.TrendWindows)
             {
             }
 
@@ -100,14 +129,42 @@ namespace NActors {
             STRICT_STFUNC(StateWork,
                 hFunc(TEvPoll, Handle)
                 hFunc(TEvCGroupMemoryStats, Handle)
-                hFunc(TEvSubscribeCallback, Handle)
-                hFunc(TEvUnsubscribeCallback, Handle)
                 hFunc(TEvSubscribeActor, Handle)
                 hFunc(TEvUnsubscribeActor, Handle)
+                hFunc(TEvReadTrend, Handle)
+                hFunc(TEvSubscribeTrendActor, Handle)
+                hFunc(TEvUnsubscribeTrendActor, Handle)
                 cFunc(TEvents::TSystem::Poison, PassAway)
             )
 
         private:
+            struct TTrendSubscription {
+                TDuration TimeToOomThreshold;
+                bool Active = false;
+
+                explicit TTrendSubscription(TDuration timeToOomThreshold)
+                    : TimeToOomThreshold(timeToOomThreshold)
+                {
+                }
+            };
+
+            struct TPendingTrendRequest {
+                TActorId Recipient;
+                ui64 Cookie;
+            };
+
+            struct TTrendActorSubscription : TTrendSubscription {
+                TActorId ActorId;
+
+                TTrendActorSubscription(
+                        TActorId actorId,
+                        TDuration timeToOomThreshold)
+                    : TTrendSubscription(timeToOomThreshold)
+                    , ActorId(actorId)
+                {
+                }
+            };
+
             void Handle(TEvPoll::TPtr&) {
                 RequestProvider(0);
             }
@@ -123,21 +180,15 @@ namespace NActors {
                 const size_t providerIndex = ev->Cookie;
 
                 if (ev->Get()->Stats) {
-                    Evaluate(std::move(ev->Get()->Stats));
+                    if (!Evaluate(std::move(ev->Get()->Stats))) {
+                        return;
+                    }
                     Schedule(Config.PollPeriod, new TEvPoll());
                 } else if (providerIndex + 1 < Providers.size()) {
                     RequestProvider(providerIndex + 1);
                 } else {
                     Schedule(Config.PollPeriod, new TEvPoll());
                 }
-            }
-
-            void Handle(TEvSubscribeCallback::TPtr& ev) {
-                Callbacks.emplace(ev->Get()->SubscriptionId, std::move(ev->Get()->Callback));
-            }
-
-            void Handle(TEvUnsubscribeCallback::TPtr& ev) {
-                Callbacks.erase(ev->Get()->SubscriptionId);
             }
 
             void Handle(TEvSubscribeActor::TPtr& ev) {
@@ -148,14 +199,87 @@ namespace NActors {
                 ActorSubscribers.erase(ev->Get()->ActorId);
             }
 
-            void Evaluate(TCGroupMemoryStatsPtr stats) {
-                if (!PreviousVersion || *PreviousVersion != stats->Version ||
-                        PreviousCGroupPath != stats->CGroupPath) {
-                    PreviousVersion = stats->Version;
-                    PreviousCGroupPath = stats->CGroupPath;
-                    HasPreviousMemory = false;
-                    ActiveLevelReasons = 0;
+            void Handle(TEvReadTrend::TPtr& ev) {
+                if (TrendCalculator.HasResult(ev->Get()->Window)) {
+                    const auto trend = GetTrend(ev->Get()->Window);
+                    SendTrend(
+                        ev->Get()->Recipient,
+                        trend
+                            ? ECGroupOomTrendState::Active
+                            : ECGroupOomTrendState::Stopped,
+                        trend,
+                        std::nullopt,
+                        ev->Get()->Cookie);
+                } else {
+                    PendingTrendRequests[CGroupOomTrendWindowIndex(
+                        ev->Get()->Window)].push_back({
+                        .Recipient = ev->Get()->Recipient,
+                        .Cookie = ev->Get()->Cookie,
+                    });
                 }
+            }
+
+            void Handle(TEvSubscribeTrendActor::TPtr& ev) {
+                const auto* event = ev->Get();
+                auto& subscriptions =
+                    TrendActors[CGroupOomTrendWindowIndex(event->Window)];
+                const auto existing = std::find_if(
+                    subscriptions.begin(),
+                    subscriptions.end(),
+                    [event](const TTrendActorSubscription& subscription) {
+                        return subscription.ActorId == event->ActorId &&
+                            subscription.TimeToOomThreshold == event->TimeToOomThreshold;
+                    });
+                if (existing == subscriptions.end()) {
+                    subscriptions.push_back({
+                        event->ActorId,
+                        event->TimeToOomThreshold,
+                    });
+                    if (TrendCalculator.HasResult(event->Window)) {
+                        const auto trend = GetTrend(event->Window);
+                        UpdateTrendActorSubscription(
+                            trend,
+                            subscriptions.back());
+                    }
+                }
+            }
+
+            void Handle(TEvUnsubscribeTrendActor::TPtr& ev) {
+                const TActorId actorId = ev->Get()->ActorId;
+                for (auto& subscriptions : TrendActors) {
+                    subscriptions.erase(
+                        std::remove_if(
+                            subscriptions.begin(),
+                            subscriptions.end(),
+                            [actorId](const TTrendActorSubscription& subscription) {
+                                return subscription.ActorId == actorId;
+                            }),
+                        subscriptions.end());
+                }
+            }
+
+            bool Evaluate(TCGroupMemoryStatsPtr stats) {
+                if (!CGroupVersion) {
+                    CGroupVersion = stats->Version;
+                    CGroupPath = stats->CGroupPath;
+                } else if (*CGroupVersion != stats->Version ||
+                        CGroupPath != stats->CGroupPath) {
+                    Cerr
+                        << "ERROR: cgroup memory stats source changed from version "
+                        << static_cast<ui32>(*CGroupVersion)
+                        << " path " << CGroupPath
+                        << " to version " << static_cast<ui32>(stats->Version)
+                        << " path " << stats->CGroupPath << Endl;
+                    Cerr
+                        << "Stopping cgroup OOM monitoring; restart the process "
+                        << "in the target cgroup" << Endl;
+                    PassAway();
+                    return false;
+                }
+
+                const auto recalculated = TrendCalculator.AddSample(
+                    TActivationContext::Monotonic(),
+                    stats);
 
                 TCGroupOomAlert alert;
                 alert.Stats = std::move(stats);
@@ -201,6 +325,13 @@ namespace NActors {
                 if (alert.Reasons) {
                     Notify(alert);
                 }
+                for (ECGroupOomTrendWindow window : CGroupOomTrendWindows) {
+                    if (recalculated.Contains(window)) {
+                        ReplyToPendingTrendRequests(window);
+                        UpdateTrendSubscriptions(window);
+                    }
+                }
+                return true;
             }
 
             void Notify(const TCGroupOomAlert& alert) {
@@ -208,26 +339,93 @@ namespace NActors {
                 for (const TActorId& actorId : ActorSubscribers) {
                     actorContext.Send(actorId, new TEvCGroupOomAlert(alert));
                 }
+            }
 
-                for (const auto& item : Callbacks) {
-                    try {
-                        item.second(alert);
-                    } catch (...) {
-                        // One callback must not prevent other subscribers from
-                        // releasing memory.
-                    }
+            void UpdateTrendSubscriptions(ECGroupOomTrendWindow window) {
+                const auto windowIndex = CGroupOomTrendWindowIndex(window);
+                const auto trend = GetTrend(window);
+
+                for (auto& subscription : TrendActors[windowIndex]) {
+                    UpdateTrendActorSubscription(trend, subscription);
                 }
+            }
+
+            void UpdateTrendActorSubscription(
+                    const std::optional<TCGroupOomTrend>& trend,
+                    TTrendActorSubscription& subscription) {
+                const bool active =
+                    trend && trend->TimeToOom <= subscription.TimeToOomThreshold;
+                if (!active && !subscription.Active) {
+                    return;
+                }
+
+                SendTrend(
+                    subscription.ActorId,
+                    active
+                        ? ECGroupOomTrendState::Active
+                        : ECGroupOomTrendState::Stopped,
+                    trend,
+                    subscription.TimeToOomThreshold);
+                subscription.Active = active;
+            }
+
+            std::optional<TCGroupOomTrend> GetTrend(
+                    ECGroupOomTrendWindow window) const {
+                if (const auto* trend = TrendCalculator.FindTrend(window)) {
+                    return *trend;
+                }
+                return std::nullopt;
+            }
+
+            void SendTrend(
+                    const TActorId& recipient,
+                    ECGroupOomTrendState state,
+                    const std::optional<TCGroupOomTrend>& trend,
+                    std::optional<TDuration> timeToOomThreshold = std::nullopt,
+                    ui64 cookie = 0) {
+                Send(
+                    recipient,
+                    new TEvCGroupOomTrend(trend, state, timeToOomThreshold),
+                    0,
+                    cookie);
+            }
+
+            void ReplyToPendingTrendRequests(ECGroupOomTrendWindow window) {
+                auto& requests =
+                    PendingTrendRequests[CGroupOomTrendWindowIndex(window)];
+                if (!TrendCalculator.HasResult(window)) {
+                    return;
+                }
+                const auto trend = GetTrend(window);
+                const auto state = trend
+                    ? ECGroupOomTrendState::Active
+                    : ECGroupOomTrendState::Stopped;
+                for (const auto& request : requests) {
+                    SendTrend(
+                        request.Recipient,
+                        state,
+                        trend,
+                        std::nullopt,
+                        request.Cookie);
+                }
+                requests.clear();
             }
 
         private:
             const TVector<const ICGroupMemoryStatsProvider*> Providers;
             const TCGroupOomConfig Config;
+            TCGroupOomTrendCalculator TrendCalculator;
 
-            THashMap<TCGroupOomSubSystem::TSubscriptionId, TCGroupOomSubSystem::TCallback> Callbacks;
             THashSet<TActorId> ActorSubscribers;
+            std::array<
+                TVector<TTrendActorSubscription>,
+                CGroupOomTrendWindows.size()> TrendActors;
+            std::array<
+                TVector<TPendingTrendRequest>,
+                CGroupOomTrendWindows.size()> PendingTrendRequests;
 
-            std::optional<ECGroupVersion> PreviousVersion;
-            TString PreviousCGroupPath;
+            std::optional<ECGroupVersion> CGroupVersion;
+            TString CGroupPath;
             TCGroupMemoryStats PreviousMemory;
             ui32 ActiveLevelReasons = 0;
             bool HasPreviousMemory = false;
@@ -247,6 +445,30 @@ namespace NActors {
             (*Config.MemoryPressureFullAvg10Threshold >= 0 &&
                 *Config.MemoryPressureFullAvg10Threshold <= 100),
             "cgroup OOM PSI threshold must be in [0, 100]");
+
+        const auto validateTrendWindow = [this](
+                const std::optional<TCGroupOomTrendWindowConfig>& window) {
+            if (!window) {
+                return;
+            }
+            Y_ABORT_UNLESS(window->Duration >= Config.PollPeriod,
+                "cgroup OOM trend window must be at least one poll period");
+            Y_ABORT_UNLESS(
+                window->RecalculationPeriod >= Config.PollPeriod &&
+                    window->RecalculationPeriod <= window->Duration,
+                "cgroup OOM trend recalculation period must be between the poll period and window");
+            Y_ABORT_UNLESS(
+                window->MinimumRSquared >= 0 && window->MinimumRSquared <= 1,
+                "cgroup OOM minimum trend R-squared must be in [0, 1]");
+        };
+        validateTrendWindow(Config.TrendWindows.ShortWindow);
+        validateTrendWindow(Config.TrendWindows.LongWindow);
+        Y_ABORT_UNLESS(
+            !Config.TrendWindows.ShortWindow ||
+                !Config.TrendWindows.LongWindow ||
+                Config.TrendWindows.ShortWindow->Duration <
+                    Config.TrendWindows.LongWindow->Duration,
+            "cgroup OOM short trend window must be shorter than the long trend window");
     }
 
     TSubSystemDependencies TCGroupOomSubSystem::GetDependencies() const {
@@ -266,25 +488,6 @@ namespace NActors {
         }
     }
 
-    TCGroupOomSubSystem::TSubscriptionId TCGroupOomSubSystem::Subscribe(TCallback callback) {
-        Y_ABORT_UNLESS(callback, "cannot subscribe an empty cgroup OOM callback");
-
-        Y_ABORT_UNLESS(ActorSystem, "cgroup OOM subsystem is not running");
-
-        const TSubscriptionId subscriptionId =
-            NextSubscriptionId.fetch_add(1, std::memory_order_relaxed);
-        ActorSystem->Send(MonitorActorId,
-            new NDetail::TEvSubscribeCallback(subscriptionId, std::move(callback)));
-        return subscriptionId;
-    }
-
-    void TCGroupOomSubSystem::Unsubscribe(TSubscriptionId subscriptionId) {
-        Y_ABORT_UNLESS(ActorSystem, "cgroup OOM subsystem is not running");
-
-        ActorSystem->Send(MonitorActorId,
-            new NDetail::TEvUnsubscribeCallback(subscriptionId));
-    }
-
     void TCGroupOomSubSystem::Subscribe(const TActorId& actorId) {
         Y_ABORT_UNLESS(actorId, "cannot subscribe an empty actor id to cgroup OOM alerts");
 
@@ -297,6 +500,60 @@ namespace NActors {
         Y_ABORT_UNLESS(ActorSystem, "cgroup OOM subsystem is not running");
 
         ActorSystem->Send(MonitorActorId, new NDetail::TEvUnsubscribeActor(actorId));
+    }
+
+    void TCGroupOomSubSystem::ReadTrend(
+            const TActorId& recipient,
+            ECGroupOomTrendWindow window,
+            ui64 cookie) const {
+        Y_ABORT_UNLESS(recipient, "cannot send a cgroup OOM trend to an empty actor id");
+        Y_ABORT_UNLESS(ActorSystem, "cgroup OOM subsystem is not running");
+        ValidateTrendWindow(window);
+
+        ActorSystem->Send(
+            MonitorActorId,
+            new NDetail::TEvReadTrend(recipient, window, cookie));
+    }
+
+    void TCGroupOomSubSystem::SubscribeToTrend(
+            const TActorId& actorId,
+            ECGroupOomTrendWindow window,
+            TDuration timeToOomThreshold) {
+        Y_ABORT_UNLESS(
+            actorId,
+            "cannot subscribe an empty actor id to cgroup OOM trends");
+        Y_ABORT_UNLESS(ActorSystem, "cgroup OOM subsystem is not running");
+        ValidateTrendSubscription(window, timeToOomThreshold);
+
+        ActorSystem->Send(
+            MonitorActorId,
+            new NDetail::TEvSubscribeTrendActor(
+                actorId,
+                window,
+                timeToOomThreshold));
+    }
+
+    void TCGroupOomSubSystem::UnsubscribeFromTrend(const TActorId& actorId) {
+        Y_ABORT_UNLESS(ActorSystem, "cgroup OOM subsystem is not running");
+
+        ActorSystem->Send(
+            MonitorActorId,
+            new NDetail::TEvUnsubscribeTrendActor(actorId));
+    }
+
+    void TCGroupOomSubSystem::ValidateTrendWindow(ECGroupOomTrendWindow window) const {
+        Y_ABORT_UNLESS(
+            Config.TrendWindows.Find(window),
+            "cgroup OOM trend window is not configured");
+    }
+
+    void TCGroupOomSubSystem::ValidateTrendSubscription(
+            ECGroupOomTrendWindow window,
+            TDuration timeToOomThreshold) const {
+        ValidateTrendWindow(window);
+        Y_ABORT_UNLESS(
+            timeToOomThreshold > TDuration::Zero(),
+            "cgroup OOM trend time threshold must be positive");
     }
 
     void TCGroupOomSubSystem::OnAfterStart(TActorSystem& actorSystem) {

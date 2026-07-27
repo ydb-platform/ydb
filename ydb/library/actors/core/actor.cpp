@@ -2,6 +2,7 @@
 #include "debug.h"
 #include "actorsystem.h"
 #include "cpu_manager.h"
+#include "events.h"
 #include "executor_thread.h"
 #include <ydb/library/actors/util/datetime.h>
 #include <util/datetime/cputimer.h>
@@ -351,17 +352,25 @@ namespace NActors {
         return NHPTimer::GetSeconds(ElapsedTicks);
     }
 
-    bool IActor::HandleResumeRunnable(TAutoPtr<IEventHandle>& ev) {
-        if (ev->GetTypeRewrite() == TEvents::TSystem::ResumeRunnable) {
-            auto* msg = ev->Get<TEvents::TEvResumeRunnable>();
-            auto* item = msg->Item;
-            if (item != nullptr) {
-                msg->Item = nullptr;
-                item->Run(this);
-            }
-            return true;
+    void IActor::HandleCheckActorLiveness(TAutoPtr<IEventHandle>& ev) {
+        TActivationContext::Send(new IEventHandle(
+            TEvents::TSystem::ActorAlive,
+            0,
+            ev->Sender,
+            ev->Recipient,
+            nullptr,
+            ev->Cookie,
+            nullptr,
+            std::move(ev->TraceId)));
+    }
+
+    void IActor::HandleResumeRunnable(TAutoPtr<IEventHandle>& ev) {
+        auto* msg = ev->Get<TEvents::TEvResumeRunnable>();
+        auto* item = msg->Item;
+        if (item != nullptr) {
+            msg->Item = nullptr;
+            item->Run(this);
         }
-        return false;
     }
 
     bool IActor::HandleRegisteredEvent(TAutoPtr<IEventHandle>& ev) {
@@ -390,7 +399,26 @@ namespace NActors {
         TActorRunnableQueue queue(this);
 
         try {
-            if (!HandleResumeRunnable(ev) && !HandleRegisteredEvent(ev)) {
+            if (ev->Flags & IEventHandle::FlagSystemMessage) {
+                switch (ev->GetTypeRewrite()) {
+                    case TEvents::TSystem::ResumeRunnable:
+                        // ResumeRunnable is local-only and legitimate senders
+                        // always provide its in-process event object.
+                        if (ev->HasEvent()) {
+                            HandleResumeRunnable(ev);
+                        }
+                        break;
+                    case TEvents::TSystem::CheckActorLiveness:
+                        HandleCheckActorLiveness(ev);
+                        break;
+                    default:
+                        // System messages must never reach actor
+                        // awaiters or user state functions. Event flags are
+                        // controlled by senders, so unknown values are ignored
+                        // instead of terminating the actor system.
+                        break;
+                }
+            } else if (!HandleRegisteredEvent(ev)) {
                 (this->*StateFunc_)(ev);
             }
         } catch (...) {

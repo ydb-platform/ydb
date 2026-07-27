@@ -2912,7 +2912,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 ORDER BY Key, SubKey1, SubKey2;
             )",
             R"(
-                -- не выбирается никакой индекс, так как PK основной таблицы имеет самый длинный point prefix
+                -- используется Index212
                 SELECT * 
                 FROM Table `/Root/Table`
                 WHERE Key = 0 and SubKey2 = "1"
@@ -2967,6 +2967,18 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"([[[0];[0];["0"];["1"];["1"]];[[0];[0];["1"];["2"];["2"]];[[1];[0];["0"];["5"];["5"]];[[1];[0];["1"];["6"];["6"]]])",
         };
 
+        std::vector<TString> expectedIndexes = {
+            "Index12",
+            "Index12",
+            "", // PK
+            "Index212",
+            "Index12",
+            "Index12",
+            "Index21", // or "Index212"
+            "Index212",
+            "Index12",
+        };
+
         for (ui32 i = 0; i < queries.size(); ++i) {
             const auto &query = queries[i];
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
@@ -2982,6 +2994,16 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             PrintPlan(plan, /*analyzeMode=*/false);
             auto ast = TString{*result2.GetStats()->GetAst()};
             Cout << "Plan AST:\n" << ast;
+
+            const auto& expectedIndex = expectedIndexes[i];
+            if (expectedIndex.empty()) {
+                UNIT_ASSERT_C(!ast.Contains("indexImplTable"), "query #" << i << " must read the main table, ast:\n" << ast);
+                UNIT_ASSERT_C(!plan.Contains("indexImplTable"), "query #" << i << " must read the main table, plan:\n" << plan);
+            } else {
+                const auto implTable = TString::Join(expectedIndex, "/indexImplTable");
+                UNIT_ASSERT_C(ast.Contains(implTable), "query #" << i << " expected index " << expectedIndex << ", ast:\n" << ast);
+                UNIT_ASSERT_C(plan.Contains(expectedIndex) && plan.Contains("indexImplTable"), "query #" << i << " expected index " << expectedIndex << ", plan:\n" << plan);
+            }
         }
     }
 

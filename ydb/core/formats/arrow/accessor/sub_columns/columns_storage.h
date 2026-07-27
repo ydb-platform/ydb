@@ -50,7 +50,7 @@ public:
     class TIterator {
     private:
         ui32 KeyIndex;
-        EValueType ValueType;
+        std::shared_ptr<const IValueArrowCodec> Codec;
         std::shared_ptr<IChunkedArray> GlobalChunkedArray;
         const arrow::Array* CurrentArrayData;
         std::optional<IChunkedArray::TFullChunkedArrayAddress> FullArrayAddress;
@@ -62,7 +62,7 @@ public:
     public:
         TIterator(const ui32 keyIndex, const EValueType valueType, const std::shared_ptr<IChunkedArray>& chunkedArray)
             : KeyIndex(keyIndex)
-            , ValueType(valueType)
+            , Codec(GetCodecForValueType(valueType))
             , GlobalChunkedArray(chunkedArray) {
             InitArrays();
         }
@@ -85,7 +85,7 @@ public:
         }
 
         NArrow::NAccessor::TJsonValueView GetValue() const {
-            return GetCodecForValueType(ValueType)->ReadValueView(*CurrentArrayData, GetLocalIndex());
+            return Codec->ReadValueView(*CurrentArrayData, GetLocalIndex());
         }
 
         bool HasValue() const {

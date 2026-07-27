@@ -140,7 +140,8 @@ If attachments empty: say so explicitly (`stderr empty` / `logs empty`) and lowe
    ssh <host> 'cat /place/coredumps/sended_kikimr_<slot>_<unix_ts>.json'   # → url_v3 / traceback_fingerprint_v3
    ssh <host> 'grep -nE "Program terminated|BufferReader|VERIFY|TWorker|#0 " /place/coredumps/backtrace_kikimr_<slot>_<unix_ts>.dmp | head'
    ```
-   В отчёт: URL coredump + 1–2 ключевые frame (symbol/path), не весь dump.  
+   В секцию P\* отчёта: URL coredump + 1–2 ключевые frame.  
+   В **Materials / GitHub issue Body** (`#### Детали ошибки`): **полный** backtrace из `kikimr__stderr` (`#0`…последний кадр, без «…») **и** кликабельный `coredumps.yandex-team.ru/v3/cores…` из `focus.fatal.coredump_urls` / `host_dig` — не плейсхолдер «filter URL в descriptionHtml».
 3. **Повтор рецептов с хоста** — только если вложений мало / нет abort, а node down остаётся загадкой:
    ```bash
    # окно времени — из descriptionHtml (MSK/UTC как в рецепте)
@@ -300,6 +301,7 @@ For each problem, you can answer yes:
 - [ ] Correlations checked: other run_type/suite and peer cluster on same branch  
 - [ ] Read cluster logs **and** execution stderr (OLAP fail), or documented empty  
 - [ ] On segfault/abort/VERIFY: coredump URL or `/place/coredumps` dig (or explicit skip why)  
+- [ ] При `open_ticket` + signal/Backtrace: в Materials полный стек `#0…#N` из stderr **и** кликабельный `coredumps.yandex-team.ru` (не «filter URL в descriptionHtml»)
 - [ ] Mechanism stated (not only fingerprint)  
 - [ ] Tied to code at **tested sha**  
 - [ ] Давность stated with dates/labels  
@@ -420,10 +422,15 @@ Label **не нужен**. Шаблон: [`REPORT_TEMPLATE.md`](REPORT_TEMPLATE.
 - …
 
 #### Детали ошибки
+Host: `…`  
+Coredump: https://coredumps.yandex-team.ru/v3/cores?filter=…   ← из focus.fatal / host_dig
 ~~~
-цитата VERIFY / signal / backtrace
+Received signal 11
+Backtrace:
+#0 …
+…
+#N …   ← полный стек из kikimr__stderr, без «…» между кадрами
 ~~~
-Host / coredump …
 
 #### Код
 | Место падения | … |

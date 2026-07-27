@@ -42,6 +42,87 @@ def _issue_body_section(body: str, heading: str) -> str:
     return m.group(1) if m else ""
 
 
+def _fenced_blocks(text: str) -> list[str]:
+    return re.findall(r"```(?:[^\n]*)\n(.*?)```", text or "", flags=re.S)
+
+
+def _check_issue_crash_paste(details: str, *, resolution: str) -> list[str]:
+    """Quality gate for #### Детали ошибки in Materials (open_ticket / update_known).
+
+    Forbid truncated backtraces («#7 … #16») and «filter URL в descriptionHtml»
+    placeholders; require a real coredumps.yandex-team.ru link when the paste
+    quotes SIGSEGV / Received signal / Backtrace.
+    """
+    errs: list[str] = []
+    if not details:
+        return errs
+    dl = details.lower()
+    has_crash_quote = bool(
+        re.search(
+            r"Received signal\s*\d+|SIGSEGV|SIGABRT|Backtrace\s*:",
+            details,
+            re.I,
+        )
+    )
+    has_core_url = bool(
+        re.search(r"coredumps\.yandex-team\.ru/v3/cores", details, re.I)
+    )
+    if re.search(
+        r"descriptionhtml|filter\s*url\s*в|coredump:\s*filter\b|"
+        r"filter url в description",
+        dl,
+    ):
+        errs.append(
+            f"{resolution}: #### Детали ошибки — paste a real "
+            "`https://coredumps.yandex-team.ru/v3/cores…` URL from "
+            "`focus.fatal.coredump_urls` / case `host_dig`, not "
+            "«filter URL в descriptionHtml»"
+        )
+    if has_crash_quote and not has_core_url:
+        if not re.search(
+            r"coredump skipped|без coredump|coredump не|нет coredump|"
+            r"uuid нет|coredump url отсутствует",
+            dl,
+        ):
+            errs.append(
+                f"{resolution}: #### Детали ошибки quotes signal/Backtrace — "
+                "include clickable `coredumps.yandex-team.ru/v3/cores…` "
+                "(from focus.fatal / attach_analysis.host_dig), or explicitly "
+                "«coredump skipped» with why"
+            )
+
+    for fence in _fenced_blocks(details):
+        if not re.search(r"Backtrace\s*:|Received signal\s*\d+", fence, re.I):
+            continue
+        # Ellipsis-only line or "#N … #M" cut inside the stack paste
+        if re.search(r"^\s*[.……]{1,3}\s*$", fence, re.M) or re.search(
+            r"#\d+[^\n]*\n\s*[.……]{1,3}\s*\n\s*#\d+",
+            fence,
+        ):
+            errs.append(
+                f"{resolution}: #### Детали ошибки — do not truncate Backtrace "
+                "with «…» / «...»; paste full stack from kikimr__stderr "
+                "(#0 … last frame)"
+            )
+        frames = [int(n) for n in re.findall(r"^#(\d+)\b", fence, re.M)]
+        if len(frames) < 8:
+            errs.append(
+                f"{resolution}: #### Детали ошибки — Backtrace too short "
+                f"({len(frames)} frames); paste full kikimr__stderr stack "
+                "(#0 … last), not 3–4 key frames"
+            )
+        elif frames:
+            span = max(frames) - min(frames) + 1
+            # e.g. #5,#6,#7,#16 → span 12, only 4 frames present
+            if span >= 10 and len(frames) < span * 0.6:
+                errs.append(
+                    f"{resolution}: #### Детали ошибки — Backtrace has gaps "
+                    f"(frames {min(frames)}…{max(frames)} but only "
+                    f"{len(frames)} lines); paste contiguous #0…#N from stderr"
+                )
+    return errs
+
+
 def _analysis_types(out_dir: Path | None) -> list[str]:
     if not out_dir or not (out_dir / "detect_type.json").is_file():
         return []
@@ -676,6 +757,11 @@ def validate_analysis_md(
                     warnings.append(
                         f"{resolution}: ### Body should include #### Детали ошибки "
                         "(VERIFY/signal quote, not under details)"
+                    )
+                else:
+                    details = _issue_body_section(body, "Детали ошибки")
+                    errors.extend(
+                        _check_issue_crash_paste(details, resolution=resolution)
                     )
                 if not re.search(r"^####\s+Код\s*$", body, re.I | re.M):
                     warnings.append(

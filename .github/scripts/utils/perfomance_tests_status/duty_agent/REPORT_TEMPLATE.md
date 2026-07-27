@@ -106,9 +106,18 @@ Fingerprint в Title + `keys` в match-блоке достаточно. В «К�
 Буллеты impact: crash/abort ноды; какие query fail; что видит Allure (**node down / connection lost**); suite/кластер до рестарта.
 
 #### Детали ошибки
-Цитата VERIFY / `Received signal N` / backtrace **открытым** code-блоком (не под катом).  
-Host / node; coredump URL или filter.  
+Цитата VERIFY / `Received signal N` / backtrace **открытым** code-блоком (не под катом).
+
+При crash (`Received signal` / `Backtrace:`):
+- **полный** стек из `kikimr__stderr` — от `#0` до последнего кадра, **без** «…» / вырезанных `#7 … #16`;
+- **кликабельный** URL `https://coredumps.yandex-team.ru/v3/cores…` из `focus.fatal.coredump_urls` / case `host_dig` (filter-query ок; UUID лучше);
+- **запрещено:** «Coredump: filter URL в descriptionHtml» и другие плейсхолдеры без ссылки;
+- если URL реально нет — явно `coredump skipped` + почему (нет UUID / нет signal в stderr этого кейса).
+
+Host / node — строкой над или под code-блоком.  
 Следствия на том же прогоне (другие query без цитаты VERIFY) — здесь же одной-двумя строками.
+
+В секции P\* отчёта можно кратко (host + 1–2 frame + URL); в **Materials / GitHub Body** — полный стек.
 
 #### Код
 | | |

@@ -750,6 +750,119 @@ https://github.com/ydb-platform/ydb/commit/abc1234
         self.assertFalse(r["ok"])
         self.assertTrue(any("Title" in e and "Body" in e for e in r["errors"]), r["errors"])
 
+    def _open_ticket_sigsegv_md(self, details: str) -> str:
+        return f"""# Perf duty — x
+
+## Заключение
+- **Итог:** SIGSEGV RemainOnly
+- **Решение:** open_ticket
+- **Виновник:** unknown
+- **Уверенность:** высокая
+- **Давность:** на разбираемом прогоне
+- **Механика:** RemainOnly → signal 11
+
+## Проблемы
+### P1 — RemainOnly
+- Тип: olap_fail
+- Логи: kikimr__stderr signal 11; kikimr__logs cluster dig
+- Код ([`d6dd620`](https://github.com/ydb-platform/ydb/commit/d6dd620)): `collection.cpp`
+- Гипотеза проверена: yes
+
+## Что дальше
+1. Тикет
+
+## Материалы для issue
+### Title
+```
+OLAP: SIGSEGV RemainOnly (collection.cpp:262) on UploadTpch1000
+```
+### Body
+#### Фактура
+| | |
+|--|--|
+| Suite / DB | `UploadTpch1000` / `sas_big_column` |
+| Branch · Version | `main` · [`d6dd620`](https://github.com/ydb-platform/ydb/commit/d6dd620) |
+| Run | `2026-07-27_d6dd620` · `2026-07-27T08:24:30` UTC |
+| Allure | https://proxy.sandbox.yandex-team.ru/12931774388/index.html |
+| Failed | Query06 (SIGSEGV) |
+#### Что сломалось
+SIGSEGV в RemainOnly.
+#### К чему приводит
+- Crash ноды; node down / connection lost.
+#### Детали ошибки
+{details}
+#### Код
+| Место падения | [`collection.cpp`](https://github.com/ydb-platform/ydb/blob/d6dd620/ydb/core/formats/arrow/program/collection.cpp#L256) |
+
+<!-- perf-duty-match
+kind: olap
+fingerprint: collection.cpp:262 RemainOnly
+keys:
+  - collection.cpp:262
+  - RemainOnly
+affected:
+  - suite: UploadTpch1000
+    db: sas_big_column
+    queries: [Query06]
+-->
+"""
+
+    def test_open_ticket_rejects_truncated_backtrace(self):
+        details = """
+Host: `sas9-1593`
+Coredump: https://coredumps.yandex-team.ru/v3/cores?filter=program_type%3Dkikimr
+```
+Received signal 11
+Backtrace:
+#5 __yhashtable_iterator<...>::operator++() at .../hash_table.h
+#6 RemainOnly at .../collection.cpp:262
+#7 DoExecute at .../projection.cpp:9
+…
+#16 ExecuteTask at .../worker.cpp:19
+```
+"""
+        r = validate_analysis_md(self._open_ticket_sigsegv_md(details))
+        self.assertFalse(r["ok"], r)
+        blob = " ".join(r["errors"]).lower()
+        self.assertTrue(
+            "truncat" in blob or "short" in blob or "gap" in blob or "…" in " ".join(r["errors"]),
+            r["errors"],
+        )
+
+    def test_open_ticket_rejects_coredump_placeholder(self):
+        frames = "\n".join(f"#{i} frame_{i} at file.cpp:{i}" for i in range(12))
+        details = f"""
+Host: `sas9-1593`
+Coredump: filter URL в descriptionHtml Allure.
+```
+Received signal 11
+Backtrace:
+{frames}
+```
+"""
+        r = validate_analysis_md(self._open_ticket_sigsegv_md(details))
+        self.assertFalse(r["ok"], r)
+        self.assertTrue(
+            any("coredumps.yandex-team.ru" in e or "descriptionHtml" in e for e in r["errors"]),
+            r["errors"],
+        )
+
+    def test_open_ticket_accepts_full_backtrace_and_coredump_url(self):
+        frames = "\n".join(
+            f"#{i} NKikimr::Frame{i}() at /-S/ydb/core/x.cpp:{i}:0" for i in range(20)
+        )
+        details = f"""
+Host: `sas9-1593.host.testing.ydb.yandex.net`
+Coredump: https://coredumps.yandex-team.ru/v3/cores?filter=program_type%3Dkikimr%3B+%40cluster_name%3Dolap-testing-sas-perf&since_ts=2026-07-27T12%3A01%3A02%2B03%3A00&till_ts=2026-07-27T12%3A01%3A41%2B03%3A00
+```
+Received signal 11
+Backtrace:
+{frames}
+```
+"""
+        r = validate_analysis_md(self._open_ticket_sigsegv_md(details))
+        self.assertTrue(r["ok"], r["errors"])
+
     def test_reject_2005_only_olap_fail(self):
         with tempfile.TemporaryDirectory() as td:
             d = Path(td)

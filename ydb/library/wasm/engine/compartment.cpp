@@ -17,7 +17,7 @@
 #include <library/cpp/yt/misc/tls.h>
 #include <library/cpp/yt/string/format.h>
 
-#include <contrib/restricted/wavm/Lib/Runtime/RuntimePrivate.h>
+#include <contrib/restricted/wavm_llvm16/Lib/Runtime/RuntimePrivate.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/hash_set.h>

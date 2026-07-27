@@ -12,7 +12,7 @@ SRCS(
 )
 
 ADDINCL(
-    contrib/restricted/wavm/Include
+    contrib/restricted/wavm_llvm16/Include
 )
 
 PEERDIR(

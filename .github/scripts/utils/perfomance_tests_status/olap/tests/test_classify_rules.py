@@ -479,6 +479,49 @@ class QueryMetricsSinglePointTests(unittest.TestCase):
         self.assertEqual(data["ok"], [])
         self.assertEqual(data["inbox"][0]["issue"], "failing")
 
+    def test_promote_capped_by_inbox_returns_to_ok(self):
+        """Inbox slower-cap must not erase a suite into fake «no runs»."""
+        branch = "stable-26-3-1"
+        db = "sas_small_column"
+        # Saturate per-branch slower cap so the Clickbench promotion is dropped.
+        inbox = [
+            {
+                "branch": branch,
+                "db": db,
+                "suite": f"TpchFlood{i}",
+                "issue": "slower",
+                "status": "regression",
+                "ydb_pct": 0.9,
+            }
+            for i in range(30)
+        ]
+        data = {
+            "ui": {"focus_branches": ["main", branch]},
+            "ok": [
+                {
+                    "branch": branch,
+                    "db": db,
+                    "suite": "Clickbench",
+                    "issue": "ok",
+                    "status": "ok",
+                    "queries": [
+                        {"test": "Q01", "kind": "slow", "ydb_pct": 0.2},
+                    ],
+                }
+            ],
+            "inbox": inbox,
+        }
+        moved = promote_ok_with_hot_queries(data)
+        self.assertEqual(moved, 1)
+        inbox_suites = {r["suite"] for r in data["inbox"]}
+        ok_suites = {r["suite"] for r in data["ok"]}
+        self.assertNotIn("Clickbench", inbox_suites)
+        self.assertIn("Clickbench", ok_suites)
+        demoted = next(r for r in data["ok"] if r["suite"] == "Clickbench")
+        self.assertEqual(demoted["issue"], "ok")
+        self.assertTrue(demoted.get("query_promote_capped"))
+        self.assertEqual(len(demoted.get("queries") or []), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

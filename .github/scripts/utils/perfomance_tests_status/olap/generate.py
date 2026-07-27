@@ -1515,10 +1515,19 @@ def attach_finished_snapshots(data: dict) -> int:
     return n
 
 
+def _suite_key(r: dict) -> tuple[str, str, str]:
+    return (r.get("branch") or "", r.get("db") or "", r.get("suite") or "")
+
+
 def promote_ok_with_hot_queries(data: dict) -> int:
-    """Suite sum can be OK while individual queries are hard-slow/fail — promote those."""
+    """Suite sum can be OK while individual queries are hard-slow/fail — promote those.
+
+    Inbox caps may drop a promotion. Those suites must return to ``ok`` so the
+    heatmap does not show fake «no runs» for suites that are present and green
+    at suite-sum level (query drill-down stays on the ok row).
+    """
     stay: list[dict] = []
-    moved = 0
+    moved_items: list[dict] = []
     for item in data.get("ok") or []:
         qs = item.get("queries") or []
         n_fail = sum(1 for q in qs if q.get("kind") in ("fail", "both"))
@@ -1526,7 +1535,11 @@ def promote_ok_with_hot_queries(data: dict) -> int:
         if not n_fail and not n_slow:
             stay.append(item)
             continue
+        orig_issue = item.get("issue") or "ok"
+        orig_status = item.get("status") or "ok"
         item = dict(item)
+        item["_pre_promote_issue"] = orig_issue
+        item["_pre_promote_status"] = orig_status
         if n_fail and n_slow:
             item["issue"] = "both"
             item["kind"] = "both"
@@ -1541,11 +1554,24 @@ def promote_ok_with_hot_queries(data: dict) -> int:
         reasons.append(f"queries: fail {n_fail} · slow {n_slow} (suite sum not hot)")
         item["reasons"] = reasons
         data.setdefault("inbox", []).append(item)
-        moved += 1
+        moved_items.append(item)
     data["ok"] = stay
-    if moved:
+    if moved_items:
         recap_inbox_after_promote(data)
-    return moved
+        kept = {_suite_key(r) for r in (data.get("inbox") or [])}
+        for item in moved_items:
+            if _suite_key(item) in kept:
+                item.pop("_pre_promote_issue", None)
+                item.pop("_pre_promote_status", None)
+                continue
+            # Cap dropped this promotion — keep suite visible as suite-sum ok/watch.
+            demoted = dict(item)
+            demoted["issue"] = demoted.pop("_pre_promote_issue", None) or "ok"
+            demoted["status"] = demoted.pop("_pre_promote_status", None) or "ok"
+            demoted["kind"] = demoted["issue"] if demoted["issue"] in ("ok", "watch") else "ok"
+            demoted["query_promote_capped"] = True
+            data["ok"].append(demoted)
+    return len(moved_items)
 
 
 def recap_inbox_after_promote(data: dict) -> None:

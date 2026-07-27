@@ -267,6 +267,46 @@ Y_UNIT_TEST(PublishMakesDataVisible) {
     UNIT_ASSERT_VALUES_EQUAL(messages[0], payload);
 }
 
+Y_UNIT_TEST(PublishMakesDataVisibleViaProducer) {
+    TTopicSdkTestSetup setup("PublishMakesDataVisibleViaProducer", MakeDeferredPublishEnabledSettings());
+    TDriver driver(setup.MakeDriverConfig());
+    NTopic::TTopicClient topicClient(driver);
+    TDeferredPublishClient deferredClient(driver);
+
+    const std::string extId = "ext-sdk-publish-producer";
+    const std::string payload = "sdk-deferred-producer-payload";
+    const auto topicPath = setup.GetFullTopicPath();
+
+    auto begin = deferredClient.BeginPublication(extId).GetValueSync();
+    UNIT_ASSERT_C(begin.IsSuccess(), begin.GetIssues().ToString());
+    const auto& publication = begin.GetPublication();
+
+    TProducerSettings producerSettings;
+    producerSettings
+        .Path(topicPath)
+        .Codec(ECodec::RAW);
+    producerSettings.ProducerIdPrefix("deferred-producer-ut");
+    producerSettings.PartitionChooserStrategy(TProducerSettings::EPartitionChooserStrategy::KafkaHash);
+    producerSettings.MaxBlockTimeout(TDuration::Seconds(30));
+
+    auto producer = topicClient.CreateProducer(producerSettings);
+    TWriteMessage message("deferred-key", payload);
+    message.SeqNo(1);
+    message.DeferredPublication(publication);
+    UNIT_ASSERT_C(producer->Write(std::move(message)).IsQueued(), "Failed to queue deferred write");
+    // Flush so the write reaches StreamWrite (TryOnWrite) before Publish waits for acks.
+    UNIT_ASSERT_C(producer->Flush().GetValueSync().IsSuccess(), "Failed to flush producer");
+
+    auto publish = deferredClient.Publish(publication).GetValueSync();
+    UNIT_ASSERT_C(publish.IsSuccess(), publish.GetIssues().ToString());
+
+    UNIT_ASSERT_C(producer->Close(TDuration::Seconds(30)).IsSuccess(), "Failed to close producer");
+
+    const auto messages = ReadMessages(topicClient, topicPath, TEST_CONSUMER, 1);
+    UNIT_ASSERT_VALUES_EQUAL(messages.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(messages[0], payload);
+}
+
 Y_UNIT_TEST(StreamWriteAllowsOmitExtPublicationId) {
     TTopicSdkTestSetup setup("StreamWriteAllowsOmitExtPublicationId", MakeDeferredPublishEnabledSettings());
     TDriver driver(setup.MakeDriverConfig());

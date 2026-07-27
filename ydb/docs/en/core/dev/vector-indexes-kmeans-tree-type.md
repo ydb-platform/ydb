@@ -97,7 +97,7 @@ Adaptive clusters are controlled by the `adaptive_clusters` [index parameter](..
 
 * `adaptive_clusters` applies only to filtered indexes (indexes with more than one index column). For non-filtered indexes it has no effect.
 * When you create a filtered index without explicitly specifying parameters and {{ ydb-short-name }} [selects them automatically](#auto-settings), adaptive clusters are enabled by default.
-* When you specify index parameters explicitly, `adaptive_clusters` defaults to `false`; to enable adaptive behavior, set `adaptive_clusters` to `true`.
+* When you specify index parameters explicitly, `adaptive_clusters` defaults to `false`; to enable adaptive mode, set `adaptive_clusters` to `true`.
 
 In adaptive mode, the `clusters` parameter is interpreted as the *maximum* number of clusters for any single filtering-column value. The actual number chosen for each value is derived from its vector count, `levels`, and `overlap_clusters`, and is never lower than 2. Values with very few vectors (fewer than 100) always use the minimum of 2 clusters.
 

@@ -368,6 +368,7 @@ struct TStorageTableStats {
     ui64 EraseRows = 0;
     ui64 EraseBytes = 0;
     ui64 AffectedPartitions = 0;
+    ui64 AffectedRows = 0;
 };
 
 struct TQueryTableStats {
@@ -383,6 +384,7 @@ struct TQueryTableStats {
     TSumStats WriteBytes;
     TSumStats EraseRows;
     TSumStats EraseBytes;
+    TSumStats AffectedRows;
     TSumStats AffectedPartitions;
     TStorageTableStats StorageStats;
     ui64 AffectedPartitionsUniqueCount = 0;

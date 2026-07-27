@@ -1109,6 +1109,7 @@ void TQueryExecutionStats::UpdateQueryTables(const NYql::NDqProto::TDqTaskStats&
         queryTableStats.WriteBytes.SetNonZero(index, tableStat.GetWriteBytes());
         queryTableStats.EraseRows.SetNonZero(index, tableStat.GetEraseRows());
         queryTableStats.EraseBytes.SetNonZero(index, tableStat.GetEraseBytes());
+        queryTableStats.AffectedRows.SetNonZero(index, tableStat.GetAffectedRows());
 
         if (txStats) {
             auto& tableShards = TableShards[tablePath];
@@ -1157,6 +1158,7 @@ void TQueryExecutionStats::UpdateStorageTables(const NYql::NDqProto::TDqTaskStat
         queryTableStats.StorageStats.WriteBytes += tableStat.GetWriteBytes();
         queryTableStats.StorageStats.EraseRows += tableStat.GetEraseRows();
         queryTableStats.StorageStats.EraseBytes += tableStat.GetEraseBytes();
+        queryTableStats.StorageStats.AffectedRows += tableStat.GetAffectedRows();
         if (txStats) {
             auto& tableShards = TableShards[tablePath];
             for (const auto& perShard : txStats->GetPerShardStats()) {
@@ -1684,6 +1686,7 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
         tableAggr.SetWriteBytes(t.StorageStats.WriteBytes + t.WriteBytes.Sum);
         tableAggr.SetEraseRows(t.StorageStats.EraseRows + t.EraseRows.Sum);
         tableAggr.SetEraseBytes(t.StorageStats.EraseBytes + t.EraseBytes.Sum);
+        tableAggr.SetAffectedRows(t.StorageStats.AffectedRows + t.AffectedRows.Sum);
         tableAggr.SetAffectedPartitions(t.StorageStats.AffectedPartitions +
             (t.AffectedPartitionsUniqueCount ? t.AffectedPartitionsUniqueCount : t.AffectedPartitions.Sum)
         );

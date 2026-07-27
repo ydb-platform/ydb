@@ -326,6 +326,10 @@ void TDataShardUserDb::EraseRow(
             // performing operations from the user's viewpoint
             return;
         }
+    } else if (LockMode == ELockMode::PessimisticNone) {
+        if (RowExists(tableId, key)) {
+            Counters.NAffectedEraseRow++;
+        }
     }
 
     UpsertRowInt(NTable::ERowOp::Erase, tableId, localTableId, key, {}, userCtx);
@@ -355,6 +359,10 @@ void TDataShardUserDb::IncreaseUpdateCounters(
 
     Counters.NUpdateRow++;
     Counters.UpdateRowBytes += keyBytes + valueBytes;
+
+    if (LockMode == ELockMode::PessimisticNone) {
+        Counters.NAffectedEraseRow++;
+    }
 }
 
 void TDataShardUserDb::IncreaseSelectCounters(
@@ -1106,7 +1114,8 @@ void TDataShardUserDb::CheckReadConflict(const TRowVersion& rowVersion) {
 }
 
 bool TDataShardUserDb::NeedToReadBeforeWrite(const TTableId& tableId) {
-    if (LockMode == ELockMode::OptimisticSnapshotIsolation) {
+    if (LockMode == ELockMode::OptimisticSnapshotIsolation
+            || LockMode == ELockMode::PessimisticNone) {
         return true;
     }
 

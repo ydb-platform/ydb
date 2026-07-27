@@ -8,6 +8,7 @@
 #include <yql/essentials/minikql/mkql_program_builder.h>
 
 #include <ydb/library/yql/dq/comp_nodes/dq_join_common.h>
+#include <ydb/library/yql/dq/comp_nodes/dq_join_filters.h>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/scalar_layout_converter.h>
 
 namespace NKikimr::NMiniKQL {
@@ -15,6 +16,20 @@ namespace NKikimr::NMiniKQL {
 namespace {
 
 using TDqJoinImplRenames = TDqRenames<ESide>;
+
+// Filter callable inputs, appended after the 7 base inputs; must match TDqProgramBuilder::DqScalarHashJoin.
+namespace NScalarFilterParams {
+    enum : ui32 {
+        LeftArgs = 7,
+        LeftBody = 8,
+        RightArgs = 9,
+        RightBody = 10,
+        CommonLeftArgs = 11,
+        CommonRightArgs = 12,
+        CommonBody = 13,
+        Count = 14,
+    };
+}
 
 struct TDqScalarJoinMetadata {
     TSides<TVector<TType*>> InputTypes;
@@ -173,17 +188,18 @@ private:
     const int ProbeWidth_;
 };
 
-template <EJoinKind Kind>
-class TScalarHashJoinWrapper : public TStatefulWideFlowComputationNode<TScalarHashJoinWrapper<Kind>> {
+template <EJoinKind Kind, bool HasFilter>
+class TScalarHashJoinWrapper : public TStatefulWideFlowComputationNode<TScalarHashJoinWrapper<Kind, HasFilter>> {
 private:
     using TBaseComputation = TStatefulWideFlowComputationNode<TScalarHashJoinWrapper>;
 
 public:
     TScalarHashJoinWrapper(TComputationMutables& mutables, TDqScalarJoinMetadata meta,
-                           TSides<IComputationWideFlowNode*> flows)
+                           TSides<IComputationWideFlowNode*> flows, TJoinFilters filters = {})
         : TBaseComputation(mutables, nullptr, EValueRepresentation::Boxed)
         , Meta_(std::make_unique<TDqScalarJoinMetadata>(std::move(meta)))
         , Flows_(flows)
+        , Filters_(std::move(filters))
     {}
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx,
@@ -201,7 +217,8 @@ private:
 
     public:
         TStreamState(TMemoryUsageInfo* memInfo, TComputationContext& ctx, TSides<IComputationWideFlowNode*> flows,
-                     TSides<std::unique_ptr<IScalarLayoutConverter>> converters, const TDqScalarJoinMetadata* meta)
+                     TSides<std::unique_ptr<IScalarLayoutConverter>> converters, const TDqScalarJoinMetadata* meta,
+                     std::optional<TPackedTuplePairFilter> pairFilter)
             : TBase(memInfo)
             , Meta_(meta)
             , Converters_(std::move(converters))
@@ -217,6 +234,7 @@ private:
                     TSides<const NPackedTuple::TTupleLayout*>{.Build = Converters_.Build->GetTupleLayout(),
                                                               .Probe = Converters_.Probe->GetTupleLayout()})
             , Output_(meta, {.Build = Converters_.Build.get(), .Probe = Converters_.Probe.get()})
+            , PairFilter_(std::move(pairFilter))
         {}
 
         EFetchResult FetchValues(NUdf::TUnboxedValue* const* output) {
@@ -250,8 +268,13 @@ private:
         }
 
         EFetchResult FillBuffer() {
-            return RunPackedHashJoinBatch<OutputThreshold_>(
-                *JoinCtx_, Join_, Output_, [&](auto flush) { Buffer_ = std::move(flush); });
+            const auto flushSink = [&](auto flush) { Buffer_ = std::move(flush); };
+            if constexpr (HasFilter) {
+                return RunPackedHashJoinBatch<OutputThreshold_>(*JoinCtx_, Join_, Output_, flushSink,
+                                                                std::ref(*PairFilter_));
+            } else {
+                return RunPackedHashJoinBatch<OutputThreshold_>(*JoinCtx_, Join_, Output_, flushSink);
+            }
         }
 
     private:
@@ -260,6 +283,7 @@ private:
         TComputationContext* JoinCtx_;
         JoinType Join_;
         TRenamesScalarOutput<Kind> Output_;
+        std::optional<TPackedTuplePairFilter> PairFilter_;
         std::optional<typename TRenamesScalarOutput<Kind>::TFlushResult> Buffer_;
         size_t BufferPos_ = 0;
         static constexpr i64 OutputThreshold_ = 10000;
@@ -275,22 +299,72 @@ private:
                 MakeScalarLayoutConverter(helper, Meta_->UserTypes.SelectSide(side), roles, ctx.HolderFactory);
         }
 
-        state = ctx.HolderFactory.Create<TStreamState>(ctx, Flows_, std::move(converters), Meta_.get());
+        // The filter path is only instantiated when a filter is present (HasFilter). It uses its own
+        // scalar converters (independent of the join's), and only for sides some filter references.
+        std::optional<TPackedTuplePairFilter> pairFilter;
+        if constexpr (HasFilter) {
+            const bool needLeft = Filters_.Left || Filters_.Common;
+            const bool needRight = Filters_.Right || Filters_.Common;
+            TSides<std::unique_ptr<IScalarLayoutConverter>> filterConverters;
+            const auto makeScalar = [&](ESide side) {
+                const auto roles =
+                    MakeColumnRoles(Meta_->UserTypes.SelectSide(side).size(), Meta_->KeyColumns.SelectSide(side));
+                filterConverters.SelectSide(side) =
+                    MakeScalarLayoutConverter(helper, Meta_->UserTypes.SelectSide(side), roles, ctx.HolderFactory);
+            };
+            if (needLeft) {
+                makeScalar(ESide::Probe);
+            }
+            if (needRight) {
+                makeScalar(ESide::Build);
+            }
+            const TSides<int> widths{.Build = static_cast<int>(std::ssize(Meta_->UserTypes.Build)),
+                                     .Probe = static_cast<int>(std::ssize(Meta_->UserTypes.Probe))};
+            pairFilter.emplace(ctx, std::move(filterConverters), Meta_->ColumnPermutation, widths, Filters_);
+        }
+
+        state = ctx.HolderFactory.Create<TStreamState>(ctx, Flows_, std::move(converters), Meta_.get(),
+                                                       std::move(pairFilter));
     }
 
     void RegisterDependencies() const final {
-        this->FlowDependsOnBoth(Flows_.Build, Flows_.Probe);
+        const auto flow = this->FlowDependsOnBoth(Flows_.Build, Flows_.Probe);
+        if constexpr (HasFilter) {
+            const auto ownArgs = [&](const TComputationExternalNodePtrVector& args) {
+                for (auto* arg : args) {
+                    this->Own(flow, arg);
+                }
+            };
+            const auto dependOnBody = [&](IComputationNode* body) {
+                if (body) {
+                    this->DependsOn(flow, body);
+                }
+            };
+            ownArgs(Filters_.Left.Args);
+            dependOnBody(Filters_.Left.Body);
+            ownArgs(Filters_.Right.Args);
+            dependOnBody(Filters_.Right.Body);
+            ownArgs(Filters_.Common.LeftArgs);
+            ownArgs(Filters_.Common.RightArgs);
+            dependOnBody(Filters_.Common.Body);
+        } else {
+            Y_UNUSED(flow);
+        }
     }
 
 private:
     std::unique_ptr<const TDqScalarJoinMetadata> Meta_;
     TSides<IComputationWideFlowNode*> Flows_;
+    TJoinFilters Filters_;
 };
+
+template <EJoinKind K> using TScalarHashJoinWrapperFiltered = TScalarHashJoinWrapper<K, true>;
+template <EJoinKind K> using TScalarHashJoinWrapperPlain = TScalarHashJoinWrapper<K, false>;
 
 } // namespace
 
 IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 7, "Expected 7 args");
+    MKQL_ENSURE(callable.GetInputsCount() == NScalarFilterParams::Count, "Expected 14 args");
 
     const auto joinType = callable.GetType()->GetReturnType();
     MKQL_ENSURE(joinType->IsFlow(), "Expected WideFlow as a resulting flow");
@@ -340,7 +414,19 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
     meta.UserTypes = ForceOptionalOnNullableSide(meta.InputTypes, joinKind, ESide::Build, ctx.Env);
 
     const TSides<IComputationWideFlowNode*> flows{.Build = rightFlow, .Probe = leftFlow};
-    return DispatchHashJoinByKind<TScalarHashJoinWrapper, IComputationWideFlowNode>(
+
+    // The three ON-clause predicates stay separate; empty argument tuples encode an absent filter.
+    TJoinFilters filters = ParseJoinFilters(
+        ctx, callable, NScalarFilterParams::LeftArgs, NScalarFilterParams::LeftBody, NScalarFilterParams::RightArgs,
+        NScalarFilterParams::RightBody, NScalarFilterParams::CommonLeftArgs, NScalarFilterParams::CommonRightArgs,
+        NScalarFilterParams::CommonBody);
+
+    if (filters) {
+        return DispatchHashJoinByKind<TScalarHashJoinWrapperFiltered, IComputationWideFlowNode>(
+            joinKind, "unsupported join type in scalar hash join, see gh#26780 for details.", ctx.Mutables,
+            std::move(meta), flows, std::move(filters));
+    }
+    return DispatchHashJoinByKind<TScalarHashJoinWrapperPlain, IComputationWideFlowNode>(
         joinKind, "unsupported join type in scalar hash join, see gh#26780 for details.", ctx.Mutables,
         std::move(meta), flows);
 }

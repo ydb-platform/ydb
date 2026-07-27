@@ -356,6 +356,13 @@ template <typename Source> class TInMemoryHashJoin {
     ui32 ResumeIndex_ = 0;
 };
 
+// Default match-time predicate: accepts every pair (used when no non-equi join filters exist).
+struct AlwaysPassPair {
+    bool operator()(TSides<TSingleTuple>) const {
+        return true;
+    }
+};
+
 template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THybridHashJoin {
     struct Logger {
         Logger(TComputationContext& ctx, TString name)
@@ -516,7 +523,11 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
     }
 
 
-    EFetchResult MatchRows([[maybe_unused]] TComputationContext& ctx, auto consume, auto isFull) {
+    // `pairPasses(TSides<TSingleTuple>)` is the match-time non-equi join filter: it returns true iff
+    // the (Build, Probe) pair satisfies all ON-clause predicates. Since it drives the `found`
+    // decision, LEFT rows whose matches are all rejected are still emitted null-padded. Callers
+    // without filters pass NJoinPackedTuples::AlwaysPassPair{}.
+    EFetchResult MatchRows([[maybe_unused]] TComputationContext& ctx, auto consume, auto isFull, auto pairPasses) {
         auto notEnoughMemory = [hasSpiller = !!Spiller_] {
             return hasSpiller && TlsAllocState->IsMemoryYellowZoneEnabled();
         };
@@ -524,24 +535,36 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
             bool found = false;
             if constexpr (Kind == EJoinKind::Left) {
                 if (Settings_.LeftIsBuild()) {
+                    // Preserved side is Build; unmatched build rows are emitted later via
+                    // used-tracking. Filters in this orientation are rejected at wrap time.
                     table.Lookup(tuple, [&](TSingleTuple tableMatch) {
-                        found = true;
-                        consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
+                        const TSides<TSingleTuple> pair{.Build = tableMatch, .Probe = tuple};
+                        if (pairPasses(pair)) {
+                            found = true;
+                            consume(pair);
+                        }
                     });
                 } else {
                     table.Lookup(tuple, [&](TSingleTuple tableMatch) {
-                        found = true;
-                        consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
+                        const TSides<TSingleTuple> pair{.Build = tableMatch, .Probe = tuple};
+                        if (pairPasses(pair)) {
+                            found = true;
+                            consume(pair);
+                        }
                     });
                     if (!found) {
+                        // Left row with no qualifying match: emit null-padded.
                         consume(tuple);
                     }
                 }
             } else {
                 table.Lookup(tuple, [&](TSingleTuple tableMatch) {
-                    found = true;
-                    if constexpr (Kind == EJoinKind::Inner) {
-                        consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
+                    const TSides<TSingleTuple> pair{.Build = tableMatch, .Probe = tuple};
+                    if (pairPasses(pair)) {
+                        found = true;
+                        if constexpr (Kind == EJoinKind::Inner) {
+                            consume(pair);
+                        }
                     }
                 });
                 if constexpr (Kind == EJoinKind::LeftOnly) {
@@ -1040,11 +1063,13 @@ protected:
     bool LeftIsBuild_;
 };
 
-template <i64 MaxOutputRows, typename JoinType, typename OutputType, typename FlushSink>
-EFetchResult RunPackedHashJoinBatch(TComputationContext& ctx, JoinType& join, OutputType& output, FlushSink&& onFlush) {
+template <i64 MaxOutputRows, typename JoinType, typename OutputType, typename FlushSink,
+          typename PairPasses = NJoinPackedTuples::AlwaysPassPair>
+EFetchResult RunPackedHashJoinBatch(TComputationContext& ctx, JoinType& join, OutputType& output, FlushSink&& onFlush,
+                                    PairPasses pairPasses = {}) {
     auto outputIsFull = [&]() { return output.SizeTuples() >= MaxOutputRows; };
     while (!outputIsFull()) {
-        switch (join.MatchRows(ctx, output.MakeConsumeFn(), outputIsFull)) {
+        switch (join.MatchRows(ctx, output.MakeConsumeFn(), outputIsFull, pairPasses)) {
         case EFetchResult::Finish:
             if (output.SizeTuples() == 0) {
                 return EFetchResult::Finish;

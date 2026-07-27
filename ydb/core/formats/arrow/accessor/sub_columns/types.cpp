@@ -69,14 +69,18 @@ bool CanBeDictionaryEncoded(EValueType valueType) {
 TJsonValueView ArrayElementToJsonValueView(const arrow::Array& array, const i64 index, const EValueType valueType) {
     switch (valueType) {
         case EValueType::String: {
+            AFL_VERIFY(array.type_id() == arrow::Type::BINARY)("actual", (ui32)array.type_id());
             const auto view = static_cast<const arrow::BinaryArray&>(array).GetView(index);
             return TJsonValueView::OfString(TStringBuf(view.data(), view.size()));
         }
         case EValueType::Double:
+            AFL_VERIFY(array.type_id() == arrow::Type::DOUBLE)("actual", (ui32)array.type_id());
             return TJsonValueView::OfNumber(static_cast<const arrow::DoubleArray&>(array).Value(index));
         case EValueType::Bool:
+            AFL_VERIFY(array.type_id() == arrow::Type::BOOL)("actual", (ui32)array.type_id());
             return TJsonValueView::OfBool(static_cast<const arrow::BooleanArray&>(array).Value(index));
         case EValueType::BinaryJson: {
+            AFL_VERIFY(array.type_id() == arrow::Type::BINARY)("actual", (ui32)array.type_id());
             const auto view = static_cast<const arrow::BinaryArray&>(array).GetView(index);
             return TJsonValueView::OfBinaryJson(TStringBuf(view.data(), view.size()));
         }

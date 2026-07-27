@@ -172,6 +172,9 @@ public:
     // If necessary, adds hosts to make the hostIndex valid.
     void AddHostIfNeeded(THostIndex hostIndex);
 
+    // Check if it's valid to QueryAddHost from HostStateController and do it.
+    void QueryAddHostIfPossible();
+
     [[nodiscard]] TVector<TOracleHostStat> BuildHostStats(TInstant now) const;
 
 private:

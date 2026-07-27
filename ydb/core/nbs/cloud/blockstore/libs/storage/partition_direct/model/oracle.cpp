@@ -201,6 +201,7 @@ void TOracle::Think(TInstant now)
         auto errorsInfo = HostStatistics[i].GetErrorsInfo(now);
 
         if (newHostsHealths[i] == EHostHealth::Broken) {
+            // Host with broken ddisk can not be restored.
             continue;
         }
 
@@ -244,12 +245,7 @@ void TOracle::Think(TInstant now)
         }
     }
 
-    if (GetAliveHostCount(HostStates) < DirectBlockGroupHostCount &&
-        GetHostCount() < MaxHostCount)
-    {
-        const THostIndex newHostIndex = GetHostCount();
-        HostStateController->QueryAddHost(newHostIndex);
-    }
+    QueryAddHostIfPossible();
 }
 
 void TOracle::OnRequestStarted(
@@ -301,7 +297,7 @@ void TOracle::OnDDiskBroken(THostIndex hostIndex)
             oldState,
             EHostState::Offline);
 
-        HostStateController->QueryAddHost(GetHostCount());
+        QueryAddHostIfPossible();
     }
 }
 
@@ -473,6 +469,16 @@ void TOracle::AddHostIfNeeded(THostIndex hostIndex)
         HostsReconnectDelays.emplace_back(MinReconnectDelay, MaxReconnectDelay);
 
         currentHostCount = HostStatistics.size();
+    }
+}
+
+void TOracle::QueryAddHostIfPossible()
+{
+    if (GetAliveHostCount(HostStates) < DirectBlockGroupHostCount &&
+        GetHostCount() < MaxHostCount)
+    {
+        const THostIndex newHostIndex = GetHostCount();
+        HostStateController->QueryAddHost(newHostIndex);
     }
 }
 

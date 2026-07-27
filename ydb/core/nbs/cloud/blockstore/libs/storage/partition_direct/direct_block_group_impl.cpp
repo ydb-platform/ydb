@@ -139,7 +139,7 @@ CreateWaitSessionCbForSyncWithPBuffer(
     return cb;
 }
 
-bool CanLeadToBlockedSession(EOperation operation)
+bool IsDDiskSessionOperation(EOperation operation)
 {
     return operation == EOperation::ReadFromDDisk ||
            operation == EOperation::WriteToDDisk ||
@@ -990,6 +990,8 @@ TDBGFlushResponse TDirectBlockGroup::HandleSyncWithPBufferResponse(
 
         if (IsSessionBlockedError(error)) {
             HandleBlockedGeneration(ddiskHostIndex, "SyncWithPBuffer");
+        } else if (IsDeviceBrokenError(error)) {
+            Oracle.OnDDiskBroken(ddiskHostIndex);
         }
 
         for (size_t i = 0; i < segmentCount; ++i) {
@@ -1748,7 +1750,7 @@ void TDirectBlockGroup::OnResponse(
         if (IsCancelledError(error)) {
             Oracle.OnRequestCancelled(hostIndex, operation, TInstant::Now());
         } else if (
-            CanLeadToBlockedSession(operation) && IsSessionBlockedError(error))
+            IsDDiskSessionOperation(operation) && IsSessionBlockedError(error))
         {
             HandleBlockedGeneration(hostIndex, ToString(operation));
         } else if (IsDeviceBrokenError(error)) {
@@ -1867,7 +1869,6 @@ void TDirectBlockGroup::HandleBlockedGeneration(
     THostIndex hostIndex,
     TStringBuf context)
 {
-    using namespace NKikimrBlobStorage::NDDisk;
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     if (BlockedGenerationDetected) {

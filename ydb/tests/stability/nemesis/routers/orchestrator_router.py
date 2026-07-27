@@ -14,9 +14,10 @@ from ydb.tests.stability.nemesis.internal.nemesis.catalog import (
     NEMESIS_TYPES,
     guard_mode_for,
     impact_scope_for,
+    impairment_hold_sec_for,
     nemesis_types_flat_for_api,
     nemesis_types_grouped_for_api,
-    recovery_sec_for,
+    supports_boundary_scheduler,
     target_kind_for,
 )
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_problems import ChaosProblemStore
@@ -149,7 +150,7 @@ def create_host_process():
     except ValueError as e:
         return jsonify({"status": "error", "message": str(e)}), 400
 
-    # Expand bare host → concrete entity via inventory when target_kind needs it.
+    # Expand a bare host into a concrete entity when the type needs one.
     if target_data is None and cluster_inventory is not None:
         kind = target_kind_for(process_type)
         if kind is not TargetKind.HOST:
@@ -189,8 +190,7 @@ def create_host_process():
     try:
         if chaos_store is None:
             return jsonify({"status": "error", "message": "Chaos store not initialized"}), 500
-        # Plan-time safety for FULL-mode manual inject (no dispatch veto).
-        # force=True skips the filter check.
+        # Plan-time safety for a FULL-mode manual inject; force=true skips it.
         if (
             not force
             and action == "inject"
@@ -217,7 +217,7 @@ def create_host_process():
             return jsonify(
                 {"status": "error", "message": "Could not plan manual execution for this type/action"}
             ), 400
-        # Prefer the explicit ChaosTarget from the request on planned commands.
+        # Prefer the request's ChaosTarget over whatever the planner picked.
         cmds = [
             type(c)(
                 execution_id=c.execution_id,
@@ -240,7 +240,10 @@ def create_host_process():
                         cmd.execution_id,
                         cmd.target,
                         record_scope,
-                        recovery_sec=recovery_sec_for(cmd.nemesis_type),
+                        # Paired by the operator, so a toggle holds its budget until that extract.
+                        recovery_sec=impairment_hold_sec_for(
+                            cmd.nemesis_type, paired_extract=True
+                        ),
                     )
         return jsonify(
             {
@@ -275,7 +278,7 @@ def get_process_types_grouped():
 
 @blueprint.route("/api/inventory", methods=["GET"])
 def get_cluster_inventory():
-    """Return host/node/slot inventory used for ChaosTarget planning."""
+    """Host/node/slot inventory used for planning."""
     if cluster_inventory is None:
         return jsonify(
             {
@@ -422,7 +425,7 @@ def get_schedule_history():
 
 
 def _scheduler_state() -> dict:
-    """Scheduler status plus the current failure-budget snapshot."""
+    """Scheduler status plus the failure-budget snapshot."""
     if nemesis_scheduler is None:
         return {"available": False}
     state = {"available": True, **nemesis_scheduler.status()}
@@ -438,12 +441,9 @@ def get_scheduler():
 
 
 def _validated_profile(data: dict) -> tuple[dict, str | None]:
-    """Parse/validate a scheduler profile from a request body.
-
-    Returns ``(profile, error)``. Anything malformed is rejected instead of silently degrading
-    the run: an unknown type name would just never be offered, and a bare string in ``enabled``
-    would be split into single-character "types".
-    """
+    """``(profile, error)`` from a request body. Malformed input is rejected, not silently ignored:
+    an unknown type would simply never fire, and a bare string in ``enabled`` would be split into
+    single-character "types"."""
     profile: dict = {}
 
     if "enabled" in data:
@@ -456,6 +456,13 @@ def _validated_profile(data: dict) -> tuple[dict, str | None]:
             return {}, (
                 f"unknown nemesis type(s): {', '.join(sorted(unknown))}. "
                 f"See GET /api/process_types; default profile: {', '.join(default_enabled_types())}"
+            )
+        unsupported = [t for t in names if not supports_boundary_scheduler(t)]
+        if unsupported:
+            return {}, (
+                f"type(s) not usable by the boundary scheduler: {', '.join(sorted(unsupported))}. "
+                f"Their planners keep their own target state, so they would inject somewhere other "
+                f"than the target the guard reserved. Run them through the per-type schedule instead."
             )
         profile["enabled"] = names
 
@@ -487,15 +494,14 @@ def _validated_profile(data: dict) -> tuple[dict, str | None]:
 
 @blueprint.route("/api/scheduler/start", methods=["POST"])
 def start_scheduler():
-    """Apply an optional profile and start the nemesis scheduler.
+    """Apply an optional profile and start the scheduler.
 
-    Body (all optional): ``enabled`` (list of type names), ``base_interval`` (sec),
-    ``jitter`` (0..1), ``max_per_tick`` (int). Omitted fields keep their current value;
-    on a fresh scheduler that means the catalog defaults. Invalid values are rejected with 400.
+    Body (all optional): ``enabled``, ``base_interval``, ``jitter``, ``max_per_tick``. Omitted fields
+    keep their current value; invalid ones are rejected with 400.
     """
     if nemesis_scheduler is None:
         return jsonify(
-            {"status": "error", "message": "Nemesis scheduler not initialized (failure model unavailable)"}
+            {"status": "error", "message": "Nemesis scheduler not initialized (orchestrator startup did not complete)"}
         ), 500
 
     data = request.get_json(silent=True) or {}
@@ -525,12 +531,7 @@ def stop_scheduler():
 
 @blueprint.route("/api/problems", methods=["GET"])
 def get_chaos_problems():
-    """Nemesis-side problems for the stability test report.
-
-    Faults that never recovered (their failure budget is still held, so the cluster stays degraded
-    and the scheduler quietly does less chaos) and a failure-model guard that failed open.
-    ``ydb/tests/stability/tests`` polls this when disabling nemesis and attaches it to Allure.
-    """
+    """Chaos-side problems for the stability test report: stuck faults, degraded inventory."""
     problems = chaos_problems.snapshot() if chaos_problems is not None else []
     payload = {
         "count": len(problems),

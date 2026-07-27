@@ -1,8 +1,7 @@
 """ClusterInventory: host/node/slot entities for chaos planning.
 
-Built from ``cluster.yaml`` topology plus optional ``ExternalKiKiMRCluster`` enrichment
-(node_id, ic_port, slots). Fail-open: if cluster harness is unavailable, host-only
-candidates are still produced.
+Built from the ``cluster.yaml`` topology plus ``ExternalKiKiMRCluster`` (node_id, ic_port, slots).
+If the harness is unavailable, nodes are synthesized and ``degraded_reason`` says so.
 """
 
 from __future__ import annotations
@@ -51,8 +50,7 @@ class ClusterInventory:
             self._agent_hosts = list(topology.hosts.keys())
         self.nodes: dict[int, NodeInfo] = {}
         self.slots: dict[int, SlotInfo] = {}
-        # Set when nodes had to be synthesized from the host list: node/slot ids and ports are then
-        # guesses and there are no slots at all. Reported through ``GET /api/problems``.
+        # Set when nodes had to be synthesized: ids and ports are guesses, and there are no slots.
         self.degraded_reason: str | None = None
         self._load_from_harness()
 
@@ -131,18 +129,6 @@ class ClusterInventory:
     def control_host(self) -> str | None:
         """Pinned first host for cluster-API tablet chaos."""
         return self._agent_hosts[0] if self._agent_hosts else None
-
-    def nodes_on_host(self, host: str) -> list[NodeInfo]:
-        return [n for n in self.nodes.values() if n.host == host]
-
-    def slots_on_host(self, host: str) -> list[SlotInfo]:
-        return [s for s in self.slots.values() if s.host == host]
-
-    def node_by_id(self, node_id: int) -> NodeInfo | None:
-        return self.nodes.get(node_id)
-
-    def slot_by_idx(self, slot_idx: int) -> SlotInfo | None:
-        return self.slots.get(slot_idx)
 
     # -- candidate generation -----------------------------------------------
 

@@ -468,14 +468,10 @@ class StressUtilDeployer:
             return False
 
     def _fetch_nemesis_problems(self, nemesis_log: list[str]) -> dict:
-        """Fetch ``GET /api/problems`` — nemesis-side anomalies from the chaos phase.
-
-        These never show up in cluster checks: a fault that never recovered (its failure budget
-        stays held, so the cluster ran degraded and the scheduler did less chaos than asked), or a
-        degraded chaos inventory (synthesized node ids, no slot chaos).
+        """``GET /api/problems``: chaos-side anomalies cluster checks cannot see.
 
         Returns:
-            The parsed payload, or ``{}`` when the endpoint is unavailable (older orchestrator).
+            The parsed payload, or ``{}`` when the endpoint is unavailable.
         """
         endpoint = self._get_orchestrator_endpoint()
         url = f"{endpoint}/api/problems"
@@ -490,11 +486,8 @@ class StressUtilDeployer:
             return {}
 
     def _report_nemesis_problems(self, nemesis_log: list[str]) -> int:
-        """Put nemesis-side problems into the log and the Allure report.
-
-        Informational: the chaos side misbehaving does not by itself fail the workload, but it has
-        to be visible when reading the report — a stuck fault explains both a degraded cluster and
-        a suspiciously calm chaos phase.
+        """Log chaos-side problems and attach them to Allure. Informational: does not fail the
+        workload, but a stuck fault explains both a degraded cluster and a calm chaos phase.
 
         Returns:
             Number of reported problems.
@@ -705,7 +698,7 @@ class StressUtilDeployer:
                 nemesis_log.append("Nemesis chaos disabled successfully")
             else:
                 nemesis_log.append("Failed to disable nemesis chaos schedules")
-            # After the scheduler stopped: report what misbehaved during the chaos phase.
+            # After the scheduler stopped: report what misbehaved.
             self._report_nemesis_problems(nemesis_log)
         else:
             nemesis_log.append(

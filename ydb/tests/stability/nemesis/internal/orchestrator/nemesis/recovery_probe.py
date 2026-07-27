@@ -1,14 +1,8 @@
 """Fact-based recovery for reserved failure budget.
 
-The boundary scheduler reserves budget per injected fault and holds it (``recovery_sec=None``)
-until the fault is observed to have recovered. :class:`RecoveryProbe` polls a ``recovered(target)``
-predicate and calls :meth:`FailureModelGuard.release` the moment a target is back — instead of
-guessing a fixed timer. If a fault does NOT recover within its timeout the probe does not silently
-release the budget (that would let the scheduler pile more chaos onto a cluster that is not
-healing); it keeps holding and raises a stuck-fault problem for the warden to surface.
-
-``recovered`` is injected so the criterion can be healthcheck-based (:func:`healthcheck_recovery`),
-warden-based, or anything else without coupling this module to a data source.
+Polls a ``recovered(target)`` predicate and releases the lease the moment a target is back, instead
+of guessing a timer. A fault that overshoots its timeout is *not* released — it is reported stuck and
+keeps holding the budget, so chaos does not pile onto a cluster that is not healing.
 """
 
 from __future__ import annotations
@@ -27,8 +21,7 @@ logger = logging.getLogger(__name__)
 # Healthcheck self_check_result values that mean "this host's endpoint did not answer".
 _HC_ERROR_RESULTS = frozenset({"HC_REQUEST_ERROR", "HC_RESULT_ERROR"})
 
-# Wait at least this long before trusting a recovery signal, so a stale pre-fault healthcheck
-# result cannot be mistaken for "already recovered" right after injection.
+# Ignore recovery signals for this long, so a stale pre-fault healthcheck isn't read as recovery.
 DEFAULT_MIN_HOLD_SEC: float = 30.0
 DEFAULT_RECOVERY_TIMEOUT_SEC: float = 300.0
 DEFAULT_POLL_INTERVAL_SEC: float = 15.0
@@ -60,9 +53,7 @@ class _Pending:
 def healthcheck_recovery(
     reporter, error_results: frozenset[str] = _HC_ERROR_RESULTS
 ) -> Callable[[ChaosTarget], bool]:
-    """``recovered`` predicate: a target is recovered once its host's healthcheck endpoint answers
-    again (any non-error ``self_check_result``). ``reporter`` is anything exposing ``last_results``
-    (e.g. ``HealthCheckReporter``)."""
+    """``recovered`` predicate: the host's healthcheck endpoint answers again."""
 
     def recovered(target: ChaosTarget) -> bool:
         results = getattr(reporter, "last_results", None) or {}
@@ -108,11 +99,8 @@ class RecoveryProbe:
     ) -> None:
         """Track a reserved fault until its budget can be released.
 
-        ``recover_action`` distinguishes the two recovery classes:
-        - ``None`` (self-recovering): released once ``recovered(target)`` is true; a fault that
-          overshoots ``timeout_sec`` is reported stuck and keeps holding budget.
-        - callable (toggle): after holding for ``timeout_sec`` the probe runs the action
-          (dispatch an extract) and releases the budget — no healthcheck, never stuck.
+        ``recover_action=None`` (self-recovering): released once ``recovered(target)``, reported
+        stuck past ``timeout_sec``. A callable (toggle): run after ``timeout_sec``, then released.
         """
         if not lease_id:
             return
@@ -127,10 +115,6 @@ class RecoveryProbe:
                 min_hold_sec=min(self._min_hold_sec, timeout),
                 recover_action=recover_action,
             )
-
-    def forget(self, lease_id: str) -> None:
-        with self._lock:
-            self._pending.pop(lease_id, None)
 
     def tick(self) -> list[StuckFault]:
         """Poll every tracked fault once. Releases recovered ones; returns newly-stuck ones."""
@@ -184,18 +168,11 @@ class RecoveryProbe:
         return stuck
 
     def drain_extracts(self) -> int:
-        """Extract every tracked toggle fault right now, regardless of its remaining hold window.
+        """Extract every tracked toggle fault now, whatever is left of its hold window.
 
-        Called when chaos is switched off (scheduler ``stop()`` / app teardown): a fault that is
-        still waiting out its hold — stopped node, broken disk, skewed clock — would otherwise
-        never be extracted, and the cluster would stay broken after nemesis was disabled. Nothing
-        else extracts them: the boundary scheduler dispatches toggle injects directly, so the
-        planners' ``extract_all_on_disable`` bookkeeping never saw them.
-
-        Self-recovering faults are left tracked: they heal on their own, and a probe that is
-        started again keeps polling them.
-
-        Returns the number of extracts dispatched.
+        Called when chaos is switched off: nothing else would extract them (the scheduler dispatches
+        toggle injects directly, so the planners never saw them). Self-recovering faults stay
+        tracked. Returns the number of extracts dispatched.
         """
         with self._lock:
             pending = [p for p in self._pending.values() if p.recover_action is not None]

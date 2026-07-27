@@ -111,10 +111,6 @@ def build_all_planners() -> dict[str, NemesisPlannerBase]:
 # ---------------------------------------------------------------------------
 
 
-def get_all_nemesis_types() -> list[str]:
-    return list(NEMESIS_TYPES.keys())
-
-
 def impact_scope_for(nemesis_type: str) -> ImpactScope:
     """ImpactScope for ``nemesis_type`` (defaults to NODE when unannotated)."""
     spec = NEMESIS_TYPES.get(nemesis_type)
@@ -134,11 +130,7 @@ def target_kind_for(nemesis_type: str) -> TargetKind:
 
 
 def guard_mode_for(nemesis_type: str) -> GuardMode:
-    """GuardMode for ``nemesis_type``.
-
-    Default when unannotated: FULL for stateless types (no ``planner_cls`` /
-    ``planner_factory`` -> DefaultRandomHostPlanner), else BYPASS.
-    """
+    """GuardMode of the type; unannotated defaults to FULL, or BYPASS for custom-planner types."""
     spec = NEMESIS_TYPES.get(nemesis_type)
     if spec is None:
         return GuardMode.BYPASS
@@ -150,11 +142,7 @@ def guard_mode_for(nemesis_type: str) -> GuardMode:
 
 
 def recovery_sec_for(nemesis_type: str) -> float | None:
-    """Auto-recovery window (seconds) passed to ``record_inject`` as ``recovery_sec``.
-
-    Number -> impairment auto-expires after that many seconds; ``None`` -> held until an
-    explicit extract (toggle faults); unannotated -> :data:`DEFAULT_RECOVERY_SEC`.
-    """
+    """``auto_recovery_sec`` of the type: how long the fault is expected to last."""
     spec = NEMESIS_TYPES.get(nemesis_type)
     if spec is None:
         return DEFAULT_RECOVERY_SEC
@@ -170,26 +158,53 @@ def recovery_sec_for(nemesis_type: str) -> float | None:
 
 
 def recovery_mode_for(nemesis_type: str) -> str:
-    """How the boundary scheduler recovers this fault and frees its budget.
-
-    ``"self"`` (default) — the fault heals on its own (SIGKILL + systemd restart, stop/start
-    pulse); the recovery probe releases the lease once healthcheck sees the host answer again.
-    ``"extract"`` — a toggle fault (clock skew, broken disk, stopped node) that stays broken
-    until told otherwise; the probe holds the lease for ``auto_recovery_sec`` then dispatches an
-    explicit extract and releases.
-    """
+    """``"self"`` — heals on its own (SIGKILL + systemd restart); ``"extract"`` — stays applied
+    until the probe dispatches an extract (clock skew, broken disk, stopped node)."""
     spec = NEMESIS_TYPES.get(nemesis_type)
     if spec is None:
         return "self"
     return "extract" if spec.get("recovery") == "extract" else "self"
 
 
-def supports_manual_for(nemesis_type: str) -> bool:
-    """Whether UI/API manual inject on a host/target is supported for this type.
+def impairment_hold_sec_for(nemesis_type: str, *, paired_extract: bool) -> float | None:
+    """``recovery_sec`` for ``record_inject``.
 
-    Planners that keep cross-tick state (network isolation, rolling restart, DC/pile
-    fanout) return None from ``manual()`` → ``False`` here.
+    ``paired_extract=True`` (manual inject, followed by a manual extract): a toggle fault holds its
+    budget until that extract. ``False`` (legacy loop, where the *next inject* toggles the fault
+    back): held for the length of the pulse, i.e. until the type's next tick.
     """
+    if recovery_mode_for(nemesis_type) != "extract":
+        return recovery_sec_for(nemesis_type)
+    if paired_extract:
+        return None
+    spec = NEMESIS_TYPES.get(nemesis_type) or {}
+    interval = float(spec.get("schedule") or 60)
+    window = recovery_sec_for(nemesis_type)
+    return max(interval, window) if window is not None else interval
+
+
+def supports_boundary_scheduler(nemesis_type: str) -> bool:
+    """Whether the boundary scheduler may inject this type on the target it reserved.
+
+    Safe: a DATACENTER target (fanned out over exactly that DC), a toggle fault (dispatched directly,
+    bypassing planners), or the default planner (injects the candidate it is handed). A custom planner
+    must opt in with ``boundary_safe``: one that keeps its own targets would inject something the
+    guard never reserved. Never builds the planner to ask — constructors may talk to the cluster.
+    """
+    spec = NEMESIS_TYPES.get(nemesis_type)
+    if spec is None:
+        return False
+    if "boundary_safe" in spec:
+        return bool(spec["boundary_safe"])
+    if target_kind_for(nemesis_type) is TargetKind.DATACENTER:
+        return True
+    if recovery_mode_for(nemesis_type) == "extract":
+        return True
+    return spec.get("planner_cls") is None and spec.get("planner_factory") is None
+
+
+def supports_manual_for(nemesis_type: str) -> bool:
+    """Whether UI/API manual inject works: planners with cross-tick state return None instead."""
     spec = NEMESIS_TYPES.get(nemesis_type)
     if spec is None:
         return False

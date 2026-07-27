@@ -7,6 +7,9 @@ TEST_SRCS(
     test_boundary_scheduler.py
     test_recovery_probe.py
     test_chaos_problems.py
+    test_catalog_annotations.py
+    test_guard_invariants.py
+    test_orchestrator_api.py
 )
 
 PEERDIR(

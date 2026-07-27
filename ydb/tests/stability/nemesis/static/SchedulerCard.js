@@ -1,9 +1,7 @@
 /**
- * Boundary-walking scheduler: run state, failure-model budget, recovery probe and the
- * nemesis-side problem list (GET /api/scheduler + GET /api/problems).
- *
- * This is the thing that actually drives scheduled chaos — the per-type schedule toggles in the
- * accordion belong to the legacy per-type loop.
+ * Scheduler state, failure budget, recovery probe and problems
+ * (GET /api/scheduler + GET /api/problems). This drives scheduled chaos; the per-type toggles in
+ * the accordion belong to the legacy loop.
  */
 export default {
   props: {
@@ -101,7 +99,7 @@ export default {
         </div>
 
         <div v-if="!available" class="text-sm opacity-60 pt-2">
-          Scheduler not initialized (failure model unavailable).
+          Scheduler not initialized — orchestrator startup did not complete.
         </div>
 
         <div v-else class="space-y-3 pt-2">

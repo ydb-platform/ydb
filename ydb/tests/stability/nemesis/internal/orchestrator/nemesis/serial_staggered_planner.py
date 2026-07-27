@@ -16,19 +16,14 @@ from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.nemesis_planner_b
 # Lower bound of tools ``schedule_between_kills`` (30, 60) for node serial nemeses.
 DEFAULT_SERIAL_STAGGER_SEC = 30.0
 
-# Upper bound on entities killed within one tick (matches the pre-ChaosTarget planner).
 MAX_ENTITIES_PER_TICK = 4
 
 
 class SerialStaggeredInjectPlanner(NemesisPlannerBase):
-    """
-    Each ``scheduled_tick``: sample ``K`` distinct node/slot entities (``K`` in
-    1..:data:`MAX_ENTITIES_PER_TICK`, capped by the candidate count) and dispatch one inject per
-    entity **to that entity's own owner host**, with ``payload["sleep_before"] = i * stagger_sec``
-    so the agents kill their daemons one after another instead of all at once.
+    """Kill ``K`` distinct node/slot entities per tick (``K`` up to :data:`MAX_ENTITIES_PER_TICK`).
 
-    The pre-ChaosTarget version fanned the *same* ``node_id`` out to K random hosts, which only
-    worked while the agent resolved the target locally; only the owner agent can kill the daemon.
+    One inject per entity, dispatched to that entity's own owner host, with
+    ``payload["sleep_before"] = i * stagger_sec`` so the kills are serial rather than simultaneous.
     """
 
     PAYLOAD_INJECT: ClassVar[dict] = {}
@@ -81,7 +76,7 @@ class SerialStaggeredInjectPlanner(NemesisPlannerBase):
         return commands
 
     def _payload_for(self, target: ChaosTarget, *, sleep_before: float) -> dict:
-        """Ids the agent needs to find the daemon, plus how long it waits before killing it."""
+        """Ids the agent needs to find the daemon, plus its wait before killing it."""
         payload: dict = {"sleep_before": sleep_before}
         if target.node_id is not None:
             payload["node_id"] = target.node_id

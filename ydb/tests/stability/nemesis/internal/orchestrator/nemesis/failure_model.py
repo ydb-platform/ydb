@@ -1,44 +1,19 @@
-"""Failure-model guard: constrain nemesis chaos to the cluster's declared fault tolerance.
+"""Failure-model guard: keep chaos within the cluster's declared fault tolerance.
 
-Parses ``cluster.yaml`` into a :class:`ClusterTopologyModel` and exposes a
-:class:`FailureModelGuard` that vetoes/filters chaos exceeding the tolerated
-simultaneous-failure budget (fail domain = rack, fail realm = datacenter):
+Budget per ``static_erasure`` from ``cluster.yaml``::
 
     mirror-3-dc : 1 realm fully + 1 domain in another realm
     block-4-2   : any 2 domains
     none        : 0
 
-A fail domain is identified by :func:`fail_domain_key` — ``"<data_center>/<rack>"`` — because
-rack labels are only unique *within* a datacenter (``rack: '1'`` in every DC is a normal YDB
-config). Keying by the bare rack label would collapse one rack per DC into a single domain and
-let the guard admit chaos in every realm at once.
+A fail domain is ``"<dc>/<rack>"`` (:func:`fail_domain_key`): rack labels repeat across DCs, so the
+realm must be part of the key. Slot (dynamic node) kills cost no redundancy and draw from a separate
+budget instead: ≤30% of the cluster's slots at once.
 
-Only static (storage) node loss touches this erasure budget. Dynamic-node (slot) kills draw
-from a separate, independent budget: up to a fraction (default 30%) of the cluster's slots may
-be down at once. A :class:`Footprint` carries both dimensions so one lease covers either.
-
-**Where the slot budget applies.** It is enforced by the lease API only — :meth:`fits` and
-:meth:`reserve`, i.e. the boundary scheduler's path, which is what runs stability chaos. The
-plan-time helpers do *not* enforce it: :meth:`filter_safe` (legacy per-type schedule loop in
-``schedule_loop.py`` and the manual ``POST /api/hosts/process`` pre-check) only reasons about
-fail domains, and :meth:`record_inject` records a slot fault's identity without charging a slot.
-So slot chaos driven through the legacy schedule or manual injects is bounded by nothing but its
-own dedup, and mixing both paths under-counts ``impaired_slots``. Fine while the boundary
-scheduler owns scheduled chaos; revisit if the legacy loop is used for slot types again.
-
-**The failure model is a hard requirement, not best effort.** An unusable ``cluster.yaml``
-(missing, unparsable, unknown ``static_erasure``, hosts without ``location.rack``) raises
-:class:`FailureModelConfigError` from :class:`ClusterTopologyModel`, and the orchestrator refuses
-to start — see ``app.create_app``. Running chaos without a fault-tolerance ceiling is worse than
-not running it at all, so there is no "guard disabled" mode: once the app is up, every guard API
-enforces the budget.
+An unusable config raises :class:`FailureModelConfigError` and the orchestrator refuses to start
+(``app.require_failure_model_or_die``) — there is no unguarded mode.
 
 Unrelated to the runner-side ``scope=`` metrics argument in ``monitored_actor.py``.
-
-Each recorded impairment carries an optional recovery deadline, so faults that recover
-without an explicit extract (systemd auto-restart after SIGKILL, self-healing rolling
-restart) release their budget on a timer instead of piling up forever. ``recovery_sec=None``
-holds an impairment until an explicit extract (toggle faults that stay down until next inject).
 """
 
 from __future__ import annotations
@@ -63,12 +38,7 @@ logger = logging.getLogger(__name__)
 
 
 class FailureModelConfigError(RuntimeError):
-    """``cluster.yaml`` cannot back a failure model — the orchestrator must not start.
-
-    Raised for a missing/unparsable file, an unsupported ``static_erasure``, or hosts without the
-    ``location`` data the guard needs. Never caught to keep chaos running: unbounded chaos would
-    silently exceed the cluster's fault tolerance and turn every stability failure into noise.
-    """
+    """``cluster.yaml`` cannot back a failure model, so the orchestrator must not start."""
 
 
 class ImpactScope(enum.Enum):
@@ -77,56 +47,43 @@ class ImpactScope(enum.Enum):
     NODE = "node"
     SLOT = "slot"
     DISK = "disk"
-    RACK = "rack"
     DATACENTER = "datacenter"
     PILE = "pile"
     UNKNOWN = "unknown"
 
 
 class GuardMode(enum.Enum):
-    """How the failure-model guard treats a nemesis type.
-
-    FULL   : pre-filter candidates and account for the impact (``reserve`` / ``record_inject``).
-    BYPASS : the type costs no budget (tablet chaos) — offered every tick, never reserved.
-    """
+    """FULL: filtered and accounted for. BYPASS: costs no budget (tablet chaos)."""
 
     FULL = "full"
     BYPASS = "bypass"
 
 
-# Fallback recovery window (seconds) when a nemesis type has no ``auto_recovery_sec`` annotation.
-# Conservatively longer than a systemd restart so a node stays "impaired" until it likely rejoined.
+# Recovery window for types without ``auto_recovery_sec``: longer than a systemd restart + rejoin.
 DEFAULT_RECOVERY_SEC: float = 120.0
 
-# Fraction of the cluster's dynamic-node slots that may be down simultaneously (separate from the
-# erasure/rack budget). Killing a slot doesn't reduce storage redundancy, so it's cheap chaos.
+# Share of the cluster's slots allowed down at once.
 DEFAULT_SLOT_FRACTION: float = 0.3
 
-# Datacenter placeholder in a fail-domain key for hosts whose ``location`` has no ``data_center``.
-_UNKNOWN_DC = "?"
+_UNKNOWN_DC = "?"                      # host with no ``location.data_center``
+_SYNTHETIC_DOMAIN_PREFIX = "__host__:"  # host with no rack in ``cluster.yaml``
 
-# Prefix of a fail-domain key synthesized for a host that is not in ``cluster.yaml``.
-_SYNTHETIC_DOMAIN_PREFIX = "__host__:"
+
+def _slots_within_budget(active_slots: int, add_slots: int, max_slots: int) -> bool:
+    """Slot-budget rule, shared by the guard and :class:`BudgetView`. ``max_slots<=0`` never blocks."""
+    if add_slots <= 0 or max_slots <= 0:
+        return True
+    return active_slots + add_slots <= max_slots
 
 
 def fail_domain_key(datacenter: str | None, rack: str) -> str:
-    """Fail-domain identity: ``"<data_center>/<rack>"``.
-
-    Rack labels in ``cluster.yaml`` are only unique inside a datacenter, so the realm has to be
-    part of the key — otherwise rack ``1`` of every DC would be one domain and ``mirror-3-dc``
-    would tolerate losing all three realms at once.
-    """
+    """``"<dc>/<rack>"`` — rack labels are only unique inside a datacenter."""
     return f"{datacenter or _UNKNOWN_DC}/{rack}"
 
 
 @dataclass(frozen=True)
 class Footprint:
-    """What one fault consumes from the budget: fail domains and/or dynamic-node slots.
-
-    Rack faults (static nodes, disks, datacenters) fill ``racks`` with :func:`fail_domain_key`
-    keys (``"<dc>/<rack>"``); a slot (dynamic node) kill fills ``slots`` and leaves ``racks``
-    empty; a tablet touches neither. The two dimensions are checked independently by the guard.
-    """
+    """What one fault consumes: fail-domain keys and/or slots. A tablet fault consumes neither."""
 
     racks: frozenset[str] = frozenset()
     slots: int = 0
@@ -175,15 +132,10 @@ class HostTopology:
 
 
 class ClusterTopologyModel:
-    """Parses ``cluster.yaml``: erasure mode and host -> rack -> datacenter mapping.
+    """``cluster.yaml`` -> erasure mode + host/rack/datacenter map, or :class:`FailureModelConfigError`.
 
-    Raises :class:`FailureModelConfigError` for anything that would leave the guard unable to
-    decide — missing/unparsable file, unsupported ``static_erasure``, no hosts, a host without
-    ``location.rack``, or (for ``mirror-3-dc``) without ``location.data_center``. Construction
-    therefore either yields a usable model or takes the orchestrator down with it.
-
-    ``rack_of`` / ``dc_of`` return the raw ``location`` labels (inventory, UI); the guard reasons
-    in :func:`fail_domain_key` keys via ``domain_of`` / ``domains_in_dc`` / ``dc_of_domain``.
+    ``rack_of`` / ``dc_of`` give the raw ``location`` labels (inventory, UI); the guard reasons in
+    fail-domain keys via ``domain_of`` / ``domains_in_dc`` / ``dc_of_domain``.
     """
 
     def __init__(self, yaml_path: str | None) -> None:
@@ -265,15 +217,11 @@ class ClusterTopologyModel:
 
     @property
     def guards(self) -> bool:
-        """Always True: an unusable config raises instead of degrading into a no-op guard.
-
-        Kept because the guard state is reported through ``snapshot()`` / the API, where "the guard
-        is live" is worth stating explicitly.
-        """
+        """Always True (an unusable config raises); reported through ``snapshot()`` / the API."""
         return self.tolerance.guards and bool(self.hosts)
 
     def rack_of(self, host: str) -> str | None:
-        """Raw ``location.rack`` label (not a fail-domain key) — inventory / UI."""
+        """Raw ``location.rack`` label, not a fail-domain key."""
         t = self.hosts.get(host)
         return t.rack if t else None
 
@@ -282,14 +230,14 @@ class ClusterTopologyModel:
         return t.datacenter if t else None
 
     def domain_of(self, host: str) -> str | None:
-        """Fail-domain key of ``host``, or None when the host has no rack in ``cluster.yaml``."""
+        """Fail-domain key of ``host``, or None if it is not in ``cluster.yaml``."""
         t = self.hosts.get(host)
         if t is None or t.rack is None:
             return None
         return fail_domain_key(t.datacenter, t.rack)
 
     def domains_in_dc(self, dc: str | None) -> set[str]:
-        """Every fail-domain key of realm ``dc``."""
+        """Fail-domain keys of realm ``dc``."""
         return {d for d, ddc in self._domain_to_dc.items() if ddc == dc}
 
     def dc_of_domain(self, domain: str) -> str | None:
@@ -297,15 +245,9 @@ class ClusterTopologyModel:
 
 
 class BudgetView:
-    """Read-only snapshot of both budgets, for filtering many candidates at once.
+    """Read-only budget snapshot: one lock for a whole menu of candidates.
 
-    :meth:`FailureModelGuard.budget_view` builds one under a single lock; the scheduler then tests
-    every (type, target) pair against it instead of locking per candidate. Each candidate is
-    checked against the same captured state — exactly what per-candidate
-    :meth:`FailureModelGuard.fits` calls did, minus the lock traffic.
-
-    A view is advisory and may be stale: :meth:`FailureModelGuard.reserve` re-checks atomically and
-    refuses the fault if the budget moved meanwhile.
+    Advisory — :meth:`FailureModelGuard.reserve` re-checks atomically before anything is injected.
     """
 
     __slots__ = ("impaired_racks", "impaired_slots", "touched", "_is_tolerable", "_max_slots")
@@ -326,17 +268,14 @@ class BudgetView:
         self._max_slots = max_slots
 
     def fits(self, footprint: Footprint) -> bool:
-        if not self._is_tolerable(set(self.impaired_racks) | set(footprint.racks)):
-            return False
-        if footprint.slots <= 0 or self._max_slots <= 0:
-            return True
-        return self.impaired_slots + footprint.slots <= self._max_slots
+        return self._is_tolerable(
+            set(self.impaired_racks) | set(footprint.racks)
+        ) and _slots_within_budget(self.impaired_slots, footprint.slots, self._max_slots)
 
 
 @dataclass
 class _Impairment:
-    """One recorded fault footprint. ``deadline`` is a ``time.monotonic()`` value; ``None`` = held
-    until an explicit extract."""
+    """One recorded fault. ``deadline`` is ``time.monotonic()``; ``None`` = held until extracted."""
 
     execution_id: str
     racks: set[str]
@@ -346,14 +285,13 @@ class _Impairment:
 
 
 class FailureModelGuard:
-    """Tracks impaired fail domains (racks) + dynamic-node slots against the failure model.
+    """Tracks impaired fail domains + slots. No dispatch-time veto; two ways in:
 
-    Safety is applied at plan time via :meth:`filter_safe` (no dispatch-time veto).
-    ``record_inject`` / ``record_extract`` update the touched set after dispatch.
-    Tablet targets contribute nothing; slot (dynamic node) targets contribute no rack but
-    draw from a separate slot budget (``total_slots`` × ``slot_fraction``).
-
-    Assumes a single active nemesis in MVP (no allocate/reserve locks across types).
+    * lease API (boundary scheduler): :meth:`budget_view` to filter, :meth:`reserve` to claim
+      atomically (the only call that refuses), :meth:`release` on recovery;
+    * plan-then-record (legacy loop, manual inject): :meth:`filter_safe`, then
+      :meth:`record_inject` / :meth:`record_extract` — recording never refuses, the fault already
+      happened.
     """
 
     def __init__(
@@ -366,39 +304,30 @@ class FailureModelGuard:
         self._topology = topology
         self._lock = threading.Lock()
         self._impairments: list[_Impairment] = []
-        self._total_slots = max(0, int(total_slots))
-        self._slot_fraction = float(slot_fraction)
-        # ≥1 when the cluster has any slots so slot chaos still runs on small test clusters;
-        # 0 means no slots known -> the slot budget fails open (never blocks).
-        self._max_slots = (
-            max(1, int(self._total_slots * self._slot_fraction)) if self._total_slots > 0 else 0
-        )
+        slots = max(0, int(total_slots))
+        # ≥1 so slot chaos still runs on small clusters; 0 (slot count unknown) never blocks.
+        self._max_slots = max(1, int(slots * float(slot_fraction))) if slots else 0
 
     @property
     def enabled(self) -> bool:
-        """Always True — an unusable topology raises at construction (see the module docstring).
-
-        Reported through :meth:`snapshot` and ``/api/scheduler`` / ``/api/problems`` so a report
-        can state that chaos ran under a live guard.
-        """
+        """Always True — an unusable topology raises at construction. Reported in :meth:`snapshot`."""
         return self._topology.guards
 
     # -- rack resolution ----------------------------------------------------
 
     def _racks_for_host(self, host: str, scope: ImpactScope) -> set[str]:
-        """Fail domains (``<dc>/<rack>`` keys) touched by injecting ``scope`` on ``host``."""
+        """Fail domains touched by injecting ``scope`` on ``host``."""
         if scope == ImpactScope.DATACENTER:
             dc = self._topology.dc_of(host)
             domains = self._topology.domains_in_dc(dc)
             return set(domains) if domains else {self._synthetic_key(host)}
-        # NODE / DISK / RACK — and PILE / UNKNOWN as best effort — collapse to the host's own fail
-        # domain. SLOT never reaches here: ``_racks_for_target`` routes it to the slot budget.
+        # Everything else collapses to the host's own domain (SLOT is routed to the slot budget).
         domain = self._topology.domain_of(host)
         return {domain if domain is not None else self._synthetic_key(host)}
 
     @staticmethod
     def _is_slot(target: ChaosTarget, scope: ImpactScope) -> bool:
-        """A dynamic-node (slot) fault — draws from the slot budget, not a rack fail-domain."""
+        """A slot fault: draws from the slot budget, not from a fail domain."""
         return scope is ImpactScope.SLOT or target.kind is TargetKind.SLOT
 
     def _racks_for_target(self, target: ChaosTarget, scope: ImpactScope) -> set[str]:
@@ -411,26 +340,18 @@ class FailureModelGuard:
         return self._racks_for_host(target.host, scope)
 
     def _synthetic_key(self, host: str) -> str:
-        """Fail-domain key for a host ``cluster.yaml`` has no rack for (e.g. an agent host that is
-        not in the config at all).
-
-        Namespaced by realm like a real domain key, so unknown-rack hosts in different DCs are not
-        lumped into one sacrificial realm under ``mirror-3-dc``.
-        """
+        """Fail-domain key for a host with no rack in ``cluster.yaml``; still namespaced by realm."""
         return f"{_SYNTHETIC_DOMAIN_PREFIX}{fail_domain_key(self._topology.dc_of(host), host)}"
 
     def _realm_of_domain(self, domain: str) -> str | None:
-        """Realm (datacenter) of a fail-domain key, synthetic ones included."""
+        """Realm of a fail-domain key, synthetic ones included."""
         if domain.startswith(_SYNTHETIC_DOMAIN_PREFIX):
             dc = domain[len(_SYNTHETIC_DOMAIN_PREFIX):].split("/", 1)[0]
             return None if dc == _UNKNOWN_DC else dc
         return self._topology.dc_of_domain(domain)
 
     def footprint_for(self, target: ChaosTarget, scope: ImpactScope) -> Footprint:
-        """What ``target`` consumes at ``scope``: fail-domain racks and/or one slot.
-
-        Empty for tablets; one slot (no rack) for dynamic-node kills; the host's rack(s)
-        otherwise (static node / disk / datacenter)."""
+        """Empty for tablets, one slot for slot kills, the host's fail domain(s) otherwise."""
         return Footprint(
             racks=frozenset(self._racks_for_target(target, scope)),
             slots=1 if self._is_slot(target, scope) else 0,
@@ -455,10 +376,10 @@ class FailureModelGuard:
         return sum(imp.slots for imp in self._impairments)
 
     def _slots_ok(self, add_slots: int, now: float) -> bool:
-        """Whether ``add_slots`` more slots stay within the 30% cluster budget (fail-open at 0)."""
+        """Whether ``add_slots`` more slots stay within the budget."""
         if add_slots <= 0 or self._max_slots <= 0:
             return True
-        return self._active_slots(now) + add_slots <= self._max_slots
+        return _slots_within_budget(self._active_slots(now), add_slots, self._max_slots)
 
     def _touched_keys(self, now: float) -> set[str]:
         self._purge_expired(now)
@@ -474,7 +395,7 @@ class FailureModelGuard:
         if tol.kind == "domains":
             return n <= tol.max_domains
         if tol.kind == "realm_plus_domain":
-            # One realm may be lost entirely, plus max_extra_domains in other realms combined.
+            # One realm may be lost entirely, plus max_extra_domains elsewhere.
             by_dc: dict[str | None, int] = {}
             for domain in impaired_racks:
                 realm = self._realm_of_domain(domain)
@@ -484,8 +405,7 @@ class FailureModelGuard:
             sacrificial = max(by_dc.values())  # the realm we allow to fail fully
             remaining = n - sacrificial
             return remaining <= tol.max_extra_domains
-        # Unreachable: an erasure mode the model doesn't understand never gets past parsing.
-        return True
+        return True  # unreachable: unknown modes never get past parsing
 
     # -- public API ---------------------------------------------------------
 
@@ -494,16 +414,10 @@ class FailureModelGuard:
         candidates: Iterable[ChaosTarget],
         scope: ImpactScope,
     ) -> list[ChaosTarget]:
-        """Return a jointly safe subset of ``candidates`` under the fail-domain budget.
+        """Jointly safe subset of ``candidates``: each admission narrows the budget for the next.
 
-        Candidates are checked in order. Each admitted target's fail domains are added to
-        the running ``active`` set, so later candidates see earlier admissions (order-dependent).
-        Already-touched identities (``ChaosTarget.identity_key``) are skipped.
-
-        Only the erasure/fail-domain dimension is checked here: slot candidates carry no fail
-        domain, so they are always admitted regardless of the slot budget. Use :meth:`fits` /
-        :meth:`reserve` (boundary scheduler) when the slot budget must hold — see the module
-        docstring.
+        Skips already-impaired identities. Fail domains only — a slot candidate has none, so it is
+        always admitted here and :meth:`reserve` is what refuses it.
         """
         candidates = list(candidates)
         now = time.monotonic()
@@ -525,23 +439,7 @@ class FailureModelGuard:
                     active = hypothetical
         return safe
 
-    def filter_safe_hosts(self, hosts: Iterable[str], scope: ImpactScope) -> list[str]:
-        """Legacy wrapper: host strings → HOST targets → filter → host strings."""
-        targets = self.filter_safe(
-            [ChaosTarget.for_host(h) for h in hosts],
-            scope,
-        )
-        return [t.host for t in targets]
-
     # -- lease-based budget API ---------------------------------------------
-
-    def fits(self, footprint: Footprint) -> bool:
-        """True if adding ``footprint`` keeps both budgets within tolerance (read-only)."""
-        now = time.monotonic()
-        with self._lock:
-            return self._is_tolerable(
-                self._active_racks(now) | set(footprint.racks)
-            ) and self._slots_ok(footprint.slots, now)
 
     def reserve(
         self,
@@ -549,14 +447,11 @@ class FailureModelGuard:
         recovery_sec: float | None = None,
         identity_key: str | None = None,
     ) -> str | None:
-        """Atomically claim ``footprint`` (racks and/or slots) under one lock; return a lease id,
-        or None if it exceeds either budget. ``recovery_sec`` auto-expires the lease after that
-        many seconds; ``None`` holds it until :meth:`release`. ``identity_key`` records which target
-        the lease covers so it shows up in :meth:`active_identities` (schedulers skip already-impaired
-        targets).
+        """Claim ``footprint`` atomically; return a unique lease id, or None if it exceeds a budget.
 
-        Every granted lease id is unique, so callers may key their own bookkeeping by it (the
-        recovery probe tracks pending extracts that way)."""
+        ``recovery_sec`` auto-expires the lease; ``None`` holds it until :meth:`release`.
+        ``identity_key`` is reported by :meth:`budget_view` so schedulers skip impaired targets.
+        """
         now = time.monotonic()
         deadline = None if recovery_sec is None else now + float(recovery_sec)
         with self._lock:
@@ -576,14 +471,8 @@ class FailureModelGuard:
             )
             return lease_id
 
-    def active_identities(self) -> set[str]:
-        """Identity keys of every non-expired impairment."""
-        now = time.monotonic()
-        with self._lock:
-            return self._touched_keys(now)
-
     def budget_view(self) -> BudgetView:
-        """Snapshot both budgets and the touched identities under one lock (see :class:`BudgetView`)."""
+        """Snapshot both budgets and the impaired identities under one lock."""
         now = time.monotonic()
         with self._lock:
             return BudgetView(
@@ -611,15 +500,10 @@ class FailureModelGuard:
         scope: ImpactScope,
         recovery_sec: float | None = DEFAULT_RECOVERY_SEC,
     ) -> None:
-        """Mark ``target``'s fail domain(s) impaired after a successful plan/dispatch.
+        """Account for an already-dispatched fault; never refuses.
 
-        ``recovery_sec``: auto-release window; ``None`` holds until an explicit extract.
-        ``target`` may be a hostname string (legacy) or :class:`ChaosTarget`.
-
-        Charges both dimensions of the target's :meth:`footprint_for` — fail domains for static
-        faults, one slot for a dynamic-node kill. A footprint that consumes nothing (tablets) is
-        not recorded at all. Unlike :meth:`reserve` this never refuses: the fault was already
-        dispatched, so the budget is told the truth even when that truth exceeds it.
+        Charges both dimensions of :meth:`footprint_for` (nothing is recorded for tablets).
+        ``recovery_sec=None`` holds the impairment until an explicit extract.
         """
         chaos_target = (
             target if isinstance(target, ChaosTarget) else ChaosTarget.for_host(str(target))
@@ -658,8 +542,8 @@ class FailureModelGuard:
                 imp for imp in self._impairments if imp.execution_id != execution_id
             ]
             if len(self._impairments) == before:
-                # Untracked execution (e.g. after restart): drop by identity, not by rack subset
-                # (same rack can hold unrelated impairments).
+                # Untracked execution (e.g. after a restart): drop by identity, not by domain —
+                # one domain can hold unrelated impairments.
                 key = chaos_target.identity_key()
                 self._impairments = [
                     imp for imp in self._impairments if imp.identity_key != key
@@ -669,14 +553,12 @@ class FailureModelGuard:
         now = time.monotonic()
         with self._lock:
             active = sorted(self._active_racks(now))
-            touched = sorted(self._touched_keys(now))
             return {
                 "enabled": self.enabled,
                 "erasure": self._topology.tolerance.erasure,
                 "impaired_racks": active,
                 "impaired_slots": self._active_slots(now),
                 "max_slots": self._max_slots,
-                "touched_targets": touched,
                 "tracked_executions": len(self._impairments),
             }
 

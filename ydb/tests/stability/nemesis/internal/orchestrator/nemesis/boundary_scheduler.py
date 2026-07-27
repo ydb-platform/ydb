@@ -1,16 +1,12 @@
-"""Single-threaded nemesis scheduler.
+"""Single-threaded nemesis scheduler that walks the failure-model boundary.
 
-Walks the failure-model boundary: each tick breaks a random number of things (``cap``), picking
-each fault uniformly at random from whatever currently fits the budget, reserving it atomically,
-then sleeps a randomized interval. Replaces the per-type schedule threads in ``schedule_loop.py``.
+Each tick breaks a random number of things (``cap``), picking uniformly from whatever fits the
+budget, reserving atomically, then sleeps a randomized interval. Replaces the per-type threads in
+``schedule_loop.py``.
 
-Budget is released by the :class:`RecoveryProbe`, per the type's :func:`recovery_mode_for`:
-self-recovering faults are released once healthcheck sees the host answer again; toggle faults
-are held for their ``auto_recovery_sec`` then actively extracted. Without a probe, self-recovering
-faults fall back to the reserve timer so budget never sticks.
-
-:meth:`BoundaryNemesisScheduler.stop` drains toggle faults that are still inside their hold
-window through their extract, so switching chaos off never leaves the cluster broken.
+Budget is released by the :class:`RecoveryProbe`: self-recovering faults once healthcheck sees the
+host answer again, toggle faults after ``auto_recovery_sec`` via an extract. :meth:`stop` extracts
+whatever is still held, so switching chaos off never leaves the cluster broken.
 """
 
 from __future__ import annotations
@@ -26,6 +22,7 @@ from ydb.tests.stability.nemesis.internal.nemesis.catalog import (
     impact_scope_for,
     recovery_mode_for as catalog_recovery_mode_for,
     recovery_sec_for,
+    supports_boundary_scheduler,
     target_kind_for,
 )
 from ydb.tests.stability.nemesis.internal.nemesis.chaos_dispatch import DispatchCommand
@@ -40,11 +37,8 @@ from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model imp
 
 logger = logging.getLogger(__name__)
 
-# Curated stability chaos profile: datacenter stop, node kill, slot kill, node stop/start, disk
-# break/cleanup, clock skew, plus tablet chaos. Filtered to what the cluster actually registers
-# (e.g. the DC type only exists on multi-DC clusters). Toggle members are recovered via timed
-# extract. Tablet types are BYPASS (injected without spending the failure-model budget), except
-# KickTabletsFromNodeNemesis, which kills the node and so is counted like any other node fault.
+# Curated stability profile, filtered to what this cluster registers (the DC type needs multi-DC).
+# Tablet types are BYPASS; KickTabletsFromNode kills the node, so it is budgeted like a node fault.
 _STABILITY_PROFILE: tuple[str, ...] = (
     "DataCenterStopNodesNemesis",
     "KillNodeNemesis",
@@ -62,10 +56,17 @@ _STABILITY_PROFILE: tuple[str, ...] = (
     "KickTabletsFromNodeNemesis",
 )
 
+# A tick can be slow: every dispatch is an HTTP POST with its own timeout.
+DEFAULT_STOP_JOIN_SEC: float = 10.0
+# ``start()`` must not run on top of a thread a previous ``stop()`` gave up on.
+DEFAULT_RESTART_JOIN_SEC: float = 30.0
+
 
 def default_enabled_types() -> list[str]:
-    """The stability chaos profile, restricted to types registered for this cluster."""
-    return [t for t in _STABILITY_PROFILE if t in NEMESIS_TYPES]
+    """The stability chaos profile: registered for this cluster and usable by this scheduler."""
+    return [
+        t for t in _STABILITY_PROFILE if t in NEMESIS_TYPES and supports_boundary_scheduler(t)
+    ]
 
 
 class BoundaryNemesisScheduler:
@@ -89,6 +90,8 @@ class BoundaryNemesisScheduler:
         max_per_tick: int = 3,
         default_recovery_sec: float = DEFAULT_RECOVERY_SEC,
         rng: random.Random | None = None,
+        stop_join_sec: float = DEFAULT_STOP_JOIN_SEC,
+        restart_join_sec: float = DEFAULT_RESTART_JOIN_SEC,
     ) -> None:
         self._guard = guard
         self._inventory = inventory
@@ -110,6 +113,8 @@ class BoundaryNemesisScheduler:
         self._base_interval = float(base_interval)
         self._jitter = float(jitter)
         self._max_per_tick = max(1, int(max_per_tick))
+        self._stop_join_sec = float(stop_join_sec)
+        self._restart_join_sec = float(restart_join_sec)
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -159,8 +164,7 @@ class BoundaryNemesisScheduler:
     ) -> list[tuple[str, ChaosTarget, Footprint]]:
         with self._cfg_lock:
             enabled = list(self._enabled)
-        # One budget snapshot for the whole menu: every candidate is judged against the same state,
-        # and reserve() re-checks atomically before anything is injected.
+        # One snapshot for the whole menu; reserve() re-checks atomically before injecting.
         view = self._guard.budget_view()
         impaired = view.touched
         can_extract = self._can_extract()
@@ -179,9 +183,8 @@ class BoundaryNemesisScheduler:
                     continue
                 seen.add(key)
                 if bypass:
-                    # BYPASS: not counted against the failure budget, so it's offered every tick
-                    # regardless of what's impaired. Deduped per (type, target) — tablet types all
-                    # share one control-host target, so this keeps each firing at most once a tick.
+                    # Costs no budget, so it is always offered. Deduped per (type, target) because
+                    # tablet types share one control-host target.
                     if (nemesis_type, key) not in bypass_used:
                         menu.append((nemesis_type, target, Footprint()))
                     continue
@@ -204,7 +207,7 @@ class BoundaryNemesisScheduler:
                 break
             nemesis_type, target, footprint = self._rng.choice(menu)
             if self._mode_for(nemesis_type) is GuardMode.BYPASS:
-                # No budget to reserve and no probe to track — just fire and remember it fired.
+                # Nothing to reserve or track — fire and remember it fired.
                 for cmd in self._plan_inject(nemesis_type, target):
                     self._dispatch(cmd)
                 bypass_used.add((nemesis_type, target.identity_key()))
@@ -213,13 +216,9 @@ class BoundaryNemesisScheduler:
             recovery = self._recovery_sec_for(nemesis_type)
             if recovery is None:
                 recovery = self._default_recovery_sec
-            # The probe releases the budget by fact, so hold it (recovery_sec=None):
-            #   extract  — toggle fault; probe holds `recovery`s then dispatches the extract.
-            #   self     — probe releases once healthcheck sees the host answer again.
-            # No rack footprint (slots/tablets) or a missing probe falls back to the reserve timer
-            # so self-recovering budget never sticks. Slot kills take this timer path deliberately:
-            # host healthcheck can't observe an individual slot's restart, so the recovery window
-            # is the honest signal.
+            # Hold the budget (recovery_sec=None) when the probe will release it by fact: after a
+            # timed extract, or once healthcheck sees the host again. Slot kills have no fail domain
+            # and healthcheck cannot see a single slot restart, so they fall back to the timer.
             by_extract = (
                 self._recovery_mode_for(nemesis_type) == "extract" and self._can_extract()
             )
@@ -273,8 +272,22 @@ class BoundaryNemesisScheduler:
             self._stop.wait(self._sleep_seconds())
 
     def start(self) -> None:
-        if self._thread and self._thread.is_alive():
-            return
+        t = self._thread
+        if t is not None and t.is_alive():
+            if not self._stop.is_set():
+                return  # already running
+            # A previous stop() gave up on a slow tick. Returning here would report "started" while
+            # the stop flag kills the old thread and the probe stays down — no budget ever released.
+            logger.warning(
+                "start(): previous scheduler thread is still stopping; waiting up to %.0fs",
+                self._restart_join_sec,
+            )
+            t.join(timeout=self._restart_join_sec)
+            if t.is_alive():
+                raise RuntimeError(
+                    f"previous scheduler thread is still shutting down after "
+                    f"{self._restart_join_sec:.0f}s; not starting a second one"
+                )
         if self._recovery_probe is not None:
             self._recovery_probe.start()
         self._stop.clear()
@@ -285,13 +298,17 @@ class BoundaryNemesisScheduler:
         self._stop.set()
         t = self._thread
         if t and t.is_alive() and t is not threading.current_thread():
-            t.join(timeout=2.0)
+            t.join(timeout=self._stop_join_sec)
+            if t.is_alive():
+                logger.warning(
+                    "scheduler thread still inside a tick %.0fs after stop; stopping the probe "
+                    "anyway — start() will wait for it",
+                    self._stop_join_sec,
+                )
         if self._recovery_probe is not None:
             self._recovery_probe.stop()
-            # Toggle faults still inside their hold window must be extracted here: nothing else
-            # will, so stopping chaos would otherwise leave a node stopped / disk broken / clock
-            # skewed for the rest of the run. Runs after the probe thread is joined so it cannot
-            # extract the same lease concurrently.
+            # Nothing else extracts them, so stopping chaos would leave a node stopped / disk
+            # broken / clock skewed. After the join, so no lease is extracted twice.
             try:
                 drained = self._recovery_probe.drain_extracts()
             except Exception:

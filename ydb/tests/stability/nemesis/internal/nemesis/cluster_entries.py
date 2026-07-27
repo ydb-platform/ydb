@@ -154,8 +154,7 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "target_kind": TargetKind.NODE,
         "impact_scope": ImpactScope.NODE,
         "guard_mode": GuardMode.FULL,
-        # SIGKILL + systemd restart + rejoin: 20s was well under real re-replication, so the
-        # probe cried "stuck" too early (and the timer freed budget before the node was back).
+        # SIGKILL + systemd restart + rejoin; shorter windows cried "stuck" too early.
         "auto_recovery_sec": 120,
     }
     # out["DnsNemesis"] = {
@@ -264,9 +263,7 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         }
 
     # --- daemon kills -------------------------------------------------------
-    # SIGKILL + no-op extract: systemd auto-restarts the daemon, so the guard releases the slot
-    # on a timer (auto_recovery_sec) covering restart + rejoin, not on an explicit extract. A slot
-    # is a dynamic node — it draws from the separate 30% slot budget, not the erasure/rack budget.
+    # SIGKILL + systemd restart, so the budget is released on a timer, not by an extract.
     out["KillSlotDaemonNemesis"] = {
         "runner": ClusterKillSlotDaemonNemesis(),
         "schedule": 120,
@@ -292,6 +289,8 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "schedule": 300,
         "ui_group": _UI_GROUP,
         "planner_factory": _serial_staggered_node_planner_factory,
+        # Injects exactly the candidates it is handed, so the boundary scheduler may drive it.
+        "boundary_safe": True,
         "target_kind": TargetKind.NODE,
         "impact_scope": ImpactScope.NODE,
         "guard_mode": GuardMode.FULL,
@@ -301,15 +300,14 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         "schedule": 300,
         "ui_group": _UI_GROUP,
         "planner_factory": _serial_staggered_slot_planner_factory,
+        "boundary_safe": True,
         "target_kind": TargetKind.SLOT,
         "impact_scope": ImpactScope.SLOT,
         "guard_mode": GuardMode.FULL,
     }
 
     # --- disk / rolling / stop-start / suspend ------------------------------
-    # Toggle faults (``recovery: extract``): the pinned planner injects the scheduler-chosen
-    # target; the boundary scheduler holds the budget for ``auto_recovery_sec`` then dispatches
-    # an extract so the agent-side actor restores its stored state.
+    # Toggle faults: the scheduler holds the budget for ``auto_recovery_sec``, then extracts.
     for wire, cls, sched, scope, tkind, extra in (
         ("SafelyBreakDiskNemesis", ClusterSafelyBreakDiskNemesis, 400, ImpactScope.DISK, TargetKind.DISK,
          {"recovery": "extract", "auto_recovery_sec": 120}),
@@ -318,7 +316,9 @@ def all_nemesis_type_entries() -> dict[str, dict[str, Any]]:
         # ("RollingUpdateClusterNemesis", ClusterRollingUpdateNemesis, 120, ImpactScope.NODE, TargetKind.NODE, {}),
         ("StopStartNodeNemesis", ClusterStopStartNodeNemesis, 400, ImpactScope.NODE, TargetKind.NODE,
          {"recovery": "extract", "auto_recovery_sec": 90}),
-        ("SuspendNodeNemesis", ClusterSuspendNodeNemesis, 800, ImpactScope.NODE, TargetKind.NODE, {}),
+        # SIGSTOP: the node never comes back on its own, so it needs an extract like the others.
+        ("SuspendNodeNemesis", ClusterSuspendNodeNemesis, 800, ImpactScope.NODE, TargetKind.NODE,
+         {"recovery": "extract", "auto_recovery_sec": 90}),
     ):
         out[wire] = {
             "runner": cls(),
@@ -356,8 +356,8 @@ def _topology_conditional_entries() -> dict[str, dict[str, Any]]:
     extra: dict[str, dict[str, Any]] = {}
 
     if yaml_has_multi_datacenter(path):
-        # StopNodes only (self-recovering stop/start pulse). Route/iptables/DNS variants stay off:
-        # they need explicit extract and don't fit the inject-only boundary-scheduler path.
+        # StopNodes only: it is a self-recovering pulse. The route/iptables/DNS variants need an
+        # explicit extract and don't fit the inject-only path.
         from ydb.tests.stability.nemesis.internal.nemesis.runners import (
             ClusterDataCenterStopNodesNemesis,
         )
@@ -369,7 +369,7 @@ def _topology_conditional_entries() -> dict[str, dict[str, Any]]:
             "planner_factory": _dc_fanout_planner_factory,
             "target_kind": TargetKind.DATACENTER,
             "impact_scope": ImpactScope.DATACENTER,
-            "guard_mode": GuardMode.FULL,  # reserves the whole realm (mirror-3-dc sacrificial DC)
+            "guard_mode": GuardMode.FULL,  # reserves the whole realm
             "auto_recovery_sec": 240,
             "supports_manual": False,
         }

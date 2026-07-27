@@ -28,10 +28,8 @@ logger = logging.getLogger(__name__)
 def datacenter_inject_fanout(
     nemesis_type: str, target: ChaosTarget, inventory
 ) -> list[DispatchCommand]:
-    """Inject the DC fault on every host of ``target``'s datacenter (one shared scenario).
-
-    The scheduler already chose and reserved this DC, so we fan out to exactly its hosts
-    rather than let the round-robin ``DataCenterFanoutPlanner`` pick a different one."""
+    """Inject on every host of ``target``'s DC (one scenario) — the DC is already reserved, so the
+    round-robin ``DataCenterFanoutPlanner`` must not pick a different one."""
     dc = target.group_id
     hosts = [
         t.host for t in inventory.entities(TargetKind.DATACENTER) if t.group_id == dc
@@ -56,12 +54,7 @@ class ChaosOrchestratorStore:
         self._inventory = inventory
 
     def rebuild_planner(self, nemesis_type: str, params: dict | None = None) -> bool:
-        """Re-create a planner for ``nemesis_type`` with the supplied ``params``.
-
-        Used when the UI starts a scheduled run with custom parameters. Returns
-        ``True`` if the planner was rebuilt, ``False`` if the type is unknown
-        or planner construction failed.
-        """
+        """Re-create a planner with UI-supplied ``params``; False if that failed."""
         with self._lock:
             try:
                 self._planners[nemesis_type] = build_planner(nemesis_type, params)
@@ -106,14 +99,10 @@ class ChaosOrchestratorStore:
     def plan_inject_target(
         self, nemesis_type: str, target: ChaosTarget
     ) -> list[DispatchCommand]:
-        """Inject command(s) for one already-chosen ``target`` (boundary scheduler path).
+        """Inject on one already-reserved ``target`` (boundary scheduler path), so no pre-filter.
 
-        The scheduler has already reserved the failure budget, so this skips the legacy
-        ``filter_safe`` pre-filter. A DATACENTER target fans out to every host in the chosen
-        DC (the round-robin fanout planner would pick its own DC, not this one); toggle faults
-        (``recovery: extract``) are dispatched directly so a stateful planner's cross-tick
-        bookkeeping can't fight the scheduler; anything else goes to its planner's single-target
-        tick.
+        A DATACENTER target is fanned out over its DC; a toggle fault is dispatched directly, so a
+        planner's cross-tick state cannot fight the scheduler; anything else goes to its planner.
         """
         if target.kind is TargetKind.DATACENTER and self._inventory is not None:
             return datacenter_inject_fanout(nemesis_type, target, self._inventory)
@@ -127,10 +116,8 @@ class ChaosOrchestratorStore:
     def plan_extract_target(
         self, nemesis_type: str, target: ChaosTarget
     ) -> list[DispatchCommand]:
-        """Extract command for one chosen ``target`` (boundary-scheduler toggle recovery).
-
-        Bypasses the planner's cross-tick state — the scheduler owns which target is broken;
-        the agent-side actor restores from its own stored state on extract."""
+        """Extract one chosen ``target``: the scheduler owns what is broken, and the agent-side
+        actor restores from its own stored state."""
         return self._direct_commands(nemesis_type, target, "extract")
 
     def _direct_commands(

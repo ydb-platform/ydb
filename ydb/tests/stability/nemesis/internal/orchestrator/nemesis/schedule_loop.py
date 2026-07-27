@@ -19,7 +19,7 @@ from ydb.tests.stability.nemesis.internal.nemesis.catalog import (
     NEMESIS_TYPES,
     guard_mode_for,
     impact_scope_for,
-    recovery_sec_for,
+    impairment_hold_sec_for,
 )
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_state import ChaosOrchestratorStore
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import FailureModelGuard, GuardMode
@@ -245,7 +245,7 @@ class OrchestratorNemesisSchedule:
             self._dispatch_and_record(cmd)
 
     def _dispatch_and_record(self, cmd: DispatchCommand) -> None:
-        """Dispatch a planned command and record FULL-mode impact (no veto)."""
+        """Dispatch a planned command and account for its impact (no veto)."""
         self.dispatch_command(cmd, track_history=True)
         guard = self._failure_guard
         if guard is None or guard_mode_for(cmd.nemesis_type) is not GuardMode.FULL:
@@ -258,7 +258,8 @@ class OrchestratorNemesisSchedule:
                 cmd.execution_id,
                 cmd.target,
                 scope,
-                recovery_sec=recovery_sec_for(cmd.nemesis_type),
+                # This loop toggles a fault back with its next inject, not with an extract.
+                recovery_sec=impairment_hold_sec_for(cmd.nemesis_type, paired_extract=False),
             )
 
     def _run_planned_tick(self, process_type: str) -> None:

@@ -28,14 +28,12 @@ class KillNodeNemesis(MonitoredAgentActor):
             ic_port = int(payload["node_ic_port"])
 
         if ic_port is None:
-            # Fail loudly: the orchestrator has already reserved failure budget for this fault,
-            # so a silent no-op would look like injected chaos that never happened.
+            # Loudly: the budget is already reserved, so a no-op would look like injected chaos.
             raise ValueError(
                 "KillNodeNemesis: ChaosTarget must include ic_port (or payload.node_ic_port)"
             )
 
-        # Match the port exactly (not as a prefix of a longer one), and no `xargs -r`: an empty
-        # pid list must fail the command instead of reporting a successful kill of nothing.
+        # Exact port match, and no `xargs -r`: an empty pid list must fail, not report success.
         cmd = (
             "ps aux | grep -E -- '--ic-port %d($|[^0-9])' | grep -v grep | awk '{ print $2 }' | "
             "xargs sudo kill -%d" % (ic_port, int(sig))

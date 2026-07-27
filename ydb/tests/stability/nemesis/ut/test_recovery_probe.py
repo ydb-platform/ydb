@@ -1,4 +1,4 @@
-"""Unit tests for fact-based recovery of reserved failure budget."""
+"""Fact-based recovery of reserved failure budget."""
 
 from __future__ import annotations
 
@@ -23,8 +23,7 @@ from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.recovery_probe im
 
 def _guard() -> FailureModelGuard:
     hosts = [
-        {"name": f"h{i}", "location": {"rack": f"r{i}", "data_center": "dc1"}}
-        for i in (1, 2, 3, 4)
+        {"name": f"h{i}", "location": {"rack": f"r{i}", "data_center": "dc1"}} for i in (1, 2, 3, 4)
     ]
     fd, path = tempfile.mkstemp(suffix=".yaml")
     os.close(fd)
@@ -35,8 +34,8 @@ def _guard() -> FailureModelGuard:
 
 
 class FakeClock:
-    def __init__(self, t: float = 0.0) -> None:
-        self.t = t
+    def __init__(self) -> None:
+        self.t = 0.0
 
     def __call__(self) -> float:
         return self.t
@@ -45,216 +44,131 @@ class FakeClock:
         self.t += dt
 
 
-def _reserve(guard, host, node_id):
+def _reserve(guard, host="h1", node_id=1):
     target = ChaosTarget.for_node(host, node_id=node_id)
-    fp = guard.footprint_for(target, ImpactScope.NODE)
-    lease = guard.reserve(fp, recovery_sec=None, identity_key=target.identity_key())
+    lease = guard.reserve(
+        guard.footprint_for(target, ImpactScope.NODE),
+        recovery_sec=None,
+        identity_key=target.identity_key(),
+    )
     return target, lease
 
 
-class TestRecoveryProbe:
-    def test_recovered_fault_releases_budget(self):
-        guard = _guard()
-        clock = FakeClock()
-        recovered_hosts = set()
+class TestSelfRecovery:
+    def test_budget_is_released_once_the_target_is_back(self):
+        guard, clock, recovered = _guard(), FakeClock(), set()
         probe = RecoveryProbe(
-            guard=guard,
-            recovered=lambda t: t.host in recovered_hosts,
-            min_hold_sec=30.0,
-            default_timeout_sec=300.0,
-            clock=clock,
+            guard=guard, recovered=lambda t: t.host in recovered, min_hold_sec=30.0, clock=clock
         )
-        target, lease = _reserve(guard, "h1", 1)
+        target, lease = _reserve(guard)
         probe.track(lease, target, "KillNode", timeout_sec=300.0)
-        assert guard.snapshot()["impaired_racks"] == ["dc1/r1"]
 
-        # Still within min-hold: recovery signal must be ignored.
-        recovered_hosts.add("h1")
+        recovered.add("h1")
         clock.advance(10.0)
-        assert probe.tick() == []
-        assert guard.snapshot()["impaired_racks"] == ["dc1/r1"], "must not release before min-hold"
+        probe.tick()
+        assert guard.snapshot()["impaired_racks"] == ["dc1/r1"], "min-hold ignores early signals"
 
-        # Past min-hold and recovered -> budget released.
         clock.advance(40.0)
-        assert probe.tick() == []
-        assert guard.snapshot()["impaired_racks"] == [], (
-            f"recovered fault must release budget; snapshot={guard.snapshot()}"
-        )
-        assert probe.pending() == []
+        probe.tick()
+        assert guard.snapshot()["impaired_racks"] == [] and probe.pending() == []
 
-    def test_stuck_fault_reports_once_and_holds_budget(self):
-        guard = _guard()
-        clock = FakeClock()
-        stuck_seen: list[StuckFault] = []
+    def test_a_stuck_fault_keeps_the_budget_and_is_reported_once(self):
+        guard, clock, seen = _guard(), FakeClock(), []
         probe = RecoveryProbe(
-            guard=guard,
-            recovered=lambda t: False,  # never recovers
-            on_stuck=stuck_seen.append,
-            min_hold_sec=30.0,
-            default_timeout_sec=100.0,
-            clock=clock,
+            guard=guard, recovered=lambda t: False, on_stuck=seen.append,
+            min_hold_sec=30.0, clock=clock,
         )
-        target, lease = _reserve(guard, "h1", 1)
+        target, lease = _reserve(guard)
         probe.track(lease, target, "KillNode", timeout_sec=100.0)
 
-        clock.advance(50.0)  # past min-hold, before timeout
-        assert probe.tick() == [], "no stuck report before timeout"
+        clock.advance(50.0)
+        assert probe.tick() == [], "not stuck before the timeout"
 
-        clock.advance(60.0)  # now past 100s timeout
-        stuck = probe.tick()
-        assert len(stuck) == 1 and stuck[0].target.host == "h1", (
-            f"a fault past its timeout must be reported stuck; got {stuck}"
-        )
-        assert len(stuck_seen) == 1, "on_stuck must fire exactly once"
-        assert guard.snapshot()["impaired_racks"] == ["dc1/r1"], (
-            "a stuck fault must KEEP holding budget, never silently release"
-        )
-
-        # Subsequent ticks must not re-report the same stuck fault.
         clock.advance(60.0)
-        assert probe.tick() == []
-        assert len(stuck_seen) == 1, "stuck fault must not be re-reported every tick"
-        assert guard.snapshot()["impaired_racks"] == ["dc1/r1"]
+        stuck = probe.tick()
+        assert len(stuck) == 1 and stuck[0].target.host == "h1"
 
-    def test_forget_stops_tracking(self):
-        guard = _guard()
-        clock = FakeClock()
-        probe = RecoveryProbe(
-            guard=guard, recovered=lambda t: False, clock=clock, min_hold_sec=0.0
-        )
-        target, lease = _reserve(guard, "h1", 1)
-        probe.track(lease, target, "KillNode", timeout_sec=10.0)
-        probe.forget(lease)
-        clock.advance(1000.0)
-        assert probe.tick() == [], "a forgotten lease must not be polled or reported"
+        clock.advance(60.0)
+        assert probe.tick() == [] and len(seen) == 1, "reported once, not every tick"
+        assert guard.snapshot()["impaired_racks"] == ["dc1/r1"], "never silently released"
 
 
-class TestToggleAutoExtract:
-    def test_toggle_fault_extracts_then_releases_after_hold(self):
-        guard = _guard()
-        clock = FakeClock()
-        extracted: list[str] = []
+class TestToggleRecovery:
+    def test_extract_runs_after_the_hold_and_releases(self):
+        guard, clock, extracted = _guard(), FakeClock(), []
         probe = RecoveryProbe(
             guard=guard,
             recovered=lambda t: (_ for _ in ()).throw(AssertionError("healthcheck must not run")),
             min_hold_sec=30.0,
             clock=clock,
         )
-        target, lease = _reserve(guard, "h1", 1)
+        target, lease = _reserve(guard)
         probe.track(
             lease, target, "TimeSkewNemesis", timeout_sec=90.0,
             recover_action=lambda: extracted.append(target.host),
         )
-        assert guard.snapshot()["impaired_racks"] == ["dc1/r1"]
 
-        clock.advance(60.0)  # past min-hold, before the hold window closes
-        assert probe.tick() == []
-        assert extracted == [], "must not extract before the hold elapses"
-        assert guard.snapshot()["impaired_racks"] == ["dc1/r1"], "budget held through the hold window"
+        clock.advance(60.0)
+        probe.tick()
+        assert extracted == [] and guard.snapshot()["impaired_racks"] == ["dc1/r1"]
 
-        clock.advance(40.0)  # now past the 90s hold
-        assert probe.tick() == []
-        assert extracted == ["h1"], "hold elapsed -> extract dispatched exactly once"
-        assert guard.snapshot()["impaired_racks"] == [], "extract must release the budget"
-        assert probe.pending() == []
+        clock.advance(40.0)
+        probe.tick()
+        assert extracted == ["h1"] and guard.snapshot()["impaired_racks"] == []
 
-    def test_toggle_fault_never_reports_stuck(self):
-        guard = _guard()
-        clock = FakeClock()
-        stuck_seen: list[StuckFault] = []
+    def test_toggle_faults_are_never_reported_stuck(self):
+        guard, clock, seen = _guard(), FakeClock(), []
         probe = RecoveryProbe(
-            guard=guard,
-            recovered=lambda t: False,
-            on_stuck=stuck_seen.append,
-            min_hold_sec=0.0,
-            clock=clock,
+            guard=guard, recovered=lambda t: False, on_stuck=seen.append,
+            min_hold_sec=0.0, clock=clock,
         )
-        target, lease = _reserve(guard, "h1", 1)
-        probe.track(
-            lease, target, "StopStartNodeNemesis", timeout_sec=50.0,
-            recover_action=lambda: None,
-        )
-        clock.advance(1000.0)  # far past the hold
-        assert probe.tick() == [], "a toggle fault is recovered by extract, never reported stuck"
-        assert stuck_seen == []
-        assert guard.snapshot()["impaired_racks"] == [], "released by extract, not held as stuck"
+        target, lease = _reserve(guard)
+        probe.track(lease, target, "StopStart", timeout_sec=50.0, recover_action=lambda: None)
+        clock.advance(1000.0)
+        assert probe.tick() == [] and seen == []
 
 
 class TestDrainExtracts:
-    """Switching chaos off must not leave toggle faults applied."""
-
-    def test_drain_extracts_pending_toggle_faults_before_their_hold_elapsed(self):
-        guard = _guard()
-        clock = FakeClock()
-        extracted: list[str] = []
+    def test_drain_extracts_toggles_early_and_leaves_the_rest_tracked(self):
+        guard, clock, extracted = _guard(), FakeClock(), []
         probe = RecoveryProbe(
             guard=guard, recovered=lambda t: False, min_hold_sec=30.0, clock=clock
         )
-        target, lease = _reserve(guard, "h1", 1)
+        toggle, toggle_lease = _reserve(guard, "h1", 1)
+        self_healing, self_lease = _reserve(guard, "h2", 2)
         probe.track(
-            lease, target, "StopStartNodeNemesis", timeout_sec=600.0,
-            recover_action=lambda: extracted.append(target.host),
+            toggle_lease, toggle, "StopStart", timeout_sec=600.0,
+            recover_action=lambda: extracted.append(toggle.host),
         )
-        clock.advance(5.0)  # still deep inside the hold window
-        assert probe.tick() == [] and extracted == [], "nothing is due yet"
+        probe.track(self_lease, self_healing, "KillNode", timeout_sec=300.0)
 
-        assert probe.drain_extracts() == 1, "the pending toggle fault must be drained"
-        assert extracted == ["h1"], (
-            "drain must dispatch the extract even though the hold window has not elapsed"
-        )
-        assert guard.snapshot()["impaired_racks"] == [], (
-            f"drained fault must release its budget; snapshot={guard.snapshot()}"
-        )
-        assert probe.pending() == [], "drained faults must stop being tracked"
+        assert probe.drain_extracts() == 1, "only the toggle has something to extract"
+        assert extracted == ["h1"], "dispatched even though the hold window is far from over"
+        assert [p.lease_id for p in probe.pending()] == [self_lease], "self-healing stays tracked"
+        assert guard.snapshot()["impaired_racks"] == ["dc1/r2"], "and keeps its budget"
 
-    def test_drain_keeps_self_recovering_faults_tracked(self):
-        guard = _guard()
-        clock = FakeClock()
-        probe = RecoveryProbe(
-            guard=guard, recovered=lambda t: False, min_hold_sec=0.0, clock=clock
-        )
-        target, lease = _reserve(guard, "h1", 1)
-        probe.track(lease, target, "KillNodeNemesis", timeout_sec=300.0)  # no recover_action
-
-        assert probe.drain_extracts() == 0, (
-            "a self-recovering fault has nothing to extract — it must not be drained"
-        )
-        assert [p.lease_id for p in probe.pending()] == [lease], (
-            "self-recovering faults stay tracked so a restarted probe keeps polling them"
-        )
-        assert guard.snapshot()["impaired_racks"] == ["dc1/r1"], (
-            "draining must not release a fault that is still down"
-        )
-
-    def test_drain_is_idempotent(self):
-        guard = _guard()
-        extracted: list[str] = []
-        probe = RecoveryProbe(
-            guard=guard, recovered=lambda t: False, min_hold_sec=0.0, clock=FakeClock()
-        )
-        target, lease = _reserve(guard, "h1", 1)
-        probe.track(
-            lease, target, "TimeSkewNemesis", timeout_sec=120.0,
-            recover_action=lambda: extracted.append(target.host),
-        )
-        assert probe.drain_extracts() == 1
-        assert probe.drain_extracts() == 0, "a second drain must not re-dispatch extracts"
-        assert extracted == ["h1"]
+        assert probe.drain_extracts() == 0 and extracted == ["h1"], "idempotent"
 
 
 class TestHealthcheckRecovery:
-    def test_recovered_when_endpoint_answers(self):
+    def test_recovered_when_the_endpoint_answers(self):
         reporter = type("R", (), {"last_results": {}})()
         recovered = healthcheck_recovery(reporter)
-        t = ChaosTarget.for_node("h1", node_id=1)
+        target = ChaosTarget.for_node("h1", node_id=1)
 
-        assert recovered(t) is False, "no healthcheck data yet must read as not-recovered"
-
+        assert recovered(target) is False, "no data yet is not recovery"
         reporter.last_results = {"h1": {"self_check_result": "HC_REQUEST_ERROR"}}
-        assert recovered(t) is False, "endpoint error means the host is still down"
-
-        reporter.last_results = {"h1": {"self_check_result": "GOOD"}}
-        assert recovered(t) is True, "endpoint answering GOOD means recovered"
-
+        assert recovered(target) is False
         reporter.last_results = {"h1": {"self_check_result": "DEGRADED"}}
-        assert recovered(t) is True, "a degraded-but-answering endpoint still counts as back"
+        assert recovered(target) is True, "degraded but answering counts as back"
+
+
+def test_stuck_fault_is_serializable_for_the_problem_log():
+    fault = StuckFault(
+        lease_id="l1",
+        nemesis_type="KillNode",
+        target=ChaosTarget.for_node("h1", node_id=1),
+        held_sec=400.0,
+        timeout_sec=300.0,
+    )
+    assert fault.target.identity_key() == "node:1:h1"

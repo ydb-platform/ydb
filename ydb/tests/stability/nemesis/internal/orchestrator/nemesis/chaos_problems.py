@@ -1,22 +1,10 @@
-"""Problem log for nemesis-side anomalies, exposed via ``GET /api/problems``.
+"""Problem log for chaos-side anomalies, served by ``GET /api/problems``.
 
-Some things go wrong on the chaos side rather than on the cluster side, and nothing in the
-stability test would notice them otherwise:
+Things the cluster checks cannot see: a fault that never recovered (its budget is still held, so the
+scheduler is quietly doing less chaos) and a degraded inventory (synthesized node ids, no slot
+chaos). ``ydb/tests/stability/tests`` pulls this when disabling nemesis and attaches it to Allure.
 
-* a fault that never recovered (``RecoveryProbe`` reports it stuck and keeps holding its budget,
-  so the cluster is running degraded and the scheduler is quietly doing less chaos);
-* a degraded inventory (the cluster harness was unavailable, so node/slot ids and ports are
-  synthesized guesses and slot chaos does not run at all).
-
-An unusable failure model is *not* in this list: the orchestrator refuses to start without one
-(see ``app._require_failure_model``), so there is no "chaos ran unguarded" case to report.
-
-Both are recorded here so ``ydb/tests/stability/tests`` can pull them at the end of a phase and
-attach them to its Allure report (see ``StressUtilDeployer._report_nemesis_problems``).
-
-Problems are latched: an entry stays in the list after the fault eventually recovers, because the
-report is read once, after the run. Repeats of the same problem update ``last_seen`` / ``count``
-instead of piling up.
+Entries are latched (the report is read once, after the run) and deduplicated by kind + target.
 """
 
 from __future__ import annotations
@@ -28,7 +16,7 @@ from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
-# Problem kinds (kept stable — the stability test report groups by them).
+# Kinds are stable: the test report groups by them.
 KIND_STUCK_FAULT = "stuck_fault"
 KIND_INVENTORY_DEGRADED = "inventory_degraded"
 
@@ -111,7 +99,7 @@ class ChaosProblemStore:
         logger.warning("chaos problem recorded [%s]: %s", kind, summary)
 
     def record_stuck_fault(self, fault) -> None:
-        """``on_stuck`` callback for :class:`RecoveryProbe`."""
+        """``on_stuck`` callback for the recovery probe."""
         target = fault.target
         self.record(
             KIND_STUCK_FAULT,
@@ -155,11 +143,6 @@ class ChaosProblemStore:
     def dropped(self) -> int:
         with self._lock:
             return self._dropped
-
-    def clear(self) -> None:
-        with self._lock:
-            self._problems.clear()
-            self._dropped = 0
 
 
 __all__ = [

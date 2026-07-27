@@ -90,14 +90,12 @@ def initialize_app():
         orchestrator_router.healthcheck_reporter = HealthCheckReporter(loaded_hosts, store_results=True)
         orchestrator_router.healthcheck_reporter.start_healthchecks()
 
-        # Problems surfaced to the stability test report via GET /api/problems.
+        # Surfaced to the stability test report via GET /api/problems.
         problems = ChaosProblemStore()
         orchestrator_router.chaos_problems = problems
 
-        # Failure-model guard + inventory. The topology is normally validated at startup by
-        # require_failure_model_or_die(); parse it here too for embedded/test use, where an
-        # unusable config surfaces as a failed request instead of a dead process. Either way the
-        # guard is live once we get past this line — there is no unguarded mode.
+        # Normally validated at startup by require_failure_model_or_die(); parsed here too for
+        # embedded/test use. Either way the guard is live past this line.
         topology = current_app.config.get("NEMESIS_TOPOLOGY")
         if topology is None:
             topology = ClusterTopologyModel(cluster_yaml_path())
@@ -108,8 +106,7 @@ def initialize_app():
         orchestrator_router.failure_guard = failure_guard
         orchestrator_router.cluster_inventory = inventory
 
-        # A synthesized inventory means node/slot targets are guesses (and slot chaos is off) —
-        # not fatal, but it must not stay invisible in the test report.
+        # Synthesized targets are guesses and slot chaos is off — not fatal, but must be visible.
         if inventory.degraded_reason:
             problems.record_inventory_degraded(
                 inventory.degraded_reason,
@@ -138,14 +135,11 @@ def initialize_app():
             failure_guard=failure_guard,
         )
 
-        # Boundary-walking scheduler (started on demand via /api/scheduler/start).
-        # Recovery is fact-based via the healthcheck probe.
+        # Boundary scheduler, started on demand via /api/scheduler/start.
         probe = RecoveryProbe(
             guard=failure_guard,
             recovered=healthcheck_recovery(orchestrator_router.healthcheck_reporter),
-            # A fault that never recovers holds its budget forever — report it instead of
-            # leaving it as one ERROR line in the orchestrator log.
-            on_stuck=problems.record_stuck_fault,
+            on_stuck=problems.record_stuck_fault,  # a never-recovering fault holds budget forever
         )
         orchestrator_router.nemesis_scheduler = BoundaryNemesisScheduler(
             guard=failure_guard,
@@ -176,17 +170,14 @@ def cleanup_app(exception=None):
         if orchestrator_router.nemesis_schedule:
             orchestrator_router.nemesis_schedule.shutdown_disable_all()
 
+        # Both steps above dispatch extracts; locally-run ones would die with the interpreter.
+        agent_router.wait_for_local_processes()
+
 
 def require_failure_model_or_die(flask_app) -> None:
-    """Parse ``cluster.yaml`` into a failure model before serving, or exit the process.
-
-    The guard is not an optional extra: chaos that ignores the cluster's fault tolerance destroys
-    data and turns every stability failure into noise. So an unusable topology kills the
-    orchestrator at startup — loud, with the reason — instead of degrading into unbounded chaos.
-
-    Called from the ``run`` entry point rather than from :func:`create_app` so that merely importing
-    this module stays free of side effects. Agents don't plan chaos and need no model.
-    """
+    """Parse ``cluster.yaml`` before serving, or exit: chaos without a fault-tolerance ceiling is
+    worse than no chaos. Called from the ``run`` entry point so importing this module stays free of
+    side effects; agents plan nothing and need no model."""
     if get_settings().nemesis_type == "agent":
         return
     try:

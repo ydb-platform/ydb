@@ -1,7 +1,6 @@
 """Planner that always runs inject/extract on the first candidate (inventory / YAML order).
 
-Stateful cluster nemeses keep their Python state in one agent process, so dispatching every tick
-to the same host matches single-actor harness behavior.
+Stateful cluster nemeses keep their state in one agent process, so every tick goes to the same host.
 """
 
 from __future__ import annotations

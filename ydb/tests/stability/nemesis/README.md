@@ -111,7 +111,7 @@ Planning is entity-based (`ChaosTarget`), not host-only. Dispatch still goes to 
 
 ```text
 tick: cap = rand(1..max_per_tick)
-  → menu of (type, target) that currently fits the budget   (guard.fits)
+  → menu of (type, target) that currently fits the budget   (guard.budget_view)
   → pick uniformly, guard.reserve(footprint)                 (atomic)
   → plan_inject → dispatch (payload includes chaos_target)
   → RecoveryProbe releases the budget by fact
@@ -138,7 +138,7 @@ There is **no** dispatch-time `can_inject` veto. Safety is plan-time (`filter_sa
 
 **The failure model is mandatory.** An unusable `cluster.yaml` — missing, unparsable, unknown `static_erasure`, a host without `location.rack`, or (for `mirror-3-dc`) without `location.data_center` — raises `FailureModelConfigError` and the orchestrator refuses to start. There is no unguarded mode: chaos that ignores fault tolerance is worse than no chaos.
 
-**Catalog fields** (in `cluster_entries.py`): `target_kind`, `impact_scope`, `guard_mode` (`FULL` — filtered and accounted for; `BYPASS` — costs no budget, for tablet chaos), optional `recovery`, `auto_recovery_sec`, `supports_manual`.
+**Catalog fields** (in `cluster_entries.py`): `target_kind`, `impact_scope`, `guard_mode` (`FULL` — filtered and accounted for; `BYPASS` — costs no budget, for tablet chaos), optional `recovery` (`extract` for faults that stay applied until extracted), `auto_recovery_sec`, `supports_manual`, `boundary_safe` (a custom planner must opt in before the boundary scheduler may drive it — otherwise it could inject something other than the reserved target).
 
 **Agent contract:** node/slot/disk runners require explicit ids in `chaos_target` (`node_id`, `slot_idx`, `ic_port`) — no hostname guessing.
 
@@ -146,8 +146,8 @@ There is **no** dispatch-time `can_inject` veto. Safety is plan-time (`filter_sa
 
 - History shows the target (not only host)
 - Manual Run lists nodes/slots when `supports_manual` and `target_kind` need them; types with `supports_manual: false` (network, time skew, rolling restart, bridge pile) are schedule-only
-- `GET /api/inventory` — hosts/nodes/slots used for planning (built once at startup)
-- `GET /api/scheduler`, `POST /api/scheduler/start|stop` — boundary scheduler state and profile (`enabled`, `base_interval`, `jitter`, `max_per_tick`; invalid values and unknown type names are rejected with 400)
+- `GET /api/inventory` — hosts/nodes/slots used for planning (built once, on the orchestrator's first request; the UI fetches it once, not on every poll)
+- `GET /api/scheduler`, `POST /api/scheduler/start|stop` — boundary scheduler state and profile (`enabled`, `base_interval`, `jitter`, `max_per_tick`). Rejected with 400: invalid values, unknown type names, and types whose planner keeps its own target state (`supports_boundary_scheduler`)
 - `GET /api/problems` — nemesis-side problems: faults that never recovered (budget still held) and a degraded inventory (harness unavailable → synthesized node ids, no slot chaos). `ydb/tests/stability/tests` fetches this when disabling nemesis and attaches it to the Allure report
 - The UI's Nemesis Scheduler card shows run state, profile, both budgets, the recovery probe and the problem list; the per-type schedule toggles in the accordion belong to the legacy loop
 

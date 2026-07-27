@@ -63,6 +63,8 @@ SRCS(
     detailed_metrics/ydb_metrics_target_counters_base.h
     private/aggregated_counters.cpp
     private/aggregated_counters.h
+    private/aggregated_tablet_counters.cpp
+    private/aggregated_tablet_counters.h
     private/labeled_db_counters.cpp
     private/labeled_db_counters.h
 )

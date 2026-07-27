@@ -28,6 +28,7 @@
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <atomic>
+#include <mutex>
 #include <util/digest/murmur.h>
 #include <util/stream/zlib.h>
 
@@ -83,8 +84,14 @@ void ReadMessagesAndAssertOrderedBySeqNo(TTopicClient& client,
     };
     // Handlers may still run after Close(); keep shared ownership so late callbacks are safe.
     struct TState {
+        std::mutex Lock;
         std::vector<TMessageInfo> Messages;
         NThreading::TPromise<void> DonePromise = NThreading::NewPromise<void>();
+
+        std::vector<TMessageInfo> CopyMessages() {
+            std::lock_guard guard(Lock);
+            return Messages;
+        }
     };
     auto state = std::make_shared<TState>();
     state->Messages.reserve(expectedCount);
@@ -98,6 +105,7 @@ void ReadMessagesAndAssertOrderedBySeqNo(TTopicClient& client,
         .AppendTopics(topicSettings);
 
     readSettings.EventHandlers_.SimpleDataHandlers([state, expectedCount](TReadSessionEvent::TDataReceivedEvent& ev) {
+        std::lock_guard guard(state->Lock);
         for (auto& msg : ev.GetMessages()) {
             if (state->Messages.size() >= expectedCount) {
                 break;
@@ -116,16 +124,18 @@ void ReadMessagesAndAssertOrderedBySeqNo(TTopicClient& client,
 
     auto readSession = client.CreateReadSession(readSettings);
     UNIT_ASSERT_C(state->DonePromise.GetFuture().Wait(timeout),
-        "Expected to read " << expectedCount << " messages within " << timeout << ", got " << state->Messages.size());
+        "Expected to read " << expectedCount << " messages within " << timeout);
     readSession->Close(TDuration::Seconds(5));
 
-    UNIT_ASSERT_VALUES_EQUAL_C(state->Messages.size(), expectedCount,
-        "Read message count mismatch: got " << state->Messages.size() << ", expected " << expectedCount);
+    const auto messages = state->CopyMessages();
+
+    UNIT_ASSERT_VALUES_EQUAL_C(messages.size(), expectedCount,
+        "Read message count mismatch: got " << messages.size() << ", expected " << expectedCount);
 
     // SeqNo ordering is guaranteed within one producer stream.
     // Multiple producers can write into the same partition with independent seqNo sequences.
     std::map<std::pair<ui64, std::string>, std::vector<ui64>> byPartitionAndProducer;
-    for (const auto& m : state->Messages) {
+    for (const auto& m : messages) {
         UNIT_ASSERT_VALUES_EQUAL(m.Data, expectedPayload);
         byPartitionAndProducer[{m.PartitionId, m.ProducerId}].push_back(m.SeqNo);
     }

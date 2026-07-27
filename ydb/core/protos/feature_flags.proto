@@ -303,4 +303,5 @@ message TFeatureFlags {
     optional bool EnableKqpConstraintsTransformer = 277 [default = false];
     optional bool EnableSmallBlobsQuotaEnforcement = 288 [default = false];
     optional bool EnableExportFiltering = 291 [default = false];
+    optional bool EnableMoveWithColumnTableReplace = 305 [default = false];
 }

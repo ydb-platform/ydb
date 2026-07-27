@@ -188,7 +188,7 @@ bool TStoragePoolInfo::AddTabletToWait(TTabletId tabletId) {
 
 bool TStoragePoolInfo::SetShrinkRequest(TEvHive::TEvShrinkStoragePool::TPtr ev) {
     bool result = TabletsWaiting.empty() && !(ShrinkRequest);
-    ShrinkRequest = ev;
+    ShrinkRequest = std::move(ev);
     return result;
 }
 

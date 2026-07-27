@@ -15,10 +15,68 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
         with:
+<<<<<<< HEAD
           ref: ${{ github.event.pull_request.head.sha }}
+=======
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/pull/{0}/head', inputs.pull_number) || github.event.pull_request.head.sha }}
+
+      - name: Get commit SHA
+        id: sha
+        run: echo "value=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Disable PDF for PR build
+        run: yq -i '.["docs-viewer"].pdf = false | .singlePage = false' ydb/docs/.yfm
+
+>>>>>>> b0ff6939f5d (fix(docs): remove legacy branches (#47824))
       - name: Build
         uses: diplodoc-platform/docs-build-action@v3
         with:
           revision: "pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}"
           src-root: "./ydb/docs"
+<<<<<<< HEAD
           cli-version: stable
+=======
+          cli-version: "4.59.12"
+          use-ya-opensource: true
+
+      - name: Fail on documentation build issues
+        run: |
+          set -euo pipefail
+          if [[ ! -f build-html.log ]]; then
+            echo "::error::Documentation build log (build-html.log) not found"
+            exit 1
+          fi
+          issue_count=$(grep -cE '^(ERR|WARN)' build-html.log || true)
+          if [[ "$issue_count" -gt 0 ]]; then
+            echo "::error::Documentation build has ${issue_count} error(s)/warning(s)"
+            grep -E '^(ERR|WARN)' build-html.log | sort -u | head -20
+            if [[ "$issue_count" -gt 20 ]]; then
+              echo "... and $((issue_count - 20)) more (see PR comment for full log)"
+            fi
+            exit 1
+          fi
+          echo "No documentation build warnings or errors"
+
+      # docs-build-action writes github.event.number to inputs/pr-number.
+      # For workflow_dispatch this field is empty, so patch the artifact.
+      - name: Download inputs artifact
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/download-artifact@v4
+        with:
+          name: inputs
+          path: ./inputs
+
+      - name: Save PR number to inputs artifact
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          PULL_NUMBER: ${{ inputs.pull_number }}
+        run: printf '%s' "$PULL_NUMBER" > ./inputs/pr-number
+
+      - name: Upload inputs artifact
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: inputs
+          path: ./inputs/
+          overwrite: true
+>>>>>>> b0ff6939f5d (fix(docs): remove legacy branches (#47824))

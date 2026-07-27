@@ -506,6 +506,55 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                             NLs::ShardsInsideDomain(3)});
     }
 
+    Y_UNIT_TEST(MoveReplaceOverColumnTableDisabledByDefault) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableMoveColumnTable(true);
+        ui64 txId = 100;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Dst"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+                Columns { Name: "resource_id" Type: "Utf8" }
+                Columns { Name: "uid" Type: "Utf8" NotNull: true }
+                KeyColumnNames: "timestamp"
+                KeyColumnNames: "uid"
+            }
+        )");
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "Src"
+              Columns { Name: "key"   Type: "Uint64" }
+              Columns { Name: "value0" Type: "Utf8" }
+              Columns { Name: "value1" Type: "Utf8" }
+              KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+              Name: "Sync"
+              KeyColumnNames: ["value0"]
+            }
+            IndexDescription {
+              Name: "Async"
+              KeyColumnNames: ["value1"]
+              Type: EIndexTypeGlobalAsync
+            }
+        )");
+        env.TestWaitNotification(runtime, {txId - 1, txId});
+
+        auto* dstDrop = DropTableRequest(txId + 1, "/MyRoot", "Dst");
+        auto* srcMove = MoveTableRequest(txId + 1, "/MyRoot/Src", "/MyRoot/Dst");
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, CombineSchemeTransactions({dstDrop, srcMove}));
+        TestModificationResults(runtime, ++txId, {{
+            NKikimrScheme::StatusPreconditionFailed,
+            "Unsupported: feature flag EnableMoveWithColumnTableReplace is off"
+        }});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Src"), {NLs::PathExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Dst"), {NLs::PathExist, NLs::IsColumnTable});
+    }
+
     Y_UNIT_TEST(Replace2) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

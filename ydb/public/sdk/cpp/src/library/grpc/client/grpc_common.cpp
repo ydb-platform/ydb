@@ -54,16 +54,18 @@ bool ValidateRootCertificates(const std::string& pemRootCerts, std::string& erro
     size_t certsParsed = 0;
     while (true) {
         std::unique_ptr<X509, decltype(&X509_free)> cert(
-            PEM_read_bio_X509(rootCertsBio, nullptr, nullptr, nullptr),
+            PEM_read_bio_X509_AUX(rootCertsBio, nullptr, nullptr, nullptr),
             &X509_free);
         if (!cert) {
-            const unsigned long errorCode = ERR_peek_last_error();
-            if (errorCode == 0 || ERR_GET_REASON(errorCode) == PEM_R_NO_START_LINE) {
-                ERR_clear_error();
-                break;
+            if (certsParsed == 0) {
+                errorMessage = "root CA PEM: failed to parse certificate #1: " + DrainOpenSslErrors();
+                return false;
             }
-            errorMessage = "root CA PEM: " + DrainOpenSslErrors();
-            return false;
+
+            // gRPC treats a read error as the end of the bundle and uses all
+            // certificates parsed before it.
+            ERR_clear_error();
+            break;
         }
 
         // Match gRPC trust store semantics: with X509_V_FLAG_PARTIAL_CHAIN an
@@ -72,10 +74,6 @@ bool ValidateRootCertificates(const std::string& pemRootCerts, std::string& erro
         ++certsParsed;
     }
 
-    if (certsParsed == 0) {
-        errorMessage = "root CA PEM: no certificates parsed";
-        return false;
-    }
     return true;
 }
 

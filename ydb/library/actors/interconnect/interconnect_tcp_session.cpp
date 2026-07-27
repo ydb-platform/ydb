@@ -2,6 +2,7 @@
 #include "interconnect_tcp_session.h"
 #include "interconnect_handshake.h"
 #include "interconnect_zc_processor.h"
+#include "subscriber_liveness_checker.h"
 
 #include <ydb/library/actors/core/probes.h>
 #include <ydb/library/actors/core/log.h>
@@ -79,6 +80,10 @@ namespace NActors {
         Pool = std::make_unique<TEventHolderPool>(Proxy->Common, std::move(destroyCallback));
         ChannelScheduler.ConstructInPlace(Proxy->PeerNodeId, Proxy->Common->ChannelsConfig, Proxy->Metrics,
             Proxy->Common->Settings.MaxSerializedEventSize, Params, Proxy->Common->RdmaMemPool);
+        if (const TDuration interval = Proxy->Common->Settings.SubscriberLivenessCheckInterval;
+                interval != TDuration::Zero()) {
+            Schedule(interval, new TEvCheckSubscriberLiveness);
+        }
 
         YDB_LOG_INFO_CTX_COMP(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "Session created",
             {"peerNodeId", Proxy->PeerNodeId});
@@ -333,6 +338,16 @@ namespace NActors {
             Subscribers.erase(it);
             Proxy->Metrics->SubSubscribersCount(1);
         }
+    }
+
+    void TInterconnectSessionTCP::CheckSubscriberLiveness() {
+        const TDuration interval = Proxy->Common->Settings.SubscriberLivenessCheckInterval;
+        if (interval == TDuration::Zero()) {
+            return;
+        }
+
+        RegisterSubscriberLivenessChecker(SelfId(), Subscribers);
+        Schedule(interval, new TEvCheckSubscriberLiveness);
     }
 
     void TInterconnectSessionTCP::UpdateSubscriber(const TActorId& actorId, ui64 cookie, ui32 activityIndex, TString eventTypeName,

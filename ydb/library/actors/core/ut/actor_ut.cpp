@@ -781,7 +781,7 @@ Y_UNIT_TEST_SUITE(TestActorLiveness) {
 
         void Bootstrap() {
             Become(&TThis::StateWork);
-            CheckActorLiveness(AliveCookie);
+            SendActorLivenessCheck(Target, AliveCookie);
         }
 
         STRICT_STFUNC(StateWork,
@@ -795,7 +795,7 @@ Y_UNIT_TEST_SUITE(TestActorLiveness) {
             Y_ABORT_UNLESS(ev->Cookie == AliveCookie);
 
             Send(Target, new TEvents::TEvPoison());
-            CheckActorLiveness(DeadCookie);
+            SendActorLivenessCheck(Target, DeadCookie);
         }
 
         void Handle(TEvents::TEvActorDead::TPtr& ev) {
@@ -810,16 +810,6 @@ Y_UNIT_TEST_SUITE(TestActorLiveness) {
                 DonePad->Unpark();
             }
             PassAway();
-        }
-
-        void CheckActorLiveness(ui64 cookie) {
-            Send(new IEventHandle(
-                TEvents::TSystem::CheckActorLiveness,
-                TEvents::TEvCheckActorLiveness::RequestFlags,
-                Target,
-                SelfId(),
-                nullptr,
-                cookie));
         }
 
         const TActorId Target;
@@ -838,13 +828,7 @@ Y_UNIT_TEST_SUITE(TestActorLiveness) {
 
         void Bootstrap() {
             Become(&TThis::StateWork);
-            Send(new IEventHandle(
-                TEvents::TSystem::CheckActorLiveness,
-                TEvents::TEvCheckActorLiveness::RequestFlags,
-                Target,
-                SelfId(),
-                nullptr,
-                Cookie));
+            SendActorLivenessCheck(Target, Cookie);
         }
 
         STRICT_STFUNC(StateWork,

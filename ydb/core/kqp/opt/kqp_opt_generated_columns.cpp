@@ -134,7 +134,7 @@ std::pair<TExprBase, TCoAtomList> BuildStoredGeneratedColumnsInline(const TExprB
 
 std::pair<TExprBase, TCoAtomList> BuildStoredGeneratedColumnsViaStreamLookup(const TExprBase& input, const TCoAtomList& inputColumns,
     const TVector<const TKikimrColumnMetadata*>& generatedColumns, const TVector<TString>& missingDeps, const TKikimrTableDescription& table,
-    TPositionHandle pos, TExprContext& ctx)
+    bool dropRowsAbsentFromTable, TPositionHandle pos, TExprContext& ctx)
 {
     const auto& pk = table.Metadata->KeyColumnNames;
 
@@ -220,34 +220,44 @@ std::pair<TExprBase, TCoAtomList> BuildStoredGeneratedColumnsViaStreamLookup(con
                     .Build()
                 .Done());
     }
+
+    auto presentRowArg = Build<TCoArgument>(ctx, pos).Name("present_row").Done();
+
     for (const auto& dep : missingDeps) {
         const auto* columnType = table.GetColumnType(dep);
         YQL_ENSURE(columnType, "Unknown generated dependency column " << dep);
 
-        const auto* optionalType = columnType->IsOptionalOrNull()
-            ? columnType
-            : ctx.MakeType<TOptionalExprType>(columnType);
-
-        auto fetchedArg = Build<TCoArgument>(ctx, pos).Name("fetched_row").Done();
-        auto fetchedMember = Build<TCoMember>(ctx, pos)
-            .Struct(fetchedArg)
+        TExprBase depValue = Build<TCoMember>(ctx, pos)
+            .Struct(presentRowArg)
             .Name().Build(dep)
             .Done();
 
-        TExprBase presentValue = columnType->IsOptionalOrNull()
-            ? TExprBase(fetchedMember)
-            : TExprBase(Build<TCoJust>(ctx, pos).Input(fetchedMember).Done());
+        if (!dropRowsAbsentFromTable) {
+            const auto* optionalType = columnType->IsOptionalOrNull()
+                ? columnType
+                : ctx.MakeType<TOptionalExprType>(columnType);
 
-        auto depValue = Build<TCoIfPresent>(ctx, pos)
-            .Optional(fetchedOpt)
-            .PresentHandler<TCoLambda>()
-                .Args({fetchedArg})
-                .Body(presentValue)
-                .Build()
-            .MissingValue<TCoNothing>()
-                .OptionalType(NCommon::BuildTypeExpr(pos, *optionalType, ctx))
-                .Build()
-            .Done();
+            auto fetchedArg = Build<TCoArgument>(ctx, pos).Name("fetched_row").Done();
+            auto fetchedMember = Build<TCoMember>(ctx, pos)
+                .Struct(fetchedArg)
+                .Name().Build(dep)
+                .Done();
+
+            TExprBase presentValue = columnType->IsOptionalOrNull()
+                ? TExprBase(fetchedMember)
+                : TExprBase(Build<TCoJust>(ctx, pos).Input(fetchedMember).Done());
+
+            depValue = Build<TCoIfPresent>(ctx, pos)
+                .Optional(fetchedOpt)
+                .PresentHandler<TCoLambda>()
+                    .Args({fetchedArg})
+                    .Body(presentValue)
+                    .Build()
+                .MissingValue<TCoNothing>()
+                    .OptionalType(NCommon::BuildTypeExpr(pos, *optionalType, ctx))
+                    .Build()
+                .Done();
+        }
 
         mergedMembers.push_back(
             Build<TCoNameValueTuple>(ctx, pos)
@@ -284,15 +294,35 @@ std::pair<TExprBase, TCoAtomList> BuildStoredGeneratedColumnsViaStreamLookup(con
         allMembers.push_back(std::move(member));
     }
 
-    auto writeData = Build<TCoMap>(ctx, pos)
-        .Input(joined)
-        .Lambda()
-            .Args({joinArg})
-            .Body<TCoAsStruct>()
-                .Add(allMembers)
+    auto outputRow = Build<TCoAsStruct>(ctx, pos).Add(allMembers).Done();
+
+    const auto writeData = [&]() -> TExprBase {
+        if (dropRowsAbsentFromTable) {
+            return Build<TCoFlatMap>(ctx, pos)
+                .Input(joined)
+                .Lambda()
+                    .Args({joinArg})
+                    .Body<TCoFlatMap>()
+                        .Input(fetchedOpt)
+                        .Lambda()
+                            .Args({presentRowArg})
+                            .Body<TCoJust>()
+                                .Input(outputRow)
+                                .Build()
+                            .Build()
+                        .Build()
+                    .Build()
+                .Done();
+        }
+
+        return Build<TCoMap>(ctx, pos)
+            .Input(joined)
+            .Lambda()
+                .Args({joinArg})
+                .Body(outputRow)
                 .Build()
-            .Build()
-        .Done();
+            .Done();
+    }();
 
     auto columnList = Build<TCoAtomList>(ctx, pos)
         .Add(allColumns)
@@ -303,6 +333,10 @@ std::pair<TExprBase, TCoAtomList> BuildStoredGeneratedColumnsViaStreamLookup(con
 
 bool GeneratedDepsComeFromTable(TYdbOperation op) {
     return op == TYdbOperation::Upsert || op == TYdbOperation::UpdateOn;
+}
+
+bool WriteSkipsRowsAbsentFromTable(TYdbOperation op) {
+    return op == TYdbOperation::UpdateOn;
 }
 
 }   // namespace
@@ -419,8 +453,8 @@ TBuildWriteInputResult ExtendInputRowsWithStoredGeneratedColumns(const TKiWriteT
     if (generatedLookup && depsComeFromTable) {
         auto missingDeps = GetMissingStoredGeneratedDeps(generatedColumns, inputColumnsSet);
         if (!missingDeps.empty()) {
-            auto [rewritten, columns] =
-                BuildStoredGeneratedColumnsViaStreamLookup(input, inputColumns, generatedColumns, missingDeps, table, pos, ctx);
+            auto [rewritten, columns] = BuildStoredGeneratedColumnsViaStreamLookup(input, inputColumns, generatedColumns,
+                missingDeps, table, WriteSkipsRowsAbsentFromTable(tableOp), pos, ctx);
             return { .Input=rewritten, .Columns=columns, .EmittedStreamLookup=true };
         }
     }

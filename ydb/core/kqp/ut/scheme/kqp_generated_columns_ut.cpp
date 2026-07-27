@@ -607,6 +607,60 @@ Y_UNIT_TEST_SUITE(GeneratedStored) {
         fixture.Check("SELECT k, g1, g2 FROM TestTable ORDER BY k;", "[[1;7;30]]");
     }
 
+    Y_UNIT_TEST(NotNullUpdateOnLookedUpDependency) {
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Uint32 NOT NULL,
+                a Uint32 NOT NULL,
+                b Uint32 NOT NULL,
+                s Uint32 NOT NULL GENERATED ALWAYS AS (a + b) STORED,
+                PRIMARY KEY (k)
+            );
+        )", "UPSERT INTO TestTable (k, a, b) VALUES (1u, 1u, 2u);");
+
+        // Seed: s = 1 + 2 = 3
+        fixture.Check("SELECT k, s FROM TestTable ORDER BY k;", "[[1u;3u]]");
+
+        // UPDATE ... SET recomputes s from the new a and the stored b
+        fixture.Exec("UPDATE TestTable SET a = 5u WHERE k = 1u;");
+        fixture.Check("SELECT k, a, b, s FROM TestTable ORDER BY k;", "[[1u;5u;2u;7u]]");
+
+        // UPDATE ... ON supplying only a: b is read back from the table. Since UPDATE ON never
+        // inserts, the looked-up row is always present, so s stays NOT NULL
+        fixture.Exec("UPDATE TestTable ON (SELECT 8u AS a, 1u AS k);");
+        fixture.Check("SELECT k, a, b, s FROM TestTable ORDER BY k;", "[[1u;8u;2u;10u]]");
+
+        // Listing every dependency keeps working (no read-back at all)
+        fixture.Exec("UPDATE TestTable ON (SELECT 1u AS k, 3u AS a, 4u AS b);");
+        fixture.Check("SELECT k, a, b, s FROM TestTable ORDER BY k;", "[[1u;3u;4u;7u]]");
+
+        // A non-existent key is still a no-op
+        fixture.Exec("UPDATE TestTable ON (SELECT 42u AS k, 1u AS a);");
+        fixture.Check("SELECT k, a, b, s FROM TestTable ORDER BY k;", "[[1u;3u;4u;7u]]");
+    }
+
+    Y_UNIT_TEST(NotNullUpdateOnLookedUpDependencyWithIndex) {
+        TTestFixture fixture(R"(
+            CREATE TABLE TestTable (
+                k Uint32 NOT NULL,
+                a Uint32 NOT NULL,
+                b Uint32 NOT NULL,
+                s Uint32 NOT NULL GENERATED ALWAYS AS (a + b) STORED,
+                PRIMARY KEY (k),
+                INDEX idx_s GLOBAL ON (s)
+            );
+        )", "UPSERT INTO TestTable (k, a, b) VALUES (1u, 1u, 2u);");
+
+        // Seed: s = 1 + 2 = 3
+        fixture.Check("SELECT k, s FROM TestTable VIEW idx_s WHERE s = 3u;", "[[1u;3u]]");
+
+        // Only a is supplied, b is read back from the table: s = 8 + 2 = 10, and the index follows
+        fixture.Exec("UPDATE TestTable ON (SELECT 8u AS a, 1u AS k);");
+        fixture.Check("SELECT k, a, b, s FROM TestTable ORDER BY k;", "[[1u;8u;2u;10u]]");
+        fixture.Check("SELECT k, s FROM TestTable VIEW idx_s WHERE s = 3u;", "[]");
+        fixture.Check("SELECT k, s FROM TestTable VIEW idx_s WHERE s = 10u;", "[[1u;10u]]");
+    }
+
     Y_UNIT_TEST(NotNullUpsertPartial) {
         TTestFixture fixture(R"(
             CREATE TABLE TestTable (

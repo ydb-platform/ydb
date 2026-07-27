@@ -1302,22 +1302,61 @@ function rowKey(r) {
 function suiteKey(r) {
   return `${r.branch || ''}|${r.db || ''}|${r.suite || ''}`;
 }
+/** Per-render cache: heatmap + React must use the same live focus view as inbox badges. */
+let _liveViewCache = new Map();
+function clearLiveViewCache() { _liveViewCache = new Map(); }
+function liveSuiteView(r) {
+  const k = suiteKey(r);
+  if (_liveViewCache.has(k)) return _liveViewCache.get(k);
+  let v = null;
+  try { v = suiteViewAtFocus(r, '_cell'); } catch (_) { v = null; }
+  _liveViewCache.set(k, v);
+  return v;
+}
+/** Static catalog kinds (generate). Fallback when live focus view is unavailable. */
+function catalogQuerySplit(r) {
+  const fail = new Set();
+  const slow = new Set();
+  const soft = new Set();
+  const nodata = new Set();
+  for (const q of listedFail(r)) fail.add(String(q.test));
+  for (const q of listedSlow(r)) slow.add(String(q.test));
+  for (const q of listedWatch(r)) soft.add(String(q.test));
+  for (const q of listedNodata(r)) nodata.add(String(q.test));
+  return { fail, slow, soft, nodata };
+}
+/**
+ * Prefer live reclassify at focus run (inbox badge path). Fixes heatmap ok while
+ * inbox shows FAIL when generate left queries[].kind=ok (e.g. single history point).
+ */
+function querySplit(r) {
+  const view = liveSuiteView(r);
+  if (view) {
+    return {
+      fail: new Set((view.fails || []).map(q => String(q.test))),
+      slow: new Set((view.slows || []).map(q => String(q.test))),
+      soft: new Set((view.softs || []).map(q => String(q.test))),
+      nodata: new Set((view.nodatas || []).map(q => String(q.test))),
+    };
+  }
+  return catalogQuerySplit(r);
+}
 function hasFailSignal(r) {
   if (['failing', 'both'].includes(r.issue)) return true;
   if (r.status === 'broken' && (r.fail_rate_now || 0) >= 0.1) return true;
-  return listedFail(r).length > 0;
+  return querySplit(r).fail.size > 0;
 }
 function hasHardSlowSignal(r) {
   if (['slower', 'both'].includes(r.issue)) return true;
-  return listedSlow(r).length > 0;
+  return querySplit(r).slow.size > 0;
 }
 function hasSoftSlowSignal(r) {
   if (r.issue === 'watch' || r.status === 'watch') return true;
-  return listedWatch(r).length > 0;
+  return querySplit(r).soft.size > 0;
 }
 function hasNodataSignal(r) {
   if (r.status === 'nodata' || r.kind === 'nodata' || r.issue === 'nodata') return true;
-  return listedNodata(r).length > 0;
+  return querySplit(r).nodata.size > 0;
 }
 function isInfraIssue(r) {
   if (r.issue === 'in_progress') return waveView() === 'all';
@@ -1331,17 +1370,6 @@ function rowMatchesReact(r) {
   if (s.soft && hasSoftSlowSignal(r)) return true;
   if (s.nodata && hasNodataSignal(r)) return true;
   return false;
-}
-function querySplit(r) {
-  const fail = new Set();
-  const slow = new Set();
-  const soft = new Set();
-  const nodata = new Set();
-  for (const q of listedFail(r)) fail.add(String(q.test));
-  for (const q of listedSlow(r)) slow.add(String(q.test));
-  for (const q of listedWatch(r)) soft.add(String(q.test));
-  for (const q of listedNodata(r)) nodata.add(String(q.test));
-  return { fail, slow, soft, nodata };
 }
 function fmtFS(nFail, nSlow, nSoft, nNodata) {
   const s = reactSignals();
@@ -3599,6 +3627,7 @@ function renderInbox() {
 }
 
 function renderAll() {
+  clearLiveViewCache();
   renderHeader();
   renderHeatmap();
   renderInbox();

@@ -27,7 +27,11 @@ from classify_rules import (  # noqa: E402
     resolve_compare_row,
     short_cell_status,
 )
-from generate import collapse_in_progress_suite_dupes  # noqa: E402
+from generate import (  # noqa: E402
+    _query_metrics,
+    collapse_in_progress_suite_dupes,
+    promote_ok_with_hot_queries,
+)
 
 
 def _side(status="ok", n_fail=0, n_slow=0, n_soft=0, n_nodata=0):
@@ -438,6 +442,42 @@ class QueryNodataCompareTests(unittest.TestCase):
         self.assertEqual(paint_class_for_side(_side("noruns")), "noruns")
         self.assertEqual(paint_class_for_side(_side("nodata", n_nodata=0)), "noruns")
         self.assertEqual(paint_class_for_side(_side("nodata", n_nodata=18)), "nodata")
+
+
+class QueryMetricsSinglePointTests(unittest.TestCase):
+    """Solo history point must still mark fail (heatmap/inbox used to diverge)."""
+
+    def test_single_point_fail_is_kind_fail(self):
+        m = _query_metrics([{"fr": 1.0, "ydb": 100.0, "ts": "2026-07-26"}])
+        self.assertIsNotNone(m)
+        self.assertEqual(m["kind"], "fail")
+        self.assertTrue(m["is_fail"])
+
+    def test_single_point_ok_stays_ok(self):
+        m = _query_metrics([{"fr": 0.0, "ydb": 100.0, "ts": "2026-07-26"}])
+        self.assertIsNotNone(m)
+        self.assertEqual(m["kind"], "ok")
+
+    def test_promote_ok_suite_with_solo_fail_query(self):
+        data = {
+            "ok": [
+                {
+                    "branch": "stable-26-3",
+                    "db": "sas_small_column",
+                    "suite": "UploadTpch1",
+                    "issue": "ok",
+                    "status": "ok",
+                    "queries": [
+                        {"test": "Query14", "kind": "fail", "fail_rate_late": 1.0},
+                    ],
+                }
+            ],
+            "inbox": [],
+        }
+        moved = promote_ok_with_hot_queries(data)
+        self.assertEqual(moved, 1)
+        self.assertEqual(data["ok"], [])
+        self.assertEqual(data["inbox"][0]["issue"], "failing")
 
 
 if __name__ == "__main__":

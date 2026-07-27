@@ -1255,17 +1255,23 @@ def _query_metrics(rows: list[dict]) -> dict | None:
             "dur_level": None,
             "error_class": None,
         }
-    if len(rows) < 2:
-        return None
+    # One point is enough for fail (last_fr ≥ FAIL_HOT). Duration needs a base —
+    # do not reuse the same point as baseline (would hide a solo fail as kind=ok).
     now = rows[-NOW_RUNS:]
-    base = rows[-(NOW_RUNS + BASELINE_RUNS) : -NOW_RUNS] or rows[: max(1, len(rows) // 2)]
+    base_slice = rows[-(NOW_RUNS + BASELINE_RUNS) : -NOW_RUNS]
+    if base_slice:
+        base = base_slice
+    elif len(rows) > len(now):
+        base = rows[: max(1, len(rows) - len(now))]
+    else:
+        base = []
     now_ydbs = [r["ydb"] for r in now]
     base_ydbs = [r["ydb"] for r in base]
     ydb_now = median(now_ydbs)
-    ydb_base = median(base_ydbs)
-    ydb_pct = pct(ydb_base, ydb_now)
+    ydb_base = median(base_ydbs) if base else None
+    ydb_pct = pct(ydb_base, ydb_now) if base else None
     fr_now = avg([r["fr"] for r in now]) or 0.0
-    fr_base = avg([r["fr"] for r in base]) or 0.0
+    fr_base = avg([r["fr"] for r in base]) if base else None
     last = now[-1] if now else {}
     last_fr = (last.get("fr") or 0.0) if last else 0.0
     # last completed run only — same as classify_slice / JS

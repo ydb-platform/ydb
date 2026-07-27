@@ -54,14 +54,12 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
             std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc>&& alloc,
             TLookupActorFactory&& lookupActorFactory,
             NYql::NDqProto::StatusIds::StatusCode expectedError,
-            const NActors::TActorId& edge,
-            size_t fullscanLimit = 0)
+            const NActors::TActorId& edge)
             : Alloc(std::move(alloc))
             , TypeEnv(std::make_shared<NKikimr::NMiniKQL::TTypeEnvironment>(*Alloc))
             , LookupActorFactory(std::move(lookupActorFactory))
             , ExpectedError(expectedError)
             , Edge(edge)
-            , FullscanLimit(fullscanLimit)
         {
         }
 

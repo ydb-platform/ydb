@@ -354,8 +354,10 @@ struct IClientResponseHandler
     //! Called if the request fails.
     /*!
      *  \param error An error that has occurred.
+     *  \param address Address of the peer that reported the error. Empty if it is not supported by the underlying
+     *  RPC stack or the request failed before a peer was selected.
      */
-    virtual void HandleError(TError error) = 0;
+    virtual void HandleError(TError error, const std::string& address = {}) = 0;
 
     //! Enables passing streaming data from the service to clients.
     virtual void HandleStreamingPayload(const TStreamingPayload& payload) = 0;
@@ -418,7 +420,7 @@ protected:
     virtual bool TryDeserializeBody(TRef data, std::optional<NCompression::ECodec> codecId = {}) = 0;
 
     // IClientResponseHandler implementation.
-    void HandleError(TError error) override;
+    void HandleError(TError error, const std::string& address) override;
     void HandleAcknowledgement() override;
     void HandleResponse(
         TSharedRefArray message,
@@ -448,7 +450,7 @@ private:
     IDirectPlacementTransferPtr ResponseAttachmentsTransfer_;
 
     void TraceResponse();
-    void DoHandleError(TError error);
+    void DoHandleError(TError error, const std::string& address);
 
     void DoHandleResponse(
         TSharedRefArray message,

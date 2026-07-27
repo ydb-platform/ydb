@@ -4271,6 +4271,9 @@ void CollectPossibleStarJoins(const TYtEquiJoin& equiJoin, TYtJoinNodeOp& op, co
             op.StarOptions.emplace_back(option);
         }
         YQL_ENSURE(op.StarOptions.size() <= 1);
+        if (!op.StarOptions) {
+            warning(TStringBuilder() << "Join side " << leafLabel.Quote() << " cannot be added to a star join chain");
+        }
     }
 }
 

@@ -208,15 +208,15 @@ struct TCmsSentinelConfig {
     static EEvictVDisksStatus LoadEvictVDisksStatus(const NKikimrCms::TCmsConfig::TSentinelConfig &config) {
         using EEvictVDisksStatusProto = NKikimrCms::TCmsConfig::TSentinelConfig;
         switch (config.GetEvictVDisksStatus()) {
+            case EEvictVDisksStatusProto::UNKNOWN:
             case EEvictVDisksStatusProto::FAULTY:
                 return EEvictVDisksStatus::Faulty;
             case EEvictVDisksStatusProto::MAINTENANCE:
                 return EEvictVDisksStatus::Maintenance;
             case EEvictVDisksStatusProto::DISABLED:
-            case EEvictVDisksStatusProto::UNKNOWN:
                 return EEvictVDisksStatus::Disabled;
         }
-        return EEvictVDisksStatus::Disabled;
+        return EEvictVDisksStatus::Faulty;
     }
 
     void SaveEvictVDisksStatus(NKikimrCms::TCmsConfig::TSentinelConfig &config) const {

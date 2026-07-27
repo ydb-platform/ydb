@@ -682,6 +682,10 @@ namespace NKikimr {
 
     void TBlobStorageGroupProxy::Handle(TEvents::TEvMailboxProcessingFinished::TPtr&) {
         if (BatchedPutRequestCount) {
+            // This direct callback intentionally performs the flush here. In StateWork each batch is capped at
+            // MaxBatchedPutRequests, and flushing only walks these small queues and registers request actors; their
+            // actual work remains subject to normal mailbox scheduling. A self-event would add queue traffic and
+            // another activation for this bounded bookkeeping.
             for (auto &bucket : PutBatchedBucketQueue) {
                 auto &batchedPuts = BatchedPuts[bucket.HandleClass][bucket.Tactic][bucket.ReduceInterpileTraffic];
                 Y_ABORT_UNLESS(!batchedPuts.Queue.empty());

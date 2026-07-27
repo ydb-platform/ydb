@@ -239,26 +239,22 @@ Y_UNIT_TEST_SUITE(CppGrpcClientSimpleTest) {
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "root CA PEM:");
     }
 
-    Y_UNIT_TEST(NonCaTrustAnchorPassesValidation) {
-        const std::string nonCaCertificate = R"(-----BEGIN CERTIFICATE-----
-MIICODCCAd2gAwIBAgIUMizwaqRBfZMqZLAfqOon9LxVUwswCgYIKoZIzj0EAwIw
-RjELMAkGA1UEBhMCUlUxDzANBgNVBAcMBk1vc2NvdzEPMA0GA1UECgwGWWFuZGV4
-MRUwEwYDVQQDDAxMb2NhbGhvc3QgQ0EwHhcNMjUwNTEyMTQxOTEzWhcNMzUwNTEw
-MTQxOTEzWjBDMQswCQYDVQQGEwJSVTEPMA0GA1UEBwwGTW9zY293MQ8wDQYDVQQK
-DAZZYW5kZXgxEjAQBgNVBAMMCWxvY2FsaG9zdDBZMBMGByqGSM49AgEGCCqGSM49
-AwEHA0IABOM5UtoWuYTndtECRIdexT/5o5M7Dj5sBe4mPcydByC8AY6sSUghpzTD
-HU/gNnfja8unXt1gukZEe9h03uoH37mjgaswgagwHQYDVR0OBBYEFD3bqNr1fG99
-dKCFAsKkTHwNHkF+MB8GA1UdIwQYMBaAFMX2CNtuUf7N2udXp3Xn9YdWy9czMCwG
-A1UdEQQlMCOCCWxvY2FsaG9zdIcEfwAAAYcQAAAAAAAAAAAAAAAAAAAAATAMBgNV
-HRMBAf8EAjAAMAsGA1UdDwQEAwIFoDAdBgNVHSUEFjAUBggrBgEFBQcDAQYIKwYB
-BQUHAwIwCgYIKoZIzj0EAwIDSQAwRgIhANIfRVOvxINkIBKeW60zD7BkrYBXWczl
-FmSagrLHbVpDAiEA+HkxWw0d1mFaF5ZQ03DEbeb0gFQQDQCrqk/hS6ofCbs=
+    Y_UNIT_TEST(LegacyV1TrustAnchorPassesValidation) {
+        const std::string legacyV1Certificate = R"(-----BEGIN CERTIFICATE-----
+MIIBbTCCARMCFBthJdWIg/H6ITeelffnCYoK8fDFMAoGCCqGSM49BAMCMDkxCzAJ
+BgNVBAYTAlJVMQwwCgYDVQQKDANZREIxHDAaBgNVBAMME0xlZ2FjeSBUZXN0IFJv
+b3QgQ0EwHhcNMjYwNzI3MDk0NDU2WhcNMzYwNzI0MDk0NDU2WjA5MQswCQYDVQQG
+EwJSVTEMMAoGA1UECgwDWURCMRwwGgYDVQQDDBNMZWdhY3kgVGVzdCBSb290IENB
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE4zlS2ha5hOd20QJEh17FP/mjkzsO
+PmwF7iY9zJ0HILwBjqxJSCGnNMMdT+A2d+Nry6de3WC6RkR72HTe6gffuTAKBggq
+hkjOPQQDAgNIADBFAiEA/0rBKAconmtFcliTZ0i9HzIkQeG+E/zVMiUvlhwpylYC
+IGfPhGBVwOMnr+uhwtpj4PAOIrlOQD/fBsaRtYuBRdg2
 -----END CERTIFICATE-----)";
 
         auto driver = TDriver(
             TDriverConfig()
                 .SetEndpoint("localhost:100")
-                .UseSecureConnection(nonCaCertificate));
+                .UseSecureConnection(legacyV1Certificate));
         auto client = NTable::TTableClient(driver);
 
         auto result = client.CreateSession().GetValueSync();

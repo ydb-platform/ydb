@@ -4,11 +4,15 @@ from ydb.tests.olap.scenario.helpers import (
     TestContext,
     CreateTable,
     CreateTableStore,
+    AlterTable,
+    AlterTableStore,
     DropTable,
 )
 from ydb import PrimitiveType
 from ydb.tests.olap.common.thread_helper import TestThread, TestThreads
 import allure
+import uuid
+import random
 
 
 class TestSchemeLoad(BaseTestSet):
@@ -28,6 +32,54 @@ class TestSchemeLoad(BaseTestSet):
         sth = ScenarioTestHelper(ctx)
         for i in range(count):
             sth.execute_scheme_query(DropTable(f'store/{prefix}_{i}'), retries=5)
+
+    def scenario_add_and_drop_columns(self, ctx: TestContext):
+        ops_count = 100
+        max_columns_count = 100
+
+        store_name = 'testStore'
+        table_name = 'testStore/testTable'
+
+        sth = ScenarioTestHelper(ctx)
+        added_columns = set()
+
+        def generate_column_name() -> str:
+            return str(uuid.uuid1())
+
+        def add_column():
+            new_column = generate_column_name()
+            while new_column in added_columns:
+                new_column = generate_column_name()
+
+            sth.execute_scheme_query(
+                AlterTableStore(store_name).add_column(sth.Column(new_column, PrimitiveType.Uint32))
+            )
+            added_columns.add(new_column)
+
+        def drop_column():
+            if not added_columns:
+                return
+
+            column_to_drop = random.choice(tuple(added_columns))
+
+            sth.execute_scheme_query(
+                AlterTableStore(store_name).drop_column(sth.Column(column_to_drop))
+            )
+            added_columns.remove(column_to_drop)
+
+        sth.execute_scheme_query(CreateTableStore(store_name).with_schema(self.schema1))
+        sth.execute_scheme_query(CreateTable(table_name).with_schema(self.schema1))
+
+        for _ in range(ops_count):
+            p = len(added_columns) / max_columns_count
+
+            if (random.random() < p):
+                drop_column()
+            else:
+                add_column()
+
+        # TODO check final columns count
+        # assert <get schema and count columns> == len(added_columns) + 2
 
     def scenario_create_and_drop_tables(self, ctx: TestContext):
         tables_count = 100

@@ -25,6 +25,8 @@ static const std::vector<TString> SensitiveWords = {
 // Each sequence is a list of keywords that must appear consecutively (only ASCII
 // whitespace allowed between neighboring words, any amount of it, including
 // newlines/tabs/multiple spaces).
+// The first matching sequence is reported as the marker, so the plain verb pairs
+// come first: they never match the variants with keywords in between.
 static const std::vector<TWordSequence> SensitiveWordSequences = {
     {"create", "secret"},
     {"alter", "secret"},

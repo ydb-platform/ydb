@@ -2,6 +2,7 @@
 #include "interconnect_tcp_session.h"
 #include "interconnect_handshake.h"
 #include "interconnect_zc_processor.h"
+#include "subscriber_liveness_checker.h"
 
 #include <ydb/library/actors/core/probes.h>
 #include <ydb/library/actors/core/log.h>
@@ -55,6 +56,14 @@ namespace NActors {
         ReceiveContext.Reset(new TReceiveContext);
     }
 
+    TInterconnectSessionTCP::TInterconnectSessionTCP(
+        TInterconnectProxyTCP* const proxy,
+        NInterconnect::NRdma::TQueuePair::TPtr rdmaQp)
+        : TInterconnectSessionTCP(proxy)
+    {
+        RdmaQp = rdmaQp;
+    }
+
     TInterconnectSessionTCP::~TInterconnectSessionTCP() {
         // close socket ASAP when actor system is being shut down
         if (Socket) {
@@ -77,6 +86,10 @@ namespace NActors {
         Pool = std::make_unique<TEventHolderPool>(Proxy->Common, std::move(destroyCallback));
         ChannelScheduler.ConstructInPlace(Proxy->PeerNodeId, Proxy->Common->ChannelsConfig, Proxy->Metrics,
             Proxy->Common->Settings.MaxSerializedEventSize, Params, Proxy->Common->RdmaMemPool);
+        if (const TDuration interval = Proxy->Common->Settings.SubscriberLivenessCheckInterval;
+                interval != TDuration::Zero()) {
+            Schedule(interval, new TEvCheckSubscriberLiveness);
+        }
 
         LOG_INFO(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "[%u] session created", Proxy->PeerNodeId);
         SetPrefix(Sprintf("Session %s [node %" PRIu32 "]", SelfId().ToString().data(), Proxy->PeerNodeId));
@@ -315,6 +328,16 @@ namespace NActors {
         }
     }
 
+    void TInterconnectSessionTCP::CheckSubscriberLiveness() {
+        const TDuration interval = Proxy->Common->Settings.SubscriberLivenessCheckInterval;
+        if (interval == TDuration::Zero()) {
+            return;
+        }
+
+        RegisterSubscriberLivenessChecker(SelfId(), Subscribers);
+        Schedule(interval, new TEvCheckSubscriberLiveness);
+    }
+
     void TInterconnectSessionTCP::UpdateSubscriber(const TActorId& actorId, ui64 cookie, ui32 activityIndex, TString eventTypeName,
             TString stackTrace) {
         auto updateInfo = [&] (TSubscriberInfo& info) {
@@ -414,9 +437,18 @@ namespace NActors {
         // Keep most session params stable, but pass current transport-level liveness mode.
         TSessionParams inputSessionParams = Params;
         inputSessionParams.UseKernelLiveness = KernelLivenessMode;
-        auto actor = MakeHolder<TInputSessionTCP>(SelfId(), Socket, XdcSocket, ReceiveContext, Proxy->Common,
-            Proxy->Metrics, Proxy->PeerNodeId, nextPacket, GetDeadPeerTimeout(), std::move(inputSessionParams), RdmaQp, std::move(cq));
-        ReceiverId = RegisterWithSameMailbox(actor.Release());
+
+        TInputSessionTCP* inputSession = nullptr;
+        if (ev->Get()->RdmaHanshakeResult.HasPreinitedSession()) {
+            inputSession = ev->Get()->RdmaHanshakeResult.ReleasePreinitedSession();
+            ReceiverId = IActor::InvokeOtherActor(*inputSession, &TInputSessionTCP::SelfId);
+        } else {
+            inputSession = new TInputSessionTCP(Proxy->Common, RdmaQp, std::move(cq));
+            ReceiverId = RegisterWithSameMailbox(inputSession);
+        }
+
+        IActor::InvokeOtherActor(*inputSession, &TInputSessionTCP::StartRecieve, SelfId(), Socket, XdcSocket,
+            ReceiveContext, Proxy->Metrics, Proxy->PeerNodeId, nextPacket, GetDeadPeerTimeout(), std::move(inputSessionParams));
 
         // register our socket with the appropriate I/O backend
         if (Proxy->Common->Settings.UseUring && !Params.Encryption && TUringContext::IsSupported()) {

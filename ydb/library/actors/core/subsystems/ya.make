@@ -15,6 +15,7 @@ ENDIF()
 
 SRCS(
     cgroup/cgroup_oom.cpp
+    cgroup/cgroup_oom_trend.cpp
     cgroup/cgroup_v1.cpp
     cgroup/cgroup_v2.cpp
     stats.cpp

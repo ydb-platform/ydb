@@ -35,6 +35,16 @@ DEFINE_ENUM(ETimestampProviderFeature,
     ((AlienClocks)     (0))
 );
 
+//! Only applies to master transactions; setting it on a tablet transaction raises an error.
+DEFINE_ENUM(EMasterTransactionExpirationMode,
+    // Expire the local transaction only when the server reports it gone.
+    ((Optimistic)      (0))
+    // Additionally expire the local transaction once its ping lease elapses, even
+    // while the server-side transaction may still be alive, i.e. self-fence on a
+    // network partition.
+    ((Pessimistic)     (1))
+);
+
 YT_DEFINE_ERROR_ENUM(
     ((NoSuchTransaction)                (11000))
     ((NestedExternalTransactionExists)  (11001))

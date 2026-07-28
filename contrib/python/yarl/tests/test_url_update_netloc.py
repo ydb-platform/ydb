@@ -171,6 +171,26 @@ def test_with_host_non_ascii():
     assert url2.authority == "оун-упа.укр:123"
 
 
+@pytest.mark.parametrize(
+    ("host", "is_authority"),
+    [
+        ("user:pass@host.com", True),
+        ("user@host.com", True),
+        ("host:com", False),
+        ("not_percent_encoded%Zf", False),
+        ("still_not_percent_encoded%fZ", False),
+        *(("other_gen_delim_" + c, False) for c in "/?#[]"),
+    ],
+)
+def test_with_invalid_host(host: str, is_authority: bool):
+    url = URL("http://example.com:123")
+    match = r"Host '[^']+' cannot contain '[^']+' \(at position \d+\)"
+    if is_authority:
+        match += ", if .* use 'authority' instead of 'host'"
+    with pytest.raises(ValueError, match=f"{match}$"):
+        url.with_host(host=host)
+
+
 def test_with_host_percent_encoded():
     url = URL("http://%25cf%2580%cf%80:%25cf%2580%cf%80@example.com:123")
     url2 = url.with_host("%cf%80.org")

@@ -2,7 +2,6 @@
 
 #include "ast.h"
 
-#include <util/string/builder.h>
 #include <yql/essentials/sql/v1/format/sql_format.h>
 
 #include <yql/essentials/sql/v1/lexer/lexer.h>
@@ -14,9 +13,12 @@
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
 
+#include <yql/essentials/sql/v1/translation/sql.h>
 #include <yql/essentials/sql/sql.h>
-#include <yql/essentials/sql/v1/sql.h>
+
 #include <yql/essentials/utils/yql_panic.h>
+
+#include <util/string/builder.h>
 
 namespace NSQLFormat {
 

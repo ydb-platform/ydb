@@ -19,4 +19,4 @@ If the [`external_throttling`](./setup.md#external-throttling) section is presen
 
 ## SDK support
 
-Some SDKs support trace-id passing; you can find their list and usage examples on the [{#T}](../../../recipes/ydb-sdk/debug-otel.md) page.
+Some SDKs support trace-id passing; you can find their list and usage examples on the [{#T}](../../ydb-sdk/observability/tracing/opentelemetry.md) page.

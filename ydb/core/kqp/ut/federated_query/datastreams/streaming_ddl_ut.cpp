@@ -1366,10 +1366,12 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(StreamingQueryWithPrecompute, TStreamingTestFixture) {
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+
         constexpr char inputTopicName[] = "streamingQueryWithPrecomputeInputTopic";
         constexpr char outputTopicName[] = "streamingQueryWithPrecomputeOutputTopic";
         constexpr char pqSourceName[] = "pqSourceName";
-        CreateTopic(inputTopicName);
+        CreateTopic(inputTopicName, NTopic::TCreateTopicSettings().PartitioningSettings(2, 2));
         CreateTopic(outputTopicName);
         CreatePqSource(pqSourceName);
 
@@ -1414,6 +1416,25 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         WriteTopicMessage(inputTopicName, "message-1");
         ReadTopicMessage(outputTopicName, "message-1-value-1");
         Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
+
+        const auto& result = ExecQuery("SELECT Plan, Ast FROM `.sys/streaming_queries`");
+        UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+        CheckScriptResult(result[0], 2, 1, [&](TResultSetParser& resultSet) {
+            AstChecker(2, 3)(resultSet.ColumnParser("Ast").GetOptionalUtf8().value_or(""));
+
+            const auto planJson = resultSet.ColumnParser("Plan").GetOptionalUtf8().value_or("");
+            Cerr << "Plan: " << planJson << Endl;
+            NJson::TJsonValue plan;
+            UNIT_ASSERT(NJson::ReadJsonTree(planJson, &plan));
+
+            const auto& stagePlan = plan["Plan"]["Plans"][0]["Plans"][0];
+            UNIT_ASSERT_VALUES_EQUAL(stagePlan["Node Type"].GetStringSafe(), "Stage");
+            UNIT_ASSERT_VALUES_EQUAL(stagePlan["Stats"]["Tasks"].GetIntegerSafe(), 2);
+
+            const auto& sourceOp = stagePlan["Plans"][0]["Operators"].GetArraySafe()[0];
+            UNIT_ASSERT_VALUES_EQUAL(sourceOp["ExternalDataSource"].GetStringSafe(), pqSourceName);
+            UNIT_ASSERT_VALUES_EQUAL(sourceOp["SourceType"].GetStringSafe(), "pq");
+        });
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (

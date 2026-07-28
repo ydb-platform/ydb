@@ -59,6 +59,7 @@ void TPartitionActor::OnDetach(const TActorContext& ctx)
         NKikimrServices::NBS_PARTITION,
         "%s OnDetach",
         LogTitle.GetWithTime().c_str());
+
     Die(ctx);
 }
 
@@ -66,13 +67,14 @@ void TPartitionActor::OnTabletDead(
     TEvTablet::TEvTabletDead::TPtr& ev,
     const TActorContext& ctx)
 {
-    Y_UNUSED(ev);
+    const auto* msg = ev->Get();
 
     LOG_INFO(
         NActors::TActivationContext::AsActorContext(),
         NKikimrServices::NBS_PARTITION,
-        "%s OnTabletDead",
-        LogTitle.GetWithTime().c_str());
+        "%s OnTabletDead %s",
+        LogTitle.GetWithTime().c_str(),
+        TEvTablet::TEvTabletDead::Str(msg->Reason));
 
     Die(ctx);
 }
@@ -198,17 +200,13 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
             TActivationContext::ActorSystem(),
             nbsService->StorageConfig,
             executors[dbgIndex],
-            VolumeConfig.GetDiskId(),
-            TabletID(),
-            Executor()->Generation(),   // generation
+            DiskDescription,
             dbgIndex,
             std::move(ddiskIds),
             std::move(persistentBufferDDiskIds),
             std::make_unique<NTransport::TICStorageTransport>(
                 TActivationContext::ActorSystem(),
-                NTransport::CreateTransportActor(
-                    VolumeConfig.GetDiskId(),
-                    dbgIndex)));
+                NTransport::CreateTransportActor(DiskDescription, dbgIndex)));
 
         directBlockGroups.emplace_back(std::move(directBlockGroup));
     }
@@ -259,6 +257,9 @@ void TPartitionActor::Start(
 {
     LogTitle.SetDiskId(VolumeConfig.GetDiskId());
     LogTitle.SetGeneration(Executor()->Generation());
+    DiskDescription.DiskId = VolumeConfig.GetDiskId();
+    DiskDescription.TabletId = TabletID();
+    DiskDescription.Generation = Executor()->Generation();
 
     LOG_INFO(
         ctx,
@@ -283,8 +284,7 @@ void TPartitionActor::Start(
     FastPathService = std::make_shared<TFastPathService>(
         TActivationContext::ActorSystem(),
         SelfId(),
-        TabletID(),
-        VolumeConfig.GetDiskId(),
+        DiskDescription,
         blockCount,
         VolumeConfig.GetBlockSize(),
         CreateDirectBlockGroups(std::move(directBlockGroupsConnections)),
@@ -639,8 +639,6 @@ STFUNC(TPartitionActor::StateWork)
         HFunc(
             TEvPartitionDirectPrivate::TEvPoison,
             HandlePoisonByBlockedGeneration);
-
-        HFunc(NMon::TEvRemoteHttpInfo, HandleHttpInfo);
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {

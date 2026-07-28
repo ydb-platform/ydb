@@ -81,3 +81,4 @@ The user interacts with Gateway through a browser or API. Gateway forwards reque
 
 - [{#T}](initial-deployment.md)
 - [{#T}](s3-backups.md)
+- [{#T}](ai-assistant.md)

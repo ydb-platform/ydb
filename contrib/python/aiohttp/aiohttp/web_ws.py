@@ -379,14 +379,14 @@ class WebSocketResponse(StreamResponse):
             raise RuntimeError("Call .prepare() first")
         await self._writer.pong(message)
 
-    async def send_str(self, data: str, compress: Optional[bool] = None) -> None:
+    async def send_str(self, data: str, compress: Optional[int] = None) -> None:
         if self._writer is None:
             raise RuntimeError("Call .prepare() first")
         if not isinstance(data, str):
             raise TypeError("data argument must be str (%r)" % type(data))
         await self._writer.send(data, binary=False, compress=compress)
 
-    async def send_bytes(self, data: bytes, compress: Optional[bool] = None) -> None:
+    async def send_bytes(self, data: bytes, compress: Optional[int] = None) -> None:
         if self._writer is None:
             raise RuntimeError("Call .prepare() first")
         if not isinstance(data, (bytes, bytearray, memoryview)):
@@ -396,7 +396,7 @@ class WebSocketResponse(StreamResponse):
     async def send_json(
         self,
         data: Any,
-        compress: Optional[bool] = None,
+        compress: Optional[int] = None,
         *,
         dumps: JSONEncoder = json.dumps,
     ) -> None:
@@ -453,7 +453,11 @@ class WebSocketResponse(StreamResponse):
 
         try:
             async with async_timeout.timeout(self._timeout):
-                msg = await reader.read()
+                while True:
+                    msg = await reader.read()
+                    if msg.type is WSMsgType.CLOSE:
+                        self._set_code_close_transport(msg.data)
+                        return True
         except asyncio.CancelledError:
             self._set_code_close_transport(WSCloseCode.ABNORMAL_CLOSURE)
             raise
@@ -461,14 +465,6 @@ class WebSocketResponse(StreamResponse):
             self._exception = exc
             self._set_code_close_transport(WSCloseCode.ABNORMAL_CLOSURE)
             return True
-
-        if msg.type is WSMsgType.CLOSE:
-            self._set_code_close_transport(msg.data)
-            return True
-
-        self._set_code_close_transport(WSCloseCode.ABNORMAL_CLOSURE)
-        self._exception = asyncio.TimeoutError()
-        return True
 
     def _set_closing(self, code: WSCloseCode) -> None:
         """Set the close code and mark the connection as closing."""
@@ -490,8 +486,6 @@ class WebSocketResponse(StreamResponse):
         if self._reader is None:
             raise RuntimeError("Call .prepare() first")
 
-        loop = self._loop
-        assert loop is not None
         receive_timeout = timeout or self._receive_timeout
         while True:
             if self._waiting:

@@ -2,8 +2,8 @@
 
 #include <yql/essentials/public/udf/udf_helpers.h>
 
-#include <yql/essentials/sql/v1/context.h>
-#include <yql/essentials/sql/v1/sql_translation.h>
+#include <yql/essentials/sql/v1/translation/context.h>
+#include <yql/essentials/sql/v1/translation/sql_translation.h>
 #include <yql/essentials/sql/v1/reflect/sql_reflect.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>

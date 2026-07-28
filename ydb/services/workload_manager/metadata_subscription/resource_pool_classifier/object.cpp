@@ -3,6 +3,9 @@
 
 #include <library/cpp/json/json_reader.h>
 
+#include <util/generic/serialized_enum.h>
+#include <util/string/cast.h>
+
 
 namespace NKikimr::NWorkloadManager {
 
@@ -26,6 +29,15 @@ public:
 
         for (const auto& [key, value] : otherConfigJson.GetMap()) {
             selfConfigJson.InsertValue(key, value);
+        }
+
+        if (selfConfigJson.Has("action")) {
+            EClassifierAction action;
+            if (TryFromString(to_lower(selfConfigJson["action"].GetStringRobust()), action)
+                && action == EClassifierAction::Reject)
+            {
+                selfConfigJson.EraseValue("resource_pool");
+            }
         }
 
         NJsonWriter::TBuf writer;
@@ -109,6 +121,10 @@ void TResourcePoolClassifierConfig::EnsureSettings() {
         }
     }
 
+    if (settings.Action == EClassifierAction::Reject) {
+        settings.ResourcePool.reset();
+    }
+
     Settings = std::move(settings);
 }
 
@@ -121,9 +137,6 @@ NJson::TJsonValue TResourcePoolClassifierConfig::GetDebugJson() const {
     return result;
 }
 
-bool TResourcePoolClassifierConfig::operator==(const TResourcePoolClassifierConfig& other) const {
-    return std::tie(Database, Name, Rank, ConfigJson) == std::tie(other.Database, other.Name, other.Rank, other.ConfigJson);
-}
 
 NMetadata::IClassBehaviour::TPtr TResourcePoolClassifierConfig::GetBehaviour() {
     return TResourcePoolClassifierBehaviour::GetInstance();

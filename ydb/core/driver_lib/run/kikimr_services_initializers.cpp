@@ -115,6 +115,7 @@
 #include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/volume/volume.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/dbs_controller/dbs_controller.h>
 #endif
 
 #include <ydb/core/mon/mon.h>
@@ -220,6 +221,7 @@
 #include <ydb/core/tx/columnshard/column_fetching/cache_policy.h>
 #include <ydb/core/tx/general_cache/usage/service.h>
 #include <ydb/core/tx/priorities/usage/config.h>
+#include <ydb/core/tx/priorities/service/service.h>
 #include <ydb/core/tx/priorities/usage/service.h>
 
 #include <ydb/core/tx/limiter/grouped_memory/usage/config.h>
@@ -578,6 +580,9 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
     if (config.HasRdmaChecksum()) {
         result.RdmaChecksum = config.GetRdmaChecksum();
     }
+    if (config.HasEnableRdmaSendReceive()) {
+        result.EnableRdmaSendReceive = config.GetEnableRdmaSendReceive();
+    }
     if (config.HasRdmaPayloadCopySizeThreshold()) {
         result.RdmaPayloadCopySizeThreshold = config.GetRdmaPayloadCopySizeThreshold();
     }
@@ -597,10 +602,17 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
         result.EnableUringSQPOLL = config.GetEnableUringSQPOLL();
     }
 
-    result.EnableInterconnectSessionV2 = config.GetEnableInterconnectSessionV2();
-    result.ChecksumInterconnectSessionV2 = config.GetChecksumInterconnectSessionV2();
-    result.EnableSQPOLLv2 = config.GetEnableSQPOLLv2();
-    result.EnablePreserializeInV2 = config.GetEnablePreserializeInV2();
+    if (config.HasV2Config()) {
+        const auto& v2 = config.GetV2Config();
+        result.V2.Enable = v2.GetEnable();
+        result.V2.ChecksumEvents = v2.GetChecksumEvents();
+        result.V2.EnableSQPOLL = v2.GetEnableSQPOLL();
+        result.V2.EnablePreserializeEvents = v2.GetEnablePreserializeEvents();
+        result.V2.UringEngineThreads = v2.GetUringEngineThreads();
+        result.V2.UringEngineRingsPerShard = v2.GetUringEngineRingsPerShard();
+        result.V2.UringEngineSqThreadIdleMs = v2.GetUringEngineSqThreadIdleMs();
+        result.V2.ShareRingsAmongThreads = v2.GetShareRingsAmongThreads();
+    }
 
     return result;
 }
@@ -762,14 +774,17 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             icCommon->ChannelsConfig = channels;
             icCommon->Settings = settings;
 
-            if (settings.EnableInterconnectSessionV2) {
+            if (settings.V2.Enable) {
                 // Create the shared v2 io_uring data-plane engine once, at startup, and publish it in Common.
                 // The actor system does not exist yet, so the engine is bound to it later (once it is up,
                 // TInterconnectProxyTCP::Registered calls SetActorSystem). CreateUringEngine returns null when
                 // io_uring is unavailable, in which case v2 is simply never negotiated during the handshake.
-                icCommon->UringEngineV2 = CreateUringEngine(icConfig.GetUringEngineThreadsV2(),
+                icCommon->UringEngineV2 = CreateUringEngine(settings.V2.UringEngineThreads,
                     interconectCounters->GetSubgroup("subsystem", "uring"),
-                    settings.EnableSQPOLLv2);
+                    settings.V2.EnableSQPOLL,
+                    settings.V2.UringEngineRingsPerShard,
+                    settings.V2.UringEngineSqThreadIdleMs,
+                    settings.V2.ShareRingsAmongThreads);
                 setup->OnActorSystemCreated.push_back([engine = icCommon->UringEngineV2](TActorSystem *actorSystem) {
                     if (engine) {
                         engine->SetActorSystem(actorSystem);
@@ -1357,6 +1372,7 @@ void TLocalServiceInitializer::InitializeServices(
 #if defined(YDB_EMBEDDED_NBS_ENABLED)
     addToLocalConfig(TTabletTypes::BlockStoreVolumeDirect, &NYdb::NBS::NStorage::CreateVolumeTablet, TMailboxType::ReadAsFilled, appData->UserPoolId);
     addToLocalConfig(TTabletTypes::BlockStorePartitionDirect, &NYdb::NBS::NBlockStore::NStorage::NPartitionDirect::CreatePartitionTablet, TMailboxType::ReadAsFilled, appData->UserPoolId);
+    addToLocalConfig(TTabletTypes::DbsController, &NYdb::NBS::NBlockStore::NStorage::NDbsController::CreateDbsControllerTablet, TMailboxType::ReadAsFilled, appData->UserPoolId);
 #endif
 
     if (Config.GetShutdownConfig().HasDrainTimeoutSeconds()) {
@@ -2643,7 +2659,7 @@ void TCompPrioritiesInitializer::InitializeServices(NActors::TActorSystemSetup* 
         TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
         TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorGroup = tabletGroup->GetSubgroup("type", "TX_COMP_PRIORITIES");
 
-        auto service = NPrioritiesQueue::TCompServiceOperator::CreateService(serviceConfig, conveyorGroup);
+        auto service = NPrioritiesQueue::CreateService<NPrioritiesQueue::TCompConveyorPolicy>(serviceConfig, conveyorGroup);
 
         setup->LocalServices.push_back(std::make_pair(
             NPrioritiesQueue::TCompServiceOperator::MakeServiceId(NodeId),

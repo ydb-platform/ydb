@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package NYdb.NBS.DbsController.NProto;
+option java_package = "ru.yandex.ydb.core.nbs.dbs_controller.proto";
+
+// Persisted controller state. Placeholder for now - fill with real fields as
+// the tablet gains functionality.
+message TDbsControllerState {
+  uint64 Version = 1;
+}

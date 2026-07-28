@@ -157,7 +157,7 @@ public:
 
     template <class TFiller>
     void FillNGrammHashes(const ui32 nGrammSize, const std::shared_ptr<arrow::Array>& array, TFiller& fillData) {
-        AFL_VERIFY(array->type_id() == arrow::utf8()->id())("id", array->type()->ToString());
+        AFL_VERIFY(array->type_id() == arrow::utf8()->id() || array->type_id() == arrow::binary()->id())("id", array->type()->ToString());
         NArrow::SwitchType(array->type_id(), [&](const auto& type) {
             using TWrap = std::decay_t<decltype(type)>;
             using T = typename TWrap::T;

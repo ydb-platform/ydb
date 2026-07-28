@@ -7,6 +7,8 @@
 #include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/public.h>
 
+#include <ydb/core/mind/bscontroller/types.h>
+
 #include <util/datetime/base.h>
 #include <util/system/types.h>
 
@@ -45,6 +47,16 @@ struct IPartitionDirectService
     // Called when DDisk replied BLOCKED, meaning DDisk has already
     // seen a newer tablet generation. The current tablet instance must suicide.
     virtual void StopTablet(const TString& reason) = 0;
+
+    // Several DBGs of the tablet may share one pbuffer ddisk, and each of them
+    // broadcasts the same tablet-wide barrier, so the ddisk may have already
+    // received this lsn. Called from DBG executor threads.
+    // True: the lsn advances the ddisk's barrier - send it.
+    // False: the ddisk already holds a barrier >= lsn; re-sending it would be
+    // a non-advancing MoveBarrier that DDisk logs as an error - skip the send.
+    virtual bool TryAdvancePBufferBarrier(
+        const NKikimr::NBsController::TDDiskId& pbufferDDiskId,
+        ui64 lsn) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -973,7 +973,7 @@ Y_UNIT_TEST_SUITE(MailboxProcessingFinished) {
                         ESendingType::Tail;
                     break;
                 case EFinishReason::ActorDied:
-                    Y_ABORT("ActorDied cannot be forced for a live actor");
+                    break; // Rejected by Run() before the actor starts.
             }
         }
 
@@ -1042,6 +1042,10 @@ Y_UNIT_TEST_SUITE(MailboxProcessingFinished) {
     };
 
     TResult Run(EFinishReason expectedReason) {
+        UNIT_ASSERT_C(
+            expectedReason != EFinishReason::ActorDied,
+            "ActorDied cannot be forced for a live actor");
+
         auto setup = TActorBenchmark::GetActorSystemSetup();
         TActorBenchmark::AddBasicPool(setup, 1, false, false);
 

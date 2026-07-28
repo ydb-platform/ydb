@@ -263,6 +263,7 @@ namespace NActors {
                 return;
             }
 
+            TActivationContext* const previousActivationContext = TlsActivationContext;
             if (notifyMailboxProcessingFinished) {
                 for (size_t i = 0; i < DyingActors.size(); ++i) {
                     IActor* dyingActor = DyingActors[i].Get();
@@ -302,6 +303,7 @@ namespace NActors {
                         false,
                         false);
                     eventStart = hpnow;
+                    TlsActivationContext = previousActivationContext;
                 }
             }
 

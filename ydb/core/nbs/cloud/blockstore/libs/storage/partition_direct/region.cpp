@@ -27,6 +27,7 @@ TRegion::TRegion(
     NActors::TActorSystem* actorSystem,
     ITraceService* traceService,
     IPartitionDirectService* partitionDirectService,
+    const TDiskDescription& diskDescription,
     ui32 regionIndex,
     const TVector<IDirectBlockGroupPtr>& directBlockGroups,
     const TVChunkConfigByIndex& vChunkConfigs,
@@ -34,6 +35,7 @@ TRegion::TRegion(
     ui64 vChunkSize,
     NMonitoring::TDynamicCounterPtr counters)
     : ActorSystem(actorSystem)
+    , DiskDescription(diskDescription)
 {
     const ui64 vChunksPerRegionCount = GetVChunksPerRegion(vChunkSize);
     for (size_t i = 0; i < vChunksPerRegionCount; i++) {
@@ -57,6 +59,7 @@ TRegion::TRegion(
             ActorSystem,
             traceService,
             partitionDirectService,
+            DiskDescription,
             vChunkConfig,
             directBlockGroups[dbgIndex],
             syncRequestsBatchSize,

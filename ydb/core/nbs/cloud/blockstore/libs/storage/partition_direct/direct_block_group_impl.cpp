@@ -7,6 +7,7 @@
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ic_storage_transport.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error_utils.h>
@@ -181,9 +182,7 @@ TDirectBlockGroup::TDirectBlockGroup(
     NActors::TActorSystem* actorSystem,
     TStorageConfigPtr storageConfig,
     TExecutorPtr executor,
-    const TString& diskId,
-    ui64 tabletId,
-    ui32 generation,
+    const TDiskDescription& diskDescription,
     size_t directBlockGroupIndex,
     const TVector<NBsController::TDDiskId>& ddisksIds,
     const TVector<NBsController::TDDiskId>& pbufferIds,
@@ -191,17 +190,17 @@ TDirectBlockGroup::TDirectBlockGroup(
     : ActorSystem(actorSystem)
     , StorageConfig(std::move(storageConfig))
     , Executor(std::move(executor))
-    , TabletId(tabletId)
-    , TabletGeneration(generation)
+    , TabletId(diskDescription.TabletId)
+    , TabletGeneration(diskDescription.Generation)
     , DirectBlockGroupIndex(directBlockGroupIndex)
     , StorageTransport(std::move(storageTransport))
     , LogTitle(
           GetCycleCount(),
           TLogTitle::TDirectBlockGroup{
-              .DiskId = diskId,
-              .DBGIndex = DirectBlockGroupIndex,
-              .TabletId = TabletId,
-              .Generation = TabletGeneration})
+              .DiskId = diskDescription.DiskId,
+              .TabletId = diskDescription.TabletId,
+              .Generation = diskDescription.Generation,
+              .DBGIndex = DirectBlockGroupIndex})
     , Oracle(StorageConfig, this)
 {
     Y_ASSERT(pbufferIds.size() == ddisksIds.size());
@@ -1314,17 +1313,18 @@ void TDirectBlockGroup::OnAddHostResult(
     Y_ABORT_UNLESS(DDiskConnections.size() < MaxHostCount);
     Y_ABORT_UNLESS(!DDiskConnections.empty());
 
-    LOG_INFO(
-        *ActorSystem,
-        NKikimrServices::NBS_PARTITION,
-        "%s AddHost %s request OK",
-        LogTitle.GetWithTime().c_str(),
-        PrintHostIndex(newHostIndex).c_str());
-
     AddDDiskAndPBufferConnection(
         newHostIndex,
         NBsController::TDDiskId(ddiskId),
         NBsController::TDDiskId(pbufferId));
+
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s AddHost %s %s request OK",
+        LogTitle.GetWithTime().c_str(),
+        PrintNodeId(GetNodeId(newHostIndex)).c_str(),
+        PrintHostIndex(newHostIndex).c_str());
 
     DoEstablishConnection(newHostIndex, EConnectionType::DDisk);
     DoEstablishConnection(newHostIndex, EConnectionType::PBuffer);
@@ -1360,8 +1360,9 @@ void TDirectBlockGroup::SetHostState(
     LOG_WARN(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "%s %s state changed: %s -> %s",
+        "%s %s %s state changed: %s -> %s",
         LogTitle.GetWithTime().c_str(),
+        PrintNodeId(GetNodeId(hostIndex)).c_str(),
         PrintHostIndex(hostIndex).c_str(),
         ToString(oldState).c_str(),
         ToString(newState).c_str());
@@ -1405,6 +1406,14 @@ size_t TDirectBlockGroup::GetHostCount() const
 {
     Y_ABORT_UNLESS(DDiskConnections.size() == PBufferConnections.size());
     return DDiskConnections.size();
+}
+
+ui32 TDirectBlockGroup::GetNodeId(THostIndex host) const
+{
+    if (DDiskConnections.size() <= host) {
+        return Max<ui32>();
+    }
+    return DDiskConnections[host].HostConnection.DDiskId.NodeId;
 }
 
 void TDirectBlockGroup::AddDDiskAndPBufferConnection(
@@ -1476,8 +1485,9 @@ void TDirectBlockGroup::DoEstablishConnection(
         LOG_INFO(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "%s %s starting session: new seq_no: %lu",
+            "%s %s %s starting session: new seq_no: %lu",
             LogTitle.GetWithTime().c_str(),
+            PrintNodeId(GetNodeId(hostIndex)).c_str(),
             PrintHostIndex(hostIndex).c_str(),
             actualSeqNo);
     }
@@ -1549,9 +1559,10 @@ void TDirectBlockGroup::OnConnectionEstablished(
                 LOG_WARN(
                     *ActorSystem,
                     NKikimrServices::NBS_PARTITION,
-                    "%s %s attempt to establish a session with an old "
+                    "%s %s %s attempt to establish a session with an old "
                     "seq_no: %lu while actual seq_no: %lu",
                     LogTitle.GetWithTime().c_str(),
+                    PrintNodeId(GetNodeId(hostIndex)).c_str(),
                     PrintHostIndex(hostIndex).c_str(),
                     seqNo,
                     connection.ConfirmedSessionSeqNo);
@@ -1572,8 +1583,9 @@ void TDirectBlockGroup::OnConnectionEstablished(
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "%s connection failed %s: %s",
+            "%s connection failed %s %s: %s",
             LogTitle.GetWithTime().c_str(),
+            PrintNodeId(GetNodeId(hostIndex)).c_str(),
             PrintHostIndex(hostIndex).c_str(),
             FormatError(error).c_str());
         ReEstablishConnection(connectionType, hostIndex);
@@ -1609,8 +1621,11 @@ void TDirectBlockGroup::ReEstablishConnection(
         LOG_WARN(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "%s reconnect suppressed: blocked generation, suicide in progress",
-            LogTitle.GetWithTime().c_str());
+            "%s reconnect %s %s suppressed: blocked generation, suicide in "
+            "progress",
+            LogTitle.GetWithTime().c_str(),
+            PrintNodeId(GetNodeId(hostIndex)).c_str(),
+            PrintHostIndex(hostIndex).c_str());
         return;
     }
 
@@ -1633,10 +1648,10 @@ void TDirectBlockGroup::OnNodeDisconnected(THostIndex hostIndex, ui32 nodeId)
     LOG_WARN(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "%s OnNodeDisconnected, %s, nodeId: %d",
+        "%s OnNodeDisconnected %s %s",
         LogTitle.GetWithTime().c_str(),
-        PrintHostIndex(hostIndex).c_str(),
-        nodeId);
+        PrintNodeId(nodeId).c_str(),
+        PrintHostIndex(hostIndex).c_str());
 
     Oracle.OnDDiskDisconnected(hostIndex, TInstant::Now());
 
@@ -1742,8 +1757,9 @@ void TDirectBlockGroup::OnResponse(
         LOG_DEBUG(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "%s OnResponse %s %s %s",
+            "%s OnResponse %s %s %s %s",
             LogTitle.GetWithTime().c_str(),
+            PrintNodeId(GetNodeId(hostIndex)).c_str(),
             PrintHostIndex(hostIndex).c_str(),
             ToString(operation).c_str(),
             FormatError(error).c_str());

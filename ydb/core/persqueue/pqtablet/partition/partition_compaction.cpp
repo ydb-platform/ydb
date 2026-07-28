@@ -819,10 +819,9 @@ void TPartition::InitFirstCompactionPart()
     if (CompactionBlobEncoder.HeadKeys.empty()) {
         return;
     }
-    CompactionBlobEncoder.Head.MutableLastBatch().Unpack();
-    const auto& batch = CompactionBlobEncoder.Head.GetLastBatch();
+    TBatch batch = CompactionBlobEncoder.Head.GetLastBatch();
+    batch.Unpack();
     FirstCompactionPart = std::make_pair(batch.GetOffset(), batch.Blobs.back().GetPartNo());
-    CompactionBlobEncoder.Head.MutableLastBatch().Pack();
 }
 
 }

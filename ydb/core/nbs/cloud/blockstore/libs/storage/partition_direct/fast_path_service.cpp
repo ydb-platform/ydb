@@ -436,6 +436,23 @@ void TFastPathService::StopTablet(const TString& reason)
     ActorSystem->Send(PartitionActorId, event.release());
 }
 
+bool TFastPathService::TryAdvancePBufferBarrier(
+    const NKikimr::NBsController::TDDiskId& pbufferDDiskId,
+    ui64 lsn)
+{
+    auto guard = Guard(PBufferBarrierLock);
+    auto [it, inserted] =
+        LastSentBarrierByPBuffer.try_emplace(pbufferDDiskId, lsn);
+    if (inserted) {
+        return true;
+    }
+    if (lsn > it->second) {
+        it->second = lsn;
+        return true;
+    }
+    return false;
+}
+
 TFastPathServiceInfo TFastPathService::GetMonInfo() const
 {
     return {

@@ -1104,6 +1104,13 @@ void TDirectBlockGroup::DoBarrierEraseFromPBuffer(
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
+    if (!Service->TryAdvancePBufferBarrier(
+            PBufferConnections[hostIndex].HostConnection.DDiskId,
+            lsn))
+    {
+        return;
+    }
+
     using TEvErasePersistentBufferResult =
         NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult;
 

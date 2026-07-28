@@ -69,6 +69,15 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
         ++BlockedGenerationCount;
         LastBlockedReason = reason;
     }
+
+    bool TryAdvancePBufferBarrier(
+        const NKikimr::NBsController::TDDiskId& pbufferDDiskId,
+        ui64 lsn) override
+    {
+        Y_UNUSED(pbufferDDiskId);
+        Y_UNUSED(lsn);
+        return true;
+    }
 };
 
 using TPartitionDirectServiceMockPtr =

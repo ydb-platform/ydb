@@ -9,6 +9,7 @@ UDF_TABLE_WASM_SOURCE_PATH = UDF_STORE_PATH + "/wasm_source"
 UDF_TABLE_WASM_SOURCE_CHUNKS_PATH = UDF_STORE_PATH + "/wasm_source_chunks"
 UDF_TABLE_LIBRARY_SOURCE_PATH = UDF_STORE_PATH + "/library_source"
 UDF_TABLE_LIBRARY_SOURCE_CHUNKS_PATH = UDF_STORE_PATH + "/library_source_chunks"
+UDF_ARTIFACTS_DIR_PATH = UDF_STORE_PATH + "/artifacts"
 
 # Must match NKikimr::NUdfStore::WasmBlobChunkSize
 WASM_BLOB_CHUNK_SIZE = 8 * 1024 * 1024

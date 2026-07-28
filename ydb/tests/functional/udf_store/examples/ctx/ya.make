@@ -10,6 +10,7 @@ SRCS(
 
 PEERDIR(
     ydb/services/udf_store/wasm/abi
+    ydb/services/udf_store/wasm/object_framework
 )
 
 END()

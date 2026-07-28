@@ -1,7 +1,9 @@
 /* syntax version 1 */
--- Force filter evaluation, then Snapshot (do not pair Snapshot in the same SELECT row list).
+-- Shared ctx: CountRow always bumps rows_seen; CountPositive bumps positives when x > 0.
+-- Evaluate filters first, then Snapshot (do not mix Snapshot into the same SELECT row list).
 $ctx = Ctx::New();
-$vals = AsList(1, 2, 3);
-$afterA = ListMap($vals, ($x) -> { RETURN Filters::ApplyA($ctx, $x) });
-$afterB = ListMap($afterA, ($x) -> { RETURN Filters::ApplyB($ctx, $x) });
-SELECT $afterB AS rows, Ctx::Snapshot($ctx) AS stats;
+$vals = AsList(-1, 2, 3);
+$afterRows = ListMap($vals, ($x) -> { RETURN Ctx::CountRow($ctx, $x) });
+$afterPos = ListMap($afterRows, ($x) -> { RETURN Ctx::CountPositive($ctx, $x) });
+SELECT $afterPos AS rows, Ctx::Snapshot($ctx) AS stats;
+-- expected: rows = [-1, 2, 3], stats = "rows_seen=3;positives=2"

@@ -13,6 +13,7 @@ SRCS(
     blobstorage_events.cpp
     blobstorage_events.h
     blobstorage_oos_defs.h
+    infer_pdisk_slot_count_settings.h
     blobstorage_vdiskid.cpp
     blobstorage_vdiskid.h
     blobstorage_syncstate.cpp
@@ -20,6 +21,7 @@ SRCS(
     defs.h
     html.cpp
     html.h
+    pdisk_config_validation.h
     ptr.h
     vdisk_lsn.h
     vdisk_sync_common.h

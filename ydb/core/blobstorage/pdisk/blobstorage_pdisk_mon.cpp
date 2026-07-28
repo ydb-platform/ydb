@@ -230,6 +230,7 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
 
     // pdisk (interface)
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, YardInit, YardInit);
+    IO_REQ_INIT_IF_EXTENDED(PDiskGroup, ChangeExpectedSlotCount, ChangeExpectedSlotCount);
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, CheckSpace, YardCheckSpace);
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, YardConfigureScheduler, YardConfigureScheduler);
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, ChunkReserve, YardChunkReserve);

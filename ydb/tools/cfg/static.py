@@ -421,11 +421,17 @@ class StaticConfigGenerator(object):
                     # inside config.yaml we should use field drive in host_configs section
                     host_config['drive'] = host_config.pop('drives')
                     for drive in host_config['drive']:
+                        pdisk_config = {}
                         if 'expected_slot_count' in drive:
                             # inside config.yaml we should use pdisk_config section for expected_slot_count
-                            drive['pdisk_config'] = {
-                                'expected_slot_count': drive.pop('expected_slot_count')
-                            }
+                            pdisk_config['expected_slot_count'] = drive.pop('expected_slot_count')
+                        if 'expected_slot_size' in drive:
+                            # inside config.yaml we should use pdisk_config section for expected_slot_size/max_slots
+                            pdisk_config['expected_slot_size'] = drive.pop('expected_slot_size')
+                        if 'max_slots' in drive:
+                            pdisk_config['max_slots'] = drive.pop('max_slots')
+                        if pdisk_config:
+                            drive.setdefault('pdisk_config', {}).update(pdisk_config)
 
                         # support type-safe `pdisk_config` directly in `host_configs`, for example:
                         # - path: /dev/disk/by-partlabel/ydb_disk_hdd_04
@@ -464,9 +470,14 @@ class StaticConfigGenerator(object):
         if self.__cluster_details.s3_proxy_resolver_config is not None:
             normalized_config["s3_proxy_resolver_config"] = self.__cluster_details.s3_proxy_resolver_config
 
-        if self.__cluster_details.blob_storage_config is not None:
-            normalized_config["blob_storage_config"] = self.__cluster_details.blob_storage_config
+        user_bs_config = self.__cluster_details.blob_storage_config
+        if user_bs_config is not None and "service_set" in user_bs_config:
+            normalized_config["blob_storage_config"] = user_bs_config
         else:
+            if user_bs_config:
+                # merge user-supplied fields (e.g. bsc_settings, infer_pdisk_slot_count_settings)
+                # on top of the generated config, keeping the generated static service set
+                normalized_config["blob_storage_config"].update(user_bs_config)
             blobstorage_config_service_set = normalized_config["blob_storage_config"]["service_set"]
             del blobstorage_config_service_set["vdisks"]
 
@@ -560,7 +571,14 @@ class StaticConfigGenerator(object):
                             vdisk_location['pdisk_category'] = int(vdisk_location['pdisk_category'])
                             if 'pdisk_config' in vdisk_location:
                                 if 'expected_slot_count' in vdisk_location['pdisk_config']:
-                                    vdisk_location['pdisk_config']['expected_slot_count'] = int(vdisk_location['pdisk_config']['expected_slot_count'])
+                                    vdisk_location['pdisk_config']['expected_slot_count'] = int(
+                                        vdisk_location['pdisk_config']['expected_slot_count'])
+                                if 'expected_slot_size' in vdisk_location['pdisk_config']:
+                                    vdisk_location['pdisk_config']['expected_slot_size'] = int(
+                                        vdisk_location['pdisk_config']['expected_slot_size'])
+                                if 'max_slots' in vdisk_location['pdisk_config']:
+                                    vdisk_location['pdisk_config']['max_slots'] = int(
+                                        vdisk_location['pdisk_config']['max_slots'])
 
         if self.__cluster_details.channel_profile_config is not None:
             normalized_config["channel_profile_config"] = self.__cluster_details.channel_profile_config
@@ -626,6 +644,12 @@ class StaticConfigGenerator(object):
         app_config = config_pb2.TAppConfig()
         app_config.BootstrapConfig.CopyFrom(self.boot_txt)
         app_config.BlobStorageConfig.CopyFrom(self.bs_txt)
+        user_bs_config = self.__cluster_details.blob_storage_config
+        if user_bs_config and "service_set" not in user_bs_config:
+            # keep the CMS-pushed config consistent with the generated config.yaml: merge
+            # user-supplied blob_storage_config extras (e.g. infer_pdisk_slot_count_settings)
+            # over the generated service set, as get_normalized_config() does
+            utils.wrap_parse_dict(user_bs_config, app_config.BlobStorageConfig)
         app_config.ChannelProfileConfig.CopyFrom(self.channels_txt)
         app_config.DomainsConfig.CopyFrom(self.domains_txt)
         if self.feature_flags_txt.ByteSize() > 0:
@@ -803,6 +827,9 @@ class StaticConfigGenerator(object):
 
                 if drive.expected_slot_count is not None:
                     drive_pb.PDiskConfig.ExpectedSlotCount = drive.expected_slot_count
+                if drive.expected_slot_size:  # zero means 'not set', as on the C++ side
+                    drive_pb.PDiskConfig.ExpectedSlotSize = drive.expected_slot_size
+                    drive_pb.PDiskConfig.MaxSlots = drive.max_slots
 
                 assert drive_pb.Guid not in all_guids, "All Guids must be unique!"
                 all_guids.add(drive_pb.Guid)
@@ -813,7 +840,8 @@ class StaticConfigGenerator(object):
         dc_enumeration = {}
 
         if not self.__cluster_details.get_service("static_groups"):
-            if self.__cluster_details.blob_storage_config:
+            user_bs_config = self.__cluster_details.blob_storage_config
+            if user_bs_config and "service_set" in user_bs_config:
                 return
             self.__proto_configs["bs.txt"] = self._read_generated_bs_config(
                 str(self.__cluster_details.static_erasure),
@@ -871,6 +899,9 @@ class StaticConfigGenerator(object):
 
                 if drive.expected_slot_count is not None:
                     drive_pb.PDiskConfig.ExpectedSlotCount = drive.expected_slot_count
+                if drive.expected_slot_size:  # zero means 'not set', as on the C++ side
+                    drive_pb.PDiskConfig.ExpectedSlotSize = drive.expected_slot_size
+                    drive_pb.PDiskConfig.MaxSlots = drive.max_slots
 
             my_group = self._read_generated_bs_config(
                 group.get("erasure"),

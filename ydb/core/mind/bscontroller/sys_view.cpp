@@ -58,9 +58,11 @@ void CalculateGroupUsageStats(NKikimrSysView::TGroupInfo *info, const std::vecto
 
         const auto& pdiskMetrics = *disk.PDiskMetrics;
         ui64 slotSize = 0;
-        if (pdiskMetrics.HasEnforcedDynamicSlotSize()) {
+        if (disk.ExpectedSlotSize) {
+            slotSize = disk.ExpectedSlotSize;
+        } else if (pdiskMetrics.HasEnforcedDynamicSlotSize()) {
             slotSize = pdiskMetrics.GetEnforcedDynamicSlotSize();
-        } else if (pdiskMetrics.GetTotalSize()) {
+        } else if (pdiskMetrics.GetTotalSize() && disk.ExpectedSlotCount) {
             slotSize = pdiskMetrics.GetTotalSize() / disk.ExpectedSlotCount;
         }
 
@@ -331,7 +333,8 @@ void CopyInfo(NKikimrSysView::TPDiskInfo* info, const THolder<TBlobStorageContro
     if (pDiskInfo->Metrics.HasEnforcedDynamicSlotSize()) {
         info->SetEnforcedDynamicSlotSize(pDiskInfo->Metrics.GetEnforcedDynamicSlotSize());
     }
-    info->SetExpectedSlotCount(pDiskInfo->ExpectedSlotCount);
+    info->SetExpectedSlotCount(pDiskInfo->GetEffectiveExpectedSlotCount());
+    info->SetExpectedSlotSize(pDiskInfo->GetEffectiveExpectedSlotSize());
     info->SetNumActiveSlots(pDiskInfo->NumActiveSlots + pDiskInfo->StaticSlotUsage);
     info->SetDecommitStatus(NKikimrBlobStorage::EDecommitStatus_Name(pDiskInfo->DecommitStatus));
 }
@@ -395,7 +398,12 @@ void CopyInfo(NKikimrSysView::TGroupInfo* info, const THolder<TBlobStorageContro
 
     std::vector<TGroupDiskInfo> disks;
     for (const auto& vslot : groupInfo->VDisksInGroup) {
-        disks.push_back({&vslot->PDisk->Metrics, &vslot->Metrics, vslot->PDisk->ExpectedSlotCount});
+        disks.push_back({
+            &vslot->PDisk->Metrics,
+            &vslot->Metrics,
+            vslot->PDisk->GetEffectiveExpectedSlotCount(),
+            vslot->PDisk->GetEffectiveExpectedSlotSize(),
+        });
     }
     CalculateGroupUsageStats(info, disks, TBlobStorageGroupType(groupInfo->ErasureSpecies));
 
@@ -506,7 +514,9 @@ void TBlobStorageController::UpdateSystemViews() {
                 }
                 pb->SetStatusV2(NKikimrBlobStorage::EDriveStatus_Name(NKikimrBlobStorage::EDriveStatus::ACTIVE));
                 pb->SetDecommitStatus(NKikimrBlobStorage::EDecommitStatus_Name(NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE));
-                pb->SetExpectedSlotCount(pdisk.ExpectedSlotCount ? pdisk.ExpectedSlotCount : pdisk.StaticSlotUsage);
+                const ui32 slotCount = pdisk.GetEffectiveExpectedSlotCount();
+                pb->SetExpectedSlotCount(slotCount ? slotCount : pdisk.StaticSlotUsage);
+                pb->SetExpectedSlotSize(pdisk.GetEffectiveExpectedSlotSize());
                 pb->SetNumActiveSlots(pdisk.StaticSlotUsage);
             }
         }
@@ -538,13 +548,14 @@ void TBlobStorageController::UpdateSystemViews() {
                         for (const auto& domain : realm.GetFailDomains()) {
                             for (const auto& location : domain.GetVDiskLocations()) {
                                 const TVSlotId vslotId(location.GetNodeID(), location.GetPDiskID(), location.GetVDiskSlotID());
-                                TGroupDiskInfo disk{nullptr, nullptr, 0};
+                                TGroupDiskInfo disk{nullptr, nullptr, 0, 0};
                                 if (const auto it = StaticVSlots.find(vslotId); it != StaticVSlots.end()) {
                                     disk.VDiskMetrics = it->second.VDiskMetrics ? &*it->second.VDiskMetrics : &zero;
                                 }
                                 if (const auto it = PDisks.find(vslotId.ComprisingPDiskId()); it != PDisks.end()) {
                                     disk.PDiskMetrics = &it->second->Metrics;
-                                    disk.ExpectedSlotCount = it->second->ExpectedSlotCount;
+                                    disk.ExpectedSlotCount = it->second->GetEffectiveExpectedSlotCount();
+                                    disk.ExpectedSlotSize = it->second->GetEffectiveExpectedSlotSize();
                                 }
                                 if (disk.VDiskMetrics && disk.PDiskMetrics) {
                                     disks.push_back(std::move(disk));

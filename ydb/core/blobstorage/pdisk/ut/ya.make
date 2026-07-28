@@ -34,6 +34,7 @@ SRCS(
     blobstorage_pdisk_restore_ut.cpp
     blobstorage_pdisk_ut.cpp
     blobstorage_pdisk_ut_actions.cpp
+    blobstorage_pdisk_ut_chunk_tracker.cpp
     blobstorage_pdisk_ut_color_limits.cpp
     blobstorage_pdisk_ut_context.cpp
     blobstorage_pdisk_ut_env.cpp

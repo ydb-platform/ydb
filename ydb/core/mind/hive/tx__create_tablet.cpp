@@ -289,8 +289,10 @@ public:
                     db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::BootMode>(BootMode);
                     tablet->BalancerPolicy = BalancerPolicy;
                     db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::BalancerPolicy>(BalancerPolicy);
-                    tablet->IsBackup = IsBackup;
-                    db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::IsBackup>(IsBackup);
+                    if (RequestData.HasIsBackup()) {
+                        tablet->IsBackup = IsBackup;
+                        db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::IsBackup>(IsBackup);
+                    }
 
                     UpdateChannelsBinding(*tablet, db);
 

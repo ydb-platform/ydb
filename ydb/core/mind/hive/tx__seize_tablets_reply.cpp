@@ -35,7 +35,9 @@ public:
             tablet.State = static_cast<ETabletState>(protoTabletInfo.GetState());
             tablet.Owner = owner;
             tablet.BootMode = protoTabletInfo.GetTabletBootMode();
-            tablet.IsBackup = protoTabletInfo.GetIsBackup();
+            if (protoTabletInfo.HasIsBackup()) {
+                tablet.IsBackup = protoTabletInfo.GetIsBackup();
+            }
             tablet.ObjectId = {owner.first, protoTabletInfo.GetObjectId()};
 
             TVector<TSubDomainKey> allowedDomains;

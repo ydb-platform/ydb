@@ -131,18 +131,29 @@ public:
         THashMap<TBlobRange, std::vector<TBlobRange>> result;
         std::optional<TBlobRange> currentRange;
         std::vector<TBlobRange> currentList;
+        auto flushCurrent = [&]() {
+            AFL_VERIFY(currentRange);
+            AFL_VERIFY(currentList.size());
+            for (const auto& sub : currentList) {
+                AFL_VERIFY(currentRange->GetBlobId() == sub.GetBlobId())("group", currentRange->ToString())("sub", sub.ToString());
+                AFL_VERIFY(currentRange->Offset <= sub.Offset)("group", currentRange->ToString())("sub", sub.ToString());
+                AFL_VERIFY(static_cast<ui64>(sub.Offset) + sub.GetBlobSize() <= static_cast<ui64>(currentRange->Offset) + currentRange->GetBlobSize())
+                ("group", currentRange->ToString())("sub", sub.ToString());
+            }
+            AFL_VERIFY(result.emplace(*currentRange, std::move(currentList)).second)("group", currentRange->ToString());
+            currentList.clear();
+        };
         for (auto&& br : ranges) {
             if (!currentRange) {
                 currentRange = br;
             } else if (!policy.Glue(*currentRange, br)) {
-                result.emplace(*currentRange, std::move(currentList));
+                flushCurrent();
                 currentRange = br;
-                currentList.clear();
             }
             currentList.emplace_back(br);
         }
         if (currentRange) {
-            result.emplace(*currentRange, std::move(currentList));
+            flushCurrent();
         }
         return result;
     }

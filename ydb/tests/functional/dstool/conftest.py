@@ -58,6 +58,7 @@ class BaseConfigBuilder:
         vslot.VDiskMetrics.AllocatedSize = allocated_size
         vslot.VDiskMetrics.AvailableSize = available_size
         if status == 'READY':
+            vslot.Ready = True
             vslot.VDiskMetrics.Replicated = True
             vslot.VDiskMetrics.State = EVDiskState.OK
         return self

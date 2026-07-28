@@ -13,10 +13,19 @@ select  item.i_product_name
        where inv_date_sk=d_date_sk
               and inv_item_sk=i_item_sk
               and d_month_seq between 1200 and 1200 + 11
+    /*
        group by rollup(item.i_product_name
                        ,item.i_brand
                        ,item.i_class
                        ,item.i_category)
+    */
+       group by grouping sets(
+        (item.i_product_name, item.i_brand, item.i_class, item.i_category),
+        (item.i_product_name, item.i_brand, item.i_class),
+        (item.i_product_name, item.i_brand),
+        (item.i_product_name),
+        ((d_month_seq < 0) AS FAKE)
+       )
 order by qoh, item.i_product_name, item.i_brand, item.i_class, item.i_category
 limit 100;
 

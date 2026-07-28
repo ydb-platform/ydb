@@ -1355,7 +1355,8 @@ public:
         ui64 fileQueueConsumersCountDelta,
         bool asyncDecoding,
         bool asyncDecompressing,
-        bool allowLocalFiles)
+        bool allowLocalFiles,
+        IDqSchedulerContextPtr schedulerContext)
         : TSourceErrorHandler(inputIndex)
         , ReadActorFactoryCfg(readActorFactoryCfg)
         , Gateway(std::move(gateway))
@@ -1384,7 +1385,8 @@ public:
         , FileQueueConsumersCountDelta(fileQueueConsumersCountDelta)
         , AsyncDecoding(asyncDecoding)
         , AsyncDecompressing(asyncDecompressing)
-        , AllowLocalFiles(allowLocalFiles) {
+        , AllowLocalFiles(allowLocalFiles)
+        , SchedulerContext(std::move(schedulerContext)) {
         if (Counters) {
             QueueDataSize = Counters->GetCounter("QueueDataSize");
             QueueDataLimit = Counters->GetCounter("QueueDataLimit");
@@ -1992,6 +1994,7 @@ private:
     const bool AsyncDecoding;
     const bool AsyncDecompressing;
     const bool AllowLocalFiles;
+    const IDqSchedulerContextPtr SchedulerContext;
     bool IsCurrentBatchEmpty = false;
     bool IsFileQueueEmpty = false;
     bool IsWaitingFileQueueResponse = false;
@@ -2155,7 +2158,8 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     ::NMonitoring::TDynamicCounterPtr counters,
     ::NMonitoring::TDynamicCounterPtr taskCounters,
     IMemoryQuotaManager::TPtr memoryQuotaManager,
-    bool allowLocalFiles)
+    bool allowLocalFiles,
+    IDqSchedulerContextPtr schedulerContext)
 {
     const IFunctionRegistry& functionRegistry = *holderFactory.GetFunctionRegistry();
 
@@ -2373,7 +2377,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
                                                   std::move(paths), addPathIndex, readSpec, computeActorId, retryPolicy,
                                                   cfg, counters, taskCounters, fileSizeLimit, sizeLimit, rowsLimitHint, memoryQuotaManager,
                                                   params.GetUseRuntimeListing(), fileQueueActor, fileQueueBatchSizeLimit, fileQueueBatchObjectCountLimit, fileQueueConsumersCountDelta,
-                                                  params.GetAsyncDecoding(), params.GetAsyncDecompressing(), allowLocalFiles);
+                                                  params.GetAsyncDecoding(), params.GetAsyncDecompressing(), allowLocalFiles, std::move(schedulerContext));
 
         return {actor, actor};
     }

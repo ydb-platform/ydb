@@ -73,7 +73,7 @@ namespace NYql::NDq {
                         return CreateS3ReadActor(args.TypeEnv, args.HolderFactory, std::move(args.Alloc), gateway,
                             std::move(settings), args.InputIndex, args.StatsLevel, args.TxId, args.SecureParams,
                             args.TaskParams, args.ReadRanges, args.ComputeActorId, credentialsFactory, retryPolicy, cfg,
-                            counters, args.TaskCounters, args.MemoryQuotaManager, allowLocalFiles);
+                            counters, args.TaskCounters, args.MemoryQuotaManager, allowLocalFiles, std::move(args.SchedulerContext));
                     });
             #else
                 Y_UNUSED(factory);

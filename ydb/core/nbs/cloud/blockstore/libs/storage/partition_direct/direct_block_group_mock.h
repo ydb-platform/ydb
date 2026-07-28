@@ -242,6 +242,8 @@ public:
     NThreading::TFuture<TListPBufferResponse> ListPBuffers(
         THostIndex hostIndex) override;
 
+    ui32 GetNodeId(THostIndex host) override;
+
     NThreading::TFuture<TDBGDumpResponse> Dump() override;
 
     void OnAddHostResult(

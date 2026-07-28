@@ -166,7 +166,7 @@ LIMIT 10;
 ```
 
 
-Filters on service fields are evaluated before reading data from the topic and significantly reduce the volume of messages read. The following comparison operators are supported: (`=`, `<>`, `<`, `<=`, `>`, `>=`, `IN`), logical conditions (`AND`, `OR`), and fields `partition_id`, `write_time`, `offset`. Predicates on other service fields do not limit the read volume.
+Filters on service fields are evaluated before reading data from the topic and significantly reduce the volume of messages read. The following comparison operators are supported: `=`, `<>`, `<`, `<=`, `>`, `>=`, `IN`, logical conditions `AND`, `OR`, and fields `partition_id`, `write_time`, `offset`. Predicates on other service fields do not limit the read volume.
 
 
 ```yql

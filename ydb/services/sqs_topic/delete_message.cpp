@@ -38,7 +38,6 @@
 
 #include <ydb/services/sqs_topic/billing.h>
 
-#include <ydb/library/actors/core/log.h>
 #include <ydb/services/sqs_topic/statuses.h>
 
 using namespace NActors;
@@ -253,8 +252,10 @@ namespace NKikimr::NSqsTopic::V1 {
                     SetRlContext(*rlContext);
                     if (IsQuotaRequired()) {
                         const ui64 ru = NBilling::CalcRu(0, NBilling::DELETE_BASE_COST, 0, false, false);
-                        AFL_ENSURE(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, TlsActivationContext->AsActorContext()))
-                            ("ru", ru)("path", FullTopicPath_);
+                        if (!MaybeRequestQuota(ru, EWakeupTag::RlAllowed, TlsActivationContext->AsActorContext())) {
+                            return this->ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
+                                "Rate limiter request already in progress"));
+                        }
                         return;
                     }
                 }
@@ -263,7 +264,10 @@ namespace NKikimr::NSqsTopic::V1 {
             }
 
             const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-            AFL_ENSURE(result->ResultSet.size() == 1)("result_set_size", result->ResultSet.size());
+            if (result->ResultSet.size() != 1) {
+                return this->ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
+                    TStringBuilder() << "Unexpected scheme cache result size: " << result->ResultSet.size()));
+            }
             const auto& response = result->ResultSet.front();
             if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
                 if (response.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {

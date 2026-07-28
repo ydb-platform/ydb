@@ -300,7 +300,10 @@ namespace NKikimr::NSqsTopic::V1 {
             if (ShouldBeCharged_ && IsQuotaRequired()) {
                 const ui64 ru = NBilling::CalcRu(
                     CalcRuConsumption(payloadSize), NBilling::READ_BASE_COST, NBilling::READ_COST_PER_BLOCK, Fifo_, false);
-                AFL_ENSURE(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, ctx))("ru", ru)("path", FullTopicPath_);
+                if (!MaybeRequestQuota(ru, EWakeupTag::RlAllowed, ctx)) {
+                    return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
+                        "Rate limiter request already in progress"));
+                }
                 return;
             }
 
@@ -331,7 +334,10 @@ namespace NKikimr::NSqsTopic::V1 {
             }
 
             const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-            AFL_ENSURE(result->ResultSet.size() == 1)("result_set_size", result->ResultSet.size());
+            if (result->ResultSet.size() != 1) {
+                return this->ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
+                    TStringBuilder() << "Unexpected scheme cache result size: " << result->ResultSet.size()));
+            }
             const auto& response = result->ResultSet.front();
             if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
                 if (response.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {

@@ -39,7 +39,6 @@
 
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 
-#include <ydb/library/actors/core/log.h>
 #include <ydb/services/sqs_topic/statuses.h>
 
 #include <library/cpp/json/json_writer.h>
@@ -99,7 +98,10 @@ namespace NKikimr::NSqsTopic::V1 {
 
         void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
             const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-            AFL_ENSURE(result->ResultSet.size() == 1)("result_set_size", result->ResultSet.size());
+            if (result->ResultSet.size() != 1) {
+                return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
+                    TStringBuilder() << "Unexpected scheme cache result size: " << result->ResultSet.size()));
+            }
             const auto& response = result->ResultSet.front();
             if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
                 if (response.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
@@ -117,7 +119,10 @@ namespace NKikimr::NSqsTopic::V1 {
                 return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
                                                 TStringBuilder() << "Failed to describe topic: " << response.Status));
             }
-            AFL_ENSURE(response.PQGroupInfo)("path", this->TopicPath);
+            if (!response.PQGroupInfo) {
+                return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
+                    TStringBuilder() << "Failed to describe topic: missing PQ group info for " << this->TopicPath));
+            }
             PQGroup = response.PQGroupInfo->Description;
             SelfInfo = response.Self->Info;
             ConsumerConfig = GetConsumerConfig(PQGroup.GetPQTabletConfig(), ConsumerName, ActorContext());

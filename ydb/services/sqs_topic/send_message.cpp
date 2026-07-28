@@ -41,7 +41,6 @@
 
 #include <ydb/services/sqs_topic/billing.h>
 
-#include <ydb/library/actors/core/log.h>
 #include <ydb/services/sqs_topic/statuses.h>
 
 #include <library/cpp/digest/md5/md5.h>
@@ -326,8 +325,10 @@ namespace NKikimr::NSqsTopic::V1 {
                             NBilling::WRITE_COST_PER_BLOCK,
                             Fifo_,
                             ContentBasedDeduplication_);
-                        AFL_ENSURE(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, TlsActivationContext->AsActorContext()))
-                            ("ru", ru)("path", FullTopicPath_);
+                        if (!MaybeRequestQuota(ru, EWakeupTag::RlAllowed, TlsActivationContext->AsActorContext())) {
+                            return this->ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
+                                "Rate limiter request already in progress"));
+                        }
                         return;
                     }
                 }
@@ -336,7 +337,10 @@ namespace NKikimr::NSqsTopic::V1 {
             }
 
             const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-            AFL_ENSURE(result->ResultSet.size() == 1)("result_set_size", result->ResultSet.size());
+            if (result->ResultSet.size() != 1) {
+                return this->ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
+                    TStringBuilder() << "Unexpected scheme cache result size: " << result->ResultSet.size()));
+            }
             const auto& response = result->ResultSet.front();
             if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
                 if (response.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
@@ -353,7 +357,10 @@ namespace NKikimr::NSqsTopic::V1 {
                                                 TStringBuilder() << "Failed to describe topic: " << response.Status));
             }
 
-            AFL_ENSURE(response.PQGroupInfo)("path", FullTopicPath_);
+            if (!response.PQGroupInfo) {
+                return this->ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
+                    TStringBuilder() << "Failed to describe topic: missing PQ group info for " << FullTopicPath_));
+            }
             Fifo_ = QueueUrl_->Fifo;
             ApplyContentBasedDeduplication(
                 Fifo_ && response.PQGroupInfo->Description.GetPQTabletConfig().GetContentBasedDeduplication());

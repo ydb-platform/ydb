@@ -60,7 +60,7 @@ void TPartitionActor::OnDetach(const TActorContext& ctx)
         "%s OnDetach",
         LogTitle.GetWithTime().c_str());
 
-    DetachEndpointAddDie(ctx);
+    Die(ctx);
 }
 
 void TPartitionActor::OnTabletDead(
@@ -72,7 +72,7 @@ void TPartitionActor::OnTabletDead(
     LOG_INFO(
         NActors::TActivationContext::AsActorContext(),
         NKikimrServices::NBS_PARTITION,
-        "%s OnTabletDead",
+        "%s OnTabletDead %s",
         LogTitle.GetWithTime().c_str(),
         TEvTablet::TEvTabletDead::Str(msg->Reason));
 

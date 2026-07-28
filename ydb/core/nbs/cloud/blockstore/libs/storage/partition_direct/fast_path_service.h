@@ -38,6 +38,7 @@ private:
     const TVector<IDirectBlockGroupPtr> DirectBlockGroups;
     const TVector<TRegionPtr> Regions;   // 4 GiB each
 
+    TLogTitle LogTitle;
     std::atomic<ui64> SequenceGenerator;
     std::atomic<NActors::TMonotonic> LastTraceTs{NActors::TMonotonic::Zero()};
     // Throttle trace ID creation to avoid overwhelming the tracing system

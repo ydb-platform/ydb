@@ -84,6 +84,7 @@ private:
     using TData = std::variant<
         TVolume,
         TPartitionDirect,
+        TFastPathService,
         TDirectBlockGroup,
         TVChunk,
         TDDiskDataCopier,

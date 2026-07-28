@@ -67,7 +67,7 @@ void DumpToFile(
                 << dirPath << diskDescription.DiskId << "." << index;
     TFile file(path, EOpenModeFlag::CreateAlways);
 
-    auto header = diskDescription.Print() + "/n";
+    auto header = diskDescription.Print() + "\n";
     file.Write(header.data(), header.size());
 
     file.Write(config.data(), config.size());
@@ -192,8 +192,8 @@ TFastPathService::~TFastPathService()
     LOG_INFO(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "TFastPathService::Destroy %s",
-        DiskId.Quote().c_str());
+        "%s Destroy",
+        LogTitle.GetWithTime().c_str());
 }
 
 NThreading::TFuture<void> TFastPathService::Run()
@@ -201,8 +201,8 @@ NThreading::TFuture<void> TFastPathService::Run()
     LOG_INFO(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "TFastPathService::Run %s",
-        DiskId.Quote().c_str());
+        "%s Run",
+        LogTitle.GetWithTime().c_str());
 
     TVector<NThreading::TFuture<void>> initialReadyFutures;
     initialReadyFutures.reserve(DirectBlockGroups.size());
@@ -222,8 +222,8 @@ NThreading::TFuture<void> TFastPathService::Stop()
     LOG_INFO(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "TFastPathService::Stop %s",
-        DiskId.Quote().c_str());
+        "%s TFastPathService::Stop",
+        LogTitle.GetWithTime().c_str());
 
     TVector<NThreading::TFuture<void>> stopFutures;
     for (const auto& region: Regions) {
@@ -599,7 +599,8 @@ void TFastPathService::OnDebugDump(size_t dbgIndex, TDBGDumpResponse dump)
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "Dump error %s",
+            "%s Dump error %s",
+            LogTitle.GetWithTime().c_str(),
             e.what());
     }
 

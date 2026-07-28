@@ -53,6 +53,10 @@ public:
 
     void Bootstrap(const NActors::TActorContext& ctx);
 
+    NActors::TActorId GetKafkaConnectionId() const {
+        return Context ? Context->ConnectionId : NActors::TActorId{};
+    }
+
 private:
     NActors::NStructuredLog::TStructuredMessage LogPrefix();
     void Die(const TActorContext& ctx) override;

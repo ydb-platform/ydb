@@ -90,9 +90,8 @@ public:
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::KAFKA_READ_SESSION_ACTOR; }
 
-    void OnKafkaUnhandledException(const std::exception&, const NActors::TActorContext& ctx) {
-        CloseReadSession(ctx);
-        ctx.Send(SelfId(), new NActors::TEvents::TEvPoison);
+    NActors::TActorId GetKafkaConnectionId() const {
+        return Context ? Context->ConnectionId : NActors::TActorId{};
     }
 
 private:

@@ -33,6 +33,10 @@ public:
 
     void Bootstrap();
 
+    NActors::TActorId GetKafkaConnectionId() const {
+        return Context ? Context->ConnectionId : NActors::TActorId{};
+    }
+
 private:
     STATEFN(StateWork) {
         YDB_LOG_TRACE_COMP(NKikimrServices::KAFKA_PROXY, "Received",

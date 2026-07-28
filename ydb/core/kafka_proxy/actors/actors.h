@@ -33,8 +33,18 @@ public:
         return true;
     }
 
+    // Default: tear down the TCP connection when available so the client reconnects.
+    // Override GetKafkaConnectionId() in actors that own a TContext.
+    NActors::TActorId GetKafkaConnectionId() const {
+        return {};
+    }
+
     void OnKafkaUnhandledException(const std::exception&, const NActors::TActorContext& ctx) {
         auto* self = static_cast<TDerived*>(this);
+        if (const auto connectionId = self->GetKafkaConnectionId()) {
+            ctx.Send(connectionId, new NActors::TEvents::TEvPoison);
+            return;
+        }
         ctx.Send(self->SelfId(), new NActors::TEvents::TEvPoison);
     }
 };

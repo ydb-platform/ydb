@@ -65,6 +65,10 @@ public:
 
     void Bootstrap(const NActors::TActorContext& ctx);
 
+    NActors::TActorId GetKafkaConnectionId() const {
+        return Context ? Context->ConnectionId : NActors::TActorId{};
+    }
+
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvKafka::TEvCommitedOffsetsResponse, Handle);

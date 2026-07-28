@@ -43,6 +43,10 @@ public:
     void Handle(const TEvKafka::TEvTopicDescribeResponse::TPtr& ev);
     void Reply();
 
+    NActors::TActorId GetKafkaConnectionId() const {
+        return Context ? Context->ConnectionId : NActors::TActorId{};
+    }
+
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvKafka::TEvTopicDescribeResponse, Handle);

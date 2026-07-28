@@ -561,7 +561,10 @@ public:
         LastClassifierSnapshot = snapshot;
         for (const auto& [databaseId, info] : snapshot->GetResourcePoolClassifierConfigs()) {
             for (const auto& [_, classifier] : info.ByName) {
-                (void)GetPoolInfo(databaseId, classifier.GetClassifierSettings().ResourcePool, actorContext);
+                const auto maybeResourcePool = classifier.GetClassifierSettings().ResourcePool;
+                if (maybeResourcePool) {
+                    (void)GetPoolInfo(databaseId, *maybeResourcePool, actorContext);
+                }
             }
         }
     }

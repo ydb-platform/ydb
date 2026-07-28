@@ -1037,13 +1037,17 @@ private:
     // dedup key and, in the non-covered path, the buffered main-read key. The PK
     // columns are read at CoveredPkPositions in the covered path, else at
     // positions 0..N-1. The cells reference the row's memory, so they are only
-    // valid until the row is released.
+    // valid until the row is released -- or, for an embedded string that MakeCell has
+    // to copy into PkCellsPool, until the next call.
     TConstArrayRef<TCell> PostingPkCells(NUdf::TUnboxedValue& value) {
         const ui32 n = MainKeyTypeInfos.size();
         PkCellsScratch.resize(n);
+        // Both callers copy the cells out before the next call, so the pool is reset per
+        // row; the type environment would instead hold every copy until the task ends.
+        PkCellsPool.MemoryPool.ClearKeepFirstChunk();
         for (ui32 i = 0; i < n; ++i) {
             const ui32 pos = PostingCovers ? CoveredPkPositions[i] : i;
-            PkCellsScratch[i] = NMiniKQL::MakeCell(MainKeyTypeInfos[i], value.GetElement(pos), TypeEnv, /* copy */ false);
+            PkCellsScratch[i] = NMiniKQL::MakeCell(MainKeyTypeInfos[i], value.GetElement(pos), PkCellsPool, /* copy */ false);
         }
         return PkCellsScratch;
     }
@@ -1220,6 +1224,8 @@ private:
     // Reusable scratch for extracting a posting row's PK cells (dedup key, and
     // the main-read key in the non-covered path). See PostingPkCells.
     TVector<TCell> PkCellsScratch;
+    // Backing storage for those cells when MakeCell cannot reference the row.
+    NMiniKQL::TStringProviderBackend PkCellsPool;
 
     // Covered-index posting read: the read row holds the output columns at
     // positions 0..N-1, then any PK columns not already among them (the indices

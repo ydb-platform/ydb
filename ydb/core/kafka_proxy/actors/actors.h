@@ -6,10 +6,38 @@
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h> // strange
 
+#include <util/system/backtrace.h>
+#include <util/system/type_name.h>
+
 namespace NKafka {
+
+template <typename TDerived>
+class TKafkaExceptionHandler: public NActors::IActorExceptionHandler {
+public:
+    bool OnUnhandledException(const std::exception& exc) override {
+        auto* self = static_cast<TDerived*>(this);
+        const auto& ctx = self->ActorContext();
+        YDB_LOG_CRIT_CTX_COMP(ctx, NKikimrServices::KAFKA_PROXY, "Unhandled exception in kafka actor",
+            {"actor", TypeName<TDerived>()},
+            {"typeName", TypeName(exc)},
+            {"exception", exc.what()},
+            {"currentException", TBackTrace::FromCurrentException().PrintToString()});
+        self->OnKafkaUnhandledException(exc, ctx);
+        return true;
+    }
+
+    void OnKafkaUnhandledException(const std::exception&, const NActors::TActorContext& ctx) {
+        auto* self = static_cast<TDerived*>(this);
+        ctx.Send(self->SelfId(), new NActors::TEvents::TEvPoison);
+    }
+};
 
 static constexpr int ProxyNodeId = 1;
 static constexpr char UnderlayPrefix[] = "u-";

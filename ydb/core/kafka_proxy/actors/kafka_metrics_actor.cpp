@@ -1,4 +1,5 @@
 #include "kafka_metrics_actor.h"
+#include "actors.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
@@ -12,7 +13,8 @@ namespace NKafka {
 
     using namespace NActors;
 
-    class TKafkaMetricsActor : public NActors::TActorBootstrapped<TKafkaMetricsActor> {
+    class TKafkaMetricsActor : public NActors::TActorBootstrapped<TKafkaMetricsActor>
+                             , public TKafkaExceptionHandler<TKafkaMetricsActor> {
         using TBase = NActors::TActorBootstrapped<TKafkaMetricsActor>;
     public:
         explicit TKafkaMetricsActor(const TKafkaMetricsSettings& settings)

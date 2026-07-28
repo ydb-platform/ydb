@@ -54,7 +54,8 @@ namespace NKafka {
      *           <----------------
      */
 
-class TKafkaReadSessionActor: public NActors::TActorBootstrapped<TKafkaReadSessionActor> {
+class TKafkaReadSessionActor: public NActors::TActorBootstrapped<TKafkaReadSessionActor>
+                            , public TKafkaExceptionHandler<TKafkaReadSessionActor> {
 
 enum EReadSessionSteps {
     WAIT_JOIN_GROUP,
@@ -88,6 +89,11 @@ public:
     void Bootstrap(const NActors::TActorContext& ctx);
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::KAFKA_READ_SESSION_ACTOR; }
+
+    void OnKafkaUnhandledException(const std::exception&, const NActors::TActorContext& ctx) {
+        CloseReadSession(ctx);
+        ctx.Send(SelfId(), new NActors::TEvents::TEvPoison);
+    }
 
 private:
     using TActorContext = NActors::TActorContext;

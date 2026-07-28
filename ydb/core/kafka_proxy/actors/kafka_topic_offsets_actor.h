@@ -16,7 +16,8 @@ class TTopicOffsetsActor : public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActo
                                                                TEvKafka::TGetOffsetsRequest,
                                                                TEvKafka::TEvTopicOffsetsResponse>
                                , public NKikimr::NGRpcProxy::V1::TDescribeTopicActorImpl
-                               , public NKikimr::NGRpcProxy::V1::TCdcStreamCompatible {
+                               , public NKikimr::NGRpcProxy::V1::TCdcStreamCompatible
+                               , public TKafkaExceptionHandler<TTopicOffsetsActor> {
 
 using TBase = TPQInternalSchemaActor<TTopicOffsetsActor,
                                                                TEvKafka::TGetOffsetsRequest,

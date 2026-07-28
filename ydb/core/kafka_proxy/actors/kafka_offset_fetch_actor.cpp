@@ -35,7 +35,8 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
                                                        NKikimr::NGRpcProxy::V1::TLocalRequestBase,
                                                        NKikimr::NGRpcProxy::V1::TEvPQProxy::TEvPartitionLocationResponse>,
                          public NKikimr::NGRpcProxy::V1::TDescribeTopicActorImpl,
-                         public NKikimr::NGRpcProxy::V1::TCdcStreamCompatible {
+                         public NKikimr::NGRpcProxy::V1::TCdcStreamCompatible,
+                         public TKafkaExceptionHandler<TTopicOffsetActor> {
     using TBase = NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<TTopicOffsetActor,
         NKikimr::NGRpcProxy::V1::TLocalRequestBase,
         NKikimr::NGRpcProxy::V1::TEvPQProxy::TEvPartitionLocationResponse>;

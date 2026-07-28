@@ -1,5 +1,6 @@
 #pragma once
 
+#include "actors.h"
 #include "kafka_init_producer_id_actor.h"
 #include <ydb/core/kafka_proxy/kafka_log_impl.h>
 #include <ydb/core/kafka_proxy/kafka_topic_partition.h>
@@ -14,7 +15,8 @@ namespace NKafka {
 
     It accumulates transaction state (partitions in tx, offsets) and on commit submits transaction to KQP
     */
-    class TTransactionActor : public NActors::TActor<TTransactionActor> {
+    class TTransactionActor : public NActors::TActor<TTransactionActor>
+                            , public TKafkaExceptionHandler<TTransactionActor> {
 
         using TBase = NActors::TActor<TTransactionActor>;
 

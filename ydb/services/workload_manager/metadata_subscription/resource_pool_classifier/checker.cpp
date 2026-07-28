@@ -361,11 +361,17 @@ private:
     }
 
     void ValidatePools() {
-        // Collect unique pool IDs referenced by classifiers being created/altered
         std::unordered_set<TString> poolIds;
         for (auto& object : PatchedObjects) {
             object.EnsureSettings();
-            const TString& poolId = object.GetClassifierSettings().ResourcePool;
+            if (auto error = object.GetClassifierSettings().Validate()) {
+                FailAndPassAway(TStringBuilder() << "Invalid resource pool classifier settings: " << *error);
+                return;
+            }
+            if (!object.GetClassifierSettings().ResourcePool.has_value()) {
+                continue;
+            }
+            const TString& poolId = *object.GetClassifierSettings().ResourcePool;
             // The default pool is always created on first use — skip it
             if (poolId == NResourcePool::DEFAULT_POOL_ID) {
                 continue;

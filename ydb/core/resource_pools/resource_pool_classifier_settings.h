@@ -43,7 +43,7 @@ struct TClassifierSettings : public TSettingsBase {
     [[nodiscard]] std::optional<TString> Validate() const;
 
     i64 Rank = -1;  // -1 = max rank + CLASSIFIER_RANK_OFFSET
-    TString ResourcePool = DEFAULT_POOL_ID;
+    std::optional<TString> ResourcePool; //absent when Action is Reject
     std::optional<TString> MemberName;
     std::optional<TString> HasAppName;
     std::optional<TRegexPredicate> HasFullScan;

@@ -593,7 +593,12 @@ namespace NKikimr {
                     whyUnusable.append('D');
                 }
 
-                ui32 maxSlots = info.ExpectedSlotCount;
+                ui32 maxSlots = info.GetEffectiveExpectedSlotCount();
+                if (!maxSlots && info.GetEffectiveExpectedSlotSize()) {
+                    // slot count for byte-sized slots is calculated by NodeWarden and arrives via
+                    // PDisk metrics; until then MaxSlots is its upper bound
+                    maxSlots = info.MaxSlots;
+                }
 
                 auto location = State.HostRecords->GetLocation(id.NodeId);
 
@@ -604,6 +609,7 @@ namespace NKikimr {
                     .Usable = usable,
                     .NumSlots = numSlots,
                     .MaxSlots = maxSlots,
+                    .SlotSizeInBytes = info.GetEffectiveExpectedSlotSize(),
                     .Groups = std::move(groups),
                     .SpaceAvailable = availableSpace,
                     .Operational = info.Operational,

@@ -600,8 +600,28 @@ namespace NKikimr::NYaml {
                         drive.SetPath(Sprintf("SectorMap:%d:64", sectorMapIndex));
                         drive.SetType("SSD");
                     }
+                    const bool hasExpectedSlotSize = drive.HasExpectedSlotSize() && drive.GetExpectedSlotSize();
+                    const bool hasMaxSlots = drive.HasMaxSlots() && drive.GetMaxSlots();
+                    if (hasExpectedSlotSize && drive.GetExpectedSlotCount()) {
+                        ythrow yexception() << "expected_slot_size is mutually exclusive with expected_slot_count"
+                            << " for drive with path '" << drive.GetPath() << "'";
+                    }
+                    if (hasExpectedSlotSize && !hasMaxSlots) {
+                        ythrow yexception() << "expected_slot_size requires max_slots"
+                            << " for drive with path '" << drive.GetPath() << "'";
+                    }
+                    if (hasMaxSlots && !hasExpectedSlotSize) {
+                        ythrow yexception() << "max_slots requires expected_slot_size"
+                            << " for drive with path '" << drive.GetPath() << "'";
+                    }
                     if (drive.HasExpectedSlotCount()) {
                         drive.MutablePDiskConfig()->SetExpectedSlotCount(drive.GetExpectedSlotCount());
+                    }
+                    if (drive.HasExpectedSlotSize()) {
+                        drive.MutablePDiskConfig()->SetExpectedSlotSize(drive.GetExpectedSlotSize());
+                    }
+                    if (drive.HasMaxSlots()) {
+                        drive.MutablePDiskConfig()->SetMaxSlots(drive.GetMaxSlots());
                     }
                 }
             }

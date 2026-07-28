@@ -571,6 +571,32 @@ public:
 
 Y_UNIT_TEST_SUITE(TGroupMapperTest) {
 
+    Y_UNIT_TEST(SlotSizeInBytesLimitsRequiredSpace) {
+        NActorsInterconnect::TNodeLocation locationProto;
+        locationProto.SetDataCenter("1");
+        locationProto.SetModule("1");
+        locationProto.SetRack("1");
+        locationProto.SetUnit("1");
+
+        TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureNone, 1, 1, 1));
+        UNIT_ASSERT(mapper.RegisterPDisk({
+            .PDiskId = TPDiskId(1, 1),
+            .Location = TNodeLocation(locationProto),
+            .Usable = true,
+            .NumSlots = 0,
+            .MaxSlots = 2,
+            .SlotSizeInBytes = 100,
+            .Groups{},
+            .SpaceAvailable = 1000,
+            .Operational = true,
+            .Decommitted = false,
+        }));
+
+        TGroupMapper::TGroupDefinition group;
+        TGroupMapperError error;
+        UNIT_ASSERT_C(!mapper.AllocateGroup(1, group, {}, {}, 150, false, error), error.ErrorMessage);
+    }
+
     Y_UNIT_TEST(MapperSequentialCalls) {
         TTestContext globalContext(3, 3, 4, 3, 4);
         TTestContext localContext(3, 3, 4, 3, 4);

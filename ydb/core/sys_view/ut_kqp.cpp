@@ -1076,6 +1076,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                     TotalSize,
                     Type,
                     ExpectedSlotCount,
+                    ExpectedSlotSize,
                     NumActiveSlots,
                     DecommitStatus
                 FROM `/Root/.sys/ds_pdisks`
@@ -1094,7 +1095,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             }
         }
 
-        TYsonFieldChecker check(ysonString, 17);
+        TYsonFieldChecker check(ysonString, 18);
 
         check.Uint64(0u); // AvailableSize
         check.Uint64(999u); // BoxId
@@ -1111,6 +1112,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check.Uint64(0u); // TotalSize
         check.String("ROT"); // Type
         check.Uint64(16); // ExpectedSlotCount
+        check.Uint64(0); // ExpectedSlotSize
         check.Uint64(2); // NumActiveSlots
         check.String("DECOMMIT_NONE"); // DecommitStatus
     }

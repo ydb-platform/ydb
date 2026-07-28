@@ -73,8 +73,10 @@ namespace NKikimr::NBsController {
             }
 
             void ApplyPDiskDiff(const TPDiskId &pdiskId, const TPDiskInfo &prev, const TPDiskInfo &cur) {
-                if (prev.Mood != cur.Mood) {
-                    // PDisk's mood has changed
+                if (prev.Mood != cur.Mood ||
+                        prev.ExpectedSlotCount != cur.ExpectedSlotCount ||
+                        prev.ExpectedSlotSize != cur.ExpectedSlotSize ||
+                        prev.MaxSlots != cur.MaxSlots) {
                     CreatePDiskEntry(pdiskId, cur);
                 }
             }
@@ -1016,7 +1018,8 @@ namespace NKikimr::NBsController {
             pb->SetBoxId(pdisk.BoxId);
             pb->SetNumStaticSlots(pdisk.StaticSlotUsage);
             pb->SetDriveStatus(pdisk.Status);
-            pb->SetExpectedSlotCount(pdisk.ExpectedSlotCount);
+            pb->SetExpectedSlotCount(pdisk.GetEffectiveExpectedSlotCount());
+            pb->SetExpectedSlotSize(pdisk.GetEffectiveExpectedSlotSize());
             pb->SetDriveStatusChangeTimestamp(pdisk.StatusTimestamp.GetValue());
             pb->SetDecommitStatus(pdisk.DecommitStatus);
             pb->MutablePDiskMetrics()->CopyFrom(pdisk.Metrics);

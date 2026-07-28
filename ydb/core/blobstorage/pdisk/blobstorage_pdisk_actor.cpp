@@ -657,6 +657,12 @@ public:
         Send(sender, new NPDisk::TEvYardControlResult(NKikimrProto::OK, cookie, {}));
     }
 
+    void InitHandle(NPDisk::TEvChangeExpectedSlotCount::TPtr &ev) {
+        PDisk->Mon.ChangeExpectedSlotCount.CountRequest();
+        Send(ev->Sender, new NPDisk::TEvChangeExpectedSlotCountResult(NKikimrProto::CORRUPTED, StateErrorReason));
+        PDisk->Mon.ChangeExpectedSlotCount.CountResponse();
+    }
+
     void InitHandle(NPDisk::TEvYardControl::TPtr &ev) {
         const NPDisk::TEvYardControl &evControl = *ev->Get();
         switch (evControl.Action) {
@@ -840,6 +846,12 @@ public:
         PDisk->Mon.ChunkForget.CountResponse();
     }
 
+    void ErrorHandle(NPDisk::TEvChangeExpectedSlotCount::TPtr &ev) {
+        PDisk->Mon.ChangeExpectedSlotCount.CountRequest();
+        Send(ev->Sender, new NPDisk::TEvChangeExpectedSlotCountResult(NKikimrProto::CORRUPTED, StateErrorReason));
+        PDisk->Mon.ChangeExpectedSlotCount.CountResponse();
+    }
+
     void ErrorHandle(NPDisk::TEvYardControl::TPtr &ev) {
         const NPDisk::TEvYardControl &evControl = *ev->Get();
         Y_VERIFY_S(PDisk, PCtx->PDiskLogPrefix);
@@ -985,6 +997,12 @@ public:
 
     void Handle(NPDisk::TEvChunkUnlock::TPtr &ev) {
         auto* request = PDisk->ReqCreator.CreateFromEv<TChunkUnlock>(*ev->Get(), ev->Sender);
+        PDisk->InputRequest(request);
+    }
+
+    void Handle(NPDisk::TEvChangeExpectedSlotCount::TPtr &ev) {
+        PDisk->Mon.ChangeExpectedSlotCount.CountRequest();
+        NPDisk::TChangeExpectedSlotCount* request = PDisk->ReqCreator.CreateFromEv<NPDisk::TChangeExpectedSlotCount>(*ev->Get(), ev->Sender);
         PDisk->InputRequest(request);
     }
 
@@ -1451,6 +1469,7 @@ public:
             hFunc(NPDisk::TEvChunkReserve, ErrorHandle);
             hFunc(NPDisk::TEvChunkForget, ErrorHandle);
             hFunc(NPDisk::TEvYardControl, InitHandle);
+            hFunc(NPDisk::TEvChangeExpectedSlotCount, InitHandle);
             hFunc(NPDisk::TEvAskForCutLog, ErrorHandle);
             hFunc(NPDisk::TEvWhiteboardReportResult, Handle);
             hFunc(NPDisk::TEvHttpInfoResult, Handle);
@@ -1493,6 +1512,7 @@ public:
             hFunc(NPDisk::TEvChunkLock, Handle);
             hFunc(NPDisk::TEvChunkUnlock, Handle);
             hFunc(NPDisk::TEvYardControl, Handle);
+            hFunc(NPDisk::TEvChangeExpectedSlotCount, Handle);
             hFunc(NPDisk::TEvAskForCutLog, Handle);
             hFunc(NPDisk::TEvConfigureScheduler, Handle);
             hFunc(NPDisk::TEvWhiteboardReportResult, Handle);
@@ -1529,6 +1549,7 @@ public:
             hFunc(NPDisk::TEvChunkReserve, ErrorHandle);
             hFunc(NPDisk::TEvChunkForget, ErrorHandle);
             hFunc(NPDisk::TEvYardControl, ErrorHandle);
+            hFunc(NPDisk::TEvChangeExpectedSlotCount, ErrorHandle);
             hFunc(NPDisk::TEvAskForCutLog, ErrorHandle);
             hFunc(NPDisk::TEvReadFormatResult, ErrorHandle);
             hFunc(NPDisk::TEvWhiteboardReportResult, Handle);

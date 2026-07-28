@@ -189,6 +189,7 @@ public:
     NCommon::TConfSetting<ETmpSecurityMode, Static> TmpSecurity;
     NCommon::TConfSetting<bool, Static> _ParseExpressionColumns;
     NCommon::TConfSetting<TDuration, Static> _SecureTmpTokenUsersAccessPeriod;
+    NCommon::TConfSetting<bool, Static> _FixEndlessLoopInDropIfExists;
 
     // Job runtime
     NCommon::TConfSetting<TString, Dynamic> Pool;

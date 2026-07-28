@@ -173,4 +173,6 @@ constexpr TDuration DEFAULT_SECURE_TMP_TOKEN_USERS_ACCESS_PERIOD = TDuration::Da
 
 constexpr bool DEFAULT_JOIN_COMMON_ANY_SIDE_FIRST = false;
 
+constexpr bool DEFAULT_FIX_ENDLESS_LOOP_IN_DROP_IF_EXISTS = false;
+
 } // NYql

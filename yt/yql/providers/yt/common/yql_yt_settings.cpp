@@ -643,6 +643,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, TmpSecurity).Parser([](const TString& v) { return FromString<ETmpSecurityMode>(v); });
     REGISTER_SETTING(*this, _ParseExpressionColumns);
     REGISTER_SETTING(*this, _SecureTmpTokenUsersAccessPeriod);
+    REGISTER_SETTING(*this, _FixEndlessLoopInDropIfExists);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

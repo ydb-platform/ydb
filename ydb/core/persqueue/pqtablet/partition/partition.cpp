@@ -5253,8 +5253,10 @@ void TPartition::AttachPersistRequestSpan(NWilson::TSpan& span)
 }
 
 void TPartition::SendCompacterWriteRequest(THolder<TEvKeyValue::TEvRequest>&& request) {
-    AFL_ENSURE(!CompacterKvRequestInflight);
-    AFL_ENSURE(!CompacterKvRequest);
+    AFL_ENSURE(!CompacterKvRequestInflight)
+        ("tablet_id", TabletId)("partition_id", Partition)("topic", TopicName());
+    AFL_ENSURE(!CompacterKvRequest)
+        ("tablet_id", TabletId)("partition_id", Partition)("topic", TopicName());
     YDB_LOG_DEBUG_COMP(Service, "Topic partition Acquire RW Lock",
         {"logPrefix", NPQ_LOG_PREFIX},
         {"clientSideName", TopicConverter->GetClientsideName()},

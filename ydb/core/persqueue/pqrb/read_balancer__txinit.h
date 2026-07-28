@@ -115,7 +115,9 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
         } catch (const TNotReadyTabletException&) {
             return false;
         } catch (...) {
-        AFL_ENSURE(false)("reason", "there must be no leaked exceptions")("tablet_id", Self->TabletID())("path", Self->Path)("topic", Self->Topic);
+            AFL_ENSURE(false)("reason", "there must be no leaked exceptions")
+                ("exception", CurrentExceptionMessage())
+                ("tablet_id", Self->TabletID())("path", Self->Path)("topic", Self->Topic);
         }
         return true;
     }

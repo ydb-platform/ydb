@@ -433,7 +433,9 @@ void TPartitionFamily::Merge(TPartitionFamily* other) {
         {"logPrefix", LogPrefix()},
         {"debug", other->DebugStr()});
 
-    AFL_ENSURE(this != other);
+    AFL_ENSURE(this != other)
+        ("this_id", Id)("other_id", other->Id)
+        ("this_partitions", Partitions.size())("other_partitions", other->Partitions.size());
 
     Partitions.insert(Partitions.end(), other->Partitions.begin(), other->Partitions.end());
     UpdatePartitionMapping(other->Partitions);
@@ -846,7 +848,9 @@ bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool d
 }
 
 std::pair<TPartitionFamily*, bool> TConsumer::MergeFamilies(TPartitionFamily* lhs, TPartitionFamily* rhs, const TActorContext& ctx) {
-    AFL_ENSURE(lhs != rhs);
+    AFL_ENSURE(lhs != rhs)
+        ("lhs_id", lhs->Id)("rhs_id", rhs->Id)
+        ("lhs_partitions", lhs->Partitions.size())("rhs_partitions", rhs->Partitions.size());
 
     if (lhs->IsFree() && rhs->IsFree() ||
         lhs->IsActive() && rhs->IsActive() && lhs->Session == rhs->Session ||

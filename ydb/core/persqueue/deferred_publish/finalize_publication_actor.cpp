@@ -58,8 +58,8 @@ bool BuildDeferredPublicationRequest(
     NKikimrKqp::TTopicDeferredPublicationRequest* request,
     NYql::TIssues* issues)
 {
-    AFL_ENSURE(request != nullptr);
-    AFL_ENSURE(issues != nullptr);
+    AFL_ENSURE(request != nullptr)("op", static_cast<int>(op))("int_publication_id", intPublicationId);
+    AFL_ENSURE(issues != nullptr)("op", static_cast<int>(op))("int_publication_id", intPublicationId);
 
     request->Clear();
     request->SetOp(MapFinalizeOp(op));
@@ -251,7 +251,8 @@ private:
             return ReplyAndPassAway(response.Status, response.Issues);
         }
 
-        AFL_ENSURE(response.Data.Defined());
+        AFL_ENSURE(response.Data.Defined())
+            ("database", Database)("int_publication_id", IntPublicationId)("op", static_cast<int>(Op));
         ListDestinationsData = *response.Data;
 
         if (!IsPublicationOwnedByCaller(CallerSid, ListDestinationsData->CreatedBy)) {
@@ -296,7 +297,8 @@ private:
         }
 
         KqpSessionId = record.GetResponse().GetSessionId();
-        AFL_ENSURE(!KqpSessionId.empty());
+        AFL_ENSURE(!KqpSessionId.empty())
+            ("database", Database)("int_publication_id", IntPublicationId)("op", static_cast<int>(Op));
         SendKqpBeginTx();
     }
 
@@ -309,7 +311,9 @@ private:
         switch (Step) {
             case EStep::KqpBeginTx: {
                 TxId = record.GetResponse().GetTxMeta().id();
-                AFL_ENSURE(!TxId.empty());
+                AFL_ENSURE(!TxId.empty())
+                    ("database", Database)("int_publication_id", IntPublicationId)
+                    ("op", static_cast<int>(Op))("kqp_session", KqpSessionId);
                 SendKqpDelete();
                 return;
             }

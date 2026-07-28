@@ -64,7 +64,11 @@ TVector<TReadResult> TKafkaBatchCutter::Cut(const TBatchCutterData& data, const 
         return {data.ReadResult};
     }
 
-    AFL_ENSURE(dataChunk.HasCodec() && dataChunk.GetCodec() == KafkaBatchCodec());
+    AFL_ENSURE(dataChunk.HasCodec() && dataChunk.GetCodec() == KafkaBatchCodec())
+        ("has_codec", dataChunk.HasCodec())
+        ("codec", dataChunk.HasCodec() ? dataChunk.GetCodec() : -1)
+        ("expected_codec", KafkaBatchCodec())
+        ("offset", data.ReadResult.GetOffset());
 
     const auto batch = NKafka::ReadKafkaRecordBatch(dataChunk.GetData());
     if (batch.Records.empty()) {
@@ -101,7 +105,8 @@ TVector<TReadResult> TKafkaBatchCutter::Cut(const TBatchCutterData& data, const 
             itemChunk.ClearData();
         }
         TString serializedChunk;
-        AFL_ENSURE(itemChunk.SerializeToString(&serializedChunk));
+        AFL_ENSURE(itemChunk.SerializeToString(&serializedChunk))
+            ("offset", offset)("seq_no", seqNo)("codec", codec);
         item.SetData(std::move(serializedChunk));
 
         if (record.Key) {
@@ -125,7 +130,11 @@ THashMap<TString, ui64> TKafkaBatchCutter::GetKeys(const TBatchCutterData& data,
         return result;
     }
 
-    AFL_ENSURE(dataChunk.HasCodec() && dataChunk.GetCodec() == KafkaBatchCodec());
+    AFL_ENSURE(dataChunk.HasCodec() && dataChunk.GetCodec() == KafkaBatchCodec())
+        ("has_codec", dataChunk.HasCodec())
+        ("codec", dataChunk.HasCodec() ? dataChunk.GetCodec() : -1)
+        ("expected_codec", KafkaBatchCodec())
+        ("offset", data.ReadResult.GetOffset());
 
     const auto batch = NKafka::ReadKafkaRecordBatch(dataChunk.GetData());
     const ui64 baseOffset = data.ReadResult.GetOffset();

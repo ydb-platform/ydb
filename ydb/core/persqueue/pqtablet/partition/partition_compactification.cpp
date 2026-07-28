@@ -59,7 +59,12 @@ void TPartitionCompaction::TryCompactionIfPossible() {
         } else if (step == EStep::COMPACTING) {
             Step = EStep::COMPACTING;
             CompactState.ConstructInPlace(std::move(ReadState->GetData()), FirstUncompactedOffset, ReadState->GetLastOffset(), PartitionActor, &Counters);
-            AFL_ENSURE(FirstUncompactedOffset < ReadState->GetLastOffset());
+            AFL_ENSURE(FirstUncompactedOffset < ReadState->GetLastOffset())
+                ("first_uncompacted_offset", FirstUncompactedOffset)
+                ("last_offset", ReadState->GetLastOffset())
+                ("tablet_id", PartitionActor->TabletId)
+                ("partition_id", PartitionActor->Partition)
+                ("topic", PartitionActor->TopicName());
             FirstUncompactedOffset = ReadState->GetLastOffset();
             Counters.CurrentReadCycleKeys = CompactState->TopicData.size();
             Counters.ReadCyclesCount += 1;
@@ -777,8 +782,18 @@ bool TPartitionCompaction::TCompactState::ProcessReadResult(NKikimrClient::TCmdR
         {"hasNonZeroParts", hasNonZeroParts},
         {"isMiddlePartOfMessage", isMiddlePartOfMessage});
 
-    AFL_ENSURE(KeysIter->Key.GetInternalPartsCount() == internalPartsCount);
-    AFL_ENSURE(KeysIter->Key.GetCount() == offsetSpan);
+    AFL_ENSURE(KeysIter->Key.GetInternalPartsCount() == internalPartsCount)
+        ("key_internal_parts", KeysIter->Key.GetInternalPartsCount())
+        ("internal_parts_count", internalPartsCount)
+        ("key", KeysIter->Key.ToString())
+        ("tablet_id", PartitionActor->TabletId)
+        ("partition_id", PartitionActor->Partition);
+    AFL_ENSURE(KeysIter->Key.GetCount() == offsetSpan)
+        ("key_count", KeysIter->Key.GetCount())
+        ("offset_span", offsetSpan)
+        ("key", KeysIter->Key.ToString())
+        ("tablet_id", PartitionActor->TabletId)
+        ("partition_id", PartitionActor->Partition);
     if (!hasNonZeroParts) {
         EmptyBlobs.emplace(isTruncatedBlob ? lastExpectedOffset : lastExpectedOffset - 1, KeysIter->Key);
     }
@@ -949,8 +964,18 @@ void TPartitionCompaction::TCompactState::UpdateDataKeysBody() {
         itExisting++;
     }
 
-    AFL_ENSURE(PartitionActor->CompactionBlobEncoder.DataKeysBody.size() == oldDataKeys.size() - zeroedKeys);
-    AFL_ENSURE(currCumulSize == PartitionActor->CompactionBlobEncoder.BodySize - sizeDiff);
+    AFL_ENSURE(PartitionActor->CompactionBlobEncoder.DataKeysBody.size() == oldDataKeys.size() - zeroedKeys)
+        ("data_keys_body_size", PartitionActor->CompactionBlobEncoder.DataKeysBody.size())
+        ("old_data_keys_size", oldDataKeys.size())
+        ("zeroed_keys", zeroedKeys)
+        ("tablet_id", PartitionActor->TabletId)
+        ("partition_id", PartitionActor->Partition);
+    AFL_ENSURE(currCumulSize == PartitionActor->CompactionBlobEncoder.BodySize - sizeDiff)
+        ("curr_cumul_size", currCumulSize)
+        ("body_size", PartitionActor->CompactionBlobEncoder.BodySize)
+        ("size_diff", sizeDiff)
+        ("tablet_id", PartitionActor->TabletId)
+        ("partition_id", PartitionActor->Partition);
     PartitionActor->CompactionBlobEncoder.BodySize = currCumulSize;
     if (PartitionActor->IsTopicRetentionDeleteLastBlobEnabled()) {
         if (PartitionActor->CompactionBlobEncoder.DataKeysBody.empty()) {

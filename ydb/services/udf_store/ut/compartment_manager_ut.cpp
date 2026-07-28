@@ -1,5 +1,6 @@
 #include <ydb/services/udf_store/wasm/compartment_manager.h>
 #include <ydb/services/udf_store/wasm/module_catalog.h>
+#include <ydb/services/udf_store/wasm/query_compartment_scope.h>
 #include <ydb/services/udf_store/wasm/registry_helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -37,6 +38,17 @@ Y_UNIT_TEST_SUITE(TWasmCompartmentManagerTest) {
 
     Y_UNIT_TEST(ExportKey) {
         UNIT_ASSERT_VALUES_EQUAL(MakeExportKey("Mod", "Fn"), "Mod::Fn");
+    }
+
+    Y_UNIT_TEST(FilterLoadedWasmUdfModulesSkipsNative) {
+        TWasmModuleCatalog catalog;
+        catalog.Register(MakeDummyArtifact("md5-a", "ModA"));
+
+        const auto filtered = FilterLoadedWasmUdfModules(
+            {"String", "ModA", "Knn", "Missing"},
+            catalog);
+        UNIT_ASSERT_VALUES_EQUAL(filtered.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(filtered[0], "ModA");
     }
 
     Y_UNIT_TEST(QueryCompartmentTlsGuard) {

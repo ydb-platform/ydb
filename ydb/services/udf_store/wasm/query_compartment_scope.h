@@ -1,12 +1,30 @@
 #pragma once
 
 #include "compartment_manager.h"
+#include "module_catalog.h"
 
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 
 #include <util/generic/vector.h>
 
 namespace NKikimr::NUdfStore::NWasm {
+
+//! Keep only module names registered in the WASM catalog.
+//! Stage predictor currently records every TCoUdf module (String, Knn, ...);
+//! native UDFs must not trigger Acquire / ResolveModules.
+inline TVector<TString> FilterLoadedWasmUdfModules(
+    const TVector<TString>& modules,
+    const TWasmModuleCatalog& catalog = GetWasmModuleCatalog())
+{
+    TVector<TString> result;
+    result.reserve(modules.size());
+    for (const auto& module : modules) {
+        if (catalog.FindByModuleName(module)) {
+            result.push_back(module);
+        }
+    }
+    return result;
+}
 
 inline TVector<TString> CollectWasmUdfModules(
     const NYql::NDqProto::TProgram::TSettings& settings)
@@ -16,7 +34,7 @@ inline TVector<TString> CollectWasmUdfModules(
     for (const auto& module : settings.GetWasmUdfModules()) {
         modules.push_back(module);
     }
-    return modules;
+    return FilterLoadedWasmUdfModules(modules);
 }
 
 // Owns a per-query compartment. Install it as the current TLS compartment only
@@ -31,8 +49,9 @@ public:
     }
 
     explicit TQueryCompartmentScope(const TVector<TString>& modules) {
-        if (!modules.empty()) {
-            Handle_ = GetWasmCompartmentManager().Acquire(modules);
+        const auto loaded = FilterLoadedWasmUdfModules(modules);
+        if (!loaded.empty()) {
+            Handle_ = GetWasmCompartmentManager().Acquire(loaded);
         }
     }
 

@@ -64,6 +64,9 @@ private:
     // across all DBGs. 0 until the first round finishes.
     std::atomic<ui64> LastSafeBarrier{0};
 
+    TAdaptiveLock PBufferBarrierLock;
+    TMap<NKikimr::NBsController::TDDiskId, ui64> LastSentBarrierByPBuffer;
+
 public:
     TFastPathService(
         NActors::TActorSystem* actorSystem,
@@ -124,6 +127,10 @@ public:
     ui64 GenerateLsn() override;
 
     void StopTablet(const TString& reason) override;
+
+    bool TryAdvancePBufferBarrier(
+        const NKikimr::NBsController::TDDiskId& pbufferDDiskId,
+        ui64 lsn) override;
 
     // Read-only info for the monitoring UI.
     [[nodiscard]] TFastPathServiceInfo GetMonInfo() const;

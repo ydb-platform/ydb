@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../defs.h"
+#include <ydb/library/actors/core/defs.h>
 
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/subsystem.h>

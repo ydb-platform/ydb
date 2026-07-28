@@ -1849,6 +1849,12 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
                 input.Meta.VectorSearchSettings->SetLockMode(*GetMeta().LockMode);
             }
 
+            // Inconsistent online RO takes neither a snapshot nor a lock, so the reads
+            // have to say so explicitly or the read actor rejects them.
+            if (GetMeta().AllowInconsistentReads) {
+                input.Meta.VectorSearchSettings->SetAllowInconsistentReads(true);
+            }
+
             {
                 const ui64 effectiveSpanId = GetMeta().GetEffectiveQuerySpanId(
                     GetMeta().QuerySpanId, input.Meta.TablePath);

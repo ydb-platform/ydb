@@ -545,6 +545,10 @@ private:
         } else if (Snapshot.IsValid()) {
             src->MutableSnapshot()->SetTxId(Snapshot.TxId);
             src->MutableSnapshot()->SetStep(Snapshot.Step);
+        } else if (Settings.GetAllowInconsistentReads()) {
+            // Inconsistent online RO: no snapshot and no lock, which the read actor
+            // otherwise rejects.
+            src->SetAllowInconsistentReads(true);
         }
         if (!followerRead && Settings.HasLockTxId()) {
             src->SetLockTxId(Settings.GetLockTxId());

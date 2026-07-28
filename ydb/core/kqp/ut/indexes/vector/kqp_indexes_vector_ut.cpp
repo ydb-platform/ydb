@@ -807,6 +807,36 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
+    void DoTestVectorIndexInconsistentOnlineRO(int flags, bool enableVectorSearchActor) {
+        // Inconsistent online RO takes neither an MVCC snapshot nor a lock, so the reads
+        // must carry AllowInconsistentReads. Regression guard: the vector search actor did
+        // not pass it on, and the read actor failed the query with UNAVAILABLE.
+        auto serverSettings = TKikimrSettings().SetKqpSettings({NKikimrKqp::TKqpSetting()});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(enableVectorSearchActor);
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableAndVectorIndex(db, flags);
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            $target = "\x67\x71\x02";
+            SELECT pk FROM `/Root/TestTable` VIEW index1
+            ORDER BY Knn::CosineDistance(emb, $target)
+            LIMIT 3;
+        )"), TTxControl::BeginTx(TTxSettings::OnlineRO(
+            TTxOnlineSettings().AllowInconsistentReads(true))).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 3);
+    }
+
+    Y_UNIT_TEST_TWIN(VectorIndexInconsistentOnlineRO, EnableVectorSearchActor) {
+        DoTestVectorIndexInconsistentOnlineRO(0, EnableVectorSearchActor);
+    }
+
+    Y_UNIT_TEST_TWIN(VectorIndexInconsistentOnlineROCovered, EnableVectorSearchActor) {
+        DoTestVectorIndexInconsistentOnlineRO(F_COVERING, EnableVectorSearchActor);
+    }
+
     void DoTestVectorIndexReadsOwnUncommittedWrite(int flags, bool enableVectorSearchActor) {
         // A vector search must observe writes made earlier in the same transaction: the write
         // is a deferred effect, so the search has to force a flush before reading. Regression

@@ -60,6 +60,11 @@ public:
         return result;
     }
 
+    virtual bool HasPendingExternalCleanup() const override {
+        return HasOngoingGC() || !GCInfo->GetBlobsToDelete().IsEmpty() || !GCInfo->GetBlobsToDeleteInFuture().IsEmpty() ||
+               !GCInfo->GetDraftBlobIdsToRemove().empty();
+    }
+
     virtual std::shared_ptr<IBlobInUseTracker> GetBlobsTracker() const override {
         return GCInfo;
     }

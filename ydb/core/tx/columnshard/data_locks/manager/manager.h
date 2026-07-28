@@ -44,6 +44,10 @@ private:
 public:
     TManager() = default;
 
+    bool HasProcessLocks() const {
+        return !ProcessLocks.empty();
+    }
+
     void Stop();
 
     class TGuard {

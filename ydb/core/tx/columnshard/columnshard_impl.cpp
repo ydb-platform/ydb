@@ -489,6 +489,8 @@ void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
     Counters.GetCSCounters().OnStartBackground();
 
     if (!TablesManager.HasPrimaryIndex()) {
+        // GC must run even without an index to drain persisted external-tier removal queues
+        SetupGC();
         YDB_LOG_NOTICE_COMP(NKikimrServices::TX_COLUMNSHARD, "",
             {"problem", "Background activities cannot be started: no index at tablet"});
         return;
@@ -1872,6 +1874,11 @@ void TColumnShard::Enqueue(STFUNC_SIG) {
         HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
         HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable, Handle);
         HFunc(TEvColumnShard::TEvNotifyTxCompletion, Handle);
+        case TEvDataShard::TEvKqpScan::EventType:
+            YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
+                {"event", "postpone scan until initialization is finished"});
+            InitializationPostponedEvents.emplace_back(ev.Release());
+            return;
         default:
             YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
                 {"event", "unexpected event in enqueue"});

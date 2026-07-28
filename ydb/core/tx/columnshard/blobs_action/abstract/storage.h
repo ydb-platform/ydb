@@ -151,6 +151,15 @@ public:
         StartGCAction(action);
     }
 
+    bool HasOngoingGC() const {
+        return CurrentGCAction && CurrentGCAction->IsInProgress();
+    }
+
+    // whether removed blobs still must be erased from an external system (e.g. S3)
+    virtual bool HasPendingExternalCleanup() const {
+        return false;
+    }
+
     [[nodiscard]] std::shared_ptr<IBlobsGCAction> CreateGC() {
         YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD_BLOBS,
             {"storageId", GetStorageId()},

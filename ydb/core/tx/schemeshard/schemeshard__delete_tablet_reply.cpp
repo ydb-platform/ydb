@@ -146,6 +146,26 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
             auto path = Self->PathsById.at(pathId);
             path->DecShardsInside();
 
+            if (tabletType == ETabletType::ColumnShard && path->Dropped()) {
+                auto& pendingCleanupCounter = Self->TabletCounters->Simple()[COUNTER_COLUMN_SHARDS_PENDING_DROP_CLEANUP];
+                if (pendingCleanupCounter.Get() > 0) {
+                    pendingCleanupCounter.Sub(1);
+                }
+                // the last shard of the dropped path is gone: release the external data sources
+                // kept for the tier configuration (see olap/operations/drop_table.cpp)
+                if (path->GetShardsInside() == 0) {
+                    for (const auto& [sourcePathId, source] : Self->ExternalDataSources) {
+                        const auto& references = source->ExternalTableReferences.GetReferences();
+                        const bool referenced = AnyOf(references.begin(), references.end(), [&](const auto& reference) {
+                            return TPathId::FromProto(reference.GetPathId()) == pathId;
+                        });
+                        if (referenced) {
+                            Self->PersistRemoveExternalDataSourceReference(db, sourcePathId, pathId);
+                        }
+                    }
+                }
+            }
+
             auto domain = Self->ResolveDomainInfo(path);
             domain->RemoveInternalShard(ShardIdx, Self);
             switch (tabletType) {

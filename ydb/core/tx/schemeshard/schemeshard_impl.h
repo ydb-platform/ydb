@@ -1186,6 +1186,18 @@ public:
     struct TTxDeleteTabletReply;
     NTabletFlatExecutor::ITransaction* CreateTxDeleteTabletReply(TEvHive::TEvDeleteTabletReply::TPtr& ev);
 
+    struct TTxColumnShardDropCleanupState;
+    NTabletFlatExecutor::ITransaction* CreateTxColumnShardDropCleanupState(TEvColumnShard::TEvDropCleanupState::TPtr& ev);
+    struct TTxColumnShardDropCleanupDrain;
+    NTabletFlatExecutor::ITransaction* CreateTxColumnShardDropCleanupDrain(std::vector<TShardIdx>&& shards);
+
+    THashSet<TShardIdx> CollectColumnShardsPendingDropCleanup() const;
+    void SchedulePollColumnShardDropCleanup(const TActorContext& ctx, const TDuration delay = TDuration::Seconds(60));
+    void Handle(TEvPrivate::TEvPollColumnShardDropCleanup::TPtr& ev, const TActorContext& ctx);
+    bool ColumnShardDropCleanupPollScheduled = false;
+    // poll rounds without an answer, per tablet: purely observational
+    THashMap<TTabletId, ui32> ColumnShardDropCleanupSilentPolls;
+
     class TTxProgressIncrementalRestore;
     class TTxProgressIncrementalRestoreAllocateResult;
     class TTxIncrementalRestoreShardProgress;
@@ -1494,6 +1506,7 @@ public:
     void Handle(TEvPersQueue::TEvDropTabletReply::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvColumnShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvColumnShard::TEvDropCleanupState::TPtr& ev, const TActorContext& ctx);
     void Handle(NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult::TPtr &ev, const TActorContext &ctx);
     void Handle(NSequenceShard::TEvSequenceShard::TEvDropSequenceResult::TPtr &ev, const TActorContext &ctx);
     void Handle(NSequenceShard::TEvSequenceShard::TEvUpdateSequenceResult::TPtr &ev, const TActorContext &ctx);

@@ -365,6 +365,10 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActiva
 
     Execute(CreateTxInitPopulator(std::move(opts.DelayPublications)), ctx);
 
+    // Resume waiting for column shards of dropped tables that are still erasing evicted
+    // data from external tiers (the set is derived from persistent state on each poll)
+    SchedulePollColumnShardDropCleanup(ctx);
+
     if (opts.TablesToClean) {
         Execute(CreateTxCleanTables(std::move(opts.TablesToClean)), ctx);
     }
@@ -5932,6 +5936,8 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         //
         HFuncTraced(TEvColumnShard::TEvProposeTransactionResult, Handle);
         HFuncTraced(TEvColumnShard::TEvNotifyTxCompletionResult, Handle);
+        HFuncTraced(TEvColumnShard::TEvDropCleanupState, Handle);
+        HFuncTraced(TEvPrivate::TEvPollColumnShardDropCleanup, Handle);
 
         // sequence shard
         HFuncTraced(NSequenceShard::TEvSequenceShard::TEvCreateSequenceResult, Handle);

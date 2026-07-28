@@ -95,6 +95,9 @@ enum EEv {
     EvOverloadReady,
     EvOverloadUnsubscribe,
 
+    EvCheckDropCleanup,
+    EvDropCleanupState,
+
     EvEnd
 };
 
@@ -246,6 +249,23 @@ struct TEvOverloadUnsubscribe: public TEventPB<TEvOverloadUnsubscribe, NKikimrTx
 
     explicit TEvOverloadUnsubscribe(ui64 seqNo) {
         Record.SetSeqNo(seqNo);
+    }
+};
+
+struct TEvCheckDropCleanup: public TEventPB<TEvCheckDropCleanup, NKikimrTxColumnShard::TEvCheckDropCleanup, EvCheckDropCleanup> {
+    TEvCheckDropCleanup() = default;
+
+    explicit TEvCheckDropCleanup(ui64 tabletId) {
+        Record.SetTabletId(tabletId);
+    }
+};
+
+struct TEvDropCleanupState: public TEventPB<TEvDropCleanupState, NKikimrTxColumnShard::TEvDropCleanupState, EvDropCleanupState> {
+    TEvDropCleanupState() = default;
+
+    TEvDropCleanupState(ui64 tabletId, bool ready) {
+        Record.SetTabletId(tabletId);
+        Record.SetReady(ready);
     }
 };
 };   // namespace TEvColumnShard

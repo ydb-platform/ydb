@@ -224,6 +224,53 @@ bool TBlobManagerDb::LoadTierLists(
     return true;
 }
 
+bool TBlobManagerDb::LoadTierStorageIds(THashSet<TString>& storageIds) {
+    THashSet<TString> local;
+    NIceDb::TNiceDb db(Database);
+
+    {
+        auto rowset = db.Table<Schema::TierBlobsToDelete>().Select();
+        if (!rowset.IsReady()) {
+            return false;
+        }
+        while (!rowset.EndOfSet()) {
+            local.emplace(rowset.GetValue<Schema::TierBlobsToDelete::StorageId>());
+            if (!rowset.Next()) {
+                return false;
+            }
+        }
+    }
+
+    {
+        auto rowset = db.Table<Schema::TierBlobsToDeleteWT>().Select();
+        if (!rowset.IsReady()) {
+            return false;
+        }
+        while (!rowset.EndOfSet()) {
+            local.emplace(rowset.GetValue<Schema::TierBlobsToDeleteWT::StorageId>());
+            if (!rowset.Next()) {
+                return false;
+            }
+        }
+    }
+
+    {
+        auto rowset = db.Table<Schema::TierBlobsDraft>().Select();
+        if (!rowset.IsReady()) {
+            return false;
+        }
+        while (!rowset.EndOfSet()) {
+            local.emplace(rowset.GetValue<Schema::TierBlobsDraft::StorageId>());
+            if (!rowset.Next()) {
+                return false;
+            }
+        }
+    }
+
+    std::swap(local, storageIds);
+    return true;
+}
+
 void TBlobManagerDb::AddTierBlobToDelete(const TString& storageId, const TUnifiedBlobId& blobId, const TTabletId tabletId) {
     NIceDb::TNiceDb db(Database);
     db.Table<Schema::TierBlobsToDeleteWT>().Key(storageId, blobId.ToStringNew(), (ui64)tabletId).Update();

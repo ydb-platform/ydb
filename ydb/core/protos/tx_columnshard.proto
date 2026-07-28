@@ -387,6 +387,17 @@ message TEvOverloadUnsubscribe {
     optional uint64 SeqNo = 1;
 }
 
+// Schemeshard asks a column shard of a dropped table whether external (S3) cleanup is complete
+message TEvCheckDropCleanup {
+    optional uint64 TabletId = 1;
+}
+
+// Answer to TEvCheckDropCleanup: Ready means the tablet can be deleted without losing external data
+message TEvDropCleanupState {
+    optional uint64 TabletId = 1;
+    optional bool Ready = 2;
+}
+
 message TCompletedBackupTransaction {
     optional uint64 TxId = 1;
     optional TShardOpResult OpResult = 2;

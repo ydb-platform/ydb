@@ -241,8 +241,18 @@ public:
         NIceDb::TNiceDb db(context.GetDB());
         context.SS->PersistOlapStoreRemove(db, txState->TargetPathId);
 
+        // defer shard deletion until evicted data is erased from external tiers
+        const bool deferShardDeletion = AppData()->FeatureFlags.GetEnableDeferredColumnShardDeletionOnDrop();
         for (auto& shard : txState->Shards) {
-            context.OnComplete.DeleteShard(shard.Idx);
+            if (deferShardDeletion) {
+                LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                           DebugHint() << " Defer deletion of shard " << shard.Idx
+                                       << " until external data cleanup is complete");
+                context.SS->SchedulePollColumnShardDropCleanup(context.Ctx, TDuration::Seconds(1));
+            } else {
+                context.OnComplete.DeleteShard(shard.Idx);
+            }
+            context.SS->TabletCounters->Simple()[COUNTER_COLUMN_SHARDS_PENDING_DROP_CLEANUP].Add(1);
         }
 
         context.OnComplete.DoneOperation(OperationId);

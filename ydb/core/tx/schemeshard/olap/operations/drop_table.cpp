@@ -317,15 +317,30 @@ private:
         NIceDb::TNiceDb db(context.GetDB());
 
         bool isStandalone = false;
+        bool deferShardDeletion = false;
         {
             Y_ABORT_UNLESS(context.SS->ColumnTables.contains(txState->TargetPathId));
             auto tableInfo = context.SS->ColumnTables.GetVerified(txState->TargetPathId);
             isStandalone = tableInfo->IsStandalone();
+            bool hasOwnedShards = false;
+            for (const auto& shard : txState->Shards) {
+                if (context.SS->ShardInfos.at(shard.Idx).PathId == txState->TargetPathId) {
+                    hasOwnedShards = true;
+                    break;
+                }
+            }
 
-            for (const auto& tier : tableInfo->GetUsedTiers()) {
-                auto tierPath = TPath::Resolve(tier, context.SS);
-                AFL_VERIFY(tierPath.IsResolved())("path", tier);
-                context.SS->PersistRemoveExternalDataSourceReference(db, tierPath->PathId, txState->TargetPathId);
+            // deferred shards need the tier configuration until the cleanup finishes: the references
+            // are removed together with the last shard of the path in TTxDeleteTabletReply
+            deferShardDeletion = isStandalone && hasOwnedShards &&
+                AppData()->FeatureFlags.GetEnableDeferredColumnShardDeletionOnDrop();
+
+            if (!deferShardDeletion) {
+                for (const auto& tier : tableInfo->GetUsedTiers()) {
+                    auto tierPath = TPath::Resolve(tier, context.SS);
+                    AFL_VERIFY(tierPath.IsResolved())("path", tier);
+                    context.SS->PersistRemoveExternalDataSourceReference(db, tierPath->PathId, txState->TargetPathId);
+                }
             }
         }
 
@@ -341,8 +356,17 @@ private:
                     // Not the owner - remove from SharedShards
                     RemoveSharedShard(context, shardIdx, targetPathId);
                 } else if (sharedIt == context.SS->SharedShards.end()) {
-                    // Owner, no one is sharing - delete the shard
-                    context.OnComplete.DeleteShard(shardIdx);
+                    if (deferShardDeletion) {
+                        // the shard is deleted later, upon a Ready answer to the cleanup poll
+                        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                                   DebugHint() << " Defer deletion of shard " << shardIdx
+                                               << " until external data cleanup is complete");
+                        context.SS->SchedulePollColumnShardDropCleanup(context.Ctx, TDuration::Seconds(1));
+                    } else {
+                        // Owner, no one is sharing - delete the shard
+                        context.OnComplete.DeleteShard(shardIdx);
+                    }
+                    context.SS->TabletCounters->Simple()[COUNTER_COLUMN_SHARDS_PENDING_DROP_CLEANUP].Add(1);
                 } else {
                     // Owner, there are dependents - transfer ownership
                     AFL_VERIFY(newOwner.has_value());

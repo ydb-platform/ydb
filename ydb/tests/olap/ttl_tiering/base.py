@@ -78,7 +78,19 @@ class TllTieringTestBase(object):
         else:
             cls.ydb_client = YdbClient(database=cls.database, endpoint=cls.endpoint)
 
-        cls.ydb_client.wait_connection()
+        # fail_fast inside wait_connection surfaces the very first discovery error, giving the
+        # cluster only a couple of seconds to become ready; retry to tolerate slow schemeshard boot
+        last_error = None
+        for _ in range(12):
+            try:
+                cls.ydb_client.wait_connection()
+                last_error = None
+                break
+            except Exception as e:  # noqa: BLE001
+                last_error = e
+                time.sleep(5)
+        if last_error is not None:
+            raise last_error
 
     @classmethod
     def _setup_s3(cls):

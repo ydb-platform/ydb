@@ -56,6 +56,7 @@ namespace TEvPrivate {
         EvFullBackupItemDone,
         EvProgressForcedCompaction,
         EvMoveShardToStoragePool,
+        EvPollColumnShardDropCleanup,
         EvEnd
     };
 
@@ -63,6 +64,9 @@ namespace TEvPrivate {
 
     // This event is sent by a schemeshard to itself to signal that some tx state has changed
     // and it should run all the actions associated with this state
+    struct TEvPollColumnShardDropCleanup: public TEventLocal<TEvPollColumnShardDropCleanup, EvPollColumnShardDropCleanup> {
+    };
+
     struct TEvProgressOperation: public TEventLocal<TEvProgressOperation, EvProgressOperation> {
         const ui64 TxId;
         const ui32 TxPartId;

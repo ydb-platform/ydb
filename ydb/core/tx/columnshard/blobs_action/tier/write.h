@@ -17,6 +17,7 @@ private:
     const ui32 Generation;
     const ui32 Step;
     mutable ui32 BlobIdsCounter = 0;
+    bool DraftsPersisted = false;
 
 protected:
     virtual void DoSendWriteBlobRequest(const TString& data, const TUnifiedBlobId& blobId) override;
@@ -33,6 +34,7 @@ protected:
 
     virtual void DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) override;
     virtual void DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& self, const bool blobsWroteSuccessfully) override;
+    virtual void DoOnWritingAborted() override;
 
 public:
     virtual bool NeedDraftTransaction() const override {

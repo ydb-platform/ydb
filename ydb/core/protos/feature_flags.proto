@@ -357,4 +357,7 @@ message TFeatureFlags {
     optional bool EnableRejectActionInResourcePoolClassifiers = 304 [default = true];
     optional bool EnableMoveWithColumnTableReplace = 305 [default = false];
     optional bool DisableOldSecrets = 306 [default = false];
+    // Kill-switch: defer column shard deletion on drop until evicted data is erased from external tiers.
+    // Disabling it makes dropped shards be deleted immediately, leaking their evicted data (issue #45898).
+    optional bool EnableDeferredColumnShardDeletionOnDrop = 307 [default = true];
 }

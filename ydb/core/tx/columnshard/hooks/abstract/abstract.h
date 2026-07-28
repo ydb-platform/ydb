@@ -278,6 +278,11 @@ public:
         return false;
     }
 
+    // tests only: false emulates an old binary that does not answer TEvCheckDropCleanup
+    virtual bool NeedAnswerDropCleanup() const {
+        return true;
+    }
+
     ui64 GetSmallPortionSizeDetector() const {
         const ui64 defaultValue = GetConfig().GetSmallPortionDetectSizeLimit();
         return DoGetSmallPortionSizeDetector(defaultValue);

@@ -36,6 +36,7 @@ public:
 
     [[nodiscard]] virtual bool LoadTierLists(const TString& storageId, TTabletsByBlob& blobsToDelete,
         std::deque<TUnifiedBlobId>& draftBlobsToDelete, const TTabletId selfTabletId) = 0;
+    [[nodiscard]] virtual bool LoadTierStorageIds(THashSet<TString>& storageIds) = 0;
 
     virtual void AddTierBlobToDelete(const TString& storageId, const TUnifiedBlobId& blobId, const TTabletId tabletId) = 0;
     virtual void RemoveTierBlobToDelete(const TString& storageId, const TUnifiedBlobId& blobId, const TTabletId tabletId) = 0;
@@ -73,6 +74,7 @@ public:
 
     [[nodiscard]] bool LoadTierLists(const TString& storageId, TTabletsByBlob& blobsToDelete, std::deque<TUnifiedBlobId>& draftBlobsToDelete,
         const TTabletId selfTabletId) override;
+    [[nodiscard]] bool LoadTierStorageIds(THashSet<TString>& storageIds) override;
 
     void AddTierBlobToDelete(const TString& storageId, const TUnifiedBlobId& blobId, const TTabletId tabletId) override;
     void RemoveTierBlobToDelete(const TString& storageId, const TUnifiedBlobId& blobId, const TTabletId tabletId) override;

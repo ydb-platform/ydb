@@ -4514,6 +4514,35 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
+        // with the feature disabled, delete the shards deferred earlier right away (rollback path)
+        if (!AppData()->FeatureFlags.GetEnableDeferredColumnShardDeletionOnDrop()) {
+            THashSet<TPathId> pathsUnderOperation;
+            for (const auto& [opId, txState] : Self->TxInFlight) {
+                pathsUnderOperation.insert(txState.TargetPathId);
+            }
+            for (const auto& [shardIdx, shardInfo] : Self->ShardInfos) {
+                if (shardInfo.TabletType != ETabletType::ColumnShard) {
+                    continue;
+                }
+                const auto* path = Self->PathsById.FindPtr(shardInfo.PathId);
+                if (!path || !(*path)->Dropped()) {
+                    continue;
+                }
+                if (Self->SharedShards.contains(shardIdx)) {
+                    continue;
+                }
+                if (pathsUnderOperation.contains(shardInfo.PathId)) {
+                    // The drop operation is still in flight and will decide the shards' fate
+                    continue;
+                }
+                LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                             "TTxInit: deferred deletion of column shard " << shardIdx
+                                 << " is disabled by feature flag, deleting the shard"
+                                 << ", at schemeshard: " << Self->TabletID());
+                OnComplete.DeleteShard(shardIdx);
+            }
+        }
+
         // Read backup settings
         {
             TBackupSettingsRows backupSettings;
@@ -4869,6 +4898,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 break;
             case ETabletType::ColumnShard:
                 Self->TabletCounters->Simple()[COUNTER_COLUMN_SHARDS].Add(1);
+                if (path->Dropped()) {
+                    Self->TabletCounters->Simple()[COUNTER_COLUMN_SHARDS_PENDING_DROP_CLEANUP].Add(1);
+                }
                 break;
             case ETabletType::SequenceShard:
                 Self->TabletCounters->Simple()[COUNTER_SEQUENCESHARD_COUNT].Add(1);

@@ -11,24 +11,26 @@
 
 #include <algorithm>
 #include <cctype>
-#include <regex>
 #include <vector>
 
 namespace NKikimr {
 
 namespace {
 
-struct TSensitivePairedWords {
-    TStringBuf First;
-    TStringBuf Second;
-};
+using TWordSequence = std::vector<TStringBuf>;
 
 static const std::vector<TString> SensitiveWords = {
     "password",
 };
-static const TSensitivePairedWords SensitivePairedWords[] = {
+// Each sequence is a list of keywords that must appear consecutively (only ASCII
+// whitespace allowed between neighboring words, any amount of it, including
+// newlines/tabs/multiple spaces).
+static const std::vector<TWordSequence> SensitiveWordSequences = {
     {"create", "secret"},
     {"alter", "secret"},
+    {"create", "or", "replace", "secret"},
+    {"create", "if", "not", "exists", "secret"},
+    {"alter", "if", "exists", "secret"},
 };
 
 bool ContainsCaseInsensitive(TStringBuf text, TStringBuf pattern) {
@@ -49,32 +51,40 @@ bool MatchPrefixIgnoreCase(TStringBuf text, size_t pos, TStringBuf word) {
     return true;
 }
 
-// Two consecutive keywords; only ASCII whitespace between them; case-insensitive.
-bool ContainsAdjacentWordsIgnoreSpaces(TStringBuf text, TStringBuf w1, TStringBuf w2) {
-    for (size_t i = 0; i + w1.size() <= text.size(); ++i) {
-        if (!MatchPrefixIgnoreCase(text, i, w1)) {
+// A sequence of consecutive keywords; only ASCII whitespace (any amount) is
+// allowed between neighboring words; case-insensitive.
+bool ContainsWordSequenceIgnoreSpaces(TStringBuf text, const TWordSequence& words) {
+    if (words.empty()) {
+        return false;
+    }
+    const TStringBuf& first = words.front();
+    for (size_t i = 0; i + first.size() <= text.size(); ++i) {
+        if (!MatchPrefixIgnoreCase(text, i, first)) {
             continue;
         }
-        size_t p = i + w1.size();
-        while (p < text.size() && IsAsciiSpace(static_cast<unsigned char>(text[p]))) {
-            ++p;
+        size_t p = i + first.size();
+        bool matched = true;
+        for (size_t w = 1; w < words.size(); ++w) {
+            size_t spaceStart = p;
+            while (p < text.size() && IsAsciiSpace(static_cast<unsigned char>(text[p]))) {
+                ++p;
+            }
+            if (p == spaceStart) {
+                matched = false;
+                break;
+            }
+            const TStringBuf& word = words[w];
+            if (p + word.size() > text.size() || !MatchPrefixIgnoreCase(text, p, word)) {
+                matched = false;
+                break;
+            }
+            p += word.size();
         }
-        if (p + w2.size() <= text.size() && MatchPrefixIgnoreCase(text, p, w2)) {
+        if (matched) {
             return true;
         }
     }
     return false;
-}
-
-// Checks for "secret" after a DDL verb with SQL keywords between verb and "secret".
-// Matches exactly:
-//   CREATE OR REPLACE SECRET, CREATE IF NOT EXISTS SECRET,
-//   ALTER IF EXISTS SECRET
-bool ContainsDdlVerbAndSecret(TStringBuf text) {
-    static const std::regex re(
-        R"((?:create\s+or\s+replace|create\s+if\s+not\s+exists|alter\s+if\s+exists)\s+secret\b)",
-        std::regex::icase);
-    return std::regex_search(text.begin(), text.end(), re);
 }
 
 TMaybe<TString> FindSensitiveQueryMarker(TStringBuf text) {
@@ -83,13 +93,17 @@ TMaybe<TString> FindSensitiveQueryMarker(TStringBuf text) {
             return word;
         }
     }
-    for (const auto& pair : SensitivePairedWords) {
-        if (ContainsAdjacentWordsIgnoreSpaces(text, pair.First, pair.Second)) {
-            return TStringBuilder() << pair.First << ' ' << pair.Second;
+    for (const auto& seq : SensitiveWordSequences) {
+        if (ContainsWordSequenceIgnoreSpaces(text, seq)) {
+            TStringBuilder marker;
+            for (size_t i = 0; i < seq.size(); ++i) {
+                if (i > 0) {
+                    marker << ' ';
+                }
+                marker << seq[i];
+            }
+            return TString(marker);
         }
-    }
-    if (ContainsDdlVerbAndSecret(text)) {
-        return TString("ddl secret");
     }
     return Nothing();
 }

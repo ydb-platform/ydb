@@ -27,6 +27,12 @@ Y_UNIT_TEST_SUITE(Util) {
         UNIT_ASSERT(NKikimr::IsQueryWithSensitiveInfo("create or replace secret x with (value = '123')"));
         UNIT_ASSERT(NKikimr::IsQueryWithSensitiveInfo("create if not exists secret x with (value = '123')"));
 
+        // true – DDL verbs with irregular whitespace (multiple spaces/tabs/newlines) between every word
+        UNIT_ASSERT(NKikimr::IsQueryWithSensitiveInfo("CREATE  OR   REPLACE SECRET x WITH (VALUE = '123')"));
+        UNIT_ASSERT(NKikimr::IsQueryWithSensitiveInfo("CREATE\tOR\nREPLACE\r\nSECRET x WITH (VALUE = '123')"));
+        UNIT_ASSERT(NKikimr::IsQueryWithSensitiveInfo("CREATE  IF  NOT   EXISTS SECRET x WITH (VALUE = '123')"));
+        UNIT_ASSERT(NKikimr::IsQueryWithSensitiveInfo("ALTER\t IF  EXISTS\nSECRET x WITH (VALUE = '123')"));
+
         // true – many lines
         UNIT_ASSERT(NKikimr::IsQueryWithSensitiveInfo(
             "CREATE\n"
@@ -62,7 +68,7 @@ Y_UNIT_TEST_SUITE(Util) {
         UNIT_ASSERT(NKikimr::ProtectQueryForLoggingIfSensitive("CREATE OR REPLACE SECRET x WITH (VALUE = '123')", protectedText));
         UNIT_ASSERT_VALUES_EQUAL(
             protectedText,
-            "Query text is hidden due to a sensitive marker: ddl secret");
+            "Query text is hidden due to a sensitive marker: create or replace secret");
     }
 
     Y_UNIT_TEST(ProtectQueryForLoggingIfSensitive) {
@@ -111,10 +117,10 @@ Y_UNIT_TEST_SUITE(Util) {
         // DDL verbs with keywords between verb and "secret"
         UNIT_ASSERT_VALUES_EQUAL(
             NKikimr::ProtectQueryForLoggingIfSensitive("CREATE OR REPLACE SECRET x WITH (VALUE = '123')"),
-            "Query text is hidden due to a sensitive marker: ddl secret");
+            "Query text is hidden due to a sensitive marker: create or replace secret");
         UNIT_ASSERT_VALUES_EQUAL(
             NKikimr::ProtectQueryForLoggingIfSensitive("CREATE IF NOT EXISTS SECRET x WITH (VALUE = '123')"),
-            "Query text is hidden due to a sensitive marker: ddl secret");
+            "Query text is hidden due to a sensitive marker: create if not exists secret");
 
         // false positives
         UNIT_ASSERT_VALUES_EQUAL(

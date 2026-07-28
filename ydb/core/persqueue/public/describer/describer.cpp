@@ -175,7 +175,8 @@ public:
 
                         CDCPaths[TStringBuilder() << realPath << "/streamImpl"] = {
                             .OriginalPath = originalPath,
-                            .CdcStreamName = entry.Self->Info.GetName()
+                            .CdcStreamName = entry.Self->Info.GetName(),
+                            .AccountDatabase = RequestDatabaseName
                         };
                         break;
                     } else if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic) {
@@ -266,18 +267,8 @@ public:
             return;
         }
 
-        if (!CDCPaths.empty() && !RetryWithCDC) {
-            RetryWithSyncVersion = false;
-            RetryWithCDC = true;
-            RequestDatabaseName = DatabasePath;
-
-            absl::flat_hash_set<TString> newPath;
-            newPath.reserve(CDCPaths.size());
-            for (auto& [path, _] : CDCPaths) {
-                newPath.insert(path);
-            }
-
-            return DoRequest(newPath);
+        if (TryStartNextCdcDatabaseRequest()) {
+            return;
         }
 
         Send(Parent, new TEvDescribeTopicsResponse(std::move(Result), UsedSyncVersion));
@@ -359,6 +350,35 @@ private:
         return true;
     }
 
+    // One SchemeCache request per account database for CDC streamImpl paths.
+    bool TryStartNextCdcDatabaseRequest() {
+        TString nextDatabase;
+        for (const auto& [_, info] : CDCPaths) {
+            if (!RequestedCdcDatabases.contains(info.AccountDatabase)) {
+                nextDatabase = info.AccountDatabase;
+                break;
+            }
+        }
+        if (nextDatabase.empty()) {
+            return false;
+        }
+
+        RetryWithCDC = true;
+        RetryWithSyncVersion = false;
+        RequestDatabaseName = nextDatabase;
+        RequestedCdcDatabases.insert(nextDatabase);
+
+        absl::flat_hash_set<TString> newPath;
+        for (const auto& [path, info] : CDCPaths) {
+            if (info.AccountDatabase == nextDatabase) {
+                newPath.insert(path);
+            }
+        }
+
+        DoRequest(newPath);
+        return true;
+    }
+
     void SetErrorResult(const TString& originalPath, EStatus status, const TString& realPath = {}) {
         auto it = Result.find(originalPath);
         if (it != Result.end() && it->second.Status == EStatus::SUCCESS) {
@@ -386,10 +406,12 @@ private:
     // DatabaseName for the current SchemeCache request (account DB on LbRoot retry).
     TString RequestDatabaseName;
     absl::flat_hash_set<TString> RequestedLbRootDatabases;
-    // CDC topic path -> original topic path
+    absl::flat_hash_set<TString> RequestedCdcDatabases;
+    // CDC streamImpl path -> original changefeed path
     struct TCDCTopicInfo {
         TString OriginalPath;
         TString CdcStreamName;
+        TString AccountDatabase;
     };
     absl::flat_hash_map<TString, TCDCTopicInfo> CDCPaths;
     // LbUserDatabaseRoot-prefixed path -> original topic path

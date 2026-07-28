@@ -245,7 +245,7 @@ void TOracle::Think(TInstant now)
         }
     }
 
-    QueryAddHostIfPossible();
+    MaybeQueryAddHost();
 }
 
 void TOracle::OnRequestStarted(
@@ -297,7 +297,7 @@ void TOracle::OnDDiskBroken(THostIndex hostIndex)
             oldState,
             EHostState::Offline);
 
-        QueryAddHostIfPossible();
+        MaybeQueryAddHost();
     }
 }
 
@@ -472,7 +472,7 @@ void TOracle::AddHostIfNeeded(THostIndex hostIndex)
     }
 }
 
-void TOracle::QueryAddHostIfPossible()
+void TOracle::MaybeQueryAddHost()
 {
     if (GetAliveHostCount(HostStates) < DirectBlockGroupHostCount &&
         GetHostCount() < MaxHostCount)

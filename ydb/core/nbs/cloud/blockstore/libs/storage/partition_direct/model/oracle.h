@@ -173,7 +173,7 @@ public:
     void AddHostIfNeeded(THostIndex hostIndex);
 
     // Check if it's valid to QueryAddHost from HostStateController and do it.
-    void QueryAddHostIfPossible();
+    void MaybeQueryAddHost();
 
     [[nodiscard]] TVector<TOracleHostStat> BuildHostStats(TInstant now) const;
 

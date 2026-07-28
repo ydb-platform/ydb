@@ -139,7 +139,7 @@ CreateWaitSessionCbForSyncWithPBuffer(
     return cb;
 }
 
-bool IsDDiskSessionOperation(EOperation operation)
+bool IsDDiskOperation(EOperation operation)
 {
     return operation == EOperation::ReadFromDDisk ||
            operation == EOperation::WriteToDDisk ||
@@ -1749,8 +1749,7 @@ void TDirectBlockGroup::OnResponse(
 
         if (IsCancelledError(error)) {
             Oracle.OnRequestCancelled(hostIndex, operation, TInstant::Now());
-        } else if (
-            IsDDiskSessionOperation(operation) && IsSessionBlockedError(error))
+        } else if (IsDDiskOperation(operation) && IsSessionBlockedError(error))
         {
             HandleBlockedGeneration(hostIndex, ToString(operation));
         } else if (IsDeviceBrokenError(error)) {

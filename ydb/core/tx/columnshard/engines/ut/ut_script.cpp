@@ -5,6 +5,8 @@
 #include <reader/simple_reader/iterator/fetching.h>
 #include <scheme/versions/snapshot_scheme.h>
 
+#include <thread>
+
 using namespace NKikimr;
 using namespace NKikimr::NOlap;
 using namespace NKikimr::NOlap::NReader;
@@ -49,5 +51,39 @@ Y_UNIT_TEST_SUITE(TestScript) {
             "{name=FETCHING_COLUMNS;details={columns=1,2;};};"
             "{name=ASSEMBLER;details={columns=(column_ids=1,2;column_names=c1,c2;);;};};"
             "{name=DELETION;details={};};]}");
+    }
+
+    // regression for #47943: reading the owner from another thread while the script is being
+    // published must not observe a torn shared_ptr
+    Y_UNIT_TEST(OwnerConcurrentInitialization) {
+        static constexpr ui32 RacesCount = 5000;
+        static constexpr ui32 ReaderAttemptsCount = 100000;
+        auto schema = MakeTestSchema({ { 0, NTable::TColumn("c0", 0, NScheme::TTypeInfo(NScheme::NTypeIds::Int32), "") } });
+        for (ui32 i = 0; i < RacesCount; ++i) {
+            NCommon::TFetchingScriptBuilder acc = NCommon::TFetchingScriptBuilder::MakeForTests(schema);
+            acc.AddFetchingStep(std::vector<ui32>({ 0 }), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter);
+            acc.AddAssembleStep(std::vector<ui32>({ 0 }), "", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter, false);
+            auto script = std::move(acc).Build();
+
+            NCommon::TFetchingScriptOwner owner;
+            std::atomic<bool> readerStarted = false;
+            std::thread reader([&]() {
+                readerStarted = true;
+                for (ui32 j = 0; j < ReaderAttemptsCount; ++j) {
+                    if (owner.HasScript()) {
+                        Y_UNUSED(owner.ProfileDebugString());
+                        break;
+                    }
+                }
+            });
+            while (!readerStarted) {
+            }
+            auto guard = owner.StartInitialization();
+            UNIT_ASSERT(guard);
+            guard->InitializationFinished(std::move(script));
+            reader.join();
+            UNIT_ASSERT(!owner.NeedInitialization());
+            UNIT_ASSERT_STRING_CONTAINS(owner.GetScriptVerified()->DebugString(), "FETCHING_COLUMNS");
+        }
     }
 }

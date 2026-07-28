@@ -91,7 +91,7 @@ public:
                 tabletInfo.SetTabletStorageVersion(tablet.TabletStorageInfo->Version);
                 tabletInfo.SetTabletBootMode(tablet.BootMode);
                 tablet.GetResourceValues().ToProto(tabletInfo.MutableResourceUsage());
-                if (tabletRowset.GetValueOrDefault<Schema::Tablet::IsBackup>()) {
+                if (tablet.IsBackup) {
                     tabletInfo.SetIsBackup(true);
                 }
 

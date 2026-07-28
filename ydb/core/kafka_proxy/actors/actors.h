@@ -28,7 +28,7 @@ public:
             {"actor", TypeName<TDerived>()},
             {"typeName", TypeName(exc)},
             {"exception", exc.what()},
-            {"currentException", TBackTrace::FromCurrentException().PrintToString()});
+            {"backTrace", TBackTrace::FromCurrentException().PrintToString()});
         self->OnKafkaUnhandledException(exc, ctx);
         return true;
     }

@@ -309,7 +309,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             YDB_LOG_CRIT_CTX_COMP(ctx, NKikimrServices::PERSQUEUE, "Unhandled exception",
                 {"typeName", TypeName(exc)},
                 {"exception", exc.what()},
-                {"currentException", TBackTrace::FromCurrentException().PrintToString()});
+                {"backTrace", TBackTrace::FromCurrentException().PrintToString()});
 
             ReplyWithError(Ydb::StatusIds::INTERNAL_ERROR, Ydb::PersQueue::ErrorCode::ERROR, "Internal error");
 

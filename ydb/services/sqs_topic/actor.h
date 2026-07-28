@@ -56,7 +56,7 @@ namespace NKikimr::NSqsTopic::V1 {
                 {"exception", exc.what()},
                 {"path", this->GetTopicPath()},
                 {"database", this->Database},
-                {"currentException", TBackTrace::FromCurrentException().PrintToString()});
+                {"backTrace", TBackTrace::FromCurrentException().PrintToString()});
 
             ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, "Internal error"));
             return true;

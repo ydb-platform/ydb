@@ -66,7 +66,7 @@ namespace NKikimr::NSqsTopic::V1 {
             YDB_LOG_CRIT_CTX_COMP(ctx, NKikimrServices::SQS, "Unhandled exception in SQS topic actor",
                 {"typeName", TypeName(exc)},
                 {"exception", exc.what()},
-                {"currentException", TBackTrace::FromCurrentException().PrintToString()});
+                {"backTrace", TBackTrace::FromCurrentException().PrintToString()});
 
             const auto error = MakeError(NSQS::NErrors::INTERNAL_FAILURE, "Internal error");
             NYql::TIssue issue(error.GetMessage());

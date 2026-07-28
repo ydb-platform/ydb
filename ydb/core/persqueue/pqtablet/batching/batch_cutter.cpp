@@ -13,7 +13,6 @@
 #include <util/stream/mem.h>
 #include <util/stream/output.h>
 #include <util/stream/zlib.h>
-#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NPQ::NBatching {
 namespace {
@@ -64,11 +63,14 @@ TVector<TReadResult> TKafkaBatchCutter::Cut(const TBatchCutterData& data, const 
         return {data.ReadResult};
     }
 
-    AFL_ENSURE(dataChunk.HasCodec() && dataChunk.GetCodec() == KafkaBatchCodec())
-        ("has_codec", dataChunk.HasCodec())
-        ("codec", dataChunk.HasCodec() ? dataChunk.GetCodec() : -1)
-        ("expected_codec", KafkaBatchCodec())
-        ("offset", data.ReadResult.GetOffset());
+    // Bad on-disk/client data: throw yexception (catchable in UT and callers), not AFL_ENSURE
+    // which aborts outside an actor activation context.
+    Y_ENSURE(dataChunk.HasCodec() && dataChunk.GetCodec() == KafkaBatchCodec(),
+        "unexpected data chunk codec for kafka batch cutter"
+        << " has_codec=" << dataChunk.HasCodec()
+        << " codec=" << (dataChunk.HasCodec() ? static_cast<int>(dataChunk.GetCodec()) : -1)
+        << " expected_codec=" << static_cast<int>(KafkaBatchCodec())
+        << " offset=" << data.ReadResult.GetOffset());
 
     const auto batch = NKafka::ReadKafkaRecordBatch(dataChunk.GetData());
     if (batch.Records.empty()) {
@@ -105,8 +107,11 @@ TVector<TReadResult> TKafkaBatchCutter::Cut(const TBatchCutterData& data, const 
             itemChunk.ClearData();
         }
         TString serializedChunk;
-        AFL_ENSURE(itemChunk.SerializeToString(&serializedChunk))
-            ("offset", offset)("seq_no", seqNo)("codec", codec);
+        Y_ENSURE(itemChunk.SerializeToString(&serializedChunk),
+            "failed to serialize data chunk"
+            << " offset=" << offset
+            << " seq_no=" << seqNo
+            << " codec=" << static_cast<int>(codec));
         item.SetData(std::move(serializedChunk));
 
         if (record.Key) {
@@ -130,11 +135,12 @@ THashMap<TString, ui64> TKafkaBatchCutter::GetKeys(const TBatchCutterData& data,
         return result;
     }
 
-    AFL_ENSURE(dataChunk.HasCodec() && dataChunk.GetCodec() == KafkaBatchCodec())
-        ("has_codec", dataChunk.HasCodec())
-        ("codec", dataChunk.HasCodec() ? dataChunk.GetCodec() : -1)
-        ("expected_codec", KafkaBatchCodec())
-        ("offset", data.ReadResult.GetOffset());
+    Y_ENSURE(dataChunk.HasCodec() && dataChunk.GetCodec() == KafkaBatchCodec(),
+        "unexpected data chunk codec for kafka batch cutter"
+        << " has_codec=" << dataChunk.HasCodec()
+        << " codec=" << (dataChunk.HasCodec() ? static_cast<int>(dataChunk.GetCodec()) : -1)
+        << " expected_codec=" << static_cast<int>(KafkaBatchCodec())
+        << " offset=" << data.ReadResult.GetOffset());
 
     const auto batch = NKafka::ReadKafkaRecordBatch(dataChunk.GetData());
     const ui64 baseOffset = data.ReadResult.GetOffset();

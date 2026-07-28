@@ -91,6 +91,9 @@ Y_UNIT_TEST_SUITE(TPortionBlobValidation) {
         UNIT_ASSERT_VALUES_EQUAL(hash20, (((ui64)2) << 16) + 0);
     }
 
+    // Smoke test for the mixed column+index blob path that failed in #47860:
+    // bloom index stored in default blob storage (not inplace), then portion Build/Finalize
+    // with FullValidation of all column and index blob ranges.
     Y_UNIT_TEST(BuildPortionWithBlobStoredBloomIndex) {
         const auto schema = MakeSchemaWithBlobBloom();
         const auto batch = MakeBatch();

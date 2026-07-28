@@ -252,21 +252,6 @@ public:
         BlobIdxs.emplace_back(address, blobIdx);
     }
 
-    const TBlobRangeLink16& GetBlobRangeByAddressVerified(const TChunkAddress& address) const {
-        for (auto&& i : Records) {
-            if (i.GetAddress() == address) {
-                return i.GetBlobRange();
-            }
-        }
-        for (auto&& i : Indexes) {
-            if (i.GetAddress() == address) {
-                return i.GetBlobRangeVerified();
-            }
-        }
-        AFL_VERIFY(false)("address", address.DebugString());
-        return Records.front().GetBlobRange();
-    }
-
     TString DebugString() const {
         TStringBuilder sb;
         sb << PortionInfo->DebugString() << ";";

@@ -4,8 +4,6 @@
 
 #include <ydb/library/actors/struct_log/log_stack.h>
 
-#include <util/generic/hash.h>
-
 namespace NKikimr::NOlap {
 
 void TPortionAccessorConstructor::ChunksValidation() const {
@@ -53,28 +51,43 @@ std::shared_ptr<TPortionDataAccessor> TPortionAccessorConstructor::Build(const b
     YDB_LOG_CREATE_CONTEXT(
         {"portionId", PortionInfo->GetPortionIdVerified()});
     if (BlobIdxs.size()) {
-        THashMap<TChunkAddress, TBlobRangeLink16::TLinkId> addressToBlobIdx;
-        addressToBlobIdx.reserve(BlobIdxs.size());
-        for (auto&& i : BlobIdxs) {
-            AFL_VERIFY(addressToBlobIdx.emplace(i.GetAddress(), i.GetBlobIdx()).second)("address", i.GetAddress().DebugString())(
-                                                                   "blob_idx", i.GetBlobIdx());
+        // BlobIdxs is ordered (see ReorderChunks); walk Records/Indexes in the same address order.
+        auto itRecord = Records.begin();
+        auto itIndex = Indexes.begin();
+        auto itBlobIdx = BlobIdxs.begin();
+        while (itRecord != Records.end() && itIndex != Indexes.end() && itBlobIdx != BlobIdxs.end()) {
+            if (itRecord->GetAddress() < itIndex->GetAddress()) {
+                AFL_VERIFY(itRecord->GetAddress() == itBlobIdx->GetAddress());
+                itRecord->RegisterBlobIdx(itBlobIdx->GetBlobIdx());
+                ++itRecord;
+                ++itBlobIdx;
+            } else if (itIndex->GetAddress() < itRecord->GetAddress()) {
+                if (itIndex->HasBlobData()) {
+                    ++itIndex;
+                    continue;
+                }
+                AFL_VERIFY(itIndex->GetAddress() == itBlobIdx->GetAddress());
+                itIndex->RegisterBlobIdx(itBlobIdx->GetBlobIdx());
+                ++itIndex;
+                ++itBlobIdx;
+            } else {
+                AFL_VERIFY(false);
+            }
         }
-        for (auto&& i : Records) {
-            auto it = addressToBlobIdx.find(i.GetAddress());
-            AFL_VERIFY(it != addressToBlobIdx.end())("address", i.GetAddress().DebugString());
-            i.RegisterBlobIdx(it->second);
-            addressToBlobIdx.erase(it);
+        for (; itRecord != Records.end() && itBlobIdx != BlobIdxs.end(); ++itRecord, ++itBlobIdx) {
+            AFL_VERIFY(itRecord->GetAddress() == itBlobIdx->GetAddress());
+            itRecord->RegisterBlobIdx(itBlobIdx->GetBlobIdx());
         }
-        for (auto&& i : Indexes) {
-            if (i.HasBlobData()) {
+        for (; itIndex != Indexes.end() && itBlobIdx != BlobIdxs.end(); ++itIndex) {
+            if (itIndex->HasBlobData()) {
                 continue;
             }
-            auto it = addressToBlobIdx.find(i.GetAddress());
-            AFL_VERIFY(it != addressToBlobIdx.end())("address", i.GetAddress().DebugString());
-            i.RegisterBlobIdx(it->second);
-            addressToBlobIdx.erase(it);
+            AFL_VERIFY(itIndex->GetAddress() == itBlobIdx->GetAddress());
+            itIndex->RegisterBlobIdx(itBlobIdx->GetBlobIdx());
+            ++itBlobIdx;
         }
-        AFL_VERIFY(addressToBlobIdx.empty())("rest", addressToBlobIdx.size());
+        AFL_VERIFY(itRecord == Records.end());
+        AFL_VERIFY(itBlobIdx == BlobIdxs.end());
     } else {
         for (auto&& i : Records) {
             AFL_VERIFY(i.BlobRange.GetBlobIdxVerified() < GetBlobIdsCount());

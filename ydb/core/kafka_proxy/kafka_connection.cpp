@@ -788,7 +788,7 @@ protected:
 
     bool UpgradeToSecure() {
         if (IsSslRequired && !IsSslActive) {
-            int res = Socket->TryUpgradeToSecure(NKikimrServices::KAFKA_PROXY, ServerCreds);
+            int res = Socket->TryUpgradeToSecure(NKikimrServices::KAFKA_PROXY, ServerCreds ? std::make_optional(ServerCreds) : std::nullopt);
             if (res < 0) {
                 YDB_LOG_ERROR("Connection closed - error in UpgradeToSecure",
                     {LogPrefix()},

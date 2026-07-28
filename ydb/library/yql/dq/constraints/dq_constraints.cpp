@@ -104,10 +104,6 @@ TStatus ConstraintDqPhyHashCombine(const TExprNode::TPtr& input, TExprContext& c
 }
 
 TStatus ConstrainDqWatermarkGenerator(const TExprNode::TPtr& input, TExprContext& ctx) {
-    if (const auto status = UpdateAllChildLambdasConstraints(*input); status != TStatus::Ok) {
-        return status;
-    }
-
     const auto* streaming = input->Head().GetConstraint<TStreamingConstraintNode>();
     if (!streaming) {
         ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Watermark generator requires streaming input"));
@@ -118,8 +114,34 @@ TStatus ConstrainDqWatermarkGenerator(const TExprNode::TPtr& input, TExprContext
         return TStatus::Error;
     }
 
-    auto descriptor = BuildEventTimeDescriptor(input->Child(TDqPhyWatermarkGenerator::idx_WatermarkExtractor));
-    input->AddConstraint(ctx.MakeConstraint<TStreamingConstraintNode>(std::move(descriptor)));
+    auto& extractor = input->ChildRef(TDqPhyWatermarkGenerator::idx_WatermarkExtractor);
+    TMaybe<TPartOfConstraintBase::TPathType> eventTime;
+    if (const auto status = TryExtractEventTime(
+            extractor,
+            *extractor->Child(TCoLambda::idx_Body),
+            ctx,
+            eventTime
+        );
+        status != TStatus::Ok
+    ) {
+        return status;
+    }
+    if (!eventTime) {
+        ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Event time expression must be materialized into a Timestamp column before assigning a watermark"));
+        return TStatus::Error;
+    }
+
+    if (const auto status = UpdateLambdaConstraints(*input->Child(TDqPhyWatermarkGenerator::idx_PartitionKeyExtractor));
+        status != TStatus::Ok) {
+        return status;
+    }
+
+    if (const auto status = UpdateLambdaConstraints(*input->Child(TDqPhyWatermarkGenerator::idx_WriteTimeExtractor));
+        status != TStatus::Ok) {
+        return status;
+    }
+
+    input->AddConstraint(ctx.MakeConstraint<TStreamingConstraintNode>(std::move(*eventTime)));
 
     TCopyConstraints::Do<TSortedConstraintNode, TPartOfSortedConstraintNode, TChoppedConstraintNode, TPartOfChoppedConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TPartOfStreamingConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>(input->Head(), *input);
     return TStatus::Ok;

@@ -11,8 +11,8 @@ namespace NKikimr {
 
     struct TDbStatYieldPolicy {
         const ui64 StepsBeforeMeasures = 100'000;
-        const TDuration QuantDuration = TDuration::MilliSeconds(50);
-        const TDuration DelayBetweenQuants = TDuration::MilliSeconds(100);
+        const TDuration QuantumDuration = TDuration::MilliSeconds(50);
+        const TDuration DelayBetweenQuanta = TDuration::MilliSeconds(100);
     };
 
     struct TDbStatYieldChecker {
@@ -21,19 +21,19 @@ namespace NKikimr {
                 TIntrusivePtr<NMonotonic::IMonotonicTimeProvider> monotonicTimeProvider = {})
             : Policy(std::move(policy))
             , MonotonicTimeProvider(std::move(monotonicTimeProvider))
-            , PhaseStart(TMonotonic::Zero())
+            , QuantumStart(TMonotonic::Zero())
         {
             if (Policy) {
                 if (!MonotonicTimeProvider) {
                     MonotonicTimeProvider = CreateActorSystemMonotonicTimeProvider();
                 }
-                PhaseStart = MonotonicTimeProvider->Now();
+                QuantumStart = MonotonicTimeProvider->Now();
             }
         }
 
         std::optional<TDbStatYieldPolicy> Policy;
         TIntrusivePtr<NMonotonic::IMonotonicTimeProvider> MonotonicTimeProvider;
-        TMonotonic PhaseStart;
+        TMonotonic QuantumStart;
 
         ui64 Step = 0;
 
@@ -42,8 +42,8 @@ namespace NKikimr {
             if (Policy && Policy->StepsBeforeMeasures && Step >= Policy->StepsBeforeMeasures) {
                 Step = 0;
                 const TMonotonic now = MonotonicTimeProvider->Now();
-                if (now - PhaseStart > Policy->QuantDuration) {
-                    PhaseStart = now;
+                if (now - QuantumStart > Policy->QuantumDuration) {
+                    QuantumStart = now;
                     return true;
                 }
             }

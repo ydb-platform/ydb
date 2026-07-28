@@ -29,7 +29,7 @@ namespace NKikimr {
 
         friend class TActorBootstrapped<TThis>;
 
-        void Bootstrap(const TActorContext &ctx) {
+        void Bootstrap() {
             if constexpr (std::is_same_v<TRequest, TEvBlobStorage::TEvVDbStat>) {
                 const bool prettyPrint = Ev->Get()->Record.GetPrettyPrint();
                 PrepareStat(Output, prettyPrint);
@@ -37,7 +37,7 @@ namespace NKikimr {
                 PrepareStat(Result);
             }
             TThis::Become(&TThis::StateFunc);
-            ContinueTraversal(ctx);
+            ContinueTraversal();
         }
 
         void PrepareStat(IOutputStream &str, bool pretty);
@@ -58,24 +58,24 @@ namespace NKikimr {
             };
         }
 
-        void ContinueTraversal(const TActorContext& ctx) {
+        void ContinueTraversal() {
             Y_ABORT_UNLESS(Snapshot);
             YieldedState = Traversal(*Snapshot, std::move(YieldedState));
             Snapshot->Destroy();
             Snapshot.reset();
 
             if (YieldedState) {
-                ctx.Schedule(YieldPolicy.DelayBetweenQuants, new TEvents::TEvWakeup);
+                Schedule(YieldPolicy.DelayBetweenQuanta, new TEvents::TEvWakeup);
             } else {
-                ReplyAndDie(ctx);
+                ReplyAndDie();
             }
         }
 
-        void HandleWakeup(const TActorContext& ctx) {
-            ctx.Send(ParentId, new TEvTakeHullSnapshot(true));
+        void HandleWakeup() {
+            Send(ParentId, new TEvTakeHullSnapshot(true));
         }
 
-        void Handle(TEvTakeHullSnapshotResult::TPtr& ev, const TActorContext& ctx) {
+        void Handle(TEvTakeHullSnapshotResult::TPtr& ev) {
             if constexpr (std::is_same_v<TKey, TKeyLogoBlob>) {
                 Snapshot.emplace(std::move(ev->Get()->Snap.LogoBlobsSnap));
             } else if constexpr (std::is_same_v<TKey, TKeyBlock>) {
@@ -85,22 +85,23 @@ namespace NKikimr {
             } else {
                 static_assert(!std::is_same_v<TKey, TKey>, "unsupported Hull database key");
             }
-            ContinueTraversal(ctx);
+            ContinueTraversal();
         }
 
-        void ReplyAndDie(const TActorContext& ctx) {
+        void ReplyAndDie() {
             if constexpr (std::is_same_v<TRequest, TEvBlobStorage::TEvVDbStat>) {
                 Result->SetResult(Output.Str());
             }
-            SendVDiskResponse(ctx, Ev->Sender, Result.release(), Ev->Cookie, HullCtx->VCtx, {});
-            ctx.Send(ParentId, new TEvents::TEvGone);
-            TThis::Die(ctx);
+            SendVDiskResponse(TActivationContex::AsActorContext(), Ev->Sender, Result.release(),
+                    Ev->Cookie, HullCtx->VCtx, {});
+            Send(ParentId, new TEvents::TEvGone);
+            PassAway();
         }
 
         STRICT_STFUNC(StateFunc, {
-            CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
-            CFunc(TEvents::TSystem::PoisonPill, TBase::Die);
-            HFunc(TEvTakeHullSnapshotResult, Handle);
+            cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
+            cFunc(TEvents::TSystem::PoisonPill, PassAway);
+            hFunc(TEvTakeHullSnapshotResult, Handle);
         })
 
     public:

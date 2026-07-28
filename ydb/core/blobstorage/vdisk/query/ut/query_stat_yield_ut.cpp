@@ -31,8 +31,8 @@ namespace {
             TDbStatYieldChecker checker(
                 TDbStatYieldPolicy{
                     .StepsBeforeMeasures = 3,
-                    .QuantDuration = TDuration::MilliSeconds(10),
-                    .DelayBetweenQuants = TDuration::MilliSeconds(100),
+                    .QuantumDuration = TDuration::MilliSeconds(10),
+                    .DelayBetweenQuanta = TDuration::MilliSeconds(100),
                 },
                 timeProvider);
 
@@ -41,7 +41,7 @@ namespace {
             UNIT_ASSERT(!checker.StepAndCheckForYield());
             UNIT_ASSERT(checker.StepAndCheckForYield());
 
-            // The elapsed time must exceed QuantDuration, and the clock is
+            // The elapsed time must exceed QuantumDuration, and the clock is
             // checked only after another StepsBeforeMeasures records.
             timeProvider->Advance(TDuration::MilliSeconds(10));
             UNIT_ASSERT(!checker.StepAndCheckForYield());
@@ -59,8 +59,8 @@ namespace {
             TDbStatYieldChecker checker(
                 TDbStatYieldPolicy{
                     .StepsBeforeMeasures = 2,
-                    .QuantDuration = TDuration::MilliSeconds(50),
-                    .DelayBetweenQuants = TDuration::MilliSeconds(100),
+                    .QuantumDuration = TDuration::MilliSeconds(50),
+                    .DelayBetweenQuanta = TDuration::MilliSeconds(100),
                 },
                 timeProvider);
 

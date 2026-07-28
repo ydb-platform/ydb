@@ -417,8 +417,8 @@ namespace {
                     std::move(yieldedState),
                     TDbStatYieldPolicy{
                         .StepsBeforeMeasures = 4,
-                        .QuantDuration = TDuration::MilliSeconds(3),
-                        .DelayBetweenQuants = TDuration::Zero(),
+                        .QuantumDuration = TDuration::MilliSeconds(3),
+                        .DelayBetweenQuanta = TDuration::Zero(),
                     },
                     timeProvider);
                 snapshot.Destroy();

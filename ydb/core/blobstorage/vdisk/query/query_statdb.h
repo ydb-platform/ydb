@@ -65,14 +65,14 @@ namespace NKikimr {
             Snapshot.reset();
 
             if (YieldedState) {
-                Schedule(YieldPolicy.DelayBetweenQuanta, new TEvents::TEvWakeup);
+                TThis::Schedule(YieldPolicy.DelayBetweenQuanta, new TEvents::TEvWakeup);
             } else {
                 ReplyAndDie();
             }
         }
 
         void HandleWakeup() {
-            Send(ParentId, new TEvTakeHullSnapshot(true));
+            TThis::Send(ParentId, new TEvTakeHullSnapshot(true));
         }
 
         void Handle(TEvTakeHullSnapshotResult::TPtr& ev) {
@@ -92,15 +92,15 @@ namespace NKikimr {
             if constexpr (std::is_same_v<TRequest, TEvBlobStorage::TEvVDbStat>) {
                 Result->SetResult(Output.Str());
             }
-            SendVDiskResponse(TActivationContex::AsActorContext(), Ev->Sender, Result.release(),
+            SendVDiskResponse(TActivationContext::AsActorContext(), Ev->Sender, Result.release(),
                     Ev->Cookie, HullCtx->VCtx, {});
-            Send(ParentId, new TEvents::TEvGone);
-            PassAway();
+            TThis::Send(ParentId, new TEvents::TEvGone);
+            TThis::PassAway();
         }
 
         STRICT_STFUNC(StateFunc, {
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
-            cFunc(TEvents::TSystem::PoisonPill, PassAway);
+            cFunc(TEvents::TSystem::PoisonPill, TBase::PassAway);
             hFunc(TEvTakeHullSnapshotResult, Handle);
         })
 

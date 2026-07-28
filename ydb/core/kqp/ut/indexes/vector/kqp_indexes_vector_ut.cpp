@@ -802,6 +802,48 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
+    void DoTestVectorIndexReadsOwnUncommittedWrite(int flags, bool enableVectorSearchActor) {
+        // A vector search must observe writes made earlier in the same transaction: the write
+        // is a deferred effect, so the search has to force a flush before reading. Regression
+        // guard: the vector search connection used to be treated as pass-through by
+        // HasUncommittedChangesRead, so the search silently read the pre-write snapshot.
+        auto serverSettings = TKikimrSettings().SetKqpSettings({NKikimrKqp::TKqpSetting()});
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableVectorSearchActor(enableVectorSearchActor);
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = DoCreateTableAndVectorIndex(db, flags);
+
+        auto beginResult = session.ExecuteDataQuery(Q_(R"(
+            UPSERT INTO `/Root/TestTable` (pk, emb, data) VALUES (100, "\x67\x71\x02", "100");
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync();
+        UNIT_ASSERT_C(beginResult.IsSuccess(), beginResult.GetIssues().ToString());
+        auto tx = beginResult.GetTransaction();
+        UNIT_ASSERT(tx);
+
+        // The upserted row's embedding equals the target, so it is the single nearest row.
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            $target = "\x67\x71\x02";
+            SELECT pk FROM `/Root/TestTable` VIEW index1
+            ORDER BY Knn::CosineDistance(emb, $target)
+            LIMIT 1;
+        )"), TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        TResultSetParser parser(result.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(parser.GetValue("pk").GetProto().int64_value(), 100);
+        UNIT_ASSERT(!parser.TryNextRow());
+    }
+
+    Y_UNIT_TEST_TWIN(VectorIndexReadsOwnUncommittedWrite, EnableVectorSearchActor) {
+        DoTestVectorIndexReadsOwnUncommittedWrite(0, EnableVectorSearchActor);
+    }
+
+    Y_UNIT_TEST_TWIN(VectorIndexReadsOwnUncommittedWriteCovered, EnableVectorSearchActor) {
+        DoTestVectorIndexReadsOwnUncommittedWrite(F_COVERING, EnableVectorSearchActor);
+    }
+
     Y_UNIT_TEST_TWIN(BuildIndexTimesAndUser, EnableIndexStreamWrite) {
         NKikimrConfig::TFeatureFlags featureFlags;
         auto setting = NKikimrKqp::TKqpSetting();

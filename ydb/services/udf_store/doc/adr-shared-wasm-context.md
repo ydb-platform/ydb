@@ -17,8 +17,9 @@ Accepted (MVP).
 
 ### Share
 
-- Context — **объект в per-query compartment** с identity **`ui64` handle** (id в реестре).
-- Cross-module: реестр в **shared wasm library** (`required_libraries`, как `helpers`); модули `import` create/mutate/snapshot API. Static `object_framework` внутри одного module image **не** шарит handles с другим module image.
+- Context — **объект в per-query compartment** с identity **`ui64` handle** (id в реестре `object_framework`).
+- **MVP example** (`examples/ctx/`): один module image — `Ctx::New` / `CountRow` / `CountPositive` / `Snapshot` линкуют static `object_framework` через `PEERDIR`. Filters и snapshot шарят один реестр.
+- Cross-module (опционально, не в examples): реестр в **shared wasm library** (`required_libraries`); static `object_framework` внутри одного module image **не** шарит handles с другим.
 - В вызовы фильтров передаётся **`uint64` ctx** первым (или явным) аргументом.
 - `TypeConfigCallable` остаётся для per-object config; context — отдельный handle.
 
@@ -32,14 +33,14 @@ Accepted (MVP).
 
 ```sql
 $ctx = Ctx::New();
-$mapped = ListMap($vals, ($x) -> { RETURN Filters::ApplyA($ctx, $x) });
+$mapped = ListMap($vals, ($x) -> { RETURN Ctx::CountRow($ctx, $x) });
 SELECT $mapped AS rows, Ctx::Snapshot($ctx) AS stats;
 ```
 
 Антипаттерн для итоговой статистики запроса:
 
 ```sql
-SELECT Filters::ApplyA($ctx, x), Ctx::Snapshot($ctx) FROM Input;
+SELECT Ctx::CountRow($ctx, x), Ctx::Snapshot($ctx) FROM Input;
 ```
 
 ### Manifest

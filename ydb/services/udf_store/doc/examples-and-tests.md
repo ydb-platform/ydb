@@ -11,11 +11,9 @@
 | `with_helpers/` | UDF `WithHelpers::scale` | `["sdk", "helpers"]` |
 | `md5/` | UDF с libc (MD5) | `["sdk"]` |
 | `add/` | Минимальный UDF без libs | `[]` |
-| `throw/` | Host `ThrowException` | `[]` |
+| `throw/` | Host `ThrowException` + wasm call stack | `["sdk"]` |
 | `prefix/` | Objects + TypeConfig (`Prefix::Apply`) | `["sdk"]` + PEERDIR `object_framework` |
-| `ctx_lib/` | Shared context registry (library) | — |
-| `ctx/` | `Ctx::New` / `Ctx::Snapshot(ctx)` | `["sdk", "ctx_lib"]` |
-| `filters/` | `Filters::ApplyA/B(ctx, x)` mutate shared ctx | `["sdk", "ctx_lib"]` |
+| `ctx/` | Shared ctx + filters (`Ctx::New` / `CountRow` / `CountPositive` / `Snapshot`) | `["sdk"]` + PEERDIR `object_framework` |
 
 Сборка:
 
@@ -28,9 +26,7 @@ ya make --target-platform=clang18-emscripten-wasm64 --build profile \
   ydb/tests/functional/udf_store/examples/add \
   ydb/tests/functional/udf_store/examples/throw \
   ydb/tests/functional/udf_store/examples/prefix \
-  ydb/tests/functional/udf_store/examples/ctx_lib \
-  ydb/tests/functional/udf_store/examples/ctx \
-  ydb/tests/functional/udf_store/examples/filters
+  ydb/tests/functional/udf_store/examples/ctx
 ```
 
 `webassembly_udf.inc` + `sdk/ld_plugin.py` вырезают sdk-архивы из линковки UDF (sdk подаётся отдельно через store).
@@ -51,9 +47,9 @@ Prefix (objects):
 
 Shared context + Snapshot:
 
-1. upload library `sdk`, then `ctx_lib`
-2. upload UDF `ctx` + `filters`
-3. See `examples/ctx/query.sql` — ListMap filters, then `Ctx::Snapshot($ctx)` (не в одной строке SELECT с фильтрами)
+1. upload library `sdk`
+2. upload UDF `ctx` + `manifest.json` (`objects[]` + `functions[]` CountRow/CountPositive)
+3. See `examples/ctx/query.sql` — ListMap over `AsList(-1, 2, 3)`, then `Ctx::Snapshot($ctx)` → `rows_seen=3;positives=2`
 
 ---
 
@@ -78,6 +74,7 @@ Shared context + Snapshot:
 - `test_using_native_unsafe_udf` — native .so path
 - `test_using_wasm_udf` — upload WAT, compile, `LocalUdf::udf_add(1,2)==3`
 - `test_using_wasm_udf_with_sdk_and_library` — sdk + helpers + module, `WithHelpers::scale(7)==21`
+- `test_delete_wasm_udf_and_library` — delete module/libraries via `upload_udf --action delete`, UDF unloaded
 
 Запуск (из корня ydbwork/ydb):
 
@@ -100,7 +97,7 @@ Upload helper: `ENV(YDB_UPLOAD_UDF_PATH=...)`, поддерживает `--kind 
 | `object_framework_ut` | static registry create/get/destroy, 2 objects |
 | `objects_abi_ut` | WAT create/call exports (ui64 handles) |
 | `shared_ctx_ut` | two filters mutate shared ctx; Snapshot → `a=2;b=1` |
-| `throw_exception_ut` | host ThrowException → reason `fail(); ex: … boom-from-wasm` |
+| `throw_exception_ut` | host ThrowException → reason `fail(); ex: … boom-from-wasm` + wasm call stack frames |
 | `with_helpers_ut` | Empty+AddSdk(sdk_stub)+helpers+module, `scale(7)==21` |
 | `blob_chunks_ut` | chunk split/join |
 

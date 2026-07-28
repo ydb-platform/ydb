@@ -12,7 +12,7 @@
 
 using namespace NKikimr::NUdfStore::NWasm;
 using namespace NYdb::NWasm;
-using EAbiValueType = NYT::NQueryClient::NUdf::EValueType;
+using EAbiValueType = NYdb::NUdfStore::NAbi::EValueType;
 
 namespace {
 

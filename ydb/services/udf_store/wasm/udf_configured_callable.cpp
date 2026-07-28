@@ -21,7 +21,7 @@ namespace NKikimr::NUdfStore::NWasm {
 
 using namespace NYql::NUdf;
 using namespace NYdb::NWasm;
-using EAbiValueType = NYT::NQueryClient::NUdf::EValueType;
+using EAbiValueType = NYdb::NUdfStore::NAbi::EValueType;
 
 namespace {
 

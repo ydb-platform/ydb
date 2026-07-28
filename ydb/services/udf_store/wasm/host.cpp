@@ -11,9 +11,58 @@
 #include <util/generic/yexception.h>
 
 #include <util/generic/scope.h>
+#include <util/string/builder.h>
 #include <util/system/types.h>
 
 #include <bit>
+
+namespace {
+
+//! Keep only user-module wasm frames: "wasm!Module!func+off" → "func".
+//! Drops host!, thnk!, and wasm!env! (imports / host thunks).
+bool TrySimplifyUserWasmFrame(TStringBuf frame, TString& outName) {
+    static constexpr TStringBuf Prefix = "wasm!";
+    if (!frame.StartsWith(Prefix)) {
+        return false;
+    }
+    frame.SkipPrefix(Prefix);
+    if (frame.StartsWith("env!")) {
+        return false;
+    }
+    const auto lastBang = frame.rfind('!');
+    if (lastBang == TStringBuf::npos) {
+        return false;
+    }
+    TStringBuf name = frame.Tail(lastBang + 1);
+    if (const auto plus = name.find('+'); plus != TStringBuf::npos) {
+        name = name.Head(plus);
+    }
+    if (name.empty() || name.StartsWith("thunk:")) {
+        return false;
+    }
+    outName = TString(name);
+    return true;
+}
+
+TString FormatWasmCallStack(WAVM::Uptr omitTopFrames = 1) {
+    const auto callStack = WAVM::Platform::captureCallStack(omitTopFrames);
+    const auto description = WAVM::Runtime::describeCallStack(callStack);
+    TStringBuilder backtrace;
+    int i = 0;
+    for (const auto& item : description) {
+        TString name;
+        if (!TrySimplifyUserWasmFrame(item, name)) {
+            continue;
+        }
+        backtrace << i++ << ". " << name << '\n';
+    }
+    if (i == 0) {
+        backtrace << "<no user wasm frames>\n";
+    }
+    return backtrace;
+}
+
+} // namespace
 
 extern "C" char* AllocateBytes(TExpressionContext* context, size_t byteCount) {
     auto* invocationContext = reinterpret_cast<NKikimr::NUdfStore::NWasm::TWasmUdfInvocationContext*>(context);
@@ -21,9 +70,29 @@ extern "C" char* AllocateBytes(TExpressionContext* context, size_t byteCount) {
 }
 
 extern "C" void ThrowException(const char* error) {
+    const char* message = "(null)";
+    if (error) {
+        if (auto* compartment = NYdb::NWasm::GetCurrentCompartment()) {
+            message = NYdb::NWasm::PtrFromVM(compartment, error);
+        }
+    }
+
+    // Stack capture must never replace the original UDF error (e.g. if describeCallStack
+    // hits a WAVM assert on a partial frame).
+    TString stack;
+    try {
+        stack = FormatWasmCallStack();
+    } catch (const std::exception& ex) {
+        stack = TStringBuilder() << "<wasm call stack unavailable: " << ex.what() << ">\n";
+    } catch (...) {
+        stack = "<wasm call stack unavailable>\n";
+    }
+
     ythrow yexception()
         << "Error while executing UDF: "
-        << NYdb::NWasm::PtrFromVM(NYdb::NWasm::GetCurrentCompartment(), error);
+        << message
+        << "\n\n"
+        << stack;
 }
 
 namespace NKikimr::NUdfStore::NWasm {

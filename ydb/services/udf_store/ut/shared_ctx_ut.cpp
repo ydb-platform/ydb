@@ -12,7 +12,7 @@
 
 using namespace NKikimr::NUdfStore::NWasm;
 using namespace NYdb::NWasm;
-using EAbiValueType = NYT::NQueryClient::NUdf::EValueType;
+using EAbiValueType = NYdb::NUdfStore::NAbi::EValueType;
 
 namespace {
 
@@ -35,7 +35,7 @@ constexpr TStringBuf SdkStubWast = R"(
     )
 )";
 
-// Shared context + two filters in one module (MVP of ctx_lib semantics).
+// Shared context + two filters in one module (MVP of examples/ctx semantics).
 // Handles index into a flat counter table in linear memory.
 // Snapshot returns ASCII "a=<n>;b=<m>".
 constexpr TStringBuf SharedCtxWast = R"(

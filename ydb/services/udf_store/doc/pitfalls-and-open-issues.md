@@ -91,4 +91,4 @@ C++ UDF → отдельная библиотека: нужен `import_module("
 - [ ] Functional: `test_using_wasm_udf`, `test_using_wasm_udf_with_sdk_and_library`
 - [ ] Ручной сценарий: upload sdk → helpers → with_helpers / md5 / throw / prefix
 - [ ] Ошибка Acquire видна в UI (не `stats.GetTasks().size() == 1`)
-- [ ] `ThrowException("…")` доходит как `fail(); ex: …`
+- [x] `ThrowException("…")` доходит как `fail(); ex: …` (+ wasm call stack)

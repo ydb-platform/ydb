@@ -46,7 +46,8 @@ flowchart TD
 `cpu_spec` — нормализованный triple/cpu узла (`DetectLocalCpuSpec` / `WasmCpuSpecOverride`), чтобы object code был валиден на данной машине.
 
 Upload helper: `ydb/tests/functional/udf_store/upload_udf`  
-(`--kind udf|library`, для library нужен `--library-name`).
+(`--action upload|delete`, `--kind udf|library`; для library нужен `--library-name`;
+delete udf — `--md5` или `--udf-file`; delete чистит meta/source(+chunks) и best-effort AOT artifacts).
 
 ---
 
@@ -125,7 +126,7 @@ Host path (`TWasmConfiguredCallable`):
 
 При `create_export` хост также синтезирует **`New` → ui64`** (plain), если имя свободно. Methods с `yql_binding: "plain"` вызывают `export` напрямую (например `Snapshot(ctx) → string`). Optional `"export"` на `functions[]` — wasm-имя ≠ YQL `name`.
 
-Shared context между фильтрами/модулями: реестр в library (`ctx_lib`) + передача `uint64` handle; SELECT stats через `Ctx::Snapshot($ctx)` после форсированного прогона фильтров (см. [adr-shared-wasm-context.md](./adr-shared-wasm-context.md)).
+Shared context: один модуль линкует `object_framework`, передаёт `uint64` handle между `CountRow` / `CountPositive` и `Snapshot` (см. `examples/ctx/`, [adr-shared-wasm-context.md](./adr-shared-wasm-context.md)).
 
 ---
 
@@ -222,7 +223,7 @@ Shared context между фильтрами/модулями: реестр в l
 Зарегистрированы на **standard** intrinsic module (`getIntrinsicModule_standard()`):
 
 - `AllocateBytes(context, size)` — аллокация через `TWasmUdfInvocationContext::WebAssemblyPool` (не через wasm `malloc`, когда вызывается host intrinsic).
-- `ThrowException(const char*)` — `THROW_ERROR_EXCEPTION` с текстом из wasm memory (`PtrFromVM` + `GetCurrentCompartment()`).
+- `ThrowException(const char*)` — `yexception` с текстом из wasm memory (`PtrFromVM` + `GetCurrentCompartment()`) и WAVM call stack (`captureCallStack` / `describeCallStack`).
 
 `compartment->AllocateBytes` (engine) идёт через **экспорт `malloc` у RuntimeLibraryInstance_** (sdk / AddSdk). Поэтому:
 
@@ -231,8 +232,11 @@ Shared context между фильтрами/модулями: реестр в l
 
 Calling convention `unversioned_value`: указатели на `TUnversionedValue` в wasm memory; типы int64/uint64/double/bool/string/null.
 
-Ошибки из wasm: `ThrowException` → C++ exception → `WasmError` → `UdfTerminate("name(); ex: …")`.
+Ошибки из wasm: `ThrowException` → C++ exception → `WasmError` → `UdfTerminate("name(); ex: …")` (+ call stack).
 
+Unload WASM: при delete/replace вызывается `FunctionRegistry::RemoveModule(moduleName)`; иначе reupload того же `module_name` падает с `UDF module duplication`, а в registry остаётся старый набор функций.
+
+Unload WASM: `FunctionRegistry::RemoveModule(moduleName)` при delete/replace; иначе reupload того же `module_name` падает с `UDF module duplication`, а в registry остаётся старый набор функций.
 ---
 
 ## 10. Линковка модулей (WAVM)
@@ -260,7 +264,7 @@ Calling convention `unversioned_value`: указатели на `TUnversionedVal
 | Сценарий | required_libraries | Комментарий |
 |---|---|---|
 | Минимальный WAT без libc | `[]` | Empty image + host; без wasm-malloc в RuntimeLibrary |
-| throw (`Throw::fail`) | `[]` | только host `ThrowException` |
+| throw (`Throw::fail`) | `["sdk"]` | host `ThrowException` + call stack |
 | md5 | `["sdk"]` | полный emscripten sdk как env |
 | with_helpers | `["sdk", "helpers"]` | sdk + промежуточная библиотека + модуль |
 | prefix (objects) | `["sdk"]` | TypeConfig + `object_framework` PEERDIR |

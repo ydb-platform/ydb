@@ -13,7 +13,7 @@ using namespace NYdb::NWasm;
 
 namespace {
 
-// Minimal UDF-shaped module: imports host ThrowException and always fails.
+// Nested wasm frames: fail -> boom_middle -> boom_leaf -> ThrowException.
 constexpr TStringBuf FailUdfWast = R"(
     (module
         (import "env" "memory" (memory i64 1))
@@ -21,8 +21,16 @@ constexpr TStringBuf FailUdfWast = R"(
 
         (data (i64.const 64) "boom-from-wasm\00")
 
-        (func $fail (param $context i64) (param $result i64)
+        (func $boom_leaf
             (call $throw (i64.const 64))
+        )
+
+        (func $boom_middle
+            (call $boom_leaf)
+        )
+
+        (func $fail (param $context i64) (param $result i64)
+            (call $boom_middle)
         )
 
         (export "fail" (func $fail))
@@ -68,5 +76,18 @@ Y_UNIT_TEST_SUITE(TWasmUdfThrowExceptionTest) {
         UNIT_ASSERT_C(
             reason.Contains("boom-from-wasm"),
             TStringBuilder() << "missing wasm error text in: " << reason);
+        // Host frames are filtered; only user wasm function names remain.
+        UNIT_ASSERT_C(
+            reason.Contains("boom_leaf"),
+            TStringBuilder() << "missing boom_leaf frame in: " << reason);
+        UNIT_ASSERT_C(
+            reason.Contains("boom_middle"),
+            TStringBuilder() << "missing boom_middle frame in: " << reason);
+        UNIT_ASSERT_C(
+            reason.Contains("fail"),
+            TStringBuilder() << "missing fail frame in: " << reason);
+        UNIT_ASSERT_C(
+            !reason.Contains("host!"),
+            TStringBuilder() << "host frames must be filtered out: " << reason);
     }
 }

@@ -151,26 +151,32 @@ def _upload_udf_binary():
 def _run_upload_udf(
     endpoint,
     database,
-    udf_file_path,
+    udf_file_path="",
     udf_type="NATIVE_UNSAFE",
     manifest_path="",
     kind="udf",
     library_name="",
+    action="upload",
+    md5="",
 ):
     """
     Invoke the upload_udf binary as a subprocess.
 
-    Returns the md5 hex-digest printed by the binary on stdout.
+    Returns the md5 / library name printed by the binary on stdout.
     Raises RuntimeError if the binary exits with a non-zero code.
     """
     cmd = [
         _upload_udf_binary(),
+        "--action", action,
         "--endpoint", endpoint,
         "--database", database,
-        "--udf-file", udf_file_path,
         "--type", udf_type,
         "--kind", kind,
     ]
+    if udf_file_path:
+        cmd.extend(["--udf-file", udf_file_path])
+    if md5:
+        cmd.extend(["--md5", md5])
     if manifest_path:
         cmd.extend(["--manifest", manifest_path])
     if library_name:
@@ -198,6 +204,28 @@ def _run_upload_library(endpoint, database, library_file_path, library_name):
         udf_type="WASM",
         kind="library",
         library_name=library_name,
+    )
+
+
+def _run_delete_udf(endpoint, database, md5, udf_type="WASM"):
+    return _run_upload_udf(
+        endpoint,
+        database,
+        udf_type=udf_type,
+        kind="udf",
+        action="delete",
+        md5=md5,
+    )
+
+
+def _run_delete_library(endpoint, database, library_name):
+    return _run_upload_udf(
+        endpoint,
+        database,
+        udf_type="WASM",
+        kind="library",
+        library_name=library_name,
+        action="delete",
     )
 
 
@@ -531,6 +559,187 @@ def test_using_wasm_udf_with_sdk_and_library():
         assert len(rows) == 1
         result_value = list(rows[0].values())[0]
         assert result_value == 21, "Expected WithHelpers::scale(7) == 21, got %r" % result_value
+
+    finally:
+        cluster.remove_database(database)
+        cluster.unregister_and_stop_slots(db_nodes)
+        cluster.stop()
+
+
+def test_delete_wasm_udf_and_library():
+    """
+    Upload sdk + helpers + WithHelpers, verify the query works, then delete
+    the module and libraries via upload_udf --action delete and assert they
+    disappear from tables and the UDF is unloaded.
+    """
+    database = "/Root/test"
+    cluster = _make_cluster(
+        enable_udf_store=True,
+        enable_wasm_udf=True,
+    )
+    db_nodes = _create_database(cluster, database)
+    try:
+        node = cluster.nodes[1]
+        driver_config = ydb.DriverConfig(
+            endpoint="%s:%s" % (node.host, node.port),
+            database=database,
+        )
+        endpoint = "grpc://%s:%s" % (node.host, node.port)
+
+        assert _wait_for_condition(
+            lambda: _table_exists(driver_config, database),
+            timeout_seconds=60,
+            description="UDF metadata table creation at startup",
+        )
+        assert _wait_for_condition(
+            lambda: _kv_volume_exists(endpoint, database),
+            timeout_seconds=60,
+            description="KV volume creation at startup",
+        )
+
+        data_dir = "ydb/tests/functional/udf_store/data/wasm"
+        sdk_path = yatest.common.source_path("%s/sdk_stub.wat" % data_dir)
+        helpers_path = yatest.common.source_path("%s/helpers.wat" % data_dir)
+        udf_path = yatest.common.source_path("%s/with_helpers.wat" % data_dir)
+        manifest_path = yatest.common.source_path("%s/with_helpers_manifest.json" % data_dir)
+
+        _run_upload_library(endpoint, database, sdk_path, "sdk")
+        _run_upload_library(endpoint, database, helpers_path, "helpers")
+
+        def _library_compile_ready(name):
+            try:
+                result = _run_query(
+                    driver_config,
+                    'SELECT compile_status FROM `{database}/{path}` WHERE name = "{name}"'.format(
+                        database=database,
+                        path=UDF_TABLE_LIBRARY_SOURCE_PATH,
+                        name=name,
+                    ),
+                )
+                if not result or not result[0].rows:
+                    return False
+                return list(result[0].rows[0].values())[0] == "ready"
+            except Exception as e:
+                logger.debug("library %s compile status not ready yet: %s", name, e)
+                return False
+
+        assert _wait_for_condition(
+            lambda: _library_compile_ready("sdk"),
+            timeout_seconds=180,
+            description="library sdk compile_status=ready",
+        )
+        assert _wait_for_condition(
+            lambda: _library_compile_ready("helpers"),
+            timeout_seconds=180,
+            description="library helpers compile_status=ready",
+        )
+
+        udf_md5 = _run_upload_udf(
+            endpoint, database, udf_path, udf_type="WASM", manifest_path=manifest_path
+        )
+
+        def _wasm_compile_ready():
+            try:
+                result = _run_query(
+                    driver_config,
+                    'SELECT compile_status FROM `{database}/{path}` WHERE md5 = "{md5}"'.format(
+                        database=database,
+                        path=UDF_TABLE_META_PATH,
+                        md5=udf_md5,
+                    ),
+                )
+                if not result or not result[0].rows:
+                    return False
+                return list(result[0].rows[0].values())[0] == "ready"
+            except Exception as e:
+                logger.debug("WASM compile status not ready yet: %s", e)
+                return False
+
+        assert _wait_for_condition(
+            _wasm_compile_ready,
+            timeout_seconds=180,
+            description="WithHelpers WASM compile_status=ready for md5=%s" % udf_md5,
+        )
+
+        UDF_QUERY = "SELECT WithHelpers::scale(7);"
+        udf_query_result = [None]
+
+        def try_wasm_query():
+            try:
+                udf_query_result[0] = _run_query(driver_config, UDF_QUERY)
+                return True
+            except Exception as e:
+                logger.debug("WithHelpers query not ready yet: %s", e)
+                return False
+
+        assert _wait_for_condition(
+            try_wasm_query,
+            timeout_seconds=120,
+            description="WithHelpers::scale query execution before delete",
+        )
+        assert list(udf_query_result[0][0].rows[0].values())[0] == 21
+
+        _run_delete_udf(endpoint, database, udf_md5, udf_type="WASM")
+
+        def _meta_row_gone():
+            try:
+                result = _run_query(
+                    driver_config,
+                    'SELECT COUNT(*) AS cnt FROM `{database}/{path}` WHERE md5 = "{md5}"'.format(
+                        database=database,
+                        path=UDF_TABLE_META_PATH,
+                        md5=udf_md5,
+                    ),
+                )
+                return result and result[0].rows and list(result[0].rows[0].values())[0] == 0
+            except Exception as e:
+                logger.debug("meta delete check failed: %s", e)
+                return False
+
+        assert _wait_for_condition(
+            _meta_row_gone,
+            timeout_seconds=30,
+            description="meta row deleted for md5=%s" % udf_md5,
+        )
+
+        def _udf_unloaded():
+            try:
+                _run_query(driver_config, UDF_QUERY)
+                return False
+            except Exception as e:
+                logger.info("expected failure after UDF delete: %s", e)
+                return True
+
+        assert _wait_for_condition(
+            _udf_unloaded,
+            timeout_seconds=60,
+            description="WithHelpers unloaded after meta delete",
+        ), "WithHelpers query still succeeded after module delete"
+
+        _run_delete_library(endpoint, database, "helpers")
+        _run_delete_library(endpoint, database, "sdk")
+
+        def _library_gone(name):
+            try:
+                result = _run_query(
+                    driver_config,
+                    'SELECT COUNT(*) AS cnt FROM `{database}/{path}` WHERE name = "{name}"'.format(
+                        database=database,
+                        path=UDF_TABLE_LIBRARY_SOURCE_PATH,
+                        name=name,
+                    ),
+                )
+                return result and result[0].rows and list(result[0].rows[0].values())[0] == 0
+            except Exception as e:
+                logger.debug("library delete check failed for %s: %s", name, e)
+                return False
+
+        assert _wait_for_condition(
+            lambda: _library_gone("helpers") and _library_gone("sdk"),
+            timeout_seconds=30,
+            description="library_source rows deleted",
+        )
+        logger.info("Test passed: deleted UDF md5=%s and libraries sdk/helpers", udf_md5)
 
     finally:
         cluster.remove_database(database)

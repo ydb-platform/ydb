@@ -132,6 +132,23 @@ void TUdfStoreService::EnqueueWasmLoadIfNeeded(const TUdfMeta& udf) {
     if (LoadedUdfs.contains(udf.GetMd5()) || IsMd5Pending(udf.GetMd5(), EUdfType::WASM)) {
         return;
     }
+    try {
+        const auto manifest = NWasm::ParseManifest(udf.GetManifest());
+        TVector<TString> conflictingMd5s;
+        for (const auto& [md5, moduleName] : LoadedWasmModuleNames) {
+            if (moduleName == manifest.ModuleName && md5 != udf.GetMd5()) {
+                conflictingMd5s.push_back(md5);
+            }
+        }
+        for (const auto& md5 : conflictingMd5s) {
+            ALS_INFO(NKikimrServices::METADATA_PROVIDER)
+                << "TUdfStoreService: unloading previous WASM module '"
+                << manifest.ModuleName << "' md5=" << md5
+                << " before loading md5=" << udf.GetMd5();
+            UnloadWasmUdf(md5);
+        }
+    } catch (...) {
+    }
     PendingWasmLoad.push_back(TPendingUdf{
         .Md5 = udf.GetMd5(),
         .ExpectedSize = udf.GetSize(),
@@ -413,7 +430,12 @@ void TUdfStoreService::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TP
 }
 
 void TUdfStoreService::UnloadWasmUdf(const TString& md5) {
-    LoadedWasmModuleNames.erase(md5);
+    if (auto it = LoadedWasmModuleNames.find(md5); it != LoadedWasmModuleNames.end()) {
+        if (FunctionRegistry) {
+            FunctionRegistry->RemoveModule(it->second);
+        }
+        LoadedWasmModuleNames.erase(it);
+    }
     LoadedUdfs.erase(md5);
     NWasm::GetWasmModuleCatalog().Unregister(md5);
 }

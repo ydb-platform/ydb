@@ -2,7 +2,7 @@
   "module_name": "Throw",
   "calling_convention": "unversioned_value",
   "module_extension": "wasm",
-  "required_libraries": [],
+  "required_libraries": ["sdk"],
   "functions": [
     {
       "name": "fail",

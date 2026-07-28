@@ -232,6 +232,26 @@ public:
         Y_ENSURE(!loader.HasError(), loader.GetError());
     }
 
+    void RemoveModule(const TStringBuf& moduleName) override {
+        auto it = UdfModules_.find(TString(moduleName));
+        if (it == UdfModules_.end()) {
+            return;
+        }
+        const TString libraryPath = it->second.LibraryPath;
+        UdfModules_.erase(it);
+        bool pathStillUsed = false;
+        for (const auto& [name, module] : UdfModules_) {
+            Y_UNUSED(name);
+            if (module.LibraryPath == libraryPath) {
+                pathStillUsed = true;
+                break;
+            }
+        }
+        if (!pathStillUsed) {
+            LoadedLibraries_.erase(libraryPath);
+        }
+    }
+
     void SetSystemModulePaths(const TUdfModulePathsMap& paths) override {
         SystemModulePaths_ = paths;
     }

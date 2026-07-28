@@ -160,7 +160,7 @@ class AccessServicer(access_service_pb2_grpc.AccessServiceServicer):
                 context.set_details("This one is bad")
                 return access_service_pb2.AuthorizeResponse()
 
-            if resource.id.startswith('bad-skip-'):
+            if resource.id.startswith('bad-sa-skip-'):
                 skips = int(resource.id.split('-')[-1])
                 self.calls += 1
                 self.calls %= skips + 1

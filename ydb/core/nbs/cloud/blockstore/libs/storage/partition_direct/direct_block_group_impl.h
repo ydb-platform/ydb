@@ -183,6 +183,7 @@ private:
     };
 
     [[nodiscard]] size_t GetHostCount() const;
+    [[nodiscard]] ui32 GetNodeId(THostIndex host) const;
     void AddDDiskAndPBufferConnection(
         THostIndex host,
         const NKikimr::NBsController::TDDiskId& ddiskId,

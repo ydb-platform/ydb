@@ -185,7 +185,14 @@ TFastPathService::TFastPathService(
           .BlockCount = blockCount,
           .BlocksPerStripe = StorageConfig->GetStripeSize() / blockSize,
           .VChunkSize = StorageConfig->GetVChunkSize()}))
-{}
+{
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s Regions: %zu",
+        LogTitle.GetWithTime().c_str(),
+        Regions.size());
+}
 
 TFastPathService::~TFastPathService()
 {
@@ -226,11 +233,30 @@ NThreading::TFuture<void> TFastPathService::Stop()
         LogTitle.GetWithTime().c_str());
 
     TVector<NThreading::TFuture<void>> stopFutures;
-    for (const auto& region: Regions) {
-        stopFutures.push_back(region->Stop());
+    for (size_t regionIndex = 0; regionIndex < Regions.size(); ++regionIndex) {
+        auto stopFuture = Regions[regionIndex]->Stop();
+        stopFuture.Subscribe(
+            [self = shared_from_this(),
+             regionIndex]   //
+            (const NThreading::TFuture<void>& f)
+            {
+                Y_UNUSED(f);
+                self->OnRegionStopped(regionIndex);
+            });
+        stopFutures.push_back(stopFuture);
     }
 
-    return NThreading::WaitAll(stopFutures);
+    auto result = NThreading::WaitAll(stopFutures);
+
+    result.Subscribe(
+        [self = shared_from_this()]   //
+        (const NThreading::TFuture<void>& f)
+        {
+            Y_UNUSED(f);
+            self->OnAllRegionsStopped();
+        });
+
+    return result;
 }
 
 NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
@@ -472,6 +498,25 @@ TFastPathService::GatherVChunkMonSnapshot(ui32 vchunkIndex) const
     executor->ExecuteSimple([vchunk = std::move(vchunk), promise]() mutable
                             { promise.SetValue(vchunk->BuildMonSnapshot()); });
     return future;
+}
+
+void TFastPathService::OnRegionStopped(size_t regionIndex)
+{
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s OnRegionStopped %zu",
+        LogTitle.GetWithTime().c_str(),
+        regionIndex);
+}
+
+void TFastPathService::OnAllRegionsStopped()
+{
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s OnAllRegionsStopped",
+        LogTitle.GetWithTime().c_str());
 }
 
 void TFastPathService::MaybeTriggerPBufferCleanup(ui64 lsn)

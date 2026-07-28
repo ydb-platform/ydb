@@ -138,6 +138,9 @@ public:
     GatherVChunkMonSnapshot(ui32 vchunkIndex) const;
 
 private:
+    void OnRegionStopped(size_t regionIndex);
+    void OnAllRegionsStopped();
+
     void ScheduleDirtyMapDebugPrint();
     void QueryDirtyMapDebugDump();
     void OnDebugDump(size_t dbgIndex, TDBGDumpResponse dump);

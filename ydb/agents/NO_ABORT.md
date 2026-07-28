@@ -1,17 +1,11 @@
-# Do not crash the node on check failures
+# No abort
 
-Do **not** use:
+Do **not** use `Y_ABORT`, `Y_ABORT_UNLESS`, `Y_VERIFY`, `Y_FAIL` — they kill the process.
 
-- `Y_ABORT`
-- `Y_ABORT_UNLESS`
-- `Y_VERIFY`
+Use `AFL_ENSURE(cond)("key", value)...` (throws; recoverable) or reply with an error.
 
-These terminate the process. Prefer:
+Always attach localization context for the relevant objects: tablet id, path/name, partition/shard, table, datashard, switch value — whatever identifies the failure (same data as nearby logs).
 
-- `Y_ENSURE` — throws; caller can catch and recover
-- return / reply with an error to the user or peer — keep the node running
+`Y_VERIFY_DEBUG` / `AFL_VERIFY_DEBUG` are OK (debug-only). Prefer `AFL_ENSURE` over `Y_ENSURE`.
 
-When writing code, do not introduce these macros.
-
-**PR review:** always check the diff for new `Y_ABORT` / `Y_ABORT_UNLESS` /
-`Y_VERIFY` and request replacing them with `Y_ENSURE` or a non-fatal error reply.
+**Review:** reject new abort/verify; require diagnostic keys on every `AFL_ENSURE`.

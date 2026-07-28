@@ -98,7 +98,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
         void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
             const auto* result = ev->Get();
-            Y_ABORT_UNLESS(result->Topics.size() == 1);
+            AFL_ENSURE(result->Topics.size() == 1)("topics_size", result->Topics.size());
             const auto& topicInfo = result->Topics.begin()->second;
 
             switch(topicInfo.Status) {

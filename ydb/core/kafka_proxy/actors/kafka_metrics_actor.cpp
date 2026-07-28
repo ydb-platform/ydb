@@ -49,7 +49,7 @@ namespace NKafka {
     };
 
     TIntrusivePtr<NMonitoring::TDynamicCounters> TKafkaMetricsActor::GetGroupFromLabels(const TVector<std::pair<TString, TString>>& labels) {
-        Y_ABORT_UNLESS(labels.size() > 1);
+        AFL_ENSURE(labels.size() > 1)("labels_size", labels.size());
         auto group = Settings.Counters->GetSubgroup(labels[0].first, labels[0].second);
         for (ui32 i = 1; i + 1 < labels.size(); ++i) {
             if (labels[i].second.empty())

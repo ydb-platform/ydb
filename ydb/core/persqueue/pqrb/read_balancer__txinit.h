@@ -6,6 +6,7 @@
 
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -114,7 +115,7 @@ struct TPersQueueReadBalancer::TTxInit : public ITransaction {
         } catch (const TNotReadyTabletException&) {
             return false;
         } catch (...) {
-        Y_ABORT("there must be no leaked exceptions");
+        AFL_ENSURE(false)("reason", "there must be no leaked exceptions")("tablet_id", Self->TabletID())("path", Self->Path)("topic", Self->Topic);
         }
         return true;
     }

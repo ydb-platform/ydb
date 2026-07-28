@@ -8,6 +8,7 @@
 #include <ydb/services/persqueue_v1/actors/schema_actors.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKafka {
 
@@ -34,11 +35,11 @@ public:
 
     virtual void ApplyResponse(TTabletInfo&, NKikimr::TEvPersQueue::TEvReadSessionsInfoResponse::TPtr&,
                                const TActorContext&) override {
-        Y_ABORT();
+        AFL_ENSURE(false)("reason", "TTopicOffsetsActor: unexpected TEvReadSessionsInfoResponse")("database", Database)("path", TopicPath);
     }
 
     bool ApplyResponse(NKikimr::TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr&, const TActorContext&) override {
-        Y_ABORT();
+        AFL_ENSURE(false)("reason", "TTopicOffsetsActor: unexpected TEvGetPartitionsLocationResponse")("database", Database)("path", TopicPath);
     }
 
     void ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx) override;

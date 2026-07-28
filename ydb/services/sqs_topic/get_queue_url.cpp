@@ -99,7 +99,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
         void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
             const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-            Y_ABORT_UNLESS(result->ResultSet.size() == 1);
+            AFL_ENSURE(result->ResultSet.size() == 1)("result_set_size", result->ResultSet.size());
             const auto& response = result->ResultSet.front();
             if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
                 if (response.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
@@ -117,7 +117,7 @@ namespace NKikimr::NSqsTopic::V1 {
                 return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
                                                 TStringBuilder() << "Failed to describe topic: " << response.Status));
             }
-            Y_ABORT_UNLESS(response.PQGroupInfo);
+            AFL_ENSURE(response.PQGroupInfo)("path", this->TopicPath);
             PQGroup = response.PQGroupInfo->Description;
             SelfInfo = response.Self->Info;
             ConsumerConfig = GetConsumerConfig(PQGroup.GetPQTabletConfig(), ConsumerName, ActorContext());

@@ -3,6 +3,7 @@
 #include <ydb/core/tx/scheme_board/cache.h>
 #include <ydb/core/base/appdata.h>
 #include <util/generic/queue.h>
+#include <ydb/library/actors/core/log.h>
 
 using namespace NActors;
 using namespace NKikimrClient;
@@ -63,8 +64,8 @@ void TPQWriteService::Handle(NNetClassifier::TEvNetClassifier::TEvClassifierUpda
 
 
 void TPQWriteService::Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate::TPtr& ev, const TActorContext& ctx) {
-    Y_ABORT_UNLESS(ev->Get()->ClustersList);
-    Y_ABORT_UNLESS(ev->Get()->ClustersList->Clusters.size());
+    AFL_ENSURE(ev->Get()->ClustersList);
+    AFL_ENSURE(ev->Get()->ClustersList->Clusters.size());
 
     const auto& clusters = ev->Get()->ClustersList->Clusters;
 

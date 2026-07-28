@@ -14,6 +14,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <yql/essentials/public/issue/yql_issue.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NPQ::NDeferredPublish {
 
@@ -46,7 +47,7 @@ NKikimrKqp::TTopicDeferredPublicationRequest::EOp MapFinalizeOp(EFinalizePublica
         case EFinalizePublicationOp::Cancel:
             return NKikimrKqp::TTopicDeferredPublicationRequest::Cancel;
         default:
-            Y_ABORT("unexpected EFinalizePublicationOp");
+            AFL_ENSURE(false)("reason", "unexpected EFinalizePublicationOp")("op", static_cast<int>(op));
     }
 }
 
@@ -57,8 +58,8 @@ bool BuildDeferredPublicationRequest(
     NKikimrKqp::TTopicDeferredPublicationRequest* request,
     NYql::TIssues* issues)
 {
-    Y_ABORT_UNLESS(request != nullptr);
-    Y_ABORT_UNLESS(issues != nullptr);
+    AFL_ENSURE(request != nullptr);
+    AFL_ENSURE(issues != nullptr);
 
     request->Clear();
     request->SetOp(MapFinalizeOp(op));
@@ -250,7 +251,7 @@ private:
             return ReplyAndPassAway(response.Status, response.Issues);
         }
 
-        Y_ABORT_UNLESS(response.Data.Defined());
+        AFL_ENSURE(response.Data.Defined());
         ListDestinationsData = *response.Data;
 
         if (!IsPublicationOwnedByCaller(CallerSid, ListDestinationsData->CreatedBy)) {
@@ -295,7 +296,7 @@ private:
         }
 
         KqpSessionId = record.GetResponse().GetSessionId();
-        Y_ABORT_UNLESS(!KqpSessionId.empty());
+        AFL_ENSURE(!KqpSessionId.empty());
         SendKqpBeginTx();
     }
 
@@ -308,7 +309,7 @@ private:
         switch (Step) {
             case EStep::KqpBeginTx: {
                 TxId = record.GetResponse().GetTxMeta().id();
-                Y_ABORT_UNLESS(!TxId.empty());
+                AFL_ENSURE(!TxId.empty());
                 SendKqpDelete();
                 return;
             }

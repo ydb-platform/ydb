@@ -13,6 +13,7 @@
 #include <util/stream/mem.h>
 #include <util/stream/output.h>
 #include <util/stream/zlib.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NPQ::NBatching {
 namespace {
@@ -63,7 +64,7 @@ TVector<TReadResult> TKafkaBatchCutter::Cut(const TBatchCutterData& data, const 
         return {data.ReadResult};
     }
 
-    Y_ENSURE(dataChunk.HasCodec() && dataChunk.GetCodec() == KafkaBatchCodec());
+    AFL_ENSURE(dataChunk.HasCodec() && dataChunk.GetCodec() == KafkaBatchCodec());
 
     const auto batch = NKafka::ReadKafkaRecordBatch(dataChunk.GetData());
     if (batch.Records.empty()) {
@@ -100,7 +101,7 @@ TVector<TReadResult> TKafkaBatchCutter::Cut(const TBatchCutterData& data, const 
             itemChunk.ClearData();
         }
         TString serializedChunk;
-        Y_ENSURE(itemChunk.SerializeToString(&serializedChunk));
+        AFL_ENSURE(itemChunk.SerializeToString(&serializedChunk));
         item.SetData(std::move(serializedChunk));
 
         if (record.Key) {
@@ -124,7 +125,7 @@ THashMap<TString, ui64> TKafkaBatchCutter::GetKeys(const TBatchCutterData& data,
         return result;
     }
 
-    Y_ENSURE(dataChunk.HasCodec() && dataChunk.GetCodec() == KafkaBatchCodec());
+    AFL_ENSURE(dataChunk.HasCodec() && dataChunk.GetCodec() == KafkaBatchCodec());
 
     const auto batch = NKafka::ReadKafkaRecordBatch(dataChunk.GetData());
     const ui64 baseOffset = data.ReadResult.GetOffset();

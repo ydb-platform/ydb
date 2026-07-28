@@ -1,4 +1,5 @@
 #include "kafka_offset_commit_actor.h"
+#include <ydb/library/actors/core/log.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
 
@@ -134,11 +135,11 @@ void TKafkaOffsetCommitActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev
 
 void TKafkaOffsetCommitActor::ProcessPipeProblem(ui64 tabletId, const TActorContext& ctx) {
     auto cookiesIt = TabletIdToCookies.find(tabletId);
-    Y_ABORT_UNLESS(cookiesIt != TabletIdToCookies.end());
+    AFL_ENSURE(cookiesIt != TabletIdToCookies.end())("tablet_id", tabletId)("group", Message->GroupId.value())("database", Context->DatabasePath);
 
     for (auto cookie: cookiesIt->second) {
         auto requestInfoIt = CookieToRequestInfo.find(cookie);
-        Y_ABORT_UNLESS(requestInfoIt != CookieToRequestInfo.end());
+        AFL_ENSURE(requestInfoIt != CookieToRequestInfo.end())("tablet_id", tabletId)("cookie", cookie)("database", Context->DatabasePath);
 
         if (!requestInfoIt->second.Done) {
             requestInfoIt->second.Done = true;
@@ -300,7 +301,7 @@ void TKafkaOffsetCommitActor::SendCommits(const TActorContext& ctx) {
 void TKafkaOffsetCommitActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
     const auto& partitionResult = ev->Get()->Record.GetPartitionResponse();
     auto requestInfo = CookieToRequestInfo.find(partitionResult.GetCookie());
-    Y_ABORT_UNLESS(requestInfo != CookieToRequestInfo.end());
+    AFL_ENSURE(requestInfo != CookieToRequestInfo.end())("cookie", partitionResult.GetCookie())("database", Context->DatabasePath);
 
     requestInfo->second.Done = true;
     if (ev->Get()->Record.GetErrorCode() != NPersQueue::NErrorCode::OK) {

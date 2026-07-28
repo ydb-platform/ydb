@@ -222,7 +222,7 @@ public:
                 NKikimrBlobStorage::TQueryResult *mutableResult = ev.Record.MutableResult(i);
                 replyStatus = NKikimrProto::ERROR;
                 errorReason = "buffer checksum mismatch";
-                mutableResult->SetStatus(NKikimrProto::CORRUPTED);
+                mutableResult->SetStatus(replyStatus);
             }
 
             // Currently CRC can be checked only if blob part is fully read
@@ -233,7 +233,7 @@ public:
                             << " resultShift# " << resultShift << " resultBuffer.Size()# " << resultBuffer.size());
                     NKikimrBlobStorage::TQueryResult *mutableResult = ev.Record.MutableResult(i);
                     replyStatus = NKikimrProto::ERROR;
-                    mutableResult->SetStatus(NKikimrProto::ERROR);
+                    mutableResult->SetStatus(replyStatus);
                 }
             }
 

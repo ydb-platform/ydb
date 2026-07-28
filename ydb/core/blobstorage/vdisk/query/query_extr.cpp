@@ -246,6 +246,7 @@ namespace NKikimr {
                             const bool Keep;
                             const bool DoNotKeep;
                             ui32 ResponseSize;
+                            bool IsFullPartRead;
                             bool EnableChecksumReadValidationOnVDisk;
                             bool Success = true;
 
@@ -278,15 +279,14 @@ namespace NKikimr {
                                 Success = false;
                             }
                             void operator()(TRcBuf&& buffer) {
-                                TRope data(std::move(buffer));
-                                this->operator()(data);
+                                this->operator()(TRope(std::move(buffer)));
                             }
                             void operator()(const TRope& data) {
                                 TRope dataCopy(data);
                                 this->operator()(std::move(dataCopy));
                             }
                             void operator()(TRope&& data) {
-                                std::optional<ui64> checksumInBlob = ExtractChecksumInplace(data);
+                                std::optional<ui64> checksumInBlob = IsFullPartRead ? ExtractChecksumInplace(data) : std::nullopt;
                                 std::optional<ui64> calculatedChecksum;
                                 if (EnableChecksumReadValidationOnVDisk) {
                                     calculatedChecksum = CalculateXxh3Hash(data.Begin(), data.GetSize()).second;
@@ -315,8 +315,9 @@ namespace NKikimr {
                         };
                         const ui32 partSize = GType.PartSize(it->Id);
                         const ui32 responseSize = static_cast<ui32>(query->Size ? query->Size : partSize - query->Shift);
+                        const bool isFullPartRead = query->Shift == 0 && responseSize == partSize;
                         TProcessor processor{Result, it->Id, query->Shift, query->Size, cookiePtr, pingr, keep,
-                            doNotKeep, responseSize,
+                            doNotKeep, responseSize, isFullPartRead,
                             static_cast<bool>(QueryCtx->HullCtx->VCfg->EnableChecksumReadValidationOnVDisk)};
                         rit.GetData(processor);
                         if (!processor.Success) {

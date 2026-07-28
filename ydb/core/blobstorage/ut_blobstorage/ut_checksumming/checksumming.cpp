@@ -58,10 +58,14 @@ struct TTetsEnvBase {
         return Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(Sender, false);
     }
 
-    TAutoPtr<TEventHandle<TEvBlobStorage::TEvGetResult>> ReadDataFromDsProxy() {
-        SendToDsProxy(new TEvBlobStorage::TEvGet(LastBlobId, 0, LastBlobId.BlobSize(), TInstant::Max(),
+    TAutoPtr<TEventHandle<TEvBlobStorage::TEvGetResult>> ReadDataFromDsProxy(ui32 shift, ui32 size) {
+        SendToDsProxy(new TEvBlobStorage::TEvGet(LastBlobId, shift, size, TInstant::Max(),
             NKikimrBlobStorage::EGetHandleClass::FastRead));
         return Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(Sender, false);
+    }
+
+    TAutoPtr<TEventHandle<TEvBlobStorage::TEvGetResult>> ReadDataFromDsProxy() {
+        return ReadDataFromDsProxy(0, LastBlobId.BlobSize());
     }
 
     void EnableChecksumCalcAndValidationOnDsProxy() {
@@ -90,7 +94,7 @@ struct TTetsEnvBase {
         return decryptedData;
     }
 
-    NKikimrProto::EReplyStatus ReadLastPartFromVDisk(TString* partData = nullptr,
+    NKikimrProto::EReplyStatus ReadLastPartFromVDisk(ui32 shift, ui32 size, TString* partData = nullptr,
             const std::function<void(TEvBlobStorage::TEvVGetResult&)>& inspect = {}) {
         NKikimrProto::EReplyStatus status = NKikimrProto::ERROR;
         TBlobStorageGroupInfo::TVDiskIds vdiskIds;
@@ -102,7 +106,7 @@ struct TTetsEnvBase {
             const TActorId& edge = Env.Runtime->AllocateEdgeActor(queueId.NodeId(), __FILE__, __LINE__);
             Env.Runtime->Send(new IEventHandle(queueId, edge, TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(vdiskId,
                 TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::FastRead, TEvBlobStorage::TEvVGet::EFlags::None,
-                Nothing(), {LastBlobId}).release()), queueId.NodeId());
+                Nothing(), {TEvBlobStorage::TEvVGet::TExtremeQuery(LastBlobId, shift, size)}).release()), queueId.NodeId());
 
             auto response = Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVGetResult>(edge, false);
             const auto& record = response->Get()->Record;
@@ -121,6 +125,11 @@ struct TTetsEnvBase {
         });
 
         return status;
+    }
+
+    NKikimrProto::EReplyStatus ReadLastPartFromVDisk(TString* partData = nullptr,
+            const std::function<void(TEvBlobStorage::TEvVGetResult&)>& inspect = {}) {
+        return ReadLastPartFromVDisk(0, 0, partData, inspect);
     }
 
     NKikimrBlobStorage::TEvVMultiPutResult SendVMultiPutToVDisk(std::unique_ptr<TEvBlobStorage::TEvVMultiPut> event) {
@@ -217,9 +226,11 @@ Y_UNIT_TEST(PutEightBytesWithoutXxh3BlobHeader) {
 
 Y_UNIT_TEST(ReadsXxh3HeaderBlobAfterHeaderModeRollback) {
     EBlobHeaderMode blobHeaderMode = EBlobHeaderMode::XXH3_64BIT_HEADER;
+    ui32 vDiskConfigPreprocessorCalled = 0;
     TTetsEnvBase env({
         .VDiskConfigPreprocessor = [&](TVDiskConfig& config) {
             config.BlobHeaderMode = blobHeaderMode;
+            ++vDiskConfigPreprocessorCalled;
         },
     });
     env.EnableChecksumReadValidationOnVDisk();
@@ -242,7 +253,9 @@ Y_UNIT_TEST(ReadsXxh3HeaderBlobAfterHeaderModeRollback) {
     UNIT_ASSERT_VALUES_EQUAL(env.DecryptLastPart(partData), data);
 
     blobHeaderMode = EBlobHeaderMode::NO_HEADER;
+    vDiskConfigPreprocessorCalled = 0;
     env.RestartVDiskNode();
+    UNIT_ASSERT_VALUES_EQUAL(vDiskConfigPreprocessorCalled, 1);
 
     auto readResult = env.ReadDataFromDsProxy();
     UNIT_ASSERT_VALUES_EQUAL_C(readResult->Get()->Status, NKikimrProto::OK, readResult->Get()->ToString());
@@ -571,6 +584,128 @@ Y_UNIT_TEST(VDiskDoesNotReturnXxh3ChecksumByDefault) {
     }), NKikimrProto::OK);
     UNIT_ASSERT_VALUES_EQUAL(env.DecryptLastPart(partData), data);
     UNIT_ASSERT(seenVGetResult);
+}
+
+// ------------------ Substring Reads ------------------
+
+Y_UNIT_TEST(VDiskReturnsXxh3ChecksumForSubstringWhenReadValidationEnabled) {
+    TTetsEnvBase env(Xxh3HeaderSettings());
+    env.EnableChecksumReadValidationOnVDisk();
+
+    const TString data = GenData(256, 14);
+    auto writeResult = env.WriteData(data);
+    UNIT_ASSERT_EQUAL(writeResult->Get()->Status, NKikimrProto::OK);
+
+    constexpr ui32 shift = 17;
+    constexpr ui32 size = 53;
+
+    TString fullPartData;
+    UNIT_ASSERT_VALUES_EQUAL(env.ReadLastPartFromVDisk(&fullPartData), NKikimrProto::OK);
+
+    bool seenVGetResult = false;
+    TString partData;
+    UNIT_ASSERT_VALUES_EQUAL(env.ReadLastPartFromVDisk(shift, size, &partData, [&](TEvBlobStorage::TEvVGetResult& vgetResult) {
+        MutateFirstOkVGetResult(vgetResult, [&](NKikimrBlobStorage::TQueryResult& result) {
+            seenVGetResult = true;
+            UNIT_ASSERT_VALUES_EQUAL(result.GetShift(), shift);
+            UNIT_ASSERT(result.HasChecksum());
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(result.GetChecksumType()),
+                static_cast<ui32>(NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob));
+            const TRope buffer = vgetResult.GetBlobData(result);
+            UNIT_ASSERT_VALUES_EQUAL(buffer.GetSize(), size);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetChecksum(),
+                CalculateXxh3Hash(buffer.Begin(), buffer.GetSize()).second);
+        });
+    }), NKikimrProto::OK);
+    UNIT_ASSERT(seenVGetResult);
+    UNIT_ASSERT_VALUES_EQUAL(partData, fullPartData.substr(shift, size));
+}
+
+Y_UNIT_TEST(VDiskDoesNotReturnXxh3ChecksumForSubstringByDefault) {
+    TTetsEnvBase env(Xxh3HeaderSettings());
+
+    const TString data = GenData(256, 15);
+    auto writeResult = env.WriteData(data);
+    UNIT_ASSERT_EQUAL(writeResult->Get()->Status, NKikimrProto::OK);
+
+    constexpr ui32 shift = 11;
+    constexpr ui32 size = 37;
+
+    TString fullPartData;
+    UNIT_ASSERT_VALUES_EQUAL(env.ReadLastPartFromVDisk(&fullPartData), NKikimrProto::OK);
+
+    bool seenVGetResult = false;
+    TString partData;
+    UNIT_ASSERT_VALUES_EQUAL(env.ReadLastPartFromVDisk(shift, size, &partData, [&](TEvBlobStorage::TEvVGetResult& vgetResult) {
+        MutateFirstOkVGetResult(vgetResult, [&](NKikimrBlobStorage::TQueryResult& result) {
+            seenVGetResult = true;
+            UNIT_ASSERT_VALUES_EQUAL(result.GetShift(), shift);
+            UNIT_ASSERT(!result.HasChecksum());
+            UNIT_ASSERT(!result.HasChecksumType());
+            UNIT_ASSERT_VALUES_EQUAL(vgetResult.GetBlobData(result).GetSize(), size);
+        });
+    }), NKikimrProto::OK);
+    UNIT_ASSERT(seenVGetResult);
+    UNIT_ASSERT_VALUES_EQUAL(partData, fullPartData.substr(shift, size));
+}
+
+Y_UNIT_TEST(DsProxyReturnsSubstringWithChecksumsEnabled) {
+    TTetsEnvBase env(Xxh3HeaderSettings());
+    env.EnableChecksumCalcAndValidationOnDsProxy();
+    env.EnableChecksumReadValidationOnVDisk();
+
+    const TString data = GenData(256, 16);
+    auto writeResult = env.WriteData(data);
+    UNIT_ASSERT_EQUAL(writeResult->Get()->Status, NKikimrProto::OK);
+
+    constexpr ui32 shift = 23;
+    constexpr ui32 size = 41;
+
+    auto readResult = env.ReadDataFromDsProxy(shift, size);
+    UNIT_ASSERT_VALUES_EQUAL_C(readResult->Get()->Status, NKikimrProto::OK, readResult->Get()->ToString());
+    UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->ResponseSz, 1);
+    const auto& response = readResult->Get()->Responses[0];
+    UNIT_ASSERT_VALUES_EQUAL(response.Status, NKikimrProto::OK);
+    UNIT_ASSERT_VALUES_EQUAL(response.Shift, shift);
+    UNIT_ASSERT_VALUES_EQUAL(response.RequestedSize, size);
+    UNIT_ASSERT_VALUES_EQUAL(response.Buffer.ConvertToString(), data.substr(shift, size));
+}
+
+Y_UNIT_TEST(DsProxyRejectsCorruptedSubstringVGetChecksum) {
+    TTetsEnvBase env(Xxh3HeaderSettings());
+    env.EnableChecksumCalcAndValidationOnDsProxy();
+    env.EnableChecksumReadValidationOnVDisk();
+
+    const TString data = GenData(256, 17);
+    auto writeResult = env.WriteData(data);
+    UNIT_ASSERT_EQUAL(writeResult->Get()->Status, NKikimrProto::OK);
+
+    constexpr ui32 shift = 29;
+    constexpr ui32 size = 43;
+
+    bool corruptedVGetResult = false;
+    env.Env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+        if (ev->GetTypeRewrite() == TEvBlobStorage::EvVGetResult && !corruptedVGetResult) {
+            auto* vgetResult = ev->Get<TEvBlobStorage::TEvVGetResult>();
+            corruptedVGetResult = true;
+            MutateFirstOkVGetResult(*vgetResult, [&](NKikimrBlobStorage::TQueryResult& result) {
+                UNIT_ASSERT_VALUES_EQUAL(result.GetShift(), shift);
+                UNIT_ASSERT(result.HasChecksum());
+                UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(result.GetChecksumType()),
+                    static_cast<ui32>(NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob));
+                UNIT_ASSERT_VALUES_EQUAL(vgetResult->GetBlobData(result).GetSize(), size);
+                CorruptVGetResultPayload(*vgetResult, result);
+            });
+        }
+        return true;
+    };
+
+    auto readResult = env.ReadDataFromDsProxy(shift, size);
+    UNIT_ASSERT(corruptedVGetResult);
+    UNIT_ASSERT_VALUES_EQUAL_C(readResult->Get()->Status, NKikimrProto::ERROR, readResult->Get()->ToString());
+    UNIT_ASSERT_STRING_CONTAINS(readResult->Get()->ErrorReason, "buffer checksum mismatch");
+    UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->ResponseSz, 1);
+    UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->Responses[0].Status, NKikimrProto::ERROR);
 }
 
 // ------------------ DsProxy ------------------

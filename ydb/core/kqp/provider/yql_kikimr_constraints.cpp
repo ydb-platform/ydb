@@ -104,15 +104,21 @@ public:
         }, Hndl(&TKiSourceConstraintsTransformer::HandleDefault));
 
         if (IsIn({EKikimrQueryType::Query, EKikimrQueryType::Script}, SessionCtx->Query().Type)) {
-            AddHandler({TDqSource::CallableName()}, Hndl(&CopyAllFrom<1>));
+            AddHandler({
+                TDqSource::CallableName(),
+            }, Hndl(&CopyAllFrom<1>));
             AddHandler({
                 TDqSourceWrap::CallableName(),
+                TDqLookupSourceWrap::CallableName(),
+            }, Hndl(&CopyAllFrom<0>));
+            AddHandler({
                 TDqSourceWideWrap::CallableName(),
                 TDqSourceWideBlockWrap::CallableName(),
+            }, Hndl(&TKiSourceConstraintsTransformer::CopyFromWideSourceWrapInput));
+            AddHandler({
                 TDqReadWrap::CallableName(),
                 TDqReadWideWrap::CallableName(),
                 TDqReadBlockWideWrap::CallableName(),
-                TDqLookupSourceWrap::CallableName(),
             }, Hndl(&CopyAllFrom<0>));
         }
     }
@@ -120,6 +126,44 @@ public:
 private:
     static TStatus HandleDefault(const TExprNode::TPtr& node, TExprContext& ctx) {
         Y_UNUSED(node, ctx);
+        return TStatus::Ok;
+    }
+
+    TStatus CopyFromWideSourceWrapInput(const TExprNode::TPtr& node, TExprContext& ctx) {
+        TDqSourceWrapBase sourceWrap(node);
+        const auto* rowType = sourceWrap
+            .RowType().Raw()
+            ->GetTypeAnn()
+            ->Cast<TTypeExprType>()
+            ->GetType()
+            ->Cast<TStructExprType>();
+
+        const auto rename = [rowType, &ctx](const TPartOfConstraintBase::TPathType& path) {
+            if (path.empty()) {
+                return std::vector<TPartOfConstraintBase::TPathType>{};
+            }
+
+            const auto index = rowType->FindItem(path.front());
+            if (!index) {
+                return std::vector<TPartOfConstraintBase::TPathType>{};
+            }
+
+            auto result = path;
+            result.front() = ctx.GetIndexAsString(*index);
+            return std::vector<TPartOfConstraintBase::TPathType>{std::move(result)};
+        };
+
+        const auto& sourceInput = sourceWrap.Input();
+        if (const auto* streaming = sourceInput.Ref().GetConstraint<TStreamingConstraintNode>()) {
+            if (const auto* renamed = streaming->RenameFields(ctx, rename)) {
+                node->AddConstraint(renamed->GetSimplifiedForType(*node->GetTypeAnn(), ctx));
+            }
+        }
+        if (const auto* partOfStreaming = sourceInput.Ref().GetConstraint<TPartOfStreamingConstraintNode>()) {
+            if (const auto* renamed = partOfStreaming->RenameFields(ctx, rename)) {
+                node->AddConstraint(renamed);
+            }
+        }
         return TStatus::Ok;
     }
 

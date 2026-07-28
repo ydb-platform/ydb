@@ -367,7 +367,7 @@ class StressRunExecutor:
                 allure.attach(json.dumps(result_dict, indent=2), "Execution summary",
                               attachment_type=allure.attachment_type.JSON)
                 if not success:
-                    logging.warning(
+                    raise RuntimeError(
                         f"Pre-nemesis command for {name} on {node_host} failed "
                         f"(timeout={is_timeout}): {stderr[:200]}"
                     )
@@ -439,7 +439,7 @@ class StressRunExecutor:
                 allure.attach(json.dumps(result_dict, indent=2), "Execution summary",
                               attachment_type=allure.attachment_type.JSON)
                 if not success:
-                    logging.warning(
+                    raise RuntimeError(
                         f"Post-nemesis command for {name} on {node_host} failed "
                         f"(timeout={is_timeout}): {stderr[:200]}"
                     )

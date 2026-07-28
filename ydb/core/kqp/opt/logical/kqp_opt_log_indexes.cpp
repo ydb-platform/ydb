@@ -1244,12 +1244,43 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTreeToVectorSearch(
             .Build()
         .Done().Ptr();
 
-    // Read columns must include everything the reapplied projection/predicate uses:
-    // all referenced main columns (match.Columns), the embedding (for ranking) and
-    // the prefix key columns (the WHERE predicate references them).
+    // The predicate is fully applied to the prefix table read above, and every row under a
+    // matching group's root carries that group's prefix, so it is not reapplied here. Doing
+    // so would force the prefix columns into the read, and the posting table does not store
+    // them -- which costs a covering index its covering property.
+    THashSet<TStringBuf> prefixColumnSet;
+    for (size_t i = 0; i + 1 < indexDesc.KeyColumns.size(); ++i) {
+        prefixColumnSet.insert(indexDesc.KeyColumns[i]);
+    }
+
+    TNodeOnNodeOwnedMap projectionReplaces;
+    TMaybeNode<TCoLambda> mainLambda;
+    // SELECT * passes the row through as is, so the prefix columns stay in the result.
+    bool prefixInResult = true;
+    if (const auto asStruct = optionalIf.Value().Maybe<TCoAsStruct>()) {
+        mainLambda = NewLambdaFrom(ctx, pos, projectionReplaces, flatMap.Lambda().Args().Ref(), asStruct.Cast());
+        const auto* rowArgRaw = mainLambda.Cast().Args().Arg(0).Raw();
+        prefixInResult = false;
+        VisitExpr(mainLambda.Cast().Ptr(), [&](const TExprNode::TPtr& node) {
+            if (const auto maybeMember = TMaybeNode<TCoMember>(node)) {
+                const auto member = maybeMember.Cast();
+                if (member.Struct().Raw() == rowArgRaw && prefixColumnSet.contains(member.Name().Value())) {
+                    prefixInResult = true;
+                    return false;
+                }
+            }
+            return true;
+        });
+    }
+
+    // Read columns: the main columns the projection references, plus the embedding the actor
+    // ranks on. Prefix columns are dropped unless the projection itself returns them.
     THashSet<TStringBuf> present;
     TVector<TCoAtom> columns;
     for (const auto& col : match.Columns()) {
+        if (!prefixInResult && prefixColumnSet.contains(col.Value())) {
+            continue;
+        }
         columns.push_back(col);
         present.insert(col.Value());
     }
@@ -1259,8 +1290,10 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTreeToVectorSearch(
         }
     };
     ensureColumn(indexDesc.KeyColumns.back());
-    for (size_t i = 0; i + 1 < indexDesc.KeyColumns.size(); ++i) {
-        ensureColumn(indexDesc.KeyColumns[i]);
+    if (prefixInResult) {
+        for (size_t i = 0; i + 1 < indexDesc.KeyColumns.size(); ++i) {
+            ensureColumn(indexDesc.KeyColumns[i]);
+        }
     }
 
     TExprNode::TPtr read = Build<TKqlReadTableVectorIndex>(ctx, pos)
@@ -1272,11 +1305,13 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTreeToVectorSearch(
         .PrefixRows(TExprBase{prefixRows})
         .Done().Ptr();
 
-    // Reapply the original projection/filter on the main-table rows.
-    read = Build<TCoFlatMap>(ctx, flatMap.Pos())
-        .Input(read)
-        .Lambda(ctx.DeepCopyLambda(flatMap.Lambda().Ref()))
-    .Done().Ptr();
+    // Reapply the original projection on the search result rows.
+    if (mainLambda) {
+        read = Build<TCoMap>(ctx, flatMap.Pos())
+            .Input(read)
+            .Lambda(mainLambda.Cast())
+        .Done().Ptr();
+    }
 
     VectorTopMain(ctx, top, read);
     return TExprBase{read};

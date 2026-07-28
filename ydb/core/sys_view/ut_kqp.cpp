@@ -2442,6 +2442,19 @@ Y_UNIT_TEST_SUITE(SystemView) {
             [[0u]];
         ])", ysonString);
     }
+
+    Y_UNIT_TEST(UdfModulesEmpty) {
+        TTestEnv env(1, 0);
+        TTableClient client(env.GetDriver());
+
+        auto it = client.StreamExecuteScanQuery(R"(
+            SELECT Uid, Name, ModuleType, CompileStatus
+            FROM `/Root/.sys/udf_modules`;
+        )").GetValueSync();
+
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        NKqp::CompareYson(R"([])", NKqp::StreamResultToYson(it));
+    }
 }
 Y_UNIT_TEST_SUITE(ViewQuerySplit) {
 

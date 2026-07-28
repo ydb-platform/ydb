@@ -235,7 +235,7 @@ void TWasmLibraryCompileActor::StartWriteChunks() {
 void TWasmLibraryCompileActor::WriteNextChunk() {
     if (NextChunkWriteIndex_ >= PendingChunkWrites_.size()) {
         Step_ = EStep::UpdateMetaReady;
-        ExecuteQuery(NTableQuery::BuildUpdateLibraryCompileStatusQuery(LibrarySourceTablePath_), false);
+        ExecuteQuery(NTableQuery::BuildUpdateCompileStatusQuery(ModulesTablePath_), false);
         return;
     }
     Step_ = EStep::WriteArtifactChunk;
@@ -244,8 +244,12 @@ void TWasmLibraryCompileActor::WriteNextChunk() {
 
 void TWasmLibraryCompileActor::FailAndPersist(const TString& message) {
     ErrorMessage_ = message;
+    if (LibrarySource_.Uid.empty()) {
+        ReplyError(message);
+        return;
+    }
     Step_ = EStep::UpdateMetaFailed;
-    ExecuteQuery(NTableQuery::BuildUpdateLibraryCompileStatusQuery(LibrarySourceTablePath_), false);
+    ExecuteQuery(NTableQuery::BuildUpdateCompileStatusQuery(ModulesTablePath_), false);
 }
 
 void TWasmLibraryCompileActor::ReplyError(const TString& message) {

@@ -44,8 +44,15 @@ void TWasmCompileActor::ExecuteQuery(const TString& yql, bool readOnly) {
         case EStep::ReadModuleChunks:
             NTableQuery::SetSelectSourceChunksParams(request, ModuleSource_.Uid);
             break;
-        case EStep::ReadWasmChunks:
-            NTableQuery::SetSelectSourceChunksParams(request, Md5_);
+        case EStep::MarkCompiling:
+            NTableQuery::SetUpdateCompileStatusParams(
+                request,
+                ModuleSource_.Uid,
+                TUdfModule::CompileStatusToString(ECompileStatus::Compiling),
+                "");
+            break;
+        case EStep::ReadModuleChunks:
+            NTableQuery::SetSelectSourceChunksParams(request, ModuleSource_.Uid);
             break;
         case EStep::ReadLibraryArtifact:
             NTableQuery::SetSelectArtifactParams(
@@ -296,7 +303,7 @@ void TWasmCompileActor::StartWriteChunks() {
 void TWasmCompileActor::WriteNextChunk() {
     if (NextChunkWriteIndex_ >= PendingChunkWrites_.size()) {
         Step_ = EStep::UpdateMetaReady;
-        ExecuteQuery(NTableQuery::BuildUpdateCompileStatusQuery(MetaTablePath_), false);
+        ExecuteQuery(NTableQuery::BuildUpdateCompileStatusQuery(ModulesTablePath_), false);
         return;
     }
     Step_ = EStep::WriteArtifactChunk;
@@ -305,8 +312,12 @@ void TWasmCompileActor::WriteNextChunk() {
 
 void TWasmCompileActor::FailAndPersist(const TString& message) {
     ErrorMessage_ = message;
+    if (ModuleSource_.Uid.empty()) {
+        ReplyError(message);
+        return;
+    }
     Step_ = EStep::UpdateMetaFailed;
-    ExecuteQuery(NTableQuery::BuildUpdateCompileStatusQuery(MetaTablePath_), false);
+    ExecuteQuery(NTableQuery::BuildUpdateCompileStatusQuery(ModulesTablePath_), false);
 }
 
 void TWasmCompileActor::ReplyError(const TString& message) {

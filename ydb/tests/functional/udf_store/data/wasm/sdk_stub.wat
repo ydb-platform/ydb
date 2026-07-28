@@ -1,4 +1,4 @@
-;; Stub runtime library uploaded as library_source name "sdk".
+;; Stub runtime library uploaded as modules type=LIBRARY name "sdk".
 ;; First entry in required_libraries → AddSdk / "env" (must export malloc/free).
 (module
     (import "env" "memory" (memory i64 8 2097152))

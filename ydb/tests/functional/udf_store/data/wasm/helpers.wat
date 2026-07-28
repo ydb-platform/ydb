@@ -1,4 +1,4 @@
-;; Intermediate library uploaded as library_source name "helpers".
+;; Intermediate library uploaded as modules type=LIBRARY name "helpers".
 (module
     (func $helpers_scale (param $value i64) (result i64)
         (i64.mul (local.get $value) (i64.const 3))

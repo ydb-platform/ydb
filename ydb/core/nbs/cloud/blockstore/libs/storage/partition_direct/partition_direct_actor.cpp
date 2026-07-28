@@ -200,13 +200,9 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
                 connection.GetPersistentBufferDDiskId()));
         }
 
-        NMonitoring::TDynamicCounterPtr dbgCounters;
-        if (dbgCountersRoot) {
-            dbgCounters = dbgCountersRoot->GetSubgroup(
-                "directBlockGroup",
-                ToString(dbgIndex));
-        }
-
+        // Session counters are aggregated at the disk level: all direct block
+        // groups of this tablet share the same counters chain, so per-group
+        // increments naturally sum up into disk-level counters.
         auto directBlockGroup = std::make_shared<TDirectBlockGroup>(
             TActivationContext::ActorSystem(),
             nbsService->StorageConfig,
@@ -222,7 +218,7 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
                 NTransport::CreateTransportActor(
                     VolumeConfig.GetDiskId(),
                     dbgIndex)),
-            std::move(dbgCounters));
+            dbgCountersRoot);
 
         directBlockGroups.emplace_back(std::move(directBlockGroup));
     }

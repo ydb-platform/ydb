@@ -514,6 +514,24 @@ public:
             return node;
         }
 
+        // Build an updated settings list that appends UsedPartitionPredicate=true when
+        // the partition list was computed from a __ydb_partition_id predicate.
+        auto buildNewSettings = [&](const TDqPqTopicSource& src) -> TCoNameValueTupleList {
+            TVector<TCoNameValueTuple> newSettings;
+            for (size_t i = 0; i < src.Settings().Size(); ++i) {
+                newSettings.push_back(src.Settings().Item(i));
+            }
+            if (isPartitionListUpdated) {
+                newSettings.push_back(Build<TCoNameValueTuple>(ctx, src.Pos())
+                    .Name().Build(UsedPartitionPredicateSetting)
+                    .Value<TCoAtom>().Build("true")
+                    .Done());
+            }
+            return Build<TCoNameValueTupleList>(ctx, src.Settings().Pos())
+                .Add(std::move(newSettings))
+                .Done();
+        };
+
         YQL_CLOG(INFO, ProviderPq) << "Build new TCoFlatMap with predicate";
         if (maybeExtractMembers) {
             return Build<TCoFlatMap>(ctx, flatmap.Pos())
@@ -528,6 +546,7 @@ public:
                             .Partitions(partitionList)
                             .OffsetPredicate().Value(offsetPredicateSerializedProto).Build()
                             .WriteTimePredicate().Value(writeTimePredicateSerializedProto).Build()
+                            .Settings(buildNewSettings(dqPqTopicSource))
                             .Build()
                         .Build()
                     .Build()
@@ -543,6 +562,7 @@ public:
                     .Partitions(partitionList)
                     .OffsetPredicate().Value(offsetPredicateSerializedProto).Build()
                     .WriteTimePredicate().Value(writeTimePredicateSerializedProto).Build()
+                    .Settings(buildNewSettings(dqPqTopicSource))
                     .Build()
                 .Build()
             .Done();

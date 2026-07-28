@@ -599,9 +599,18 @@ private:
                     {
                         const auto& extSrc = stage.GetSources(0).GetExternalSource();
                         if (extSrc.GetType() == "PqSource") {
-                            TopicPartitionSnapshotRequired = true;
-                            ++PendingTopicDescribes;
-                            DescribePqSourceTopic(extSrc);
+                            // If the partition list was already fixed at compile time by a
+                            // __ydb_partition_id predicate, the ReadRanges are authoritative
+                            // and must not be overwritten with the current total partition count.
+                            NYql::NPq::NProto::TDqPqTopicSource topicSourceProto;
+                            const bool usedPartitionPredicate =
+                                extSrc.GetSettings().UnpackTo(&topicSourceProto)
+                                && topicSourceProto.GetUsedPartitionPredicate();
+                            if (!usedPartitionPredicate) {
+                                TopicPartitionSnapshotRequired = true;
+                                ++PendingTopicDescribes;
+                                DescribePqSourceTopic(extSrc);
+                            }
                         }
                     }
                 }
@@ -1427,7 +1436,6 @@ private:
             {"cluster", cluster},
             {"database=", database},
             {"topicPath=", topicPath},
-            {"token=", token},
             {"sessionId=", sessionId});
         gateway->DescribeFederatedTopic(sessionId, cluster, database, topicPath, token)
             .Subscribe([
@@ -1439,7 +1447,7 @@ private:
                     const auto& result = future.GetValue();
                     ui32 totalPartitions = 0;
                     for (const auto& clusterInfo : result) {
-                        totalPartitions += clusterInfo.PartitionsCount;
+                        totalPartitions += clusterInfo.PartitionsCount; // TODO
                     }
                     actorSystem->Send(selfId,
                         new TEvPrivate::TEvDescribePqTopic(totalPartitions));

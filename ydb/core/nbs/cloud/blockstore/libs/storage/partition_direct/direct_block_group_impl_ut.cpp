@@ -1294,6 +1294,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             Runtime->GetActorSystem(0),
             TraceService.get(),
             Service.get(),
+            DiskDescription,
             TVChunkConfig::MakeDefault(
                 100,
                 DirectBlockGroupHostCount,

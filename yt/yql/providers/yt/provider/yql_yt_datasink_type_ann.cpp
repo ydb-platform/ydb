@@ -2023,13 +2023,36 @@ private:
             const TYtTableInfo tableInfo(drop.Table());
             YQL_ENSURE(tableInfo.Meta);
 
+            // Make sure we register the table state for the next epoch
+            if (const auto commitEpoch = tableInfo.CommitEpoch) {
+                auto& nextDescription = State_->TablesData->GetOrAddTable(drop.DataSink().Cluster().StringValue(), tableInfo.Name, commitEpoch);
+
+                auto& nextMetadata = nextDescription.Meta;
+                if (!nextMetadata) {
+                    nextDescription.RowType = nullptr;
+                    nextDescription.RawRowType = nullptr;
+
+                    nextMetadata = MakeIntrusive<TYtTableMetaInfo>();
+                    nextMetadata->DoesExist = false;
+                }
+                else if (nextMetadata->DoesExist) {
+                    ctx.AddError(TIssue(ctx.GetPosition(drop.Table().Pos()), TStringBuilder() <<
+                        (isDropTable ? "Table" : "View") << ' ' << tableInfo.Name << " is modified and dropped in the same transaction"));
+                    return TStatus::Error;
+                }
+            }
+
             if (!tableInfo.Meta->DoesExist && ifExists) {
                 YQL_CLOG(INFO, ProviderYt) <<
                     (isDropTable ? "Table" : "View") << ' ' << tableInfo.Name <<
                     " does not exist. 'DROP " << (isDropTable ? "TABLE" : "VIEW") << " IF EXISTS' statement will do nothing.";
 
-                output = drop.World().Ptr();
-                return TStatus::Repeat;
+                // TODO: the object we are dropping is missing, but we cannot remove DropTable from graph
+                // (via output = drop.World().Ptr(); return TStatus::Repeat; )
+                // this will break epoch assigmnent and fail RunOnOpt test.
+                // Bot we can actually detect this situation later in exec transformer and don't even issue YT call
+                input->SetTypeAnn(drop.World().Ref().GetTypeAnn());
+                return TStatus::Ok;
             }
 
             if (isDropTable) {
@@ -2051,24 +2074,6 @@ private:
                     << "Drop of " << tableInfo.Name.Quote() << ' ' << (isTable ? "table" : "view")
                     << " can not be done via DROP " << (isDropTable ? "TABLE" : "VIEW") << " statement."));
                 return TStatus::Error;
-            }
-
-            if (const auto commitEpoch = tableInfo.CommitEpoch) {
-                auto& nextDescription = State_->TablesData->GetOrAddTable(drop.DataSink().Cluster().StringValue(), tableInfo.Name, commitEpoch);
-
-                auto& nextMetadata = nextDescription.Meta;
-                if (!nextMetadata) {
-                    nextDescription.RowType = nullptr;
-                    nextDescription.RawRowType = nullptr;
-
-                    nextMetadata = MakeIntrusive<TYtTableMetaInfo>();
-                    nextMetadata->DoesExist = false;
-                }
-                else if (nextMetadata->DoesExist) {
-                    ctx.AddError(TIssue(ctx.GetPosition(drop.Table().Pos()), TStringBuilder() <<
-                        (isDropTable ? "Table" : "View") << ' ' << tableInfo.Name << " is modified and dropped in the same transaction"));
-                    return TStatus::Error;
-                }
             }
         }
 

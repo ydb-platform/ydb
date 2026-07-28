@@ -56,6 +56,7 @@ public:
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(DirectRowInFlatMap));
         AddHandler(0, &TCoUnorderedBase::Match, HNDL(Unordered));
         AddHandler(0, &TCoAggregate::Match, HNDL(CountAggregate));
+        AddHandler(0, &TYtReadTable::Match, HNDL(TrimQlFilters));
         AddHandler(0, &TYtReadTable::Match, HNDL(ZeroSampleToZeroLimit));
         AddHandler(0, &TCoMatchRecognize::Match, HNDL(MatchRecognize));
         AddHandler(0, &TResPull::Match, HNDL(TrimResPullWorld));
@@ -2929,6 +2930,16 @@ protected:
 
         return TAggregateExpander::CountAggregateRewrite(aggregate, ctx,
             State_->Types->UseBlocks || State_->Types->BlockEngineMode == EBlockEngineMode::Force);
+    }
+
+    TMaybeNode<TExprBase> TrimQlFilters(TExprBase node, TExprContext& ctx) const {
+        auto read = node.Cast<TYtReadTable>();
+        auto input = RemoveYtQLFilters(read.Input(), ctx);
+        if (input.Raw() == read.Input().Raw()) {
+            return node;
+        }
+
+        return ctx.ChangeChild(read.Ref(), TYtReadTable::idx_Input, input.Ptr());
     }
 
     TMaybeNode<TExprBase> ZeroSampleToZeroLimit(TExprBase node, TExprContext& ctx) const {

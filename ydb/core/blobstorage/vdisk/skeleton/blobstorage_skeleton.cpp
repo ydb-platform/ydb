@@ -628,23 +628,25 @@ namespace NKikimr {
                 return {NKikimrProto::ERROR, "empty TabletID"};
             }
 
-            const bool checksumValid = [&] {
-                if (!checksum) {
-                    return !checksumType || *checksumType == NKikimrBlobStorage::TChecksumType::NoChecksum;
+            if (static_cast<bool>(Config->EnableChecksumWriteValidationOnVDisk)) {
+                const bool checksumValid = [&] {
+                    if (!checksum) {
+                        return !checksumType || *checksumType == NKikimrBlobStorage::TChecksumType::NoChecksum;
+                    }
+                    if (checksumType.value_or(NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob)
+                            != NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob) {
+                        return false;
+                    }
+                    return *checksum == CalculateXxh3Hash(buffer.Begin(), buffer.GetSize()).second;
+                }();
+                if (!checksumValid) {
+                    YDB_LOG_ERROR_CTX_COMP(ctx, BS_VDISK_PUT, "Buffer checksum mismatch;",
+                        {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
+                        {"evPrefix", evPrefix},
+                        {"id", id},
+                        {"marker", "BSVS45"});
+                    return {NKikimrProto::ERROR, "buffer checksum mismatch"};
                 }
-                if (checksumType.value_or(NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob)
-                        != NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob) {
-                    return false;
-                }
-                return *checksum == CalculateXxh3Hash(buffer.Begin(), buffer.GetSize()).second;
-            }();
-            if (!checksumValid) {
-                YDB_LOG_ERROR_CTX_COMP(ctx, BS_VDISK_PUT, "Buffer checksum mismatch;",
-                    {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
-                    {"evPrefix", evPrefix},
-                    {"id", id},
-                    {"marker", "BSVS45"});
-                return {NKikimrProto::ERROR, "buffer checksum mismatch"};
             }
 
             auto status = Hull->CheckLogoBlob(ctx, id, ignoreBlock, issueKeepFlag, extraBlockChecks, writtenBeyondBarrier);

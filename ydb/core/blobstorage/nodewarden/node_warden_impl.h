@@ -257,6 +257,8 @@ namespace NKikimr::NStorage {
         TControlWrapper EnablePersistentPhantomFlagStorage;
         TControlWrapper PhantomFlagStorageLimitPerVDiskBytes;
         TControlWrapper VolatilePhantomFlagStorageBlobSizeLimitBytes;
+        TControlWrapper EnableChecksumReadValidationOnVDisk;
+        TControlWrapper EnableChecksumWriteValidationOnVDisk;
 
         TControlWrapper EnableChunkKeeper;
 
@@ -289,6 +291,7 @@ namespace NKikimr::NStorage {
         TControlWrapper ReportingControllerLeakDurationMs;
         TControlWrapper ReportingControllerLeakRate;
         TControlWrapper MaxPutTimeoutSeconds;
+        TControlWrapper EnableChecksumCalcAndValidationOnDsProxy;
 
         TControlWrapper EnableDeepScrubbing;
 

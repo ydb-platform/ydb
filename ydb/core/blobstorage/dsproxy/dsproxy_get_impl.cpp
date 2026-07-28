@@ -321,7 +321,7 @@ void TGetImpl::PrepareVPuts(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBlobS
         const TVDiskID vdiskId = Info->GetVDiskId(put.OrderNumber);
         Y_DEBUG_ABORT_UNLESS(Info->Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3of4 ||
             put.Id.PartId() != 3 || put.Buffer.IsEmpty());
-        const bool checksumming = Blackboard.GroupQueues->ChecksumExpected(Info->GetTopology(), vdiskId,
+        const bool checksumming = EnableChecksumCalcAndValidationOnDsProxy && Blackboard.GroupQueues->ChecksumExpected(Info->GetTopology(), vdiskId,
             TGroupQueues::TVDisk::TQueues::VDiskQueueId(Blackboard.PutHandleClass));
         auto vput = std::make_unique<TEvBlobStorage::TEvVPut>(put.Id, put.Buffer, vdiskId, true, nullptr, Deadline,
             Blackboard.PutHandleClass, checksumming, TWriteSource::DSProxyGetAccelerate);

@@ -64,6 +64,18 @@ struct TTetsEnvBase {
         return Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvGetResult>(Sender, false);
     }
 
+    void EnableChecksumCalcAndValidationOnDsProxy() {
+        Env.SetIcbControl(0, "DSProxyControls.EnableChecksumCalcAndValidationOnDsProxy", 1);
+    }
+
+    void EnableChecksumReadValidationOnVDisk() {
+        Env.SetIcbControl(0, "VDiskControls.EnableChecksumReadValidationOnVDisk", 1);
+    }
+
+    void EnableChecksumWriteValidationOnVDisk() {
+        Env.SetIcbControl(0, "VDiskControls.EnableChecksumWriteValidationOnVDisk", 1);
+    }
+
     void RestartVDiskNode() {
         Env.RestartNode(VDiskActorId.NodeId());
         Env.Sim(TDuration::Seconds(5));
@@ -210,6 +222,7 @@ Y_UNIT_TEST(ReadsXxh3HeaderBlobAfterHeaderModeRollback) {
             config.BlobHeaderMode = blobHeaderMode;
         },
     });
+    env.EnableChecksumReadValidationOnVDisk();
 
     const TString data = GenData(16_KB, 11);
     auto writeResult = env.WriteData(data);
@@ -241,6 +254,7 @@ Y_UNIT_TEST(ReadsXxh3HeaderBlobAfterHeaderModeRollback) {
 
 Y_UNIT_TEST(DsProxySendsXxh3ChecksumToVDisk) {
     TTetsEnvBase env(Xxh3HeaderSettings());
+    env.EnableChecksumCalcAndValidationOnDsProxy();
 
     bool seenVPut = false;
     env.Env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
@@ -266,6 +280,28 @@ Y_UNIT_TEST(DsProxySendsXxh3ChecksumToVDisk) {
     UNIT_ASSERT(seenVPut);
 }
 
+Y_UNIT_TEST(DsProxyDoesNotSendXxh3ChecksumByDefault) {
+    TTetsEnvBase env(Xxh3HeaderSettings());
+
+    bool seenVPut = false;
+    env.Env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+        switch (ev->GetTypeRewrite()) {
+            case TEvBlobStorage::EvVPut: {
+                auto* vput = ev->Get<TEvBlobStorage::TEvVPut>();
+                seenVPut = true;
+                UNIT_ASSERT(!vput->Record.HasChecksum());
+                UNIT_ASSERT(!vput->Record.HasChecksumType());
+                break;
+            }
+        }
+        return true;
+    };
+
+    auto writeResult = env.WriteData(GenData(16_KB, 12));
+    UNIT_ASSERT_EQUAL(writeResult->Get()->Status, NKikimrProto::OK);
+    UNIT_ASSERT(seenVPut);
+}
+
 Y_UNIT_TEST(VDiskAcceptsCorrectData) {
     TTetsEnvBase env(Xxh3HeaderSettings());
 
@@ -285,6 +321,8 @@ Y_UNIT_TEST(VDiskAcceptsCorrectData) {
 
 Y_UNIT_TEST(VDiskRejectsCorruptedData) {
     TTetsEnvBase env(Xxh3HeaderSettings());
+    env.EnableChecksumCalcAndValidationOnDsProxy();
+    env.EnableChecksumWriteValidationOnVDisk();
 
     env.Env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
@@ -302,8 +340,30 @@ Y_UNIT_TEST(VDiskRejectsCorruptedData) {
     UNIT_ASSERT_STRING_CONTAINS(writeResult->Get()->ErrorReason, "buffer checksum mismatch");
 }
 
+Y_UNIT_TEST(VDiskAcceptsInvalidVPutChecksumWhenWriteValidationDisabled) {
+    TTetsEnvBase env(Xxh3HeaderSettings());
+    env.EnableChecksumCalcAndValidationOnDsProxy();
+
+    env.Env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+        switch (ev->GetTypeRewrite()) {
+            case TEvBlobStorage::EvVPut: {
+                auto* vput = ev->Get<TEvBlobStorage::TEvVPut>();
+                UNIT_ASSERT(vput->Record.HasChecksum());
+                vput->Record.SetChecksum(vput->Record.GetChecksum() ^ ui64(1));
+                break;
+            }
+        }
+        return true;
+    };
+
+    auto writeResult = env.WriteData(GenData(16_KB, 13));
+    UNIT_ASSERT_VALUES_EQUAL_C(writeResult->Get()->Status, NKikimrProto::OK, writeResult->Get()->ErrorReason);
+}
+
 Y_UNIT_TEST(VDiskRejectsInvalidVPutChecksum) {
     TTetsEnvBase env(Xxh3HeaderSettings());
+    env.EnableChecksumCalcAndValidationOnDsProxy();
+    env.EnableChecksumWriteValidationOnVDisk();
 
     env.Env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
@@ -324,6 +384,8 @@ Y_UNIT_TEST(VDiskRejectsInvalidVPutChecksum) {
 
 Y_UNIT_TEST(VDiskAcceptsMissingVPutChecksumFields) {
     TTetsEnvBase env(Xxh3HeaderSettings());
+    env.EnableChecksumCalcAndValidationOnDsProxy();
+    env.EnableChecksumWriteValidationOnVDisk();
 
     env.Env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
@@ -343,6 +405,8 @@ Y_UNIT_TEST(VDiskAcceptsMissingVPutChecksumFields) {
 
 Y_UNIT_TEST(VDiskAcceptsLegacyVPutChecksumWithoutType) {
     TTetsEnvBase env(Xxh3HeaderSettings());
+    env.EnableChecksumCalcAndValidationOnDsProxy();
+    env.EnableChecksumWriteValidationOnVDisk();
 
     env.Env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
@@ -362,6 +426,8 @@ Y_UNIT_TEST(VDiskAcceptsLegacyVPutChecksumWithoutType) {
 
 Y_UNIT_TEST(VDiskRejectsVPutChecksumTypeWithoutChecksum) {
     TTetsEnvBase env(Xxh3HeaderSettings());
+    env.EnableChecksumCalcAndValidationOnDsProxy();
+    env.EnableChecksumWriteValidationOnVDisk();
 
     env.Env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
@@ -382,6 +448,8 @@ Y_UNIT_TEST(VDiskRejectsVPutChecksumTypeWithoutChecksum) {
 
 Y_UNIT_TEST(VDiskRejectsVPutChecksumWithNoChecksumType) {
     TTetsEnvBase env(Xxh3HeaderSettings());
+    env.EnableChecksumCalcAndValidationOnDsProxy();
+    env.EnableChecksumWriteValidationOnVDisk();
 
     env.Env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
@@ -402,6 +470,7 @@ Y_UNIT_TEST(VDiskRejectsVPutChecksumWithNoChecksumType) {
 
 Y_UNIT_TEST(VDiskAcceptsAndRejectsVMultiPutChecksums) {
     TTetsEnvBase env(Xxh3HeaderSettings());
+    env.EnableChecksumWriteValidationOnVDisk();
 
     struct TChecksumCase {
         const char *Name;
@@ -461,6 +530,7 @@ Y_UNIT_TEST(VDiskAcceptsAndRejectsVMultiPutChecksums) {
 
 Y_UNIT_TEST(VDiskReturnsXxh3ChecksumInVGetResult) {
     TTetsEnvBase env(Xxh3HeaderSettings());
+    env.EnableChecksumReadValidationOnVDisk();
 
     const TString data = "abcdefgh";
     auto writeResult = env.WriteData(data);
@@ -483,10 +553,32 @@ Y_UNIT_TEST(VDiskReturnsXxh3ChecksumInVGetResult) {
     UNIT_ASSERT(seenVGetResult);
 }
 
+Y_UNIT_TEST(VDiskDoesNotReturnXxh3ChecksumByDefault) {
+    TTetsEnvBase env(Xxh3HeaderSettings());
+
+    const TString data = "abcdefgh";
+    auto writeResult = env.WriteData(data);
+    UNIT_ASSERT_EQUAL(writeResult->Get()->Status, NKikimrProto::OK);
+
+    bool seenVGetResult = false;
+    TString partData;
+    UNIT_ASSERT_VALUES_EQUAL(env.ReadLastPartFromVDisk(&partData, [&](TEvBlobStorage::TEvVGetResult& vgetResult) {
+        MutateFirstOkVGetResult(vgetResult, [&](NKikimrBlobStorage::TQueryResult& result) {
+            seenVGetResult = true;
+            UNIT_ASSERT(!result.HasChecksum());
+            UNIT_ASSERT(!result.HasChecksumType());
+        });
+    }), NKikimrProto::OK);
+    UNIT_ASSERT_VALUES_EQUAL(env.DecryptLastPart(partData), data);
+    UNIT_ASSERT(seenVGetResult);
+}
+
 // ------------------ DsProxy ------------------
 
 Y_UNIT_TEST(DsProxyRejectsInvalidVGetChecksum) {
     TTetsEnvBase env(Xxh3HeaderSettings());
+    env.EnableChecksumCalcAndValidationOnDsProxy();
+    env.EnableChecksumReadValidationOnVDisk();
 
     const TString data = GenData(64, 9);
     auto writeResult = env.WriteData(data);
@@ -517,6 +609,8 @@ Y_UNIT_TEST(DsProxyRejectsInvalidVGetChecksum) {
 
 Y_UNIT_TEST(DsProxyAcceptsCorruptedVGetDataWithoutChecksum) {
     TTetsEnvBase env(Xxh3HeaderSettings());
+    env.EnableChecksumCalcAndValidationOnDsProxy();
+    env.EnableChecksumReadValidationOnVDisk();
 
     const TString data = GenData(64, 10);
     auto writeResult = env.WriteData(data);

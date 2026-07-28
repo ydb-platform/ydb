@@ -246,6 +246,7 @@ namespace NKikimr {
                             const bool Keep;
                             const bool DoNotKeep;
                             ui32 ResponseSize;
+                            bool EnableChecksumReadValidationOnVDisk;
                             bool Success = true;
 
                             std::optional<ui64> ExtractChecksumInplace(TRope& data) const {
@@ -285,23 +286,38 @@ namespace NKikimr {
                                 this->operator()(std::move(dataCopy));
                             }
                             void operator()(TRope&& data) {
-                                std::optional<ui64> checksum = ExtractChecksumInplace(data);
-                                ui64 calculatedChecksum = CalculateXxh3Hash(data.Begin(), data.GetSize()).second;
-                                if (checksum.has_value() && (*checksum != calculatedChecksum)) {
+                                std::optional<ui64> checksumInBlob = ExtractChecksumInplace(data);
+                                std::optional<ui64> calculatedChecksum;
+                                if (EnableChecksumReadValidationOnVDisk) {
+                                    calculatedChecksum = CalculateXxh3Hash(data.Begin(), data.GetSize()).second;
+                                }
+                                if (calculatedChecksum && checksumInBlob && *calculatedChecksum != *checksumInBlob) {
                                     Result->AddResult(NKikimrProto::CORRUPTED, Id, Shift, static_cast<ui32>(Size), CookiePtr,
-                                    IngrPtr, Keep, DoNotKeep);
+                                        IngrPtr, Keep, DoNotKeep);
                                     Success = false;
                                     return;
                                 }
-                                Y_ASSERT(!checksum || *checksum == calculatedChecksum);
+
+                                // If both are present they match;
+                                // Otherwise return whichever checksum is available as best-effort.
+                                const ui64 *checksumPtr = nullptr;
+                                if (calculatedChecksum) {
+                                    checksumPtr = &*calculatedChecksum;
+                                } else if (checksumInBlob) {
+                                    checksumPtr = &*checksumInBlob;
+                                }
+                                const auto checksumType = checksumPtr
+                                    ? NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob
+                                    : NKikimrBlobStorage::TChecksumType::NoChecksum;
                                 Result->AddResult(NKikimrProto::OK, Id, Shift, std::move(data), CookiePtr,
-                                    IngrPtr, Keep, DoNotKeep, &calculatedChecksum, NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob);
+                                    IngrPtr, Keep, DoNotKeep, checksumPtr, checksumType);
                             }
                         };
                         const ui32 partSize = GType.PartSize(it->Id);
                         const ui32 responseSize = static_cast<ui32>(query->Size ? query->Size : partSize - query->Shift);
                         TProcessor processor{Result, it->Id, query->Shift, query->Size, cookiePtr, pingr, keep,
-                            doNotKeep, responseSize};
+                            doNotKeep, responseSize,
+                            static_cast<bool>(QueryCtx->HullCtx->VCfg->EnableChecksumReadValidationOnVDisk)};
                         rit.GetData(processor);
                         if (!processor.Success) {
                             NMatrix::TVectorType& v = neededParts[it->Id.FullID()];

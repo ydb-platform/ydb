@@ -384,6 +384,7 @@ public:
     NCommon::TConfSetting<bool, Static> DontForceTransformForInputTables;
     NCommon::TConfSetting<bool, Static> _RequestOnlyRequiredAttrs;
     NCommon::TConfSetting<bool, Static> _CacheSchemaBySchemaId;
+    NCommon::TConfSetting<bool, Static> JoinCommonAnySideFirst;
 };
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings);

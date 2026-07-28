@@ -15029,6 +15029,66 @@ END DO)",
         }
     }
 
+    Y_UNIT_TEST_TWIN(CreateOrReplaceSecretInheritPermissions, UseQueryService) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableSchemaSecrets(true);
+        const auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        // Create a secret with inherit_permissions = false (ACL is interrupted)
+        {
+            static const auto query = R"sql(
+                CREATE SECRET `/Root/secret-name` WITH (value = "secret-value-1", inherit_permissions = false);
+            )sql";
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // The ACL should be non-empty (inheritance interrupted)
+        {
+            const auto describeResult = kikimr.GetTestClient().Ls("/Root/secret-name");
+            const auto& self = describeResult->Record.GetPathDescription().GetSelf();
+            UNIT_ASSERT_C(!self.GetACL().empty(), "ACL should be non-empty when inherit_permissions = false");
+        }
+
+        // CREATE OR REPLACE SECRET with inherit_permissions = true should restore inheritance (clear ACL)
+        {
+            static const auto query = R"sql(
+                CREATE OR REPLACE SECRET `/Root/secret-name` WITH (value = "secret-value-2", inherit_permissions = true);
+            )sql";
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // The ACL should now be empty (inheritance restored)
+        {
+            const auto describeResult = kikimr.GetTestClient().Ls("/Root/secret-name");
+            const auto& self = describeResult->Record.GetPathDescription().GetSelf();
+            UNIT_ASSERT_C(self.GetACL().empty(), "ACL should be empty when inherit_permissions = true after CREATE OR REPLACE");
+        }
+
+        // CREATE OR REPLACE SECRET with inherit_permissions = false should interrupt inheritance again
+        {
+            static const auto query = R"sql(
+                CREATE OR REPLACE SECRET `/Root/secret-name` WITH (value = "secret-value-3", inherit_permissions = false);
+            )sql";
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // The ACL should be non-empty again
+        {
+            const auto describeResult = kikimr.GetTestClient().Ls("/Root/secret-name");
+            const auto& self = describeResult->Record.GetPathDescription().GetSelf();
+            UNIT_ASSERT_C(!self.GetACL().empty(), "ACL should be non-empty when inherit_permissions = false after CREATE OR REPLACE");
+        }
+    }
+
     Y_UNIT_TEST_TWIN(AlterSecretIfExists, UseQueryService) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableSchemaSecrets(true);

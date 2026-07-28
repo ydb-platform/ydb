@@ -898,4 +898,70 @@ Y_UNIT_TEST_SUITE(TSchemeShardSecretTest) {
         TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSecret});
         ExpectEqualSecretDescription(describeResult, "test-secret", "test-value-new", 1);
     }
+
+    Y_UNIT_TEST(CreateOrReplaceSecretInheritPermissions) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        // setup acl on root
+        NACLib::TDiffACL diffACL;
+        diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::DescribeSchema, "user1");
+        diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::AlterSchema, "user1");
+        AsyncModifyACL(runtime, ++txId, "", "MyRoot", diffACL.SerializeAsString(), /* newOwner */ "");
+        env.TestWaitNotification(runtime, txId);
+
+        // create a secret with InheritPermissions: false (ACL is interrupted)
+        TestCreateSecret(runtime, ++txId, "/MyRoot",
+            R"(
+                Name: "secret"
+                Value: "value1"
+                InheritPermissions: false
+            )"
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        // ACL should be non-empty (inheritance interrupted)
+        {
+            const auto describeSecret = DescribePath(runtime, "/MyRoot/secret").GetPathDescription().GetSelf();
+            UNIT_ASSERT_C(!describeSecret.GetACL().empty(),
+                "ACL should be non-empty when InheritPermissions = false");
+        }
+
+        // CREATE OR REPLACE with InheritPermissions: true should restore inheritance (clear ACL)
+        TestCreateSecret(runtime, ++txId, "/MyRoot",
+            R"(
+                Name: "secret"
+                Value: "value2"
+                InheritPermissions: true
+                ReplaceIfExists: true
+            )"
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        // ACL should now be empty (inheritance restored)
+        {
+            const auto describeSecret = DescribePath(runtime, "/MyRoot/secret").GetPathDescription().GetSelf();
+            UNIT_ASSERT_C(describeSecret.GetACL().empty(),
+                "ACL should be empty when InheritPermissions = true after CREATE OR REPLACE");
+        }
+
+        // CREATE OR REPLACE with InheritPermissions: false should interrupt inheritance again
+        TestCreateSecret(runtime, ++txId, "/MyRoot",
+            R"(
+                Name: "secret"
+                Value: "value3"
+                InheritPermissions: false
+                ReplaceIfExists: true
+            )"
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        // ACL should be non-empty again
+        {
+            const auto describeSecret = DescribePath(runtime, "/MyRoot/secret").GetPathDescription().GetSelf();
+            UNIT_ASSERT_C(!describeSecret.GetACL().empty(),
+                "ACL should be non-empty when InheritPermissions = false after CREATE OR REPLACE");
+        }
+    }
 }

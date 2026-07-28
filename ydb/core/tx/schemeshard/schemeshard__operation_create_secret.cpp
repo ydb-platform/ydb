@@ -7,11 +7,11 @@
 #define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
 #define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
 
-namespace {
+namespace NKikimr::NSchemeShard {
 
-using namespace NKikimr;
-using namespace NSchemeShard;
-
+// Creates an ACL that interrupts inheritance from the parent, keeping only the DescribeSchema grant.
+// Used by CREATE SECRET and CREATE OR REPLACE SECRET (which converts to ALTER) to ensure that
+// secrets do not inherit permissions from their parent directory by default.
 TString InterruptInheritanceExceptDescribe(const TString& initialAcl) {
     NACLib::TACL secObj(initialAcl);
     NACLib::TACL resultSecObj;
@@ -31,6 +31,13 @@ TString InterruptInheritanceExceptDescribe(const TString& initialAcl) {
     Y_ABORT_UNLESS(resultSecObj.SerializeToString(&resultAcl));
     return resultAcl;
 }
+
+} // namespace NKikimr::NSchemeShard
+
+namespace {
+
+using namespace NKikimr;
+using namespace NSchemeShard;
 
 class TPropose : public TSubOperationState {
 private:
@@ -356,6 +363,9 @@ ISubOperation::TPtr CreateNewSecret(TOperationId id, const TTxTransaction& tx, T
             }
             if (createSecretProto.HasValueParamName()) {
                 alterSecret->SetValueParamName(createSecretProto.GetValueParamName());
+            }
+            if (createSecretProto.HasInheritPermissions()) {
+                alterSecret->SetInheritPermissions(createSecretProto.GetInheritPermissions());
             }
             return CreateAlterSecret(id, alterTx);
         }

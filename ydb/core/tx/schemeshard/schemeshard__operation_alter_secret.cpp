@@ -6,6 +6,12 @@
 #define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
 #define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
 
+namespace NKikimr::NSchemeShard {
+
+TString InterruptInheritanceExceptDescribe(const TString& initialAcl);
+
+} // namespace NKikimr::NSchemeShard
+
 namespace {
 
 using namespace NKikimr;
@@ -171,6 +177,23 @@ public:
         context.DbChanges.PersistPath(secretPath.Base()->PathId);
         context.DbChanges.PersistAlterSecret(secretPath.Base()->PathId);
         context.DbChanges.PersistTxState(OperationId);
+
+        // Handle InheritPermissions for CREATE OR REPLACE SECRET: re-apply the ACL
+        // to match the behavior of DROP + CREATE (the secret is treated as if freshly created).
+        if (alterSecretProto.HasInheritPermissions()) {
+            const TString acl = Transaction.GetModifyACL().GetDiffACL();
+            if (!acl.empty()) {
+                secretPath.Base()->ApplyACL(acl);
+            } else if (alterSecretProto.GetInheritPermissions()) {
+                // Restore inheritance: clear the ACL
+                secretPath.Base()->ACL.clear();
+                secretPath.Base()->ACLVersion++;
+            } else {
+                // Interrupt inheritance: keep only DescribeSchema grant
+                secretPath.Base()->ACL = InterruptInheritanceExceptDescribe(secretPath.GetEffectiveACL());
+                secretPath.Base()->ACLVersion++;
+            }
+        }
 
         if (alterSecretProto.HasValueParamName()) {
             result->SetError(NKikimrScheme::StatusInvalidParameter,

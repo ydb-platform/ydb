@@ -66,6 +66,17 @@ class YdbTpccWorkload(WorkloadBase):
         self.cmd_run(
             self.get_command_prefix(['clean'])
         )
+        if len(self.table_prefix) > 0:
+            if self.table_prefix.startswith('/'):
+                full_path = self.table_prefix
+            else:
+                full_path = self.database.rstrip('/') + '/' + self.table_prefix
+            self.cmd_run([
+                self.cli_path,
+                '--endpoint', self.endpoint,
+                f'--database={self.database}',
+                'scheme', 'rmdir', '--recursive', '--force', full_path,
+            ])
 
     def __loop(self):
         cmd = ['run', '--no-tui', '--format', 'Json',

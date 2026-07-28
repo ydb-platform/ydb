@@ -1,6 +1,6 @@
 # Import from NFS
 
-The `import nfs` command starts a server-side process of importing data and schema object information from the network file system ( [Network File System](https://en.wikipedia.org/wiki/Network_File_System), NFS) of the {{ ydb-short-name }} cluster hosts, in the format described in the [File structure](./file-structure.md) article:
+The `import nfs` command runs on the server side the process of importing data and schema object information from the network file system ( [Network File System](https://en.wikipedia.org/wiki/Network_File_System), NFS) of the {{ ydb-short-name }} cluster hosts, in the format described in the [File structure](./file-structure.md) article:
 
 
 ```bash
@@ -10,17 +10,17 @@ The `import nfs` command starts a server-side process of importing data and sche
 
 {% include [conn_options_ref.md](../commands/_includes/conn_options_ref.md) %}
 
-Unlike the [`tools restore` command](./tools-restore.md), the `import nfs` command always creates objects entirely, so for it to succeed, none of the imported objects (neither directories nor tables) should exist.
+Unlike the [`tools restore` command](./tools-restore.md), the `import nfs` command always creates objects entirely, so for it to succeed, none of the imported objects (neither directories nor tables) must exist.
 
-If you need to additionally load data into existing tables, use the [`tools restore` command](./tools-restore.md) directly on the mounted NFS directory.
+If you need to load additional data into existing tables, use the [`tools restore` command](./tools-restore.md) directly on the mounted NFS directory.
 
-## Command-line parameters {#pars}
+## Command line parameters {#pars}
 
-`[options]` — command parameters:
+`[options]` - command parameters:
 
 ### NFS parameters {#nfs-params}
 
-The import from NFS command requires specifying a mounted directory (or subdirectory) common to all objects involved in the import. Since the import is performed asynchronously on all {{ ydb-short-name }} hosts, the specified directory must exist on each {{ ydb-short-name }} host and be mounted in NFS.
+The import from NFS command requires specifying a mounted directory (or subdirectory) common to all objects involved in the import. Since the import is performed asynchronously on all {{ ydb-short-name }} hosts, the specified directory must be present on each {{ ydb-short-name }} host and mounted in NFS.
 
 `--fs-path PATH`: path to the mounted directory (or subdirectory).
 
@@ -33,7 +33,7 @@ The import from NFS command requires specifying a mounted directory (or subdirec
 {% include [import-alternative-syntax.md](_includes/import-alternative-syntax.md) %}
 
 - `source`, `src`, or `s` — path in NFS (relative to `fs-path`) with the imported directory or table.
-- `destination`, `dst`, or `d` — the path in the database for placing the imported directory or table. The final path element must not exist. All directories along the path will be created if they do not exist.
+- `destination`, `dst`, or `d` — the path in the database to place the imported directory or table. The final path element must not exist. All directories on the path will be created if they do not exist.
 
 {% include [import-alternative-syntax-warning.md](_includes/import-alternative-syntax-warning.md) %}
 
@@ -41,7 +41,13 @@ The import from NFS command requires specifying a mounted directory (or subdirec
 
 ### Additional parameters {#aux}
 
-{% include [import-additional-params.md](_includes/import-additional-params.md) %}
+| Parameter | Description |
+| --- | --- |
+| `--description STRING` | Text description of the operation, saved in the operation history. |
+| `--retries NUM` | Number of import retries the server will attempt.<br/>Default value: `10`. |
+| `--skip-checksum-validation` | Skip the [checksum](./file-structure.md#checksums) validation step for imported objects. |
+| `--encryption-key-file PATH` | Path to the file containing the encryption key (only for encrypted exports). This file is binary and must contain the exact number of bytes corresponding to the key length in the selected encryption algorithm (16 bytes for `AES-128-GCM`, 32 bytes for `AES-256-GCM` and `ChaCha20-Poly1305`). The key can also be passed via the `YDB_ENCRYPTION_KEY` environment variable, in hexadecimal string representation. |
+| `--format STRING` | Result output format.<br/>Allowed values:<br/><ul><li>`pretty` — human-readable format (default);</li><li>`proto-json-base64` — [Protocol Buffers](https://en.wikipedia.org/wiki/Protocol_Buffers) in [JSON](https://en.wikipedia.org/wiki/JSON) format, binary strings encoded in [Base64](https://en.wikipedia.org/wiki/Base64).</li></ul> |
 
 ## Running the import {#exec}
 
@@ -49,7 +55,7 @@ The import from NFS command requires specifying a mounted directory (or subdirec
 
 ### Launch result {#result}
 
-Upon successful execution, the `import nfs` command outputs summary information about the queued import from NFS operation, in the format specified by the `--format` option. The actual import is performed asynchronously by the server. The summary information includes the operation ID, which can later be used to check the status and perform actions on the operation:
+Upon successful execution, the `import nfs` command outputs summary information about the queued import from NFS operation, in the format specified by the `--format` option. The actual import is performed asynchronously by the server. The summary information includes the operation ID, which can be used later to check the status and perform actions on the operation:
 
 {% include [import-operation-result-pretty-intro.md](_includes/import-operation-result-pretty-intro.md) %}
 
@@ -97,7 +103,7 @@ Upon successful execution, the `import nfs` command outputs summary information 
 
 ### List of import operations {#list}
 
-To get a list of import operations, use the `operation list import/nfs` command:
+To get the list of import operations, use the `operation list import/nfs` command:
 
 
 ```bash
@@ -111,7 +117,7 @@ To get a list of import operations, use the `operation list import/nfs` command:
 
 {% include [ydb-cli-profile.md](../../../_includes/ydb-cli-profile.md) %}
 
-### Importing to the database root {#example-full-db}
+### Import to the database root {#example-full-db}
 
 Importing the contents of the `/mnt/nfs/backups/export1` directory on the file system into the database root:
 
@@ -124,7 +130,7 @@ Importing the contents of the `/mnt/nfs/backups/export1` directory on the file s
 
 ### Importing multiple directories {#example-specific-dirs}
 
-Importing objects from the `dir1` and `dir2` directories of the export located in `/mnt/nfs/backups/export1` on the file system into the identically named database directories:
+Importing objects from the `dir1` and `dir2` directories of the export located in `/mnt/nfs/backups/export1` on the file system, into the database directories with the same names:
 
 
 ```bash
@@ -136,7 +142,7 @@ Importing objects from the `dir1` and `dir2` directories of the export located i
 
 ### Importing an encrypted export {#example-encryption}
 
-Importing a single table that was exported at path `dir/my_table` into the path `dir1/dir/my_table` from an encrypted export located in `/mnt/nfs/backups/export1` on the file system, using a secret key from the `~/my_secret_key` file.
+Importing a single table that was exported along the path `dir/my_table`, into the path `dir1/dir/my_table` from an encrypted export located in `/mnt/nfs/backups/export1` on the file system, using the secret key from the `~/my_secret_key` file.
 
 
 ```bash

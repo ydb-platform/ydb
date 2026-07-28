@@ -25,11 +25,11 @@ TFlushRequestExecutor::TFlushRequestExecutor(
           GetCycleCount(),
           {{"t", "Flush"},
            {"src",
-            PrintHostAndNode(
+            PrintHostAndNodeId(
                 route.SourceHostIndex,
                 directBlockGroup->GetNodeId(route.SourceHostIndex))},
            {"dst",
-            PrintHostAndNode(
+            PrintHostAndNodeId(
                 route.DestinationHostIndex,
                 directBlockGroup->GetNodeId(route.DestinationHostIndex))}}))
     , VChunkConfig(vChunkConfig)

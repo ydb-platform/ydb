@@ -213,7 +213,9 @@ private:
 
     template<typename TStore>
     bool TryResolve(const NResourcePool::TClassifierSettings& classifier, TStore& store) {
-        return TryResolve(classifier.ResourcePool, store, TStringBuilder() << "Classifier with rank: " << classifier.Rank);
+        Y_ABORT_UNLESS(classifier.ResourcePool.has_value(),
+            "ResourcePool must be set for non-Reject classifiers");
+        return TryResolve(*classifier.ResourcePool, store, TStringBuilder() << "Classifier with rank: " << classifier.Rank);
     }
 
     static TReject MakeRejectFromClassifier(const TResourcePoolClassifierConfig& config) {

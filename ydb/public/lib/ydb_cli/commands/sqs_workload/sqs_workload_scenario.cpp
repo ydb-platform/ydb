@@ -3,6 +3,7 @@
 
 #include <aws/core/Aws.h>
 #include <aws/core/auth/AWSCredentials.h>
+#include <aws/core/http/HttpResponse.h>
 #include <aws/core/utils/ratelimiter/RateLimiterInterface.h>
 #include <aws/core/utils/threading/Executor.h>
 #include <aws/sqs/model/GetQueueUrlRequest.h>
@@ -118,14 +119,21 @@ namespace NYdb::NConsoleClient {
             }
 
             const auto& error = outcome.GetError();
+            const auto responseCode = error.GetResponseCode();
+            const bool retryable =
+                error.ShouldRetry() ||
+                responseCode == Aws::Http::HttpResponseCode::REQUEST_NOT_MADE ||
+                Aws::Http::IsRetryableHttpResponseCode(responseCode);
+            const bool finalFailure = !retryable || attempt == maxAttempts;
+
             Log->Write(
-                ELogPriority::TLOG_ERR,
+                finalFailure ? ELogPriority::TLOG_ERR : ELogPriority::TLOG_WARNING,
                 TStringBuilder()
                     << "GetQueueUrl failed (attempt " << attempt << "/" << maxAttempts
                     << "): " << error.GetMessage()
-                    << " responseCode=" << static_cast<int>(error.GetResponseCode()));
+                    << " responseCode=" << static_cast<int>(responseCode));
 
-            if (attempt == maxAttempts) {
+            if (finalFailure) {
                 break;
             }
             Sleep(retryDelay);

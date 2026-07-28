@@ -21,10 +21,12 @@ namespace {
 
 class TS3DecompressorCoroImpl : public TActorCoroImpl {
 public:
-    TS3DecompressorCoroImpl(const TActorId& parent, const TString& compression)
+    TS3DecompressorCoroImpl(const TActorId& parent, const TString& compression, IDqSchedulerContextPtr schedulerContext)
         : TActorCoroImpl(256_KB)
         , Compression(compression)
         , Parent(parent)
+        , SchedulerContext(std::move(schedulerContext))
+        , Work(SchedulerContext ? SchedulerContext->CreateSchedulableWork() : nullptr)
     {}
 
 private:
@@ -73,7 +75,22 @@ private:
     }
 
     void Run() final {
+        if (Work) {
+            Work->RegisterForResume(SelfActorId);
+        }
         StartCycleCount = GetCycleCountFast();
+
+        auto startUnit = [this]() {
+            while (Work && !Work->StartExecution(TMonotonic::Now())) {
+                (void)WaitForSpecificEvent<NActors::TEvents::TEvWakeup>([](const auto&){ return false; }, TMonotonic::Now() + Work->CalculateDelay(TMonotonic::Now()));
+            }
+        };
+        auto stopUnit = [this]() {
+            if (Work) {
+                bool forced = false;
+                Work->StopExecution(forced);
+            }
+        };
 
         try {
             std::unique_ptr<NDB::ReadBuffer> coroBuffer = std::make_unique<TCoroReadBuffer>(this);
@@ -82,9 +99,11 @@ private:
             YQL_ENSURE(decompressorBuffer, "Unsupported " << Compression << " compression.");
             while (!decompressorBuffer->eof()) {
                 decompressorBuffer->nextIfAtEnd();
+                startUnit();
                 TString data{decompressorBuffer->available(), ' '};
                 decompressorBuffer->read(&data.front(), decompressorBuffer->available());
                 Send(Parent, new TEvS3Provider::TEvDecompressDataResult(std::move(data), TakeCpuTimeDelta()));
+                stopUnit();
             }
         } catch (const TDtorException&) {
             // Stop any activity instantly
@@ -127,6 +146,8 @@ private:
     TActorId Parent;
     bool InputFinished = false;
     std::queue<THolder<TEvS3Provider::TEvDecompressDataRequest>> Requests;
+    const IDqSchedulerContextPtr SchedulerContext;
+    std::shared_ptr<IDqSchedulableWork> Work;
 };
 
 class TS3DecompressorCoroActor : public TActorCoro {
@@ -143,8 +164,8 @@ private:
 
 } // anonymous namespace
 
-NActors::IActor* CreateS3DecompressorActor(const NActors::TActorId& parent, const TString& compression) {
-    return new TS3DecompressorCoroActor(MakeHolder<TS3DecompressorCoroImpl>(parent, compression));
+NActors::IActor* CreateS3DecompressorActor(const NActors::TActorId& parent, const TString& compression, IDqSchedulerContextPtr schedulerContext) {
+    return new TS3DecompressorCoroActor(MakeHolder<TS3DecompressorCoroImpl>(parent, compression, std::move(schedulerContext)));
 }
 
 } // namespace NYql::NDq

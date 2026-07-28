@@ -416,6 +416,7 @@ public:
     };
 
     void RunClickHouseParserOverHttp() {
+        // TODO: wrap per-block Work->Start/Stop like RunCoroBlockArrowParserOverHttp
         LOG_CORO_D("RunClickHouseParserOverHttp");
 
         std::unique_ptr<NDB::ReadBuffer> coroBuffer = AsyncDecompressing ? std::unique_ptr<NDB::ReadBuffer>(std::make_unique<TCoroDecompressorBuffer>(this)) : std::unique_ptr<NDB::ReadBuffer>(std::make_unique<TCoroReadBuffer>(this));
@@ -457,6 +458,7 @@ public:
     }
 
     void RunClickHouseParserOverFile() {
+        // TODO: wrap per-block Work->Start/Stop like RunCoroBlockArrowParserOverHttp
         LOG_CORO_D("RunClickHouseParserOverFile");
         YQL_ENSURE(!AsyncDecompressing, "Async decompression is not supported for file input");
 
@@ -648,6 +650,18 @@ public:
     void RunCoroBlockArrowParserOverHttp() {
         LOG_CORO_D("RunCoroBlockArrowParserOverHttp");
 
+        auto startUnit = [this]() {
+            while (Work && !Work->StartExecution(TMonotonic::Now())) {
+                (void)WaitForSpecificEvent<NActors::TEvents::TEvWakeup>(&TS3ReadCoroImpl::ProcessUnexpectedEvent, TMonotonic::Now() + Work->CalculateDelay(TMonotonic::Now()));
+            }
+        };
+        auto stopUnit = [this]() {
+            if (Work) {
+                bool forced = false;
+                Work->StopExecution(forced);
+            }
+        };
+
         ui64 readerCount = 1;
 
         std::vector<std::unique_ptr<parquet::arrow::FileReader>> readers;
@@ -760,7 +774,10 @@ public:
                 std::shared_ptr<arrow::Table> table;
 
                 LOG_CORO_D("Decode RowGroup " << readyGroupIndex << " of " << numGroups << " from reader " << readyReaderIndex);
+                // TODO: split DecodeRowGroups into smaller units (arrow async / column streaming)
+                startUnit();
                 ThrowParquetNotOk(readers[readyReaderIndex]->DecodeRowGroups({ hasPredicate ? static_cast<int>(matchedRowGroups[readyGroupIndex]) : static_cast<int>(readyGroupIndex) }, columnIndices, &table));
+                stopUnit();
                 readyGroupCount++;
 
                 auto downloadedBytes = ReadInflightSize[readyGroupIndex];
@@ -774,6 +791,7 @@ public:
                 bool isCancelled = false;
                 ui64 numRows = 0;
                 while (status = reader->ReadNext(&batch), status.ok() && batch) {
+                    startUnit();
                     auto convertedBatch = ConvertArrowColumns(batch, columnConverters);
                     auto size = NUdf::GetSizeOfArrowBatchInBytes(*convertedBatch);
                     decodedBytes += size;
@@ -782,6 +800,7 @@ public:
                         convertedBatch, PathIndex, TakeIngressDelta(), TakeCpuTimeDelta()
                     ));
                     numRows += convertedBatch->num_rows();
+                    stopUnit();
                 }
                 if (StopIfConsumedEnough(numRows)) {
                     isCancelled = true;
@@ -814,6 +833,7 @@ public:
     }
 
     void RunCoroBlockArrowParserOverFile() {
+        // TODO: wrap Zone 1 (DecodeRowGroups) + Zone 2 (per-batch) like OverHttp
         LOG_CORO_D("RunCoroBlockArrowParserOverFile");
 
         std::shared_ptr<arrow::io::RandomAccessFile> arrowFile =
@@ -1082,7 +1102,8 @@ public:
         const ::NMonitoring::TDynamicCounters::TCounterPtr& httpInflightSize,
         const ::NMonitoring::TDynamicCounters::TCounterPtr& httpDataRps,
         const ::NMonitoring::TDynamicCounters::TCounterPtr& rawInflightSize,
-        bool asyncDecompressing)
+        bool asyncDecompressing,
+        IDqSchedulerContextPtr schedulerContext)
         : TActorCoroImpl(256_KB)
         , TSourceErrorHandler(inputIndex)
         , ReadActorFactoryCfg(readActorFactoryCfg)
@@ -1100,6 +1121,8 @@ public:
         , HttpDataRps(httpDataRps)
         , RawInflightSize(rawInflightSize)
         , AsyncDecompressing(asyncDecompressing)
+        , SchedulerContext(std::move(schedulerContext))
+        , Work(SchedulerContext ? SchedulerContext->CreateSchedulableWork() : nullptr)
     {}
 
     ~TS3ReadCoroImpl() override {
@@ -1154,8 +1177,11 @@ private:
     }
 
     void Run() final {
+        if (Work) {
+            Work->RegisterForResume(SelfActorId);
+        }
         if (AsyncDecompressing) {
-            DecompressorActorId = Register(CreateS3DecompressorActor(SelfActorId, ReadSpec->Compression));
+            DecompressorActorId = Register(CreateS3DecompressorActor(SelfActorId, ReadSpec->Compression, SchedulerContext));
         }
 
         FatalCode = NYql::NDqProto::StatusIds::EXTERNAL_ERROR;
@@ -1309,6 +1335,8 @@ private:
     const ::NMonitoring::TDynamicCounters::TCounterPtr HttpDataRps;
     const ::NMonitoring::TDynamicCounters::TCounterPtr RawInflightSize;
     const bool AsyncDecompressing;
+    const IDqSchedulerContextPtr SchedulerContext;
+    std::shared_ptr<IDqSchedulableWork> Work;
 };
 
 class TS3ReadCoroActor : public TActorCoro {
@@ -1466,7 +1494,8 @@ public:
                 Pattern,
                 PatternVariant,
                 ES3PatternType::Wildcard,
-                AllowLocalFiles));
+                AllowLocalFiles,
+                SchedulerContext));
         }
         FileQueueEvents.Init(TxId, SelfId(), SelfId());
         FileQueueEvents.OnNewRecipientId(FileQueueActor);
@@ -1549,7 +1578,8 @@ public:
             HttpInflightSize,
             HttpDataRps,
             RawInflightSize,
-            AsyncDecompressing
+            AsyncDecompressing,
+            SchedulerContext
         );
         if (AsyncDecoding) {
             actorId = Register(new TS3ReadCoroActor(std::move(impl)));

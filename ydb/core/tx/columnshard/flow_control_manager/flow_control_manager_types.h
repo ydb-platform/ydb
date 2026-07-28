@@ -8,6 +8,7 @@
 #include <ydb/library/actors/core/actor.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
+#include <util/datetime/base.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NKikimr::NColumnShard::NFlowControl {
@@ -15,7 +16,7 @@ namespace NKikimr::NColumnShard::NFlowControl {
 enum class EAdmitDecision {
     Allow,
     RejectNow,
-    // Enqueue // phase 2 wait-queue
+    Wait,
 };
 
 class TLongTxWrite {
@@ -28,11 +29,14 @@ class TLongTxWrite {
     YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, Batch);
     YDB_READONLY_DEF(std::shared_ptr<NYql::TIssues>, Issues);
     YDB_READONLY_DEF(TIntrusivePtr<NACLib::TUserContext>, UserCtx);
+    YDB_READONLY_DEF(TInstant, Deadline);
+    YDB_READONLY_DEF(TDuration, OperationTimeout);
 
 public:
     TLongTxWrite(const TActorId& replyTo, const NLongTxService::TLongTxId& longTxId, const TString& dedupId, const TString& databaseName,
         const TString& path, std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
-        std::shared_ptr<NYql::TIssues> issues, TIntrusivePtr<NACLib::TUserContext> userCtx)
+        std::shared_ptr<NYql::TIssues> issues, TIntrusivePtr<NACLib::TUserContext> userCtx, TInstant deadline = TInstant::Max(),
+        TDuration operationTimeout = TDuration::Seconds(5 * 60))
         : ReplyTo(replyTo)
         , LongTxId(longTxId)
         , DedupId(dedupId)
@@ -42,8 +46,14 @@ public:
         , Batch(std::move(batch))
         , Issues(std::move(issues))
         , UserCtx(std::move(userCtx))
+        , Deadline(deadline)
+        , OperationTimeout(operationTimeout)
     {
     }
+
+    // Prefer TFlowControlManagerServiceOperator::ComputeWaitDeadline at admit time.
+    // Kept for helpers that still hold Deadline/Timeout locally.
+    TInstant GetWaitDeadline() const;
 };
 
 }   // namespace NKikimr::NColumnShard::NFlowControl

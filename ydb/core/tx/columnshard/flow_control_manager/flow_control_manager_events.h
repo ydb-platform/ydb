@@ -3,6 +3,7 @@
 #include <ydb/core/base/events.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_service.h>
 #include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_types.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
@@ -10,6 +11,7 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event_pb.h>
 
+#include <util/datetime/base.h>
 #include <util/generic/vector.h>
 
 namespace NKikimr::NColumnShard::NFlowControl {
@@ -18,6 +20,9 @@ enum EEvFlowControl {
     EvLongTxWrite = EventSpaceBegin(TKikimrEvents::ES_FLOW_CONTROL_MANAGER),
     EvTryAdmit,
     EvTryAdmitResult,
+    EvCancelWait,
+    EvDrainWaiter,
+    EvContinueDrain,
     EvNodeOverloadStatus,
     EvTabletLocationUpdated,
     EvTabletLocationInvalidated,
@@ -47,23 +52,58 @@ public:
 
 class TEvTryAdmit: public NActors::TEventLocal<TEvTryAdmit, EvTryAdmit> {
     YDB_READONLY_DEF(TVector<ui64>, TabletIds);
+    YDB_READONLY_DEF(TInstant, Deadline);
+    YDB_READONLY_DEF(TDuration, OperationTimeout);
 
 public:
-    explicit TEvTryAdmit(TVector<ui64> tabletIds)
+    TEvTryAdmit(TVector<ui64> tabletIds, TInstant deadline, TDuration operationTimeout)
         : TabletIds(std::move(tabletIds))
+        , Deadline(deadline)
+        , OperationTimeout(operationTimeout)
     {
+    }
+
+    TInstant GetWaitDeadline() const {
+        return TFlowControlManagerServiceOperator::ComputeWaitDeadline(Deadline, OperationTimeout);
     }
 };
 
 class TEvTryAdmitResult: public NActors::TEventLocal<TEvTryAdmitResult, EvTryAdmitResult> {
     YDB_READONLY_DEF(EAdmitDecision, Decision);
+    YDB_READONLY(ui64, WaiterId, 0);
+    YDB_READONLY_DEF(TInstant, WaitDeadline);
 
 public:
-    explicit TEvTryAdmitResult(EAdmitDecision decision)
+    explicit TEvTryAdmitResult(EAdmitDecision decision, ui64 waiterId = 0, TInstant waitDeadline = TInstant::Zero())
         : Decision(decision)
+        , WaiterId(waiterId)
+        , WaitDeadline(waitDeadline)
     {
     }
 };
+
+class TEvCancelWait: public NActors::TEventLocal<TEvCancelWait, EvCancelWait> {
+    YDB_READONLY(ui64, WaiterId, 0);
+
+public:
+    explicit TEvCancelWait(ui64 waiterId)
+        : WaiterId(waiterId)
+    {
+    }
+};
+
+class TEvDrainWaiter: public NActors::TEventLocal<TEvDrainWaiter, EvDrainWaiter> {
+    YDB_READONLY(ui64, WaiterId, 0);
+
+public:
+    explicit TEvDrainWaiter(ui64 waiterId)
+        : WaiterId(waiterId)
+    {
+    }
+};
+
+// Wake FCM to continue paced wait-queue drain when tokens refill.
+class TEvContinueDrain: public NActors::TEventLocal<TEvContinueDrain, EvContinueDrain> {};
 
 struct TEvNodeOverloadStatus
     : public NActors::TEventPB<TEvNodeOverloadStatus, NKikimrTxColumnShard::TEvNodeOverloadStatus, EvNodeOverloadStatus> {

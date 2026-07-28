@@ -11,6 +11,10 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
+#include <util/generic/utility.h>
+
+#include <cmath>
+
 namespace NKikimr::NColumnShard::NFlowControl {
 
 namespace {
@@ -75,12 +79,19 @@ TIntrusivePtr<::NMonitoring::TDynamicCounters> CountersGroupOrNull() {
     return nullptr;
 }
 
+enum class EHelperWakeup: ui64 {
+    WaitDeadline = 1,
+};
+
 // Runs on the caller's mailbox (BulkUpsert / DoLongTxWriteSameMailbox). Does data split + FCM admit
 // RPC here, then starts TLongTxWriteInternal on the same mailbox (forceNoFlowControl).
+// On Wait: hold until Allow (READY drain) or wait-deadline / RejectNow → OVERLOADED.
 class TLongTxWriteFlowControlled: public NActors::TActorBootstrapped<TLongTxWriteFlowControlled> {
     TLongTxWrite Tx;
     TCSFlowControlManagerCounters Counters;
     TInstant WaitAdmitStartedAt;
+    ui64 WaiterId = 0;
+    bool Queued = false;
 
 public:
     explicit TLongTxWriteFlowControlled(TLongTxWrite&& tx)
@@ -102,30 +113,86 @@ public:
             // (it will reply with the real navigate/split error).
             Counters.OnAdmitSkippedNoSplit();
             StartWrite(ctx);
-            return Finish();
+            return Finish(ctx);
         }
 
         WaitAdmitStartedAt = TActivationContext::Now();
         Counters.OnWaitingAdmitStart();
-        ctx.Send(TFlowControlManagerServiceOperator::MakeServiceId(ctx.SelfID.NodeId()), std::make_unique<TEvTryAdmit>(std::move(tabletIds)));
+        ctx.Send(TFlowControlManagerServiceOperator::MakeServiceId(ctx.SelfID.NodeId()),
+            std::make_unique<TEvTryAdmit>(std::move(tabletIds), Tx.GetDeadline(), Tx.GetOperationTimeout()));
         Become(&TThis::StateWaitAdmit);
     }
 
 private:
-    STRICT_STFUNC(StateWaitAdmit, HFunc(TEvTryAdmitResult, Handle))
+    STRICT_STFUNC(StateWaitAdmit, HFunc(TEvTryAdmitResult, HandleAdmitResult))
+    STRICT_STFUNC(StateQueued, HFunc(TEvTryAdmitResult, HandleQueuedResult) HFunc(NActors::TEvents::TEvWakeup, HandleWaitDeadlineWakeup))
 
-    void Handle(TEvTryAdmitResult::TPtr& ev, const TActorContext& ctx) {
+    void HandleAdmitResult(TEvTryAdmitResult::TPtr& ev, const TActorContext& ctx) {
         Counters.OnWaitingAdmitFinish(TActivationContext::Now() - WaitAdmitStartedAt);
 
         switch (ev->Get()->GetDecision()) {
             case EAdmitDecision::Allow:
                 StartWrite(ctx);
+                Finish(ctx);
                 break;
             case EAdmitDecision::RejectNow:
                 ReplyOverloaded(ctx, "destination node is overloaded");
+                Finish(ctx);
+                break;
+            case EAdmitDecision::Wait:
+                EnterQueued(ctx, ev->Get()->GetWaiterId(), ev->Get()->GetWaitDeadline());
                 break;
         }
-        Finish();
+    }
+
+    void EnterQueued(const TActorContext& ctx, ui64 waiterId, TInstant waitDeadline) {
+        WaiterId = waiterId;
+        Queued = true;
+        Become(&TThis::StateQueued);
+
+        const TInstant now = TActivationContext::Now();
+        if (waitDeadline <= now) {
+            CancelAndReject(ctx, "destination node is overloaded");
+            return;
+        }
+        ctx.Schedule(waitDeadline - now, new NActors::TEvents::TEvWakeup(static_cast<ui64>(EHelperWakeup::WaitDeadline)));
+    }
+
+    void HandleQueuedResult(TEvTryAdmitResult::TPtr& ev, const TActorContext& ctx) {
+        switch (ev->Get()->GetDecision()) {
+            case EAdmitDecision::Allow:
+                Queued = false;
+                StartWrite(ctx);
+                Finish(ctx);
+                break;
+            case EAdmitDecision::RejectNow:
+                Queued = false;
+                ReplyOverloaded(ctx, "destination node is overloaded");
+                Finish(ctx);
+                break;
+            case EAdmitDecision::Wait:
+                // Should not be re-issued while already queued.
+                break;
+        }
+    }
+
+    void HandleWaitDeadlineWakeup(NActors::TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx) {
+        if (ev->Get()->Tag != static_cast<ui64>(EHelperWakeup::WaitDeadline)) {
+            return;
+        }
+        if (!Queued) {
+            return;
+        }
+        CancelAndReject(ctx, "destination node is overloaded");
+    }
+
+    void CancelAndReject(const TActorContext& ctx, const TString& message) {
+        if (Queued && WaiterId) {
+            ctx.Send(TFlowControlManagerServiceOperator::MakeServiceId(ctx.SelfID.NodeId()), std::make_unique<TEvCancelWait>(WaiterId));
+        }
+        Queued = false;
+        ReplyOverloaded(ctx, message);
+        Finish(ctx);
     }
 
     void StartWrite(const TActorContext& ctx) {
@@ -140,7 +207,7 @@ private:
         ctx.Send(Tx.GetReplyTo(), new NActors::TEvents::TEvCompleted(0, Ydb::StatusIds::OVERLOADED));
     }
 
-    void Finish() {
+    void Finish(const TActorContext& /*ctx*/) {
         Counters.OnRequestFinish();
         PassAway();
     }
@@ -153,24 +220,97 @@ TFlowControlManager::TFlowControlManager(TIntrusivePtr<::NMonitoring::TDynamicCo
     , Counters(countersGroup)
 {
     FlowControlCountersGroup = countersGroup;
+    const auto params = TFlowControlManagerServiceOperator::GetDrainRateParams();
+    RMin = params.RMin;
+    RMax = params.RMax;
+    RefillRateR = params.RStart;
+    Burst = params.Burst;
+    AimdAdd = params.AimdAdd;
+    AimdBeta = params.AimdBeta;
+    AimdGrow = params.AimdGrow;
+    AimdHold = params.AimdHold;
+    AimdFeedback = params.AimdFeedback;
+    Tokens = Burst;
+    PublishDrainGauges();
 }
 
 void TFlowControlManager::PublishMapSizes() const {
     Counters.SetHotNodesCount(HotNodes.size());
     Counters.SetTabletToNodeCount(TabletToNode.size());
+    Counters.SetWaitQueueCount(Waiters.size());
 }
 
-EAdmitDecision TFlowControlManager::TryAdmit(const TVector<ui64>& tabletIds) const {
+void TFlowControlManager::PublishDrainGauges() const {
+    Counters.SetDrainRefillRate(static_cast<ui64>(std::llround(RefillRateR)));
+    Counters.SetDrainTokens(static_cast<ui64>(std::llround(Tokens)));
+}
+
+void TFlowControlManager::RecomputeBurst() {
+    Burst = Max(1.0, 2.0 * RefillRateR);
+    Tokens = Min(Tokens, Burst);
+}
+
+TVector<ui32> TFlowControlManager::CollectDestinationNodes(const TVector<ui64>& tabletIds) const {
+    THashSet<ui32> nodes;
+    TVector<ui32> result;
+    for (const ui64 tabletId : tabletIds) {
+        const auto* nodeId = TabletToNode.FindPtr(tabletId);
+        if (!nodeId) {
+            continue;
+        }
+        if (nodes.insert(*nodeId).second) {
+            result.push_back(*nodeId);
+        }
+    }
+    return result;
+}
+
+bool TFlowControlManager::IsAdmitAllowed(const TVector<ui64>& tabletIds) const {
     for (const ui64 tabletId : tabletIds) {
         const auto* nodeId = TabletToNode.FindPtr(tabletId);
         if (!nodeId) {
             continue;   // fail-open for unknown location
         }
         if (HotNodes.contains(*nodeId)) {
-            return EAdmitDecision::RejectNow;
+            return false;
         }
     }
-    return EAdmitDecision::Allow;
+    return true;
+}
+
+bool TFlowControlManager::HasWaitersOnDestinations(const TVector<ui64>& tabletIds) const {
+    for (const ui64 tabletId : tabletIds) {
+        const auto* nodeId = TabletToNode.FindPtr(tabletId);
+        if (!nodeId) {
+            continue;
+        }
+        if (const auto* count = WaiterCountByNode.FindPtr(*nodeId)) {
+            if (*count > 0) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+void TFlowControlManager::IncWaiterCounts(const TVector<ui32>& nodes) {
+    for (const ui32 nodeId : nodes) {
+        ++WaiterCountByNode[nodeId];
+    }
+}
+
+void TFlowControlManager::DecWaiterCounts(const TVector<ui32>& nodes) {
+    for (const ui32 nodeId : nodes) {
+        auto it = WaiterCountByNode.find(nodeId);
+        if (it == WaiterCountByNode.end()) {
+            continue;
+        }
+        if (it->second <= 1) {
+            WaiterCountByNode.erase(it);
+        } else {
+            --it->second;
+        }
+    }
 }
 
 void TFlowControlManager::MaybeStartLocationRechecks(const TVector<ui64>& tabletIds) {
@@ -199,6 +339,146 @@ void TFlowControlManager::MaybeStartLocationRechecks(const TVector<ui64>& tablet
     }
 }
 
+void TFlowControlManager::RefundDrainToken(TWaiter& waiter) {
+    if (waiter.TokenReserved) {
+        Tokens = Min(Burst, Tokens + 1.0);
+        waiter.TokenReserved = false;
+    }
+}
+
+void TFlowControlManager::EraseWaiter(ui64 waiterId, bool countCancel) {
+    auto it = Waiters.find(waiterId);
+    if (it == Waiters.end()) {
+        return;
+    }
+    RefundDrainToken(it->second);
+    DecWaiterCounts(it->second.DestinationNodes);
+    Waiters.erase(it);
+    for (auto qIt = WaitQueueOrder.begin(); qIt != WaitQueueOrder.end(); ++qIt) {
+        if (*qIt == waiterId) {
+            WaitQueueOrder.erase(qIt);
+            break;
+        }
+    }
+    if (countCancel) {
+        Counters.OnWaitQueueCancel();
+    }
+    PublishMapSizes();
+    PublishDrainGauges();
+}
+
+void TFlowControlManager::RefillTokens(TInstant now) {
+    if (LastRefillAt == TInstant::Zero()) {
+        LastRefillAt = now;
+        return;
+    }
+    const double dt = (now - LastRefillAt).SecondsFloat();
+    if (dt > 0) {
+        Tokens = Min(Burst, Tokens + RefillRateR * dt);
+        LastRefillAt = now;
+    }
+    MaybeGrowRate(now);
+}
+
+void TFlowControlManager::MaybeGrowRate(TInstant now) {
+    if (now < HoldUntil) {
+        return;
+    }
+    if (LastOverloadAt && now - LastOverloadAt < AimdGrow) {
+        return;
+    }
+    if (LastGrowAt && now - LastGrowAt < AimdGrow) {
+        return;
+    }
+    if (RefillRateR >= RMax) {
+        return;
+    }
+    const double prev = RefillRateR;
+    RefillRateR = Min(RMax, RefillRateR + AimdAdd);
+    RecomputeBurst();
+    LastGrowAt = now;
+    if (RefillRateR > prev) {
+        Counters.OnDrainRateGrow();
+    }
+}
+
+void TFlowControlManager::CutRateOnOverload(TInstant now) {
+    LastOverloadAt = now;
+    if (!LastDrainActivityAt || now - LastDrainActivityAt > AimdFeedback) {
+        return;
+    }
+    const double prev = RefillRateR;
+    RefillRateR = Max(RMin, RefillRateR * AimdBeta);
+    RecomputeBurst();
+    HoldUntil = now + AimdHold;
+    if (RefillRateR < prev) {
+        Counters.OnDrainRateCut();
+    }
+    PublishDrainGauges();
+}
+
+void TFlowControlManager::ScheduleDrainEligible(const TActorContext& ctx) {
+    const TInstant now = TActivationContext::Now();
+    RefillTokens(now);
+
+    bool moreEligibleWithoutToken = false;
+    for (const ui64 waiterId : WaitQueueOrder) {
+        auto* waiter = Waiters.FindPtr(waiterId);
+        if (!waiter || waiter->DrainScheduled) {
+            continue;
+        }
+        if (now >= waiter->WaitDeadline) {
+            continue;   // helper deadline timer owns RejectNow
+        }
+        if (!IsAdmitAllowed(waiter->TabletIds)) {
+            continue;
+        }
+
+        if (Tokens < 1.0) {
+            moreEligibleWithoutToken = true;
+            break;
+        }
+
+        Tokens -= 1.0;
+        waiter->DrainScheduled = true;
+        waiter->TokenReserved = true;
+        const TDuration jitter = TFlowControlManagerServiceOperator::PickDrainJitter();
+        if (jitter == TDuration::Zero()) {
+            ctx.Send(ctx.SelfID, new TEvDrainWaiter(waiterId));
+        } else {
+            ctx.Schedule(jitter, new TEvDrainWaiter(waiterId));
+        }
+    }
+
+    if (!moreEligibleWithoutToken) {
+        for (const ui64 waiterId : WaitQueueOrder) {
+            auto* waiter = Waiters.FindPtr(waiterId);
+            if (!waiter || waiter->DrainScheduled) {
+                continue;
+            }
+            if (now >= waiter->WaitDeadline) {
+                continue;
+            }
+            if (!IsAdmitAllowed(waiter->TabletIds)) {
+                continue;
+            }
+            moreEligibleWithoutToken = true;
+            break;
+        }
+    }
+
+    if (moreEligibleWithoutToken && !DrainWakeupScheduled) {
+        DrainWakeupScheduled = true;
+        ui64 delayMs = 100;
+        if (RefillRateR > 0) {
+            delayMs = Max<ui64>(1, static_cast<ui64>(std::llround(1000.0 / RefillRateR)));
+        }
+        ctx.Schedule(TDuration::MilliSeconds(delayMs), new TEvContinueDrain());
+    }
+
+    PublishDrainGauges();
+}
+
 void TFlowControlManager::Handle(const NFlowControl::TEvLongTxWrite::TPtr& ev, const TActorContext& ctx) {
     // Compatibility path: do not run split/write on FCM mailbox. Schedule helper on a separate mailbox.
     auto tx = ev->Get()->DetachLongTxWrite();
@@ -208,31 +488,105 @@ void TFlowControlManager::Handle(const NFlowControl::TEvLongTxWrite::TPtr& ev, c
 void TFlowControlManager::Handle(const NFlowControl::TEvTryAdmit::TPtr& ev, const TActorContext& ctx) {
     const TInstant startedAt = TActivationContext::Now();
     const auto& tabletIds = ev->Get()->GetTabletIds();
-    const EAdmitDecision decision = TryAdmit(tabletIds);
     const TDuration duration = TActivationContext::Now() - startedAt;
 
-    switch (decision) {
-        case EAdmitDecision::Allow:
-            Counters.OnAdmitAllowed(duration);
-            break;
-        case EAdmitDecision::RejectNow:
-            Counters.OnAdmitRejected(duration);
-            MaybeStartLocationRechecks(tabletIds);
-            break;
+    if (IsAdmitAllowed(tabletIds) && !HasWaitersOnDestinations(tabletIds)) {
+        Counters.OnAdmitAllowed(duration);
+        ctx.Send(ev->Sender, new TEvTryAdmitResult(EAdmitDecision::Allow));
+        return;
     }
 
-    ctx.Send(ev->Sender, new TEvTryAdmitResult(decision));
+    MaybeStartLocationRechecks(tabletIds);
+
+    const TInstant waitDeadline = ev->Get()->GetWaitDeadline();
+    const TInstant now = TActivationContext::Now();
+    if (now >= waitDeadline) {
+        Counters.OnAdmitRejected(duration);
+        Counters.OnWaitQueueRejectDeadlineAtAdmit();
+        ctx.Send(ev->Sender, new TEvTryAdmitResult(EAdmitDecision::RejectNow));
+        return;
+    }
+
+    if (Waiters.size() >= TFlowControlManagerServiceOperator::GetMaxWaitQueueSize()) {
+        Counters.OnAdmitRejected(duration);
+        Counters.OnWaitQueueRejectFull();
+        ctx.Send(ev->Sender, new TEvTryAdmitResult(EAdmitDecision::RejectNow));
+        return;
+    }
+
+    const ui64 waiterId = NextWaiterId++;
+    TWaiter waiter;
+    waiter.WaiterId = waiterId;
+    waiter.Helper = ev->Sender;
+    waiter.TabletIds = tabletIds;
+    waiter.DestinationNodes = CollectDestinationNodes(tabletIds);
+    waiter.WaitDeadline = waitDeadline;
+    waiter.EnqueuedAt = now;
+    IncWaiterCounts(waiter.DestinationNodes);
+    Waiters.emplace(waiterId, std::move(waiter));
+    WaitQueueOrder.push_back(waiterId);
+    Counters.OnWaitQueueEnqueue();
+    PublishMapSizes();
+    ctx.Send(ev->Sender, new TEvTryAdmitResult(EAdmitDecision::Wait, waiterId, waitDeadline));
 }
 
-void TFlowControlManager::Handle(const NFlowControl::TEvNodeOverloadStatus::TPtr& ev, const TActorContext& /*ctx*/) {
+void TFlowControlManager::Handle(const NFlowControl::TEvCancelWait::TPtr& ev, const TActorContext& /*ctx*/) {
+    EraseWaiter(ev->Get()->GetWaiterId(), /*countCancel=*/true);
+}
+
+void TFlowControlManager::Handle(const NFlowControl::TEvContinueDrain::TPtr& /*ev*/, const TActorContext& ctx) {
+    DrainWakeupScheduled = false;
+    ScheduleDrainEligible(ctx);
+}
+
+void TFlowControlManager::Handle(const NFlowControl::TEvDrainWaiter::TPtr& ev, const TActorContext& ctx) {
+    const ui64 waiterId = ev->Get()->GetWaiterId();
+    auto* waiter = Waiters.FindPtr(waiterId);
+    if (!waiter) {
+        return;
+    }
+
+    const TInstant now = TActivationContext::Now();
+    if (now >= waiter->WaitDeadline) {
+        // Leave for helper deadline / cancel; clear drain flag so we don't loop.
+        RefundDrainToken(*waiter);
+        waiter->DrainScheduled = false;
+        PublishDrainGauges();
+        ScheduleDrainEligible(ctx);
+        return;
+    }
+
+    if (!IsAdmitAllowed(waiter->TabletIds)) {
+        RefundDrainToken(*waiter);
+        waiter->DrainScheduled = false;
+        PublishDrainGauges();
+        return;
+    }
+
+    const TActorId helper = waiter->Helper;
+    const TDuration waited = now - waiter->EnqueuedAt;
+    // Token already reserved at schedule time; clear flag before erase so EraseWaiter does not refund.
+    waiter->TokenReserved = false;
+    EraseWaiter(waiterId, /*countCancel=*/false);
+    LastDrainActivityAt = now;
+    Counters.OnWaitQueueDrain(waited);
+    Counters.OnAdmitAllowed(TDuration::Zero());
+    Counters.OnDrainAllowed();
+    ctx.Send(helper, new TEvTryAdmitResult(EAdmitDecision::Allow));
+    ScheduleDrainEligible(ctx);
+}
+
+void TFlowControlManager::Handle(const NFlowControl::TEvNodeOverloadStatus::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
     const ui32 nodeId = record.GetNodeId();
     const ui64 generation = record.GetGeneration();
+    const TInstant now = TActivationContext::Now();
 
     switch (record.GetStatus()) {
         case NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED:
             HotNodes[nodeId] = Max(HotNodes[nodeId], generation);
             Counters.OnStatusOverloaded();
+            CutRateOnOverload(now);
             break;
         case NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY: {
             auto it = HotNodes.find(nodeId);
@@ -240,6 +594,7 @@ void TFlowControlManager::Handle(const NFlowControl::TEvNodeOverloadStatus::TPtr
                 HotNodes.erase(it);
             }
             Counters.OnStatusReady();
+            ScheduleDrainEligible(ctx);
             break;
         }
         case NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_UNSPECIFIED:
@@ -248,17 +603,19 @@ void TFlowControlManager::Handle(const NFlowControl::TEvNodeOverloadStatus::TPtr
     PublishMapSizes();
 }
 
-void TFlowControlManager::Handle(const NFlowControl::TEvTabletLocationUpdated::TPtr& ev, const TActorContext& /*ctx*/) {
+void TFlowControlManager::Handle(const NFlowControl::TEvTabletLocationUpdated::TPtr& ev, const TActorContext& ctx) {
     TabletToNode[ev->Get()->GetTabletId()] = ev->Get()->GetNodeId();
     PublishMapSizes();
+    ScheduleDrainEligible(ctx);
 }
 
-void TFlowControlManager::Handle(const NFlowControl::TEvTabletLocationInvalidated::TPtr& ev, const TActorContext& /*ctx*/) {
+void TFlowControlManager::Handle(const NFlowControl::TEvTabletLocationInvalidated::TPtr& ev, const TActorContext& ctx) {
     TabletToNode.erase(ev->Get()->GetTabletId());
     PublishMapSizes();
+    ScheduleDrainEligible(ctx);
 }
 
-void TFlowControlManager::Handle(const TEvTabletResolver::TEvForwardResult::TPtr& ev, const TActorContext& /*ctx*/) {
+void TFlowControlManager::Handle(const TEvTabletResolver::TEvForwardResult::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
     LocationRecheckInFlight.erase(msg->TabletID);
     if (msg->Status != NKikimrProto::OK || !msg->TabletActor) {
@@ -266,6 +623,7 @@ void TFlowControlManager::Handle(const TEvTabletResolver::TEvForwardResult::TPtr
     }
     TabletToNode[msg->TabletID] = msg->TabletActor.NodeId();
     PublishMapSizes();
+    ScheduleDrainEligible(ctx);
 }
 
 void TFlowControlManagerServiceOperator::StartLongTxWrite(const TActorContext& ctx, TLongTxWrite&& longTxWrite) {

@@ -76,7 +76,8 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         auto tx = std::move(LongTxWrite);
         NTxProxy::DoLongTxWriteSameMailbox(ctx, tx.GetReplyTo(), tx.GetLongTxId(), tx.GetDedupId(), tx.GetDatabaseName(), tx.GetPath(),
-            tx.GetNavigateResult(), tx.GetBatch(), tx.GetIssues(), tx.GetUserCtx(), /*forceNoFlowControl=*/false);
+            tx.GetNavigateResult(), tx.GetBatch(), tx.GetIssues(), tx.GetUserCtx(), /*forceNoFlowControl=*/false, tx.GetDeadline(),
+            tx.GetOperationTimeout());
         PassAway();
     }
 
@@ -126,25 +127,39 @@ public:
     explicit TFlowControlManagerTestEnv(TTestBasicRuntime& runtime)
         : Runtime(runtime)
     {
+        // Fast drain jitter in UTs by default; keep queue capacity high unless a test shrinks it.
+        // Drain rate params: leave process defaults (or whatever the test set before construction);
+        // FCM copies them at RegisterServices time.
+        TFlowControlManagerServiceOperator::SetWaitQueueParams(TDuration::Zero(), TDuration::Zero(), 1024);
         TTester::Setup(Runtime);
         RegisterServices();
         ReplyTo = Runtime.AllocateEdgeActor();
+    }
+
+    ~TFlowControlManagerTestEnv() {
+        Runtime.GetAppData(0).ColumnShardConfig.ClearFlowControl();
+        TFlowControlManagerServiceOperator::SetWaitQueueParams(TDuration::MilliSeconds(50), TDuration::MilliSeconds(250), 1024);
+        TFlowControlManagerServiceOperator::ResetDrainRateParamsToDefaults();
     }
 
     TActorId GetReplyTo() const {
         return ReplyTo;
     }
 
-    TLongTxWrite BuildLongTxWrite(
-        std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch = nullptr) const {
+    TLongTxWrite BuildLongTxWrite(std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult,
+        std::shared_ptr<arrow::RecordBatch> batch = nullptr, TDuration operationTimeout = TDuration::Seconds(5 * 60),
+        TInstant now = TInstant::Zero()) const {
         auto issues = std::make_shared<NYql::TIssues>();
         if (!batch) {
             batch = MakeEmptyBatch();
         }
         TLongTxId longTxId;
         Y_ABORT_UNLESS(longTxId.ParseString("ydb://long-tx/01ezvvxjdk2hd4vdgjs68knvp8?node_id=1"));
+        if (now == TInstant::Zero()) {
+            now = Runtime.GetCurrentTime();
+        }
         return TLongTxWrite(ReplyTo, longTxId, "0", "/Root", "/Root/table", std::move(navigateResult), std::move(batch), std::move(issues),
-            NACLib::TUserContextBuilder().Build());
+            NACLib::TUserContextBuilder().Build(), now + operationTimeout, operationTimeout);
     }
 
     void StartLongTxWrite(TLongTxWrite longTxWrite) {
@@ -163,6 +178,12 @@ public:
         Runtime.Send(new IEventHandle(TFlowControlManagerServiceOperator::MakeServiceId(Runtime.GetNodeId(0)), ReplyTo, event), 0, true);
     }
 
+    TEvTryAdmitResult::TPtr TryAdmit(TVector<ui64> tabletIds, TDuration operationTimeout = TDuration::Seconds(60)) {
+        const TInstant now = Runtime.GetCurrentTime();
+        SendToFlowControlManager(new TEvTryAdmit(std::move(tabletIds), now + operationTimeout, operationTimeout));
+        return Runtime.GrabEdgeEventRethrow<TEvTryAdmitResult>(ReplyTo);
+    }
+
     void SeedTabletLocation(ui64 tabletId, ui32 nodeId) {
         SendToFlowControlManager(new TEvTabletLocationUpdated(tabletId, nodeId));
     }
@@ -171,7 +192,22 @@ public:
         SendToFlowControlManager(new TEvNodeOverloadStatus(nodeId, status, generation));
     }
 
-    TEvents::TEvCompleted::TPtr WaitCompleted() {
+    void EnableSchedulesForAllActors() {
+        // FCM is registered in the env ctor before this hook; enable it explicitly for ContinueDrain / jitter.
+        Runtime.EnableScheduleForActor(TFlowControlManagerServiceOperator::MakeServiceId(Runtime.GetNodeId(0)), true);
+        Runtime.SetRegistrationObserverFunc([](TTestActorRuntimeBase& runtime, const TActorId& /*parentId*/, const TActorId& actorId) {
+            runtime.EnableScheduleForActor(actorId, true);
+        });
+        Runtime.SetScheduledEventFilter([](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration, TInstant&) {
+            return !runtime.IsScheduleForActorEnabled(event->GetRecipientRewrite());
+        });
+    }
+
+    TEvents::TEvCompleted::TPtr WaitCompleted(TDuration advance = TDuration::Zero()) {
+        if (advance) {
+            Runtime.AdvanceCurrentTime(advance);
+            Runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+        }
         return Runtime.GrabEdgeEventRethrow<TEvents::TEvCompleted>(ReplyTo);
     }
 
@@ -187,11 +223,13 @@ private:
         {
             auto actor = NOverload::TOverloadManagerServiceOperator::CreateService(counters);
             const auto actorId = Runtime.Register(actor.release(), 0, appData.UserPoolId, TMailboxType::Revolving, 0);
+            Runtime.EnableScheduleForActor(actorId, true);
             Runtime.RegisterService(NOverload::TOverloadManagerServiceOperator::MakeServiceId(), actorId, 0);
         }
         {
             auto actor = TFlowControlManagerServiceOperator::CreateService(counters);
             const auto actorId = Runtime.Register(actor.release(), 0, appData.UserPoolId, TMailboxType::Revolving, 0);
+            Runtime.EnableScheduleForActor(actorId, true);
             Runtime.RegisterService(TFlowControlManagerServiceOperator::MakeServiceId(Runtime.GetNodeId(0)), actorId, 0);
         }
     }
@@ -383,6 +421,8 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         InstallFakeShardWriteResponder(runtime, shardTabletId, MakeFakeShardWriteCompleted, &writeObserved);
 
         TFlowControlManagerTestEnv env(runtime);
+        // Queue disabled → gated requests reject immediately.
+        TFlowControlManagerServiceOperator::SetWaitQueueParams(TDuration::Zero(), TDuration::Zero(), /*maxWaitQueueSize=*/0);
         env.SeedTabletLocation(shardTabletId, hotNodeId);
         env.SeedNodeOverloadStatus(hotNodeId, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED);
 
@@ -391,6 +431,297 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         const auto completed = env.WaitCompleted();
         UNIT_ASSERT(!writeObserved);
         UNIT_ASSERT_VALUES_EQUAL((Ydb::StatusIds::StatusCode)completed->Get()->Status, Ydb::StatusIds::OVERLOADED);
+    }
+
+    Y_UNIT_TEST(WaitThenAllowOnReady) {
+        TTestBasicRuntime runtime;
+        const ui64 shardTabletId = TTestTxConfig::TxTablet0;
+        const ui32 hotNodeId = 42;
+
+        bool writeObserved = false;
+        InstallFakeShardWriteResponder(runtime, shardTabletId, MakeFakeShardWriteCompleted, &writeObserved);
+
+        TFlowControlManagerTestEnv env(runtime);
+        env.EnableSchedulesForAllActors();
+        TFlowControlManagerServiceOperator::SetWaitQueueParams(TDuration::Zero(), TDuration::Zero(), /*maxWaitQueueSize=*/1024);
+        env.SeedTabletLocation(shardTabletId, hotNodeId);
+        env.SeedNodeOverloadStatus(hotNodeId, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED);
+
+        env.StartLongTxWrite(
+            env.BuildLongTxWrite(MakeNavigateForSingleColumnShard(shardTabletId), MakeHappyPathBatch(), TDuration::Seconds(60)));
+
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(20));
+        UNIT_ASSERT(!writeObserved);
+
+        env.SeedNodeOverloadStatus(hotNodeId, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/1);
+
+        const auto completed = env.WaitCompleted();
+        UNIT_ASSERT(writeObserved);
+        UNIT_ASSERT_VALUES_EQUAL((Ydb::StatusIds::StatusCode)completed->Get()->Status, Ydb::StatusIds::SUCCESS);
+    }
+
+    Y_UNIT_TEST(WaitDeadlineRejects) {
+        TTestBasicRuntime runtime;
+        const ui64 shardTabletId = TTestTxConfig::TxTablet0;
+        const ui32 hotNodeId = 42;
+        const TDuration operationTimeout = TDuration::MilliSeconds(200);
+
+        bool writeObserved = false;
+        InstallFakeShardWriteResponder(runtime, shardTabletId, MakeFakeShardWriteCompleted, &writeObserved);
+
+        TFlowControlManagerTestEnv env(runtime);
+        env.EnableSchedulesForAllActors();
+        TFlowControlManagerServiceOperator::SetWaitQueueParams(TDuration::Zero(), TDuration::Zero(), /*maxWaitQueueSize=*/1024);
+        env.SeedTabletLocation(shardTabletId, hotNodeId);
+        env.SeedNodeOverloadStatus(hotNodeId, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED);
+
+        env.StartLongTxWrite(env.BuildLongTxWrite(MakeNavigateForSingleColumnShard(shardTabletId), MakeHappyPathBatch(), operationTimeout));
+
+        // Default WaitTimeoutPercent=50 ⇒ wait deadline = Timeout/2 = 100ms.
+        const auto completed = env.WaitCompleted(operationTimeout / 2 + TDuration::MilliSeconds(20));
+        UNIT_ASSERT(!writeObserved);
+        UNIT_ASSERT_VALUES_EQUAL((Ydb::StatusIds::StatusCode)completed->Get()->Status, Ydb::StatusIds::OVERLOADED);
+    }
+
+    Y_UNIT_TEST(WaitTimeoutPercentFromConfig) {
+        TTestBasicRuntime runtime;
+        const ui64 tabletA = TTestTxConfig::TxTablet0;
+        const ui32 nodeA = 42;
+        const TDuration operationTimeout = TDuration::MilliSeconds(1000);
+
+        TFlowControlManagerTestEnv env(runtime);
+        env.EnableSchedulesForAllActors();
+        // Config wins over UT atomics for wait percent.
+        runtime.GetAppData(0).ColumnShardConfig.MutableFlowControl()->SetWaitTimeoutPercent(10);
+        runtime.GetAppData(0).ColumnShardConfig.MutableFlowControl()->SetMaxWaitQueueSize(1024);
+        TFlowControlManagerServiceOperator::SetWaitQueueParams(TDuration::Zero(), TDuration::Zero(), 1024);
+
+        env.SeedTabletLocation(tabletA, nodeA);
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED);
+
+        const TInstant now = runtime.GetCurrentTime();
+        const auto admit = env.TryAdmit({ tabletA }, operationTimeout);
+        UNIT_ASSERT_VALUES_EQUAL((int)admit->Get()->GetDecision(), (int)EAdmitDecision::Wait);
+        // Max wait = 10% of 1000ms = 100ms ⇒ WaitDeadline = now + 100ms.
+        const TInstant expected = now + operationTimeout * 10 / 100;
+        UNIT_ASSERT_VALUES_EQUAL(admit->Get()->GetWaitDeadline().MilliSeconds(), expected.MilliSeconds());
+
+        // Request whose wait window already elapsed → RejectNow.
+        const TInstant startedAgo = runtime.GetCurrentTime() - TDuration::MilliSeconds(200);
+        env.SendToFlowControlManager(new TEvTryAdmit(TVector<ui64>{ tabletA }, startedAgo + operationTimeout, operationTimeout));
+        const auto late = runtime.GrabEdgeEventRethrow<TEvTryAdmitResult>(env.GetReplyTo());
+        UNIT_ASSERT_VALUES_EQUAL((int)late->Get()->GetDecision(), (int)EAdmitDecision::RejectNow);
+
+        runtime.GetAppData(0).ColumnShardConfig.ClearFlowControl();
+    }
+
+    Y_UNIT_TEST(QueueFullRejects) {
+        TTestBasicRuntime runtime;
+        const ui64 shardTabletId = TTestTxConfig::TxTablet0;
+        const ui32 hotNodeId = 42;
+
+        bool writeObserved = false;
+        InstallFakeShardWriteResponder(runtime, shardTabletId, MakeFakeShardWriteCompleted, &writeObserved);
+
+        TFlowControlManagerTestEnv env(runtime);
+        TFlowControlManagerServiceOperator::SetWaitQueueParams(TDuration::Zero(), TDuration::Zero(), /*maxWaitQueueSize=*/1);
+        env.SeedTabletLocation(shardTabletId, hotNodeId);
+        env.SeedNodeOverloadStatus(hotNodeId, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED);
+
+        // First request occupies the only wait slot (stays queued).
+        env.StartLongTxWrite(
+            env.BuildLongTxWrite(MakeNavigateForSingleColumnShard(shardTabletId), MakeHappyPathBatch(), TDuration::Seconds(60)));
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(20));
+
+        // Second request must be rejected immediately (queue full).
+        const auto replyTo2 = runtime.AllocateEdgeActor();
+        {
+            auto issues = std::make_shared<NYql::TIssues>();
+            TLongTxId longTxId;
+            Y_ABORT_UNLESS(longTxId.ParseString("ydb://long-tx/01ezvvxjdk2hd4vdgjs68knvp8?node_id=1"));
+            const TInstant now = runtime.GetCurrentTime();
+            auto tx = TLongTxWrite(replyTo2, longTxId, "1", "/Root", "/Root/table", MakeNavigateForSingleColumnShard(shardTabletId),
+                MakeHappyPathBatch(), std::move(issues),
+                NACLib::TUserContextBuilder().Build(), now + TDuration::Seconds(60), TDuration::Seconds(60));
+            env.StartLongTxWrite(std::move(tx));
+        }
+
+        const auto completed2 = runtime.GrabEdgeEventRethrow<TEvents::TEvCompleted>(replyTo2);
+        UNIT_ASSERT(!writeObserved);
+        UNIT_ASSERT_VALUES_EQUAL((Ydb::StatusIds::StatusCode)completed2->Get()->Status, Ydb::StatusIds::OVERLOADED);
+    }
+
+    Y_UNIT_TEST(NoJumpWhileWaitersOnSameDestination) {
+        // Drain params must be set before FCM is constructed.
+        TFlowControlManagerServiceOperator::TDrainRateParams drain;
+        drain.RMin = 1.0;
+        drain.RMax = 1.0;
+        drain.RStart = 1.0;
+        drain.Burst = 1.0;
+        TFlowControlManagerServiceOperator::SetDrainRateParams(drain);
+
+        TTestBasicRuntime runtime;
+        TFlowControlManagerTestEnv env(runtime);
+        env.EnableSchedulesForAllActors();
+        TFlowControlManagerServiceOperator::SetWaitQueueParams(TDuration::Zero(), TDuration::Zero(), 1024);
+
+        const ui64 tabletA = TTestTxConfig::TxTablet0;
+        const ui32 nodeA = 42;
+        env.SeedTabletLocation(tabletA, nodeA);
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED);
+
+        // Three waiters on A; burst=1 so READY drains only one immediately.
+        for (int i = 0; i < 3; ++i) {
+            const auto admit = env.TryAdmit({ tabletA });
+            UNIT_ASSERT_VALUES_EQUAL((int)admit->Get()->GetDecision(), (int)EAdmitDecision::Wait);
+        }
+
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/1);
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(20));
+        // One Allow from drain (consumed by edge actor as TryAdmitResult).
+        {
+            const auto drained = runtime.GrabEdgeEventRethrow<TEvTryAdmitResult>(env.GetReplyTo());
+            UNIT_ASSERT_VALUES_EQUAL((int)drained->Get()->GetDecision(), (int)EAdmitDecision::Allow);
+        }
+
+        // Node A is cool but still has waiters → new admit must Wait (no jump).
+        const auto noJump = env.TryAdmit({ tabletA });
+        UNIT_ASSERT_VALUES_EQUAL((int)noJump->Get()->GetDecision(), (int)EAdmitDecision::Wait);
+    }
+
+    Y_UNIT_TEST(CoolOtherDestinationAllowsDespiteWaitersOnA) {
+        TTestBasicRuntime runtime;
+        TFlowControlManagerTestEnv env(runtime);
+        TFlowControlManagerServiceOperator::SetWaitQueueParams(TDuration::Zero(), TDuration::Zero(), 1024);
+
+        const ui64 tabletA = TTestTxConfig::TxTablet0;
+        const ui64 tabletB = TTestTxConfig::TxTablet1;
+        const ui32 nodeA = 42;
+        const ui32 nodeB = 43;
+        env.SeedTabletLocation(tabletA, nodeA);
+        env.SeedTabletLocation(tabletB, nodeB);
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED);
+
+        const auto waitA = env.TryAdmit({ tabletA });
+        UNIT_ASSERT_VALUES_EQUAL((int)waitA->Get()->GetDecision(), (int)EAdmitDecision::Wait);
+
+        // B is cool and has no waiters → Allow even while A has a queue.
+        const auto allowB = env.TryAdmit({ tabletB });
+        UNIT_ASSERT_VALUES_EQUAL((int)allowB->Get()->GetDecision(), (int)EAdmitDecision::Allow);
+    }
+
+    Y_UNIT_TEST(MultiDestWaiterBlocksSharedDestination) {
+        TTestBasicRuntime runtime;
+        TFlowControlManagerTestEnv env(runtime);
+        TFlowControlManagerServiceOperator::SetWaitQueueParams(TDuration::Zero(), TDuration::Zero(), 1024);
+
+        const ui64 tabletA = TTestTxConfig::TxTablet0;
+        const ui64 tabletB = TTestTxConfig::TxTablet1;
+        const ui32 nodeA = 42;
+        const ui32 nodeB = 43;
+        env.SeedTabletLocation(tabletA, nodeA);
+        env.SeedTabletLocation(tabletB, nodeB);
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED);
+
+        // Multi-dest waiter increments counts on both A and B.
+        const auto waitAB = env.TryAdmit({ tabletA, tabletB });
+        UNIT_ASSERT_VALUES_EQUAL((int)waitAB->Get()->GetDecision(), (int)EAdmitDecision::Wait);
+
+        // B-only must wait while multi-dest waiter is still queued.
+        const auto waitB = env.TryAdmit({ tabletB });
+        UNIT_ASSERT_VALUES_EQUAL((int)waitB->Get()->GetDecision(), (int)EAdmitDecision::Wait);
+    }
+
+    Y_UNIT_TEST(PacedDrainDoesNotReleaseAllAtOnce) {
+        TFlowControlManagerServiceOperator::TDrainRateParams drain;
+        drain.RMin = 1.0;
+        drain.RMax = 1.0;
+        drain.RStart = 1.0;
+        drain.Burst = 1.0;
+        drain.AimdAdd = 0.0;   // do not grow during the test
+        TFlowControlManagerServiceOperator::SetDrainRateParams(drain);
+
+        TTestBasicRuntime runtime;
+        TFlowControlManagerTestEnv env(runtime);
+        env.EnableSchedulesForAllActors();
+        TFlowControlManagerServiceOperator::SetWaitQueueParams(TDuration::Zero(), TDuration::Zero(), 1024);
+
+        const ui64 tabletA = TTestTxConfig::TxTablet0;
+        const ui32 nodeA = 42;
+        env.SeedTabletLocation(tabletA, nodeA);
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED);
+
+        for (int i = 0; i < 5; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL((int)env.TryAdmit({ tabletA })->Get()->GetDecision(), (int)EAdmitDecision::Wait);
+        }
+
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/1);
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(20));
+
+        // Exactly one drain Allow before time advances enough for another token.
+        {
+            const auto drained = runtime.GrabEdgeEventRethrow<TEvTryAdmitResult>(env.GetReplyTo());
+            UNIT_ASSERT_VALUES_EQUAL((int)drained->Get()->GetDecision(), (int)EAdmitDecision::Allow);
+        }
+
+        // Without advancing ~1s, no further drain Allow should be pending.
+        {
+            TAutoPtr<IEventHandle> handle;
+            const auto* drained = runtime.GrabEdgeEventRethrow<TEvTryAdmitResult>(handle, TDuration::MilliSeconds(50));
+            UNIT_ASSERT(!drained);
+        }
+
+        // Advance sim time so the token bucket refills, then nudge drain scheduling.
+        runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/1);
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+        {
+            const auto drained = runtime.GrabEdgeEventRethrow<TEvTryAdmitResult>(env.GetReplyTo());
+            UNIT_ASSERT_VALUES_EQUAL((int)drained->Get()->GetDecision(), (int)EAdmitDecision::Allow);
+        }
+    }
+
+    Y_UNIT_TEST(OverloadAfterDrainCutsRate) {
+        TFlowControlManagerServiceOperator::TDrainRateParams drain;
+        drain.RMin = 10.0;
+        drain.RMax = 100.0;
+        drain.RStart = 100.0;
+        drain.Burst = 1.0;
+        drain.AimdBeta = 0.5;
+        drain.AimdAdd = 0.0;
+        drain.AimdFeedback = TDuration::Seconds(10);
+        TFlowControlManagerServiceOperator::SetDrainRateParams(drain);
+
+        TTestBasicRuntime runtime;
+        TFlowControlManagerTestEnv env(runtime);
+        env.EnableSchedulesForAllActors();
+        TFlowControlManagerServiceOperator::SetWaitQueueParams(TDuration::Zero(), TDuration::Zero(), 1024);
+
+        const ui64 tabletA = TTestTxConfig::TxTablet0;
+        const ui32 nodeA = 42;
+        env.SeedTabletLocation(tabletA, nodeA);
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED);
+
+        for (int i = 0; i < 3; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL((int)env.TryAdmit({ tabletA })->Get()->GetDecision(), (int)EAdmitDecision::Wait);
+        }
+
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/1);
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(20));
+        {
+            const auto drained = runtime.GrabEdgeEventRethrow<TEvTryAdmitResult>(env.GetReplyTo());
+            UNIT_ASSERT_VALUES_EQUAL((int)drained->Get()->GetDecision(), (int)EAdmitDecision::Allow);
+        }
+
+        // Recent drain + OVERLOADED triggers AIMD rate cut; further READY still drains remaining waiters.
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED, /*generation=*/2);
+        env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/2);
+        runtime.AdvanceCurrentTime(TDuration::MilliSeconds(100));
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+        {
+            const auto drained = runtime.GrabEdgeEventRethrow<TEvTryAdmitResult>(env.GetReplyTo());
+            UNIT_ASSERT_VALUES_EQUAL((int)drained->Get()->GetDecision(), (int)EAdmitDecision::Allow);
+        }
     }
 
     Y_UNIT_TEST(AllowsWhenHotNodeBecomesReady) {
@@ -448,6 +779,7 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         UNIT_ASSERT(locationNodeId != 0);
 
         env.SeedNodeOverloadStatus(locationNodeId, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED);
+        TFlowControlManagerServiceOperator::SetWaitQueueParams(TDuration::Zero(), TDuration::Zero(), /*maxWaitQueueSize=*/0);
 
         bool secondWriteObserved = false;
         InstallFakeShardWriteResponder(runtime, shardTabletId, MakeFakeShardWriteCompleted, &secondWriteObserved);
@@ -469,6 +801,7 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         InstallFakeShardWriteResponder(runtime, shardTabletId, MakeFakeShardWriteCompleted, &writeObserved);
 
         TFlowControlManagerTestEnv env(runtime);
+        TFlowControlManagerServiceOperator::SetWaitQueueParams(TDuration::Zero(), TDuration::Zero(), /*maxWaitQueueSize=*/0);
         env.SeedTabletLocation(shardTabletId, hotNodeId);
         env.SeedNodeOverloadStatus(hotNodeId, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED);
 
@@ -546,6 +879,7 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
                          new NOverload::TEvCompactionOverloadState(shardTabletId, true)), 0, true);
         runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(100));
 
+        TFlowControlManagerServiceOperator::SetWaitQueueParams(TDuration::Zero(), TDuration::Zero(), /*maxWaitQueueSize=*/0);
         env.StartLongTxWrite(env.BuildLongTxWrite(MakeNavigateForSingleColumnShard(shardTabletId), MakeHappyPathBatch()));
         {
             const auto completed = env.WaitCompleted();

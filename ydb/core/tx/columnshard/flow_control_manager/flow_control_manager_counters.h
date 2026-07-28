@@ -14,11 +14,22 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr WaitingAdmitInFlight;
     NMonitoring::TDynamicCounters::TCounterPtr HotNodesCount;
     NMonitoring::TDynamicCounters::TCounterPtr TabletToNodeCount;
+    NMonitoring::TDynamicCounters::TCounterPtr WaitQueueCount;
+
+    NMonitoring::TDynamicCounters::TCounterPtr DrainRefillRate;
+    NMonitoring::TDynamicCounters::TCounterPtr DrainTokens;
+    NMonitoring::TDynamicCounters::TCounterPtr DrainAllowedCount;
+    NMonitoring::TDynamicCounters::TCounterPtr DrainRateCutCount;
+    NMonitoring::TDynamicCounters::TCounterPtr DrainRateGrowCount;
 
     NMonitoring::TDynamicCounters::TCounterPtr RequestsCount;
     NMonitoring::TDynamicCounters::TCounterPtr AdmitAllowedCount;
     NMonitoring::TDynamicCounters::TCounterPtr AdmitRejectedCount;
     NMonitoring::TDynamicCounters::TCounterPtr AdmitSkippedNoSplitCount;
+    NMonitoring::TDynamicCounters::TCounterPtr WaitQueueEnqueuedCount;
+    NMonitoring::TDynamicCounters::TCounterPtr WaitQueueDrainedCount;
+    NMonitoring::TDynamicCounters::TCounterPtr WaitQueueRejectedDeadlineCount;
+    NMonitoring::TDynamicCounters::TCounterPtr WaitQueueRejectedFullCount;
     NMonitoring::TDynamicCounters::TCounterPtr LocationRecheckCount;
     NMonitoring::TDynamicCounters::TCounterPtr StatusOverloadCount;
     NMonitoring::TDynamicCounters::TCounterPtr StatusReadyCount;
@@ -28,6 +39,7 @@ private:
     NMonitoring::THistogramPtr SplitDurationMsHistogram;
     NMonitoring::THistogramPtr AdmitDurationMsHistogram;
     NMonitoring::THistogramPtr WaitAdmitDurationMsHistogram;
+    NMonitoring::THistogramPtr WaitQueueWaitDurationMsHistogram;
 
 public:
     TCSFlowControlManagerCounters(TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup)
@@ -36,10 +48,20 @@ public:
         , WaitingAdmitInFlight(TBase::GetValue("FlowControl/Admit/Waiting/InFlight"))
         , HotNodesCount(TBase::GetValue("FlowControl/HotNodes/Count"))
         , TabletToNodeCount(TBase::GetValue("FlowControl/TabletToNode/Count"))
+        , WaitQueueCount(TBase::GetValue("FlowControl/WaitQueue/Count"))
+        , DrainRefillRate(TBase::GetValue("FlowControl/Drain/RefillRate"))
+        , DrainTokens(TBase::GetValue("FlowControl/Drain/Tokens"))
+        , DrainAllowedCount(TBase::GetDeriviative("FlowControl/Drain/Allowed/Count"))
+        , DrainRateCutCount(TBase::GetDeriviative("FlowControl/Drain/RateCut/Count"))
+        , DrainRateGrowCount(TBase::GetDeriviative("FlowControl/Drain/RateGrow/Count"))
         , RequestsCount(TBase::GetDeriviative("FlowControl/Requests/Count"))
         , AdmitAllowedCount(TBase::GetDeriviative("FlowControl/Admit/Allowed/Count"))
         , AdmitRejectedCount(TBase::GetDeriviative("FlowControl/Admit/Rejected/Count"))
         , AdmitSkippedNoSplitCount(TBase::GetDeriviative("FlowControl/Admit/SkippedNoSplit/Count"))
+        , WaitQueueEnqueuedCount(TBase::GetDeriviative("FlowControl/WaitQueue/Enqueued/Count"))
+        , WaitQueueDrainedCount(TBase::GetDeriviative("FlowControl/WaitQueue/Drained/Count"))
+        , WaitQueueRejectedDeadlineCount(TBase::GetDeriviative("FlowControl/WaitQueue/RejectedDeadline/Count"))
+        , WaitQueueRejectedFullCount(TBase::GetDeriviative("FlowControl/WaitQueue/RejectedFull/Count"))
         , LocationRecheckCount(TBase::GetDeriviative("FlowControl/LocationRecheck/Count"))
         , StatusOverloadCount(TBase::GetDeriviative("FlowControl/Status/Overloaded/Count"))
         , StatusReadyCount(TBase::GetDeriviative("FlowControl/Status/Ready/Count"))
@@ -49,6 +71,8 @@ public:
         , AdmitDurationMsHistogram(TBase::GetHistogram("FlowControl/Admit/DurationMs/Histogram", NMonitoring::ExponentialHistogram(18, 2, 1)))
         , WaitAdmitDurationMsHistogram(
               TBase::GetHistogram("FlowControl/Admit/WaitDurationMs/Histogram", NMonitoring::ExponentialHistogram(18, 2, 1)))
+        , WaitQueueWaitDurationMsHistogram(
+              TBase::GetHistogram("FlowControl/WaitQueue/WaitDurationMs/Histogram", NMonitoring::ExponentialHistogram(18, 2, 1)))
     {
     }
 
@@ -89,6 +113,59 @@ public:
 
     void OnAdmitSkippedNoSplit() const {
         AdmitSkippedNoSplitCount->Inc();
+    }
+
+    void OnWaitQueueEnqueue() const {
+        WaitQueueEnqueuedCount->Inc();
+        WaitQueueCount->Inc();
+    }
+
+    void OnWaitQueueDrain(const TDuration waited) const {
+        WaitQueueDrainedCount->Inc();
+        WaitQueueCount->Dec();
+        WaitQueueWaitDurationMsHistogram->Collect(waited.MilliSeconds());
+    }
+
+    void OnWaitQueueRejectDeadlineAtAdmit() const {
+        WaitQueueRejectedDeadlineCount->Inc();
+    }
+
+    void OnWaitQueueRejectDeadline(const TDuration waited) const {
+        WaitQueueRejectedDeadlineCount->Inc();
+        WaitQueueCount->Dec();
+        WaitQueueWaitDurationMsHistogram->Collect(waited.MilliSeconds());
+    }
+
+    void OnWaitQueueRejectFull() const {
+        WaitQueueRejectedFullCount->Inc();
+    }
+
+    void OnWaitQueueCancel() const {
+        WaitQueueCount->Dec();
+    }
+
+    void SetWaitQueueCount(ui64 count) const {
+        WaitQueueCount->Set(count);
+    }
+
+    void SetDrainRefillRate(ui64 rate) const {
+        DrainRefillRate->Set(rate);
+    }
+
+    void SetDrainTokens(ui64 tokens) const {
+        DrainTokens->Set(tokens);
+    }
+
+    void OnDrainAllowed() const {
+        DrainAllowedCount->Inc();
+    }
+
+    void OnDrainRateCut() const {
+        DrainRateCutCount->Inc();
+    }
+
+    void OnDrainRateGrow() const {
+        DrainRateGrowCount->Inc();
     }
 
     void OnLocationRecheck() const {

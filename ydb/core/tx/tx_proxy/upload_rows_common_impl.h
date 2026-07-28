@@ -105,7 +105,8 @@ void DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& replyTo,
     const TString& databaseName, const TString& path,
     std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
     std::shared_ptr<NYql::TIssues> issues,
-    TIntrusivePtr<NACLib::TUserContext> userCtx, bool forceNoFlowControl);
+    TIntrusivePtr<NACLib::TUserContext> userCtx, bool forceNoFlowControl,
+    TInstant deadline = TInstant::Max(), TDuration operationTimeout = TDuration::Seconds(5 * 60));
 
 template <NKikimrServices::TActivity::EType DerivedActivityType>
 class TUploadRowsBase : public TActorBootstrapped<TUploadRowsBase<DerivedActivityType>> {
@@ -996,7 +997,8 @@ private:
         ui32 batchNo = 0;
         TString dedupId = ToString(batchNo);
         DoLongTxWriteSameMailbox(
-            ctx, ctx.SelfID, LongTxId, dedupId, GetDatabase(), GetTable(), ResolveNamesResult, Batch, Issues, UserCtx, false);
+            ctx, ctx.SelfID, LongTxId, dedupId, GetDatabase(), GetTable(), ResolveNamesResult, Batch, Issues, UserCtx, false,
+            Deadline(), Timeout);
     }
 
     void RollbackLongTx(const TActorContext& ctx) {

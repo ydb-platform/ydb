@@ -6,6 +6,8 @@
 
 #include <util/generic/string.h>
 
+#include <tuple>
+
 namespace NKikimrColumnShardProto {
 class TBlobRange;
 class TBlobRangeLink16;
@@ -227,16 +229,11 @@ struct TBlobRange {
         // Must be consistent with operator== (LogoBlobId + DsGroup). Ordering by LogoBlobId
         // only when BlobId differs breaks strict weak ordering for std::sort when the same
         // LogoBlobId appears with different DsGroup values (see #47871).
-        const auto logoCmp = BlobId.GetLogoBlobId().Compare(br.BlobId.GetLogoBlobId());
-        if (logoCmp != 0) {
-            return logoCmp < 0;
-        } else if (BlobId.GetDsGroup() != br.BlobId.GetDsGroup()) {
-            return BlobId.GetDsGroup() < br.BlobId.GetDsGroup();
-        } else if (Offset != br.Offset) {
-            return Offset < br.Offset;
-        } else {
-            return Size < br.Size;
-        }
+        const TLogoBlobID logo = BlobId.GetLogoBlobId();
+        const TLogoBlobID otherLogo = br.BlobId.GetLogoBlobId();
+        const ui32 dsGroup = BlobId.GetDsGroup();
+        const ui32 otherDsGroup = br.BlobId.GetDsGroup();
+        return std::tie(logo, dsGroup, Offset, Size) < std::tie(otherLogo, otherDsGroup, br.Offset, br.Size);
     }
 
     const TUnifiedBlobId& GetBlobId() const {
@@ -257,7 +254,7 @@ struct TBlobRange {
         if (size > limit) {
             return false;
         }
-        Size = size;
+        Size = static_cast<ui32>(size);
         Offset = offset;
         return true;
     }

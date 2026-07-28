@@ -347,4 +347,5 @@ message TFeatureFlags {
     optional bool EnableIdmPermissionsManagement = 301 [default = false];
     optional bool EnableHasPredicatesInResourcePoolClassifiers = 303 [default = false];
     optional bool EnableRejectActionInResourcePoolClassifiers = 304 [default = false];
+    optional bool EnableMoveWithColumnTableReplace = 305 [default = false];
 }

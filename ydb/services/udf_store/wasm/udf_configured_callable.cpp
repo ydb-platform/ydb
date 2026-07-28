@@ -93,6 +93,7 @@ void TWasmConfiguredCallable::EnsureObject(TStringRef functionNameForErrors) con
     auto* compartment = queryHandle->Compartment.get();
     TCurrentCompartmentGuard compartmentGuard(compartment);
     TWasmUdfInvocationContext context(compartment);
+    TCurrentInvocationContextGuard invocationGuard(&context);
     Y_DEFER {
         context.WebAssemblyPool.Clear();
     };
@@ -164,8 +165,11 @@ TUnboxedValue TWasmConfiguredCallable::Run(
 
         auto* queryHandle = GetCurrentQueryCompartment();
         auto* compartment = queryHandle->Compartment.get();
+        compartment->SetTimeout(TDuration::Minutes(1));
+        compartment->StartDeadlineTimer();
         TCurrentCompartmentGuard compartmentGuard(compartment);
         TWasmUdfInvocationContext context(compartment);
+        TCurrentInvocationContextGuard invocationGuard(&context);
         Y_DEFER {
             context.WebAssemblyPool.Clear();
         };

@@ -214,8 +214,11 @@ TUnboxedValue TWasmUdfFunction::Run(
         auto* exportIt = queryHandle->Exports.FindPtr(exportKey);
         Y_ENSURE(exportIt, "Missing WASM export binding for " << exportKey);
 
+        compartment->SetTimeout(TDuration::Minutes(1));
+        compartment->StartDeadlineTimer();
         TCurrentCompartmentGuard compartmentGuard(compartment);
         TWasmUdfInvocationContext context(compartment);
+        TCurrentInvocationContextGuard invocationGuard(&context);
         Y_DEFER {
             context.WebAssemblyPool.Clear();
         };

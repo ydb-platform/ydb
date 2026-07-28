@@ -3,7 +3,9 @@
 namespace NKikimr::NUdfStore {
 
 bool TSnapshot::DoDeserializeFromResultSet(const Ydb::Table::ExecuteQueryResult& rawDataResult) {
-    Y_ABORT_UNLESS(rawDataResult.result_sets().size() == 2);
+    if (rawDataResult.result_sets().size() != 2) {
+        return false;
+    }
     ParseSnapshotObjects<TUdfMeta>(rawDataResult.result_sets()[0], [this](TUdfMeta&& u) {
         Udfs.emplace(u.GetMd5(), std::move(u));
     });

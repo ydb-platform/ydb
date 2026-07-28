@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <regex>
 #include <vector>
 
 namespace NKikimr {
@@ -65,6 +66,17 @@ bool ContainsAdjacentWordsIgnoreSpaces(TStringBuf text, TStringBuf w1, TStringBu
     return false;
 }
 
+// Checks for "secret" after a DDL verb with SQL keywords between verb and "secret".
+// Matches exactly:
+//   CREATE OR REPLACE SECRET, CREATE IF NOT EXISTS SECRET,
+//   ALTER IF EXISTS SECRET
+bool ContainsDdlVerbAndSecret(TStringBuf text) {
+    static const std::regex re(
+        R"((?:create\s+or\s+replace|create\s+if\s+not\s+exists|alter\s+if\s+exists)\s+secret\b)",
+        std::regex::icase);
+    return std::regex_search(text.begin(), text.end(), re);
+}
+
 TMaybe<TString> FindSensitiveQueryMarker(TStringBuf text) {
     for (const TString& word : SensitiveWords) {
         if (ContainsCaseInsensitive(text, word)) {
@@ -75,6 +87,9 @@ TMaybe<TString> FindSensitiveQueryMarker(TStringBuf text) {
         if (ContainsAdjacentWordsIgnoreSpaces(text, pair.First, pair.Second)) {
             return TStringBuilder() << pair.First << ' ' << pair.Second;
         }
+    }
+    if (ContainsDdlVerbAndSecret(text)) {
+        return TString("ddl secret");
     }
     return Nothing();
 }
@@ -141,7 +156,7 @@ TString MaskIAMTicket(const TString& token) {
     TVector<TString> parts;
     StringSplitter(token).Split('.').AddTo(&parts);
     parts.erase(
-        std::remove_if(parts.begin(), parts.end(), 
+        std::remove_if(parts.begin(), parts.end(),
                     [](const TString& value) { return value.empty(); }),
         parts.end()
     );

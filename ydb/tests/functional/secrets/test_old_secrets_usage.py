@@ -43,6 +43,7 @@ class Utils:
     def __init__(self):
         self.config = KikimrConfigGenerator(use_in_memory_pdisks=False)
         self.config.yaml_config["feature_flags"]["enable_external_data_sources"] = True
+        self.config.yaml_config["feature_flags"]["enable_replace_if_exists_for_external_entities"] = True
 
         self.cluster = KiKiMR(self.config)
         self.cluster.start()

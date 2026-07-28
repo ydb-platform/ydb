@@ -5,6 +5,7 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_ut.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/compstrat/hulldb_compstrat_selector.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/test/test_sst.h>
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
@@ -68,7 +69,7 @@ struct TInput {
     bool AllowGarbageCollection = true;
 
     explicit TInput(TActorSystem* system, TDuration ratioCalcBudget = TDuration::Seconds(1))
-        : Ctx(ChunkSize, 2u << 20, ratioCalcBudget)
+        : Ctx(ChunkSize, 2u << 20, true, TDuration::Minutes(5), ratioCalcBudget)
     {
         Ctx.GetVCtx()->ActorSystem = system;
         Ds->LogoBlobs = MakeIntrusive<TLogoBlobsDs>(Ctx.GetLevelIndexSettings(), Arena);
@@ -100,7 +101,6 @@ struct TInput {
     }
 
     TSstPtr AddSst(ui32 level, ui32 firstStep, ui32 lastStep, ui32 id, bool huge = false, std::function<TIngress(ui32)> ingress = {}) {
-        auto sst = MakeIntrusive<TSst>(Ctx.GetVCtx());
         TTrackableVector<typename TSst::TRec> index(TMemoryConsumer(Ctx.GetVCtx()->SstIndex));
         const ui32 count = lastStep - firstStep + 1;
         index.reserve(count);
@@ -123,13 +123,10 @@ struct TInput {
             }
             index.emplace_back(MakeKey(step), memRec);
         }
-        sst->LoadedIndex.swap(index);
-        sst->AssignedSstId = id;
+        auto sst = NTest::MakeTestSst<TKey, TMemRec>(
+            Ctx.GetVCtx(), id, std::move(index), {}, TInstant::Seconds(1));
         sst->AllChunks.push_back(id);
         sst->Info.Chunks = 1;
-        sst->Info.Items = count;
-        sst->Info.FirstLsn = sst->Info.LastLsn = 1;
-        sst->Info.CTime = TInstant::Seconds(1);
         auto ratio = MakeIntrusive<TSstRatio>(TAppData::TimeProvider->Now());
         ratio->IndexItemsTotal = ratio->IndexItemsKeep = count;
         ratio->IndexBytesTotal = ratio->IndexBytesKeep = ui64(count) * (sizeof(TKey) + sizeof(TMemRec));
@@ -142,11 +139,7 @@ struct TInput {
             }
         }
         sst->StorageRatio.Set(ratio, ratio->Time);
-        if (level) {
-            Index->CurSlice->SortedLevels.at(level - 1).Put(sst);
-        } else {
-            Index->CurSlice->Level0.Put(sst);
-        }
+        NTest::PutTestSst(*Index, level, sst);
         Ssts.push_back(sst);
         return sst;
     }

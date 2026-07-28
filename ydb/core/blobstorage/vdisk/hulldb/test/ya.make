@@ -8,6 +8,7 @@ PEERDIR(
 
 SRCS(
     defs.h
+    test_sst.h
     testhull_index.h
     testhull_index.cpp
 )

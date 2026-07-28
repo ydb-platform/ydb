@@ -36,6 +36,7 @@ namespace {
 using TAccessServiceMock = TTicketParserAccessServiceMock;
 using TAccessServiceMockV2 = TTicketParserAccessServiceMockV2;
 using TNebiusAccessServiceMock = TTicketParserNebiusAccessServiceMock;
+using TEvAuthorizeTicket = TEvTicketParser::TEvAuthorizeTicket;
 
 // Precomputed argon2id + SCRAM-SHA-256 hashes from scram_ut.cpp
 // Password: "password1"
@@ -1604,10 +1605,12 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature signature {.AccessKeyId = "AKIAIOSFODNN7EXAMPLE"};
         TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature retrySignature = signature;
 
-        const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> entries {{
-                                                                        TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"something.read"}),
-                                                                        {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}
-                                                                    }};
+        const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> entries {
+            {
+                TEvAuthorizeTicket::ToPermissions({"something.read"}),
+                {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}
+            }
+        };
 
         if (IsSignatureSupported<TAccessServiceMock>()) {
             runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
@@ -1719,10 +1722,12 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature signature {.AccessKeyId = "AKIAIOSFODNN7EXAMPLE"};
         TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature retrySignature = signature;
 
-        const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> entries {{
-                                                                        TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"something.read"}),
-                                                                        {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}
-                                                                    }};
+        const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> entries {
+            {
+                TEvAuthorizeTicket::ToPermissions({"something.read"}),
+                {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}
+            }
+        };
 
         if (IsSignatureSupported<TAccessServiceMock>()) {
             runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
@@ -1984,7 +1989,9 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = userToken,
             .PeerName = "192.168.0.101",
-            .Entries = {{TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"something.read"}), attrs}},
+            .Entries = {
+                { TEvAuthorizeTicket::ToPermissions({"something.read"}), attrs }
+            },
         })), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT_C(!result->HasError(), result->Error);
@@ -1996,7 +2003,13 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = userToken,
             .PeerName = "192.168.0.101",
-            .Entries = {{TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"something.read", "something.connect", "something.list", "something.update"}), attrs}},
+            .Entries = {
+                {
+                    TEvAuthorizeTicket::ToPermissions(
+                        {"something.read", "something.connect", "something.list", "something.update"}
+                    ), attrs
+                }
+            },
         })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT_C(!result->HasError(), result->Error);
@@ -2011,7 +2024,9 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
             runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
                 .Ticket = "ApiKey ApiKey-value-valid",
                 .PeerName = "192.168.0.101",
-                .Entries = {{TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"something.read"}), attrs}},
+                .Entries = {
+                    { TEvAuthorizeTicket::ToPermissions({"something.read"}), attrs }
+                },
             })), 0);
             result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
             UNIT_ASSERT_C(!result->HasError(), result->Error);
@@ -2026,7 +2041,13 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
             runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
                 .Ticket = userToken,
                 .PeerName = "192.168.0.101",
-                .Entries = {{TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"something.read", "read.something", "something.connect", "something.list", "something.update"}), attrs}},
+                .Entries = {
+                    {
+                        TEvAuthorizeTicket::ToPermissions(
+                            {"something.read", "read.something", "something.connect", "something.list", "something.update"}
+                        ), attrs
+                    }
+                },
             })), 0);
             TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
             UNIT_ASSERT_C(result->HasError(), result->Token->ShortDebugString());
@@ -2039,7 +2060,12 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = userToken,
             .PeerName = "192.168.0.101",
-            .Entries = {{TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"something.write"}), {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}}},
+            .Entries = {{
+                {
+                    TEvAuthorizeTicket::ToPermissions({"something.write"}),
+                    {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}
+                },
+            }},
         })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
@@ -2050,7 +2076,12 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = userToken,
             .PeerName = "192.168.0.101",
-            .Entries = {{TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"something.read"}), {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}}},
+            .Entries = {{
+                {
+                    TEvAuthorizeTicket::ToPermissions({"something.read"}),
+                    {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}
+                },
+            }},
         })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT_C(!result->HasError(), result->Error);
@@ -2062,7 +2093,12 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = "invalid",
             .PeerName = "192.168.0.101",
-            .Entries = {{TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"something.read"}), {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}}},
+            .Entries = {
+                {
+                    TEvAuthorizeTicket::ToPermissions({"something.read"}),
+                    {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}
+                }
+            },
         })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
@@ -2073,7 +2109,12 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = "invalid-token1",
             .PeerName = "192.168.0.101",
-            .Entries = {{TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"something.read"}), {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}}},
+            .Entries = {
+                {
+                    TEvAuthorizeTicket::ToPermissions({"something.read"}),
+                    {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}
+                }
+            },
         })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
@@ -2085,7 +2126,12 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = userToken,
             .PeerName = "192.168.0.101",
-            .Entries = {{TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"something.read"}), {{"folder_id", "XXXXXXXX"}, {"database_id", "XXXXXXXX"}}}},
+            .Entries = {
+                {
+                    TEvAuthorizeTicket::ToPermissions({"something.read"}),
+                    {{"folder_id", "XXXXXXXX"}, {"database_id", "XXXXXXXX"}}
+                }
+            },
         })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
@@ -2100,7 +2146,12 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = userToken,
             .PeerName = "192.168.0.101",
-            .Entries = {{TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"something.read"}), {{"folder_id", "aaaa1234"}, {"database_id", "XXXXXXXX"}}}},
+            .Entries = {
+                {
+                    TEvAuthorizeTicket::ToPermissions({"something.read"}),
+                    {{"folder_id", "aaaa1234"}, {"database_id", "XXXXXXXX"}}
+                }
+            },
         })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT_C(!result->HasError(), result->Error);
@@ -2118,7 +2169,12 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = userToken,
             .PeerName = "192.168.0.101",
-            .Entries = {{TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"something.read"}), {{"folder_id", "XXXXXXXX"}, {"database_id", "bbbb4554"}}}},
+            .Entries = {
+                {
+                    TEvAuthorizeTicket::ToPermissions({"something.read"}),
+                    {{"folder_id", "XXXXXXXX"}, {"database_id", "bbbb4554"}}
+                }
+            },
         })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT_C(!result->HasError(), result->Error);
@@ -2132,7 +2188,9 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
             runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
                 .Ticket = userToken,
                 .PeerName = "192.168.0.101",
-                .Entries = {{TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"monitoring.view"}), {{"gizmo_id", "gizmo"}, }}},
+                .Entries = {
+                    { TEvAuthorizeTicket::ToPermissions({"monitoring.view"}), {{"gizmo_id", "gizmo"}} }
+                },
             })), 0);
             result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
             UNIT_ASSERT_C(!result->HasError(), result->Error);
@@ -2149,7 +2207,9 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
             runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
                 .Ticket = userToken,
                 .PeerName = "192.168.0.101",
-                .Entries = {{TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"monitoring.view"}), {{"folder_id", "folder"}, }}},
+                .Entries = {
+                    { TEvAuthorizeTicket::ToPermissions({"monitoring.view"}), {{"folder_id", "folder"}} }
+                },
             })), 0);
             result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
             UNIT_ASSERT_C(!result->HasError(), result->Error);
@@ -2178,7 +2238,9 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
             runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
                 .Ticket = serviceToken,
                 .PeerName = "192.168.0.101",
-                .Entries = {{TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"something.write"}), serviceAttrs}},
+                .Entries = {
+                    { TEvAuthorizeTicket::ToPermissions({"something.write"}), serviceAttrs }
+                },
             })), 0);
             result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
             UNIT_ASSERT_C(!result->HasError(), result->Error);
@@ -2195,7 +2257,9 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
                 runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
                     .Ticket = serviceToken,
                     .PeerName = "192.168.0.101",
-                    .Entries = {{TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"something.write"}), serviceAttrs}},
+                    .Entries = {
+                        { TEvAuthorizeTicket::ToPermissions({"something.write"}), serviceAttrs }
+                    },
                 })), 0);
                 result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
                 UNIT_ASSERT_C(!result->HasError(), result->Error);
@@ -2215,7 +2279,9 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
                 runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
                     .Ticket = serviceToken,
                     .PeerName = "192.168.0.101",
-                    .Entries = {{TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"something.write"}), serviceAttrs}},
+                    .Entries = {
+                        { TEvAuthorizeTicket::ToPermissions({"something.write"}), serviceAttrs }
+                    },
                 })), 0);
                 result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
                 UNIT_ASSERT_C(!result->HasError(), result->Error);
@@ -2416,7 +2482,12 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = userToken,
             .PeerName = "192.168.0.101",
-            .Entries = {{TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"something.read"}), {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}}},
+            .Entries = {
+                {
+                    TEvAuthorizeTicket::ToPermissions({"something.read"}),
+                    {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}
+                }
+            },
         })), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->HasError());
@@ -2428,7 +2499,12 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = userToken,
             .PeerName = "192.168.0.101",
-            .Entries = {{TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"something.write"}), {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}}},
+            .Entries = {
+                {
+                    TEvAuthorizeTicket::ToPermissions({"something.write"}),
+                    {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}
+                }
+            },
         })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
@@ -2439,7 +2515,12 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = userToken,
             .PeerName = "192.168.0.101",
-            .Entries = {{TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"something.read"}), {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}}},
+            .Entries = {
+                {
+                    TEvAuthorizeTicket::ToPermissions({"something.read"}),
+                    {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}
+                }
+            },
         })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->HasError());
@@ -2453,7 +2534,12 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = userToken,
             .PeerName = "192.168.0.101",
-            .Entries = {{TEvTicketParser::TEvAuthorizeTicket::ToPermissions(TVector<TString>{"something.read", "something.write"}), {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}}},
+            .Entries = {
+                {
+                    TEvAuthorizeTicket::ToPermissions(TVector<TString>{"something.read", "something.write"}),
+                    {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}
+                }
+            },
         })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->HasError());
@@ -2530,7 +2616,12 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = userToken,
             .PeerName = "192.168.0.101",
-            .Entries = {{TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"something.list", "something.read", "something.write", "something.eat", "somewhere.sleep"}), {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}}},
+            .Entries = {
+                {
+                    TEvAuthorizeTicket::ToPermissions({"something.list", "something.read", "something.write", "something.eat", "somewhere.sleep"}),
+                    {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}
+                }
+            },
         })), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->HasError());
@@ -2598,7 +2689,12 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = userToken,
             .PeerName = "192.168.0.101",
-            .Entries = {{TEvTicketParser::TEvAuthorizeTicket::ToPermissions(TVector<TString>{"something.read", "something.write"}), {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}}},
+            .Entries = {
+                {
+                    TEvAuthorizeTicket::ToPermissions(TVector<TString>{"something.read", "something.write"}),
+                    {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}
+                }
+            },
         })), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
@@ -2670,7 +2766,12 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = userToken,
             .PeerName = "192.168.0.101",
-            .Entries = {{TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"something.read"}), {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}}},
+            .Entries = {
+                {
+                    TEvAuthorizeTicket::ToPermissions({"something.read"}),
+                    {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}
+                }
+            },
         })), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->HasError());
@@ -2684,7 +2785,12 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = userToken,
             .PeerName = "192.168.0.101",
-            .Entries = {{TEvTicketParser::TEvAuthorizeTicket::ToPermissions(TVector<TString>{"something.read", "something.write"}), {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}}},
+            .Entries = {
+                {
+                    TEvAuthorizeTicket::ToPermissions(TVector<TString>{"something.read", "something.write"}),
+                    {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}
+                }
+            },
         })), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->HasError());
@@ -2757,7 +2863,12 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = userToken,
             .PeerName = "192.168.0.101",
-            .Entries = {{TEvTicketParser::TEvAuthorizeTicket::ToPermissions(TVector<TString>{"something.read", "something.write"}), {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}}},
+            .Entries = {
+                {
+                    TEvAuthorizeTicket::ToPermissions(TVector<TString>{"something.read", "something.write"}),
+                    {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}}
+                }
+            },
         })), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT_C(result->HasError(), result->Error.Message);
@@ -3442,7 +3553,9 @@ Y_UNIT_TEST(CanAuthorizeYdbInAccessService) {
     runtime->Send(new IEventHandle(MakeTicketParserID(), ticketParserClient, new TEvTicketParser::TEvAuthorizeTicket({
         .Ticket = userToken,
         .PeerName = "192.168.0.101",
-        .Entries = {{TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"something.read"}), attrs}},
+        .Entries = {
+            { TEvAuthorizeTicket::ToPermissions({"something.read"}), attrs }
+        },
     })));
     TAutoPtr<IEventHandle> handle;
     TEvTicketParser::TEvAuthorizeTicketResult* authorizeTicketResultEv = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -3451,7 +3564,9 @@ Y_UNIT_TEST(CanAuthorizeYdbInAccessService) {
         runtime->Send(new IEventHandle(MakeTicketParserID(), ticketParserClient, new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = userToken,
             .PeerName = "192.168.0.101",
-            .Entries = {{TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"something.read"}), attrs}},
+            .Entries = {
+                { TEvAuthorizeTicket::ToPermissions({"something.read"}), attrs }
+            },
         })));
         authorizeTicketResultEv = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
     }
@@ -3528,7 +3643,9 @@ Y_UNIT_TEST(CanRefreshTokenForAccessService) {
         runtime->Send(new IEventHandle(MakeTicketParserID(), ticketParserClient, new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = userToken,
             .PeerName = "192.168.0.101",
-            .Entries = {{TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"something.read"}), attrs}},
+            .Entries = {
+                { TEvAuthorizeTicket::ToPermissions({"something.read"}), attrs }
+            },
         })));
         TEvTicketParser::TEvAuthorizeTicketResult* authorizeTicketResultEv = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         // waiting for ticket parser get success token for access service from service token manager
@@ -3536,7 +3653,9 @@ Y_UNIT_TEST(CanRefreshTokenForAccessService) {
             runtime->Send(new IEventHandle(MakeTicketParserID(), ticketParserClient, new TEvTicketParser::TEvAuthorizeTicket({
                 .Ticket = userToken,
                 .PeerName = "192.168.0.101",
-                .Entries = {{TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"something.read"}), attrs}},
+                .Entries = {
+                    { TEvAuthorizeTicket::ToPermissions({"something.read"}), attrs }
+                },
             })));
             authorizeTicketResultEv = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         }
@@ -3563,7 +3682,9 @@ Y_UNIT_TEST(CanRefreshTokenForAccessService) {
         runtime->Send(new IEventHandle(MakeTicketParserID(), ticketParserClient, new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = userToken,
             .PeerName = "192.168.0.101",
-            .Entries = {{TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"something.read"}), attrs}},
+            .Entries = {
+                { TEvAuthorizeTicket::ToPermissions({"something.read"}), attrs }
+            },
         })));
         TEvTicketParser::TEvAuthorizeTicketResult* authorizeTicketResultEv = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         // waiting for ticket parser get success token for access service from service token manager
@@ -3571,7 +3692,9 @@ Y_UNIT_TEST(CanRefreshTokenForAccessService) {
             runtime->Send(new IEventHandle(MakeTicketParserID(), ticketParserClient, new TEvTicketParser::TEvAuthorizeTicket({
                 .Ticket = userToken,
                 .PeerName = "192.168.0.101",
-                .Entries = {{TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"something.read"}), attrs}},
+                .Entries = {
+                    { TEvAuthorizeTicket::ToPermissions({"something.read"}), attrs }
+                },
             })));
             authorizeTicketResultEv = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         }

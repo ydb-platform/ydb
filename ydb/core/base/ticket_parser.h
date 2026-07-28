@@ -104,7 +104,8 @@ namespace NKikimr {
                 , Ticket(std::move(init.Ticket))
                 , PeerName(std::move(init.PeerName))
                 , Entries(std::move(init.Entries))
-            {}
+            {
+            }
 
             TEvAuthorizeTicket(TInitializationFieldsWithSignature&& init)
                 : Database(std::move(init.Database))

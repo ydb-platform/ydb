@@ -126,9 +126,6 @@ namespace NActors {
         // io_uring data plane
         ui64 EngineHandle = 0;
 
-        ui64 BytesSent = 0;
-        ui64 BytesReceived = 0;
-
         struct TSubscriberInfo {
             ui64 Cookie = 0;
             ui32 ActivityIndex = Max<ui32>();

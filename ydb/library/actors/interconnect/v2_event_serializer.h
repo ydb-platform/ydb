@@ -146,9 +146,11 @@ namespace NActors {
             TIntrusivePtr<TEventSerializedData> Buffer;
             std::unique_ptr<IEventBase> Event;
             TRcBuf Scratch;
+            size_t ScratchBytesUsed = 0;
             ui64 EventReceivedTimestamp;
         };
         std::deque<TRefcountItem> RefcountItems;
+        size_t NumBytesInScratchBuffers = 0;
         ui64 CumulativeProduced = 0; // total bytes ever produced into the output stream
         ui64 CumulativeCommitted = 0; // total bytes ever reported as sent via CommitProducedBytes
 
@@ -187,6 +189,8 @@ namespace NActors {
         ui64 GetSerializeEventTime() const { return SerializeEventTime; }
         ui64 GetBytesCopied() const { return BytesCopied; }
         ui64 GetBytesAliased() const { return BytesAliased; }
+
+        size_t GetNumBytesInScratchBuffers() const { return NumBytesInScratchBuffers; }
 
     private:
         TPerChannelQueue& GetQueue(ui16 channel) {

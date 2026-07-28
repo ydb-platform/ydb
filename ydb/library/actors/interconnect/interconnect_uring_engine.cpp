@@ -16,6 +16,8 @@
 // liburing may define macros that clash with project headers.
 #include <ydb/library/uring/liburing_linux.h>
 
+#include <library/cpp/monlib/service/pages/templates.h>
+
 #include <util/system/env.h>
 #include <util/system/hp_timer.h>
 
@@ -39,15 +41,23 @@ namespace NActors {
         constexpr unsigned CqeBatchSize = 64;
         constexpr size_t ReadBufferSize = 262144;
         constexpr size_t MinReadBufferSize = 65536;
-        constexpr size_t WriteBufferSize = 262144;
-        constexpr size_t MinWriteBufferSize = 65536;
+        constexpr size_t MinWriteBufferSize = 4096;
+        constexpr size_t MaxWriteBufferSize = 262144;
         constexpr size_t MaxSpansPerWrite = 64;
-        constexpr size_t SerializeWindowSize = 65536;
         constexpr size_t MinSerializeWindowSize = 4096;
+        constexpr size_t MaxSerializeWindowSize = 262144;
         constexpr ui32 RebalanceTimerMs = 500; // drives MaybeOffload and also issues ping packet
         constexpr ui32 OffloadBusyThreshold = 700000; // ppm
         constexpr ui32 StealBusyThreshold = 300000; // ppm
     }
+
+    struct TEvUringMonRequest : TEventLocal<TEvUringMonRequest, static_cast<ui32>(ENetwork::EvUringMonRequest)> {
+        NMon::TEvHttpInfoRes::TPtr Ev;
+
+        TEvUringMonRequest(NMon::TEvHttpInfoRes::TPtr ev)
+            : Ev(std::move(ev))
+        {}
+    };
 
     class TUringEngine final : public IUringEngine {
         TActorSystem *ActorSystem = nullptr; // bound after construction via SetActorSystem()
@@ -77,10 +87,12 @@ namespace NActors {
             bool UnregisterRequested = false;
             const bool SendPings;
             TRcBuf WriteBuffer;
+            size_t WriteBufferSize = MinWriteBufferSize;
             std::deque<TContiguousSpan> OutgoingSpans;
             iovec Iov[MaxSpansPerWrite];
             size_t IovLen = 0;
             size_t UnsentBytes = 0;
+            size_t BytesToWriteLastTime = 0;
             int ReadPendingRingIdx = -1;
             ui32 PreferredRingIdx = 0;
             std::atomic_uint64_t IncomingSeqNo{1};
@@ -97,6 +109,8 @@ namespace NActors {
             NMonitoring::TDynamicCounters::TCounterPtr EventsReceived;
 
             std::vector<TIncomingEventQueue::TRecord> PendingRecordsHeap;
+
+            size_t SerializeWindowSize = MinSerializeWindowSize;
 
             TRegisteredSession(ui32 shardIdx, TIntrusivePtr<NInterconnect::TStreamSocket> socket,
                     TActorId sessionId, bool checksumming, TScopeId peerScopeId,
@@ -151,17 +165,11 @@ namespace NActors {
             // serialization/sending
 
             bool Serialize() {
-                if (UnsentBytes >= MinSerializeWindowSize && !Serializer.HasOutOfBandTraffic()) {
-                    return false;
-                }
-
                 Serializer.ResetCounters();
 
                 while (UnsentBytes < SerializeWindowSize && OutgoingSpans.size() < MaxSpansPerWrite) {
                     if (WriteBuffer.size() < MinWriteBufferSize) { // (re)allocate write buffer
                         WriteBuffer = TRcBuf::Uninitialized(WriteBufferSize);
-                    } else { // align write buffer to 64-byte boundary
-                        WriteBuffer.TrimFront(WriteBuffer.size() - WriteBuffer.size() % 64);
                     }
                     const size_t numBytesProduced = Serializer.ProduceOutputStream(WriteBuffer, &OutgoingSpans,
                         SerializeWindowSize - UnsentBytes);
@@ -172,6 +180,13 @@ namespace NActors {
                     UnsentBytes += numBytesProduced;
                 }
 
+                const size_t numb = Serializer.GetNumBytesInScratchBuffers();
+                if (numb >= WriteBufferSize * 2 && WriteBufferSize < MaxWriteBufferSize) {
+                    WriteBufferSize *= 2;
+                } else if (numb < WriteBufferSize / 2 && WriteBufferSize > MinWriteBufferSize) {
+                    WriteBufferSize /= 2;
+                }
+
                 return true;
             }
 
@@ -179,6 +194,7 @@ namespace NActors {
                 // Build the iovec WITHOUT consuming spans: writev may complete partially, so a span is only
                 // dropped once the bytes it covers have actually been confirmed sent (see ApplyBytesWritten).
                 IovLen = 0;
+                BytesToWriteLastTime = 0;
                 for (const TContiguousSpan& span : OutgoingSpans) {
                     if (IovLen >= MaxSpansPerWrite) {
                         break;
@@ -187,11 +203,21 @@ namespace NActors {
                         .iov_base = const_cast<char*>(span.data()),
                         .iov_len = span.size(),
                     };
+                    BytesToWriteLastTime += span.size();
                 }
                 return IovLen != 0;
             }
 
             void ApplyBytesWritten(size_t num, std::vector<ui64> *eventToWireTime) {
+                // Check if we need to resize serialization window. If we have issued some data and all of it has been
+                // successfully written, and it was limited by serialization window, we can increase it. If we have
+                // serialized less than the window, we can decrease the window.
+                if (num == BytesToWriteLastTime && BytesToWriteLastTime == SerializeWindowSize) {
+                    SerializeWindowSize = Min(SerializeWindowSize + MinSerializeWindowSize, MaxSerializeWindowSize);
+                }  else if (UnsentBytes < SerializeWindowSize) {
+                    SerializeWindowSize = Max(SerializeWindowSize - MinSerializeWindowSize, MinSerializeWindowSize);
+                }
+
                 // Advance past exactly the bytes the kernel accepted. A writev can be short (e.g. under
                 // backpressure or on a real network), so drop only fully-sent spans and trim the span that
                 // straddles the boundary; the rest stay queued and are retried by the next writev.
@@ -298,6 +324,56 @@ namespace NActors {
                 return MigrateState == EMigrateState::None
                     && !UnregisterRequested
                     && !Terminated;
+            }
+
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+            void RenderHtml(IOutputStream& str) const {
+                HTML(str) {
+                    DIV_CLASS("panel panel-info") {
+                        DIV_CLASS("panel-heading") {
+                            str << "Uring engine details";
+                        }
+                        DIV_CLASS("panel-body") {
+                            TABLE_CLASS("table") {
+                                TABLEHEAD() {
+                                    TABLER() {
+                                        TABLEH() { str << "Parameter"; }
+                                        TABLEH() { str << "Value"; }
+                                    }
+                                }
+                                TABLEBODY() {
+#define PARAM2(K, V) TABLER() { TABLED() { str << (K); } TABLED() { str << (V); } }
+#define PARAM(P) PARAM2(#P, P)
+                                    PARAM2("OwnerShard", OwnerShard.load())
+                                    PARAM2("Socket", (int)*Socket)
+                                    PARAM(Terminated)
+                                    PARAM(ReadPending)
+                                    PARAM(WritePending)
+                                    PARAM(UnregisterRequested)
+                                    PARAM(SendPings)
+                                    PARAM2("WriteBuffer size", WriteBuffer.size())
+                                    PARAM(WriteBufferSize)
+                                    PARAM2("OutgoingSpans size", OutgoingSpans.size())
+                                    PARAM(UnsentBytes)
+                                    PARAM(ReadPendingRingIdx)
+                                    PARAM(PreferredRingIdx)
+                                    PARAM2("IncomingSeqNo", IncomingSeqNo.load())
+                                    PARAM(ExpectedSeqNo)
+                                    PARAM2("MigrateState", (int)MigrateState)
+                                    PARAM(MigrateTargetShard)
+                                    PARAM(MigrateSourceShard)
+                                    PARAM2("ClockSkew", ClockSkew->load())
+                                    PARAM2("PingRTT", PingRTT->load())
+                                    PARAM2("ReceiveCallbacks size", ReceiveCallbacks.size())
+                                    PARAM2("PendingRecordsHeap size", PendingRecordsHeap.size())
+                                    PARAM(SerializeWindowSize)
+                                    PARAM2("NumBytesInScratchBuffers", Serializer.GetNumBytesInScratchBuffers())
+                                }
+                            }
+                        }
+                    }
+                }
             }
         };
 
@@ -647,6 +723,11 @@ namespace NActors {
                 }
             }
 
+            void IssueMonRequest(ui64 conn, NMon::TEvHttpInfoRes::TPtr ev) {
+                SendImpl(conn, std::make_unique<IEventHandle>(TActorId(), TActorId(), new TEvUringMonRequest(std::move(ev))),
+                    nullptr, false);
+            }
+
         private:
             // Pops and frees any commands still sitting in the queue after the worker has stopped. Mirrors
             // the ownership handling of the worker loop: destroys the embedded TEventPayload and reclaims a
@@ -953,6 +1034,10 @@ namespace NActors {
                     case static_cast<ui32>(ENetwork::EvStop):
                         Y_ABORT();
 
+                    case static_cast<ui32>(ENetwork::EvUringMonRequest):
+                        ProcessMonRequest(GetSession(record->Conn), std::move(record->Ev->Get<TEvUringMonRequest>()->Ev));
+                        break;
+
                     default: {
                         TRegisteredSession& session = GetSession(record->Conn);
                         if (record->Callback) { // register callback coming along with the message
@@ -963,6 +1048,15 @@ namespace NActors {
                         break;
                     }
                 }
+            }
+
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // monitoring
+
+            void ProcessMonRequest(TRegisteredSession& session, NMon::TEvHttpInfoRes::TPtr ev) {
+                TStringOutput str(const_cast<TString&>(static_cast<NMon::TEvHttpInfoRes*>(ev->Get())->Answer));
+                session.RenderHtml(str);
+                Engine.ActorSystem->Send(ev.Release());
             }
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1347,6 +1441,10 @@ namespace NActors {
                     shard->Stop();
                 }
             }
+        }
+
+        void IssueMonRequest(ui64 conn, NMon::TEvHttpInfoRes::TPtr ev) override {
+            GetShard(conn).IssueMonRequest(conn, std::move(ev));
         }
     };
 

@@ -1019,15 +1019,20 @@ void TKqpTasksGraph::BuildStreamLookupChannels(const TStageInfo& stageInfo, ui32
 
     if (streamLookup.HasVectorTopK()) {
         const auto& in = streamLookup.GetVectorTopK();
-        auto& out = *settings->MutableVectorTopK();
-        out.SetColumn(in.GetColumn());
-        *out.MutableSettings() = in.GetSettings();
         const auto guard = TxAlloc->TypeEnv.BindAllocator();
-        auto target = ExtractPhyValue(stageInfo, in.GetTargetVector(), TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
-        out.SetTargetVector(TString(target.AsStringRef()));
-        out.SetLimit((ui32)ExtractPhyValue(stageInfo, in.GetLimit(), TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod()).Get<ui64>());
-        for (const auto& colIdx: in.GetDistinctColumns()) {
-            out.AddDistinctColumns(colIdx);
+        // A parametric LIMIT can resolve to 0. The datashard rejects a VectorTopK with
+        // limit 0, so skip the pushdown; the plan's own LIMIT still yields no rows.
+        const ui64 limit = ExtractPhyValue(stageInfo, in.GetLimit(), TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod()).Get<ui64>();
+        if (limit) {
+            auto& out = *settings->MutableVectorTopK();
+            out.SetColumn(in.GetColumn());
+            *out.MutableSettings() = in.GetSettings();
+            auto target = ExtractPhyValue(stageInfo, in.GetTargetVector(), TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
+            out.SetTargetVector(TString(target.AsStringRef()));
+            out.SetLimit((ui32)limit);
+            for (const auto& colIdx: in.GetDistinctColumns()) {
+                out.AddDistinctColumns(colIdx);
+            }
         }
     }
 
@@ -3049,13 +3054,18 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, T
 
         if (source.HasVectorTopK()) {
             const auto& in = source.GetVectorTopK();
-            auto& out = *settings->MutableVectorTopK();
-            out.SetColumn(in.GetColumn());
-            *out.MutableSettings() = in.GetSettings();
             const auto guard = TxAlloc->TypeEnv.BindAllocator();
-            auto target = ExtractPhyValue(stageInfo, in.GetTargetVector(), TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
-            out.SetTargetVector(TString(target.AsStringRef()));
-            out.SetLimit((ui32)ExtractPhyValue(stageInfo, in.GetLimit(), TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod()).Get<ui64>());
+            // A parametric LIMIT can resolve to 0. The datashard rejects a VectorTopK with
+            // limit 0, so skip the pushdown; the plan's own LIMIT still yields no rows.
+            const ui64 limit = ExtractPhyValue(stageInfo, in.GetLimit(), TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod()).Get<ui64>();
+            if (limit) {
+                auto& out = *settings->MutableVectorTopK();
+                out.SetColumn(in.GetColumn());
+                *out.MutableSettings() = in.GetSettings();
+                auto target = ExtractPhyValue(stageInfo, in.GetTargetVector(), TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
+                out.SetTargetVector(TString(target.AsStringRef()));
+                out.SetLimit((ui32)limit);
+            }
         }
 
         FillScanTaskLockTxId(*settings);

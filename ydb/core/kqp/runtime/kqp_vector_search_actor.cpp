@@ -228,6 +228,12 @@ private:
             RuntimeError("Index settings are required", NYql::NDqProto::StatusIds::INTERNAL_ERROR);
             return;
         }
+        if (TopK == 0) {
+            // Empty result, and no reads: the datashard rejects a pushed-down VectorTopK
+            // with limit 0.
+            Phase = EPhase::Done;
+            return;
+        }
         auto status = FetchTarget();
         if (status == NUdf::EFetchStatus::Yield) {
             // The target vector input has not arrived yet. Stay in WaitInput; the
@@ -1052,11 +1058,6 @@ private:
     // Build a candidate (output row + distance to the target) from a read row
     // whose first OutputColumns elements are the output columns in order.
     void AddCandidate(NUdf::TUnboxedValue& value) {
-        // LIMIT 0: keeps TopK >= 1 below, so front() sees a non-empty heap and
-        // PushBoundedMaxHeap never gets cap == 0.
-        if (TopK == 0) {
-            return;
-        }
         auto embedding = value.GetElement(Settings.GetVectorColumnIndex());
         double distance = std::numeric_limits<double>::max();
         if (embedding.IsString() || embedding.IsEmbedded()) {
@@ -1066,6 +1067,7 @@ private:
         // a row no nearer than the current worst is dropped before its output holder
         // is even materialized -- bounding peak memory at ~TopK rows regardless of
         // shard count (matters most for non-covered reads with large main rows).
+        // TopK >= 1 here: StartSearch finishes without reading anything when it is 0.
         auto cmp = [](const TCandidate& a, const TCandidate& b) { return a.Distance < b.Distance; };
         if (Candidates.size() >= TopK && distance >= Candidates.front().Distance) {
             return;

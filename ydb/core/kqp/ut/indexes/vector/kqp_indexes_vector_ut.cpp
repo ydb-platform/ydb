@@ -788,17 +788,22 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
                 LIMIT $topK;
             )"));
 
-            auto params = TParamsBuilder()
-                .AddParam("$topK").Uint64(3).Build()
-                .Build();
+            // topK=0 is only reachable through a parameter (a literal LIMIT 0 is folded away):
+            // the result must be empty rather than an error, so the actor must not push a
+            // VectorTopK with limit 0 down into the datashard, which rejects it.
+            for (ui64 topK : {ui64(3), ui64(0)}) {
+                auto params = TParamsBuilder()
+                    .AddParam("$topK").Uint64(topK).Build()
+                    .Build();
 
-            auto result = session.ExecuteDataQuery(
-                query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params)
-                .ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(),
-                "enableVectorSearchActor=" << enableVectorSearchActor << ": " << result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSet(0).RowsCount(), 3,
-                "enableVectorSearchActor=" << enableVectorSearchActor);
+                auto result = session.ExecuteDataQuery(
+                    query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params)
+                    .ExtractValueSync();
+                const TString ctx = TStringBuilder()
+                    << "enableVectorSearchActor=" << enableVectorSearchActor << " topK=" << topK;
+                UNIT_ASSERT_C(result.IsSuccess(), ctx << ": " << result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSet(0).RowsCount(), topK, ctx);
+            }
         }
     }
 

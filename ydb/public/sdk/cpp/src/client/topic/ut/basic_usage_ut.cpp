@@ -2042,13 +2042,12 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSettings.MaxBlockTimeout(TDuration::Seconds(30));
 
         auto producer = client.CreateProducer(writeSettings);
-        const std::string message(1_MB, 'a');
         constexpr ui64 messageCount = 10;
         std::vector<NThreading::TFuture<TWriteResult>> writeFutures;
         writeFutures.reserve(messageCount);
 
         for (ui64 i = 0; i < messageCount; ++i) {
-            TWriteMessage writeMessage("key", message);
+            TOwnedWriteMessage writeMessage("key", std::string(1_MB, 'a'));
             writeFutures.push_back(producer->WriteAsync(std::move(writeMessage)));
         }
 
@@ -2098,10 +2097,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSettings.MaxBlockTimeout(TDuration::Zero());
 
         auto producer = client.CreateProducer(writeSettings);
-        auto msgData = TString(1_MB, 'a');
-
-        UNIT_ASSERT(producer->WriteAsync(TWriteMessage(msgData)).GetValueSync().IsQueued());
-        auto writeFuture = producer->WriteAsync(TWriteMessage(msgData));
+        UNIT_ASSERT(producer->WriteAsync(TOwnedWriteMessage(std::string(1_MB, 'a'))).GetValueSync().IsQueued());
+        auto writeFuture = producer->WriteAsync(TOwnedWriteMessage(std::string(1_MB, 'a')));
         UNIT_ASSERT(writeFuture.GetValueSync().IsTimeout());
         UNIT_ASSERT(producer->Close(TDuration::Seconds(10)).IsSuccess());
     }
@@ -2120,7 +2117,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto producer = client.CreateProducer(writeSettings);
         UNIT_ASSERT(producer->Close(TDuration::Seconds(1)).IsSuccess());
 
-        auto result = producer->WriteAsync(TWriteMessage("message")).GetValueSync();
+        auto result = producer->WriteAsync(TOwnedWriteMessage("message")).GetValueSync();
         UNIT_ASSERT(result.IsError());
         UNIT_ASSERT_VALUES_EQUAL(result.ErrorMessage, "producer is closed");
         UNIT_ASSERT(result.ClosedDescription);

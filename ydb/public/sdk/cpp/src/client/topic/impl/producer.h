@@ -402,7 +402,7 @@ public:
 
     [[nodiscard]] TWriteResult Write(TWriteMessage&& message) override;
 
-    [[nodiscard]] NThreading::TFuture<TWriteResult> WriteAsync(TWriteMessage&& message) override;
+    [[nodiscard]] NThreading::TFuture<TWriteResult> WriteAsync(TOwnedWriteMessage message) override;
 
     [[nodiscard]] NThreading::TFuture<TFlushResult> Flush() override;
 

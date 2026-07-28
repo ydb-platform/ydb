@@ -116,8 +116,6 @@ public:
 public:
     void AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration period) override;
     void PostToResponseQueue(std::function<void()>&& f) override;
-    
-    NThreading::TFuture<void> Delay(TDeadline::Duration delay);
 
     void ScheduleDelayedTask(TSimpleCb&& fn, TDeadline deadline);
     void ScheduleDelayedTask(TSimpleCb&& fn, TDeadline::Duration delay);

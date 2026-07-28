@@ -2234,8 +2234,7 @@ TWriteResult TProducer::Write(TWriteMessage&& message) {
     }
 }
 
-NThreading::TFuture<TWriteResult> TProducer::WriteAsync(TWriteMessage&& message) {
-    TWriteMessage ownedMessage(std::move(message));
+NThreading::TFuture<TWriteResult> TProducer::WriteAsync(TOwnedWriteMessage message) {
     auto remainingTimeout = Settings.MaxBlockTimeout_;
     auto sleepTimeMs = DEFAULT_START_BLOCK_TIMEOUT;
     for (;;) {
@@ -2252,7 +2251,7 @@ NThreading::TFuture<TWriteResult> TProducer::WriteAsync(TWriteMessage&& message)
         if (!continuationToken) {
             if (remainingTimeout > TDuration::Zero()) {
                 auto toSleep = Min(sleepTimeMs, remainingTimeout);
-                co_await this->Connections->Delay(TDeadline::SafeDurationCast(toSleep));
+                co_await Connections->ScheduleFuture(toSleep);
                 sleepTimeMs *= 2;
                 if (remainingTimeout > toSleep) {
                     remainingTimeout -= toSleep;
@@ -2269,7 +2268,7 @@ NThreading::TFuture<TWriteResult> TProducer::WriteAsync(TWriteMessage&& message)
             };
         }
 
-        co_return WriteInternal(std::move(*continuationToken), std::move(ownedMessage));
+        co_return WriteInternal(std::move(*continuationToken), std::move(message));
     }
 }
 

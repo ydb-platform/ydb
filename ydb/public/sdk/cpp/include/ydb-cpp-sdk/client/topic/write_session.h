@@ -203,6 +203,8 @@ struct TWriteMessage {
     using TSelf = TWriteMessage;
     using TMessageMeta = std::vector<std::pair<std::string, std::string>>;
 private:
+    friend struct TOwnedWriteMessage;
+
     //! This field is used to store serialized data.
     std::optional<std::string> DataHolder;
 
@@ -342,6 +344,53 @@ public:
 private:
     std::optional<std::string> Key;
     std::optional<uint32_t> Partition;
+};
+
+//! Contains an owned message to write asynchronously and all the options.
+struct TOwnedWriteMessage : TWriteMessage {
+    explicit TOwnedWriteMessage(std::string data)
+        : TWriteMessage(std::string_view{})
+    {
+        SetData(std::move(data));
+    }
+
+    TOwnedWriteMessage(std::string key, std::string data)
+        : TWriteMessage(std::string_view{})
+    {
+        Key = std::move(key);
+        SetData(std::move(data));
+    }
+
+    TOwnedWriteMessage(uint32_t partition, std::string data)
+        : TWriteMessage(std::string_view{})
+    {
+        Partition = partition;
+        SetData(std::move(data));
+    }
+
+    template<Serializable T>
+    explicit TOwnedWriteMessage(T&& data)
+        : TWriteMessage(std::forward<T>(data))
+    {}
+
+    TOwnedWriteMessage(const TOwnedWriteMessage&) = delete;
+    TOwnedWriteMessage& operator=(const TOwnedWriteMessage&) = delete;
+    TOwnedWriteMessage(TOwnedWriteMessage&&) noexcept = default;
+    TOwnedWriteMessage& operator=(TOwnedWriteMessage&&) noexcept = default;
+
+    //! Creates an owned message that is already compressed by codec.
+    static TOwnedWriteMessage CompressedMessage(std::string data, ECodec codec, uint32_t originalSize) {
+        TOwnedWriteMessage result{std::move(data)};
+        result.Codec = codec;
+        result.OriginalSize = originalSize;
+        return result;
+    }
+
+private:
+    void SetData(std::string data) {
+        DataHolder.emplace(std::move(data));
+        Data = *DataHolder;
+    }
 };
 
 //! Simple write session. Does not need event handlers. Does not provide Events, ContinuationTokens, write Acks.

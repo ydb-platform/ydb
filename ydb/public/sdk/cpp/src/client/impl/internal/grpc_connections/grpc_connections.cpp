@@ -608,14 +608,6 @@ void TGRpcConnectionsImpl::ScheduleDelayedTask(TSimpleCb&& fn, TDeadline::Durati
     ScheduleDelayedTask(std::move(fn), TDeadline::AfterDuration(delay));
 }
 
-NThreading::TFuture<void> TGRpcConnectionsImpl::Delay(TDeadline::Duration delay) {
-    auto promise = NThreading::NewPromise<void>();
-    ScheduleDelayedTask([promise]() mutable {
-        promise.SetValue();
-    }, delay);
-    return promise.GetFuture();
-}
-
 NThreading::TFuture<bool> TGRpcConnectionsImpl::ScheduleFuture(
         TDuration timeout,
         IQueueClientContextPtr context)

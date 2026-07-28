@@ -13,7 +13,6 @@
 
 #include "dq_join_common.h"
 #include "dq_join_filters.h"
-#include <ydb/library/yql/dq/comp_nodes/hash_join_utils/scalar_layout_converter.h>
 
 namespace NKikimr::NMiniKQL {
 

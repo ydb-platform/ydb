@@ -220,16 +220,16 @@ NKqpProto::EKqpPhyTableKind GetPhyTableKind(EKikimrTableKind kind) {
     }
 }
 
-void FillTablesMap(const TStringBuf path, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap) {
-    tablesMap.emplace(path, THashSet<TStringBuf>{});
+void FillTablesMap(const TStringBuf path, THashMap<TString, THashSet<TString>>& tablesMap) {
+    tablesMap.emplace(path, THashSet<TString>{});
 }
 
-void FillTablesMap(const TKqpTable& table, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap) {
+void FillTablesMap(const TKqpTable& table, THashMap<TString, THashSet<TString>>& tablesMap) {
     FillTablesMap(table.Path().Value(), tablesMap);
 }
 
 void FillTablesMap(const TStringBuf& path, const TVector<TStringBuf>& columns,
-    THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap)
+    THashMap<TString, THashSet<TString>>& tablesMap)
 {
     FillTablesMap(path, tablesMap);
 
@@ -239,7 +239,7 @@ void FillTablesMap(const TStringBuf& path, const TVector<TStringBuf>& columns,
 }
 
 void FillTablesMap(const TKqpTable& table, const TCoAtomList& columns,
-    THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap)
+    THashMap<TString, THashSet<TString>>& tablesMap)
 {
     FillTablesMap(table, tablesMap);
 
@@ -249,7 +249,7 @@ void FillTablesMap(const TKqpTable& table, const TCoAtomList& columns,
 }
 
 void FillTablesMap(const TKqpTable& table, const TVector<TStringBuf>& columns,
-    THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap)
+    THashMap<TString, THashSet<TString>>& tablesMap)
 {
     FillTablesMap(table, tablesMap);
 
@@ -258,7 +258,7 @@ void FillTablesMap(const TKqpTable& table, const TVector<TStringBuf>& columns,
     }
 }
 
-void FillTable(const TKikimrTableMetadata& tableMeta, THashSet<TStringBuf>&& columns,
+void FillTable(const TKikimrTableMetadata& tableMeta, THashSet<TString>&& columns,
     NKqpProto::TKqpPhyTable& tableProto)
 {
     FillTableId(tableMeta, *tableProto.MutableId());
@@ -320,7 +320,7 @@ void FillTable(const TKikimrTableMetadata& tableMeta, THashSet<TStringBuf>&& col
 }
 
 void FillExternalSource(const TKikimrTableMetadata& tableMeta, NKqpProto::TKqpPhyTable& tableProto) {
-    THashSet<TStringBuf> columns;
+    THashSet<TString> columns;
     columns.reserve(tableMeta.Columns.size());
     for (const auto& [col, _] : tableMeta.Columns){
         columns.emplace(col);
@@ -963,7 +963,7 @@ private:
         TExprContext& ctx,
         const TMap<ui64, ui32>& stagesMap,
         TRequestPredictor& rPredictor,
-        THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap,
+        THashMap<TString, THashSet<TString>>& tablesMap,
         THashMap<ui64, NKqpProto::TKqpPhyStage*>& physicalStageByID
     ) {
         TStagePredictor& stagePredictor = rPredictor.BuildForStage(stage, ctx);
@@ -1192,7 +1192,7 @@ private:
 
         TMap<ui64, ui32> stagesMap;
         THashMap<ui64, NKqpProto::TKqpPhyStage*> physicalStageByID;
-        THashMap<TStringBuf, THashSet<TStringBuf>> tablesMap;
+        THashMap<TString, THashSet<TString>> tablesMap;
 
         TRequestPredictor rPredictor;
         for (const auto& stage : tx.Stages()) {
@@ -1312,7 +1312,7 @@ private:
     }
 
     void FillKqpSource(const TDqSource& source, NKqpProto::TKqpSource* protoSource, bool allowSystemColumns,
-        THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap)
+        THashMap<TString, THashSet<TString>>& tablesMap)
     {
         if (auto settings = source.Settings().Maybe<TKqpReadRangesSourceSettings>()) {
             NKqpProto::TKqpReadRangesSource& readProto = *protoSource->MutableReadRangesSource();
@@ -1668,7 +1668,7 @@ private:
     }
 
     void FillSource(const TDqSource& source, NKqpProto::TKqpPhyStage& stageProto, NKqpProto::TKqpSource* protoSource, bool allowSystemColumns,
-        THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap, TExprContext& ctx)
+        THashMap<TString, THashSet<TString>>& tablesMap, TExprContext& ctx)
     {
         const TStringBuf dataSourceCategory = source.DataSource().Cast<TCoDataSource>().Category();
         if (IsIn({NYql::KikimrProviderName, NYql::YdbProviderName, NYql::KqpReadRangesSourceName, NYql::KqpFullTextSourceName, NYql::KqpSysViewSourceName}, dataSourceCategory)) {
@@ -2112,7 +2112,7 @@ private:
     }
 
     // Fills indexSettings for a GlobalSync / GlobalSyncUnique secondary index.
-    void FillSyncIndexSettings(const TIndexDescription& indexDescription, const TKikimrTableMetadataPtr& implTable, NKikimrKqp::TKqpTableSinkIndexSettings* indexSettings, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap,
+    void FillSyncIndexSettings(const TIndexDescription& indexDescription, const TKikimrTableMetadataPtr& implTable, NKikimrKqp::TKqpTableSinkIndexSettings* indexSettings, THashMap<TString, THashSet<TString>>& tablesMap,
             const TVector<TStringBuf>& columns, const TVector<TStringBuf>& lookupColumns, const THashSet<TStringBuf>& localDefaultColumns) {
         indexSettings->SetKeyPrefixSize(indexDescription.KeyColumns.size());
 
@@ -2146,7 +2146,7 @@ private:
 
     // Fills indexSettings for a fulltext / json compact index (and its dict/docs/stats
     // sub-tables for the relevance variant).
-    void FillFulltextIndexSettings(size_t index, const TIndexDescription& indexDescription, const TKikimrTableMetadataPtr& implTable, NKikimrKqp::TKqpTableSinkIndexSettings* indexSettings, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap,
+    void FillFulltextIndexSettings(size_t index, const TIndexDescription& indexDescription, const TKikimrTableMetadataPtr& implTable, NKikimrKqp::TKqpTableSinkIndexSettings* indexSettings, THashMap<TString, THashSet<TString>>& tablesMap,
             const TKikimrTableMetadataPtr& tableMeta, const TVector<TStringBuf>& columns, const TVector<TStringBuf>& lookupColumns) {
         YQL_ENSURE(indexDescription.KeyColumns.size() > 0);
         if (indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompact) {
@@ -2310,7 +2310,7 @@ private:
     }
 
     // Fills all per-index settings for the EnableIndexStreamWrite feature.
-    void FillIndexesSettings(const TKqpTableSinkSettings& settings, NKikimrKqp::TKqpTableSinkSettings& settingsProto, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap,
+    void FillIndexesSettings(const TKqpTableSinkSettings& settings, NKikimrKqp::TKqpTableSinkSettings& settingsProto, THashMap<TString, THashSet<TString>>& tablesMap,
             const TKikimrTableMetadataPtr& tableMeta, const TSinkInputShape& shape, const TAffectedIndexes& affectedIndexes,
             const TVector<TStringBuf>& lookupColumns, const THashSet<TStringBuf>& localDefaultColumns, const THashSet<TStringBuf>& mainKeyColumnsSet) {
         for (size_t index : affectedIndexes.Affected) {
@@ -2363,7 +2363,7 @@ private:
     // The EnableIndexStreamWrite path: computes lookup/index requirements and fills
     // index settings + returning columns + final operation type.
     // Returns the locally-processed DEFAULT columns (consumed by FillMainTableColumnsAndOrder).
-    TLocalDefaultColumns BuildStreamIndexWrite(const TKqpTableSinkSettings& settings, NKikimrKqp::TKqpTableSinkSettings& settingsProto, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap,
+    TLocalDefaultColumns BuildStreamIndexWrite(const TKqpTableSinkSettings& settings, NKikimrKqp::TKqpTableSinkSettings& settingsProto, THashMap<TString, THashSet<TString>>& tablesMap,
             const TKikimrTableMetadataPtr& tableMeta, const TSinkInputShape& shape) {
         const auto mode = settings.Mode().StringValue();
 
@@ -2495,7 +2495,7 @@ private:
         }
     }
 
-    void FillKqpSinkSettings(const TKqpTableSinkSettings& settings, NKikimrKqp::TKqpTableSinkSettings& settingsProto, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap, const TDqPhyStage& stage) {
+    void FillKqpSinkSettings(const TKqpTableSinkSettings& settings, NKikimrKqp::TKqpTableSinkSettings& settingsProto, THashMap<TString, THashSet<TString>>& tablesMap, const TDqPhyStage& stage) {
         settingsProto.SetDatabase(Database);
 
         const TSinkInputShape shape = DetermineInputRowFormat(settings, settingsProto, stage);
@@ -2530,7 +2530,7 @@ private:
             || dataSinkCategory == NYql::KqpTableSinkName;
     }
 
-    void FillSink(const TDqSink& sink, NKqpProto::TKqpSink* protoSink, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap, const TDqPhyStage& stage, TExprContext& ctx) {
+    void FillSink(const TDqSink& sink, NKqpProto::TKqpSink* protoSink, THashMap<TString, THashSet<TString>>& tablesMap, const TDqPhyStage& stage, TExprContext& ctx) {
         Y_UNUSED(ctx);
         const TStringBuf dataSinkCategory = sink.DataSink().Cast<TCoDataSink>().Category();
         if (IsTableSink(dataSinkCategory)) {
@@ -2625,7 +2625,7 @@ private:
         const TMap<ui64, ui32>& stagesMap,
         NKqpProto::TKqpPhyConnection& connectionProto,
         TExprContext& ctx,
-        THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap,
+        THashMap<TString, THashSet<TString>>& tablesMap,
         THashMap<ui64, NKqpProto::TKqpPhyStage*>& physicalStageByID,
         const TDqPhyStage* stage,
         ui32 inputIndex
@@ -2978,7 +2978,7 @@ private:
             auto levelTableMeta = TablesData->ExistingTable(Cluster, levelTablePath).Metadata;
             YQL_ENSURE(levelTableMeta);
 
-            tablesMap.emplace(levelTablePath, THashSet<TStringBuf>{});
+            tablesMap.emplace(levelTablePath, THashSet<TString>{});
             tablesMap[levelTablePath].emplace(NTableIndex::NKMeans::ParentColumn);
             tablesMap[levelTablePath].emplace(NTableIndex::NKMeans::IdColumn);
             tablesMap[levelTablePath].emplace(NTableIndex::NKMeans::CentroidColumn);

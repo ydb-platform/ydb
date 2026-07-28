@@ -140,6 +140,14 @@ CreateWaitSessionCbForSyncWithPBuffer(
     return cb;
 }
 
+bool IsDDiskOperation(EOperation operation)
+{
+    return operation == EOperation::ReadFromDDisk ||
+           operation == EOperation::WriteToDDisk ||
+           operation == EOperation::Flush ||
+           operation == EOperation::FlushCrossNode;
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -385,12 +393,6 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
                     if (auto self = weakSelf.lock()) {
                         NProto::TError error = TranslateError(f.GetValue());
 
-                        if (IsSessionBlockedError(error)) {
-                            self->HandleBlockedGeneration(
-                                hostIndex,
-                                "ReadFromDDisk");
-                        }
-
                         self->OnResponse(
                             hostIndex,
                             TMonotonic::Now() - startAt,
@@ -593,11 +595,6 @@ TDirectBlockGroup::WriteBlocksToDDisk(
                     if (auto self = weakSelf.lock()) {
                         NProto::TError error = TranslateError(f.GetValue());
 
-                        if (IsSessionBlockedError(error)) {
-                            self->HandleBlockedGeneration(
-                                hostIndex,
-                                "WriteToDDisk");
-                        }
                         self->OnResponse(
                             hostIndex,
                             TMonotonic::Now() - startAt,
@@ -992,6 +989,8 @@ TDBGFlushResponse TDirectBlockGroup::HandleSyncWithPBufferResponse(
 
         if (IsSessionBlockedError(error)) {
             HandleBlockedGeneration(ddiskHostIndex, "SyncWithPBuffer");
+        } else if (IsDeviceBrokenError(error)) {
+            Oracle.OnDDiskBroken(ddiskHostIndex);
         }
 
         for (size_t i = 0; i < segmentCount; ++i) {
@@ -1773,6 +1772,11 @@ void TDirectBlockGroup::OnResponse(
 
         if (IsCancelledError(error)) {
             Oracle.OnRequestCancelled(hostIndex, operation, TInstant::Now());
+        } else if (IsDDiskOperation(operation) && IsSessionBlockedError(error))
+        {
+            HandleBlockedGeneration(hostIndex, ToString(operation));
+        } else if (IsDeviceBrokenError(error)) {
+            Oracle.OnDDiskBroken(hostIndex);
         } else {
             Oracle.OnRequestFailed(hostIndex, operation, TInstant::Now());
         }

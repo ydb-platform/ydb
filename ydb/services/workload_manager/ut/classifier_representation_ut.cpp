@@ -239,8 +239,9 @@ Y_UNIT_TEST_SUITE(ClassifierRepresentation) {
             UNIT_ASSERT_C(rs.TryNextRow(), "Expected one row in sys-view");
 
             UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("Action").GetOptionalUtf8(), "reject");
-            // ResourcePool defaults to "default" for reject classifiers
-            UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("ResourcePool").GetOptionalUtf8(), "default");
+            // ResourcePool must be NULL for reject classifiers (not stored in config)
+            UNIT_ASSERT_C(!rs.ColumnParser("ResourcePool").GetOptionalUtf8().has_value(),
+                "ResourcePool must be NULL for Reject classifiers");
             // Other optional fields absent
             UNIT_ASSERT_C(!rs.ColumnParser("MemberName").GetOptionalUtf8().has_value(),
                 "MemberName must be NULL");

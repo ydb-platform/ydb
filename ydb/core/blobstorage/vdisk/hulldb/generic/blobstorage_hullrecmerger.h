@@ -33,6 +33,7 @@ namespace NKikimr {
 
         ui32 GetNumKeepFlags() const { return NumKeepFlags; }
         ui32 GetNumDoNotKeepFlags() const { return NumDoNotKeepFlags >> 1; }
+        ui32 GetNumMergedRecords() const { return MemRecsMerged; }
 
     protected:
         const TBlobStorageGroupType GType;

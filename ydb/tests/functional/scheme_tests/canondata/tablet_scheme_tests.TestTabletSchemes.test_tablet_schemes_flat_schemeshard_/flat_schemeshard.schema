@@ -5420,6 +5420,11 @@
                 "ColumnId": 58,
                 "ColumnName": "ParentBuildId",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 59,
+                "ColumnName": "IsRebuild",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -5483,7 +5488,8 @@
                     55,
                     56,
                     57,
-                    58
+                    58,
+                    59
                 ],
                 "RoomID": 0,
                 "Codec": 0,

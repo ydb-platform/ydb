@@ -77,6 +77,9 @@ public:
     {
         Settings_.Path(topicPath);
         Settings_.ProducerId("deferred-producer");
+        // RAW: sync SendImpl per write so consecutive Writes are not coalesced into one
+        // write_request (GZIP async compress can batch them and hit unsorted seqNo).
+        Settings_.Codec(ECodec::RAW);
         Session_ = Client_.CreateWriteSession(Settings_);
     }
 

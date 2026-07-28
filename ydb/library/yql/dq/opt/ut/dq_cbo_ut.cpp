@@ -34,13 +34,17 @@ Y_UNIT_TEST_SUITE(DQCBO) {
 Y_UNIT_TEST(Empty) {
     TBaseProviderContext pctx;
     TExprContext dummyCtx;
-    std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, 100000, dummyCtx, false));
+
+    TCBOSettings settings{};
+    std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, settings, dummyCtx, false));
 }
 
 Y_UNIT_TEST(JoinSearch2Rels) {
     TBaseProviderContext pctx;
     TExprContext dummyCtx;
-    std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, 100000, dummyCtx, false));
+
+    TCBOSettings settings{};
+    std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, settings, dummyCtx, false));
 
     auto rel1 = std::make_shared<TRelOptimizerNode>(
         "a",
@@ -74,7 +78,9 @@ Y_UNIT_TEST(JoinSearch2Rels) {
 Y_UNIT_TEST(JoinSearch3Rels) {
     TBaseProviderContext pctx;
     TExprContext dummyCtx;
-    std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, 100000, dummyCtx, false));
+
+    TCBOSettings settings{};
+    std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, settings, dummyCtx, false));
 
     auto rel1 = std::make_shared<TRelOptimizerNode>("a",
         TOptimizerStatistics(BaseTable, 100000, 1, 0, 1000000));
@@ -121,7 +127,9 @@ Y_UNIT_TEST(JoinSearchYQL19363) {
     // Verify that JoinSearch() correctly handles dot and comma characters.
     TBaseProviderContext pctx;
     TExprContext dummyCtx;
-    std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, 100000, dummyCtx, false));
+
+    TCBOSettings settings{};
+    std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, settings, dummyCtx, false));
 
     TString relName1 = "a,b.c";
     TString colName1 = "a.x";
@@ -228,7 +236,9 @@ struct TMockProviderContextYT24403 : public TBaseProviderContext {
 Y_UNIT_TEST(JoinSearchYT24403) {
     TMockProviderContextYT24403 pctx;
     TExprContext dummyCtx;
-    std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, 100000, dummyCtx, false));
+
+    TCBOSettings settings{};
+    std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, settings, dummyCtx, false));
 
     const TString relName1 = "a";
     const TString relName2 = "b";
@@ -368,7 +378,8 @@ Y_UNIT_TEST(DqOptimizeEquiJoinWithCostsNative) {
     TExprContext ctx;
     TBaseProviderContext pctx;
     std::function<IOptimizerNew*()> optFactory = [&]() {
-        return MakeNativeOptimizerNew(pctx, 100000, ctx, false);
+        TCBOSettings settings{};
+        return MakeNativeOptimizerNew(pctx, settings, ctx, false);
     };
     _DqOptimizeEquiJoinWithCosts(optFactory, ctx);
 }

@@ -3257,6 +3257,16 @@ bool StoreTopicSettingsEntry(
             }
             settings.MetricsLevel.Set(valueExprNode);
         }
+    } else if (to_lower(id.Name) == "content_based_deduplication") {
+        if (reset) {
+            settings.ContentBasedDeduplication.Reset();
+        } else {
+            if (!valueExprNode->IsLiteral() || valueExprNode->GetLiteralType() != "Bool") {
+                ctx.Error() << to_upper(id.Name) << " value should be bool";
+                return false;
+            }
+            settings.ContentBasedDeduplication.Set(valueExprNode);
+        }
     } else {
         ctx.Error() << "unknown topic setting: " << id.Name;
         return false;

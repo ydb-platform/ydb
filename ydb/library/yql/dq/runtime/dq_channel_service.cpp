@@ -1377,12 +1377,12 @@ void TNodeState::HandleUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
 
 void TNodeState::ConnectSession(NActors::TActorId& sender, ui64 genMajor, ui64 genMinor) {
     if (OutputNodeActorId == sender && OutputNodeGenMajor.load() == genMajor) {
-        LOG_D(LogPrefix << "RECONNECTED, OutputNodeActorId=" << sender << ", PG=" << genMajor << '.' << genMinor);
+        LOG_T(LogPrefix << "RECONNECTED, OutputNodeActorId=" << sender << ", PG=" << genMajor << '.' << genMinor);
     } else {
         OutputNodeActorId = sender;
         OutputNodeGenMajor.store(genMajor);
         ConfirmedSeqNo = 0;
-        LOG_W(LogPrefix << "RECONNECTED, OutputNodeActorId=" << sender << ", PG=" << genMajor << '.' << genMinor);
+        LOG_D(LogPrefix << "RECONNECTED, OutputNodeActorId=" << sender << ", PG=" << genMajor << '.' << genMinor);
     }
     OutputNodeGenMinor.store(genMinor);
     FailInputs(OutputNodeActorId, OutputNodeGenMajor.load());

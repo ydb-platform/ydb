@@ -2096,7 +2096,13 @@ void TPath::Activate() {
     Y_ABORT_UNLESS(Base()->IsCreateFinished());
 
     auto result = SS->AttachChild(Base());
-    Y_VERIFY_S(result == EAttachChildResult::AttachedAsNewerActual, "result is: " << result);
+    // AttachedAsNewerActual: replace over a still-live previous child (CreateAt ordering),
+    // e.g. row-table drop delays SetDropped past the move plan step.
+    // AttachedAsActual: replace over an already-dropped previous child (DropAt set),
+    // e.g. column-table drop marks DropAt on the plan step before move Activate runs.
+    Y_VERIFY_S(result == EAttachChildResult::AttachedAsNewerActual
+            || result == EAttachChildResult::AttachedAsActual,
+        "result is: " << result);
 }
 
 void TPath::MaterializeLeaf(const TString& owner) {

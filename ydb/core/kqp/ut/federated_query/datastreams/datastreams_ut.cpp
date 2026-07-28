@@ -2397,95 +2397,117 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         // increase the partition count to 20, restart WITHOUT recompilation
         // (no FORCE flag, SQL is unchanged), write data to every new partition,
         // and verify all messages appear in the output topic.
+        //
+        // The test body is run twice: once for non-local (external) topics and
+        // once for local (internal kikimr) topics.
 
-        constexpr char inputTopicName[] = "restartAfterPartIncInputTopic";
-        constexpr char outputTopicName[] = "restartAfterPartIncOutputTopic";
-        constexpr char sourceName[] = "restartAfterPartIncSource";
-        constexpr char queryName[] = "restartAfterPartIncQuery";
+        // Enable local topic support before the cluster is first initialised.
+        InternalInitFederatedQuerySetupFactory = true;
+        SetupAppConfig().MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
 
-        // Create the input topic with exactly 1 partition
-        CreateTopic(inputTopicName, NYdb::NTopic::TCreateTopicSettings()
-            .PartitioningSettings(/* minActivePartitions */ 1, /* maxActivePartitions */ 1));
-        CreateTopic(outputTopicName);
-        CreatePqSource(sourceName);
+        const auto runTest = [&](bool local) {
+            const std::string suffix = local ? "_local" : "_nonlocal";
+            const std::string inputTopicName  = std::string("restartAfterPartIncInputTopic")  + suffix;
+            const std::string outputTopicName = std::string("restartAfterPartIncOutputTopic") + suffix;
+            const std::string sourceName      = std::string("restartAfterPartIncSource")      + suffix;
+            const std::string queryName       = std::string("restartAfterPartIncQuery")       + suffix;
 
-        // Create and start a streaming query
-        ExecQuery(fmt::format(R"(
-            CREATE STREAMING QUERY `{query_name}` AS
-            DO BEGIN
-                $in = SELECT value FROM `{source}`.`{input_topic}` WITH (
-                    FORMAT = "json_each_row",
-                    SCHEMA = (value String NOT NULL)
-                )
-                WHERE value LIKE "%data%";
-                INSERT INTO `{source}`.`{output_topic}` SELECT value FROM $in;
-            END DO;)",
-            "query_name"_a = queryName,
-            "source"_a = sourceName,
-            "input_topic"_a = inputTopicName,
-            "output_topic"_a = outputTopicName
-        ));
+            // Create the input topic with exactly 1 partition.
+            CreateTopic(inputTopicName, NYdb::NTopic::TCreateTopicSettings()
+                .PartitioningSettings(/* minActivePartitions */ 1, /* maxActivePartitions */ 1), local);
+            CreateTopic(outputTopicName, std::nullopt, local);
 
-        WriteTopicMessage(inputTopicName, R"({"value": "my_data_0"})", 0);
-        const std::vector<std::string> expectedMessages0(1, "my_data_0");
-        ReadTopicMessages(outputTopicName, expectedMessages0,
-            TInstant::Now() - TDuration::Seconds(100),
-            /* sort */ true);
+            // For non-local topics the query references `source`.`topic`;
+            // for local topics the topic name is used directly.
+            std::string inputRef, outputRef;
+            if (local) {
+                inputRef  = fmt::format("`{}`", inputTopicName);
+                outputRef = fmt::format("`{}`", outputTopicName);
+            } else {
+                CreatePqSource(sourceName);
+                inputRef  = fmt::format("`{}`.`{}`", sourceName, inputTopicName);
+                outputRef = fmt::format("`{}`.`{}`", sourceName, outputTopicName);
+            }
 
-        // Let the query reach a stable checkpoint before stopping
-        Sleep(TDuration::Seconds(2));
+            // Create and start a streaming query.
+            ExecQuery(fmt::format(R"(
+                CREATE STREAMING QUERY `{query_name}` AS
+                DO BEGIN
+                    $in = SELECT value FROM {input_ref} WITH (
+                        FORMAT = "json_each_row",
+                        SCHEMA = (value String NOT NULL)
+                    )
+                    WHERE value LIKE "%data%";
+                    INSERT INTO {output_ref} SELECT value FROM $in;
+                END DO;)",
+                "query_name"_a = queryName,
+                "input_ref"_a  = inputRef,
+                "output_ref"_a = outputRef
+            ));
 
-        // Stop the query before altering the topic partition count
-        ExecQuery(fmt::format(R"(
-            ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);)",
-            "query_name"_a = queryName
-        ));
-        Sleep(TDuration::MilliSeconds(500));
+            WriteTopicMessage(inputTopicName, R"({"value": "my_data_0"})", 0, local);
+            ReadTopicMessages(outputTopicName, {"my_data_0"},
+                TInstant::Now() - TDuration::Seconds(100),
+                /* sort */ true, local);
 
-        // Increase the partition count from 1 to 20 via the Topic API (not SQL,
-        // to avoid PQ-gateway session-related issues during schema changes)
-        {
-            auto alterSettings = NYdb::NTopic::TAlterTopicSettings();
-            alterSettings
-                .BeginAlterPartitioningSettings()
-                    .MinActivePartitions(20)
-                    .MaxActivePartitions(20)
-                .EndAlterTopicPartitioningSettings();
-            const auto result = GetTopicClient()->AlterTopic(inputTopicName, alterSettings).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
-        }
+            // Let the query reach a stable checkpoint before stopping.
+            Sleep(TDuration::Seconds(2));
 
-        // Restart WITHOUT recompilation: no FORCE flag, SQL body is unchanged
-        ExecQuery(fmt::format(R"(
-            ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);)",
-            "query_name"_a = queryName
-        ));
+            // Stop the query before altering the topic partition count.
+            ExecQuery(fmt::format(R"(
+                ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);)",
+                "query_name"_a = queryName
+            ));
+            Sleep(TDuration::MilliSeconds(500));
 
-        // Give the query time to reconnect to all 20 partitions and checkpoint
-        Sleep(TDuration::Seconds(2));
+            // Increase the partition count from 1 to 20 via the Topic API (not SQL,
+            // to avoid PQ-gateway session-related issues during schema changes).
+            {
+                auto alterSettings = NYdb::NTopic::TAlterTopicSettings();
+                alterSettings
+                    .BeginAlterPartitioningSettings()
+                        .MinActivePartitions(20)
+                        .MaxActivePartitions(20)
+                    .EndAlterTopicPartitioningSettings();
+                const auto result = GetTopicClient(local)->AlterTopic(inputTopicName, alterSettings).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            }
 
-        // Write one message to each of the 20 partitions.
-        // Send to new partitions (1..19) first, then old partition (0).
-        constexpr ui32 messageCount = 20;
-        for (ui32 i = 1; i < messageCount; ++i) {
-            WriteTopicMessage(inputTopicName, fmt::format(R"({{"value": "my_data_{}"}})", i), i);
-        }
-        WriteTopicMessage(inputTopicName, R"({"value": "my_data_0"})", 0);
+            // Restart WITHOUT recompilation: no FORCE flag, SQL body is unchanged.
+            ExecQuery(fmt::format(R"(
+                ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);)",
+                "query_name"_a = queryName
+            ));
 
-        // All 20 messages + initial message must appear in the output topic (order may vary)
-        std::vector<std::string> expectedMessages = {"my_data_0"}; // initial message written before restart
-        for (ui32 i = 0; i < messageCount; ++i) {
-            expectedMessages.push_back(fmt::format("my_data_{}", i));
-        }
-        ReadTopicMessages(outputTopicName, expectedMessages,
-            TInstant::Now() - TDuration::Seconds(100),
-            /* sort */ true);
+            // Give the query time to reconnect to all 20 partitions and checkpoint.
+            Sleep(TDuration::Seconds(2));
 
-        // Cleanup
-        ExecQuery(fmt::format(R"(
-            DROP STREAMING QUERY `{query_name}`;)",
-            "query_name"_a = queryName
-        ));
+            // Write one message to each of the 20 partitions.
+            // Send to new partitions (1..19) first, then old partition (0).
+            constexpr ui32 messageCount = 20;
+            for (ui32 i = 1; i < messageCount; ++i) {
+                WriteTopicMessage(inputTopicName, fmt::format(R"({{"value": "my_data_{}"}})", i), i, local);
+            }
+            WriteTopicMessage(inputTopicName, R"({"value": "my_data_0"})", 0, local);
+
+            // All 20 messages + initial message must appear in the output topic (order may vary).
+            std::vector<std::string> expectedMessages = {"my_data_0"}; // initial message written before restart
+            for (ui32 i = 0; i < messageCount; ++i) {
+                expectedMessages.push_back(fmt::format("my_data_{}", i));
+            }
+            ReadTopicMessages(outputTopicName, expectedMessages,
+                TInstant::Now() - TDuration::Seconds(100),
+                /* sort */ true, local);
+
+            // Cleanup.
+            ExecQuery(fmt::format(R"(
+                DROP STREAMING QUERY `{query_name}`;)",
+                "query_name"_a = queryName
+            ));
+        };
+
+        runTest(/* local */ false);
+        runTest(/* local */ true);
     }
 
     Y_UNIT_TEST_F(PartitionPredicatePreservedAfterPartitionIncrease, TStreamingTestFixture) {

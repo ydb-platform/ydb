@@ -1417,7 +1417,8 @@ private:
         const TString topicPath = topicSource.GetTopicPath();
         const TString token     = /*UserToken ? UserToken->GetSerializedToken() : */TString{"{\"no_auth\":\"\"}"};
         // Session id is not required for non-CM calls; an empty string is fine.
-        const TString sessionId;
+        //const TString sessionId;
+        const TString sessionId = CreateGuidAsString();
         auto gateway = FederatedQuerySetup->PqGatewayFactory->CreatePqGateway();
 
         {
@@ -1428,9 +1429,8 @@ private:
             clusterConfig.SetToken(token);
             clusterConfig.SetDatabase(topicSource.GetDatabase());
             clusterConfig.SetUseSsl(topicSource.GetUseSsl());
-
-           // State_->Configuration->AddCluster(cluster, State_->DatabaseIds, State_->Types->Credentials, State_->DbResolver, properties);
             gateway->AddCluster(clusterConfig);
+            gateway->OpenSession(sessionId, "username");
         }
         YDB_LOG_DEBUG("Describing PQ topic",
             {"cluster", cluster},
@@ -1438,10 +1438,7 @@ private:
             {"topicPath=", topicPath},
             {"sessionId=", sessionId});
         gateway->DescribeFederatedTopic(sessionId, cluster, database, topicPath, token)
-            .Subscribe([
-                actorSystem = TActivationContext::ActorSystem(),
-                selfId      = SelfId(),
-                gateway = gateway](const auto& future)
+            .Subscribe([actorSystem = TActivationContext::ActorSystem(), selfId = SelfId(), gateway = gateway](const auto& future)
             {
                 try {
                     const auto& result = future.GetValue();

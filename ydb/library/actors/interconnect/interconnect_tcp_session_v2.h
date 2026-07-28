@@ -120,9 +120,6 @@ namespace NActors {
         // io_uring data plane
         ui64 EngineHandle = 0;
 
-        ui64 BytesSent = 0;
-        ui64 BytesReceived = 0;
-
         // subscribers awaiting connection state notifications (actor id -> cookie)
         THashMap<TActorId, ui64> Subscribers;
 

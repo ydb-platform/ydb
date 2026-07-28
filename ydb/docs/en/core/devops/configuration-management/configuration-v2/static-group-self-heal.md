@@ -13,8 +13,7 @@ To allow distributed configuration to change the static group automatically, ena
 Static group SelfHeal requires the following components to be enabled:
 
 * the distributed configuration mechanism in configuration V2 — [`self_management_config.enabled: true`](../../../reference/configuration/self_management_config.md#parameters);
-* the general SelfHeal mechanism, which is [enabled by default](../../../maintenance/manual/selfheal.md#on-off);
-* automatic static group management — `automatic_static_group_management: true`.
+* the general SelfHeal mechanism, which is [enabled by default](../../../maintenance/manual/selfheal.md#on-off).
 
 To enable or disable automatic static group management:
 
@@ -57,9 +56,3 @@ config:
 ```
 
 An empty list means that no restrictions apply. The allowed nodes must have suitable PDisks and enough free space to move the VDisk without violating the failure model.
-
-## Verifying the result {#verify-result}
-
-Fetch the cluster configuration again and make sure that `automatic_static_group_management` has the required value.
-
-After SelfHeal is triggered, open the [static group monitoring page in the Embedded UI](../../../reference/embedded-ui/ydb-monitoring.md#static-group) and make sure that the VDisk has moved to another PDisk and replication has completed.

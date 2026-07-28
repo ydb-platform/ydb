@@ -13,8 +13,7 @@
 Для работы SelfHeal статической группы должны быть включены:
 
 * распределённая конфигурация V2 — [`self_management_config.enabled: true`](../../../reference/configuration/self_management_config.md#parameters);
-* общий механизм SelfHeal, который [включён по умолчанию](../../../maintenance/manual/selfheal.md#on-off);
-* автоматическое управление статической группой — `automatic_static_group_management: true`.
+* общий механизм SelfHeal, который [включён по умолчанию](../../../maintenance/manual/selfheal.md#on-off).
 
 Чтобы включить или выключить автоматическое управление статической группой:
 
@@ -57,9 +56,3 @@ config:
 ```
 
 Пустой список означает отсутствие ограничений. На разрешённых узлах должны быть подходящие PDisk и достаточно свободного места для переноса VDisk с учётом модели отказа.
-
-## Проверка результата {#verify-result}
-
-Повторно получите конфигурацию кластера и убедитесь, что параметр `automatic_static_group_management` имеет требуемое значение.
-
-После срабатывания SelfHeal убедитесь на [странице мониторинга статической группы во встроенном UI](../../../reference/embedded-ui/ydb-monitoring.md#static-group), что VDisk перенесён на другой PDisk и репликация завершилась.

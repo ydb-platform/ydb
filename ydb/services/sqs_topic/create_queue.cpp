@@ -42,7 +42,7 @@
 
 #include <ydb/services/sqs_topic/statuses.h>
 
-#include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <library/cpp/json/json_writer.h>
 
@@ -117,11 +117,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
         void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
             const auto* result = ev->Get();
-            if (result->Topics.size() != 1) {
-                Y_VERIFY_DEBUG(false);
-                return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
-                    TStringBuilder() << "Unexpected describe topics result size: " << result->Topics.size()));
-            }
+            AFL_ENSURE(result->Topics.size() == 1)("topics_size", result->Topics.size())("path", TopicPath);
             const auto& topicInfo = result->Topics.begin()->second;
 
             switch(topicInfo.Status) {

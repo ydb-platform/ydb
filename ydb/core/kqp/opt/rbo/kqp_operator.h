@@ -22,7 +22,7 @@ namespace NKqp {
 
 using namespace NYql;
 
-enum EOperator : ui32 { EmptySource, Source, Map, AddDependencies, Filter, Join, Aggregate, Limit, Sort, UnionAll, CBOTree, Root };
+enum EOperator : ui32 { EmptySource, Source, Map, AddDependencies, Filter, Join, Aggregate, Limit, Sort, UnionAll, TableLookup, CBOTree, Root };
 
 // clang-format off
 #define PHASE_ENUM(X) \
@@ -730,6 +730,27 @@ protected:
 
 private:
     EOpPhase SortPhase{EOpPhase::Undefined};
+};
+
+class TOpTableLookup: public IUnaryOperator {
+public:
+    TOpTableLookup(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExprNode::TPtr& table,
+                   const TVector<TString>& fetchColumns, const TVector<TInfoUnit>& outputIUs, const TVector<TInfoUnit>& lookupKeys);
+
+    virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
+    virtual void PropagateLiveness(ILivenessContext& ctx) override;
+    virtual TString ToString(TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "TableLookup"; }
+
+    virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
+
+    TExprNode::TPtr Table;
+    TVector<TString> FetchColumns;
+    TVector<TInfoUnit> OutputIUs;
+    TVector<TInfoUnit> LookupKeys;
+
+protected:
+    void ComputeOutputIUs() override;
 };
 
 

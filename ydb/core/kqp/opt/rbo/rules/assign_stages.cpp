@@ -1,6 +1,9 @@
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_utils.h>
+#include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 
 namespace NKikimr::NKqp {
 
@@ -212,6 +215,38 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
         }
 
         YQL_CLOG(TRACE, CoreDq) << "Assign stage to aggregation ";
+    } else if (input->Kind == EOperator::TableLookup) {
+        auto lookup = CastOperator<TOpTableLookup>(input);
+        auto& exprCtx = ctx.ExprCtx;
+
+        const auto inputStageId = *(lookup->GetInput()->Props.StageId);
+        const auto outputIndex = props.StageGraph.GetOutputIndex(inputStageId);
+        const auto newStageId = props.StageGraph.AddStage();
+        input->Props.StageId = newStageId;
+
+        TVector<NYql::NNodes::TCoAtom> columnAtoms;
+        for (const auto& column : lookup->FetchColumns) {
+            columnAtoms.push_back(NYql::NNodes::Build<NYql::NNodes::TCoAtom>(exprCtx, lookup->Pos).Value(column).Done());
+        }
+        auto columnsNode = NYql::NNodes::Build<NYql::NNodes::TCoAtomList>(exprCtx, lookup->Pos).Add(columnAtoms).Done().Ptr();
+
+        TVector<const NYql::TItemExprType*> keyItems;
+        for (const auto& key : lookup->LookupKeys) {
+            const auto* keyType = lookup->GetInput()->GetIUType(key);
+            Y_ENSURE(keyType, "Lookup key type is not available");
+            keyItems.push_back(exprCtx.MakeType<NYql::TItemExprType>(key.GetFullName(), keyType));
+        }
+        const auto* keyStructType = exprCtx.MakeType<NYql::TStructExprType>(keyItems);
+        const auto* keyListType = exprCtx.MakeType<NYql::TListExprType>(keyStructType);
+        auto inputTypeNode = NYql::ExpandType(lookup->Pos, *keyListType, exprCtx);
+
+        TKqpStreamLookupSettings settings;
+        settings.Strategy = EStreamLookupStrategyType::LookupRows;
+        auto settingsNode = settings.BuildNode(exprCtx, lookup->Pos).Ptr();
+
+        props.StageGraph.Connect(inputStageId, newStageId,
+                                 MakeIntrusive<TStreamLookupConnection>(outputIndex, lookup->Table, columnsNode, inputTypeNode, settingsNode));
+        YQL_CLOG(TRACE, CoreDq) << "Assign stages table lookup";
     } else {
         Y_ENSURE(false, "Unknown operator encountered");
     }

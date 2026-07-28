@@ -110,6 +110,12 @@ std::unordered_map<TString, TClassifierSettings::TProperty> TClassifierSettings:
 }
 
 std::optional<TString> TClassifierSettings::Validate() const {
+    if (!ResourcePool && !Action) {
+        return TStringBuilder() << "Invalid resource pool classifier configuration, either resource pool or action must be specified";
+    }
+    if (ResourcePool && Action) {
+        return TStringBuilder() << "Invalid resource pool classifier configuration, resource pool must not be used for Reject action";
+    }
     if (!MemberName) {
         return std::nullopt;
     }

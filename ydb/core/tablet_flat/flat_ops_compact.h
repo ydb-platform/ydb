@@ -367,9 +367,9 @@ namespace NTabletFlatExecutor {
                         sharedPage->ProvideBody(std::move(loadedPage.Data));
                         saveCompactedPages->Pages.push_back(sharedPage);
                         if (sticky) {
-                            resultingPageCollection->AddStickyPage(loadedPage.Location.Offset, TSharedPageRef::MakeUsed(std::move(sharedPage), gcList, loadedPage.Location.Type));
+                            resultingPageCollection->AddStickyPage(loadedPage.Location.Offset, loadedPage.Location.Size, TSharedPageRef::MakeUsed(std::move(sharedPage), gcList, loadedPage.Location.Type));
                         } else {
-                            resultingPageCollection->AddPage(loadedPage.Location.Offset, TSharedPageRef::MakeUsed(std::move(sharedPage), gcList, loadedPage.Location.Type));
+                            resultingPageCollection->AddPage(loadedPage.Location.Offset, loadedPage.Location.Size, TSharedPageRef::MakeUsed(std::move(sharedPage), gcList, loadedPage.Location.Type));
                         }
                     };
                     for (auto &page : pageCollection.StickyPages) {

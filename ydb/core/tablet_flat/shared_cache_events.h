@@ -133,16 +133,18 @@ namespace NKikimr::NSharedCache {
             return
                 std::accumulate(Pages.begin(), Pages.end(), ui64(0),
                     [](ui64 bytes, const TLoaded& loaded)
-                        { return bytes + TPinnedPageRef(loaded.Page)->size(); });
+                        { return bytes + loaded.Size; });
         }
 
         struct TLoaded {
-            TLoaded(NTable::NPage::TPageOffset offset, TSharedPageRef page)
+            TLoaded(NTable::NPage::TPageOffset offset, size_t size, TSharedPageRef page)
                 : Offset(offset)
+                , Size(size)
                 , Page(std::move(page))
             { }
 
             NTable::NPage::TPageOffset Offset;
+            size_t Size;
             TSharedPageRef Page;
         };
 

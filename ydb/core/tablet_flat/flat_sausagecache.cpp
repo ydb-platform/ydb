@@ -34,7 +34,7 @@ TPrivatePageCache::TPageCollection::TPageCollection(const TPageCollection &pageC
     PageMap.reserve(pageCollection.PageMap.size());
     for (const auto& page : pageCollection.PageMap) {
         Y_ASSERT(page);
-        AddPage(page->Offset, page->SharedBody);
+        AddPage(page->Offset, page->Size, page->SharedBody);
     }
 }
 
@@ -118,19 +118,17 @@ void TPrivatePageCache::DropPage(TPageOffset offset, TPageCollection* pageCollec
     }
 }
 
-void TPrivatePageCache::AddPage(TPageOffset offset, const TSharedPageRef& sharedBody, TPageCollection *pageCollection)
+void TPrivatePageCache::AddPage(TPageOffset offset, size_t size, const TSharedPageRef& sharedBody, TPageCollection *pageCollection)
 {
-    auto size = sharedBody.GetBodySize();
-    if (pageCollection->AddPage(offset, sharedBody)) {
+    if (pageCollection->AddPage(offset, size, sharedBody)) {
         Stats.SharedBodyBytes += size;
     }
 }
 
-void TPrivatePageCache::AddStickyPage(TPageOffset offset, TSharedPageRef sharedBody, TPageCollection *pageCollection)
+void TPrivatePageCache::AddStickyPage(TPageOffset offset, size_t size, TSharedPageRef sharedBody, TPageCollection *pageCollection)
 {
-    auto size = sharedBody.GetBodySize();
-    AddPage(offset, sharedBody, pageCollection);
-    if (pageCollection->AddStickyPage(offset, std::move(sharedBody))) {
+    AddPage(offset, size, sharedBody, pageCollection);
+    if (pageCollection->AddStickyPage(offset, size, std::move(sharedBody))) {
         Stats.StickyBytes += size;
     }
 }

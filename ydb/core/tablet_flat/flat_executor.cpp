@@ -3242,7 +3242,7 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
 
             if (requestType == ERequestTypeCookie::StickyPages) {
                 for (auto& loaded : msg->Pages) {
-                    PrivatePageCache->AddStickyPage(loaded.Offset, std::move(loaded.Page), pageCollection);
+                    PrivatePageCache->AddStickyPage(loaded.Offset, loaded.Size, std::move(loaded.Page), pageCollection);
                 }
 
                 // Re-drive any V2 B-tree sticky preload
@@ -3251,7 +3251,7 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
                 }
             } else { // requestType == ERequestTypeCookie::Transaction or ERequestTypeCookie::TryKeepInMemPages
                 for (auto& loaded : msg->Pages) {
-                    PrivatePageCache->AddPage(loaded.Offset, loaded.Page, pageCollection);
+                    PrivatePageCache->AddPage(loaded.Offset, loaded.Size, loaded.Page, pageCollection);
                 }
                 if (requestType == ERequestTypeCookie::Transaction) {
                     TryActivateWaitingTransaction(std::move(msg->WaitPad), std::move(msg->Pages), pageCollection);

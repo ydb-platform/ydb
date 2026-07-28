@@ -114,9 +114,9 @@ namespace NTable {
                 bool sticky = NeedIn(pageType) || pageType == EPage::FlatIndex;
                 AddSavedPage(loaded.Offset, loaded.Page);
                 if (sticky) {
-                    PageCollection->AddStickyPage(loaded.Offset, std::move(loaded.Page));
+                    PageCollection->AddStickyPage(loaded.Offset, loaded.Size, std::move(loaded.Page));
                 } else {
-                    PageCollection->AddPage(loaded.Offset, std::move(loaded.Page));
+                    PageCollection->AddPage(loaded.Offset, loaded.Size, std::move(loaded.Page));
                 }
             }
 

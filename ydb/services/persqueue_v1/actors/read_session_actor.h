@@ -90,7 +90,8 @@ struct TPartitionActorInfo {
         , NodeId(0)
         , ReadingFinished(false)
     {
-        AFL_ENSURE(partition.DiscoveryConverter != nullptr);
+        AFL_ENSURE(partition.DiscoveryConverter != nullptr)
+            ("partition", partition.Partition)("assign_id", partition.AssignId);
     }
 
     bool IsLastOffsetCommitted() const {

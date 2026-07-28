@@ -65,6 +65,13 @@ void RunScanStress(TKikimrRunner& kikimr, const ui32 writeIterations, const bool
             FROM `/Root/olapStore/olapTable`
             ORDER BY `message` DESC LIMIT 20000
         )",
+        R"(
+            --!syntax_v1
+            SELECT a.`resource_id`, COUNT(*), MAX(b.`message`)
+            FROM `/Root/olapStore/olapTable` AS a
+            INNER JOIN `/Root/olapStore/olapTable` AS b ON a.`uid` = b.`uid`
+            GROUP BY a.`resource_id` ORDER BY a.`resource_id` LIMIT 10
+        )",
     };
 
     std::atomic<bool> stop{ false };

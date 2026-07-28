@@ -175,6 +175,17 @@ void IDataSource::OnStartProcessing() {
         maxSnapshot);
 }
 
+void IDataSource::StartStepExecution(const TString& stepName) {
+    const bool acquired = AtomicCas(&StepExecutionInProgressFlag, 1, 0);
+    AFL_VERIFY(acquired)("executing_step", ExecutingStepName)("new_step", stepName)("source_idx", SourceIdx);
+    ExecutingStepName = stepName;
+}
+
+void IDataSource::FinishStepExecution() {
+    ExecutingStepName.clear();
+    AFL_VERIFY(AtomicCas(&StepExecutionInProgressFlag, 0, 1));
+}
+
 void IDataSource::StartAsyncSection() {
     AFL_VERIFY(AtomicCas(&SyncSectionFlag, 0, 1));
 }

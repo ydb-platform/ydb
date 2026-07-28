@@ -15,9 +15,7 @@ logger = logging.getLogger(__name__)
 
 DATABASE = "/Root"
 OLD_SECRETS_CREATION_DISABLED_MESSAGE = "Old secrets creation syntax is disabled now. Please use the new one"
-CREATION_WITH_OLD_SECRETS_DISABLED_MESSAGE = (
-    "Old secrets are disabled for creating new objects. Please use new secrets"
-)
+CREATION_WITH_OLD_SECRETS_DISABLED_MESSAGE = "Old secrets are disabled for creating new objects. Please use new secrets"
 OLD_SECRETS_USAGE_DISABLED_MESSAGE = "Usage of old secrets is disabled now. Please use new secrets"
 
 
@@ -43,6 +41,7 @@ class Utils:
     def __init__(self):
         self.config = KikimrConfigGenerator(use_in_memory_pdisks=False)
         self.config.yaml_config["feature_flags"]["enable_external_data_sources"] = True
+        self.config.yaml_config["feature_flags"]["enable_replace_if_exists_for_external_entities"] = True
 
         self.cluster = KiKiMR(self.config)
         self.cluster.start()
@@ -102,6 +101,23 @@ class Utils:
 
         if not wait_for(driver_ready, timeout_seconds=120, step_seconds=1):
             raise AssertionError("Driver didn't become ready after cluster restart")
+
+        def viewer_ready():
+            try:
+                description = self.viewer_describe(DATABASE)
+            except Exception as exc:
+                logger.info("Viewer not ready yet after cluster restart: %s", exc)
+                return False
+            if description.get("Status") != "StatusSuccess":
+                logger.info("Viewer not ready yet after cluster restart: %s", description)
+                return False
+            if description.get("PathDescription", {}).get("Self", {}).get("CreateFinished") is not True:
+                logger.info("Viewer not ready yet after cluster restart: %s", description)
+                return False
+            return True
+
+        if not wait_for(viewer_ready, timeout_seconds=120, step_seconds=1):
+            raise AssertionError("Viewer didn't become ready after cluster restart")
 
         self.driver = driver_holder["driver"]
         self.session_pool = ydb.SessionPool(self.driver)

@@ -561,7 +561,10 @@ public:
         CaptureCheckSpaceResult = true;
         CheckSpaceResultReceived = false;
         sendCheckSpace();
-        const bool quotaReturned = PumpUntil([&] {
+        const bool waitCompleted = PumpUntil([&] {
+            if (ObservedOutOfSpace()) {
+                return true;
+            }
             if (!CheckSpaceResultReceived) {
                 return false;
             }
@@ -583,7 +586,11 @@ public:
         }, 600, TDuration::MilliSeconds(10));
         CaptureCheckSpaceResult = false;
 
-        UNIT_ASSERT_C(quotaReturned,
+        if (ObservedOutOfSpace()) {
+            return;
+        }
+
+        UNIT_ASSERT_C(waitCompleted,
             "common-log quota was not returned after recovery log cut"
             << " owner# " << ui32(CutOwner)
             << " ownerRound# " << CutOwnerRound

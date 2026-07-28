@@ -510,19 +510,9 @@ public:
 class TStreamingConstraintNode final: public TConstraintWithFieldsT<TStreamingConstraintNode> {
     friend struct TExprContext;
 
-public:
-    struct TEventTimeDescriptor {
-        ui64 Hash;
-        std::vector<TPartOfConstraintBase::TPathType> Bindings;
-
-        [[nodiscard]] constexpr bool operator==(const TEventTimeDescriptor&) const = default;
-
-        void Out(IOutputStream& out) const;
-    };
-
 protected:
     explicit TStreamingConstraintNode(TExprContext& ctx);
-    TStreamingConstraintNode(TExprContext& ctx, TEventTimeDescriptor eventTime);
+    TStreamingConstraintNode(TExprContext& ctx, TPartOfConstraintBase::TPathType eventTime);
     TStreamingConstraintNode(TExprContext& ctx, const NYT::TNode& serialized);
 
 public:
@@ -530,7 +520,7 @@ public:
         return "Streaming";
     }
 
-    [[nodiscard]] const TMaybe<TEventTimeDescriptor>& GetEventTime() const {
+    [[nodiscard]] const TMaybe<TPartOfConstraintBase::TPathType>& GetEventTime() const {
         return EventTime_;
     }
 
@@ -550,7 +540,7 @@ private:
     const TConstraintWithFieldsNode* DoGetComplicatedForType(const TTypeAnnotationNode& type, TExprContext& ctx) const final;
     const TConstraintWithFieldsNode* DoGetSimplifiedForType(const TTypeAnnotationNode& type, TExprContext& ctx) const final;
 
-    TMaybe<TEventTimeDescriptor> EventTime_;
+    TMaybe<TPartOfConstraintBase::TPathType> EventTime_;
 };
 
 using TPartOfStreamingConstraintNode = TPartOfConstraintNode<TStreamingConstraintNode>;

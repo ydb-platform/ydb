@@ -212,6 +212,7 @@ SRCS(
     GLOBAL rpc/configure_dispatcher.cpp
     rpc/dispatcher.cpp
     rpc/dynamic_channel_pool.cpp
+    rpc/dynamic_channel_pool_provider.cpp
     rpc/endpoint_address.cpp
     rpc/hedging_channel.cpp
     rpc/helpers.cpp
@@ -480,6 +481,7 @@ IF (NOT OS_WINDOWS)
         phoenix/unittests
         profiling/unittests
         rpc/grpc/unittests
+        rpc/http/unittests
         rpc/unittests
         ypath/unittests
         ytree/unittests

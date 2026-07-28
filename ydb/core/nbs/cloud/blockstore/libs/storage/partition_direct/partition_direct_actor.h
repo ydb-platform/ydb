@@ -82,9 +82,12 @@ private:
     void StateInit(TAutoPtr<NActors::IEventHandle>& ev);
     STFUNC(StateWork);
 
-    void HandleHttpInfo(
-        NActors::NMon::TEvRemoteHttpInfo::TPtr& ev,
-        const NActors::TActorContext& ctx);
+    // The tablet's own monitoring page, reached via the standard tablet page's
+    // "App" link. The base class passes a null event to ask whether that link
+    // should appear - it always should.
+    bool OnRenderAppHtmlPage(
+        NActors::NMon::TEvRemoteHttpInfo::TPtr ev,
+        const NActors::TActorContext& ctx) override;
 
     void OnDetach(const NActors::TActorContext& ctx) override;
     void OnTabletDead(

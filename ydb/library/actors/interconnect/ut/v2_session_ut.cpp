@@ -308,8 +308,8 @@ namespace {
 
     std::unique_ptr<TTestICCluster> MakeV2Cluster(ui32 tcpSocketBufferSize = 0) {
         auto customizer = [tcpSocketBufferSize](ui32, TInterconnectSettings& settings) {
-            settings.EnableInterconnectSessionV2 = true;
-            settings.ChecksumInterconnectSessionV2 = true;
+            settings.V2.Enable = true;
+            settings.V2.ChecksumEvents = true;
             if (tcpSocketBufferSize) {
                 settings.TCPSocketBufferSize = tcpSocketBufferSize;
             }
@@ -505,7 +505,7 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
 
         constexpr ui32 kNodes = 5;
         auto customizer = [](ui32, TInterconnectSettings& settings) {
-            settings.EnableInterconnectSessionV2 = true;
+            settings.V2.Enable = true;
         };
         auto cluster = std::make_unique<TTestICCluster>(
             kNodes, TChannelsConfig(), nullptr, nullptr, TTestICCluster::EMPTY,
@@ -554,7 +554,7 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
 
         constexpr ui32 kNodes = 5;
         auto customizer = [](ui32, TInterconnectSettings& settings) {
-            settings.EnableInterconnectSessionV2 = true;
+            settings.V2.Enable = true;
         };
         auto cluster = std::make_unique<TTestICCluster>(
             kNodes, TChannelsConfig(), nullptr, nullptr, TTestICCluster::EMPTY,

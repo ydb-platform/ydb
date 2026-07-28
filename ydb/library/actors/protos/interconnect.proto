@@ -68,6 +68,7 @@ message TRdmaHandshake {
     }
     // Perform additional software checksum for rdma events
     optional bool RdmaChecksum = 11;
+    optional uint32 SendReceiveVersion = 12;
 }
 
 message TRdmaHandshakeReadAck {
@@ -75,6 +76,44 @@ message TRdmaHandshakeReadAck {
         fixed32 Digest = 1; // set in case of OK, contains checksum of read RDMA region
         string Err = 2;     // set in case of error, contains explanation of remote read error
     }
+}
+
+enum ERdmaSyncErrorCode {
+    SYNC_ERR_UNKNOWN = 0;
+    SYNC_ERR_UNSUPPORTED_VERSION = 1;
+    SYNC_ERR_UNEXPECTED_SESSION = 2;
+    SYNC_ERR_HASH_CHAIN_MISMATCH = 3;
+    SYNC_ERR_RDMA_FAILED = 4;
+    SYNC_ERR_TIMEOUT = 5;
+}
+
+// Send by TCP
+message TRdmaStartSync {
+    required uint32 Version = 1;         // The RdmaSync protocol version
+    required uint64 FeatureMask = 2;     // Requested feature mask
+    required uint64 SessionHash = 3;     // xxhash(SelfVirtualId) | xxhash(PeerVirtualId)
+    optional uint64 MaxRdmaRttNs = 4;    // If set the peer will accept rdma ACK only if it took less time
+}
+
+message TRdmaFinSync {
+    required uint64 HashChain = 1;       // xxhash(TRdmaAckSync)
+    required uint64 RdmaRtt = 2;         // rdma rtt seen by peer
+}
+
+// Send by RDMA
+message TRdmaDataSync {
+    required uint64 HashChain = 1;       // xxhash(TRdmaStartSync)
+    required uint64 FeatureMask = 2;     // Accepted feature mask
+    required bytes Payload = 3;          // Some data just to fill packet
+}
+
+message TRdmaAckSync {
+    required uint64 HashChain = 1;       // xxhash(TRdmaDataSync)
+}
+
+message TRdmaErrSync {
+    required ERdmaSyncErrorCode Code = 1;
+    required string Text = 2;
 }
 
 message THandshakeRequest {
@@ -160,7 +199,7 @@ message THandshakeSuccess {
     repeated TKeyValuePair Params = 18; // extra params for connection validation
 
     oneof RdmaHandshake {
-        TRdmaHandshake QpPrepared = 19; // Set and containts QP of incomming handshaker
+        TRdmaHandshake QpPrepared = 19; // Set and contains QP of incoming handshaker
         string RdmaErr = 20;
     }
 }

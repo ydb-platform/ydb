@@ -1498,6 +1498,7 @@ public:
             auto streamReaderResult = arrow::ipc::RecordBatchStreamReader::Open(InputStream_.get());
             if (!streamReaderResult.ok() && InputStream_->EOSReached() && InputStream_->Tell().ValueOrDie() == 0) {
                 // Workaround for YT-23495
+                // TODO(dagorokhov): remove the 0-byte workaround (YT-28650)
                 return false;
             }
             StreamReader_ = ARROW_RESULT(streamReaderResult);

@@ -92,31 +92,50 @@ private:
                     return TCell::Make<i64>(config.GetRank());
                 }});
                 insert({TSchema::MemberName::ColumnId, [] (const NWorkloadManager::TResourcePoolClassifierConfig& config) {
-                    const auto& memberName = config.GetConfigJson()["member_name"].GetString();
-                    return TCell(memberName.data(), memberName.size());
+                    if (config.GetConfigJson().Has("member_name")) {
+                        const auto& memberName = config.GetConfigJson()["member_name"].GetString();
+                        return TCell(memberName.data(), memberName.size());
+                    }
+                    return TCell();
                 }});
                 insert({TSchema::ResourcePool::ColumnId, [] (const NWorkloadManager::TResourcePoolClassifierConfig& config) {
                     const auto& resourcePool = config.GetConfigJson()["resource_pool"].GetString();
                     return TCell(resourcePool.data(), resourcePool.size());
                 }});
                 insert({TSchema::HasAppName::ColumnId, [] (const NWorkloadManager::TResourcePoolClassifierConfig& config) {
-                    const auto& hasAppName = config.GetConfigJson()["has_app_name"].GetString();
-                    return TCell(hasAppName.data(), hasAppName.size());
+                    if (config.GetConfigJson().Has("has_app_name")) {
+                        const auto& hasAppName = config.GetConfigJson()["has_app_name"].GetString();
+                        return TCell(hasAppName.data(), hasAppName.size());
+                    }
+                    return TCell();
                 }});
                 insert({TSchema::Action::ColumnId, [] (const NWorkloadManager::TResourcePoolClassifierConfig& config) {
-                    const auto& action = config.GetConfigJson()["action"].GetString();
-                    return TCell(action.data(), action.size());
+                    if (config.GetConfigJson().Has("action")) {
+                        const auto& action = config.GetConfigJson()["action"].GetString();
+                        return TCell(action.data(), action.size());
+                    }
+                    return TCell();
                 }});
                 insert({TSchema::HasFullScan::ColumnId, [] (const NWorkloadManager::TResourcePoolClassifierConfig& config) {
-                    const auto& hasFullScan = config.GetConfigJson()["has_full_scan"].GetString();
-                    return TCell(hasFullScan.data(), hasFullScan.size());
+                    if (config.GetConfigJson().Has("has_full_scan")) {
+                        const auto& hasFullScan = config.GetConfigJson()["has_full_scan"].GetString();
+                        return TCell(hasFullScan.data(), hasFullScan.size());
+                    }
+                    return TCell();
                 }});
                 insert({TSchema::HasPath::ColumnId, [] (const NWorkloadManager::TResourcePoolClassifierConfig& config) {
-                    const auto& hasPath = config.GetConfigJson()["has_path"].GetString();
-                    return TCell(hasPath.data(), hasPath.size());
+                    if (config.GetConfigJson().Has("has_path")) {
+                        const auto& hasPath = config.GetConfigJson()["has_path"].GetString();
+                        return TCell(hasPath.data(), hasPath.size());
+                    }
+                    return TCell();
                 }});
                 insert({TSchema::HasStream::ColumnId, [] (const NWorkloadManager::TResourcePoolClassifierConfig& config) {
-                    return TCell::Make<bool>(config.GetConfigJson()["has_stream"].GetBoolean());
+                    if (config.GetConfigJson().Has("has_stream")) {
+                        return TCell::Make<bool>(config.GetConfigJson()["has_stream"].GetBoolean());
+                    } else {
+                        return TCell();
+                    }
                 }});
             }
         };

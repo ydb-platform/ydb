@@ -1439,6 +1439,46 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT_STRING_CONTAINS(html, "Overview");
     }
 
+    Y_UNIT_TEST(StandardTabletPageRenders)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        const ui64 tabletId = CreatePartitionTablet(env);
+
+        const TActorId edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+
+        // Empty path (not "/app") renders the standard flat-tablet page.
+        runtime->SendToPipe(
+            tabletId,
+            edge,
+            new NActors::NMon::TEvRemoteHttpInfo(
+                "?TabletID=" + ToString(tabletId)),
+            0,
+            TTestActorSystem::GetPipeConfigWithRetries());
+
+        auto response =
+            env.WaitForEdgeActorEvent<NActors::NMon::TEvRemoteHttpInfoRes>(
+                edge);
+        UNIT_ASSERT(response);
+
+        const TString& html = response->Get()->Html;
+        // The standard tablet page: the info block, the Restart action, and the
+        // "App" link to this tablet's own monitoring page.
+        UNIT_ASSERT_STRING_CONTAINS(html, "Tablet generation");
+        UNIT_ASSERT_STRING_CONTAINS(
+            html,
+            "RestartTabletID=" + ToString(tabletId));
+        UNIT_ASSERT_STRING_CONTAINS(html, "tablets/app?");
+    }
+
     Y_UNIT_TEST(ShouldSuicideOnPoisonByBlockedGeneration)
     {
         TEnvironmentSetup env{{

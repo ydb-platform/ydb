@@ -28,3 +28,15 @@ items:
       href: health-check-api.md
   - name: Comparison of SDK features
     href: feature-parity.md
+  - name: Observability
+    items:
+    - name: Exporting logs to OpenTelemetry
+      href: observability/logging/opentelemetry.md
+    - name: Metrics with OpenTelemetry
+      href: observability/metrics/opentelemetry.md
+    - name: Enabling metrics in Prometheus
+      href: observability/metrics/prometheus.md
+    - name: Enabling tracing in Jaeger
+      href: observability/tracing/jaeger.md
+    - name: Tracing with OpenTelemetry
+      href: observability/tracing/opentelemetry.md

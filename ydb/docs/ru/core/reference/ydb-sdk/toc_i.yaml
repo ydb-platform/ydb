@@ -28,3 +28,16 @@ items:
       href: health-check-api.md
   - name: Сравнение возможностей SDK
     href: feature-parity.md
+  - name: Форматы данных
+    href: data-formats/index.md
+    items:
+    - name: Protobuf (Value)
+      href: data-formats/format-protobuf.md
+    - name: Apache Arrow
+      href: data-formats/format-arrow.md
+  - name: Observability
+    items:
+    - name: Экспорт логов в OpenTelemetry
+      href: observability/logging/opentelemetry.md
+    - name: Метрики с OpenTelemetry
+      href: observability/metrics/opentelemetry.md

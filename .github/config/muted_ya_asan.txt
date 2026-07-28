@@ -309,6 +309,7 @@ ydb/core/kafka_proxy/ut KafkaProtocol.BalanceScenarioCdc
 ydb/core/kafka_proxy/ut KafkaProtocol.NativeKafkaBalanceScenario
 ydb/core/kqp/ut/federated_query/datastreams KqpFederatedQueryDatastreams.ReadFromLocalTopicsWithAuth
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.CreateAndAlterStreamingQuery
+ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.OffsetsRecoveryAfterManualAndInternalRetry
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithLocalYdbJoin
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithMultipleWrites
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithPrecompute
@@ -318,6 +319,7 @@ ydb/core/kqp/ut/indexes KqpMultishardIndex.DataColumnWrite
 ydb/core/kqp/ut/indexes KqpUniqueIndex.UpdateOnNullInComplexFk
 ydb/core/kqp/ut/olap KqpOlapOptimizer.SpecialSliceToOneLayer
 ydb/core/kqp/ut/olap KqpOlapOptimizer.TilingPlusPlusTtlDeletion
+ydb/core/kqp/ut/olap/types KqpOlapJson.BloomMixIndexesOldSyntaxVariants[false,true,1024,10,1000,0,CATEGORY_BLOOM_FILTER]
 ydb/core/kqp/ut/rbo KqpRboOlap.BlockChannelScalar
 ydb/core/kqp/ut/rbo KqpRboOlap.DisableBlockExecutionPerQuery
 ydb/core/kqp/ut/rbo KqpRboOlap.PredicatePushdownCastErrors
@@ -451,6 +453,7 @@ ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup_
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup_watermarks[v1-6-True-2-1-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup_watermarks[v1-6-True-2-2-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup_watermarks[v1-8-True-1-2-fq_client0-mvp_external_ydb_endpoint0]
+ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup_watermarks[v1-8-True-2-1-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/s3 test_streaming_join.py.TestStreamingJoin.test_grace_join[v1-client0]
 ydb/tests/fq/streaming test_scalar_topic_write.py.TestScalarTopicWriteInYdb.test_mixed_valid_invalid_statements[False]
 ydb/tests/fq/streaming test_scalar_topic_write.py.TestScalarTopicWriteInYdb.test_mixed_valid_invalid_statements[True]
@@ -465,6 +468,7 @@ ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_idle_watermarks[2-shared
 ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_watermarks[no_shared]
 ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_watermarks[shared]
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
+ydb/tests/functional/config test_distconf_sentinel_node_status.py.TestKiKiMRDistConfSelfHealReassignNodeAfterReconfiguration.test_state_storage
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_add
 ydb/tests/functional/kqp/kqp_indexes ConsistentIndexRead.InteractiveTx
 ydb/tests/functional/kqp/kqp_indexes unittest.sole chunk

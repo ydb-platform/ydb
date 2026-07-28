@@ -1235,6 +1235,12 @@ def vdisk_is_ok(vslot):
     return metrics.Replicated and metrics.State == whiteboard_disk_states.EVDiskState.OK
 
 
+def vslot_is_bsc_ready(vslot):
+    # BSC treats a VDisk as ready only after Status=READY is stable for ReadyStablePeriod.
+    # Degraded/fail-model checks use IsReady (BaseConfig.TVSlot.Ready), not Status alone.
+    return vslot.Status == 'READY' and vslot.Ready and vdisk_is_ok(vslot)
+
+
 def filter_healthy_groups(groups, base_config, vslot_map):
     healthy = set()
     for group in base_config.Group:
@@ -1243,9 +1249,7 @@ def filter_healthy_groups(groups, base_config, vslot_map):
         vslots = list(vslots_of_group(group, vslot_map))
         if not vslots:
             continue
-        if not all(vslot.Status == 'READY' for vslot in vslots):
-            continue
-        if all(vdisk_is_ok(vslot) for vslot in vslots):
+        if all(vslot_is_bsc_ready(vslot) for vslot in vslots):
             healthy.add(group.GroupId)
     return healthy
 

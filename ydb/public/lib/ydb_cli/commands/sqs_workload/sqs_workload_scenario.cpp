@@ -8,6 +8,7 @@
 #include <aws/sqs/model/GetQueueUrlRequest.h>
 #include <library/cpp/logger/log.h>
 #include <library/cpp/uri/http_url.h>
+#include <util/datetime/base.h>
 #include <util/string/builder.h>
 #include <ydb/public/lib/ydb_cli/commands/sqs_workload/sqs_json/sqs_json_client.h>
 #include <ydb/public/lib/ydb_cli/common/command.h>
@@ -104,15 +105,33 @@ namespace NYdb::NConsoleClient {
     }
 
     TString TSqsWorkloadScenario::GetQueueUrl(TString topic, TString consumer, TMaybe<TString> queueName) const {
+        constexpr size_t maxAttempts = 10;
+        constexpr TDuration retryDelay = TDuration::MilliSeconds(500);
+
         Aws::SQS::Model::GetQueueUrlRequest request;
         request.SetQueueName(BuildQueueName(topic, consumer, queueName));
-        auto outcome = SqsClient->GetQueueUrl(request);
-        if (outcome.IsSuccess()) {
-            return outcome.GetResult().GetQueueUrl().c_str();
-        } else {
-            Log->Write(ELogPriority::TLOG_ERR, "got error: " + outcome.GetError().GetMessage());
-            return "";
+
+        for (size_t attempt = 1; attempt <= maxAttempts; ++attempt) {
+            auto outcome = SqsClient->GetQueueUrl(request);
+            if (outcome.IsSuccess()) {
+                return outcome.GetResult().GetQueueUrl().c_str();
+            }
+
+            const auto& error = outcome.GetError();
+            Log->Write(
+                ELogPriority::TLOG_ERR,
+                TStringBuilder()
+                    << "GetQueueUrl failed (attempt " << attempt << "/" << maxAttempts
+                    << "): " << error.GetMessage()
+                    << " responseCode=" << static_cast<int>(error.GetResponseCode()));
+
+            if (attempt == maxAttempts) {
+                break;
+            }
+            Sleep(retryDelay);
         }
+
+        return "";
     }
 
     void TSqsWorkloadScenario::DestroySqsClient() {

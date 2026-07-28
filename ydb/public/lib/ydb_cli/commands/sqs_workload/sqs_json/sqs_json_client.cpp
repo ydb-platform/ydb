@@ -537,11 +537,13 @@ namespace NYdb::NConsoleClient {
         if (response->GetResponseCode() != Aws::Http::HttpResponseCode::OK) {
             Aws::OStringStream oss;
             auto responseBody = response->GetResponseBody().rdbuf();
-            oss << response->GetClientErrorType() << " " << response->GetResponseCode() << " " << responseBody;
+            oss << response->GetClientErrorType() << " " << response->GetResponseCode()
+                << " " << response->GetClientErrorMessage() << " " << responseBody;
             Cerr << "got error response: " << oss.str() << Endl;
             Aws::SQS::SQSError error;
             error.SetResponseHeaders(response->GetHeaders());
             error.SetResponseCode(response->GetResponseCode());
+            error.SetMessage(response->GetClientErrorMessage());
             return GetQueueUrlOutcome(error);
         }
 

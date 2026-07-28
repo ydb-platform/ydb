@@ -590,7 +590,7 @@ void TColumnShardScan::SendScanError(const TString& reason) {
 
 void TColumnShardScan::Finish(const NColumnShard::TScanCounters::EStatusFinish status) {
     if (AppDataVerified().ColumnShardConfig.GetEnableDiagnostics()) {
-        auto scanIteratorDiagnostics = ScanIterator->DebugString(true);
+        auto scanIteratorDiagnostics = ScanIterator ? ScanIterator->DebugString(true) : TString("NO");
         Send(ScanDiagnosticsActorId,
             std::make_unique<NColumnShard::TEvPrivate::TEvReportScanIteratorDiagnostics>(RequestCookie, std::move(scanIteratorDiagnostics)));
     }

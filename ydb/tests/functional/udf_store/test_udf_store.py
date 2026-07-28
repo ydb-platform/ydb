@@ -13,9 +13,8 @@ from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.oss.ydb_sdk_import import ydb
 from ydb.tests.functional.udf_store.lib.constants import (
-    UDF_TABLE_META_PATH,
+    UDF_TABLE_MODULES_PATH,
     UDF_KV_BINARIES_PATH,
-    UDF_TABLE_LIBRARY_SOURCE_PATH,
 )
 
 logger = logging.getLogger(__name__)
@@ -70,7 +69,7 @@ def _run_kv_tool(endpoint, database, path, command, *extra_args):
     return result
 
 
-def _table_exists(config, database, table_path=UDF_TABLE_META_PATH):
+def _table_exists(config, database, table_path=UDF_TABLE_MODULES_PATH):
     """Return True if the UDF metadata table can be queried."""
     try:
         result = _run_query(
@@ -125,7 +124,7 @@ def test_udf_store_feature_flag(enable_udf_store):
         if enable_udf_store:
             assert table_appeared, (
                 "UDF metadata table `%s` was NOT created within %ds when udf_store_config.enabled=true"
-                % (UDF_TABLE_META_PATH, _SETTLE_TIMEOUT)
+                % (UDF_TABLE_MODULES_PATH, _SETTLE_TIMEOUT)
             )
             assert kv_appeared, (
                 "KV volume `%s` was NOT created within %ds when udf_store_config.enabled=true"
@@ -133,7 +132,7 @@ def test_udf_store_feature_flag(enable_udf_store):
             )
         else:
             assert not table_appeared, (
-                "UDF metadata table `%s` appeared even though udf_store_config is disabled" % UDF_TABLE_META_PATH
+                "UDF metadata table `%s` appeared even though udf_store_config is disabled" % UDF_TABLE_MODULES_PATH
             )
             assert not kv_appeared, (
                 "KV volume `%s` appeared even though udf_store_config is disabled" % UDF_KV_BINARIES_PATH
@@ -353,7 +352,7 @@ def test_using_native_unsafe_udf():
 
 def test_using_wasm_udf():
     """
-    Upload a WASM UDF (.wat) with JSON manifest into wasm_source/meta tables,
+    Upload a WASM UDF (.wat) with JSON manifest into modules(+chunks) tables,
     wait for TUdfStoreService to compile and load from the artifact table, then query.
     """
     database = "/Root/test"
@@ -399,7 +398,7 @@ def test_using_wasm_udf():
                     driver_config,
                     'SELECT compile_status FROM `{database}/{path}` WHERE md5 = "{md5}"'.format(
                         database=database,
-                        path=UDF_TABLE_META_PATH,
+                        path=UDF_TABLE_MODULES_PATH,
                         md5=udf_md5,
                     ),
                 )
@@ -487,9 +486,9 @@ def test_using_wasm_udf_with_sdk_and_library():
             try:
                 result = _run_query(
                     driver_config,
-                    'SELECT compile_status FROM `{database}/{path}` WHERE name = "{name}"'.format(
+                    'SELECT compile_status FROM `{database}/{path}` WHERE name = "{name}" AND type = "LIBRARY"'.format(
                         database=database,
-                        path=UDF_TABLE_LIBRARY_SOURCE_PATH,
+                        path=UDF_TABLE_MODULES_PATH,
                         name=name,
                     ),
                 )
@@ -521,7 +520,7 @@ def test_using_wasm_udf_with_sdk_and_library():
                     driver_config,
                     'SELECT compile_status FROM `{database}/{path}` WHERE md5 = "{md5}"'.format(
                         database=database,
-                        path=UDF_TABLE_META_PATH,
+                        path=UDF_TABLE_MODULES_PATH,
                         md5=udf_md5,
                     ),
                 )
@@ -610,9 +609,9 @@ def test_delete_wasm_udf_and_library():
             try:
                 result = _run_query(
                     driver_config,
-                    'SELECT compile_status FROM `{database}/{path}` WHERE name = "{name}"'.format(
+                    'SELECT compile_status FROM `{database}/{path}` WHERE name = "{name}" AND type = "LIBRARY"'.format(
                         database=database,
-                        path=UDF_TABLE_LIBRARY_SOURCE_PATH,
+                        path=UDF_TABLE_MODULES_PATH,
                         name=name,
                     ),
                 )
@@ -644,7 +643,7 @@ def test_delete_wasm_udf_and_library():
                     driver_config,
                     'SELECT compile_status FROM `{database}/{path}` WHERE md5 = "{md5}"'.format(
                         database=database,
-                        path=UDF_TABLE_META_PATH,
+                        path=UDF_TABLE_MODULES_PATH,
                         md5=udf_md5,
                     ),
                 )
@@ -687,7 +686,7 @@ def test_delete_wasm_udf_and_library():
                     driver_config,
                     'SELECT COUNT(*) AS cnt FROM `{database}/{path}` WHERE md5 = "{md5}"'.format(
                         database=database,
-                        path=UDF_TABLE_META_PATH,
+                        path=UDF_TABLE_MODULES_PATH,
                         md5=udf_md5,
                     ),
                 )
@@ -723,9 +722,9 @@ def test_delete_wasm_udf_and_library():
             try:
                 result = _run_query(
                     driver_config,
-                    'SELECT COUNT(*) AS cnt FROM `{database}/{path}` WHERE name = "{name}"'.format(
+                    'SELECT COUNT(*) AS cnt FROM `{database}/{path}` WHERE name = "{name}" AND type = "LIBRARY"'.format(
                         database=database,
-                        path=UDF_TABLE_LIBRARY_SOURCE_PATH,
+                        path=UDF_TABLE_MODULES_PATH,
                         name=name,
                     ),
                 )
@@ -737,7 +736,7 @@ def test_delete_wasm_udf_and_library():
         assert _wait_for_condition(
             lambda: _library_gone("helpers") and _library_gone("sdk"),
             timeout_seconds=30,
-            description="library_source rows deleted",
+            description="library module rows deleted",
         )
         logger.info("Test passed: deleted UDF md5=%s and libraries sdk/helpers", udf_md5)
 

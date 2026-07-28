@@ -3,14 +3,19 @@
 namespace NKikimr::NUdfStore {
 
 bool TSnapshot::DoDeserializeFromResultSet(const Ydb::Table::ExecuteQueryResult& rawDataResult) {
-    if (rawDataResult.result_sets().size() != 2) {
+    if (rawDataResult.result_sets().size() != 1) {
         return false;
     }
-    ParseSnapshotObjects<TUdfMeta>(rawDataResult.result_sets()[0], [this](TUdfMeta&& u) {
-        Udfs.emplace(u.GetMd5(), std::move(u));
-    });
-    ParseSnapshotObjects<TUdfLibrarySource>(rawDataResult.result_sets()[1], [this](TUdfLibrarySource&& library) {
-        Libraries.emplace(library.GetName(), std::move(library));
+    ParseSnapshotObjects<TUdfModule>(rawDataResult.result_sets()[0], [this](TUdfModule&& module) {
+        switch (module.GetType()) {
+            case EUdfType::LIBRARY:
+                Libraries.emplace(module.GetName(), std::move(module));
+                break;
+            case EUdfType::WASM:
+            case EUdfType::NATIVE_UNSAFE:
+                Udfs.emplace(module.GetMd5(), std::move(module));
+                break;
+        }
     });
     return true;
 }
@@ -28,8 +33,8 @@ TString TSnapshot::DoSerializeToString() const {
     return sb;
 }
 
-const TUdfMeta* TSnapshot::GetUdfByMd5(const TString& name) const {
-    auto it = Udfs.find(name);
+const TUdfModule* TSnapshot::GetUdfByMd5(const TString& md5) const {
+    auto it = Udfs.find(md5);
     if (it == Udfs.end()) {
         return nullptr;
     }
@@ -45,7 +50,7 @@ std::vector<TString> TSnapshot::GetUdfMd5s() const {
     return result;
 }
 
-const TUdfLibrarySource* TSnapshot::GetLibraryByName(const TString& name) const {
+const TUdfModule* TSnapshot::GetLibraryByName(const TString& name) const {
     auto it = Libraries.find(name);
     if (it == Libraries.end()) {
         return nullptr;

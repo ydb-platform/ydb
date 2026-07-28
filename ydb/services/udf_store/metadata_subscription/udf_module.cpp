@@ -1,21 +1,26 @@
-#include "udf_meta.h"
-#include "udf_behaviour.h"
+#include "udf_module.h"
+#include "udf_module_behaviour.h"
 #include <ydb/services/metadata/manager/ydb_value_operator.h>
 
 namespace NKikimr::NUdfStore {
 
-TUdfMeta::TDecoder::TDecoder(const Ydb::ResultSet& rawData) {
+TUdfModule::TDecoder::TDecoder(const Ydb::ResultSet& rawData) {
+    UidIdx = GetFieldIndex(rawData, UidColName);
     Md5Idx = GetFieldIndex(rawData, Md5ColName);
     SizeIdx = GetFieldIndex(rawData, SizeColName);
     NameIdx = GetFieldIndex(rawData, NameColName);
     TypeIdx = GetFieldIndex(rawData, TypeColName);
     ManifestIdx = GetFieldIndex(rawData, ManifestColName);
     VersionIdx = GetFieldIndex(rawData, VersionColName);
+    ChunkCountIdx = GetFieldIndex(rawData, ChunkCountColName);
     CompileStatusIdx = GetFieldIndex(rawData, CompileStatusColName);
     CompileErrorIdx = GetFieldIndex(rawData, CompileErrorColName);
+    CreatedAtIdx = GetFieldIndex(rawData, CreatedAtColName);
+    CompileStartedAtIdx = GetFieldIndex(rawData, CompileStartedAtColName);
+    CompileFinishedAtIdx = GetFieldIndex(rawData, CompileFinishedAtColName);
 }
 
-bool TUdfMeta::TDecoder::Read(const i32 columnIdx, EUdfType& result, const Ydb::Value& r) const {
+bool TUdfModule::TDecoder::Read(const i32 columnIdx, EUdfType& result, const Ydb::Value& r) const {
     if (columnIdx >= (i32)r.items().size() || columnIdx < 0) {
         return false;
     }
@@ -23,17 +28,10 @@ bool TUdfMeta::TDecoder::Read(const i32 columnIdx, EUdfType& result, const Ydb::
     if (!pValue.has_text_value()) {
         return false;
     }
-    if (pValue.text_value() == "NATIVE_UNSAFE") {
-        result = EUdfType::NATIVE_UNSAFE;
-    } else if (pValue.text_value() == "WASM") {
-        result = EUdfType::WASM;
-    } else {
-        return false;
-    }
-    return true;
+    return TypeFromString(pValue.text_value(), result);
 }
 
-bool TUdfMeta::TDecoder::Read(const i32 columnIdx, ECompileStatus& result, const Ydb::Value& r) const {
+bool TUdfModule::TDecoder::Read(const i32 columnIdx, ECompileStatus& result, const Ydb::Value& r) const {
     if (columnIdx >= (i32)r.items().size() || columnIdx < 0) {
         return false;
     }
@@ -44,7 +42,35 @@ bool TUdfMeta::TDecoder::Read(const i32 columnIdx, ECompileStatus& result, const
     return CompileStatusFromString(pValue.text_value(), result);
 }
 
-TString TUdfMeta::CompileStatusToString(ECompileStatus status) {
+TString TUdfModule::TypeToString(EUdfType type) {
+    switch (type) {
+        case EUdfType::NATIVE_UNSAFE:
+            return "NATIVE_UNSAFE";
+        case EUdfType::WASM:
+            return "WASM";
+        case EUdfType::LIBRARY:
+            return "LIBRARY";
+    }
+    return "NATIVE_UNSAFE";
+}
+
+bool TUdfModule::TypeFromString(TStringBuf value, EUdfType& result) {
+    if (value == "NATIVE_UNSAFE") {
+        result = EUdfType::NATIVE_UNSAFE;
+        return true;
+    }
+    if (value == "WASM") {
+        result = EUdfType::WASM;
+        return true;
+    }
+    if (value == "LIBRARY") {
+        result = EUdfType::LIBRARY;
+        return true;
+    }
+    return false;
+}
+
+TString TUdfModule::CompileStatusToString(ECompileStatus status) {
     switch (status) {
         case ECompileStatus::Pending:
             return "pending";
@@ -58,7 +84,7 @@ TString TUdfMeta::CompileStatusToString(ECompileStatus status) {
     return "pending";
 }
 
-bool TUdfMeta::CompileStatusFromString(TStringBuf value, ECompileStatus& result) {
+bool TUdfModule::CompileStatusFromString(TStringBuf value, ECompileStatus& result) {
     if (value == "pending") {
         result = ECompileStatus::Pending;
         return true;
@@ -78,7 +104,7 @@ bool TUdfMeta::CompileStatusFromString(TStringBuf value, ECompileStatus& result)
     return false;
 }
 
-TVector<NKikimrSchemeOp::TColumnDescription> TUdfMeta::GetColumnDescription(){
+TVector<NKikimrSchemeOp::TColumnDescription> TUdfModule::GetColumnDescription() {
     auto makeCol = [](const TString& name, const char* type) {
         NKikimrSchemeOp::TColumnDescription col;
         col.SetName(name);
@@ -86,23 +112,30 @@ TVector<NKikimrSchemeOp::TColumnDescription> TUdfMeta::GetColumnDescription(){
         return col;
     };
     return {
+        makeCol(UidColName, "Utf8"),
         makeCol(Md5ColName, "Utf8"),
         makeCol(SizeColName, "Uint64"),
         makeCol(NameColName, "Utf8"),
         makeCol(TypeColName, "Utf8"),
         makeCol(ManifestColName, "Json"),
         makeCol(VersionColName, "Uint64"),
+        makeCol(ChunkCountColName, "Uint64"),
         makeCol(CompileStatusColName, "Utf8"),
         makeCol(CompileErrorColName, "Utf8"),
+        makeCol(CreatedAtColName, "Timestamp"),
+        makeCol(CompileStartedAtColName, "Timestamp"),
+        makeCol(CompileFinishedAtColName, "Timestamp"),
     };
 }
 
-TVector<TString> TUdfMeta::GetPk() {
-    return {Md5ColName};
+TVector<TString> TUdfModule::GetPk() {
+    return {UidColName};
 }
 
-
-bool TUdfMeta::DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& rawValue) {
+bool TUdfModule::DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& rawValue) {
+    if (!decoder.Read(decoder.GetUidIdx(), Uid, rawValue)) {
+        return false;
+    }
     if (!decoder.Read(decoder.GetMd5Idx(), Md5, rawValue)) {
         return false;
     }
@@ -124,33 +157,52 @@ bool TUdfMeta::DeserializeFromRecord(const TDecoder& decoder, const Ydb::Value& 
     if (decoder.GetVersionIdx() >= 0) {
         decoder.Read(decoder.GetVersionIdx(), Version, rawValue);
     }
+    if (decoder.GetChunkCountIdx() >= 0) {
+        decoder.Read(decoder.GetChunkCountIdx(), ChunkCount, rawValue);
+    }
     if (decoder.GetCompileStatusIdx() >= 0) {
         ECompileStatus status = ECompileStatus::Pending;
         if (decoder.Read(decoder.GetCompileStatusIdx(), status, rawValue)) {
             CompileStatus = status;
         }
-    } else if (Type == EUdfType::WASM) {
+    } else if (Type == EUdfType::WASM || Type == EUdfType::LIBRARY) {
         CompileStatus = ECompileStatus::Pending;
     }
     if (decoder.GetCompileErrorIdx() >= 0) {
         decoder.Read(decoder.GetCompileErrorIdx(), CompileError, rawValue);
     }
+    if (decoder.GetCreatedAtIdx() >= 0) {
+        decoder.Read(decoder.GetCreatedAtIdx(), CreatedAt, rawValue);
+    }
+    if (decoder.GetCompileStartedAtIdx() >= 0) {
+        decoder.Read(decoder.GetCompileStartedAtIdx(), CompileStartedAt, rawValue);
+    }
+    if (decoder.GetCompileFinishedAtIdx() >= 0) {
+        decoder.Read(decoder.GetCompileFinishedAtIdx(), CompileFinishedAt, rawValue);
+    }
     return true;
 }
 
-NMetadata::NInternal::TTableRecord TUdfMeta::SerializeToRecord() const {
+NMetadata::NInternal::TTableRecord TUdfModule::SerializeToRecord() const {
     return {};
 }
 
-TString TUdfMeta::SerializeToString() const {
-    return TStringBuilder() << "{" << "Md5: " << Md5 << ", Size: " << Size << ", Name: " << Name
-        << ", Type: " << (Type == EUdfType::WASM ? "WASM" : "NATIVE_UNSAFE")
-        << ", Manifest: " << Manifest << ", Version: " << Version
-        << ", CompileStatus: " << CompileStatusToString(CompileStatus) << "}";
+TString TUdfModule::SerializeToString() const {
+    return TStringBuilder() << "{"
+        << "Uid: " << Uid
+        << ", Md5: " << Md5
+        << ", Size: " << Size
+        << ", Name: " << Name
+        << ", Type: " << TypeToString(Type)
+        << ", Manifest: " << Manifest
+        << ", Version: " << Version
+        << ", ChunkCount: " << ChunkCount
+        << ", CompileStatus: " << CompileStatusToString(CompileStatus)
+        << "}";
 }
 
-NMetadata::IClassBehaviour::TPtr TUdfMeta::GetBehaviour() {
-    return TUdfBehaviour::GetInstance();
+NMetadata::IClassBehaviour::TPtr TUdfModule::GetBehaviour() {
+    return TUdfModuleBehaviour::GetInstance();
 }
 
 } // namespace NKikimr::NUdfStore

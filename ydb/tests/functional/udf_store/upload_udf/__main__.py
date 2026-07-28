@@ -4,14 +4,13 @@
 Standalone helper: upload or delete a UDF / WASM library in YDB UDF store tables.
 
 Upload:
-  NATIVE_UNSAFE: KV volume + meta
-  WASM udf: wasm_source(+chunks) + meta
-  library: library_source(+chunks)
+  NATIVE_UNSAFE: KV volume + modules row (chunk_count=0)
+  WASM udf / library: modules row + module_chunks
 
 Delete:
-  WASM udf: meta + wasm_source(+chunks) + best-effort AOT artifacts (kind=module)
-  library: library_source(+chunks) + best-effort AOT artifacts (kind=library)
-  NATIVE_UNSAFE: meta (KV orphan left; service removes on-disk copy on snapshot)
+  WASM udf: modules + module_chunks + best-effort AOT artifacts (kind=module)
+  library: modules + module_chunks + best-effort AOT artifacts (kind=library)
+  NATIVE_UNSAFE: modules (KV orphan left; service removes on-disk copy on snapshot)
 """
 
 import argparse
@@ -20,17 +19,15 @@ import json
 import os
 import subprocess
 import sys
+import uuid
 
 import ydb
 
 from ydb.tests.functional.udf_store.lib.constants import (
     UDF_ARTIFACTS_DIR_PATH,
     UDF_KV_BINARIES_PATH,
-    UDF_TABLE_LIBRARY_SOURCE_CHUNKS_PATH,
-    UDF_TABLE_LIBRARY_SOURCE_PATH,
-    UDF_TABLE_META_PATH,
-    UDF_TABLE_WASM_SOURCE_CHUNKS_PATH,
-    UDF_TABLE_WASM_SOURCE_PATH,
+    UDF_TABLE_MODULE_CHUNKS_PATH,
+    UDF_TABLE_MODULES_PATH,
     WASM_BLOB_CHUNK_SIZE,
 )
 
@@ -96,8 +93,8 @@ def _upload_to_kv(endpoint: str, database: str, udf_file: str, md5: str) -> None
         )
 
 
-def _upsert_source_chunks(pool, database: str, chunks_table: str, owner_key: str, chunks: list) -> None:
-    full_table = "{}/{}".format(database, chunks_table)
+def _upsert_source_chunks(pool, database: str, owner_key: str, chunks: list) -> None:
+    full_table = "{}/{}".format(database, UDF_TABLE_MODULE_CHUNKS_PATH)
     query = (
         "DECLARE $owner_key AS Utf8; "
         "DECLARE $chunk_idx AS Uint64; "
@@ -116,115 +113,125 @@ def _upsert_source_chunks(pool, database: str, chunks_table: str, owner_key: str
         )
 
 
-def _upsert_wasm_source(
+def _find_uid(pool, database: str, *, md5: str = "", name: str = "", module_type: str = "") -> str:
+    full_table = "{}/{}".format(database, UDF_TABLE_MODULES_PATH)
+    if md5:
+        query = (
+            "DECLARE $md5 AS Utf8; "
+            "SELECT uid FROM `{}` WHERE md5 = $md5 LIMIT 1;"
+        ).format(full_table)
+        result = pool.execute_with_retries(query, {"$md5": md5})
+    elif name:
+        query = (
+            "DECLARE $name AS Utf8; "
+            "DECLARE $type AS Utf8; "
+            "SELECT uid FROM `{}` WHERE name = $name AND type = $type LIMIT 1;"
+        ).format(full_table)
+        result = pool.execute_with_retries(query, {"$name": name, "$type": module_type or "LIBRARY"})
+    else:
+        return ""
+    if not result or not result[0].rows:
+        return ""
+    return list(result[0].rows[0].values())[0]
+
+
+def _delete_chunks(pool, database: str, uid: str) -> None:
+    if not uid:
+        return
+    _delete_by_key(pool, database, UDF_TABLE_MODULE_CHUNKS_PATH, "owner_key", uid)
+
+
+def _upsert_module_row(
     pool,
     database: str,
-    md5: str,
-    version: int,
-    body: bytes,
-) -> None:
-    chunks = _split_blob(body)
-    _upsert_source_chunks(pool, database, UDF_TABLE_WASM_SOURCE_CHUNKS_PATH, md5, chunks)
-
-    full_table = "{}/{}".format(database, UDF_TABLE_WASM_SOURCE_PATH)
-    query = (
-        "DECLARE $md5 AS Utf8; "
-        "DECLARE $version AS Uint64; "
-        "DECLARE $size AS Uint64; "
-        "DECLARE $chunk_count AS Uint64; "
-        "UPSERT INTO `{}` (md5, version, size, chunk_count) "
-        "VALUES ($md5, $version, $size, $chunk_count);"
-    ).format(full_table)
-    pool.execute_with_retries(
-        query,
-        {
-            "$md5": md5,
-            "$version": _uint64(version),
-            "$size": _uint64(len(body)),
-            "$chunk_count": _uint64(len(chunks)),
-        },
-    )
-
-
-def _upsert_library_source(
-    pool,
-    database: str,
-    name: str,
-    md5: str,
-    version: int,
-    body: bytes,
-    compile_status: str = "pending",
-) -> None:
-    chunks = _split_blob(body)
-    _upsert_source_chunks(pool, database, UDF_TABLE_LIBRARY_SOURCE_CHUNKS_PATH, name, chunks)
-
-    full_table = "{}/{}".format(database, UDF_TABLE_LIBRARY_SOURCE_PATH)
-    query = (
-        "DECLARE $name AS Utf8; "
-        "DECLARE $md5 AS Utf8; "
-        "DECLARE $version AS Uint64; "
-        "DECLARE $size AS Uint64; "
-        "DECLARE $chunk_count AS Uint64; "
-        "DECLARE $compile_status AS Utf8; "
-        "UPSERT INTO `{}` (name, md5, version, size, chunk_count, compile_status) "
-        "VALUES ($name, $md5, $version, $size, $chunk_count, $compile_status);"
-    ).format(full_table)
-    pool.execute_with_retries(
-        query,
-        {
-            "$name": name,
-            "$md5": md5,
-            "$version": _uint64(version),
-            "$size": _uint64(len(body)),
-            "$chunk_count": _uint64(len(chunks)),
-            "$compile_status": compile_status,
-        },
-    )
-
-
-def _upsert_udf_row(
-    pool,
-    database: str,
+    uid: str,
     md5: str,
     name: str,
     size: int,
-    udf_type: str,
+    module_type: str,
+    chunk_count: int = 0,
     manifest: str = "",
     version: int = 1,
     compile_status: str = "",
 ) -> None:
-    full_table = "{}/{}".format(database, UDF_TABLE_META_PATH)
+    full_table = "{}/{}".format(database, UDF_TABLE_MODULES_PATH)
     params = {
+        "$uid": uid,
         "$md5": md5,
         "$size": _uint64(size),
         "$name": name,
-        "$type": udf_type,
+        "$type": module_type,
         "$version": _uint64(version),
+        "$chunk_count": _uint64(chunk_count),
     }
-    if udf_type == "WASM":
-        params["$manifest"] = _json(manifest)
+    columns = "uid, md5, size, name, type, version, chunk_count, created_at"
+    values = "$uid, $md5, $size, $name, $type, $version, $chunk_count, CurrentUtcTimestamp()"
+    decls = (
+        "DECLARE $uid AS Utf8; "
+        "DECLARE $md5 AS Utf8; "
+        "DECLARE $size AS Uint64; "
+        "DECLARE $name AS Utf8; "
+        "DECLARE $type AS Utf8; "
+        "DECLARE $version AS Uint64; "
+        "DECLARE $chunk_count AS Uint64; "
+    )
+    if module_type in ("WASM", "LIBRARY"):
         params["$compile_status"] = compile_status or "pending"
-        query = (
-            "DECLARE $md5 AS Utf8; "
-            "DECLARE $size AS Uint64; "
-            "DECLARE $name AS Utf8; "
-            "DECLARE $type AS Utf8; "
-            "DECLARE $manifest AS Json; "
-            "DECLARE $version AS Uint64; "
-            "DECLARE $compile_status AS Utf8; "
-            "UPSERT INTO `{}` (md5, size, name, type, manifest, version, compile_status) "
-            "VALUES ($md5, $size, $name, $type, $manifest, $version, $compile_status);"
-        ).format(full_table)
-    else:
-        query = (
-            "DECLARE $md5 AS Utf8; "
-            "DECLARE $size AS Uint64; "
-            "DECLARE $name AS Utf8; "
-            "DECLARE $type AS Utf8; "
-            "UPSERT INTO `{}` (md5, size, name, type) "
-            "VALUES ($md5, $size, $name, $type);"
-        ).format(full_table)
+        decls += "DECLARE $compile_status AS Utf8; "
+        columns += ", compile_status"
+        values += ", $compile_status"
+    if module_type == "WASM":
+        params["$manifest"] = _json(manifest)
+        decls += "DECLARE $manifest AS Json; "
+        columns += ", manifest"
+        values += ", $manifest"
+    query = (
+        "{decls}"
+        "UPSERT INTO `{table}` ({columns}) "
+        "VALUES ({values});"
+    ).format(decls=decls, table=full_table, columns=columns, values=values)
     pool.execute_with_retries(query, params)
+
+
+def _upsert_wasm_or_library(
+    pool,
+    database: str,
+    *,
+    module_type: str,
+    md5: str,
+    name: str,
+    version: int,
+    body: bytes,
+    manifest: str = "",
+) -> str:
+    uid = _find_uid(
+        pool,
+        database,
+        md5=md5 if module_type == "WASM" else "",
+        name=name if module_type == "LIBRARY" else "",
+        module_type=module_type,
+    )
+    if not uid:
+        uid = str(uuid.uuid4())
+    else:
+        _delete_chunks(pool, database, uid)
+
+    chunks = _split_blob(body)
+    _upsert_source_chunks(pool, database, uid, chunks)
+    _upsert_module_row(
+        pool,
+        database,
+        uid=uid,
+        md5=md5,
+        name=name,
+        size=len(body),
+        module_type=module_type,
+        chunk_count=len(chunks),
+        manifest=manifest,
+        version=version,
+        compile_status="pending",
+    )
+    return uid
 
 
 def _delete_by_key(pool, database: str, table: str, column: str, value: str) -> None:
@@ -277,17 +284,24 @@ def _delete_artifacts(driver, pool, database: str, artifact_id: str, kind: str) 
 
 
 def _delete_udf(driver, pool, database: str, md5: str, udf_type: str) -> None:
-    _delete_by_key(pool, database, UDF_TABLE_META_PATH, "md5", md5)
+    uid = _find_uid(pool, database, md5=md5)
+    if uid:
+        _delete_chunks(pool, database, uid)
+        _delete_by_key(pool, database, UDF_TABLE_MODULES_PATH, "uid", uid)
+    else:
+        _delete_by_key(pool, database, UDF_TABLE_MODULES_PATH, "md5", md5)
     if udf_type == "WASM":
-        _delete_by_key(pool, database, UDF_TABLE_WASM_SOURCE_PATH, "md5", md5)
-        _delete_by_key(pool, database, UDF_TABLE_WASM_SOURCE_CHUNKS_PATH, "owner_key", md5)
         _delete_artifacts(driver, pool, database, md5, "module")
     print("[upload_udf] deleted udf: md5={} type={}".format(md5, udf_type), file=sys.stderr)
 
 
 def _delete_library(driver, pool, database: str, name: str) -> None:
-    _delete_by_key(pool, database, UDF_TABLE_LIBRARY_SOURCE_PATH, "name", name)
-    _delete_by_key(pool, database, UDF_TABLE_LIBRARY_SOURCE_CHUNKS_PATH, "owner_key", name)
+    uid = _find_uid(pool, database, name=name, module_type="LIBRARY")
+    if uid:
+        _delete_chunks(pool, database, uid)
+        _delete_by_key(pool, database, UDF_TABLE_MODULES_PATH, "uid", uid)
+    else:
+        _delete_by_key(pool, database, UDF_TABLE_MODULES_PATH, "name", name)
     _delete_artifacts(driver, pool, database, name, "library")
     print("[upload_udf] deleted library: name={}".format(name), file=sys.stderr)
 
@@ -319,20 +333,46 @@ def _do_upload(args) -> str:
         driver.wait(timeout=30, fail_fast=True)
         with ydb.QuerySessionPool(driver, size=1) as pool:
             if args.kind == "library":
-                _upsert_library_source(pool, args.database, args.library_name, md5, args.version, body)
+                _upsert_wasm_or_library(
+                    pool,
+                    args.database,
+                    module_type="LIBRARY",
+                    md5=md5,
+                    name=args.library_name,
+                    version=args.version,
+                    body=body,
+                )
                 print("[upload_udf] library uploaded: name={} md5={}".format(
                     args.library_name, md5), file=sys.stderr)
             elif args.type == "WASM":
-                _upsert_wasm_source(pool, args.database, md5, args.version, body)
-                _upsert_udf_row(
-                    pool, args.database, md5, udf_name, size, "WASM",
-                    manifest=manifest_text, version=args.version, compile_status="pending",
+                _upsert_wasm_or_library(
+                    pool,
+                    args.database,
+                    module_type="WASM",
+                    md5=md5,
+                    name=udf_name,
+                    version=args.version,
+                    body=body,
+                    manifest=manifest_text,
                 )
-                print("[upload_udf] WASM source + metadata inserted: md5={}".format(md5), file=sys.stderr)
+                print("[upload_udf] WASM module uploaded: md5={}".format(md5), file=sys.stderr)
             else:
+                uid = _find_uid(pool, args.database, md5=md5)
+                if not uid:
+                    uid = str(uuid.uuid4())
                 _upload_to_kv(args.endpoint, args.database, args.udf_file, md5)
-                _upsert_udf_row(pool, args.database, md5, udf_name, size, "NATIVE_UNSAFE")
-                print("[upload_udf] native binary uploaded to KV, metadata inserted", file=sys.stderr)
+                _upsert_module_row(
+                    pool,
+                    args.database,
+                    uid=uid,
+                    md5=md5,
+                    name=udf_name,
+                    size=size,
+                    module_type="NATIVE_UNSAFE",
+                    chunk_count=0,
+                    version=args.version,
+                )
+                print("[upload_udf] native binary uploaded to KV, module row inserted", file=sys.stderr)
     return md5
 
 

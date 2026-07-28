@@ -13,20 +13,12 @@ TString GetUdfStorePrefix() {
     return "/" + AppData()->TenantName + "/" + path + "/udf_store";
 }
 
-TString GetWasmSourceTablePath() {
-    return GetUdfStorePrefix() + "/wasm_source";
+TString GetModulesTablePath() {
+    return GetUdfStorePrefix() + "/modules";
 }
 
-TString GetWasmSourceChunksTablePath() {
-    return GetUdfStorePrefix() + "/wasm_source_chunks";
-}
-
-TString GetLibrarySourceTablePath() {
-    return GetUdfStorePrefix() + "/library_source";
-}
-
-TString GetLibrarySourceChunksTablePath() {
-    return GetUdfStorePrefix() + "/library_source_chunks";
+TString GetModuleChunksTablePath() {
+    return GetUdfStorePrefix() + "/module_chunks";
 }
 
 TString GetArtifactTablePath(const TString& cpuSpec) {

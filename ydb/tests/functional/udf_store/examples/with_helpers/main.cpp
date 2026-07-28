@@ -2,7 +2,7 @@
 
 using namespace NYT::NQueryClient::NUdf;
 
-// Linked at query time from library_source entry "helpers"
+// Linked at query time from modules entry type=LIBRARY name "helpers"
 // (required_libraries: ["sdk", "helpers"]).
 __attribute__((import_module("helpers"), import_name("helpers_scale")))
 extern "C" long long helpers_scale(long long value);

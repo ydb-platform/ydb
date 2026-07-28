@@ -1,8 +1,6 @@
 #include "store_initializer.h"
 #include "blob_chunks.h"
-#include "metadata_subscription/udf_meta.h"
-#include "metadata_subscription/wasm_source.h"
-#include "metadata_subscription/library_source.h"
+#include "metadata_subscription/udf_module.h"
 #include "metadata_subscription/storage_paths.h"
 
 #include <ydb/library/actors/core/log.h>
@@ -32,11 +30,11 @@ void TUdfStoreInitializer::Bootstrap() {
 
 void TUdfStoreInitializer::CreateNextTable() {
     switch (InitStep_) {
-        case EInitStep::Meta: {
+        case EInitStep::Modules: {
             Register(CreateTableCreator(
-                GetTablePathSuffix(TUdfMeta::GetBehaviour()->GetStorageTablePath()),
-                TUdfMeta::GetColumnDescription(),
-                TUdfMeta::GetPk(),
+                GetTablePathSuffix(TUdfModule::GetBehaviour()->GetStorageTablePath()),
+                TUdfModule::GetColumnDescription(),
+                TUdfModule::GetPk(),
                 NKikimrServices::METADATA_PROVIDER,
                 Nothing(),
                 {},
@@ -44,45 +42,9 @@ void TUdfStoreInitializer::CreateNextTable() {
             ));
             break;
         }
-        case EInitStep::WasmSource: {
+        case EInitStep::ModuleChunks: {
             Register(CreateTableCreator(
-                GetTablePathSuffix(GetWasmSourceTablePath()),
-                TUdfWasmSource::GetColumnDescription(),
-                TUdfWasmSource::GetPk(),
-                NKikimrServices::METADATA_PROVIDER,
-                Nothing(),
-                {},
-                /* isSystemUser */ true
-            ));
-            break;
-        }
-        case EInitStep::WasmSourceChunks: {
-            Register(CreateTableCreator(
-                GetTablePathSuffix(GetWasmSourceChunksTablePath()),
-                TSourceChunkSchema::GetColumnDescription(),
-                TSourceChunkSchema::GetPk(),
-                NKikimrServices::METADATA_PROVIDER,
-                Nothing(),
-                {},
-                /* isSystemUser */ true
-            ));
-            break;
-        }
-        case EInitStep::LibrarySource: {
-            Register(CreateTableCreator(
-                GetTablePathSuffix(GetLibrarySourceTablePath()),
-                TUdfLibrarySource::GetColumnDescription(),
-                TUdfLibrarySource::GetPk(),
-                NKikimrServices::METADATA_PROVIDER,
-                Nothing(),
-                {},
-                /* isSystemUser */ true
-            ));
-            break;
-        }
-        case EInitStep::LibrarySourceChunks: {
-            Register(CreateTableCreator(
-                GetTablePathSuffix(GetLibrarySourceChunksTablePath()),
+                GetTablePathSuffix(GetModuleChunksTablePath()),
                 TSourceChunkSchema::GetColumnDescription(),
                 TSourceChunkSchema::GetPk(),
                 NKikimrServices::METADATA_PROVIDER,
@@ -93,7 +55,7 @@ void TUdfStoreInitializer::CreateNextTable() {
             break;
         }
         case EInitStep::KvVolume: {
-            auto tablePath = SplitPath(TUdfMeta::GetBehaviour()->GetStorageTablePath());
+            auto tablePath = SplitPath(TUdfModule::GetBehaviour()->GetStorageTablePath());
             AFL_VERIFY(!tablePath.empty());
             tablePath.pop_back();
             tablePath.push_back("binaries");
@@ -125,19 +87,10 @@ void TUdfStoreInitializer::CreateNextTable() {
 
 void TUdfStoreInitializer::AdvanceInitStep() {
     switch (InitStep_) {
-        case EInitStep::Meta:
-            InitStep_ = EInitStep::WasmSource;
+        case EInitStep::Modules:
+            InitStep_ = EInitStep::ModuleChunks;
             break;
-        case EInitStep::WasmSource:
-            InitStep_ = EInitStep::WasmSourceChunks;
-            break;
-        case EInitStep::WasmSourceChunks:
-            InitStep_ = EInitStep::LibrarySource;
-            break;
-        case EInitStep::LibrarySource:
-            InitStep_ = EInitStep::LibrarySourceChunks;
-            break;
-        case EInitStep::LibrarySourceChunks:
+        case EInitStep::ModuleChunks:
             InitStep_ = EInitStep::KvVolume;
             break;
         case EInitStep::KvVolume:

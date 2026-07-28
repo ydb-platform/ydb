@@ -40,13 +40,10 @@ private:
     YDB_READONLY_FLAG(EnableWasmUdf, false);
     TString WasmCpuSpecOverride;
     TString LocalCpuSpec;
-    TString WasmSourceTablePath;
-    TString WasmSourceChunksTablePath;
-    TString LibrarySourceTablePath;
-    TString LibrarySourceChunksTablePath;
+    TString ModulesTablePath;
+    TString ModuleChunksTablePath;
     TString ArtifactTablePath;
     TString ArtifactChunksTablePath;
-    TString MetaTablePath;
     std::shared_ptr<TSnapshot> CurrentSnapshot;
 
     bool NativeFetchInProgress = false;
@@ -55,6 +52,8 @@ private:
     bool LibraryCompileInProgress = false;
     THashSet<TString> LoadedUdfs;
     THashMap<TString, ui32> FetchRetryCounts;
+    // Libraries whose compile finished in DB but CurrentSnapshot may still say pending.
+    THashSet<TString> LocallyReadyLibraries;
 
     static constexpr ui32 MaxFetchRetries = 5;
 
@@ -67,10 +66,10 @@ private:
     bool IsMd5Pending(const TString& md5, EUdfType type) const;
     bool IsLibraryPending(const TString& name) const;
     void EnqueueNativeUdfIfNeeded(const TString& md5, ui64 expectedSize);
-    void EnqueueWasmCompileIfNeeded(const TUdfMeta& udf);
-    void EnqueueWasmLoadIfNeeded(const TUdfMeta& udf);
-    void EnqueueLibraryCompileIfNeeded(const TUdfLibrarySource& library);
-    bool AreLibraryDependenciesReady(TStringBuf manifest) const;
+    void EnqueueWasmCompileIfNeeded(const TUdfModule& udf, const TSnapshot* snapshot = nullptr);
+    void EnqueueWasmLoadIfNeeded(const TUdfModule& udf);
+    void EnqueueLibraryCompileIfNeeded(const TUdfModule& library);
+    bool AreLibraryDependenciesReady(TStringBuf manifest, const TSnapshot* snapshot = nullptr) const;
     void RetryPendingWasmCompilesForLibrary(const TString& libraryName);
     void UnloadWasmUdfsDependingOnLibrary(const TString& libraryName);
     void FetchNextNativeBody();

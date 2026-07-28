@@ -15,6 +15,7 @@ private:
 
     enum class EStep {
         ReadLibrarySource,
+        MarkCompiling,
         ReadLibraryChunks,
         DeleteArtifactChunks,
         UpsertArtifact,
@@ -26,13 +27,13 @@ private:
     NActors::TActorId ReplyTo_;
     TString LibraryName_;
     TString CpuSpec_;
-    TString LibrarySourceTablePath_;
-    TString LibrarySourceChunksTablePath_;
+    TString ModulesTablePath_;
+    TString ModuleChunksTablePath_;
     TString ArtifactTablePath_;
     TString ArtifactChunksTablePath_;
 
     EStep Step_ = EStep::ReadLibrarySource;
-    NTableQuery::TLibrarySourceRow LibrarySource_;
+    NTableQuery::TModuleSourceRow LibrarySource_;
     NTableQuery::TWasmArtifactRow ArtifactRow_;
     TString Kind_;
     TString Format_;
@@ -56,15 +57,15 @@ public:
         const NActors::TActorId& replyTo,
         const TString& libraryName,
         const TString& cpuSpec,
-        const TString& librarySourceTablePath,
-        const TString& librarySourceChunksTablePath,
+        const TString& modulesTablePath,
+        const TString& moduleChunksTablePath,
         const TString& artifactTablePath,
         const TString& artifactChunksTablePath)
         : ReplyTo_(replyTo)
         , LibraryName_(libraryName)
         , CpuSpec_(cpuSpec)
-        , LibrarySourceTablePath_(librarySourceTablePath)
-        , LibrarySourceChunksTablePath_(librarySourceChunksTablePath)
+        , ModulesTablePath_(modulesTablePath)
+        , ModuleChunksTablePath_(moduleChunksTablePath)
         , ArtifactTablePath_(artifactTablePath)
         , ArtifactChunksTablePath_(artifactChunksTablePath)
     {}

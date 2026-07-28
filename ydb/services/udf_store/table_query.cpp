@@ -1,7 +1,7 @@
 #include "table_query.h"
 
 #include "blob_chunks.h"
-#include "metadata_subscription/udf_meta.h"
+#include "metadata_subscription/udf_module.h"
 
 #include <ydb/services/metadata/manager/ydb_value_operator.h>
 
@@ -139,49 +139,31 @@ bool ExtractQueryResult(
     return result.result_sets_size() > 0;
 }
 
-TString BuildSelectWasmSourceQuery(const TString& tablePath) {
+TString BuildSelectModuleByMd5Query(const TString& tablePath) {
     return TStringBuilder()
         << "DECLARE $md5 AS Utf8; "
-        << "SELECT md5, version, size, chunk_count FROM `"
+        << "SELECT uid, md5, name, type, version, size, chunk_count, compile_status, compile_error FROM `"
         << EscapeTablePath(tablePath)
-        << "` WHERE md5 = $md5;";
+        << "` WHERE md5 = $md5 AND type = 'WASM';";
 }
 
-void SetSelectWasmSourceParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& md5) {
+void SetSelectModuleByMd5Params(Ydb::Table::ExecuteDataQueryRequest& request, const TString& md5) {
     (*request.mutable_parameters())["$md5"] = MakeUtf8Param(md5);
 }
 
-bool ParseWasmSourceResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TWasmSourceRow& row) {
-    Ydb::Table::ExecuteQueryResult result;
-    if (!ExtractQueryResult(response, result)) {
-        return false;
-    }
-    const auto& resultSet = result.result_sets(0);
-    if (resultSet.rows().empty()) {
-        return false;
-    }
-    if (!ReadUtf8Column(resultSet, "md5", row.Md5)) {
-        return false;
-    }
-    ReadUint64Column(resultSet, "version", row.Version);
-    ReadUint64Column(resultSet, "size", row.Size);
-    ReadUint64Column(resultSet, "chunk_count", row.ChunkCount);
-    return true;
-}
-
-TString BuildSelectLibrarySourceQuery(const TString& tablePath) {
+TString BuildSelectModuleByNameQuery(const TString& tablePath) {
     return TStringBuilder()
         << "DECLARE $name AS Utf8; "
-        << "SELECT name, md5, version, size, chunk_count, compile_status, compile_error FROM `"
+        << "SELECT uid, md5, name, type, version, size, chunk_count, compile_status, compile_error FROM `"
         << EscapeTablePath(tablePath)
-        << "` WHERE name = $name;";
+        << "` WHERE name = $name AND type = 'LIBRARY';";
 }
 
-void SetSelectLibrarySourceParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& name) {
+void SetSelectModuleByNameParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& name) {
     (*request.mutable_parameters())["$name"] = MakeUtf8Param(name);
 }
 
-bool ParseLibrarySourceResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TLibrarySourceRow& row) {
+bool ParseModuleSourceResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TModuleSourceRow& row) {
     Ydb::Table::ExecuteQueryResult result;
     if (!ExtractQueryResult(response, result)) {
         return false;
@@ -190,16 +172,18 @@ bool ParseLibrarySourceResponse(const Ydb::Table::ExecuteDataQueryResponse& resp
     if (resultSet.rows().empty()) {
         return false;
     }
-    if (!ReadUtf8Column(resultSet, "name", row.Name)) {
+    if (!ReadUtf8Column(resultSet, "uid", row.Uid)) {
         return false;
     }
     ReadUtf8Column(resultSet, "md5", row.Md5);
+    ReadUtf8Column(resultSet, "name", row.Name);
+    ReadUtf8Column(resultSet, "type", row.Type);
     ReadUint64Column(resultSet, "version", row.Version);
     ReadUint64Column(resultSet, "size", row.Size);
     ReadUint64Column(resultSet, "chunk_count", row.ChunkCount);
     TString compileStatus;
     if (ReadUtf8Column(resultSet, "compile_status", compileStatus)) {
-        TUdfMeta::CompileStatusFromString(compileStatus, row.CompileStatus);
+        TUdfModule::CompileStatusFromString(compileStatus, row.CompileStatus);
     }
     ReadUtf8Column(resultSet, "compile_error", row.CompileError);
     return true;
@@ -376,46 +360,28 @@ void SetUpsertArtifactChunkParams(
     (*request.mutable_parameters())["$data"] = MakeStringParam(data);
 }
 
-TString BuildUpdateLibraryCompileStatusQuery(const TString& tablePath) {
-    return TStringBuilder()
-        << "DECLARE $name AS Utf8; "
-        << "DECLARE $compile_status AS Utf8; "
-        << "DECLARE $compile_error AS Utf8; "
-        << "UPDATE `"
-        << EscapeTablePath(tablePath)
-        << "` SET compile_status = $compile_status, compile_error = $compile_error "
-        << "WHERE name = $name;";
-}
-
-void SetUpdateLibraryCompileStatusParams(
-    Ydb::Table::ExecuteDataQueryRequest& request,
-    const TString& name,
-    const TString& status,
-    const TString& errorMessage)
-{
-    (*request.mutable_parameters())["$name"] = MakeUtf8Param(name);
-    (*request.mutable_parameters())["$compile_status"] = MakeUtf8Param(status);
-    (*request.mutable_parameters())["$compile_error"] = MakeUtf8Param(errorMessage);
-}
-
 TString BuildUpdateCompileStatusQuery(const TString& tablePath) {
     return TStringBuilder()
-        << "DECLARE $md5 AS Utf8; "
+        << "DECLARE $uid AS Utf8; "
         << "DECLARE $compile_status AS Utf8; "
         << "DECLARE $compile_error AS Utf8; "
         << "UPDATE `"
         << EscapeTablePath(tablePath)
-        << "` SET compile_status = $compile_status, compile_error = $compile_error "
-        << "WHERE md5 = $md5;";
+        << "` SET compile_status = $compile_status, "
+        << "compile_error = $compile_error, "
+        << "compile_started_at = IF($compile_status = 'compiling', CurrentUtcTimestamp(), compile_started_at), "
+        << "compile_finished_at = IF($compile_status = 'ready' OR $compile_status = 'failed', "
+        << "CurrentUtcTimestamp(), compile_finished_at) "
+        << "WHERE uid = $uid;";
 }
 
 void SetUpdateCompileStatusParams(
     Ydb::Table::ExecuteDataQueryRequest& request,
-    const TString& md5,
+    const TString& uid,
     const TString& status,
     const TString& errorMessage)
 {
-    (*request.mutable_parameters())["$md5"] = MakeUtf8Param(md5);
+    (*request.mutable_parameters())["$uid"] = MakeUtf8Param(uid);
     (*request.mutable_parameters())["$compile_status"] = MakeUtf8Param(status);
     (*request.mutable_parameters())["$compile_error"] = MakeUtf8Param(errorMessage);
 }

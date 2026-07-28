@@ -114,6 +114,6 @@ Upload helper: `ENV(YDB_UPLOAD_UDF_PATH=...)`, поддерживает `--kind 
 
 1. Включить `udf_store_config.enabled` + `enable_wasm_udf`.
 2. Upload library/module через `upload_udf` (или UI/SQL upsert в таблицы).
-3. Дождаться `compile_status=ready` в `meta` / `library_source`.
+3. Дождаться `compile_status=ready` в `modules`.
 4. Выполнить YQL с `Module::func`.
 5. При ошибке смотреть CA log (`Failed to acquire WASM query compartment` / linkage Missing) и issues ответа — не verification stats.

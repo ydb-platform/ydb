@@ -1,6 +1,5 @@
 #pragma once
-#include "udf_meta.h"
-#include "library_source.h"
+#include "udf_module.h"
 
 #include <ydb/services/metadata/abstract/common.h>
 #include <ydb/library/accessor/accessor.h>
@@ -10,8 +9,8 @@ namespace NKikimr::NUdfStore {
 class TSnapshot: public NMetadata::NFetcher::ISnapshot {
 private:
     using TBase = NMetadata::NFetcher::ISnapshot;
-    using TUdfs = std::map<TString, TUdfMeta>;
-    using TLibraries = std::map<TString, TUdfLibrarySource>;
+    using TUdfs = std::map<TString, TUdfModule>;
+    using TLibraries = std::map<TString, TUdfModule>;
     YDB_READONLY_DEF(TUdfs, Udfs);
     YDB_READONLY_DEF(TLibraries, Libraries);
 protected:
@@ -20,9 +19,9 @@ protected:
 public:
     using TBase::TBase;
 
-    const TUdfMeta* GetUdfByMd5(const TString& name) const;
+    const TUdfModule* GetUdfByMd5(const TString& md5) const;
     std::vector<TString> GetUdfMd5s() const;
-    const TUdfLibrarySource* GetLibraryByName(const TString& name) const;
+    const TUdfModule* GetLibraryByName(const TString& name) const;
     std::vector<TString> GetLibraryNames() const;
 };
 

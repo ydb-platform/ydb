@@ -70,14 +70,21 @@ TString TUdfStoreService::GetModuleExtensionFromManifest(TStringBuf manifest) {
     return "wasm";
 }
 
-bool TUdfStoreService::AreLibraryDependenciesReady(TStringBuf manifest) const {
-    if (!CurrentSnapshot) {
+bool TUdfStoreService::AreLibraryDependenciesReady(
+    TStringBuf manifest,
+    const TSnapshot* snapshot) const
+{
+    const TSnapshot* snap = snapshot ? snapshot : CurrentSnapshot.get();
+    if (!snap) {
         return false;
     }
     try {
         const auto parsed = NWasm::ParseManifest(manifest);
         for (const auto& libraryName : parsed.RequiredLibraries) {
-            const auto* library = CurrentSnapshot->GetLibraryByName(libraryName);
+            if (LocallyReadyLibraries.contains(libraryName)) {
+                continue;
+            }
+            const auto* library = snap->GetLibraryByName(libraryName);
             if (!library || library->GetCompileStatus() != ECompileStatus::Ready) {
                 return false;
             }
@@ -104,13 +111,13 @@ void TUdfStoreService::EnqueueNativeUdfIfNeeded(const TString& md5, ui64 expecte
     });
 }
 
-void TUdfStoreService::EnqueueWasmCompileIfNeeded(const TUdfMeta& udf) {
+void TUdfStoreService::EnqueueWasmCompileIfNeeded(const TUdfModule& udf, const TSnapshot* snapshot) {
     if (udf.GetCompileStatus() == ECompileStatus::Ready
         || udf.GetCompileStatus() == ECompileStatus::Failed)
     {
         return;
     }
-    if (!AreLibraryDependenciesReady(udf.GetManifest())) {
+    if (!AreLibraryDependenciesReady(udf.GetManifest(), snapshot)) {
         return;
     }
     if (IsMd5Pending(udf.GetMd5(), EUdfType::WASM)) {
@@ -125,7 +132,7 @@ void TUdfStoreService::EnqueueWasmCompileIfNeeded(const TUdfMeta& udf) {
     });
 }
 
-void TUdfStoreService::EnqueueWasmLoadIfNeeded(const TUdfMeta& udf) {
+void TUdfStoreService::EnqueueWasmLoadIfNeeded(const TUdfModule& udf) {
     if (udf.GetCompileStatus() != ECompileStatus::Ready) {
         return;
     }
@@ -158,7 +165,7 @@ void TUdfStoreService::EnqueueWasmLoadIfNeeded(const TUdfMeta& udf) {
     });
 }
 
-void TUdfStoreService::EnqueueLibraryCompileIfNeeded(const TUdfLibrarySource& library) {
+void TUdfStoreService::EnqueueLibraryCompileIfNeeded(const TUdfModule& library) {
     if (library.GetCompileStatus() == ECompileStatus::Ready
         || library.GetCompileStatus() == ECompileStatus::Failed)
     {
@@ -226,13 +233,10 @@ void TUdfStoreService::UnloadWasmUdfsDependingOnLibrary(const TString& libraryNa
 }
 
 void TUdfStoreService::Bootstrap() {
-    WasmSourceTablePath = GetWasmSourceTablePath();
-    WasmSourceChunksTablePath = GetWasmSourceChunksTablePath();
-    LibrarySourceTablePath = GetLibrarySourceTablePath();
-    LibrarySourceChunksTablePath = GetLibrarySourceChunksTablePath();
+    ModulesTablePath = TUdfModule::GetBehaviour()->GetStorageTablePath();
+    ModuleChunksTablePath = GetModuleChunksTablePath();
     ArtifactTablePath = GetArtifactTablePath(LocalCpuSpec);
     ArtifactChunksTablePath = GetArtifactChunksTablePath(LocalCpuSpec);
-    MetaTablePath = TUdfMeta::GetBehaviour()->GetStorageTablePath();
 
     Become(&TUdfStoreService::StateMain);
     Register(new TUdfStoreInitializer(SelfId(), KvStorageMedia));
@@ -283,7 +287,7 @@ void TUdfStoreService::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TP
         << "TUdfStoreService: received UDF snapshot";
 
     for (const auto& [name, library] : snapshot->GetLibraries()) {
-        const TUdfLibrarySource* existing = CurrentSnapshot
+        const TUdfModule* existing = CurrentSnapshot
             ? CurrentSnapshot->GetLibraryByName(name)
             : nullptr;
         const bool isNew = !existing;
@@ -322,7 +326,7 @@ void TUdfStoreService::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TP
     }
 
     for (const auto& [md5, udf] : snapshot->GetUdfs()) {
-        const TUdfMeta* existing = CurrentSnapshot ? CurrentSnapshot->GetUdfByMd5(md5) : nullptr;
+        const TUdfModule* existing = CurrentSnapshot ? CurrentSnapshot->GetUdfByMd5(md5) : nullptr;
         const bool isNew = !existing;
 
         if (isNew) {
@@ -383,10 +387,12 @@ void TUdfStoreService::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TP
                     FetchRetryCounts.erase(md5);
                 }
                 if (udf.GetCompileStatus() != ECompileStatus::Ready) {
-                    EnqueueWasmCompileIfNeeded(udf);
+                    EnqueueWasmCompileIfNeeded(udf, snapshot.get());
                 } else {
                     EnqueueWasmLoadIfNeeded(udf);
                 }
+                break;
+            case EUdfType::LIBRARY:
                 break;
         }
     }
@@ -414,6 +420,17 @@ void TUdfStoreService::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TP
     }
 
     CurrentSnapshot = snapshot;
+
+    TVector<TString> confirmedLibraries;
+    for (const auto& name : LocallyReadyLibraries) {
+        const auto* library = CurrentSnapshot->GetLibraryByName(name);
+        if (library && library->GetCompileStatus() == ECompileStatus::Ready) {
+            confirmedLibraries.push_back(name);
+        }
+    }
+    for (const auto& name : confirmedLibraries) {
+        LocallyReadyLibraries.erase(name);
+    }
 
     if (!NativeFetchInProgress) {
         FetchNextNativeBody();
@@ -471,8 +488,8 @@ void TUdfStoreService::FetchNextLibraryCompile() {
         SelfId(),
         pending.Name,
         LocalCpuSpec,
-        LibrarySourceTablePath,
-        LibrarySourceChunksTablePath,
+        ModulesTablePath,
+        ModuleChunksTablePath,
         ArtifactTablePath,
         ArtifactChunksTablePath));
 }
@@ -491,11 +508,10 @@ void TUdfStoreService::FetchNextWasmCompile() {
         pending.Md5,
         pending.Manifest,
         LocalCpuSpec,
-        WasmSourceTablePath,
-        WasmSourceChunksTablePath,
+        ModulesTablePath,
+        ModuleChunksTablePath,
         ArtifactTablePath,
-        ArtifactChunksTablePath,
-        MetaTablePath));
+        ArtifactChunksTablePath));
 }
 
 void TUdfStoreService::FetchNextWasmLoad() {
@@ -534,6 +550,7 @@ void TUdfStoreService::Handle(TEvLibraryCompileResponse::TPtr& ev) {
         ALS_INFO(NKikimrServices::METADATA_PROVIDER)
             << "TUdfStoreService: library '" << libraryName
             << "' compiled for cpu_spec " << LocalCpuSpec;
+        LocallyReadyLibraries.insert(libraryName);
         RetryPendingWasmCompilesForLibrary(libraryName);
     } else {
         ALS_ERROR(NKikimrServices::METADATA_PROVIDER)

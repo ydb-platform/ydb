@@ -16,7 +16,7 @@
 ```
 ydb/services/udf_store/
   service.{h,cpp}                 # оркестрация compile/load по metadata snapshot
-  store_initializer.*             # создание таблиц meta / wasm_source / library_source
+  store_initializer.*             # создание таблиц modules / module_chunks
   artifact_table_initializer.*    # per-CPU artifact tables
   wasm_library_compile_actor.*    # AOT библиотек
   wasm_compile_actor.*            # AOT UDF-модулей (ждёт ready библиотек)
@@ -32,7 +32,7 @@ ydb/services/udf_store/
     host.*                        # AllocateBytes / ThrowException host ABI
     compile.*                     # CompileModuleObjectCode (WAVM AOT)
     manifest.*                    # JSON manifest parse (functions + objects)
-  metadata_subscription/          # snapshot meta + libraries
+  metadata_subscription/          # snapshot modules (udf + libraries)
 
 ydb/library/wasm/
   engine/compartment.cpp          # WAVM compartment, AddSdk, AddPrecompiledModule

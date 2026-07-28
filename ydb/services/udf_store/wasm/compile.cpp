@@ -56,6 +56,19 @@ NYdb::NWasm::EBytecodeFormat DetectBytecodeFormat(TStringBuf extension) {
     return NYdb::NWasm::EBytecodeFormat::Binary;
 }
 
+NYdb::NWasm::EBytecodeFormat DetectBytecodeFormatFromBody(TStringBuf body) {
+    // WASM binary magic: 0x00 0x61 0x73 0x6d ("\0asm").
+    if (body.size() >= 4
+        && body[0] == '\0'
+        && body[1] == 'a'
+        && body[2] == 's'
+        && body[3] == 'm')
+    {
+        return NYdb::NWasm::EBytecodeFormat::Binary;
+    }
+    return NYdb::NWasm::EBytecodeFormat::HumanReadable;
+}
+
 TString CompileModuleObjectCode(TStringBuf wasmBytes, NYdb::NWasm::EBytecodeFormat format) {
     auto irModule = ParseWasmModule(wasmBytes, format);
     auto compiled = WAVM::Runtime::compileModule(irModule);

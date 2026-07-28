@@ -1,7 +1,7 @@
 #include "wasm_compile_actor.h"
 
 #include "blob_chunks.h"
-#include "metadata_subscription/udf_meta.h"
+#include "metadata_subscription/udf_module.h"
 #include "metadata_subscription/wasm_artifact.h"
 #include "wasm/compile.h"
 #include "wasm/manifest.h"
@@ -16,7 +16,7 @@ namespace NKikimr::NUdfStore {
 void TWasmCompileActor::Bootstrap() {
     Become(&TWasmCompileActor::StateMain);
     ModuleKind_ = WasmArtifactKindToString(EWasmArtifactKind::Module);
-    ExecuteQuery(NTableQuery::BuildSelectWasmSourceQuery(WasmSourceTablePath_), true);
+    ExecuteQuery(NTableQuery::BuildSelectModuleByMd5Query(ModulesTablePath_), true);
 }
 
 void TWasmCompileActor::ExecuteQuery(const TString& yql, bool readOnly) {
@@ -31,11 +31,18 @@ void TWasmCompileActor::ExecuteQuery(const TString& yql, bool readOnly) {
     }
 
     switch (Step_) {
-        case EStep::ReadWasmSource:
-            NTableQuery::SetSelectWasmSourceParams(request, Md5_);
+        case EStep::ReadModuleSource:
+            NTableQuery::SetSelectModuleByMd5Params(request, Md5_);
             break;
-        case EStep::ReadWasmChunks:
-            NTableQuery::SetSelectSourceChunksParams(request, Md5_);
+        case EStep::MarkCompiling:
+            NTableQuery::SetUpdateCompileStatusParams(
+                request,
+                ModuleSource_.Uid,
+                TUdfModule::CompileStatusToString(ECompileStatus::Compiling),
+                "");
+            break;
+        case EStep::ReadModuleChunks:
+            NTableQuery::SetSelectSourceChunksParams(request, ModuleSource_.Uid);
             break;
         case EStep::ReadLibraryArtifact:
             NTableQuery::SetSelectArtifactParams(
@@ -64,15 +71,15 @@ void TWasmCompileActor::ExecuteQuery(const TString& yql, bool readOnly) {
         case EStep::UpdateMetaReady:
             NTableQuery::SetUpdateCompileStatusParams(
                 request,
-                Md5_,
-                TUdfMeta::CompileStatusToString(ECompileStatus::Ready),
+                ModuleSource_.Uid,
+                TUdfModule::CompileStatusToString(ECompileStatus::Ready),
                 "");
             break;
         case EStep::UpdateMetaFailed:
             NTableQuery::SetUpdateCompileStatusParams(
                 request,
-                Md5_,
-                TUdfMeta::CompileStatusToString(ECompileStatus::Failed),
+                ModuleSource_.Uid,
+                TUdfModule::CompileStatusToString(ECompileStatus::Failed),
                 ErrorMessage_);
             break;
     }
@@ -96,33 +103,38 @@ void TWasmCompileActor::HandleQueryFailed(NMetadata::NRequest::TEvRequestFailed:
 void TWasmCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQueryResponse& response) {
     try {
         switch (Step_) {
-            case EStep::ReadWasmSource: {
-                if (!NTableQuery::ParseWasmSourceResponse(response, WasmSource_)) {
-                    ReplyError(TStringBuilder() << "WASM source row not found for md5=" << Md5_);
+            case EStep::ReadModuleSource: {
+                if (!NTableQuery::ParseModuleSourceResponse(response, ModuleSource_)) {
+                    ReplyError(TStringBuilder() << "WASM module row not found for md5=" << Md5_);
                     return;
                 }
                 ParsedManifest_ = NWasm::ParseManifest(Manifest_);
-                Step_ = EStep::ReadWasmChunks;
-                ExecuteQuery(NTableQuery::BuildSelectSourceChunksQuery(WasmSourceChunksTablePath_), true);
+                Step_ = EStep::MarkCompiling;
+                ExecuteQuery(NTableQuery::BuildUpdateCompileStatusQuery(ModulesTablePath_), false);
                 return;
             }
-            case EStep::ReadWasmChunks: {
+            case EStep::MarkCompiling: {
+                Step_ = EStep::ReadModuleChunks;
+                ExecuteQuery(NTableQuery::BuildSelectSourceChunksQuery(ModuleChunksTablePath_), true);
+                return;
+            }
+            case EStep::ReadModuleChunks: {
                 TVector<TString> chunks;
                 if (!NTableQuery::ParseSourceChunksResponse(response, chunks)) {
-                    ReplyError(TStringBuilder() << "Failed to read wasm source chunks for md5=" << Md5_);
+                    ReplyError(TStringBuilder() << "Failed to read module source chunks for md5=" << Md5_);
                     return;
                 }
-                if (chunks.size() != WasmSource_.ChunkCount) {
+                if (chunks.size() != ModuleSource_.ChunkCount) {
                     ReplyError(TStringBuilder()
-                        << "Wasm source chunk_count mismatch for md5=" << Md5_
-                        << ": meta=" << WasmSource_.ChunkCount << " actual=" << chunks.size());
+                        << "Module source chunk_count mismatch for md5=" << Md5_
+                        << ": meta=" << ModuleSource_.ChunkCount << " actual=" << chunks.size());
                     return;
                 }
-                WasmSource_.Body = JoinBlobs(chunks);
-                if (WasmSource_.Size != 0 && WasmSource_.Body.size() != WasmSource_.Size) {
+                ModuleSource_.Body = JoinBlobs(chunks);
+                if (ModuleSource_.Size != 0 && ModuleSource_.Body.size() != ModuleSource_.Size) {
                     ReplyError(TStringBuilder()
-                        << "Wasm source size mismatch for md5=" << Md5_
-                        << ": meta=" << WasmSource_.Size << " actual=" << WasmSource_.Body.size());
+                        << "Module source size mismatch for md5=" << Md5_
+                        << ": meta=" << ModuleSource_.Size << " actual=" << ModuleSource_.Body.size());
                     return;
                 }
                 Step_ = EStep::ReadLibraryArtifact;
@@ -180,7 +192,7 @@ void TWasmCompileActor::StartNextLibrary() {
 
 void TWasmCompileActor::ValidateExports() {
     const auto format = NWasm::DetectBytecodeFormat(ParsedManifest_.ModuleExtension);
-    const auto exports = NWasm::CollectWasmExports(WasmSource_.Body, format);
+    const auto exports = NWasm::CollectWasmExports(ModuleSource_.Body, format);
 
     auto requireExport = [&](const TString& exportName) {
         if (exportName.empty()) {
@@ -208,8 +220,8 @@ void TWasmCompileActor::CompileUserModule() {
     try {
         ValidateExports();
         const auto format = NWasm::DetectBytecodeFormat(ParsedManifest_.ModuleExtension);
-        const TString objectCode = NWasm::CompileModuleObjectCode(WasmSource_.Body, format);
-        const auto wasmChunks = SplitBlob(WasmSource_.Body);
+        const TString objectCode = NWasm::CompileModuleObjectCode(ModuleSource_.Body, format);
+        const auto wasmChunks = SplitBlob(ModuleSource_.Body);
         const auto objectChunks = SplitBlob(objectCode);
 
         PendingChunkWrites_.clear();
@@ -231,10 +243,10 @@ void TWasmCompileActor::CompileUserModule() {
         ArtifactRow_ = NTableQuery::TWasmArtifactRow{
             .Id = Md5_,
             .Kind = ModuleKind_,
-            .SourceMd5 = WasmSource_.Md5,
-            .Version = WasmSource_.Version,
+            .SourceMd5 = ModuleSource_.Md5,
+            .Version = ModuleSource_.Version,
             .Format = ParsedManifest_.ModuleExtension,
-            .WasmDataSize = WasmSource_.Body.size(),
+            .WasmDataSize = ModuleSource_.Body.size(),
             .WasmDataChunkCount = wasmChunks.size(),
             .ObjectCodeSize = objectCode.size(),
             .ObjectCodeChunkCount = objectChunks.size(),
@@ -255,7 +267,7 @@ void TWasmCompileActor::StartWriteChunks() {
 void TWasmCompileActor::WriteNextChunk() {
     if (NextChunkWriteIndex_ >= PendingChunkWrites_.size()) {
         Step_ = EStep::UpdateMetaReady;
-        ExecuteQuery(NTableQuery::BuildUpdateCompileStatusQuery(MetaTablePath_), false);
+        ExecuteQuery(NTableQuery::BuildUpdateCompileStatusQuery(ModulesTablePath_), false);
         return;
     }
     Step_ = EStep::WriteArtifactChunk;
@@ -264,8 +276,12 @@ void TWasmCompileActor::WriteNextChunk() {
 
 void TWasmCompileActor::FailAndPersist(const TString& message) {
     ErrorMessage_ = message;
+    if (ModuleSource_.Uid.empty()) {
+        ReplyError(message);
+        return;
+    }
     Step_ = EStep::UpdateMetaFailed;
-    ExecuteQuery(NTableQuery::BuildUpdateCompileStatusQuery(MetaTablePath_), false);
+    ExecuteQuery(NTableQuery::BuildUpdateCompileStatusQuery(ModulesTablePath_), false);
 }
 
 void TWasmCompileActor::ReplyError(const TString& message) {

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "metadata_subscription/udf_meta.h"
+#include "metadata_subscription/udf_module.h"
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
@@ -9,17 +9,11 @@
 
 namespace NKikimr::NUdfStore::NTableQuery {
 
-struct TWasmSourceRow {
+struct TModuleSourceRow {
+    TString Uid;
     TString Md5;
-    ui64 Version = 0;
-    ui64 Size = 0;
-    ui64 ChunkCount = 0;
-    TString Body;
-};
-
-struct TLibrarySourceRow {
     TString Name;
-    TString Md5;
+    TString Type;
     ui64 Version = 0;
     ui64 Size = 0;
     ui64 ChunkCount = 0;
@@ -48,13 +42,13 @@ struct TPendingChunkWrite {
     TString Data;
 };
 
-TString BuildSelectWasmSourceQuery(const TString& tablePath);
-void SetSelectWasmSourceParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& md5);
-bool ParseWasmSourceResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TWasmSourceRow& row);
+TString BuildSelectModuleByMd5Query(const TString& tablePath);
+void SetSelectModuleByMd5Params(Ydb::Table::ExecuteDataQueryRequest& request, const TString& md5);
 
-TString BuildSelectLibrarySourceQuery(const TString& tablePath);
-void SetSelectLibrarySourceParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& name);
-bool ParseLibrarySourceResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TLibrarySourceRow& row);
+TString BuildSelectModuleByNameQuery(const TString& tablePath);
+void SetSelectModuleByNameParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& name);
+
+bool ParseModuleSourceResponse(const Ydb::Table::ExecuteDataQueryResponse& response, TModuleSourceRow& row);
 
 TString BuildSelectSourceChunksQuery(const TString& tablePath);
 void SetSelectSourceChunksParams(Ydb::Table::ExecuteDataQueryRequest& request, const TString& ownerKey);
@@ -95,17 +89,10 @@ void SetUpsertArtifactChunkParams(
     ui64 chunkIdx,
     const TString& data);
 
-TString BuildUpdateLibraryCompileStatusQuery(const TString& tablePath);
-void SetUpdateLibraryCompileStatusParams(
-    Ydb::Table::ExecuteDataQueryRequest& request,
-    const TString& name,
-    const TString& status,
-    const TString& errorMessage);
-
 TString BuildUpdateCompileStatusQuery(const TString& tablePath);
 void SetUpdateCompileStatusParams(
     Ydb::Table::ExecuteDataQueryRequest& request,
-    const TString& md5,
+    const TString& uid,
     const TString& status,
     const TString& errorMessage);
 

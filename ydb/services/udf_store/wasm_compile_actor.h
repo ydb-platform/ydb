@@ -15,8 +15,9 @@ private:
     using TBase = NActors::TActorBootstrapped<TWasmCompileActor>;
 
     enum class EStep {
-        ReadWasmSource,
-        ReadWasmChunks,
+        ReadModuleSource,
+        MarkCompiling,
+        ReadModuleChunks,
         ReadLibraryArtifact,
         DeleteArtifactChunks,
         UpsertModuleArtifact,
@@ -29,14 +30,13 @@ private:
     TString Md5_;
     TString Manifest_;
     TString CpuSpec_;
-    TString WasmSourceTablePath_;
-    TString WasmSourceChunksTablePath_;
+    TString ModulesTablePath_;
+    TString ModuleChunksTablePath_;
     TString ArtifactTablePath_;
     TString ArtifactChunksTablePath_;
-    TString MetaTablePath_;
 
-    EStep Step_ = EStep::ReadWasmSource;
-    NTableQuery::TWasmSourceRow WasmSource_;
+    EStep Step_ = EStep::ReadModuleSource;
+    NTableQuery::TModuleSourceRow ModuleSource_;
     NWasm::TWasmManifest ParsedManifest_;
     size_t NextLibraryIndex_ = 0;
     TString PendingLibraryName_;
@@ -66,20 +66,18 @@ public:
         const TString& md5,
         const TString& manifest,
         const TString& cpuSpec,
-        const TString& wasmSourceTablePath,
-        const TString& wasmSourceChunksTablePath,
+        const TString& modulesTablePath,
+        const TString& moduleChunksTablePath,
         const TString& artifactTablePath,
-        const TString& artifactChunksTablePath,
-        const TString& metaTablePath)
+        const TString& artifactChunksTablePath)
         : ReplyTo_(replyTo)
         , Md5_(md5)
         , Manifest_(manifest)
         , CpuSpec_(cpuSpec)
-        , WasmSourceTablePath_(wasmSourceTablePath)
-        , WasmSourceChunksTablePath_(wasmSourceChunksTablePath)
+        , ModulesTablePath_(modulesTablePath)
+        , ModuleChunksTablePath_(moduleChunksTablePath)
         , ArtifactTablePath_(artifactTablePath)
         , ArtifactChunksTablePath_(artifactChunksTablePath)
-        , MetaTablePath_(metaTablePath)
     {}
 
     void Bootstrap();

@@ -18,8 +18,8 @@ WASM UDF живут в UDF Store и исполняются через WAVM:
 
 ```mermaid
 flowchart TD
-  Upload["upload_udf<br/>WASM source / library source"] --> Meta["meta + wasm_source(+chunks)<br/>или library_source(+chunks)"]
-  Meta --> Svc["TUdfStoreService<br/>metadata snapshot"]
+  Upload["upload_udf<br/>WASM / library / native"] --> Modules["modules + module_chunks"]
+  Modules --> Svc["TUdfStoreService<br/>metadata snapshot"]
   Svc --> LibAOT["TWasmLibraryCompileActor<br/>AOT library → artifact"]
   LibAOT --> ModAOT["TWasmCompileActor<br/>AOT module (после ready libs)"]
   ModAOT --> Load["TWasmArtifactLoadActor<br/>читать artifact + libs"]
@@ -38,16 +38,27 @@ flowchart TD
 
 | Таблица | Назначение |
 |---|---|
-| `meta` | UDF-метаданные: md5, name, type=`WASM`, manifest (JSON), version, compile_status |
-| `wasm_source` + `wasm_source_chunks` | тело исходника модуля (chunked blob) |
-| `library_source` + `library_source_chunks` | исходники библиотек (ключ = **имя** библиотеки) |
-| `artifact_<cpu_spec>` + chunks | AOT: wasm_data + object_code для module **или** library |
+| `modules` | Унифицированные записи: PK=`uid`, `md5`, `name`, `type`=`WASM`\|`LIBRARY`\|`NATIVE_UNSAFE`, manifest, version, size, chunk_count, compile_status/error, created_at, compile_started_at, compile_finished_at |
+| `module_chunks` | Тело исходника (chunked blob), `owner_key`=`uid` |
+| `artifact_<cpu_spec>` + chunks | AOT: wasm_data + object_code для module **или** library (без изменений) |
 
 `cpu_spec` — нормализованный triple/cpu узла (`DetectLocalCpuSpec` / `WasmCpuSpecOverride`), чтобы object code был валиден на данной машине.
 
+Artifact id остаётся `md5` для module и `name` для library. FunctionRegistry не переводится на uid.
+
+Список текущих модулей (без доступа к `.metadata`):
+
+```sql
+SELECT Uid, Name, ModuleType, CompileStatus, Md5
+FROM `.sys/udf_modules`
+WHERE ModuleType = "WASM";
+```
+
+Колонки view: `Uid`, `Md5`, `Name`, `ModuleType`, `Version`, `Size`, `ChunkCount`, `CompileStatus`, `CompileError`, `CreatedAt`, `CompileStartedAt`, `CompileFinishedAt`, `Manifest`.
+
 Upload helper: `ydb/tests/functional/udf_store/upload_udf`  
 (`--action upload|delete`, `--kind udf|library`; для library нужен `--library-name`;
-delete udf — `--md5` или `--udf-file`; delete чистит meta/source(+chunks) и best-effort AOT artifacts).
+delete udf — `--md5` или `--udf-file`; delete чистит modules(+chunks) и best-effort AOT artifacts).
 
 ---
 
@@ -75,7 +86,7 @@ JSON, парсится `wasm/manifest.*` → `TWasmManifest`:
 
 - **`module_name`** — имя в YQL (`WithHelpers::scale`).
 - **`module_extension`** — `wasm` | `wat` | `wast` → формат исходника / artifact.
-- **`required_libraries`** — **упорядоченный** список имён из `library_source`.
+- **`required_libraries`** — **упорядоченный** список имён библиотек (`modules.type=LIBRARY`).
   - **Первая** библиотека ставится как runtime via `AddSdk` / `CreateImageFromSdk` → модуль линкуется как **`"env"`**.
   - Остальные — `AddPrecompiledModule(..., name)` под своим именем (например `"helpers"`).
 - **`functions`** — plain экспорты и типы ABI (`unversioned_value`).
@@ -134,18 +145,20 @@ Shared context: один модуль линкует `object_framework`, пер�
 
 ### Библиотека — `TWasmLibraryCompileActor`
 
-1. Читает `library_source` + chunks.
-2. `CompileModuleObjectCode(body, format)` (`wasm/compile.cpp`, WAVM `compileModule` → object code).
-3. Пишет artifact (`kind=library`, id = library name): wasm_data + object_code chunks.
-4. `compile_status = ready|failed` в `library_source`.
+1. Читает строку `modules` (`type=LIBRARY`) + `module_chunks` по `uid`.
+2. Ставит `compile_status=compiling` и `compile_started_at`.
+3. `CompileModuleObjectCode(body, format)` (`wasm/compile.cpp`, WAVM `compileModule` → object code).
+4. Пишет artifact (`kind=library`, id = library name): wasm_data + object_code chunks.
+5. `compile_status = ready|failed` + `compile_finished_at` в `modules`.
 
 ### Модуль — `TWasmCompileActor`
 
 1. Не стартует, пока `AreLibraryDependenciesReady(manifest)` (все `required_libraries` в snapshot со статусом `ready`).
-2. Проверяет, что artifact’ы библиотек существуют.
-3. Валидирует экспорты (`CollectWasmExports` vs plain `functions[].name` и create/call/destroy для `objects`).
-4. Компилирует user module → artifact (`kind=module`, id = md5).
-5. Обновляет `meta.compile_status`.
+2. Читает `modules` по md5 + chunks по `uid`, ставит `compiling` / `compile_started_at`.
+3. Проверяет, что artifact’ы библиотек существуют.
+4. Валидирует экспорты (`CollectWasmExports` vs plain `functions[].name` и create/call/destroy для `objects`).
+5. Компилирует user module → artifact (`kind=module`, id = md5).
+6. Обновляет `modules.compile_status` + `compile_finished_at`.
 
 При смене/удалении библиотеки сервис может выгрузить зависящие WASM UDF и перезапустить compile (`UnloadWasmUdfsDependingOnLibrary`, `RetryPendingWasmCompilesForLibrary`).
 

@@ -1,7 +1,7 @@
 #include "wasm_library_compile_actor.h"
 
 #include "blob_chunks.h"
-#include "metadata_subscription/library_source.h"
+#include "metadata_subscription/udf_module.h"
 #include "metadata_subscription/wasm_artifact.h"
 #include "wasm/compile.h"
 
@@ -14,7 +14,7 @@ namespace NKikimr::NUdfStore {
 void TWasmLibraryCompileActor::Bootstrap() {
     Become(&TWasmLibraryCompileActor::StateMain);
     Kind_ = WasmArtifactKindToString(EWasmArtifactKind::Library);
-    ExecuteQuery(NTableQuery::BuildSelectLibrarySourceQuery(LibrarySourceTablePath_), true);
+    ExecuteQuery(NTableQuery::BuildSelectModuleByNameQuery(ModulesTablePath_), true);
 }
 
 void TWasmLibraryCompileActor::ExecuteQuery(const TString& yql, bool readOnly) {
@@ -30,10 +30,17 @@ void TWasmLibraryCompileActor::ExecuteQuery(const TString& yql, bool readOnly) {
 
     switch (Step_) {
         case EStep::ReadLibrarySource:
-            NTableQuery::SetSelectLibrarySourceParams(request, LibraryName_);
+            NTableQuery::SetSelectModuleByNameParams(request, LibraryName_);
+            break;
+        case EStep::MarkCompiling:
+            NTableQuery::SetUpdateCompileStatusParams(
+                request,
+                LibrarySource_.Uid,
+                TUdfModule::CompileStatusToString(ECompileStatus::Compiling),
+                "");
             break;
         case EStep::ReadLibraryChunks:
-            NTableQuery::SetSelectSourceChunksParams(request, LibraryName_);
+            NTableQuery::SetSelectSourceChunksParams(request, LibrarySource_.Uid);
             break;
         case EStep::DeleteArtifactChunks:
             NTableQuery::SetDeleteArtifactChunksParams(request, LibraryName_, Kind_);
@@ -54,17 +61,17 @@ void TWasmLibraryCompileActor::ExecuteQuery(const TString& yql, bool readOnly) {
             break;
         }
         case EStep::UpdateMetaReady:
-            NTableQuery::SetUpdateLibraryCompileStatusParams(
+            NTableQuery::SetUpdateCompileStatusParams(
                 request,
-                LibraryName_,
-                TUdfMeta::CompileStatusToString(ECompileStatus::Ready),
+                LibrarySource_.Uid,
+                TUdfModule::CompileStatusToString(ECompileStatus::Ready),
                 "");
             break;
         case EStep::UpdateMetaFailed:
-            NTableQuery::SetUpdateLibraryCompileStatusParams(
+            NTableQuery::SetUpdateCompileStatusParams(
                 request,
-                LibraryName_,
-                TUdfMeta::CompileStatusToString(ECompileStatus::Failed),
+                LibrarySource_.Uid,
+                TUdfModule::CompileStatusToString(ECompileStatus::Failed),
                 ErrorMessage_);
             break;
     }
@@ -89,12 +96,17 @@ void TWasmLibraryCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQuery
     try {
         switch (Step_) {
             case EStep::ReadLibrarySource: {
-                if (!NTableQuery::ParseLibrarySourceResponse(response, LibrarySource_)) {
+                if (!NTableQuery::ParseModuleSourceResponse(response, LibrarySource_)) {
                     ReplyError(TStringBuilder() << "Library source '" << LibraryName_ << "' not found");
                     return;
                 }
+                Step_ = EStep::MarkCompiling;
+                ExecuteQuery(NTableQuery::BuildUpdateCompileStatusQuery(ModulesTablePath_), false);
+                return;
+            }
+            case EStep::MarkCompiling: {
                 Step_ = EStep::ReadLibraryChunks;
-                ExecuteQuery(NTableQuery::BuildSelectSourceChunksQuery(LibrarySourceChunksTablePath_), true);
+                ExecuteQuery(NTableQuery::BuildSelectSourceChunksQuery(ModuleChunksTablePath_), true);
                 return;
             }
             case EStep::ReadLibraryChunks: {
@@ -148,10 +160,8 @@ void TWasmLibraryCompileActor::OnQuerySuccess(const Ydb::Table::ExecuteDataQuery
 
 void TWasmLibraryCompileActor::CompileLibrary() {
     try {
-        Format_ = LibrarySource_.Body.StartsWith("(") ? "wat" : "wasm";
-        const auto format = Format_ == "wat"
-            ? NYdb::NWasm::EBytecodeFormat::HumanReadable
-            : NYdb::NWasm::EBytecodeFormat::Binary;
+        const auto format = NWasm::DetectBytecodeFormatFromBody(LibrarySource_.Body);
+        Format_ = format == NYdb::NWasm::EBytecodeFormat::HumanReadable ? "wat" : "wasm";
         const TString objectCode = NWasm::CompileModuleObjectCode(LibrarySource_.Body, format);
         const auto wasmChunks = SplitBlob(LibrarySource_.Body);
         const auto objectChunks = SplitBlob(objectCode);
@@ -199,7 +209,7 @@ void TWasmLibraryCompileActor::StartWriteChunks() {
 void TWasmLibraryCompileActor::WriteNextChunk() {
     if (NextChunkWriteIndex_ >= PendingChunkWrites_.size()) {
         Step_ = EStep::UpdateMetaReady;
-        ExecuteQuery(NTableQuery::BuildUpdateLibraryCompileStatusQuery(LibrarySourceTablePath_), false);
+        ExecuteQuery(NTableQuery::BuildUpdateCompileStatusQuery(ModulesTablePath_), false);
         return;
     }
     Step_ = EStep::WriteArtifactChunk;
@@ -208,8 +218,12 @@ void TWasmLibraryCompileActor::WriteNextChunk() {
 
 void TWasmLibraryCompileActor::FailAndPersist(const TString& message) {
     ErrorMessage_ = message;
+    if (LibrarySource_.Uid.empty()) {
+        ReplyError(message);
+        return;
+    }
     Step_ = EStep::UpdateMetaFailed;
-    ExecuteQuery(NTableQuery::BuildUpdateLibraryCompileStatusQuery(LibrarySourceTablePath_), false);
+    ExecuteQuery(NTableQuery::BuildUpdateCompileStatusQuery(ModulesTablePath_), false);
 }
 
 void TWasmLibraryCompileActor::ReplyError(const TString& message) {

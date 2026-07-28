@@ -7,7 +7,8 @@
 namespace NKikimr {
 namespace NBsController {
 
-NActors::IActor* CreateBlobCheckerWorkerActor(TGroupId groupId, TActorId orchestratorId);
+NActors::IActor* CreateBlobCheckerWorkerActor(TGroupId groupId, TActorId orchestratorId,
+        TLogoBlobID maxCheckedBlob);
 
 NActors::IActor* CreateBlobCheckerOrchestratorActor(TActorId bscActorId,
         std::unordered_map<TGroupId, TString> serializedGroups,

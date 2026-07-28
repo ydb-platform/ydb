@@ -15,19 +15,18 @@ namespace NBsController {
 
 class TBlobCheckerWorker : public TActorBootstrapped<TBlobCheckerWorker> {
 public:
-    TBlobCheckerWorker(TGroupId groupId, TActorId orchestratorActorId)
+    TBlobCheckerWorker(TGroupId groupId, TActorId orchestratorActorId, TLogoBlobID maxCheckedBlob)
         : GroupId(groupId)
         , OrchestratorActorId(orchestratorActorId)
+        , MaxCheckedBlob(maxCheckedBlob)
     {}
 
     void Bootstrap() {
         STLOG(PRI_NOTICE, BLOB_CHECKER_WORKER, BSW01, "Bootstrapping BlobCheckerWorker",
                 (GroupId, GroupId));
 
-        SendToBSProxy(SelfId(), GroupId, new TEvBlobStorage::TEvAssimilate(
-                std::nullopt, std::nullopt, std::nullopt, /*ignoreDecommitState=*/true,
-                /*reverse=*/false));
-        Become(&TThis::StateAssimilating);
+        QuantumStart = TActivationContext::Monotonic();
+        RequestNextPage();
     }
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -51,19 +50,29 @@ private:
                 (GroupId, GroupId),
                 (Event, ev->Get()->ToString()));
 
-        if (ev->Get()->Status != NKikimrProto::OK) {
+        TEvBlobStorage::TEvAssimilateResult* res = ev->Get();
+        if (res->Status != NKikimrProto::OK) {
             // Unable to collect blobs to check from group
             // We terminate worker and try again later
             FinishQuantum(EBlobCheckerWorkerQuantumStatus::Error);
             return;
         }
-        BlobsToCheck.swap(ev->Get()->Blobs);
+
+        // Blocks and barriers are deliberately skipped by RequestNextPage().
+        Y_DEBUG_ABORT_UNLESS(res->Blocks.empty() && res->Barriers.empty());
+
+        BlobsToCheck.swap(res->Blobs);
+        if (BlobsToCheck.empty()) {
+            // Assimilation is paginated. An empty page is the end-of-stream marker.
+            FinishQuantum(EBlobCheckerWorkerQuantumStatus::FinishOk);
+            return;
+        }
+
         // assure that BlobsToCheck queue is sorted
         std::sort(BlobsToCheck.begin(), BlobsToCheck.end(),
                 [](const TBlob& left, const TBlob& right) { return left.Id < right.Id; });
         Become(&TThis::StateCheckingIntegrity);
 
-        QuantumStart = TActivationContext::Monotonic();
         CheckNext();
     }
 
@@ -87,6 +96,8 @@ private:
         switch (res->PlacementStatus) {
             case TEvBlobStorage::TEvCheckIntegrityResult::PS_UNKNOWN:
             case TEvBlobStorage::TEvCheckIntegrityResult::PS_REPLICATION_IN_PROGRESS:
+                // Treat transient placement states as a blob being written or deleted.
+                // It will be observed again by a later full scan.
                 ++UnknownPlacementStatusCount;
                 break;
             case TEvBlobStorage::TEvCheckIntegrityResult::PS_BLOB_IS_LOST:
@@ -100,6 +111,8 @@ private:
 
         switch (res->DataStatus) {
             case TEvBlobStorage::TEvCheckIntegrityResult::DS_UNKNOWN:
+                // Unreadable blobs are intentionally skipped for now; they are
+                // presumed to be in the middle of a write or deletion.
                 ++UnknownDataStatusCount;
                 break;
             case TEvBlobStorage::TEvCheckIntegrityResult::DS_ERROR:
@@ -117,15 +130,13 @@ private:
         TMonotonic now = TActivationContext::Monotonic();
 
         if (BlobsToCheck.empty()) {
-            // All blobs successfully checked
-            FinishQuantum(EBlobCheckerWorkerQuantumStatus::FinishOk);
+            RequestNextPage();
             return;
         }
 
         if (now - QuantumStart > QuantumDuration) {
             // Report intermediate status and write MaxCheckedBlob on disk to save checker progress
             FinishQuantum(EBlobCheckerWorkerQuantumStatus::IntermediateOk);
-            return;
         }
 
         TLogoBlobID blobId = BlobsToCheck.front().Id;
@@ -158,12 +169,26 @@ private:
         QuantumStart = TActivationContext::Monotonic();
     }
 
+    void RequestNextPage() {
+        std::optional<TLogoBlobID> skipBlobsUpTo;
+        if (MaxCheckedBlob) {
+            skipBlobsUpTo.emplace(MaxCheckedBlob);
+        }
+
+        Become(&TThis::StateAssimilating);
+        SendToBSProxy(SelfId(), GroupId, new TEvBlobStorage::TEvAssimilate(
+                Max<ui64>(), std::make_tuple(Max<ui64>(), Max<ui8>()), skipBlobsUpTo,
+                /*ignoreDecommitState=*/true, /*reverse=*/false));
+    }
+
 private:
     constexpr static TDuration QuantumDuration = TDuration::Minutes(30);
 
 private:
     TGroupId GroupId;
     TActorId OrchestratorActorId;
+    TLogoBlobID MaxCheckedBlob;
+    TMonotonic QuantumStart;
 
     using TBlob = TEvBlobStorage::TEvAssimilateResult::TBlob;
     std::deque<TBlob> BlobsToCheck;
@@ -176,8 +201,6 @@ private:
     std::vector<TLogoBlobID> BlobsWithDataIssues = {}; // The most severe issue, report full list
     ui32 PlacementIssuesCount = 0;
 
-    TMonotonic QuantumStart;
-    TLogoBlobID MaxCheckedBlob = TLogoBlobID{};
 };
 
 ///////////////////////////////////////////////////////////////////////////////////
@@ -266,8 +289,12 @@ private:
             if (info.WorkerId) {
                 break;
             }
-            info.Status.ShortStatus = 0;
-            info.WorkerId.emplace(Register(CreateBlobCheckerWorkerActor(groupId, SelfId())));
+            if (info.Status.ShortStatus & EBlobCheckerResultStatusFlags::ScanFinished) {
+                info.Status.ShortStatus = 0;
+                info.Status.MaxCheckedBlob = TLogoBlobID{};
+            }
+            info.WorkerId.emplace(Register(CreateBlobCheckerWorkerActor(
+                    groupId, SelfId(), info.Status.MaxCheckedBlob)));
             ++*WorkersCreated;
             break;
         }
@@ -297,6 +324,15 @@ private:
         }
 
         TGroupCheckInfo& info = it->second;
+        if (!info.WorkerId || *info.WorkerId != ev->Sender) {
+            STLOG(PRI_DEBUG, BLOB_CHECKER_ORCHESTRATOR, BSO23,
+                    "Ignoring result from a stale BlobChecker worker",
+                    (GroupId, groupId),
+                    (Sender, ev->Sender),
+                    (CurrentWorkerId, info.WorkerId ? info.WorkerId->ToString() : TString("<none>")));
+            return;
+        }
+
         bool finishScan = false;
         TMonotonic now = TActivationContext::Monotonic();
 
@@ -375,7 +411,7 @@ private:
     }
 
     void DeleteGroups(std::unordered_set<TGroupId>&& deletedGroups) {
-        for (const TGroupId groupId : deletedGroups) { 
+        for (const TGroupId groupId : deletedGroups) {
             const auto it = Groups.find(groupId);
             if (it != Groups.end()) {
                 TGroupCheckInfo& info = it->second;
@@ -386,7 +422,7 @@ private:
             }
         }
 
-        auto eraseDeleted = [](std::multimap<TMonotonic, TGroupId>& scheduled) {
+        auto eraseDeleted = [&deletedGroups](std::multimap<TMonotonic, TGroupId>& scheduled) {
             for (auto it = scheduled.begin(); it != scheduled.end(); ) {
                 if (deletedGroups.contains(it->second)) {
                     it = scheduled.erase(it);
@@ -394,7 +430,7 @@ private:
                     ++it;
                 }
             }
-        }
+        };
         eraseDeleted(CheckOrder);
         eraseDeleted(OutgoingRequests);
     }
@@ -461,8 +497,9 @@ NActors::IActor* CreateBlobCheckerOrchestratorActor(TActorId bscActorId,
             periodicity, counters);
 }
 
-NActors::IActor* CreateBlobCheckerWorkerActor(TGroupId groupId, TActorId orchestratorId) {
-    return new TBlobCheckerWorker(groupId, orchestratorId);
+NActors::IActor* CreateBlobCheckerWorkerActor(TGroupId groupId, TActorId orchestratorId,
+        TLogoBlobID maxCheckedBlob) {
+    return new TBlobCheckerWorker(groupId, orchestratorId, maxCheckedBlob);
 }
 
 

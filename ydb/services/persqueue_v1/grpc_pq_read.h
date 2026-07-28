@@ -127,7 +127,7 @@ void TPQReadService::HandleStreamPQReadRequest(typename ReadRequest::TPtr& ev, c
         return;
     } else {
 
-        AFL_ENSURE(TopicsHandler != nullptr);
+        AFL_ENSURE(TopicsHandler != nullptr)("local_cluster", LocalCluster)("have_clusters", HaveClusters);
         const ui64 cookie = NextCookie();
 
         YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::PQ_READ_PROXY, "New session created cookie",

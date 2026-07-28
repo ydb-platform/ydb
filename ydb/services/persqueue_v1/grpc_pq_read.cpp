@@ -104,9 +104,11 @@ void TPQReadService::Handle(NNetClassifier::TEvNetClassifier::TEvClassifierUpdat
 }
 
 void TPQReadService::Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate::TPtr& ev, const TActorContext& ctx) {
-    AFL_ENSURE(ev->Get()->ClustersList);
+    AFL_ENSURE(ev->Get()->ClustersList)("local_cluster", LocalCluster);
 
-    AFL_ENSURE(ev->Get()->ClustersList->Clusters.size());
+    AFL_ENSURE(ev->Get()->ClustersList->Clusters.size())
+        ("clusters", ev->Get()->ClustersList->Clusters.size())
+        ("local_cluster", LocalCluster);
 
     const auto& clusters = ev->Get()->ClustersList->Clusters;
 
@@ -161,7 +163,7 @@ void TPQReadService::Handle(NGRpcService::TEvStreamTopicDirectReadRequest::TPtr&
         // TODO: Inc SLI Errors
         return;
     } else {
-        AFL_ENSURE(TopicsHandler != nullptr);
+        AFL_ENSURE(TopicsHandler != nullptr)("local_cluster", LocalCluster)("have_clusters", HaveClusters);
         auto ip = ev->Get()->GetPeerName();
 
         const ui64 cookie = NextCookie();

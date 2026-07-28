@@ -326,7 +326,8 @@ namespace NKikimr::NSqsTopic::V1 {
                             NBilling::WRITE_COST_PER_BLOCK,
                             Fifo_,
                             ContentBasedDeduplication_);
-                        AFL_ENSURE(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, TlsActivationContext->AsActorContext()));
+                        AFL_ENSURE(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, TlsActivationContext->AsActorContext()))
+                            ("ru", ru)("path", FullTopicPath_);
                         return;
                     }
                 }

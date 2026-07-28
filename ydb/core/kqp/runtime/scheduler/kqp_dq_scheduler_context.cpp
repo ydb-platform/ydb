@@ -4,10 +4,6 @@ namespace NKikimr::NKqp::NScheduler {
 
 namespace {
 
-// Concrete IDqSchedulableWork backed by TSchedulableActorBase. Private
-// inheritance is used to reach the protected lifecycle API without exposing
-// it further; each instance owns a distinct TSchedulableTask (so CpuDemand
-// reflects real per-work-unit concurrency).
 class TDqSchedulableWork final
     : public NYql::NDq::IDqSchedulableWork
     , private TSchedulableActorBase {

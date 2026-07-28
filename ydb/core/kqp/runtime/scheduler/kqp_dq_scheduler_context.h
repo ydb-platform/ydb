@@ -7,10 +7,6 @@
 
 namespace NKikimr::NKqp::NScheduler {
 
-// Implementation of NYql::NDq::IDqSchedulerContext that hands out
-// per-work-unit wrappers backed by HDRF TSchedulableTask/TSchedulableActorBase.
-// Passed through TSourceArguments so non-kqp sources (S3, ...) don't need to
-// know about scheduler types directly.
 class TDqSchedulerContext : public NYql::NDq::IDqSchedulerContext {
 public:
     TDqSchedulerContext(NHdrf::NDynamic::TQueryPtr query, bool isSchedulable);

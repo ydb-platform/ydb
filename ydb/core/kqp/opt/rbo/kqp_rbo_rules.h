@@ -435,6 +435,19 @@ class TPruneDeadUnionAllColumnsRule : public IRule {
 };
 
 /**
+ * Merge a nested UnionAll into its parent, turning a chain of binary unions into a single
+ * own branches and merging it would hand that guarantee over to the parent.
+ */
+class TMergeUnionAllRule : public IRule {
+  public:
+    TMergeUnionAllRule()
+        : IRule("Merge nested UnionAll", ERuleProperties::RequireParents | ERuleProperties::RequireOutputIUs) {}
+
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+/**
  * Propagate and assign hash functions on StageGraph connections.
  */
 class TPropagateHashFuncStage : public IRBOStage {

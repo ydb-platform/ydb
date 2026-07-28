@@ -4,6 +4,7 @@ GENERATE_ENUM_SERIALIZATION(channel_data_kind.h)
 
 SRCS(
     channel_data_kind.cpp
+    counters_helpers.cpp
     log_prefix.cpp
     log_title.cpp
 )

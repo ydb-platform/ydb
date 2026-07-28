@@ -46,6 +46,7 @@ EDBGConnectionType ToDBGConnectionType(
         case NTransport::THostConnection::EConnectionType::PBuffer:
             return EDBGConnectionType::PBuffer;
     }
+    Y_ABORT("Unknown EConnectionType: %d", static_cast<int>(connectionType));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -1,6 +1,5 @@
 #include "fast_path_service.h"
 
-#include "counters_helper.h"
 #include "direct_block_group.h"
 #include "partition_direct_events_private.h"
 #include "region_geometry.h"
@@ -10,6 +9,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/counters_helpers.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>

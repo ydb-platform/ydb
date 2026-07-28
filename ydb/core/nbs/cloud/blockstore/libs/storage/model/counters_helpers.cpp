@@ -1,4 +1,4 @@
-#include "counters_helper.h"
+#include "counters_helpers.h"
 
 #include <ydb/core/base/counters.h>
 

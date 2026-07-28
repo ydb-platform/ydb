@@ -56,10 +56,10 @@ class YdbTpccWorkload(WorkloadBase):
 
     def import_data(self):
         self.cmd_run(
-            self.get_command_prefix(['init', '--warehouses', self.warehouses])
+            self.get_command_prefix(['init', '--log-level', 'NOTICE', '--warehouses', self.warehouses])
         )
         self.cmd_run(
-            self.get_command_prefix(['import', '--no-tui', '--warehouses', self.warehouses])
+            self.get_command_prefix(['import', '--log-level', 'NOTICE', '--no-tui', '--warehouses', self.warehouses])
         )
 
     def clean_data(self):
@@ -80,6 +80,7 @@ class YdbTpccWorkload(WorkloadBase):
 
     def __loop(self):
         cmd = ['run', '--no-tui', '--format', 'Json',
+               '--log-level', 'NOTICE',
                '--warmup', '30s',
                '--time', f'{self.duration}s',
                '--warehouses', self.warehouses]

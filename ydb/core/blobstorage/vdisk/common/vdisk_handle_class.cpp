@@ -10,7 +10,7 @@ namespace NKikimr {
 
         EHandleType HandleType(const ui32 minHugeBlobInBytes, NKikimrBlobStorage::EPutHandleClass handleClass,
                 ui32 originalBufSizeWithoutOverhead) {
-            // what size of huge blob it would be, if it huge
+            // Size of the blob if it is considered huge
             const ui64 hugeBlobSize = TDiskBlob::MaxHeaderSize + originalBufSizeWithoutOverhead;
 
             switch (handleClass) {

@@ -151,7 +151,8 @@ public:
         Y_ENSURE(room < PageCollections.size());
 
         auto& pageCollection = *PageCollections[room]->PageCollection;
-        auto meta =  IndexPages.HasBTree() ? &IndexPages.GetBTree(NTable::NPage::TGroupId(room)) : nullptr;
+        auto meta =
+            room < IndexPages.BTreeGroups.size() ? &IndexPages.GetBTree(NTable::NPage::TGroupId(room)) : nullptr;
         bool skipV1 = meta && meta->HasRootV2();
         auto total = pageCollection.MetaPages();
         TVector<TPageLocation> pages(Reserve(skipV1 ? 8 : total));

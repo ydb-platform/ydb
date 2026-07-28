@@ -336,6 +336,7 @@ class StressRunExecutor:
         if not tasks:
             return
 
+        unique_hosts = set(node['node'].host for _, _, node in tasks)
         logging.info(f"Running pre-nemesis commands for {len(tasks)} node(s)")
 
         def run_one(name, workload_config, node):
@@ -347,29 +348,40 @@ class StressRunExecutor:
                 "database": self.database,
             }
             run_name = f"{name}_{node_host}_pre_nemesis"
-            success, _, _, stderr, is_timeout = self._execute_single_workload_run(
-                node['binary_path'],
-                node['node'],
-                run_name,
-                ' '.join(workload_config['pre_nemesis_args']),
-                None,
-                run_config,
-            )
-            if not success:
-                logging.warning(
-                    f"Pre-nemesis command for {name} on {node_host} failed "
-                    f"(timeout={is_timeout}): {stderr[:200]}"
+            with allure.step(f"Execute pre-nemesis for workload {name} on {node_host}"):
+                success, execution_time, stdout, stderr, is_timeout = self._execute_single_workload_run(
+                    node['binary_path'],
+                    node['node'],
+                    run_name,
+                    ' '.join(workload_config['pre_nemesis_args']),
+                    None,
+                    run_config,
                 )
-            else:
-                logging.info(f"Pre-nemesis command for {name} on {node_host} succeeded")
+                result_dict = {
+                    "name": name, "host": node_host,
+                    "success": success, "execution_time": round(execution_time, 2),
+                    "is_timeout": is_timeout,
+                    "command": run_config.get("run_command", ""),
+                    "stdout": stdout, "stderr": stderr,
+                }
+                allure.attach(json.dumps(result_dict, indent=2), "Execution summary",
+                              attachment_type=allure.attachment_type.JSON)
+                if not success:
+                    logging.warning(
+                        f"Pre-nemesis command for {name} on {node_host} failed "
+                        f"(timeout={is_timeout}): {stderr[:200]}"
+                    )
+                else:
+                    logging.info(f"Pre-nemesis command for {name} on {node_host} succeeded")
 
-        with ThreadPoolExecutor(max_workers=len(tasks)) as executor:
-            futures = [executor.submit(run_one, name, wc, node) for name, wc, node in tasks]
-            for future in as_completed(futures):
-                try:
-                    future.result()
-                except Exception as e:
-                    logging.warning(f"Pre-nemesis command raised exception: {e}")
+        with allure.step(f"Execute pre-nemesis commands on {len(unique_hosts)} nodes"):
+            with ThreadPoolExecutor(max_workers=len(tasks)) as executor:
+                futures = [executor.submit(run_one, name, wc, node) for name, wc, node in tasks]
+                for future in as_completed(futures):
+                    try:
+                        future.result()
+                    except Exception as e:
+                        logging.warning(f"Pre-nemesis command raised exception: {e}")
 
         logging.info("Pre-nemesis commands completed")
 
@@ -396,6 +408,7 @@ class StressRunExecutor:
         if not tasks:
             return
 
+        unique_hosts = set(node['node'].host for _, _, node in tasks)
         logging.info(f"Running post-nemesis commands for {len(tasks)} node(s)")
 
         def run_one(name, workload_config, node):
@@ -407,29 +420,40 @@ class StressRunExecutor:
                 "database": self.database,
             }
             run_name = f"{name}_{node_host}_post_nemesis"
-            success, _, _, stderr, is_timeout = self._execute_single_workload_run(
-                node['binary_path'],
-                node['node'],
-                run_name,
-                ' '.join(workload_config['post_nemesis_args']),
-                None,
-                run_config,
-            )
-            if not success:
-                logging.warning(
-                    f"Post-nemesis command for {name} on {node_host} failed "
-                    f"(timeout={is_timeout}): {stderr[:200]}"
+            with allure.step(f"Execute post-nemesis for workload {name} on {node_host}"):
+                success, execution_time, stdout, stderr, is_timeout = self._execute_single_workload_run(
+                    node['binary_path'],
+                    node['node'],
+                    run_name,
+                    ' '.join(workload_config['post_nemesis_args']),
+                    None,
+                    run_config,
                 )
-            else:
-                logging.info(f"Post-nemesis command for {name} on {node_host} succeeded")
+                result_dict = {
+                    "name": name, "host": node_host,
+                    "success": success, "execution_time": round(execution_time, 2),
+                    "is_timeout": is_timeout,
+                    "command": run_config.get("run_command", ""),
+                    "stdout": stdout, "stderr": stderr,
+                }
+                allure.attach(json.dumps(result_dict, indent=2), "Execution summary",
+                              attachment_type=allure.attachment_type.JSON)
+                if not success:
+                    logging.warning(
+                        f"Post-nemesis command for {name} on {node_host} failed "
+                        f"(timeout={is_timeout}): {stderr[:200]}"
+                    )
+                else:
+                    logging.info(f"Post-nemesis command for {name} on {node_host} succeeded")
 
-        with ThreadPoolExecutor(max_workers=len(tasks)) as executor:
-            futures = [executor.submit(run_one, name, wc, node) for name, wc, node in tasks]
-            for future in as_completed(futures):
-                try:
-                    future.result()
-                except Exception as e:
-                    logging.warning(f"Post-nemesis command raised exception: {e}")
+        with allure.step(f"Execute post-nemesis commands on {len(unique_hosts)} nodes"):
+            with ThreadPoolExecutor(max_workers=len(tasks)) as executor:
+                futures = [executor.submit(run_one, name, wc, node) for name, wc, node in tasks]
+                for future in as_completed(futures):
+                    try:
+                        future.result()
+                    except Exception as e:
+                        logging.warning(f"Post-nemesis command raised exception: {e}")
 
         logging.info("Post-nemesis commands completed")
 

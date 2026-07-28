@@ -7,6 +7,7 @@
 #include <ydb/core/nbs/cloud/blockstore/config/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/tablet.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
@@ -48,6 +49,7 @@ class TPartitionActor
 
 private:
     TLogTitle LogTitle;
+    TDiskDescription DiskDescription;
     TStorageConfigPtr StorageConfig;
     NKikimrBlockStore::TVolumeConfig VolumeConfig;
     NActors::TActorId BSControllerPipeClient;

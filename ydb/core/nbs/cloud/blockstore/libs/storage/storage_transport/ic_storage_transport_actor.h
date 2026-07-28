@@ -4,6 +4,7 @@
 #include "ic_storage_transport_events.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/public.h>
 
 #include <ydb/core/blobstorage/ddisk/ddisk.h>
 
@@ -62,7 +63,9 @@ private:
     THashMap<ui64, TVector<NThreading::TPromise<ui32>>> ICSubscribedNodes;
 
 public:
-    TICStorageTransportActor(const TString& diskId, ui32 dbgIndex);
+    TICStorageTransportActor(
+        const TDiskDescription& diskDescription,
+        ui32 dbgIndex);
 
     ~TICStorageTransportActor() override;
 
@@ -179,7 +182,9 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-NActors::TActorId CreateTransportActor(const TString& diskId, ui32 dbgIndex);
+NActors::TActorId CreateTransportActor(
+    const TDiskDescription& diskDescription,
+    ui32 dbgIndex);
 
 ////////////////////////////////////////////////////////////////////////////////
 

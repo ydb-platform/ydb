@@ -55,6 +55,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             Runtime->GetActorSystem(0),
             TraceService.get(),
             PartitionDirectService.get(),
+            DiskDescription,
             VChunkConfig,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
@@ -141,6 +142,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             Runtime->GetActorSystem(0),
             TraceService.get(),
             PartitionDirectService.get(),
+            DiskDescription,
             VChunkConfig,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
@@ -220,6 +222,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             Runtime->GetActorSystem(0),
             TraceService.get(),
             PartitionDirectService.get(),
+            DiskDescription,
             VChunkConfig,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
@@ -265,6 +268,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             Runtime->GetActorSystem(0),
             TraceService.get(),
             PartitionDirectService.get(),
+            DiskDescription,
             VChunkConfig,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
@@ -381,6 +385,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             Runtime->GetActorSystem(0),
             TraceService.get(),
             PartitionDirectService.get(),
+            DiskDescription,
             VChunkConfig,
             DirectBlockGroup,
             3,
@@ -492,6 +497,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             Runtime->GetActorSystem(0),
             TraceService.get(),
             PartitionDirectService.get(),
+            DiskDescription,
             VChunkConfig,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
@@ -662,6 +668,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             Runtime->GetActorSystem(0),
             TraceService.get(),
             PartitionDirectService.get(),
+            DiskDescription,
             VChunkConfig,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
@@ -765,6 +772,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             Runtime->GetActorSystem(0),
             TraceService.get(),
             PartitionDirectService.get(),
+            DiskDescription,
             VChunkConfig,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize

@@ -1,9 +1,13 @@
 #pragma once
 
-#include "common.h"
-
 #include <library/cpp/yt/assert/assert.h>
+
 #include <library/cpp/yt/string/format.h>
+
+#include <cstring>
+#include <memory>
+#include <type_traits>
+#include <utility>
 
 namespace NYT {
 
@@ -67,7 +71,7 @@ public:
         }
 
     private:
-        friend class TRingQueue<T>;
+        friend class TRingQueue<T, TAllocator>;
 
         explicit TIterator(T* ptr)
             : Ptr_(ptr)
@@ -116,7 +120,6 @@ public:
         }
     }
 
-
     T& front()
     {
         return *Head_;
@@ -144,7 +147,6 @@ public:
             return *(Tail_ - 1);
         }
     }
-
 
     // For performance reasons iterators do not provide their own operator++ and operator--.
     // move_forward and move_backward are provided instead.
@@ -175,7 +177,6 @@ public:
         }
     }
 
-
     T& operator[](size_t index)
     {
         YT_ASSERT(index < size());
@@ -190,7 +191,6 @@ public:
         return const_cast<TRingQueue*>(this)->operator[](index);
     }
 
-
     size_t size() const
     {
         return Size_;
@@ -200,7 +200,6 @@ public:
     {
         return Size_ == 0;
     }
-
 
     void push(const T& value)
     {
@@ -256,7 +255,6 @@ private:
     T* Tail_;
 
     static const size_t InitialCapacity = 16;
-
 
     void DestroyElements()
     {

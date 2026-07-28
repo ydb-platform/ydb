@@ -1043,7 +1043,8 @@ private:
             if (attachments.empty()) {
                 responseHandler->HandleError(TError(
                     NRpc::EErrorCode::ProtocolError,
-                    "Streaming payload without attachments"));
+                    "Streaming payload without attachments"),
+                    Bus_->GetEndpointAddress());
                 return;
             }
 
@@ -1052,7 +1053,8 @@ private:
                 responseHandler->HandleError(TError(
                     NRpc::EErrorCode::ProtocolError,
                     "Streaming payload codec %v is not supported",
-                    header.codec()));
+                    header.codec()),
+                    Bus_->GetEndpointAddress());
                 return;
             }
 
@@ -1180,7 +1182,7 @@ private:
                 reason,
                 requestControl->GetRequestId());
 
-            responseHandler->HandleError(std::move(detailedError));
+            responseHandler->HandleError(std::move(detailedError), Bus_->GetEndpointAddress());
         }
 
         void NotifyAcknowledgement(

@@ -1,11 +1,13 @@
 #pragma once
 
 #include "public.h"
-#include "farm_hash.h"
-#include "property.h"
 #include "protobuf_helpers.h"
 
+#include <library/cpp/yt/farmhash/farm_hash.h>
+
 #include <library/cpp/yt/memory/ref.h>
+
+#include <library/cpp/yt/misc/property.h>
 
 #include <util/generic/noncopyable.h>
 

@@ -4,6 +4,13 @@
 #include "static_ring_queue.h"
 #endif
 
+#include <library/cpp/yt/assert/assert.h>
+
+#include <util/system/types.h>
+
+#include <algorithm>
+#include <iterator>
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////

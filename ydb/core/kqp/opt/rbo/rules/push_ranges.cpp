@@ -106,7 +106,7 @@ TExprNode::TPtr GetLambdaForRangeExtractor(TExprNode::TPtr node, const TTypeAnno
     return TExprBase(afterPeephole).Cast<TKqpPredicateClosure>().Lambda().Ptr();
 }
 
-bool IsSuitableToExtractAndPushRanges(const TIntrusivePtr<IOperator>& input) {
+bool IsSuitableToExtractAndPushRanges(const TIntrusivePtr<IOperator>& input, const NYql::EStorageType applicableTableType) {
     if (input->Kind != EOperator::Filter) {
         return false;
     }
@@ -117,14 +117,9 @@ bool IsSuitableToExtractAndPushRanges(const TIntrusivePtr<IOperator>& input) {
         return false;
     }
 
-    const auto type = filter->FilterExpr.Node->GetTypeAnn();
-    if (!type || type->GetKind() == ETypeAnnotationKind::Pg) {
-        return false;
-    }
-
     const auto read = CastOperator<TOpRead>(maybeRead);
     const auto tableType = read->GetTableStorageType();
-    return !read->GetRanges() && (tableType == NYql::EStorageType::ColumnStorage || tableType == NYql::EStorageType::RowStorage);
+    return !read->GetRanges() && (tableType == applicableTableType);
 }
 
 TPredicateExtractorSettings PrepareExtractorSettings(TKqpOptimizeContext& kqpCtx) {
@@ -335,7 +330,7 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
         return input;
     }
 
-    if (!IsSuitableToExtractAndPushRanges(input)) {
+    if (!IsSuitableToExtractAndPushRanges(input, ApplicableTableType)) {
         return input;
     }
 

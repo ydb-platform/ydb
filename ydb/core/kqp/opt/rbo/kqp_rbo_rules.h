@@ -274,12 +274,16 @@ class TPeepholePredicate : public ISimplifiedRule {
 /**
  * Push ranges to read.
  */
-class TPushRangesRule : public ISimplifiedRule {
-  public:
-      TPushRangesRule() : ISimplifiedRule("Push ranges", ERuleProperties::RequireParents | ERuleProperties::RequireTypes) {}
+class TPushRangesRule: public ISimplifiedRule {
+public:
+    TPushRangesRule(NYql::EStorageType applicableTableType)
+        : ISimplifiedRule("Push ranges", ERuleProperties::RequireParents | ERuleProperties::RequireTypes)
+        , ApplicableTableType(applicableTableType) {
+    }
 
-      virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
-      virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+    NYql::EStorageType ApplicableTableType;
 };
 
 /**

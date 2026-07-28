@@ -91,7 +91,11 @@ public:
     virtual void DoOnEvent(const std::shared_ptr<NSubscriber::ISubscriptionEvent>& ev) override {
         AFL_VERIFY(ev->GetType() == NSubscriber::EEventType::TxCompleted);
         const auto* evCompleted = static_cast<const NSubscriber::TEventTxCompleted*>(ev.get());
-        AFL_VERIFY(TxIdsToWait.erase(evCompleted->GetTxId()));
+        // Subscribers receive every TxCompleted on the shard. Wait set is a snapshot from propose
+        // time (GetTxs), so later/unrelated completions must be ignored — otherwise VERIFY fails
+        if (!TxIdsToWait.erase(evCompleted->GetTxId())) {
+            return;
+        }
         YDB_LOG_DEBUG("",
             {"completed", evCompleted->GetTxId()},
             {"remained", JoinSeq(",", TxIdsToWait)});

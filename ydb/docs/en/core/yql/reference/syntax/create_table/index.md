@@ -20,7 +20,7 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
   [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])]
   [, ...],
     INDEX <index_name>
-      [GLOBAL]
+      GLOBAL
       [SYNC|ASYNC]
       [USING <index_type>]
       ON ( <index_columns> )

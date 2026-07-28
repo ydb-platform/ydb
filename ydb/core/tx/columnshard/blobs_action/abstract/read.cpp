@@ -55,7 +55,7 @@ void IBlobsReadingAction::OnReadResult(const TBlobRange& range, const TString& d
     Counters->OnReply(range.Size, TMonotonic::Now() - StartWaitingRanges);
     AFL_VERIFY(data.size() == range.Size)("data", data.size())("range", range.ToString());
     for (auto&& i : it->second) {
-        AFL_VERIFY(i.Offset + i.GetBlobSize() <= range.Offset + data.size())
+        AFL_VERIFY(static_cast<ui64>(i.Offset) + i.GetBlobSize() <= static_cast<ui64>(range.Offset) + data.size())
         ("group", range.ToString())("sub", i.ToString())("data", data.size());
         AFL_VERIFY(range.Offset <= i.Offset)("group", range.ToString())("sub", i.ToString());
         Replies.emplace(i, data.substr(i.Offset - range.Offset, i.GetBlobSize()));

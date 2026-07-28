@@ -248,7 +248,7 @@ struct TBlobRange {
         if (GetBlobId() != br.GetBlobId()) {
             return false;
         }
-        const ui64 right = std::max<ui64>(ui64(Offset) + Size, ui64(br.Offset) + br.Size);
+        const ui64 right = std::max<ui64>(static_cast<ui64>(Offset) + Size, static_cast<ui64>(br.Offset) + br.Size);
         const ui32 offset = std::min<ui32>(Offset, br.Offset);
         const ui64 size = right - offset;
         if (size > limit) {

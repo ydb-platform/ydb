@@ -137,7 +137,7 @@ public:
             for (const auto& sub : currentList) {
                 AFL_VERIFY(currentRange->GetBlobId() == sub.GetBlobId())("group", currentRange->ToString())("sub", sub.ToString());
                 AFL_VERIFY(currentRange->Offset <= sub.Offset)("group", currentRange->ToString())("sub", sub.ToString());
-                AFL_VERIFY(sub.Offset + sub.GetBlobSize() <= currentRange->Offset + currentRange->GetBlobSize())
+                AFL_VERIFY(static_cast<ui64>(sub.Offset) + sub.GetBlobSize() <= static_cast<ui64>(currentRange->Offset) + currentRange->GetBlobSize())
                 ("group", currentRange->ToString())("sub", sub.ToString());
             }
             AFL_VERIFY(result.emplace(*currentRange, std::move(currentList)).second)("group", currentRange->ToString());

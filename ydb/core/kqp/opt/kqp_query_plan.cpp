@@ -1,6 +1,7 @@
 #include "kqp_query_plan.h"
 
 #include <ydb/core/base/fulltext.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/library/json_index/json_index.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -635,30 +636,31 @@ private:
             // reads the main table depends on the index being covering for the requested columns. When
             // it is covering, every output column is served from the posting table and the main table
             // is not touched — reflect that so covered-index plans show no main-table access.
+            // The posting table holds the main table's key columns plus the index data columns; the
+            // index key columns (the embedding, and the prefix of a prefixed index) are not in it, so
+            // ask its metadata rather than deriving the set from the index description.
             TString tablePath(vectorSearch.Table().Path().Value());
             auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, tablePath);
-            const auto& tableMeta = tableData.Metadata;
 
-            THashSet<TString> coveredColumns;
-            if (tableMeta) {
-                coveredColumns.insert(tableMeta->KeyColumnNames.begin(), tableMeta->KeyColumnNames.end());
-                for (const auto& index : tableMeta->Indexes) {
-                    if (index.Name == indexName) {
-                        coveredColumns.insert(index.KeyColumns.begin(), index.KeyColumns.end());
-                        coveredColumns.insert(index.DataColumns.begin(), index.DataColumns.end());
-                        break;
-                    }
+            TKikimrTableMetadataPtr postingMeta;
+            {
+                const TString postingPath = TStringBuilder()
+                    << tablePath << "/" << indexName << "/" << NTableIndex::NKMeans::PostingTable;
+                const auto& tables = SerializerCtx.TablesData->GetTables();
+                if (auto* desc = tables.FindPtr(std::make_pair(SerializerCtx.Cluster, postingPath))) {
+                    postingMeta = desc->Metadata;
                 }
             }
 
-            bool covered = true;
+            // Without the posting metadata, fall back to reporting the main table read.
+            bool covered = bool(postingMeta);
             auto& columns = planNode.NodeInfo["Columns"];
             TVector<TString> readColumns;
             readColumns.reserve(vectorSearch.Columns().Size());
             for (const auto& column : vectorSearch.Columns()) {
                 columns.AppendValue(column.Value());
                 readColumns.push_back(TString(column.Value()));
-                if (!coveredColumns.contains(column.Value())) {
+                if (postingMeta && !postingMeta->Columns.contains(readColumns.back())) {
                     covered = false;
                 }
             }

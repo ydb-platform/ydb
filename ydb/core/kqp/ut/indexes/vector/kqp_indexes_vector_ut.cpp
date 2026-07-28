@@ -600,6 +600,35 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
             UNIT_ASSERT_VALUES_EQUAL_C(vectorSearchNodes, 0, result.GetPlan());
             UNIT_ASSERT_C(tableLookupNodes > 0, result.GetPlan());
         }
+
+        if (!enableVectorSearchActor) {
+            return;
+        }
+
+        // Selecting only key columns: the embedding is still read (the actor ranks on it) and a
+        // non-covering index does not store it in the posting table, so the main table is read
+        // after all. Regression guard: the plan used to derive "covering" from the index key and
+        // data columns, which counts the embedding as covered, and hid that read.
+        const TString keyOnlyQuery(Q1_(R"(
+            $target = "\x67\x71\x02";
+            SELECT pk FROM `/Root/TestTable` VIEW index1
+            ORDER BY Knn::CosineDistance(emb, $target)
+            LIMIT 3;
+        )"));
+
+        auto keyOnlyResult = session.ExplainDataQuery(keyOnlyQuery).ExtractValueSync();
+        UNIT_ASSERT_C(keyOnlyResult.IsSuccess(), keyOnlyResult.GetIssues().ToString());
+
+        NJson::TJsonValue keyOnlyPlan;
+        NJson::ReadJsonTree(keyOnlyResult.GetPlan(), &keyOnlyPlan, true);
+        UNIT_ASSERT(ValidatePlanNodeIds(keyOnlyPlan));
+
+        const auto keyOnlyMainTableAccess = CountPlanNodesByKv(keyOnlyPlan, "Table", "TestTable");
+        if (flags & F_COVERING) {
+            UNIT_ASSERT_VALUES_EQUAL_C(keyOnlyMainTableAccess, 0, keyOnlyResult.GetPlan());
+        } else {
+            UNIT_ASSERT_C(keyOnlyMainTableAccess > 0, keyOnlyResult.GetPlan());
+        }
     }
 
     Y_UNIT_TEST_TWIN(VectorIndexPlanShape, EnableVectorSearchActor) {

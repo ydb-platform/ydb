@@ -10,9 +10,10 @@ A set of automated playbooks for installing and maintaining the server side of [
 | v0.15   | 13.12.2024   | [ydb-ansible-0.15.zip](https://github.com/ydb-platform/ydb-ansible/archive/refs/tags/v0.15.zip) | Minimal set of scripts and roles for launch (deprecated) — [see list](#0-15) |
 
 
-# Ansible Playbooks changelog
+## Ansible Playbooks changelog
 
 ## Version 2.1.0 {#2-1-0}
+
 ### Functionality
 
 * Added support for Ansible 2.19 and newer versions.
@@ -33,6 +34,7 @@ A set of automated playbooks for installing and maintaining the server side of [
 * Synced Grafana dashboards with the YDB repository.
 
 ## Version 2.0.0 {#2-0-0}
+
 ### Functionality
 
 * Added support for installing a cluster with YDB V2 configuration (Distconf).
@@ -64,5 +66,6 @@ A set of automated playbooks for installing and maintaining the server side of [
 
 
 ## Version 0.15 {#0-15}
+
 Deprecated version.
 A collection of separate scripts and roles. Superseded by the 1.x.x playbooks.

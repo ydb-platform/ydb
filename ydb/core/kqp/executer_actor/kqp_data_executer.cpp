@@ -521,6 +521,9 @@ private:
         }
 
         SecretSnapshotRequired = false;
+        // SecureParams is now populated — launch any deferred PQ topic describes
+        // that need the resolved secret token.
+        LaunchPendingPqTopicDescribes();
         if (!WaitRequired()) {
             Execute();
         }
@@ -599,19 +602,22 @@ private:
                     {
                         const auto& extSrc = stage.GetSources(0).GetExternalSource();
                         if (extSrc.GetType() == "PqSource") {
-                            // If the partition list was already fixed at compile time by a
-                            // __ydb_partition_id predicate, the ReadRanges are authoritative
-                            // and must not be overwritten with the current total partition count.
-                            NYql::NPq::NProto::TDqPqTopicSource topicSourceProto;
-                            const bool usedPartitionPredicate =
-                                extSrc.GetSettings().UnpackTo(&topicSourceProto)
-                                && topicSourceProto.GetUsedPartitionPredicate();
-                            if (!usedPartitionPredicate) {
-                                TopicPartitionSnapshotRequired = true;
-                                ++PendingTopicDescribes;
-                                DescribePqSourceTopic(extSrc);
+                                // If the partition list was already fixed at compile time by a
+                                // __ydb_partition_id predicate, the ReadRanges are authoritative
+                                // and must not be overwritten with the current total partition count.
+                                NYql::NPq::NProto::TDqPqTopicSource topicSourceProto;
+                                const bool usedPartitionPredicate =
+                                    extSrc.GetSettings().UnpackTo(&topicSourceProto)
+                                    && topicSourceProto.GetUsedPartitionPredicate();
+                                if (!usedPartitionPredicate) {
+                                    TopicPartitionSnapshotRequired = true;
+                                    ++PendingTopicDescribes;
+                                    // Defer the actual describe call until after secrets are
+                                    // resolved so that SecureParams is populated and we can
+                                    // fetch the auth token from the external data source.
+                                    PendingPqTopicDescribeSources.push_back(extSrc);
+                                }
                             }
-                        }
                     }
                 }
                 if (requestContext->CurrentExecutionId) {
@@ -631,6 +637,12 @@ private:
         }
         if (SecretSnapshotRequired) {
             GetSecretsSnapshot();
+            // PQ topic describes are deferred to HandleResolve(TEvDescribeSecretsResponse)
+            // where SecureParams will already be populated.
+        } else {
+            // No secrets needed — SecureParams is already up-to-date, so we can
+            // launch the PQ topic describes immediately.
+            LaunchPendingPqTopicDescribes();
         }
         if (ResourceSnapshotRequired) {
             GetResourcesSnapshot();
@@ -1395,16 +1407,21 @@ private:
     }
 
 private:
+    // Launches DescribePqSourceTopic for all deferred PQ source stages.
+    // Must be called only after SecureParams has been populated.
+    void LaunchPendingPqTopicDescribes() {
+        for (const auto& extSrc : PendingPqTopicDescribeSources) {
+            DescribePqSourceTopic(extSrc);
+        }
+        PendingPqTopicDescribeSources.clear();
+    }
+
     // Fires an async DescribeFederatedTopic for the given PQ external source stage.
     // On completion, sends TEvPrivate::TEvDescribePqTopic to SelfId().
     void DescribePqSourceTopic(const NKqpProto::TKqpExternalSource& extSrc) {
         NYql::NPq::NProto::TDqPqTopicSource topicSource;
         YQL_ENSURE(extSrc.GetSettings().UnpackTo(&topicSource),
             "Failed to unpack TDqPqTopicSource from external source settings");
-
-        // const TString cluster   = topicSource.FederatedClustersSize() > 0
-        //                               ? topicSource.GetFederatedClusters(0).GetName()
-        //                               : TString{};
 
         const TString cluster = extSrc.GetSourceName();
         // For local topics the endpoint is empty and the Database field in the source
@@ -1415,9 +1432,13 @@ private:
                                       ? Database
                                       : topicSource.GetDatabase();
         const TString topicPath = topicSource.GetTopicPath();
-        const TString token     = /*UserToken ? UserToken->GetSerializedToken() : */TString{"{\"no_auth\":\"\"}"};
-        // Session id is not required for non-CM calls; an empty string is fine.
-        //const TString sessionId;
+        // Resolve the auth token from the external data source secret.
+        // The Token.Name field is the key in SecureParams (populated from the
+        // external data source secrets before this function is called).
+        const TString tokenName = topicSource.GetToken().GetName();
+        const auto& secureParams = TasksGraph.GetMeta().SecureParams;
+        const auto tokenIt = secureParams.find(tokenName);
+        const TString token = tokenIt != secureParams.end() ? tokenIt->second : TString{};
         const TString sessionId = CreateGuidAsString();
         auto gateway = FederatedQuerySetup->PqGatewayFactory->CreatePqGateway();
 
@@ -1488,6 +1509,10 @@ private:
 
     TShardIdToTableInfoPtr ShardIdToTableInfo;
     TVector<NKikimr::TTableId> TableIdsForSnapshot;
+
+    // PQ source stages whose DescribeFederatedTopic call is deferred until after
+    // SecureParams is populated (i.e. after secrets have been resolved).
+    TVector<NKqpProto::TKqpExternalSource> PendingPqTopicDescribeSources;
 
     bool HasExternalSources = false;
     bool SecretSnapshotRequired = false;

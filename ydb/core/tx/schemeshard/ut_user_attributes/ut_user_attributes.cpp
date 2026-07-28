@@ -1,3 +1,4 @@
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 using namespace NKikimr;
@@ -234,5 +235,61 @@ Y_UNIT_TEST_SUITE(TSchemeShardUserAttrsTest) {
 
         TUserAttrs dirDAttrs{{"__extra_path_symbols_allowed", "./_"}};
         TestMkDir(runtime, txId++, "/MyRoot", "DirD", {NKikimrScheme::StatusInvalidParameter}, AlterUserAttrs(dirDAttrs));
+    }
+
+    // Regression test for a bug where dropping a tenant while AlterUserAttributes is
+    // in-flight (after Propose, before the coordinator plan is applied) left orphaned
+    // UserAttributesAlterData rows in the local database.
+    // On schemeshard restart, ReadEverything hit Y_VERIFY_S(PathsById.contains(pathId)) and crashed.
+    Y_UNIT_TEST(DropPathWhileAlteringUserAttrs) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        // Create a directory with initial user attributes.
+        TestMkDir(runtime, ++txId, "/MyRoot", "DirA", {NKikimrScheme::StatusAccepted}, AlterUserAttrs({{"key1", "val1"}}));
+        env.TestWaitNotification(runtime, txId);
+        ui64 dirAPathId = DescribePath(runtime, "/MyRoot/DirA").GetPathId();
+
+        // Intercept TEvTxProcessing::TEvPlanStep for the upcoming AlterUserAttrs to keep it in
+        // Propose state (UserAttributesAlterData written to DB, but not yet applied).
+        const ui64 alterTxId = ++txId;
+        TBlockEvents<TEvTxProcessing::TEvPlanStep> blockedPlan(runtime, [alterTxId](const auto& ev) {
+            const auto& record = ev->Get()->Record;
+            for (const auto& tx : record.GetTransactions()) {
+                if (tx.GetTxId() == alterTxId) {
+                    return true;
+                }
+            }
+            return false;
+        });
+
+        // Send AlterUserAttrs — this writes UserAttributesAlterData rows to the DB.
+        TestUserAttrs(runtime, alterTxId, "/MyRoot", "DirA", AlterUserAttrs({{"key2", "val2"}}));
+
+        // Wait until the plan is blocked (alter is in Propose, AlterData is persisted).
+        runtime.WaitFor("blocked plan", [&] { return !blockedPlan.empty(); });
+
+        // Force-drop the directory while AlterUserAttrs is in-flight.
+        // This calls AbortUnsafe on the alter operation (which does NOT clean up
+        // UserAttributesAlterData from DB), then calls DropNode which — with the fix —
+        // must clean up those orphaned rows.
+        TestForceDropUnsafe(runtime, ++txId, dirAPathId);
+
+        // Unblock the intercepted plan so the runtime does not stall.
+        blockedPlan.Unblock().Stop();
+
+        env.TestWaitNotification(runtime, {alterTxId, txId});
+
+        // Verify the directory is gone.
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA"), {NLs::PathNotExist});
+
+        // Reboot schemeshard.  Without the fix, ReadEverything crashes here with
+        // Y_VERIFY_S(PathsById.contains(pathId)) on the orphaned AlterData rows.
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        // Verify schemeshard is alive after restart.
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"), {NLs::PathExist});
     }
 }

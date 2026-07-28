@@ -9,12 +9,20 @@
 namespace NSQLFormat {
 
 bool SqlFormatSimple(const TString& query, TString& formattedQuery, TString& error) {
-    NSQLTranslationV1::TLexers lexers;
-    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
-    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
-    NSQLTranslationV1::TParsers parsers;
-    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
-    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+    NSQLTranslationV1::TLexers lexers = {
+        .Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory(),
+        .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory(),
+    };
+
+    NSQLTranslationV1::TParsers parsers = {
+        .Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(
+            /*isAmbiguityError=*/false,
+            /*isAmbiguityDebugging=*/false),
+        .Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
+            /*isAmbiguityError=*/false,
+            /*isAmbiguityDebugging=*/false),
+    };
+
     return SqlFormatSimple(lexers, parsers, query, formattedQuery, error);
 }
 

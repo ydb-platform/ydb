@@ -1,0 +1,15 @@
+#include "config.h"
+
+namespace NYT::NYaml {
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TYamlFormatConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("write_uint_tag", &TThis::WriteUintTag)
+        .Default(false);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYT::NYaml

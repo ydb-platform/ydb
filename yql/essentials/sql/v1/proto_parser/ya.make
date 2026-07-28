@@ -20,3 +20,5 @@ RECURSE(
     antlr4
     antlr4_ansi
 )
+
+RECURSE_FOR_TESTS(ut)

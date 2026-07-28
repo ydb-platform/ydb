@@ -162,8 +162,11 @@ void TKeyValueState::Clear() {
     CompletedVacuumGeneration = 0;
     CompletedVacuumTrashGeneration = 0;
 
+    MoveDataIsInProgress = false;
     MoveDataGroups.clear();
-    ClearMoveData();
+    MoveDataRequestSender = {};
+    ClearMoveDataBlobMovingStage();
+    ClearMoveDataTrashCheckingStage();
 
     Trash.clear();
     TrashForVacuum.clear();
@@ -1893,7 +1896,7 @@ void TKeyValueState::UpdateKeyValue(const TString& key, const TIndexRecord& reco
     TString value = record.Serialize();
     THelpers::DbUpdateUserKeyValue(key, value, db);
 
-    if (MoveDataIsInProgress) {
+    if (MoveDataBlobMovingIsInProgress) {
         if (MoveDataKey == key) {
             MoveDataRecordTouched = true;
         }
@@ -1902,7 +1905,7 @@ void TKeyValueState::UpdateKeyValue(const TString& key, const TIndexRecord& reco
                 continue;
             }
             if (NeedMoveBlob(item.LogoBlobId)) {
-                MoveDataNeedsAnotherPass = true;
+                MoveDataBlobMovingNeedsAnotherPass = true;
             }
         }
     }
@@ -1911,7 +1914,7 @@ void TKeyValueState::UpdateKeyValue(const TString& key, const TIndexRecord& reco
 void TKeyValueState::EraseKey(const TString& key, ISimpleDb& db) {
     THelpers::DbEraseUserKey(key, db);
 
-    if (MoveDataIsInProgress) {
+    if (MoveDataBlobMovingIsInProgress) {
         if (MoveDataKey == key) {
             MoveDataRecordTouched = true;
         }

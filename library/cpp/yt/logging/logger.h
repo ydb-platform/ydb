@@ -468,12 +468,18 @@ void LogStructuredEvent(
 // Tags are supplied via a fluent |.With(name, value)| (or |.With(name, value, "%spec")|)
 // chain; they are carried as structured key/value pairs in the event payload. A single-
 // argument |.With(value)| attaches the value under a statically known key resolved by ADL
-// (e.g. |.With(error)| under the "Error" key):
+// (e.g. |.With(error)| under the "Error" key). |.WithFormat(name, format, args...)| composes
+// one tag out of several values:
 //
 //     YT_TLOG_INFO("Message")
 //         .With("Key", value)
 //         .With("Count", count, "%08x")
+//         .WithFormat("Method", "%v.%v", service, method)
 //         .With(error);
+//
+// |.With(tagList)| splices a #TLoggingTagList -- a set of keyed tags a component builds
+// once (with the same fluent API) and attaches to many events, without collapsing them
+// into a single tag.
 //
 // If the message is not logged then the |.With| chain is not evaluated, so tag value
 // expressions cost nothing.
@@ -498,12 +504,12 @@ void LogStructuredEvent(
             (message));                                               \
         !loggingGuard__.IsEnabled())                                  \
     { } else                                                          \
-        loggingGuard__
+        loggingGuard__.Self()
 
 #ifdef YT_ENABLE_TRACE_LOGGING
 #define YT_TLOG_TRACE(message)                     YT_TLOG_EVENT_FLUENT(Logger, ::NYT::NLogging::ELogLevel::Trace, message)
-#define YT_TLOG_TRACE_IF(condition, message)       if (condition)    YT_TLOG_TRACE(message)
-#define YT_TLOG_TRACE_UNLESS(condition, message)   if (!(condition)) YT_TLOG_TRACE(message)
+#define YT_TLOG_TRACE_IF(condition, message)       if (!(condition)) { } else YT_TLOG_TRACE(message)
+#define YT_TLOG_TRACE_UNLESS(condition, message)   if (condition)    { } else YT_TLOG_TRACE(message)
 #else
 #define YT_TLOG_UNUSED(message)                    if (true) { } else ::NYT::NLogging::NDetail::MakeNullTaggedLoggingGuard(message)
 #define YT_TLOG_TRACE(message)                     YT_TLOG_UNUSED(message)
@@ -512,24 +518,24 @@ void LogStructuredEvent(
 #endif
 
 #define YT_TLOG_DEBUG(message)                     YT_TLOG_EVENT_FLUENT(Logger, ::NYT::NLogging::ELogLevel::Debug, message)
-#define YT_TLOG_DEBUG_IF(condition, message)       if (condition)    YT_TLOG_DEBUG(message)
-#define YT_TLOG_DEBUG_UNLESS(condition, message)   if (!(condition)) YT_TLOG_DEBUG(message)
+#define YT_TLOG_DEBUG_IF(condition, message)       if (!(condition)) { } else YT_TLOG_DEBUG(message)
+#define YT_TLOG_DEBUG_UNLESS(condition, message)   if (condition)    { } else YT_TLOG_DEBUG(message)
 
 #define YT_TLOG_INFO(message)                      YT_TLOG_EVENT_FLUENT(Logger, ::NYT::NLogging::ELogLevel::Info, message)
-#define YT_TLOG_INFO_IF(condition, message)        if (condition)    YT_TLOG_INFO(message)
-#define YT_TLOG_INFO_UNLESS(condition, message)    if (!(condition)) YT_TLOG_INFO(message)
+#define YT_TLOG_INFO_IF(condition, message)        if (!(condition)) { } else YT_TLOG_INFO(message)
+#define YT_TLOG_INFO_UNLESS(condition, message)    if (condition)    { } else YT_TLOG_INFO(message)
 
 #define YT_TLOG_WARNING(message)                   YT_TLOG_EVENT_FLUENT(Logger, ::NYT::NLogging::ELogLevel::Warning, message)
-#define YT_TLOG_WARNING_IF(condition, message)     if (condition)    YT_TLOG_WARNING(message)
-#define YT_TLOG_WARNING_UNLESS(condition, message) if (!(condition)) YT_TLOG_WARNING(message)
+#define YT_TLOG_WARNING_IF(condition, message)     if (!(condition)) { } else YT_TLOG_WARNING(message)
+#define YT_TLOG_WARNING_UNLESS(condition, message) if (condition)    { } else YT_TLOG_WARNING(message)
 
 #define YT_TLOG_ERROR(message)                     YT_TLOG_EVENT_FLUENT(Logger, ::NYT::NLogging::ELogLevel::Error, message)
-#define YT_TLOG_ERROR_IF(condition, message)       if (condition)    YT_TLOG_ERROR(message)
-#define YT_TLOG_ERROR_UNLESS(condition, message)   if (!(condition)) YT_TLOG_ERROR(message)
+#define YT_TLOG_ERROR_IF(condition, message)       if (!(condition)) { } else YT_TLOG_ERROR(message)
+#define YT_TLOG_ERROR_UNLESS(condition, message)   if (condition)    { } else YT_TLOG_ERROR(message)
 
 #define YT_TLOG_ALERT(message)                     YT_TLOG_EVENT_FLUENT(Logger, ::NYT::NLogging::ELogLevel::Alert, message)
-#define YT_TLOG_ALERT_IF(condition, message)       if (condition)    YT_TLOG_ALERT(message)
-#define YT_TLOG_ALERT_UNLESS(condition, message)   if (!(condition)) YT_TLOG_ALERT(message)
+#define YT_TLOG_ALERT_IF(condition, message)       if (!(condition)) { } else YT_TLOG_ALERT(message)
+#define YT_TLOG_ALERT_UNLESS(condition, message)   if (condition)    { } else YT_TLOG_ALERT(message)
 
 // The terminal action of |YT_TLOG_FATAL|/|YT_TLOG_ALERT_AND_THROW| (aborting or throwing)
 // must run *after* the |.With| chain, which the user appends to the macro. A guard cannot
@@ -545,7 +551,7 @@ void LogStructuredEvent(
             (message));                                                     \
         loggingGuard__.TryEnter();                                          \
         loggingGuard__.Commit())                                            \
-        loggingGuard__
+        loggingGuard__.Self()
 #define YT_TLOG_FATAL_IF(condition, message)       if (condition) [[unlikely]]    YT_TLOG_FATAL(message)
 #define YT_TLOG_FATAL_UNLESS(condition, message)   if (!(condition)) [[unlikely]] YT_TLOG_FATAL(message)
 
@@ -564,7 +570,7 @@ void LogStructuredEvent(
             ::NYT::EErrorCode::Fatal,                                          \
             "Malformed request or incorrect state detected")                   \
             << ::NYT::TErrorAttribute("message", loggingGuard__.Commit()))     \
-        loggingGuard__
+        loggingGuard__.Self()
 #define YT_TLOG_ALERT_AND_THROW_IF(condition, message)     if (condition) [[unlikely]]    YT_TLOG_ALERT_AND_THROW(message)
 #define YT_TLOG_ALERT_AND_THROW_UNLESS(condition, message) if (!(condition)) [[unlikely]] YT_TLOG_ALERT_AND_THROW(message)
 

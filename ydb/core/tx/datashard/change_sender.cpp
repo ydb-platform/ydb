@@ -16,6 +16,8 @@
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CHANGE_EXCHANGE
+
 namespace NKikimr::NDataShard {
 
 class TChangeSender: public TActor<TChangeSender> {
@@ -32,16 +34,13 @@ class TChangeSender: public TActor<TChangeSender> {
         return CurrentStateFunc() == static_cast<TReceiveFunc>(&TThis::StateActive);
     }
 
-    TStringBuf GetLogPrefix() const {
-        if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[ChangeSender]"
-                << "[" << DataShard.TabletId << ":" << DataShard.Generation << "]"
-                << SelfId() /* contains brackets */
-                << (IsActive() ? "" : "[Inactive]") << " ";
-        }
-
-        return LogPrefix.GetRef();
+    NActors::NStructuredLog::TStructuredMessage GetLogPrefix() const {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "ChangeSender"},
+            {"selfId", SelfId()},
+            {"tabletId", DataShard.TabletId},
+            {"generation", DataShard.Generation},
+            {"isActive", IsActive()});
     }
 
     TSender& AddChangeSender(const TPathId& pathId, const TTableId& userTableId, ESenderType type) {
@@ -69,9 +68,10 @@ class TChangeSender: public TActor<TChangeSender> {
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
-        auto& records = ev->Get()->Records;
+        YDB_LOG_DEBUG("Handle",
+            {"eventDetails", ev->Get()->ToString()});
 
+        auto& records = ev->Get()->Records;
         if (!IsActive()) {
             std::move(records.begin(), records.end(), std::back_inserter(Enqueued));
         } else {
@@ -102,25 +102,25 @@ class TChangeSender: public TActor<TChangeSender> {
     }
 
     void Handle(TEvChangeExchange::TEvAddSender::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"eventDetails", ev->Get()->ToString()});
 
         const auto& msg = *ev->Get();
-
         auto it = Senders.find(msg.PathId);
         if (it != Senders.end()) {
             Y_ENSURE(it->second.UserTableId == msg.UserTableId);
             Y_ENSURE(it->second.Type == msg.Type);
-            LOG_W("Trying to add duplicate sender"
-                << ": userTableId# " << msg.UserTableId
-                << ", type# " << msg.Type
-                << ", pathId# " << msg.PathId);
+            YDB_LOG_WARN("Duplicate change sender registration ignored",
+                {"userTableId", msg.UserTableId},
+                {"senderType", msg.Type},
+                {"pathId", msg.PathId});
             return;
         }
 
-        LOG_N("Add sender"
-            << ": userTableId# " << msg.UserTableId
-            << ", type# " << msg.Type
-            << ", pathId# " << msg.PathId);
+        YDB_LOG_NOTICE("Registered change sender",
+            {"userTableId", msg.UserTableId},
+            {"senderType", msg.Type},
+            {"pathId", msg.PathId});
 
         auto& sender = AddChangeSender(msg.PathId, msg.UserTableId, msg.Type);
         if (IsActive()) {
@@ -129,19 +129,20 @@ class TChangeSender: public TActor<TChangeSender> {
     }
 
     void Handle(TEvChangeExchange::TEvRemoveSender::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
-        const auto& pathId = ev->Get()->PathId;
+        YDB_LOG_DEBUG("Handle",
+            {"eventDetails", ev->Get()->ToString()});
 
+        const auto& pathId = ev->Get()->PathId;
         auto it = Senders.find(pathId);
         if (it == Senders.end()) {
-            LOG_W("Trying to remove unknown sender"
-                << ": pathId# " << pathId);
+            YDB_LOG_WARN("Unknown change sender removal ignored",
+                {"pathId", pathId});
             return;
         }
 
-        LOG_N("Remove sender"
-            << ": type# " << it->second.Type
-            << ", pathId# " << it->first);
+        YDB_LOG_NOTICE("Removed change sender",
+            {"senderType", it->second.Type},
+            {"pathId", it->first});
 
         if (const auto& actorId = it->second.ActorId) {
             Send(actorId, new TEvChangeExchange::TEvRemoveSender(pathId));
@@ -151,10 +152,9 @@ class TChangeSender: public TActor<TChangeSender> {
     }
 
     void Handle(TEvChangeExchange::TEvActivateSender::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
-
+        YDB_LOG_DEBUG("Handle",
+            {"eventDetails", ev->Get()->ToString()});
         Become(&TThis::StateActive);
-        LogPrefix.Clear();
 
         for (auto& [pathId, sender] : Senders) {
             RegisterChangeSender(pathId, sender);
@@ -290,6 +290,8 @@ public:
     }
 
     STFUNC(StateBase) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+            {"actorState", "StateBase"});
         switch (ev->GetTypeRewrite()) {
             hFunc(NChangeExchange::TEvChangeExchange::TEvEnqueueRecords, Handle);
             hFunc(TEvChangeExchange::TEvAddSender, Handle);
@@ -300,6 +302,8 @@ public:
     }
 
     STFUNC(StateInactive) {
+        YDB_LOG_CREATE_CONTEXT(GetLogPrefix(),
+            {"actorState", "StateInactive"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvChangeExchange::TEvActivateSender, Handle);
         default:
@@ -313,7 +317,6 @@ public:
 
 private:
     const TDataShardId DataShard;
-    mutable TMaybe<TString> LogPrefix;
 
     THashMap<TPathId, TSender> Senders;
     TVector<TEnqueuedRecord> Enqueued; // Enqueued while inactive

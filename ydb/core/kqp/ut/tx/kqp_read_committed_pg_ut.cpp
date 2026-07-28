@@ -1365,6 +1365,145 @@ Y_UNIT_TEST_SUITE(KqpReadCommittedPg) {
         tester.Execute();
     }
 
+    // =========================================================================
+    // INSERT then UPDATE within the same RC transaction should see the inserted row
+    // =========================================================================
+    class TInsertThenUpdateSameTx : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+            auto session = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            auto result1 = Kikimr->RunCall([&] {
+                return session.ExecuteQuery(Q_(R"(
+                    INSERT INTO `/Root/Test` (Group, Name, Amount, Comment) VALUES (998u, "NewRow", 500u, "Initial");
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(result1.GetStatus(), EStatus::SUCCESS, result1.GetIssues().ToString());
+            auto tx = result1.GetTransaction();
+            UNIT_ASSERT(tx && tx->IsActive());
+
+            auto result2 = Kikimr->RunCall([&] {
+                return session.ExecuteQuery(Q_(R"(
+                    UPDATE `/Root/Test` SET Comment = "Updated" WHERE Group = 998u AND Name = "NewRow";
+                )"), TTxControl::Tx(*tx)).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), EStatus::SUCCESS, result2.GetIssues().ToString());
+            tx = result2.GetTransaction();
+            UNIT_ASSERT(tx && tx->IsActive());
+
+            auto result3 = Kikimr->RunCall([&] {
+                return session.ExecuteQuery(Q_(R"(
+                    SELECT Comment FROM `/Root/Test` WHERE Group = 998u AND Name = "NewRow";
+                )"), TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(result3.GetStatus(), EStatus::SUCCESS, result3.GetIssues().ToString());
+            CompareYson(R"([[["Updated"]]])", FormatResultSetYson(result3.GetResultSet(0)));
+        }
+    };
+
+    Y_UNIT_TEST(TInsertThenUpdateSameTx) {
+        TInsertThenUpdateSameTx tester;
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    // =========================================================================
+    // INSERT then DELETE within the same RC transaction should delete the inserted row
+    // =========================================================================
+    class TInsertThenDeleteSameTx : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+            auto session = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            auto result1 = Kikimr->RunCall([&] {
+                return session.ExecuteQuery(Q_(R"(
+                    INSERT INTO `/Root/Test` (Group, Name, Amount, Comment) VALUES (998u, "NewRow", 500u, "Initial");
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(result1.GetStatus(), EStatus::SUCCESS, result1.GetIssues().ToString());
+            auto tx = result1.GetTransaction();
+            UNIT_ASSERT(tx && tx->IsActive());
+
+            auto result2 = Kikimr->RunCall([&] {
+                return session.ExecuteQuery(Q_(R"(
+                    DELETE FROM `/Root/Test` WHERE Group = 998u AND Name = "NewRow";
+                )"), TTxControl::Tx(*tx)).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), EStatus::SUCCESS, result2.GetIssues().ToString());
+            tx = result2.GetTransaction();
+            UNIT_ASSERT(tx && tx->IsActive());
+
+            auto result3 = Kikimr->RunCall([&] {
+                return session.ExecuteQuery(Q_(R"(
+                    SELECT Comment FROM `/Root/Test` WHERE Group = 998u AND Name = "NewRow";
+                )"), TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(result3.GetStatus(), EStatus::SUCCESS, result3.GetIssues().ToString());
+            CompareYson(R"([])", FormatResultSetYson(result3.GetResultSet(0)));
+        }
+    };
+
+    Y_UNIT_TEST(TInsertThenDeleteSameTx) {
+        TInsertThenDeleteSameTx tester;
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    // =========================================================================
+    // INSERT, DELETE, INSERT within the same RC transaction: final row should survive
+    // =========================================================================
+    class TInsertDeleteInsertSameTx : public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+            auto session = Kikimr->RunCall([&] { return client.GetSession().GetValueSync().GetSession(); });
+
+            auto result1 = Kikimr->RunCall([&] {
+                return session.ExecuteQuery(Q_(R"(
+                    INSERT INTO `/Root/Test` (Group, Name, Amount, Comment) VALUES (998u, "NewRow", 500u, "First");
+                )"), TTxControl::BeginTx(TTxSettings::ReadCommittedRW())).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(result1.GetStatus(), EStatus::SUCCESS, result1.GetIssues().ToString());
+            auto tx = result1.GetTransaction();
+            UNIT_ASSERT(tx && tx->IsActive());
+
+            auto result2 = Kikimr->RunCall([&] {
+                return session.ExecuteQuery(Q_(R"(
+                    DELETE FROM `/Root/Test` WHERE Group = 998u AND Name = "NewRow";
+                )"), TTxControl::Tx(*tx)).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(result2.GetStatus(), EStatus::SUCCESS, result2.GetIssues().ToString());
+            tx = result2.GetTransaction();
+            UNIT_ASSERT(tx && tx->IsActive());
+
+            auto result3 = Kikimr->RunCall([&] {
+                return session.ExecuteQuery(Q_(R"(
+                    INSERT INTO `/Root/Test` (Group, Name, Amount, Comment) VALUES (998u, "NewRow", 500u, "Second");
+                )"), TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(result3.GetStatus(), EStatus::SUCCESS, result3.GetIssues().ToString());
+
+            auto verify = Kikimr->RunCall([&] {
+                return session.ExecuteQuery(Q_(R"(
+                    SELECT Comment FROM `/Root/Test` WHERE Group = 998u AND Name = "NewRow";
+                )"), TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(verify.GetStatus(), EStatus::SUCCESS, verify.GetIssues().ToString());
+            CompareYson(R"([[["Second"]]])", FormatResultSetYson(verify.GetResultSet(0)));
+        }
+    };
+
+    Y_UNIT_TEST(TInsertDeleteInsertSameTx) {
+        TInsertDeleteInsertSameTx tester;
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
     class TLockOnlyShardDistributedCommit : public TTableDataModificationTester {
     protected:
         void DoExecute() override {

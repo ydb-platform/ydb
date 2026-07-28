@@ -12,6 +12,10 @@
 
 #include <deque>
 
+namespace NActorsInterconnect {
+    class TSystemPayloadV2;
+}
+
 namespace NActors {
 
     class TEventSerializer {
@@ -28,18 +32,29 @@ namespace NActors {
         };
 
         struct TChunkHeader {
-            ui16 TypeLength;
-            ui16 Channel;
+            ui16 Length;
+            ui16 TypeChannel;
 
-            static constexpr ui16 TypeMask = 0xc000;
-            static constexpr ui16 LengthMask = 0x3fff;
+            static constexpr size_t ChannelBits = 12;
+
+            static constexpr ui16 ChannelMask = (1 << ChannelBits) - 1;
+            static constexpr ui16 TypeMask = ~ChannelMask;
+
+            static constexpr ui16 SystemChannel = 0x1000;
 
             enum : ui16 {
-                kEventChunk = 0x0000,
-                kEventHeader = 0x4000,
+                kEventChunk = 0 << ChannelBits,
+                kEventHeader = 1 << ChannelBits,
+                kSystem = 2 << ChannelBits,
             };
 
-            size_t GetLength() const { return TypeLength & LengthMask; }
+            ui16 GetChannel() const {
+                return TypeChannel != kSystem ? TypeChannel & ChannelMask : SystemChannel;
+            }
+
+            ui16 GetType() const {
+                return TypeChannel & TypeMask;
+            }
         };
 #pragma pack(pop)
 
@@ -65,8 +80,45 @@ namespace NActors {
             kChunkSerializer,
             kHeader,
         };
+        class TEventQueue {
+            IEventHandle *First = nullptr;
+            IEventHandle *Last = nullptr;
+
+        public:
+            ~TEventQueue() {
+                while (Peek()) {
+                    Pop();
+                }
+            }
+
+            bool Push(std::unique_ptr<IEventHandle> ev) {
+                const bool res = !First; // was this the first one
+                ev->NextLinkPtr.store(0, std::memory_order_relaxed);
+                if (Last) {
+                    Last->NextLinkPtr.store(reinterpret_cast<uintptr_t>(ev.get()), std::memory_order_relaxed);
+                } else {
+                    First = ev.get();
+                }
+                Last = ev.release();
+                return res;
+            }
+
+            IEventHandle *Peek() const {
+                return First;
+            }
+
+            void Pop() {
+                Y_DEBUG_ABORT_UNLESS(Last && First);
+                std::unique_ptr<IEventHandle> temp(First);
+                First = reinterpret_cast<IEventHandle*>(First->NextLinkPtr.load(std::memory_order_relaxed));
+                if (!First) {
+                    Last = nullptr;
+                }
+            }
+        };
         struct TPerChannelQueue {
-            std::deque<std::unique_ptr<IEventHandle>> Events;
+            TEventQueue Events;
+            std::deque<TRcBuf> SystemRequests;
             TEventHeader EventHeader;
             size_t EventHeaderOffset = 0;
             TIntrusivePtr<TEventSerializedData> Buffer;
@@ -80,6 +132,7 @@ namespace NActors {
         };
         std::array<TPerChannelQueue, NumDefaultChannels> PerChannelQueue;
         THashMap<ui16, TPerChannelQueue> PerChannelQueueMap;
+        TPerChannelQueue SystemChannelQueue;
 
         // Refcounted objects tracking. An event's serialized bytes may be scattered across the output
         // stream (interleaved with other channels) and across several pipelined write batches, so we can
@@ -112,7 +165,10 @@ namespace NActors {
 
         void Push(std::unique_ptr<IEventHandle> ev);
 
+        void Push(NActorsInterconnect::TSystemPayloadV2& systemRequest);
+
         bool IsTrafficPending() const { return !PerChannelQuotaHeap.empty(); }
+        bool HasOutOfBandTraffic() const { return !SystemChannelQueue.SystemRequests.empty(); }
 
         // this function generates output stream for transmission; it returns number of bytes added to output spans
         size_t ProduceOutputStream(TRcBuf& buffer, std::deque<TContiguousSpan> *out, size_t maxBytesToProduce = Max<size_t>());
@@ -134,10 +190,11 @@ namespace NActors {
 
     private:
         TPerChannelQueue& GetQueue(ui16 channel) {
-            return channel < NumDefaultChannels ? PerChannelQueue[channel] : PerChannelQueueMap[channel];
+            return channel < NumDefaultChannels ? PerChannelQueue[channel] :
+                channel == TChunkHeader::SystemChannel ? SystemChannelQueue : PerChannelQueueMap[channel];
         }
 
-        size_t ProduceOutputStreamForQueue(TPerChannelQueue& queue, size_t maxBytesToProduce, TRcBuf& buffer,
+        size_t ProduceOutputStreamForQueue(ui16 channel, TPerChannelQueue& queue, size_t maxBytesToProduce, TRcBuf& buffer,
             std::deque<TContiguousSpan> *out, ui64 *bufferProduced);
 
         ui64 UpdateTimestamp();
@@ -166,6 +223,7 @@ namespace NActors {
         struct IEventProcessor {
             virtual ~IEventProcessor() = default;
             virtual void PushEvent(std::unique_ptr<IEventHandle> ev) = 0;
+            virtual void Process(NActorsInterconnect::TSystemPayloadV2& systemRequest) = 0;
         };
 
     public:

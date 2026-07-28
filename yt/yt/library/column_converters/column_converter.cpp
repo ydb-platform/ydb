@@ -67,9 +67,6 @@ TConvertedColumnRange TColumnConverters::ConvertRowsToColumns(
     const THashMap<int, TColumnSchema>& columnSchemas)
 {
     TConvertedColumnRange convertedColumnsRange;
-    if (rows.size() == 0) {
-        return convertedColumnsRange;
-    }
 
     if (IsFirstBatch_) {
         // Initialize mapping column ids to indexes.

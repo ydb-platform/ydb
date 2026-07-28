@@ -1796,7 +1796,7 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvRunDeadlockDetection::TPtr& ev) 
                 continue;
             }
 
-            YDB_LOG_DEBUG("Breaking the wait edge",
+            YDB_LOG_WARN("Breaking the wait edge",
                 {"logPrefix", LogPrefix},
                 {"id", edge.Id},
                 {"awaiter", edge.Awaiter.LockInfo(SelfId())},

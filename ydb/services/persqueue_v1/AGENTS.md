@@ -14,4 +14,5 @@ Tests: `./ya make --build relwithdebinfo -tA ydb/services/persqueue_v1`
 
 Style/workflow: [`agents/CODESTYLE.md`](../../agents/CODESTYLE.md) ·
 [`agents/GUIDE.md`](../../agents/GUIDE.md) ·
-[`agents/GTEST_PREFER.md`](../../agents/GTEST_PREFER.md)
+[`agents/GTEST_PREFER.md`](../../agents/GTEST_PREFER.md) ·
+[`agents/NO_ABORT.md`](../../agents/NO_ABORT.md)

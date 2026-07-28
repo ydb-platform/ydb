@@ -31,6 +31,7 @@ The following configuration sections are available, listed in alphabetical order
 | [{#T}](query_service_config.md) | No | Configuration of external sources for federated queries |
 | [{#T}](resource_broker_config.md) | No | Resource broker for controlling CPU and memory consumption |
 | [{#T}](security_config.md) | No | Security configuration settings |
+| [{#T}](self_management_config.md) | No | Distributed configuration V2 and automatic cluster component management settings |
 | [{#T}](system_tablet_backup_config.md) | No | System tablet backup configuration |
 | [{#T}](table_service_config.md) | No | Query execution configuration settings |
 | [{#T}](tli_config.md) | No | Diagnostics parameters for [transaction lock invalidation](../../concepts/glossary.md#tli) (TLI) |

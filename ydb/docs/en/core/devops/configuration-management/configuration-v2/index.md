@@ -12,6 +12,7 @@ Main materials:
 - [{#T}](config-settings.md)
 - [{#T}](cluster-expansion.md)
 - [{#T}](state-storage-move.md)
+- [{#T}](static-group-self-heal.md)
 - [{#T}](static-group-move.md)
 - [{#T}](replacing-nodes.md)
 - [{#T}](node-authorization.md)

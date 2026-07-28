@@ -13,6 +13,7 @@
 - [{#T}](cluster-expansion.md)
 - [{#T}](state-storage-reconfiguration.md)
 - [{#T}](state-storage-move.md)
+- [{#T}](static-group-self-heal.md)
 - [{#T}](static-group-move.md)
 - [Замена FQDN узла](replacing-nodes.md)
 - [Аутентификация и авторизация узлов баз данных](node-authorization.md)

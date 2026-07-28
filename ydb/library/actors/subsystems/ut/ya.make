@@ -14,7 +14,6 @@ ENDIF()
 
 PEERDIR(
     ydb/library/actors/core
-    library/cpp/threading/future
 )
 
 SRCS(

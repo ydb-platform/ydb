@@ -8,6 +8,7 @@ import time
 import pytest
 
 from ydb.tests.functional.secrets.lib.secrets_plugin import (
+    ALTER_SECRET_GRANTS,
     create_secrets,
     create_user,
     DATABASE,

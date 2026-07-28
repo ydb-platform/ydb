@@ -51,7 +51,6 @@ std::shared_ptr<TPortionDataAccessor> TPortionAccessorConstructor::Build(const b
     YDB_LOG_CREATE_CONTEXT(
         {"portionId", PortionInfo->GetPortionIdVerified()});
     if (BlobIdxs.size()) {
-        // BlobIdxs is ordered (see ReorderChunks); walk Records/Indexes in the same address order.
         auto itRecord = Records.begin();
         auto itIndex = Indexes.begin();
         auto itBlobIdx = BlobIdxs.begin();

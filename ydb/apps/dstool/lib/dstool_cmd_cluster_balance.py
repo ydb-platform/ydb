@@ -214,9 +214,9 @@ class BalancingStrategy(IBalancingStrategy):
 
     def check_waiting_conditions(self):
         if any(k < -1 for k in self.cluster_info.vdisks_groups_count_map.keys()):
-            common.print_if_not_quiet(self.args, 'There are groups with more than one non READY vslot, waiting...', sys.stdout)
+            common.print_if_not_quiet(self.args, 'There are groups with more than one non-ready (BSC) vslot, waiting...', sys.stdout)
             groups_count_str = ', '.join(f'{k}: {v}' for k, v in sorted(self.cluster_info.vdisks_groups_count_map.items()))
-            common.print_if_verbose(self.args, f'Number of non READY vdisks -> number of groups: {groups_count_str}', file=sys.stdout)
+            common.print_if_verbose(self.args, f'Number of non-ready (BSC) vdisks -> number of groups: {groups_count_str}', file=sys.stdout)
             return True
 
         if self.args.max_replicating_pdisks is not None:

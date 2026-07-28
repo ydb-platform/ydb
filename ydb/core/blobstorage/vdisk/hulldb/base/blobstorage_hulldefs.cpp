@@ -106,6 +106,9 @@ namespace NKikimr {
         , HullCompStorageRatioMaxCalcDuration(hullCompStorageRatioMaxCalcDuration)
         , AddHeader(addHeader)
         , CompactionStrategyGroup(VCtx->VDiskCounters, "subsystem", "compstrategy")
+        , StorageRatioGroup(VCtx->VDiskCounters, "subsystem", "storageratio")
+        , StorageRatioPerSstGroup(StorageRatioGroup.GetGroup(), "algorithm", "per_sst")
+        , StorageRatioBatchGroup(StorageRatioGroup.GetGroup(), "algorithm", "batch")
         , LsmHullGroup(VCtx->VDiskCounters, "subsystem", "lsmhull")
         , LsmCompactionRankGroups{{
             {LsmHullGroup.GetGroup(), "hull_db", EHullDbTypeToString(EHullDbType::LogoBlobs)},

@@ -460,6 +460,7 @@ ydb/core/kqp/ut/olap KqpOlapOptimizer.SpecialSliceToOneLayer
 ydb/core/kqp/ut/olap KqpOlapOptimizer.TilingPlusPlusTtlDeletion
 ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.IndexesActualization-QueryService
 ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.MinMaxIndexAppliedToDataAfterCompaction-QueryService-SchemeObjectDisabled
+ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.MinMaxIndexAppliedToDataAfterCompaction-QueryService-SchemeObjectEnabled
 ydb/core/kqp/ut/olap/types KqpOlapJson.BloomMixIndexesOldSyntaxVariants[false,false,0,0,1000,0.5,CATEGORY_BLOOM_FILTER]
 ydb/core/kqp/ut/olap/types KqpOlapJson.CompactionVariants[10,true,1024,1000,100,0.5]
 ydb/core/kqp/ut/olap/types KqpOlapJson.SimpleExistsVariants[10,false,1024,1000,0,0.5]
@@ -771,6 +772,7 @@ ydb/tests/functional/query_cache/warmup test_warmup.py.TestCompileCacheViewPeerW
 ydb/tests/functional/query_cache/warmup test_warmup.py.TestWarmupRestart.test_warmup_basic
 ydb/tests/functional/restarts test_restarts.py.TestRestartClusterMirror34.test_when_create_many_tablets_and_restart_cluster_then_every_thing_is_ok
 ydb/tests/functional/restarts test_restarts.py.TestRestartClusterMirror3DC.test_when_create_many_tablets_and_restart_cluster_then_every_thing_is_ok
+ydb/tests/functional/secrets test_old_secrets_usage.py.test_existing_objects_are_ok_if_old_secret_creation_is_disabled
 ydb/tests/functional/security/mon/canonical test_mon_endpoints_auth.py.test[enforce_user_token_disabled-no_schema_grants]
 ydb/tests/functional/security/mon/canonical test_mon_endpoints_auth.py.test[enforce_user_token_disabled-with_schema_grants]
 ydb/tests/functional/security/mon/canonical test_mon_endpoints_auth.py.test[enforce_user_token_enabled-no_schema_grants]

@@ -115,6 +115,37 @@ void IUnaryOperator::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) 
 }
 
 /***
+ * Compute metadata for table lookup
+ */
+void TOpTableLookup::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
+    Y_UNUSED(planProps);
+    Props.Metadata = TRBOMetadata();
+
+    auto path = TKqpTable(Table).Path();
+    const auto& tableData = ctx.KqpCtx.Tables->ExistingTable(ctx.KqpCtx.Cluster, path.Value());
+    Props.Metadata->ColumnsCount = OutputIUs.size();
+    Props.Metadata->StorageType = EStorageType::RowStorage;
+
+    Y_ENSURE(OutputIUs.size() == FetchColumns.size());
+    const TString alias = OutputIUs.empty() ? TString() : OutputIUs[0].GetAlias();
+    const int duplicateId = Props.Metadata->ColumnLineage.AddAlias(alias, path.StringValue());
+    for (size_t i = 0; i < OutputIUs.size(); i++) {
+        Props.Metadata->ColumnLineage.AddMapping(OutputIUs[i], TColumnLineageEntry(alias, path.StringValue(), FetchColumns[i], duplicateId));
+    }
+
+    TVector<TInfoUnit> keyColumns;
+    for (const auto& key : tableData.Metadata->KeyColumnNames) {
+        for (size_t i = 0; i < FetchColumns.size(); i++) {
+            if (FetchColumns[i] == key) {
+                keyColumns.push_back(OutputIUs[i]);
+                break;
+            }
+        }
+    }
+    Props.Metadata->KeyColumns = std::move(keyColumns);
+}
+
+/***
  * Compute metadata for empty source
  */
 void TOpEmptySource::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {

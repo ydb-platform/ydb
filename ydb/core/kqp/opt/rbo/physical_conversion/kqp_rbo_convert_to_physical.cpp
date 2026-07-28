@@ -222,6 +222,29 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
 
             stages[opStageId] = currentStageBody;
             stagePos[opStageId] = op->Pos;
+        } else if (op->Kind == EOperator::TableLookup) {
+            auto lookup = CastOperator<TOpTableLookup>(op);
+
+            if (!currentStageBody) {
+                auto [stageArg, stageInput] = graph.GenerateStageInput(stageInputCounter, op->Pos, ctx);
+                stageArgs[opStageId].push_back(stageArg);
+                currentStageBody = stageInput;
+            }
+
+            auto streamInput = Build<TCoToStream>(ctx, op->Pos).Input(currentStageBody).Done().Ptr();
+            TVector<std::pair<TString, TString>> renames;
+            for (size_t i = 0; i < lookup->FetchColumns.size(); ++i) {
+                renames.emplace_back(lookup->FetchColumns[i], lookup->OutputIUs[i].GetFullName());
+            }
+            currentStageBody = NPhysicalConvertionUtils::BuildRenameMap(streamInput, renames, ctx);
+
+            if (!lookup->IsSingleConsumer()) {
+                currentStageBody = NPhysicalConvertionUtils::BuildMultiConsumerHandler(currentStageBody, lookup->GetNumOfConsumers(), ctx, op->Pos);
+            }
+
+            stages[opStageId] = currentStageBody;
+            stagePos[opStageId] = op->Pos;
+            YQL_CLOG(TRACE, CoreDq) << "Converted TableLookup " << opStageId;
         } else {
             Y_ENSURE(false, "Could not generate physical plan");
         }

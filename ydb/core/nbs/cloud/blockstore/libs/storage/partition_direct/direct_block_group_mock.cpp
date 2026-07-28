@@ -397,6 +397,11 @@ void TDirectBlockGroupMock::OnAddHostResult(
         std::move(pbufferId));
 }
 
+ui32 TDirectBlockGroupMock::GetNodeId(THostIndex host)
+{
+    return host + 10;
+}
+
 NThreading::TFuture<TDbgSnapshot>
 TDirectBlockGroupMock::BuildMonSnapshot() const
 {

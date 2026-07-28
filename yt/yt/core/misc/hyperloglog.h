@@ -2,9 +2,10 @@
 
 #include "public.h"
 #include "hyperloglog_bias.h"
-#include "farm_hash.h"
 
 #include <yt/yt_proto/yt/core/misc/proto/hyperloglog.pb.h>
+
+#include <library/cpp/yt/farmhash/farm_hash.h>
 
 #include <library/cpp/yt/memory/range.h>
 

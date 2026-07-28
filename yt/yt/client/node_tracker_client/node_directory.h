@@ -10,11 +10,10 @@
 
 #include <yt/yt/core/yson/public.h>
 
-#include <yt/yt/core/misc/property.h>
-#include <yt/yt/core/misc/copyable_atomic.h>
-
 #include <library/cpp/yt/misc/enum.h>
+#include <library/cpp/yt/misc/property.h>
 
+#include <library/cpp/yt/threading/copyable_atomic.h>
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 
 namespace NYT::NNodeTrackerClient {
@@ -79,7 +78,7 @@ private:
     std::vector<std::string> Tags_;
 
     // Not persisted.
-    mutable TCopyableAtomic<TCpuInstant> LastSeenTime_;
+    mutable NThreading::TCopyableAtomic<TCpuInstant> LastSeenTime_;
 };
 
 const std::string& NullNodeAddress();

@@ -1,6 +1,6 @@
-#include <yt/yt/core/test_framework/framework.h>
+#include <library/cpp/yt/containers/default_map.h>
 
-#include <yt/yt/core/misc/default_map.h>
+#include <library/cpp/testing/gtest/gtest.h>
 
 #include <util/generic/hash_table.h>
 

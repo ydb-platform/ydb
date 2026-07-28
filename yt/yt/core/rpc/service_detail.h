@@ -21,7 +21,6 @@
 #include <yt/yt/core/misc/memory_usage_tracker.h>
 #include <yt/yt/core/misc/object_pool.h>
 #include <yt/yt/core/misc/protobuf_helpers.h>
-#include <yt/yt/core/misc/ring_queue.h>
 
 #include <yt/yt/core/profiling/timing.h>
 
@@ -34,6 +33,8 @@
 #include <yt/yt/library/profiling/sensor.h>
 
 #include <yt/yt/library/syncmap/map.h>
+
+#include <library/cpp/yt/containers/ring_queue.h>
 
 #include <library/cpp/yt/memory/atomic_intrusive_ptr.h>
 #include <library/cpp/yt/memory/ref.h>

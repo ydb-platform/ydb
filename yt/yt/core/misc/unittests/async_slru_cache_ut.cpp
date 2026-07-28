@@ -8,9 +8,10 @@
 #include <yt/yt/core/actions/new_with_offloaded_dtor.h>
 
 #include <yt/yt/core/misc/async_slru_cache.h>
-#include <yt/yt/core/misc/property.h>
 
 #include <yt/yt/library/profiling/testing.h>
+
+#include <library/cpp/yt/misc/property.h>
 
 #include <util/generic/strbuf.h>
 

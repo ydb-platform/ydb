@@ -608,7 +608,7 @@ IDirectPlacementTransferPtr TClientResponse::TryGetResponseAttachmentsTransfer()
     return ResponseAttachmentsTransfer_;
 }
 
-void TClientResponse::HandleError(TError error)
+void TClientResponse::HandleError(TError error, const std::string& address)
 {
     auto prevState = State_.exchange(EState::Done);
     if (prevState == EState::Done) {
@@ -622,12 +622,14 @@ void TClientResponse::HandleError(TError error)
         ClientContext_->GetFeatureIdFormatter());
 
     GetInvoker()->Invoke(
-        BIND(&TClientResponse::DoHandleError, MakeStrong(this), std::move(error)));
+        BIND(&TClientResponse::DoHandleError, MakeStrong(this), std::move(error), address));
 }
 
-void TClientResponse::DoHandleError(TError error)
+void TClientResponse::DoHandleError(TError error, const std::string& address)
 {
     NProfiling::TWallTimer timer;
+
+    Address_ = address;
 
     Finish(error);
 

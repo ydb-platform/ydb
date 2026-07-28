@@ -1,7 +1,13 @@
-#include <yt/yt/core/test_framework/framework.h>
+#include <library/cpp/yt/containers/ring_queue.h>
 
-#include <yt/yt/core/misc/common.h>
-#include <yt/yt/core/misc/ring_queue.h>
+#include <library/cpp/testing/gtest/gtest.h>
+
+#include <library/cpp/yt/memory/new.h>
+#include <library/cpp/yt/memory/ref_counted.h>
+
+#include <cstdlib>
+#include <deque>
+#include <iterator>
 
 namespace NYT {
 namespace {
@@ -69,12 +75,13 @@ public:
     {
         --Counter_;
     }
+
 private:
     int& Counter_;
 };
 
-DEFINE_REFCOUNTED_TYPE(TFoo)
 DECLARE_REFCOUNTED_TYPE(TFoo)
+DEFINE_REFCOUNTED_TYPE(TFoo)
 
 TEST(TRingQueueTest, TestLifetimeWithRefCount)
 {

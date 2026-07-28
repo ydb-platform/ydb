@@ -104,6 +104,28 @@ class Utils:
         if not wait_for(driver_ready, timeout_seconds=120, step_seconds=1):
             raise AssertionError("Driver didn't become ready after cluster restart")
 
+        def viewer_ready():
+            try:
+                response = requests.get(
+                    f"{self.mon_endpoint()}/viewer/json/describe",
+                    params={"database": DATABASE, "path": DATABASE},
+                    timeout=10,
+                )
+            except requests.exceptions.RequestException as exc:
+                logger.info("Viewer not ready yet after cluster restart: %s", exc)
+                return False
+            if response.status_code != 200:
+                logger.info(
+                    "Viewer not ready yet after cluster restart: status=%s body=%s",
+                    response.status_code,
+                    response.text,
+                )
+                return False
+            return True
+
+        if not wait_for(viewer_ready, timeout_seconds=120, step_seconds=1):
+            raise AssertionError("Viewer didn't become ready after cluster restart")
+
         self.driver = driver_holder["driver"]
         self.session_pool = ydb.SessionPool(self.driver)
         self.query_session_pool = ydb.QuerySessionPool(self.driver)

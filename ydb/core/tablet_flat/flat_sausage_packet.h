@@ -106,8 +106,11 @@ namespace NPageCollection {
 
         const TLargeGlobId LargeGlobId;
         const TMeta Meta;
-        const ui32 SkippedInMeta;
+        mutable ui32 SkippedInMeta;
         mutable bool SkipBTreeIndexV1Shadow_ = false;
+
+        /// Update SkippedInMeta after construction .
+        void SetSkippedPagesInMeta(ui32 value) const noexcept override { SkippedInMeta = value; }
     };
 
     /// Page-index TPageOffset to satisfy forward cache

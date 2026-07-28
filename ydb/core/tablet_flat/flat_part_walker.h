@@ -6,6 +6,7 @@
 namespace NKikimr {
 namespace NTable {
 
+// B-Tree Index V2 specific
 class TBTreePartWalker {
 public:
     TBTreePartWalker() = default;

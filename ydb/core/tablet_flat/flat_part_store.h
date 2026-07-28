@@ -169,27 +169,15 @@ public:
         return pages;
     }
 
-    /// TOuterPageCollection for the outer blob slot
-    static void Construct(TVector<TIntrusivePtr<TPageCollection>>& pageCollections, TVector<TPageCollectionComponents> components, bool hasOuter)
+    static TVector<TIntrusivePtr<TPageCollection>> Construct(TVector<TPageCollectionComponents> components)
     {
-        if (components.empty() && hasOuter) {
-            auto& outer = pageCollections.back();
-            auto* plain = CheckedCast<const NPageCollection::TPageCollection*>(outer->PageCollection.Get());
-            auto outerColl = MakeIntrusiveConst<NPageCollection::TOuterPageCollection>(
-                plain->LargeGlobId, TSharedData(plain->Meta.Raw));
-            outer = new TPageCollection(std::move(outerColl));
-            return;
+        TVector<TIntrusivePtr<TPageCollection>> pageCollections;
+
+        for (auto &one: components) {
+            pageCollections.emplace_back(new TPageCollection(std::move(one.PageCollection)));
         }
 
-        for (ui32 i = 0; i < components.size() - hasOuter; i++) {
-            pageCollections.emplace_back(new TPageCollection(std::move(components[i].PageCollection)));
-        }
-        if (hasOuter) {
-            auto outerColl = MakeIntrusiveConst<NPageCollection::TOuterPageCollection>(
-                components.back().PageCollection->LargeGlobId,
-                TSharedData(components.back().PageCollection->Meta.Raw));
-            pageCollections.emplace_back(new TPageCollection(std::move(outerColl)));
-        }
+        return pageCollections;
     }
 
     static TArrayRef<const TIntrusivePtr<TPageCollection>> Storages(const TPartView &partView)

@@ -561,9 +561,9 @@ namespace NKikimr::NTable::NPage {
         /// Returns the child at pos as a version-agnostic TPageRef.
         /// V2 children carry byte-offset TPageLocation inline.
         /// V1 children carry TPageId (resolve via ResolvePageLocation/Part->GetPageLocation).
-        TPageRef GetChild(TRecIdx pos, bool isDataPage) const noexcept {
+        TPageRef GetChild(TRecIdx pos, bool isLeafLevel) const noexcept {
             if (IsV2Format) {
-                auto type = isDataPage ? EPage::DataPage : EPage::BTreeIndexV2;
+                auto type = isLeafLevel ? EPage::DataPage : EPage::BTreeIndexV2;
                 return GetChildV2Location(pos, type);
             }
             return GetChildV1PageId(pos);

@@ -145,27 +145,12 @@ namespace NTable {
         };
 
         TLoader(TPartComponents ou)
-            : Legacy(std::move(ou.Legacy))
-            , Opaque(std::move(ou.Opaque))
-            , Epoch(ou.Epoch)
+            : TLoader(TPartStore::Construct(std::move(ou.PageCollectionComponents)),
+                    std::move(ou.Legacy),
+                    std::move(ou.Opaque),
+                    {},
+                    ou.Epoch)
         {
-            auto components = std::move(ou.PageCollectionComponents);
-
-            if (components.size() < 1) {
-                Y_TABLET_ERROR("Cannot load TPart from " << components.size() << " page collections");
-            }
-
-            PageCollections.reserve(components.size());
-
-            // Wrap slot 0 immediately — needed for LoaderEnv and scheme parsing in StageParseMeta
-            PageCollections.emplace_back(new TPageCollection(std::move(components[0].PageCollection)));
-            LoaderEnv = MakeHolder<TLoaderEnv>(PageCollections[0]);
-
-            // Store remaining raw components — wrapped in StageParseMeta after we know SmallId/GroupsCount
-            RawComponents.reserve(components.size() - 1);
-            for (ui32 i = 1; i < components.size(); i++) {
-                RawComponents.emplace_back(std::move(components[i]));
-            }
         }
 
         TLoader(TVector<TIntrusivePtr<TPageCollection>> pageCollections, TString legacy, TString opaque,
@@ -290,7 +275,6 @@ namespace NTable {
 
     private:
         TVector<TIntrusivePtr<TPageCollection>> PageCollections;
-        TVector<TPageCollectionComponents> RawComponents;
         const TString Legacy;
         const TString Opaque;
         const TVector<TString> Deltas;

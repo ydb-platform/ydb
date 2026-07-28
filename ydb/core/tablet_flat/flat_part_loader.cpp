@@ -132,7 +132,7 @@ void TLoader::StageParseMeta()
                     meta.LevelCountV2 = Max<ui32>();
                 }
             }
-            // if no RootV1, keep RootV2 even it's disable
+            // if no RootV1, keep RootV2 even if disable
         } else {
             // For dual-root (V2+V1) parts, strip V1 tree and mark the index
             // page collection so the shared cache skips dead V1 BTreeIndex pages.
@@ -179,10 +179,26 @@ void TLoader::StageParseMeta()
     MaxRowVersion.Step = Root.GetMaxRowVersion().GetStep();
     MaxRowVersion.TxId = Root.GetMaxRowVersion().GetTxId();
 
-    // Wrap RawComponents into page collections
-    // And replace TOuterPageCollection for the outer blob slot even RawComponents is empty
-    auto hasOuter = (SmallId != Max<TPageId>()) ? true : false;
-    TPartStore::Construct(PageCollections, std::move(RawComponents), hasOuter);
+    // TOuterPageCollection for the outer blob slot — wrap it if not already done.
+    if (SmallId != Max<TPageId>()) {
+        auto& outerContainer = PageCollections.back();
+        if (!dynamic_cast<const NPageCollection::TOuterPageCollection*>(
+                outerContainer->PageCollection.Get()))
+        {
+            auto* plain = CheckedCast<const NPageCollection::TPageCollection*>(
+                outerContainer->PageCollection.Get());
+            outerContainer = new TPageCollection(MakeIntrusiveConst<NPageCollection::TOuterPageCollection>(
+                plain->LargeGlobId, TSharedData(plain->Meta.Raw)));
+        }
+    }
+
+    // For V1/V1+V2 parts, force SkippedInMeta = 0.
+    if (!BTreeGroupIndexes || BTreeGroupIndexes[0].HasRootV1())
+    {
+        for (ui32 i = 0; i < PageCollections.size(); i++) {
+            PageCollections[i]->PageCollection.Get()->SetSkippedPagesInMeta(0);
+        }
+    }
 
     if (!HasBasics() || (Rooted && SchemeId != meta.TotalPages() - 1)
         || (LargeId == Max<TPageId>()) != (GlobsId == Max<TPageId>())

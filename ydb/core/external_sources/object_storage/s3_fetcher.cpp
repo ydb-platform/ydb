@@ -71,8 +71,10 @@ public:
             authInfo.GetAwsSigV4()
         );
 
+        const TString path = request->Path;
+        const ui64 start = request->Start;
         Gateway_->Download(
-            NYql::NS3Util::UrlEscapeRet(Url_ + request->Path), std::move(headers), request->Start, length,
+            NYql::NS3Util::UrlEscapeRet(Url_ + path), std::move(headers), start, length,
             [actorSystem, selfId = SelfId(), request = std::move(request)](NYql::IHTTPGateway::TResult&& result) mutable {
                 actorSystem->Send(selfId, new TEvS3DownloadResponse(std::move(request), std::move(result)));
             }, {}, RetryPolicy_);

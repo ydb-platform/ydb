@@ -90,7 +90,9 @@ block-beta
 
 Each node runs a [Local](../concepts/glossary.md#local) service responsible for interacting with Hive. When starting a tablet, Hive sends a tablet start command to the Local service of the required node, containing all information necessary for startup: [TabletID](../concepts/glossary.md#tabletid), [generation](../concepts/glossary.md#tablet-generation), [channel history](general-schema.md#history), and startup mode ([leader](../concepts/glossary.md#tablet-leader) or [follower](../concepts/glossary.md#tablet-follower)). After the tablet starts, Local reports this to Hive. From this moment, the tablet is considered started from Hive's perspective and remains so until:
 
-* Local does not report about stopping its work.
+* Local does not report that it has stopped working.
 * Communication with Local is not disrupted.
 
 In these situations, the startup process will begin again for the next generation of the tablet.
+
+{% include [career](./_includes/career.md) %}

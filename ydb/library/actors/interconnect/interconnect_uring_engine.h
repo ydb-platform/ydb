@@ -2,6 +2,7 @@
 
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/mon.h>
 #include <ydb/library/actors/util/rc_buf.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
@@ -44,6 +45,9 @@ namespace NActors {
 
         // Stops every reaper thread. Must be called before the actor system is torn down.
         virtual void Stop() = 0;
+
+        // Issue monitoring request.
+        virtual void IssueMonRequest(ui64 conn, NMon::TEvHttpInfoRes::TPtr ev) = 0;
     };
 
     using TUringEnginePtr = TIntrusivePtr<IUringEngine>;

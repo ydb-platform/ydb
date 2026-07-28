@@ -70,7 +70,23 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
             currentStageBody = Build<TPhysicalSourceBuilder>(opRead, ctx, op->Pos);
 
             if (!opRead->IsSingleConsumer()) {
-                currentStageBody = NPhysicalConvertionUtils::BuildMultiConsumerHandler(currentStageBody, opRead->GetNumOfConsumers(), ctx, op->Pos);
+                if (opRead->GetTableStorageType() == NYql::EStorageType::RowStorage) {
+                    auto existingStage = TDqPhyStage(currentStageBody);
+                    auto switchBody = NPhysicalConvertionUtils::BuildMultiConsumerHandler(
+                        existingStage.Program().Body().Ptr(), opRead->GetNumOfConsumers(), ctx, op->Pos);
+                    // clang-format off
+                    currentStageBody = Build<TDqPhyStage>(ctx, op->Pos)
+                        .InitFrom(existingStage)
+                        .Program()
+                            .Args(existingStage.Program().Args())
+                            .Body(switchBody)
+                        .Build()
+                    .Done().Ptr();
+                    // clang-format on
+                } else {
+                    currentStageBody = NPhysicalConvertionUtils::BuildMultiConsumerHandler(
+                        currentStageBody, opRead->GetNumOfConsumers(), ctx, op->Pos);
+                }
             }
 
             stages[opStageId] = currentStageBody;

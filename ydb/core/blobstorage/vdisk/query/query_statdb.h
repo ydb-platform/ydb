@@ -23,7 +23,7 @@ namespace NKikimr {
         using TLevelSegment = ::NKikimr::TLevelSegment<TKey, TMemRec>;
         using TMemIterator = typename TLevelSegment::TMemIterator;
         using TLevelSstPtr = typename TLevelSegment::TLevelSstPtr;
-        using TYieldedState = TDbStatYeildedState<TKey, TMemRec>;
+        using TYieldedState = TDbStatYieldedState<TKey, TMemRec>;
         using TTraversal = std::function<std::optional<TYieldedState>(
             const TLevelIndexSnapshot&, std::optional<TYieldedState>)>;
 

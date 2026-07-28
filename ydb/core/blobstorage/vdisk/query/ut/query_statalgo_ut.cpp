@@ -20,7 +20,7 @@ namespace {
     using TMemRec = TMemRecLogoBlob;
     using TLogoBlobsLevelIndex = ::NKikimr::TLevelIndex<TKey, TMemRec>;
     using TLogoBlobsLevelSegment = ::NKikimr::TLevelSegment<TKey, TMemRec>;
-    using TYieldedState = TDbStatYeildedState<TKey, TMemRec>;
+    using TYieldedState = TDbStatYieldedState<TKey, TMemRec>;
 
     TKey MakeKey(ui32 step) {
         return TKey(TLogoBlobID(1, 1, step, 0, 0, 0));

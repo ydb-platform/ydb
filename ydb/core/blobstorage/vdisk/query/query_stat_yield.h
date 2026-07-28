@@ -52,7 +52,7 @@ namespace NKikimr {
     };
 
     ////////////////////////////////////////////////////////////////////////////
-    // TDbStatYeildedState
+    // TDbStatYieldedState
     // Snapshot of the traversal position, that allows to resume DB traversal
     // after a yield. A yield releases and later re-captures the Hull snapshot,
     // so iterators become invalid across yields. Therefore we only remember the
@@ -60,7 +60,7 @@ namespace NKikimr {
     // re-seek into the freshly captured snapshot on resume.
     ////////////////////////////////////////////////////////////////////////////
     template <class TKey, class TMemRec>
-    struct TDbStatYeildedState {
+    struct TDbStatYieldedState {
         enum class EFreshSegment {
             Cur = 0,
             Dreg,

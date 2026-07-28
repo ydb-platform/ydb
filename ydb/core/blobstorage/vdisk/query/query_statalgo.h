@@ -15,16 +15,16 @@ namespace NKikimr {
     //
     ////////////////////////////////////////////////////////////////////////////
     template <class TAggr, class TKey, class TMemRec>
-    std::optional<TDbStatYeildedState<TKey, TMemRec>> TraverseFreshSegment(
+    std::optional<TDbStatYieldedState<TKey, TMemRec>> TraverseFreshSegment(
             const TIntrusivePtr<THullCtx>& hullCtx,
             TAggr* aggr,
             const char* segmentName,
             const ::NKikimr::TFreshSegmentSnapshot<TKey, TMemRec>& segment,
-            typename TDbStatYeildedState<TKey, TMemRec>::EFreshSegment segmentType,
+            typename TDbStatYieldedState<TKey, TMemRec>::EFreshSegment segmentType,
             const std::optional<TKey>& resumeKey,
             TDbStatYieldChecker& yeildChecker)
     {
-        using TYeildedState = TDbStatYeildedState<TKey, TMemRec>;
+        using TYeildedState = TDbStatYieldedState<TKey, TMemRec>;
         using TFreshSegmentSnapshot = ::NKikimr::TFreshSegmentSnapshot<TKey, TMemRec>;
         using TFreshIterator = typename TFreshSegmentSnapshot::TIteratorWOMerge;
 
@@ -55,15 +55,15 @@ namespace NKikimr {
     // from saved state.
     ////////////////////////////////////////////////////////////////////////////
     template <class TAggr, class TKey, class TMemRec>
-    std::optional<TDbStatYeildedState<TKey, TMemRec>> TraverseDbWithoutMerge(
+    std::optional<TDbStatYieldedState<TKey, TMemRec>> TraverseDbWithoutMerge(
             const TIntrusivePtr<THullCtx>& hullCtx,
             TAggr* aggr,
             const ::NKikimr::TLevelIndexSnapshot<TKey, TMemRec>& snap,
-            std::optional<TDbStatYeildedState<TKey, TMemRec>> yeildedState = std::nullopt,
+            std::optional<TDbStatYieldedState<TKey, TMemRec>> yeildedState = std::nullopt,
             std::optional<TDbStatYieldPolicy> yeildPolicy = std::nullopt,
             TIntrusivePtr<NMonotonic::IMonotonicTimeProvider> monotonicTimeProvider = {})
     {
-        using TYeildedState = TDbStatYeildedState<TKey, TMemRec>;
+        using TYeildedState = TDbStatYieldedState<TKey, TMemRec>;
         using TFreshSegmentSnapshot = ::NKikimr::TFreshSegmentSnapshot<TKey, TMemRec>;
         using TLevelSliceSnapshot = ::NKikimr::TLevelSliceSnapshot<TKey, TMemRec>;
         using TSstIterator = typename TLevelSliceSnapshot::TSstIterator;

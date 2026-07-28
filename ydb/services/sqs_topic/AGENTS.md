@@ -18,4 +18,5 @@ Functional: `ydb/tests/functional/sqs/`
 
 Style/workflow: [`agents/CODESTYLE.md`](../../agents/CODESTYLE.md) ·
 [`agents/GUIDE.md`](../../agents/GUIDE.md) ·
-[`agents/GTEST_PREFER.md`](../../agents/GTEST_PREFER.md)
+[`agents/GTEST_PREFER.md`](../../agents/GTEST_PREFER.md) ·
+[`agents/NO_ABORT.md`](../../agents/NO_ABORT.md)

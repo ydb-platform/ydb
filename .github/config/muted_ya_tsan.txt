@@ -1,11 +1,9 @@
 ydb/core/blobstorage/backpressure/ut_client Backpressure.MonteCarlo
 ydb/core/blobstorage/backpressure/ut_client unittest.sole chunk
 ydb/core/blobstorage/ddisk/ut TDDiskActorPDiskTest.EmptyRestart_Uring
-ydb/core/blobstorage/ddisk/ut TDDiskActorTest.LateOutdatedSyncReadResultDoesNotLogUnknownSync
 ydb/core/blobstorage/ut_blobstorage/ut_balancing VDiskBalancing.TestRandom_Block42
 ydb/core/blobstorage/ut_blobstorage/ut_balancing VDiskBalancing.TestRandom_Mirror3dc
 ydb/core/blobstorage/ut_blobstorage/ut_balancing unittest.[*/*] chunk
-ydb/core/blobstorage/ut_blobstorage/ut_blob_depot BlobDepot.LoadPutAndRead
 ydb/core/blobstorage/ut_blobstorage/ut_blob_depot BlobDepot.VerifiedRandom
 ydb/core/blobstorage/ut_blobstorage/ut_blob_depot unittest.sole chunk
 ydb/core/blobstorage/ut_blobstorage/ut_bridge BridgeGet.PartRestorationAcrossBridgeOnDiscover
@@ -44,14 +42,12 @@ ydb/core/blobstorage/ut_blobstorage/ut_read_only_vdisk unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_restart_pdisk BSCRestartPDisk.RestartOneByOne
 ydb/core/blobstorage/ut_blobstorage/ut_restart_pdisk BSCRestartPDisk.RestartOneByOneWithReconnects
 ydb/core/blobstorage/ut_blobstorage/ut_restart_pdisk unittest.[*/*] chunk
-ydb/core/blobstorage/ut_blobstorage/ut_startup_brokers VDiskStartupBrokers.LocalRecoveryBrokerSerializesStartupPerPDisk
 ydb/core/blobstorage/ut_blobstorage/ut_startup_brokers VDiskStartupBrokers.StartupDataSyncBrokerReleasesTokenWhenPeerIsOfflinePerNode
 ydb/core/blobstorage/ut_blobstorage/ut_startup_brokers unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_vdisk_internals ChunkKeeper.Random
 ydb/core/blobstorage/ut_blobstorage/ut_vdisk_internals ChunkKeeper.Shred
 ydb/core/blobstorage/ut_blobstorage/ut_vdisk_internals unittest.[*/*] chunk
 ydb/core/blobstorage/ut_mirror3of4 Mirror3of4.ReplicationHuge
-ydb/core/blobstorage/ut_mirror3of4 Mirror3of4.ReplicationSmall
 ydb/core/blobstorage/ut_mirror3of4 unittest.sole chunk
 ydb/core/blobstorage/ut_vdisk2 VDiskTest.HugeBlobWrite
 ydb/core/blobstorage/ut_vdisk2 unittest.[*/*] chunk

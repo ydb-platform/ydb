@@ -4306,8 +4306,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         removeIdentity.RunStage(root, testContext.RboCtx);
 
         auto rewrittenUnion = CastOperator<TOpUnionAll>(root.GetInput());
-        UNIT_ASSERT_C(rewrittenUnion->GetLeftInput()->Kind == EOperator::Source, root.PlanToString(testContext.ExprCtx));
-        UNIT_ASSERT(rewrittenUnion->GetLeftInput() == leftRead);
+        UNIT_ASSERT_C(rewrittenUnion->GetInput(0)->Kind == EOperator::Source, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT(rewrittenUnion->GetInput(0) == leftRead);
     }
 
     Y_UNIT_TEST(RemoveIdentityMapDoesNotCareAboutOutputOrder) {
@@ -6250,6 +6250,124 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             UNIT_ASSERT(pushedMap->MapElements.front().GetElementName() == TInfoUnit("l_a"));
             UNIT_ASSERT(pushedMap->MapElements.front().GetRename() == TInfoUnit("a"));
         }
+    }
+
+    Y_UNIT_TEST(MergeUnionAllFlattensLeftDeepChain) {
+        TMapRuleTestContext testContext;
+        const auto pos = NYql::TPositionHandle();
+
+        const TVector<TInfoUnit> columns{TInfoUnit("a"), TInfoUnit("payload")};
+        auto firstRead = MakeTestRead(columns, pos);
+        auto secondRead = MakeTestRead(columns, pos);
+        auto thirdRead = MakeTestRead(columns, pos);
+        auto innerUnion = MakeIntrusive<TOpUnionAll>(firstRead, secondRead, pos, columns);
+        auto outerUnion = MakeIntrusive<TOpUnionAll>(innerUnion, thirdRead, pos, columns);
+        TOpRoot root(outerUnion, pos, {"a", "payload"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TMergeUnionAllRule>());
+        TRuleBasedStage mergeUnionAll("Focused merge UnionAll", std::move(rules));
+        ComputeLogicalTestProps(root);
+        mergeUnionAll.RunStage(root, testContext.RboCtx);
+
+        UNIT_ASSERT_C(root.GetInput() == outerUnion, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_VALUES_EQUAL(outerUnion->Children.size(), 3);
+        UNIT_ASSERT_C(outerUnion->Children[0] == firstRead, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_C(outerUnion->Children[1] == secondRead, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_C(outerUnion->Children[2] == thirdRead, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_VALUES_EQUAL(outerUnion->Columns.size(), 2);
+        UNIT_ASSERT(outerUnion->Columns[0] == TInfoUnit("a"));
+        UNIT_ASSERT(outerUnion->Columns[1] == TInfoUnit("payload"));
+    }
+
+    Y_UNIT_TEST(MergeUnionAllFlattensNestedBranches) {
+        TMapRuleTestContext testContext;
+        const auto pos = NYql::TPositionHandle();
+
+        const TVector<TInfoUnit> columns{TInfoUnit("a")};
+        auto firstRead = MakeTestRead(columns, pos);
+        auto secondRead = MakeTestRead(columns, pos);
+        auto thirdRead = MakeTestRead(columns, pos);
+        auto fourthRead = MakeTestRead(columns, pos);
+        auto leftUnion = MakeIntrusive<TOpUnionAll>(firstRead, secondRead, pos, columns);
+        auto rightUnion = MakeIntrusive<TOpUnionAll>(thirdRead, fourthRead, pos, columns);
+        auto outerUnion = MakeIntrusive<TOpUnionAll>(leftUnion, rightUnion, pos, columns);
+        TOpRoot root(outerUnion, pos, {"a"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TMergeUnionAllRule>());
+        TRuleBasedStage mergeUnionAll("Focused merge UnionAll", std::move(rules));
+        ComputeLogicalTestProps(root);
+        mergeUnionAll.RunStage(root, testContext.RboCtx);
+
+        UNIT_ASSERT_C(root.GetInput() == outerUnion, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_VALUES_EQUAL(outerUnion->Children.size(), 4);
+        UNIT_ASSERT_C(outerUnion->Children[0] == firstRead, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_C(outerUnion->Children[1] == secondRead, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_C(outerUnion->Children[2] == thirdRead, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_C(outerUnion->Children[3] == fourthRead, root.PlanToString(testContext.ExprCtx));
+    }
+
+    Y_UNIT_TEST(MergeUnionAllKeepsOrderedUnion) {
+        TMapRuleTestContext testContext;
+        const auto pos = NYql::TPositionHandle();
+
+        const TVector<TInfoUnit> columns{TInfoUnit("a")};
+
+        // An ordered inner union pins the order of its own branches.
+        {
+            auto innerUnion =
+                MakeIntrusive<TOpUnionAll>(MakeTestRead(columns, pos), MakeTestRead(columns, pos), pos, columns, /*ordered=*/true);
+            auto outerUnion = MakeIntrusive<TOpUnionAll>(innerUnion, MakeTestRead(columns, pos), pos, columns);
+            TOpRoot root(outerUnion, pos, {"a"});
+
+            TVector<std::unique_ptr<IRule>> rules;
+            rules.emplace_back(std::make_unique<TMergeUnionAllRule>());
+            TRuleBasedStage mergeUnionAll("Focused merge UnionAll", std::move(rules));
+            ComputeLogicalTestProps(root);
+            mergeUnionAll.RunStage(root, testContext.RboCtx);
+
+            UNIT_ASSERT_VALUES_EQUAL(outerUnion->Children.size(), 2);
+            UNIT_ASSERT_C(outerUnion->Children[0] == innerUnion, root.PlanToString(testContext.ExprCtx));
+        }
+
+        // Same for an ordered parent: merging would extend its order guarantee to the inner branches.
+        {
+            auto innerUnion = MakeIntrusive<TOpUnionAll>(MakeTestRead(columns, pos), MakeTestRead(columns, pos), pos, columns);
+            auto outerUnion =
+                MakeIntrusive<TOpUnionAll>(innerUnion, MakeTestRead(columns, pos), pos, columns, /*ordered=*/true);
+            TOpRoot root(outerUnion, pos, {"a"});
+
+            TVector<std::unique_ptr<IRule>> rules;
+            rules.emplace_back(std::make_unique<TMergeUnionAllRule>());
+            TRuleBasedStage mergeUnionAll("Focused merge UnionAll", std::move(rules));
+            ComputeLogicalTestProps(root);
+            mergeUnionAll.RunStage(root, testContext.RboCtx);
+
+            UNIT_ASSERT_VALUES_EQUAL(outerUnion->Children.size(), 2);
+            UNIT_ASSERT_C(outerUnion->Children[0] == innerUnion, root.PlanToString(testContext.ExprCtx));
+        }
+    }
+
+    Y_UNIT_TEST(MergeUnionAllKeepsSharedUnion) {
+        TMapRuleTestContext testContext;
+        const auto pos = NYql::TPositionHandle();
+
+        const TVector<TInfoUnit> columns{TInfoUnit("a")};
+        auto innerUnion = MakeIntrusive<TOpUnionAll>(MakeTestRead(columns, pos), MakeTestRead(columns, pos), pos, columns);
+        // The inner union feeds the parent twice, so it has more than one consumer.
+        auto outerUnion = MakeIntrusive<TOpUnionAll>(innerUnion, innerUnion, pos, columns);
+        TOpRoot root(outerUnion, pos, {"a"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TMergeUnionAllRule>());
+        TRuleBasedStage mergeUnionAll("Focused merge UnionAll", std::move(rules));
+        ComputeLogicalTestProps(root);
+        mergeUnionAll.RunStage(root, testContext.RboCtx);
+
+        UNIT_ASSERT_VALUES_EQUAL(outerUnion->Children.size(), 2);
+        UNIT_ASSERT_C(outerUnion->Children[0] == innerUnion, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_C(outerUnion->Children[1] == innerUnion, root.PlanToString(testContext.ExprCtx));
     }
 
     Y_UNIT_TEST(PreferredAliasConvergesUsesOntoRootPinnedName) {

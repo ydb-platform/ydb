@@ -353,6 +353,33 @@ public:
     }
 };
 
+/**
+ * Operator with an arbitrary number of inputs. The inputs are the children, in order.
+ */
+class IVariadicOperator: public IOperator {
+public:
+    IVariadicOperator(EOperator kind, TPositionHandle pos)
+        : IOperator(kind, pos) {
+    }
+
+    IVariadicOperator(EOperator kind, TPositionHandle pos, TVector<TIntrusivePtr<IOperator>> inputs)
+        : IOperator(kind, pos) {
+        Children = std::move(inputs);
+    }
+
+    TVector<TIntrusivePtr<IOperator>>& GetInputs() {
+        return Children;
+    }
+
+    TIntrusivePtr<IOperator>& GetInput(size_t index) {
+        return Children[index];
+    }
+
+    void SetInputs(TVector<TIntrusivePtr<IOperator>> newInputs) {
+        Children = std::move(newInputs);
+    }
+};
+
 class TOpEmptySource: public IOperator {
 public:
     TOpEmptySource(TPositionHandle pos)
@@ -635,8 +662,9 @@ protected:
     void ComputeOutputIUs() override;
 };
 
-class TOpUnionAll: public IBinaryOperator {
+class TOpUnionAll: public IVariadicOperator {
 public:
+    TOpUnionAll(TVector<TIntrusivePtr<IOperator>> inputs, TPositionHandle pos, TVector<TInfoUnit> columns, bool ordered = false);
     TOpUnionAll(TIntrusivePtr<IOperator> leftArg, TIntrusivePtr<IOperator> rightArg, TPositionHandle pos,
                 TVector<TInfoUnit> columns, bool ordered = false);
     virtual void PropagateLiveness(ILivenessContext& ctx) override;

@@ -257,25 +257,24 @@ void TOpJoin::PropagateLiveness(ILivenessContext& ctx) {
 
 void TOpUnionAll::PropagateLiveness(ILivenessContext& ctx) {
     const auto& liveOut = ctx.GetLiveOut(this);
-    TInfoUnitSet leftLive;
-    TInfoUnitSet rightLive;
+    TInfoUnitSet inputLive;
     for (const auto& column : Columns) {
         if (!liveOut.contains(column)) {
             continue;
         }
-        AddInfoUnit(leftLive, column);
-        AddInfoUnit(rightLive, column);
+        AddInfoUnit(inputLive, column);
     }
 
     // The union must keep at least one column; TPruneDeadUnionAllColumnsRule
     // retains the first declared column in the same case.
-    if (leftLive.empty() && !Columns.empty()) {
-        AddInfoUnit(leftLive, Columns.front());
-        AddInfoUnit(rightLive, Columns.front());
+    if (inputLive.empty() && !Columns.empty()) {
+        AddInfoUnit(inputLive, Columns.front());
     }
 
-    ctx.AddLiveInput(this, 0, leftLive);
-    ctx.AddLiveInput(this, 1, rightLive);
+    // Every input of the union sees the same set of live columns.
+    for (ui32 childIndex = 0; childIndex < Children.size(); ++childIndex) {
+        ctx.AddLiveInput(this, childIndex, inputLive);
+    }
 }
 
 void TOpLimit::PropagateLiveness(ILivenessContext& ctx) {

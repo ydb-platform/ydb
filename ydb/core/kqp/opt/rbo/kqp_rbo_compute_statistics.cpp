@@ -638,8 +638,10 @@ void TOpJoin::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
 void TOpUnionAll::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     Y_UNUSED(ctx);
     Y_UNUSED(planProps);
-    if (!GetLeftInput()->Props.Metadata.has_value() || !GetRightInput()->Props.Metadata.has_value()) {
-        return;
+    for (const auto& input : Children) {
+        if (!input->Props.Metadata.has_value()) {
+            return;
+        }
     }
 
     Props.Metadata = TRBOMetadata();
@@ -649,16 +651,28 @@ void TOpUnionAll::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
 void TOpUnionAll::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
     Y_UNUSED(ctx);
     Y_UNUSED(planProps);
-    if (!GetLeftInput()->Props.Statistics.has_value() || !GetRightInput()->Props.Statistics.has_value()) {
-        return;
+    for (const auto& input : Children) {
+        if (!input->Props.Statistics.has_value()) {
+            return;
+        }
     }
 
     Props.Statistics = TRBOStatistics();
-    Props.Statistics->EBytes = GetLeftInput()->Props.Statistics->EBytes + GetRightInput()->Props.Statistics->EBytes;
-    Props.Statistics->ERows = GetLeftInput()->Props.Statistics->ERows + GetRightInput()->Props.Statistics->ERows;
 
-    if (GetLeftInput()->Props.Cost.has_value() && GetRightInput()->Props.Cost.has_value()) {
-        Props.Cost = *GetLeftInput()->Props.Cost + *GetRightInput()->Props.Cost;
+    double cost = 0.0;
+    bool allInputsHaveCost = true;
+    for (const auto& input : Children) {
+        Props.Statistics->EBytes += input->Props.Statistics->EBytes;
+        Props.Statistics->ERows += input->Props.Statistics->ERows;
+        if (input->Props.Cost.has_value()) {
+            cost += *input->Props.Cost;
+        } else {
+            allInputsHaveCost = false;
+        }
+    }
+
+    if (allInputsHaveCost) {
+        Props.Cost = cost;
     } else {
         Props.Cost = std::nullopt;
     }

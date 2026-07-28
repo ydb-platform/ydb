@@ -127,6 +127,14 @@ public:
         return result;
     }
 
+    void OnWritingsAborted() {
+        for (auto&& [_, action] : StorageActions) {
+            if (!!action.GetWritingOptional()) {
+                action.GetWritingOptional()->OnWritingAborted();
+            }
+        }
+    }
+
     std::vector<std::shared_ptr<IBlobsReadingAction>> GetReadingActions() const {
         std::vector<std::shared_ptr<IBlobsReadingAction>> result;
         for (auto&& i : StorageActions) {

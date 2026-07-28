@@ -10,6 +10,7 @@ TEST_SRCS(
     base.py
     data_correctness.py
     data_migration_when_alter_ttl.py
+    drop_table_s3.py
     tier_delete.py
     ttl_delete_s3.py
     ttl_unavailable_s3.py

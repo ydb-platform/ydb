@@ -517,6 +517,15 @@ public:
         return Tables;
     }
 
+    bool HasAnyAliveTable() const {
+        for (const auto& [_, table] : Tables) {
+            if (!table.IsDropped()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     const THashSet<ui32>& GetSchemaPresets() const {
         return SchemaPresetsIds;
     }

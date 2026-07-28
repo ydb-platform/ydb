@@ -48,6 +48,7 @@ public:
 
     bool LoadIdempotency(NTable::TDatabase& database);
     bool HasBlobsToDelete() const;
+    bool HasPendingExternalCleanup() const;
     void Stop();
 
     std::shared_ptr<IBlobsStorageOperator> GetDefaultOperator() const {

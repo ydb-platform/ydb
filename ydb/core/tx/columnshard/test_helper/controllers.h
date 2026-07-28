@@ -18,6 +18,7 @@ private:
     YDB_READONLY(TAtomicCounter, MaxValueUsageCount, 0);
     YDB_ACCESSOR_DEF(std::optional<ui64>, SmallSizeDetector);
     YDB_ACCESSOR(bool, SkipSpecialCheckForEvict, false);
+    YDB_ACCESSOR(bool, AnswerDropCleanup, true);
 
 protected:
     virtual void OnTieringModified(const std::shared_ptr<NKikimr::NColumnShard::TTiersManager>& /*tiers*/) override;
@@ -51,6 +52,10 @@ protected:
     }
 
 public:
+    virtual bool NeedAnswerDropCleanup() const override {
+        return AnswerDropCleanup;
+    }
+
     virtual bool CheckPortionForEvict(const TPortionInfo& portion) const override {
         if (SkipSpecialCheckForEvict) {
             return true;

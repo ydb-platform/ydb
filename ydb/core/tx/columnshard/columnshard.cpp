@@ -96,6 +96,10 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
         OnTieringModified();
     }
     Counters.GetCSCounters().OnIndexMetadataLimit(NOlap::IColumnEngine::GetMetadataLimit());
+    for (auto&& postponedEvent : InitializationPostponedEvents) {
+        TActivationContext::Send(postponedEvent.release());
+    }
+    InitializationPostponedEvents.clear();
     EnqueueBackgroundActivities();
     BackgroundSessionsManager->Start();
     ctx.Send(SelfId(), new NActors::TEvents::TEvWakeup());
@@ -564,6 +568,37 @@ void TColumnShard::SendPeriodicStats(bool withExecutor) {
             StatsReportRound++;
         }
     }
+}
+
+bool TColumnShard::IsDropCleanupComplete() const {
+    if (TablesManager.HasAnyAliveTable()) {
+        return false;
+    }
+    if (DataLocksManager->HasProcessLocks()) {
+        // in-flight background task: its blobs may exist in the external storage before the index commit
+        return false;
+    }
+    const auto& portionStats = Counters.GetPortionIndexCounters();
+    for (const auto& [_, pathIds] : TablesManager.GetPathsToDrop()) {
+        for (const auto& pathId : pathIds) {
+            if (portionStats->GetTableStats(pathId, TPortionIndexStats::TNonDefaultTierPortions()).GetCount()) {
+                return false;
+            }
+        }
+    }
+    return !StoragesManager->HasPendingExternalCleanup();
+}
+
+void TColumnShard::Handle(TEvColumnShard::TEvCheckDropCleanup::TPtr& ev, const TActorContext& ctx) {
+    if (!NYDBTest::TControllers::GetColumnShardController()->NeedAnswerDropCleanup()) {
+        // Emulates an old binary that does not know the request (mixed-version tests)
+        return;
+    }
+    const bool ready = IsDropCleanupComplete();
+    YDB_LOG_INFO("Drop cleanup state requested",
+        {"tabletId", TabletID()},
+        {"ready", ready});
+    ctx.Send(ev->Sender, new TEvColumnShard::TEvDropCleanupState(TabletID(), ready));
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvReportBaseStatistics::TPtr& /*ev*/) {

@@ -273,6 +273,7 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvColumnShard::TEvCheckPlannedTransaction::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvNotifyTxCompletion::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvColumnShard::TEvCheckDropCleanup::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvInternalScan::TPtr& ev, const TActorContext& ctx);
@@ -452,6 +453,7 @@ protected:
             HFunc(TEvColumnShard::TEvCheckPlannedTransaction, Handle);
             HFunc(TEvDataShard::TEvCancelTransactionProposal, Handle);
             HFunc(TEvColumnShard::TEvNotifyTxCompletion, Handle);
+            HFunc(TEvColumnShard::TEvCheckDropCleanup, Handle);
             HFunc(TEvDataShard::TEvKqpScan, Handle);
             HFunc(TEvColumnShard::TEvInternalScan, Handle);
             HFunc(TEvTxProcessing::TEvPlanStep, Handle);
@@ -533,6 +535,7 @@ private:
     const TMonotonic CreateInstant = TMonotonic::Now();
     std::optional<TMonotonic> StartInstant;
     bool IsTxInitFinished = false;
+    std::vector<std::unique_ptr<IEventHandle>> InitializationPostponedEvents;
 
     ui64 CurrentSchemeShardId = 0;
     TMessageSeqNo LastSchemaSeqNo;
@@ -685,6 +688,9 @@ public:
     const TTablesManager& GetTablesManager() const {
         return TablesManager;
     }
+
+    // true when the tablet can be deleted without losing external (S3) data; monotonic after drop
+    bool IsDropCleanupComplete() const;
 
     void EnqueueProgressTx(const TActorContext& ctx, const ui64 continueTxId = 0);
 

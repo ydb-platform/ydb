@@ -51,7 +51,10 @@ bool TStoragesManagerInitializer::DoPrecharge(NTabletFlatExecutor::TTransactionC
            (int)Schema::Precharge<Schema::BlobsToDelete>(db, txc.DB.GetScheme()) &
            (int)Schema::Precharge<Schema::BlobsToDeleteWT>(db, txc.DB.GetScheme()) &
            (int)Schema::Precharge<Schema::SharedBlobIds>(db, txc.DB.GetScheme()) &
-           (int)Schema::Precharge<Schema::BorrowedBlobIds>(db, txc.DB.GetScheme());
+           (int)Schema::Precharge<Schema::BorrowedBlobIds>(db, txc.DB.GetScheme()) &
+           (int)Schema::Precharge<Schema::TierBlobsDraft>(db, txc.DB.GetScheme()) &
+           (int)Schema::Precharge<Schema::TierBlobsToDelete>(db, txc.DB.GetScheme()) &
+           (int)Schema::Precharge<Schema::TierBlobsToDeleteWT>(db, txc.DB.GetScheme());
 }
 
 bool TDBLocksInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
@@ -247,6 +250,17 @@ bool TTiersManagerInitializer::DoExecute(NTabletFlatExecutor::TTransactionContex
 
         if (!rowset.Next()) {
             return false;
+        }
+    }
+
+    // re-activate tiers for storages with persisted external removal queues (their tables may be already dropped)
+    for (const auto& [storageId, storageOperator] : Self->StoragesManager->GetStorages()) {
+        if (storageId == NOlap::IStoragesManager::DefaultStorageId || storageId == NOlap::IStoragesManager::MemoryStorageId ||
+            storageId == NOlap::IStoragesManager::LocalMetadataStorageId) {
+            continue;
+        }
+        if (storageOperator->HasPendingExternalCleanup()) {
+            Self->Tiers->ActivateTiers({ NTiers::TExternalStorageId(storageId) }, false);
         }
     }
     return true;

@@ -27,8 +27,18 @@ void TWriteAction::DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& /*self*/,
 }
 
 void TWriteAction::DoOnExecuteTxBeforeWrite(NColumnShard::TColumnShard& /*self*/, TBlobManagerDb& dbBlobs) {
+    DraftsPersisted = true;
     for (auto&& i : GetBlobsForWrite()) {
         dbBlobs.AddTierDraftBlobId(GetStorageId(), i.first);
+    }
+}
+
+void TWriteAction::DoOnWritingAborted() {
+    if (!DraftsPersisted) {
+        return;
+    }
+    for (auto&& i : GetBlobsForWrite()) {
+        GCInfo->MutableDraftBlobIdsToRemove().emplace_back(i.first);
     }
 }
 

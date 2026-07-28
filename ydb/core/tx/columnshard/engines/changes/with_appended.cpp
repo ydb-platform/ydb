@@ -20,13 +20,18 @@ void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self,
         PortionsToRemove.ApplyOnExecute(self, context, *FetchedDataAccessors);
         PortionsToMove.ApplyOnExecute(self, context, *FetchedDataAccessors);
     }
-    const auto predRemoveDroppedTable = [self](const TWritePortionInfoWithBlobsResult& item) {
+    const auto predRemoveDroppedTable = [self, this](const TWritePortionInfoWithBlobsResult& item) {
         auto& portionInfo = item.GetPortionResult();
         if (!!self && !self->TablesManager.HasTable(portionInfo.GetPortionInfo().GetPathId(), false)) {
             YDB_LOG_WARN("",
                 {"event", "skip_inserted_data"},
                 {"reason", "table_removed"},
                 {"pathId", portionInfo.GetPortionInfo().GetPathId()});
+            // the portion is discarded: without an explicit removal declaration its blobs leak
+            for (auto&& blob : item.GetBlobs()) {
+                MutableBlobsAction().GetRemoving(blob.GetOperator()->GetStorageId())->DeclareRemove((TTabletId)self->TabletID(),
+                    blob.GetBlobIdVerified());
+            }
             return true;
         } else {
             return false;

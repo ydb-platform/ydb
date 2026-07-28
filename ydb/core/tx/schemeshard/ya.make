@@ -113,6 +113,7 @@ SRCS(
     schemeshard__local_index_migration.cpp
     schemeshard__local_index_migration.h
     schemeshard__login.cpp
+    schemeshard__column_shard_cleanup_complete.cpp
     schemeshard__make_access_database_no_inheritable.cpp
     schemeshard__monitoring.cpp
     schemeshard__monitoring.h

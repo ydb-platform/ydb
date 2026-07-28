@@ -91,6 +91,7 @@ void TColumnEngineChanges::Abort(NColumnShard::TColumnShard& self, TChangesFinis
                                               "stage", StateGuard.GetStage())("reason", context.ErrorMessage)("prev_reason", AbortedReason);
     SetStage(NChanges::EStage::Aborted);
     AbortedReason = context.ErrorMessage;
+    MutableBlobsAction().OnWritingsAborted();
     OnFinish(self, context);
 }
 
@@ -124,6 +125,7 @@ void TColumnEngineChanges::AbortEmergency(const TString& reason) {
     } else {
         SetStage(NChanges::EStage::Aborted);
         AbortedReason = reason;
+        MutableBlobsAction().OnWritingsAborted();
         if (!!LockGuard) {
             LockGuard->AbortLock();
         }

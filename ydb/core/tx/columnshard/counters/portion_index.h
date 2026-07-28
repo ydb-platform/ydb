@@ -129,6 +129,13 @@ public:
             return portionClass.GetProduced() == Type;
         }
     };
+
+    class TNonDefaultTierPortions: public IStatsSelector {
+    public:
+        bool Select(const TPortionClass& portionClass) const override {
+            return !portionClass.GetIsDefaultTier();
+        }
+    };
 };
 
 }   // namespace NKikimr::NColumnShard

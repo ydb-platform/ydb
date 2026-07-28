@@ -61,6 +61,16 @@ bool IStoragesManager::LoadIdempotency(NTable::TDatabase& database) {
         return false;
     }
     TBlobManagerDb blobsDB(database);
+    {
+        // construct operators for storages that only have persisted removal queues, otherwise the queues are never loaded
+        THashSet<TString> storageIds;
+        if (!blobsDB.LoadTierStorageIds(storageIds)) {
+            return false;
+        }
+        for (const auto& storageId : storageIds) {
+            GetOperatorGuarantee(storageId);
+        }
+    }
     for (auto&& i : GetStorages()) {
         if (!i.second->Load(blobsDB)) {
             return false;
@@ -74,6 +84,15 @@ bool IStoragesManager::LoadIdempotency(NTable::TDatabase& database) {
 bool IStoragesManager::HasBlobsToDelete() const {
     for (auto&& i : Constructed) {
         if (!i.second->GetBlobsToDelete().IsEmpty()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool IStoragesManager::HasPendingExternalCleanup() const {
+    for (auto&& i : Constructed) {
+        if (i.second->HasPendingExternalCleanup()) {
             return true;
         }
     }

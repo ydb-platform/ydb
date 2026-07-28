@@ -24,6 +24,7 @@ private:
     THashMap<TUnifiedBlobId, TString> BlobsForWrite;
     THashSet<TUnifiedBlobId> BlobsWaiting;
     bool Aborted = false;
+    bool AfterWriteFinalized = false;
     std::shared_ptr<NBlobOperations::TWriteCounters> Counters;
     YDB_FLAG_ACCESSOR(Bulk, false);
     void AddDataForWrite(const TUnifiedBlobId& blobId, const TString& data);
@@ -37,6 +38,9 @@ protected:
 
     virtual void DoOnExecuteTxAfterWrite(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) = 0;
     virtual void DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& self, const bool blobsWroteSuccessfully) = 0;
+
+    virtual void DoOnWritingAborted() {
+    }
 
     virtual TUnifiedBlobId AllocateNextBlobId(const TString& data) = 0;
 
@@ -91,11 +95,22 @@ public:
     }
 
     void OnExecuteTxAfterWrite(NColumnShard::TColumnShard& self, TBlobManagerDb& dbBlobs, const bool blobsWroteSuccessfully) {
+        AfterWriteFinalized = true;
         return DoOnExecuteTxAfterWrite(self, dbBlobs, blobsWroteSuccessfully);
     }
 
     void OnCompleteTxAfterWrite(NColumnShard::TColumnShard& self, const bool blobsWroteSuccessfully) {
+        AfterWriteFinalized = true;
         return DoOnCompleteTxAfterWrite(self, blobsWroteSuccessfully);
+    }
+
+    // blobs already written by a dying change are tracked by nothing: schedule their drafts for removal
+    void OnWritingAborted() {
+        if (AfterWriteFinalized) {
+            return;
+        }
+        AfterWriteFinalized = true;
+        DoOnWritingAborted();
     }
 
     void SendWriteBlobRequest(const TString& data, const TUnifiedBlobId& blobId);

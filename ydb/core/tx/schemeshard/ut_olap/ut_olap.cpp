@@ -1,4 +1,6 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+
+#include <util/generic/xrange.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/olap_helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/schemeshard_counters.h>
@@ -632,6 +634,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
         env.TestWaitNotification(runtime, txId);
 
         TestLs(runtime, "/MyRoot/MyDir/MyTable", false, NLs::PathNotExist);
+        // the shards are deleted after external cleanup, only then the path is removed
+        env.TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets + 1);
         TestLsPathId(runtime, expectedTablePathId, NLs::PathStringEqual(""));
     }
 
@@ -966,6 +970,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
         env.TestWaitNotification(runtime, txId);
 
         TestLs(runtime, "/MyRoot/OlapStore", false, NLs::PathNotExist);
+        // the store shards are deleted after external cleanup, only then the path is removed
+        env.TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets);
         TestLsPathId(runtime, expectedStorePathId, NLs::PathStringEqual(""));
     }
 
@@ -989,6 +995,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         env.TestWaitNotification(runtime, txId);
 
         TestLs(runtime, "/MyRoot/MyDir/ColumnTable", false, NLs::PathNotExist);
+        env.TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets);
         TestLsPathId(runtime, expectedTablePathId, NLs::PathStringEqual(""));
 
         // PARTITION BY ()
@@ -1034,6 +1041,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         env.TestWaitNotification(runtime, txId);
 
         TestLs(runtime, "/MyRoot/MyDir/ColumnTable", false, NLs::PathNotExist);
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets + 1, TTestTxConfig::FakeHiveTablets + 5));
         TestLsPathId(runtime, expectedTablePathId, NLs::PathStringEqual(""));
     }
 
@@ -1057,6 +1065,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         env.TestWaitNotification(runtime, txId);
 
         TestLs(runtime, "/MyRoot/MyDir/ColumnTable", false, NLs::PathNotExist);
+        env.TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets);
         TestLsPathId(runtime, expectedTablePathId, NLs::PathStringEqual(""));
 
         TString otherSchema = R"(
@@ -1097,6 +1106,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         env.TestWaitNotification(runtime, txId);
 
         TestLs(runtime, "/MyRoot/MyDir/ColumnTable", false, NLs::PathNotExist);
+        env.TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets + 1, TTestTxConfig::FakeHiveTablets + 65));
         TestLsPathId(runtime, expectedTablePathId, NLs::PathStringEqual(""));
     }
 
@@ -3391,6 +3401,7 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
 
         TestLs(runtime, "/MyRoot/MyDir/ColumnTable", false, NLs::PathNotExist);
         UNIT_ASSERT_VALUES_EQUAL(CountSharedShardsRows(runtime), 0u);
+        env.TestWaitTabletDeletion(runtime, tabletIds);
         // Shards rows for the (now deleted) column shards must be gone.
         UNIT_ASSERT_VALUES_EQUAL(GetShardOwnerLocalPathId(runtime, localShardIdx), 0u);
     }
@@ -3438,6 +3449,7 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "ColumnTable");
         env.TestWaitNotification(runtime, txId);
         TestLs(runtime, "/MyRoot/MyDir/ColumnTable", false, NLs::PathNotExist);
+        env.TestWaitTabletDeletion(runtime, tabletIds);
         UNIT_ASSERT_VALUES_EQUAL(GetShardOwnerLocalPathId(runtime, localShardIdx), 0u);
     }
 

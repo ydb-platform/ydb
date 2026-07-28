@@ -3,6 +3,7 @@
 #include "helpers/query_executor.h"
 #include "helpers/writer.h"
 
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
 #include <ydb/core/kqp/ut/common/olap_indexes_enums.h>
 #include <ydb/core/tx/columnshard/data_locks/locks/list.h>
@@ -511,6 +512,188 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         csController->WaitCondition(TDuration::Seconds(60), []() {
             return Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("olap-tier1").GetSize() == 0;
         });
+    }
+
+    Y_UNIT_TEST(DropTableAndStoreDeletesS3Data) {
+        // shards belong to the store, so the deferred deletion is driven by DROP TABLESTORE
+        Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->Clear();
+        TTieringTestHelper tieringHelper;
+        auto& csController = tieringHelper.GetCsController();
+        csController->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        auto& olapHelper = tieringHelper.GetOlapHelper();
+        auto& testHelper = tieringHelper.GetTestHelper();
+
+        olapHelper.CreateTestOlapTable();
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
+        tieringHelper.WriteSampleData();
+        testHelper.SetTiering(DEFAULT_TABLE_PATH, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
+        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
+        UNIT_ASSERT_GT(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("olap-tier1").GetSize(), 0);
+
+        {
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(R"(DROP TABLE `/Root/olapStore/olapTable`)").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(R"(DROP TABLESTORE `/Root/olapStore`)").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // AFL_VERIFYs internally when the condition is not reached in time
+        csController->WaitCondition(TDuration::Seconds(60), []() {
+            return Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("olap-tier1").GetSize() == 0;
+        });
+    }
+
+    Y_UNIT_TEST(DropStandaloneTableDeletesS3Data) {
+        // https://github.com/ydb-platform/ydb/issues/45898
+        Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->Clear();
+        TTieringTestHelper tieringHelper;
+        auto& csController = tieringHelper.GetCsController();
+        csController->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        auto& olapHelper = tieringHelper.GetOlapHelper();
+        auto& testHelper = tieringHelper.GetTestHelper();
+        testHelper.GetRuntime().GetAppData().ColumnShardConfig.SetBulkUpsertRequireAllColumns(false);
+
+        tieringHelper.SetTablePath("/Root/olapTable");
+        olapHelper.CreateTestOlapStandaloneTable();
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
+        tieringHelper.WriteSampleData();
+        testHelper.SetTiering("/Root/olapTable", DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
+        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
+        UNIT_ASSERT_GT(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("olap-tier1").GetSize(), 0);
+
+        {
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(R"(DROP TABLE `/Root/olapTable`)").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // AFL_VERIFYs internally when the condition is not reached in time
+        csController->WaitCondition(TDuration::Seconds(60), []() {
+            return Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("olap-tier1").GetSize() == 0;
+        });
+    }
+
+    Y_UNIT_TEST(DropTableWithUnavailableS3) {
+        // the tier is unreachable at drop time: the shards must stay alive until the data is erased
+        Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->Clear();
+        TTieringTestHelper tieringHelper;
+        auto& csController = tieringHelper.GetCsController();
+        csController->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        auto& olapHelper = tieringHelper.GetOlapHelper();
+        auto& testHelper = tieringHelper.GetTestHelper();
+        testHelper.GetRuntime().GetAppData().ColumnShardConfig.SetBulkUpsertRequireAllColumns(false);
+
+        tieringHelper.SetTablePath("/Root/olapTable");
+        olapHelper.CreateTestOlapStandaloneTable();
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
+        tieringHelper.WriteSampleData();
+        testHelper.SetTiering("/Root/olapTable", DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
+        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
+        UNIT_ASSERT_GT(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("olap-tier1").GetSize(), 0);
+
+        csController->SetExternalStorageUnavailable(true);
+        // the unavailability override is picked up on operator re-initialization
+        testHelper.SetTiering("/Root/olapTable", DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
+        {
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(R"(DROP TABLE `/Root/olapTable`)").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        Sleep(TDuration::Seconds(15));
+        UNIT_ASSERT_GT(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("olap-tier1").GetSize(), 0);
+
+        UNIT_ASSERT_GT(csController->GetActiveTablets().size(), 0);
+
+        csController->SetExternalStorageUnavailable(false);
+        // on boot the shards must reconstruct the tier configuration from the persisted removal queues
+        for (const auto& [tabletId, unused] : csController->GetActiveTablets()) {
+            testHelper.GetRuntime().Send(MakePipePerNodeCacheID(false), NActors::TActorId(),
+                new TEvPipeCache::TEvForward(new TEvents::TEvPoisonPill(), tabletId, false));
+        }
+        csController->WaitCondition(TDuration::Seconds(120), []() {
+            return Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("olap-tier1").GetSize() == 0;
+        });
+    }
+
+    Y_UNIT_TEST(DropTableSilentShardNeverDeleted) {
+        // emulates column shards on an older binary: they never answer the cleanup poll
+        Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->Clear();
+        TTieringTestHelper tieringHelper;
+        auto& csController = tieringHelper.GetCsController();
+        csController->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetAnswerDropCleanup(false);
+        auto& olapHelper = tieringHelper.GetOlapHelper();
+        auto& testHelper = tieringHelper.GetTestHelper();
+        testHelper.GetRuntime().GetAppData().ColumnShardConfig.SetBulkUpsertRequireAllColumns(false);
+
+        tieringHelper.SetTablePath("/Root/olapTable");
+        olapHelper.CreateTestOlapStandaloneTable();
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
+        tieringHelper.WriteSampleData();
+        testHelper.SetTiering("/Root/olapTable", DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
+        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
+        UNIT_ASSERT_GT(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("olap-tier1").GetSize(), 0);
+        const size_t tabletsBefore = csController->GetActiveTablets().size();
+        UNIT_ASSERT_GT(tabletsBefore, 0);
+
+        {
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(R"(DROP TABLE `/Root/olapTable`)").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        csController->WaitCondition(TDuration::Seconds(120), []() {
+            return Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("olap-tier1").GetSize() == 0;
+        });
+        Sleep(TDuration::Seconds(70));
+        UNIT_ASSERT_VALUES_EQUAL(csController->GetActiveTablets().size(), tabletsBefore);
+
+        csController->SetAnswerDropCleanup(true);
+        csController->WaitCondition(TDuration::Seconds(180), [&]() {
+            return csController->GetActiveTablets().size() == 0;
+        });
+    }
+
+    Y_UNIT_TEST(DropCleanupKillSwitchDrains) {
+        // disabling the kill-switch deletes the pending tablets without waiting, accepting the leak
+        Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->Clear();
+        TTieringTestHelper tieringHelper;
+        auto& csController = tieringHelper.GetCsController();
+        csController->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        auto& olapHelper = tieringHelper.GetOlapHelper();
+        auto& testHelper = tieringHelper.GetTestHelper();
+        testHelper.GetRuntime().GetAppData().ColumnShardConfig.SetBulkUpsertRequireAllColumns(false);
+
+        tieringHelper.SetTablePath("/Root/olapTable");
+        olapHelper.CreateTestOlapStandaloneTable();
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
+        tieringHelper.WriteSampleData();
+        testHelper.SetTiering("/Root/olapTable", DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
+        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
+        UNIT_ASSERT_GT(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("olap-tier1").GetSize(), 0);
+
+        csController->SetExternalStorageUnavailable(true);
+        testHelper.SetTiering("/Root/olapTable", DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
+        {
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(R"(DROP TABLE `/Root/olapTable`)").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        Sleep(TDuration::Seconds(10));
+        UNIT_ASSERT_GT(csController->GetActiveTablets().size(), 0);
+
+        testHelper.GetRuntime().GetAppData().FeatureFlags.SetEnableDeferredColumnShardDeletionOnDrop(false);
+        csController->WaitCondition(TDuration::Seconds(180), [&]() {
+            return csController->GetActiveTablets().size() == 0;
+        });
+        UNIT_ASSERT_GT(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("olap-tier1").GetSize(), 0);
     }
 
     Y_UNIT_TEST(NoBackoffUnavailableS3) {

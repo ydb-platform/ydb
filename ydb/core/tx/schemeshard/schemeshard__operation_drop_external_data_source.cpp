@@ -148,8 +148,22 @@ public:
             result->SetError(NKikimrScheme::StatusSchemeError, "Data source doesn't exist");
             return result;
         }
-        if (externalDataSource->ExternalTableReferences.ReferencesSize()) {
-            result->SetError(NKikimrScheme::StatusSchemeError, "Other entities depend on this data source, please remove them at the beginning: " + externalDataSource->ExternalTableReferences.GetReferences(0).GetPath());
+        for (const auto& reference : externalDataSource->ExternalTableReferences.GetReferences()) {
+            const auto referrerPathId = TPathId::FromProto(reference.GetPathId());
+            const auto* referrerPath = context.SS->PathsById.FindPtr(referrerPathId);
+            if (!referrerPath || ((*referrerPath)->Dropped() && (*referrerPath)->GetShardsInside() == 0)) {
+                // stale reference (e.g. left by an older binary): must not block the drop
+                continue;
+            }
+            if ((*referrerPath)->Dropped()) {
+                // shards of the dropped table still need this data source to erase evicted data
+                result->SetError(NKikimrScheme::StatusSchemeError,
+                    "External data cleanup for dropped table " + reference.GetPath() +
+                        " is still in progress, please retry the drop later");
+                return result;
+            }
+            result->SetError(NKikimrScheme::StatusSchemeError,
+                "Other entities depend on this data source, please remove them at the beginning: " + reference.GetPath());
             return result;
         }
 

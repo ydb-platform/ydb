@@ -928,7 +928,7 @@ Y_UNIT_TEST_SUITE(MailboxProcessingFinished) {
         {}
 
         void Bootstrap() {
-            SetSystemFlag(ESystemFlag::RequestedMailboxProcessingFinished);
+            SetSystemFlag(ESystemFlag::NotifyOnMailboxProcessingFinished);
             ForceFinishReason();
             Become(&TThis::StateWork);
         }
@@ -1003,7 +1003,7 @@ Y_UNIT_TEST_SUITE(MailboxProcessingFinished) {
         {}
 
         void Bootstrap() {
-            SetSystemFlag(ESystemFlag::RequestedMailboxProcessingFinished);
+            SetSystemFlag(ESystemFlag::NotifyOnMailboxProcessingFinished);
             Become(&TThis::StateWork);
         }
 
@@ -1019,7 +1019,7 @@ Y_UNIT_TEST_SUITE(MailboxProcessingFinished) {
             if (Notifications == 1) {
                 Send(SelfId(), new TEvents::TEvWakeup(1));
             } else if (Notifications == 2) {
-                ClearSystemFlag(ESystemFlag::RequestedMailboxProcessingFinished);
+                ClearSystemFlag(ESystemFlag::NotifyOnMailboxProcessingFinished);
                 Send(SelfId(), new TEvents::TEvWakeup(2));
             } else {
                 Done.Unpark();
@@ -1124,8 +1124,8 @@ Y_UNIT_TEST_SUITE(MailboxProcessingStarted) {
 
         void Bootstrap() {
             Steps.push_back(EStep::Bootstrap);
-            SetSystemFlag(ESystemFlag::RequestedMailboxProcessingStarted);
-            SetSystemFlag(ESystemFlag::RequestedMailboxProcessingFinished);
+            SetSystemFlag(ESystemFlag::NotifyOnMailboxProcessingStarted);
+            SetSystemFlag(ESystemFlag::NotifyOnMailboxProcessingFinished);
             Send(SelfId(), new TEvents::TEvWakeup(1));
             Send(SelfId(), new TEvents::TEvWakeup(2));
             Become(&TThis::StateWork);
@@ -1148,8 +1148,8 @@ Y_UNIT_TEST_SUITE(MailboxProcessingStarted) {
             if (++Activations == 1) {
                 Send(SelfId(), new TEvents::TEvWakeup(3));
             } else {
-                ClearSystemFlag(ESystemFlag::RequestedMailboxProcessingStarted);
-                ClearSystemFlag(ESystemFlag::RequestedMailboxProcessingFinished);
+                ClearSystemFlag(ESystemFlag::NotifyOnMailboxProcessingStarted);
+                ClearSystemFlag(ESystemFlag::NotifyOnMailboxProcessingFinished);
                 Done.Unpark();
                 PassAway();
             }
@@ -1203,7 +1203,7 @@ Y_UNIT_TEST_SUITE(MailboxProcessingStarted) {
             switch (ev->Get()->Tag) {
                 case 1:
                     Steps.push_back(EStep::Event1);
-                    SetSystemFlag(ESystemFlag::RequestedMailboxProcessingStarted);
+                    SetSystemFlag(ESystemFlag::NotifyOnMailboxProcessingStarted);
                     Send(SelfId(), new TEvents::TEvWakeup(2));
                     break;
                 case 2:
@@ -1212,7 +1212,7 @@ Y_UNIT_TEST_SUITE(MailboxProcessingStarted) {
                     break;
                 case 3:
                     Steps.push_back(EStep::Event3);
-                    ClearSystemFlag(ESystemFlag::RequestedMailboxProcessingStarted);
+                    ClearSystemFlag(ESystemFlag::NotifyOnMailboxProcessingStarted);
                     Done.Unpark();
                     PassAway();
                     break;
@@ -1246,9 +1246,9 @@ Y_UNIT_TEST_SUITE(MailboxProcessingStarted) {
 
         void Bootstrap() {
             Steps.push_back(EStep::Bootstrap);
-            SetSystemFlag(ESystemFlag::RequestedMailboxProcessingFinished);
+            SetSystemFlag(ESystemFlag::NotifyOnMailboxProcessingFinished);
             if (PassAwayOnStarted) {
-                SetSystemFlag(ESystemFlag::RequestedMailboxProcessingStarted);
+                SetSystemFlag(ESystemFlag::NotifyOnMailboxProcessingStarted);
             }
             Send(SelfId(), new TEvents::TEvWakeup());
             Become(&TThis::StateWork);
@@ -1305,7 +1305,7 @@ Y_UNIT_TEST_SUITE(MailboxProcessingStarted) {
         {}
 
         void Bootstrap() {
-            SetSystemFlag(ESystemFlag::RequestedMailboxProcessingStarted);
+            SetSystemFlag(ESystemFlag::NotifyOnMailboxProcessingStarted);
             Send(SelfId(), new TEvents::TEvWakeup());
             Become(&TThis::StateWork);
         }
@@ -1325,7 +1325,7 @@ Y_UNIT_TEST_SUITE(MailboxProcessingStarted) {
         void Handle(TEvents::TEvWakeup::TPtr&) {
             ++Result.Events[Index];
             Result.Order.push_back(20 + Index);
-            ClearSystemFlag(ESystemFlag::RequestedMailboxProcessingStarted);
+            ClearSystemFlag(ESystemFlag::NotifyOnMailboxProcessingStarted);
             if (++Result.FinishedActors == 2) {
                 Done.Unpark();
             }

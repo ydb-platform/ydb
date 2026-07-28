@@ -112,7 +112,8 @@ namespace NKikimr {
                 , PeerName(std::move(init.PeerName))
                 , Entries(std::move(init.Entries))
                 , Signature(std::move(init.Signature))
-            {}
+            {
+            }
         };
 
         struct TError {

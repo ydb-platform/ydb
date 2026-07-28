@@ -20,13 +20,17 @@ namespace NHive {
 static constexpr ui64 MAX_REASSIGNS_WITHOUT_CONFIRMATION = 1000;
 static constexpr i64 REASSIGN_CONFIRMATION_ERROR_MARGIN = 10;
 
-static void AppendTabletDevUiMonScript(IOutputStream& out, TStringBuf pathInfo, const TAppData* appData) {
+// Loads hive.js and publishes the DevUI path every link on the page must use. The path is
+// resolved here rather than re-derived in JS from a feature flag: these pages are rendered
+// server-side, so `app` vs `app/secure` is already known, and keeping the mapping in one place
+// avoids it drifting from TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH.
+static void AppendHiveDevUiScript(IOutputStream& out, TStringBuf pathInfo, const TAppData* appData) {
     const TStringBuf monRoot = IsTabletDevUiSecurePath(pathInfo) ? TStringBuf("../..") : TStringBuf("..");
-    const bool enableSecurePath = UsesTabletDevUiSecurePath(appData, TTabletTypes::Hive);
-    // The flag must be published before hive.js is used, so that every DevUI link
-    // built by hiveAppUrl()/makeTabletDevUiUrl() points to the secure subpath.
-    out << "<script>window.FeatureFlags = window.FeatureFlags || {};"
-        << "window.FeatureFlags.EnableTabletDevUiSecurePath = " << (enableSecurePath ? "true" : "false") << ";</script>";
+    const TStringBuf appPath = UsesTabletDevUiSecurePath(appData, TTabletTypes::Hive)
+        ? TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH
+        : TStringBuf("app");
+    // Must precede hive.js, which reads it from hiveAppUrl()/makeTabletDevUiUrl().
+    out << "<script>window.HiveDevUiAppPath = \"" << appPath << "\";</script>";
     out << "<script src=\"" << monRoot << "/cms/hive.js\"></script>";
 }
 
@@ -510,7 +514,7 @@ public:
 
     void RenderHTMLPage(IOutputStream &out) {
         out << "<script>$('.container').css('width', 'auto');</script>";
-        AppendTabletDevUiMonScript(out, Event.Get()->PathInfo(), AppData());
+        AppendHiveDevUiScript(out, Event.Get()->PathInfo(), AppData());
         out << "<table class='table table-sortable'>";
         out << "<thead>";
         out << "<tr>";
@@ -1590,7 +1594,7 @@ public:
         }
 
         out << "<head>";
-        AppendTabletDevUiMonScript(out, Event.Get()->PathInfo(), AppData());
+        AppendHiveDevUiScript(out, Event.Get()->PathInfo(), AppData());
         out << "<style>";
         out << "table.simple-table1 th { text-align: center; }";
         out << "table.simple-table1 td { padding: 1px 3px; }";
@@ -4926,7 +4930,7 @@ public:
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
         TStringStream out;
-        AppendTabletDevUiMonScript(out, Event.Get()->PathInfo(), AppData());
+        AppendHiveDevUiScript(out, Event.Get()->PathInfo(), AppData());
         out << "<div>";
         out << "<form id='dynamicForm' method='POST'>";
         out << R"(

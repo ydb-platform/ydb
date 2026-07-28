@@ -1,5 +1,10 @@
 'use strict';
 
+// Hive DevUI pages are rendered server-side, so the DevUI path is resolved there and published
+// as HiveDevUiAppPath before this script is loaded. That is why there is no /viewer/capabilities
+// lookup here: unlike the DataShard page, which is a static template that has to query the
+// feature flag at runtime, Hive already knows the answer at render time.
+
 function getMonRootPath() {
     var marker = '/tablets/app';
     var markerPos = window.location.pathname.indexOf(marker);
@@ -10,12 +15,8 @@ function makeMonUrl(path) {
     return getMonRootPath() + path;
 }
 
-function isTabletDevUiSecurePathEnabled() {
-    return Boolean(window.FeatureFlags && window.FeatureFlags.EnableTabletDevUiSecurePath);
-}
-
 function getTabletDevUiPath() {
-    return isTabletDevUiSecurePathEnabled() ? 'app/secure' : 'app';
+    return window.HiveDevUiAppPath || 'app';
 }
 
 function makeTabletDevUiUrl(queryAndMaybeHash) {

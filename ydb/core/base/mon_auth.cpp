@@ -45,6 +45,7 @@ bool IsTabletDevUiAppPageAdminOnly(const TAppData* appData, TTabletTypes::EType 
     if (!appData) {
         return false;
     }
+
     constexpr std::array tabletTypes = {
         TTabletTypes::DataShard,
         TTabletTypes::BSController,

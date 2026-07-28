@@ -310,20 +310,19 @@ def _hive_readonly_devui_cases(tablet_id, secure_path_mode):
 # Every Hive DevUI `page=` handler that mutates cluster state. The Hive non-admin whitelist is
 # empty by design, so each one of these must be admin-only and reachable only under /app/secure.
 _HIVE_MUTATING_PAGES = (
-    # Node management
     'SetDown&node=1&down=0',
     'SetFreeze&node=1&freeze=0',
     'KickNode&node=1',
     'DrainNode&node=1&wait=0',
-    # Balancing
+
     'Rebalance',
     'RebalanceFromScratch',
     'StorageRebalance',
     'ReassignTablet&tablet=all&wait=0',
-    # Migration
+
     'InitMigration',
     'QueryMigration',
-    # Tablet lifecycle
+
     'MoveTablet',
     'StopTablet',
     'ResumeTablet',
@@ -331,10 +330,10 @@ _HIVE_MUTATING_PAGES = (
     'ResetTablet',
     'DeleteTablet',
     'UpdateResources',
-    # Domain management
+
     'StopDomain',
     'SetDomain',
-    # Forms and logs over the same handlers
+
     'ManualOperations',
     'Settings',
     'TabletAvailability',
@@ -372,12 +371,6 @@ def _hive_non_admin_expectations():
 
 
 def _hive_all_mutating_pages_cases(tablet_id, secure_path_mode):
-    """Deny-side coverage for the full handler list.
-
-    Only denials are asserted here, so no mutating operation is ever executed against the
-    cluster: on the legacy path every identity is rejected once the flag is on, and on the
-    secure path every non-admin identity is rejected in both modes.
-    """
     q = f'TabletID={tablet_id}'
     all_forbidden, monitoring_allowed, _ = tablet_devui_sid_matrix()
     expected_on_app = tablet_devui_expected_on_app(secure_path_mode, monitoring_allowed, all_forbidden)
@@ -498,7 +491,6 @@ def test_hive_all_mutating_devui_pages_are_admin_only_with_secure_path_mode(
 def test_hive_secure_path_lets_administrator_through(
     ydb_cluster_with_enforce_user_token_secure_devui_flag_and_hive_tablet,
 ):
-    """The deny sweep above must not pass merely because every request is rejected."""
     cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_hive_tablet
     tid = cluster.hive_tablet_id
 
@@ -513,7 +505,8 @@ def test_hive_secure_path_lets_administrator_through(
 def test_hive_devui_links_use_secure_path(
     ydb_cluster_with_enforce_user_token_secure_devui_flag_and_hive_tablet,
 ):
-    """Hive builds its DevUI links in JS, so the page must publish the flag hive.js reads."""
+    """Hive renders server-side and builds its DevUI links in JS, so the page must publish the
+    resolved app path that hive.js reads."""
     cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_hive_tablet
     tid = cluster.hive_tablet_id
     response = requests.get(
@@ -523,7 +516,7 @@ def test_hive_devui_links_use_secure_path(
     )
 
     assert response.status_code == 200, response.text
-    assert 'window.FeatureFlags.EnableTabletDevUiSecurePath = true;' in response.text
+    assert 'window.HiveDevUiAppPath = "app/secure";' in response.text
     assert '/cms/hive.js' in response.text
 
 

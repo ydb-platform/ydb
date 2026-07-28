@@ -15,9 +15,7 @@ logger = logging.getLogger(__name__)
 
 DATABASE = "/Root"
 OLD_SECRETS_CREATION_DISABLED_MESSAGE = "Old secrets creation syntax is disabled now. Please use the new one"
-CREATION_WITH_OLD_SECRETS_DISABLED_MESSAGE = (
-    "Old secrets are disabled for creating new objects. Please use new secrets"
-)
+CREATION_WITH_OLD_SECRETS_DISABLED_MESSAGE = "Old secrets are disabled for creating new objects. Please use new secrets"
 OLD_SECRETS_USAGE_DISABLED_MESSAGE = "Usage of old secrets is disabled now. Please use new secrets"
 
 
@@ -106,20 +104,15 @@ class Utils:
 
         def viewer_ready():
             try:
-                response = requests.get(
-                    f"{self.mon_endpoint()}/viewer/json/describe",
-                    params={"database": DATABASE, "path": DATABASE},
-                    timeout=10,
-                )
-            except requests.exceptions.RequestException as exc:
+                description = self.viewer_describe(DATABASE)
+            except Exception as exc:
                 logger.info("Viewer not ready yet after cluster restart: %s", exc)
                 return False
-            if response.status_code != 200:
-                logger.info(
-                    "Viewer not ready yet after cluster restart: status=%s body=%s",
-                    response.status_code,
-                    response.text,
-                )
+            if description.get("Status") != "StatusSuccess":
+                logger.info("Viewer not ready yet after cluster restart: %s", description)
+                return False
+            if description.get("PathDescription", {}).get("Self", {}).get("CreateFinished") is not True:
+                logger.info("Viewer not ready yet after cluster restart: %s", description)
                 return False
             return True
 

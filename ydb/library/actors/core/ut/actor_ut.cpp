@@ -972,6 +972,8 @@ Y_UNIT_TEST_SUITE(MailboxProcessingFinished) {
                     TlsThreadContext->ExecutionContext.CapturedActivation.SendingType =
                         ESendingType::Tail;
                     break;
+                case EFinishReason::ActorDied:
+                    Y_ABORT("ActorDied cannot be forced for a live actor");
             }
         }
 
@@ -1095,6 +1097,410 @@ Y_UNIT_TEST_SUITE(MailboxProcessingFinished) {
         actorSystem.Stop();
 
         UNIT_ASSERT_VALUES_EQUAL(notifications, 2);
+    }
+}
+
+Y_UNIT_TEST_SUITE(MailboxProcessingStarted) {
+    enum class EStep : ui8 {
+        Bootstrap,
+        Started,
+        Event1,
+        Event2,
+        Event3,
+        Finished,
+        Destroyed,
+    };
+
+    class TOrderedObserverActor : public TActorBootstrapped<TOrderedObserverActor> {
+    public:
+        TOrderedObserverActor(TVector<EStep>& steps, TThreadParkPad& done)
+            : Steps(steps)
+            , Done(done)
+        {}
+
+        void Bootstrap() {
+            Steps.push_back(EStep::Bootstrap);
+            SetSystemFlag(ESystemFlag::MailboxProcessingStarted);
+            SetSystemFlag(ESystemFlag::MailboxProcessingFinished);
+            Send(SelfId(), new TEvents::TEvWakeup(1));
+            Send(SelfId(), new TEvents::TEvWakeup(2));
+            Become(&TThis::StateWork);
+        }
+
+        STFUNC(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvents::TEvMailboxProcessingStarted, Handle);
+                hFunc(TEvents::TEvMailboxProcessingFinished, Handle);
+                hFunc(TEvents::TEvWakeup, Handle);
+            }
+        }
+
+        void Handle(TEvents::TEvMailboxProcessingStarted::TPtr&) {
+            Steps.push_back(EStep::Started);
+        }
+
+        void Handle(TEvents::TEvMailboxProcessingFinished::TPtr&) {
+            Steps.push_back(EStep::Finished);
+            if (++Activations == 1) {
+                Send(SelfId(), new TEvents::TEvWakeup(3));
+            } else {
+                ClearSystemFlag(ESystemFlag::MailboxProcessingStarted);
+                ClearSystemFlag(ESystemFlag::MailboxProcessingFinished);
+                Done.Unpark();
+                PassAway();
+            }
+        }
+
+        void Handle(TEvents::TEvWakeup::TPtr& ev) {
+            switch (ev->Get()->Tag) {
+                case 1:
+                    Steps.push_back(EStep::Event1);
+                    break;
+                case 2:
+                    Steps.push_back(EStep::Event2);
+                    break;
+                case 3:
+                    Steps.push_back(EStep::Event3);
+                    break;
+            }
+        }
+
+    private:
+        TVector<EStep>& Steps;
+        TThreadParkPad& Done;
+        ui32 Activations = 0;
+    };
+
+    class TDeferredOptInActor : public TActorBootstrapped<TDeferredOptInActor> {
+    public:
+        TDeferredOptInActor(TVector<EStep>& steps, TThreadParkPad& done)
+            : Steps(steps)
+            , Done(done)
+        {}
+
+        void Bootstrap() {
+            Steps.push_back(EStep::Bootstrap);
+            Send(SelfId(), new TEvents::TEvWakeup(1));
+            Become(&TThis::StateWork);
+        }
+
+        STFUNC(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvents::TEvMailboxProcessingStarted, Handle);
+                hFunc(TEvents::TEvWakeup, Handle);
+            }
+        }
+
+        void Handle(TEvents::TEvMailboxProcessingStarted::TPtr&) {
+            Steps.push_back(EStep::Started);
+        }
+
+        void Handle(TEvents::TEvWakeup::TPtr& ev) {
+            switch (ev->Get()->Tag) {
+                case 1:
+                    Steps.push_back(EStep::Event1);
+                    SetSystemFlag(ESystemFlag::MailboxProcessingStarted);
+                    Send(SelfId(), new TEvents::TEvWakeup(2));
+                    break;
+                case 2:
+                    Steps.push_back(EStep::Event2);
+                    Schedule(TDuration::MilliSeconds(1), new TEvents::TEvWakeup(3));
+                    break;
+                case 3:
+                    Steps.push_back(EStep::Event3);
+                    ClearSystemFlag(ESystemFlag::MailboxProcessingStarted);
+                    Done.Unpark();
+                    PassAway();
+                    break;
+            }
+        }
+
+    private:
+        TVector<EStep>& Steps;
+        TThreadParkPad& Done;
+    };
+
+    class TPassAwayObserverActor : public TActorBootstrapped<TPassAwayObserverActor> {
+    public:
+        TPassAwayObserverActor(
+                TVector<EStep>& steps,
+                TEvents::TEvMailboxProcessingFinished::EReason& reason,
+                ui32& handledEvents,
+                TThreadParkPad& done,
+                bool passAwayOnStarted = false)
+            : Steps(steps)
+            , Reason(reason)
+            , HandledEvents(handledEvents)
+            , Done(done)
+            , PassAwayOnStarted(passAwayOnStarted)
+        {}
+
+        ~TPassAwayObserverActor() {
+            Steps.push_back(EStep::Destroyed);
+            Done.Unpark();
+        }
+
+        void Bootstrap() {
+            Steps.push_back(EStep::Bootstrap);
+            SetSystemFlag(ESystemFlag::MailboxProcessingFinished);
+            if (PassAwayOnStarted) {
+                SetSystemFlag(ESystemFlag::MailboxProcessingStarted);
+            }
+            Send(SelfId(), new TEvents::TEvWakeup());
+            Become(&TThis::StateWork);
+        }
+
+        STFUNC(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvents::TEvMailboxProcessingStarted, Handle);
+                hFunc(TEvents::TEvMailboxProcessingFinished, Handle);
+                hFunc(TEvents::TEvWakeup, Handle);
+            }
+        }
+
+        void Handle(TEvents::TEvMailboxProcessingStarted::TPtr&) {
+            Steps.push_back(EStep::Started);
+            PassAway();
+        }
+
+        void Handle(TEvents::TEvMailboxProcessingFinished::TPtr& ev) {
+            Steps.push_back(EStep::Finished);
+            Reason = ev->Get()->Reason;
+        }
+
+        void Handle(TEvents::TEvWakeup::TPtr&) {
+            ++HandledEvents;
+            Steps.push_back(EStep::Event1);
+            PassAway();
+        }
+
+    private:
+        TVector<EStep>& Steps;
+        TEvents::TEvMailboxProcessingFinished::EReason& Reason;
+        ui32& HandledEvents;
+        TThreadParkPad& Done;
+        const bool PassAwayOnStarted;
+    };
+
+    struct TSharedMailboxResult {
+        ui32 Started[2] = {};
+        ui32 Events[2] = {};
+        ui32 FinishedActors = 0;
+        TVector<ui32> Order;
+    };
+
+    class TSharedMailboxChild : public TActorBootstrapped<TSharedMailboxChild> {
+    public:
+        TSharedMailboxChild(
+                ui32 index,
+                TSharedMailboxResult& result,
+                TThreadParkPad& done)
+            : Index(index)
+            , Result(result)
+            , Done(done)
+        {}
+
+        void Bootstrap() {
+            SetSystemFlag(ESystemFlag::MailboxProcessingStarted);
+            Send(SelfId(), new TEvents::TEvWakeup());
+            Become(&TThis::StateWork);
+        }
+
+        STFUNC(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvents::TEvMailboxProcessingStarted, Handle);
+                hFunc(TEvents::TEvWakeup, Handle);
+            }
+        }
+
+        void Handle(TEvents::TEvMailboxProcessingStarted::TPtr&) {
+            ++Result.Started[Index];
+            Result.Order.push_back(10 + Index);
+        }
+
+        void Handle(TEvents::TEvWakeup::TPtr&) {
+            ++Result.Events[Index];
+            Result.Order.push_back(20 + Index);
+            ClearSystemFlag(ESystemFlag::MailboxProcessingStarted);
+            if (++Result.FinishedActors == 2) {
+                Done.Unpark();
+            }
+            PassAway();
+        }
+
+    private:
+        const ui32 Index;
+        TSharedMailboxResult& Result;
+        TThreadParkPad& Done;
+    };
+
+    class TSharedMailboxParent : public TActorBootstrapped<TSharedMailboxParent> {
+    public:
+        TSharedMailboxParent(TSharedMailboxResult& result, TThreadParkPad& done)
+            : Result(result)
+            , Done(done)
+        {}
+
+        void Bootstrap() {
+            RegisterWithSameMailbox(new TSharedMailboxChild(0, Result, Done));
+            RegisterWithSameMailbox(new TSharedMailboxChild(1, Result, Done));
+            PassAway();
+        }
+
+    private:
+        TSharedMailboxResult& Result;
+        TThreadParkPad& Done;
+    };
+
+    THolder<TActorSystemSetup> MakeSetup() {
+        auto setup = NActors::NTests::TActorBenchmark<>::GetActorSystemSetup();
+        NActors::NTests::TActorBenchmark<>::AddBasicPool(setup, 1, false, false);
+        return setup;
+    }
+
+    Y_UNIT_TEST(NotifiesBeforeFirstEventOfEveryActivation) {
+        auto setup = MakeSetup();
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+
+        TVector<EStep> steps;
+        TThreadParkPad done;
+        actorSystem.Register(
+            new TOrderedObserverActor(steps, done),
+            TMailboxType::HTSwap,
+            0);
+
+        done.Park();
+        actorSystem.Stop();
+
+        const TVector<EStep> expected = {
+            EStep::Bootstrap,
+            EStep::Started,
+            EStep::Event1,
+            EStep::Event2,
+            EStep::Finished,
+            EStep::Started,
+            EStep::Event3,
+            EStep::Finished,
+        };
+        UNIT_ASSERT(steps == expected);
+    }
+
+    Y_UNIT_TEST(EnablingFlagDuringEventTakesEffectNextActivation) {
+        auto setup = MakeSetup();
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+
+        TVector<EStep> steps;
+        TThreadParkPad done;
+        actorSystem.Register(
+            new TDeferredOptInActor(steps, done),
+            TMailboxType::HTSwap,
+            0);
+
+        done.Park();
+        actorSystem.Stop();
+
+        const TVector<EStep> expected = {
+            EStep::Bootstrap,
+            EStep::Event1,
+            EStep::Event2,
+            EStep::Started,
+            EStep::Event3,
+        };
+        UNIT_ASSERT(steps == expected);
+    }
+
+    Y_UNIT_TEST(NotifiesBeforeActorDestruction) {
+        using EReason = TEvents::TEvMailboxProcessingFinished::EReason;
+
+        auto setup = MakeSetup();
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+
+        TVector<EStep> steps;
+        EReason reason = EReason::QueueEmpty;
+        ui32 handledEvents = 0;
+        TThreadParkPad done;
+        actorSystem.Register(
+            new TPassAwayObserverActor(steps, reason, handledEvents, done),
+            TMailboxType::HTSwap,
+            0);
+
+        done.Park();
+        actorSystem.Stop();
+
+        const TVector<EStep> expected = {
+            EStep::Bootstrap,
+            EStep::Event1,
+            EStep::Finished,
+            EStep::Destroyed,
+        };
+        UNIT_ASSERT(steps == expected);
+        UNIT_ASSERT_VALUES_EQUAL(handledEvents, 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<ui8>(reason),
+            static_cast<ui8>(EReason::ActorDied));
+    }
+
+    Y_UNIT_TEST(NotifiesEveryActorInSharedMailbox) {
+        auto setup = MakeSetup();
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+
+        TSharedMailboxResult result;
+        TThreadParkPad done;
+        actorSystem.Register(
+            new TSharedMailboxParent(result, done),
+            TMailboxType::HTSwap,
+            0);
+
+        done.Park();
+        actorSystem.Stop();
+
+        UNIT_ASSERT_VALUES_EQUAL(result.Started[0], 1);
+        UNIT_ASSERT_VALUES_EQUAL(result.Started[1], 1);
+        UNIT_ASSERT_VALUES_EQUAL(result.Events[0], 1);
+        UNIT_ASSERT_VALUES_EQUAL(result.Events[1], 1);
+
+        const auto started0 = std::find(result.Order.begin(), result.Order.end(), 10);
+        const auto event0 = std::find(result.Order.begin(), result.Order.end(), 20);
+        const auto started1 = std::find(result.Order.begin(), result.Order.end(), 11);
+        const auto event1 = std::find(result.Order.begin(), result.Order.end(), 21);
+        UNIT_ASSERT(started0 < event0);
+        UNIT_ASSERT(started1 < event1);
+    }
+
+    Y_UNIT_TEST(DoesNotDeliverOriginalEventAfterActorDiesInStartedNotification) {
+        using EReason = TEvents::TEvMailboxProcessingFinished::EReason;
+
+        auto setup = MakeSetup();
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+
+        TVector<EStep> steps;
+        EReason reason = EReason::QueueEmpty;
+        ui32 handledEvents = 0;
+        TThreadParkPad done;
+        actorSystem.Register(
+            new TPassAwayObserverActor(steps, reason, handledEvents, done, true),
+            TMailboxType::HTSwap,
+            0);
+
+        done.Park();
+        actorSystem.Stop();
+
+        const TVector<EStep> expected = {
+            EStep::Bootstrap,
+            EStep::Started,
+            EStep::Finished,
+            EStep::Destroyed,
+        };
+        UNIT_ASSERT(steps == expected);
+        UNIT_ASSERT_VALUES_EQUAL(handledEvents, 0);
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<ui8>(reason),
+            static_cast<ui8>(EReason::ActorDied));
     }
 }
 

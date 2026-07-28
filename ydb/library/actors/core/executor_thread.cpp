@@ -209,6 +209,7 @@ namespace NActors {
         ui32 finishedExecutedEvents = execCtx.ExecutedEvents;
         bool isPreempted = false;
         bool wasWorking = false;
+        TStackVec<TActorId, 1> mailboxProcessingStartedActors;
         TStackVec<TActorId, 1> mailboxProcessingFinishedActors;
         NHPTimer::STime hpnow = execCtx.HPStart;
         NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
@@ -216,20 +217,20 @@ namespace NActors {
         NHPTimer::STime eventStart = execCtx.HPStart;
         TlsThreadContext->ActivityContext.ActivationStartTS.store(execCtx.HPStart, std::memory_order_release);
 
-        auto finishActorEvent = [&](IActor*& currentActor, IEventHandle* ev, ui32 eventType,
-                const std::type_info* currentActorType, ui32 activityType) {
+        auto finishActorEvent = [&](IActor* currentActor, IEventHandle* ev, ui32 eventType,
+                const std::type_info* currentActorType, ui32 activityType,
+                bool updateActorsStats = true,
+                bool lockEmptyMailbox = true) {
             hpnow = GetCycleCountFast();
             hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
 
             const size_t dyingActorsCnt = DyingActors.size();
             EXECUTOR_THREAD_DEBUG(EDebugLevel::Event, "dyingActorsCnt ", dyingActorsCnt);
-            ExecutionStats.UpdateActorsStats(dyingActorsCnt, ThreadCtx.Pool());
-            if (dyingActorsCnt) {
-                DropUnregistered();
-                currentActor = nullptr;
+            if (updateActorsStats) {
+                ExecutionStats.UpdateActorsStats(dyingActorsCnt, ThreadCtx.Pool());
             }
 
-            if (mailbox->IsEmpty()) {
+            if (lockEmptyMailbox && mailbox->IsEmpty()) {
                 // had actors and became empty, prepare to reclaim mailbox
                 mailbox->LockToFree();
             }
@@ -256,6 +257,61 @@ namespace NActors {
             CurrentRecipient = TActorId();
         };
 
+        auto dropUnregistered = [&](IActor*& currentActor, ui32 executedEvents,
+                bool notifyMailboxProcessingFinished = true) {
+            if (DyingActors.empty()) {
+                return;
+            }
+
+            if (notifyMailboxProcessingFinished) {
+                for (size_t i = 0; i < DyingActors.size(); ++i) {
+                    IActor* dyingActor = DyingActors[i].Get();
+                    if (!(dyingActor->GetSystemFlags() & static_cast<ui64>(
+                            IActor::ESystemFlag::MailboxProcessingFinished))) {
+                        continue;
+                    }
+
+                    const TActorId recipient = dyingActor->SelfId();
+                    TActorContext ctx(*mailbox, *this, eventStart, recipient);
+                    TlsActivationContext = &ctx;
+                    TAutoPtr<IEventHandle> ev = new IEventHandle(
+                        recipient,
+                        TActorId(),
+                        new TEvents::TEvMailboxProcessingFinished(
+                            EFinishReason::ActorDied,
+                            executedEvents,
+                            hpnow - execCtx.HPStart));
+
+                    const std::type_info* notificationActorType = &typeid(*dyingActor);
+                    const ui32 activityType = dyingActor->GetActivityType().GetIndex();
+                    NProfiling::TMemoryTagScope::Reset(activityType);
+                    TlsThreadContext->ActivityContext.ElapsingActorActivity.store(
+                        activityType,
+                        std::memory_order_release);
+                    CurrentRecipient = recipient;
+                    CurrentActorScheduledEventsCounter = 0;
+
+                    dyingActor->Receive(ev);
+
+                    finishActorEvent(
+                        dyingActor,
+                        ev.Get(),
+                        TEvents::TSystem::MailboxProcessingFinished,
+                        notificationActorType,
+                        activityType,
+                        false,
+                        false);
+                    eventStart = hpnow;
+                }
+            }
+
+            const TActorId currentActorId = currentActor ? currentActor->SelfId() : TActorId();
+            DropUnregistered();
+            currentActor = currentActorId
+                ? mailbox->FindActor(currentActorId.LocalId())
+                : nullptr;
+        };
+
         ThreadCtx.ResetOverwrittenEventsPerMailbox();
         ThreadCtx.ResetOverwrittenTimePerMailboxTs();
         Y_ABORT_UNLESS(mailboxScheduledTimestampTs, "mailbox scheduled timestamp must be set");
@@ -275,10 +331,9 @@ namespace NActors {
                         recipient = evExt->GetRecipientRewrite();
                     }
                 }
-                TActorContext ctx(*mailbox, *this, eventStart, recipient);
-                TlsActivationContext = &ctx; // ensure dtor (if any) is called within actor system
-                // move for destruct before ctx;
                 TAutoPtr<IEventHandle> ev = evExt.release();
+                bool eventDelivered = false;
+                bool actorRemovedBeforeEvent = false;
                 if (actor) {
                     EXECUTOR_THREAD_DEBUG(EDebugLevel::Event, "actor is not null");
                     wasWorking = true;
@@ -290,8 +345,6 @@ namespace NActors {
                     TCallstack::GetTlsCallstack().SetLinesToSkip();
 #endif
                     CurrentRecipient = recipient;
-                    CurrentActorScheduledEventsCounter = 0;
-
                     if (firstEvent) {
                         ThreadCtx.SetActivationTimeUs(CalculateWaitingTimeUs(mailboxScheduledTimestampTs, hpprev));
                         double usec = ExecutionStats.AddActivationStats(mailboxScheduledTimestampTs, hpprev);
@@ -316,32 +369,95 @@ namespace NActors {
                         TlsThreadContext->ActivityContext.ElapsingActorActivity.store(activityType, std::memory_order_release);
                     }
 
-                    actor->Receive(ev);
+                    const bool isBootstrapEvent =
+                        ev->GetTypeRewrite() == TEvents::TSystem::Bootstrap;
+                    const TActorId actorId = actor->SelfId();
+                    const ui64 systemFlagsBefore = actor->GetSystemFlags();
+                    if (!isBootstrapEvent &&
+                            (systemFlagsBefore & static_cast<ui64>(
+                                IActor::ESystemFlag::MailboxProcessingStarted)) &&
+                            std::find(
+                                mailboxProcessingStartedActors.begin(),
+                                mailboxProcessingStartedActors.end(),
+                                actorId) == mailboxProcessingStartedActors.end()) {
+                        mailboxProcessingStartedActors.push_back(actorId);
 
-                    const ui64 systemFlags = actor->GetSystemFlags();
-                    if (Y_UNLIKELY(systemFlags != 0)) {
-                        if (systemFlags & static_cast<ui64>(
-                                IActor::ESystemFlag::MailboxProcessingFinished)) {
-                            const TActorId actorId = actor->SelfId();
-                            if (std::find(
-                                    mailboxProcessingFinishedActors.begin(),
-                                    mailboxProcessingFinishedActors.end(),
-                                    actorId) == mailboxProcessingFinishedActors.end()) {
-                                mailboxProcessingFinishedActors.push_back(actorId);
-                            }
-                        }
+                        TActorContext startedCtx(*mailbox, *this, eventStart, recipient);
+                        TlsActivationContext = &startedCtx;
+                        TAutoPtr<IEventHandle> startedEv = new IEventHandle(
+                            actorId,
+                            TActorId(),
+                            new TEvents::TEvMailboxProcessingStarted());
+                        CurrentRecipient = recipient;
+                        CurrentActorScheduledEventsCounter = 0;
+
+                        actor->Receive(startedEv);
+
+                        finishActorEvent(
+                            actor,
+                            startedEv.Get(),
+                            TEvents::TSystem::MailboxProcessingStarted,
+                            actorType,
+                            activityType,
+                            true,
+                            false);
+                        dropUnregistered(actor, execCtx.ExecutedEvents);
+                        actorRemovedBeforeEvent = !actor;
+                        eventStart = hpnow;
                     }
 
-                    finishActorEvent(actor, ev.Get(), evTypeForTracing, actorType, activityType);
-                } else {
+                    if (actor) {
+                        TActorContext ctx(*mailbox, *this, eventStart, recipient);
+                        TlsActivationContext = &ctx; // ensure dtor (if any) is called within actor system
+                        CurrentRecipient = recipient;
+                        CurrentActorScheduledEventsCounter = 0;
+                        eventDelivered = true;
+
+                        actor->Receive(ev);
+
+                        const ui64 systemFlags = actor->GetSystemFlags();
+                        if (Y_UNLIKELY(systemFlags != 0)) {
+                            if (!isBootstrapEvent &&
+                                    (systemFlags & static_cast<ui64>(
+                                        IActor::ESystemFlag::MailboxProcessingStarted)) &&
+                                    std::find(
+                                        mailboxProcessingStartedActors.begin(),
+                                        mailboxProcessingStartedActors.end(),
+                                        actorId) == mailboxProcessingStartedActors.end()) {
+                                // The flag was enabled by the event being handled.
+                                // Remember this actor so the notification starts
+                                // with the next mailbox activation.
+                                mailboxProcessingStartedActors.push_back(actorId);
+                            }
+                            if (systemFlags & static_cast<ui64>(
+                                    IActor::ESystemFlag::MailboxProcessingFinished)) {
+                                if (std::find(
+                                        mailboxProcessingFinishedActors.begin(),
+                                        mailboxProcessingFinishedActors.end(),
+                                        actorId) == mailboxProcessingFinishedActors.end()) {
+                                    mailboxProcessingFinishedActors.push_back(actorId);
+                                }
+                            }
+                        }
+
+                        finishActorEvent(actor, ev.Get(), evTypeForTracing, actorType, activityType);
+                        dropUnregistered(actor, execCtx.ExecutedEvents + 1);
+                    }
+                    TlsActivationContext = nullptr;
+                }
+                if (!eventDelivered) {
                     EXECUTOR_THREAD_DEBUG(EDebugLevel::Event, "actor is null");
                     actorType = nullptr;
+                    TlsActivationContext = nullptr;
 
                     TAutoPtr<IEventHandle> nonDelivered = IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::ReasonActorUnknown);
                     if (nonDelivered.Get()) {
                         ActorSystem->Send(nonDelivered);
                     } else {
                         ExecutionStats.IncrementNonDeliveredEvents();
+                    }
+                    if (actorRemovedBeforeEvent && mailbox->IsEmpty()) {
+                        mailbox->LockToFree();
                     }
                     hpnow = GetCycleCountFast();
                     hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
@@ -463,6 +579,9 @@ namespace NActors {
                     TEvents::TSystem::MailboxProcessingFinished,
                     notificationActorType,
                     activityType);
+                // The actor has already received its finish notification, so
+                // do not send a second one if it passes away while handling it.
+                dropUnregistered(actor, finishedExecutedEvents, false);
                 eventStart = hpnow;
             }
         }

@@ -571,10 +571,15 @@ namespace NActors {
     public:
         using TReceiveFunc = void (IActor::*)(TAutoPtr<IEventHandle>& ev);
         enum class ESystemFlag : ui64 {
-            // Notify this actor only after an activation that processed one of
-            // its events. Activations of other actors in the same mailbox are
-            // not reported.
+            // Notify this actor after an activation that processed one of its
+            // events, or immediately before destruction if it passes away
+            // during processing. Activations of other actors in the same
+            // mailbox are not reported.
             MailboxProcessingFinished = 1ull << 0,
+            // Notify this actor before its first non-bootstrap event in a
+            // mailbox activation. Enabling this flag while handling an event
+            // takes effect starting with the next activation.
+            MailboxProcessingStarted = 1ull << 1,
         };
 
     private:

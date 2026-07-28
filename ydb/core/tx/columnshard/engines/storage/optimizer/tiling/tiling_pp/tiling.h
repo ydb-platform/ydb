@@ -319,8 +319,6 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
             if (pit != PortionRegistry.end()) {
                 typename TPortion::TPtr p = pit->second;
                 DoRemovePortion(p);
-                // Promote as a last-level candidate (not a stable portion) so it stays compactable
-                // and eventually merges with a neighbour instead of stranding as an INSERTED portion.
                 Place(p, currentInstant, /*accumulatorAllowed=*/false, /*forcedLevel=*/static_cast<ui8>(1), /*forceCandidate=*/true);
             }
         }
@@ -349,10 +347,6 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         return true;
     }
 
-    // Whether a below-threshold accumulator should defer to the other levels. Middle levels suppress
-    // structurally (a lone middle portion ages down on its own), while the last level suppresses only
-    // when it can actually produce a task — a promoted last-level candidate with no merge partner
-    // yields no task and must not stall the accumulator that would feed it a neighbour.
     bool HasOtherLevelWork(TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const {
         if (!AreMiddleLevelsEmpty()) {
             return true;
@@ -376,7 +370,6 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
         if (!Accumulator.IsBelowThreshold() || !yieldToOthers) {
             consider(Accumulator.DoGetNextOptimizationTask(isLocked));
         }
-
         if (result) {
             const i64 maxOverloadLevel = this->Counters.Portions->GetMaxOverloadLevel();
             if (result->Priority.GetLevel() < maxOverloadLevel - Settings.MaxPriorityGap) {

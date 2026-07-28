@@ -49,9 +49,6 @@ struct LastLevel: ICompactionUnit<TKey, TPortion> {
         this->Counters.Portions->SetHeight(CandidateIds.size());
     }
 
-    /// Insert a portion as a candidate regardless of its measure. Used for small portions promoted
-    /// out of the accumulator: they must stay compactable rather than settle as stable/Optimized
-    /// last-level portions (which would strand them un-compacted).
     void AddCandidatePortion(typename TPortion::TPtr p) {
         if constexpr (std::is_same_v<TPortion, NOlap::TPortionInfo>) {
             this->Counters.Portions->AddPortion(p);
@@ -87,9 +84,6 @@ struct LastLevel: ICompactionUnit<TKey, TPortion> {
         return TOptimizationPriority::Normalize(1, Settings.CandidatePortionsOverload, CandidateIds.size() - locked);
     }
 
-    /// Nearest last-level portion (stable or candidate) to `candidate` by index-key-end order.
-    /// Used to give a non-intersecting candidate a merge partner. Prefers the closest not-locked
-    /// successor, then the closest predecessor; returns nothing if there is no free neighbour.
     std::optional<typename TPortion::TConstPtr> NearestNeighbour(
         typename TPortion::TConstPtr candidate, TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const {
         const auto cmp = TPortionByIndexKeyEndComparator<TKey, TPortion>();
@@ -153,12 +147,10 @@ struct LastLevel: ICompactionUnit<TKey, TPortion> {
                 continue;
             }
             if (result.size() == 1) {
-                // Candidate overlaps no stable portion (e.g. a small portion promoted out of the
-                // accumulator). Prefer merging it with a neighbouring last-level portion; if there is
-                // no free neighbour, compact it solo so it is still rewritten to SPLIT_COMPACTED and
-                // gains its inplace indexes, instead of stranding as an un-compacted INSERTED portion.
                 if (auto neighbour = NearestNeighbour(candidate, isLocked)) {
                     result.push_back(*neighbour);
+                } else {
+                    return std::nullopt;
                 }
             }
             return CompactionTask<TKey, TPortion>{ result, 1, BuildPriority(locked) };

@@ -350,11 +350,11 @@ struct TLevel {
         TOptimizationPriority priority;
         if (height < 2) {
             priority = TOptimizationPriority::Zero();
-        }
-        if (height >= i32(settings.Factor)) {
+        } else if (height >= i32(settings.Factor)) {
             priority = TOptimizationPriority::Critical(height);
+        } else {
+            priority = TOptimizationPriority::LevelOptimization(height);
         }
-        priority = TOptimizationPriority::LevelOptimization(height);
         Counters.Portions->SetOverload(priority.GetLevel());
         return priority;
     }

@@ -44,6 +44,7 @@
 #include <ydb/services/sqs_topic/billing.h>
 
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
@@ -301,6 +302,7 @@ namespace NKikimr::NSqsTopic::V1 {
                 const ui64 ru = NBilling::CalcRu(
                     CalcRuConsumption(payloadSize), NBilling::READ_BASE_COST, NBilling::READ_COST_PER_BLOCK, Fifo_, false);
                 if (!MaybeRequestQuota(ru, EWakeupTag::RlAllowed, ctx)) {
+                    Y_VERIFY_DEBUG(false);
                     return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
                         "Rate limiter request already in progress"));
                 }
@@ -335,6 +337,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
             const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
             if (result->ResultSet.size() != 1) {
+                Y_VERIFY_DEBUG(false);
                 return this->ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
                     TStringBuilder() << "Unexpected scheme cache result size: " << result->ResultSet.size()));
             }

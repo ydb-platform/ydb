@@ -40,6 +40,8 @@
 
 #include <ydb/services/sqs_topic/statuses.h>
 
+#include <ydb/library/yverify_stream/yverify_stream.h>
+
 using namespace NActors;
 using namespace NKikimrClient;
 
@@ -253,6 +255,7 @@ namespace NKikimr::NSqsTopic::V1 {
                     if (IsQuotaRequired()) {
                         const ui64 ru = NBilling::CalcRu(0, NBilling::DELETE_BASE_COST, 0, false, false);
                         if (!MaybeRequestQuota(ru, EWakeupTag::RlAllowed, TlsActivationContext->AsActorContext())) {
+                            Y_VERIFY_DEBUG(false);
                             return this->ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
                                 "Rate limiter request already in progress"));
                         }
@@ -265,6 +268,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
             const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
             if (result->ResultSet.size() != 1) {
+                Y_VERIFY_DEBUG(false);
                 return this->ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
                     TStringBuilder() << "Unexpected scheme cache result size: " << result->ResultSet.size()));
             }

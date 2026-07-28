@@ -43,6 +43,8 @@
 
 #include <ydb/services/sqs_topic/statuses.h>
 
+#include <ydb/library/yverify_stream/yverify_stream.h>
+
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/openssl/crypto/sha.h>
 #include <util/generic/guid.h>
@@ -326,6 +328,7 @@ namespace NKikimr::NSqsTopic::V1 {
                             Fifo_,
                             ContentBasedDeduplication_);
                         if (!MaybeRequestQuota(ru, EWakeupTag::RlAllowed, TlsActivationContext->AsActorContext())) {
+                            Y_VERIFY_DEBUG(false);
                             return this->ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
                                 "Rate limiter request already in progress"));
                         }
@@ -338,6 +341,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
             const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
             if (result->ResultSet.size() != 1) {
+                Y_VERIFY_DEBUG(false);
                 return this->ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
                     TStringBuilder() << "Unexpected scheme cache result size: " << result->ResultSet.size()));
             }
@@ -358,6 +362,7 @@ namespace NKikimr::NSqsTopic::V1 {
             }
 
             if (!response.PQGroupInfo) {
+                Y_VERIFY_DEBUG(false);
                 return this->ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
                     TStringBuilder() << "Failed to describe topic: missing PQ group info for " << FullTopicPath_));
             }

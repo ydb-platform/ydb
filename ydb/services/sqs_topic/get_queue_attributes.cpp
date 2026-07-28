@@ -38,6 +38,8 @@
 
 #include <ydb/services/sqs_topic/statuses.h>
 
+#include <ydb/library/yverify_stream/yverify_stream.h>
+
 #include <library/cpp/json/json_writer.h>
 
 #include <concepts>
@@ -192,6 +194,7 @@ namespace NKikimr::NSqsTopic::V1 {
         void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
             const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
             if (result->ResultSet.size() != 1) {
+                Y_VERIFY_DEBUG(false);
                 return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
                     TStringBuilder() << "Unexpected scheme cache result size: " << result->ResultSet.size()));
             }
@@ -214,6 +217,7 @@ namespace NKikimr::NSqsTopic::V1 {
                                                 TStringBuilder() << "Failed to describe topic: " << response.Status));
             }
             if (!response.PQGroupInfo) {
+                Y_VERIFY_DEBUG(false);
                 return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
                     TStringBuilder() << "Failed to describe topic: missing PQ group info for " << FullTopicPath_));
             }

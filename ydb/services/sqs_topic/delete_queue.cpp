@@ -37,6 +37,8 @@
 
 #include <ydb/services/sqs_topic/statuses.h>
 
+#include <ydb/library/yverify_stream/yverify_stream.h>
+
 #include <library/cpp/json/json_writer.h>
 
 using namespace NActors;
@@ -98,6 +100,7 @@ namespace NKikimr::NSqsTopic::V1 {
         void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
             const auto* result = ev->Get();
             if (result->Topics.size() != 1) {
+                Y_VERIFY_DEBUG(false);
                 return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE,
                     TStringBuilder() << "Unexpected describe topics result size: " << result->Topics.size()));
             }

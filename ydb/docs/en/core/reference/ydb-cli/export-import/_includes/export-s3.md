@@ -226,3 +226,5 @@ These IDs can be used, for example, to run a loop to complete all current operat
 ```bash
 {{ ydb-cli }} -p quickstart operation list export/s3 --format proto-json-base64 | jq -r ".operations[].id" | while read line; do {{ ydb-cli }} -p quickstart operation forget $line;done
 ```
+
+{% include [export-additional-params.md](export-additional-params.md) %}

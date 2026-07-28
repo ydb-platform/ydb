@@ -585,6 +585,7 @@ ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.NullEmbedding
 ydb/core/tx/datashard/build_index/ut TTxDataShardRecomputeKMeansScan.BadRequest
 ydb/core/tx/datashard/build_index/ut TTxDataShardRecomputeKMeansScan.BuildTable+WithForeign
 ydb/core/tx/datashard/build_index/ut TTxDataShardRecomputeKMeansScan.DimensionMismatchError
+ydb/core/tx/datashard/build_index/ut TTxDataShardRecomputeKMeansScan.MainTable
 ydb/core/tx/datashard/build_index/ut TTxDataShardRecomputeKMeansScan.NullEmbedding
 ydb/core/tx/datashard/build_index/ut TTxDataShardReshuffleKMeansScan.MainToPostingResumeFromLastKeyAck
 ydb/core/tx/datashard/build_index/ut TTxDataShardSampleKScan.DimensionMismatchError

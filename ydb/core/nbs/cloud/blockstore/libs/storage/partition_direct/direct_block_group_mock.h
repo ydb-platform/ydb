@@ -41,6 +41,8 @@ struct TOracleMock: public IOracle
 
     void OnDDiskDisconnected(THostIndex hostIndex, TInstant now) override;
     void OnDDiskConnected(THostIndex hostIndex, TInstant now) override;
+    void OnDDiskBroken(THostIndex hostIndex) override;
+
     TDuration GetHostReconnectDelay(THostIndex hostIndex) override;
 
     [[nodiscard]] THostIndex SelectBestPBufferHost(

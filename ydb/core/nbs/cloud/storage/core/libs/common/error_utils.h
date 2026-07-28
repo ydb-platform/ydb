@@ -14,7 +14,8 @@ constexpr TStringBuf CantAcquireDataErrorMessage = "can't acquire data";
 constexpr TStringBuf UndeliveryErrorMessage = "Undelivered";
 constexpr TStringBuf SessionBrokenErrorMessage = "Session broken";
 constexpr TStringBuf TabletGenerationBlockedErrorMessage =
-    "tablet generation blocked";
+    "Tablet generation blocked";
+constexpr TStringBuf DeviceBrokenErrorMessage = "Device is broken";
 
 ////////////////////////////////////////////////////////////////////////////////
 

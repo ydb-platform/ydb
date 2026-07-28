@@ -21,6 +21,9 @@ NProto::TError TranslateError(
             E_REJECTED,
             TString(TabletGenerationBlockedErrorMessage));
     }
+    if (errorResponse == NKikimrBlobStorage::NDDisk::TReplyStatus::BROKEN) {
+        return MakeError(E_INVALID_STATE, TString(DeviceBrokenErrorMessage));
+    }
 
     switch (flags) {
         case ETranslateFlags::None: {

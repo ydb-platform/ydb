@@ -205,6 +205,8 @@ enum class EErrorKind
 bool IsCancelledError(const NProto::TError& e);
 bool IsConnectionError(const NProto::TError& e);
 bool IsSessionBlockedError(const NProto::TError& e);
+bool IsDeviceBrokenError(const NProto::TError& e);
+
 EErrorKind GetErrorKind(const NProto::TError& e);
 
 // error classification used for logging and stats

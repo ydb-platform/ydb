@@ -200,6 +200,12 @@ bool IsSessionBlockedError(const NProto::TError& e)
            e.GetMessage() == TabletGenerationBlockedErrorMessage;
 }
 
+bool IsDeviceBrokenError(const NProto::TError& e)
+{
+    return e.GetCode() == E_INVALID_STATE &&
+           e.GetMessage() == DeviceBrokenErrorMessage;
+}
+
 NJson::TJsonValue FormatErrorJson(const NProto::TError& e)
 {
     NJson::TJsonValue result;

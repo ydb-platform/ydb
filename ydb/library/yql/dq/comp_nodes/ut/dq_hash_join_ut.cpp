@@ -968,8 +968,6 @@ TJoinTestData ScalarPayloadInnerJoinTestData() {
     return td;
 }
 
-// Predicate helpers. The lambdas are invoked lazily inside DqScalarHashJoin with the wide-row
-// argument nodes, so they fetch the program builder from the (still alive) setup at build time.
 TDqProgramBuilder::TJoinFilterLambda GreaterThanConstFilter(TDqSetup<false, true>* setup, ui32 column,
                                                                   ui64 value) {
     return [setup, column, value](TRuntimeNode::TList row) -> TRuntimeNode {
@@ -993,9 +991,15 @@ TDqProgramBuilder::TJoinCommonFilterLambda RightGreaterThanLeftFilter(TDqSetup<f
     };
 }
 
-// Base data for filter tests. Columns per side: (key ui64, value ui64), joined on column 0.
-// left:  (1,5) (2,20) (3,30)
-// right: (1,100) (2,50) (3,60)
+// left[column] > right[column] (mirror of the above: the common filter is a symmetric predicate over
+// both rows, so the referenced side is arbitrary).
+TDqProgramBuilder::TJoinCommonFilterLambda LeftGreaterThanRightFilter(TDqSetup<false, true>* setup, ui32 column) {
+    return [setup, column](TRuntimeNode::TList left, TRuntimeNode::TList right) -> TRuntimeNode {
+        auto& pb = setup->GetDqProgramBuilder();
+        return pb.Coalesce(pb.Greater(left[column], right[column]), pb.NewDataLiteral<bool>(false));
+    };
+}
+
 TJoinTestData FilterBaseInnerData() {
     TJoinTestData td;
     auto& setup = *td.Setup;
@@ -1009,7 +1013,6 @@ TJoinTestData FilterBaseInnerData() {
     return td;
 }
 
-// Left filter col1 > 10 drops left key 1 (value 5).
 TJoinTestData LeftFilterInnerTestData() {
     auto td = FilterBaseInnerData();
     auto& setup = *td.Setup;
@@ -1018,11 +1021,11 @@ TJoinTestData LeftFilterInnerTestData() {
     TVector<ui64> expRightKeys = {2, 3};
     TVector<ui64> expRightVals = {50, 60};
     td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals, expRightKeys, expRightVals);
+    // left[1] > 10 (drop 5)
     td.LeftFilter = GreaterThanConstFilter(td.Setup.get(), 1, 10);
     return td;
 }
 
-// Right filter col1 < 80 drops right key 1 (value 100).
 TJoinTestData RightFilterInnerTestData() {
     auto td = FilterBaseInnerData();
     auto& setup = *td.Setup;
@@ -1031,6 +1034,7 @@ TJoinTestData RightFilterInnerTestData() {
     TVector<ui64> expRightKeys = {2, 3};
     TVector<ui64> expRightVals = {50, 60};
     td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals, expRightKeys, expRightVals);
+    // left[1] < 80 (drop 100)
     td.RightFilter = LessThanConstFilter(td.Setup.get(), 1, 80);
     return td;
 }
@@ -1054,6 +1058,29 @@ TJoinTestData CommonFilterInnerTestData() {
     TVector<ui64> expRightVals = {100, 60};
     td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals, expRightKeys, expRightVals);
     td.CommonFilter = RightGreaterThanLeftFilter(td.Setup.get(), 1);
+    return td;
+}
+
+// Common filter in the opposite direction: left.col1 > right.col1. Verifies the predicate side is
+// arbitrary (not only right>left).
+// left:  (1,5) (2,60) (3,30)   right: (1,100) (2,50) (3,60)
+TJoinTestData CommonFilterReversedInnerTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2, 3};
+    TVector<ui64> leftVals = {5, 60, 30};
+    TVector<ui64> rightKeys = {1, 2, 3};
+    TVector<ui64> rightVals = {100, 50, 60};
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftVals);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightVals);
+    td.Kind = EJoinKind::Inner;
+    // key1: 5>100 drop, key2: 60>50 keep, key3: 30>60 drop
+    TVector<ui64> expLeftKeys = {2};
+    TVector<ui64> expLeftVals = {60};
+    TVector<ui64> expRightKeys = {2};
+    TVector<ui64> expRightVals = {50};
+    td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals, expRightKeys, expRightVals);
+    td.CommonFilter = LeftGreaterThanRightFilter(td.Setup.get(), 1);
     return td;
 }
 
@@ -1328,6 +1355,10 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         Test(CommonFilterInnerTestData(), false);
     }
 
+    Y_UNIT_TEST(TestScalarHashCommonFilterReversed) {
+        Test(CommonFilterReversedInnerTestData(), false);
+    }
+
     Y_UNIT_TEST(TestScalarHashAllFilters) {
         Test(AllFiltersInnerTestData(), false);
     }
@@ -1342,6 +1373,10 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
 
     Y_UNIT_TEST(TestBlockHashCommonFilter) {
         Test(CommonFilterInnerTestData(), true);
+    }
+
+    Y_UNIT_TEST(TestBlockHashCommonFilterReversed) {
+        Test(CommonFilterReversedInnerTestData(), true);
     }
 
     Y_UNIT_TEST(TestBlockHashAllFilters) {

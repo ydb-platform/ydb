@@ -12,6 +12,8 @@ PEERDIR(
 )
 
 SRCS(
+    hulldb_compstrat_ratio_test_iterators.h
+    hulldb_compstrat_ratio_ut.cpp
     hulldb_compstrat_ut.cpp
 )
 

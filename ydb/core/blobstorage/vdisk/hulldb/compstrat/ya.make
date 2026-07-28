@@ -17,6 +17,9 @@ SRCS(
     hulldb_compstrat_promote.h
     hulldb_compstrat_ratio.h
     hulldb_compstrat_ranks.h
+    hulldb_compstrat_ratio_batch.h
+    hulldb_compstrat_ratio_iterators.h
+    hulldb_compstrat_ratio_stat.h
     hulldb_compstrat_selector.cpp
     hulldb_compstrat_selector.h
     hulldb_compstrat_space.h
@@ -27,5 +30,6 @@ SRCS(
 END()
 
 RECURSE_FOR_TESTS(
+    benchmark
     ut
 )

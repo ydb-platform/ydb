@@ -1,6 +1,15 @@
 #include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
 
+#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
+
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <fmt/format.h>
 
 #include <chrono>
 #include <thread>
@@ -108,6 +117,108 @@ Y_UNIT_TEST_SUITE(StreamingQueryClassification) {
         {
             std::this_thread::sleep_for(5s);
             ydb->WaitPoolState({.DelayedRequests = 0, .RunningRequests = 1}, poolId);
+        }
+    }
+}
+
+namespace {
+
+using namespace fmt::literals;
+
+void CheckObjectProperties(TTestActorRuntime& runtime, const TString& path, const std::unordered_map<TString, TString>& expectedProperties) {
+    auto streamingQueryDesc = NKqp::Navigate(runtime, runtime.AllocateEdgeActor(), path, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+    const auto& streamingQuery = streamingQueryDesc->ResultSet.at(0);
+    UNIT_ASSERT_VALUES_EQUAL(streamingQuery.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindStreamingQuery);
+    UNIT_ASSERT(streamingQuery.StreamingQueryInfo);
+    UNIT_ASSERT_VALUES_EQUAL(streamingQuery.StreamingQueryInfo->Description.GetName(), SplitPath(path).back());
+    const auto& properties = streamingQuery.StreamingQueryInfo->Description.GetProperties().GetProperties();
+    UNIT_ASSERT_GE(properties.size(), expectedProperties.size());
+    for (const auto& [key, value] : expectedProperties) {
+        UNIT_ASSERT_C(properties.contains(key), key);
+        UNIT_ASSERT_VALUES_EQUAL(properties.at(key), value);
+    }
+}
+
+std::unique_ptr<NKqp::TKikimrRunner> SetupStreamingSource(bool enableStreamingQueries = true) {
+    NKikimrConfig::TAppConfig config;
+    auto& featureFlags = *config.MutableFeatureFlags();
+    featureFlags.SetEnableStreamingQueries(enableStreamingQueries);
+    featureFlags.SetEnableExternalDataSources(true);
+    featureFlags.SetEnableResourcePools(true);
+    featureFlags.SetEnableStreamingQueryDisposition(true);
+    config.MutableTableServiceConfig()->SetDqChannelVersion(1u);
+
+    auto kikimr = std::make_unique<NKqp::TKikimrRunner>(NKqp::TKikimrSettings(config)
+        .SetEnableStreamingQueries(enableStreamingQueries)
+        .SetEnableExternalDataSources(true)
+        .SetEnableResourcePools(true)
+        .SetInitFederatedQuerySetupFactory(true));
+
+    const auto result = kikimr->GetQueryClient().ExecuteQuery(fmt::format(R"(
+        CREATE TOPIC MyTopic;
+        CREATE EXTERNAL DATA SOURCE MySource WITH (
+            SOURCE_TYPE = "Ydb",
+            LOCATION = "localhost:{port}",
+            DATABASE_NAME = "/Root",
+            AUTH_METHOD = "NONE"
+        );)",
+        "port"_a = kikimr->GetTestServer().GetGRpcServer().GetPort()),
+        NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+    return kikimr;
+}
+
+}  // anonymous namespace
+
+Y_UNIT_TEST_SUITE(WorkloadManagerScheme) {
+    Y_UNIT_TEST(StreamingQueriesWithResourcePools) {
+        auto kikimr = SetupStreamingSource();
+        auto& runtime = *kikimr->GetTestServer().GetRuntime();
+        auto db = kikimr->GetQueryClient();
+
+        {
+            const auto result = kikimr->GetQueryClient().ExecuteQuery(R"(
+                CREATE RESOURCE POOL my_pool WITH (
+                    CONCURRENT_QUERY_LIMIT = 0
+                ))",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                CREATE STREAMING QUERY `MyFolder/MyStreamingQuery` WITH (
+                    RUN = TRUE,
+                    RESOURCE_POOL = "my_pool"
+                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::PRECONDITION_FAILED, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Resource pool my_pool was disabled due to zero concurrent query limit");
+
+            CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {});
+        }
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                CREATE STREAMING QUERY `MyFolder/OtherQuery` WITH (
+                    RUN = FALSE
+                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+            CheckObjectProperties(runtime, "/Root/MyFolder/OtherQuery", {});
+        }
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                ALTER STREAMING QUERY `MyFolder/OtherQuery` SET (
+                    RUN = TRUE,
+                    RESOURCE_POOL = "my_pool"
+                );)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::PRECONDITION_FAILED, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Resource pool my_pool was disabled due to zero concurrent query limit");
         }
     }
 }

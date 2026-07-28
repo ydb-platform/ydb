@@ -2,7 +2,7 @@
 
 Секция `tls` настраивает параметры [TLS](https://ru.wikipedia.org/wiki/Transport_Layer_Security) для [шифрования данных при передаче по сети](../../security/encryption/data-in-transit.md) в {{ ydb-short-name }}. Каждый сетевой протокол может иметь различные настройки TLS для обеспечения безопасной связи между компонентами кластера и клиентами.
 
-## Interconnect
+## Interconnect {#interconnect}
 
 [Интерконнект акторной системы {{ ydb-short-name }}](../../concepts/glossary.md#actor-system-interconnect) — это специализированный протокол для обмена данными между узлами {{ ydb-short-name }}.
 

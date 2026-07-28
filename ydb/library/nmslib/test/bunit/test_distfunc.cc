@@ -104,6 +104,8 @@ void TestSparsePackUnpack() {
     vector<SparseVectElem<dist_t>> target;
     UnpackSparseElements(pBuff, dataLen, target);
 
+    delete[] pBuff;
+
     bool eqFlag = checkElemVectEq(source, target);
 
     if (!eqFlag) {
@@ -631,10 +633,12 @@ bool TestKLAgree(size_t N, size_t dim, size_t Rep) {
 
 template <class T>
 bool TestKLGeneralAgree(size_t N, size_t dim, size_t Rep) {
-    T* pVect1 = new T[dim];
-    T* pVect2 = new T[dim];
-    T* pPrecompVect1 = new T[dim * 2];
-    T* pPrecompVect2 = new T[dim * 2];
+    vector<T> vect1(dim), vect2(dim);
+    vector<T> precompVect1(dim * 2), precompVect2(dim * 2);
+    T* pVect1 = &vect1[0];
+    T* pVect2 = &vect2[0];
+    T* pPrecompVect1 = &precompVect1[0];
+    T* pPrecompVect2 = &precompVect2[0];
 
     for (size_t i = 0; i < Rep; ++i) {
         for (size_t j = 1; j < N; ++j) {
@@ -1024,6 +1028,9 @@ bool TestSparseAngularDistanceAgree(const string& dataFile, size_t N, size_t Rep
     unique_ptr<DataFileInputState> inpStateReg(spaceReg->ReadDataset(elemsReg, tmp, dataFile, N));
     spaceReg->UpdateParamsFromFile(*inpStateReg);
 
+    // Free the objects read from disk on every return path (avoids LeakSanitizer errors).
+    ObjectVectorGuard elemsFastGuard(elemsFast), elemsRegGuard(elemsReg);
+
     CHECK(elemsFast.size() == elemsReg.size());
 
     N = min(N, elemsReg.size());
@@ -1068,10 +1075,13 @@ bool TestSparseCosineSimilarityAgree(const string& dataFile, size_t N, size_t Re
     ObjectVector                                 elemsReg;
     vector<string>                               tmp;
 
-    unique_ptr<DataFileInputState> inpStateFast(spaceFast->ReadDataset(elemsFast, tmp, dataFile,  N)); 
+    unique_ptr<DataFileInputState> inpStateFast(spaceFast->ReadDataset(elemsFast, tmp, dataFile,  N));
     spaceFast->UpdateParamsFromFile(*inpStateFast);
-    unique_ptr<DataFileInputState> inpStateReg(spaceReg->ReadDataset(elemsReg, tmp, dataFile,  N)); 
+    unique_ptr<DataFileInputState> inpStateReg(spaceReg->ReadDataset(elemsReg, tmp, dataFile,  N));
     spaceReg->UpdateParamsFromFile(*inpStateReg);
+
+    // Free the objects read from disk on every return path (avoids LeakSanitizer errors).
+    ObjectVectorGuard elemsFastGuard(elemsFast), elemsRegGuard(elemsReg);
 
     CHECK(elemsFast.size() == elemsReg.size());
 
@@ -1115,10 +1125,13 @@ bool TestSparseNegativeScalarProductAgree(const string& dataFile, size_t N, size
     ObjectVector                                 elemsReg;
     vector<string>                               tmp;
 
-    unique_ptr<DataFileInputState> inpStateFast(spaceFast->ReadDataset(elemsFast, tmp, dataFile,  N)); 
+    unique_ptr<DataFileInputState> inpStateFast(spaceFast->ReadDataset(elemsFast, tmp, dataFile,  N));
     spaceFast->UpdateParamsFromFile(*inpStateFast);
-    unique_ptr<DataFileInputState> inpStateReg(spaceReg->ReadDataset(elemsReg, tmp, dataFile,  N)); 
+    unique_ptr<DataFileInputState> inpStateReg(spaceReg->ReadDataset(elemsReg, tmp, dataFile,  N));
     spaceReg->UpdateParamsFromFile(*inpStateReg);
+
+    // Free the objects read from disk on every return path (avoids LeakSanitizer errors).
+    ObjectVectorGuard elemsFastGuard(elemsFast), elemsRegGuard(elemsReg);
 
     CHECK(elemsFast.size() == elemsReg.size());
 
@@ -1166,6 +1179,9 @@ bool TestSparseQueryNormNegativeScalarProductAgree(const string& dataFile, size_
     spaceFast->UpdateParamsFromFile(*inpStateFast);
     unique_ptr<DataFileInputState> inpStateReg(spaceReg->ReadDataset(elemsReg, tmp, dataFile,  N));
     spaceReg->UpdateParamsFromFile(*inpStateReg);
+
+    // Free the objects read from disk on every return path (avoids LeakSanitizer errors).
+    ObjectVectorGuard elemsFastGuard(elemsFast), elemsRegGuard(elemsReg);
 
     CHECK(elemsFast.size() == elemsReg.size());
 
@@ -1225,6 +1241,9 @@ bool TestPivotIndex(const string& spaceName,
     unique_ptr<DataFileInputState> inpStateFast(space->ReadDataset(data, tmp, dataFile,  dataQty));
     space->UpdateParamsFromFile(*inpStateFast);
     space->ReadDataset(pivots, tmp, pivotFile, pivotQty);
+
+    // Free the objects read from disk on every return path (avoids LeakSanitizer errors).
+    ObjectVectorGuard dataGuard(data), pivotsGuard(pivots);
 
     unique_ptr<PivotIndex<T>>  pivIndx(useDummyIndex ? 
       new DummyPivotIndex<T>(*space, pivots)

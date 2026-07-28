@@ -47,12 +47,34 @@ inline string GetSampleDataPrefix() {
 
 const string sampleDataPrefix = GetSampleDataPrefix();
 
+// ObjectVector holds raw Object* pointers whose ownership is not managed by the
+// vector itself. Tests that build an ObjectVector directly (e.g. via ReadDataset)
+// must free the objects explicitly, otherwise LeakSanitizer flags them.
+inline void DeleteObjects(ObjectVector& dataSet) {
+  for (const Object* pObj : dataSet) {
+    delete pObj;
+  }
+  dataSet.clear();
+}
+
+// Scope guard that releases the objects held by an ObjectVector when it goes out
+// of scope, regardless of which return path is taken.
+class ObjectVectorGuard {
+ public:
+  explicit ObjectVectorGuard(ObjectVector& dataSet) : dataSet_(dataSet) {}
+  ~ObjectVectorGuard() { DeleteObjects(dataSet_); }
+
+  ObjectVectorGuard(const ObjectVectorGuard&) = delete;
+  ObjectVectorGuard& operator=(const ObjectVectorGuard&) = delete;
+
+ private:
+  ObjectVector& dataSet_;
+};
+
 class TestDataset {
  public:
   virtual ~TestDataset() {
-    for (auto it = dataobjects_.begin(); it != dataobjects_.end(); ++it) {
-      delete *it;
-    }
+    DeleteObjects(dataobjects_);
   }
 
   const ObjectVector& GetDataObjects() const { return dataobjects_; }

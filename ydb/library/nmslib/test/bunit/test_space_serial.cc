@@ -61,6 +61,9 @@ bool fullTestCommon(bool binTest, Space<dist_t>* pSpace,
     inpState = pSpace->ReadDataset(dataSet2, vExternIds2, tmpFileName);
   }
 
+  // Ensure objects read back from disk are always released, even on early return.
+  ObjectVectorGuard dataSet2Guard(dataSet2);
+
   pSpace->UpdateParamsFromFile(*inpState);
 
   if (maxNumRec != dataSet2.size()) {
@@ -130,12 +133,15 @@ bool fullTest(bool binTest,
   space->UpdateParamsFromFile(*inpState);
 
   if (dataSet1.size() != maxNumRec) {
-    LOG(LIB_ERROR) << "Bug or poorly designed test, expected to read " << maxNumRec << " records from " 
+    LOG(LIB_ERROR) << "Bug or poorly designed test, expected to read " << maxNumRec << " records from "
           << dataSetFileName << ", but read only: " << dataSet1.size();
+    DeleteObjects(dataSet1);
     return false;
   }
 
-  return fullTestCommon(binTest, space.get(), dataSet1, vExternIds1, maxNumRec, tmpFileName, bTestExternId);
+  bool res = fullTestCommon(binTest, space.get(), dataSet1, vExternIds1, maxNumRec, tmpFileName, bTestExternId);
+  DeleteObjects(dataSet1);
+  return res;
 }
 
 template <typename dist_t>
@@ -166,10 +172,13 @@ bool fullTest(bool binTest, const vector<string>& dataSetStr, size_t maxNumRec, 
 
   if (dataSet1.size() < maxNumRec) {
     LOG(LIB_ERROR) << "Bug or poorly designed test, expected to create " << maxNumRec << " records from array but read only: " << dataSet1.size();
+    DeleteObjects(dataSet1);
     return false;
   }
 
-  return fullTestCommon(binTest, space.get(), dataSet1, vExternIds1, maxNumRec, tmpFileName, bTestExternId);
+  bool res = fullTestCommon(binTest, space.get(), dataSet1, vExternIds1, maxNumRec, tmpFileName, bTestExternId);
+  DeleteObjects(dataSet1);
+  return res;
 }
 
 const char *emptyParams[] = {NULL};

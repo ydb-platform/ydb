@@ -6,12 +6,6 @@
 #define LOG_I(stream) LOG_INFO_S  (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
 #define LOG_D(stream) LOG_DEBUG_S (context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->SelfTabletId() << "] " << stream)
 
-namespace NKikimr::NSchemeShard {
-
-TString InterruptInheritanceExceptDescribe(const TString& initialAcl);
-
-} // namespace NKikimr::NSchemeShard
-
 namespace {
 
 using namespace NKikimr;

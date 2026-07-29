@@ -314,9 +314,12 @@ namespace NActors {
                 if (!out.size()) {
                     break;
                 }
-                for (const auto& [buffer, size] : Chunker.FeedBuf(out.data(), out.size())) {
-                    addChunk(buffer, size, false);
-                }
+                auto consumeChunk = [&](const TCoroutineChunkSerializer::TChunk& chunk) {
+                    addChunk(chunk.Buf, chunk.Size, false);
+                    return true;
+                };
+                TCoroutineChunkSerializer::TGenericChunkConsumer consumer(consumeChunk);
+                Y_ABORT_UNLESS(Chunker.FeedBuf(out.data(), out.size(), consumer));
                 complete = Chunker.IsComplete();
                 if (complete) {
                     Y_ABORT_UNLESS(Chunker.IsSuccessfull());
@@ -638,12 +641,16 @@ namespace NActors {
     void TEventOutputChannel::ProcessUndelivered(TEventHolderPool& pool, NInterconnect::IZcGuard* zg) {
         LOG_DEBUG_IC_SESSION("ICOCH89", "Notyfying about Undelivered messages! NotYetConfirmed size: %zu, Queue size: %zu", NotYetConfirmed.size(), Queue.size());
         if (State == EState::BODY && Queue.front().Event) {
-            Y_ABORT_UNLESS(!Chunker.IsComplete()); // chunk must have an event being serialized
-            Y_ABORT_UNLESS(!Queue.empty()); // this event must be the first event in queue
-            TEventHolder& event = Queue.front();
-            Y_ABORT_UNLESS(Chunker.GetCurrentEvent() == event.Event.Get()); // ensure the event is valid
-            Chunker.Abort(); // stop serializing current event
-            Y_ABORT_UNLESS(Chunker.IsComplete());
+            if (!Chunker.IsComplete()) {
+                Y_ABORT_UNLESS(!Queue.empty()); // this event must be the first event in queue
+                TEventHolder& event = Queue.front();
+                Y_ABORT_UNLESS(Chunker.GetCurrentEvent() == event.Event.Get()); // ensure the event is valid
+                Chunker.Abort(); // stop serializing current event
+                Y_ABORT_UNLESS(Chunker.IsComplete());
+            } else {
+                // A consumer exception completes Chunker before it is propagated to the session.
+                Y_ABORT_UNLESS(!Chunker.IsSuccessfull());
+            }
         }
         for (auto& item : NotYetConfirmed) {
             if (item.Descr.Flags & IEventHandle::FlagGenerateUnsureUndelivered) { // notify only when unsure flag is set

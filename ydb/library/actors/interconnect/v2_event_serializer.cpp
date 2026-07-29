@@ -275,10 +275,13 @@ namespace NActors {
                     // serialize as much as we can
                     TMutableContiguousSpan span = buffer.UnsafeGetContiguousSpanMut().SubSpan(sizeof(TChunkHeader),
                         Max<size_t>()); // reserve space for TChunkHeader which we write first thing if we have some data
-                    for (const auto [data, size] : queue.CoroutineChunkSerializer.FeedBuf(&span, maxBytesToProduce -
-                            sizeof(TChunkHeader))) {
-                        addEventChunkBytes(data, size);
-                    }
+                    auto consumeChunk = [&](const TCoroutineChunkSerializer::TChunk& chunk) {
+                        addEventChunkBytes(chunk.Buf, chunk.Size);
+                        return true;
+                    };
+                    TCoroutineChunkSerializer::TGenericChunkConsumer consumer(consumeChunk);
+                    Y_ABORT_UNLESS(queue.CoroutineChunkSerializer.FeedBuf(&span,
+                        maxBytesToProduce - sizeof(TChunkHeader), consumer));
                     Y_DEBUG_ABORT_UNLESS(buffer.data() + buffer.size() == span.data() + span.size());
                     Y_DEBUG_ABORT_UNLESS(span.size() <= buffer.size()); // ensure span did not reduce
                     if (header) {

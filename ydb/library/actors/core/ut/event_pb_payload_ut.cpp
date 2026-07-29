@@ -193,6 +193,58 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
         UNIT_ASSERT_VALUES_EQUAL(actual, expected);
     }
 
+    // Verifies that an RDMA-backed aliased payload remains zero-copy while a regular
+    // aliased payload is copied into the serializer's RDMA buffer.
+    Y_UNIT_TEST(CoroutineSerializerHandlesMixedAliasedData) {
+        constexpr size_t payloadSize = 1024;
+
+        const auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+        auto rdmaBuffer = memPool->AllocRcBuf(payloadSize, 0).value();
+        memset(rdmaBuffer.GetDataMut(), 'r', payloadSize);
+
+        const char* rdmaPayloadData = rdmaBuffer.GetData();
+        const auto memRegion = NInterconnect::NRdma::TryExtractFromRcBuf(rdmaBuffer);
+        UNIT_ASSERT(!memRegion.Empty());
+
+        TEvMessageWithPayload msg;
+        msg.Record.SetMeta("hello, world!");
+        msg.Record.AddPayloadId(msg.AddPayload(MakeStringRope(TString(payloadSize, 't'))));
+        msg.Record.AddPayloadId(msg.AddPayload(TRope(std::move(rdmaBuffer))));
+
+        auto serializer = MakeHolder<TAllocChunkSerializer>();
+        UNIT_ASSERT(msg.SerializeToArcadiaStream(serializer.Get()));
+        const TString expected = serializer->Release(msg.CreateSerializationInfo(false))->GetString();
+
+        TCoroutineChunkSerializer chunker;
+        chunker.SetSerializingEvent(&msg, true);
+
+        TString actual;
+        bool foundRdmaPayload = false;
+        char buffer[4096];
+        while (!chunker.IsComplete()) {
+            auto consumeChunk = [&](const TCoroutineChunkSerializer::TChunk& chunk) {
+                if (chunk.MemRegion) {
+                    UNIT_ASSERT(!foundRdmaPayload);
+                    UNIT_ASSERT(chunk.MemRegion == memRegion.GetMemRegion());
+                    UNIT_ASSERT(chunk.Buf == rdmaPayloadData);
+                    UNIT_ASSERT_VALUES_EQUAL(chunk.Size, payloadSize);
+                    foundRdmaPayload = true;
+                } else {
+                    UNIT_ASSERT(buffer <= chunk.Buf);
+                    UNIT_ASSERT(chunk.Buf + chunk.Size <= std::end(buffer));
+                }
+                actual.append(chunk.Buf, chunk.Size);
+                return true;
+            };
+            TCoroutineChunkSerializer::TRdmaAwareChunkConsumer consumer(true, consumeChunk);
+            UNIT_ASSERT(chunker.FeedBuf(buffer, sizeof(buffer), consumer));
+        }
+
+        UNIT_ASSERT(chunker.IsSuccessfull());
+        UNIT_ASSERT(foundRdmaPayload);
+        UNIT_ASSERT_VALUES_EQUAL(actual, expected);
+    }
+
 #if (!defined(_tsan_enabled_))
     Y_UNIT_TEST(SerializeDeserialize) {
         TestAllSizes<TEvMessageWithPayload>();

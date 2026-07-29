@@ -4,7 +4,6 @@ items:
 - { name: FROM,                 href: from.md                                                 }
 - { name: FROM AS_TABLE,        href: from_as_table.md                                        }
 - { name: FROM SELECT,          href: from_select.md                                          }
-- { name: FROM Topic,           href: topics.md                                               }
 - { name: FOLDER,               href: folder.md,                when: yt                      }
 - { name: FLATTEN,              href: flatten.md                                             }
 - { name: GROUP BY,             href: group-by.md                                            }
@@ -21,6 +20,9 @@ items:
 - { name: VIEW FULLTEXT INDEX,  href: fulltext_index.md,        when: feature_secondary_index }
 - { name: VIEW JSON INDEX,      href: json_index.md,            when: feature_secondary_index }
 - { name: ORDER BY HybridRank,  href: hybrid_search.md,         when: feature_secondary_index }
+- name: WITH
+  href: with.md
+  include: { mode: link, path: with/toc_p.yaml }
 - { name: WITHOUT,              href: without.md                                              }
 - { name: WHERE,                href: where.md                                                }
 - { name: ORDER BY,             href: order_by.md                                             }
@@ -29,3 +31,4 @@ items:
 - { name: SAMPLE,               href: sample.md                                               }
 - { name: MATCH_RECOGNIZE,      href: match_recognize.md                                      }
 - { name: STREAMING,            href: streaming.md                                            }
+- { name: FROM Topic,           href: topics.md                                               }

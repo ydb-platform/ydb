@@ -2631,6 +2631,7 @@ constexpr TReviewedUdfType OptionalTimestampType{
     NUdf::EDataSlot::Timestamp, true};
 constexpr TReviewedUdfType Int32Type{NUdf::EDataSlot::Int32};
 constexpr TReviewedUdfType Uint16Type{NUdf::EDataSlot::Uint16};
+constexpr TReviewedUdfType Utf8Type{NUdf::EDataSlot::Utf8};
 constexpr TReviewedUdfType OptionalIntervalType{
     NUdf::EDataSlot::Interval, true};
 constexpr TReviewedUdfType TmType{NUdf::EDataSlot::Date, false, true};
@@ -2665,6 +2666,16 @@ static_assert(sizeof(ReviewedDateTimeUdfs) / sizeof(ReviewedDateTimeUdfs[0]) ==
 const TReviewedUdfSpec& ReviewedDateTimeUdf(EReviewedDateTimeUdf kind) {
     return ReviewedDateTimeUdfs[static_cast<size_t>(kind)];
 }
+
+const TReviewedUdfSpec ReviewedUnicodeToUpperUdf = {
+    "Unicode.ToUpper",
+    Utf8Type,
+    {{Utf8Type, ReviewedUdfAutoMap}, {}},
+    1,
+    {},
+    0,
+    true,
+};
 
 void CheckTupleDescriptor(
     const TExprNode& node,
@@ -3459,6 +3470,142 @@ bool IsNullableDateYearMap(const TExprNode& node) {
     return node.IsCallable("Map") &&
         IsExactDataAnnotation(
             node.GetTypeAnn(), NUdf::EDataSlot::Uint16, true);
+}
+
+bool IsNullableUnicodeToUpperMap(const TExprNode& node) {
+    return node.IsCallable("Map") &&
+        IsExactDataAnnotation(
+            node.GetTypeAnn(), NUdf::EDataSlot::Utf8, true);
+}
+
+TString CheckNullableUnicodeToUpperMap(
+    const TExprNode& node,
+    const TExprNode* rowArgument,
+    const THashSet<TString>& visibleColumns)
+{
+    CheckScalarSafetyMetadata(node);
+    if (!node.IsCallable("Map") || node.ChildrenSize() != 2 ||
+        !IsExactDataAnnotation(
+            node.GetTypeAnn(), NUdf::EDataSlot::Utf8, true))
+    {
+        Unsupported(
+            "Unicode.ToUpper bridge requires an Optional<Utf8> Map");
+    }
+
+    const auto& cast = *node.Child(0);
+    CheckScalarSafetyMetadata(cast);
+    if (!cast.IsCallable("SafeCast") || cast.ChildrenSize() != 2 ||
+        !IsExactDataAnnotation(
+            cast.GetTypeAnn(), NUdf::EDataSlot::Utf8, true))
+    {
+        Unsupported(
+            "Unicode.ToUpper bridge requires SafeCast to Optional<Utf8>");
+    }
+    CheckDataDescriptor(
+        *cast.Child(1),
+        NUdf::EDataSlot::Utf8,
+        true,
+        "Unicode.ToUpper SafeCast target");
+
+    const auto& source = *cast.Child(0);
+    CheckScalarSafetyMetadata(source);
+    if (!source.IsCallable("Member") || source.ChildrenSize() != 2 ||
+        !source.Child(1)->IsAtom() ||
+        !IsExactDataAnnotation(
+            source.GetTypeAnn(), NUdf::EDataSlot::String, true))
+    {
+        Unsupported(
+            "Unicode.ToUpper bridge requires a direct Optional<String> member");
+    }
+    CheckScalarSafetyMetadata(*source.Child(1));
+    const TString column(source.Child(1)->Content());
+    if (column.empty() || source.Child(0) != rowArgument ||
+        !visibleColumns.contains(column))
+    {
+        Unsupported(
+            "Unicode.ToUpper bridge requires a direct visible input member");
+    }
+    if (CastResult<true>(source.GetTypeAnn(), cast.GetTypeAnn()) !=
+        NUdf::ECastOptions::MayFail)
+    {
+        Unsupported(
+            "Unicode.ToUpper bridge requires the reviewed "
+            "String-to-Utf8 MayFail conversion");
+    }
+
+    const auto& lambda = *node.Child(1);
+    if (!lambda.IsLambda() || lambda.ChildrenSize() != 2 ||
+        !lambda.Child(0)->IsArguments() ||
+        lambda.Child(0)->ChildrenSize() != 1 ||
+        !lambda.Child(0)->Child(0)->IsArgument() ||
+        lambda.Child(0)->Child(0)->ChildrenSize() != 0)
+    {
+        Unsupported("Unicode.ToUpper Map requires a unary lambda");
+    }
+    CheckScalarSafetyMetadata(lambda);
+    CheckScalarSafetyMetadata(*lambda.Child(0));
+    const auto& argument = *lambda.Child(0)->Child(0);
+    CheckScalarSafetyMetadata(argument);
+    if (!IsExactDataAnnotation(
+            argument.GetTypeAnn(), NUdf::EDataSlot::Utf8, false))
+    {
+        Unsupported(
+            "Unicode.ToUpper Map lambda argument must be Utf8");
+    }
+
+    const auto& upper = *lambda.Child(1);
+    CheckReviewedUdfApply(
+        upper, ReviewedUnicodeToUpperUdf, "Unicode.ToUpper Apply");
+    if (upper.Child(1) != &argument) {
+        Unsupported(
+            "Unicode.ToUpper Map does not preserve exact lambda identity");
+    }
+    return column;
+}
+
+NJson::TJsonValue NullableUnicodeToUpperExpr(
+    const TExprNode& node,
+    const TExprNode* rowArgument,
+    const THashSet<TString>& visibleColumns,
+    const TVector<const TExprNode*>& boundArguments,
+    TExactScalarBudget& budget,
+    size_t normalizedDepth)
+{
+    const TString column =
+        CheckNullableUnicodeToUpperMap(node, rowArgument, visibleColumns);
+    if (boundArguments.size() >= MaxIfPresentBindingDepth) {
+        Unsupported(
+            "Unicode.ToUpper bridge binding depth exceeds the audit limit");
+    }
+
+    // Source NULL is exact.  For a present String, the nullable opaque result
+    // jointly represents UTF-8 validation failure or the deterministic
+    // uppercase value without adding Unicode semantics to the string quotient.
+    budget.Charge(normalizedDepth + 1, 3);
+    budget.Charge(normalizedDepth + 2);
+
+    auto arguments = JsonArray();
+    arguments.AppendValue(BoundExpr(0));
+
+    auto present = JsonMap();
+    present["kind"] = "opaque";
+    present["fingerprint"] = "yql-string-to-utf8-unicode-upper-v1";
+    present["type"] = "Utf8";
+    present["nullable"] = true;
+    present["args"] = std::move(arguments);
+
+    auto missing = JsonMap();
+    missing["kind"] = "null";
+    missing["type"] = "Utf8";
+
+    auto result = JsonMap();
+    result["kind"] = "if_present";
+    result["optional"] = ColumnExpr(column);
+    result["present"] = std::move(present);
+    result["missing"] = std::move(missing);
+    result["type"] = "Utf8";
+    result["nullable"] = true;
+    return result;
 }
 
 TString CheckNullableDateYearMap(
@@ -4933,6 +5080,16 @@ NJson::TJsonValue ExportExprNode(
         result["type"] = signature.ResultType;
         result["nullable"] = signature.ResultNullable;
         return result;
+    }
+
+    if (IsNullableUnicodeToUpperMap(node)) {
+        return NullableUnicodeToUpperExpr(
+            node,
+            rowArgument,
+            visibleColumns,
+            boundArguments,
+            budget,
+            normalizedDepth);
     }
 
     if (IsNullableDateYearMap(node)) {

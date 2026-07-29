@@ -311,6 +311,93 @@ Y_UNIT_TEST_SUITE(ClassifierRepresentation) {
         }
     }
 
+    /// Creating a classifier without an explicit RANK auto-assigns rank = maxRank + 1000.
+    Y_UNIT_TEST(AutoRankIsMaxRankPlus1000) {
+        auto ydb = TYdbSetupSettings().Create();
+
+        // Explicit rank
+        ydb->ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL CLASSIFIER explicit_rank_classifier WITH (
+                RESOURCE_POOL = "default",
+                MEMBER_NAME   = "explicit@user",
+                RANK          = 20
+            );
+        )");
+
+        // Auto rank (no RANK specified)
+        ydb->ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL CLASSIFIER auto_rank_classifier WITH (
+                RESOURCE_POOL = "default",
+                MEMBER_NAME   = "auto@user"
+            );
+        )");
+
+        ydb->WaitForClassifierPropagation();
+
+        // The auto-assigned rank must be the previous max (20) + 1000 = 1020.
+        {
+            auto result = ReadSysView(ydb, "auto_rank_classifier");
+            TSampleQueries::CheckSuccess(result);
+            NYdb::TResultSetParser rs(result.GetResultSet(0));
+            UNIT_ASSERT_C(rs.TryNextRow(), "Expected one row in sys-view");
+            UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("Rank").GetOptionalInt64(), 1020);
+        }
+
+        {
+            auto result = ReadMetadataTable(ydb, "auto_rank_classifier");
+            TSampleQueries::CheckSuccess(result);
+            NYdb::TResultSetParser rs(result.GetResultSet(0));
+            UNIT_ASSERT_C(rs.TryNextRow(), "Expected one row in metadata table");
+            UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("rank").GetOptionalInt64(), 1020);
+        }
+    }
+
+    /// ALTER ... RESET (MEMBER_NAME) clears the optional field from the representation.
+    Y_UNIT_TEST(ResetMemberNameClearsField) {
+        auto ydb = TYdbSetupSettings().Create();
+
+        ydb->ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL CLASSIFIER some_classifier WITH (
+                RESOURCE_POOL = "default",
+                MEMBER_NAME   = "present@user",
+                RANK          = 20
+            );
+        )");
+
+        ydb->WaitForClassifierPropagation();
+
+        ydb->ExecuteSchemeQuery(R"(
+            ALTER RESOURCE POOL CLASSIFIER some_classifier RESET (
+                MEMBER_NAME
+            );
+        )");
+
+        ydb->WaitForClassifierPropagation();
+
+        // ---- sys-view: MemberName is reset to an empty string ----
+        {
+            auto result = ReadSysView(ydb, "some_classifier");
+            TSampleQueries::CheckSuccess(result);
+            NYdb::TResultSetParser rs(result.GetResultSet(0));
+            UNIT_ASSERT_C(rs.TryNextRow(), "Expected one row in sys-view");
+            const auto memberName = rs.ColumnParser("MemberName").GetOptionalUtf8();
+            UNIT_ASSERT_C(memberName.has_value(), "MemberName must be present after RESET");
+            UNIT_ASSERT_VALUES_EQUAL(*memberName, "");
+        }
+
+        // ---- metadata table: member_name key is present with an empty value ----
+        {
+            auto result = ReadMetadataTable(ydb, "some_classifier");
+            TSampleQueries::CheckSuccess(result);
+            NYdb::TResultSetParser rs(result.GetResultSet(0));
+            UNIT_ASSERT_C(rs.TryNextRow(), "Expected one row in metadata table");
+
+            const auto json = ParseJson(TString(*rs.ColumnParser("config").GetOptionalJsonDocument()));
+            UNIT_ASSERT_C(json.Has("member_name"), "'member_name' must be present in JSON after RESET");
+            UNIT_ASSERT_VALUES_EQUAL(json["member_name"].GetString(), "");
+        }
+    }
+
 }  // Y_UNIT_TEST_SUITE(ClassifierRepresentation)
 
 }  // namespace NKikimr::NWorkloadManager

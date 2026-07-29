@@ -1375,12 +1375,12 @@ namespace NKikimr {
                     if (clientId.GetType() == NBackpressure::EQueueClientType::DSProxy) {
                         CostGroup.SkeletonFrontUserCostNs() += cost;
                         if (VCtx->CostTracker) {
-                            VCtx->CostTracker->CountUserCost(advancedCost);
+                            VCtx->CostTracker->CountUserCost<TEvent>(advancedCost);
                         }
                     } else {
                         CostGroup.SkeletonFrontInternalCostNs() += cost;
                         if (VCtx->CostTracker) {
-                            VCtx->CostTracker->CountInternalCost(advancedCost);
+                            VCtx->CostTracker->CountInternalCost<TEvent>(advancedCost);
                         }
                     }
                 }

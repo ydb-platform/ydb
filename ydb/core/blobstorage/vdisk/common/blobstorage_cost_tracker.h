@@ -13,6 +13,9 @@
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/util/light.h>
 
+#include <concepts>
+#include <type_traits>
+
 namespace NKikimr {
 
 class TDiskOperationCostEstimator {
@@ -300,8 +303,40 @@ class TBsCostModelMirror3dc;
 class TBsCostModel4Plus2Block;
 class TBsCostModelMirror3of4;
 
+template<class TEvent>
+concept CReadDiskOperation =
+    std::same_as<std::decay_t<TEvent>, TEvBlobStorage::TEvVGet>
+    || std::same_as<std::decay_t<TEvent>, TEvBlobStorage::TEvVGetBlock>
+    || std::same_as<std::decay_t<TEvent>, TEvBlobStorage::TEvVGetBarrier>
+    || std::same_as<std::decay_t<TEvent>, NPDisk::TEvChunkRead>;
+
+template<class TEvent>
+concept CWriteDiskOperation =
+    std::same_as<std::decay_t<TEvent>, TEvBlobStorage::TEvVBlock>
+    || std::same_as<std::decay_t<TEvent>, TEvBlobStorage::TEvVCollectGarbage>
+    || std::same_as<std::decay_t<TEvent>, TEvBlobStorage::TEvVPut>
+    || std::same_as<std::decay_t<TEvent>, TEvBlobStorage::TEvVMultiPut>
+    || std::same_as<std::decay_t<TEvent>, TEvBlobStorage::TEvVPatchStart>
+    || std::same_as<std::decay_t<TEvent>, TEvBlobStorage::TEvVPatchDiff>
+    || std::same_as<std::decay_t<TEvent>, TEvBlobStorage::TEvVPatchXorDiff>
+    || std::same_as<std::decay_t<TEvent>, TEvBlobStorage::TEvVMovedPatch>
+    || std::same_as<std::decay_t<TEvent>, NPDisk::TEvChunkWrite>;
+
+template<class TEvent>
+concept CDiskOperation = CReadDiskOperation<TEvent> || CWriteDiskOperation<TEvent>;
+
 class TBsCostTracker {
 private:
+    template<CReadDiskOperation TEvent>
+    NMonGroup::TCostTrackerGroup::TDiskCostGroup& GetDiskCostGroup() {
+        return MonGroup->ReadDiskCost;
+    }
+
+    template<CWriteDiskOperation TEvent>
+    NMonGroup::TCostTrackerGroup::TDiskCostGroup& GetDiskCostGroup() {
+        return MonGroup->WriteDiskCost;
+    }
+
     TBlobStorageGroupType GroupType;
     std::unique_ptr<TBsCostModelBase> CostModel;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> CostCounters;
@@ -363,48 +398,50 @@ public:
     }
 
 public:
-    template<class TEvent>
+    template<CDiskOperation TEvent>
     void CountUserRequest(const TEvent& ev) {
         ui64 cost = GetCost(ev);
-        MonGroup->UserDiskCost() += cost;
+        GetDiskCostGroup<TEvent>().UserDiskCost() += cost;
         CountRequest(cost);
     }
 
+    template<CDiskOperation TEvent>
     void CountUserCost(ui64 cost) {
-        MonGroup->UserDiskCost() += cost;
+        GetDiskCostGroup<TEvent>().UserDiskCost() += cost;
         CountRequest(cost);
     }
 
-    template<class TEvent>
+    template<CDiskOperation TEvent>
     void CountCompactionRequest(const TEvent& ev) {
         ui64 cost = GetCost(ev);
-        MonGroup->CompactionDiskCost() += cost;
+        GetDiskCostGroup<TEvent>().CompactionDiskCost() += cost;
         CountRequest(cost);
     }
 
-    template<class TEvent>
+    template<CDiskOperation TEvent>
     void CountScrubRequest(const TEvent& ev) {
         ui64 cost = GetCost(ev);
-        MonGroup->ScrubDiskCost() += cost;
+        GetDiskCostGroup<TEvent>().ScrubDiskCost() += cost;
         CountRequest(cost);
     }
 
-    template<class TEvent>
+    template<CDiskOperation TEvent>
     void CountDefragRequest(const TEvent& ev) {
         ui64 cost = GetCost(ev);
-        MonGroup->DefragDiskCost() += cost;
+        GetDiskCostGroup<TEvent>().DefragDiskCost() += cost;
         CountRequest(cost);
     }
 
-    template<class TEvent>
+    template<CDiskOperation TEvent>
     void CountInternalRequest(const TEvent& ev) {
         ui64 cost = GetCost(ev);
-        MonGroup->InternalDiskCost() += cost;
+        GetDiskCostGroup<TEvent>().InternalDiskCost() += cost;
         CountRequest(cost);
     }
 
+    template<CDiskOperation TEvent>
     void CountInternalCost(ui64 cost) {
-        MonGroup->InternalDiskCost() += cost;
+        GetDiskCostGroup<TEvent>().InternalDiskCost() += cost;
         CountRequest(cost);
     }
 

@@ -473,7 +473,7 @@ void TPartitionCompaction::TCompactState::AddCmdWrite(const TKey& key, TBatch& b
         Request = MakeHolder<TEvKeyValue::TEvRequest>();
     }
     TString data;
-    batch.Pack();
+    batch.Pack(GetMaxHeaderSize(PartitionActor->ActorContext()));
     batch.SerializeTo(data);
     TClientBlob::CheckBlob(key, data);
     UpdatedKeys.emplace(key, data.size());

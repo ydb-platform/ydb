@@ -1481,7 +1481,8 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
                                        p.Msg.TotalSize,
                                        parameters.HeadCleared,
                                        needCompactHead,
-                                       MaxBlobSize);
+                                       MaxBlobSize,
+                                       GetMaxHeaderSize(ctx));
     }
 
     YDB_LOG_DEBUG("Topic partition part blob processing sourceId seqNo partNo",
@@ -1576,7 +1577,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         for (auto& x : BlobEncoder.PartitionedBlob.GetClientBlobs()) {
             if (BlobEncoder.NewHead.GetBatches().empty() || BlobEncoder.NewHead.GetLastBatch().Packed) {
                 BlobEncoder.NewHead.AddBatch(TBatch(curOffset, x.GetPartNo()));
-                BlobEncoder.NewHead.PackedSize += GetMaxHeaderSize(); //upper bound for packed size
+                BlobEncoder.NewHead.PackedSize += GetMaxHeaderSize(ctx); //upper bound for packed size
             }
 
             if (x.IsLastPart()) {
@@ -1587,7 +1588,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             BlobEncoder.NewHead.AddBlob(x);
             BlobEncoder.NewHead.PackedSize += x.GetSerializedSize();
             if (BlobEncoder.NewHead.GetLastBatch().GetUnpackedSize() >= BATCH_UNPACK_SIZE_BORDER) {
-                BlobEncoder.PackLastBatch();
+                BlobEncoder.PackLastBatch(GetMaxHeaderSize(ctx));
             }
         }
 
@@ -1610,7 +1611,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             p.Msg.ProducerEpoch);
 
         curOffset += p.Msg.LogicalMessageCount;
-        BlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);
+        BlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize, GetMaxHeaderSize(ctx));
     }
     return true;
 }
@@ -1941,7 +1942,7 @@ void TPartition::EndAppendHeadWithNewWrites(const TActorContext& ctx)
     UpdateWriteBufferIsFullState(ctx.Now());
 
     if (!BlobEncoder.IsLastBatchPacked()) {
-        BlobEncoder.PackLastBatch();
+        BlobEncoder.PackLastBatch(GetMaxHeaderSize(ctx));
     }
 
     PQ_ENSURE((Parameters->HeadCleared ? 0 : BlobEncoder.Head.PackedSize) + BlobEncoder.NewHead.PackedSize <= MaxBlobSize); //otherwise last PartitionedBlob.Add must compact all except last cl

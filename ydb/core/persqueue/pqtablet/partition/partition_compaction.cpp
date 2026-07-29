@@ -53,7 +53,8 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
                                                  p.Msg.TotalSize,
                                                  parameters.HeadCleared,
                                                  needCompactHead,
-                                                 MaxBlobSize);
+                                                 MaxBlobSize,
+                                                 GetMaxHeaderSize(ctx));
     }
 
     YDB_LOG_DEBUG_COMP(Service, "Topic partition part blob processing sourceId seqNo partNo",
@@ -124,7 +125,7 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
         for (auto& x : CompactionBlobEncoder.PartitionedBlob.GetClientBlobs()) {
             if (CompactionBlobEncoder.NewHead.GetBatches().empty() || CompactionBlobEncoder.NewHead.GetLastBatch().Packed) {
                 CompactionBlobEncoder.NewHead.AddBatch(TBatch(curOffset, x.GetPartNo()));
-                CompactionBlobEncoder.NewHead.PackedSize += GetMaxHeaderSize(); //upper bound for packed size
+                CompactionBlobEncoder.NewHead.PackedSize += GetMaxHeaderSize(ctx); //upper bound for packed size
             }
 
             if (x.IsLastPart()) {
@@ -135,7 +136,7 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
             CompactionBlobEncoder.NewHead.AddBlob(x);
             CompactionBlobEncoder.NewHead.PackedSize += x.GetSerializedSize();
             if (CompactionBlobEncoder.NewHead.GetLastBatch().GetUnpackedSize() >= BATCH_UNPACK_SIZE_BORDER) {
-                CompactionBlobEncoder.PackLastBatch();
+                CompactionBlobEncoder.PackLastBatch(GetMaxHeaderSize(ctx));
             }
         }
 
@@ -152,7 +153,7 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
             {"newHead", CompactionBlobEncoder.NewHead});
 
         curOffset += p.Msg.LogicalMessageCount;
-        CompactionBlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);
+        CompactionBlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize, GetMaxHeaderSize(ctx));
     }
 
     return true;
@@ -366,6 +367,7 @@ bool TPartition::CompactRequestedBlob(const TRequestedBlob& requestedBlob,
                                                          parameters.HeadCleared,
                                                          needToCompactHead,
                                                          MaxBlobSize,
+                                                         GetMaxHeaderSize(ActorContext()),
                                                          partNo);
             } else if (!CompactionBlobEncoder.PartitionedBlob.IsInited()) {
                 CompactionBlobEncoder.NewPartitionedBlob(Partition,
@@ -377,6 +379,7 @@ bool TPartition::CompactRequestedBlob(const TRequestedBlob& requestedBlob,
                                                          parameters.HeadCleared,
                                                          needToCompactHead,
                                                          MaxBlobSize,
+                                                         GetMaxHeaderSize(ActorContext()),
                                                          partNo);
             }
             wasThePreviousBlobBig = false;
@@ -453,7 +456,8 @@ void TPartition::RenameCompactedBlob(TDataKey& k,
                                                  0,                       // TotalSize
                                                  parameters.HeadCleared,  // headCleared
                                                  needToCompactHead,       // needCompactHead
-                                                 MaxBlobSize);
+                                                 MaxBlobSize,
+                                                 GetMaxHeaderSize(ctx));
     }
     auto write = CompactionBlobEncoder.PartitionedBlob.Add(k.Key, size, k.Timestamp, false);
     if (write && !write->Value.empty()) {
@@ -508,7 +512,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
     AFL_ENSURE(CompactionInProgress);
     AFL_ENSURE(blobs.size() == CompactionBlobsCount);
 
-    CompactionBlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);
+    CompactionBlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize, GetMaxHeaderSize(ctx));
 
     // Empty partition may will be filling from offset great than zero from mirror actor if source partition old and was clean by retantion time
     if (!CompactionBlobEncoder.Head.GetCount() &&
@@ -561,7 +565,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
                                 parameters,
                                 compactionRequest.Get());
 
-            CompactionBlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);
+            CompactionBlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize, GetMaxHeaderSize(ctx));
 
             CompactionBlobEncoder.NewHead.Clear();
             CompactionBlobEncoder.NewHead.Offset = parameters.CurOffset;
@@ -592,7 +596,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
     }
 
     if (!CompactionBlobEncoder.IsLastBatchPacked()) {
-        CompactionBlobEncoder.PackLastBatch();
+        CompactionBlobEncoder.PackLastBatch(GetMaxHeaderSize(ctx));
     }
 
     CompactionBlobEncoder.HeadCleared = parameters.HeadCleared;

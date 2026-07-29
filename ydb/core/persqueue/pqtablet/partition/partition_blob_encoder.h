@@ -66,8 +66,9 @@ struct TPartitionBlobEncoder {
                             bool headCleared,
                             bool needCompactHead,
                             const ui32 maxBlobSize,
+                            ui32 maxHeaderSize,
                             ui16 nextPartNo = 0);
-    void ClearPartitionedBlob(const TPartitionId& partitionId, ui32 maxBlobSize);
+    void ClearPartitionedBlob(const TPartitionId& partitionId, ui32 maxBlobSize, ui32 maxHeaderSize);
 
     void SyncHeadKeys();
     void SyncNewHeadKey();
@@ -82,7 +83,7 @@ struct TPartitionBlobEncoder {
 
     void ResetNewHead(ui64 endOffset);
 
-    void PackLastBatch();
+    void PackLastBatch(ui32 maxHeaderSize);
 
     std::pair<TKey, ui32> Compact(const TKey& key, bool headCleared);
 

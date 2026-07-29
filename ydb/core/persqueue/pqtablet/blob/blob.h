@@ -114,7 +114,7 @@ struct TBatch {
     TInstant GetEndWriteTimestamp() const;
 
     ui32 GetPackedSize() const;
-    void Pack();
+    void Pack(ui32 maxHeaderSize);
     void Unpack();
     void UnpackTo(TVector<TClientBlob> *result) const;
 
@@ -171,7 +171,7 @@ private:
     public:
         explicit TBatchAccessor(TBatch& batch);
 
-        void Pack();
+        void Pack(ui32 maxHeaderSize);
         void Unpack();
     };
 
@@ -225,7 +225,7 @@ public:
 
     TPartitionedBlob(const TPartitionId& partition, const ui64 offset, const TString& sourceId, const ui64 seqNo,
                      const ui16 totalParts, const ui32 totalSize, THead& head, THead& newHead, bool headCleared, bool needCompactHead, const ui32 maxBlobSize,
-                     ui16 nextPartNo = 0, bool fastWrite = true);
+                     ui32 maxHeaderSize, ui16 nextPartNo = 0, bool fastWrite = true);
 
     struct TFormedBlobInfo {
         TKey Key;
@@ -288,6 +288,7 @@ private:
     bool GlueNewHead;
     bool NeedCompactHead;
     ui32 MaxBlobSize;
+    ui32 MaxHeaderSize;
     bool FastWrite = true;
 };
 

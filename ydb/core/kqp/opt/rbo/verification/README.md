@@ -172,7 +172,9 @@ q35, q37, q38, q40, q42, q43, q45, q46, q48, q50, q52, q54, q55, q56, q58, q59,
 q60, q61, q62, q65, q66, q68, q69, q71, q73, q75, q76, q77, q78, q79, q80,
 q82, q83, q85, q87, q88, q90, q91, q93, q94, q95, q96, q97, and q99: 80/121
 workload queries (66.1%).
-The complete derived-ordering dashboards leave TPCH at eighteen
+TPC-DS q72 is separately pinned at successful preparation and verifier entry;
+it is not in the formula or proof floor.
+The q72 verifier-entry checkpoint leaves TPCH at eighteen
 formulas, two unsupported semantic outcomes, and two no-pair optimizer
 failures; TPC-DS has sixty-two formulas, nineteen unsupported semantic
 outcomes, and eighteen no-pair optimizer failures. Across both suites the
@@ -188,17 +190,39 @@ Integral-`AVG` Slice A moves TPC-DS q7, q13, and q26 from initial
 export rejection to formula construction; exact integral extrema then move
 q35 from verifier rejection to formula construction. Certified derived
 integral-AVG ordering then moves TPC-DS q22 and q85 through both exporters and
+formula construction. Exact dynamic Date-shift normalization subsequently
+moves q72 through both exporters and into the verifier, but not through
 formula construction. The resulting measured formula coverage is 80/121
 (66.1%) over the corpus, 80/101 (79.2%) over exact Initial/Final
 boundary-result pairs, 80/93 (86.0%) within the preparation-successful subset,
-and 80/86 (93.0%) among verifier entrants. The
+and 80/87 (92.0%) among verifier entrants. The
 preparation-success ratio uses
 the intersection of formula rows with preparation-success rows; version five
 permits a formula to coexist with failed later preparation. Twenty TPCH and
 eighty-one TPC-DS queries have exact boundary-result pairs. Eighteen TPCH and
-sixty-eight TPC-DS pairs enter the verifier. The 21 unsupported outcomes
-consequently split into 15 initial-export, zero final-export, and six verifier
+sixty-nine TPC-DS pairs enter the verifier. The 21 unsupported outcomes
+consequently split into 14 initial-export, zero final-export, and seven verifier
 results.
+
+Milestone 64 accepts only a direct visible `Optional<Date>` member under exact
+binary `+` or `-` with a reviewed literal `IntervalFromDays`. The Initial
+boundary applies the reviewed eight-child UDF envelope to an `Int32` literal;
+the Final boundary uses an exact `Just(Interval literal)` whose value is a
+whole number of days. Both forms must encode a day count in
+`[-49672, 49672]`. Export preserves source NULL exactly with `if_present` and
+uses one versioned nullable-Date opaque operation, keyed by operator and day
+count, only for the present branch. This conservatively over-approximates the
+full present-input result, including overflow; it is not general Date/Interval
+semantics.
+
+At the normal audit limits q72 rejects a 4,608-row join output above the
+4,096-row relation bound. A disposable experiment raising only that limit to
+8,192 was fully reverted; it reached a 10,619,136-pair grouped aggregate above
+the 16,384-pair construction bound after 12.151 seconds. The next step is
+exact unique-key-aware compaction for a join whose right side contributes at
+most one row, not a larger global cap. Implementation commit `97f103ce060`
+and policy commit `aa01e609499` record the slice. It found no optimizer bug or
+counterexample, and the proof floor remains twenty-seven.
 
 A focused version-five run selected TPC-DS q12, q20, q49, q51, q53, q63, q89,
 and q98. Every query produced an exact Initial/Final boundary-result pair and
@@ -290,12 +314,16 @@ the global deadline at branch 2/4 (`right_language_empty`), while q85 spends
 report SHA-256 is
 `6fbe29825c3e2863ad8c3a7d92ea661bd655e7245d455fcbb1db207dcd1e258c`.
 
-The current complete TPCH dashboard has 18 formulas / 2 unsupported / 2
-no-pair outcomes, spends 2,947/33,310 ms, and has report SHA-256
+The preceding derived-ordering complete TPCH dashboard has 18 formulas / 2
+unsupported / 2 no-pair outcomes, spends 2,947/33,310 ms, and has report SHA-256
 `8a231a04398f6ca176286bd9d4d658e7d836c36c34ddcc4d43dfde54cc413a4b`.
-TPC-DS has 62 formulas / 19 unsupported / 18 no-pair outcomes, spends
-68,923/846,363 ms, and has report SHA-256
+Its TPC-DS counterpart has 62 formulas / 19 unsupported / 18 no-pair outcomes,
+spends 68,923/846,363 ms, and has report SHA-256
 `64fbda391ca5b50698aceaa2a38ba2210617fd0c1c0071bcb7c5c7967b260ecd`.
+The post-q72 complete TPC-DS dashboard confirms the same partition, spends
+67,551/841,054 ms, and has report SHA-256
+`8fa6661f88bbbc3f45b8bbee7fec73c4262608f5b2755736e5b1425bce15ec15`;
+q72 itself spends 371/535 ms before the 4,608-row guard.
 This is formula coverage only: the proof floor remains twenty-seven, and the
 checkpoint found no optimizer bug or counterexample.
 
@@ -1742,8 +1770,10 @@ contexts, coercing dynamic `IN`, broader read-range grammars, and other OLAP
 pushdowns remain separate extensions. Cardinality-certified integral `AVG`
 Slice A is complete for q7/q13/q26, and exact fixed-width integral extrema are
 complete for q35. Narrowly tagged derived-`Double` ordering is complete for
-q22/q85. The next slice targets exact dynamic `Optional<Date>` plus/minus
-literal `IntervalFromDays` normalization for TPC-DS q72.
+q22/q85. Exact dynamic `Optional<Date>` plus/minus literal
+`IntervalFromDays` normalization is complete for q72 through verifier entry.
+The next slice targets exact unique-key-aware at-most-one right-side join
+compaction for q72.
 The auditability consolidation is complete in commits `7a3639d1c16`,
 `ebcfdbb1263`, and `4b7f27d492e`. The checked-in proof policy added TPC-DS q95
 after the earlier TPCH q18 addition, then q38 and q87 through the exact

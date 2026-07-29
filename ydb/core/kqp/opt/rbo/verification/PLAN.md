@@ -504,6 +504,26 @@ Dynamic, nullable, malformed, differently annotated, or otherwise noncanonical
 forms fail closed. Because the whole expression is evaluated by the exporter,
 no Interval node or Python evaluator semantics are added.
 
+The separate dynamic Date-shift gate accepts only exact binary `+` or `-` with
+an `Optional<Date>` result, a direct visible `Optional<Date>` input member on
+the left, and a literal `IntervalFromDays` on the right. The Initial boundary
+must apply the reviewed eight-child UDF envelope above to an `Int32` literal. The
+Final boundary may instead use exact `Just(Interval literal)`, but only when
+the literal is a whole-day multiple and decodes to the same bounded
+`[-49672, 49672]` day domain. Other wrappers, dynamic intervals, fractional
+days, commuted operands, and Date variants fail closed.
+
+The normalized IR is
+`if_present(column(Date), opaque(bound Date), NULL<Date>)`. The outer
+`if_present` models source NULL exactly. The present branch is a versioned
+nullable-Date opaque operation keyed by both `+`/`-` and the decoded day
+literal; it conservatively represents the full result as any in-domain Date or
+NULL, including Date overflow. The same
+fingerprint and bound argument share one deterministic operation across both
+plans. Extra opaque outcomes can prevent a proof but cannot create a false
+`UNSAT` equivalence result. No Interval type or new Python evaluator operation
+is added.
+
 Canonical `Decimal(p,s)` uses YDB's scaled-integer representation. Finite
 values satisfy `-10^p < code < 10^p`; negative infinity, positive infinity, and
 NaN are the only other legal codes. Snapshot literals tag these four cases
@@ -782,11 +802,14 @@ Implementation sequence:
     `Optional<Double>` outputs, with independently derived producer provenance,
     exact alias/pass-through propagation, explicit Sort/StageGraph Merge tags,
     and TPC-DS q22/q85 formula construction;
-64. M4 next: exact dynamic `Optional<Date>` plus/minus literal
-    `IntervalFromDays` normalization for TPC-DS q72, initially targeting one
-    additional formula, followed by more than two dependencies, broader
-    correlations, coercing and nullable-String dynamic `IN`, broader range
-    grammars, and other OLAP pushdowns.
+64. M4: exact dynamic `Optional<Date>` plus/minus literal `IntervalFromDays`
+    normalization for TPC-DS q72, accepting the Initial `Apply` and Final
+    folded whole-day `Just(Interval)` spellings, preserving source NULL, and
+    moving q72 through both exporters to verifier entry;
+65. M4 next: exact unique-key-aware at-most-one right-side join compaction for
+    q72, without raising the global relation bound, followed by more than two
+    dependencies, broader correlations, coercing and nullable-String dynamic
+    `IN`, broader range grammars, and other OLAP pushdowns.
 
 The exact read-range slice is a closed exporter grammar, not a general
 expression rewriter. It accepts only a column-store StageGraph source with
@@ -1880,20 +1903,21 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   recursion limit, while 3,000 randomized shared and quantified DAGs preserve
   the preceding renderer's bytes exactly.
 
-  The complete derived integral-AVG ordering dashboards include the preceding
+  The q72 verifier-entry checkpoint includes the preceding
   literal-`Concat`/Decimal-bound q66 and exact point/finite-point
-  `RangeInfo::ComputeNode`, integral-AVG, and integral-extrema milestones.
+  `RangeInfo::ComputeNode`, integral-AVG, integral-extrema, and derived-ordering
+  milestones.
   TPCH's semantic partition is 18 formulas, two unsupported queries, and two
   no-pair optimizer failures; TPC-DS has 62 formulas, 19 unsupported queries,
   and 18 no-pair optimizer failures. Preparation succeeds for 20/22 TPCH and
   73/99 TPC-DS queries and fails for the other 2 and 26. TPCH retains 20 exact
-  pairs and 18 verifier entrants; TPC-DS retains 81 exact pairs and 68
+  pairs and 18 verifier entrants; TPC-DS retains 81 exact pairs and 69
   verifier entrants. Eight failed TPC-DS preparations retain exact pairs and
   overlap the unsupported inventory.
   Across both suites, 80/121 construct formulas (66.1%), 80/101 exact pairs do
   so (79.2%), 80/93 do so within the preparation-successful subset (86.0%),
-  and 80/86 verifier entrants do so (93.0%). The 21 unsupported rows split by
-  primary reason into 15 initial-export, zero final-export, and six
+  and 80/87 verifier entrants do so (92.0%). The 21 unsupported rows split by
+  primary reason into 14 initial-export, zero final-export, and seven
   verifier results.
 
   The preceding q66 complete TPCH formula dashboard spent 2,880/31,400 ms in
@@ -2011,6 +2035,28 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   and verifier-entrant coverage to 80/86 (93.0%). The proof floor remains
   twenty-seven. This checkpoint found no optimizer bug or counterexample.
 
+  Milestone 64 is complete at implementation commit `97f103ce060` and policy
+  commit `aa01e609499`. TPC-DS q72 now exports at both boundaries and is pinned
+  at successful preparation plus verifier entry, not formula construction.
+  At the normal limits it rejects a 4,608-row join output above the 4,096-row
+  relation cap. A disposable increase to 8,192 rows was fully reverted after
+  showing the next blocker: a 10,619,136-pair grouped aggregate above the
+  16,384-pair construction cap after 12.151 seconds. Therefore the next
+  logical step is an exact unique-key-aware proof that the relevant right side
+  contributes at most one row, followed by join compaction using that fact;
+  increasing a global construction cap is not the plan.
+
+  q72 changes only the entry denominator: combined formula coverage remains
+  80/121, exact-pair coverage 80/101, and preparation-success coverage 80/93,
+  while verifier-entry coverage becomes 80/87 (92.0%). TPC-DS has 69 entrants
+  and the unsupported split becomes 14 initial / 0 final / 7 verifier.
+  The complete post-q72 TPC-DS dashboard spends 67,551/841,054 ms and has
+  report SHA-256
+  `8fa6661f88bbbc3f45b8bbee7fec73c4262608f5b2755736e5b1425bce15ec15`;
+  q72 spends 371/535 ms before the join guard.
+  Formula and proof floors remain 80 and twenty-seven. No optimizer bug or
+  counterexample was found.
+
   A focused version-five audit of TPC-DS q12, q20, q49, q51, q53, q63, q89,
   and q98 preserves exact pairs despite failed preparation. All eight are
   semantically unsupported: window callables dominate, q49 first exposes a
@@ -2021,9 +2067,10 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   The passive-carrier slice removes q83 from the numeric blocker inventory,
   integral-AVG Slice A removes q7/q13/q26, and exact integral extrema remove
   q35. Narrowly tagged derived-`Double` ordering now removes q22/q85 from the
-  generic type inventory. Milestone 64 next targets exact dynamic
-  `Optional<Date>` plus/minus literal `IntervalFromDays` normalization for
-  TPC-DS q72. Including exact
+  generic type inventory. Milestone 64 moves q72 from the Date exporter
+  inventory to the join-construction inventory. Milestone 65 next targets
+  exact unique-key-aware at-most-one right-side join compaction for q72.
+  Including exact
   window semantics
   for the failed-preparation pairs, the full captured-pair gap is roughly
   6--8 feature families or 8--16 milestones. Those workload-targeted
@@ -2725,8 +2772,10 @@ formula construction without claiming general binary64 semantics. Exact
 fixed-width signed/unsigned integral `MIN`/`MAX` now moves q35 through formula
 construction. Narrowly tagged derived-`Double` ordering now moves q22/q85
 through formula construction. Exact dynamic `Optional<Date>` plus/minus
-literal `IntervalFromDays` normalization for TPC-DS q72 is next; broader
-floating-point semantics and dataflow, coercing
+literal `IntervalFromDays` normalization now moves q72 through both exporters
+to the 4,608-row join-output guard. Exact unique-key-aware at-most-one
+right-side join compaction is next; broader floating-point semantics and
+dataflow, coercing
 dynamic `IN`, nullable String and non-positive nullable uses, more than two
 `EXISTS` dependencies, broader correlated predicates, broader range reads, and other
 OLAP pushdowns remain future work beyond the admitted q9/q45 point grammars.

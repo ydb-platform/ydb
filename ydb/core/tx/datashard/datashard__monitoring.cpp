@@ -11,12 +11,14 @@
 #include <library/cpp/html/pcdata/pcdata.h>
 #include <util/string/subst.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
+
 namespace NKikimr::NDataShard {
 
 void TDataShard::HandleMonIndexPage(NMon::TEvRemoteHttpInfo::TPtr& ev) {
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CMS,
-                "HTTP request at " << TabletID() << " url="
-                << ev->Get()->PathInfo());
+    YDB_LOG_DEBUG("HTTP request",
+        {"tabletID", TabletID()},
+        {"url", ev->Get()->PathInfo()});
 
     TString blob;
     NResource::FindExact("datashard/index.html", &blob);

@@ -65,13 +65,15 @@ Y_UNIT_TEST_SUITE(TestScript) {
             acc.AddAssembleStep(std::vector<ui32>({ 0 }), "", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter, false);
             auto script = std::move(acc).Build();
 
+            const NCommon::TFetchingScript* published = script.get();
             NCommon::TFetchingScriptOwner owner;
             std::atomic<bool> readerStarted = false;
+            std::atomic<const NCommon::TFetchingScript*> observed = nullptr;
             std::thread reader([&]() {
                 readerStarted = true;
                 for (ui32 j = 0; j < ReaderAttemptsCount; ++j) {
                     if (owner.HasScript()) {
-                        Y_UNUSED(owner.ProfileDebugString());
+                        observed = owner.GetScriptVerified().get();
                         break;
                     }
                 }
@@ -83,7 +85,11 @@ Y_UNIT_TEST_SUITE(TestScript) {
             guard->InitializationFinished(std::move(script));
             reader.join();
             UNIT_ASSERT(!owner.NeedInitialization());
-            UNIT_ASSERT_STRING_CONTAINS(owner.GetScriptVerified()->DebugString(), "FETCHING_COLUMNS");
+            if (observed) {
+                UNIT_ASSERT_VALUES_EQUAL((const void*)observed.load(), (const void*)published);
+            }
+            UNIT_ASSERT_VALUES_EQUAL((const void*)owner.GetScriptVerified().get(), (const void*)published);
+            UNIT_ASSERT(!owner.GetScriptVerified()->IsFinished(0));
         }
     }
 }

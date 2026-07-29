@@ -17,6 +17,7 @@ enum class EAdmitDecision {
     Allow,
     RejectNow,
     Wait,
+    DelayedReject,   // Queue is full; drop Arrow batch, send OVERLOADED after delay
 };
 
 class TLongTxWrite {
@@ -54,6 +55,13 @@ public:
     // Prefer TFlowControlManagerServiceOperator::ComputeWaitDeadline at admit time.
     // Kept for helpers that still hold Deadline/Timeout locally.
     TInstant GetWaitDeadline() const;
+
+    // Release the Arrow batch payload while keeping lightweight metadata.
+    // Used on delayed-reject: we no longer intend to write, so free the (potentially large)
+    // record batch immediately instead of holding it until the delayed OVERLOADED fires.
+    void DetachBatch() {
+        Batch.reset();
+    }
 };
 
 }   // namespace NKikimr::NColumnShard::NFlowControl

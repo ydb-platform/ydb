@@ -2840,21 +2840,22 @@ message TColumnShardConfig {
     // ColumnShard write Flow Control Manager (FCM) admit / wait-queue / drain knobs.
     // Feature flag EnableCsFlowControl still gates the path; these tune behavior when it is on.
     message TFlowControlConfig {
-        optional uint64 MaxWaitQueueSize = 1 [default = 1024];
+        optional uint64 MaxWaitQueueSize = 1 [default = 500];
         optional uint32 DrainJitterMinMs = 2 [default = 50];
         optional uint32 DrainJitterMaxMs = 3 [default = 250];
         // Max time a request may stay in the FCM wait queue, as percent of BulkUpsert
-        // operation_timeout (default 50 ⇒ timeout/2). Example: 10 ⇒ wait at most 10% of timeout.
-        optional uint32 WaitTimeoutPercent = 4 [default = 50];
-        optional double DrainRateMin = 5 [default = 10];      // admits/s
+        // operation_timeout (default 10 ⇒ wait at most 10% of timeout).
+        optional uint32 WaitTimeoutPercent = 4 [default = 10];
+        optional double DrainRateMin = 5 [default = 20];      // admits/s
         optional double DrainRateMax = 6 [default = 500];
-        optional double DrainRateStart = 7 [default = 10];
-        optional double DrainBurst = 8 [default = 20];
+        optional double DrainRateStart = 7 [default = 50];
+        optional double DrainBurst = 8 [default = 100];
         optional double DrainAimdAdd = 9 [default = 5];       // admits/s additive increase
         optional uint32 DrainAimdGrowMs = 10 [default = 1000];
         optional uint32 DrainAimdHoldMs = 11 [default = 2000];
         optional uint32 DrainAimdFeedbackMs = 12 [default = 5000];
         optional double DrainAimdBeta = 13 [default = 0.5];    // multiplicative decrease factor
+        optional uint64 MaxDelayedRejectQueueSize = 14 [default = 5000];
     }
 
     optional TFlowControlConfig FlowControl = 73;

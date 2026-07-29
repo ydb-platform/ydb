@@ -32,6 +32,7 @@ public:
 
     // Prefer ColumnShardConfig.FlowControl when present; else process-wide UT/default atomics.
     static ui64 GetMaxWaitQueueSize();
+    static ui64 GetMaxDelayedRejectQueueSize();
     static TDuration GetDrainJitterMin();
     static TDuration GetDrainJitterMax();
     // Max wait = OperationTimeout * WaitTimeoutPercent / 100 (clamped to 1..100, default 50).
@@ -45,7 +46,8 @@ public:
     // Test / tuning hooks (used when ColumnShardConfig.FlowControl is unset).
     // MaxWaitQueueSize == 0 disables waiting (immediate OVERLOADED when gated).
     // DrainJitterMax == 0 drains immediately (no Schedule delay) aside from token-bucket pacing.
-    static void SetWaitQueueParams(TDuration drainJitterMin, TDuration drainJitterMax, ui64 maxWaitQueueSize);
+    static void SetWaitQueueParams(
+        TDuration drainJitterMin, TDuration drainJitterMax, ui64 maxWaitQueueSize, ui64 maxDelayedRejectQueueSize = 512);
     static void SetWaitTimeoutPercent(ui32 percent);
     static void SetDrainRateParams(const TDrainRateParams& params);
     static void ResetDrainRateParamsToDefaults();

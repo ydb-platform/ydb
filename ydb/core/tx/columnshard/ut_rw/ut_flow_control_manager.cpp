@@ -131,6 +131,9 @@ public:
         // Drain rate params: leave process defaults (or whatever the test set before construction);
         // FCM copies them at RegisterServices time.
         TFlowControlManagerServiceOperator::SetWaitQueueParams(TDuration::Zero(), TDuration::Zero(), 1024);
+        // Pin the wait-timeout percent to the historical UT default (50%) so tests are deterministic
+        // regardless of the process-wide default (which now matches production tuning at 10%).
+        TFlowControlManagerServiceOperator::SetWaitTimeoutPercent(50);
         TTester::Setup(Runtime);
         RegisterServices();
         ReplyTo = Runtime.AllocateEdgeActor();
@@ -139,6 +142,7 @@ public:
     ~TFlowControlManagerTestEnv() {
         Runtime.GetAppData(0).ColumnShardConfig.ClearFlowControl();
         TFlowControlManagerServiceOperator::SetWaitQueueParams(TDuration::MilliSeconds(50), TDuration::MilliSeconds(250), 1024);
+        TFlowControlManagerServiceOperator::SetWaitTimeoutPercent(50);
         TFlowControlManagerServiceOperator::ResetDrainRateParamsToDefaults();
     }
 
@@ -1236,6 +1240,266 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         UNIT_ASSERT_VALUES_EQUAL(statusCount, 2);
         UNIT_ASSERT(statusRecipientNodeIds.contains(node0));
         UNIT_ASSERT(statusRecipientNodeIds.contains(node1));
+    }
+
+    Y_UNIT_TEST(DelayedRejectWhenWaitQueueFull) {
+        TTestBasicRuntime runtime;
+        const ui64 shardTabletId = TTestTxConfig::TxTablet0;
+        const ui32 hotNodeId = 42;
+
+        bool writeObserved = false;
+        InstallFakeShardWriteResponder(runtime, shardTabletId, MakeFakeShardWriteCompleted, &writeObserved);
+
+        TFlowControlManagerTestEnv env(runtime);
+        env.EnableSchedulesForAllActors();
+        // Set wait queue size to 1, delayed-reject queue size to 2.
+        // Delayed reject fires at WaitTimeoutPercent of the operation timeout; pin it to 10% so
+        // the reject lands at 6s (10% of 60s), which the 7s advance below crosses.
+        TFlowControlManagerServiceOperator::SetWaitQueueParams(
+            TDuration::Zero(), TDuration::Zero(), /*maxWaitQueueSize=*/1, /*maxDelayedRejectQueueSize=*/2);
+        TFlowControlManagerServiceOperator::SetWaitTimeoutPercent(10);
+        env.SeedTabletLocation(shardTabletId, hotNodeId);
+        env.SeedNodeOverloadStatus(hotNodeId, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED);
+
+        // First request occupies the only wait slot (stays queued).
+        env.StartLongTxWrite(
+            env.BuildLongTxWrite(MakeNavigateForSingleColumnShard(shardTabletId), MakeHappyPathBatch(), TDuration::Seconds(60)));
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(20));
+
+        // Second request should go to delayed-reject queue (wait queue full).
+        const auto replyTo2 = runtime.AllocateEdgeActor();
+        {
+            auto issues = std::make_shared<NYql::TIssues>();
+            TLongTxId longTxId;
+            Y_ABORT_UNLESS(longTxId.ParseString("ydb://long-tx/01ezvvxjdk2hd4vdgjs68knvp8?node_id=2"));
+            const TInstant now = runtime.GetCurrentTime();
+            auto tx = TLongTxWrite(replyTo2, longTxId, "2", "/Root", "/Root/table", MakeNavigateForSingleColumnShard(shardTabletId),
+                MakeHappyPathBatch(), std::move(issues),
+                NACLib::TUserContextBuilder().Build(), now + TDuration::Seconds(60), TDuration::Seconds(60));
+            env.StartLongTxWrite(std::move(tx));
+        }
+
+        // Should not get immediate response (delayed reject)
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(20));
+        UNIT_ASSERT(!writeObserved);
+
+        // Advance time to trigger delayed reject (10% of 60s = 6s)
+        runtime.AdvanceCurrentTime(TDuration::Seconds(7));
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+
+        const auto completed2 = runtime.GrabEdgeEventRethrow<TEvents::TEvCompleted>(replyTo2);
+        UNIT_ASSERT_VALUES_EQUAL((Ydb::StatusIds::StatusCode)completed2->Get()->Status, Ydb::StatusIds::OVERLOADED);
+    }
+
+    Y_UNIT_TEST(DelayedRejectQueueFullRejectsImmediately) {
+        TTestBasicRuntime runtime;
+        const ui64 shardTabletId = TTestTxConfig::TxTablet0;
+        const ui32 hotNodeId = 42;
+
+        bool writeObserved = false;
+        InstallFakeShardWriteResponder(runtime, shardTabletId, MakeFakeShardWriteCompleted, &writeObserved);
+
+        TFlowControlManagerTestEnv env(runtime);
+        // Set wait queue size to 1, delayed-reject queue size to 1
+        TFlowControlManagerServiceOperator::SetWaitQueueParams(
+            TDuration::Zero(), TDuration::Zero(), /*maxWaitQueueSize=*/1, /*maxDelayedRejectQueueSize=*/1);
+        env.SeedTabletLocation(shardTabletId, hotNodeId);
+        env.SeedNodeOverloadStatus(hotNodeId, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED);
+
+        // First request occupies the only wait slot.
+        env.StartLongTxWrite(
+            env.BuildLongTxWrite(MakeNavigateForSingleColumnShard(shardTabletId), MakeHappyPathBatch(), TDuration::Seconds(60)));
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(20));
+
+        // Second request goes to delayed-reject queue.
+        const auto replyTo2 = runtime.AllocateEdgeActor();
+        {
+            auto issues = std::make_shared<NYql::TIssues>();
+            TLongTxId longTxId;
+            Y_ABORT_UNLESS(longTxId.ParseString("ydb://long-tx/01ezvvxjdk2hd4vdgjs68knvp8?node_id=2"));
+            const TInstant now = runtime.GetCurrentTime();
+            auto tx = TLongTxWrite(replyTo2, longTxId, "2", "/Root", "/Root/table", MakeNavigateForSingleColumnShard(shardTabletId),
+                MakeHappyPathBatch(), std::move(issues),
+                NACLib::TUserContextBuilder().Build(), now + TDuration::Seconds(60), TDuration::Seconds(60));
+            env.StartLongTxWrite(std::move(tx));
+        }
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(20));
+
+        // Third request should be rejected immediately (both queues full).
+        const auto replyTo3 = runtime.AllocateEdgeActor();
+        {
+            auto issues = std::make_shared<NYql::TIssues>();
+            TLongTxId longTxId;
+            Y_ABORT_UNLESS(longTxId.ParseString("ydb://long-tx/01ezvvxjdk2hd4vdgjs68knvp8?node_id=3"));
+            const TInstant now = runtime.GetCurrentTime();
+            auto tx = TLongTxWrite(replyTo3, longTxId, "3", "/Root", "/Root/table", MakeNavigateForSingleColumnShard(shardTabletId),
+                MakeHappyPathBatch(), std::move(issues),
+                NACLib::TUserContextBuilder().Build(), now + TDuration::Seconds(60), TDuration::Seconds(60));
+            env.StartLongTxWrite(std::move(tx));
+        }
+
+        // Should get immediate reject
+        const auto completed3 = runtime.GrabEdgeEventRethrow<TEvents::TEvCompleted>(replyTo3);
+        UNIT_ASSERT(!writeObserved);
+        UNIT_ASSERT_VALUES_EQUAL((Ydb::StatusIds::StatusCode)completed3->Get()->Status, Ydb::StatusIds::OVERLOADED);
+    }
+
+    Y_UNIT_TEST(DelayedRejectFiresAfterConfiguredDelay) {
+        TTestBasicRuntime runtime;
+        const ui64 shardTabletId = TTestTxConfig::TxTablet0;
+        const ui32 hotNodeId = 42;
+
+        bool writeObserved = false;
+        InstallFakeShardWriteResponder(runtime, shardTabletId, MakeFakeShardWriteCompleted, &writeObserved);
+
+        TFlowControlManagerTestEnv env(runtime);
+        env.EnableSchedulesForAllActors();
+        // Set wait timeout percent to 10% (so delayed reject fires at 10% of operation timeout)
+        TFlowControlManagerServiceOperator::SetWaitQueueParams(
+            TDuration::Zero(), TDuration::Zero(), /*maxWaitQueueSize=*/1, /*maxDelayedRejectQueueSize=*/10);
+        TFlowControlManagerServiceOperator::SetWaitTimeoutPercent(10);
+        env.SeedTabletLocation(shardTabletId, hotNodeId);
+        env.SeedNodeOverloadStatus(hotNodeId, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED);
+
+        // First request occupies the wait slot.
+        env.StartLongTxWrite(
+            env.BuildLongTxWrite(MakeNavigateForSingleColumnShard(shardTabletId), MakeHappyPathBatch(), TDuration::Seconds(100)));
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(20));
+
+        // Second request goes to delayed-reject queue with 100s operation timeout.
+        const auto replyTo2 = runtime.AllocateEdgeActor();
+        const TInstant startTime = runtime.GetCurrentTime();
+        {
+            auto issues = std::make_shared<NYql::TIssues>();
+            TLongTxId longTxId;
+            Y_ABORT_UNLESS(longTxId.ParseString("ydb://long-tx/01ezvvxjdk2hd4vdgjs68knvp8?node_id=2"));
+            auto tx = TLongTxWrite(replyTo2, longTxId, "2", "/Root", "/Root/table", MakeNavigateForSingleColumnShard(shardTabletId),
+                MakeHappyPathBatch(), std::move(issues),
+                NACLib::TUserContextBuilder().Build(), startTime + TDuration::Seconds(100), TDuration::Seconds(100));
+            env.StartLongTxWrite(std::move(tx));
+        }
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(20));
+
+        // Should fire after 10% of 100s = 10s
+        runtime.AdvanceCurrentTime(TDuration::Seconds(11));
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+
+        const auto completed2 = runtime.GrabEdgeEventRethrow<TEvents::TEvCompleted>(replyTo2);
+        UNIT_ASSERT_VALUES_EQUAL((Ydb::StatusIds::StatusCode)completed2->Get()->Status, Ydb::StatusIds::OVERLOADED);
+    }
+
+    Y_UNIT_TEST(DelayedRejectDropsArrowBatchImmediately) {
+        TTestBasicRuntime runtime;
+        const ui64 shardTabletId = TTestTxConfig::TxTablet0;
+        const ui32 hotNodeId = 42;
+
+        bool writeObserved = false;
+        InstallFakeShardWriteResponder(runtime, shardTabletId, MakeFakeShardWriteCompleted, &writeObserved);
+
+        TFlowControlManagerTestEnv env(runtime);
+        env.EnableSchedulesForAllActors();
+        // Pin the reject delay to 10% so it fires at 6s (10% of 60s), crossed by the 7s advance below.
+        TFlowControlManagerServiceOperator::SetWaitQueueParams(
+            TDuration::Zero(), TDuration::Zero(), /*maxWaitQueueSize=*/1, /*maxDelayedRejectQueueSize=*/10);
+        TFlowControlManagerServiceOperator::SetWaitTimeoutPercent(10);
+        env.SeedTabletLocation(shardTabletId, hotNodeId);
+        env.SeedNodeOverloadStatus(hotNodeId, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED);
+
+        // First request occupies the wait slot.
+        env.StartLongTxWrite(
+            env.BuildLongTxWrite(MakeNavigateForSingleColumnShard(shardTabletId), MakeHappyPathBatch(), TDuration::Seconds(60)));
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(20));
+
+        // Second request goes to delayed-reject queue.
+        // The Arrow batch should be dropped immediately (not held in memory).
+        const auto replyTo2 = runtime.AllocateEdgeActor();
+        {
+            auto issues = std::make_shared<NYql::TIssues>();
+            TLongTxId longTxId;
+            Y_ABORT_UNLESS(longTxId.ParseString("ydb://long-tx/01ezvvxjdk2hd4vdgjs68knvp8?node_id=2"));
+            const TInstant now = runtime.GetCurrentTime();
+            auto tx = TLongTxWrite(replyTo2, longTxId, "2", "/Root", "/Root/table", MakeNavigateForSingleColumnShard(shardTabletId),
+                MakeHappyPathBatch(), std::move(issues),
+                NACLib::TUserContextBuilder().Build(), now + TDuration::Seconds(60), TDuration::Seconds(60));
+            env.StartLongTxWrite(std::move(tx));
+        }
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(20));
+
+        // The helper actor should have finished immediately (dropped the batch).
+        // We verify this by checking that no write was attempted to the shard.
+        UNIT_ASSERT(!writeObserved);
+
+        // Advance time to trigger delayed reject
+        runtime.AdvanceCurrentTime(TDuration::Seconds(7));
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+
+        const auto completed2 = runtime.GrabEdgeEventRethrow<TEvents::TEvCompleted>(replyTo2);
+        UNIT_ASSERT_VALUES_EQUAL((Ydb::StatusIds::StatusCode)completed2->Get()->Status, Ydb::StatusIds::OVERLOADED);
+        UNIT_ASSERT(!writeObserved);   // Still no write attempted
+    }
+
+    Y_UNIT_TEST(MultipleDelayedRejectsFireIndependently) {
+        TTestBasicRuntime runtime;
+        const ui64 shardTabletId = TTestTxConfig::TxTablet0;
+        const ui32 hotNodeId = 42;
+
+        bool writeObserved = false;
+        InstallFakeShardWriteResponder(runtime, shardTabletId, MakeFakeShardWriteCompleted, &writeObserved);
+
+        TFlowControlManagerTestEnv env(runtime);
+        env.EnableSchedulesForAllActors();
+        TFlowControlManagerServiceOperator::SetWaitQueueParams(
+            TDuration::Zero(), TDuration::Zero(), /*maxWaitQueueSize=*/1, /*maxDelayedRejectQueueSize=*/10);
+        TFlowControlManagerServiceOperator::SetWaitTimeoutPercent(10);
+        env.SeedTabletLocation(shardTabletId, hotNodeId);
+        env.SeedNodeOverloadStatus(hotNodeId, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED);
+
+        // First request occupies the wait slot.
+        env.StartLongTxWrite(
+            env.BuildLongTxWrite(MakeNavigateForSingleColumnShard(shardTabletId), MakeHappyPathBatch(), TDuration::Seconds(100)));
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(20));
+
+        // Second request: 100s timeout → fires at 10s
+        const auto replyTo2 = runtime.AllocateEdgeActor();
+        const TInstant startTime = runtime.GetCurrentTime();
+        {
+            auto issues = std::make_shared<NYql::TIssues>();
+            TLongTxId longTxId;
+            Y_ABORT_UNLESS(longTxId.ParseString("ydb://long-tx/01ezvvxjdk2hd4vdgjs68knvp8?node_id=2"));
+            auto tx = TLongTxWrite(replyTo2, longTxId, "2", "/Root", "/Root/table", MakeNavigateForSingleColumnShard(shardTabletId),
+                MakeHappyPathBatch(), std::move(issues),
+                NACLib::TUserContextBuilder().Build(), startTime + TDuration::Seconds(100), TDuration::Seconds(100));
+            env.StartLongTxWrite(std::move(tx));
+        }
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(20));
+
+        // Third request: 50s timeout → fires at 5s
+        const auto replyTo3 = runtime.AllocateEdgeActor();
+        {
+            auto issues = std::make_shared<NYql::TIssues>();
+            TLongTxId longTxId;
+            Y_ABORT_UNLESS(longTxId.ParseString("ydb://long-tx/01ezvvxjdk2hd4vdgjs68knvp8?node_id=3"));
+            const TInstant now = runtime.GetCurrentTime();
+            auto tx = TLongTxWrite(replyTo3, longTxId, "3", "/Root", "/Root/table", MakeNavigateForSingleColumnShard(shardTabletId),
+                MakeHappyPathBatch(), std::move(issues),
+                NACLib::TUserContextBuilder().Build(), now + TDuration::Seconds(50), TDuration::Seconds(50));
+            env.StartLongTxWrite(std::move(tx));
+        }
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(20));
+
+        // Advance to 6s: third request should fire
+        runtime.AdvanceCurrentTime(TDuration::Seconds(6));
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+
+        const auto completed3 = runtime.GrabEdgeEventRethrow<TEvents::TEvCompleted>(replyTo3);
+        UNIT_ASSERT_VALUES_EQUAL((Ydb::StatusIds::StatusCode)completed3->Get()->Status, Ydb::StatusIds::OVERLOADED);
+
+        // Advance to 11s: second request should fire (10% of 100s)
+        runtime.AdvanceCurrentTime(TDuration::Seconds(5));
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+
+        const auto completed2 = runtime.GrabEdgeEventRethrow<TEvents::TEvCompleted>(replyTo2);
+        UNIT_ASSERT_VALUES_EQUAL((Ydb::StatusIds::StatusCode)completed2->Get()->Status, Ydb::StatusIds::OVERLOADED);
     }
 
 }   // Y_UNIT_TEST_SUITE(TFlowControlManager)

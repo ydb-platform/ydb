@@ -26,6 +26,7 @@ enum EEvFlowControl {
     EvNodeOverloadStatus,
     EvTabletLocationUpdated,
     EvTabletLocationInvalidated,
+    EvFireDelayedReject,
 
     EvEnd
 };
@@ -72,12 +73,14 @@ class TEvTryAdmitResult: public NActors::TEventLocal<TEvTryAdmitResult, EvTryAdm
     YDB_READONLY_DEF(EAdmitDecision, Decision);
     YDB_READONLY(ui64, WaiterId, 0);
     YDB_READONLY_DEF(TInstant, WaitDeadline);
+    YDB_READONLY(ui64, RejectId, 0);   // For DelayedReject decision
 
 public:
-    explicit TEvTryAdmitResult(EAdmitDecision decision, ui64 waiterId = 0, TInstant waitDeadline = TInstant::Zero())
+    explicit TEvTryAdmitResult(EAdmitDecision decision, ui64 waiterId = 0, TInstant waitDeadline = TInstant::Zero(), ui64 rejectId = 0)
         : Decision(decision)
         , WaiterId(waiterId)
         , WaitDeadline(waitDeadline)
+        , RejectId(rejectId)
     {
     }
 };
@@ -134,6 +137,18 @@ class TEvTabletLocationInvalidated: public NActors::TEventLocal<TEvTabletLocatio
 public:
     explicit TEvTabletLocationInvalidated(ui64 tabletId)
         : TabletId(tabletId)
+    {
+    }
+};
+
+// Fire a delayed reject: send OVERLOADED to ReplyTo after a delay.
+// This event is scheduled by FCM and sent to itself.
+class TEvFireDelayedReject: public NActors::TEventLocal<TEvFireDelayedReject, EvFireDelayedReject> {
+    YDB_READONLY(ui64, RejectId, 0);
+
+public:
+    explicit TEvFireDelayedReject(ui64 rejectId)
+        : RejectId(rejectId)
     {
     }
 };

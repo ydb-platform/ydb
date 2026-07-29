@@ -30,6 +30,15 @@ class TFlowControlManager: public NActors::TActor<TFlowControlManager> {
         bool TokenReserved = false;
     };
 
+    // Delayed-reject entry: holds only minimal data needed to send OVERLOADED after a delay.
+    // Arrow batch is dropped immediately to save memory.
+    struct TDelayedReject {
+        ui64 RejectId = 0;
+        TActorId ReplyTo;
+        std::shared_ptr<NYql::TIssues> Issues;
+        TInstant RejectAt;
+    };
+
     TCSFlowControlManagerCounters Counters;
 
     // nodeId -> last overload generation (present => hot)
@@ -45,6 +54,12 @@ class TFlowControlManager: public NActors::TActor<TFlowControlManager> {
 
     // Per-destination waiter counts (no-jump admit). Key = nodeId.
     THashMap<ui32, ui64> WaiterCountByNode;
+
+    // Delayed-reject queue: minimal metadata only, no Arrow batch.
+    // Capacity is read live from TFlowControlManagerServiceOperator::GetMaxDelayedRejectQueueSize().
+    THashMap<ui64, TDelayedReject> DelayedRejects;
+    TDeque<ui64> DelayedRejectOrder;
+    ui64 NextRejectId = 1;
 
     // Drain token bucket + AIMD (FCM-local).
     double Tokens = 0.0;
@@ -75,6 +90,7 @@ class TFlowControlManager: public NActors::TActor<TFlowControlManager> {
                   HFunc(NFlowControl::TEvTabletLocationUpdated, Handle)
                   HFunc(NFlowControl::TEvTabletLocationInvalidated, Handle)
                   HFunc(TEvTabletResolver::TEvForwardResult, Handle)
+                  HFunc(NFlowControl::TEvFireDelayedReject, Handle)
     )
     // clang-format on
 
@@ -87,6 +103,7 @@ class TFlowControlManager: public NActors::TActor<TFlowControlManager> {
     void Handle(const NFlowControl::TEvTabletLocationUpdated::TPtr& ev, const TActorContext& ctx);
     void Handle(const NFlowControl::TEvTabletLocationInvalidated::TPtr& ev, const TActorContext& ctx);
     void Handle(const TEvTabletResolver::TEvForwardResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(const NFlowControl::TEvFireDelayedReject::TPtr& ev, const TActorContext& ctx);
 
     bool IsAdmitAllowed(const TVector<ui64>& tabletIds) const;
     bool HasWaitersOnDestinations(const TVector<ui64>& tabletIds) const;

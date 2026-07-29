@@ -15,6 +15,7 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr HotNodesCount;
     NMonitoring::TDynamicCounters::TCounterPtr TabletToNodeCount;
     NMonitoring::TDynamicCounters::TCounterPtr WaitQueueCount;
+    NMonitoring::TDynamicCounters::TCounterPtr DelayedRejectQueueCount;
 
     NMonitoring::TDynamicCounters::TCounterPtr DrainRefillRate;
     NMonitoring::TDynamicCounters::TCounterPtr DrainTokens;
@@ -30,6 +31,9 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr WaitQueueDrainedCount;
     NMonitoring::TDynamicCounters::TCounterPtr WaitQueueRejectedDeadlineCount;
     NMonitoring::TDynamicCounters::TCounterPtr WaitQueueRejectedFullCount;
+    NMonitoring::TDynamicCounters::TCounterPtr DelayedRejectEnqueuedCount;
+    NMonitoring::TDynamicCounters::TCounterPtr DelayedRejectFiredCount;
+    NMonitoring::TDynamicCounters::TCounterPtr DelayedRejectQueueFullCount;
     NMonitoring::TDynamicCounters::TCounterPtr LocationRecheckCount;
     NMonitoring::TDynamicCounters::TCounterPtr StatusOverloadCount;
     NMonitoring::TDynamicCounters::TCounterPtr StatusReadyCount;
@@ -49,6 +53,7 @@ public:
         , HotNodesCount(TBase::GetValue("FlowControl/HotNodes/Count"))
         , TabletToNodeCount(TBase::GetValue("FlowControl/TabletToNode/Count"))
         , WaitQueueCount(TBase::GetValue("FlowControl/WaitQueue/Count"))
+        , DelayedRejectQueueCount(TBase::GetValue("FlowControl/DelayedRejectQueue/Count"))
         , DrainRefillRate(TBase::GetValue("FlowControl/Drain/RefillRate"))
         , DrainTokens(TBase::GetValue("FlowControl/Drain/Tokens"))
         , DrainAllowedCount(TBase::GetDeriviative("FlowControl/Drain/Allowed/Count"))
@@ -62,6 +67,9 @@ public:
         , WaitQueueDrainedCount(TBase::GetDeriviative("FlowControl/WaitQueue/Drained/Count"))
         , WaitQueueRejectedDeadlineCount(TBase::GetDeriviative("FlowControl/WaitQueue/RejectedDeadline/Count"))
         , WaitQueueRejectedFullCount(TBase::GetDeriviative("FlowControl/WaitQueue/RejectedFull/Count"))
+        , DelayedRejectEnqueuedCount(TBase::GetDeriviative("FlowControl/DelayedRejectQueue/Enqueued/Count"))
+        , DelayedRejectFiredCount(TBase::GetDeriviative("FlowControl/DelayedRejectQueue/Fired/Count"))
+        , DelayedRejectQueueFullCount(TBase::GetDeriviative("FlowControl/DelayedRejectQueue/Full/Count"))
         , LocationRecheckCount(TBase::GetDeriviative("FlowControl/LocationRecheck/Count"))
         , StatusOverloadCount(TBase::GetDeriviative("FlowControl/Status/Overloaded/Count"))
         , StatusReadyCount(TBase::GetDeriviative("FlowControl/Status/Ready/Count"))
@@ -186,6 +194,24 @@ public:
 
     void SetTabletToNodeCount(ui64 count) const {
         TabletToNodeCount->Set(count);
+    }
+
+    void OnDelayedRejectEnqueue() const {
+        DelayedRejectEnqueuedCount->Inc();
+        DelayedRejectQueueCount->Inc();
+    }
+
+    void OnDelayedRejectFired() const {
+        DelayedRejectFiredCount->Inc();
+        DelayedRejectQueueCount->Dec();
+    }
+
+    void OnDelayedRejectQueueFull() const {
+        DelayedRejectQueueFullCount->Inc();
+    }
+
+    void SetDelayedRejectQueueCount(ui64 count) const {
+        DelayedRejectQueueCount->Set(count);
     }
 };
 

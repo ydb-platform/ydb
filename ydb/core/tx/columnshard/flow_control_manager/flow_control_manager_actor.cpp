@@ -124,8 +124,15 @@ public:
     }
 
 private:
-    STRICT_STFUNC(StateWaitAdmit, HFunc(TEvTryAdmitResult, HandleAdmitResult))
+    STRICT_STFUNC(
+        StateWaitAdmit, HFunc(TEvTryAdmitResult, HandleAdmitResult) HFunc(NActors::TEvents::TEvCompleted, HandleDelayedRejectCompleted))
     STRICT_STFUNC(StateQueued, HFunc(TEvTryAdmitResult, HandleQueuedResult) HFunc(NActors::TEvents::TEvWakeup, HandleWaitDeadlineWakeup))
+
+    void HandleDelayedRejectCompleted(NActors::TEvents::TEvCompleted::TPtr& ev, const TActorContext& ctx) {
+        // Forward the OVERLOADED response to the original client
+        ctx.Send(Tx.GetReplyTo(), ev->Release().Release());
+        Finish(ctx);
+    }
 
     void HandleAdmitResult(TEvTryAdmitResult::TPtr& ev, const TActorContext& ctx) {
         Counters.OnWaitingAdmitFinish(TActivationContext::Now() - WaitAdmitStartedAt);
@@ -141,6 +148,12 @@ private:
                 break;
             case EAdmitDecision::Wait:
                 EnterQueued(ctx, ev->Get()->GetWaiterId(), ev->Get()->GetWaitDeadline());
+                break;
+            case EAdmitDecision::DelayedReject:
+                // FCM will send TEvCompleted(OVERLOADED) after a delay.
+                // Drop Arrow batch now to free memory, but stay alive to forward the response.
+                Tx.DetachBatch();
+                // Stay in current state and wait for TEvCompleted from FCM
                 break;
         }
     }
@@ -168,6 +181,13 @@ private:
             case EAdmitDecision::RejectNow:
                 Queued = false;
                 ReplyOverloaded(ctx, "destination node is overloaded");
+                Finish(ctx);
+                break;
+            case EAdmitDecision::DelayedReject:
+                // FCM will send OVERLOADED after a delay. Drop Arrow batch now to free memory.
+                // We don't need to wait for anything - FCM handles the delayed response.
+                // Just finish this helper actor; FCM has all the info it needs to send OVERLOADED.
+                Queued = false;
                 Finish(ctx);
                 break;
             case EAdmitDecision::Wait:
@@ -238,6 +258,7 @@ void TFlowControlManager::PublishMapSizes() const {
     Counters.SetHotNodesCount(HotNodes.size());
     Counters.SetTabletToNodeCount(TabletToNode.size());
     Counters.SetWaitQueueCount(Waiters.size());
+    Counters.SetDelayedRejectQueueCount(DelayedRejects.size());
 }
 
 void TFlowControlManager::PublishDrainGauges() const {
@@ -508,9 +529,39 @@ void TFlowControlManager::Handle(const NFlowControl::TEvTryAdmit::TPtr& ev, cons
     }
 
     if (Waiters.size() >= TFlowControlManagerServiceOperator::GetMaxWaitQueueSize()) {
+        // Wait queue is full. Check if we can use delayed-reject queue instead.
+        // Read the cap live (matches GetMaxWaitQueueSize) so UT/config overrides applied
+        // after FCM construction take effect.
+        if (DelayedRejects.size() >= TFlowControlManagerServiceOperator::GetMaxDelayedRejectQueueSize()) {
+            // Both queues full → immediate reject
+            Counters.OnAdmitRejected(duration);
+            Counters.OnWaitQueueRejectFull();
+            Counters.OnDelayedRejectQueueFull();
+            ctx.Send(ev->Sender, new TEvTryAdmitResult(EAdmitDecision::RejectNow));
+            return;
+        }
+
+        // Enqueue for delayed reject: drop Arrow batch, send OVERLOADED after delay
+        const ui64 rejectId = NextRejectId++;
+        const TInstant rejectAt = now + (ev->Get()->GetOperationTimeout() * TFlowControlManagerServiceOperator::GetWaitTimeoutPercent() / 100);
+
+        TDelayedReject reject;
+        reject.RejectId = rejectId;
+        reject.ReplyTo = ev->Sender;
+        reject.Issues = std::make_shared<NYql::TIssues>();
+        reject.Issues->AddIssue(NYql::TIssue("destination node is overloaded; wait queue full"));
+        reject.RejectAt = rejectAt;
+
+        DelayedRejects.emplace(rejectId, std::move(reject));
+        DelayedRejectOrder.push_back(rejectId);
+
+        const TDuration delay = rejectAt > now ? rejectAt - now : TDuration::Zero();
+        ctx.Schedule(delay, new TEvFireDelayedReject(rejectId));
+
         Counters.OnAdmitRejected(duration);
-        Counters.OnWaitQueueRejectFull();
-        ctx.Send(ev->Sender, new TEvTryAdmitResult(EAdmitDecision::RejectNow));
+        Counters.OnDelayedRejectEnqueue();
+        PublishMapSizes();
+        ctx.Send(ev->Sender, new TEvTryAdmitResult(EAdmitDecision::DelayedReject, 0, TInstant::Zero(), rejectId));
         return;
     }
 
@@ -613,6 +664,33 @@ void TFlowControlManager::Handle(const NFlowControl::TEvTabletLocationInvalidate
     TabletToNode.erase(ev->Get()->GetTabletId());
     PublishMapSizes();
     ScheduleDrainEligible(ctx);
+}
+
+void TFlowControlManager::Handle(const NFlowControl::TEvFireDelayedReject::TPtr& ev, const TActorContext& ctx) {
+    const ui64 rejectId = ev->Get()->GetRejectId();
+    auto it = DelayedRejects.find(rejectId);
+    if (it == DelayedRejects.end()) {
+        // Already cancelled or fired
+        return;
+    }
+
+    TDelayedReject reject = std::move(it->second);
+    DelayedRejects.erase(it);
+
+    // Remove from order queue
+    auto orderIt = std::find(DelayedRejectOrder.begin(), DelayedRejectOrder.end(), rejectId);
+    if (orderIt != DelayedRejectOrder.end()) {
+        DelayedRejectOrder.erase(orderIt);
+    }
+
+    Counters.OnDelayedRejectFired();
+    PublishMapSizes();
+
+    // Send OVERLOADED to the client
+    if (reject.Issues && !reject.Issues->Empty()) {
+        // Issues already set during enqueue
+    }
+    ctx.Send(reject.ReplyTo, new NActors::TEvents::TEvCompleted(0, Ydb::StatusIds::OVERLOADED));
 }
 
 void TFlowControlManager::Handle(const TEvTabletResolver::TEvForwardResult::TPtr& ev, const TActorContext& ctx) {

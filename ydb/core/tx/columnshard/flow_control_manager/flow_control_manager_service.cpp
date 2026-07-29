@@ -17,13 +17,14 @@ namespace {
 // Process-wide defaults / UT overrides (used when ColumnShardConfig.FlowControl is unset).
 std::atomic<ui64> DrainJitterMinMs{ 50 };
 std::atomic<ui64> DrainJitterMaxMs{ 250 };
-std::atomic<ui64> MaxWaitQueueSize{ 1024 };
-std::atomic<ui32> WaitTimeoutPercent{ 50 };
+std::atomic<ui64> MaxWaitQueueSize{ 500 };
+std::atomic<ui64> MaxDelayedRejectQueueSize{ 5000 };
+std::atomic<ui32> WaitTimeoutPercent{ 10 };
 
-std::atomic<ui64> DrainRMinMilli{ 10'000 };
+std::atomic<ui64> DrainRMinMilli{ 20'000 };
 std::atomic<ui64> DrainRMaxMilli{ 500'000 };
-std::atomic<ui64> DrainRStartMilli{ 10'000 };
-std::atomic<ui64> DrainBurstMilli{ 20'000 };
+std::atomic<ui64> DrainRStartMilli{ 50'000 };
+std::atomic<ui64> DrainBurstMilli{ 100'000 };
 std::atomic<ui64> DrainAimdAddMilli{ 5'000 };
 std::atomic<ui64> DrainAimdGrowMs{ 1'000 };
 std::atomic<ui64> DrainAimdHoldMs{ 2'000 };
@@ -68,6 +69,15 @@ ui64 TFlowControlManagerServiceOperator::GetMaxWaitQueueSize() {
         return cfg->GetMaxWaitQueueSize();
     }
     return MaxWaitQueueSize.load();
+}
+
+ui64 TFlowControlManagerServiceOperator::GetMaxDelayedRejectQueueSize() {
+    if (const auto* cfg = FlowControlConfigOrNull()) {
+        if (cfg->HasMaxDelayedRejectQueueSize()) {
+            return cfg->GetMaxDelayedRejectQueueSize();
+        }
+    }
+    return MaxDelayedRejectQueueSize.load();
 }
 
 TDuration TFlowControlManagerServiceOperator::GetDrainJitterMin() {
@@ -130,13 +140,15 @@ TFlowControlManagerServiceOperator::TDrainRateParams TFlowControlManagerServiceO
     return params;
 }
 
-void TFlowControlManagerServiceOperator::SetWaitQueueParams(TDuration drainJitterMin, TDuration drainJitterMax, ui64 maxWaitQueueSize) {
+void TFlowControlManagerServiceOperator::SetWaitQueueParams(
+    TDuration drainJitterMin, TDuration drainJitterMax, ui64 maxWaitQueueSize, ui64 maxDelayedRejectQueueSize) {
     if (drainJitterMax < drainJitterMin) {
         drainJitterMax = drainJitterMin;
     }
     DrainJitterMinMs.store(drainJitterMin.MilliSeconds());
     DrainJitterMaxMs.store(drainJitterMax.MilliSeconds());
     MaxWaitQueueSize.store(maxWaitQueueSize);
+    MaxDelayedRejectQueueSize.store(maxDelayedRejectQueueSize);
 }
 
 void TFlowControlManagerServiceOperator::SetWaitTimeoutPercent(ui32 percent) {

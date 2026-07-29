@@ -293,6 +293,14 @@ namespace NActors {
 
         bool IsSharedOnly() const;
     private:
+        // Instantiated once per activation queue kind so that Pop() inlines into the spin loop;
+        // GetReadyActivationCommon/Shared pick the instantiation from UseRingQueueValue.
+        template <typename TQueue>
+        TMailbox* GetReadyActivationCommonImpl(ui64 revolvingReadCounter);
+
+        template <typename TQueue>
+        TMailbox* GetReadyActivationSharedImpl(ui64 revolvingReadCounter);
+
         void AskToGoToSleep(bool *needToWait, bool *needToBlock);
 
         void WakeUpLoop(i16 currentThreadCount);

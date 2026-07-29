@@ -59,6 +59,26 @@ namespace NActors {
         alignas(64) std::variant<TUnorderedCacheActivationQueue, TRingActivationQueueV4> Activations;
         TAtomic ActivationsRevolvingCounter = 0;
         std::atomic_bool StopFlag = false;
+
+        // Checked access that keeps Push/Pop statically dispatched and inlineable. Select TQueue from
+        // this pool's UseRingQueueValue; shared threads may serve pools with different queue types.
+        template <typename TQueue>
+        TQueue& GetActivations() {
+            TQueue* queue = std::get_if<TQueue>(&Activations);
+            Y_ABORT_UNLESS(queue, "activation queue kind mismatch; UseRingQueueValue# %d",
+                static_cast<int>(UseRingQueueValue));
+            return *queue;
+        }
+
+        // Same dispatch, when the caller does not care which alternative is active (cold paths).
+        template <typename TCallback>
+        decltype(auto) VisitActivations(TCallback&& callback) {
+            if (UseRingQueueValue) {
+                return callback(GetActivations<TRingActivationQueueV4>());
+            }
+            return callback(GetActivations<TUnorderedCacheActivationQueue>());
+        }
+
     public:
         TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity, bool useRingQueue);
         ~TExecutorPoolBase();

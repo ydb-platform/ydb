@@ -50,7 +50,6 @@ namespace NActors {
         ui64 TimePerMailboxTs = 0;
         ui32 EventsPerMailbox = 0;
         ui64 SoftDeadlineTs = ui64(-1);
-        bool UseRingQueueValue = false;
 
         TWorkerContext(TWorkerId workerId, IExecutorPool* pool, IExecutorPool* sharedPool);
 
@@ -58,7 +57,6 @@ namespace NActors {
         TString PoolName() const;
         ui32 OwnerPoolId() const;
         bool IsShared() const;
-        bool UseRingQueue() const;
         void AssignPool(IExecutorPool* pool, ui64 softDeadlineTs = -1);
         void FreeMailbox(TMailbox* mailbox);
     };
@@ -126,7 +124,6 @@ namespace NActors {
         ui32 EventsPerMailbox() const;
         ui64 SoftDeadlineTs() const;
         void FreeMailbox(TMailbox* mailbox);
-        bool UseRingQueue() const;
         void AssignPool(IExecutorPool* pool, ui64 softDeadlineTs = Max<ui64>());
 
         bool CheckSendingType(ESendingType type) const;

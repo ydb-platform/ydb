@@ -65,8 +65,10 @@ namespace NActors {
     }
 
     TExecutorPoolBase::~TExecutorPoolBase() {
-        while (std::visit([](auto &x){return x.Pop(0);}, Activations))
-            ;
+        VisitActivations([](auto &x) {
+            while (x.Pop(0))
+                ;
+        });
     }
 
     TMailbox* TExecutorPoolBaseMailboxed::ResolveMailbox(ui32 hint) {

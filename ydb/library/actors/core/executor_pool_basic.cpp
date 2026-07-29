@@ -254,7 +254,8 @@ namespace NActors {
         } while (true);
     }
 
-    TMailbox* TBasicExecutorPool::GetReadyActivationCommon(ui64 revolvingCounter) {
+    template <typename TQueue>
+    TMailbox* TBasicExecutorPool::GetReadyActivationCommonImpl(ui64 revolvingCounter) {
         TWorkerId workerId = TlsThreadContext->WorkerId();
         EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "");
         NHPTimer::STime hpnow = GetCycleCountFast();
@@ -293,7 +294,7 @@ namespace NActors {
                 }
             } else {
                 TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE, false> activityGuard;
-                if (const ui32 activation = std::visit([&revolvingCounter](auto &x) {return x.Pop(revolvingCounter++);}, Activations)) {
+                if (const ui32 activation = GetActivations<TQueue>().Pop(revolvingCounter++)) {
                     EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "activation found");
                     Threads[workerId].SetWork();
                     AtomicDecrement(Semaphore);
@@ -309,7 +310,17 @@ namespace NActors {
         return nullptr;
     }
 
+    TMailbox* TBasicExecutorPool::GetReadyActivationCommon(ui64 revolvingCounter) {
+        if (UseRingQueueValue) {
+            return GetReadyActivationCommonImpl<TRingActivationQueueV4>(revolvingCounter);
+        }
+        return GetReadyActivationCommonImpl<TUnorderedCacheActivationQueue>(revolvingCounter);
+    }
+
     TMailbox* TBasicExecutorPool::GetReadyActivationRingQueue(ui64 revolvingCounter) {
+        // Only reachable when this pool was built with a ring queue -- see GetReadyActivation below.
+        Y_DEBUG_ABORT_UNLESS(UseRingQueueValue);
+
         if (StopFlag.load(std::memory_order_acquire)) {
             return nullptr;
         }
@@ -337,7 +348,7 @@ namespace NActors {
                     CheckToSleepWorkers.compare_exchange_weak(checkToSleepWorkers, checkToSleepWorkers - 1, std::memory_order_release, std::memory_order_relaxed);
                 } else { // otherwise we ready to get activation
                     TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE, false> activityGuard;
-                    if (const ui32 activation = std::visit([&revolvingCounter](auto &x) {return x.Pop(++revolvingCounter);}, Activations)) {
+                    if (const ui32 activation = GetActivations<TRingActivationQueueV4>().Pop(++revolvingCounter)) {
                         EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "activation found");
                         Threads[workerId].SetWork();
                         AtomicDecrement(Semaphore);
@@ -386,7 +397,7 @@ namespace NActors {
             TlsThreadContext->LocalQueueContext.LocalQueueSize = LocalQueueSize.load(std::memory_order_relaxed);
         }
         EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "local queue done; moving to common");
-        if (TlsThreadContext->UseRingQueue()) {
+        if (UseRingQueueValue) {
             return GetReadyActivationRingQueue(revolvingCounter);
         }
         return GetReadyActivationCommon(revolvingCounter);
@@ -396,7 +407,7 @@ namespace NActors {
         if (MaxLocalQueueSize) {
             EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "local queue");
             return GetReadyActivationLocalQueue(revolvingCounter);
-        } else if (TlsThreadContext->UseRingQueue()) {
+        } else if (UseRingQueueValue) {
             EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "ring queue");
             return GetReadyActivationRingQueue(revolvingCounter);
         } else {
@@ -420,9 +431,11 @@ namespace NActors {
     }
 
     void TBasicExecutorPool::ScheduleActivationExCommon(TMailbox* mailbox, ui64 revolvingCounter, std::optional<TAtomic> initSemaphore) {
-        std::visit([mailbox, revolvingCounter](auto &queue) {
-            queue.Push(mailbox->Hint, revolvingCounter);
-        }, Activations);
+        if (UseRingQueueValue) {
+            GetActivations<TRingActivationQueueV4>().Push(mailbox->Hint, revolvingCounter);
+        } else {
+            GetActivations<TUnorderedCacheActivationQueue>().Push(mailbox->Hint, revolvingCounter);
+        }
         bool needToWakeUp = false;
         bool needToChangeOldSemaphore = true;
 
@@ -835,7 +848,8 @@ namespace NActors {
         SharedPool = pool;
     }
 
-    TMailbox* TBasicExecutorPool::GetReadyActivationShared(ui64 revolvingCounter) {
+    template <typename TQueue>
+    TMailbox* TBasicExecutorPool::GetReadyActivationSharedImpl(ui64 revolvingCounter) {
         TWorkerId workerId = TlsThreadContext->WorkerId();
         NHPTimer::STime hpnow = GetCycleCountFast();
         TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION, false> activityGuard(hpnow);
@@ -854,7 +868,7 @@ namespace NActors {
                 return nullptr;
             } else {
                 TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE, false> activityGuard;
-                if (const ui32 activation = std::visit([&revolvingCounter](auto &x) {return x.Pop(revolvingCounter++);}, Activations)) {
+                if (const ui32 activation = GetActivations<TQueue>().Pop(revolvingCounter++)) {
                     SharedPool->Threads[workerId].SetWork();
                     AtomicDecrement(Semaphore);
                     EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "activation == ", activation, " semaphore == ", semaphore.OldSemaphore);
@@ -868,6 +882,13 @@ namespace NActors {
         }
         EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Executor, "stop");
         return nullptr;
+    }
+
+    TMailbox* TBasicExecutorPool::GetReadyActivationShared(ui64 revolvingCounter) {
+        if (UseRingQueueValue) {
+            return GetReadyActivationSharedImpl<TRingActivationQueueV4>(revolvingCounter);
+        }
+        return GetReadyActivationSharedImpl<TUnorderedCacheActivationQueue>(revolvingCounter);
     }
 
     void TBasicExecutorPool::SetSharedCpuQuota(float quota) {

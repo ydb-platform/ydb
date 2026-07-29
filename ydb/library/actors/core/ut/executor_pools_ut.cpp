@@ -457,6 +457,56 @@ Y_UNIT_TEST_SUITE(ExecutorPoolsTests) {
         }
     }
 
+    Y_UNIT_TEST(SharedThreadSwitchesBetweenActivationQueueTypes) {
+        std::unique_ptr<TSharedExecutorPool> sharedPool = std::make_unique<TSharedExecutorPool>(TSharedExecutorPoolConfig{
+            .Threads = 1
+        }, std::vector<TPoolShortInfo>{
+            TPoolShortInfo{
+                .PoolId = 0,
+                .SharedThreadCount = 1,
+                .InPriorityOrder = true,
+                .PoolName = "UnorderedPool",
+                .AdjacentPools = {1},
+            },
+            TPoolShortInfo{
+                .PoolId = 1,
+                .SharedThreadCount = 0,
+                .InPriorityOrder = true,
+                .PoolName = "RingPool",
+            }
+        });
+
+        std::vector<std::unique_ptr<TBasicExecutorPool>> pools;
+        for (ui32 poolId = 0; poolId < 2; ++poolId) {
+            pools.push_back(std::make_unique<TBasicExecutorPool>(TBasicExecutorPoolConfig{
+                .PoolId = poolId,
+                .PoolName = poolId == 0 ? "UnorderedPool" : "RingPool",
+                .Threads = 1,
+                .HasSharedThread = poolId == 0,
+                .UseRingQueue = poolId == 1,
+                .MinLocalQueueSize = 0,
+                .MaxLocalQueueSize = 0,
+            }, nullptr));
+        }
+
+        TieBasicPoolsAndSharedPool(pools, sharedPool.get());
+        PreparePools(pools);
+        PreparePool(sharedPool.get());
+
+        std::vector<IExecutorPool*> poolsForEmulator = {pools[0].get(), pools[1].get()};
+        TThreadEmulator emulator(poolsForEmulator, sharedPool.get());
+        TWorkerIdentity workerIdentity{sharedPool.get(), 0};
+
+        TMailbox* unorderedMailbox = pools[0]->GetMailboxTable()->Allocate();
+        TMailbox* ringMailbox = pools[1]->GetMailboxTable()->Allocate();
+
+        emulator.ScheduleActivation(workerIdentity, pools[1].get(), ringMailbox, 0);
+        UNIT_ASSERT_EQUAL(emulator.GetReadyActivation(workerIdentity, 0), ringMailbox);
+
+        emulator.ScheduleActivation(workerIdentity, pools[0].get(), unorderedMailbox, 0);
+        UNIT_ASSERT_EQUAL(emulator.GetReadyActivation(workerIdentity, 0), unorderedMailbox);
+    }
+
     Y_UNIT_TEST(SharedPoolWithMultiplePools) {
         std::unique_ptr<TSharedExecutorPool> sharedPool = std::make_unique<TSharedExecutorPool>(TSharedExecutorPoolConfig{
             .Threads = 3

@@ -12,9 +12,9 @@ namespace NPQ {
 const ui32 MAX_HEADER_SIZE = 32; // max TBatchHeader size
 
 
-ui32 GetMaxHeaderSize() {
+ui32 GetMaxHeaderSize(const NActors::TActorContext& ctx) {
     const ui32 MAX_HEADER_SIZE_AFTER_BATCHING_ENABLED = 64;
-    return IsTopicMessagesBatchingEnabled() ? MAX_HEADER_SIZE_AFTER_BATCHING_ENABLED : MAX_HEADER_SIZE;
+    return IsTopicMessagesBatchingEnabled(ctx) ? MAX_HEADER_SIZE_AFTER_BATCHING_ENABLED : MAX_HEADER_SIZE;
 }
 
 NKikimrPQ::TBatchHeader ExtractHeader(const char *data, ui32 size) {

@@ -39,6 +39,12 @@ void Out<NKikimrPQ::TEvProposeTransactionResult_EStatus>(IOutputStream& out, NKi
 
 namespace NKikimr::NPQ {
 
+namespace {
+
+constexpr ui32 TEST_MAX_HEADER_SIZE = 64;
+
+} // namespace
+
 namespace NHelpers {
 
 struct TConfigParams {
@@ -100,6 +106,10 @@ public:
 
     static bool CleanUpBlobs(TPartition& partition, const TActorContext& ctx) {
         return partition.CleanUpBlobs(nullptr, ctx);
+    }
+
+    static void InitFirstCompactionPart(TPartition& partition) {
+        partition.InitFirstCompactionPart();
     }
 
 private:
@@ -966,7 +976,7 @@ TBatch CreateBatch(size_t count) {
         batch.AddBlob(blob);
     }
 
-    batch.Pack();
+    batch.Pack(TEST_MAX_HEADER_SIZE);
 
     return batch;
 }
@@ -4222,7 +4232,7 @@ TClientBlob MakeMultipartBodyReadBlob(ui64 seqNo, ui16 partNo, ui16 totalParts, 
 }
 
 TString SerializePackedBatchForReadBodyTest(TBatch batch) {
-    batch.Pack();
+    batch.Pack(TEST_MAX_HEADER_SIZE);
     TString raw;
     batch.SerializeTo(raw);
     return raw;
@@ -4815,7 +4825,7 @@ void AddHeadKeyWithBatch(
     std::deque<TClientBlob> dq;
     dq.push_back(MakeSinglePartBodyReadBlob(seqNo, fill));
     TBatch batch = TBatch::FromBlobs(offset, std::move(dq));
-    batch.Pack();
+    batch.Pack(TEST_MAX_HEADER_SIZE);
     const ui32 blobSize = batch.GetPackedSize();
 
     const TKey key = TKey::ForHead(TKeyPrefix::TypeData, partitionId, offset, 0, 1, 0);
@@ -4854,7 +4864,7 @@ void AddHeadKeyWithPartNo(
     std::deque<TClientBlob> dq;
     dq.push_back(MakeSinglePartBodyReadBlob(seqNo, fill));
     TBatch batch = TBatch::FromBlobs(offset, std::move(dq));
-    batch.Pack();
+    batch.Pack(TEST_MAX_HEADER_SIZE);
     const ui32 blobSize = batch.GetPackedSize();
 
     const TKey key = TKey::ForHead(TKeyPrefix::TypeData, partitionId, offset, partNo, 1, 0);
@@ -4969,7 +4979,7 @@ Y_UNIT_TEST_F(FinalizeEmptyBlobEncoderClearsNewHead, TPartitionFixture) {
     std::deque<TClientBlob> dq;
     dq.push_back(MakeSinglePartBodyReadBlob(1, 'n'));
     TBatch newHeadBatch = TBatch::FromBlobs(50, std::move(dq));
-    newHeadBatch.Pack();
+    newHeadBatch.Pack(TEST_MAX_HEADER_SIZE);
     const ui32 newHeadBatchSize = newHeadBatch.GetPackedSize();
 
     encoder.NewHead.Offset = 50;
@@ -5022,6 +5032,57 @@ Y_UNIT_TEST_F(CleanUpBlobsResetsStaleCompactionZoneHeadPartNo, TPartitionFixture
         return ev.GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType;
     });
     Ctx->Runtime->DispatchEvents(options);
+}
+
+Y_UNIT_TEST_F(InitFirstCompactionPartDoesNotRepackHeadBatch, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+
+    const TPartitionId partitionId(1);
+    auto& encoder = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    while (encoder.DataKeysHead.size() < 4) {
+        encoder.DataKeysHead.emplace_back(8_MB);
+    }
+
+    std::deque<TClientBlob> blobs;
+    const auto ts = TInstant::Seconds(100);
+    for (ui32 i = 0; i < 8; ++i) {
+        blobs.emplace_back(
+            TString("source-id"),
+            i + 1,
+            TString(40 + i, 'a' + i),
+            TMaybe<TPartData>(),
+            ts + TDuration::MilliSeconds(i),
+            ts + TDuration::MilliSeconds(i),
+            0,
+            TString(),
+            TString());
+    }
+
+    TBatch batch = TBatch::FromBlobs(10, std::move(blobs));
+    batch.Pack(TEST_MAX_HEADER_SIZE);
+
+    TString before;
+    batch.SerializeTo(before);
+    const ui32 blobSize = before.size();
+
+    const TKey key = TKey::ForHead(TKeyPrefix::TypeData, partitionId, 10, 0, batch.GetCount(), batch.GetInternalPartsCount());
+    encoder.Head.Offset = 10;
+    encoder.Head.PartNo = 0;
+    encoder.Head.PackedSize = blobSize;
+    encoder.Head.AddBatch(batch);
+    encoder.HeadKeys.push_back(TDataKey{key, blobSize, TInstant::MilliSeconds(1), 0, MakeTestBlobKeyToken()});
+    encoder.DataKeysHead[0].AddKey(key, blobSize);
+
+    TPartitionTestWrapper::InitFirstCompactionPart(*partition);
+
+    TString after;
+    encoder.Head.GetLastBatch().SerializeTo(after);
+
+    UNIT_ASSERT_VALUES_EQUAL(after.size(), before.size());
+    UNIT_ASSERT_VALUES_EQUAL(encoder.Head.PackedSize, blobSize);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.HeadKeys.back().Size, blobSize);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.DataKeysHead[0].GetSize(0), blobSize);
 }
 
 Y_UNIT_TEST(PopFrontHeadKeySyncsHeadWithRemainingHeadKeys) {

@@ -358,7 +358,7 @@ GROUP BY
 
 ## GROUP BY ... HoppingWindow {#group-by-hopping_window}
 
-groups events by overlapping time windows (hopping windows), similar to [GROUP BY `HoppingWindow`](#group-by-hop). It is supported both in [analytical queries to tables](#hopping-window-table) and in [streaming queries to topics](#hopping-window-topic). The main difference from `HOP`: in streaming queries, `HoppingWindow` uses the [watermarks](../../../../dev/streaming-query/watermarks.md) mechanism to determine the window closing time instead of a fixed parameter `delay`.
+groups events by overlapping time windows (hopping windows), similar to [GROUP BY `HoppingWindow`](#group-by-hop). It is supported both in [analytical queries to tables](#hopping-window-table) and in [stream queries to topics](#hopping-window-topic). The main difference from `HOP`: in stream queries, `HoppingWindow` uses the [watermarks](../../../../dev/streaming-query/watermarks.md) mechanism to determine the window closing time instead of a fixed parameter `delay`.
 
 
 ```yql

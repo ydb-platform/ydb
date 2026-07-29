@@ -10,7 +10,7 @@ Frequent access to system views causes additional load on the database, especial
 
 ## Partitions {#partitions}
 
-The following system view stores detailed information about [partitions](topic.md#partitioning) of database tables:
+The following system view stores detailed information about partitions of database tables:
 
 * `partition_stats` contains information about instantaneous metrics and cumulative operation counters. The former include, for example, data on CPU load or the number of running [transactions](../concepts/transactions.md). The latter include the total number of rows read.
 
@@ -619,7 +619,7 @@ WHERE Name = "default";
 
 ## Information about resource pool classifiers {#resource_pools_classifiers}
 
-The `resource_pools_classifiers` system view contains information about [settings](create-resource-pool.md#parameters) of [resource pool classifiers](../concepts/glossary.md#resource-pool-classifier).
+The `resource_pools_classifiers` system view contains information about settings of [resource pool classifiers](../concepts/glossary.md#resource-pool-classifier).
 
 Structure of the system view:
 

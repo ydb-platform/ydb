@@ -1,0 +1,89 @@
+name: Update PR Branch / Restart tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      pull_number:
+        description: "PR number to update branch for"
+        required: true
+        type: string
+  pull_request_target:
+    types:
+      - labeled
+
+jobs:
+  update-branch:
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request_target' &&
+       github.event.action == 'labeled' &&
+       github.event.label.name == 'restart_tests')
+    runs-on: [self-hosted, tiny-worker]
+    timeout-minutes: 10
+    steps:
+      - name: Remove restart_tests label
+        if: github.event_name == 'pull_request_target'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          script: |
+            try {
+              await github.rest.issues.removeLabel({
+                ...context.repo,
+                issue_number: context.payload.pull_request.number,
+                name: 'restart_tests',
+              });
+            } catch (e) {
+              if (e.status !== 404) throw e;
+            }
+
+      - name: Update branch
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          script: |
+            const pullNumber = context.eventName === "workflow_dispatch"
+              ? Number("${{ inputs.pull_number }}")
+              : context.payload.pull_request.number;
+            if (!Number.isInteger(pullNumber) || pullNumber <= 0) {
+              core.setFailed(`Invalid pull_number: ${pullNumber}`);
+              return;
+            }
+
+            const { data: pr } = await github.rest.pulls.get({
+              ...context.repo,
+              pull_number: pullNumber,
+            });
+
+            const { data: baseRef } = await github.rest.git.getRef({
+              ...context.repo,
+              ref: `heads/${pr.base.ref}`,
+            });
+            const baseTipSha = baseRef.object.sha;
+
+            let mergeBaseParentSha = null;
+            if (pr.merge_commit_sha) {
+              const { data: mergeCommit } = await github.rest.git.getCommit({
+                ...context.repo,
+                commit_sha: pr.merge_commit_sha,
+              });
+              mergeBaseParentSha = mergeCommit.parents[0]?.sha ?? null;
+            }
+
+            core.info(`pr=#${pullNumber} head_sha=${pr.head.sha} base_ref=${pr.base.ref} base_tip=${baseTipSha} merge_base_parent=${mergeBaseParentSha ?? "null"}`);
+
+            if (mergeBaseParentSha && mergeBaseParentSha === baseTipSha) {
+              core.info('Branch is already up to date, skipping update.');
+              return;
+            }
+
+            core.info('Branch is behind base, calling update-branch...');
+            try {
+              await github.rest.pulls.updateBranch({
+                ...context.repo,
+                pull_number: pullNumber,
+              });
+              core.info('update-branch succeeded');
+            } catch (e) {
+              core.setFailed(`update-branch failed: ${e.message}`);
+            }

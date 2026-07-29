@@ -1078,6 +1078,42 @@ enum class EDateTime2YearShape {
     WrongGetYearFlags,
 };
 
+enum class EUnicodeToUpperShape {
+    Exact,
+    NonOptionalResult,
+    WrongResultType,
+    MissingLambda,
+    NonMemberSource,
+    InvisibleSource,
+    NonOptionalSource,
+    WrongSourceType,
+    WrongCastCallable,
+    WrongCastTarget,
+    MismatchedCastTargetAnnotation,
+    NonOptionalCastTarget,
+    NonOptionalCastResult,
+    NonUnaryLambda,
+    WrongLambdaType,
+    WrongLambdaBinder,
+    WrongApplyCallable,
+    MissingApplyArgument,
+    WrongApplyResult,
+    WrongUdfCallable,
+    WrongUdfName,
+    NonVoidRunConfig,
+    NonVoidUserType,
+    NonEmptyTypeConfig,
+    WrongCallableAnnotation,
+    WrongCachedArgumentFlags,
+    MismatchedCachedCallableAnnotation,
+    WrongCachedReturnDescriptor,
+    WrongCachedArgumentDescriptor,
+    NonVoidCachedRunConfigType,
+    NonEmptyFileAlias,
+    ReversedUdfSettings,
+    MissingUdfSetting,
+};
+
 TExprNode::TPtr VoidValue(TExportTestContext& ctx) {
     return TypedCallable(
         ctx,
@@ -2082,6 +2118,262 @@ TSemanticSnapshotExportResult ExportNullableDateYear(
             TInfoUnit("result"),
             TExpression(
                 TypedNullableDateYear(ctx, shape),
+                &ctx.ExprCtx,
+                &ctx.ExpressionProps))});
+    TOpRoot root(map, TPositionHandle(), {"result"});
+    return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+}
+
+TExprNode::TPtr TypedNullableUnicodeToUpper(
+    TExportTestContext& ctx,
+    EUnicodeToUpperShape shape = EUnicodeToUpperShape::Exact)
+{
+    const auto* stringType = ScalarType(ctx, NUdf::EDataSlot::String);
+    const auto* optionalStringType =
+        ScalarType(ctx, NUdf::EDataSlot::String, true);
+    const auto* utf8Type = ScalarType(ctx, NUdf::EDataSlot::Utf8);
+    const auto* optionalUtf8Type =
+        ScalarType(ctx, NUdf::EDataSlot::Utf8, true);
+    const auto* int32Type = ScalarType(ctx, NUdf::EDataSlot::Int32);
+    const ui64 autoMap = NUdf::ICallablePayload::TArgumentFlags::AutoMap;
+
+    TExprNode::TPtr source;
+    if (shape == EUnicodeToUpperShape::NonMemberSource) {
+        source = TypedNothing(
+            ctx, "String", stringType, optionalStringType);
+    } else {
+        source = TypedMember(
+            ctx,
+            shape == EUnicodeToUpperShape::InvisibleSource
+                ? TStringBuf("a.hidden")
+                : TStringBuf("a.s"),
+            shape == EUnicodeToUpperShape::WrongSourceType
+                ? optionalUtf8Type
+                : shape == EUnicodeToUpperShape::NonOptionalSource
+                    ? stringType
+                    : optionalStringType);
+    }
+
+    const bool nonOptionalCast =
+        shape == EUnicodeToUpperShape::NonOptionalCastResult;
+    TExprNode::TPtr castTarget =
+        shape == EUnicodeToUpperShape::NonOptionalCastTarget
+        ? DataTypeDescriptor(ctx, "Utf8", utf8Type)
+        : shape == EUnicodeToUpperShape::WrongCastTarget
+            ? OptionalDataTypeDescriptor(
+                ctx, "String", stringType, optionalStringType)
+            : OptionalDataTypeDescriptor(
+                ctx, "Utf8", utf8Type, optionalUtf8Type);
+    if (shape == EUnicodeToUpperShape::MismatchedCastTargetAnnotation) {
+        castTarget->SetTypeAnn(
+            ctx.ExprCtx.MakeType<TTypeExprType>(optionalStringType));
+    }
+    auto cast = TypedCallable(
+        ctx,
+        shape == EUnicodeToUpperShape::WrongCastCallable
+            ? TStringBuf("Convert")
+            : TStringBuf("SafeCast"),
+        {std::move(source), std::move(castTarget)},
+        nonOptionalCast ? utf8Type : optionalUtf8Type);
+
+    const ui64 callableFlags =
+        shape == EUnicodeToUpperShape::WrongCallableAnnotation
+            ? 0
+            : autoMap;
+    const auto* reviewedCallableType = UdfCallableType(
+        ctx, utf8Type, {{utf8Type, autoMap}});
+    const auto* callableType = UdfCallableType(
+        ctx, utf8Type, {{utf8Type, callableFlags}});
+    const auto* cachedCallableType =
+        shape == EUnicodeToUpperShape::MismatchedCachedCallableAnnotation
+            ? UdfCallableType(ctx, utf8Type, {{utf8Type, 0}})
+            : reviewedCallableType;
+    const ui64 cachedFlags =
+        shape == EUnicodeToUpperShape::WrongCachedArgumentFlags
+            ? 0
+            : autoMap;
+    auto cachedType = CallableTypeDescriptor(
+        ctx,
+        shape == EUnicodeToUpperShape::WrongCachedReturnDescriptor
+            ? DataTypeDescriptor(ctx, "String", stringType)
+            : DataTypeDescriptor(ctx, "Utf8", utf8Type),
+        {{
+            shape == EUnicodeToUpperShape::WrongCachedArgumentDescriptor
+                ? DataTypeDescriptor(ctx, "String", stringType)
+                : DataTypeDescriptor(ctx, "Utf8", utf8Type),
+            cachedFlags,
+        }},
+        cachedCallableType);
+
+    TExprNode::TListType udfChildren = {
+        ctx.ExprCtx.NewAtom(
+            TPositionHandle(),
+            shape == EUnicodeToUpperShape::WrongUdfName
+                ? TStringBuf("Unicode.ToLower")
+                : TStringBuf("Unicode.ToUpper")),
+        shape == EUnicodeToUpperShape::NonVoidRunConfig
+            ? TypedLiteral(ctx, "Int32", "0", int32Type)
+            : VoidValue(ctx),
+        shape == EUnicodeToUpperShape::NonVoidUserType
+            ? DataTypeDescriptor(ctx, "Int32", int32Type)
+            : VoidTypeDescriptor(ctx),
+        ctx.ExprCtx.NewAtom(
+            TPositionHandle(),
+            shape == EUnicodeToUpperShape::NonEmptyTypeConfig
+                ? TStringBuf("config")
+                : TStringBuf("")),
+        std::move(cachedType),
+        shape == EUnicodeToUpperShape::NonVoidCachedRunConfigType
+            ? DataTypeDescriptor(ctx, "Int32", int32Type)
+            : VoidTypeDescriptor(ctx),
+        ctx.ExprCtx.NewAtom(
+            TPositionHandle(),
+            shape == EUnicodeToUpperShape::NonEmptyFileAlias
+                ? TStringBuf("module")
+                : TStringBuf("")),
+        shape == EUnicodeToUpperShape::ReversedUdfSettings
+            ? UdfSettings(ctx, {"strict", "blocks"})
+            : UdfSettings(ctx, {"blocks", "strict"}),
+    };
+    if (shape == EUnicodeToUpperShape::MissingUdfSetting) {
+        udfChildren[7] = UdfSettings(ctx, {"blocks"});
+    }
+    auto udf = TypedCallable(
+        ctx,
+        shape == EUnicodeToUpperShape::WrongUdfCallable
+            ? TStringBuf("ScriptUdf")
+            : TStringBuf("Udf"),
+        std::move(udfChildren),
+        callableType);
+
+    auto argument = ctx.ExprCtx.NewArgument(TPositionHandle(), "text");
+    argument->SetTypeAnn(
+        shape == EUnicodeToUpperShape::WrongLambdaType
+            ? stringType
+            : utf8Type);
+    TExprNode::TPtr applyArgument = argument;
+    if (shape == EUnicodeToUpperShape::WrongLambdaBinder) {
+        applyArgument =
+            ctx.ExprCtx.NewArgument(TPositionHandle(), "other_text");
+        applyArgument->SetTypeAnn(utf8Type);
+    }
+    TExprNode::TListType applyChildren = {
+        std::move(udf),
+        std::move(applyArgument),
+    };
+    if (shape == EUnicodeToUpperShape::MissingApplyArgument) {
+        applyChildren.pop_back();
+    }
+    auto upper = TypedCallable(
+        ctx,
+        shape == EUnicodeToUpperShape::WrongApplyCallable
+            ? TStringBuf("Invoke")
+            : TStringBuf("Apply"),
+        std::move(applyChildren),
+        shape == EUnicodeToUpperShape::WrongApplyResult
+            ? stringType
+            : utf8Type);
+
+    TExprNode::TPtr lambda;
+    if (shape == EUnicodeToUpperShape::NonUnaryLambda) {
+        auto second = ctx.ExprCtx.NewArgument(
+            TPositionHandle(), "second_text");
+        second->SetTypeAnn(utf8Type);
+        lambda = ctx.ExprCtx.NewLambda(
+            TPositionHandle(),
+            ctx.ExprCtx.NewArguments(
+                TPositionHandle(), {argument, std::move(second)}),
+            std::move(upper));
+    } else {
+        lambda = TypedUnaryLambda(ctx, argument, std::move(upper));
+    }
+
+    TExprNode::TListType mapChildren = {
+        std::move(cast),
+        std::move(lambda),
+    };
+    if (shape == EUnicodeToUpperShape::MissingLambda) {
+        mapChildren.pop_back();
+    }
+    return TypedCallable(
+        ctx,
+        "Map",
+        std::move(mapChildren),
+        shape == EUnicodeToUpperShape::NonOptionalResult
+            ? utf8Type
+            : shape == EUnicodeToUpperShape::WrongResultType
+                ? optionalStringType
+                : optionalUtf8Type);
+}
+
+TSemanticSnapshotExportResult ExportNullableUnicodeToUpper(
+    TExportTestContext& ctx,
+    EUnicodeToUpperShape shape = EUnicodeToUpperShape::Exact,
+    size_t bindingDepth = 0)
+{
+    const auto& table = AddTable(ctx, "/Root/UnicodeToUpper", {
+        {"s", "String", false},
+        {"hidden", "String", false},
+    });
+    auto read = MakeRead(ctx, table, "a", {"s"});
+    TExprNode::TPtr expression =
+        TypedNullableUnicodeToUpper(ctx, shape);
+    if (bindingDepth != 0) {
+        auto source = expression->Child(0)->ChildPtr(0);
+        auto rowArgument = source->ChildPtr(0);
+        const auto* stringType =
+            ScalarType(ctx, NUdf::EDataSlot::String);
+        const auto* optionalStringType =
+            ScalarType(ctx, NUdf::EDataSlot::String, true);
+        const auto* utf8Type =
+            ScalarType(ctx, NUdf::EDataSlot::Utf8);
+        const auto* optionalUtf8Type =
+            ScalarType(ctx, NUdf::EDataSlot::Utf8, true);
+        TVector<TExprNode::TPtr> arguments;
+        arguments.reserve(bindingDepth);
+        for (size_t index = 0; index < bindingDepth; ++index) {
+            auto argument = ctx.ExprCtx.NewArgument(
+                TPositionHandle(),
+                TStringBuilder() << "text_" << index);
+            argument->SetTypeAnn(stringType);
+            arguments.push_back(std::move(argument));
+        }
+        for (size_t index = bindingDepth; index > 0; --index) {
+            const size_t level = index - 1;
+            auto optional = level == 0
+                ? source
+                : TypedCallable(
+                    ctx,
+                    "Just",
+                    {arguments[level - 1]},
+                    optionalStringType);
+            expression = TypedCallable(
+                ctx,
+                "IfPresent",
+                {
+                    std::move(optional),
+                    TypedUnaryLambda(
+                        ctx,
+                        arguments[level],
+                        std::move(expression)),
+                    TypedNothing(
+                        ctx, "Utf8", utf8Type, optionalUtf8Type),
+                },
+                optionalUtf8Type);
+        }
+        expression = ctx.ExprCtx.NewLambda(
+            TPositionHandle(),
+            ctx.ExprCtx.NewArguments(
+                TPositionHandle(), {std::move(rowArgument)}),
+            std::move(expression));
+    }
+    auto map = MakeIntrusive<TOpMap>(
+        read,
+        TPositionHandle(),
+        TVector<TMapElement>{TMapElement(
+            TInfoUnit("result"),
+            TExpression(
+                std::move(expression),
                 &ctx.ExprCtx,
                 &ctx.ExpressionProps))});
     TOpRoot root(map, TPositionHandle(), {"result"});
@@ -6209,6 +6501,106 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             TExportTestContext ctx;
             const auto result = ExportNullableDateYear(ctx, shape);
             UNIT_ASSERT_C(!result.IsSupported(), static_cast<ui32>(shape));
+        }
+    }
+
+    Y_UNIT_TEST(ExportsExactNullableUnicodeToUpperMap) {
+        TExportTestContext ctx;
+        const auto snapshot =
+            ParseSupported(ExportNullableUnicodeToUpper(ctx));
+        const auto& expression = FindNode(snapshot, "project")
+            ["columns"].GetArraySafe().back()["expression"];
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            expression["kind"].GetStringSafe(), "if_present");
+        UNIT_ASSERT_VALUES_EQUAL(
+            expression["type"].GetStringSafe(), "Utf8");
+        UNIT_ASSERT(expression["nullable"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            expression["optional"]["kind"].GetStringSafe(), "column");
+        UNIT_ASSERT_VALUES_EQUAL(
+            expression["optional"]["column"].GetStringSafe(), "a.s");
+
+        const auto& present = expression["present"];
+        UNIT_ASSERT_VALUES_EQUAL(
+            present["kind"].GetStringSafe(), "opaque");
+        UNIT_ASSERT_VALUES_EQUAL(
+            present["fingerprint"].GetStringSafe(),
+            "yql-string-to-utf8-unicode-upper-v1");
+        UNIT_ASSERT_VALUES_EQUAL(
+            present["type"].GetStringSafe(), "Utf8");
+        UNIT_ASSERT(present["nullable"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            present["args"].GetArraySafe().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            present["args"][0]["kind"].GetStringSafe(), "bound");
+        UNIT_ASSERT_VALUES_EQUAL(
+            present["args"][0]["depth"].GetUIntegerSafe(), 0);
+
+        const auto& missing = expression["missing"];
+        UNIT_ASSERT_VALUES_EQUAL(
+            missing["kind"].GetStringSafe(), "null");
+        UNIT_ASSERT_VALUES_EQUAL(
+            missing["type"].GetStringSafe(), "Utf8");
+    }
+
+    Y_UNIT_TEST(NullableUnicodeToUpperMapGateFailsClosed) {
+        const TVector<EUnicodeToUpperShape> malformedShapes = {
+            EUnicodeToUpperShape::NonOptionalResult,
+            EUnicodeToUpperShape::WrongResultType,
+            EUnicodeToUpperShape::MissingLambda,
+            EUnicodeToUpperShape::NonMemberSource,
+            EUnicodeToUpperShape::InvisibleSource,
+            EUnicodeToUpperShape::NonOptionalSource,
+            EUnicodeToUpperShape::WrongSourceType,
+            EUnicodeToUpperShape::WrongCastCallable,
+            EUnicodeToUpperShape::WrongCastTarget,
+            EUnicodeToUpperShape::MismatchedCastTargetAnnotation,
+            EUnicodeToUpperShape::NonOptionalCastTarget,
+            EUnicodeToUpperShape::NonOptionalCastResult,
+            EUnicodeToUpperShape::NonUnaryLambda,
+            EUnicodeToUpperShape::WrongLambdaType,
+            EUnicodeToUpperShape::WrongLambdaBinder,
+            EUnicodeToUpperShape::WrongApplyCallable,
+            EUnicodeToUpperShape::MissingApplyArgument,
+            EUnicodeToUpperShape::WrongApplyResult,
+            EUnicodeToUpperShape::WrongUdfCallable,
+            EUnicodeToUpperShape::WrongUdfName,
+            EUnicodeToUpperShape::NonVoidRunConfig,
+            EUnicodeToUpperShape::NonVoidUserType,
+            EUnicodeToUpperShape::NonEmptyTypeConfig,
+            EUnicodeToUpperShape::WrongCallableAnnotation,
+            EUnicodeToUpperShape::WrongCachedArgumentFlags,
+            EUnicodeToUpperShape::MismatchedCachedCallableAnnotation,
+            EUnicodeToUpperShape::WrongCachedReturnDescriptor,
+            EUnicodeToUpperShape::WrongCachedArgumentDescriptor,
+            EUnicodeToUpperShape::NonVoidCachedRunConfigType,
+            EUnicodeToUpperShape::NonEmptyFileAlias,
+            EUnicodeToUpperShape::ReversedUdfSettings,
+            EUnicodeToUpperShape::MissingUdfSetting,
+        };
+        for (const auto shape : malformedShapes) {
+            TExportTestContext ctx;
+            const auto result =
+                ExportNullableUnicodeToUpper(ctx, shape);
+            UNIT_ASSERT_C(!result.IsSupported(), static_cast<ui32>(shape));
+        }
+    }
+
+    Y_UNIT_TEST(NullableUnicodeToUpperSyntheticBindingDepthIsBounded) {
+        {
+            TExportTestContext ctx;
+            ParseSupported(ExportNullableUnicodeToUpper(
+                ctx, EUnicodeToUpperShape::Exact, 63));
+        }
+        {
+            TExportTestContext ctx;
+            const auto result = ExportNullableUnicodeToUpper(
+                ctx, EUnicodeToUpperShape::Exact, 64);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "Unicode.ToUpper bridge binding depth exceeds");
         }
     }
 

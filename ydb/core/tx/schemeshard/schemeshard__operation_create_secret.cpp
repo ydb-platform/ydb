@@ -350,6 +350,7 @@ ISubOperation::TPtr CreateNewSecret(TOperationId id, const TTxTransaction& tx, T
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting()
+                .NotUnderOperation()
                 .IsSecret();
 
         if (isAlreadyExists) {
@@ -360,9 +361,6 @@ ISubOperation::TPtr CreateNewSecret(TOperationId id, const TTxTransaction& tx, T
             alterSecret->SetName(createSecretProto.GetName());
             if (createSecretProto.HasValue()) {
                 alterSecret->SetValue(createSecretProto.GetValue());
-            }
-            if (createSecretProto.HasValueParamName()) {
-                alterSecret->SetValueParamName(createSecretProto.GetValueParamName());
             }
             if (createSecretProto.HasInheritPermissions()) {
                 alterSecret->SetInheritPermissions(createSecretProto.GetInheritPermissions());

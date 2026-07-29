@@ -190,7 +190,7 @@ public:
                     // Inherit from the parent: no ACL of its own.
                     secretPath.Base()->ACL.clear();
                 } else {
-                    secretPath.Base()->ACL = InterruptInheritanceExceptDescribe(secretPath.GetEffectiveACL());
+                    secretPath.Base()->ACL = InterruptInheritanceExceptDescribe(parentPath.GetEffectiveACL());
                 }
                 ++secretPath.Base()->ACLVersion;
             }

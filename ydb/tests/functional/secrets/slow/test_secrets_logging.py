@@ -55,6 +55,7 @@ def test_secret_value_from_params_not_in_trace_logs(db_fixture, ydb_cluster):
     secret_value = 'secret-value-rand-value-mf83ezDr7'
     secret_path = 'x'
     secret_path2 = 'y'
+    secret_path3 = 'z'
 
     # run all DDL SQL commands for secrets
     query = f"""
@@ -66,6 +67,8 @@ def test_secret_value_from_params_not_in_trace_logs(db_fixture, ydb_cluster):
         ALTER SECRET IF EXISTS `{secret_path}` WITH (value = $value);
         CREATE OR REPLACE SECRET `{secret_path2}` WITH (value = $value);
         DROP SECRET `{secret_path2}`;
+        CREATE SECRET `{secret_path3}` WITH (value = $value);
+        DROP SECRET IF EXISTS `{secret_path3}`;
     """
     parameters = {'$value': (secret_value, ydb.PrimitiveType.Utf8.proto)}
     with ydb.Driver(db_fixture) as driver:
@@ -76,7 +79,7 @@ def test_secret_value_from_params_not_in_trace_logs(db_fixture, ydb_cluster):
     log_paths = _collect_ydbd_log_paths(ydb_cluster)
     assert log_paths, 'Log files are missing'
 
-    _wait_for_log_marker('DROP SECRET', log_paths)
+    _wait_for_log_marker('DROP SECRET IF EXISTS', log_paths)
     time.sleep(2.0)
 
     # assert that the secret value is not in the logs

@@ -27,7 +27,8 @@ exact direct Decimal
 semantics for comparison, weak integral-to-Decimal casts, same-scale
 nondecreasing-precision Decimal widening, arithmetic, ordering, `SUM`, and
 Decimal `MIN`/`MAX` and phase-aware Decimal `AVG`, exact same-output-type
-fixed-width signed/unsigned integral `MIN`/`MAX`, exact ordered logical `UnionAll`,
+fixed-width signed/unsigned integral `MIN`/`MAX`, narrowly certified ordering of
+completed integral-`AVG` `Optional<Double>` results, exact ordered logical `UnionAll`,
 explicit query-error outcomes, exact physical `EnsureAtMostOne`, and general
 uncorrelated scalar subplans with consumer-demanded local cardinality errors
 and eager inherited errors, including the exact closed scalar-inside-`IN`
@@ -62,9 +63,11 @@ distinct direct `Optional<Int64>` columns. They are exported as
 `opaque_double` with an exact `yql-passive-double-v1` fingerprint and modeled
 as one nullable deterministic uninterpreted function over the ordered
 arguments. No floating arithmetic or ordering semantics enter the Python
-kernel. `Double` remains forbidden in base tables, subplans, predicates,
-comparisons, join keys, aggregate keys/inputs/results, sort or routing keys,
-and every scalar consumer; the derived value may only travel through
+kernel for this passive carrier. `Double` remains forbidden in base tables,
+subplans, predicates, comparisons, join keys, aggregate keys/inputs/results,
+and every scalar consumer; except for the separately tagged integral-AVG rank
+contract below, it also remains forbidden in sort or routing keys. The passive
+derived value may only travel through
 relational operators and StageGraph as a direct, uninspected payload column.
 q83's concrete downstream path is Project, non-key Sort, Limit, and Merge.
 The inspector renders `opaque_double` explicitly. Every other `Double` shape
@@ -116,6 +119,19 @@ limit, compaction, or StageGraph route. Intermediate
 `IntegralAverageState` remains transportable; a completed certificate never
 is.
 
+The disjoint `integral_avg_rank_v1` ordering contract admits only a completed
+integral-AVG `Optional<Double>` column whose provenance is independently
+derived from the aggregate producer and preserved through exact direct
+Map/Project aliases and pass-through operators. Join propagation is restricted
+to retained payloads, and `UnionAll` requires every positional branch to carry
+the same certification. Sort and StageGraph Merge must carry the explicit tag;
+untagged or forged `Double`, intermediate AVG state, and every other binary64
+use still fail closed. The existing shared `(count,min,max) -> Int` carrier is
+used as an abstract rank. Under the mandatory count-at-most-two domain, the
+runtime binary64 AVG equivalence classes have an integer ranking, while the
+unconstrained carrier also admits extra collisions or orderings. This is a
+sound over-approximation for `UNSAT` and can only make proof harder.
+
 Integral extrema admit `Int8/16/32/64` and `Uint8/16/32/64` only with an exact
 same-type result and phase-aware nullability. A guarded, balanced,
 sentinel-free reduction preserves exact NULL, group, and split-state behavior;
@@ -151,16 +167,16 @@ target under `contrib/tools/z3`; it is not linked into `ydbd`.
 The checked-in policy currently requires formula construction for
 TPCH q1, q2, q3, q4, q5, q6, q7, q8, q9, q10, q11, q12, q14,
 q15, q18, q19, q21, and q22 plus TPC-DS q2, q3, q5, q6, q7, q10, q13, q15,
-q16, q18, q19, q21, q25, q26, q29, q33, q34,
+q16, q18, q19, q21, q22, q25, q26, q29, q33, q34,
 q35, q37, q38, q40, q42, q43, q45, q46, q48, q50, q52, q54, q55, q56, q58, q59,
 q60, q61, q62, q65, q66, q68, q69, q71, q73, q75, q76, q77, q78, q79, q80,
-q82, q83, q87, q88, q90, q91, q93, q94, q95, q96, q97, and q99: 78/121
-workload queries (64.5%).
-The complete integral-extrema dashboards leave TPCH at eighteen
+q82, q83, q85, q87, q88, q90, q91, q93, q94, q95, q96, q97, and q99: 80/121
+workload queries (66.1%).
+The complete derived-ordering dashboards leave TPCH at eighteen
 formulas, two unsupported semantic outcomes, and two no-pair optimizer
-failures; TPC-DS has sixty formulas, twenty-one unsupported semantic
+failures; TPC-DS has sixty-two formulas, nineteen unsupported semantic
 outcomes, and eighteen no-pair optimizer failures. Across both suites the
-semantic partition is 78 formulas, 23 `UNSUPPORTED`, and 20
+semantic partition is 80 formulas, 21 `UNSUPPORTED`, and 20
 `OPTIMIZER_FAILURE`.
 Preparation is a separate partition: twenty TPCH and seventy-three TPC-DS
 queries succeed, while two TPCH and twenty-six TPC-DS queries fail. Eight
@@ -170,16 +186,18 @@ counts.
 
 Integral-`AVG` Slice A moves TPC-DS q7, q13, and q26 from initial
 export rejection to formula construction; exact integral extrema then move
-q35 from verifier rejection to formula construction. The resulting measured
-formula coverage is 78/121 (64.5%) over the corpus, 78/101 (77.2%) over exact
-Initial/Final boundary-result pairs, 78/93 (83.9%) within the
-preparation-successful subset, and 78/84 (92.9%) among verifier entrants. The
+q35 from verifier rejection to formula construction. Certified derived
+integral-AVG ordering then moves TPC-DS q22 and q85 through both exporters and
+formula construction. The resulting measured formula coverage is 80/121
+(66.1%) over the corpus, 80/101 (79.2%) over exact Initial/Final
+boundary-result pairs, 80/93 (86.0%) within the preparation-successful subset,
+and 80/86 (93.0%) among verifier entrants. The
 preparation-success ratio uses
 the intersection of formula rows with preparation-success rows; version five
 permits a formula to coexist with failed later preparation. Twenty TPCH and
 eighty-one TPC-DS queries have exact boundary-result pairs. Eighteen TPCH and
-sixty-six TPC-DS pairs enter the verifier. The 23 unsupported outcomes
-consequently split into 17 initial-export, zero final-export, and six verifier
+sixty-eight TPC-DS pairs enter the verifier. The 21 unsupported outcomes
+consequently split into 15 initial-export, zero final-export, and six verifier
 results.
 
 A focused version-five run selected TPC-DS q12, q20, q49, q51, q53, q63, q89,
@@ -251,16 +269,37 @@ A separate 60-second run is `UNKNOWN` after 614/199,928 ms because it cannot
 exclude integral-AVG count greater than two; report SHA-256 is
 `164398b163725598b676c231349a19c30f161fdb012dc61f951934c89676f2e4`.
 
-The final suites pass 615/615 Python verifier, 237/237 C++ exporter, 47/47
-inspector, and 14/14 coverage-policy tests. The complete TPCH dashboard spends
-3,207/36,148 ms and has report SHA-256
+The integral-extrema suites pass 615/615 Python verifier, 237/237 C++
+exporter, 47/47 inspector, and 14/14 coverage-policy tests. The complete TPCH
+dashboard spends 3,207/36,148 ms and has report SHA-256
 `499e0098afda7bed5198b2cb4cc2dfe35ca81e24252aa15c8e7b1803f26e2b3f`;
 TPC-DS spends 70,746/858,347 ms and has report SHA-256
 `8b194da2b89d4da4dbd9fd088bf8cc07e5224239e1b656322e3cfa43198d662a`.
 q35 is `FORMULA_EMITTED` there after 565/121,012 ms. The proof floor remains
 twenty-seven, and this checkpoint found no optimizer bug or counterexample.
 
-The complete TPC-DS dashboard records q83 as `FORMULA_EMITTED` after
+The derived integral-AVG ordering checkpoint is recorded by implementation
+commit `e8abaff7ff4` and policy commit `3e91814d64e`. Validation passes 619/619
+Python verifier, 242/242 C++ exporter, 50/50 inspector, and 14/14
+coverage-policy tests. Focused formula-only TPC-DS q22 and q85 runs emit after
+324/1,704 and 347/8,346 ms of preparation/verifier work; their report SHA-256
+is `0a7612f430d9dbff68d60afdcd79cf3a7cf97170d54a5287e315be9270ba954e`.
+A separate 60-second run leaves both `UNKNOWN`: q22 spends 348/61,611 ms before
+the global deadline at branch 2/4 (`right_language_empty`), while q85 spends
+315/71,360 ms and cannot rule out an integral-AVG count greater than two. Its
+report SHA-256 is
+`6fbe29825c3e2863ad8c3a7d92ea661bd655e7245d455fcbb1db207dcd1e258c`.
+
+The current complete TPCH dashboard has 18 formulas / 2 unsupported / 2
+no-pair outcomes, spends 2,947/33,310 ms, and has report SHA-256
+`8a231a04398f6ca176286bd9d4d658e7d836c36c34ddcc4d43dfde54cc413a4b`.
+TPC-DS has 62 formulas / 19 unsupported / 18 no-pair outcomes, spends
+68,923/846,363 ms, and has report SHA-256
+`64fbda391ca5b50698aceaa2a38ba2210617fd0c1c0071bcb7c5c7967b260ecd`.
+This is formula coverage only: the proof floor remains twenty-seven, and the
+checkpoint found no optimizer bug or counterexample.
+
+The retained q83-milestone complete TPC-DS dashboard records q83 as `FORMULA_EMITTED` after
 1,338/6,175 ms of preparation/verifier work. The separate hardened focused run
 returns `FORMULA_EMITTED` after 1,301/6,081 ms at two rows per table and two
 tasks; its report SHA-256 is
@@ -364,8 +403,9 @@ validation passed 568/568 verifier tests, 208/208 C++ exporter tests, and
 
 The detailed planning estimate in [BENCHMARK_COVERAGE.md](BENCHMARK_COVERAGE.md)
 groups the remaining formula gap by shared semantic feature rather than query
-count. Integral-AVG Slice A removes q7/q13/q26, and exact integral extrema
-remove q35, leaving q22/q85 as derived-`Double` boundaries.
+count. Integral-AVG Slice A removes q7/q13/q26, exact integral extrema remove
+q35, and certified derived-AVG ordering removes q22/q85 from the generic
+`Double` boundary.
 The restricted whole-predicate bridge moved q21, q34, and q75 through formula
 construction, and the passive-carrier milestone moved q83. q73 emits, and q78
 emits through the packed-row network carrier. The
@@ -373,7 +413,7 @@ factorized-construction cluster has five remaining primary blockers after q2,
 q59, and q78 emit.
 Including exact window semantics for the newly visible failed-preparation
 pairs gives roughly
-seven to nine families and nine to seventeen milestones for the complete
+six to eight families and eight to sixteen milestones for the complete
 captured-pair gap; the remaining twenty workload entries need frontend or
 optimizer progress before verifier feature work can reach them.
 Those milestone ranges are planning estimates, not coverage promises, and
@@ -1701,8 +1741,9 @@ correlations, nullable `String`, nullable anti-membership or embedded Boolean
 contexts, coercing dynamic `IN`, broader read-range grammars, and other OLAP
 pushdowns remain separate extensions. Cardinality-certified integral `AVG`
 Slice A is complete for q7/q13/q26, and exact fixed-width integral extrema are
-complete for q35. The next slice is narrowly tagged derived-`Double` ordering
-for q22/q85, initially targeting formula construction only.
+complete for q35. Narrowly tagged derived-`Double` ordering is complete for
+q22/q85. The next slice targets exact dynamic `Optional<Date>` plus/minus
+literal `IntervalFromDays` normalization for TPC-DS q72.
 The auditability consolidation is complete in commits `7a3639d1c16`,
 `ebcfdbb1263`, and `4b7f27d492e`. The checked-in proof policy added TPC-DS q95
 after the earlier TPCH q18 addition, then q38 and q87 through the exact

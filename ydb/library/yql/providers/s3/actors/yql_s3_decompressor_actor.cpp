@@ -76,9 +76,6 @@ private:
     }
 
     void Run() final {
-        if (Work) {
-            Work->RegisterForResume(SelfActorId);
-        }
         StartCycleCount = GetCycleCountFast();
 
         auto startUnit = [this]() {

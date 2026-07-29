@@ -1208,9 +1208,6 @@ private:
 
     void Run() final {
         LOG_CORO_D("Run start: SchedulerContext=" << (SchedulerContext ? "set" : "null") << " Work=" << (Work ? "set" : "null"));
-        if (Work) {
-            Work->RegisterForResume(SelfActorId);
-        }
         if (AsyncDecompressing) {
             DecompressorActorId = Register(CreateS3DecompressorActor(SelfActorId, ReadSpec->Compression, SchedulerContext));
         }

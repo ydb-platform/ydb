@@ -11,5 +11,7 @@ items:
   href: guarantees.md
 - name: Checkpoints
   href: checkpoints.md
+- name: Watermarks
+  href: watermarks.md
 - name: Local and external topics
   href: local-and-external-topics.md

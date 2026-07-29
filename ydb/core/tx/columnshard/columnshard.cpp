@@ -9,6 +9,8 @@
 #include "resource_subscriber/actor.h"
 #include "transactions/locks/read_finished.h"
 
+#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/console.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/columnshard/bg_tasks/adapter/adapter.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
@@ -161,6 +163,14 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     ColumnDataManager = std::make_shared<NOlap::NColumnFetching::TColumnDataManager>(SelfId());
     NormalizerController.SetDataAccessorsManager(DataAccessorsManager);
     PrioritizationClientId = NPrioritiesQueue::TCompServiceOperator::RegisterClient();
+
+    // Local config copy + CMS subscription before DB load, so planners get RuntimeSettings at creation.
+    ColumnShardConfig = AppData(ctx)->ColumnShardConfig;
+    ApplyColumnShardConfig();
+    Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
+        new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({ (ui32)NKikimrConsole::TConfigItem::ColumnShardConfigItem }),
+        IEventHandle::FlagTrackDelivery);
+
     Execute(CreateTxInitSchema(), ctx);
 }
 
@@ -173,6 +183,32 @@ void TColumnShard::Handle(TEvPrivate::TEvTieringModified::TPtr& /*ev*/, const TA
 
     OnTieringModified();
     NYDBTest::TControllers::GetColumnShardController()->OnTieringModified(Tiers);
+}
+
+void TColumnShard::Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr& /*ev*/) {
+    YDB_LOG_DEBUG("",
+        {"event", "subscribed_for_columnshard_config"});
+}
+
+void TColumnShard::ApplyColumnShardConfig() {
+    if (!HasIndex()) {
+        return;
+    }
+    MutableIndexAs<NOlap::TColumnEngineForLogs>().GetOptimizerRuntimeSettings()->ApplyFromConfig(ColumnShardConfig);
+}
+
+void TColumnShard::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+    auto& event = ev->Get()->Record;
+
+    ColumnShardConfig.Swap(event.MutableConfig()->MutableColumnShardConfig());
+    ApplyColumnShardConfig();
+    YDB_LOG_INFO("",
+        {"event", "columnshard_config_updated"},
+        {"has_node_portions_count_limit", ColumnShardConfig.HasNodePortionsCountLimit()},
+        {"node_portions_count_limit", ColumnShardConfig.HasNodePortionsCountLimit() ? ColumnShardConfig.GetNodePortionsCountLimit() : 0});
+
+    auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
+    Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
 }
 
 void TColumnShard::HandleInit(TEvPrivate::TEvTieringModified::TPtr& /*ev*/, const TActorContext& ctx) {

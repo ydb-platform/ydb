@@ -38,6 +38,31 @@ IOptimizerPlanner::TModificationGuard& IOptimizerPlanner::TModificationGuard::Re
     return *this;
 }
 
+ui64 IOptimizerPlanner::GetNodePortionsCountLimit() const {
+    if (RuntimeSettings) {
+        if (const auto& nodePortionsCountLimit = RuntimeSettings->GetNodePortionsCountLimit()) {
+            return *nodePortionsCountLimit;
+        }
+    }
+    return NodePortionsCountLimit.value_or(DynamicPortionsCountLimit.load());
+}
+
+void TOptimizerRuntimeSettings::LoadFromAppData() {
+    if (HasAppData() && AppDataVerified().ColumnShardConfig.HasNodePortionsCountLimit()) {
+        SetNodePortionsCountLimit(AppDataVerified().ColumnShardConfig.GetNodePortionsCountLimit());
+    } else {
+        SetNodePortionsCountLimit(std::nullopt);
+    }
+}
+
+void TOptimizerRuntimeSettings::ApplyFromConfig(const NKikimrConfig::TColumnShardConfig& config) {
+    if (config.HasNodePortionsCountLimit()) {
+        SetNodePortionsCountLimit(config.GetNodePortionsCountLimit());
+    } else {
+        SetNodePortionsCountLimit(std::nullopt);
+    }
+}
+
 ui64 IOptimizerPlanner::GetBadPortionsLimit() const {
     if (AppDataVerified().ColumnShardConfig.GetBadPortionsLimit()) {
         return AppDataVerified().ColumnShardConfig.GetBadPortionsLimit();

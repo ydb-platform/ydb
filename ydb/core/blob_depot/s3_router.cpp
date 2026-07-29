@@ -1,6 +1,7 @@
 #include "s3_router.h"
 
 #include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/counters.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/wrappers/abstract.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
@@ -11,6 +12,8 @@
 
 #include <util/string/cast.h>
 #include <util/string/strip.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
 
 namespace NKikimr::NBlobDepot {
 
@@ -77,12 +80,21 @@ namespace NKikimr::NBlobDepot {
         };
 
         NKikimrBlobDepot::TS3BackendSettings Settings;
+        ui64 TabletId = 0;
+        TString LogId;
         TString OriginalEndpoint;
         TString CurrentEndpoint;
         TActorId InnerWrapperId;
         TActorId HttpProxyId;
         bool RefreshInFlight = false;
         bool RefreshScheduled = false;
+
+        NMonitoring::TDynamicCounters::TCounterPtr BalancerRequests;
+        NMonitoring::TDynamicCounters::TCounterPtr BalancerSuccesses;
+        NMonitoring::TDynamicCounters::TCounterPtr BalancerFailures;
+        NMonitoring::TDynamicCounters::TCounterPtr EndpointSwitches;
+        NMonitoring::TDynamicCounters::TCounterPtr FiveXxRefreshTriggers;
+        NMonitoring::TDynamicCounters::TCounterPtr IsUsingProxy;
 
         ui32 RefreshSecMin() const {
             return Settings.HasBalancerRefreshSecMin() ? Settings.GetBalancerRefreshSecMin() : 10;
@@ -100,6 +112,20 @@ namespace NKikimr::NBlobDepot {
             const ui32 sec = lo == hi ? lo
                 : lo + TAppData::RandomProvider->GenRand() % (hi - lo + 1);
             return TDuration::Seconds(sec);
+        }
+
+        void SetupCounters() {
+            if (auto counters = AppData()->Counters) {
+                auto group = GetServiceCounters(std::move(counters), "blob_depot")
+                    ->GetSubgroup("tablet", ::ToString(TabletId))
+                    ->GetSubgroup("subsystem", "s3_router");
+                BalancerRequests      = group->GetCounter("BalancerRequests", true);
+                BalancerSuccesses     = group->GetCounter("BalancerSuccesses", true);
+                BalancerFailures      = group->GetCounter("BalancerFailures", true);
+                EndpointSwitches      = group->GetCounter("EndpointSwitches", true);
+                FiveXxRefreshTriggers = group->GetCounter("FiveXxRefreshTriggers", true);
+                IsUsingProxy          = group->GetCounter("IsUsingProxy", false);
+            }
         }
 
         ui16 BalancerProxyPort() const {
@@ -124,9 +150,19 @@ namespace NKikimr::NBlobDepot {
             RegisterInnerWrapper(NWrappers::IExternalStorageConfig::Construct(
                 AppData()->AwsClientConfig, *mutableSettings));
             CurrentEndpoint = endpoint;
+
+            YDB_LOG_INFO("S3Router endpoint set (direct)",
+                {"marker", "BDTS25"},
+                {"id", LogId},
+                {"endpoint", endpoint});
+
+            if (IsUsingProxy) {
+                *IsUsingProxy = 0;
+            }
         }
 
         void BuildInnerWrapperViaProxy(const TString& host, ui16 port) {
+            const TString prevEndpoint = CurrentEndpoint;
             auto* mutableSettings = Settings.MutableSettings();
             mutableSettings->SetEndpoint(OriginalEndpoint);
             mutableSettings->SetProxyHost(host);
@@ -135,6 +171,21 @@ namespace NKikimr::NBlobDepot {
             RegisterInnerWrapper(NWrappers::IExternalStorageConfig::Construct(
                 AppData()->AwsClientConfig, *mutableSettings));
             CurrentEndpoint = TStringBuilder() << host << ':' << port;
+
+            YDB_LOG_INFO("S3Router endpoint switch (via proxy)",
+                {"marker", "BDTS26"},
+                {"id", LogId},
+                {"from", prevEndpoint},
+                {"to", CurrentEndpoint},
+                {"proxyHost", host},
+                {"proxyPort", port});
+
+            if (EndpointSwitches) {
+                ++*EndpointSwitches;
+            }
+            if (IsUsingProxy) {
+                *IsUsingProxy = 1;
+            }
         }
 
         bool BalancerEnabled() const {
@@ -149,10 +200,19 @@ namespace NKikimr::NBlobDepot {
                 HttpProxyId = Register(NHttp::CreateHttpProxy());
             }
             const TString url = TStringBuilder() << "http://" << Settings.GetBalancerHost();
+
+            YDB_LOG_DEBUG("S3Router issuing balancer request",
+                {"marker", "BDTS27"},
+                {"id", LogId},
+                {"url", url});
+
             Send(HttpProxyId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(
                 NHttp::THttpOutgoingRequest::CreateRequestGet(url),
                 TDuration::Seconds(10)));
             RefreshInFlight = true;
+            if (BalancerRequests) {
+                ++*BalancerRequests;
+            }
         }
 
         void ScheduleNextRefresh() {
@@ -169,6 +229,14 @@ namespace NKikimr::NBlobDepot {
         }
 
         void HandleRefreshNow() {
+            YDB_LOG_WARN("S3Router 5xx detected, triggering endpoint refresh",
+                {"marker", "BDTS30"},
+                {"id", LogId},
+                {"currentEndpoint", CurrentEndpoint});
+
+            if (FiveXxRefreshTriggers) {
+                ++*FiveXxRefreshTriggers;
+            }
             if (!RefreshInFlight) {
                 IssueBalancerRequest();
             }
@@ -179,6 +247,17 @@ namespace NKikimr::NBlobDepot {
             const auto& msg = *ev->Get();
             if (msg.Response && msg.Response->Status.StartsWith("2")) {
                 TString host = TString(StripString(msg.Response->Body));
+
+                YDB_LOG_DEBUG("S3Router balancer response OK",
+                    {"marker", "BDTS28"},
+                    {"id", LogId},
+                    {"status", msg.Response->Status},
+                    {"body", host});
+
+                if (BalancerSuccesses) {
+                    ++*BalancerSuccesses;
+                }
+
                 if (!host.empty()) {
                     ui16 port = BalancerProxyPort();
                     if (TStringBuf h, p; TStringBuf(host).TrySplit(':', h, p)) {
@@ -190,6 +269,17 @@ namespace NKikimr::NBlobDepot {
                     if (endpoint != CurrentEndpoint) {
                         BuildInnerWrapperViaProxy(host, port);
                     }
+                }
+            } else {
+                YDB_LOG_WARN("S3Router balancer response failure",
+                    {"marker", "BDTS29"},
+                    {"id", LogId},
+                    {"hasResponse", msg.Response != nullptr},
+                    {"status", msg.Response ? TString(msg.Response->Status) : TString("(no response)")},
+                    {"error", msg.Error});
+
+                if (BalancerFailures) {
+                    ++*BalancerFailures;
                 }
             }
             ScheduleNextRefresh();
@@ -207,14 +297,25 @@ namespace NKikimr::NBlobDepot {
             return NKikimrServices::TActivity::BLOB_DEPOT_S3_ROUTER;
         }
 
-        explicit TBlobDepotS3Router(NKikimrBlobDepot::TS3BackendSettings settings)
+        explicit TBlobDepotS3Router(NKikimrBlobDepot::TS3BackendSettings settings, ui64 tabletId)
             : Settings(std::move(settings))
+            , TabletId(tabletId)
+            , LogId(TStringBuilder() << '{' << tabletId << ":s3r}")
         {}
 
         void Bootstrap() {
             const TString& endpoint = Settings.GetSettings().GetEndpoint();
             OriginalEndpoint = endpoint;
+            SetupCounters();
             BuildInnerWrapper(endpoint);
+
+            YDB_LOG_INFO("S3Router bootstrap",
+                {"marker", "BDTS24"},
+                {"id", LogId},
+                {"endpoint", OriginalEndpoint},
+                {"balancerEnabled", BalancerEnabled()},
+                {"balancerHost", BalancerEnabled() ? Settings.GetBalancerHost() : TString()});
+
             if (BalancerEnabled()) {
                 IssueBalancerRequest();
             }
@@ -222,6 +323,11 @@ namespace NKikimr::NBlobDepot {
         }
 
         void PassAway() override {
+            YDB_LOG_INFO("S3Router shutting down",
+                {"marker", "BDTS31"},
+                {"id", LogId},
+                {"currentEndpoint", CurrentEndpoint});
+
             if (InnerWrapperId) {
                 Send(InnerWrapperId, new TEvents::TEvPoison());
                 InnerWrapperId = {};
@@ -250,8 +356,8 @@ namespace NKikimr::NBlobDepot {
 
     } // anonymous
 
-    IActor* CreateBlobDepotS3Router(NKikimrBlobDepot::TS3BackendSettings settings) {
-        return new TBlobDepotS3Router(std::move(settings));
+    IActor* CreateBlobDepotS3Router(NKikimrBlobDepot::TS3BackendSettings settings, ui64 tabletId) {
+        return new TBlobDepotS3Router(std::move(settings), tabletId);
     }
 
 } // NKikimr::NBlobDepot

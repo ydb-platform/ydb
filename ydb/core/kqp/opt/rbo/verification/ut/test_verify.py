@@ -3889,6 +3889,47 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
                         self._extrema_reference_bag(function, grouped, rows),
                     )
 
+    def test_three_row_staged_integral_extrema_match_nullable_groups(self):
+        rows_cases = tuple(product(
+            (None, (0, None), (0, -128), (1, 127)),
+            repeat=3,
+        ))
+        placements = tuple(product((False, True), repeat=3))
+        for function in ("max", "min"):
+            snapshot = aggregate_stage_snapshot(
+                function,
+                True,
+                True,
+                nullable_input=True,
+                input_type="Int8",
+            )
+            script = smt.Script()
+            database = Database(snapshot, 3, script)
+            router = Router(script)
+            relation = StageEvaluator(
+                snapshot,
+                database,
+                ScalarEncoder(script),
+                router,
+            ).root().certain()
+            for rows, placement in product(rows_cases, placements):
+                with self.subTest(
+                    function=function,
+                    rows=rows,
+                    placement=placement,
+                ):
+                    constants = self._constants(database, rows)
+                    for slot, task in enumerate(placement):
+                        constants[router.source_task("A", slot).atom] = task
+                    self.assertEqual(
+                        self._symbolic_bag(
+                            relation,
+                            constants,
+                            self._hash_choice,
+                        ),
+                        self._extrema_reference_bag(function, True, rows),
+                    )
+
     def test_split_decimal_avg_matches_special_state_table(self):
         cases = (
             ((0, REFERENCE_DECIMAL_INF), (0, -REFERENCE_DECIMAL_INF)),

@@ -189,6 +189,12 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
                         TStringBuilder() << "Cannot truncate read-only table " << schemeShardLocalPathId);
                 }
             }
+            // Fence the path like MoveTablePropose: new EvWrites and CommitWriteLock fail with
+            // "unknown table" until plan applies the generation swap. Without this, a write that
+            // resolved the old InternalPathId before PREPARED could commit into PathsToDrop.
+            if (owner.TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false)) {
+                owner.TablesManager.TruncateTablePropose(schemeShardLocalPathId);
+            }
             auto txIdsToWait = owner.GetProgressTxController().GetTxs();   //TODO #8650 Get transactions for truncated pathId only
             if (!txIdsToWait.empty()) {
                 AFL_VERIFY(!txIdsToWait.contains(GetTxId()))("tx_id", GetTxId())("tx_ids", JoinSeq(",", txIdsToWait));
@@ -343,11 +349,15 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
                 break;
             }
             const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(SchemaTxBody.GetTruncateTable());
+            // After restart TruncatingLocalToInternal is empty and SchemeShardLocalToInternal is
+            // rebuilt from DB. Re-fence the path (same as MoveTablePropose replay) so writes stay
+            // blocked while TRUNCATE is still pending.
             if (const auto internalPathId = owner.TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false)) {
                 if (owner.TablesManager.HasTable(*internalPathId) &&
                     owner.TablesManager.GetTable(*internalPathId).IsReadOnly(schemeShardLocalPathId)) {
                     break;
                 }
+                owner.TablesManager.TruncateTablePropose(schemeShardLocalPathId);
             }
             auto txIdsToWait = owner.GetProgressTxController().GetTxs();
             AFL_VERIFY(txIdsToWait.erase(GetTxId()));

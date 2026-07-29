@@ -546,10 +546,31 @@ TInternalPathId TTablesManager::TruncateTable(const TSchemeShardLocalPathId sche
     TTableInfo newTable({ TUnifiedPathId::BuildValid(newPathId, schemeShardLocalPathId) });
     RegisterTable(std::move(newTable), db);
 
+    // Clear the propose-time fence now that the live mapping points at the new generation.
+    TruncatingLocalToInternal.erase(schemeShardLocalPathId);
+
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("method", "TruncateTable")("ss_local_path_id", schemeShardLocalPathId)(
         "old_internal_path_id", oldPathId)("new_internal_path_id", newPathId)("version", version.DebugString());
 
     return newPathId;
+}
+
+void TTablesManager::TruncateTablePropose(const TSchemeShardLocalPathId schemeShardLocalPathId) {
+    YDB_LOG_CREATE_CONTEXT_COMP(NKikimrServices::TX_COLUMNSHARD,
+        {"schemeShardLocalPathId", schemeShardLocalPathId});
+    const auto& internalPathId = ResolveInternalPathId(schemeShardLocalPathId, false);
+    AFL_VERIFY(internalPathId);
+    AFL_VERIFY(TruncatingLocalToInternal.emplace(schemeShardLocalPathId, *internalPathId).second)(
+        "src_internal_path_id", internalPathId);
+    AFL_VERIFY(SchemeShardLocalToInternal.erase(schemeShardLocalPathId));
+}
+
+std::optional<TInternalPathId> TTablesManager::GetTruncatingInternalPathId(
+    const TSchemeShardLocalPathId schemeShardLocalPathId) const {
+    if (const auto* internalPathId = TruncatingLocalToInternal.FindPtr(schemeShardLocalPathId)) {
+        return *internalPathId;
+    }
+    return std::nullopt;
 }
 
 void TTablesManager::DropPreset(const ui32 presetId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db) {

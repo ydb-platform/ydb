@@ -313,7 +313,7 @@ Y_UNIT_TEST_SUITE(TruncateTableReboots) {
         });
     }
 
-    // Column-table-specific: truncation of column table inside OLAP store
+    // Column-table-specific: truncation of column table inside OLAP store is rejected
     Y_UNIT_TEST_WITH_REBOOTS(SimpleInStore) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
@@ -335,7 +335,7 @@ Y_UNIT_TEST_SUITE(TruncateTableReboots) {
 
             const ui64 truncateTxId = ++t.TxId;
             t.TestEnv->ReliablePropose(runtime, TruncateTableRequest(truncateTxId, "/MyRoot/OlapStore", "ColumnTable", TTestTxConfig::SchemeShard, {}),
-                                       {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
+                                       {NKikimrScheme::StatusPreconditionFailed});
             t.TestEnv->TestWaitNotification(runtime, truncateTxId);
 
             {
@@ -345,7 +345,7 @@ Y_UNIT_TEST_SUITE(TruncateTableReboots) {
         });
     }
 
-    // Column-table-specific: truncation then drop of column table inside OLAP store
+    // Column-table-specific: in-store truncate is rejected; table can still be dropped afterwards
     Y_UNIT_TEST_WITH_REBOOTS(TruncateInStoreThenDrop) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
@@ -365,7 +365,7 @@ Y_UNIT_TEST_SUITE(TruncateTableReboots) {
 
             const ui64 truncateTxId = ++t.TxId;
             t.TestEnv->ReliablePropose(runtime, TruncateTableRequest(truncateTxId, "/MyRoot/OlapStore", "ColumnTable", TTestTxConfig::SchemeShard, {}),
-                                       {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
+                                       {NKikimrScheme::StatusPreconditionFailed});
             t.TestEnv->TestWaitNotification(runtime, truncateTxId);
 
             t.TestEnv->ReliablePropose(runtime, DropColumnTableRequest(++t.TxId, "/MyRoot/OlapStore", "ColumnTable"),

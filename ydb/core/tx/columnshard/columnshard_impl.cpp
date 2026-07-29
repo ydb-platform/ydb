@@ -442,16 +442,20 @@ void TColumnShard::RunTruncateTable(
     NIceDb::TNiceDb db(txc.DB);
 
     const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(truncateProto);
-    const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false);
+    // Prefer the propose-time fence (TruncatingLocalToInternal): ResolveInternalPathId is empty
+    // after TruncateTablePropose, by design. Fall back to Resolve for defensive coverage.
+    std::optional<TInternalPathId> oldInternalPathId = TablesManager.GetTruncatingInternalPathId(schemeShardLocalPathId);
+    if (!oldInternalPathId) {
+        oldInternalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false);
+    }
 
-    if (!internalPathId) {
+    if (!oldInternalPathId) {
         LOG_S_DEBUG("TruncateTable for unknown or deleted scheme shard pathId: " << schemeShardLocalPathId << " at tablet " << TabletID());
         return;
     }
 
-    const auto oldInternalPathId = *internalPathId;
-    const auto& pathId = TUnifiedPathId::BuildValid(oldInternalPathId, schemeShardLocalPathId);
-    if (!TablesManager.HasTable(oldInternalPathId)) {
+    const auto& pathId = TUnifiedPathId::BuildValid(*oldInternalPathId, schemeShardLocalPathId);
+    if (!TablesManager.HasTable(*oldInternalPathId)) {
         LOG_S_DEBUG("TruncateTable for unknown or deleted pathId: " << pathId << " at tablet " << TabletID());
         return;
     }
@@ -460,9 +464,9 @@ void TColumnShard::RunTruncateTable(
 
     // Capture the TTL/lifecycle settings of the table being truncated BEFORE TruncateTable() drops it,
     // so the freshly generated internal path id inherits the same TTL and tiering configuration.
-    const auto ttlSettings = TablesManager.GetTableTtlProto(oldInternalPathId, version);
+    const auto ttlSettings = TablesManager.GetTableTtlProto(*oldInternalPathId, version);
 
-    const auto newInternalPathId = TablesManager.TruncateTable(schemeShardLocalPathId, oldInternalPathId, version, db);
+    const auto newInternalPathId = TablesManager.TruncateTable(schemeShardLocalPathId, *oldInternalPathId, version, db);
 
     NKikimrTxColumnShard::TTableVersionInfo tableVerProto;
     newInternalPathId.ToProto(tableVerProto);

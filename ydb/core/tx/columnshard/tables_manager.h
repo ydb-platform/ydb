@@ -403,6 +403,9 @@ private:
     THashMap<TSchemeShardLocalPathId, THashSet<TInternalPathId>> SchemeShardLocalToInternalAll;
     THashMap<TSchemeShardLocalPathId, TInternalPathId> RenamingLocalToInternal;   // Paths that are being renamed
     THashMap<TSchemeShardLocalPathId, TInternalPathId> CopyingLocalToInternal;   // Paths that are being copied
+    // Paths whose SchemeShardLocalToInternal mapping has been fenced for an in-flight TRUNCATE
+    // (same role as RenamingLocalToInternal for Move). Cleared when TRUNCATE is applied on plan.
+    THashMap<TSchemeShardLocalPathId, TInternalPathId> TruncatingLocalToInternal;
     THashSet<ui32> SchemaPresetsIds;
     THashMap<ui32, NKikimrSchemeOp::TColumnTableSchema> ActualSchemaForPreset;
     std::map<NOlap::TSnapshot, THashSet<TInternalPathId>> PathsToDrop;
@@ -588,6 +591,13 @@ public:
         const TSchemeShardLocalPathId dstSchemeShardLocalPathId);
     void CopyTableProgress(NIceDb::TNiceDb& db, const NOlap::TSnapshot& version, const TSchemeShardLocalPathId srcSchemeShardLocalPathId,
         const TSchemeShardLocalPathId dstSchemeShardLocalPathId);
+
+    // Fence the path for TRUNCATE on propose: remove SchemeShardLocalToInternal so new writes and
+    // CommitWriteLock fail with "unknown table" (same pattern as MoveTablePropose). The old
+    // InternalPathId is kept in TruncatingLocalToInternal until TruncateTable runs on plan.
+    void TruncateTablePropose(const TSchemeShardLocalPathId schemeShardLocalPathId);
+    // Returns the InternalPathId fenced by TruncateTablePropose, if any.
+    std::optional<TInternalPathId> GetTruncatingInternalPathId(const TSchemeShardLocalPathId schemeShardLocalPathId) const;
 
     NOlap::TSnapshot ResolveReadSnapshot(const TSchemeShardLocalPathId schemeShardLocalPathId, const NOlap::TSnapshot& requestSnapshot) const;
 

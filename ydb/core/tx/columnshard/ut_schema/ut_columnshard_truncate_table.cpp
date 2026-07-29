@@ -527,9 +527,9 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
     }
 
     // Verifies that TRUNCATE waits for all in-flight write transactions to complete before
-    // becoming PREPARED (analogous to MoveTable::WithCommitInProgress). Without the TWaitTxs
-    // mechanism a write tx committed concurrently with TRUNCATE could end up writing into the
-    // old (already-dropped) InternalPathId and the data would be silently lost in GC.
+    // becoming PREPARED (analogous to MoveTable::WithCommitInProgress). Combined with
+    // TruncateTablePropose (path fence), this prevents a concurrent write from committing into
+    // the old InternalPathId after the generation swap.
     Y_UNIT_TEST_DUO(TruncateWithCommitInProgress, Reboot) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
@@ -620,6 +620,69 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
             auto rb = reader.ReadAll();
             UNIT_ASSERT(rb);
             UNIT_ASSERT_EQUAL(rb->num_rows(), 50);
+        }
+    }
+
+    // Path fence on TRUNCATE propose (TruncateTablePropose): new writes and CommitWriteLock for
+    // locks that still hold the old generation must fail with "unknown table", same as Move.
+    Y_UNIT_TEST(TruncateFencesWritesOnPropose) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        const ui64 pathId = 1;
+        TestTableDescription testTable{};
+        auto planStep = PrepareStandaloneTablet(runtime, pathId, testTable.Schema);
+
+        ui64 txId = 10;
+        int writeId = 10;
+
+        // Lock-held write that resolved the path before TRUNCATE propose.
+        std::vector<ui64> writeIdsBefore;
+        const auto lockBefore = 1;
+        {
+            const bool ok = WriteData(runtime, sender, writeId++, pathId, MakeTestBlob({ 0, 50 }, testTable.Schema), testTable.Schema, true,
+                &writeIdsBefore, NEvWrite::EModificationType::Upsert, lockBefore);
+            UNIT_ASSERT(ok);
+        }
+
+        // Start TRUNCATE propose asynchronously — TruncateTablePropose fences the path immediately.
+        const auto truncateTxId = ++txId;
+        {
+            auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
+                NKikimrTxColumnShard::TX_KIND_SCHEMA, 0, sender, truncateTxId, TTestSchema::TruncateTableTxBody(pathId, 1), 0, 0);
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
+        }
+        runtime.SimulateSleep(TDuration::MilliSeconds(50));
+
+        // New write after fence must fail.
+        {
+            std::vector<ui64> writeIdsAfter;
+            const bool ok = WriteData(
+                runtime, sender, writeId++, pathId, MakeTestBlob({ 50, 100 }, testTable.Schema), testTable.Schema, true, &writeIdsAfter);
+            UNIT_ASSERT(!ok);
+        }
+
+        // Commit of the pre-fence lock must also fail (CommitWriteLock checks ResolveInternalPathId).
+        {
+            ProposeCommitFail(runtime, sender, TTestTxConfig::TxTablet0, ++txId, writeIdsBefore, lockBefore);
+        }
+
+        auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
+        UNIT_ASSERT(ev);
+        const auto& res = ev->Get()->Record;
+        UNIT_ASSERT_EQUAL(res.GetTxId(), truncateTxId);
+        UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrTxColumnShard::PREPARED);
+        planStep = TPlanStep{ res.GetMinStep() };
+        PlanSchemaTx(runtime, sender, { planStep, truncateTxId });
+
+        // After TRUNCATE the table is empty.
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, pathId, NOlap::TSnapshot{ planStep, truncateTxId });
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(!rb);
         }
     }
 

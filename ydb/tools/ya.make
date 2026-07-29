@@ -3,6 +3,7 @@ RECURSE(
     cfg
     disk_obliterator
     mnc
+    platform_bench
     include_sanitizer
     partcheck
     query_replay

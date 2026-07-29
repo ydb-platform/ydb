@@ -187,8 +187,6 @@ public:
                 predFinished = finished;
                 start = TInstant::Now();
             }
-            Cerr << "waiting actualization: need=" << need << " ttlWrites=" << finished << "/" << started << "/"
-                 << TInstant::Now() - start << Endl;
             if (waitWrites) {
                 if (need == 0 && started == finished && started > ttlStartedBaseline) {
                     return;

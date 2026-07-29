@@ -76,6 +76,10 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 25538:added basic monitoring tests and separate events file [#25538](https://github.com/ydb-platform/ydb/pull/25538) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 25458:Сейчас при автопартициронировании топиков учитывается скорость записи различными producer-ами: партиция делится не пополам, а стараемся разделить партицию таким образом, что бы producer-ы распределились по новым партициям равномерно с учетом скорости записи. [#25458](https://github.com/ydb-platform/ydb/pull/25458) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 25387:Change the audit logging logic from AllowedList checking to DenyList checking [#25387](https://github.com/ydb-platform/ydb/pull/25387) ([Andrei Rykov](https://github.com/StekPerepolnen))
+* 36089:Add counter to track fair share of disk bandwidth [#36089](https://github.com/ydb-platform/ydb/pull/36089) ([Sergey Belyakov](https://github.com/serbel324))
+* 35974:New public metric table.datashard.consumed_cpu_us [#35974](https://github.com/ydb-platform/ydb/pull/35974) ([avpershin](https://github.com/avpershin))
+* 35744:Add new X-user-IP header for AccessService requests. Also add this header for NebiusAS [#35744](https://github.com/ydb-platform/ydb/pull/35744) ([Vladislav Serikov](https://github.com/NewBediver))
+* 34954:Add information about chunk shredding in Discover requests to ChunkKeeper [#34954](https://github.com/ydb-platform/ydb/pull/34954) ([Sergey Belyakov](https://github.com/serbel324))
 
 ### Bug fixes
 
@@ -146,12 +150,14 @@ https://github.com/ydb-platform/ydb/issues/25454 [#25536](https://github.com/ydb
 * 25515:Fixed fault for checkpoint on not drained channels [#25515](https://github.com/ydb-platform/ydb/pull/25515) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 25412:https://github.com/ydb-platform/ydb/issues/23180 [#25412](https://github.com/ydb-platform/ydb/pull/25412) ([Vasily Gerasimov](https://github.com/UgnineSirdis))
 * 25408:Fixed tests:
-
-* TestRetryLimiter 
-* RestoreScriptPhysicalGraphOnRetry 
-* CreateStreamingQueryMatchRecognize 
-
-Also increased default test logs level [#25408](https://github.com/ydb-platform/ydb/pull/25408) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* None:CreateStreamingQueryMatchRecognize
+* 36220:Fixed hanging in PQ read session due to double spin lock acquire [#36220](https://github.com/ydb-platform/ydb/pull/36220) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 36212:Fix race condition in dynamic node subscription logic [#36212](https://github.com/ydb-platform/ydb/pull/36212) ([Alexander Rutkovsky](https://github.com/alexvru))
+* 36174:Added retry for streaming query cancelled status [#36174](https://github.com/ydb-platform/ydb/pull/36174) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 36166:Make retries when committing static group syncer updates in Bridge mode [#36166](https://github.com/ydb-platform/ydb/pull/36166) ([Alexander Rutkovsky](https://github.com/alexvru))
+* 36139:Remove excessive assertion from distconf [#36139](https://github.com/ydb-platform/ydb/pull/36139) ([Alexander Rutkovsky](https://github.com/alexvru))
+* 36131:Don't write entrypoint of ChunkKeeper when there are no chunks.
+Fixes https://github.com/ydb-platform/ydb/issues/35053 [#36131](https://github.com/ydb-platform/ydb/pull/36131) ([Sergey Belyakov](https://github.com/serbel324))
 
 ### YDB UI
 

@@ -1839,7 +1839,7 @@ class Evaluator:
     def _join(self, node: Join, left: Relation, right: Relation) -> Relation:
         matching_rows = len(left.rows) * len(right.rows)
         _require_relation_row_pairs(matching_rows, "join matching")
-        if self._has_direct_unique_rhs(node, right):
+        if self._can_compact_direct_unique_rhs(node, right):
             _require_relation_rows(len(left.rows), "join output")
             # Select the unique RHS independently of the task-local left-row
             # presence guard. Values of an absent output row are unobservable,
@@ -2004,7 +2004,7 @@ class Evaluator:
             matches.append(match_row)
         return matches
 
-    def _has_direct_unique_rhs(self, node: Join, right: Relation) -> bool:
+    def _can_compact_direct_unique_rhs(self, node: Join, right: Relation) -> bool:
         if node.kind not in {"inner", "left"}:
             return False
         right_node = self.nodes[node.right]
@@ -2083,22 +2083,22 @@ class Evaluator:
         node: Join,
         left: Relation,
         right: Relation,
-        matches: list[list[smt.Term]],
+        rhs_selectors: list[list[smt.Term]],
     ) -> Relation:
         rows: list[Row] = []
         for left_index, left_row in enumerate(left.rows):
             matched = smt.and_(
                 left_row.present,
-                smt.or_(*matches[left_index]),
+                smt.or_(*rhs_selectors[left_index]),
             )
             selected: dict[str, Value] = {}
             for column in right.columns:
                 value = self.scalar.null(column.type)
                 for right_index, right_row in enumerate(right.rows):
-                    if matches[left_index][right_index] == smt.FALSE:
+                    if rhs_selectors[left_index][right_index] == smt.FALSE:
                         continue
                     value = self._select_value(
-                        matches[left_index][right_index],
+                        rhs_selectors[left_index][right_index],
                         right_row.values[column.name],
                         value,
                     )

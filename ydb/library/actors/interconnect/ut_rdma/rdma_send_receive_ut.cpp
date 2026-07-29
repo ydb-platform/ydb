@@ -405,6 +405,57 @@ TEST_P(RdmaSendReceiveTestCqMode, MainChannelPing) {
     UNIT_ASSERT_VALUES_EQUAL(GetSessionCounter(cluster, 1, 2, "BytesWrittenToSocket"), receiverBytesWrittenToSocketBefore);
 }
 
+// Verifies simultaneous application traffic over the RDMA main channel in
+// both directions without falling back to either TCP main channel.
+TEST_P(RdmaSendReceiveTestCqMode, BidirectionalMainChannelTraffic) {
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(GetParam()),
+        TTestICCluster::TCheckerFactory(), TDuration::Seconds(30), TNode::DefaultInflight(), EnableRdmaSendReceive);
+
+    constexpr ui32 numEvents = 16;
+    auto node1ReceiverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
+        const ui32 index = ev->Get()->Record.GetBlobID();
+        UNIT_ASSERT(index < numEvents);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBuffer(), TStringBuilder{} << "2 to 1 " << index);
+    });
+    const TActorId node1Receiver = cluster.RegisterActor(node1ReceiverPtr, 1);
+
+    auto node2ReceiverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
+        const ui32 index = ev->Get()->Record.GetBlobID();
+        UNIT_ASSERT(index < numEvents);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBuffer(), TStringBuilder{} << "1 to 2 " << index);
+    });
+    const TActorId node2Receiver = cluster.RegisterActor(node2ReceiverPtr, 2);
+
+    WaitForInterconnectConnection(cluster, 2, 1);
+    WaitForInterconnectConnection(cluster, 1, 2);
+    TString node2RdmaStatus;
+    UNIT_ASSERT_C(WaitForRdmaChecksumStatus(cluster, 2, 1, "On | SoftwareChecksum | SendReceive", 20, node2RdmaStatus),
+        "last node 2 RDMA status: " << FormatLastRdmaStatus(node2RdmaStatus));
+    TString node1RdmaStatus;
+    UNIT_ASSERT_C(WaitForRdmaChecksumStatus(cluster, 1, 2, "On | SoftwareChecksum | SendReceive", 20, node1RdmaStatus),
+        "last node 1 RDMA status: " << FormatLastRdmaStatus(node1RdmaStatus));
+
+    const ui64 node2BytesWrittenToSocketBefore = GetSessionCounter(cluster, 2, 1, "BytesWrittenToSocket");
+    const ui64 node1BytesWrittenToSocketBefore = GetSessionCounter(cluster, 1, 2, "BytesWrittenToSocket");
+
+    for (ui32 i = 0; i != numEvents; ++i) {
+        auto node2Event = std::make_unique<TEvTestSerialization>();
+        node2Event->Record.SetBlobID(i);
+        node2Event->Record.SetBuffer(TStringBuilder{} << "2 to 1 " << i);
+        cluster.RegisterActor(new TSendActor(node1Receiver, std::move(node2Event)), 2);
+
+        auto node1Event = std::make_unique<TEvTestSerialization>();
+        node1Event->Record.SetBlobID(i);
+        node1Event->Record.SetBuffer(TStringBuilder{} << "1 to 2 " << i);
+        cluster.RegisterActor(new TSendActor(node2Receiver, std::move(node1Event)), 1);
+    }
+
+    UNIT_ASSERT(node1ReceiverPtr->WaitForReceive(numEvents, 20));
+    UNIT_ASSERT(node2ReceiverPtr->WaitForReceive(numEvents, 20));
+    UNIT_ASSERT_VALUES_EQUAL(GetSessionCounter(cluster, 2, 1, "BytesWrittenToSocket"), node2BytesWrittenToSocketBefore);
+    UNIT_ASSERT_VALUES_EQUAL(GetSessionCounter(cluster, 1, 2, "BytesWrittenToSocket"), node1BytesWrittenToSocketBefore);
+}
+
 namespace {
 
 void RunOversizedMainChannelEventTest(NInterconnect::NRdma::ECqMode cqMode,

@@ -806,10 +806,13 @@ Implementation sequence:
     normalization for TPC-DS q72, accepting the Initial `Apply` and Final
     folded whole-day `Just(Interval)` spellings, preserving source NULL, and
     moving q72 through both exporters to verifier entry;
-65. M4 next: exact unique-key-aware at-most-one right-side join compaction for
-    q72, without raising the global relation bound, followed by more than two
-    dependencies, broader correlations, coercing and nullable-String dynamic
-    `IN`, broader range grammars, and other OLAP pushdowns.
+65. M4: exact unique-key-aware at-most-one direct right-side join compaction
+    for q72, without raising either global construction bound;
+66. M4 next: exact ordered singleton-`Limit` compaction for q9's
+    `UnionAll(real-or-error, NULL fallback) -> Limit(1) -> Cross` scalar
+    lowering, followed by more than two dependencies, broader correlations,
+    coercing and nullable-String dynamic `IN`, broader range grammars, and
+    other OLAP pushdowns.
 
 The exact read-range slice is a closed exporter grammar, not a general
 expression rewriter. It accepts only a column-store StageGraph source with
@@ -919,6 +922,27 @@ the residual begins one level deeper. Exhaustive left/right semi/anti and
 StageGraph routing tests cover shared names, NULLs, duplicates, source-task
 placement, and HashShuffle connection occurrences.
 
+An exact compact representation is available for `inner` and `left` joins
+whose right plan child is an unfiltered, unlimited direct `Scan`. The residual
+must be the exact non-null literal `true`, and side-explicit equalities must
+cover one complete declared non-null right-table unique key with identical
+left/right scalar types. Exact types are a soundness condition: a coercing
+Decimal comparison can collapse distinct catalog values to the same infinity.
+The runtime gate independently checks the right schema, distinct base-table
+occurrences and slots, source-presence implication, and exact `Value` payload
+identity. A Project, predicate, limit, nullable key, partial key, coercion,
+forged occurrence, or changed payload falls back to the generic join.
+
+The compact result has exactly one candidate slot per left slot. A nested ITE
+selects the unique matching right payload over a typed NULL fallback; inner
+presence additionally requires a match, while left presence remains the
+original left guard. Selector guards deliberately exclude task-local left
+presence so routed copies of an absent logical row retain identical
+unobservable payloads and StageGraph gather can coalesce them. The result keeps
+only left-local partition facts and derives occurrence from the left row.
+Catalog uniqueness plus the runtime gate proves that at most one selector can
+hold in every satisfying model.
+
 Unordered results are compared by symbolic tuple multiplicity. Ordered results
 are compared as sequences where order is observable. Root output names and
 their order are an external schema contract and must match exactly; the exporter
@@ -996,7 +1020,10 @@ sequences; otherwise they are compared as bags.
 
 Every materialized relation fails closed above 4096 candidate rows. Join
 matching/output, UnionAll, and grouped-aggregate sizes are checked before their
-large intermediates are allocated. Sort, Merge, and latent-sequence pair
+large intermediates are allocated. The direct unique-RHS join still charges
+the complete `|L|*|R|` match matrix against the pair ceiling, but its proven
+at-most-one output charges exactly `|L|` rows; no global cap was raised.
+Sort, Merge, and latent-sequence pair
 preflights charge only syntactically live slots. Sort and fixed- or symbolic-order Merge
 may instead use the exact network above, bounded by 32768 comparators, 131072
 logical packed-payload cells, and 64 ordering columns. The payload metric is
@@ -1889,7 +1916,7 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Its strict version-four input policy and independently versioned
   version-three evaluation enforce one orthogonal preparation-success floor
   and three monotonic semantic depths: TPCH q1 and TPC-DS q5, q9, q59, q65,
-  q78, and q80 must reach the verifier, the 80-query formula floor must keep
+  q72, q78, and q80 must reach the verifier, the 81-query formula floor must keep
   constructing SMT, and the twenty-seven-query hermetic proof floor must remain
   `VERIFIED_BOUNDED`. A verifier-side `UNSUPPORTED` result satisfies only the
   entry tier; later formulas and proofs satisfy every weaker semantic tier
@@ -1903,21 +1930,22 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   recursion limit, while 3,000 randomized shared and quantified DAGs preserve
   the preceding renderer's bytes exactly.
 
-  The q72 verifier-entry checkpoint includes the preceding
+  The current Milestone 65 checkpoint includes the preceding q72
+  verifier-entry checkpoint plus the
   literal-`Concat`/Decimal-bound q66 and exact point/finite-point
   `RangeInfo::ComputeNode`, integral-AVG, integral-extrema, and derived-ordering
   milestones.
   TPCH's semantic partition is 18 formulas, two unsupported queries, and two
-  no-pair optimizer failures; TPC-DS has 62 formulas, 19 unsupported queries,
+  no-pair optimizer failures; TPC-DS has 63 formulas, 18 unsupported queries,
   and 18 no-pair optimizer failures. Preparation succeeds for 20/22 TPCH and
   73/99 TPC-DS queries and fails for the other 2 and 26. TPCH retains 20 exact
   pairs and 18 verifier entrants; TPC-DS retains 81 exact pairs and 69
   verifier entrants. Eight failed TPC-DS preparations retain exact pairs and
   overlap the unsupported inventory.
-  Across both suites, 80/121 construct formulas (66.1%), 80/101 exact pairs do
-  so (79.2%), 80/93 do so within the preparation-successful subset (86.0%),
-  and 80/87 verifier entrants do so (92.0%). The 21 unsupported rows split by
-  primary reason into 14 initial-export, zero final-export, and seven
+  Across both suites, 81/121 construct formulas (66.9%), 81/101 exact pairs do
+  so (80.2%), 81/93 do so within the preparation-successful subset (87.1%),
+  and 81/87 verifier entrants do so (93.1%). The 20 unsupported rows split by
+  primary reason into 14 initial-export, zero final-export, and six
   verifier results.
 
   The preceding q66 complete TPCH formula dashboard spent 2,880/31,400 ms in
@@ -2057,6 +2085,35 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   Formula and proof floors remain 80 and twenty-seven. No optimizer bug or
   counterexample was found.
 
+  Milestone 65 is complete at implementation commit `0b0025f2a11`, naming
+  polish `a55f3ecba73`, and policy commit `aa004084427`. The verifier now uses
+  catalog uniqueness only after its runtime gate has re-established a direct,
+  unfiltered RHS scan, exact non-null same-type key coverage, distinct source
+  slots, source-presence implication, and exact payload identity. It retains
+  the `|L|*|R|` match-pair preflight but emits one candidate per left slot.
+  Every rejected shape continues through the generic join.
+
+  Focused q72 now reaches `FORMULA_EMITTED` after 376/1,359 ms; its report
+  SHA-256 is
+  `3e6875016128af45b91b41a2fdc427fcfc7a3ef9817fa51441dd28c3636bdc8f`.
+  A separate 60-second solver attempt is `UNKNOWN` after 366/61,896 ms because
+  the global deadline expires before branch 4/4
+  (`right_outcome_0_unmatched`); report SHA-256 is
+  `5bdd19a912dbdbfb5c02d865547a692690f93f8c9cd2bac83db180dd18aeea1e`.
+  This is formula coverage, not a bounded proof or counterexample.
+
+  The complete post-M65 TPCH dashboard remains 18 formula / 2 unsupported /
+  2 no-pair, spends 2,938/90,617 ms, and has report SHA-256
+  `67aff9f9ce4404ca52b720d5155a05a6fc7943061ab20d6ad3cc8773d2e4017e`.
+  TPC-DS becomes 63 / 18 / 18, spends 64,770/786,154 ms, and has report
+  SHA-256
+  `5ca1acabd6e83cf99476cdce6547be427368c74edf0d2ea8b829cc8826d9dd62`.
+  Combined formula coverage is 81/121, the proof floor stays twenty-seven,
+  and no optimizer bug was found. Validation passes 629/629 Python verifier
+  tests and 14/14 policy tests. Milestone 66 next targets q9's ordered
+  singleton-`Limit` representation; q64's independent 8,192-row join blocker
+  remains.
+
   A focused version-five audit of TPC-DS q12, q20, q49, q51, q53, q63, q89,
   and q98 preserves exact pairs despite failed preparation. All eight are
   semantically unsupported: window callables dominate, q49 first exposes a
@@ -2068,13 +2125,14 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   integral-AVG Slice A removes q7/q13/q26, and exact integral extrema remove
   q35. Narrowly tagged derived-`Double` ordering now removes q22/q85 from the
   generic type inventory. Milestone 64 moves q72 from the Date exporter
-  inventory to the join-construction inventory. Milestone 65 next targets
-  exact unique-key-aware at-most-one right-side join compaction for q72.
+  inventory to the join-construction inventory, and Milestone 65 removes q72
+  from that inventory with exact direct unique-RHS compaction. Milestone 66
+  next targets q9's ordered singleton-`Limit` representation.
   Including exact
   window semantics
   for the failed-preparation pairs, the full captured-pair gap is roughly
   6--8 feature families or 8--16 milestones. Those workload-targeted
-  estimates now start from 80 formulas and can change as later blockers become
+  estimates now start from 81 formulas and can change as later blockers become
   visible. The 20 no-pair entries require
   frontend/optimizer progress; the present captured-pair ceiling is 101/121,
   and formula construction is not solver proof.
@@ -2773,9 +2831,10 @@ fixed-width signed/unsigned integral `MIN`/`MAX` now moves q35 through formula
 construction. Narrowly tagged derived-`Double` ordering now moves q22/q85
 through formula construction. Exact dynamic `Optional<Date>` plus/minus
 literal `IntervalFromDays` normalization now moves q72 through both exporters
-to the 4,608-row join-output guard. Exact unique-key-aware at-most-one
-right-side join compaction is next; broader floating-point semantics and
-dataflow, coercing
+to the former 4,608-row join-output guard. Exact direct unique-key-aware
+right-side join compaction now moves q72 through formula construction without
+raising a global cap. Exact ordered singleton-`Limit` compaction for q9 is
+next; broader floating-point semantics and dataflow, coercing
 dynamic `IN`, nullable String and non-positive nullable uses, more than two
 `EXISTS` dependencies, broader correlated predicates, broader range reads, and other
 OLAP pushdowns remain future work beyond the admitted q9/q45 point grammars.
@@ -2928,7 +2987,7 @@ regression locks the corrected boundary.
 - Explicit diagnostic transformation-prefix verifier boundary, committed-rule
   and atomic-stage snapshot hooks, strict real-host capture command, and
   separate sequential localization driver are implemented.
-- The 78 formula-construction and twenty-seven curated proof obligations have
+- The 81 formula-construction and twenty-seven curated proof obligations have
   separate checked-in regression floors. The current complete gate confirms all
   twenty-seven as `VERIFIED_BOUNDED`; focused rows retain independent
   evidence for the newly added obligations. Every future solver witness has a

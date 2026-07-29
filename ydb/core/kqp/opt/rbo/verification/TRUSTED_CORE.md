@@ -108,7 +108,7 @@ A defect in these files can turn inequivalent supported plans into
 | `rbo_verifier/decimal.py` | Decimal representation, domains, comparison, arithmetic, extrema, specials, and proof bounds. |
 | `rbo_verifier/scalar.py` | Nullable values, SQL three-valued predicates, exact scalar evaluation, conservative Decimal finite-coefficient propagation, tagged `AverageMetadata`, the shared cardinality-certified integral-AVG carrier, typed opaque functions, and the domain-free passive carrier encoding. |
 | `rbo_verifier/sort_network.py` | Audited power-of-two bitonic compare-exchange topology and exact construction cost. |
-| `rbo_verifier/relation.py` | Symbolic database, unique-key constraints, logical operators, exact fixed-width integral extrema, aggregate ghost state and producer-local integral-AVG certificates, certified integral-AVG abstract rank ordering, per-row scalar subplans, bags/sequences, packed exact Sort/Merge transport with concrete or symbolic producer order, exact present-prefix equality, errors, choices, result-family equality, and the exact mismatch cover. |
+| `rbo_verifier/relation.py` | Symbolic database, unique-key constraints, logical operators including fail-closed direct unique-RHS join compaction, exact fixed-width integral extrema, aggregate ghost state and producer-local integral-AVG certificates, certified integral-AVG abstract rank ordering, per-row scalar subplans, bags/sequences, packed exact Sort/Merge transport with concrete or symbolic producer order, exact present-prefix equality, errors, choices, result-family equality, and the exact mismatch cover. |
 | `rbo_verifier/stages.py` | Two-task StageGraph execution, routing, connection semantics including tagged integral-AVG Merge ordering, per-task evaluation, and root gathering. |
 | `rbo_verifier/verify.py` | Boundary/catalog/schema checks, shared model construction, producer-local integral-AVG observation, mandatory model-domain precheck, canonical/branch solver portfolio, one-deadline status interpretation, and witness decoding. |
 
@@ -338,12 +338,57 @@ proof, but it cannot make an inequivalent concrete operation prove `UNSAT`.
 At the normal construction limits q72 rejects a 4,608-row join output above
 4,096. A disposable 8,192-row experiment was fully reverted after it exposed
 a 10,619,136-pair grouped aggregate above 16,384 in 12.151 seconds. This
-supports exact unique-key-aware at-most-one right-side join compaction as the
-next slice; it does not justify enlarging a global audit cap.
+supported exact unique-key-aware at-most-one right-side join compaction as the
+next slice at that checkpoint; it did not justify enlarging a global audit cap.
 The focused normal report has SHA-256
 `b1a529f927b37f262ed71f0e7e3fec92eabe6d39a79801845c91d6b40a58935f`;
 the reverted-cap diagnostic report has SHA-256
 `3e34de0eaf4b5e0e5215f48706263de2c8bc4a8e7ccdebb4dc11389bd9dd0470`.
+
+Milestone 65 is recorded by implementation commit `0b0025f2a11`, naming
+polish `a55f3ecba73`, and policy commit `aa004084427`. It changes no exporter,
+snapshot schema, or IR contract. The new trusted seam is localized to
+`relation.py`: an `inner` or `left` join may use the compact representation
+only when its RHS plan child is an unfiltered, unlimited direct scan, its
+residual is exact literal true, and side-explicit equalities cover one complete
+declared non-null RHS unique key.
+
+The gate does not trust plan shape alone. It rechecks the evaluated RHS schema,
+distinct base-table occurrences and in-range slots, syntactic
+`row.present => source.present`, and exact source payloads. Each covering
+left/right comparison must have the identical scalar type. This last condition
+closes a concrete soundness hazard: Decimal alignment can saturate two distinct
+catalog integers to the same infinity, destroying injectivity after coercion.
+Every rejected or corrupted shape retains the generic join semantics.
+
+For an accepted join, catalog uniqueness proves at most one RHS selector.
+The formula still constructs and audits the complete `|L|*|R|` match matrix,
+then emits one row per left candidate and ITE-selects the RHS payload over a
+typed NULL fallback. Selector guards exclude task-local left presence so
+unobservable cells of routed absent copies remain identical and StageGraph
+gather can coalesce them. Output presence restores the left guard; only
+left-local partition facts and occurrence provenance are retained.
+
+Independent tests include exhaustive inner/left bag references, composite and
+extra keys, nullable and partial keys, cross-type Decimal coercion, predicate,
+Project, scan-limit, schema, occurrence, payload, hidden-metadata, row/pair-cap,
+and two-task Broadcast/gather mutations. The complete Python verifier target
+passes 629/629 tests and policy passes 14/14. Focused q72 emits after
+376/1,359 ms (report SHA-256
+`3e6875016128af45b91b41a2fdc427fcfc7a3ef9817fa51441dd28c3636bdc8f`);
+its 60-second solver attempt is `UNKNOWN` after 366/61,896 ms at branch 4/4
+(`right_outcome_0_unmatched`, report SHA-256
+`5bdd19a912dbdbfb5c02d865547a692690f93f8c9cd2bac83db180dd18aeea1e`).
+This adds formula coverage, not a proof or counterexample.
+
+The complete post-M65 dashboards are TPCH 18 formula / 2 unsupported /
+2 no-pair at 2,938/90,617 ms (SHA-256
+`67aff9f9ce4404ca52b720d5155a05a6fc7943061ab20d6ad3cc8773d2e4017e`)
+and TPC-DS 63 / 18 / 18 at 64,770/786,154 ms (SHA-256
+`5ca1acabd6e83cf99476cdce6547be427368c74edf0d2ea8b829cc8826d9dd62`).
+Combined formula coverage is 81/121; the proof floor remains twenty-seven.
+No optimizer bug was found. The next reviewed slice is q9's ordered
+singleton-`Limit` representation, not a global cap increase.
 
 The packed-row declaration substrate remains deliberately narrower than a
 general SMT datatype or macro facility. A product has exactly one constructor,
@@ -1051,9 +1096,31 @@ review seam is one closed C++ exporter grammar: direct nullable Date member,
 two exact literal-interval spellings, explicit source-NULL lifting, and a
 stable operator/day opaque identity. Existing Python `if_present`,
 opaque-function congruence, nullable result, and Date-domain semantics are
-reused unchanged. The next slice is exact
+reused unchanged. At that checkpoint the next slice was exact
 unique-key-aware at-most-one right-side join compaction for q72, not a global
 construction-cap increase.
+
+The completed post-M65 physical-line audit uses implementation commit
+`0b0025f2a11`, naming polish `a55f3ecba73`, and policy commit `aa004084427`
+for code and tests, plus this documentation update:
+
+| Area | Physical lines |
+|---|---:|
+| Ten trusted Python semantic modules | 13,424 |
+| C++ exporter (`semantic_snapshot.cpp`, `.h`, and `read_range_predicate_impl.h`) | 11,930 |
+| **Proof-producing code total** | **25,354** |
+| Tests, outside the TCB | 62,010 |
+| Diagnostic/orchestration tools, outside the TCB | 5,245 |
+| Documentation, outside the TCB | 9,540 |
+
+Relative to the post-q72 audit, Milestone 65 adds 167 trusted Python lines, no
+C++, 167 proof-producing lines, and 630 test lines. Diagnostic tooling is
+unchanged, while documentation adds 242 lines. The proof-producing review seam
+is one linear fail-closed gate, one shared match-matrix builder, and one
+one-row-per-left compactor in `relation.py`; the existing generic join remains
+the fallback. The larger test delta is outside the TCB and supplies the
+independent exhaustive, coercion, provenance, cap, and StageGraph evidence.
+Milestone 66 next targets exact ordered singleton-`Limit` compaction for q9.
 
 ## External assumptions
 
@@ -1129,6 +1196,10 @@ the SMT obligation itself:
   values, each admitted shared-IU semi/anti join exposes only its selected
   side, and StageGraph occurrences with equal IU spellings remain distinct
   runtime streams;
+- each exported catalog unique key denotes the runtime at-most-one constraint
+  over present base rows, and an accepted direct scan plus task routing
+  preserves each source cell exactly while only strengthening its presence
+  guard;
 - each accepted direct Uint64 `Just` is always present at runtime and the
   synthetic typed-NULL branch preserves its exact static Optional schema;
 - each accepted scalar-final Uint64 `unwrap` denotes the physical builder's
@@ -1221,6 +1292,6 @@ each slice. It is an audit checklist, not a claim that tests are exhaustive.
 | Types, NULLs, scalar functions | `semantic_snapshot.cpp`; `ir.py`; `types.py`; `scalar.py`; `decimal.py`; `string_order.py` | `ut/test_scalar.py`; `test_decimal.py`; `test_string_order.py`; `test_string_proof.py`; `test_sql_in.py`; canonical literal-only String-`Concat`, String-predicate, Date-year, dynamic Date-shift, proven-total Date-`Unwrap`, direct-Uint64-`Just`, exact Decimal weak-`SafeCast`, proven-present raw-tuple Date-`SafeCast`, restricted whole-floating-predicate, passive-Double carrier, and exact literal-wrapper mutations; integral-right Decimal finite-bound boundary/special and two-row aggregate tests; passive-carrier identity/mutation and non-key Sort/Merge passenger proofs; `source_type`, NULL, overflow, widening-special, and fail-closed references; synthetic real-host proofs; exporter near-miss mutations |
 | Logical bags, order, limits, errors | `semantic_snapshot.cpp`; `ir.py`; `smt.py`; `sort_network.py`; `relation.py` | `ut/test_logical_reference.py`; `test_limit.py`; `test_sort.py`; exhaustive network topology/prefix/nullable/mixed-order/Merge-hole/AVG-state tests; completed-integral-AVG rank identity/order/mutation and provenance-forgery tests; packed-layout, declaration-structure, present-prefix equality, and cap tests; deep stack-safe rendering plus 3,000-DAG byte differential; focused concrete differential tests |
 | Aggregates and subplans | `semantic_snapshot.cpp`; `ir.py`; `decimal.py`; `scalar.py`; `relation.py`; `verify.py` | aggregate/DistinctAll/count-distinct/unwrap exporter and IR mutations; integral-AVG strict contract, one/two/three-row semantics, split-state mutation, central producer-observe/parent-strip lifecycle, model-domain SAT/UNKNOWN/UNSAT protocol, and projected/sorted/limited/staged observation tests; fixed-width signed/unsigned integral-extrema boundary, NULL/group/split, odd-width exhaustive, and solver-mutation checks; exhaustive count-distinct duplicates and triangular cap; scalar-final unwrap empty/all-NULL/present references; Decimal-extrema raw-code differential, routing, and solver-mutation checks; nullable composite-key differential and staged-routing checks; `ut/test_subplans.py`; cardinality, demand, NULL, duplicate, error, exact scalar- and one-level `IN`-inside-`IN` ownership/nesting/cache/choice checks, nested finite references and sequential-semi solver differentials, correlated outer-binding, one- and exact two-dependency `EXISTS` ordering/shape/semi/anti checks, dynamic-`IN` mapping/cache/pair-cap and positive-nullable integral/Date-context checks, real-host Decimal-AVG and correlated-`EXISTS`, and non-null/nullable `IN`-to-`left_semi` cases |
-| StageGraph, reads, joins, and routing | `semantic_snapshot.cpp`; `read_range_predicate_impl.h`; `ir.py`; `scalar.py`; `stages.py`; `relation.py` | exact q9 point and q45 finite-set `ComputeNode` references; exhaustive range-grammar/key/annotation/pointer-identity mutations; pushed-range-plus-OLAP conjunction; `OriginalPredicate` irrelevance and `ComputeNode` sensitivity; tagged integral-AVG Merge propagation/mismatch tests; `ut/test_stagegraph_reference.py`; `test_stage_compaction.py`; shared-IU semi/anti exhaustive execution; JoinKey budget/mutation checks; C++ topology/task mutations; real-host integration |
+| StageGraph, reads, joins, and routing | `semantic_snapshot.cpp`; `read_range_predicate_impl.h`; `ir.py`; `scalar.py`; `stages.py`; `relation.py` | exact q9 point and q45 finite-set `ComputeNode` references; exhaustive range-grammar/key/annotation/pointer-identity mutations; pushed-range-plus-OLAP conjunction; `OriginalPredicate` irrelevance and `ComputeNode` sensitivity; tagged integral-AVG Merge propagation/mismatch tests; `ut/test_stagegraph_reference.py`; `test_stage_compaction.py`; shared-IU semi/anti exhaustive execution; JoinKey budget/mutation checks; direct unique-RHS exhaustive bags, composite/extra keys, cross-type coercion rejection, provenance/schema/predicate/Project/limit/metadata mutations, row/pair caps, and Broadcast/gather equivalence; C++ topology/task mutations; real-host integration |
 | SMT construction and verdict | `smt.py`; `verify.py` | `ut/test_smt.py`; `test_verify.py`; product ownership, closed-definition, free-symbol, nullary-capture, and foreign-declaration rejections; emitted-SMT inspection; identity and semantic-mutation obligations |
 | Workload reach and regressions | no additional trusted code | `benchmark_ut/`, coverage policy, TPCH/TPC-DS reports, inspector and replay for candidates |

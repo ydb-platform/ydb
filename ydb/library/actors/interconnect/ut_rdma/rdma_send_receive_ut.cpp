@@ -216,6 +216,60 @@ TEST_P(RdmaSendReceiveTestCqMode, MainChannelMultiPacketEvent) {
     UNIT_ASSERT_VALUES_EQUAL(GetSessionCounter(cluster, 2, 1, "BytesWrittenToSocket"), bytesWrittenToSocketBefore);
 }
 
+// Verifies that one main-channel packet split at the 16-SGE SEND limit is
+// reassembled from multiple RDMA receives without changing payload order.
+TEST_P(RdmaSendReceiveTestCqMode, MainChannelSgListBoundary) {
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(GetParam()),
+        TTestICCluster::TCheckerFactory(), TDuration::Seconds(30), TNode::DefaultInflight(), EnableRdmaSendReceive);
+
+    constexpr size_t chunkCount = 17;
+    constexpr size_t chunkSize = 64;
+    constexpr size_t chunkStride = 2 * chunkSize;
+
+    TString expectedPayload;
+    for (size_t i = 0; i != chunkCount; ++i) {
+        expectedPayload.append(chunkSize, 'A' + i);
+    }
+
+    auto receiverPtr = new TReceiveActor([expectedPayload](TEvTestSerialization::TPtr ev) {
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBlobID(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload().size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].ConvertToString(), expectedPayload);
+    });
+    const TActorId receiver = cluster.RegisterActor(receiverPtr, 1);
+
+    WaitForInterconnectConnection(cluster, 2, 1);
+    TString lastRdmaStatus;
+    UNIT_ASSERT_C(WaitForRdmaChecksumStatus(cluster, 2, 1, "On | SoftwareChecksum | SendReceive", 20, lastRdmaStatus),
+        "last RDMA status: " << FormatLastRdmaStatus(lastRdmaStatus));
+    const ui64 bytesWrittenToSocketBefore = WaitForSessionCounter(cluster, 2, 1, "BytesWrittenToSocket");
+
+    const auto memPool = cluster.GetNode(2)->GetRdmaMemPool();
+    auto storage = memPool->AllocRcBuf(chunkCount * chunkStride, 0).value();
+    TRope payload;
+    for (size_t i = 0; i != chunkCount; ++i) {
+        char* data = storage.GetDataMut() + i * chunkStride;
+        memset(data, 'A' + i, chunkSize);
+        payload.Insert(payload.End(), TRope(TRcBuf(TRcBuf::Piece, data, chunkSize, storage)));
+    }
+
+    size_t contiguousBlocks = 0;
+    for (auto iter = payload.Begin(); iter.Valid(); iter.AdvanceToNextContiguousBlock()) {
+        ++contiguousBlocks;
+        UNIT_ASSERT(!NInterconnect::NRdma::TryExtractFromRcBuf(iter.GetChunk()).Empty());
+    }
+    UNIT_ASSERT_VALUES_EQUAL(contiguousBlocks, chunkCount);
+
+    auto ev = std::make_unique<TEvTestSerialization>();
+    ev->Record.SetBlobID(1);
+    ev->AddPayload(std::move(payload));
+    UNIT_ASSERT(!ev->AllowExternalDataChannel());
+    cluster.RegisterActor(new TSendActor(receiver, std::move(ev)), 2);
+
+    UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
+    UNIT_ASSERT_VALUES_EQUAL(GetSessionCounter(cluster, 2, 1, "BytesWrittenToSocket"), bytesWrittenToSocketBefore);
+}
+
 namespace {
 
 void RunOversizedMainChannelEventTest(NInterconnect::NRdma::ECqMode cqMode,

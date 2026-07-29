@@ -368,9 +368,21 @@ namespace NTabletFlatExecutor {
                     { },
                     std::move(result.Overlay));
 
-                auto fetch = loader.Run(false);
+                // do not preload index as it may be already offloaded
+                auto fetch = loader.Run({.PreloadIndex = false, .PreloadData = false});
 
-                Y_ABORT_UNLESS(!fetch, "Just compacted part needs to load some pages");
+                if (Y_UNLIKELY(fetch)) {
+                    TStringBuilder error;
+                    error << "Just compacted part needs to load pages";
+                    for (auto collection : fetch) {
+                        error << " " << collection->PageCollection->Label().ToString() << ": [ ";
+                        for (auto pageId : collection->Pages) {
+                            error << pageId << " " << (NTable::NPage::EPage)collection->PageCollection->Page(pageId).Type << " ";
+                        }
+                        error << "]";
+                    }
+                    Y_ABORT_S(error);
+                }
 
                 auto& res = prod->Results.emplace_back();
                 res.Part = loader.Result();

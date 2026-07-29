@@ -716,18 +716,24 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
     void Handle(NSharedCache::TEvTouch::TPtr &ev, const TActorContext& ctx) {
         NSharedCache::TEvTouch *msg = ev->Get();
+        THashMap<TLogoBlobID, THashSet<TPageId>> droppedPages;
 
         for (auto &[pageCollectionId, touchedPages] : msg->Touched) {
+            LOG_TRACE_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Touch page collection " << pageCollectionId
+                << " owner " << ev->Sender
+                << " pages " << touchedPages);
+
             auto collection = Collections.FindPtr(pageCollectionId);
             if (!collection) {
+                droppedPages[pageCollectionId].insert(touchedPages.begin(), touchedPages.end());
                 continue;
             }
-            LOG_TRACE_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Touch page collection " << pageCollectionId
-                << " pages " << touchedPages);
+
             for (auto pageId : touchedPages) {
                 Y_ABORT_UNLESS(pageId < collection->PageMap.size());
                 auto* page = collection->PageMap[pageId].Get();
                 if (!page) {
+                    droppedPages[pageCollectionId].insert(pageId);
                     continue;
                 }
 
@@ -751,6 +757,10 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                     Y_ABORT("unknown load state");
                 }
             }
+        }
+
+        if (droppedPages) {
+            SendDroppedPages(ev->Sender, std::move(droppedPages));
         }
 
         DoGC();
@@ -918,16 +928,13 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     void CheckExpiredCollections(THashSet<TCollection*> recheck) {
-        THashMap<TActorId, THashMap<TLogoBlobID, NSharedCache::TEvUpdated::TActions>> toSend;
+        THashMap<TActorId, THashMap<TLogoBlobID, THashSet<TPageId>>> droppedPages;
 
         for (TCollection *collection : recheck) {
             if (collection->DroppedPages) {
                 // N.B. usually there is a single owner
                 for (TActorId owner : collection->Owners) {
-                    auto& actions = toSend[owner][collection->Id];
-                    for (ui32 pageId : collection->DroppedPages) {
-                        actions.Dropped.insert(pageId);
-                    }
+                    droppedPages[owner][collection->Id].insert(collection->DroppedPages.begin(), collection->DroppedPages.end());
                 }
                 collection->DroppedPages.clear();
             }
@@ -935,11 +942,20 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             TryDropExpiredCollection(collection);
         }
 
-        for (auto& kv : toSend) {
-            auto msg = MakeHolder<NSharedCache::TEvUpdated>();
-            msg->Actions = std::move(kv.second);
-            Send(kv.first, msg.Release());
+        for (auto& kv : droppedPages) {
+            SendDroppedPages(kv.first, std::move(kv.second));
         }
+    }
+
+    void SendDroppedPages(TActorId owner, THashMap<TLogoBlobID, THashSet<TPageId>>&& droppedPages_) {
+        auto msg = MakeHolder<NSharedCache::TEvUpdated>();
+        msg->DroppedPages = std::move(droppedPages_);
+        for (auto& [pageCollectionId, droppedPages] : msg->DroppedPages) {
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Dropping page collection " << pageCollectionId
+                << " pages " << droppedPages
+                << " owner " << owner);
+        }
+        Send(owner, msg.Release());
     }
 
     void BodyProvided(TCollection &collection, TPage *page) {
@@ -1140,10 +1156,11 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             LOG_NOTICE_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Switch replacement policy "
                 << "from " << currentReplacementPolicy << " to " << Config.GetReplacementPolicy());
             Evict(Cache.Switch(CreateCache(), Counters.ReplacementPolicySize(Config.GetReplacementPolicy())));
-            DoGC();
             LOG_NOTICE_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Switch replacement policy done "
                 << " from " << currentReplacementPolicy << " to " << Config.GetReplacementPolicy());
         }
+
+        DoGC();
     }
 
     inline ui64 GetStatAllBytes() const {

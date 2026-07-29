@@ -22,7 +22,7 @@ struct TEngineHostCounters {
 
     ui64 InvisibleRowSkips = 0;
 
-    ui64 NAffectedEraseRow = 0;
+    ui64 NAffectedRows = 0;
 
     TEngineHostCounters& operator+=(const TEngineHostCounters& other) {
         NSelectRow += other.NSelectRow;
@@ -37,7 +37,7 @@ struct TEngineHostCounters {
         UpdateRowBytes += other.UpdateRowBytes;
         EraseRowBytes += other.EraseRowBytes;
         InvisibleRowSkips += other.InvisibleRowSkips;
-        NAffectedEraseRow += other.NAffectedEraseRow;
+        NAffectedRows += other.NAffectedRows;
         return *this;
     }
 
@@ -55,7 +55,7 @@ struct TEngineHostCounters {
             << ", EraseRowBytes: " << EraseRowBytes
             << ", SelectRangeDeletedRowSkips: " << SelectRangeDeletedRowSkips
             << ", InvisibleRowSkips: " << InvisibleRowSkips
-            << ", NAffectedEraseRow: " << NAffectedEraseRow
+            << ", NAffectedRows: " << NAffectedRows
             << "}";
     }
 };

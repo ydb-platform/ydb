@@ -319,16 +319,17 @@ void TDataShardUserDb::EraseRow(
     auto localTableId = Self.GetLocalTableId(tableId);
     Y_ENSURE(localTableId != 0, "Unexpected UpdateRow for an unknown table");
 
+    const bool rowExists =
+        (LockMode == ELockMode::OptimisticSnapshotIsolation
+            || LockMode == ELockMode::PessimisticNone)
+        && RowExists(tableId, key);
+
     if (LockMode == ELockMode::OptimisticSnapshotIsolation) {
-        if (!RowExists(tableId, key)) {
+        if (!rowExists) {
             // Don't perform write for keys which don't exist, SnapshotRW
             // transaction may break otherwise even when not actually
             // performing operations from the user's viewpoint
             return;
-        }
-    } else if (LockMode == ELockMode::PessimisticNone) {
-        if (RowExists(tableId, key)) {
-            Counters.NAffectedEraseRow++;
         }
     }
 
@@ -338,6 +339,10 @@ void TDataShardUserDb::EraseRow(
 
     Counters.NEraseRow++;
     Counters.EraseRowBytes += keyBytes + 8;
+
+    if (LockMode == ELockMode::PessimisticNone && rowExists) {
+        Counters.NAffectedRows++;
+    }
 }
 
 bool TDataShardUserDb::PrechargeRow(
@@ -361,7 +366,7 @@ void TDataShardUserDb::IncreaseUpdateCounters(
     Counters.UpdateRowBytes += keyBytes + valueBytes;
 
     if (LockMode == ELockMode::PessimisticNone) {
-        Counters.NAffectedEraseRow++;
+        Counters.NAffectedRows++;
     }
 }
 
@@ -1114,8 +1119,7 @@ void TDataShardUserDb::CheckReadConflict(const TRowVersion& rowVersion) {
 }
 
 bool TDataShardUserDb::NeedToReadBeforeWrite(const TTableId& tableId) {
-    if (LockMode == ELockMode::OptimisticSnapshotIsolation
-            || LockMode == ELockMode::PessimisticNone) {
+    if (LockMode == ELockMode::OptimisticSnapshotIsolation) {
         return true;
     }
 

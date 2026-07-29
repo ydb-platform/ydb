@@ -3937,20 +3937,18 @@ def _can_compact_ordered_singleton(
 
 
 def _compact_ordered_singleton(relation: Relation) -> Relation:
-    """Select the compressed rank-zero row into one conditional slot."""
+    """Select the first present fixed-sequence row into one conditional slot."""
 
-    live_indices = _live_row_indices(relation.rows)
-    live_rows = tuple(relation.rows[index] for index in live_indices)
-    selected: list[smt.Term] = []
-    seen = smt.FALSE
-    for row in live_rows:
-        selected.append(smt.and_(row.present, smt.not_(seen)))
-        seen = smt.or_(seen, row.present)
-    selected_guards = tuple(selected)
+    live_rows = tuple(
+        relation.rows[index]
+        for index in _live_row_indices(relation.rows)
+    )
     values = {
         column.name: _select_ordered_singleton_value(
-            selected_guards,
-            tuple(row.values[column.name] for row in live_rows),
+            tuple(
+                (row.present, row.values[column.name])
+                for row in live_rows
+            ),
             _ordered_singleton_fallback(column),
         )
         for column in relation.columns
@@ -3959,7 +3957,7 @@ def _compact_ordered_singleton(relation: Relation) -> Relation:
         relation.columns,
         (
             Row(
-                smt.or_(*selected_guards),
+                smt.or_(*(row.present for row in live_rows)),
                 values,
                 None,
                 _common_partition_facts(live_rows),
@@ -3972,16 +3970,14 @@ def _compact_ordered_singleton(relation: Relation) -> Relation:
 
 
 def _select_ordered_singleton_value(
-    selected: tuple[smt.Term, ...],
-    alternatives: tuple[Value, ...],
+    candidates: tuple[tuple[smt.Term, Value], ...],
     fallback: Value,
 ) -> Value:
-    """ITE-select one typed value over a canonical absent-slot payload."""
+    """Left-biased ITE-select over a canonical absent-slot payload."""
 
-    if not alternatives or len(selected) != len(alternatives):
-        raise RelationError(
-            "ordered singleton selection has inconsistent alternatives"
-        )
+    if not candidates:
+        raise RelationError("ordered singleton selection has no candidates")
+    alternatives = tuple(value for _, value in candidates)
     first = alternatives[0]
     if any(value.type != first.type for value in alternatives[1:]):
         raise RelationError(
@@ -3998,7 +3994,7 @@ def _select_ordered_singleton_value(
 
     is_null = fallback.is_null
     value = fallback.value
-    for guard, alternative in zip(selected, alternatives):
+    for guard, alternative in reversed(candidates):
         is_null = smt.ite(guard, alternative.is_null, is_null)
         value = smt.ite(guard, alternative.value, value)
 

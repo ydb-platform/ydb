@@ -3,6 +3,7 @@
 #include <ydb/library/actors/testlib/test_runtime.h>
 
 #include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/service/service.h>
 #include <ydb/core/base/counters.h>
@@ -380,6 +381,52 @@ Y_UNIT_TEST_SUITE(BackgroundChangeRatio) {
         // Verify statistics were actually collected.
         auto countMin = ExtractCountMin(runtime, tableInfo.PathId);
         UNIT_ASSERT(countMin);
+    }
+
+    // 10. Restart persistence: the analyze baseline (LastAnalyzeRowModifications)
+    //     and LastUpdateTime live only in the SA-local ScheduleTraversals table.
+    //     After a primary collection, an SA tablet restart must reload both, so a
+    //     subsequent below-threshold change still does NOT trigger a re-analysis.
+    //     If either field were lost on reload, the table would look either
+    //     "never analyzed" (baseline -> Max<ui64>()) or time-stale
+    //     (LastUpdateTime -> 0) and be re-analyzed immediately.
+    Y_UNIT_TEST(RestartPreservesAnalyzeBaseline) {
+        TTestEnv env = CreateTestEnv();
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareColumnTableWithIndexes(env, "Database", "Table", 1);
+
+        // Wait for the primary background traversal: this persists both
+        // LastUpdateTime and LastAnalyzeRowModifications for the table.
+        WaitForSavedStatistics(runtime, tableInfo.PathId);
+
+        ui64 saTabletId = 0;
+        ResolvePathId(runtime, "/Root/Database/Table", nullptr, &saTabletId);
+
+        // Restart the SA tablet, forcing a reload from the local database.
+        auto sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, saTabletId, sender);
+
+        // Insert a below-threshold number of rows (5% << 20%). This only
+        // stays below threshold if the reloaded baseline still reflects the
+        // primary collection; a lost baseline would treat the table as
+        // never-analyzed and re-collect regardless.
+        InsertDataIntoTable(env, "Database", "Table", 50);
+
+        size_t saveCount = 0;
+        auto observer = runtime.AddObserver<TEvStatistics::TEvSaveStatisticsQueryResponse>([&](auto& ev) {
+            if (ev->Get()->PathId == tableInfo.PathId) {
+                ++saveCount;
+            }
+        });
+
+        runtime.SimulateSleep(TDuration::Seconds(10));
+
+        observer.Remove();
+
+        // No re-analysis: both persisted fields survived the restart.
+        UNIT_ASSERT_VALUES_EQUAL(saveCount, 0);
     }
 
 } // Y_UNIT_TEST_SUITE(BackgroundChangeRatio)

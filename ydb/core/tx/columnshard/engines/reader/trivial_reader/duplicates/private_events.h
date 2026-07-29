@@ -4,8 +4,8 @@
 #include "filters.h"
 
 #include <ydb/core/tx/columnshard/column_fetching/cache_policy.h>
-#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/engines/reader/trivial_reader/duplicates/common.h>
+#include <ydb/core/tx/columnshard/private_events/events.h>
 
 namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering::NPrivate {
 

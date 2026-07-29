@@ -2,11 +2,11 @@
 
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
-#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/read_with_blobs.h>
+#include <ydb/core/tx/columnshard/private_events/events.h>
 
 namespace NKikimr::NOlap {
 

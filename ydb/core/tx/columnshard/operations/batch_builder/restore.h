@@ -1,11 +1,11 @@
 #pragma once
 #include "merger.h"
 
-#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/data_reader/actor.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
 #include <ydb/core/tx/columnshard/operations/common/context.h>
+#include <ydb/core/tx/columnshard/private_events/events.h>
 
 namespace NKikimr::NOlap {
 

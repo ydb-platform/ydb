@@ -1,8 +1,8 @@
 #pragma once
-#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/common/blob.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
+#include <ydb/core/tx/columnshard/private_events/events.h>
 
 #include <util/generic/hash.h>
 

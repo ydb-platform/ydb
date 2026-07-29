@@ -1,7 +1,8 @@
 #pragma once
 
-#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
+#include <ydb/core/tx/columnshard/normalizer/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/private_events/events.h>
 
 #include <memory>
 #include <vector>

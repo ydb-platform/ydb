@@ -2,7 +2,7 @@
 
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/protos/s3_settings.pb.h>
-#include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/private_events/events.h>
 #include <ydb/core/tx/datashard/backup_restore_traits.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/datashard/datashard_s3_upload.h>

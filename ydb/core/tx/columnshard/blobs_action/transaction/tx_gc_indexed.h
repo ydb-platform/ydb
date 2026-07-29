@@ -1,6 +1,6 @@
 #pragma once
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
-#include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/private_events/events.h>
 
 namespace NKikimr::NColumnShard {
 class TTxGarbageCollectionFinished: public TTransactionBase<TColumnShard> {

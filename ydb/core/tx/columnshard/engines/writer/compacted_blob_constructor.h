@@ -5,7 +5,7 @@
 
 #include <ydb/core/tx/columnshard/blobs_action/abstract/action.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
-#include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/private_events/events.h>
 
 namespace NKikimr::NOlap {
 

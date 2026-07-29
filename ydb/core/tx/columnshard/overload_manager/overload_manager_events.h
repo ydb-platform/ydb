@@ -1,8 +1,8 @@
 #pragma once
 
 #include <ydb/core/base/events.h>
-#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/overload_manager/overload_manager_common_types.h>
+#include <ydb/core/tx/columnshard/private_events/events.h>
 
 namespace NKikimr::NColumnShard::NOverload {
 

@@ -1,7 +1,5 @@
 #include "conveyor_task.h"
 
-#include <ydb/core/tx/columnshard/columnshard_private_events.h>
-
 #include <ydb/library/actors/core/actor.h>
 
 namespace NKikimr::NOlap::NReader {

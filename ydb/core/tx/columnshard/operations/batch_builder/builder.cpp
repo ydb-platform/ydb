@@ -2,10 +2,10 @@
 #include "merger.h"
 #include "restore.h"
 
-#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/engines/writer/buffer/events.h>
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
 #include <ydb/core/tx/columnshard/operations/slice_builder/builder.h>
+#include <ydb/core/tx/columnshard/private_events/events.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/data_events/common/modification_type.h>

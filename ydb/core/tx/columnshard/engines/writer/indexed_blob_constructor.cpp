@@ -2,8 +2,8 @@
 
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
-#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/defs.h>
+#include <ydb/core/tx/columnshard/private_events/events.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 

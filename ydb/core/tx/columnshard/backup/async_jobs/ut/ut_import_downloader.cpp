@@ -5,7 +5,7 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/columnshard/backup/async_jobs/import_downloader.h>
 #include <ydb/core/tx/columnshard/backup/iscan/iscan.h>
-#include <ydb/core/tx/columnshard/columnshard_private_events.h>
+#include <ydb/core/tx/columnshard/private_events/events.h>
 #include <ydb/core/tx/datashard/import_common.h>
 
 #include <ydb/apps/ydbd/export/export.h>

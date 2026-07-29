@@ -1,7 +1,6 @@
 #pragma once
 #include "background_controller.h"
 #include "columnshard.h"
-#include "columnshard_private_events.h"
 #include "columnshard_subdomain_path_id.h"
 #include "counters.h"
 #include "defs.h"
@@ -13,6 +12,7 @@
 #include "common/path_id.h"
 #include "counters/columnshard.h"
 #include "counters/counters_manager.h"
+#include "data_accessor/abstract/events.h"
 #include "data_sharing/destination/events/control.h"
 #include "data_sharing/destination/events/transfer.h"
 #include "data_sharing/manager/sessions.h"
@@ -21,8 +21,10 @@
 #include "data_sharing/source/events/control.h"
 #include "data_sharing/source/events/transfer.h"
 #include "normalizer/abstract/abstract.h"
+#include "normalizer/abstract/events.h"
 #include "operations/events.h"
 #include "operations/manager.h"
+#include "resource_subscriber/container.h"
 #include "resource_subscriber/counters.h"
 #include "resource_subscriber/task.h"
 #include "subscriber/abstract/manager/manager.h"
@@ -39,6 +41,7 @@
 #include <ydb/core/tx/columnshard/column_fetching/manager.h>
 #include <ydb/core/tx/columnshard/overload_manager/overload_manager_events.h>
 #include <ydb/core/tx/columnshard/overload_manager/overload_manager_service.h>
+#include <ydb/core/tx/columnshard/private_events/events.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/locks/locks.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
@@ -173,6 +176,38 @@ using ITransaction = NTabletFlatExecutor::ITransaction;
 
 template <typename T>
 using TTransactionBase = NTabletFlatExecutor::TTransactionBase<T>;
+
+class TEvPrivate::TEvMetadataAccessorsInfo
+    : public NActors::TEventLocal<TEvPrivate::TEvMetadataAccessorsInfo, TEvPrivate::EvMetadataAccessorsInfo> {
+private:
+    const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor> Processor;
+    const ui64 Generation;
+    std::optional<NOlap::NResourceBroker::NSubscribe::TResourceContainer<NOlap::TDataAccessorsResult>> Result;
+
+public:
+    const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor>& GetProcessor() const {
+        return Processor;
+    }
+
+    ui64 GetGeneration() const {
+        return Generation;
+    }
+
+    NOlap::NResourceBroker::NSubscribe::TResourceContainer<NOlap::TDataAccessorsResult> ExtractResult() {
+        AFL_VERIFY(Result);
+        auto result = std::move(*Result);
+        Result.reset();
+        return result;
+    }
+
+    TEvMetadataAccessorsInfo(const std::shared_ptr<NOlap::IMetadataAccessorResultProcessor>& processor, const ui64 gen,
+        NOlap::NResourceBroker::NSubscribe::TResourceContainer<NOlap::TDataAccessorsResult>&& result)
+        : Processor(processor)
+        , Generation(gen)
+        , Result(std::move(result))
+    {
+    }
+};
 
 class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTabletExecutedFlat {
     friend class TEvWriteCommitSyncTransactionOperator;

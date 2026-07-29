@@ -9,6 +9,7 @@
 #include <ydb/core/tx/columnshard/engines/portions/column_record.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
+#include <ydb/core/tx/columnshard/engines/reader/common/conveyor_task.h>
 #include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/collection.h>
 
 namespace NKikimr::NOlap::NReader::NCommon {

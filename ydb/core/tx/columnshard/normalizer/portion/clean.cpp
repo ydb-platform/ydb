@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/scheme/filtered_scheme.h>
+#include <ydb/core/tx/columnshard/normalizer/abstract/events.h>
 #include <ydb/core/tx/columnshard/tables_manager.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
@@ -64,7 +65,7 @@ public:
             removeAction->DeclareSelfRemove(blobId);
         }
         TActorContext::AsActorContext().Send(
-            nCtx.GetShardActor(), std::make_unique<NColumnShard::TEvPrivate::TEvNormalizerResult>(
+            nCtx.GetShardActor(), std::make_unique<NKikimr::NColumnShard::TEvPrivate::TEvNormalizerResult>(
                                       std::make_shared<TBlobsRemovingResult>(removeAction, std::move(Portions))));
     }
 };

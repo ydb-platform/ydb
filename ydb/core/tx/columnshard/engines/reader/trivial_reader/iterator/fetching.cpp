@@ -4,6 +4,7 @@
 
 #include <ydb/core/tx/columnshard/engines/filter.h>
 #include <ydb/core/tx/columnshard/engines/portions/written.h>
+#include <ydb/core/tx/columnshard/engines/reader/common/conveyor_task.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
 #include <ydb/core/tx/columnshard/engines/reader/trivial_reader/duplicates/events.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>

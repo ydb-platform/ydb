@@ -23,6 +23,7 @@ PEERDIR(
     ydb/core/tx/columnshard/export/actor
     ydb/core/tx/columnshard/hooks/abstract
     ydb/core/tx/columnshard/hooks/testing
+    ydb/core/tx/columnshard/private_events
     ydb/core/tx/columnshard/test_helper
     ydb/library/testlib/s3_recipe_helper
     ydb/public/lib/yson_value

@@ -1868,7 +1868,7 @@ void TColumnShard::Enqueue(STFUNC_SIG) {
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvPrivate::TEvTieringModified, HandleInit);
         HFunc(TEvPrivate::TEvNormalizerResult, Handle);
-        HFunc(TEvPrivate::TEvAskTabletDataAccessors, Handle);
+        HFunc(NColumnShard::TEvPrivate::TEvAskTabletDataAccessors, Handle);
         HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
         HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable, Handle);
         HFunc(TEvColumnShard::TEvNotifyTxCompletion, Handle);

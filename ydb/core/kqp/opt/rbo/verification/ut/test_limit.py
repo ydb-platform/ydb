@@ -3,13 +3,17 @@ import os
 import subprocess
 import unittest
 from itertools import combinations, permutations, product
+from unittest import mock
 
 try:
     import yatest.common as yatest_common
 except ImportError:
     yatest_common = None
 
-from ydb.core.kqp.opt.rbo.verification.rbo_verifier import smt
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier import (
+    relation as relation_model,
+    smt,
+)
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
     Expr,
     SnapshotError,
@@ -21,6 +25,7 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import (
     Database,
     Evaluator as RelationEvaluator,
     BoundedChoice,
+    Occurrence,
     Outcome,
     PartitionFact,
     Relation,
@@ -1384,6 +1389,397 @@ class LimitOutcomeTest(unittest.TestCase):
             len(choices),
         )
 
+    def test_ordered_singleton_compaction_matches_symbolic_order_reference(self):
+        script = smt.Script()
+        present = tuple(
+            smt.symbol(f"present_{index}", smt.BOOL)
+            for index in range(3)
+        )
+        common_route = PartitionFact(
+            smt.symbol("common_route", smt.BOOL),
+            True,
+        )
+        split_route = smt.symbol("split_route", smt.BOOL)
+        payloads = (11, None, 7)
+        rows = tuple(
+            Row(
+                guard,
+                {
+                    "a.value": Value(
+                        "Int64",
+                        smt.bool_value(payload is None),
+                        smt.ZERO
+                        if payload is None
+                        else smt.int_value(payload),
+                    )
+                },
+                Occurrence("candidate", "source", index),
+                frozenset((
+                    common_route,
+                    PartitionFact(split_route, index == 1),
+                )),
+            )
+            for index, (guard, payload) in enumerate(zip(present, payloads))
+        )
+        orders = tuple(permutations(range(3)))
+        order_choice = script.fresh_constant("order_choice", smt.INT)
+        script.register_quantified_choice(order_choice, len(orders))
+        choice = BoundedChoice(order_choice, len(orders))
+        source_error = smt.symbol("source_error", smt.BOOL)
+        family = limit_family(
+            RelationFamily(tuple(
+                Outcome(
+                    smt.eq(order_choice, smt.int_value(order_index)),
+                    Relation(
+                        (Column("a.value", "Int64", True),),
+                        tuple(rows[index] for index in order),
+                        sequence=True,
+                    ),
+                    source_error,
+                    (("order", order_index),),
+                    (choice,),
+                )
+                for order_index, order in enumerate(orders)
+            )),
+            Expr(
+                kind="literal",
+                value=1,
+                result_type="Uint64",
+                nullable=False,
+            ),
+            None,
+            script,
+            "ordered-take",
+        )
+
+        self.assertEqual(len(family.outcomes), len(orders))
+        for order_index, outcome in enumerate(family.outcomes):
+            self.assertIs(outcome.error, source_error)
+            self.assertEqual(outcome.decisions, (("order", order_index),))
+            self.assertEqual(outcome.choices, (choice,))
+            self.assertEqual(len(outcome.relation.rows), 1)
+            self.assertTrue(outcome.relation.sequence)
+            self.assertTrue(outcome.relation.present_prefix)
+            self.assertIsNone(outcome.relation.ordinals)
+            selected = outcome.relation.rows[0]
+            self.assertIsNone(selected.occurrence)
+            self.assertEqual(
+                selected.partition_facts,
+                frozenset((common_route,)),
+            )
+
+        for mask, (order_index, order) in product(
+            product((False, True), repeat=3),
+            enumerate(orders),
+        ):
+            active = tuple(index for index in order if mask[index])
+            constants = {
+                source_error.atom: False,
+                common_route.term.atom: True,
+                split_route.atom: False,
+                order_choice.atom: order_index,
+                **{
+                    guard.atom: value
+                    for guard, value in zip(present, mask)
+                },
+            }
+            expected = () if not active else (payloads[active[0]],)
+            self.assertEqual(
+                _bags(family, constants),
+                {_bag(expected)},
+                (mask, order),
+            )
+
+    def test_ordered_singleton_tied_symbolic_ordinals_fall_back(self):
+        rows = tuple(
+            Row(
+                smt.TRUE,
+                {
+                    "a.value": Value(
+                        "Int64",
+                        smt.FALSE,
+                        smt.int_value(value),
+                    )
+                },
+            )
+            for value in (10, 20)
+        )
+        tied = (smt.ZERO, smt.ZERO)
+        family = limit_family(
+            single(
+                Relation(
+                    (Column("a.value", "Int64", False),),
+                    rows,
+                    sequence=True,
+                    ordinals=tied,
+                )
+            ),
+            Expr(
+                kind="literal",
+                value=1,
+                result_type="Uint64",
+                nullable=False,
+            ),
+            None,
+            smt.Script(),
+            "ordered-take",
+        )
+
+        relation = family.outcomes[0].relation
+        self.assertEqual(len(relation.rows), 2)
+        self.assertEqual(relation.ordinals, tied)
+        self.assertFalse(relation.present_prefix)
+        self.assertEqual(_bags(family, {}), {(10, 20)})
+
+    def test_ordered_singleton_compaction_is_small_and_fail_closed(self):
+        count_one = Expr(
+            kind="literal",
+            value=1,
+            result_type="Uint64",
+            nullable=False,
+        )
+
+        for metadata, value_type in (
+            (
+                DecimalAverageState(
+                    "Decimal(35,2)",
+                    smt.ONE,
+                    smt.ONE,
+                    1,
+                    1,
+                ),
+                "Decimal(35,2)",
+            ),
+            (
+                IntegralAverageCertificate(smt.ONE),
+                "Double",
+            ),
+        ):
+            values = tuple(
+                Value(
+                    value_type,
+                    smt.FALSE,
+                    smt.int_value(index + 1),
+                    2 if value_type.startswith("Decimal") else None,
+                    metadata if index == 0 else None,
+                )
+                for index in range(2)
+            )
+            source = single(
+                Relation(
+                    (Column("a.value", value_type, False),),
+                    tuple(
+                        Row(
+                            smt.TRUE,
+                            {"a.value": value},
+                        )
+                        for value in values
+                    ),
+                    sequence=True,
+                )
+            )
+            preserved = limit_family(
+                source,
+                count_one,
+                None,
+                smt.Script(),
+                "ordered-take",
+            )
+            with self.subTest(metadata=type(metadata).__name__):
+                self.assertEqual(len(preserved.outcomes[0].relation.rows), 2)
+                self.assertFalse(preserved.outcomes[0].relation.present_prefix)
+                self.assertIs(
+                    preserved.outcomes[0]
+                    .relation.rows[0]
+                    .values["a.value"]
+                    .average_metadata,
+                    metadata,
+                )
+
+        four_rows = single(
+            Relation(
+                (Column("a.value", "Int64", False),),
+                tuple(
+                    Row(
+                        smt.TRUE,
+                        {
+                            "a.value": Value(
+                                "Int64",
+                                smt.FALSE,
+                                smt.int_value(index),
+                            )
+                        },
+                    )
+                    for index in range(4)
+                ),
+                sequence=True,
+            )
+        )
+        bounded = limit_family(
+            four_rows,
+            count_one,
+            None,
+            smt.Script(),
+            "ordered-take",
+        )
+        self.assertEqual(len(bounded.outcomes[0].relation.rows), 4)
+        self.assertFalse(bounded.outcomes[0].relation.present_prefix)
+
+        offset_one = limit_family(
+            single(
+                Relation(
+                    (Column("a.value", "Int64", False),),
+                    four_rows.outcomes[0].relation.rows[:2],
+                    sequence=True,
+                )
+            ),
+            count_one,
+            Expr(
+                kind="literal",
+                value=1,
+                result_type="Uint64",
+                nullable=False,
+            ),
+            smt.Script(),
+            "ordered-take",
+        )
+        self.assertEqual(len(offset_one.outcomes[0].relation.rows), 2)
+        self.assertFalse(offset_one.outcomes[0].relation.present_prefix)
+
+    def test_ordered_singleton_compaction_fits_one_row_audit_cap(self):
+        present = tuple(
+            smt.symbol(f"decimal_present_{index}", smt.BOOL)
+            for index in range(3)
+        )
+        rows = tuple(
+            Row(
+                guard,
+                {
+                    "a.value": Value(
+                        "Decimal(35,2)",
+                        smt.FALSE,
+                        smt.int_value(value),
+                        bound,
+                    )
+                },
+            )
+            for guard, value, bound in zip(
+                present,
+                (100, 250, 175),
+                (100, 250, 175),
+            )
+        )
+        source = single(
+            Relation(
+                (Column("a.value", "Decimal(35,2)", False),),
+                rows,
+                sequence=True,
+            )
+        )
+
+        with mock.patch.object(relation_model, "MAX_RELATION_ROWS", 1):
+            compacted = limit_family(
+                source,
+                Expr(
+                    kind="literal",
+                    value=1,
+                    result_type="Uint64",
+                    nullable=False,
+                ),
+                None,
+                smt.Script(),
+                "ordered-take",
+            )
+
+        relation = compacted.outcomes[0].relation
+        self.assertEqual(len(relation.rows), 1)
+        self.assertTrue(relation.present_prefix)
+        self.assertEqual(
+            relation.rows[0]
+            .values["a.value"]
+            .decimal_finite_abs_bound,
+            250,
+        )
+        self.assertEqual(
+            _ground(
+                relation.rows[0].values["a.value"].is_null,
+                {
+                    guard.atom: False
+                    for guard in present
+                },
+            ),
+            False,
+        )
+        for mask in product((False, True), repeat=3):
+            constants = {
+                guard.atom: value
+                for guard, value in zip(present, mask)
+            }
+            expected = next(
+                (
+                    (payload,)
+                    for payload, active in zip((100, 250, 175), mask)
+                    if active
+                ),
+                (),
+            )
+            self.assertEqual(
+                _bags(compacted, constants),
+                {_bag(expected)},
+                mask,
+            )
+
+        one_live = smt.symbol("one_live", smt.BOOL)
+        padded = single(
+            Relation(
+                (Column("a.value", "Int64", False),),
+                (
+                    Row(
+                        smt.FALSE,
+                        {
+                            "a.value": Value(
+                                "Int64",
+                                smt.FALSE,
+                                smt.int_value(99),
+                            )
+                        },
+                    ),
+                    Row(
+                        one_live,
+                        {
+                            "a.value": Value(
+                                "Int64",
+                                smt.FALSE,
+                                smt.int_value(42),
+                            )
+                        },
+                    ),
+                ),
+                sequence=True,
+            )
+        )
+        with mock.patch.object(relation_model, "MAX_RELATION_ROWS", 1):
+            compacted_padding = limit_family(
+                padded,
+                Expr(
+                    kind="literal",
+                    value=1,
+                    result_type="Uint64",
+                    nullable=False,
+                ),
+                None,
+                smt.Script(),
+                "ordered-padded-take",
+            )
+        self.assertEqual(
+            len(compacted_padding.outcomes[0].relation.rows),
+            1,
+        )
+        self.assertEqual(
+            _bags(compacted_padding, {one_live.atom: True}),
+            {(42,)},
+        )
+
     def test_unordered_limit_matches_an_independent_exhaustive_reference(self):
         for count, offset in product(range(5), range(5)):
             with self.subTest(count=count, offset=offset):
@@ -1966,6 +2362,119 @@ class LimitOutcomeTest(unittest.TestCase):
 
 
 class StageLimitOutcomeTest(unittest.TestCase):
+    def test_merge_ordered_singleton_uses_one_present_prefix_slot(self):
+        order = [
+            {
+                "column": "a.value",
+                "ascending": True,
+                "nulls_first": True,
+            }
+        ]
+        parsed = parse_snapshot(
+            snapshot(
+                [
+                    scan(),
+                    {
+                        "id": "sorted",
+                        "op": "sort",
+                        "input": "scan",
+                        "order": copy.deepcopy(order),
+                        "limit": None,
+                        "phase": "intermediate",
+                    },
+                    limit(
+                        "first",
+                        "sorted",
+                        1,
+                        phase="final",
+                    ),
+                ],
+                "first",
+                {
+                    "root_stage": "root",
+                    "stages": [
+                        {
+                            "id": "source",
+                            "nodes": ["scan", "sorted"],
+                            "inputs": [],
+                            "outputs": [
+                                {"index": 0, "node": "sorted"}
+                            ],
+                            "source_storage": "column",
+                        },
+                        {
+                            "id": "root",
+                            "nodes": ["first"],
+                            "inputs": ["sorted"],
+                            "outputs": [
+                                {"index": 0, "node": "first"}
+                            ],
+                            "source_storage": None,
+                        },
+                    ],
+                    "edges": [
+                        {
+                            "id": "merge",
+                            "producer": "source",
+                            "consumer": "root",
+                            "occurrence": 0,
+                            "producer_output": 0,
+                            "consumer_input": 0,
+                            "kind": "merge",
+                            "order": copy.deepcopy(order),
+                        }
+                    ],
+                    "assumptions": [],
+                },
+            )
+        )
+        script = smt.Script()
+        database = Database(parsed, 1, script)
+        router = Router(script)
+        merge_shapes = []
+
+        def observe_merge(edge, task, edge_family):
+            self.assertEqual(edge.kind, "merge")
+            self.assertEqual(task, 0)
+            merge_shapes.extend(
+                len(outcome.relation.rows)
+                for outcome in edge_family.outcomes
+            )
+
+        family = StageEvaluator(
+            parsed,
+            database,
+            ScalarEncoder(script),
+            router,
+            edge_observer=observe_merge,
+        ).root()
+
+        self.assertTrue(merge_shapes)
+        self.assertEqual(set(merge_shapes), {2})
+        self.assertTrue(all(
+            len(outcome.relation.rows) == 1
+            and outcome.relation.sequence
+            and outcome.relation.present_prefix
+            for outcome in family.outcomes
+        ))
+        for present, source_task in product(
+            product((False, True), repeat=1),
+            (False, True),
+        ):
+            values = tuple(
+                10 + index
+                for index, active in enumerate(present)
+                if active
+            )
+            expected = () if not values else (min(values),)
+            constants = _constants(database, present)
+            constants[router.source_task("A", 0).atom] = source_task
+            self.assertEqual(
+                _bags(family, constants),
+                {_bag(expected)},
+                (present, source_task),
+            )
+
     def test_ensure_at_most_one_is_checked_in_each_stage_task(self):
         def errors(parsed, tasks):
             script = smt.Script()

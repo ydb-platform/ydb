@@ -1764,13 +1764,16 @@ class SortingNetworkEncodingTest(unittest.TestCase):
         script = smt.Script()
         database = Database(parsed, 4, script)
         with patch.object(relation, "MAX_RELATION_ROW_PAIRS", 10):
-            family = RelationEvaluator(
+            evaluator = RelationEvaluator(
                 parsed,
                 database,
                 ScalarEncoder(script),
-            ).root()
+            )
+            filtered = evaluator.node("filter")
+            family = evaluator.root()
 
-        self.assertFalse(family.outcomes[0].relation.present_prefix)
+        self.assertFalse(filtered.outcomes[0].relation.present_prefix)
+        self.assertTrue(family.outcomes[0].relation.present_prefix)
         rows = ((0, 0, 0), (1, 0, 1), (2, 0, 2), ABSENT)
         self.assertEqual(
             _sequences(

@@ -374,6 +374,7 @@ void TColumnShard::RunEnsureTable(
     Counters.GetTabletCounters()->SetCounter(COUNTER_TABLES, TablesManager.GetTables().size());
     Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_PRESETS, TablesManager.GetSchemaPresets().size());
     Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_TTLS, TablesManager.GetTtl().size());
+    ApplyColumnShardConfig();
 }
 
 void TColumnShard::RunAlterTable(
@@ -409,6 +410,7 @@ void TColumnShard::RunAlterTable(
 
     tableVerProto.SetSchemaPresetVersionAdj(alterProto.GetSchemaPresetVersionAdj());
     TablesManager.AddTableVersion(internalPathId, version, tableVerProto, schema, db);
+    ApplyColumnShardConfig();
 }
 
 void TColumnShard::RunDropTable(
@@ -477,6 +479,7 @@ void TColumnShard::RunAlterStore(
         }
         TablesManager.AddSchemaVersion(presetProto.GetId(), version, presetProto.GetSchema(), db);
     }
+    ApplyColumnShardConfig();
 }
 
 void TColumnShard::EnqueueBackgroundActivities(const bool periodic) {
@@ -1254,6 +1257,14 @@ void TColumnShard::Die(const TActorContext& ctx) {
 void TColumnShard::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev, const TActorContext&) {
     ui32 eventType = ev->Get()->SourceType;
     switch (eventType) {
+        case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
+            YDB_LOG_CRIT("",
+                {"event", "failed_to_deliver_config_subscription_request"});
+            break;
+        case NConsole::TEvConsole::EvConfigNotificationResponse:
+            YDB_LOG_ERROR("",
+                {"event", "failed_to_deliver_config_notification_response"});
+            break;
         case NOlap::NDataSharing::NEvents::TEvSendDataFromSource::EventType:
         case NOlap::NDataSharing::NEvents::TEvAckDataToSource::EventType:
         case NOlap::NDataSharing::NEvents::TEvApplyLinksModification::EventType:

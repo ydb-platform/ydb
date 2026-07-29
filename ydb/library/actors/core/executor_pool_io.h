@@ -25,6 +25,12 @@ namespace NActors {
 
         const TString PoolName;
         const ui32 ActorSystemIndex = NActors::TActorTypeOperator::GetActorSystemIndex();
+
+        // Instantiated once per activation queue kind so that Pop() inlines into the spin loop;
+        // GetReadyActivation picks the instantiation from UseRingQueueValue.
+        template <typename TQueue>
+        TMailbox* GetReadyActivationImpl(ui64 revolvingCounter);
+
     public:
         TIOExecutorPool(ui32 poolId, ui32 threads, const TString& poolName = "", TAffinity* affinity = nullptr, bool useRingQueue = false);
         explicit TIOExecutorPool(const TIOExecutorPoolConfig& cfg, IHarmonizer *harmonizer = nullptr);

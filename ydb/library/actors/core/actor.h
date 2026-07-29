@@ -543,6 +543,7 @@ namespace NActors {
     };
 
     namespace NDetail {
+        class TActorSystemFlagAccessor;
         class TActorAsyncHandlerPromise;
         template<class TEvent>
         class TActorSpecificEventAwaiter;
@@ -582,6 +583,7 @@ namespace NActors {
         ui64 SystemFlags = 0;
 
     private:
+        friend class NDetail::TActorSystemFlagAccessor;
         friend class NDetail::TActorAsyncHandlerPromise;
         template<class TEvent>
         friend class NDetail::TActorSpecificEventAwaiter;
@@ -881,6 +883,15 @@ namespace NActors {
             SelfActorId = actorId;
         }
     };
+
+    namespace NDetail {
+        class TActorSystemFlagAccessor {
+        public:
+            static bool HasSystemFlag(const IActor& actor, IActor::ESystemFlag flag) noexcept {
+                return actor.HasSystemFlag(flag);
+            }
+        };
+    }
 
     inline size_t GetActivityTypeCount() {
         return TLocalProcessKeyState<TActorActivityTag>::GetInstance().GetCount();

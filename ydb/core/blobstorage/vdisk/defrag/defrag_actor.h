@@ -1,6 +1,7 @@
 #pragma once
 
 #include "defs.h"
+#include <atomic>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_mongroups.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_outofspace.h>
@@ -26,6 +27,7 @@ namespace NKikimr {
         NMonGroup::TDefragGroup DefragMonGroup;
         bool RunDefragBySchedule;
         std::shared_ptr<TEventsQuoter> Throttler;
+        std::atomic<ui64> LastRatioPublishUs{0};
 
         TDefragCtx(
                 const TIntrusivePtr<TVDiskContext> &vctx,

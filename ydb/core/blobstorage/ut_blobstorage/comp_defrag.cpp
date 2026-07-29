@@ -1667,4 +1667,32 @@ Y_UNIT_TEST_SUITE(CompDefrag) {
         UNIT_ASSERT_VALUES_EQUAL(tokenResults, tokenResultsBeforeBrokerShutdown);
     }
 
+    Y_UNIT_TEST(CalculationRatioDuringDefrag) {
+        auto run = [](ui64 defragCalculation) {
+            TTestEnvCompDefragIndependent env(0.0);
+            env.SetIcbControl("VDiskControls.CalculateSstRatioDuringDefrag", defragCalculation);
+
+            const ui32 N = 50000;
+            const ui32 batchSize = 1000;
+            env.WriteData(N, batchSize);
+            env.RunFullCompaction();
+            const ui64 totalHugeChunks = env.GetMetrics().HugeUsedChunks;
+
+            DeleteHugeBlobsOfTablet(env, N, 1);
+            env.Env.Sim(TDuration::Minutes(30));
+
+            return std::make_pair(totalHugeChunks, env.PrintMetrics());
+        };
+
+        const auto [compactionTotal, compactionM] = run(0);
+        const auto [defragTotal, defragM] = run(1);
+
+        UNIT_ASSERT_VALUES_EQUAL(defragTotal, compactionTotal);
+        UNIT_ASSERT_VALUES_EQUAL(compactionM.HugeChunksCanBeFreed, 0);
+        UNIT_ASSERT_VALUES_EQUAL(defragM.HugeChunksCanBeFreed, 0);
+        UNIT_ASSERT_LT(compactionM.HugeUsedChunks, compactionTotal);
+        UNIT_ASSERT_LT(defragM.HugeUsedChunks, defragTotal);
+        UNIT_ASSERT_VALUES_EQUAL(defragM.HugeUsedChunks, compactionM.HugeUsedChunks);
+    }
+
 }

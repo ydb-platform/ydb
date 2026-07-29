@@ -5,6 +5,8 @@
 #include <ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugeheap.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all_snap.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullds_heap_it.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hullstorageratio.h>
+#include <ydb/core/blobstorage/vdisk/hulldb/generic/blobstorage_hullrecmerger.h>
 #include <ydb/core/blobstorage/vdisk/query/query_statalgo.h>
 
 namespace NKikimr {
@@ -64,9 +66,11 @@ namespace NKikimr {
 
     private:
         THullDsSnap FullSnap;
+    protected:
         const TBlobStorageGroupType GType;
         const TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> Barriers;
         const bool AllowKeepFlags;
+    private:
         TLogoBlobsSnapshot::TForwardIterator Iter;
 
         TKeyLogoBlob Key;
@@ -106,17 +110,20 @@ namespace NKikimr {
         }
 
         void AddFromFresh(const TMemRecLogoBlob& memRec, const TRope* /*data*/, const TKeyLogoBlob& key, ui64 lsn) {
+            static_cast<TDerived&>(*this).OnAddFromFresh(memRec, key, lsn);
             Update(memRec, nullptr, key, lsn, nullptr);
         }
 
         void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& key, ui64 circaLsn,
                 const TLevelSegment *sst) {
+            static_cast<TDerived&>(*this).OnAddFromSegment(memRec, outbound, key, sst);
             Update(memRec, outbound, key, circaLsn, sst);
         }
 
         static constexpr bool HaveToMergeData() { return false; }
 
         void Clear() {
+            static_cast<TDerived&>(*this).OnClear();
             Key = TKeyLogoBlob();
             MemRec.reset();
             SeenParts.Clear();
@@ -133,7 +140,14 @@ namespace NKikimr {
                         sst);
                 }
             }
+            static_cast<TDerived&>(*this).OnFinish(Key);
         }
+
+    protected:
+        void OnAddFromSegment(const TMemRecLogoBlob&, const TDiskPart*, const TKeyLogoBlob&, const TLevelSegment*) {}
+        void OnAddFromFresh(const TMemRecLogoBlob&, const TKeyLogoBlob&, ui64) {}
+        void OnFinish(const TKeyLogoBlob&) {}
+        void OnClear() {}
 
     private:
         void Update(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& key, ui64 lsn,
@@ -452,28 +466,36 @@ namespace NKikimr {
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    class TDefragCalcStat
-        : public TDefragScanner<TDefragCalcStat>
+    class TDefragCalcStatWithRatio
+        : public TDefragScanner<TDefragCalcStatWithRatio>
         , public TDefragQuantumChunkFinder
     {
-        struct TPerSlotSizeInfo {
-            ui32 UsefulSlots = 0;
-            const ui32 NumberOfSlotsInChunk;
-
-            TPerSlotSizeInfo(ui32 numberOfSlotsInChunk)
-                : NumberOfSlotsInChunk(numberOfSlotsInChunk)
-            {}
-        };
-
         std::shared_ptr<THugeBlobCtx> HugeBlobCtx;
         std::unordered_set<ui32> Chunks;
         std::unordered_map<ui32, ui32> Map; // numberOfSlotsInChunk -> usefulSlots
 
+        // SST ratio (calculate the same values as NHullComp::TStrategyStorageRatio)
+        struct TPerSstCur {
+            const TLevelSegment* Sst = nullptr;
+            ui32 NumKeepFlags = 0;
+            ui32 NumDoNotKeepFlags = 0;
+            ui64 InplacedDataSize = 0;
+            ui64 HugeDataSize = 0;
+        };
+        const bool ProduceRatios;
+        TIndexRecordMerger<TKeyLogoBlob, TMemRecLogoBlob> WholeMerger;
+        TVector<TPerSstCur> CurSsts;
+        TKeyLogoBlob RatioKey;
+        THashMap<const TLevelSegment*, NHullComp::TSstRatioPtr> Ratios;
+
     public:
-        TDefragCalcStat(THullDsSnap&& fullSnap, const std::shared_ptr<THugeBlobCtx>& hugeBlobCtx)
+        TDefragCalcStatWithRatio(THullDsSnap&& fullSnap, const std::shared_ptr<THugeBlobCtx>& hugeBlobCtx,
+                bool produceRatios = false)
             : TDefragScanner(std::move(fullSnap))
             , TDefragQuantumChunkFinder(hugeBlobCtx)
             , HugeBlobCtx(hugeBlobCtx)
+            , ProduceRatios(produceRatios)
+            , WholeMerger(GType)
         {}
 
         void Add(TDiskPart part, const TLogoBlobID& id, bool useful, const TLevelSegment *sst) {
@@ -496,6 +518,94 @@ namespace NKikimr {
                 res += (usefulSlots + numberOfSlotsInChunk - 1) / numberOfSlotsInChunk;
             }
             return res;
+        }
+
+        void OnAddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart* outbound, const TKeyLogoBlob& key,
+                const TLevelSegment* sst) {
+            if (!ProduceRatios) {
+                return;
+            }
+            RatioKey = key;
+            WholeMerger.AddFromSegment(memRec, outbound, key, 0, sst);
+
+            TPerSstCur* cur = nullptr;
+            for (TPerSstCur& c : CurSsts) {
+                if (c.Sst == sst) {
+                    cur = &c;
+                    break;
+                }
+            }
+            if (!cur) {
+                cur = &CurSsts.emplace_back();
+                cur->Sst = sst;
+            }
+            const int mode = memRec.GetIngress().GetCollectMode(TIngress::IngressMode(GType));
+            cur->NumKeepFlags += mode & CollectModeKeep;
+            cur->NumDoNotKeepFlags += mode & CollectModeDoNotKeep;
+
+            TDiskDataExtractor extr;
+            memRec.GetDiskData(&extr, outbound);
+            cur->InplacedDataSize += extr.GetInplacedDataSize();
+            cur->HugeDataSize += extr.GetHugeDataSize();
+        }
+
+        void OnAddFromFresh(const TMemRecLogoBlob& memRec, const TKeyLogoBlob& key, ui64 lsn) {
+            if (!ProduceRatios) {
+                return;
+            }
+            RatioKey = key;
+            WholeMerger.AddFromFresh(memRec, nullptr, key, lsn); // fresh is not an SST
+        }
+
+        void OnFinish(const TKeyLogoBlob& /*key*/) {
+            if (!ProduceRatios) {
+                return;
+            }
+            WholeMerger.Finish();
+            const ui32 wholeKeep = WholeMerger.GetNumKeepFlags();
+            const ui32 wholeDoNotKeep = WholeMerger.GetNumDoNotKeepFlags();
+            const TMemRecLogoBlob& wholeMemRec = WholeMerger.GetMemRec();
+            for (const TPerSstCur& cur : CurSsts) {
+                NGc::TKeepStatus keep = Barriers->Keep(RatioKey, wholeMemRec,
+                    {cur.NumKeepFlags, cur.NumDoNotKeepFlags >> 1, wholeKeep, wholeDoNotKeep},
+                    AllowKeepFlags, true /*allowGarbageCollection*/);
+                NHullComp::TSstRatioPtr& ratio = Ratios[cur.Sst];
+                if (!ratio) {
+                    ratio = MakeIntrusive<NHullComp::TSstRatio>();
+                }
+                const ui64 indexItemByteSize = sizeof(TKeyLogoBlob) + sizeof(TMemRecLogoBlob);
+                ratio->IndexItemsTotal++;
+                ratio->IndexBytesTotal += indexItemByteSize;
+                ratio->InplacedDataTotal += cur.InplacedDataSize;
+                ratio->HugeDataTotal += cur.HugeDataSize;
+                if (keep.KeepIndex) {
+                    ratio->IndexItemsKeep++;
+                    ratio->IndexBytesKeep += indexItemByteSize;
+                }
+                if (keep.KeepData) {
+                    ratio->InplacedDataKeep += cur.InplacedDataSize;
+                    ratio->HugeDataKeep += cur.HugeDataSize;
+                }
+            }
+        }
+
+        void OnClear() {
+            if (!ProduceRatios) {
+                return;
+            }
+            WholeMerger.Clear();
+            CurSsts.clear();
+        }
+
+        const THashMap<const TLevelSegment*, NHullComp::TSstRatioPtr>& GetRatios() const {
+            return Ratios;
+        }
+
+        void ApplyStorageRatios(TInstant now) {
+            for (const auto& [sst, ratio] : Ratios) {
+                ratio->Time = now;
+                const_cast<TLevelSegment*>(sst)->StorageRatio.Set(ratio, now);
+            }
         }
     };
 

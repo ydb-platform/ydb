@@ -994,6 +994,28 @@ enum class EDateIntervalShape {
     NullableDays,
 };
 
+enum class EDynamicDateIntervalShape {
+    Exact,
+    FoldedInterval,
+    FoldedNonDayInterval,
+    FoldedNonOptionalInterval,
+    NonOptionalMember,
+    WrongMemberType,
+    InvisibleMember,
+    NonMemberLeft,
+    SafeCastMember,
+    CommutedOperands,
+    DirectInterval,
+    DynamicDays,
+    NonOptionalResult,
+    WrongResultType,
+    WrongArithmeticCallable,
+    UnaryArithmetic,
+    TernaryArithmetic,
+    UnsafeRoot,
+    UnsafeMember,
+};
+
 enum class EDirectDateIntervalShape {
     Exact,
     NonOptionalResult,
@@ -1369,6 +1391,121 @@ TExprNode::TPtr TypedConstantDateInterval(
         shape == EDateIntervalShape::NonOptionalArithmeticResult
             ? dateType
             : optionalDateType);
+}
+
+TExprNode::TPtr TypedDynamicDateInterval(
+    TExportTestContext& ctx,
+    TStringBuf operation,
+    TStringBuf days,
+    EDynamicDateIntervalShape shape = EDynamicDateIntervalShape::Exact,
+    EDateIntervalShape intervalShape = EDateIntervalShape::Exact,
+    TStringBuf alias = "a")
+{
+    const auto* dateType = ScalarType(ctx, NUdf::EDataSlot::Date);
+    const auto* optionalDateType = ScalarType(
+        ctx, NUdf::EDataSlot::Date, true);
+    const auto* datetimeType = ScalarType(
+        ctx, NUdf::EDataSlot::Datetime, true);
+    const auto* intervalType = ScalarType(
+        ctx, NUdf::EDataSlot::Interval);
+    const auto* optionalIntervalType = ScalarType(
+        ctx, NUdf::EDataSlot::Interval, true);
+    const auto* int32Type = ScalarType(ctx, NUdf::EDataSlot::Int32);
+
+    auto constant = TypedConstantDateInterval(
+        ctx,
+        operation,
+        "String",
+        "1998-04-08",
+        days,
+        intervalShape);
+    TExprNode::TPtr interval = constant->ChildPtr(1);
+    TExprNode::TPtr member = TypedMember(
+        ctx,
+        TStringBuilder() << alias << ".x",
+        shape == EDynamicDateIntervalShape::NonOptionalMember
+            ? dateType
+            : shape == EDynamicDateIntervalShape::WrongMemberType
+                ? datetimeType
+                : optionalDateType);
+    if (shape == EDynamicDateIntervalShape::InvisibleMember) {
+        member = TypedMember(ctx, "a.hidden", optionalDateType);
+    } else if (shape == EDynamicDateIntervalShape::NonMemberLeft) {
+        member = TypedCallable(
+            ctx,
+            "Just",
+            {TypedLiteral(ctx, "Date", "0", dateType)},
+            optionalDateType);
+    } else if (shape == EDynamicDateIntervalShape::SafeCastMember) {
+        member = TypedCallable(
+            ctx,
+            "SafeCast",
+            {
+                std::move(member),
+                OptionalDataTypeDescriptor(
+                    ctx, "Date", dateType, optionalDateType),
+            },
+            optionalDateType);
+    }
+
+    if (shape == EDynamicDateIntervalShape::DirectInterval) {
+        interval = TypedLiteral(
+            ctx, "Interval", "432000000000", intervalType);
+    } else if (shape == EDynamicDateIntervalShape::DynamicDays) {
+        interval = TypedCallable(
+            ctx,
+            "Apply",
+            {
+                interval->ChildPtr(0),
+                TypedMember(
+                    ctx,
+                    TStringBuilder() << alias << ".days",
+                    int32Type),
+            },
+            optionalIntervalType);
+    } else if (
+        shape == EDynamicDateIntervalShape::FoldedInterval ||
+        shape == EDynamicDateIntervalShape::FoldedNonDayInterval ||
+        shape == EDynamicDateIntervalShape::FoldedNonOptionalInterval)
+    {
+        constexpr i64 MicrosPerDay = 86'400'000'000LL;
+        const TString micros =
+            shape == EDynamicDateIntervalShape::FoldedNonDayInterval
+                ? TString("1")
+                : ToString(FromString<i64>(days) * MicrosPerDay);
+        interval = TypedCallable(
+            ctx,
+            "Just",
+            {TypedLiteral(ctx, "Interval", micros, intervalType)},
+            shape == EDynamicDateIntervalShape::FoldedNonOptionalInterval
+                ? intervalType
+                : optionalIntervalType);
+    }
+
+    TExprNode::TListType arguments;
+    if (shape == EDynamicDateIntervalShape::CommutedOperands) {
+        arguments = {std::move(interval), std::move(member)};
+    } else {
+        arguments = {std::move(member), std::move(interval)};
+    }
+    if (shape == EDynamicDateIntervalShape::UnaryArithmetic) {
+        arguments.pop_back();
+    } else if (shape == EDynamicDateIntervalShape::TernaryArithmetic) {
+        arguments.push_back(TypedLiteral(ctx, "Date", "0", dateType));
+    }
+
+    auto result = TypedCallable(
+        ctx,
+        shape == EDynamicDateIntervalShape::WrongArithmeticCallable
+            ? TStringBuf("*")
+            : operation,
+        std::move(arguments),
+        shape == EDynamicDateIntervalShape::NonOptionalResult
+            ? dateType
+            : shape == EDynamicDateIntervalShape::WrongResultType
+                ? datetimeType
+                : optionalDateType);
+    return result;
 }
 
 TExprNode::TPtr TypedDirectDateInterval(
@@ -2226,21 +2363,26 @@ TSemanticSnapshotExportResult ExportTypedMapExpressionResult(
     const TString& alias,
     TStringBuf sourceType,
     bool sourceNullable,
-    TExprNode::TPtr expression)
+    TExprNode::TPtr expression,
+    std::function<void(TExprNode&)> mutate = {})
 {
     const auto& table = AddTable(ctx, "/Root/TypedExpression", {
         {"x", TString(sourceType), !sourceNullable},
     });
     auto read = MakeRead(ctx, table, alias, {"x"});
+    TExpression wrapped(
+        std::move(expression),
+        &ctx.ExprCtx,
+        &ctx.ExpressionProps);
+    if (mutate) {
+        mutate(*wrapped.GetExpressionBody());
+    }
     auto map = MakeIntrusive<TOpMap>(
         read,
         TPositionHandle(),
         TVector<TMapElement>{TMapElement(
             TInfoUnit("result"),
-            TExpression(
-                std::move(expression),
-                &ctx.ExprCtx,
-                &ctx.ExpressionProps))});
+            std::move(wrapped))});
     TOpRoot root(map, TPositionHandle(), {"result"});
 
     return ExportSemanticSnapshotV1(root, ctx.RboCtx);
@@ -6169,6 +6311,191 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                 "a",
                 TypedDateTime2Shift(ctx, callable, "8766", shift));
             UNIT_ASSERT_C(!result.IsSupported(), callable);
+        }
+    }
+
+    Y_UNIT_TEST(ExportsDynamicDateIntervalFromDaysAsPresentValueOpaque) {
+        const auto exportExpression = [](
+            TStringBuf operation,
+            TStringBuf days,
+            TStringBuf alias,
+            EDynamicDateIntervalShape shape)
+        {
+            TExportTestContext ctx;
+            return ExportTypedMapExpression(
+                ctx,
+                TString(alias),
+                "Date",
+                true,
+                TypedDynamicDateInterval(
+                    ctx,
+                    operation,
+                    days,
+                    shape,
+                    EDateIntervalShape::Exact,
+                    alias));
+        };
+
+        const auto addition = exportExpression(
+            "+", "5", "a", EDynamicDateIntervalShape::Exact);
+        UNIT_ASSERT_VALUES_EQUAL(
+            addition["kind"].GetStringSafe(), "if_present");
+        UNIT_ASSERT_VALUES_EQUAL(
+            addition["type"].GetStringSafe(), "Date");
+        UNIT_ASSERT(addition["nullable"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            addition["optional"]["kind"].GetStringSafe(), "column");
+        UNIT_ASSERT_VALUES_EQUAL(
+            addition["optional"]["column"].GetStringSafe(), "a.x");
+
+        const auto& present = addition["present"];
+        UNIT_ASSERT_VALUES_EQUAL(
+            present["kind"].GetStringSafe(), "opaque");
+        UNIT_ASSERT_VALUES_EQUAL(
+            present["type"].GetStringSafe(), "Date");
+        UNIT_ASSERT(present["nullable"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            present["args"].GetArraySafe().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            present["args"][0]["kind"].GetStringSafe(), "bound");
+        UNIT_ASSERT_VALUES_EQUAL(
+            present["args"][0]["depth"].GetUIntegerSafe(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(
+            addition["missing"]["kind"].GetStringSafe(), "null");
+        UNIT_ASSERT_VALUES_EQUAL(
+            addition["missing"]["type"].GetStringSafe(), "Date");
+
+        const TString fingerprint =
+            present["fingerprint"].GetStringSafe();
+        UNIT_ASSERT_VALUES_EQUAL(
+            fingerprint,
+            "format:30:yql-date-interval-from-days-v1;"
+            "operation:1:+;days:1:5;");
+
+        const auto folded = exportExpression(
+            "+", "5", "a", EDynamicDateIntervalShape::FoldedInterval);
+        UNIT_ASSERT_VALUES_EQUAL(
+            folded["present"]["fingerprint"].GetStringSafe(),
+            fingerprint);
+
+        const auto renamed = exportExpression(
+            "+", "5", "renamed", EDynamicDateIntervalShape::Exact);
+        UNIT_ASSERT_VALUES_EQUAL(
+            renamed["present"]["fingerprint"].GetStringSafe(),
+            fingerprint);
+        UNIT_ASSERT_VALUES_EQUAL(
+            renamed["optional"]["column"].GetStringSafe(),
+            "renamed.x");
+
+        const auto subtraction = exportExpression(
+            "-", "5", "a", EDynamicDateIntervalShape::Exact);
+        const auto differentDays = exportExpression(
+            "+", "-5", "a", EDynamicDateIntervalShape::Exact);
+        UNIT_ASSERT_VALUES_UNEQUAL(
+            subtraction["present"]["fingerprint"].GetStringSafe(),
+            fingerprint);
+        UNIT_ASSERT_VALUES_UNEQUAL(
+            differentDays["present"]["fingerprint"].GetStringSafe(),
+            fingerprint);
+    }
+
+    Y_UNIT_TEST(DynamicDateIntervalFromDaysGateFailsClosed) {
+        const TVector<EDynamicDateIntervalShape> malformedRoots = {
+            EDynamicDateIntervalShape::FoldedNonDayInterval,
+            EDynamicDateIntervalShape::FoldedNonOptionalInterval,
+            EDynamicDateIntervalShape::NonOptionalMember,
+            EDynamicDateIntervalShape::WrongMemberType,
+            EDynamicDateIntervalShape::InvisibleMember,
+            EDynamicDateIntervalShape::NonMemberLeft,
+            EDynamicDateIntervalShape::SafeCastMember,
+            EDynamicDateIntervalShape::CommutedOperands,
+            EDynamicDateIntervalShape::DirectInterval,
+            EDynamicDateIntervalShape::DynamicDays,
+            EDynamicDateIntervalShape::NonOptionalResult,
+            EDynamicDateIntervalShape::WrongResultType,
+            EDynamicDateIntervalShape::WrongArithmeticCallable,
+            EDynamicDateIntervalShape::UnaryArithmetic,
+            EDynamicDateIntervalShape::TernaryArithmetic,
+            EDynamicDateIntervalShape::UnsafeRoot,
+            EDynamicDateIntervalShape::UnsafeMember,
+        };
+        for (const auto shape : malformedRoots) {
+            TExportTestContext ctx;
+            const auto result = ExportTypedMapExpressionResult(
+                ctx,
+                "a",
+                "Date",
+                true,
+                TypedDynamicDateInterval(ctx, "+", "5", shape),
+                [shape](TExprNode& root) {
+                    if (shape == EDynamicDateIntervalShape::UnsafeRoot) {
+                        root.SetSideEffects(ESideEffects::General);
+                    } else if (
+                        shape == EDynamicDateIntervalShape::UnsafeMember)
+                    {
+                        root.Child(0)->SetSideEffects(ESideEffects::General);
+                    }
+                });
+            UNIT_ASSERT_C(!result.IsSupported(), static_cast<ui32>(shape));
+        }
+
+        const TVector<EDateIntervalShape> malformedIntervals = {
+            EDateIntervalShape::WrongUdfName,
+            EDateIntervalShape::NonVoidRunConfig,
+            EDateIntervalShape::NonVoidUserType,
+            EDateIntervalShape::NonEmptyTypeConfig,
+            EDateIntervalShape::WrongCachedArgumentFlags,
+            EDateIntervalShape::MismatchedCachedCallableAnnotation,
+            EDateIntervalShape::WrongCachedReturnDescriptor,
+            EDateIntervalShape::NonVoidCachedRunConfigType,
+            EDateIntervalShape::NonEmptyFileAlias,
+            EDateIntervalShape::WrongCallableAnnotation,
+            EDateIntervalShape::ReversedUdfSettings,
+            EDateIntervalShape::MissingUdfSetting,
+            EDateIntervalShape::WrongApplyResult,
+            EDateIntervalShape::WrongDaysType,
+            EDateIntervalShape::NullableDays,
+        };
+        for (const auto shape : malformedIntervals) {
+            TExportTestContext ctx;
+            const auto result = ExportTypedMapExpressionResult(
+                ctx,
+                "a",
+                "Date",
+                true,
+                TypedDynamicDateInterval(
+                    ctx,
+                    "+",
+                    "5",
+                    EDynamicDateIntervalShape::Exact,
+                    shape));
+            UNIT_ASSERT_C(!result.IsSupported(), static_cast<ui32>(shape));
+        }
+
+        for (const TString days : {"49673", "-49673", "2147483648"}) {
+            TExportTestContext ctx;
+            const auto result = ExportTypedMapExpressionResult(
+                ctx,
+                "a",
+                "Date",
+                true,
+                TypedDynamicDateInterval(ctx, "+", days));
+            UNIT_ASSERT_C(!result.IsSupported(), days);
+        }
+
+        for (const TString days : {"49673", "-49673"}) {
+            TExportTestContext ctx;
+            const auto result = ExportTypedMapExpressionResult(
+                ctx,
+                "a",
+                "Date",
+                true,
+                TypedDynamicDateInterval(
+                    ctx,
+                    "+",
+                    days,
+                    EDynamicDateIntervalShape::FoldedInterval));
+            UNIT_ASSERT_C(!result.IsSupported(), days);
         }
     }
 

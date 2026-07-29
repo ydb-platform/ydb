@@ -28,6 +28,7 @@ import subprocess
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime
 from typing import Any
 
 DEFAULT_REPO = "ydb-platform/ydb"
@@ -243,14 +244,302 @@ def keys_overlap(a: list[str] | None, b: list[str] | None) -> bool:
     return bool(sa & sb)
 
 
+def norm_query_name(q: str | None) -> str:
+    """Tpcds1.Query62 / Query62 → Query62."""
+    s = str(q or "").strip()
+    if not s:
+        return ""
+    if "." in s:
+        tail = s.rsplit(".", 1)[-1]
+        if tail.lower().startswith("query") or re.match(r"^q\d+$", tail, re.I):
+            return tail
+    return s
+
+
+def norm_branch_label(branch: str | None) -> str:
+    """Suite branch → GitHub label name. trunk ≡ main."""
+    b = str(branch or "").strip().lower()
+    if not b or b in ("unknown", "—", "-"):
+        return ""
+    # origin/main, refs/heads/stable-26-3-1
+    if "/" in b:
+        b = b.rsplit("/", 1)[-1]
+    if b == "trunk":
+        return "main"
+    return b
+
+
+def branch_label_match(issue_labels: list[str] | None, branch: str | None) -> bool:
+    """True if issue labels include the run branch (trunk≡main)."""
+    want = norm_branch_label(branch)
+    if not want:
+        return False
+    labels = {str(x).strip().lower() for x in (issue_labels or []) if x}
+    if want in labels:
+        return True
+    # also accept raw trunk on issue if someone labeled trunk
+    if want == "main" and "trunk" in labels:
+        return True
+    return False
+
+
+def _affected_hit(
+    aff: dict[str, Any],
+    *,
+    suite: str,
+    db: str | None,
+    query: str | None,
+) -> bool:
+    if str(aff.get("suite") or "") != suite:
+        return False
+    aff_db = aff.get("db")
+    if aff_db and db and str(aff_db) != str(db):
+        return False
+    qs = [norm_query_name(q) for q in (aff.get("queries") or []) if q]
+    if not qs:
+        return True  # suite-wide
+    if not query:
+        return True  # suite-level ask without query
+    nq = norm_query_name(query)
+    return nq in qs or any(q.lower() == nq.lower() for q in qs)
+
+
+def classify_fail_coverage(
+    issues: list[dict[str, Any]],
+    *,
+    suite: str,
+    db: str | None = None,
+    branch: str | None = None,
+    query: str | None = None,
+    kind: str | None = None,
+) -> dict[str, Any]:
+    """Classify a fail against open duty issues.
+
+    Returns:
+      status: covered | wrong_branch | uncovered
+      tickets: list of matching issue stubs (with branch_match / needs_branch)
+      missing_branch: branch label to add when status=wrong_branch
+    """
+    covered: list[dict[str, Any]] = []
+    wrong: list[dict[str, Any]] = []
+    for iss in issues:
+        if kind and iss.get("kind") and str(iss["kind"]).lower() != str(kind).lower():
+            continue
+        matched_q: list[str] = []
+        hit = False
+        for aff in iss.get("affected") or []:
+            if not _affected_hit(aff, suite=suite, db=db, query=query):
+                continue
+            hit = True
+            for q in aff.get("queries") or []:
+                nq = norm_query_name(q)
+                if nq and nq not in matched_q:
+                    matched_q.append(nq)
+        if not hit:
+            continue
+        labels = list(iss.get("labels") or [])
+        br_ok = branch_label_match(labels, branch)
+        stub = {
+            "number": iss.get("number"),
+            "title": iss.get("title"),
+            "url": iss.get("url"),
+            "fingerprint": iss.get("fingerprint"),
+            "queries": matched_q,
+            "labels": labels,
+            "branch_match": br_ok,
+            "needs_branch": None if br_ok else (norm_branch_label(branch) or None),
+        }
+        if br_ok:
+            covered.append(stub)
+        else:
+            wrong.append(stub)
+    if covered:
+        return {
+            "status": "covered",
+            "tickets": covered,
+            "missing_branch": None,
+        }
+    if wrong:
+        return {
+            "status": "wrong_branch",
+            "tickets": wrong,
+            "missing_branch": norm_branch_label(branch) or None,
+        }
+    return {"status": "uncovered", "tickets": [], "missing_branch": None}
+
+
+_COVERAGE_RANK = {"uncovered": 3, "wrong_branch": 2, "covered": 1, "ok": 0}
+
+
+def aggregate_run_coverage(
+    query_coverages: list[dict[str, Any]],
+    *,
+    fail_count: int | float | None = None,
+    problem_count: int | float | None = None,
+) -> dict[str, Any]:
+    """Merge per-query coverage into a now_runs badge payload.
+
+    ``problem_count`` = fail + nodata gaps for the run (preferred).
+    ``fail_count`` kept as alias for older callers.
+    """
+    n_problems = problem_count if problem_count is not None else fail_count
+    if n_problems is not None and float(n_problems or 0) <= 0 and not query_coverages:
+        return {
+            "ticket_coverage": "ok",
+            "tickets": [],
+            "uncovered_queries": [],
+        }
+    if not query_coverages:
+        # problem without parsed query names
+        status = "uncovered" if (n_problems or 0) > 0 else "ok"
+        return {
+            "ticket_coverage": status,
+            "tickets": [],
+            "uncovered_queries": [],
+        }
+    worst = "ok"
+    tickets_by_num: dict[Any, dict[str, Any]] = {}
+    uncovered_queries: list[str] = []
+    for qc in query_coverages:
+        st = str(qc.get("status") or "uncovered")
+        if _COVERAGE_RANK.get(st, 0) > _COVERAGE_RANK.get(worst, 0):
+            worst = st
+        qname = qc.get("query")
+        if st == "uncovered" and qname:
+            uncovered_queries.append(str(qname))
+        for t in qc.get("tickets") or []:
+            num = t.get("number")
+            if num is None:
+                continue
+            prev = tickets_by_num.get(num)
+            if prev is None or (
+                t.get("branch_match") and not prev.get("branch_match")
+            ):
+                tickets_by_num[num] = dict(t)
+    return {
+        "ticket_coverage": worst if worst != "ok" else (
+            "uncovered" if (n_problems or 0) > 0 else "ok"
+        ),
+        "tickets": list(tickets_by_num.values()),
+        "uncovered_queries": uncovered_queries,
+    }
+
+
+def find_hist_index_for_run(hist: dict[str, Any] | None, run: dict[str, Any] | None) -> int:
+    """Align suite now_run → query/suite history index (mirrors template.html)."""
+    if not hist or not run:
+        return -1
+    reports = hist.get("reports") or []
+    report = run.get("report")
+    if report:
+        for i in range(len(reports) - 1, -1, -1):
+            if reports[i] == report:
+                return i
+    civs = hist.get("ci_versions") or []
+    civ = run.get("ci_version")
+    if civ:
+        for i in range(len(civs) - 1, -1, -1):
+            if civs[i] == civ:
+                return i
+    vers = hist.get("versions") or []
+    ver = run.get("version")
+    if ver:
+        want = str(ver)[:8]
+        for i in range(len(vers) - 1, -1, -1):
+            if vers[i] and str(vers[i])[:8] == want:
+                return i
+    run_raw = run.get("ts") or run.get("day")
+    if not run_raw:
+        return -1
+    try:
+        run_ts = datetime.fromisoformat(str(run_raw).replace("Z", "+00:00"))
+    except ValueError:
+        return -1
+    if run_ts.tzinfo is not None:
+        run_ts = run_ts.replace(tzinfo=None)
+    labels = hist.get("labels") or []
+    best, best_dist = -1, float("inf")
+    for i, lab in enumerate(labels):
+        try:
+            t = datetime.fromisoformat(str(lab).replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if t.tzinfo is not None:
+            t = t.replace(tzinfo=None)
+        d = abs((t - run_ts).total_seconds())
+        if d < best_dist:
+            best_dist, best = d, i
+    return best if best_dist <= 6 * 3600 else -1
+
+
+def _hist_point_is_gap(hist: dict[str, Any], idx: int) -> str | None:
+    """Return 'nodata' / 'fail' if history point is a ticket-worthy gap, else None."""
+    if idx < 0:
+        return "nodata"
+    nodata = hist.get("nodata") or []
+    markers = hist.get("markers") or []
+    if idx < len(nodata) and nodata[idx]:
+        return "nodata"
+    if idx < len(markers) and markers[idx] in ("missing", "in_progress"):
+        return "nodata"
+    fr = hist.get("fail_rate")
+    if fr is not None and idx < len(fr) and fr[idx] is not None:
+        # history stores fail_rate as 0–100 (same as generate._query_history)
+        if float(fr[idx]) >= 10.0:
+            return "fail"
+    return None
+
+
+def gap_queries_for_run(item: dict[str, Any], run: dict[str, Any]) -> list[str]:
+    """Fail + nodata query names for one now_run (mart fail_tests + query histories)."""
+    names: list[str] = []
+    seen: set[str] = set()
+
+    def _add(raw: str | None) -> None:
+        nq = norm_query_name(raw)
+        if nq and nq not in seen:
+            seen.add(nq)
+            names.append(nq)
+
+    if isinstance(run.get("fail_queries"), list):
+        for x in run["fail_queries"]:
+            _add(x)
+    for qn in _parse_fail_test_names(run.get("fail_tests")):
+        _add(qn)
+
+    for q in item.get("queries") or []:
+        if not isinstance(q, dict):
+            continue
+        qname = q.get("test") or q.get("name")
+        hist = q.get("history")
+        if not isinstance(hist, dict):
+            if str(q.get("kind") or "") in ("fail", "both", "nodata", "missing", "in_progress"):
+                _add(qname)
+            continue
+        idx = find_hist_index_for_run(hist, run)
+        gap = _hist_point_is_gap(hist, idx)
+        if gap:
+            _add(qname)
+
+    # Catalog nodata/fail without history alignment: still flag on latest run only.
+    # (Older runs keep history-driven gaps above.)
+    return names
+
+
 def tickets_for_suite(
     issues: list[dict[str, Any]],
     *,
     suite: str,
     db: str | None = None,
+    branch: str | None = None,
     kind: str | None = None,
 ) -> list[dict[str, Any]]:
     """Tickets matching suite (+ optional db) for report pills."""
+    cov = classify_fail_coverage(
+        issues, suite=suite, db=db, branch=branch, query=None, kind=kind
+    )
+    # suite pills: all affected hits (covered + wrong_branch)
+    # Re-run without branch filter for listing, but annotate branch_match.
     out: list[dict[str, Any]] = []
     for iss in issues:
         if kind and iss.get("kind") and str(iss["kind"]).lower() != str(kind).lower():
@@ -258,17 +547,17 @@ def tickets_for_suite(
         matched_q: list[str] = []
         hit = False
         for aff in iss.get("affected") or []:
-            if str(aff.get("suite") or "") != suite:
-                continue
-            aff_db = aff.get("db")
-            if aff_db and db and aff_db != db:
+            if not _affected_hit(aff, suite=suite, db=db, query=None):
                 continue
             hit = True
             for q in aff.get("queries") or []:
-                if q not in matched_q:
-                    matched_q.append(q)
+                nq = norm_query_name(q)
+                if nq and nq not in matched_q:
+                    matched_q.append(nq)
         if not hit:
             continue
+        labels = list(iss.get("labels") or [])
+        br_ok = branch_label_match(labels, branch) if branch else True
         out.append(
             {
                 "number": iss.get("number"),
@@ -276,8 +565,13 @@ def tickets_for_suite(
                 "url": iss.get("url"),
                 "fingerprint": iss.get("fingerprint"),
                 "queries": matched_q,
+                "labels": labels,
+                "branch_match": br_ok,
+                "needs_branch": None if br_ok else (norm_branch_label(branch) or None),
             }
         )
+    # prefer covered ordering but keep cov unused warning silent
+    _ = cov
     return out
 
 
@@ -287,7 +581,7 @@ def attach_tickets_to_report(
     *,
     kind: str,
 ) -> int:
-    """Set data['known_issues'] and item['tickets'] on inbox/ok rows. Returns #items with tickets."""
+    """Set known_issues, suite tickets, query/run coverage. Returns #items with tickets."""
     data["known_issues"] = [
         {
             "number": i.get("number"),
@@ -297,27 +591,201 @@ def attach_tickets_to_report(
             "keys": i.get("keys") or [],
             "affected": i.get("affected") or [],
             "kind": i.get("kind"),
+            "labels": list(i.get("labels") or []),
         }
         for i in issues
         if not kind or not i.get("kind") or str(i.get("kind")).lower() == kind.lower()
     ]
+    known = data["known_issues"]
     n = 0
+    new_issue_suites = 0
     for key in ("inbox", "ok"):
         for item in data.get(key) or []:
-            tickets = tickets_for_suite(
-                data["known_issues"],
-                suite=str(item.get("suite") or ""),
-                db=item.get("db"),
-                kind=kind,
-            )
-            item["tickets"] = tickets
-            # Wave=finished unwraps item.finished — keep pills on the twin too.
+            _attach_coverage_to_item(item, known, kind=kind)
             fin = item.get("finished")
             if isinstance(fin, dict):
-                fin["tickets"] = tickets
-            if tickets:
+                # Wave=finished dive uses finished.now_runs — annotate twin fully.
+                fin.setdefault("suite", item.get("suite"))
+                fin.setdefault("db", item.get("db"))
+                fin.setdefault("branch", item.get("branch"))
+                _attach_coverage_to_item(fin, known, kind=kind)
+            if item.get("tickets"):
                 n += 1
+            issue_n = max(
+                int(item.get("new_issue_count") or item.get("new_fail_count") or 0),
+                int((fin or {}).get("new_issue_count") or (fin or {}).get("new_fail_count") or 0)
+                if isinstance(fin, dict)
+                else 0,
+            )
+            if issue_n > 0:
+                new_issue_suites += 1
+                item["new_issue_count"] = max(
+                    int(item.get("new_issue_count") or 0), issue_n
+                )
+                item["new_fail_count"] = item["new_issue_count"]  # alias
+    summary = data.setdefault("summary", {})
+    if isinstance(summary, dict):
+        summary["new_issues"] = new_issue_suites
+        summary["new_fail"] = new_issue_suites  # alias for older UI
     return n
+
+
+def _is_fail_query_kind(kind_q: str | None) -> bool:
+    k = str(kind_q or "").strip().lower()
+    return k in ("", "fail", "both")
+
+
+def _is_gap_query_kind(kind_q: str | None) -> bool:
+    """Fail or nodata — both can be 'new issues' without a ticket."""
+    k = str(kind_q or "").strip().lower()
+    return k in ("", "fail", "both", "nodata")
+
+
+def _parse_fail_test_names(raw: str | None) -> list[str]:
+    names: list[str] = []
+    for part in str(raw or "").split(","):
+        t = part.strip()
+        if not t:
+            continue
+        if t.isdigit():
+            t = f"Query{t.zfill(2)}"
+        nq = norm_query_name(t)
+        if nq and nq not in names:
+            names.append(nq)
+    return names
+
+
+def _gap_query_names(item: dict[str, Any]) -> list[str]:
+    """Fail + nodata query names from bad_queries / queries catalog."""
+    names: list[str] = []
+    for q in item.get("bad_queries") or []:
+        if not isinstance(q, dict):
+            continue
+        if str(q.get("kind") or "").lower() == "slow":
+            continue
+        if not _is_gap_query_kind(q.get("kind")):
+            continue
+        name = norm_query_name(q.get("test") or q.get("name"))
+        if name and name not in names:
+            names.append(name)
+    for q in item.get("queries") or []:
+        if not isinstance(q, dict):
+            continue
+        if str(q.get("kind") or "") not in ("fail", "both", "nodata"):
+            continue
+        name = norm_query_name(q.get("test") or q.get("name"))
+        if name and name not in names:
+            names.append(name)
+    return names
+
+
+def _attach_coverage_to_item(
+    item: dict[str, Any],
+    known: list[dict[str, Any]],
+    *,
+    kind: str,
+) -> None:
+    suite = str(item.get("suite") or "")
+    db = item.get("db")
+    branch = item.get("branch")
+    tickets = tickets_for_suite(
+        known, suite=suite, db=db, branch=branch, kind=kind
+    )
+    item["tickets"] = tickets
+
+    gap_names = _gap_query_names(item)
+    new_issues = 0
+    wrong_branch = 0
+    counted: set[str] = set()
+
+    def _annotate_gap_query(q: dict[str, Any]) -> None:
+        nonlocal new_issues, wrong_branch
+        qname = norm_query_name(q.get("test") or q.get("name"))
+        if not qname:
+            return
+        cov = classify_fail_coverage(
+            known, suite=suite, db=db, branch=branch, query=qname, kind=kind
+        )
+        q["ticket_coverage"] = cov["status"]
+        q["tickets"] = cov["tickets"]
+        if qname in counted:
+            return
+        counted.add(qname)
+        # wrong_branch = ticket exists but lacks this branch label → still a
+        # "new issue" for the branch (add label / treat as not covered here).
+        if cov["status"] == "uncovered":
+            new_issues += 1
+        elif cov["status"] == "wrong_branch":
+            wrong_branch += 1
+            new_issues += 1
+
+    # annotate bad_queries: fail / both / nodata / legacy empty kind
+    for q in item.get("bad_queries") or []:
+        if not isinstance(q, dict):
+            continue
+        if str(q.get("kind") or "").lower() == "slow":
+            continue
+        if not _is_gap_query_kind(q.get("kind")):
+            continue
+        _annotate_gap_query(q)
+
+    # also annotate queries catalog entries (nodata often lives there)
+    for q in item.get("queries") or []:
+        if not isinstance(q, dict):
+            continue
+        if str(q.get("kind") or "") not in ("fail", "both", "nodata"):
+            continue
+        _annotate_gap_query(q)
+
+    # suite-level fallback when failing/nodata but no named queries
+    if not gap_names:
+        fr = item.get("fail_rate_now")
+        fc = item.get("n_fail") or item.get("fail")
+        n_nodata = item.get("n_nodata") or 0
+        is_gap = (
+            (fr is not None and float(fr) >= 0.1)
+            or (fc is not None and float(fc) > 0)
+            or int(n_nodata or 0) > 0
+            or str(item.get("issue") or "") in ("failing", "both", "broken", "nodata")
+            or str(item.get("status") or "") in ("failing", "both", "broken", "nodata")
+            or str(item.get("kind") or "") == "nodata"
+        )
+        if is_gap:
+            cov = classify_fail_coverage(
+                known, suite=suite, db=db, branch=branch, query=None, kind=kind
+            )
+            if cov["status"] == "uncovered":
+                new_issues = max(new_issues, 1)
+            elif cov["status"] == "wrong_branch":
+                wrong_branch = max(wrong_branch, 1)
+                new_issues = max(new_issues, 1)
+
+    item["new_issue_count"] = new_issues
+    item["new_fail_count"] = new_issues  # alias
+    item["wrong_branch_count"] = wrong_branch
+
+    # per now_run badge coverage: mart fail_tests + query-history fail/nodata
+    runs = [r for r in (item.get("now_runs") or []) if isinstance(r, dict)]
+    for ri, run in enumerate(runs):
+        qnames = gap_queries_for_run(item, run)
+        # Catalog gaps (no usable history) also land on the latest card.
+        if ri == len(runs) - 1:
+            for qn in gap_names:
+                if qn not in qnames:
+                    qnames.append(qn)
+        qcovs: list[dict[str, Any]] = []
+        for qn in qnames:
+            if not qn:
+                continue
+            c = classify_fail_coverage(
+                known, suite=suite, db=db, branch=branch, query=qn, kind=kind
+            )
+            qcovs.append({"query": qn, **c})
+        problem_n = max(int(run.get("fail") or 0), len(qnames))
+        agg = aggregate_run_coverage(qcovs, problem_count=problem_n)
+        run["ticket_coverage"] = agg["ticket_coverage"]
+        run["tickets"] = agg["tickets"]
+        run["uncovered_queries"] = agg["uncovered_queries"]
 
 
 def _gh_json(args: list[str], *, timeout: float = 60.0) -> Any:
@@ -383,14 +851,32 @@ def _search_open_issues_via_api(repo: str, *, limit: int) -> list[dict[str, Any]
         full = _github_api_json(f"/repos/{owner}/{name}/issues/{int(num)}")
         if not isinstance(full, dict):
             continue
+        labels = _label_names(full.get("labels") or it.get("labels"))
         out.append(
             {
                 "number": full.get("number") or num,
                 "title": full.get("title") or it.get("title"),
                 "url": full.get("html_url") or it.get("html_url") or it.get("url"),
                 "body": full.get("body") or "",
+                "labels": labels,
             }
         )
+    return out
+
+
+def _label_names(raw: Any) -> list[str]:
+    out: list[str] = []
+    if not isinstance(raw, list):
+        return out
+    for lab in raw:
+        if isinstance(lab, str):
+            name = lab.strip()
+        elif isinstance(lab, dict):
+            name = str(lab.get("name") or "").strip()
+        else:
+            continue
+        if name and name not in out:
+            out.append(name)
     return out
 
 
@@ -412,6 +898,7 @@ def _issue_from_gh(raw: dict[str, Any]) -> dict[str, Any] | None:
         "fingerprint": block.get("fingerprint"),
         "keys": block.get("keys") or [],
         "affected": block.get("affected") or [],
+        "labels": _label_names(raw.get("labels")),
     }
 
 
@@ -442,7 +929,7 @@ def fetch_open_duty_issues(
                 "--limit",
                 str(min(limit, 100)),
                 "--json",
-                "number,title,url,body",
+                "number,title,url,body,labels",
             ]
         )
         if isinstance(found, list):

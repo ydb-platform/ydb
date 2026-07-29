@@ -6,6 +6,19 @@ Model: **Python = facts + validate; agent = thinking.**
 Input: frozen **perf-duty-context/v1** JSON (OLAP/TPC-C Now `Save` / `Copy context`).  
 Outputs: `analysis.md` (plain language) + `result.json` (`perf-duty-result/v1`).
 
+## Priority from Save pack
+
+Read these fields **before** digging covered tickets:
+
+1. **`ticket_coverage`** / `queries[].ticket_coverage` — `uncovered` and `wrong_branch` = проблемы **без** открытого issue на label ветки. Их разбирать **первыми**. `covered` → обычно `update_known` (расширить `affected`), не плодить дубликат.  
+2. **`hints.investigate_uncovered_first`** / React `new` — человек явно смотрел «new issues».  
+3. **`compare.active`** — в heatmap выбран cmp. Это **обязательный** второй прогон, не сноска:
+   - `prepare` пишет `compare_focus.json` (Allure `compare.run.report` + fail/slow query из `compare.queries`);
+   - разобрать gaps на **`compare.run`** (stderr/logs/coredump как для fail) **и** на `selection.focus_run` (now);
+   - в `analysis.md` явно: прогон сравнения `YYYY-MM-DD_sha` vs разбираемый now; дельта cmp→now;
+   - `validate` падает, если cmp не упомянут / нет `compare_focus.json` при active fail.
+   Нельзя закрыть разбор одним now (даже если now = nodata/ok).
+
 ## Goal
 
 For each problem, answer **all** of:
@@ -49,9 +62,12 @@ Extra digs: `gh search` / browse code at tested sha. Offline mart: `dig-runs --f
 
 ```text
 1) dutyctl prepare -c CONTEXT.json -o $OUT
+   → focus.json (now) + **compare_focus.json** when compare.active
 2) DIG LOGS / PLANS FIRST when Allure focus exists (never skip):
      fail → kikimr__stderr + kikimr__logs (+ Stderr); crash → coredump playbook
      slow → plan_dig (Stats + Final plan × iterations) + logs; then baseline Allure plan
+     If compare.active: same dig on **compare_focus** (fail/slow on compare.run) before
+       concluding from now-only nodata/ok.
      Do not block log/plan reading on mart fetch.
 3) DIG RUNS FROM DB before writing analysis (mandatory for tpcc + olap):
      Pack suite_history is short — do NOT stop there.
@@ -271,8 +287,9 @@ Put a clear line in the report: **Давность:** …
 
 ### OLAP playbook (mandatory dig-runs)
 
-1. `prepare` → Allure focus + fatal + pack history. **Read `detect_type.json` `query_counts` / `olap_nodata` / `olap_slow` seeds first.**  
-2. If `olap_nodata` (or `n_nodata>0`): **сначала отчёт** по этим query (см. playbook nodata выше). Логи/кластер — только если в отчёте тоже дыра. Не подменять nodata чужим fail с того же Allure.  
+1. `prepare` → Allure focus + fatal + pack history (+ **`compare_focus.json`** если `compare.active`). **Read `detect_type.json` seeds first** — включая `seed_compare_*` / `compare_fail_seeded`.  
+1b. If `compare.active`: разобрать **прогон сравнения** (`compare.run` / `compare_focus`) как отдельный P\* при fail/slow/nodata на cmp; затем now. Нельзя `no_action` только по now, пока cmp fail не закрыт.  
+2. If `olap_nodata` (or `n_nodata>0`) **на now**: **сначала отчёт** по этим query (см. playbook nodata выше). Логи/кластер — только если в отчёте тоже дыра. Не подменять now-nodata разбором fail с **другого** прогона (cmp) и наоборот — это разные P\*.  
 3. If `olap_slow`: follow **OLAP slow / duration growth** end-to-end  
    (plans × iterations → baseline_focus/plan_compare → logs if plan_same → **dig-prs + bisect + H-loop**).  
 4. **Read logs** from `focus.json` when `olap_fail` **or** nodata branch = «в отчёте тоже нет» **or** slow path needs server-side evidence (`kikimr__stderr` + `kikimr__logs`).  
@@ -295,6 +312,7 @@ For each problem, you can answer yes:
 
 - [ ] TPC-C / OLAP: `dig_runs.json` from mart (neighbors + ≥~month if needed), not only pack metrics  
 - [ ] TPC-C / OLAP fail|slow: `dig_prs.json` on mart `pr_window` / jump (suite-stable streak→focus or ydb|lat step), not nearest FailCount=0 / not pack prev-green alone  
+- [ ] Если `compare.active`: `compare_focus.json` + в отчёте прогон сравнения (label/sha) + gaps; fail на cmp → stderr/coredump; дельта cmp→now  
 - [ ] OLAP nodata: checked Allure/report for those queries; wrote branch «не доехали» **or** «в отчёте тоже нет → логи/кластер»  
 - [ ] OLAP slow: plans × iterations + `baseline_focus` / plan_compare + dig-prs on ydb jump + H-loop (≤3) + culprit only with evidence  
 - [ ] OLAP slow: if plan_same — server logs focus+baseline; if plan_regressed — code/bisect on planner/CS path  
@@ -373,7 +391,8 @@ Label **не нужен**. Шаблон: [`REPORT_TEMPLATE.md`](REPORT_TEMPLATE.
 1. Ключи из fingerprint (`file.cpp:NN`, `AFL_VERIFY(…)`, symbol) — **не** suite alone.  
 2. `dutyctl known-issues --keys 'read.cpp:59' 'range.Offset'` (или `gh` + parse блоков).  
 3. Если hit → `update_known`: `dutyctl annotate-issue --issue N --suite … --db … --queries …` (расширяет `affected` + comment), не плодить дубликат.  
-4. Context `known_tickets` из Save dashboard — стартовые кандидаты.
+4. Context `known_tickets` + `ticket_coverage` из Save — стартовые кандидаты; **uncovered** в pack = кандидат на новый issue (после search).  
+5. Если `compare.active` — сверь симптом на `compare.run` и на `focus_run` (появилось на now / уже было на cmp).
 
 **Как следующий агент ищет:** overlap `keys` в open issues с блоком `perf-duty-match`. Suite/query только в `affected` (растёт при новых проявлениях).
 

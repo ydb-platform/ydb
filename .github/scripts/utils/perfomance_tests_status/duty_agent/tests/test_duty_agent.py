@@ -153,6 +153,56 @@ class DetectTypeTests(unittest.TestCase):
         self.assertIn("olap_nodata", det["analysis_types"])
         self.assertNotIn("olap_fail", det["analysis_types"])
 
+    def test_uncovered_and_compare_priority_notes(self):
+        ctx = load_context(FIXTURES / "sample_olap.json")
+        ctx = json.loads(json.dumps(ctx))
+        ctx["ticket_coverage"] = {
+            "status": "uncovered",
+            "uncovered_queries": ["Query05"],
+            "wrong_branch_queries": [],
+            "investigate_uncovered_first": True,
+        }
+        ctx["queries"][0]["ticket_coverage"] = "uncovered"
+        ctx["compare"] = {
+            "wave_id": "trunk.r1",
+            "active": True,
+            "label": "2026-07-26_abc1234",
+            "run": {
+                "sha": "abc1234",
+                "label": "2026-07-26_abc1234",
+                "report": "https://example.test/cmp",
+            },
+            "queries": [
+                {
+                    "test": "Query08",
+                    "kind": "fail",
+                    "ticket_coverage": "uncovered",
+                }
+            ],
+        }
+        ctx["hints"] = {
+            "react": ["fail", "new"],
+            "investigate_uncovered_first": True,
+            "compare_active": True,
+        }
+        det = detect_type(ctx)
+        self.assertTrue(det["ticket_coverage"]["investigate_uncovered_first"])
+        self.assertIn("Query05", det["ticket_coverage"]["uncovered_queries"])
+        self.assertTrue(det["compare_active"])
+        self.assertIn("PRIORITY", det["note"])
+        self.assertIn("MANDATORY", det["note"])
+        self.assertIn("compare.run", det["note"])
+        self.assertGreaterEqual(det.get("compare_fail_seeded") or 0, 1)
+        self.assertIn("olap_fail", det["analysis_types"])
+        cmp_seeds = [
+            s
+            for s in det["problems_seed"]
+            if isinstance(s, dict) and s.get("source") == "compare.run"
+        ]
+        self.assertTrue(cmp_seeds)
+        self.assertEqual(cmp_seeds[0].get("test"), "Query08")
+        self.assertIn("Query08", det["ticket_coverage"]["uncovered_queries"])
+
 
 class MetricsDeltaTests(unittest.TestCase):
     def test_tpcc_flags(self):

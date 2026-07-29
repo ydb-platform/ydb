@@ -11,9 +11,14 @@ PTS = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PTS))
 
 from common.duty_issues import (  # noqa: E402
+    aggregate_run_coverage,
     attach_tickets_to_report,
+    branch_label_match,
+    classify_fail_coverage,
     keys_overlap,
     merge_affected,
+    norm_branch_label,
+    norm_query_name,
     parse_match_block,
     render_match_block,
     tickets_for_suite,
@@ -194,6 +199,311 @@ class JoinTests(unittest.TestCase):
         attach_tickets_to_report(data, issues, kind="olap")
         self.assertEqual(data["inbox"][0]["tickets"][0]["number"], 47871)
         self.assertEqual(data["inbox"][0]["finished"]["tickets"][0]["number"], 47871)
+
+
+class CoverageTests(unittest.TestCase):
+    def _issue(self, **kw):
+        base = {
+            "number": 1,
+            "title": "T",
+            "url": "https://example/1",
+            "kind": "olap",
+            "fingerprint": "x",
+            "keys": ["x"],
+            "labels": ["main", "performance"],
+            "affected": [
+                {
+                    "suite": "Tpcds1",
+                    "db": "sas_big_column",
+                    "queries": ["Query62"],
+                }
+            ],
+        }
+        base.update(kw)
+        return base
+
+    def test_norm_query_and_branch(self):
+        self.assertEqual(norm_query_name("Tpcds1.Query62"), "Query62")
+        self.assertEqual(norm_branch_label("trunk"), "main")
+        self.assertEqual(norm_branch_label("origin/stable-26-3-1"), "stable-26-3-1")
+        self.assertTrue(branch_label_match(["main"], "trunk"))
+        self.assertFalse(branch_label_match(["stable-26-3-1"], "main"))
+
+    def test_covered_on_branch(self):
+        cov = classify_fail_coverage(
+            [self._issue()],
+            suite="Tpcds1",
+            db="sas_big_column",
+            branch="main",
+            query="Query62",
+            kind="olap",
+        )
+        self.assertEqual(cov["status"], "covered")
+        self.assertEqual(cov["tickets"][0]["number"], 1)
+
+    def test_trunk_alias_main_label(self):
+        cov = classify_fail_coverage(
+            [self._issue()],
+            suite="Tpcds1",
+            db="sas_big_column",
+            branch="trunk",
+            query="Query62",
+        )
+        self.assertEqual(cov["status"], "covered")
+
+    def test_wrong_branch(self):
+        cov = classify_fail_coverage(
+            [self._issue(labels=["stable-26-3-1", "performance"])],
+            suite="Tpcds1",
+            db="sas_big_column",
+            branch="main",
+            query="Query62",
+        )
+        self.assertEqual(cov["status"], "wrong_branch")
+        self.assertEqual(cov["missing_branch"], "main")
+        self.assertEqual(cov["tickets"][0]["needs_branch"], "main")
+
+    def test_wrong_branch_counts_as_new_issue(self):
+        """needs <branch> label = still open for this branch → new_issue_count."""
+        data = {
+            "inbox": [
+                {
+                    "suite": "UploadTpch100",
+                    "db": "sas_small_column",
+                    "branch": "stable-26-3",
+                    "issue": "failing",
+                    "bad_queries": [{"test": "Query03", "kind": "fail"}],
+                    "now_runs": [],
+                }
+            ],
+            "ok": [],
+            "summary": {},
+        }
+        issues = [
+            self._issue(
+                number=47870,
+                labels=["main", "performance"],
+                affected=[
+                    {
+                        "suite": "UploadTpch100",
+                        "db": "sas_small_column",
+                        "queries": ["Query03"],
+                    }
+                ],
+            )
+        ]
+        attach_tickets_to_report(data, issues, kind="olap")
+        item = data["inbox"][0]
+        self.assertEqual(item["wrong_branch_count"], 1)
+        self.assertEqual(item["new_issue_count"], 1)
+        self.assertEqual(data["summary"]["new_issues"], 1)
+        self.assertEqual(item["bad_queries"][0]["ticket_coverage"], "wrong_branch")
+
+    def test_uncovered_other_query(self):
+        cov = classify_fail_coverage(
+            [self._issue()],
+            suite="Tpcds1",
+            db="sas_big_column",
+            branch="main",
+            query="Query01",
+        )
+        self.assertEqual(cov["status"], "uncovered")
+
+    def test_suite_wide_queries_empty(self):
+        iss = self._issue(
+            affected=[{"suite": "Tpcds1", "db": "sas_big_column", "queries": []}]
+        )
+        cov = classify_fail_coverage(
+            [iss],
+            suite="Tpcds1",
+            db="sas_big_column",
+            branch="main",
+            query="Query99",
+        )
+        self.assertEqual(cov["status"], "covered")
+
+    def test_aggregate_run_worst_uncovered(self):
+        agg = aggregate_run_coverage(
+            [
+                {"status": "covered", "tickets": [{"number": 1, "branch_match": True}], "query": "Query01"},
+                {"status": "uncovered", "tickets": [], "query": "Query02"},
+            ],
+            fail_count=2,
+        )
+        self.assertEqual(agg["ticket_coverage"], "uncovered")
+        self.assertEqual(agg["uncovered_queries"], ["Query02"])
+        self.assertEqual(agg["tickets"][0]["number"], 1)
+
+    def test_attach_now_runs_and_new_fail(self):
+        data = {
+            "inbox": [
+                {
+                    "suite": "Tpcds1",
+                    "db": "sas_big_column",
+                    "branch": "main",
+                    "issue": "failing",
+                    "bad_queries": [
+                        {"test": "Query62", "kind": "fail"},
+                        {"test": "Query01", "kind": "fail"},
+                    ],
+                    "now_runs": [
+                        {
+                            "fail": 2,
+                            "fail_tests": "Query62,Query01",
+                            "fail_rate": 0.02,
+                        }
+                    ],
+                }
+            ],
+            "ok": [],
+            "summary": {},
+        }
+        issues = [self._issue(number=48234, labels=["main"])]
+        attach_tickets_to_report(data, issues, kind="olap")
+        item = data["inbox"][0]
+        self.assertEqual(item["new_issue_count"], 1)  # Query01 uncovered
+        self.assertEqual(item["wrong_branch_count"], 0)
+        bq = {q["test"]: q for q in item["bad_queries"]}
+        self.assertEqual(bq["Query62"]["ticket_coverage"], "covered")
+        self.assertEqual(bq["Query01"]["ticket_coverage"], "uncovered")
+        run = item["now_runs"][0]
+        self.assertEqual(run["ticket_coverage"], "uncovered")
+        self.assertIn(48234, [t["number"] for t in run["tickets"]])
+        self.assertEqual(data["summary"]["new_issues"], 1)
+
+    def test_attach_finished_twin_now_runs(self):
+        data = {
+            "inbox": [
+                {
+                    "suite": "UploadTpch1000",
+                    "db": "sas_small_column",
+                    "branch": "main",
+                    "issue": "in_progress",
+                    "now_runs": [],
+                    "finished": {
+                        "issue": "failing",
+                        "status": "failing",
+                        "now_runs": [
+                            {"fail": 1, "fail_tests": "01", "fail_rate": 0.04},
+                            {"fail": 1, "fail_tests": "05", "fail_rate": 0.04},
+                        ],
+                        "bad_queries": [{"test": "Query05", "kind": "fail"}],
+                    },
+                }
+            ],
+            "ok": [],
+            "summary": {},
+        }
+        issues = [
+            self._issue(
+                number=47284,
+                labels=["main"],
+                affected=[
+                    {
+                        "suite": "UploadTpch1000",
+                        "db": "sas_small_column",
+                        "queries": ["Query01"],
+                    }
+                ],
+            )
+        ]
+        attach_tickets_to_report(data, issues, kind="olap")
+        fin = data["inbox"][0]["finished"]
+        r0, r1 = fin["now_runs"]
+        self.assertEqual(r0["ticket_coverage"], "covered")
+        self.assertEqual(r0["tickets"][0]["number"], 47284)
+        self.assertEqual(r1["ticket_coverage"], "uncovered")
+        self.assertEqual(r1["uncovered_queries"], ["Query05"])
+        self.assertGreaterEqual(fin["new_issue_count"], 1)
+
+    def test_nodata_counts_as_new_issue(self):
+        data = {
+            "inbox": [
+                {
+                    "suite": "Tpch1000",
+                    "db": "sas_big_column",
+                    "branch": "main",
+                    "issue": "ok",
+                    "bad_queries": [
+                        {"test": "Query21", "kind": "nodata"},
+                        {"test": "Query22", "kind": "nodata"},
+                    ],
+                    "now_runs": [],
+                }
+            ],
+            "ok": [],
+            "summary": {},
+        }
+        attach_tickets_to_report(data, [], kind="olap")
+        self.assertEqual(data["inbox"][0]["new_issue_count"], 2)
+        self.assertEqual(data["summary"]["new_issues"], 1)
+
+    def test_nodata_on_now_run_badge(self):
+        """Last-runs card gets no-ticket when catalog/history has nodata (fail=0)."""
+        data = {
+            "inbox": [
+                {
+                    "suite": "Tpch1000",
+                    "db": "sas_big_column",
+                    "branch": "main",
+                    "issue": "ok",
+                    "bad_queries": [
+                        {"test": "Query21", "kind": "nodata"},
+                        {"test": "Query22", "kind": "nodata"},
+                    ],
+                    "queries": [
+                        {
+                            "test": "Query21",
+                            "kind": "nodata",
+                            "history": {
+                                "labels": ["2026-07-28T10:00:00", "2026-07-29T10:00:00"],
+                                "versions": ["aaaaaaaa", "18a32d4"],
+                                "ci_versions": ["trunk.r1", "trunk.r2"],
+                                "nodata": [False, True],
+                                "fail_rate": [0.0, None],
+                                "ydb": [100.0, None],
+                            },
+                        },
+                        {
+                            "test": "Query22",
+                            "kind": "nodata",
+                            "history": {
+                                "labels": ["2026-07-28T10:00:00", "2026-07-29T10:00:00"],
+                                "versions": ["aaaaaaaa", "18a32d4"],
+                                "ci_versions": ["trunk.r1", "trunk.r2"],
+                                "nodata": [False, True],
+                                "fail_rate": [0.0, None],
+                                "ydb": [100.0, None],
+                            },
+                        },
+                    ],
+                    "now_runs": [
+                        {
+                            "ts": "2026-07-28T10:00:00",
+                            "version": "aaaaaaaa",
+                            "ci_version": "trunk.r1",
+                            "fail": 0,
+                            "fail_tests": "",
+                        },
+                        {
+                            "ts": "2026-07-29T10:00:00",
+                            "version": "18a32d4",
+                            "ci_version": "trunk.r2",
+                            "fail": 0,
+                            "fail_tests": "",
+                        },
+                    ],
+                }
+            ],
+            "ok": [],
+            "summary": {},
+        }
+        attach_tickets_to_report(data, [], kind="olap")
+        r0, r1 = data["inbox"][0]["now_runs"]
+        self.assertEqual(r0["ticket_coverage"], "ok")
+        self.assertEqual(r1["ticket_coverage"], "uncovered")
+        self.assertIn("Query21", r1["uncovered_queries"])
+        self.assertIn("Query22", r1["uncovered_queries"])
 
 
 if __name__ == "__main__":

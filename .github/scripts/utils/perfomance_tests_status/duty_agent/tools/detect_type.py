@@ -322,6 +322,151 @@ def detect_type(ctx: dict[str, Any]) -> dict[str, Any]:
     else:
         rollup = analysis_types[0] if analysis_types else "unknown"
 
+    ticket = ctx.get("ticket_coverage") if isinstance(ctx.get("ticket_coverage"), dict) else {}
+    uncovered = [
+        str(x)
+        for x in (ticket.get("uncovered_queries") or [])
+        if x
+    ]
+    wrong_branch = [
+        str(x)
+        for x in (ticket.get("wrong_branch_queries") or [])
+        if x
+    ]
+    # Also gather from per-query annotations in the pack.
+    for q in queries:
+        if not isinstance(q, dict):
+            continue
+        cov = str(q.get("ticket_coverage") or "").lower()
+        name = str(q.get("test") or "")
+        if not name:
+            continue
+        if cov == "uncovered" and name not in uncovered:
+            uncovered.append(name)
+        if cov == "wrong_branch" and name not in wrong_branch:
+            wrong_branch.append(name)
+    investigate_uncovered = bool(
+        ticket.get("investigate_uncovered_first")
+        or uncovered
+        or wrong_branch
+        or ((ctx.get("hints") or {}).get("investigate_uncovered_first"))
+    )
+    # Put uncovered / wrong_branch seeds first so the agent sees them immediately.
+    if investigate_uncovered and problems_seed:
+        def _seed_prio(p: dict[str, Any]) -> int:
+            t = str(p.get("test") or p.get("title") or "")
+            if any(u and u in t for u in uncovered):
+                return 0
+            if any(u and u in t for u in wrong_branch):
+                return 1
+            return 2
+
+        problems_seed = sorted(problems_seed, key=_seed_prio)
+
+    compare = ctx.get("compare") if isinstance(ctx.get("compare"), dict) else {}
+    compare_active = bool(compare.get("active") or compare.get("wave_id"))
+    compare_run = compare.get("run") if isinstance(compare.get("run"), dict) else {}
+    compare_queries = [
+        q for q in (compare.get("queries") or []) if isinstance(q, dict)
+    ]
+    # Seed compare.run gaps into problems — heatmap cmp is a first-class dig target.
+    compare_fail_seeded = 0
+    if compare_active and kind == "olap" and compare_queries:
+        for q in compare_queries[:12]:
+            qk = str(q.get("kind") or "").lower()
+            name = str(q.get("test") or "").strip()
+            if not name:
+                continue
+            if qk in ("fail", "both"):
+                if "olap_fail" not in analysis_types:
+                    analysis_types.append("olap_fail")
+                problems_seed.append(
+                    {
+                        "id": f"seed_compare_{name}",
+                        "analysis_type": "olap_fail",
+                        "title": f"compare {name}",
+                        "test": name,
+                        "error_class": q.get("error_class"),
+                        "source": "compare.run",
+                        "compare_label": compare.get("label") or compare_run.get("label"),
+                        "compare_sha": compare_run.get("sha"),
+                        "compare_report": compare_run.get("report"),
+                        "status": "seed",
+                    }
+                )
+                compare_fail_seeded += 1
+                if name not in uncovered and str(q.get("ticket_coverage") or "") == "uncovered":
+                    uncovered.append(name)
+            elif qk in ("slow", "soft", "watch"):
+                if "olap_slow" not in analysis_types:
+                    analysis_types.append("olap_slow")
+                problems_seed.append(
+                    {
+                        "id": f"seed_compare_slow_{name}",
+                        "analysis_type": "olap_slow",
+                        "title": f"compare slow {name}",
+                        "test": name,
+                        "source": "compare.run",
+                        "compare_label": compare.get("label") or compare_run.get("label"),
+                        "compare_sha": compare_run.get("sha"),
+                        "compare_report": compare_run.get("report"),
+                        "status": "seed",
+                    }
+                )
+            elif qk in ("nodata", "missing", "in_progress"):
+                if "olap_nodata" not in analysis_types:
+                    analysis_types.append("olap_nodata")
+                problems_seed.append(
+                    {
+                        "id": f"seed_compare_nodata_{name}",
+                        "analysis_type": "olap_nodata",
+                        "title": f"compare nodata {name}",
+                        "test": name,
+                        "source": "compare.run",
+                        "status": "seed",
+                    }
+                )
+        # Prefer compare.run gaps first (heatmap cmp), then uncovered.
+        def _seed_prio2(p: dict[str, Any]) -> int:
+            src = str(p.get("source") or "")
+            t = str(p.get("test") or p.get("title") or "")
+            if src == "compare.run":
+                return 0
+            if any(u and u in t for u in uncovered):
+                return 1
+            if any(u and u in t for u in wrong_branch):
+                return 2
+            return 3
+
+        problems_seed = sorted(problems_seed, key=_seed_prio2)
+
+    # Rollup may need refresh after compare seeds.
+    if len(analysis_types) > 1:
+        rollup = "mixed"
+    elif analysis_types:
+        rollup = analysis_types[0]
+    else:
+        rollup = "unknown"
+
+    notes = [
+        "Seed only — agent may reclassify after fetch-focus / metrics-delta.",
+    ]
+    if investigate_uncovered:
+        notes.append(
+            "PRIORITY: uncovered/wrong_branch queries have no open issue on this "
+            "branch label — dig these first; covered → update_known, not a duplicate."
+        )
+    if compare_active:
+        notes.append(
+            "MANDATORY: compare.active — dig compare.run Allure/sha/gaps "
+            "(prepare → compare_focus.json) AND selection.focus_run (now/latest); "
+            "do not stop at last only. Delta compare→now is part of the write-up."
+        )
+        if compare_fail_seeded:
+            notes.append(
+                f"compare.run seeded {compare_fail_seeded} fail(s) into problems_seed."
+            )
+
     return {
         "kind": kind,
         "rollup": rollup,
@@ -331,5 +476,19 @@ def detect_type(ctx: dict[str, Any]) -> dict[str, Any]:
         "suite_now_status": suite_now.get("status") or suite_now.get("issue"),
         "sticky_query": sticky,
         "reasons": reasons,
-        "note": "Seed only — agent may reclassify after fetch-focus / metrics-delta.",
+        "ticket_coverage": {
+            "status": ticket.get("status"),
+            "uncovered_queries": uncovered,
+            "wrong_branch_queries": wrong_branch,
+            "investigate_uncovered_first": investigate_uncovered,
+            "new_issue_count": ticket.get("new_issue_count")
+            or suite_now.get("new_issue_count"),
+        },
+        "compare_active": compare_active,
+        "compare_wave_id": compare.get("wave_id"),
+        "compare_label": compare.get("label") or compare_run.get("label"),
+        "compare_sha": compare_run.get("sha"),
+        "compare_report": compare_run.get("report"),
+        "compare_fail_seeded": compare_fail_seeded,
+        "note": " ".join(notes),
     }

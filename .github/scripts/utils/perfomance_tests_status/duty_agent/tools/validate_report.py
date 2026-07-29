@@ -407,6 +407,83 @@ def validate_analysis_md(
                         "re-run prepare (non-offline) or note plans empty"
                     )
 
+    # Compare heatmap: must dig compare.run, not only focus_run / now.
+    compare_active = False
+    compare_label = ""
+    compare_sha = ""
+    compare_fail_names: list[str] = []
+    if out_dir:
+        for name in ("detect_type.json", "context.json"):
+            p = out_dir / name
+            if not p.is_file():
+                continue
+            blob = read_json(p)
+            if name == "detect_type.json":
+                compare_active = bool(blob.get("compare_active"))
+                compare_label = str(blob.get("compare_label") or "")
+                compare_sha = str(blob.get("compare_sha") or "")
+            cmp = blob.get("compare") if isinstance(blob.get("compare"), dict) else {}
+            if cmp.get("active") or cmp.get("wave_id"):
+                compare_active = True
+            if not compare_label:
+                compare_label = str(
+                    cmp.get("label") or (cmp.get("run") or {}).get("label") or ""
+                )
+            if not compare_sha:
+                compare_sha = str((cmp.get("run") or {}).get("sha") or "")
+            for q in cmp.get("queries") or []:
+                if isinstance(q, dict) and str(q.get("kind") or "") in ("fail", "both"):
+                    t = str(q.get("test") or "").strip()
+                    if t and t not in compare_fail_names:
+                        compare_fail_names.append(t)
+            for seed in blob.get("problems_seed") or []:
+                if not isinstance(seed, dict):
+                    continue
+                if str(seed.get("source") or "") == "compare.run" and str(
+                    seed.get("analysis_type") or ""
+                ) == "olap_fail":
+                    t = str(seed.get("test") or "").strip()
+                    if t and t not in compare_fail_names:
+                        compare_fail_names.append(t)
+    if compare_active:
+        if not re.search(
+            r"прогон\s+сравнения|compare\.run|compare_focus|heatmap\s+cmp|"
+            r"compare\s+active|cmp\s+прогон",
+            bl,
+        ):
+            errors.append(
+                "compare.active: analysis must dig compare.run (прогон сравнения) "
+                "— not only selection.focus_run / now. Mention «прогон сравнения» "
+                "+ label/sha and Allure outcome."
+            )
+        if compare_label and compare_label not in body and (
+            not compare_sha or compare_sha[:7] not in body
+        ):
+            errors.append(
+                f"compare.active: mention compare label `{compare_label}` "
+                f"or sha `{compare_sha[:7] if compare_sha else '?'}` in analysis.md"
+            )
+        if compare_fail_names and not any(n.lower() in bl for n in compare_fail_names):
+            errors.append(
+                "compare.active: discuss failing compare query(ies) "
+                + ", ".join(compare_fail_names[:6])
+            )
+        if compare_fail_names and not re.search(
+            r"kikimr__stderr|segfault|sigsegv|sigabrt|received signal|"
+            r"coredump|blob_cache|verify|в\s*отч[её]те",
+            bl,
+        ):
+            errors.append(
+                "compare.active with fail(s): dig compare Allure logs "
+                "(kikimr__stderr / signal / coredump) — do not stop at pack fail_rate"
+            )
+        if out_dir and not (out_dir / "compare_focus.json").is_file():
+            if not re.search(r"compare_focus skipped|compare\.run без report", bl):
+                errors.append(
+                    "compare.active: missing compare_focus.json — re-run "
+                    "`dutyctl prepare` (fetches compare.run Allure) or explain skip"
+                )
+
     # Nodata: must discuss gap + report-first branch (lag vs real missing).
     if olap_nodata:
         if not re.search(

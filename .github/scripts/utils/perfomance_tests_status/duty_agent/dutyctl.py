@@ -313,6 +313,95 @@ def _cmd_prepare_body(
             }
         )
 
+    # 2b) compare.run Allure when heatmap cmp is active (mandatory dig target)
+    compare = ctx.get("compare") if isinstance(ctx.get("compare"), dict) else {}
+    compare_active = bool(compare.get("active") or compare.get("wave_id"))
+    if compare_active:
+        cr = compare.get("run") if isinstance(compare.get("run"), dict) else {}
+        cmp_url = str(cr.get("report") or "").strip() or None
+        cmp_extra: list[str] = []
+        for q in compare.get("queries") or []:
+            if not isinstance(q, dict):
+                continue
+            t = str(q.get("test") or "").strip()
+            if t and t not in cmp_extra:
+                cmp_extra.append(t)
+        for name in cr.get("uncovered_queries") or []:
+            t = str(name).strip()
+            if t and t not in cmp_extra:
+                cmp_extra.append(t)
+        cmp_want_plans = any(
+            str(q.get("kind") or "").lower() in ("slow", "soft", "watch", "both")
+            for q in (compare.get("queries") or [])
+            if isinstance(q, dict)
+        )
+        if cmp_url and not args.offline:
+            cmp_sandbox = inspect_sandbox(
+                cmp_url,
+                offline=args.offline,
+                extra_case_names=cmp_extra or None,
+                include_plans=cmp_want_plans or want_plans,
+            )
+            compare_focus = {
+                "url": cmp_url,
+                "label": compare.get("label") or cr.get("label"),
+                "sha": cr.get("sha"),
+                "fetched": cmp_sandbox.get("fetched"),
+                "source": cmp_sandbox.get("source"),
+                "auth": cmp_sandbox.get("auth"),
+                "error": cmp_sandbox.get("error"),
+                "fingerprints": cmp_sandbox.get("fingerprints"),
+                "primary": cmp_sandbox.get("primary"),
+                "quotes": cmp_sandbox.get("quotes"),
+                "allure": cmp_sandbox.get("allure"),
+                "extra_case_names": cmp_extra,
+                "note": "compare.run Allure — dig with selection.focus_run; do not stop at now only.",
+            }
+            compare_focus["fatal"] = _fatal_from_focus(compare_focus)
+            write_json(out_dir / "compare_focus.json", compare_focus)
+            print(
+                f"compare: fetched={compare_focus.get('fetched')} "
+                f"label={compare_focus.get('label')} "
+                f"fatal_signals={compare_focus['fatal'].get('signals')}",
+                flush=True,
+            )
+            cmp_sig = ", ".join(
+                str(s) for s in (compare_focus["fatal"].get("signals") or [])
+            )
+            trace_record(
+                out_dir,
+                "compare.run / Allure",
+                parent_id=str(prep["id"]),
+                detail=(
+                    f"скачан={'да' if compare_focus.get('fetched') else 'нет'}; "
+                    f"label={compare_focus.get('label') or '—'}; "
+                    f"сигналы: {cmp_sig or '—'}; queries={', '.join(cmp_extra[:6]) or '—'}"
+                ),
+                status="ok" if compare_focus.get("fetched") else "error",
+            )
+            if cmp_sandbox.get("error"):
+                errors.append(
+                    {
+                        "stage": "prepare/compare",
+                        "message": str(cmp_sandbox.get("error"))[:400],
+                        "retriable": "401" in str(cmp_sandbox.get("error"))
+                        or "missing" in str(cmp_sandbox.get("error")),
+                    }
+                )
+        elif compare_active and not cmp_url:
+            write_json(
+                out_dir / "compare_focus.json",
+                {
+                    "url": None,
+                    "label": compare.get("label") or cr.get("label"),
+                    "sha": cr.get("sha"),
+                    "fetched": False,
+                    "error": "compare.active but compare.run.report missing",
+                    "note": "Cannot dig compare Allure without report URL.",
+                },
+            )
+            print("compare: active but no report URL in pack", flush=True)
+
     # 3) priors + history
     history = analyze_history(ctx)
     write_json(out_dir / "history.json", history)

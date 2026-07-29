@@ -1615,6 +1615,7 @@ def refresh_summary_counts(data: dict) -> None:
     inbox = data.get("inbox") or []
     ok = data.get("ok") or []
     hot_rows = [r for r in inbox if r.get("issue") != "in_progress"]
+    all_rows = list(inbox) + list(ok)
     data["summary"] = {
         **(data.get("summary") or {}),
         "missing": sum(1 for r in inbox if r.get("issue") == "missing"),
@@ -1625,6 +1626,34 @@ def refresh_summary_counts(data: dict) -> None:
         "ok_slices": len(ok),
         "watch_slices": sum(1 for r in ok if r.get("issue") == "watch" or r.get("status") == "watch"),
         "hot": len(hot_rows),
+        "new_issues": sum(
+            1
+            for r in all_rows
+            if (r.get("new_issue_count") or r.get("new_fail_count") or 0) > 0
+            or (
+                isinstance(r.get("finished"), dict)
+                and (
+                    r["finished"].get("new_issue_count")
+                    or r["finished"].get("new_fail_count")
+                    or 0
+                )
+                > 0
+            )
+        ),
+        "new_fail": sum(
+            1
+            for r in all_rows
+            if (r.get("new_issue_count") or r.get("new_fail_count") or 0) > 0
+            or (
+                isinstance(r.get("finished"), dict)
+                and (
+                    r["finished"].get("new_issue_count")
+                    or r["finished"].get("new_fail_count")
+                    or 0
+                )
+                > 0
+            )
+        ),
     }
 
 

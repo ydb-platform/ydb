@@ -56,12 +56,39 @@ def _escape_ydb_str(s: str) -> str:
     return s.replace("\\", "\\\\").replace("'", "\\'")
 
 
+# Pack/UI often says ``trunk`` (Arc CI); mart OLAP rows usually store ``main`` /
+# ``origin/main`` (and sometimes empty Branch with Version ``.sha`` / ``trunk.r…``).
+_TRUNK_MAIN = frozenset({"main", "trunk"})
+
+
+def _branch_cores(branch: str) -> set[str]:
+    """Canonical branch names to match in SQL / post-filter (main ↔ trunk)."""
+    raw = (branch or "").strip().lower()
+    if not raw:
+        return set(_TRUNK_MAIN)
+    core = raw.removeprefix("origin/")
+    if "/" in core:
+        core = core.rsplit("/", 1)[-1]
+    if core in _TRUNK_MAIN:
+        return set(_TRUNK_MAIN)
+    return {core} if core else set(_TRUNK_MAIN)
+
+
 def _branch_clause(column: str, branch: str) -> str:
-    b = _escape_ydb_str(branch)
-    return (
-        f"({column} = '{b}' OR {column} = 'origin/{b}' "
-        f"OR EndsWith(CAST({column} AS String), '/{b}'))"
-    )
+    cores = sorted(_branch_cores(branch))
+    parts: list[str] = []
+    for c in cores:
+        ec = _escape_ydb_str(c)
+        parts.append(
+            f"({column} = '{ec}' OR {column} = 'origin/{ec}' "
+            f"OR EndsWith(CAST({column} AS String), '/{ec}'))"
+        )
+    # Acceptance OLAP often leaves Branch empty while CiVersion is trunk.r…
+    if set(cores) & _TRUNK_MAIN:
+        parts.append(f"(CAST({column} AS String) = '' OR {column} IS NULL)")
+    if len(parts) == 1:
+        return parts[0]
+    return "(" + " OR ".join(parts) + ")"
 
 
 def _olap_family(suite: str) -> str:

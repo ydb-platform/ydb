@@ -77,6 +77,19 @@
   .counter.ok .n { color: var(--ok); }
   .counter.nodata .n { color: var(--miss); }
   .counter.noruns .n { color: var(--muted); }
+  .counter.ticket .n { color: #8250df; }
+  .counter.newfail .n { color: var(--broken); }
+  .pill.ticket { background: #ddf4ff; color: #0550ae; }
+  .pill.ticket.needs-branch { background: #fff8c5; color: #9a6700; }
+  .pill.ticket.no-ticket { background: var(--broken-bg); color: var(--broken); }
+  .run-card .run-tickets {
+    margin-top: 3px; font-size: 10px; line-height: 1.35;
+    display: flex; flex-wrap: wrap; gap: 2px; max-width: 100%;
+  }
+  .run-card .run-tickets .pill {
+    font-size: 10px; padding: 1px 5px; max-width: 100%;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
 
   .heat-wrap {
     background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
@@ -404,6 +417,7 @@
   }
   .react-btn[aria-pressed="true"] { color: #fff; border-color: transparent; }
   .react-btn[data-react="fail"][aria-pressed="true"] { background: var(--bad); }
+  .react-btn[data-react="new"][aria-pressed="true"] { background: var(--broken); }
   .react-btn[data-react="hard"][aria-pressed="true"] { background: #e8590c; }
   .react-btn[data-react="soft"][aria-pressed="true"] { background: #9a6700; }
   .react-btn[data-react="nodata"][aria-pressed="true"] { background: #656d76; }
@@ -490,6 +504,7 @@
     <span class="lbl">React</span>
     <span id="reactBar" style="display:inline-flex;gap:4px" title="Каналы сигналов: inbox + скрытие строк heatmap без совпадений">
       <button type="button" class="react-btn" data-react="fail" aria-pressed="true">fail</button>
+      <button type="button" class="react-btn" data-react="new" aria-pressed="false" title="Fail/no-data without a branch-matched open issue (uncovered or needs &lt;branch&gt; label)">new issues</button>
       <button type="button" class="react-btn" data-react="hard" aria-pressed="false">hard</button>
       <button type="button" class="react-btn" data-react="soft" aria-pressed="false">soft</button>
       <button type="button" class="react-btn" data-react="nodata" aria-pressed="true">no data</button>
@@ -591,12 +606,18 @@ let winFrom = UI.default_from || null;
 let winTo = UI.default_to || null;
 const REACT_KEY = 'olap_now_react_signals';
 const WAVE_KEY = 'olap_now_wave_view';
-function defaultReact() { return { fail: true, hard: false, soft: false, nodata: true }; }
+function defaultReact() { return { fail: true, new: false, hard: false, soft: false, nodata: true }; }
 function loadReact() {
   try {
     const o = JSON.parse(localStorage.getItem(REACT_KEY) || '');
     if (!o || typeof o !== 'object') return defaultReact();
-    return { fail: !!o.fail, hard: !!o.hard, soft: !!o.soft, nodata: !!o.nodata };
+    return {
+      fail: !!o.fail,
+      new: !!o.new,
+      hard: !!o.hard,
+      soft: !!o.soft,
+      nodata: !!o.nodata,
+    };
   } catch (_) {
     return defaultReact();
   }
@@ -863,19 +884,21 @@ function statusSeverity(st) {
     regression: 4, slower: 4, failing: 5, missing: 5, broken: 6, both: 6, fail: 5, slow: 4,
   })[st] || 0;
 }
-function shortCellStatus(st, nFail, nSlow, nSoft, nNodata) {
+function shortCellStatus(st, nFail, nSlow, nSoft, nNodata, nNew) {
   // Coverage beats query counts — avoid blue "in progress" cell labeled "fail N".
   if (st === 'missing') return 'missing';
   if (st === 'stale') return 'stale';
   if (st === 'in_progress') return 'in progress';
-  if (st === 'noruns') return 'no runs';
-  // Counts next — same order as fmtFS / legend (slow N fail M).
+  if (st === 'noruns' && !(nNew > 0)) return 'no runs';
+  // Counts next — same order as fmtFS / legend (slow N fail M / new issues).
   // Do NOT map status "regression" → "slow" when only fails are present.
-  const fs = fmtFS(nFail || 0, nSlow || 0, nSoft || 0, nNodata || 0);
+  const fs = fmtFS(nFail || 0, nSlow || 0, nSoft || 0, nNodata || 0, nNew || 0);
   if (fs) {
     if (st === 'broken') return `broken ${fs}`;
     return fs;
   }
+  const nw = fmtNewIssues(nNew);
+  if (nw) return nw;
   if (st === 'broken' || st === 'failing' || st === 'fail') return 'fail';
   if (st === 'regression' || st === 'slower' || st === 'slow') return 'hot';
   if (st === 'watch') return 'soft';
@@ -1115,17 +1138,233 @@ function fmtFail(r) {
   if (r == null) return '—';
   return (r * 100).toFixed(0) + '%';
 }
-function ticketPillsHtml(tickets, { maxTitle = 72 } = {}) {
+function ticketPillsHtml(tickets, { maxTitle = 72, compact = false } = {}) {
   if (!tickets || !tickets.length) return '';
   return tickets.map(t => {
     const title = String(t.title || '');
     const short = title.length > maxTitle ? title.slice(0, maxTitle - 1) + '…' : title;
     const qhint = (t.queries && t.queries.length)
       ? ` · ${t.queries.slice(0, 6).join(', ')}` : '';
-    return `<a class="pill ticket" href="${esc(t.url || '#')}" target="_blank" rel="noopener" ` +
-      `title="${esc(title + qhint)}" onclick="event.stopPropagation()">` +
-      `#${esc(t.number)} · ${esc(short)}</a>`;
+    const needLbl = (t.branch_match === false && t.needs_branch) ? t.needs_branch : null;
+    const cls = needLbl ? 'pill ticket needs-branch' : 'pill ticket';
+    const label = compact
+      ? (needLbl ? `#${t.number} · needs ${needLbl}` : `#${t.number}`)
+      : (needLbl
+        ? `#${t.number} · needs ${needLbl}`
+        : `#${t.number} · ${short}`);
+    const tip = needLbl
+      ? `${title}${qhint} — add GitHub label «${needLbl}» on this issue`
+      : title + qhint;
+    return `<a class="${cls}" href="${esc(t.url || '#')}" target="_blank" rel="noopener" ` +
+      `title="${esc(tip)}" onclick="event.stopPropagation()">${esc(label)}</a>`;
   }).join(' ');
+}
+/** Mirror common/duty_issues.norm_query_name / classify_fail_coverage for Last-runs badges. */
+function normQueryNameJS(q) {
+  const s = String(q || '').trim();
+  if (!s) return '';
+  if (s.includes('.')) {
+    const tail = s.split('.').pop();
+    if (/^query/i.test(tail) || /^q\d+$/i.test(tail)) return tail;
+  }
+  return s;
+}
+function normBranchLabelJS(branch) {
+  let b = String(branch || '').trim().toLowerCase();
+  if (!b || b === 'unknown' || b === '—' || b === '-') return '';
+  if (b.includes('/')) b = b.split('/').pop();
+  if (b === 'trunk') return 'main';
+  return b;
+}
+function branchLabelMatchJS(labels, branch) {
+  const want = normBranchLabelJS(branch);
+  if (!want) return false;
+  const set = new Set((labels || []).map(x => String(x).trim().toLowerCase()));
+  if (set.has(want)) return true;
+  return want === 'main' && set.has('trunk');
+}
+function classifyFailCoverageJS(issues, opts) {
+  const suite = opts.suite || '';
+  const db = opts.db || null;
+  const branch = opts.branch || null;
+  const query = opts.query || null;
+  const kind = opts.kind || null;
+  const covered = [];
+  const wrong = [];
+  for (const iss of (issues || [])) {
+    if (kind && iss.kind && String(iss.kind).toLowerCase() !== String(kind).toLowerCase()) continue;
+    let hit = false;
+    const matchedQ = [];
+    for (const aff of (iss.affected || [])) {
+      if (String(aff.suite || '') !== suite) continue;
+      if (aff.db && db && String(aff.db) !== String(db)) continue;
+      const qs = (aff.queries || []).map(normQueryNameJS).filter(Boolean);
+      if (!qs.length) { hit = true; continue; }
+      if (!query) { hit = true; matchedQ.push(...qs); continue; }
+      const nq = normQueryNameJS(query);
+      if (qs.some(q => q === nq || q.toLowerCase() === nq.toLowerCase())) {
+        hit = true;
+        if (nq && !matchedQ.includes(nq)) matchedQ.push(nq);
+      }
+    }
+    if (!hit) continue;
+    const labels = iss.labels || [];
+    const brOk = branchLabelMatchJS(labels, branch);
+    const stub = {
+      number: iss.number, title: iss.title, url: iss.url,
+      fingerprint: iss.fingerprint, queries: matchedQ, labels,
+      branch_match: brOk,
+      needs_branch: brOk ? null : (normBranchLabelJS(branch) || null),
+    };
+    (brOk ? covered : wrong).push(stub);
+  }
+  if (covered.length) return { status: 'covered', tickets: covered, missing_branch: null };
+  if (wrong.length) {
+    return { status: 'wrong_branch', tickets: wrong, missing_branch: normBranchLabelJS(branch) || null };
+  }
+  return { status: 'uncovered', tickets: [], missing_branch: null };
+}
+function parseFailTestNamesJS(raw) {
+  const names = [];
+  for (const part of String(raw || '').split(',')) {
+    let t = part.trim();
+    if (!t) continue;
+    if (/^\d+$/.test(t)) t = 'Query' + t.padStart(2, '0');
+    const nq = normQueryNameJS(t);
+    if (nq && !names.includes(nq)) names.push(nq);
+  }
+  return names;
+}
+/**
+ * Fail + nodata query names for one Last-runs card — same signals as suiteViewAtFocus
+ * (qi&lt;0 / hist nodata / fail hot) plus mart fail_tests.
+ */
+function gapQueriesForRunJS(item, run) {
+  const names = [];
+  const seen = new Set();
+  const add = (raw) => {
+    const nq = normQueryNameJS(raw);
+    if (nq && !seen.has(nq)) { seen.add(nq); names.push(nq); }
+  };
+  for (const x of (run.fail_queries || [])) add(x);
+  for (const x of parseFailTestNamesJS(run.fail_tests)) add(x);
+  for (const q of (item.queries || [])) {
+    if (!q || !q.test) continue;
+    const qh = q.history;
+    if (!qh) {
+      if (['nodata', 'fail', 'both', 'missing', 'in_progress'].includes(q.kind)) add(q.test);
+      continue;
+    }
+    const qi = findHistIndexForRun(qh, run);
+    if (qi < 0) { add(q.test); continue; }
+    const qm = metricsAtHistIndex(q, qi, qi);
+    if (qm.kind === 'nodata' || qm.kind === 'missing' || qm.kind === 'in_progress'
+        || qm.kind === 'fail' || qm.kind === 'both') {
+      add(q.test);
+    }
+  }
+  return names;
+}
+function aggregateRunCoverageJS(qcovs, problemCount) {
+  if ((!problemCount || problemCount <= 0) && !qcovs.length) {
+    return { ticket_coverage: 'ok', tickets: [], uncovered_queries: [] };
+  }
+  if (!qcovs.length) {
+    return {
+      ticket_coverage: (problemCount || 0) > 0 ? 'uncovered' : 'ok',
+      tickets: [], uncovered_queries: [],
+    };
+  }
+  const rank = { uncovered: 3, wrong_branch: 2, covered: 1, ok: 0 };
+  let worst = 'ok';
+  const byNum = new Map();
+  const uncovered = [];
+  for (const qc of qcovs) {
+    const st = qc.status || 'uncovered';
+    if ((rank[st] || 0) > (rank[worst] || 0)) worst = st;
+    if (st === 'uncovered' && qc.query) uncovered.push(qc.query);
+    for (const t of (qc.tickets || [])) {
+      if (t.number == null) continue;
+      const prev = byNum.get(t.number);
+      if (!prev || (t.branch_match && !prev.branch_match)) byNum.set(t.number, t);
+    }
+  }
+  return {
+    ticket_coverage: worst !== 'ok' ? worst : ((problemCount || 0) > 0 ? 'uncovered' : 'ok'),
+    tickets: [...byNum.values()],
+    uncovered_queries: uncovered,
+  };
+}
+/** Merge server now_run ticket fields with live query-history gaps (nodata included). */
+function runCoverageForDisplay(item, run) {
+  if (!run) return run;
+  const issues = (typeof DATA !== 'undefined' && DATA.known_issues) || [];
+  const qnames = gapQueriesForRunJS(item, run);
+  // Catalog gaps (fail/nodata at Now) also decorate the latest card.
+  const runs = item.now_runs || [];
+  const isLatest = runs.length && run === runs[runs.length - 1];
+  if (isLatest) {
+    for (const q of [...(item.bad_queries || []), ...(item.queries || [])]) {
+      if (!q || !q.test) continue;
+      const k = String(q.kind || '').toLowerCase();
+      if (k === 'slow' || k === 'watch' || k === 'ok') continue;
+      if (!(k === 'fail' || k === 'both' || k === 'nodata' || k === 'missing' || k === 'in_progress'
+          || k === '')) continue;
+      // Empty kind: only when attach already marked coverage (legacy fail rows).
+      if (k === '' && !q.ticket_coverage) continue;
+      const nq = normQueryNameJS(q.test);
+      if (nq && !qnames.includes(nq)) qnames.push(nq);
+    }
+  }
+  if (!qnames.length && !(run.tickets || []).length
+      && (!run.ticket_coverage || run.ticket_coverage === 'ok')
+      && !(Number(run.fail || 0) > 0)) {
+    return run;
+  }
+  const qcovs = qnames.map(qn => {
+    const c = classifyFailCoverageJS(issues, {
+      suite: item.suite, db: item.db, branch: item.branch, query: qn, kind: 'olap',
+    });
+    return { query: qn, ...c };
+  });
+  const agg = aggregateRunCoverageJS(qcovs, Math.max(Number(run.fail || 0), qnames.length));
+  // Prefer live aggregation when we found gaps; keep server tickets if live found nothing new.
+  if (!qnames.length) return run;
+  return {
+    ...run,
+    ticket_coverage: agg.ticket_coverage,
+    tickets: agg.tickets.length ? agg.tickets : (run.tickets || []),
+    uncovered_queries: agg.uncovered_queries,
+  };
+}
+function runTicketsHtml(run) {
+  if (!run) return '';
+  const cov = run.ticket_coverage;
+  const tickets = run.tickets || [];
+  const failN = Number(run.fail || 0);
+  const gapN = (run.uncovered_queries || []).length;
+  // Show on fails, nodata gaps, or explicit coverage annotation.
+  if ((!cov || cov === 'ok') && !tickets.length && failN <= 0 && gapN <= 0) return '';
+  const parts = [];
+  if (tickets.length) {
+    const shown = tickets.slice(0, 3);
+    parts.push(ticketPillsHtml(shown, { compact: true, maxTitle: 24 }));
+    if (tickets.length > 3) {
+      parts.push(`<span class="pill" title="${esc(tickets.slice(3).map(t => '#' + t.number).join(', '))}">+${tickets.length - 3}</span>`);
+    }
+  }
+  if (cov === 'uncovered' || (gapN > 0 && cov !== 'covered' && cov !== 'wrong_branch')
+      || (failN > 0 && !tickets.length && cov !== 'covered' && cov !== 'wrong_branch')) {
+    const uq = (run.uncovered_queries || []).slice(0, 4).join(', ');
+    parts.push(
+      `<span class="pill ticket no-ticket" title="${esc('no open issue for: ' + (uq || 'failed / no-data queries'))}">no ticket</span>`
+    );
+  }
+  if (!parts.length && cov === 'wrong_branch') {
+    parts.push(`<span class="pill ticket needs-branch">needs branch</span>`);
+  }
+  if (!parts.length) return '';
+  return `<div class="run-tickets">${parts.join(' ')}</div>`;
 }
 
 function esc(s) {
@@ -1181,7 +1420,13 @@ function inboxPrimaryStatus(status, issue, nowCounts, failRateNow) {
   const nSlow = nowCounts.slow || 0;
   const nSoft = nowCounts.soft || 0;
   const nNodata = nowCounts.nodata || 0;
+  const nNew = nowCounts.new || 0;
   const extra = badgeExtraCounts(nSoft, nNodata);
+  const newBit = () => {
+    // Always surface on the status pill when there are uncovered / needs-branch gaps.
+    const nw = fmtNewIssues(nNew);
+    return nw ? ` · ${nw}` : '';
+  };
   const fr = failRateNow == null ? null : Number(failRateNow);
   if (issue === 'missing') return { cls: 'missing', lbl: 'missing' };
   if (issue === 'in_progress') return { cls: 'in_progress', lbl: 'in progress' };
@@ -1190,16 +1435,16 @@ function inboxPrimaryStatus(status, issue, nowCounts, failRateNow) {
     if (nFail) bits.push(`fail ${nFail}`);
     if (nSlow) bits.push(`slow ${nSlow}`);
     if (fr != null && fr >= R.failHot) bits.push(fmtFail(fr));
-    return { cls: 'broken', lbl: (bits.length ? `broken · ${bits.join(' · ')}` : 'broken') + extra };
+    return { cls: 'broken', lbl: (bits.length ? `broken · ${bits.join(' · ')}` : 'broken') + extra + newBit() };
   }
   if (nFail || issue === 'failing' || (fr != null && fr >= R.failHot)) {
     const core = nFail
       ? `fail ${nFail}`
       : (fr != null ? `fail rate ${fmtFail(fr)}` : 'failing');
-    return { cls: 'failing', lbl: core + extra };
+    return { cls: 'failing', lbl: core + extra + newBit() };
   }
   if (nSlow || status === 'regression' || issue === 'slower' || issue === 'both') {
-    return { cls: 'slower', lbl: (nSlow ? `slow ${nSlow}` : 'slow') + extra };
+    return { cls: 'slower', lbl: (nSlow ? `slow ${nSlow}` : 'slow') + extra + newBit() };
   }
   const sReact = reactSignals();
   // Soft only when React.soft is on — else nodata counts win the badge color.
@@ -1207,26 +1452,33 @@ function inboxPrimaryStatus(status, issue, nowCounts, failRateNow) {
     const softLbl = nSoft ? `soft ${nSoft}` : 'soft';
     // nodata still visible when soft is primary
     const ndOnly = (sReact.nodata && nNodata) ? ` · no data ${nNodata}` : '';
-    return { cls: 'watch', lbl: softLbl + ndOnly };
+    return { cls: 'watch', lbl: softLbl + ndOnly + newBit() };
   }
   // Server keeps many nodata suites as status/issue=ok — badge must follow counts.
   if (status === 'nodata' || issue === 'nodata' || nNodata) {
-    return { cls: 'nodata', lbl: nNodata ? `no data ${nNodata}` : 'no data' };
+    return { cls: 'nodata', lbl: (nNodata ? `no data ${nNodata}` : 'no data') + newBit() };
+  }
+  if (nNew) {
+    return { cls: 'failing', lbl: fmtNewIssues(nNew) };
   }
   if (status === 'noruns') return { cls: 'noruns', lbl: 'no runs' };
   if (status === 'watch' || issue === 'watch' || nSoft) {
-    return { cls: 'watch', lbl: nSoft ? `soft ${nSoft}` : 'soft' };
+    return { cls: 'watch', lbl: (nSoft ? `soft ${nSoft}` : 'soft') + newBit() };
   }
   if (issue === 'stale') return { cls: 'stale', lbl: 'stale' };
   return { cls: 'ok', lbl: 'ok' };
 }
 function statusCellHtml(primary, nowCounts, prevCounts, prevLabel) {
-  const nowFs = fmtFS(nowCounts.fail, nowCounts.slow, nowCounts.soft, nowCounts.nodata) || 'ok';
+  const nowFs = fmtFS(
+    nowCounts.fail, nowCounts.slow, nowCounts.soft, nowCounts.nodata, nowCounts.new
+  ) || 'ok';
   let html = `<div class="stat-cell">
     <span class="badge ${esc(primary.cls)}">${esc(primary.lbl)}</span>
     <div class="qline">queries: <b>${esc(nowFs)}</b></div>`;
   if (prevCounts) {
-    const wasFs = fmtFS(prevCounts.fail, prevCounts.slow, prevCounts.soft, prevCounts.nodata) || 'ok';
+    const wasFs = fmtFS(
+      prevCounts.fail, prevCounts.slow, prevCounts.soft, prevCounts.nodata, prevCounts.new
+    ) || 'ok';
     const short = (prevLabel || 'prev').replace(/^prev card\s+/i, '').replace(/^compare\s+/i, 'cmp ');
     html += `<div class="qline">was ${esc(wasFs)} · ${esc(short)}</div>`;
   }
@@ -1341,24 +1593,46 @@ function catalogQuerySplit(r) {
 /**
  * Prefer live reclassify at focus run (inbox badge path). Fixes heatmap ok while
  * inbox shows FAIL when generate left queries[].kind=ok (e.g. single history point).
+ * Union with catalog so generate-time nodata/fail is not greenwashed when hist says ok.
  */
 function querySplit(r) {
+  const cat = catalogQuerySplit(r);
   const view = liveSuiteView(r);
-  if (view) {
-    return {
-      fail: new Set((view.fails || []).map(q => String(q.test))),
-      slow: new Set((view.slows || []).map(q => String(q.test))),
-      soft: new Set((view.softs || []).map(q => String(q.test))),
-      nodata: new Set((view.nodatas || []).map(q => String(q.test))),
-    };
-  }
-  return catalogQuerySplit(r);
+  if (!view) return cat;
+  const merge = (a, b) => {
+    const out = new Set(a);
+    for (const x of b) out.add(x);
+    return out;
+  };
+  return {
+    fail: merge((view.fails || []).map(q => String(q.test)), cat.fail),
+    slow: merge((view.slows || []).map(q => String(q.test)), cat.slow),
+    soft: merge((view.softs || []).map(q => String(q.test)), cat.soft),
+    nodata: merge((view.nodatas || []).map(q => String(q.test)), cat.nodata),
+  };
+}
+function newIssueQueryCount(r) {
+  const n = Number(r && (r.new_issue_count || r.new_fail_count) || 0);
+  const w = Number(r && (r.wrong_branch_count || 0) || 0);
+  const nFin = Number(r && r.finished && (r.finished.new_issue_count || r.finished.new_fail_count) || 0);
+  const wFin = Number(r && r.finished && (r.finished.wrong_branch_count || 0) || 0);
+  // new_issue_count already includes wrong_branch after attach; keep max for older packs.
+  return Math.max(n || 0, w || 0, nFin || 0, wFin || 0);
 }
 function hasFailSignal(r) {
   if (['failing', 'both'].includes(r.issue)) return true;
   if (r.status === 'broken' && (r.fail_rate_now || 0) >= 0.1) return true;
   return querySplit(r).fail.size > 0;
 }
+function hasNewIssueSignal(r) {
+  if (newIssueQueryCount(r) > 0) return true;
+  // Older packs / suite pills: "needs <branch>" while fail/nodata is active.
+  const ticks = [...(r.tickets || []), ...((r.finished && r.finished.tickets) || [])];
+  if (!ticks.some(t => t && (t.branch_match === false || t.needs_branch))) return false;
+  return hasFailSignal(r) || hasNodataSignal(r);
+}
+/** @deprecated alias */
+function hasNewFailSignal(r) { return hasNewIssueSignal(r); }
 function hasHardSlowSignal(r) {
   if (['slower', 'both'].includes(r.issue)) return true;
   return querySplit(r).slow.size > 0;
@@ -1378,19 +1652,30 @@ function isInfraIssue(r) {
 function rowMatchesReact(r) {
   if (isInfraIssue(r)) return true;
   const s = reactSignals();
+  // `new issues` = fail or nodata without open issue on this branch label.
+  if (s.new) {
+    return hasNewIssueSignal(r);
+  }
   if (s.fail && hasFailSignal(r)) return true;
   if (s.hard && hasHardSlowSignal(r)) return true;
   if (s.soft && hasSoftSlowSignal(r)) return true;
   if (s.nodata && hasNodataSignal(r)) return true;
   return false;
 }
-function fmtFS(nFail, nSlow, nSoft, nNodata) {
+function fmtNewIssues(nNew) {
+  const n = Number(nNew) || 0;
+  if (n <= 0) return '';
+  return n === 1 ? 'new issue' : `new issues ${n}`;
+}
+function fmtFS(nFail, nSlow, nSoft, nNodata, nNew) {
   const s = reactSignals();
   const bits = [];
   if (s.hard && nSlow) bits.push(`slow ${nSlow}`);
   if (s.soft && nSoft) bits.push(`soft ${nSoft}`);
   if (s.fail && nFail) bits.push(`fail ${nFail}`);
   if (s.nodata && nNodata) bits.push(`no data ${nNodata}`);
+  // Explicit — never fall back to grey "N suites" when React "new issues" is on.
+  if (s.new && nNew) bits.push(fmtNewIssues(nNew));
   return bits.join(' ');
 }
 function queryCountsAtRun(data, run) {
@@ -1573,12 +1858,14 @@ function liveCellNow(branch, db, fam) {
   const slowSet = new Set();
   const softSet = new Set();
   const nodataSet = new Set();
+  let nNew = 0;
   for (const r of hot) {
     const sp = querySplit(r);
     if (s.fail) for (const n of sp.fail) failSet.add(n);
     if (s.hard) for (const n of sp.slow) slowSet.add(n);
     if (s.soft) for (const n of sp.soft) softSet.add(n);
     if (s.nodata) for (const n of sp.nodata) nodataSet.add(n);
+    if (hasNewIssueSignal(r)) nNew += newIssueQueryCount(r);
   }
   // Disambiguate Python status=regression (used for both fail and slow).
   let status = best || 'ok';
@@ -1607,6 +1894,10 @@ function liveCellNow(branch, db, fam) {
     else if (slowSet.size) status = 'regression';
     else status = 'watch';
   }
+  // React "new issues": uncovered gaps without a ticket — not anonymous "N suites".
+  if (s.new && nNew && !failSet.size && !slowSet.size && !softSet.size && !nodataSet.size) {
+    status = 'failing';
+  }
   // Final React normalize — same contract as compare (classify_rules.resolve_alert_cell).
   return resolveAlertCell({
     status,
@@ -1615,6 +1906,7 @@ function liveCellNow(branch, db, fam) {
     n_slow: slowSet.size,
     n_soft: softSet.size,
     n_nodata: nodataSet.size,
+    n_new: nNew,
     n_queries: new Set([...failSet, ...slowSet, ...softSet, ...nodataSet]).size,
   });
 }
@@ -1688,12 +1980,19 @@ function compareDeltaIsNodataOnly(prev, now) {
  */
 function normalizeSideForReact(side) {
   if (!side) {
-    return { status: 'noruns', n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 0, n_hot: 0, n_queries: 0 };
+    return {
+      status: 'noruns', n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 0,
+      n_new: 0, n_hot: 0, n_queries: 0,
+    };
   }
   const s = reactSignals();
   const st = side.status || 'ok';
-  if (st === 'noruns') {
-    return { status: 'noruns', n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 0, n_hot: 0, n_queries: 0 };
+  const n_new = s.new ? (side.n_new || 0) : 0;
+  if (st === 'noruns' && !n_new) {
+    return {
+      status: 'noruns', n_fail: 0, n_slow: 0, n_soft: 0, n_nodata: 0,
+      n_new: 0, n_hot: 0, n_queries: 0,
+    };
   }
   const rawNd = side.n_nodata || 0;
   const n_fail = s.fail ? (side.n_fail || 0) : 0;
@@ -1706,7 +2005,7 @@ function normalizeSideForReact(side) {
       outSt = 'nodata';
     }
     return {
-      status: outSt, n_fail, n_slow, n_soft, n_nodata,
+      status: outSt, n_fail, n_slow, n_soft, n_nodata, n_new,
       n_hot: side.n_hot || 0, n_queries: n_fail + n_slow + n_soft + n_nodata,
     };
   }
@@ -1720,9 +2019,10 @@ function normalizeSideForReact(side) {
   else if (n_slow || suiteSlow) newSt = 'regression';
   else if (n_soft || suiteSoft) newSt = 'watch';
   else if (n_nodata || (suiteNd && rawNd > 0)) newSt = 'nodata';
+  else if (n_new) newSt = 'failing'; // uncovered — red cell, label via fmtFS "new issues N"
   else if ((st === 'nodata' || st === 'noruns') && !n_fail && !n_slow && !n_soft) newSt = 'noruns';
   return {
-    status: newSt, n_fail, n_slow, n_soft, n_nodata,
+    status: newSt, n_fail, n_slow, n_soft, n_nodata, n_new,
     n_hot: side.n_hot || 0, n_queries: n_fail + n_slow + n_soft + n_nodata,
   };
 }
@@ -1800,30 +2100,34 @@ function cellLabel(st, live) {
   if (live && live.compare && live.prev) {
     const a = shortCellStatus(
       live.prev.status,
-      live.prev.n_fail, live.prev.n_slow, live.prev.n_soft, live.prev.n_nodata
+      live.prev.n_fail, live.prev.n_slow, live.prev.n_soft, live.prev.n_nodata,
+      live.prev.n_new
     );
     const b = shortCellStatus(
       live.delta_status || live.status,
-      live.n_fail, live.n_slow, live.n_soft, live.n_nodata
+      live.n_fail, live.n_slow, live.n_soft, live.n_nodata,
+      live.n_new
     );
     if (a === b) return `<span class="cnt">${esc(b)} <span style="opacity:.55">=</span></span>`;
     return `<span class="cnt">${esc(a)} → ${esc(b)}</span>`;
   }
-  const fs = fmtFS(live.n_fail || 0, live.n_slow || 0, live.n_soft || 0, live.n_nodata || 0);
+  const fs = fmtFS(
+    live.n_fail || 0, live.n_slow || 0, live.n_soft || 0, live.n_nodata || 0, live.n_new || 0
+  );
   if (st === 'broken') {
     if (fs) return `broken <span class="cnt">${fs}</span>`;
     const ns = live.n_hot || 0;
     return ns ? `broken <span class="cnt">${ns}</span>` : 'broken';
   }
-  // failing / regression / both / slower / soft — prefer query counts
+  // failing / regression / both / slower / soft / new — prefer query counts
   if (st === 'failing' || st === 'fail' || st === 'both'
       || st === 'regression' || st === 'slower' || st === 'slow'
       || st === 'watch' || st === 'nodata' || st === 'noruns'
       || ((live.n_soft || 0) > 0) || ((live.n_fail || 0) > 0) || ((live.n_slow || 0) > 0)
-      || ((live.n_nodata || 0) > 0)) {
+      || ((live.n_nodata || 0) > 0) || ((live.n_new || 0) > 0)) {
     if (fs) return `<span class="cnt">${fs}</span>`;
-    const ns = live.n_hot || 0;
-    if (ns) return `<span class="cnt">${ns} suites</span>`;
+    const nw = fmtNewIssues(live.n_new);
+    if (nw) return `<span class="cnt">${esc(nw)}</span>`;
     if (st === 'noruns' || (st === 'nodata' && !(live.n_nodata || 0))) return 'no runs';
     if (st === 'nodata') return 'no data';
     if (st === 'watch' || (live.n_soft || 0) > 0) return 'soft';
@@ -1912,6 +2216,8 @@ function summarizeRows(rows, { db = '', fam = '' } = {}) {
     nodata: sReact.nodata
       ? rows.filter(r => !isInfraIssue(r) && hasNodataSignal(r)).length
       : 0,
+    new_issues: rows.filter(r => !isInfraIssue(r) && hasNewIssueSignal(r)).length,
+    new_fail: rows.filter(r => !isInfraIssue(r) && hasNewIssueSignal(r)).length,
     stale: rows.filter(r => r.issue === 'stale').length,
     ok_slices: countOkSlices({ db, fam }),
     hot: hot.length,
@@ -1953,13 +2259,27 @@ function renderHeader() {
     : rs.soft
       ? `<div class="counter warn"><div class="n">${fmtNM(s.soft, total.soft, !!sel)}</div><div class="lbl">Soft slow</div></div>`
       : `<div class="counter warn"><div class="n">${fmtNM(s.stale, total.stale, !!sel)}</div><div class="lbl">Stale</div></div>`;
+  const nIssues = (DATA.known_issues || []).length;
+  const nSuitesTick = [...(DATA.inbox || []), ...(DATA.ok || [])]
+    .filter(r => (r.tickets || []).length).length;
+  const sumNew = (DATA.summary || {}).new_issues ?? (DATA.summary || {}).new_fail;
+  const nNew = (s.new_issues != null ? s.new_issues : (s.new_fail != null ? s.new_fail : sumNew)) || 0;
+  const nNewTotal = (total.new_issues != null ? total.new_issues : (total.new_fail != null ? total.new_fail : sumNew)) || 0;
   document.getElementById('counters').innerHTML = `
     <div class="counter miss"><div class="n">${fmtNM(s.missing, total.missing, !!sel)}</div><div class="lbl">Missing</div></div>
     <div class="counter info"><div class="n">${fmtNM(s.in_progress, total.in_progress, !!sel)}</div><div class="lbl">In progress</div></div>
     <div class="counter hot"><div class="n">${fmtNM(s.failing, total.failing, !!sel)}</div><div class="lbl">Failing</div></div>
+    <div class="counter newfail" title="Suites with fail or no-data query and no open issue matching affected + branch label">
+      <div class="n">${fmtNM(nNew, nNewTotal, !!sel)}</div>
+      <div class="lbl">New issues</div>
+    </div>
     <div class="counter regress"><div class="n">${fmtNM(s.slower, total.slower, !!sel)}</div><div class="lbl">Hard slow</div></div>
     ${fifth}
     <div class="counter ok"><div class="n">${fmtNM(s.ok_slices, total.ok_slices, !!sel)}</div><div class="lbl">OK slices</div></div>
+    <div class="counter ticket" title="Open GitHub issues with perf-duty-match (kind=olap). Suites = inbox/ok rows with matched tickets.">
+      <div class="n">${nIssues}<span class="sel">/${nSuitesTick}</span></div>
+      <div class="lbl">Issues / suites</div>
+    </div>
   `;
 }
 
@@ -2039,9 +2359,9 @@ function renderHeatmap() {
         const live = lives[fam];
         const st = live.status || 'ok';
         const tip = live.compare && live.prev
-          ? `compare → now: ${shortCellStatus(live.prev.status, live.prev.n_fail, live.prev.n_slow, live.prev.n_soft, live.prev.n_nodata)} → ${shortCellStatus(live.delta_status, live.n_fail, live.n_slow, live.n_soft, live.n_nodata)}`
-          : ((st === 'regression' || st === 'broken' || st === 'watch' || st === 'nodata')
-            ? `${live.n_fail || 0} fail · ${live.n_slow || 0} hard slow · ${live.n_soft || 0} soft · ${live.n_nodata || 0} no data`
+          ? `compare → now: ${shortCellStatus(live.prev.status, live.prev.n_fail, live.prev.n_slow, live.prev.n_soft, live.prev.n_nodata, live.prev.n_new)} → ${shortCellStatus(live.delta_status, live.n_fail, live.n_slow, live.n_soft, live.n_nodata, live.n_new)}`
+          : ((st === 'regression' || st === 'broken' || st === 'watch' || st === 'nodata' || st === 'failing' || (live.n_new || 0) > 0)
+            ? `${live.n_fail || 0} fail · ${live.n_slow || 0} hard slow · ${live.n_soft || 0} soft · ${live.n_nodata || 0} no data · ${live.n_new || 0} new issues`
             : `${live.n_hot || 0} suites`);
         const heat = heatSelection();
         const selected = !!(heat && heat.db === db && heat.fam === fam
@@ -3227,13 +3547,100 @@ function dutySafeName(s) {
   return String(s || 'suite').replace(/[^\w.\-]+/g, '_').slice(0, 80);
 }
 
+/** Pack one Last-runs / wave card for duty context (focus or compare). */
+function packDutyRunSnapshot(item, run) {
+  if (!run) return null;
+  const cov = runCoverageForDisplay(item, run);
+  return {
+    label: run.label || null,
+    ci_version: run.ci_version || null,
+    sha: run.version || null,
+    ts: run.ts || null,
+    day: run.day || null,
+    fail_rate: run.fail_rate != null ? run.fail_rate : null,
+    ydb: run.ydb != null ? run.ydb : null,
+    success: run.success != null ? run.success : null,
+    fail: run.fail != null ? run.fail : null,
+    report: run.report || null,
+    ticket_coverage: cov.ticket_coverage || 'ok',
+    uncovered_queries: cov.uncovered_queries || [],
+    tickets: (cov.tickets || []).map(t => ({
+      number: t.number,
+      title: t.title || null,
+      url: t.url || null,
+      branch_match: t.branch_match !== false,
+      needs_branch: t.needs_branch || null,
+      queries: t.queries || [],
+    })),
+  };
+}
+function findNowRunForCompare(runs, wave, cmpId) {
+  if (!runs || !runs.length) return null;
+  const id = (wave && (wave.ci_version || wave.id)) || cmpId;
+  if (id) {
+    for (let i = runs.length - 1; i >= 0; i--) {
+      if (runs[i].ci_version === id) return runs[i];
+    }
+  }
+  if (wave && wave.day) {
+    for (let i = runs.length - 1; i >= 0; i--) {
+      if (String(runs[i].day || '') === String(wave.day)) return runs[i];
+    }
+  }
+  return null;
+}
+/** Fail/slow/soft/nodata query lists at a specific now_run (not necessarily focus). */
+function queryGapsAtRun(item, run) {
+  const fails = [], slows = [], softs = [], nodatas = [];
+  if (!run) return { fails, slows, softs, nodatas };
+  for (const q of (item.queries || [])) {
+    if (!q || !q.test) continue;
+    if (!q.history) {
+      const k = q.kind || 'ok';
+      if (k === 'fail' || k === 'both') fails.push({ test: q.test, error_class: q.error_class || null });
+      if (k === 'slow' || k === 'both') slows.push({ test: q.test, ydb_pct: q.ydb_pct });
+      if (k === 'watch') softs.push({ test: q.test, ydb_pct: q.ydb_pct });
+      if (k === 'nodata' || k === 'missing' || k === 'in_progress') nodatas.push({ test: q.test });
+      continue;
+    }
+    const qi = findHistIndexForRun(q.history, run);
+    if (qi < 0) { nodatas.push({ test: q.test }); continue; }
+    const qm = metricsAtHistIndex(q, qi, qi);
+    if (qm.kind === 'fail' || qm.kind === 'both') {
+      fails.push({ test: q.test, ydb_pct: qm.ydb_pct, error_class: qm.error_class || null });
+    }
+    if (qm.kind === 'slow' || qm.kind === 'both') slows.push({ test: q.test, ydb_pct: qm.ydb_pct });
+    if (qm.kind === 'watch') softs.push({ test: q.test, ydb_pct: qm.ydb_pct });
+    if (qm.kind === 'nodata' || qm.kind === 'missing' || qm.kind === 'in_progress') {
+      nodatas.push({ test: q.test });
+    }
+  }
+  return { fails, slows, softs, nodatas };
+}
+function queryTicketMeta(item, testName) {
+  const nq = normQueryNameJS(testName);
+  const issues = (typeof DATA !== 'undefined' && DATA.known_issues) || [];
+  const cov = classifyFailCoverageJS(issues, {
+    suite: item.suite, db: item.db, branch: item.branch, query: nq, kind: 'olap',
+  });
+  return {
+    ticket_coverage: cov.status,
+    tickets: (cov.tickets || []).slice(0, 3).map(t => ({
+      number: t.number, url: t.url || null, branch_match: t.branch_match !== false,
+      needs_branch: t.needs_branch || null,
+    })),
+  };
+}
+
 /** Frozen incident pack for duty_agent (schema perf-duty-context/v1).
- *  Must include nodata/soft counts — duty_agent seeds olap_nodata from these. */
+ *  Must include nodata/soft counts — duty_agent seeds olap_nodata from these.
+ *  Also packs ticket coverage + compare-wave snapshot when heatmap cmp is active. */
 function buildDutyContext(item, diveId) {
   const view = suiteViewAtFocus(item, diveId);
   const data = diveData(item);
   const focusIdx = diveFocusRunIndex(item, data);
   const focusRun = (data.now_runs || [])[focusIdx] || null;
+  const focusPack = packDutyRunSnapshot(data, focusRun);
   const sticky = diveQueryFocus[suiteKey(item)] || null;
   const react = [...document.querySelectorAll('.react-btn[aria-pressed="true"]')]
     .map(b => b.dataset.react).filter(Boolean);
@@ -3242,6 +3649,7 @@ function buildDutyContext(item, diveId) {
   const pushQ = (q, kind) => {
     if (!q || !q.test || seenQ.has(q.test)) return;
     seenQ.add(q.test);
+    const tmeta = queryTicketMeta(item, q.test);
     queries.push({
       test: q.test,
       kind,
@@ -3249,6 +3657,8 @@ function buildDutyContext(item, diveId) {
       ydb_pct: q.ydb_pct != null ? q.ydb_pct : null,
       ydb_now: q.ydb_now != null ? q.ydb_now : null,
       fail_rate_late: q.fail_rate_late != null ? q.fail_rate_late : null,
+      ticket_coverage: tmeta.ticket_coverage,
+      tickets: tmeta.tickets,
     });
   };
   const catalog = data.queries || item.queries || [];
@@ -3285,10 +3695,21 @@ function buildDutyContext(item, diveId) {
     catalog.filter(q => q.kind === 'nodata' || q.kind === 'missing')
       .slice(0, 24).forEach(q => pushQ(q, 'nodata'));
   }
+  // Uncovered fail/nodata first — agent should dig these before covered tickets.
+  const covRank = { uncovered: 0, wrong_branch: 1, covered: 2, ok: 3 };
+  queries.sort((a, b) => {
+    const ka = a.kind === 'fail' || a.kind === 'both' || a.kind === 'nodata' ? 0
+      : (a.kind === 'slow' ? 1 : 2);
+    const kb = b.kind === 'fail' || b.kind === 'both' || b.kind === 'nodata' ? 0
+      : (b.kind === 'slow' ? 1 : 2);
+    if (ka !== kb) return ka - kb;
+    return (covRank[a.ticket_coverage] ?? 3) - (covRank[b.ticket_coverage] ?? 3);
+  });
   let sticky_detail = null;
   if (sticky) {
     const q = catalog.find(x => x.test === sticky);
     if (q) {
+      const tmeta = queryTicketMeta(item, q.test);
       sticky_detail = {
         test: q.test,
         kind: q.kind || null,
@@ -3297,12 +3718,86 @@ function buildDutyContext(item, diveId) {
         ydb_base: q.ydb_base != null ? q.ydb_base : null,
         ydb_pct: q.ydb_pct != null ? q.ydb_pct : null,
         fail_rate_late: q.fail_rate_late != null ? q.fail_rate_late : null,
+        ticket_coverage: tmeta.ticket_coverage,
+        tickets: tmeta.tickets,
         history: compactHist(q.history, 24),
       };
     }
   }
-  const reportUrl = (focusRun && focusRun.report)
+  const reportUrl = (focusPack && focusPack.report)
     || data.report || item.report || null;
+  if (focusPack && reportUrl && !focusPack.report) focusPack.report = reportUrl;
+
+  const uncovered = [];
+  const wrongBranch = [];
+  const covered = [];
+  for (const q of queries) {
+    if (q.kind !== 'fail' && q.kind !== 'both' && q.kind !== 'nodata') continue;
+    if (q.ticket_coverage === 'uncovered') uncovered.push(q.test);
+    else if (q.ticket_coverage === 'wrong_branch') wrongBranch.push(q.test);
+    else if (q.ticket_coverage === 'covered') covered.push(q.test);
+  }
+  // Also fold focus-run uncovered names (history gaps not in view samples).
+  for (const n of (focusPack && focusPack.uncovered_queries) || []) {
+    if (!uncovered.includes(n)) uncovered.push(n);
+  }
+  const newIssueCount = Math.max(
+    intOr0(item.new_issue_count) || intOr0(item.new_fail_count),
+    intOr0(data.new_issue_count) || intOr0(data.new_fail_count),
+    uncovered.length
+  );
+
+  const cmpId = getCompareId(item.branch, item.db) || null;
+  const cmpWave = cmpId ? waveEntry(item.branch, item.db, cmpId) : null;
+  const cmpRunRaw = cmpId
+    ? findNowRunForCompare(data.now_runs || [], cmpWave, cmpId)
+    : null;
+  const cmpPack = cmpRunRaw ? packDutyRunSnapshot(data, cmpRunRaw) : null;
+  let compareBlock = { wave_id: cmpId, active: !!cmpId };
+  if (cmpId) {
+    const cg = queryGapsAtRun(data, cmpRunRaw);
+    const cmpQc = {
+      fail: cg.fails.length,
+      slow: cg.slows.length,
+      soft: cg.softs.length,
+      nodata: cg.nodatas.length,
+    };
+    const cmpQueries = [];
+    const pushCmp = (q, kind) => {
+      if (!q || !q.test || cmpQueries.some(x => x.test === q.test)) return;
+      const tmeta = queryTicketMeta(item, q.test);
+      cmpQueries.push({
+        test: q.test, kind,
+        error_class: q.error_class || null,
+        ticket_coverage: tmeta.ticket_coverage,
+        tickets: tmeta.tickets,
+      });
+    };
+    cg.fails.forEach(q => pushCmp(q, 'fail'));
+    cg.nodatas.slice(0, 24).forEach(q => pushCmp(q, 'nodata'));
+    cg.slows.slice(0, 8).forEach(q => pushCmp(q, 'slow'));
+    compareBlock = {
+      wave_id: cmpId,
+      active: true,
+      day: (cmpWave && cmpWave.day) || (cmpPack && cmpPack.day) || null,
+      label: (cmpWave && cmpWave.label) || (cmpPack && cmpPack.label) || null,
+      run: cmpPack,
+      query_counts: cmpQc,
+      queries: cmpQueries.slice(0, 40),
+      note: 'Compare wave selected in heatmap — dig compare.run (Allure/sha/gaps) as well as selection.focus_run (now/latest). Do not stop at last only.',
+    };
+  }
+
+  const known_tickets = (item.tickets || []).map(t => ({
+    number: t.number,
+    title: t.title,
+    url: t.url,
+    fingerprint: t.fingerprint || null,
+    queries: t.queries || [],
+    branch_match: t.branch_match !== false,
+    needs_branch: t.needs_branch || null,
+  }));
+
   return {
     schema: 'perf-duty-context/v1',
     generated_at: new Date().toISOString(),
@@ -3312,17 +3807,7 @@ function buildDutyContext(item, diveId) {
       db: item.db || null,
       suite: item.suite || null,
       family: item.family || null,
-      focus_run: focusRun ? {
-        label: focusRun.label || null,
-        ci_version: focusRun.ci_version || null,
-        sha: focusRun.version || null,
-        ts: focusRun.ts || null,
-        fail_rate: focusRun.fail_rate != null ? focusRun.fail_rate : null,
-        ydb: focusRun.ydb != null ? focusRun.ydb : null,
-        success: focusRun.success != null ? focusRun.success : null,
-        fail: focusRun.fail != null ? focusRun.fail : null,
-        report: reportUrl,
-      } : null,
+      focus_run: focusPack,
     },
     suite_now: {
       issue: view ? view.issue : item.issue,
@@ -3342,22 +3827,38 @@ function buildDutyContext(item, diveId) {
       reasons: item.reasons || [],
       ci_version: (view && view.ci_version) || item.ci_version || item.wave || null,
       last_ts: (view && view.last_ts) || item.last_ts || null,
+      new_issue_count: newIssueCount,
+      ticket_coverage: (focusPack && focusPack.ticket_coverage) || 'ok',
     },
-    // fail/slow first, then soft/nodata samples (cap keeps pack small)
+    // uncovered fail/nodata first, then covered, then soft samples
     queries: queries.slice(0, 60),
     sticky_query: sticky,
     sticky_detail,
     suite_history: compactHist(data.history || item.history, 24),
-    compare: { wave_id: getCompareId(item.branch, item.db) || null },
-    hints: { react, wave_view: waveView() },
-    known_tickets: (item.tickets || []).map(t => ({
-      number: t.number,
-      title: t.title,
-      url: t.url,
-      fingerprint: t.fingerprint || null,
-      queries: t.queries || [],
-    })),
+    compare: compareBlock,
+    hints: {
+      react,
+      wave_view: waveView(),
+      investigate_uncovered_first: uncovered.length > 0 || react.includes('new'),
+      compare_active: !!cmpId,
+    },
+    ticket_coverage: {
+      status: (focusPack && focusPack.ticket_coverage) || (
+        uncovered.length ? 'uncovered' : (wrongBranch.length ? 'wrong_branch' : (covered.length ? 'covered' : 'ok'))
+      ),
+      new_issue_count: newIssueCount,
+      uncovered_queries: uncovered,
+      wrong_branch_queries: wrongBranch,
+      covered_queries: covered,
+      investigate_uncovered_first: uncovered.length > 0 || wrongBranch.length > 0 || react.includes('new'),
+      note: 'Uncovered / wrong_branch = problems without an open issue on this branch label — dig these first. Covered → prefer update_known (expand affected), do not open a duplicate.',
+    },
+    known_tickets,
   };
+}
+function intOr0(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
 }
 
 function diveHtml(r, id) {
@@ -3373,6 +3874,7 @@ function diveHtml(r, id) {
   const cmpId = getCompareId(r.branch, r.db);
   const cmpWave = cmpId ? waveEntry(r.branch, r.db, cmpId) : null;
   const runs = (data.now_runs || []).map((run, ri) => {
+    const covRun = runCoverageForDisplay(data, run);
     const link = run.report ? `<a href="${esc(run.report)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">report</a>` : '—';
     const isLatest = ri === (data.now_runs || []).length - 1;
     const active = ri === focusIdx ? ' active' : '';
@@ -3384,10 +3886,18 @@ function diveHtml(r, id) {
     const shortLbl = run.label
       ? String(run.label).replace(/^(\d{4}-\d{2}-\d{2})_([a-f0-9]{7,8}).*$/i, '$1·$2')
       : sha.slice(0, 10);
-    return `<div class="${cls}" data-run-card="${id}" data-run-idx="${ri}" data-ci="${esc(run.ci_version || '')}" title="${esc((run.label || '') + ' · ' + (run.ci_version || '') + (isCmp ? ' · compare' : (isLatest ? ' · now' : '')))}">
+    const tipBits = [
+      run.label || '',
+      run.ci_version || '',
+      isCmp ? 'compare' : (isLatest ? 'now' : ''),
+      covRun.ticket_coverage && covRun.ticket_coverage !== 'ok' ? `tickets:${covRun.ticket_coverage}` : '',
+      (covRun.uncovered_queries || []).length ? `no ticket: ${(covRun.uncovered_queries || []).join(', ')}` : '',
+    ].filter(Boolean);
+    return `<div class="${cls}" data-run-card="${id}" data-run-idx="${ri}" data-ci="${esc(run.ci_version || '')}" title="${esc(tipBits.join(' · '))}">
       <div class="t">${esc(shortLbl)}</div>
       <div>${fmtFail(run.fail_rate)} · ${fmt(run.ydb)}</div>
       <div class="muted">${esc(run.ci_version || '—')}${isCmp ? ' · cmp' : (isLatest ? ' · now' : '')}</div>
+      ${runTicketsHtml(covRun)}
       <div>${link}</div>
     </div>`;
   }).join('') || `<div class="muted">${
@@ -3424,7 +3934,8 @@ function diveHtml(r, id) {
                : '—'
            }</b></div>
          <div class="muted" style="font-size:11px">queries now: ${esc(fmtFS(
-           view.fails.length, view.slows.length, (view.softs || []).length, (view.nodatas || []).length
+           view.fails.length, view.slows.length, (view.softs || []).length, (view.nodatas || []).length,
+           newIssueQueryCount(r)
          ) || 'ok')} · ${report}</div>
        </div>`
     : `<div class="muted">${esc((r.reasons || []).join(' · '))} · ${report}</div>`;
@@ -3510,8 +4021,15 @@ function renderInbox() {
           slow: view.slows.length,
           soft: (view.softs || []).length,
           nodata: (view.nodatas || []).length,
+          new: newIssueQueryCount(r),
         }
-      : (() => { const qs = querySplit(metrics); return { fail: qs.fail.size, slow: qs.slow.size, soft: qs.soft.size, nodata: qs.nodata.size }; })();
+      : (() => {
+          const qs = querySplit(metrics);
+          return {
+            fail: qs.fail.size, slow: qs.slow.size, soft: qs.soft.size,
+            nodata: qs.nodata.size, new: newIssueQueryCount(r),
+          };
+        })();
     // Status "was" only from compare wave (same axis as heatmap). No prev-card fallback —
     // metrics base is prev7, not the neighbor card.
     let prevCounts = null;

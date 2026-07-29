@@ -1101,6 +1101,20 @@ class Evaluator:
                 for guard, row in zip(non_null, source.rows)
                 if guard != smt.FALSE
             )
+            if not decimal.is_type(trait.output_type):
+                return Value(
+                    trait.output_type,
+                    smt.not_(smt.or_(*non_null))
+                    if trait.output_nullable
+                    else smt.FALSE,
+                    _integral_extremum(
+                        tuple(
+                            (guard, value.value)
+                            for guard, value in guarded_values
+                        ),
+                        maximum=trait.function == "max",
+                    ),
+                )
             reducer = (
                 decimal.aggregate_max
                 if trait.function == "max"
@@ -1948,6 +1962,37 @@ def _wrap_sum(value: smt.Term, scalar_type: str) -> smt.Term:
             smt.int_value(-sign),
         )
     raise RelationError(f"sum output type {scalar_type!r} is not modeled")
+
+
+def _integral_extremum(
+    guarded_values: tuple[tuple[smt.Term, smt.Term], ...],
+    *,
+    maximum: bool,
+) -> smt.Term:
+    level = list(guarded_values)
+    if not level:
+        return smt.ZERO
+    while len(level) > 1:
+        next_level = []
+        for index in range(0, len(level), 2):
+            if index + 1 == len(level):
+                next_level.append(level[index])
+                continue
+            left_present, left = level[index]
+            right_present, right = level[index + 1]
+            right_better = (
+                smt.lt(left, right) if maximum else smt.lt(right, left)
+            )
+            choose_right = smt.and_(
+                right_present,
+                smt.or_(smt.not_(left_present), right_better),
+            )
+            next_level.append((
+                smt.or_(left_present, right_present),
+                smt.ite(choose_right, right, left),
+            ))
+        level = next_level
+    return level[0][1]
 
 
 def _decimal_finite_abs_bound(value: Value) -> int:

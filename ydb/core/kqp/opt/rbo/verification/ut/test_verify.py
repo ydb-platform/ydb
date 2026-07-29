@@ -37,6 +37,10 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.stages import (
     Evaluator as StageEvaluator,
     Router,
 )
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier.types import (
+    INTEGER_TYPES,
+    integer_bounds,
+)
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.verify import (
     Problem,
     SchemaMismatch,
@@ -3825,6 +3829,66 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
                     expected = self._decimal_reference_bag(function, grouped, rows)
                     self.assertEqual(actual, expected)
 
+    def test_integral_extrema_match_boundaries_before_and_after_split(self):
+        for input_type, function, grouped, nullable_input, staged in product(
+            sorted(INTEGER_TYPES),
+            ("max", "min"),
+            (False, True),
+            (False, True),
+            (False, True),
+        ):
+            bounds = integer_bounds(input_type)
+            assert bounds is not None
+            low, high = bounds[0], bounds[1] - 1
+            snapshot = aggregate_stage_snapshot(
+                function,
+                grouped,
+                staged,
+                nullable_input=nullable_input,
+                input_type=input_type,
+            )
+            script = smt.Script()
+            database = Database(snapshot, 2, script)
+            router = Router(script)
+            evaluator = (
+                StageEvaluator(snapshot, database, ScalarEncoder(script), router)
+                if staged
+                else RelationEvaluator(snapshot, database, ScalarEncoder(script))
+            )
+            relation = evaluator.root().certain()
+            cases = [
+                (None, None),
+                ((0, low), None),
+                ((0, low), (0, high)),
+                ((0, high), (0, low)),
+            ]
+            if nullable_input:
+                cases.append(((0, None), (0, None)))
+
+            placements = product((False, True), repeat=2) if staged else ((False, False),)
+            for rows, placement in product(cases, placements):
+                with self.subTest(
+                    input_type=input_type,
+                    function=function,
+                    grouped=grouped,
+                    nullable_input=nullable_input,
+                    staged=staged,
+                    rows=rows,
+                    placement=placement,
+                ):
+                    constants = self._constants(database, rows)
+                    if staged:
+                        for slot, task in enumerate(placement):
+                            constants[router.source_task("A", slot).atom] = task
+                    self.assertEqual(
+                        self._symbolic_bag(
+                            relation,
+                            constants,
+                            self._hash_choice if staged else None,
+                        ),
+                        self._extrema_reference_bag(function, grouped, rows),
+                    )
+
     def test_split_decimal_avg_matches_special_state_table(self):
         cases = (
             ((0, REFERENCE_DECIMAL_INF), (0, -REFERENCE_DECIMAL_INF)),
@@ -4300,6 +4364,28 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
                 aggregate = -REFERENCE_DECIMAL_INF
             else:
                 aggregate = sum(non_null)
+            prefix = (key,) if grouped else ()
+            result[prefix + (aggregate,)] += 1
+        return result
+
+    @staticmethod
+    def _extrema_reference_bag(function, grouped, slots):
+        rows = [row for row in slots if row is not None]
+        groups = {}
+        if grouped:
+            for key, value in rows:
+                groups.setdefault(key, []).append(value)
+        else:
+            groups[()] = [value for _, value in rows]
+
+        result = Counter()
+        for key, values in groups.items():
+            non_null = [value for value in values if value is not None]
+            aggregate = (
+                None
+                if not non_null
+                else (max(non_null) if function == "max" else min(non_null))
+            )
             prefix = (key,) if grouped else ()
             result[prefix + (aggregate,)] += 1
         return result
@@ -5148,6 +5234,8 @@ class VerificationTest(unittest.TestCase):
             ("sum", "Int64"),
             ("max", "Decimal(2,0)"),
             ("min", "Decimal(2,0)"),
+            ("max", "Int64"),
+            ("min", "Int64"),
         )
         for (function, input_type), grouped, nullable_input in product(
             cases, (False, True), (False, True)
@@ -5322,31 +5410,33 @@ class VerificationTest(unittest.TestCase):
         self.assertEqual(result.status, "VERIFIED_BOUNDED")
 
     def test_corrupt_min_final_function_has_a_solver_counterexample(self):
-        logical = aggregate_stage_snapshot(
-            "min",
-            False,
-            False,
-            input_type="Decimal(2,0)",
-        )
-        corrupted = aggregate_stage_snapshot(
-            "min",
-            False,
-            True,
-            final_function="max",
-            input_type="Decimal(2,0)",
-        )
-        result = solve(
-            build_problem(logical, corrupted, 2, 10_000),
-            SOLVER,
-            2,
-            10_000,
-        )
-        self.assertEqual(result.status, "COUNTEREXAMPLE")
-        self.assertEqual(len(result.witness["A"]), 2)
-        self.assertNotEqual(
-            result.witness["A"][0]["x"],
-            result.witness["A"][1]["x"],
-        )
+        for input_type in ("Decimal(2,0)", "Int64"):
+            with self.subTest(input_type=input_type):
+                logical = aggregate_stage_snapshot(
+                    "min",
+                    False,
+                    False,
+                    input_type=input_type,
+                )
+                corrupted = aggregate_stage_snapshot(
+                    "min",
+                    False,
+                    True,
+                    final_function="max",
+                    input_type=input_type,
+                )
+                result = solve(
+                    build_problem(logical, corrupted, 2, 10_000),
+                    SOLVER,
+                    2,
+                    10_000,
+                )
+                self.assertEqual(result.status, "COUNTEREXAMPLE")
+                self.assertEqual(len(result.witness["A"]), 2)
+                self.assertNotEqual(
+                    result.witness["A"][0]["x"],
+                    result.witness["A"][1]["x"],
+                )
 
     def test_wrong_grouped_aggregate_shuffle_key_has_a_solver_counterexample(self):
         for function, input_type in (

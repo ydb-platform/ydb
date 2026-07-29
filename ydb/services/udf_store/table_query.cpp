@@ -8,7 +8,7 @@
 #include <google/protobuf/any.pb.h>
 
 #include <util/string/builder.h>
-#include <util/string/escape.h>
+#include <util/string/subst.h>
 
 namespace NKikimr::NUdfStore::NTableQuery {
 
@@ -38,7 +38,10 @@ Ydb::TypedValue MakeUint64Param(ui64 value) {
 }
 
 TString EscapeTablePath(const TString& tablePath) {
-    return TString{tablePath};
+    // YQL backtick-quoted identifiers escape ` by doubling.
+    TString escaped = tablePath;
+    SubstGlobal(escaped, "`", "``");
+    return escaped;
 }
 
 i32 FindColumnIndex(const Ydb::ResultSet& resultSet, const TString& columnName) {

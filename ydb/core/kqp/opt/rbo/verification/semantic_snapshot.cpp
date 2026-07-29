@@ -3525,6 +3525,9 @@ TString CheckNullableUnicodeToUpperMap(
         Unsupported(
             "Unicode.ToUpper bridge requires a direct visible input member");
     }
+    // Ignore the optional wrapper here: its weak classification is
+    // MayLoseData, while the reviewed String-to-Utf8 conversion itself is the
+    // MayFail operation represented by the nullable opaque result below.
     if (CastResult<true>(source.GetTypeAnn(), cast.GetTypeAnn()) !=
         NUdf::ECastOptions::MayFail)
     {

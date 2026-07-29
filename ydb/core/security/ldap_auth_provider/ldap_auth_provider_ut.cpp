@@ -12,7 +12,7 @@ namespace NKikimr::NCertTestUtils {
 
 namespace {
 
-const TString PeerName = "192.168.0.101";
+const TString PEER_NAME = "192.168.0.101";
 
 class TLdapKikimrServer {
 public:
@@ -76,7 +76,7 @@ TAutoPtr<IEventHandle> LdapAuthenticate(TLdapKikimrServer& server, const TString
     TActorId sender = runtime->AllocateEdgeActor();
     runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
         .Ticket = loginResponse.Token,
-        .PeerName = PeerName,
+        .PeerName = PEER_NAME,
     })), 0);
 
     TAutoPtr<IEventHandle> handle;
@@ -921,7 +921,7 @@ Y_UNIT_TEST(CanRefreshGroupsInfo) {
     TActorId sender = runtime->AllocateEdgeActor();
     runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
         .Ticket = loginResponse.Token,
-        .PeerName = PeerName,
+        .PeerName = PEER_NAME,
     })), 0);
     TAutoPtr<IEventHandle> handle;
     TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -945,7 +945,7 @@ Y_UNIT_TEST(CanRefreshGroupsInfo) {
 
     runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
         .Ticket = loginResponse.Token,
-        .PeerName = PeerName,
+        .PeerName = PEER_NAME,
     })), 0);
     ticketParserResult = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
@@ -980,7 +980,7 @@ Y_UNIT_TEST(CanRefreshGroupsInfoWithDisabledNestedGroups) {
     TActorId sender = runtime->AllocateEdgeActor();
     runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
         .Ticket = loginResponse.Token,
-        .PeerName = PeerName,
+        .PeerName = PEER_NAME,
     })), 0);
     TAutoPtr<IEventHandle> handle;
     TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -1004,7 +1004,7 @@ Y_UNIT_TEST(CanRefreshGroupsInfoWithDisabledNestedGroups) {
 
     runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
         .Ticket = loginResponse.Token,
-        .PeerName = PeerName,
+        .PeerName = PEER_NAME,
     })), 0);
     ticketParserResult = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
@@ -1044,7 +1044,7 @@ Y_UNIT_TEST(CanNotRefreshRemovedUser) {
     TActorId sender = runtime->AllocateEdgeActor();
     runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
         .Ticket = loginResponse.Token,
-        .PeerName = PeerName,
+        .PeerName = PEER_NAME,
     })), 0);
     TAutoPtr<IEventHandle> handle;
     TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -1069,7 +1069,7 @@ Y_UNIT_TEST(CanNotRefreshRemovedUser) {
 
     runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
         .Ticket = loginResponse.Token,
-        .PeerName = PeerName,
+        .PeerName = PEER_NAME,
     })), 0);
     ticketParserResult = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
@@ -1100,7 +1100,7 @@ Y_UNIT_TEST(CanRefreshGroupsInfoWithError) {
     TActorId sender = runtime->AllocateEdgeActor();
     runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
         .Ticket = loginResponse.Token,
-        .PeerName = PeerName,
+        .PeerName = PEER_NAME,
     })), 0);
     TAutoPtr<IEventHandle> handle;
     TEvTicketParser::TEvAuthorizeTicketResult* ticketParserResult = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -1117,7 +1117,7 @@ Y_UNIT_TEST(CanRefreshGroupsInfoWithError) {
 
     runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
         .Ticket = loginResponse.Token,
-        .PeerName = PeerName,
+        .PeerName = PEER_NAME,
     })), 0);
     ticketParserResult = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
@@ -1175,7 +1175,7 @@ Y_UNIT_TEST(CanFetchGroupsWithDelayUpdateSecurityState) {
     auto loginResponse = provider.LoginUser({.User = login, .ExternalAuth = "ldap"});
     runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
         .Ticket = loginResponse.Token,
-        .PeerName = PeerName,
+        .PeerName = PEER_NAME,
     })), 0);
     Sleep(TDuration::Seconds(1));
     // Send update security state in 1 second after send TEvAuthorizeTicket
@@ -1216,7 +1216,7 @@ Y_UNIT_TEST(CanGetErrorIfAppropriateLoginProviderIsAbsent) {
     auto loginResponse = provider.LoginUser({.User = login, .ExternalAuth = "ldap"});
     runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
         .Ticket = loginResponse.Token,
-        .PeerName = PeerName,
+        .PeerName = PEER_NAME,
     })), 0);
     Sleep(TDuration::Seconds(1));
     // Do no send update security state

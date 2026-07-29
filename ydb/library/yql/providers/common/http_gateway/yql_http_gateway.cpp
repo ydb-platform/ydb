@@ -700,6 +700,8 @@ public:
             }
         }
 
+        PoolCaps.emplace(DefaultPoolId, MaxHandlers);
+
         InitCurl();
     }
 
@@ -971,6 +973,12 @@ private:
         return BuffersSizePerStream;
     }
 
+    void UpdatePoolCaps(THashMap<TString, size_t> caps) final {
+        const std::unique_lock lock(SyncRef());
+        PoolCaps = std::move(caps);
+        PoolCaps.emplace(DefaultPoolId, MaxHandlers);
+    }
+
     void OnRetry(TEasyCurlBuffer::TPtr easy) {
         const std::unique_lock lock(SyncRef());
         const size_t sizeLimit = easy->GetSizeLimit();
@@ -999,6 +1007,7 @@ private:
     std::queue<TEasyCurlBuffer::TPtr> Await;
     std::vector<TEasyCurlStream::TWeakPtr> Streams;
 
+    THashMap<TString, size_t> PoolCaps;
 
     std::unordered_map<CURL*, TEasyCurl::TPtr> Allocated;
     std::priority_queue<std::pair<TInstant, TEasyCurlBuffer::TPtr>> Delayed;

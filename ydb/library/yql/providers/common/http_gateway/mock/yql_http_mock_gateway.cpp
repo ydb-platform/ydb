@@ -100,6 +100,9 @@ public:
         return 0;
     }
 
+    void UpdatePoolCaps(THashMap<TString, size_t>) final {
+    }
+
     void AddDefaultResponse(TDataDefaultResponse response) {
         DefaultResponse = response;
     }

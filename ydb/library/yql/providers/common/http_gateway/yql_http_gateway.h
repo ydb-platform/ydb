@@ -2,6 +2,7 @@
 
 #include "yql_http_header.h"
 
+#include <util/generic/hash.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
 #include <contrib/libs/curl/include/curl/curl.h>
@@ -161,6 +162,10 @@ public:
         IHttpRequestContext::TPtr context = nullptr) = 0;
         
     virtual ui64 GetBuffersSizePerStream() = 0;
+
+    virtual void UpdatePoolCaps(THashMap<TString, size_t> caps) = 0;
+
+    static constexpr const char* DefaultPoolId = "default";
 
     static THeaders MakeYcHeaders(
         const TString& requestId,

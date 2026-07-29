@@ -32,6 +32,8 @@ public:
 
     void UpdateFairShare();
 
+    NHdrf::NSnapshot::TRootPtr GetSnapshot() const;
+
 private:
     static constexpr NHdrf::TQueryId READ_QUERY_ID = -1;
 

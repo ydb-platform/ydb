@@ -31,7 +31,7 @@ NActors::IActor* CreateS3FileQueueActor(
         NYql::NS3Lister::ES3PatternVariant patternVariant,
         NS3Lister::ES3PatternType patternType,
         bool allowLocalFiles,
-        IDqSchedulerContextPtr schedulerContext = nullptr);
+        IDqSchedulerContextPtr schedulerContext);
 
 std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateS3ReadActor(
     const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,

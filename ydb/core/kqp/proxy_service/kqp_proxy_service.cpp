@@ -27,6 +27,7 @@
 #include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
 #include <ydb/core/kqp/gateway/behaviour/streaming_query/behaviour.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_http_pool_cap_pusher.h>
 #include <ydb/services/workload_manager/query_classifier.h>
 #include <ydb/core/kqp/proxy_service/kqp_query_text_cache_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
@@ -387,6 +388,10 @@ public:
         KqpComputeSchedulerService = TActivationContext::Register(CreateKqpComputeSchedulerService(updateFairSharePeriod));
         TActivationContext::ActorSystem()->RegisterLocalService(
             NKqp::MakeKqpSchedulerServiceId(SelfId().NodeId()), KqpComputeSchedulerService);
+
+        NKqp::NScheduler::RegisterHttpPoolCapPusherIfNeeded(
+            TActivationContext::ActorSystem(),
+            FederatedQuerySetup ? FederatedQuerySetup->HttpGateway : nullptr);
 
         NActors::TMon* mon = AppData()->Mon;
         if (mon) {

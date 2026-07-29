@@ -4,6 +4,7 @@
 #include <library/cpp/time_provider/monotonic.h>
 
 #include <util/datetime/base.h>
+#include <util/generic/string.h>
 
 #include <memory>
 
@@ -32,6 +33,8 @@ struct IDqSchedulableWork {
     virtual void RegisterForResume(const NActors::TActorId& actorId) = 0;
 
     virtual void RecordUsage(TDuration elapsed) = 0;
+
+    virtual TString GetPoolId() const = 0;
 };
 
 ///

@@ -428,7 +428,7 @@ public:
         IHttpRequestContext::TPtr context;
         if (Work) {
             context = MakeIntrusive<TDefaultHttpRequestContext>(
-                TString{},
+                Work->GetPoolId(),
                 [w = std::weak_ptr(Work)](TDuration elapsed) {
                     if (auto work = w.lock()) work->RecordUsage(elapsed);
                 });
@@ -566,7 +566,7 @@ public:
         IHttpRequestContext::TPtr context;
         if (Work) {
             context = MakeIntrusive<TDefaultHttpRequestContext>(
-                TString{},
+                Work->GetPoolId(),
                 [w = std::weak_ptr(Work)](TDuration elapsed) {
                     if (auto work = w.lock()) work->RecordUsage(elapsed);
                 });
@@ -1059,7 +1059,15 @@ public:
         }
 
         if (!RetryStuff->IsCancelled() && RetryStuff->NextRetryDelay && RetryStuff->SizeLimit > 0ULL) {
-            GetActorSystem()->Schedule(*RetryStuff->NextRetryDelay, new IEventHandle(ParentActorId, SelfActorId, new TEvS3Provider::TEvRetryEventFunc(std::bind(&DownloadStart, RetryStuff, GetActorSystem(), SelfActorId, ParentActorId, PathIndex, HttpInflightSize))));
+            IHttpRequestContext::TPtr retryContext;
+            if (Work) {
+                retryContext = MakeIntrusive<TDefaultHttpRequestContext>(
+                    Work->GetPoolId(),
+                    [w = std::weak_ptr(Work)](TDuration elapsed) {
+                        if (auto work = w.lock()) work->RecordUsage(elapsed);
+                    });
+            }
+            GetActorSystem()->Schedule(*RetryStuff->NextRetryDelay, new IEventHandle(ParentActorId, SelfActorId, new TEvS3Provider::TEvRetryEventFunc(std::bind(&DownloadStart, RetryStuff, GetActorSystem(), SelfActorId, ParentActorId, PathIndex, HttpInflightSize, std::move(retryContext)))));
             InputBuffer.clear();
             if (DeferredDataParts.size()) {
                 if (DeferredQueueSize) {

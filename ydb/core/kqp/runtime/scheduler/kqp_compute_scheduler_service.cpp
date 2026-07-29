@@ -386,6 +386,10 @@ bool TComputeScheduler::RemoveQuery(const NHdrf::TQueryId& queryId) {
     return false;
 }
 
+NHdrf::NSnapshot::TRootPtr TComputeScheduler::GetSnapshot() const {
+    return Root->GetSnapshot();
+}
+
 void TComputeScheduler::UpdateFairShare() {
     auto startTime = TMonotonic::Now();
 

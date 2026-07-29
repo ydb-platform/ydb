@@ -4,7 +4,6 @@ import logging
 from library.python.testing.recipe import declare_recipe, set_env
 from library.recipes import common as recipes_common
 import library.python.port_manager
-import yatest
 import yatest.common as ya_common
 
 DAEMON_NAME = "solomon_emulator"
@@ -16,7 +15,7 @@ logging.basicConfig(level=logging.DEBUG)
 
 
 def is_daemon_ready() -> bool:
-    with open(yatest.common.output_path(LOG_FILENAME), "r") as logFile:
+    with open(ya_common.output_path(LOG_FILENAME), "r") as logFile:
         return "Started Solomon emulator on http port" in logFile.read()
 
 

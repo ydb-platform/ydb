@@ -270,6 +270,53 @@ TEST_P(RdmaSendReceiveTestCqMode, MainChannelSgListBoundary) {
     UNIT_ASSERT_VALUES_EQUAL(GetSessionCounter(cluster, 2, 1, "BytesWrittenToSocket"), bytesWrittenToSocketBefore);
 }
 
+// Verifies that a standalone main-channel ACK is delivered over RDMA and
+// releases the sender's in-flight data without writing in either TCP direction.
+TEST_P(RdmaSendReceiveTestCqMode, MainChannelAck) {
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(GetParam()),
+        TTestICCluster::TCheckerFactory(), TDuration::Seconds(30), TNode::DefaultInflight(), EnableRdmaSendReceive);
+
+    auto receiverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBlobID(), 1u);
+    });
+    const TActorId receiver = cluster.RegisterActor(receiverPtr, 1);
+
+    WaitForInterconnectConnection(cluster, 2, 1);
+    TString lastRdmaStatus;
+    UNIT_ASSERT_C(WaitForRdmaChecksumStatus(cluster, 2, 1, "On | SoftwareChecksum | SendReceive", 20, lastRdmaStatus),
+        "last RDMA status: " << FormatLastRdmaStatus(lastRdmaStatus));
+
+    const ui64 packetsConfirmedBefore = WaitForSessionCounter(cluster, 2, 1, "PacketsConfirmed");
+    const ui64 senderBytesWrittenToSocketBefore = GetSessionCounter(cluster, 2, 1, "BytesWrittenToSocket");
+    const ui64 receiverBytesWrittenToSocketBefore = WaitForSessionCounter(cluster, 1, 2, "BytesWrittenToSocket");
+
+    auto ev = std::make_unique<TEvTestSerialization>();
+    ev->Record.SetBlobID(1);
+    ev->Record.SetBuffer("acknowledge this event");
+    cluster.RegisterActor(new TSendActor(receiver, std::move(ev)), 2);
+
+    UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
+
+    bool confirmed = false;
+    ui64 packetsConfirmed = packetsConfirmedBefore;
+    ui64 inflightDataAmount = 0;
+    const TInstant deadline = TInstant::Now() + TDuration::Seconds(20);
+    while (TInstant::Now() < deadline) {
+        packetsConfirmed = GetSessionCounter(cluster, 2, 1, "PacketsConfirmed");
+        inflightDataAmount = GetSessionCounter(cluster, 2, 1, "InflightDataAmount");
+        if (packetsConfirmed > packetsConfirmedBefore && inflightDataAmount == 0) {
+            confirmed = true;
+            break;
+        }
+        Sleep(TDuration::MilliSeconds(10));
+    }
+
+    UNIT_ASSERT_C(confirmed, "packetsConfirmedBefore# " << packetsConfirmedBefore
+        << " packetsConfirmed# " << packetsConfirmed << " inflightDataAmount# " << inflightDataAmount);
+    UNIT_ASSERT_VALUES_EQUAL(GetSessionCounter(cluster, 2, 1, "BytesWrittenToSocket"), senderBytesWrittenToSocketBefore);
+    UNIT_ASSERT_VALUES_EQUAL(GetSessionCounter(cluster, 1, 2, "BytesWrittenToSocket"), receiverBytesWrittenToSocketBefore);
+}
+
 namespace {
 
 void RunOversizedMainChannelEventTest(NInterconnect::NRdma::ECqMode cqMode,

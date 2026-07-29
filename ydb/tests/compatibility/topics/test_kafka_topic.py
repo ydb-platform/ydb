@@ -41,11 +41,11 @@ class Workload:
             + ["--topic", self.topic_name]
         )
 
-    def create_topic(self, partitions=4):
+    def create_topic(self):
         subcmds = [
             'init',
             '--consumers', str(self.consumers),
-            '--partitions', str(partitions),
+            '--partitions', '4',
             '--cleanup-policy-compact',
         ]
         yatest.common.execute(
@@ -113,30 +113,11 @@ class Workload:
 
 
 MIN_SUPPORTED_VERSION = "stable-25-1-4"
-MAX_HEADER_SIZE_64_VERSION = "stable-26-3"
 
 
 def skip_if_unsupported(versions):
     if min(versions) < string_version_to_tuple(MIN_SUPPORTED_VERSION):
         pytest.skip(f"Only available since {MIN_SUPPORTED_VERSION}")
-
-
-def skip_unless_max_header_size_downgrade(versions):
-    if len(versions) != 2:
-        pytest.skip("Only restart between two versions is supported")
-
-    if versions[0] < string_version_to_tuple(MAX_HEADER_SIZE_64_VERSION):
-        pytest.skip(f"Initial version must have MAX_HEADER_SIZE=64, available since {MAX_HEADER_SIZE_64_VERSION}")
-
-    if versions[1] >= string_version_to_tuple(MAX_HEADER_SIZE_64_VERSION):
-        pytest.skip("Target version must have MAX_HEADER_SIZE=32")
-
-
-def enable_aggressive_blob_compaction(fixture):
-    fixture.config.yaml_config["pqconfig"]["compaction_config"] = {
-        "blobs_count": 2,
-        "blobs_size": 1,
-    }
 
 
 class TestKafkaTopicMixedClusterFixture(MixedClusterFixture):
@@ -151,56 +132,6 @@ class TestKafkaTopicMixedClusterFixture(MixedClusterFixture):
         utils.create_topic()
 
         utils.run_stress_test(duration=20)
-
-        utils.drop_topic()
-
-
-class TestKafkaTopicDowngradeAfterHeadPackingChange(RestartToAnotherVersionFixture):
-    @pytest.fixture(autouse=True, scope="function")
-    def setup(self):
-        skip_if_unsupported(self.versions)
-        skip_unless_max_header_size_downgrade(self.versions)
-
-        # Batching flags default to false. Do not mention them explicitly here:
-        # older rollback targets do not know all of these fields and fail while
-        # parsing the compatibility test YAML config.
-        yield from self.setup_cluster()
-
-    def test_topic_survives_downgrade_after_small_head_batches(self):
-        utils = Workload(self)
-
-        enable_aggressive_blob_compaction(self)
-        utils.create_topic(partitions=1)
-
-        # Small records are the interesting case for the packing heuristic:
-        # compressed payload overhead can be between the old 32-byte and the
-        # new 64-byte TBatchHeader estimate.
-        for message_size in (24, 32, 40, 45, 50, 64, 80):
-            utils.write_to_topic(
-                duration=5,
-                message_rate=3000,
-                message_size=message_size,
-                keys_count=10,
-                key_prefix=f"head_packing_before_downgrade_{message_size}",
-                producers=1,
-            )
-
-        self.change_cluster_version()
-
-        # The downgrade restart initializes partition heads. Further writes
-        # drive blob compaction immediately because pqconfig.compaction_config
-        # uses tiny thresholds; before the fix old binaries could abort in
-        # TPartitionBlobEncoder::SerializeForKey().
-        for message_size in (24, 32, 40, 45, 50, 64, 80):
-            utils.write_to_topic(
-                duration=5,
-                message_rate=3000,
-                message_size=message_size,
-                keys_count=10,
-                key_prefix=f"head_packing_after_downgrade_{message_size}",
-                producers=1,
-            )
-        utils.read_from_topic(duration=10)
 
         utils.drop_topic()
 

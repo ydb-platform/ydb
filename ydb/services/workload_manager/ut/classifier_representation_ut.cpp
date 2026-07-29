@@ -398,6 +398,185 @@ Y_UNIT_TEST_SUITE(ClassifierRepresentation) {
         }
     }
 
+    /// For each optional classifier property, SET then RESET should restore the original state.
+    /// Tests: member_name, has_app_name, has_full_scan, has_path, has_stream, action.
+    Y_UNIT_TEST(SetThenResetRestoresOriginalState) {
+        auto ydb = TYdbSetupSettings().Create();
+
+        // Create a minimal classifier with only resource_pool
+        ydb->ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL CLASSIFIER my_cls WITH (
+                RESOURCE_POOL = "default",
+                RANK          = 10
+            );
+        )");
+
+        ydb->WaitForClassifierPropagation();
+
+        auto getConfigJson = [&]() -> NJson::TJsonValue {
+            auto result = ReadMetadataTable(ydb, "my_cls");
+            TSampleQueries::CheckSuccess(result);
+            NYdb::TResultSetParser rs(result.GetResultSet(0));
+            UNIT_ASSERT_C(rs.TryNextRow(), "Expected one row in metadata table");
+            return ParseJson(TString(*rs.ColumnParser("config").GetOptionalJsonDocument()));
+        };
+
+        auto getSysViewAction = [&]() -> std::optional<TString> {
+            auto result = ReadSysView(ydb, "my_cls");
+            TSampleQueries::CheckSuccess(result);
+            NYdb::TResultSetParser rs(result.GetResultSet(0));
+            UNIT_ASSERT_C(rs.TryNextRow(), "Expected one row in sys-view");
+            return rs.ColumnParser("Action").GetOptionalUtf8();
+        };
+
+        const auto originalJson = getConfigJson();
+        UNIT_ASSERT_C(!originalJson.Has("member_name"), "baseline should not have member_name");
+        UNIT_ASSERT_C(!originalJson.Has("has_app_name"), "baseline should not have has_app_name");
+        UNIT_ASSERT_C(!originalJson.Has("has_full_scan"), "baseline should not have has_full_scan");
+        UNIT_ASSERT_C(!originalJson.Has("has_path"), "baseline should not have has_path");
+        UNIT_ASSERT_C(!originalJson.Has("has_stream"), "baseline should not have has_stream");
+        UNIT_ASSERT_C(!originalJson.Has("action"), "baseline should not have action");
+
+        // --- member_name: SET then RESET ---
+        {
+            ydb->ExecuteSchemeQuery(R"(
+                ALTER RESOURCE POOL CLASSIFIER my_cls SET (MEMBER_NAME = "test@user");
+            )");
+            ydb->WaitForClassifierPropagation();
+            {
+                auto json = getConfigJson();
+                UNIT_ASSERT_VALUES_EQUAL(json["member_name"].GetString(), "test@user");
+            }
+
+            ydb->ExecuteSchemeQuery(R"(
+                ALTER RESOURCE POOL CLASSIFIER my_cls RESET (MEMBER_NAME);
+            )");
+            ydb->WaitForClassifierPropagation();
+            {
+                auto json = getConfigJson();
+                UNIT_ASSERT_C(!json.Has("member_name"), "member_name must be absent after RESET");
+            }
+        }
+
+        // --- has_app_name: SET then RESET ---
+        {
+            ydb->ExecuteSchemeQuery(R"(
+                ALTER RESOURCE POOL CLASSIFIER my_cls SET (HAS_APP_NAME = "my_app");
+            )");
+            ydb->WaitForClassifierPropagation();
+            {
+                auto json = getConfigJson();
+                UNIT_ASSERT_VALUES_EQUAL(json["has_app_name"].GetString(), "my_app");
+            }
+
+            ydb->ExecuteSchemeQuery(R"(
+                ALTER RESOURCE POOL CLASSIFIER my_cls RESET (HAS_APP_NAME);
+            )");
+            ydb->WaitForClassifierPropagation();
+            {
+                auto json = getConfigJson();
+                UNIT_ASSERT_C(!json.Has("has_app_name"), "has_app_name must be absent after RESET");
+            }
+        }
+
+        // --- has_full_scan: SET then RESET ---
+        {
+            ydb->ExecuteSchemeQuery(R"(
+                ALTER RESOURCE POOL CLASSIFIER my_cls SET (HAS_FULL_SCAN = "/Root/*");
+            )");
+            ydb->WaitForClassifierPropagation();
+            {
+                auto json = getConfigJson();
+                UNIT_ASSERT_VALUES_EQUAL(json["has_full_scan"].GetString(), "/Root/*");
+            }
+
+            ydb->ExecuteSchemeQuery(R"(
+                ALTER RESOURCE POOL CLASSIFIER my_cls RESET (HAS_FULL_SCAN);
+            )");
+            ydb->WaitForClassifierPropagation();
+            {
+                auto json = getConfigJson();
+                UNIT_ASSERT_C(!json.Has("has_full_scan"), "has_full_scan must be absent after RESET");
+            }
+        }
+
+        // --- has_path: SET then RESET ---
+        {
+            ydb->ExecuteSchemeQuery(R"(
+                ALTER RESOURCE POOL CLASSIFIER my_cls SET (HAS_PATH = "/Root/db/*");
+            )");
+            ydb->WaitForClassifierPropagation();
+            {
+                auto json = getConfigJson();
+                UNIT_ASSERT_VALUES_EQUAL(json["has_path"].GetString(), "/Root/db/*");
+            }
+
+            ydb->ExecuteSchemeQuery(R"(
+                ALTER RESOURCE POOL CLASSIFIER my_cls RESET (HAS_PATH);
+            )");
+            ydb->WaitForClassifierPropagation();
+            {
+                auto json = getConfigJson();
+                UNIT_ASSERT_C(!json.Has("has_path"), "has_path must be absent after RESET");
+            }
+        }
+
+        // --- has_stream: SET then RESET ---
+        {
+            ydb->ExecuteSchemeQuery(R"(
+                ALTER RESOURCE POOL CLASSIFIER my_cls SET (HAS_STREAM = "true");
+            )");
+            ydb->WaitForClassifierPropagation();
+            {
+                auto json = getConfigJson();
+                UNIT_ASSERT_VALUES_EQUAL(json["has_stream"].GetBoolean(), true);
+            }
+
+            ydb->ExecuteSchemeQuery(R"(
+                ALTER RESOURCE POOL CLASSIFIER my_cls RESET (HAS_STREAM);
+            )");
+            ydb->WaitForClassifierPropagation();
+            {
+                auto json = getConfigJson();
+                UNIT_ASSERT_C(!json.Has("has_stream"), "has_stream must be absent after RESET");
+            }
+        }
+
+        // --- action: SET then RESET ---
+        // ACTION="reject" and RESOURCE_POOL are mutually exclusive: setting the
+        // action drops resource_pool from the config. Resetting the action alone
+        // would leave the classifier with neither, which is invalid, so the
+        // baseline resource_pool must be restored in the same ALTER.
+        {
+            ydb->ExecuteSchemeQuery(R"(
+                ALTER RESOURCE POOL CLASSIFIER my_cls SET (ACTION = "reject");
+            )");
+            ydb->WaitForClassifierPropagation();
+            {
+                UNIT_ASSERT_VALUES_EQUAL(*getSysViewAction(), "reject");
+                auto json = getConfigJson();
+                UNIT_ASSERT_VALUES_EQUAL(json["action"].GetString(), "reject");
+            }
+
+            ydb->ExecuteSchemeQuery(R"(
+                ALTER RESOURCE POOL CLASSIFIER my_cls RESET (ACTION), SET (RESOURCE_POOL = "default");
+            )");
+            ydb->WaitForClassifierPropagation();
+            {
+                UNIT_ASSERT_C(!getSysViewAction().has_value(),
+                    "Action must be NULL in sys-view after RESET(ACTION)");
+                auto json = getConfigJson();
+                UNIT_ASSERT_C(!json.Has("action"), "action must be absent from JSON after RESET");
+            }
+        }
+
+        // Final check: config should match the original baseline
+        {
+            auto finalJson = getConfigJson();
+            UNIT_ASSERT(originalJson == finalJson);
+        }
+    }
+
 }  // Y_UNIT_TEST_SUITE(ClassifierRepresentation)
 
 }  // namespace NKikimr::NWorkloadManager

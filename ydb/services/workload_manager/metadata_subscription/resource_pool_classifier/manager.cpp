@@ -55,14 +55,16 @@ NMetadata::NModifications::TOperationParsingResult TResourcePoolClassifierManage
             } catch (const yexception& error) {
                 return TConclusionStatus::Fail(TStringBuilder() << "Failed to parse property " << property << ": " << error.what());
             }
-        } else if (featuresExtractor.ExtractResetFeature(property)) {
-            if (property == "resource_pool") {
-                return TConclusionStatus::Fail("Cannot reset required property resource_pool");
-            }
-            if (property == "rank") {
-                return TConclusionStatus::Fail("Cannot reset property rank");
-            }
         } else {
+            if (featuresExtractor.ExtractResetFeature(property)) {
+                if (property == "resource_pool") {
+                    return TConclusionStatus::Fail("Cannot reset required property resource_pool");
+                }
+                if (property == "rank") {
+                    return TConclusionStatus::Fail("Cannot reset property rank");
+                }
+                configJson.InsertValue(property, NJson::TJsonValue{NJson::JSON_NULL});
+            }
             continue;
         }
 

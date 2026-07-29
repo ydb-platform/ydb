@@ -298,16 +298,52 @@ before the global deadline at branch 2/4 (`right_language_empty`); q85 spends
 report SHA-256 is
 `6fbe29825c3e2863ad8c3a7d92ea661bd655e7245d455fcbb1db207dcd1e258c`.
 
-The current semantic partition is TPCH 18 formula / 2 unsupported / 2 no-pair
+The q72 verifier-entry semantic partition is TPCH 18 formula / 2 unsupported /
+2 no-pair
 and TPC-DS 62 / 19 / 18, with preparation 20/2 and 73/26. Exact pairs remain
-20 plus 81; verifier entrants are 18 plus 68. Coverage is 80/121 corpus,
-80/101 exact-pair, 80/93 preparation-success, and 80/86 verifier-entry
+20 plus 81; verifier entrants are 18 plus 69. Coverage is 80/121 corpus,
+80/101 exact-pair, 80/93 preparation-success, and 80/87 (92.0%) verifier-entry
 formulas. TPCH spends 2,947/33,310 ms and has report SHA-256
 `8a231a04398f6ca176286bd9d4d658e7d836c36c34ddcc4d43dfde54cc413a4b`;
 TPC-DS spends 68,923/846,363 ms and has report SHA-256
 `64fbda391ca5b50698aceaa2a38ba2210617fd0c1c0071bcb7c5c7967b260ecd`.
-This adds formula coverage only. The proof floor remains twenty-seven, and no
+These hashes and timings are the preceding derived-ordering full dashboards;
+the post-q72 complete TPC-DS dashboard spends 67,551/841,054 ms and has report
+SHA-256
+`8fa6661f88bbbc3f45b8bbee7fec73c4262608f5b2755736e5b1425bce15ec15`.
+q72 changes only verifier entry. The proof floor remains twenty-seven, and no
 optimizer bug or counterexample was found.
+
+Implementation commit `97f103ce060` adds one C++-only dynamic Date-shift gate;
+policy commit `aa01e609499` pins q72 at preparation plus verifier entry. The
+gate requires exact binary `+` or `-`, an `Optional<Date>` result, and one
+direct visible `Optional<Date>` member on the left. The right side is either
+an `Apply` of the reviewed eight-child `DateTime2.IntervalFromDays` UDF
+envelope to an `Int32` literal or exact
+`Just(Interval literal)`. The latter must be a whole-day multiple, and both
+spellings must decode within `[-49672, 49672]`. Every other operand order,
+wrapper, Date/Interval variant, dynamic day count, fractional day, annotation,
+or UDF-envelope mutation fails closed.
+
+The exported expression is exact about source NULL:
+`if_present(column(Date), opaque(bound Date), NULL<Date>)`. The full
+present-input result remains opaque and nullable, including the possibility of
+Date overflow. Its versioned
+identity includes operator and day count, and its one bound Date argument makes
+the same deterministic operation shared across plans. Existing opaque
+evaluation constrains every non-NULL result to `[0, NUdf::MAX_DATE)`. The
+uninterpreted result can add impossible outcomes and therefore prevent a
+proof, but it cannot make an inequivalent concrete operation prove `UNSAT`.
+
+At the normal construction limits q72 rejects a 4,608-row join output above
+4,096. A disposable 8,192-row experiment was fully reverted after it exposed
+a 10,619,136-pair grouped aggregate above 16,384 in 12.151 seconds. This
+supports exact unique-key-aware at-most-one right-side join compaction as the
+next slice; it does not justify enlarging a global audit cap.
+The focused normal report has SHA-256
+`b1a529f927b37f262ed71f0e7e3fec92eabe6d39a79801845c91d6b40a58935f`;
+the reverted-cap diagnostic report has SHA-256
+`3e34de0eaf4b5e0e5215f48706263de2c8bc4a8e7ccdebb4dc11389bd9dd0470`.
 
 The packed-row declaration substrate remains deliberately narrower than a
 general SMT datatype or macro facility. A product has exactly one constructor,
@@ -991,9 +1027,33 @@ tag validation in `ir.py`, abstract rank comparison in `relation.py`, and
 matching StageGraph Merge enforcement in `stages.py`. The tests independently
 cover aliases, pass-throughs, retained and discarded Join payloads, all-branch
 `UnionAll`, ordinary-order non-regression, forged/missing tags, intermediate
-AVG state, and inspector visibility. The next slice is exact dynamic
-`Optional<Date>` plus/minus literal `IntervalFromDays` normalization for
-TPC-DS q72.
+AVG state, and inspector visibility. At that checkpoint the next slice was
+exact dynamic `Optional<Date>` plus/minus literal `IntervalFromDays`
+normalization for TPC-DS q72.
+
+The completed post-q72 physical-line audit uses implementation commit
+`97f103ce060` and policy commit `aa01e609499` for code, tests, and diagnostic
+tooling, plus this documentation update:
+
+| Area | Physical lines |
+|---|---:|
+| Ten trusted Python semantic modules | 13,257 |
+| C++ exporter (`semantic_snapshot.cpp`, `.h`, and `read_range_predicate_impl.h`) | 11,930 |
+| **Proof-producing code total** | **25,187** |
+| Tests, outside the TCB | 61,380 |
+| Diagnostic/orchestration tools, outside the TCB | 5,245 |
+| Documentation, outside the TCB | 9,298 |
+
+Relative to the post-derived-ordering audit, the q72 slice adds no trusted
+Python, 139 trusted C++ lines, 139 proof-producing lines, and 327 test lines.
+Diagnostic tooling is unchanged, while documentation adds 181 lines. Its
+review seam is one closed C++ exporter grammar: direct nullable Date member,
+two exact literal-interval spellings, explicit source-NULL lifting, and a
+stable operator/day opaque identity. Existing Python `if_present`,
+opaque-function congruence, nullable result, and Date-domain semantics are
+reused unchanged. The next slice is exact
+unique-key-aware at-most-one right-side join compaction for q72, not a global
+construction-cap increase.
 
 ## External assumptions
 
@@ -1158,7 +1218,7 @@ each slice. It is an audit checklist, not a claim that tests are exhaustive.
 | Slice | Trusted path to review | Primary independent evidence |
 |---|---|---|
 | Capture, catalog, root schema | host hook assumption; `semantic_snapshot.*`; `ir.py`; `verify.py` | `cpp_ut/semantic_snapshot_exporter_ut.cpp`; `integration_ut/optimizer_snapshot_pair_ut.cpp`; schema-mutation tests |
-| Types, NULLs, scalar functions | `semantic_snapshot.cpp`; `ir.py`; `types.py`; `scalar.py`; `decimal.py`; `string_order.py` | `ut/test_scalar.py`; `test_decimal.py`; `test_string_order.py`; `test_string_proof.py`; `test_sql_in.py`; canonical literal-only String-`Concat`, String-predicate, Date-year, proven-total Date-`Unwrap`, direct-Uint64-`Just`, exact Decimal weak-`SafeCast`, proven-present raw-tuple Date-`SafeCast`, restricted whole-floating-predicate, passive-Double carrier, and exact literal-wrapper mutations; integral-right Decimal finite-bound boundary/special and two-row aggregate tests; passive-carrier identity/mutation and non-key Sort/Merge passenger proofs; `source_type`, NULL, overflow, widening-special, and fail-closed references; synthetic real-host proofs; exporter near-miss mutations |
+| Types, NULLs, scalar functions | `semantic_snapshot.cpp`; `ir.py`; `types.py`; `scalar.py`; `decimal.py`; `string_order.py` | `ut/test_scalar.py`; `test_decimal.py`; `test_string_order.py`; `test_string_proof.py`; `test_sql_in.py`; canonical literal-only String-`Concat`, String-predicate, Date-year, dynamic Date-shift, proven-total Date-`Unwrap`, direct-Uint64-`Just`, exact Decimal weak-`SafeCast`, proven-present raw-tuple Date-`SafeCast`, restricted whole-floating-predicate, passive-Double carrier, and exact literal-wrapper mutations; integral-right Decimal finite-bound boundary/special and two-row aggregate tests; passive-carrier identity/mutation and non-key Sort/Merge passenger proofs; `source_type`, NULL, overflow, widening-special, and fail-closed references; synthetic real-host proofs; exporter near-miss mutations |
 | Logical bags, order, limits, errors | `semantic_snapshot.cpp`; `ir.py`; `smt.py`; `sort_network.py`; `relation.py` | `ut/test_logical_reference.py`; `test_limit.py`; `test_sort.py`; exhaustive network topology/prefix/nullable/mixed-order/Merge-hole/AVG-state tests; completed-integral-AVG rank identity/order/mutation and provenance-forgery tests; packed-layout, declaration-structure, present-prefix equality, and cap tests; deep stack-safe rendering plus 3,000-DAG byte differential; focused concrete differential tests |
 | Aggregates and subplans | `semantic_snapshot.cpp`; `ir.py`; `decimal.py`; `scalar.py`; `relation.py`; `verify.py` | aggregate/DistinctAll/count-distinct/unwrap exporter and IR mutations; integral-AVG strict contract, one/two/three-row semantics, split-state mutation, central producer-observe/parent-strip lifecycle, model-domain SAT/UNKNOWN/UNSAT protocol, and projected/sorted/limited/staged observation tests; fixed-width signed/unsigned integral-extrema boundary, NULL/group/split, odd-width exhaustive, and solver-mutation checks; exhaustive count-distinct duplicates and triangular cap; scalar-final unwrap empty/all-NULL/present references; Decimal-extrema raw-code differential, routing, and solver-mutation checks; nullable composite-key differential and staged-routing checks; `ut/test_subplans.py`; cardinality, demand, NULL, duplicate, error, exact scalar- and one-level `IN`-inside-`IN` ownership/nesting/cache/choice checks, nested finite references and sequential-semi solver differentials, correlated outer-binding, one- and exact two-dependency `EXISTS` ordering/shape/semi/anti checks, dynamic-`IN` mapping/cache/pair-cap and positive-nullable integral/Date-context checks, real-host Decimal-AVG and correlated-`EXISTS`, and non-null/nullable `IN`-to-`left_semi` cases |
 | StageGraph, reads, joins, and routing | `semantic_snapshot.cpp`; `read_range_predicate_impl.h`; `ir.py`; `scalar.py`; `stages.py`; `relation.py` | exact q9 point and q45 finite-set `ComputeNode` references; exhaustive range-grammar/key/annotation/pointer-identity mutations; pushed-range-plus-OLAP conjunction; `OriginalPredicate` irrelevance and `ComputeNode` sensitivity; tagged integral-AVG Merge propagation/mismatch tests; `ut/test_stagegraph_reference.py`; `test_stage_compaction.py`; shared-IU semi/anti exhaustive execution; JoinKey budget/mutation checks; C++ topology/task mutations; real-host integration |

@@ -134,10 +134,10 @@ semantic depths. `required_prepare_success_queries` preserves successful
 preparation for the currently gated operational cases; this prevents version
 five's independent semantic classification from hiding a preparation
 regression. The verifier-entry floor requires TPCH q1 and TPC-DS q5, q9, q59,
-q65, q78, and q80 to keep passing both snapshot exporters and invoke the
-verifier. Every entry-floor query except q9 also satisfies the stronger formula
-floor; q9, q59, and q78 retain weaker entry requirements as separate
-diagnostic gates.
+q65, q72, q78, and q80 to keep passing both snapshot exporters and invoke the
+verifier. Every entry-floor query except q9 and q72 also satisfies the stronger
+formula floor. q9 and q72 are entry-only; q59 and q78 retain explicit entry
+requirements in addition to their formula requirements.
 Any later formula or proof still satisfies every weaker semantic floor. A newly admitted
 failed-preparation pair can enter a semantic floor without automatically
 entering the preparation floor. The
@@ -153,6 +153,8 @@ The integral-AVG Slice A policy also pins TPC-DS q7, q13, and q26 in
 successful preparation and formula construction. The integral-extrema policy
 does the same for q35. The derived integral-AVG ordering policy pins TPC-DS
 q22 and q85 at both preparation and formula construction.
+The dynamic Date-shift policy pins q72 at successful preparation and verifier
+entry only.
 The preparation-success, verifier-entry, and formula floors are enforced only
 for a complete formula-only suite. The proof floor requires TPCH q3, q4, q6,
 q11, q12, q14, q15, q18, q19, q21, and q22 plus TPC-DS q3, q16, q34, q38, q42,
@@ -244,13 +246,18 @@ formula construction and raises the measured floor to 80 formulas. Both are
 policy-pinned and production-host captured. Implementation commit
 `e8abaff7ff4` and policy commit `3e91814d64e` record the slice.
 
+Milestone 64 then moves TPC-DS q72 through both snapshot exporters and into the
+verifier. Implementation commit `97f103ce060` and policy commit `aa01e609499`
+record the exact dynamic Date-shift normalization and its preparation-plus-entry
+floor. q72 does not construct a formula or join the proof floor.
+
 The current proof-floor gate confirms all twenty-seven checked-in obligations
 as `VERIFIED_BOUNDED`: 11/11 TPCH and 16/16 TPC-DS at two rows per table and
 two tasks. Focused solver runs separately retain per-query evidence for q34,
 q73, and the preceding three proof-floor additions, TPCH q21 and TPC-DS
 q16/q94. The verifier-entry floor is TPCH q1 and TPC-DS q5, q9, q59, q65,
-q78, and q80. Every one except q9 also belongs to the formula floor; q9 is
-pinned at its deeper verifier construction bound.
+q72, q78, and q80. Every one except q9 and q72 also belongs to the formula
+floor; q9 and q72 are pinned at their deeper verifier construction bounds.
 `FORMULA_EMITTED` alone is not a solver proof.
 
 Exact `DistinctAll` adds TPC-DS q6. The preceding correlated-COUNT correctness
@@ -275,7 +282,7 @@ Preparation is an independent partition:
 | TPCH_YQL | 20 | 2 | 22 |
 | TPCDS_YQL | 73 | 26 | 99 |
 
-Eighteen TPCH and sixty-eight TPC-DS queries pass both exporters and enter the
+Eighteen TPCH and sixty-nine TPC-DS queries pass both exporters and enter the
 verifier. TPCH has twenty exact Initial/Final boundary-result pairs; TPC-DS has
 eighty-one.
 
@@ -349,13 +356,18 @@ spends 315/71,360 ms and cannot rule out an integral-AVG count greater than
 two. Their report SHA-256 is
 `6fbe29825c3e2863ad8c3a7d92ea661bd655e7245d455fcbb1db207dcd1e258c`.
 
-The current complete TPCH dashboard spends 2,947/33,310 ms and has report
-SHA-256
+The preceding derived-ordering complete TPCH dashboard spends 2,947/33,310 ms
+and has report SHA-256
 `8a231a04398f6ca176286bd9d4d658e7d836c36c34ddcc4d43dfde54cc413a4b`.
-TPC-DS spends 68,923/846,363 ms and has report SHA-256
+Its TPC-DS counterpart spends 68,923/846,363 ms and has report SHA-256
 `64fbda391ca5b50698aceaa2a38ba2210617fd0c1c0071bcb7c5c7967b260ecd`.
+The post-q72 complete TPC-DS dashboard confirms the same semantic partition,
+spends 67,551/841,054 ms, and has report SHA-256
+`8fa6661f88bbbc3f45b8bbee7fec73c4262608f5b2755736e5b1425bce15ec15`;
+q72 spends 371/535 ms before its 4,608-row guard.
 Combined coverage is 80/121 (66.1%) of the corpus, 80/101 (79.2%) of exact
-pairs, 80/93 (86.0%) of the preparation-successful subset, and 80/86 (93.0%)
+pairs, 80/93 (86.0%) of the preparation-successful subset, and, after q72,
+80/87 (92.0%)
 of verifier entrants. The semantic partition is 80 formulas, 21 unsupported
 outcomes, and 20 no-pair optimizer failures. The proof floor remains
 twenty-seven, and this checkpoint found no optimizer bug or counterexample.
@@ -626,20 +638,42 @@ also reach a semantic unsupported result.
 
 Integral-AVG Slice A moves three exact, preparation-successful TPC-DS pairs
 from unsupported to formula construction; exact integral extrema then move
-q35; derived integral-AVG ordering then moves q22/q85. The complete dashboard
-therefore raises coverage to 80/121 (66.1%), 80/101 (79.2%) of exact pairs,
-80/93 (86.0%) of the preparation-successful subset, and 80/86 (93.0%) of
-verifier entrants. TPC-DS moves from 56 to 62 formulas and from 25 to 19
+q35; derived integral-AVG ordering then moves q22/q85. Exact dynamic
+Date-shift normalization moves q72 from initial-export rejection to verifier
+entry. The complete dashboard therefore retains 80/121 (66.1%) formula
+coverage, 80/101 (79.2%) of exact pairs, and 80/93 (86.0%) of the
+preparation-successful subset; the entrant ratio becomes 80/87 (92.0%).
+TPC-DS moves from 56 to 62 formulas and from 25 to 19
 unsupported outcomes; its 18 optimizer failures and
 73/26 preparation partition are unchanged. Across both suites the semantic
 partition is 80 formulas, 21 unsupported outcomes, and 20 no-pair optimizer
 failures. This is a useful end-to-end pre-physical optimizer sample, not a
 claim about larger inputs. Formula construction is not a bounded proof.
 
-The 21 semantic unsupported rows split by primary reason into 15
-initial-export, zero final-export, and six verifier results. The strict C++
-boundary therefore accounts for 15 primary outcomes; the six remaining exact
+The 21 semantic unsupported rows split by primary reason into 14
+initial-export, zero final-export, and seven verifier results. The strict C++
+boundary therefore accounts for 14 primary outcomes; the seven remaining exact
 pairs fail closed in the verifier itself.
+
+The q72 grammar accepts only exact binary `+` or `-` from one direct visible
+`Optional<Date>` member to `Optional<Date>`. The other operand must be either
+an `Apply` of the reviewed eight-child `DateTime2.IntervalFromDays` UDF
+envelope to an `Int32` literal or the Final boundary's folded
+`Just(Interval literal)`. The folded value must be an exact whole-day
+multiple, and either spelling must encode a day count in
+`[-49672, 49672]`. Export first preserves source NULL with `if_present`; for a
+present Date it applies one versioned nullable-Date opaque function keyed by
+operator and day count. This shared deterministic over-approximation covers
+the full present-input result, including possible overflow, without equating
+different operations.
+
+At the normal bounds q72 rejects a 4,608-row join output above the 4,096-row
+relation cap. A disposable 8,192-row experiment, fully reverted after
+measurement, passes that guard and rejects a 10,619,136-pair grouped aggregate
+above the 16,384-pair construction cap after 12.151 seconds. This is evidence
+for exact unique-key-aware at-most-one right-side join compaction, not for
+raising a global audit limit. The slice found no optimizer bug or
+counterexample and leaves the proof floor at twenty-seven.
 
 The integral-AVG contract is exact and narrow:
 `Optional<Int64> -> Optional<Double>` with the strict phase-linked state
@@ -699,8 +733,8 @@ captured pair and require frontend/optimizer work before verifier semantics
 can help; consequently the present captured-pair ceiling is 101/121.
 Even reaching that ceiling would establish formula construction, not solver
 proof.
-The next slice targets exact dynamic `Optional<Date>` plus/minus literal
-`IntervalFromDays` normalization for TPC-DS q72.
+The next slice targets exact unique-key-aware at-most-one right-side join
+compaction for q72. It does not raise the 4,096-row relation cap.
 
 The exact sorting-network slice adds TPCH q2 to the formula and preparation
 floors without changing the proof floor. A focused row-bound-two/task-bound-two
@@ -1072,10 +1106,10 @@ Eight failures--q12, q20, q49, q51, q53, q63, q89, and q98--still preserve
 exact initial/final boundary results and therefore overlap the semantic
 unsupported inventory. The other 18 are terminal no-pair preparation failures.
 
-The exporter matrix below covers the recorded boundary failures among 13 of
-the 19 unsupported TPC-DS queries after derived integral-AVG ordering. IDs can
+The exporter matrix below covers the recorded boundary failures among 12 of
+the 19 unsupported TPC-DS queries at the q72 verifier-entry checkpoint. IDs can
 appear in both exporter columns or under more than one reason because both
-snapshots are audited independently. The six queries that pass export and
+snapshots are audited independently. The seven queries that pass export and
 fail closed inside the verifier are listed after the matrix.
 
 | Unsupported reason | Initial snapshot | Final snapshot |
@@ -1089,7 +1123,6 @@ fail closed inside the verifier are listed after the matrix.
 | Scalar expression is not Data or Optional&lt;Data&gt; | - | q28 |
 | Callable `Unwrap` | q8 | q8 |
 | Restricted `Concat` exceeds its allocation-totality bound | q84 | q84 |
-| Dynamic Date fold requires `SafeCast` with `Optional<Date>` result | q72 | q72 |
 
 q66 no longer appears in the matrix: its initial literal-only `Concat` is
 canonical-folded under the exact Map-root gate, and its later Decimal
@@ -1109,7 +1142,11 @@ constructs a formula. q9 reaches the verifier and joins the construction-bound
 inventory below.
 
 After both snapshots export, q9 rejects an 8,192-row join output above the
-4,096-row relation bound. q4 rejects a 20,736-pair join match above the
+4,096-row relation bound. Exact dynamic Date-shift normalization likewise
+moves q72 through both exporters; it rejects a 4,608-row join output above the
+same bound. A reverted 8,192-row diagnostic experiment reaches a
+10,619,136-pair grouped aggregate above the 16,384-pair bound after 12.151
+seconds. q4 rejects a 20,736-pair join match above the
 16,384-pair construction bound after 1,669/395 ms of
 preparation/verification. q64 rejects an 8,192-row join output above the
 4,096-row relation bound after 7,711/753 ms. q11 and q74 reach an
@@ -1408,8 +1445,10 @@ bound. Cardinality-certified integral-AVG Slice A then adds TPC-DS q7/q13/q26:
 59/99 TPC-DS and 77/121 total formulas. q35 also reaches the verifier, for 84
 entrants total. Exact integral extrema then add q35: 60/99 TPC-DS and 78/121
 total formulas, with 84 entrants. Certified derived integral-AVG ordering then
-adds q22/q85: 62/99 TPC-DS and 80/121 total formulas, with 86 entrants. The
-twenty-seven-query proof floor remains unchanged.
+adds q22/q85: 62/99 TPC-DS and 80/121 total formulas, with 86 entrants. Exact
+dynamic Date-shift normalization adds q72 as the eighty-seventh entrant
+without adding a formula. The twenty-seven-query proof floor remains
+unchanged.
 
 Focused q1 emits a formula after 111/998 ms and returns `UNKNOWN`, not
 a proof or counterexample, in a non-gating 60-second solver run after
@@ -2103,11 +2142,14 @@ raising the formula floor to 77; q35 raises the entrant floor to 84 without
 adding a proof. Exact fixed-width integral `MIN`/`MAX` then adds q35 to the
 formula floor, raising it to 78 without adding a proof. Narrowly tagged
 derived-`Double` ordering then adds q22/q85, raising the formula floor to 80
-and the entrant floor to 86 without adding a proof. The next slice will be
-exact dynamic `Optional<Date>` plus/minus literal `IntervalFromDays`
-normalization for TPC-DS q72. More than two dependencies, other correlation
-shapes, coercing dynamic `IN`, nullable String and non-positive nullable
-contexts, broader range grammars, and other OLAP pushdowns remain later work.
+and the entrant floor to 86 without adding a proof. Exact dynamic
+`Optional<Date>` plus/minus literal `IntervalFromDays` normalization then
+raises the entrant floor to 87 through q72, again without a formula or proof.
+Exact unique-key-aware at-most-one right-side join compaction for q72 is next;
+the global relation cap remains unchanged. More than two dependencies, other
+correlation shapes, coercing dynamic `IN`, nullable String and non-positive
+nullable contexts, broader range grammars, and other OLAP pushdowns remain
+later work.
 Solver/formula-size
 work promotes supported queries only after reproducible
 `VERIFIED_BOUNDED` results. The required policy now contains twenty-seven

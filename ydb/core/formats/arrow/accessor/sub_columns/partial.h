@@ -122,6 +122,10 @@ public:
         return Header;
     }
 
+    const NSubColumns::TSettings& GetSettings() const {
+        return Settings;
+    }
+
     TConclusion<std::shared_ptr<NSubColumns::TJsonPathAccessor>> GetPathAccessor(const std::string_view svPath, const ui32 recordsCount) const;
 
     bool NeedFetch(const std::string_view colName) const {

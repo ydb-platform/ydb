@@ -77,7 +77,7 @@ public:
         AFL_VERIFY(!OthersReadData);
         for (auto&& i : Chunks) {
             std::shared_ptr<TColumnLoader> columnLoader = std::make_shared<TColumnLoader>(ChunkExternalInfo.GetDefaultSerializer(),
-                PartialArray->GetHeader().GetAccessorConstructor(i.second.GetColumnIdx()),
+                PartialArray->GetHeader().GetAccessorConstructor(i.second.GetColumnIdx(), PartialArray->GetSettings().GetEncodingParams()),
                 PartialArray->GetHeader().GetField(i.second.GetColumnIdx()), nullptr, 0);
             auto additionalData = NArrow::NAccessor::BuildAdditionalAccessorData(
                 PartialArray->GetHeader().GetAddressesProto().GetKeyColumns(i.second.GetColumnIdx()).GetAdditionalAccessorData());

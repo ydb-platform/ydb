@@ -222,15 +222,15 @@ TConclusion<std::shared_ptr<arrow::Array>> TConstructor::BuildDictionaryOnlyRead
     return rb->column(0);
 }
 
-std::shared_ptr<arrow::DataType> TConstructor::GetTypeByVariantsCount(const ui32 count) {
+std::shared_ptr<arrow::FixedWidthType> TConstructor::GetTypeByVariantsCount(const ui32 count) {
     if (count <= Max<ui8>()) {
-        return arrow::uint8();
+        return std::make_shared<arrow::UInt8Type>();
     }
     if (count <= Max<ui16>()) {
-        return arrow::uint16();
+        return std::make_shared<arrow::UInt16Type>();
     }
     if (count <= Max<ui32>()) {
-        return arrow::uint32();
+        return std::make_shared<arrow::UInt32Type>();
     }
     AFL_VERIFY(false);
     return nullptr;

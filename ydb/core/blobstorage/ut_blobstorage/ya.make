@@ -17,6 +17,7 @@ SRCS(
     assimilation.cpp
     backpressure.cpp
     block_race.cpp
+    blob_checker.cpp
     bsc_cache.cpp
     cancellation.cpp
     counting_events.cpp
@@ -66,6 +67,7 @@ PEERDIR(
     ydb/core/blobstorage/vdisk/common
     ydb/core/blobstorage/vdisk/scrub
     ydb/core/blobstorage/vdisk/synclog
+    ydb/core/mind/bscontroller
 )
 
 END()

@@ -170,7 +170,10 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
 bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext& ctx) {
     TWriteOperation* writeOp = TWriteOperation::TryCastWriteOperation(op);
 
+<<<<<<< HEAD
      // COUNTER_WRITE_COMPLETE / COUNTER_PREPARE_COMPLETE are updated in FinishProposeWrite / FinishPropose respectively
+=======
+>>>>>>> 4051bccb4d2 (Account for overload metrics increment in TEvWrite pipelining)
     auto incOverloaded = [this, writeOp]() {
         DataShard.IncCounter(writeOp ? COUNTER_WRITE_OVERLOADED : COUNTER_PREPARE_OVERLOADED);
     };

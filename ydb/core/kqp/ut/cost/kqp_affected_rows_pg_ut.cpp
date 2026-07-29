@@ -332,6 +332,35 @@ Y_UNIT_TEST_SUITE(KqpAffectedRowsPg) {
         UNIT_ASSERT_VALUES_EQUAL(affectedRows, 1u);
     }
 
+    Y_UNIT_TEST(ReadCommittedRW_FullStatsMode_MultiRowInsertAndDelete) {
+        TKikimrRunner kikimr(GetAppConfig());
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        CreateTestTable(session);
+
+        {
+            auto result = session.ExecuteQuery(Q_(R"(
+                INSERT INTO `/Root/TestTable` (Group, Name, Amount, Comment)
+                VALUES (1u, "Anna", 3500u, "None"), (2u, "Bob", 4000u, "None"), (3u, "Carl", 5000u, "None");
+            )"), BeginReadCommittedRW(), GetQuerySettingsFull()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto affectedRows = GetAffectedRowsForTable(result, "/Root/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(affectedRows, 3u);
+        }
+
+        {
+            auto result = session.ExecuteQuery(Q_(R"(
+                DELETE FROM `/Root/TestTable` WHERE Group >= 2u;
+            )"), BeginReadCommittedRW(), GetQuerySettingsFull()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto affectedRows = GetAffectedRowsForTable(result, "/Root/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(affectedRows, 2u);
+        }
+    }
+
     Y_UNIT_TEST(ReadCommittedRW_NoneStatsMode) {
         TKikimrRunner kikimr(GetAppConfig());
         auto db = kikimr.GetQueryClient();

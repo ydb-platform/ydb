@@ -190,10 +190,11 @@ struct TTableStats {
     std::vector<ui64> EraseBytes;
 
     std::vector<ui64> AffectedPartitions;
+    std::vector<ui64> AffectedRows;
 
     void Resize(ui32 taskCount);
     static TMetricInfo EstimateMem() {
-        return TMetricInfo(7);
+        return TMetricInfo(8);
     }
 };
 

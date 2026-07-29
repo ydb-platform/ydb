@@ -378,6 +378,7 @@ message TDqTableAggrStats {
     TDqStatsAggr EraseBytes = 7;
 
     uint32 AffectedPartitions = 8;
+    uint64 AffectedRows = 9;
 
     google.protobuf.Any Extra = 100;
 }

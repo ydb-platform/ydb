@@ -414,6 +414,7 @@ void TTableStats::Resize(ui32 taskCount) {
     EraseRows.resize(taskCount);
     EraseBytes.resize(taskCount);
     AffectedPartitions.resize(taskCount);
+    AffectedRows.resize(taskCount);
 }
 
 void TOperatorStats::Resize(ui32 taskCount) {
@@ -612,6 +613,7 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
         SetNonZero(aggrTableStats.EraseRows, index, tableStat.GetEraseRows());
         SetNonZero(aggrTableStats.EraseBytes, index, tableStat.GetEraseBytes());
         SetNonZero(aggrTableStats.AffectedPartitions, index, tableStat.GetAffectedPartitions());
+        SetNonZero(aggrTableStats.AffectedRows, index, tableStat.GetAffectedRows());
     }
 
     for (auto& sourceStat : taskStats.GetSources()) {
@@ -1574,6 +1576,7 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
                     ExportAggStats(t.EraseRows, *table.MutableEraseRows());
                     ExportAggStats(t.EraseBytes, *table.MutableEraseBytes());
                     table.SetAffectedPartitions(ExportAggStats(t.AffectedPartitions));
+                    table.SetAffectedRows(ExportAggStats(t.AffectedRows));
                 }
                 for (auto& [id, i] : stageStat.Ingress) {
                     ExportAggAsyncBufferStats(i, (*stageStats.MutableIngress())[id]);

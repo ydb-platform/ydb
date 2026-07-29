@@ -148,19 +148,18 @@ def _render_scope(root: Term, context: _RenderContext) -> str:
     references: dict[int, int] = {}
     discovery: list[int] = []
 
-    def collect(term: Term) -> None:
+    pending = [root]
+    while pending:
+        term = pending.pop()
         identity = id(term)
         references[identity] = references.get(identity, 0) + 1
         if identity in terms:
-            return
+            continue
         terms[identity] = term
         discovery.append(identity)
         if term.operation in {"forall", "exists"}:
-            return
-        for argument in term.arguments:
-            collect(argument)
-
-    collect(root)
+            continue
+        pending.extend(reversed(term.arguments))
     candidates = {
         identity
         for identity in discovery
@@ -171,25 +170,32 @@ def _render_scope(root: Term, context: _RenderContext) -> str:
 
     levels: dict[int, int] = {}
     maximum_below: dict[int, int] = {}
-
-    def assign_level(term: Term) -> int:
+    pending_levels = [(root, False)]
+    while pending_levels:
+        term, expanded = pending_levels.pop()
         identity = id(term)
-        cached = maximum_below.get(identity)
-        if cached is not None:
-            return cached
+        if identity in maximum_below:
+            continue
+        if not expanded:
+            pending_levels.append((term, True))
+            if term.operation not in {"forall", "exists"}:
+                pending_levels.extend(
+                    (argument, False)
+                    for argument in reversed(term.arguments)
+                    if id(argument) not in maximum_below
+                )
+            continue
         child_level = 0
         if term.operation not in {"forall", "exists"}:
             child_level = max(
-                (assign_level(argument) for argument in term.arguments),
+                (maximum_below[id(argument)] for argument in term.arguments),
                 default=0,
             )
         if identity in candidates:
             levels[identity] = child_level + 1
             child_level += 1
         maximum_below[identity] = child_level
-        return child_level
 
-    assign_level(root)
     positions = {identity: index for index, identity in enumerate(discovery)}
     aliases = {
         identity: context.fresh_alias()
@@ -199,41 +205,15 @@ def _render_scope(root: Term, context: _RenderContext) -> str:
         )
     }
 
-    def render(term: Term, defining: int | None = None) -> str:
-        identity = id(term)
-        alias = aliases.get(identity)
-        if alias is not None and identity != defining:
-            return alias
-        if term.operation == "symbol":
-            assert isinstance(term.atom, str)
-            return term.atom
-        if term.operation == "bool":
-            return "true" if term.atom else "false"
-        if term.operation == "int":
-            assert isinstance(term.atom, int)
-            return str(term.atom) if term.atom >= 0 else f"(- {-term.atom})"
-        if term.operation in {"forall", "exists"}:
-            variables = term.arguments[:-1]
-            body = term.arguments[-1]
-            bindings = " ".join(
-                f"({variable.render()} {variable.sort})" for variable in variables
-            )
-            return f"({term.operation} ({bindings}) {_render_scope(body, context)})"
-        if not term.arguments:
-            return term.operation
-        return (
-            f"({term.operation} "
-            f"{' '.join(render(argument) for argument in term.arguments)})"
-        )
-
-    body = render(root)
+    body = _render_term(root, context, aliases)
     by_level: dict[int, list[int]] = {}
     for identity in discovery:
         if identity in candidates:
             by_level.setdefault(levels[identity], []).append(identity)
     for level in sorted(by_level, reverse=True):
         bindings = " ".join(
-            f"({aliases[identity]} {render(terms[identity], identity)})"
+            f"({aliases[identity]} "
+            f"{_render_term(terms[identity], context, aliases, identity)})"
             for identity in by_level[level]
         )
         body = f"(let ({bindings}) {body})"
@@ -241,29 +221,71 @@ def _render_scope(root: Term, context: _RenderContext) -> str:
 
 
 def _render_unshared(term: Term, context: _RenderContext) -> str:
-    """Render recursively while giving nested quantifiers their own DAG scope."""
+    """Render without aliases while giving nested quantifiers their own DAG scope."""
 
-    if term.operation == "symbol":
-        assert isinstance(term.atom, str)
-        return term.atom
-    if term.operation == "bool":
-        return "true" if term.atom else "false"
-    if term.operation == "int":
-        assert isinstance(term.atom, int)
-        return str(term.atom) if term.atom >= 0 else f"(- {-term.atom})"
-    if term.operation in {"forall", "exists"}:
-        variables = term.arguments[:-1]
-        body = term.arguments[-1]
-        bindings = " ".join(
-            f"({variable.render()} {variable.sort})" for variable in variables
-        )
-        return f"({term.operation} ({bindings}) {_render_scope(body, context)})"
-    if not term.arguments:
-        return term.operation
-    return (
-        f"({term.operation} "
-        f"{' '.join(_render_unshared(argument, context) for argument in term.arguments)})"
-    )
+    return _render_term(term, context, {})
+
+
+def _render_term(
+    root: Term,
+    context: _RenderContext,
+    aliases: dict[int, str],
+    defining: int | None = None,
+) -> str:
+    """Render one scope with an explicit stack and optional let aliases."""
+
+    pieces: list[str] = []
+    pending: list[tuple[str, Term | str, int | None]] = [
+        ("term", root, defining),
+    ]
+    while pending:
+        kind, item, bypass = pending.pop()
+        if kind == "text":
+            assert isinstance(item, str)
+            pieces.append(item)
+            continue
+
+        assert isinstance(item, Term)
+        identity = id(item)
+        alias = aliases.get(identity)
+        if alias is not None and identity != bypass:
+            pieces.append(alias)
+            continue
+        if item.operation == "symbol":
+            assert isinstance(item.atom, str)
+            pieces.append(item.atom)
+            continue
+        if item.operation == "bool":
+            pieces.append("true" if item.atom else "false")
+            continue
+        if item.operation == "int":
+            assert isinstance(item.atom, int)
+            pieces.append(
+                str(item.atom) if item.atom >= 0 else f"(- {-item.atom})"
+            )
+            continue
+        if item.operation in {"forall", "exists"}:
+            variables = item.arguments[:-1]
+            body = item.arguments[-1]
+            bindings = " ".join(
+                f"({variable.render()} {variable.sort})"
+                for variable in variables
+            )
+            pieces.append(
+                f"({item.operation} ({bindings}) "
+                f"{_render_scope(body, context)})"
+            )
+            continue
+        if not item.arguments:
+            pieces.append(item.operation)
+            continue
+
+        pieces.append(f"({item.operation}")
+        pending.append(("text", ")", None))
+        for argument in reversed(item.arguments):
+            pending.append(("term", argument, None))
+            pending.append(("text", " ", None))
+    return "".join(pieces)
 
 
 @dataclass(frozen=True, slots=True)

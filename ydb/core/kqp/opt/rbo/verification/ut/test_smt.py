@@ -721,6 +721,36 @@ class SmtTest(unittest.TestCase):
         )
         self.assertEqual(term.render_shared(), term.render_shared())
 
+    def test_deep_unshared_term_renders_without_python_recursion(self):
+        term = smt.symbol("leaf", smt.INT)
+        for _ in range(2_000):
+            term = smt.Term(smt.INT, "step", (term,))
+
+        rendered = term.render_shared()
+
+        self.assertEqual(rendered, term.render_shared())
+        self.assertEqual(rendered.count("(step "), 2_000)
+        self.assertTrue(rendered.startswith("(step (step "))
+        self.assertTrue(rendered.endswith(")" * 2_000))
+
+    def test_deep_shared_quantified_dag_renders_stack_safely(self):
+        rank = smt.symbol("rank", smt.INT)
+        shared = _deep_shared_term(rank)
+        quantified = smt.exists(
+            (rank,),
+            smt.lt(shared, smt.ONE),
+        )
+
+        rendered = quantified.render_shared()
+
+        self.assertEqual(rendered, quantified.render_shared())
+        self.assertEqual(rendered.count("(let ("), 1_999)
+        self.assertTrue(rendered.startswith(
+            "(exists ((rank Int)) "
+            "(let ((rbo_let_0 (deep rank rank))) ",
+        ))
+        self.assertIn("rbo_let_1998", rendered)
+
     def test_shared_quantified_body_is_not_hoisted_past_shadowing(self):
         rank = smt.symbol("rank", smt.INT)
         successor = smt.add(rank, smt.ONE)

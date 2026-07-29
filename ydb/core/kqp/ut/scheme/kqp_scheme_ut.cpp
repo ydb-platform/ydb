@@ -14725,6 +14725,58 @@ END DO)",
         }
     }
 
+    Y_UNIT_TEST(TruncateColumnTableInStoreFails) {
+        // TRUNCATE is only supported for standalone column tables. A column table that belongs to a
+        // column store (TABLESTORE) must be rejected on propose (both on SchemeShard and column shard).
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        runnerSettings.AppConfig.MutableFeatureFlags()->SetEnableTruncateColumnTable(true);
+        TKikimrRunner kikimr(runnerSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                CREATE TABLESTORE `/Root/TestStore` (
+                    k Uint32 NOT NULL,
+                    v String,
+                    PRIMARY KEY (k)
+                )
+                WITH (
+                    STORE = COLUMN,
+                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
+                );
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/TestStore/TestTable` (
+                    k Uint32 NOT NULL,
+                    v String,
+                    PRIMARY KEY (k)
+                )
+                PARTITION BY HASH (k)
+                WITH (
+                    STORE = COLUMN,
+                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1
+                );
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                TRUNCATE TABLE `/Root/TestStore/TestTable`;
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "TRUNCATE TABLE is not supported for column tables in a column store");
+        }
+    }
+
     Y_UNIT_TEST_TWIN(AlterTableCompactSql, UseQueryService) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableForcedCompactions(true);

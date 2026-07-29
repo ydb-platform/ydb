@@ -82,7 +82,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         const ui64 pathId = 1;
         TestTableDescription testTable{};
-        auto planStep = PrepareTablet(runtime, pathId, testTable.Schema);
+        auto planStep = PrepareStandaloneTablet(runtime, pathId, testTable.Schema);
 
         ui64 txId = 10;
         planStep = ProposeSchemaTx(runtime, sender, TTestSchema::TruncateTableTxBody(pathId, 1), ++txId);
@@ -105,7 +105,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         const ui64 pathId = 1;
         TestTableDescription testTable{};
-        auto planStep = PrepareTablet(runtime, pathId, testTable.Schema);
+        auto planStep = PrepareStandaloneTablet(runtime, pathId, testTable.Schema);
 
         ui64 txId = 10;
         int writeId = 10;
@@ -161,7 +161,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         const ui64 pathId = 1;
         TestTableDescription testTable{};
-        auto planStep = PrepareTablet(runtime, pathId, testTable.Schema);
+        auto planStep = PrepareStandaloneTablet(runtime, pathId, testTable.Schema);
 
         ui64 txId = 10;
         int writeId = 10;
@@ -222,7 +222,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         const ui64 pathId = 1;
         TestTableDescription testTable{};
-        auto planStep = PrepareTablet(runtime, pathId, testTable.Schema);
+        auto planStep = PrepareStandaloneTablet(runtime, pathId, testTable.Schema);
 
         const ui64 absentPathId = 111;
         ui64 txId = 10;
@@ -247,7 +247,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         const ui64 pathId = 1;
         TestTableDescription testTable{};
-        auto planStep = PrepareTablet(runtime, pathId, testTable.Schema);
+        auto planStep = PrepareStandaloneTablet(runtime, pathId, testTable.Schema);
 
         ui64 txId = 10;
         int writeId = 10;
@@ -375,7 +375,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         const ui64 pathId = 1;
         TestTableDescription testTable{};
-        auto planStep = PrepareTablet(runtime, pathId, testTable.Schema);
+        auto planStep = PrepareStandaloneTablet(runtime, pathId, testTable.Schema);
 
         ui64 txId = 10;
         int writeId = 10;
@@ -426,7 +426,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         const ui64 pathId = 1;
         TestTableDescription testTable{};
-        auto planStep = PrepareTablet(runtime, pathId, testTable.Schema);
+        auto planStep = PrepareStandaloneTablet(runtime, pathId, testTable.Schema);
 
         ui64 txId = 10;
         int writeId = 10;
@@ -468,7 +468,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         const ui64 srcPathId = 1;
         TestTableDescription testTable{};
-        auto planStep = PrepareTablet(runtime, srcPathId, testTable.Schema);
+        auto planStep = PrepareStandaloneTablet(runtime, srcPathId, testTable.Schema);
 
         ui64 txId = 10;
         int writeId = 10;
@@ -509,7 +509,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         const ui64 pathId = 1;
         TestTableDescription testTable{};
-        auto planStep = PrepareTablet(runtime, pathId, testTable.Schema);
+        auto planStep = PrepareStandaloneTablet(runtime, pathId, testTable.Schema);
 
         ui64 txId = 10;
 
@@ -537,7 +537,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         const ui64 pathId = 1;
         TestTableDescription testTable{};
-        auto planStep = PrepareTablet(runtime, pathId, testTable.Schema);
+        auto planStep = PrepareStandaloneTablet(runtime, pathId, testTable.Schema);
 
         ui64 txId = 10;
         int writeId = 10;
@@ -620,6 +620,25 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
             UNIT_ASSERT(rb);
             UNIT_ASSERT_EQUAL(rb->num_rows(), 50);
         }
+    }
+
+    // TRUNCATE is only supported for standalone column tables. A table that belongs to a column
+    // store must be rejected at propose time on the column shard side (the SchemeShard operation
+    // enforces the same restriction). PrepareTablet creates an in-store table (schema preset id=1).
+    Y_UNIT_TEST(TruncateInStoreTableFails) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        const ui64 pathId = 1;
+        TestTableDescription testTable{};
+        auto planStep = PrepareTablet(runtime, pathId, testTable.Schema);
+        Y_UNUSED(planStep);
+
+        ui64 txId = 10;
+        // TRUNCATE of an in-store column table must be rejected at propose time.
+        ProposeSchemaTxFail(runtime, sender, TTestSchema::TruncateTableTxBody(pathId, 1), ++txId);
     }
 }
 }   // namespace NKikimr

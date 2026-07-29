@@ -175,6 +175,12 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
         case NKikimrTxColumnShard::TSchemaTxBody::kDropTable:
             break;
         case NKikimrTxColumnShard::TSchemaTxBody::kTruncateTable: {
+            // TRUNCATE is only supported for standalone column tables. Tables that belong to a column
+            // store are not supported yet (see the matching rejection in the SchemeShard operation).
+            if (owner.TablesManager.IsStoreTablet()) {
+                return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR,
+                    "TRUNCATE is not supported for tables in a column store");
+            }
             const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(SchemaTxBody.GetTruncateTable());
             if (const auto internalPathId = owner.TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false)) {
                 if (owner.TablesManager.HasTable(*internalPathId) &&
@@ -333,6 +339,9 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
         case NKikimrTxColumnShard::TSchemaTxBody::kDropTable:
             break;
         case NKikimrTxColumnShard::TSchemaTxBody::kTruncateTable: {
+            if (owner.TablesManager.IsStoreTablet()) {
+                break;
+            }
             const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(SchemaTxBody.GetTruncateTable());
             if (const auto internalPathId = owner.TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false)) {
                 if (owner.TablesManager.HasTable(*internalPathId) &&

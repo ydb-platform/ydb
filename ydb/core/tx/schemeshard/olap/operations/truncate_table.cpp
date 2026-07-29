@@ -337,54 +337,20 @@ public:
         Y_ABORT_UNLESS(context.SS->ColumnTables.contains(tablePath.Base()->PathId));
         auto tableInfo = context.SS->ColumnTables.GetVerified(tablePath.Base()->PathId);
 
+        // TRUNCATE is currently supported only for standalone column tables. Tables that belong to a
+        // column store are rejected here (the same restriction is enforced on the column shard side).
+        if (!tableInfo->IsStandalone()) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                "TRUNCATE TABLE is not supported for column tables in a column store");
+            return result;
+        }
+
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxTruncateColumnTable, tablePath.Base()->PathId);
         txState.State = TTxState::ConfigureParts;
 
-        if (tableInfo->IsStandalone()) {
+        {
             NIceDb::TNiceDb db(context.GetDB());
             for (auto shardIdx : tableInfo->BuildOwnedColumnShardsVerified()) {
-                Y_VERIFY_S(context.SS->ShardInfos.contains(shardIdx), "Unknown shardIdx " << shardIdx);
-                txState.Shards.emplace_back(shardIdx, context.SS->ShardInfos[shardIdx].TabletType, TTxState::ConfigureParts);
-
-                context.SS->ShardInfos[shardIdx].CurrentTxId = opTxId;
-                context.SS->PersistShardTx(db, shardIdx, opTxId);
-            }
-        } else {
-            auto storePathId = tableInfo->GetOlapStorePathIdVerified();
-            TPath storePath = TPath::Init(storePathId, context.SS);
-            {
-                TPath::TChecker checks = storePath.Check();
-                checks
-                    .NotEmpty()
-                    .IsResolved()
-                    .IsOlapStore()
-                    .NotUnderOperation();
-
-                if (!checks) {
-                    result->SetError(checks.GetStatus(), checks.GetError());
-                    return result;
-                }
-            }
-
-            Y_ABORT_UNLESS(context.SS->OlapStores.contains(storePathId));
-            TOlapStoreInfo::TPtr storeInfo = context.SS->OlapStores.at(storePathId);
-
-            Y_ABORT_UNLESS(storeInfo->ColumnTables.contains(tablePath->PathId));
-            storeInfo->ColumnTablesUnderOperation.insert(tablePath->PathId);
-
-            // Sequentially chain operations in the same olap store
-            if (context.SS->Operations.contains(storePath.Base()->LastTxId)) {
-                context.OnComplete.Dependence(storePath.Base()->LastTxId, opTxId);
-            }
-            storePath.Base()->LastTxId = opTxId;
-
-            NIceDb::TNiceDb db(context.GetDB());
-            context.SS->PersistLastTxId(db, storePath.Base());
-
-            for (ui64 columnShardId : tableInfo->GetColumnShards()) {
-                auto tabletId = TTabletId(columnShardId);
-                auto shardIdx = context.SS->TabletIdToShardIdx.at(tabletId);
-
                 Y_VERIFY_S(context.SS->ShardInfos.contains(shardIdx), "Unknown shardIdx " << shardIdx);
                 txState.Shards.emplace_back(shardIdx, context.SS->ShardInfos[shardIdx].TabletType, TTxState::ConfigureParts);
 

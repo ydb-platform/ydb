@@ -353,7 +353,11 @@ public:
             ttlVersion.emplace(std::move(deserializedTtl));
         }
         AddVersion(pathId, snapshot, ttlVersion);
-        TtlProtos[pathId].emplace(snapshot, ttlSettings);
+        // Keep TtlProtos in lockstep with Ttl: both maps must always carry the same (pathId, snapshot)
+        // versions, otherwise GetTableTtl and GetTableTtlProto could disagree. Mirror the same
+        // idempotency invariant enforced by AddVersion above.
+        auto [it, inserted] = TtlProtos[pathId].emplace(snapshot, ttlSettings);
+        AFL_VERIFY(inserted || it->second.SerializeAsString() == ttlSettings.SerializeAsString())("snapshot", snapshot);
     }
 
     std::optional<NOlap::TTiering> GetTableTtl(const TInternalPathId pathId, const NOlap::TSnapshot& snapshot = NOlap::TSnapshot::Max()) const {

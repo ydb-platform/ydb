@@ -666,6 +666,11 @@ struct TestTableDescription {
 [[nodiscard]] NTxUT::TPlanStep PrepareTablet(
     TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema, const ui32 keySize = 1);
 
+// Same as PrepareTablet, but creates a standalone (inline-schema) column table rather than an
+// in-store one. TRUNCATE is only supported for standalone tables, so its tests use this helper.
+[[nodiscard]] NTxUT::TPlanStep PrepareStandaloneTablet(
+    TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema, const ui32 keySize = 1);
+
 [[nodiscard]] NTxUT::TPlanStep PrepareTablet(TTestBasicRuntime& runtime, const TString& schemaTxBody);
 
 std::shared_ptr<arrow::RecordBatch> ReadAllAsBatch(

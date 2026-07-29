@@ -466,8 +466,13 @@ void TColumnShard::RunTruncateTable(
 
     NKikimrTxColumnShard::TTableVersionInfo tableVerProto;
     newInternalPathId.ToProto(tableVerProto);
-    if (!TablesManager.GetSchemaPresets().empty()) {
-        tableVerProto.SetSchemaPresetId(*TablesManager.GetSchemaPresets().begin());
+    // TRUNCATE is only allowed for standalone column tables (in-store tables are rejected on propose),
+    // so the tablet carries at most a single schema preset (the id-0 placeholder). Reuse it for the
+    // freshly generated internal path id.
+    const auto& schemaPresets = TablesManager.GetSchemaPresets();
+    AFL_VERIFY(schemaPresets.size() <= 1)("presets", schemaPresets.size());
+    if (!schemaPresets.empty()) {
+        tableVerProto.SetSchemaPresetId(*schemaPresets.begin());
     }
 
     if (ttlSettings) {

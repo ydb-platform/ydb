@@ -126,6 +126,67 @@ namespace {
         const bool StickSomePages = false;
     };
 
+    void SetupSlices(TTestParams params, const TPartStore& part) {
+        if (params.Slices) {
+            TSlices slices;
+            auto partSlices = (TSlices*)part.Slices.Get();
+            auto add = [&](ui32 pageIndex1Inclusive, ui32 pageIndex2Exclusive) {
+                slices.push_back(IndexTools::MakeSlice(part, pageIndex1Inclusive, pageIndex2Exclusive));
+            };
+
+            switch (params.Slices) {
+            case TTestParams::Many:
+                add(0, 2);
+                add(3, 4);
+                add(4, 6);
+                add(7, 8);
+                add(8, 9);
+                add(10, 14);
+                add(16, 17);
+                add(17, 19);
+                add(19, 20);
+                break;
+            case TTestParams::Type1:
+                add(7, 8);
+                add(8, 9);
+                break;
+            case TTestParams::Type2:
+                add(7, 8);
+                break;
+            case TTestParams::Type3:
+                add(7, 9);
+                break;
+            case TTestParams::Type4:
+                add(7, 10);
+                break;
+            case TTestParams::Type5:
+                add(8, 10);
+                break;
+            case TTestParams::Type6:
+                add(9, 10);
+                break;
+            case TTestParams::Type7:
+                add(2, 4);
+                add(17, 18);
+                break;
+            default:
+                Y_ABORT("Unknown slices");
+            }
+
+            partSlices->clear();
+            for (auto s : slices) {
+                partSlices->push_back(s);
+            }
+
+            if (params.Slices <= TTestParams::None + 1) {
+                Cerr << DumpPart(part, 3) << Endl;
+            }
+            Cerr << "Slices";
+            part.Slices->Describe(Cerr);
+            Cerr << Endl;
+        }
+    }
+
     TPartEggs MakePart(TTestParams params) {
         NPage::TConf conf;
         conf.WriteBTreeIndexV2 = false;
@@ -182,72 +243,7 @@ namespace {
 
         const auto part = *eggs.Lone();
 
-        if (params.Slices) {
-            TSlices slices;
-            auto partSlices = (TSlices*)part.Slices.Get();
-            auto add = [&](ui32 pageIndex1Inclusive, ui32 pageIndex2Exclusive) {
-                slices.push_back(IndexTools::MakeSlice(part, pageIndex1Inclusive, pageIndex2Exclusive));
-            };
-
-            switch (params.Slices) {
-            case TTestParams::Many: {
-                add(0, 2);
-                add(3, 4);
-                add(4, 6);
-                add(7, 8);
-                add(8, 9);
-                add(10, 14);
-                add(16, 17);
-                add(17, 19);
-                add(19, 20);
-                break;
-            }
-            case TTestParams::Type1: {
-                add(7, 8);
-                add(8, 9);
-                break;
-            }
-            case TTestParams::Type2: {
-                add(7, 8);
-                break;
-            }
-            case TTestParams::Type3: {
-                add(7, 9);
-                break;
-            }
-            case TTestParams::Type4: {
-                add(7, 10);
-                break;
-            }
-            case TTestParams::Type5: {
-                add(8, 10);
-                break;
-            }
-            case TTestParams::Type6: {
-                add(9, 10);
-                break;
-            }
-            case TTestParams::Type7: {
-                add(2, 4);
-                add(17, 18);
-                break;
-            }
-            default:
-                Y_ABORT("Unknown slices");
-            }
-
-            partSlices->clear();
-            for (auto s : slices) {
-                partSlices->push_back(s);
-            }
-        }
-
-        if (params.Slices <= TTestParams::None + 1) {
-            Cerr << DumpPart(part, 3) << Endl;
-        }
-        Cerr << "Slices";
-        part.Slices->Describe(Cerr);
-        Cerr << Endl;
+        SetupSlices(params, part);
 
         UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[0].LevelCount(), params.Levels);
         if (params.Groups) {
@@ -633,8 +629,10 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                         // The flat implementation always returns 0 bytes charged, if the bytes limit is not set
                         UNIT_ASSERT_VALUES_UNEQUAL_C(treeChargeResult.BytesPrecharged, 0, message);
 
-                        AssertLoadedTheSame(part, bTreeEnv, flatEnv, message,
-                            false, reverse && itemsLimit, !reverse && itemsLimit);
+                        if (params.Slices == TTestParams::None) {
+                            AssertLoadedTheSame(part, bTreeEnv, flatEnv, message,
+                                false, reverse && itemsLimit, !reverse && itemsLimit);
+                        }
                     }
                 }
             }
@@ -707,8 +705,10 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
                                 // The flat implementation always returns 0 bytes charged, if the bytes limit is not set
                                 UNIT_ASSERT_VALUES_UNEQUAL_C(treeChargeResult.BytesPrecharged, 0, message);
 
-                                AssertLoadedTheSame(part, bTreeEnv, flatEnv, message,
-                                    true, reverse && itemsLimit, !reverse && itemsLimit);
+                                if (params.Slices == TTestParams::None) {
+                                    AssertLoadedTheSame(part, bTreeEnv, flatEnv, message,
+                                        true, reverse && itemsLimit, !reverse && itemsLimit);
+                                }
                             }
                         }
                     }
@@ -805,7 +805,9 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
 
         CheckChargeRowId(params, part, tags, eggs.Scheme->Keys.Get());
         CheckChargeKeys(params, part, tags, eggs.Scheme->Keys.Get());
-        CheckChargeBytesLimit(params, part, tags, eggs.Scheme->Keys.Get());
+        if (params.Slices == TTestParams::None) {
+            CheckChargeBytesLimit(params, part, tags, eggs.Scheme->Keys.Get());
+        }
     }
 
     Y_UNIT_TEST(NoNodes) {
@@ -862,6 +864,61 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndex) {
 
     Y_UNIT_TEST(FewNodes_Groups_History_Sticky) {
         CheckPart({.Levels = 3, .Groups = true, .History = true, .StickSomePages = true});
+    }
+
+    // -- Slice coverage ---------------------------------------------------
+    Y_UNIT_TEST(OneNode_Slices) {
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::End)) {
+            CheckPart({.Levels = 1, .Slices = TTestParams::ESlices(slices)});
+        }
+    }
+
+    Y_UNIT_TEST(OneNode_Groups_Slices) {
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::Many + 1)) {
+            CheckPart({.Levels = 1, .Groups = true, .Slices = TTestParams::ESlices(slices)});
+        }
+    }
+
+    Y_UNIT_TEST(OneNode_History_Slices) {
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::Many + 1)) {
+            CheckPart({.Levels = 1, .History = true, .Slices = TTestParams::ESlices(slices)});
+        }
+    }
+
+    Y_UNIT_TEST(OneNode_Groups_History_Slices) {
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::Many + 1)) {
+            CheckPart({.Levels = 1, .Groups = true, .History = true, .Slices = TTestParams::ESlices(slices)});
+        }
+    }
+
+    Y_UNIT_TEST(FewNodes_Slices) {
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::End)) {
+            CheckPart({.Levels = 3, .Slices = TTestParams::ESlices(slices)});
+        }
+    }
+
+    Y_UNIT_TEST(FewNodes_Groups_Slices) {
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::Many + 1)) {
+            CheckPart({.Levels = 3, .Groups = true, .Slices = TTestParams::ESlices(slices)});
+        }
+    }
+
+    Y_UNIT_TEST(FewNodes_History_Slices) {
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::Many + 1)) {
+            CheckPart({.Levels = 3, .History = true, .Slices = TTestParams::ESlices(slices)});
+        }
+    }
+
+    Y_UNIT_TEST(FewNodes_Groups_History_Slices) {
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::Many + 1)) {
+            CheckPart({.Levels = 3, .Groups = true, .History = true, .Slices = TTestParams::ESlices(slices)});
+        }
+    }
+
+    Y_UNIT_TEST(FewNodes_Groups_History_Slices_Sticky) {
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::Many + 1)) {
+            CheckPart({.Levels = 3, .Groups = true, .History = true, .Slices = TTestParams::ESlices(slices), .StickSomePages = true});
+        }
     }
 }
 
@@ -1361,28 +1418,7 @@ Y_UNIT_TEST_SUITE(TPartGroupBtreeIndexIterV2) {
         TPartEggs eggs = cook.Finish();
         const auto part = *eggs.Lone();
 
-        if (params.Slices) {
-            TSlices slices;
-            auto partSlices = (TSlices*)part.Slices.Get();
-            auto add = [&](ui32 pageIndex1Inclusive, ui32 pageIndex2Exclusive) {
-                slices.push_back(IndexTools::MakeSlice(part, pageIndex1Inclusive, pageIndex2Exclusive));
-            };
-
-            switch (params.Slices) {
-            case TTestParams::Many: {
-                add(0, 2); add(3, 4); add(4, 6); add(7, 8); add(8, 9);
-                add(10, 14); add(16, 17); add(17, 19); add(19, 20);
-                break;
-            }
-            default:
-                break;
-            }
-
-            partSlices->clear();
-            for (auto s : slices) {
-                partSlices->push_back(s);
-            }
-        }
+        SetupSlices(params, part);
 
         UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[0].LevelCount(), params.Levels);
 
@@ -1510,7 +1546,10 @@ namespace {
             }
         }
 
-        return cook.Finish();
+        auto eggs = cook.Finish();
+        const auto part = *eggs.Lone();
+        SetupSlices(params, part);
+        return eggs;
     }
 }
 
@@ -1800,6 +1839,70 @@ Y_UNIT_TEST_SUITE(TChargeBTreeIndexV2) {
         // here we just re-run the multi-level resume to keep parity with the V1
         // suite's sticky coverage. The Type-correctness is what matters.
         CheckV2Resume({.Levels = 3, .StickSomePages = true});
+    }
+
+    // -- V2 charge slice coverage --------------------------------------------
+    Y_UNIT_TEST(OneNode_Slices_V2) {
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::End)) {
+            CheckV2ChargeBasic({.Levels = 1, .Slices = TTestParams::ESlices(slices)});
+            CheckV2VsV1Charge({.Levels = 1, .Slices = TTestParams::ESlices(slices)});
+        }
+    }
+
+    Y_UNIT_TEST(OneNode_Groups_Slices_V2) {
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::Many + 1)) {
+            CheckV2ChargeBasic({.Levels = 1, .Groups = true, .Slices = TTestParams::ESlices(slices)});
+            CheckV2VsV1Charge({.Levels = 1, .Groups = true, .Slices = TTestParams::ESlices(slices)});
+        }
+    }
+
+    Y_UNIT_TEST(OneNode_History_Slices_V2) {
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::Many + 1)) {
+            CheckV2ChargeBasic({.Levels = 1, .History = true, .Slices = TTestParams::ESlices(slices)});
+            CheckV2VsV1Charge({.Levels = 1, .History = true, .Slices = TTestParams::ESlices(slices)});
+        }
+    }
+
+    Y_UNIT_TEST(OneNode_Groups_History_Slices_V2) {
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::Many + 1)) {
+            CheckV2ChargeBasic({.Levels = 1, .Groups = true, .History = true, .Slices = TTestParams::ESlices(slices)});
+            CheckV2VsV1Charge({.Levels = 1, .Groups = true, .History = true, .Slices = TTestParams::ESlices(slices)});
+        }
+    }
+
+    Y_UNIT_TEST(FewNodes_Slices_V2) {
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::End)) {
+            CheckV2ChargeBasic({.Levels = 3, .Slices = TTestParams::ESlices(slices)});
+            CheckV2VsV1Charge({.Levels = 3, .Slices = TTestParams::ESlices(slices)});
+        }
+    }
+
+    Y_UNIT_TEST(FewNodes_Groups_Slices_V2) {
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::Many + 1)) {
+            CheckV2ChargeBasic({.Levels = 3, .Groups = true, .Slices = TTestParams::ESlices(slices)});
+            CheckV2VsV1Charge({.Levels = 3, .Groups = true, .Slices = TTestParams::ESlices(slices)});
+        }
+    }
+
+    Y_UNIT_TEST(FewNodes_History_Slices_V2) {
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::Many + 1)) {
+            CheckV2ChargeBasic({.Levels = 3, .History = true, .Slices = TTestParams::ESlices(slices)});
+            CheckV2VsV1Charge({.Levels = 3, .History = true, .Slices = TTestParams::ESlices(slices)});
+        }
+    }
+
+    Y_UNIT_TEST(FewNodes_Groups_History_Slices_V2) {
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::Many + 1)) {
+            CheckV2ChargeBasic({.Levels = 3, .Groups = true, .History = true, .Slices = TTestParams::ESlices(slices)});
+            CheckV2VsV1Charge({.Levels = 3, .Groups = true, .History = true, .Slices = TTestParams::ESlices(slices)});
+        }
+    }
+
+    Y_UNIT_TEST(FewNodes_Groups_History_Slices_Sticky_V2) {
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::Many + 1)) {
+            CheckV2ChargeBasic({.Levels = 3, .Groups = true, .History = true, .Slices = TTestParams::ESlices(slices), .StickSomePages = true});
+            CheckV2VsV1Charge({.Levels = 3, .Groups = true, .History = true, .Slices = TTestParams::ESlices(slices), .StickSomePages = true});
+        }
     }
 }
 

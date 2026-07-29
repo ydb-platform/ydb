@@ -122,7 +122,7 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
 
         TCookieAllocator cookieAllocator(10, (ui64(20) << 32) | 30, { 0,  999 }, {{ 1, 777 }});
 
-        TWriter writer(cookieAllocator, 1 /* channel */, 8192 * 1024);
+        TWriter writer(cookieAllocator, 1 /* channel */, 8192 * 1024, false /* v2OnlyMode */);
 
         const auto r1 = writer.AddPage(chunk1, 1);
         writer.AddInplace(r1, TStringBuf("chunk 1"));

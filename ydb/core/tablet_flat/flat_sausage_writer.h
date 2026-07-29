@@ -10,12 +10,12 @@ namespace NPageCollection {
 
     class TWriter {
     public:
-        TWriter(TCookieAllocator &cookieAllocator, ui8 channel, ui32 maxBlobSize, bool v2Mode = false)
+        TWriter(TCookieAllocator &cookieAllocator, ui8 channel, ui32 maxBlobSize, bool v2OnlyMode)
             : MaxBlobSize(maxBlobSize)
             , Channel(channel)
             , CookieAllocator(cookieAllocator)
             , Record(cookieAllocator.GroupBy(channel))
-            , V2OnlyMode(v2Mode)
+            , V2OnlyMode(v2OnlyMode)
         {
 
         }

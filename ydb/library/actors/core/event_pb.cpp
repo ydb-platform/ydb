@@ -58,49 +58,20 @@ namespace NActors {
         return true;
     }
 
-    bool TCoroutineChunkSerializer::Produce(const void* data, size_t size) {
+    void TCoroutineChunkSerializer::Produce(const void* data, size_t size) {
         Y_ABORT_UNLESS(size <= TotalSizeRemain);
         TotalSizeRemain -= size;
         TotalSerializedDataSize += size;
 
-        if (PendingChunk) {
-            auto& last = *PendingChunk;
-            if (last.Buf + last.Size == data) {
-                last.Size += size; // just extend the last buffer
-                return true;
+        if (!Chunks.empty()) {
+            auto& last = Chunks.back();
+            if (last.first + last.second == data) {
+                last.second += size; // just extend the last buffer
+                return;
             }
         }
 
-        if (!FlushPendingChunk()) {
-            return false;
-        }
-
-        PendingChunk.emplace(TChunk{
-            .Buf = static_cast<const char*>(data),
-            .Size = size,
-        });
-        return true;
-    }
-
-    bool TCoroutineChunkSerializer::FlushPendingChunk() {
-        if (!PendingChunk) {
-            return true;
-        }
-
-        Y_ABORT_UNLESS(Consumer);
-        const TChunk chunk = *PendingChunk;
-        PendingChunk.reset();
-        try {
-            if (!Consumer->AddChunk(chunk)) {
-                ConsumerFailed = true;
-                return false;
-            }
-        } catch (...) {
-            ConsumerException = std::current_exception();
-            ConsumerFailed = true;
-            return false;
-        }
-        return true;
+        Chunks.emplace_back(static_cast<const char*>(data), size);
     }
 
     bool TCoroutineChunkSerializer::WriteAliasedRaw(const void* data, int size) {
@@ -109,31 +80,25 @@ namespace NActors {
         Y_ABORT_UNLESS(size >= 0);
         NSan::CheckMemIsInitialized(data, size);
         while (size) {
-            if (const size_t bytesToAppend = Min<size_t>(size, TotalSizeRemain)) {
+            const bool copyAliased = AliasedMode == EAliasedMode::CopyToBuffer;
+            const size_t bytesToAppend = copyAliased
+                ? Min<size_t>(size, TotalSizeRemain, Buffer.size())
+                : Min<size_t>(size, TotalSizeRemain);
+            if (bytesToAppend) {
                 const void *produce = data;
-                Y_ABORT_UNLESS(Consumer);
-                const bool copyAliased =
-                    Consumer->GetAliasedMode() == IChunkConsumer::EAliasedMode::CopyToBuffer;
-                const bool canGlue = PendingChunk &&
-                    PendingChunk->Buf + PendingChunk->Size == data;
                 if (copyAliased ||
                         ((reinterpret_cast<uintptr_t>(data) & 63) + bytesToAppend <= 64 &&
-                            !canGlue &&
+                            (Chunks.empty() || data != Chunks.back().first + Chunks.back().second) &&
                             Buffer.size() >= bytesToAppend)) {
                     Y_ABORT_UNLESS(Buffer.size() >= bytesToAppend);
                     memcpy(Buffer.data(), data, bytesToAppend);
                     produce = Buffer.data();
                     Buffer = Buffer.SubSpan(bytesToAppend, Max<size_t>());
                 }
-                if (!Produce(produce, bytesToAppend)) {
-                    return false;
-                }
+                Produce(produce, bytesToAppend);
                 data = static_cast<const char*>(data) + bytesToAppend;
                 size -= bytesToAppend;
             } else {
-                if (!FlushPendingChunk()) {
-                    return false;
-                }
                 InnerContext.SwitchTo(BufFeedContext);
                 if (CancelFlag || AbortFlag) {
                     return false;
@@ -151,9 +116,6 @@ namespace NActors {
         size_t maxBytes = Min(Buffer.size(), TotalSizeRemain);
 
         if (!maxBytes) {
-            if (!FlushPendingChunk()) {
-                return false;
-            }
             InnerContext.SwitchTo(BufFeedContext);
             if (CancelFlag || AbortFlag) {
                 return false;
@@ -167,7 +129,8 @@ namespace NActors {
         *data = Buffer.data();
         *size = maxBytes;
         Buffer = Buffer.SubSpan(maxBytes, Max<size_t>());
-        return Produce(*data, *size);
+        Produce(*data, *size);
+        return true;
     }
 
     void TCoroutineChunkSerializer::BackUp(int count) {
@@ -175,15 +138,14 @@ namespace NActors {
             return;
         }
         Y_ABORT_UNLESS(count > 0);
-        Y_ABORT_UNLESS(PendingChunk);
-        TChunk& buf = *PendingChunk;
-        Y_ABORT_UNLESS((size_t)count <= buf.Size, "count# %d buf.Size# %zu", count, buf.Size);
-        Y_ABORT_UNLESS(buf.Buf + buf.Size == Buffer.data(),
-            "buf# %p:%zu Buffer.data# %p Buffer.size# %zu",
-            buf.Buf, buf.Size, Buffer.data(), Buffer.size());
-        buf.Size -= count;
-        if (!buf.Size) {
-            PendingChunk.reset();
+        Y_ABORT_UNLESS(!Chunks.empty());
+        TChunk& buf = Chunks.back();
+        Y_ABORT_UNLESS((size_t)count <= buf.second, "count# %d buf.second# %zu", count, buf.second);
+        Y_ABORT_UNLESS(buf.first + buf.second == Buffer.data(), "buf# %p:%zu Buffer.data# %p Buffer.size# %zu"
+            " NumChunks# %zu", buf.first, buf.second, Buffer.data(), Buffer.size(), Chunks.size());
+        buf.second -= count;
+        if (!buf.second) {
+            Chunks.pop_back();
         }
         Buffer = {Buffer.data() - count, Buffer.size() + count};
         TotalSizeRemain += count;
@@ -210,13 +172,14 @@ namespace NActors {
         return WriteAliasedRaw(s->data(), s->length());
     }
 
-    bool TCoroutineChunkSerializer::FeedBuf(void* data, size_t size, IChunkConsumer& consumer) {
+    std::span<TCoroutineChunkSerializer::TChunk> TCoroutineChunkSerializer::FeedBuf(void* data, size_t size,
+            EAliasedMode aliasedMode) {
         TMutableContiguousSpan buffer(static_cast<char*>(data), size);
-        return FeedBuf(&buffer, size, consumer);
+        return FeedBuf(&buffer, size, aliasedMode);
     }
 
-    bool TCoroutineChunkSerializer::FeedBuf(TMutableContiguousSpan *buffer, size_t totalSize,
-            IChunkConsumer& consumer) {
+    std::span<TCoroutineChunkSerializer::TChunk> TCoroutineChunkSerializer::FeedBuf(TMutableContiguousSpan *buffer,
+            size_t totalSize, EAliasedMode aliasedMode) {
         // fill in base params
         Buffer = *buffer;
         TotalSizeRemain = totalSize;
@@ -224,22 +187,14 @@ namespace NActors {
 
         // transfer control to the coroutine
         Y_ABORT_UNLESS(Event);
-        Y_ABORT_UNLESS(!PendingChunk);
-        Y_ABORT_UNLESS(!Consumer);
-        Consumer = &consumer;
-        ConsumerException = nullptr;
-        ConsumerFailed = false;
+        Chunks.clear();
+        AliasedMode = aliasedMode;
         Resume();
-        Consumer = nullptr;
 
         Y_DEBUG_ABORT_UNLESS(Buffer.data() >= buffer->data() &&
             Buffer.data() + Buffer.size() <= buffer->data() + buffer->size());
-        Y_DEBUG_ABORT_UNLESS(!PendingChunk);
         *buffer = Buffer;
-        if (ConsumerException) {
-            std::rethrow_exception(ConsumerException);
-        }
-        return !ConsumerFailed;
+        return Chunks;
     }
 
     void TCoroutineChunkSerializer::SetSerializingEvent(const IEventBase *event, bool withCachedSizes) {
@@ -260,7 +215,6 @@ namespace NActors {
         while (!CancelFlag) {
             Y_ABORT_UNLESS(Event);
             SerializationSuccess = !AbortFlag && Event->SerializeToArcadiaStream(this);
-            SerializationSuccess = FlushPendingChunk() && SerializationSuccess;
             CodedOutputStream.reset();
             Event = nullptr;
             if (!CancelFlag) { // cancel flag may have been received during serialization

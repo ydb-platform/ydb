@@ -59,12 +59,10 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
         chunker.SetSerializingEvent(&msg, true);
         while (!chunker.IsComplete()) {
             char buffer[4096];
-            auto consumeChunk = [&](const TCoroutineChunkSerializer::TChunk& chunk) {
-                chunkerRes += TString(chunk.Buf, chunk.Size);
-                return true;
-            };
-            TCoroutineChunkSerializer::TGenericChunkConsumer consumer(consumeChunk);
-            UNIT_ASSERT(chunker.FeedBuf(buffer, sizeof(buffer), consumer));
+            auto range = chunker.FeedBuf(buffer, sizeof(buffer));
+            for (auto [data, size] : range) {
+                chunkerRes += TString(data, size);
+            }
         }
         UNIT_ASSERT_VALUES_EQUAL(chunkerRes, ser);
 
@@ -101,12 +99,9 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
             chunker.SetSerializingEvent(&msg, true);
             while (!chunker.IsComplete()) {
                 TString buffer(chunkSize, '\0');
-                auto consumeChunk = [&](const TCoroutineChunkSerializer::TChunk& chunk) {
-                    actual.append(chunk.Buf, chunk.Size);
-                    return true;
-                };
-                TCoroutineChunkSerializer::TGenericChunkConsumer consumer(consumeChunk);
-                UNIT_ASSERT(chunker.FeedBuf(buffer.begin(), buffer.size(), consumer));
+                for (const auto& [data, size] : chunker.FeedBuf(buffer.begin(), buffer.size())) {
+                    actual.append(data, size);
+                }
             }
             UNIT_ASSERT(chunker.IsSuccessfull());
             UNIT_ASSERT_VALUES_EQUAL_C(actual, expected, "chunkSize# " << chunkSize);

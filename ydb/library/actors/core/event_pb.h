@@ -15,8 +15,7 @@
 #include <util/string/hex.h>
 #include <util/thread/lfstack.h>
 #include <array>
-#include <exception>
-#include <optional>
+#include <span>
 
 namespace NActorsProto {
     class TActorId;
@@ -85,42 +84,11 @@ namespace NActors {
 
     class TCoroutineChunkSerializer final : public TChunkSerializer, protected ITrampoLine {
     public:
-        struct TChunk {
-            const char* Buf;
-            size_t Size;
-        };
+        using TChunk = std::pair<const char*, size_t>;
 
-        class IChunkConsumer {
-        public:
-            enum class EAliasedMode {
-                PassThrough,
-                CopyToBuffer,
-            };
-
-            virtual EAliasedMode GetAliasedMode() const noexcept = 0;
-            virtual bool AddChunk(const TChunk& chunk) = 0;
-
-        protected:
-            ~IChunkConsumer() = default;
-        };
-
-        template <typename TAddChunk>
-        class TGenericChunkConsumer final : public IChunkConsumer {
-        public:
-            explicit TGenericChunkConsumer(TAddChunk addChunk)
-                : AddChunkCallback(std::move(addChunk))
-            {}
-
-            EAliasedMode GetAliasedMode() const noexcept override {
-                return EAliasedMode::PassThrough;
-            }
-
-            bool AddChunk(const TChunk& chunk) override {
-                return AddChunkCallback(chunk);
-            }
-
-        private:
-            TAddChunk AddChunkCallback;
+        enum class EAliasedMode {
+            PassThrough,
+            CopyToBuffer,
         };
 
         TCoroutineChunkSerializer();
@@ -129,8 +97,10 @@ namespace NActors {
         void SetSerializingEvent(const IEventBase *event, bool withCachedSizes);
         void DiscardEvent() { Event = nullptr; };
         void Abort();
-        bool FeedBuf(void* data, size_t size, IChunkConsumer& consumer);
-        bool FeedBuf(TMutableContiguousSpan *buffer, size_t totalSize, IChunkConsumer& consumer);
+        std::span<TChunk> FeedBuf(void* data, size_t size,
+            EAliasedMode aliasedMode = EAliasedMode::PassThrough);
+        std::span<TChunk> FeedBuf(TMutableContiguousSpan *buffer, size_t totalSize,
+            EAliasedMode aliasedMode = EAliasedMode::PassThrough);
         bool IsComplete() const {
             return !Event;
         }
@@ -165,8 +135,7 @@ namespace NActors {
     protected:
         void DoRun() override;
         void Resume();
-        bool Produce(const void* data, size_t size);
-        bool FlushPendingChunk();
+        void Produce(const void* data, size_t size);
 
         i64 TotalSerializedDataSize;
         TMappedAllocation Stack;
@@ -175,10 +144,8 @@ namespace NActors {
         TContMachineContext *BufFeedContext = nullptr;
         TMutableContiguousSpan Buffer;
         size_t TotalSizeRemain;
-        std::optional<TChunk> PendingChunk;
-        IChunkConsumer* Consumer = nullptr;
-        std::exception_ptr ConsumerException;
-        bool ConsumerFailed = false;
+        std::vector<TChunk> Chunks;
+        EAliasedMode AliasedMode = EAliasedMode::PassThrough;
         const IEventBase *Event = nullptr;
         bool CancelFlag = false;
         bool AbortFlag;

@@ -96,7 +96,7 @@ class TestStreamingInYdb(StreamingTestBase):
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")
 
     def test_read_topic_shared_reading_insert_to_topic(self, kikimr, entity_name):
-        source_name = entity_name("source3_")
+        source_name = entity_name("source3_")  # 123
         self.init_topics(source_name, partitions_count=10)
         self.create_source(kikimr, source_name, True)
 

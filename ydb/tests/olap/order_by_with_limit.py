@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 class TestOrderBy(object):
     test_name = "order_by"
-    n = 200
+    n = 200  # 123
 
     @classmethod
     def setup_class(cls):

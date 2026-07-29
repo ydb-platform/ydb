@@ -238,6 +238,7 @@ class TestClientTimeouts(object):
                 logger.info("Received error on request %s", e.status.name)
 
 
+
 class TestManySelectsInRow(object):
     """
     Test for bug KIKIMR-3109

@@ -54,7 +54,7 @@ class TestCompressionBase(ColumnFamilyTestBase):
 
 
 class TestAlterCompression(TestCompressionBase):
-    class_name = "alter_compression"
+    class_name = "alter_compression"  # 123
 
     def test_availability_data(self):
         ''' Implements https://github.com/ydb-platform/ydb/issues/13643 '''

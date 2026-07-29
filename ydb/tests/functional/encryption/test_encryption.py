@@ -83,6 +83,7 @@ class TestEncryption(object):
         cls.cluster.start()
         cls.discovery_endpoint = "%s:%s" % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].grpc_port)
 
+
     def test_simple_encryption(self):
         databases = []
         drivers = []

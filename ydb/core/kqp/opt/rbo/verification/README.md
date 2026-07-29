@@ -169,16 +169,15 @@ TPCH q1, q2, q3, q4, q5, q6, q7, q8, q9, q10, q11, q12, q14,
 q15, q18, q19, q21, and q22 plus TPC-DS q2, q3, q5, q6, q7, q10, q13, q15,
 q16, q18, q19, q21, q22, q25, q26, q29, q33, q34,
 q35, q37, q38, q40, q42, q43, q45, q46, q48, q50, q52, q54, q55, q56, q58, q59,
-q60, q61, q62, q65, q66, q68, q69, q71, q73, q75, q76, q77, q78, q79, q80,
-q82, q83, q85, q87, q88, q90, q91, q93, q94, q95, q96, q97, and q99: 80/121
-workload queries (66.1%).
-TPC-DS q72 is separately pinned at successful preparation and verifier entry;
-it is not in the formula or proof floor.
-The q72 verifier-entry checkpoint leaves TPCH at eighteen
-formulas, two unsupported semantic outcomes, and two no-pair optimizer
-failures; TPC-DS has sixty-two formulas, nineteen unsupported semantic
-outcomes, and eighteen no-pair optimizer failures. Across both suites the
-semantic partition is 80 formulas, 21 `UNSUPPORTED`, and 20
+q60, q61, q62, q65, q66, q68, q69, q71, q72, q73, q75, q76, q77, q78, q79,
+q80, q82, q83, q85, q87, q88, q90, q91, q93, q94, q95, q96, q97, and q99:
+81/121 workload queries (66.9%).
+TPC-DS q72 is pinned at successful preparation plus formula construction; it
+is not in the proof floor. The current complete dashboards leave TPCH at
+eighteen formulas, two unsupported semantic outcomes, and two no-pair
+optimizer failures; TPC-DS has sixty-three formulas, eighteen unsupported
+semantic outcomes, and eighteen no-pair optimizer failures. Across both suites
+the semantic partition is 81 formulas, 20 `UNSUPPORTED`, and 20
 `OPTIMIZER_FAILURE`.
 Preparation is a separate partition: twenty TPCH and seventy-three TPC-DS
 queries succeed, while two TPCH and twenty-six TPC-DS queries fail. Eight
@@ -191,17 +190,17 @@ export rejection to formula construction; exact integral extrema then move
 q35 from verifier rejection to formula construction. Certified derived
 integral-AVG ordering then moves TPC-DS q22 and q85 through both exporters and
 formula construction. Exact dynamic Date-shift normalization subsequently
-moves q72 through both exporters and into the verifier, but not through
-formula construction. The resulting measured formula coverage is 80/121
-(66.1%) over the corpus, 80/101 (79.2%) over exact Initial/Final
-boundary-result pairs, 80/93 (86.0%) within the preparation-successful subset,
-and 80/87 (92.0%) among verifier entrants. The
+followed by direct unique-right join compaction moves q72 through formula
+construction. The resulting measured formula coverage is 81/121 (66.9%) over
+the corpus, 81/101 (80.2%) over exact Initial/Final boundary-result pairs,
+81/93 (87.1%) within the preparation-successful subset, and 81/87 (93.1%)
+among verifier entrants. The
 preparation-success ratio uses
 the intersection of formula rows with preparation-success rows; version five
 permits a formula to coexist with failed later preparation. Twenty TPCH and
 eighty-one TPC-DS queries have exact boundary-result pairs. Eighteen TPCH and
-sixty-nine TPC-DS pairs enter the verifier. The 21 unsupported outcomes
-consequently split into 14 initial-export, zero final-export, and seven verifier
+sixty-nine TPC-DS pairs enter the verifier. The 20 unsupported outcomes
+consequently split into 14 initial-export, zero final-export, and six verifier
 results.
 
 Milestone 64 accepts only a direct visible `Optional<Date>` member under exact
@@ -223,6 +222,46 @@ exact unique-key-aware compaction for a join whose right side contributes at
 most one row, not a larger global cap. Implementation commit `97f103ce060`
 and policy commit `aa01e609499` record the slice. It found no optimizer bug or
 counterexample, and the proof floor remains twenty-seven.
+
+Milestone 65 adds one deliberately narrow exact compaction for `inner` and
+`left` joins. The right child must be a direct, unfiltered, unlimited `Scan`;
+the residual predicate must be literal non-null `TRUE`; and same-typed
+right-side equality columns must cover a declared non-null unique key. Runtime
+rows must retain the exact scan schema, source payloads, distinct base-table
+occurrences, and a presence guard that syntactically implies the corresponding
+base-row presence. Every near miss uses the existing general join path.
+
+For an admitted join, uniqueness makes at most one right row match each left
+row, so the evaluator emits exactly one guarded candidate per left row and
+selects the right payload with nested conditionals. Selection is independent
+of task-local left presence so broadcast copies remain identical and
+StageGraph gather can coalesce them; inner-join presence still includes the
+left guard. The ordinary `left_rows * right_rows` matching audit remains capped
+at 16,384 pairs before compaction, and the compact output remains capped at
+4,096 rows. Thus the slice removes neither global audit bound and introduces
+no approximation.
+
+Focused q72 formula-only evidence is `FORMULA_EMITTED` after 376/1,359 ms of
+preparation/verifier work, with report SHA-256
+`3e6875016128af45b91b41a2fdc427fcfc7a3ef9817fa51441dd28c3636bdc8f`.
+The separate 60-second solver run is `UNKNOWN` after 366/61,896 ms because the
+global deadline expires before branch 4/4 (`right_outcome_0_unmatched`); its
+report SHA-256 is
+`5bdd19a912dbdbfb5c02d865547a692690f93f8c9cd2bac83db180dd18aeea1e`.
+This is not a counterexample.
+
+The complete Milestone 65 TPCH dashboard has 18 formulas / 2 unsupported / 2
+no-pair outcomes, with twenty successful and two failed preparations. It
+spends 2,938/90,617 ms in preparation/verifier work and has report SHA-256
+`67aff9f9ce4404ca52b720d5155a05a6fc7943061ab20d6ad3cc8773d2e4017e`.
+TPC-DS has 63 formulas / 18 unsupported / 18 no-pair outcomes, seventy-three
+successful and twenty-six failed preparations, and sixty-nine verifier
+entrants. It spends 64,770/786,154 ms and has report SHA-256
+`5ca1acabd6e83cf99476cdce6547be427368c74edf0d2ea8b829cc8826d9dd62`.
+Implementation commits `0b0025f2a11` and `a55f3ecba73` record the semantics
+and naming polish; policy commit `aa004084427` pins q72 at formula
+construction. The slice found no optimizer bug or counterexample, and the
+proof floor remains twenty-seven.
 
 A focused version-five run selected TPC-DS q12, q20, q49, q51, q53, q63, q89,
 and q98. Every query produced an exact Initial/Final boundary-result pair and
@@ -1771,9 +1810,9 @@ pushdowns remain separate extensions. Cardinality-certified integral `AVG`
 Slice A is complete for q7/q13/q26, and exact fixed-width integral extrema are
 complete for q35. Narrowly tagged derived-`Double` ordering is complete for
 q22/q85. Exact dynamic `Optional<Date>` plus/minus literal
-`IntervalFromDays` normalization is complete for q72 through verifier entry.
-The next slice targets exact unique-key-aware at-most-one right-side join
-compaction for q72.
+`IntervalFromDays` normalization and exact direct unique-right `inner`/`left`
+join compaction are complete for q72 through formula construction. Milestone
+66 is the next slice: exact ordered `Limit(1)` compaction for TPC-DS q9.
 The auditability consolidation is complete in commits `7a3639d1c16`,
 `ebcfdbb1263`, and `4b7f27d492e`. The checked-in proof policy added TPC-DS q95
 after the earlier TPCH q18 addition, then q38 and q87 through the exact

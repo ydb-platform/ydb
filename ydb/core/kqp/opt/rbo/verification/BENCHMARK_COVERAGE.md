@@ -135,9 +135,9 @@ preparation for the currently gated operational cases; this prevents version
 five's independent semantic classification from hiding a preparation
 regression. The verifier-entry floor requires TPCH q1 and TPC-DS q5, q9, q59,
 q65, q72, q78, and q80 to keep passing both snapshot exporters and invoke the
-verifier. Every entry-floor query except q9 and q72 also satisfies the stronger
-formula floor. q9 and q72 are entry-only; q59 and q78 retain explicit entry
-requirements in addition to their formula requirements.
+verifier. Every entry-floor query except q9 also satisfies the stronger formula
+floor. q9 is entry-only; q59, q72, and q78 retain explicit entry requirements
+in addition to their formula requirements.
 Any later formula or proof still satisfies every weaker semantic floor. A newly admitted
 failed-preparation pair can enter a semantic floor without automatically
 entering the preparation floor. The
@@ -146,7 +146,7 @@ q11, q12, q14, q15, q18, q19, q21, and q22 plus TPC-DS q2, q3, q5, q6, q7,
 q10, q13, q15, q16, q18, q19, q21, q22, q25, q26, q29, q33, q34,
 q35, q37, q38, q40, q42, q43, q45, q46, q48, q50, q52, q54, q55, q56,
 q58, q59, q60, q61,
-q62, q65, q66, q68, q69, q71, q73, q75, q76, q77, q78, q79, q80, q82, q83, q85, q87,
+q62, q65, q66, q68, q69, q71, q72, q73, q75, q76, q77, q78, q79, q80, q82, q83, q85, q87,
 q88, q90, q91, q93, q94, q95, q96, q97, and q99.
 The integral-AVG Slice A policy also pins TPC-DS q7, q13, and q26 in
 `required_prepare_success_queries`; each must therefore preserve both
@@ -154,7 +154,8 @@ successful preparation and formula construction. The integral-extrema policy
 does the same for q35. The derived integral-AVG ordering policy pins TPC-DS
 q22 and q85 at both preparation and formula construction.
 The dynamic Date-shift policy pins q72 at successful preparation and verifier
-entry only.
+entry. The exact unique-RHS compaction policy additionally pins q72 at formula
+construction.
 The preparation-success, verifier-entry, and formula floors are enforced only
 for a complete formula-only suite. The proof floor requires TPCH q3, q4, q6,
 q11, q12, q14, q15, q18, q19, q21, and q22 plus TPC-DS q3, q16, q34, q38, q42,
@@ -249,15 +250,22 @@ policy-pinned and production-host captured. Implementation commit
 Milestone 64 then moves TPC-DS q72 through both snapshot exporters and into the
 verifier. Implementation commit `97f103ce060` and policy commit `aa01e609499`
 record the exact dynamic Date-shift normalization and its preparation-plus-entry
-floor. q72 does not construct a formula or join the proof floor.
+floor. At that checkpoint q72 did not construct a formula or join the proof
+floor.
+
+Milestone 65 adds exact unique-key-aware at-most-one direct-RHS join
+compaction. Implementation commit `0b0025f2a11`, audit-name clarification
+commit `a55f3ecba73`, and policy commit `aa004084427` move q72 through formula
+construction without raising either global construction bound. It does not
+join the proof floor.
 
 The current proof-floor gate confirms all twenty-seven checked-in obligations
 as `VERIFIED_BOUNDED`: 11/11 TPCH and 16/16 TPC-DS at two rows per table and
 two tasks. Focused solver runs separately retain per-query evidence for q34,
 q73, and the preceding three proof-floor additions, TPCH q21 and TPC-DS
 q16/q94. The verifier-entry floor is TPCH q1 and TPC-DS q5, q9, q59, q65,
-q72, q78, and q80. Every one except q9 and q72 also belongs to the formula
-floor; q9 and q72 are pinned at their deeper verifier construction bounds.
+q72, q78, and q80. Every one except q9 also belongs to the formula floor; q9
+is pinned at its deeper verifier construction bound.
 `FORMULA_EMITTED` alone is not a solver proof.
 
 Exact `DistinctAll` adds TPC-DS q6. The preceding correlated-COUNT correctness
@@ -273,7 +281,7 @@ The complete semantic-outcome partition is:
 | Suite | Formula emitted | Unsupported | No-pair `OPTIMIZER_FAILURE` | Total |
 |---|---:|---:|---:|---:|
 | TPCH_YQL | 18 (q1, q2, q3, q4, q5, q6, q7, q8, q9, q10, q11, q12, q14, q15, q18, q19, q21, q22) | 2 | 2 | 22 |
-| TPCDS_YQL | 62 (q2, q3, q5, q6, q7, q10, q13, q15, q16, q18, q19, q21, q22, q25, q26, q29, q33, q34, q35, q37, q38, q40, q42, q43, q45, q46, q48, q50, q52, q54, q55, q56, q58, q59, q60, q61, q62, q65, q66, q68, q69, q71, q73, q75, q76, q77, q78, q79, q80, q82, q83, q85, q87, q88, q90, q91, q93, q94, q95, q96, q97, q99) | 19 | 18 | 99 |
+| TPCDS_YQL | 63 (q2, q3, q5, q6, q7, q10, q13, q15, q16, q18, q19, q21, q22, q25, q26, q29, q33, q34, q35, q37, q38, q40, q42, q43, q45, q46, q48, q50, q52, q54, q55, q56, q58, q59, q60, q61, q62, q65, q66, q68, q69, q71, q72, q73, q75, q76, q77, q78, q79, q80, q82, q83, q85, q87, q88, q90, q91, q93, q94, q95, q96, q97, q99) | 18 | 18 | 99 |
 
 Preparation is an independent partition:
 
@@ -285,6 +293,20 @@ Preparation is an independent partition:
 Eighteen TPCH and sixty-nine TPC-DS queries pass both exporters and enter the
 verifier. TPCH has twenty exact Initial/Final boundary-result pairs; TPC-DS has
 eighty-one.
+
+The milestone-65 complete TPCH dashboard spent 2,938/90,617 ms in
+preparation/verifier work and produced report SHA-256
+`67aff9f9ce4404ca52b720d5155a05a6fc7943061ab20d6ad3cc8773d2e4017e`.
+Its TPC-DS counterpart spent 64,770/786,154 ms and produced
+`5ca1acabd6e83cf99476cdce6547be427368c74edf0d2ea8b829cc8826d9dd62`.
+Focused q72 formula construction spent 376/1,359 ms and produced report
+SHA-256
+`3e6875016128af45b91b41a2fdc427fcfc7a3ef9817fa51441dd28c3636bdc8f`.
+A separate 60-second solver run is `UNKNOWN` after 366/61,896 ms: the global
+deadline expires before branch 4/4 (`right_outcome_0_unmatched`). Its report
+SHA-256 is
+`5bdd19a912dbdbfb5c02d865547a692690f93f8c9cd2bac83db180dd18aeea1e`.
+This adds formula coverage, not a proof, counterexample, or optimizer finding.
 
 The preceding q66 complete TPCH dashboard spent 2,880/31,400 ms in
 preparation/verifier work and produced report SHA-256
@@ -361,11 +383,13 @@ and has report SHA-256
 `8a231a04398f6ca176286bd9d4d658e7d836c36c34ddcc4d43dfde54cc413a4b`.
 Its TPC-DS counterpart spends 68,923/846,363 ms and has report SHA-256
 `64fbda391ca5b50698aceaa2a38ba2210617fd0c1c0071bcb7c5c7967b260ecd`.
-The post-q72 complete TPC-DS dashboard confirms the same semantic partition,
+The milestone-64 post-q72 complete TPC-DS dashboard confirms that historical
+semantic partition,
 spends 67,551/841,054 ms, and has report SHA-256
 `8fa6661f88bbbc3f45b8bbee7fec73c4262608f5b2755736e5b1425bce15ec15`;
 q72 spends 371/535 ms before its 4,608-row guard.
-Combined coverage is 80/121 (66.1%) of the corpus, 80/101 (79.2%) of exact
+At that checkpoint combined coverage was 80/121 (66.1%) of the corpus,
+80/101 (79.2%) of exact
 pairs, 80/93 (86.0%) of the preparation-successful subset, and, after q72,
 80/87 (92.0%)
 of verifier entrants. The semantic partition is 80 formulas, 21 unsupported
@@ -640,20 +664,29 @@ Integral-AVG Slice A moves three exact, preparation-successful TPC-DS pairs
 from unsupported to formula construction; exact integral extrema then move
 q35; derived integral-AVG ordering then moves q22/q85. Exact dynamic
 Date-shift normalization moves q72 from initial-export rejection to verifier
-entry. The complete dashboard therefore retains 80/121 (66.1%) formula
+entry. The milestone-64 complete dashboard therefore retained 80/121 (66.1%) formula
 coverage, 80/101 (79.2%) of exact pairs, and 80/93 (86.0%) of the
-preparation-successful subset; the entrant ratio becomes 80/87 (92.0%).
-TPC-DS moves from 56 to 62 formulas and from 25 to 19
+preparation-successful subset; the entrant ratio became 80/87 (92.0%).
+TPC-DS moved from 56 to 62 formulas and from 25 to 19
 unsupported outcomes; its 18 optimizer failures and
-73/26 preparation partition are unchanged. Across both suites the semantic
-partition is 80 formulas, 21 unsupported outcomes, and 20 no-pair optimizer
-failures. This is a useful end-to-end pre-physical optimizer sample, not a
-claim about larger inputs. Formula construction is not a bounded proof.
+73/26 preparation partition were unchanged. Across both suites the semantic
+partition was 80 formulas, 21 unsupported outcomes, and 20 no-pair optimizer
+failures.
 
-The 21 semantic unsupported rows split by primary reason into 14
-initial-export, zero final-export, and seven verifier results. The strict C++
-boundary therefore accounts for 14 primary outcomes; the seven remaining exact
-pairs fail closed in the verifier itself.
+Milestone 65 moves q72 from verifier-entry-only to formula construction.
+Current coverage is 81/121 (66.9%) of the corpus, 81/101 (80.2%) of exact
+pairs, 81/93 (87.1%) of the preparation-successful subset, and 81/87 (93.1%)
+of verifier entrants. TPC-DS now has 63 formulas, 18 unsupported outcomes, 18
+no-pair optimizer failures, a 73/26 preparation partition, and 69 verifier
+entrants. Across both suites the semantic partition is 81 formulas, 20
+unsupported outcomes, and 20 no-pair optimizer failures. This is a useful
+end-to-end pre-physical optimizer sample, not a claim about larger inputs.
+Formula construction is not a bounded proof.
+
+The 20 semantic unsupported rows split by primary reason into 14
+initial-export, zero final-export, and six verifier results. The strict C++
+boundary therefore accounts for 14 primary outcomes; q4, q9, q11, q31, q64,
+and q74 are the six TPC-DS exact pairs that fail closed in the verifier itself.
 
 The q72 grammar accepts only exact binary `+` or `-` from one direct visible
 `Optional<Date>` member to `Optional<Date>`. The other operand must be either
@@ -667,13 +700,42 @@ operator and day count. This shared deterministic over-approximation covers
 the full present-input result, including possible overflow, without equating
 different operations.
 
-At the normal bounds q72 rejects a 4,608-row join output above the 4,096-row
-relation cap. A disposable 8,192-row experiment, fully reverted after
-measurement, passes that guard and rejects a 10,619,136-pair grouped aggregate
+At milestone 64's normal bounds q72 rejected a 4,608-row join output above the
+4,096-row relation cap. A disposable 8,192-row experiment, fully reverted after
+measurement, passed that guard and rejected a 10,619,136-pair grouped aggregate
 above the 16,384-pair construction cap after 12.151 seconds. This is evidence
 for exact unique-key-aware at-most-one right-side join compaction, not for
-raising a global audit limit. The slice found no optimizer bug or
-counterexample and leaves the proof floor at twenty-seven.
+raising a global audit limit.
+
+The milestone-65 compaction applies only to `inner` and `left` joins whose
+right plan child is a direct Scan with no predicate or pushed limit and whose
+residual is exact non-null Boolean true. A declared non-null catalog unique key
+must be wholly covered by same-type, side-explicit equality keys. At runtime,
+the right relation must have the exact scan schema, and every syntactically
+live row must have the exact mapped payload, a distinct direct catalog-row
+occurrence, and a presence guard that syntactically implies its source-row
+guard. Exact equality and false are base cases; an AND implies the source when
+any child does, while an OR implies it only when every child does. Any
+near-match uses the unchanged generic join.
+
+Catalog uniqueness makes at most one right selector true, so the exact compact
+result has one candidate per left row. Nested typed `ite` terms select the
+right payload from a NULL fallback; inner-row presence requires a match, while
+left-row presence preserves the left row and its NULL-extended no-match case.
+Selection deliberately excludes the task-local left-presence guard so routed
+copies retain identical unobservable payloads and StageGraph gather can
+coalesce them. Only left partition facts survive. The ordinary left-times-right
+matching-pair audit still runs before compaction, and neither global row nor
+pair bound changes.
+
+Focused tests compare compact inner and left bags against an independent
+finite-domain reference, cover simple and composite unique keys, reject
+coercions and every schema/provenance/predicate/limit near-match, retain the
+pair audit, demonstrate that the compact row count avoids only the generic
+output cap, and prove a two-task broadcast StageGraph equivalent under a
+one-row cap. q72 then constructs its exact bounded formula at the ordinary
+two-row/two-task bounds. The slice found no optimizer bug or counterexample and
+leaves the proof floor at twenty-seven.
 
 The integral-AVG contract is exact and narrow:
 `Optional<Int64> -> Optional<Double>` with the strict phase-linked state
@@ -727,14 +789,15 @@ for q49, and a secondary range-read boundary for q51. Including that overlap,
 the captured-pair gap is approximately 6--8 families or 8--16 milestones.
 
 These are planning estimates, not coverage floors. The new checkpoint starts
-the next planning pass from 80 formulas; later blockers can invalidate any
+the next planning pass from 81 formulas; later blockers can invalidate any
 query-count projection. The remaining 20 workload entries have no exact
 captured pair and require frontend/optimizer work before verifier semantics
 can help; consequently the present captured-pair ceiling is 101/121.
 Even reaching that ceiling would establish formula construction, not solver
 proof.
-The next slice targets exact unique-key-aware at-most-one right-side join
-compaction for q72. It does not raise the 4,096-row relation cap.
+Milestone 66 next targets exact ordered singleton-`Limit` compaction for q9's
+`UnionAll(real-or-error, NULL fallback) -> Limit(1) -> Cross` scalar lowering.
+It will preserve the global construction bounds.
 
 The exact sorting-network slice adds TPCH q2 to the formula and preparation
 floors without changing the proof floor. A focused row-bound-two/task-bound-two
@@ -1107,9 +1170,9 @@ exact initial/final boundary results and therefore overlap the semantic
 unsupported inventory. The other 18 are terminal no-pair preparation failures.
 
 The exporter matrix below covers the recorded boundary failures among 12 of
-the 19 unsupported TPC-DS queries at the q72 verifier-entry checkpoint. IDs can
+the 18 unsupported TPC-DS queries at the milestone-65 checkpoint. IDs can
 appear in both exporter columns or under more than one reason because both
-snapshots are audited independently. The seven queries that pass export and
+snapshots are audited independently. The six queries that pass export and
 fail closed inside the verifier are listed after the matrix.
 
 | Unsupported reason | Initial snapshot | Final snapshot |
@@ -1142,11 +1205,14 @@ constructs a formula. q9 reaches the verifier and joins the construction-bound
 inventory below.
 
 After both snapshots export, q9 rejects an 8,192-row join output above the
-4,096-row relation bound. Exact dynamic Date-shift normalization likewise
-moves q72 through both exporters; it rejects a 4,608-row join output above the
-same bound. A reverted 8,192-row diagnostic experiment reaches a
+4,096-row relation bound. At milestone 64, exact dynamic Date-shift
+normalization likewise moved q72 through both exporters before it rejected a
+4,608-row join output above the same bound. A reverted 8,192-row diagnostic
+experiment reaches a
 10,619,136-pair grouped aggregate above the 16,384-pair bound after 12.151
-seconds. q4 rejects a 20,736-pair join match above the
+seconds. Exact direct unique-RHS compaction now moves q72 through formula
+construction. The six remaining verifier-bound TPC-DS rows are q4, q9, q11,
+q31, q64, and q74. q4 rejects a 20,736-pair join match above the
 16,384-pair construction bound after 1,669/395 ms of
 preparation/verification. q64 rejects an 8,192-row join output above the
 4,096-row relation bound after 7,711/753 ms. q11 and q74 reach an
@@ -1447,7 +1513,9 @@ entrants total. Exact integral extrema then add q35: 60/99 TPC-DS and 78/121
 total formulas, with 84 entrants. Certified derived integral-AVG ordering then
 adds q22/q85: 62/99 TPC-DS and 80/121 total formulas, with 86 entrants. Exact
 dynamic Date-shift normalization adds q72 as the eighty-seventh entrant
-without adding a formula. The twenty-seven-query proof floor remains
+without adding a formula. Exact direct unique-RHS compaction then moves q72
+through formula construction: 63/99 TPC-DS and 81/121 total formulas, with the
+entrant count unchanged at 87. The twenty-seven-query proof floor remains
 unchanged.
 
 Focused q1 emits a formula after 111/998 ms and returns `UNKNOWN`, not
@@ -2145,8 +2213,13 @@ derived-`Double` ordering then adds q22/q85, raising the formula floor to 80
 and the entrant floor to 86 without adding a proof. Exact dynamic
 `Optional<Date>` plus/minus literal `IntervalFromDays` normalization then
 raises the entrant floor to 87 through q72, again without a formula or proof.
-Exact unique-key-aware at-most-one right-side join compaction for q72 is next;
-the global relation cap remains unchanged. More than two dependencies, other
+Exact unique-key-aware at-most-one direct right-side join compaction then moves
+q72 through formula construction, raising the formula floor to 81 while
+leaving the entrant and proof floors unchanged. Exact ordered singleton-`Limit`
+compaction for q9's
+`UnionAll(real-or-error, NULL fallback) -> Limit(1) -> Cross` scalar lowering
+is next; the global construction bounds remain unchanged. More than two
+dependencies, other
 correlation shapes, coercing dynamic `IN`, nullable String and non-positive
 nullable contexts, broader range grammars, and other OLAP pushdowns remain
 later work.

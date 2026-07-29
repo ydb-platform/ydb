@@ -4,7 +4,6 @@
 
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/base/blobstorage_common.h>
-#include <ydb/core/mind/configured_tablet_bootstrapper.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/log.h>
@@ -21,6 +20,20 @@ namespace NKikimr::NCms {
 
 using namespace NNodeWhiteboard;
 using namespace NKikimrCms;
+
+namespace {
+
+bool IsSystemTablet(TTabletTypes::EType type) {
+    switch (type) {
+    case TTabletTypes::DataShard:
+    case TTabletTypes::KeyValue:
+        return false;
+    default:
+        return true;
+    }
+}
+
+} // namespace
 
 bool TLockableItem::IsLocked(TErrorInfo &error, TDuration defaultRetryTime,
                              TInstant now, TDuration duration) const
@@ -1018,25 +1031,19 @@ void TClusterInfo::GenerateTenantNodesCheckers() {
 }
 
 void TClusterInfo::GenerateSysTabletsNodesCheckers() {
-    UseDynamicSysTabletChecking = !HasBootstrapTabletNodes();
-    SystemTabletTypes.clear();
-
     for (auto tablet : BootstrapConfig.GetTablet()) {
-        SystemTabletTypes.insert(BootstrapperTypeToTabletType(tablet.GetType()));
-        if (!UseDynamicSysTabletChecking) {
-            for (auto nodeId : tablet.GetNode()) {
-                if (!HasNode(nodeId)) {
-                    YDB_LOG_ERROR("Got node with system tablet, which exists in configuration, but does not exist in cluster",
-                        {"nodeId", nodeId});
-                    continue;
-                }
-                const ui32 pileId = NodeIdToPileId.contains(nodeId) ? NodeIdToPileId[nodeId] : 0;
-                auto& sysNodesChecker = SysNodesCheckers[pileId][tablet.GetType()];
-                if (!sysNodesChecker)
-                    sysNodesChecker = TSimpleSharedPtr<TSysTabletsNodesCounter>(new TSysTabletsNodesCounter(tablet.GetType()));
-                NodeToTabletTypes[nodeId].push_back(tablet.GetType());
-                NodeRef(nodeId).AddNodeGroup(sysNodesChecker);
+        for (auto nodeId : tablet.GetNode()) {
+            if (!HasNode(nodeId)) {
+                YDB_LOG_ERROR("Got node with system tablet, which exists in configuration, but does not exist in cluster",
+                    {"nodeId", nodeId});
+                continue;
             }
+            const ui32 pileId = NodeIdToPileId.contains(nodeId) ? NodeIdToPileId[nodeId] : 0;
+            auto& sysNodesChecker = SysNodesCheckers[pileId][tablet.GetType()];
+            if (!sysNodesChecker)
+                sysNodesChecker = TSimpleSharedPtr<TSysTabletsNodesCounter>(new TSysTabletsNodesCounter(tablet.GetType()));
+            NodeToTabletTypes[nodeId].push_back(tablet.GetType());
+            NodeRef(nodeId).AddNodeGroup(sysNodesChecker);
         }
     }
 
@@ -1052,26 +1059,16 @@ void TClusterInfo::GenerateNodesWithRunningSystemTablet() {
         }
 
         for (const auto &[_, tablet] : tablets) {
-            // Match by type intentionally: this also covers tenant system tablets
-            // that are not explicitly listed in BootstrapConfig.
+            // Match by type intentionally: this also covers tenant system tablets.
             if (tablet.Leader
                 && tablet.State == NKikimrWhiteboard::TTabletStateInfo::Active
-                && SystemTabletTypes.contains(tablet.Type))
+                && IsSystemTablet(tablet.Type))
             {
                 NodesWithRunningSystemTablet.insert(nodeId);
                 break;
             }
         }
     }
-}
-
-bool TClusterInfo::HasBootstrapTabletNodes() const {
-    for (const auto &tablet : BootstrapConfig.GetTablet()) {
-        if (tablet.NodeSize() > 0) {
-            return true;
-        }
-    }
-    return false;
 }
 
 bool TClusterInfo::NodeHasRunningSystemTablet(ui32 nodeId) const {

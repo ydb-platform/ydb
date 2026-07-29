@@ -2844,15 +2844,197 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
-    Y_UNIT_TEST(Indexes) {
+    Y_UNIT_TEST(Indexes_newRbo) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(0);
+        appConfig.MutableTableServiceConfig()->SetEnableAutoIndexSelectionForIndexLookupJoin(false);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        // appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/Table` (
+                Key Int32,
+                SubKey1 Int32,
+                SubKey2 String,
+                Value1 String,
+                Value2 String,
+                PRIMARY KEY (Key, SubKey1, SubKey2)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        const std::vector<std::tuple<i32, i32, TString, TString>> data = {
+            {0, 0, "0", "1"}, {0, 0, "1", "2"}, {0, 1, "0", "3"}, {0, 1, "1", "4"},
+            {1, 0, "0", "5"}, {1, 0, "1", "6"}, {1, 1, "0", "7"}, {1, 1, "1", "8"},
+        };
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (const auto& [key, subKey1, subKey2, value] : data) {
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("Key").OptionalInt32(key)
+                .AddMember("SubKey1").OptionalInt32(subKey1)
+                .AddMember("SubKey2").OptionalString(subKey2)
+                .AddMember("Value1").OptionalString(value)
+                .AddMember("Value2").OptionalString(value)
+                .EndStruct();
+        }
+        rows.EndList();
+        auto upsertResult = db.BulkUpsert("/Root/Table", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        for (const auto& addIndex : {
+                 "ALTER TABLE `/Root/Table` ADD INDEX Index12 GLOBAL ON (SubKey1, SubKey2);",
+                 "ALTER TABLE `/Root/Table` ADD INDEX Index21 GLOBAL ON (SubKey2, Value1);",
+                 "ALTER TABLE `/Root/Table` ADD INDEX Index212 GLOBAL ON (SubKey2) COVER (Value2);",
+             }) {
+            result = session.ExecuteSchemeQuery(addIndex).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        db = kikimr.GetTableClient();
+        session = db.CreateSession().GetValueSync().GetSession();
+        auto db2 = kikimr.GetQueryClient();
+        auto session2 = db2.GetSession().GetValueSync().GetSession();
+
+        std::vector<std::string> queries = {
+            // R"(
+            //     -- принудительно выбирается индекс с помощью конструкции VIEW, sort is free
+            //     SELECT t.SubKey1
+            //     FROM `/Root/Table` VIEW `Index12` as t
+            //     WHERE t.SubKey2 = "0"
+            //     order by t.SubKey1;
+            // )",
+            R"(
+                -- выбирается индекс Index12 (not PK), point prefix для него 1, thus re-sort is expected
+                SELECT *
+                FROM `/Root/Table`
+                WHERE SubKey1 = 1 and SubKey2 > "0"
+                ORDER BY Key, SubKey1, SubKey2;
+            )",
+            R"(
+                -- не выбирается никакой индекс, так как PK основной таблицы имеет самый длинный point prefix, sort is free
+                SELECT * 
+                FROM Table `/Root/Table`
+                WHERE Key = 0 and SubKey1 = 0 And SubKey2 = "0"
+                ORDER BY Key, SubKey1, SubKey2;
+            )",
+            R"(
+                -- используется Index212 (not PK or Index21), since Index212 has order SubKey2 and Key, thus re-sort is expected
+                SELECT * 
+                FROM Table `/Root/Table`
+                WHERE Key = 0 and SubKey2 = "1"
+                ORDER BY Key, SubKey1, SubKey2;
+            )",
+            R"(
+                -- должен использоваться Index12, sort is free
+                SELECT * 
+                FROM Table 
+                WHERE Key >= 0 and SubKey1 = 0 And SubKey2 = "0"
+                ORDER BY Key, SubKey1, SubKey2;
+            )",
+            R"(
+                -- используется Index12, sort is free
+                SELECT * 
+                FROM Table 
+                WHERE SubKey1 > 0
+                ORDER BY Key, SubKey1, SubKey2;
+            )",
+            R"(
+                -- используется Index21 (not Index212), since Index21 is declared first, thus re-sort is expected
+                SELECT * 
+                FROM Table 
+                WHERE SubKey2 = "1"
+                ORDER BY Key, SubKey1, SubKey2;
+            )",
+            R"(
+                -- используется Index212, still re-order is expected
+                SELECT Value2 
+                FROM Table
+                WHERE SubKey2 = "0"
+                ORDER BY Value2;
+            )",
+            R"(
+                -- используется Index12, thus re-sort is expected
+                SELECT * 
+                FROM Table 
+                WHERE SubKey1 = 0
+                ORDER BY Key, SubKey1, SubKey2;
+            )",
+        };
+
+        std::vector<std::string> results = {
+            // R"([[[0]];[[0]];[[1]];[[1]]])",
+            R"([[[0];[1];["1"];["4"];["4"]];[[1];[1];["1"];["8"];["8"]]])",
+            R"([[[0];[0];["0"];["1"];["1"]]])",
+            R"([[[0];[0];["1"];["2"];["2"]];[[0];[1];["1"];["4"];["4"]]])",
+            R"([[[0];[0];["0"];["1"];["1"]];[[1];[0];["0"];["5"];["5"]]])",
+            R"([[[0];[1];["0"];["3"];["3"]];[[0];[1];["1"];["4"];["4"]];[[1];[1];["0"];["7"];["7"]];[[1];[1];["1"];["8"];["8"]]])",
+            R"([[[0];[0];["1"];["2"];["2"]];[[0];[1];["1"];["4"];["4"]];[[1];[0];["1"];["6"];["6"]];[[1];[1];["1"];["8"];["8"]]])",
+            R"([[["1"]];[["3"]];[["5"]];[["7"]]])",
+            R"([[[0];[0];["0"];["1"];["1"]];[[0];[0];["1"];["2"];["2"]];[[1];[0];["0"];["5"];["5"]];[[1];[0];["1"];["6"];["6"]]])",
+        };
+
+        std::vector<TString> expectedIndexes = {
+            // "Index12",
+            "Index12",
+            "", // PK
+            "Index212",
+            "Index12",
+            "Index12",
+            "Index21",
+            "Index212",
+            "Index12",
+        };
+
+        const std::string header = "PRAGMA ydb.OptDisableAutoIndexSelection = \"false\";\n";
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const std::string query = header + queries[i];
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+            Cout << query << "\n";
+            auto result2 = session2.ExecuteQuery(query,
+                    NYdb::NQuery::TTxControl::NoTx(),
+                    NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+                ).ExtractValueSync();
+            const auto plan = TString{*result2.GetStats()->GetPlan()};
+            PrintPlan(plan, /*analyzeMode=*/false);
+            const auto ast = TString{*result2.GetStats()->GetAst()};
+            Cout << "Plan AST:\n" << ast;
+
+            const auto& expectedIndex = expectedIndexes[i];
+            if (expectedIndex.empty()) {
+                UNIT_ASSERT_C(!ast.Contains("indexImplTable"), "query #" << i << " must read the main table, ast:\n" << ast);
+                UNIT_ASSERT_C(!plan.Contains("indexImplTable"), "query #" << i << " must read the main table, plan:\n" << plan);
+            } else {
+                const auto implTable = TString::Join(expectedIndex, "/indexImplTable");
+                UNIT_ASSERT_C(ast.Contains(implTable), "query #" << i << " expected index " << expectedIndex << ", ast:\n" << ast);
+                UNIT_ASSERT_C(plan.Contains(expectedIndex) && plan.Contains("indexImplTable"), "query #" << i << " expected index " << expectedIndex << ", plan:\n" << plan);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(Indexes_oldRbo) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
-        //appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        // appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(0);
+        // appConfig.MutableTableServiceConfig()->SetEnableAutoIndexSelectionForIndexLookupJoin(false);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
         appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
-        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
 
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -2891,63 +3073,63 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         std::vector<std::string> queries = {
             R"(
-                -- принудительно выбирается индекс с помощью конструкции VIEW
+                -- принудительно выбирается индекс с помощью конструкции VIEW, sort is free
                 SELECT t.SubKey1
                 FROM `/Root/Table` VIEW `Index12` as t
                 WHERE t.SubKey2 = "0"
                 order by t.SubKey1;
             )",
             R"(
-                -- выбирается индекс Index12, point prefix для него 1
+                -- выбирается индекс Index12 (not PK), point prefix для него 1, thus re-sort is expected
                 SELECT *
                 FROM `/Root/Table`
                 WHERE SubKey1 = 1 and SubKey2 > "0"
                 ORDER BY Key, SubKey1, SubKey2;
             )",
             R"(
-                -- не выбирается никакой индекс, так как PK основной таблицы имеет самый длинный point prefix
+                -- не выбирается никакой индекс, так как PK основной таблицы имеет самый длинный point prefix, sort is free
                 SELECT * 
                 FROM Table `/Root/Table`
                 WHERE Key = 0 and SubKey1 = 0 And SubKey2 = "0"
                 ORDER BY Key, SubKey1, SubKey2;
             )",
             R"(
-                -- используется Index212
+                -- используется Index212 (not PK or Index21), since Index212 has order SubKey2 and Key, thus re-sort is expected
                 SELECT * 
                 FROM Table `/Root/Table`
                 WHERE Key = 0 and SubKey2 = "1"
                 ORDER BY Key, SubKey1, SubKey2;
             )",
             R"(
-                -- должен использоваться Index12
+                -- должен использоваться Index12, sort is free
                 SELECT * 
                 FROM Table 
                 WHERE Key >= 0 and SubKey1 = 0 And SubKey2 = "0"
                 ORDER BY Key, SubKey1, SubKey2;
             )",
             R"(
-                -- используется Index12
+                -- используется Index12, sort is free
                 SELECT * 
                 FROM Table 
                 WHERE SubKey1 > 0
                 ORDER BY Key, SubKey1, SubKey2;
             )",
             R"(
-                -- используется Index21 или Index212
+                -- используется Index21 (not Index212), since Index21 is declared first, thus re-sort is expected
                 SELECT * 
                 FROM Table 
                 WHERE SubKey2 = "1"
                 ORDER BY Key, SubKey1, SubKey2;
             )",
             R"(
-                -- используется Index212
+                -- используется Index212, still re-order is expected
                 SELECT Value2 
                 FROM Table 
                 WHERE SubKey2 = "0"
                 ORDER BY Value2;
             )",
             R"(
-                -- используется Index12
+                -- используется Index12, thus re-sort is expected
                 SELECT * 
                 FROM Table 
                 WHERE SubKey1 = 0
@@ -2974,13 +3156,14 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             "Index212",
             "Index12",
             "Index12",
-            "Index21", // or "Index212"
+            "Index21",
             "Index212",
             "Index12",
         };
 
+        const std::string header = "PRAGMA ydb.OptDisableAutoIndexSelection = \"false\";\n";
         for (ui32 i = 0; i < queries.size(); ++i) {
-            const auto &query = queries[i];
+            const std::string query = header + queries[i];
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
@@ -2990,9 +3173,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                     NYdb::NQuery::TTxControl::NoTx(),
                     NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
                 ).ExtractValueSync();
-            auto plan = TString{*result2.GetStats()->GetPlan()};
+            const auto plan = TString{*result2.GetStats()->GetPlan()};
             PrintPlan(plan, /*analyzeMode=*/false);
-            auto ast = TString{*result2.GetStats()->GetAst()};
+            const auto ast = TString{*result2.GetStats()->GetAst()};
             Cout << "Plan AST:\n" << ast;
 
             const auto& expectedIndex = expectedIndexes[i];
@@ -3007,15 +3190,17 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
-    Y_UNIT_TEST(LookupJoins) {
+    Y_UNIT_TEST(LookupJoins_oldRbo) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(false);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
-        //appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        // appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
+        appConfig.MutableTableServiceConfig()->SetEnableAutoIndexSelectionForIndexLookupJoin(true);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
         appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
-        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
 
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -3076,69 +3261,92 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         std::vector<std::string> queries = {
             R"(
-                -- Lookup join выбирается, так как join по ключу второй таблицы
-                SELECT t1.Value1, t2.Value2
-                FROM `/Root/Table` as t1 
-                inner join 
-                `/Root/Table2` as t2 on t1.Key = t2.Key
-                WHERE t2.Value2 = '15'
-                order by t1.Value1, t2.Value2;
+                -- MapJoin, PK left / PK right
+                SELECT t1.Value2, t2.Value2
+                FROM `/Root/Table` AS t1 INNER JOIN `/Root/Table2` AS t2 ON t1.Value1 = t2.Value1
+                WHERE t1.Key = 0 AND t2.Key = 0
+                ORDER BY t1.Value2, t2.Value2;
             )",
             R"(
-                -- Lookup join выбирается с помощью индекса Index2_12
-                SELECT t1.Value1, t2.Value2
-                FROM `/Root/Table` as t1 
-                inner join 
-                `/Root/Table2` as t2 on (t1.SubKey1 = t2.SubKey1 AND t1.SubKey2 = t2.SubKey2)
-                WHERE t2.Value1 = '15'
-                order by t1.Value1, t2.Value2;
+                -- MapJoin, Index12 left side stream lookup for Value1+Value2 / PK right
+                SELECT t1.Value2, t2.Value2
+                FROM `/Root/Table` AS t1 INNER JOIN `/Root/Table2` AS t2 ON t1.Value1 = t2.Value1
+                WHERE t1.SubKey1 = 0 AND t1.SubKey2 = "0" AND t2.Key = 0
+                ORDER BY t1.Value2, t2.Value2;
             )",
             R"(
-                -- Lookup join не выбирается - ни таблица ни индекс не подходят
-                SELECT t1.Value1, t2.Value2
-                FROM `/Root/Table` as t1 
-                inner join 
-                `/Root/Table2` as t2 on (t1.Value1 = t2.Value1)
-                order by t1.Value1, t2.Value2;
+                -- MapJoin, PK left / Index21 right side stream lookup for Value2
+                SELECT t1.Value2, t2.Value1
+                FROM `/Root/Table` AS t1 INNER JOIN `/Root/Table2` AS t2 ON t1.Value2 = t2.Value2
+                WHERE t1.Key = 0 AND t2.SubKey2 = "0"
+                ORDER BY t1.Value2, t2.Value1;
             )",
             R"(
-                SELECT t1.Value1, t2.Value2
-                FROM `/Root/Table` as t1 
-                inner join 
-                `/Root/Table2` as t2 on t1.Key = t2.Key
-                WHERE t2.Value2 = '15'
-                order by t1.Value1, t2.Value2;
+                -- MapJoin, Index212 left / Index212 right, no stream lookup needed
+                SELECT t1.Value2, t2.Value2
+                FROM `/Root/Table` AS t1 INNER JOIN `/Root/Table2` AS t2 ON t1.Value2 = t2.Value2
+                WHERE t1.SubKey2 = "1" AND t2.SubKey2 = "1"
+                ORDER BY t1.Value2, t2.Value2;
             )",
             R"(
-                -- Lookup join выбирается с помощью индекса Index2_12
-                SELECT t1.Value1, t2.Value2
-                FROM `/Root/Table` as t1 
-                inner join 
-                `/Root/Table2` as t2 on (t1.SubKey1 = t2.SubKey1 AND t1.SubKey2 = t2.SubKey2)
-                WHERE t2.Value1 = '15'
-                order by t1.Value1, t2.Value2;
+                -- LookupJoin, PK left / PK right (probe t2 by Key)
+                SELECT t1.Value1, t2.Value1
+                FROM `/Root/Table` AS t1 INNER JOIN `/Root/Table2` AS t2 ON t1.Key = t2.Key
+                WHERE t1.Key >= 0
+                ORDER BY t1.Value1, t2.Value1;
             )",
             R"(
-                -- Lookup join не выбирается - ни таблица ни индекс не подходят
-                SELECT t1.Value1, t2.Value2
-                FROM `/Root/Table` as t1 
-                inner join 
-                `/Root/Table2` as t2 on (t1.Value1 = t2.Value1)
-                order by t1.Value1, t2.Value2;
+                -- LookupJoin, Index12 left / PK right (t1 via Index12 filter, probe t2 PK)
+                SELECT t1.Value1, t2.Value1
+                FROM `/Root/Table` AS t1 INNER JOIN `/Root/Table2` AS t2 ON t1.Key = t2.Key
+                WHERE t1.SubKey1 = 0 AND t1.SubKey2 = "0"
+                ORDER BY t1.Value1, t2.Value1;
+            )",
+            R"(
+                -- LookupJoin, PK left / Index21 right (probe t2 by SubKey2 and need t2.Value1)
+                SELECT t1.Value1, t2.Value1
+                FROM `/Root/Table` AS t1 INNER JOIN `/Root/Table2` AS t2 ON t1.SubKey2 = t2.SubKey2
+                WHERE t1.Key = 1
+                ORDER BY t1.Value1, t2.Value1;
+            )",
+            R"(
+                -- LookupJoin, Index212 left / Index212 right
+                SELECT t1.Value2, t2.Value2
+                FROM `/Root/Table` AS t1 INNER JOIN `/Root/Table2` AS t2 ON t1.SubKey2 = t2.SubKey2
+                WHERE t1.SubKey2 >= "0"
+                ORDER BY t1.Value2, t2.Value2;
             )",
         };
 
         std::vector<std::string> results = {
-            R"([[["5"];["15"]];[["6"];["15"]];[["7"];["15"]];[["8"];["15"]]])",
-            R"([[["1"];["15"]];[["5"];["15"]]])",
             R"([[["1"];["1"]];[["2"];["2"]];[["3"];["3"]];[["4"];["4"]]])",
-            R"([[["5"];["15"]];[["6"];["15"]];[["7"];["15"]];[["8"];["15"]]])",
-            R"([[["1"];["15"]];[["5"];["15"]]])",
-            R"([[["1"];["1"]];[["2"];["2"]];[["3"];["3"]];[["4"];["4"]]])",
+            R"([[["1"];["1"]]])",
+            R"([[["1"];["1"]];[["3"];["3"]]])",
+            R"([[["2"];["2"]];[["4"];["4"]]])",
+            R"([[["1"];["1"]];[["1"];["2"]];[["1"];["3"]];[["1"];["4"]];[["2"];["1"]];[["2"];["2"]];[["2"];["3"]];[["2"];["4"]];[["3"];["1"]];[["3"];["2"]];[["3"];["3"]];[["3"];["4"]];[["4"];["1"]];[["4"];["2"]];[["4"];["3"]];[["4"];["4"]];[["5"];["15"]];[["5"];["16"]];[["5"];["17"]];[["5"];["18"]];[["6"];["15"]];[["6"];["16"]];[["6"];["17"]];[["6"];["18"]];[["7"];["15"]];[["7"];["16"]];[["7"];["17"]];[["7"];["18"]];[["8"];["15"]];[["8"];["16"]];[["8"];["17"]];[["8"];["18"]]])",
+            R"([[["1"];["1"]];[["1"];["2"]];[["1"];["3"]];[["1"];["4"]];[["5"];["15"]];[["5"];["16"]];[["5"];["17"]];[["5"];["18"]]])",
+            R"([[["5"];["1"]];[["5"];["15"]];[["5"];["17"]];[["5"];["3"]];[["6"];["16"]];[["6"];["18"]];[["6"];["2"]];[["6"];["4"]];[["7"];["1"]];[["7"];["15"]];[["7"];["17"]];[["7"];["3"]];[["8"];["16"]];[["8"];["18"]];[["8"];["2"]];[["8"];["4"]]])",
+            R"([[["1"];["1"]];[["1"];["15"]];[["1"];["17"]];[["1"];["3"]];[["2"];["16"]];[["2"];["18"]];[["2"];["2"]];[["2"];["4"]];[["3"];["1"]];[["3"];["15"]];[["3"];["17"]];[["3"];["3"]];[["4"];["16"]];[["4"];["18"]];[["4"];["2"]];[["4"];["4"]];[["5"];["1"]];[["5"];["15"]];[["5"];["17"]];[["5"];["3"]];[["6"];["16"]];[["6"];["18"]];[["6"];["2"]];[["6"];["4"]];[["7"];["1"]];[["7"];["15"]];[["7"];["17"]];[["7"];["3"]];[["8"];["16"]];[["8"];["18"]];[["8"];["2"]];[["8"];["4"]]])",
         };
 
+        struct TCase {
+            bool Lookup;
+            TVector<TString> Impls;
+        };
+        const std::vector<TCase> cases = {
+            {false, {}},
+            {false, {"Index1_12/indexImplTable"}},
+            {false, {"Index2_21/indexImplTable"}},
+            {false, {"Index1_212/indexImplTable", "Index2_212/indexImplTable"}},
+            {true,  {}},
+            {true,  {"Index1_12/indexImplTable"}},
+            {true,  {"Index2_21/indexImplTable"}},
+            {true,  {"Index1_212/indexImplTable", "Index2_212/indexImplTable"}},
+        };
+
+        const std::string header = "PRAGMA ydb.OptDisableAutoIndexSelection = \"false\";\n";
         for (ui32 i = 0; i < queries.size(); ++i) {
-            const auto &query = queries[i];
+            const std::string query = header + queries[i];
             auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
@@ -3148,10 +3356,223 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                     NYdb::NQuery::TTxControl::NoTx(),
                     NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
                 ).ExtractValueSync();
-            auto plan = TString{*result2.GetStats()->GetPlan()};
+            const auto plan = TString{*result2.GetStats()->GetPlan()};
             PrintPlan(plan, /*analyzeMode=*/false);
-            auto ast = TString{*result2.GetStats()->GetAst()};
+            const auto ast = TString{*result2.GetStats()->GetAst()};
             Cout << "Plan AST:\n" << ast;
+
+            const bool lookupPlan = plan.Contains("InnerJoin (Lookup)") || plan.Contains("TableLookupJoin");
+            if (cases[i].Lookup) {
+                UNIT_ASSERT_C(lookupPlan, "query #" << i << " expected a lookup join, plan:\n" << plan);
+            } else {
+                UNIT_ASSERT_C(plan.Contains("InnerJoin (Map)"), "query #" << i << " expected a map join, plan:\n" << plan);
+                UNIT_ASSERT_C(!lookupPlan, "query #" << i << " expected no lookup join, plan:\n" << plan);
+            }
+
+            if (cases[i].Impls.empty()) {
+                UNIT_ASSERT_C(!ast.Contains("indexImplTable"), "query #" << i << " expected only main-table reads, ast:\n" << ast);
+            } else {
+                for (const auto& impl : cases[i].Impls) {
+                    UNIT_ASSERT_C(ast.Contains(impl), "query #" << i << " expected " << impl << ", ast:\n" << ast);
+                    UNIT_ASSERT_C(plan.Contains("indexImplTable"), "query #" << i << " expected an index read, plan:\n" << plan);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST(LookupJoins_newRbo) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
+        appConfig.MutableTableServiceConfig()->SetEnableAutoIndexSelectionForIndexLookupJoin(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        // appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/Table` (
+                Key Int32,
+                SubKey1 Int32,
+                SubKey2 String,
+                Value1 String,
+                Value2 String,
+                PRIMARY KEY (Key, SubKey1, SubKey2)
+            );
+
+            CREATE TABLE `/Root/Table2` (
+                Key Int32,
+                SubKey1 Int32,
+                SubKey2 String,
+                Value1 String,
+                Value2 String,
+                PRIMARY KEY (Key, SubKey1, SubKey2)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        auto upsert = [&](const char* table, const std::vector<std::tuple<i32, i32, TString, TString, TString>>& data) {
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            for (const auto& [key, subKey1, subKey2, value1, value2] : data) {
+                rows.AddListItem().BeginStruct()
+                    .AddMember("Key").OptionalInt32(key)
+                    .AddMember("SubKey1").OptionalInt32(subKey1)
+                    .AddMember("SubKey2").OptionalString(subKey2)
+                    .AddMember("Value1").OptionalString(value1)
+                    .AddMember("Value2").OptionalString(value2)
+                    .EndStruct();
+            }
+            rows.EndList();
+            auto r = db.BulkUpsert(table, rows.Build()).GetValueSync();
+            UNIT_ASSERT_C(r.IsSuccess(), r.GetIssues().ToString());
+        };
+
+        upsert("/Root/Table", {{0, 0, "0", "1", "1"}, {0, 0, "1", "2", "2"}, {0, 1, "0", "3", "3"}, {0, 1, "1", "4", "4"},
+                               {1, 0, "0", "5", "5"}, {1, 0, "1", "6", "6"}, {1, 1, "0", "7", "7"}, {1, 1, "1", "8", "8"}});
+
+        upsert("/Root/Table2", {{0, 0, "0", "1", "1"}, {0, 0, "1", "2", "2"}, {0, 1, "0", "3", "3"}, {0, 1, "1", "4", "4"},
+                                {1, 0, "0", "15", "15"}, {1, 0, "1", "16", "16"}, {1, 1, "0", "17", "17"}, {1, 1, "1", "18", "18"}});
+
+        for (const auto& addIndex : {
+                 "ALTER TABLE `/Root/Table` ADD INDEX Index1_12 GLOBAL ON (SubKey1, SubKey2);",
+                 "ALTER TABLE `/Root/Table` ADD INDEX Index1_21 GLOBAL ON (SubKey2, Value1);",
+                 "ALTER TABLE `/Root/Table` ADD INDEX Index1_212 GLOBAL ON (SubKey2) COVER (Value2);",
+                 "ALTER TABLE `/Root/Table2` ADD INDEX Index2_12 GLOBAL ON (SubKey1, SubKey2);",
+                 "ALTER TABLE `/Root/Table2` ADD INDEX Index2_21 GLOBAL ON (SubKey2, Value1);",
+                 "ALTER TABLE `/Root/Table2` ADD INDEX Index2_212 GLOBAL ON (SubKey2) COVER (Value2);",
+             }) {
+            result = session.ExecuteSchemeQuery(addIndex).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        db = kikimr.GetTableClient();
+        session = db.CreateSession().GetValueSync().GetSession();
+        auto db2 = kikimr.GetQueryClient();
+        auto session2 = db2.GetSession().GetValueSync().GetSession();
+
+        std::vector<std::string> queries = {
+            R"(
+                -- MapJoin, PK left / PK right
+                SELECT t1.Value2, t2.Value2
+                FROM `/Root/Table` AS t1 INNER JOIN `/Root/Table2` AS t2 ON t1.Value1 = t2.Value1
+                WHERE t1.Key = 0 AND t2.Key = 0
+                ORDER BY t1.Value2, t2.Value2;
+            )",
+            R"(
+                -- MapJoin, Index12 left side stream lookup for Value1+Value2 / PK right
+                SELECT t1.Value2, t2.Value2
+                FROM `/Root/Table` AS t1 INNER JOIN `/Root/Table2` AS t2 ON t1.Value1 = t2.Value1
+                WHERE t1.SubKey1 = 0 AND t1.SubKey2 = "0" AND t2.Key = 0
+                ORDER BY t1.Value2, t2.Value2;
+            )",
+            R"(
+                -- MapJoin, PK left / Index21 right side stream lookup for Value2
+                SELECT t1.Value2, t2.Value1
+                FROM `/Root/Table` AS t1 INNER JOIN `/Root/Table2` AS t2 ON t1.Value2 = t2.Value2
+                WHERE t1.Key = 0 AND t2.SubKey2 = "0"
+                ORDER BY t1.Value2, t2.Value1;
+            )",
+            R"(
+                -- MapJoin, Index212 left / Index212 right, no stream lookup needed
+                SELECT t1.Value2, t2.Value2
+                FROM `/Root/Table` AS t1 INNER JOIN `/Root/Table2` AS t2 ON t1.Value2 = t2.Value2
+                WHERE t1.SubKey2 = "1" AND t2.SubKey2 = "1"
+                ORDER BY t1.Value2, t2.Value2;
+            )",
+            // R"(
+            //     -- LookupJoin, PK left / PK right (probe t2 by Key)
+            //     SELECT t1.Value1, t2.Value1
+            //     FROM `/Root/Table` AS t1 INNER JOIN `/Root/Table2` AS t2 ON t1.Key = t2.Key
+            //     WHERE t1.Key >= 0
+            //     ORDER BY t1.Value1, t2.Value1;
+            // )",
+            // R"(
+            //     -- LookupJoin, Index12 left / PK right (t1 via Index12 filter, probe t2 PK)
+            //     SELECT t1.Value1, t2.Value1
+            //     FROM `/Root/Table` AS t1 INNER JOIN `/Root/Table2` AS t2 ON t1.Key = t2.Key
+            //     WHERE t1.SubKey1 = 0 AND t1.SubKey2 = "0"
+            //     ORDER BY t1.Value1, t2.Value1;
+            // )",
+            // R"(
+            //     -- LookupJoin, PK left / Index21 right (probe t2 by SubKey2 and need t2.Value1)
+            //     SELECT t1.Value1, t2.Value1
+            //     FROM `/Root/Table` AS t1 INNER JOIN `/Root/Table2` AS t2 ON t1.SubKey2 = t2.SubKey2
+            //     WHERE t1.Key = 1
+            //     ORDER BY t1.Value1, t2.Value1;
+            // )",
+            // R"(
+            //     -- LookupJoin, Index212 left / Index212 right
+            //     SELECT t1.Value2, t2.Value2
+            //     FROM `/Root/Table` AS t1 INNER JOIN `/Root/Table2` AS t2 ON t1.SubKey2 = t2.SubKey2
+            //     WHERE t1.SubKey2 >= "0"
+            //     ORDER BY t1.Value2, t2.Value2;
+            // )",
+        };
+
+        std::vector<std::string> results = {
+            R"([[["1"];["1"]];[["2"];["2"]];[["3"];["3"]];[["4"];["4"]]])",
+            R"([[["1"];["1"]]])",
+            R"([[["1"];["1"]];[["3"];["3"]]])",
+            R"([[["2"];["2"]];[["4"];["4"]]])",
+            // R"([[["1"];["1"]];[["1"];["2"]];[["1"];["3"]];[["1"];["4"]];[["2"];["1"]];[["2"];["2"]];[["2"];["3"]];[["2"];["4"]];[["3"];["1"]];[["3"];["2"]];[["3"];["3"]];[["3"];["4"]];[["4"];["1"]];[["4"];["2"]];[["4"];["3"]];[["4"];["4"]];[["5"];["15"]];[["5"];["16"]];[["5"];["17"]];[["5"];["18"]];[["6"];["15"]];[["6"];["16"]];[["6"];["17"]];[["6"];["18"]];[["7"];["15"]];[["7"];["16"]];[["7"];["17"]];[["7"];["18"]];[["8"];["15"]];[["8"];["16"]];[["8"];["17"]];[["8"];["18"]]])",
+            // R"([[["1"];["1"]];[["1"];["2"]];[["1"];["3"]];[["1"];["4"]];[["5"];["15"]];[["5"];["16"]];[["5"];["17"]];[["5"];["18"]]])",
+            // R"([[["5"];["1"]];[["5"];["15"]];[["5"];["17"]];[["5"];["3"]];[["6"];["16"]];[["6"];["18"]];[["6"];["2"]];[["6"];["4"]];[["7"];["1"]];[["7"];["15"]];[["7"];["17"]];[["7"];["3"]];[["8"];["16"]];[["8"];["18"]];[["8"];["2"]];[["8"];["4"]]])",
+            // R"([[["1"];["1"]];[["1"];["15"]];[["1"];["17"]];[["1"];["3"]];[["2"];["16"]];[["2"];["18"]];[["2"];["2"]];[["2"];["4"]];[["3"];["1"]];[["3"];["15"]];[["3"];["17"]];[["3"];["3"]];[["4"];["16"]];[["4"];["18"]];[["4"];["2"]];[["4"];["4"]];[["5"];["1"]];[["5"];["15"]];[["5"];["17"]];[["5"];["3"]];[["6"];["16"]];[["6"];["18"]];[["6"];["2"]];[["6"];["4"]];[["7"];["1"]];[["7"];["15"]];[["7"];["17"]];[["7"];["3"]];[["8"];["16"]];[["8"];["18"]];[["8"];["2"]];[["8"];["4"]]])",
+        };
+
+        struct TCase {
+            bool Lookup;
+            TVector<TString> Impls;
+        };
+        const std::vector<TCase> cases = {
+            {false, {}},
+            {false, {"Index1_12/indexImplTable"}},
+            {false, {"Index2_21/indexImplTable"}},
+            {false, {"Index1_212/indexImplTable", "Index2_212/indexImplTable"}},
+            // {true,  {}},
+            // {true,  {"Index1_12/indexImplTable"}},
+            // {true,  {"Index2_21/indexImplTable"}},
+            // {true,  {"Index1_212/indexImplTable", "Index2_212/indexImplTable"}},
+        };
+
+        const std::string header = "PRAGMA ydb.OptDisableAutoIndexSelection = \"false\";\n";
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const std::string query = header + queries[i];
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            //Cout << FormatResultSetYson(result.GetResultSet(0)) << Endl;
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+            Cout << query << "\n";
+            auto result2 = session2.ExecuteQuery(query,
+                    NYdb::NQuery::TTxControl::NoTx(),
+                    NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
+                ).ExtractValueSync();
+            const auto plan = TString{*result2.GetStats()->GetPlan()};
+            PrintPlan(plan, /*analyzeMode=*/false);
+            const auto ast = TString{*result2.GetStats()->GetAst()};
+            Cout << "Plan AST:\n" << ast;
+
+            const bool lookupPlan = plan.Contains("InnerJoin (Lookup)") || plan.Contains("TableLookupJoin");
+            if (cases[i].Lookup) {
+                UNIT_ASSERT_C(lookupPlan, "query #" << i << " expected a lookup join, plan:\n" << plan);
+            } else {
+                UNIT_ASSERT_C(plan.Contains("InnerJoin (Map)"), "query #" << i << " expected a map join, plan:\n" << plan);
+                UNIT_ASSERT_C(!lookupPlan, "query #" << i << " expected no lookup join, plan:\n" << plan);
+            }
+
+            if (cases[i].Impls.empty()) {
+                UNIT_ASSERT_C(!ast.Contains("indexImplTable"), "query #" << i << " expected only main-table reads, ast:\n" << ast);
+            } else {
+                for (const auto& impl : cases[i].Impls) {
+                    UNIT_ASSERT_C(ast.Contains(impl), "query #" << i << " expected " << impl << ", ast:\n" << ast);
+                    UNIT_ASSERT_C(plan.Contains("indexImplTable"), "query #" << i << " expected an index read, plan:\n" << plan);
+                }
+            }
         }
     }
 
@@ -4306,8 +4727,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         removeIdentity.RunStage(root, testContext.RboCtx);
 
         auto rewrittenUnion = CastOperator<TOpUnionAll>(root.GetInput());
-        UNIT_ASSERT_C(rewrittenUnion->GetLeftInput()->Kind == EOperator::Source, root.PlanToString(testContext.ExprCtx));
-        UNIT_ASSERT(rewrittenUnion->GetLeftInput() == leftRead);
+        UNIT_ASSERT_C(rewrittenUnion->GetInput(0)->Kind == EOperator::Source, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT(rewrittenUnion->GetInput(0) == leftRead);
     }
 
     Y_UNIT_TEST(RemoveIdentityMapDoesNotCareAboutOutputOrder) {
@@ -6250,6 +6671,124 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             UNIT_ASSERT(pushedMap->MapElements.front().GetElementName() == TInfoUnit("l_a"));
             UNIT_ASSERT(pushedMap->MapElements.front().GetRename() == TInfoUnit("a"));
         }
+    }
+
+    Y_UNIT_TEST(MergeUnionAllFlattensLeftDeepChain) {
+        TMapRuleTestContext testContext;
+        const auto pos = NYql::TPositionHandle();
+
+        const TVector<TInfoUnit> columns{TInfoUnit("a"), TInfoUnit("payload")};
+        auto firstRead = MakeTestRead(columns, pos);
+        auto secondRead = MakeTestRead(columns, pos);
+        auto thirdRead = MakeTestRead(columns, pos);
+        auto innerUnion = MakeIntrusive<TOpUnionAll>(firstRead, secondRead, pos, columns);
+        auto outerUnion = MakeIntrusive<TOpUnionAll>(innerUnion, thirdRead, pos, columns);
+        TOpRoot root(outerUnion, pos, {"a", "payload"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TMergeUnionAllRule>());
+        TRuleBasedStage mergeUnionAll("Focused merge UnionAll", std::move(rules));
+        ComputeLogicalTestProps(root);
+        mergeUnionAll.RunStage(root, testContext.RboCtx);
+
+        UNIT_ASSERT_C(root.GetInput() == outerUnion, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_VALUES_EQUAL(outerUnion->Children.size(), 3);
+        UNIT_ASSERT_C(outerUnion->Children[0] == firstRead, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_C(outerUnion->Children[1] == secondRead, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_C(outerUnion->Children[2] == thirdRead, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_VALUES_EQUAL(outerUnion->Columns.size(), 2);
+        UNIT_ASSERT(outerUnion->Columns[0] == TInfoUnit("a"));
+        UNIT_ASSERT(outerUnion->Columns[1] == TInfoUnit("payload"));
+    }
+
+    Y_UNIT_TEST(MergeUnionAllFlattensNestedBranches) {
+        TMapRuleTestContext testContext;
+        const auto pos = NYql::TPositionHandle();
+
+        const TVector<TInfoUnit> columns{TInfoUnit("a")};
+        auto firstRead = MakeTestRead(columns, pos);
+        auto secondRead = MakeTestRead(columns, pos);
+        auto thirdRead = MakeTestRead(columns, pos);
+        auto fourthRead = MakeTestRead(columns, pos);
+        auto leftUnion = MakeIntrusive<TOpUnionAll>(firstRead, secondRead, pos, columns);
+        auto rightUnion = MakeIntrusive<TOpUnionAll>(thirdRead, fourthRead, pos, columns);
+        auto outerUnion = MakeIntrusive<TOpUnionAll>(leftUnion, rightUnion, pos, columns);
+        TOpRoot root(outerUnion, pos, {"a"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TMergeUnionAllRule>());
+        TRuleBasedStage mergeUnionAll("Focused merge UnionAll", std::move(rules));
+        ComputeLogicalTestProps(root);
+        mergeUnionAll.RunStage(root, testContext.RboCtx);
+
+        UNIT_ASSERT_C(root.GetInput() == outerUnion, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_VALUES_EQUAL(outerUnion->Children.size(), 4);
+        UNIT_ASSERT_C(outerUnion->Children[0] == firstRead, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_C(outerUnion->Children[1] == secondRead, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_C(outerUnion->Children[2] == thirdRead, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_C(outerUnion->Children[3] == fourthRead, root.PlanToString(testContext.ExprCtx));
+    }
+
+    Y_UNIT_TEST(MergeUnionAllKeepsOrderedUnion) {
+        TMapRuleTestContext testContext;
+        const auto pos = NYql::TPositionHandle();
+
+        const TVector<TInfoUnit> columns{TInfoUnit("a")};
+
+        // An ordered inner union pins the order of its own branches.
+        {
+            auto innerUnion =
+                MakeIntrusive<TOpUnionAll>(MakeTestRead(columns, pos), MakeTestRead(columns, pos), pos, columns, /*ordered=*/true);
+            auto outerUnion = MakeIntrusive<TOpUnionAll>(innerUnion, MakeTestRead(columns, pos), pos, columns);
+            TOpRoot root(outerUnion, pos, {"a"});
+
+            TVector<std::unique_ptr<IRule>> rules;
+            rules.emplace_back(std::make_unique<TMergeUnionAllRule>());
+            TRuleBasedStage mergeUnionAll("Focused merge UnionAll", std::move(rules));
+            ComputeLogicalTestProps(root);
+            mergeUnionAll.RunStage(root, testContext.RboCtx);
+
+            UNIT_ASSERT_VALUES_EQUAL(outerUnion->Children.size(), 2);
+            UNIT_ASSERT_C(outerUnion->Children[0] == innerUnion, root.PlanToString(testContext.ExprCtx));
+        }
+
+        // Same for an ordered parent: merging would extend its order guarantee to the inner branches.
+        {
+            auto innerUnion = MakeIntrusive<TOpUnionAll>(MakeTestRead(columns, pos), MakeTestRead(columns, pos), pos, columns);
+            auto outerUnion =
+                MakeIntrusive<TOpUnionAll>(innerUnion, MakeTestRead(columns, pos), pos, columns, /*ordered=*/true);
+            TOpRoot root(outerUnion, pos, {"a"});
+
+            TVector<std::unique_ptr<IRule>> rules;
+            rules.emplace_back(std::make_unique<TMergeUnionAllRule>());
+            TRuleBasedStage mergeUnionAll("Focused merge UnionAll", std::move(rules));
+            ComputeLogicalTestProps(root);
+            mergeUnionAll.RunStage(root, testContext.RboCtx);
+
+            UNIT_ASSERT_VALUES_EQUAL(outerUnion->Children.size(), 2);
+            UNIT_ASSERT_C(outerUnion->Children[0] == innerUnion, root.PlanToString(testContext.ExprCtx));
+        }
+    }
+
+    Y_UNIT_TEST(MergeUnionAllKeepsSharedUnion) {
+        TMapRuleTestContext testContext;
+        const auto pos = NYql::TPositionHandle();
+
+        const TVector<TInfoUnit> columns{TInfoUnit("a")};
+        auto innerUnion = MakeIntrusive<TOpUnionAll>(MakeTestRead(columns, pos), MakeTestRead(columns, pos), pos, columns);
+        // The inner union feeds the parent twice, so it has more than one consumer.
+        auto outerUnion = MakeIntrusive<TOpUnionAll>(innerUnion, innerUnion, pos, columns);
+        TOpRoot root(outerUnion, pos, {"a"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TMergeUnionAllRule>());
+        TRuleBasedStage mergeUnionAll("Focused merge UnionAll", std::move(rules));
+        ComputeLogicalTestProps(root);
+        mergeUnionAll.RunStage(root, testContext.RboCtx);
+
+        UNIT_ASSERT_VALUES_EQUAL(outerUnion->Children.size(), 2);
+        UNIT_ASSERT_C(outerUnion->Children[0] == innerUnion, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_C(outerUnion->Children[1] == innerUnion, root.PlanToString(testContext.ExprCtx));
     }
 
     Y_UNIT_TEST(PreferredAliasConvergesUsesOntoRootPinnedName) {

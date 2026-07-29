@@ -1,4 +1,5 @@
 #include "key.h"
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NPQ {
 
@@ -103,7 +104,7 @@ void TKeyPrefix::SetTypeImpl(EType type, bool isServicePartition)
             c = ServiceTypeTxMeta;
             break;
         default:
-            Y_ABORT();
+            AFL_ENSURE(false)("type", static_cast<int>(type))("type_char", c);
         }
     }
 

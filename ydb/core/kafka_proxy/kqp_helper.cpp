@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/services/metadata/service.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKafka {
 
@@ -33,7 +34,7 @@ bool TKqpTxHelper::HandleCreateSessionResponse(TEvKqp::TEvCreateSessionResponse:
     }
 
     KqpSessionId = record.GetResponse().GetSessionId();
-    Y_ABORT_UNLESS(!KqpSessionId.empty());
+    AFL_ENSURE(!KqpSessionId.empty())("reason", "KqpSessionId is empty")("database", DataBase);
 
     return true;
 }

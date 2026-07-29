@@ -211,21 +211,16 @@ namespace NActors {
     }
 
     void TInterconnectSessionTCPv2::GenerateHttpInfo(NMon::TEvHttpInfoRes::TPtr& ev) {
-        TStringStream str;
-        ev->Get()->Output(str);
+        TStringOutput str(const_cast<TString&>(static_cast<NMon::TEvHttpInfoRes*>(ev->Get())->Answer));
         str << "<div class=\"panel panel-info\">"
                "<div class=\"panel-heading\">Session (v2)</div>"
                "<div class=\"panel-body\">";
         str << "<table class=\"table\">";
-//        str << "<tr><td>Registered</td><td>" << (Registered ? "true" : "false") << "</td></tr>";
         str << "<tr><td>EngineHandle</td><td>" << EngineHandle << "</td></tr>";
-//        str << "<tr><td>OutstandingWrites</td><td>" << PendingBatches.size() << "</td></tr>";
-        str << "<tr><td>BytesSent</td><td>" << BytesSent << "</td></tr>";
-        str << "<tr><td>BytesReceived</td><td>" << BytesReceived << "</td></tr>";
         str << "<tr><td>Subscribers.size()</td><td>" << Subscribers.size() << "</td></tr>";
         str << "</table>";
         str << "</div></div>";
-        TActivationContext::Send(new IEventHandle(ev->Recipient, ev->Sender, new NMon::TEvHttpInfoRes(str.Str())));
+        Proxy->Common->UringEngineV2->IssueMonRequest(EngineHandle, std::move(ev));
     }
 
 }

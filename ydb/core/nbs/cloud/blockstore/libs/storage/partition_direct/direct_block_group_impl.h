@@ -141,6 +141,8 @@ public:
     NThreading::TFuture<TListPBufferResponse> ListPBuffers(
         THostIndex hostIndex) override;
 
+    ui32 GetNodeId(THostIndex host) override;
+
     NThreading::TFuture<TDBGDumpResponse> Dump() override;
 
     void OnAddHostResult(
@@ -185,7 +187,6 @@ private:
     };
 
     [[nodiscard]] size_t GetHostCount() const;
-    [[nodiscard]] ui32 GetNodeId(THostIndex host) const;
     void AddDDiskAndPBufferConnection(
         THostIndex host,
         const NKikimr::NBsController::TDDiskId& ddiskId,

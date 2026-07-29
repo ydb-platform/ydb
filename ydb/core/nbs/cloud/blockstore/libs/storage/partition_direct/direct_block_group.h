@@ -211,6 +211,9 @@ public:
     virtual NThreading::TFuture<TListPBufferResponse> ListPBuffers(
         THostIndex hostIndex) = 0;
 
+    // Translate host index to NodeId
+    virtual ui32 GetNodeId(THostIndex host) = 0;
+
     // Query dump for DirectBlockGroup and VChunks.
     virtual NThreading::TFuture<TDBGDumpResponse> Dump() = 0;
 

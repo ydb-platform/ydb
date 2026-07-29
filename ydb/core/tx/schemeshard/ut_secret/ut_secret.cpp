@@ -929,12 +929,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardSecretTest) {
         }
 
         // CREATE OR REPLACE with InheritPermissions: true should restore inheritance (clear ACL)
-        TestCreateSecret(runtime, ++txId, "/MyRoot",
+        TestCreateSecretOrReplace(runtime, ++txId, "/MyRoot",
             R"(
                 Name: "secret"
                 Value: "value2"
                 InheritPermissions: true
-                ReplaceIfExists: true
             )"
         );
         env.TestWaitNotification(runtime, txId);
@@ -947,12 +946,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardSecretTest) {
         }
 
         // CREATE OR REPLACE with InheritPermissions: false should interrupt inheritance again
-        TestCreateSecret(runtime, ++txId, "/MyRoot",
+        TestCreateSecretOrReplace(runtime, ++txId, "/MyRoot",
             R"(
                 Name: "secret"
                 Value: "value3"
                 InheritPermissions: false
-                ReplaceIfExists: true
             )"
         );
         env.TestWaitNotification(runtime, txId);
@@ -1010,12 +1008,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardSecretTest) {
         env.TestWaitNotification(runtime, txId);
 
         // CREATE OR REPLACE with InheritPermissions: false should pick up the new parent grant
-        TestCreateSecret(runtime, ++txId, "/MyRoot",
+        TestCreateSecretOrReplace(runtime, ++txId, "/MyRoot",
             R"(
                 Name: "secret"
                 Value: "value2"
                 InheritPermissions: false
-                ReplaceIfExists: true
             )"
         );
         env.TestWaitNotification(runtime, txId);

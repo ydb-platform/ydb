@@ -551,25 +551,12 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         return IsCreateRequest(modifyScheme);
     }
 
-    static bool IsReplaceIfExists(const NKikimrSchemeOp::TModifyScheme& modifyScheme) {
-        switch (modifyScheme.GetOperationType()) {
-        case NKikimrSchemeOp::ESchemeOpCreateSecret:
-            return modifyScheme.GetCreateSecret().GetReplaceIfExists();
-        case NKikimrSchemeOp::ESchemeOpCreateExternalDataSource:
-        case NKikimrSchemeOp::ESchemeOpCreateExternalTable:
-        case NKikimrSchemeOp::ESchemeOpCreateStreamingQuery:
-            return modifyScheme.GetReplaceIfExists();
-        default:
-            return false;
-        }
-    }
-
     // Schemeshard executes CREATE OR REPLACE over an existing object as an alter of it,
     // so alter rights on the object are required too: create rights on the parent dir
     // alone must not be enough to overwrite an object owned by somebody else.
     // The object may not exist yet, then it is a plain create and the check is skipped.
     void AddResolveForCreateOrReplace(NKikimrSchemeOp::TModifyScheme& pbModifyScheme, const TVector<TString>& workingDir) {
-        if (!IsReplaceIfExists(pbModifyScheme)) {
+        if (!pbModifyScheme.GetReplaceIfExists()) {
             return;
         }
 

@@ -2687,8 +2687,6 @@ message TSecretSchemaOp {
     // However, this field is supposed to be resolved at KQP to the actual value and be cleared.
     // Schemeshard always uses secret's value from the Value field and asserts that the ValueParamName field is empty.
     optional string ValueParamName = 4;
-    // For CREATE OR REPLACE: if the secret already exists, alter it with the new value
-    optional bool ReplaceIfExists = 5;
 }
 
 message TStreamingQueryProperties {

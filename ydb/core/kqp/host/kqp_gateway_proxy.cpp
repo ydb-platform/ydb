@@ -3632,6 +3632,7 @@ public:
                 tx.SetFailOnExist(!settings.ExistingOk && !settings.ReplaceIfExists);
                 tx.SetFailedOnAlreadyExists(!settings.ExistingOk && !settings.ReplaceIfExists);
                 tx.SetSuccessOnNotExist(settings.MissingOk);
+                tx.SetReplaceIfExists(settings.ReplaceIfExists);
 
                 TSecretSchemaOp& op = GetSecretSchemaOp(tx);
                 op.SetName(pathPair.second);
@@ -3719,7 +3720,6 @@ public:
             if (settings.InheritPermissions.has_value()) {
                 op.SetInheritPermissions(*settings.InheritPermissions);
             }
-            op.SetReplaceIfExists(settings.ReplaceIfExists);
         }
 
     private:

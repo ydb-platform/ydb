@@ -337,7 +337,7 @@ bool SetName<TTag>(TTag, TTxTransaction& tx, const TString& name) {
 
 ISubOperation::TPtr CreateNewSecret(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
     const auto& createSecretProto = tx.GetCreateSecret();
-    const auto replaceIfExists = createSecretProto.GetReplaceIfExists();
+    const auto replaceIfExists = tx.GetReplaceIfExists();
 
     if (replaceIfExists) {
         const TString& parentPathStr = tx.GetWorkingDir();

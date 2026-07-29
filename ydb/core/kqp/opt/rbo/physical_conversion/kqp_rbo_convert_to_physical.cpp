@@ -25,6 +25,38 @@ using namespace NKikimr::NKqp;
 
 namespace NKikimr::NKqp {
 
+namespace {
+
+/**
+ * Order in which the union inputs are consumed by the stage: inputs sharing a stage are grouped
+ * together at the position of the first child using that stage, keeping child order within a group.
+ * This mirrors the way TPhysicalQueryBuilder::BuildPhysicalStageGraph builds the stage connections,
+ * which are paired with the stage arguments positionally.
+ */
+TVector<ui32> GetUnionAllInputArgumentOrder(TOpUnionAll& unionAll) {
+    TVector<ui32> stageOrder;
+    THashMap<ui32, TVector<ui32>> childrenByStage;
+    for (ui32 childIndex = 0; childIndex < unionAll.Children.size(); ++childIndex) {
+        const auto childStageId = *unionAll.Children[childIndex]->Props.StageId;
+        auto [it, inserted] = childrenByStage.emplace(childStageId, TVector<ui32>());
+        if (inserted) {
+            stageOrder.push_back(childStageId);
+        }
+        it->second.push_back(childIndex);
+    }
+
+    TVector<ui32> result;
+    result.reserve(unionAll.Children.size());
+    for (const auto stageId : stageOrder) {
+        for (const auto childIndex : childrenByStage.at(stageId)) {
+            result.push_back(childIndex);
+        }
+    }
+    return result;
+}
+
+} // anonymous namespace
+
 TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
     TExprContext& ctx = rboCtx.ExprCtx;
 
@@ -186,13 +218,14 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& rboCtx) {
         } else if (op->Kind == EOperator::UnionAll) {
             auto unionAll = CastOperator<TOpUnionAll>(op);
 
-            auto [leftArg, leftInput] = graph.GenerateStageInput(stageInputCounter, op->Pos, ctx);
-            stageArgs[opStageId].push_back(leftArg);
+            TVector<TExprNode::TPtr> inputs(unionAll->Children.size());
+            for (const auto childIndex : GetUnionAllInputArgumentOrder(*unionAll)) {
+                auto [arg, input] = graph.GenerateStageInput(stageInputCounter, op->Pos, ctx);
+                stageArgs[opStageId].push_back(arg);
+                inputs[childIndex] = input;
+            }
 
-            auto [rightArg, rightInput] = graph.GenerateStageInput(stageInputCounter, op->Pos, ctx);
-            stageArgs[opStageId].push_back(rightArg);
-
-            currentStageBody = Build<TPhysicalUnionAllBuilder>(unionAll, ctx, op->Pos, leftInput, rightInput);
+            currentStageBody = Build<TPhysicalUnionAllBuilder>(unionAll, ctx, op->Pos, inputs);
 
             if (!unionAll->IsSingleConsumer()) {
                 currentStageBody = NPhysicalConvertionUtils::BuildMultiConsumerHandler(currentStageBody, unionAll->GetNumOfConsumers(), ctx, op->Pos);

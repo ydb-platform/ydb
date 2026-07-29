@@ -298,24 +298,31 @@ TStatus ComputeTypes(TIntrusivePtr<TOpAddDependencies> addDeps, TRBOContext& ctx
 }
 
 TStatus ComputeTypes(TIntrusivePtr<TOpUnionAll> unionAll, TRBOContext& ctx) {
-    auto leftInputType = unionAll->GetLeftInput()->Type;
-    auto rightInputType = unionAll->GetRightInput()->Type;
-    const auto leftStructType = leftInputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-    const auto rightStructType = rightInputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    TVector<const TStructExprType*> inputStructTypes;
+    inputStructTypes.reserve(unionAll->Children.size());
+    for (const auto& input : unionAll->Children) {
+        inputStructTypes.push_back(input->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>());
+    }
 
+    // The output type of every column is taken from the first input.
     TVector<const TItemExprType*> resultItems;
     resultItems.reserve(unionAll->Columns.size());
     for (const auto& column : unionAll->Columns) {
-        const auto* leftType = leftStructType->FindItemType(column.GetFullName());
-        const auto* rightType = rightStructType->FindItemType(column.GetFullName());
-        Y_ENSURE(leftType, "Missing UnionAll left source type: " << column.GetFullName());
-        Y_ENSURE(rightType, "Missing UnionAll right source type: " << column.GetFullName());
+        const TTypeAnnotationNode* resultType = nullptr;
+        for (size_t i = 0; i < inputStructTypes.size(); ++i) {
+            const auto* inputType = inputStructTypes[i]->FindItemType(column.GetFullName());
+            Y_ENSURE(inputType, "Missing UnionAll source type for input " << i << ": " << column.GetFullName());
 
-        // FIXME: This currently does not pass after UnionAll semantic update
-        // Y_ENSURE(IsSameAnnotation(*leftType, *rightType),
-        //     "UnionAll source type mismatch for " << column.GetFullName());
+            // FIXME: This currently does not pass after UnionAll semantic update
+            // Y_ENSURE(!resultType || IsSameAnnotation(*resultType, *inputType),
+            //     "UnionAll source type mismatch for " << column.GetFullName());
 
-        resultItems.push_back(ctx.ExprCtx.MakeType<TItemExprType>(column.GetFullName(), leftType));
+            if (!resultType) {
+                resultType = inputType;
+            }
+        }
+
+        resultItems.push_back(ctx.ExprCtx.MakeType<TItemExprType>(column.GetFullName(), resultType));
     }
 
     auto resultItemType = ctx.ExprCtx.MakeType<TStructExprType>(resultItems);

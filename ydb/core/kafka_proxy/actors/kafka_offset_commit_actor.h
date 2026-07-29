@@ -30,7 +30,8 @@ using namespace NKikimr;
 
 extern const TString CHECK_GROUP_GENERATION;
 
-class TKafkaOffsetCommitActor: public NActors::TActorBootstrapped<TKafkaOffsetCommitActor> {
+class TKafkaOffsetCommitActor: public NActors::TActorBootstrapped<TKafkaOffsetCommitActor>
+                             , public TKafkaExceptionHandler<TKafkaOffsetCommitActor> {
 
 struct TRequestInfo {
     TString TopicName = "";
@@ -51,6 +52,10 @@ public:
     }
 
     void Bootstrap(const NActors::TActorContext& ctx);
+
+    NActors::TActorId GetKafkaConnectionId() const {
+        return Context ? Context->ConnectionId : NActors::TActorId{};
+    }
 
 private:
     NActors::NStructuredLog::TStructuredMessage LogPrefix();

@@ -7,6 +7,7 @@
 #include <ydb/core/kqp/common/simple/services.h>
 #include <util/generic/cast.h>
 #include <regex>
+#include <ydb/library/actors/core/log.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
 
@@ -146,7 +147,7 @@ namespace NKafka {
                 HandleCommitResponse(ctx);
                 break;
             default:
-                Y_FAIL("Unexpected KQP request");
+                AFL_ENSURE(false)("reason", "Unexpected KQP request")("request", GetAsStr(LastSentToKqpRequest))("database", DatabasePath);
         }
     }
 

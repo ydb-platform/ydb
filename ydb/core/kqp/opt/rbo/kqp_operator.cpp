@@ -564,7 +564,7 @@ TOpAddDependencies::TOpAddDependencies(TIntrusivePtr<IOperator> input, TPosition
 
 TVector<std::pair<TInfoUnit, const TTypeAnnotationNode*>> TOpAddDependencies::GetDependencyPairs() {
     TVector<std::pair<TInfoUnit, const TTypeAnnotationNode*>> result;
-    for (size_t i=0; i<Dependencies.size(); i++) {
+    for (size_t i = 0; i < Dependencies.size(); i++) {
         result.push_back(std::make_pair(Dependencies[i], Types[i]));
     }
     return result;
@@ -588,12 +588,12 @@ void TOpAddDependencies::ComputeOutputIUs() {
 
 TString TOpAddDependencies::ToString(TExprContext& ctx) {
     Y_UNUSED(ctx);
-    
+
     auto res = TStringBuilder();
     res << "Correlated [";
-    for (size_t i=0; i<Dependencies.size(); i++) {
+    for (size_t i = 0; i < Dependencies.size(); i++) {
         res << Dependencies[i].GetFullName();
-        if (i!=Dependencies.size()-1) {
+        if (i != Dependencies.size() - 1) {
             res << ",";
         }
     }
@@ -843,12 +843,17 @@ NJson::TJsonValue TOpJoin::ToJson(ui32 explainFlags) {
  * OpUnionAll operator methods
  */
 
-TOpUnionAll::TOpUnionAll(TIntrusivePtr<IOperator> leftInput, TIntrusivePtr<IOperator> rightInput, TPositionHandle pos,
-                         TVector<TInfoUnit> columns, bool ordered)
-    : IBinaryOperator(EOperator::UnionAll, pos, leftInput, rightInput)
+TOpUnionAll::TOpUnionAll(TVector<TIntrusivePtr<IOperator>> inputs, TPositionHandle pos, TVector<TInfoUnit> columns, bool ordered)
+    : IVariadicOperator(EOperator::UnionAll, pos, std::move(inputs))
     , Columns(std::move(columns))
     , Ordered(ordered) {
     Y_ENSURE(!Columns.empty(), "UnionAll must have columns");
+    Y_ENSURE(Children.size() >= 2, "UnionAll must have at least two inputs");
+}
+
+TOpUnionAll::TOpUnionAll(TIntrusivePtr<IOperator> leftInput, TIntrusivePtr<IOperator> rightInput, TPositionHandle pos,
+                         TVector<TInfoUnit> columns, bool ordered)
+    : TOpUnionAll(TVector<TIntrusivePtr<IOperator>>{leftInput, rightInput}, pos, std::move(columns), ordered) {
 }
 
 // Recompute ius for now

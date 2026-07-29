@@ -2212,6 +2212,7 @@ public:
             INSERT_TOPIC_SETTING(AutoPartitioningDownUtilizationPercent)
             INSERT_TOPIC_SETTING(AutoPartitioningStrategy)
             INSERT_TOPIC_SETTING(MetricsLevel)
+            INSERT_TOPIC_SETTING(ContentBasedDeduplication)
 
 #undef INSERT_TOPIC_SETTING
 
@@ -2340,6 +2341,7 @@ public:
             INSERT_TOPIC_SETTING(AutoPartitioningDownUtilizationPercent)
             INSERT_TOPIC_SETTING(AutoPartitioningStrategy)
             INSERT_TOPIC_SETTING(MetricsLevel)
+            INSERT_TOPIC_SETTING(ContentBasedDeduplication)
 
 #undef INSERT_TOPIC_SETTING
 

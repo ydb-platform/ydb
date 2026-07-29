@@ -793,9 +793,16 @@ NYT::TNode RowSpecYqlTypeToYtType(const NYT::TNode& rowSpecType, ui64 nativeYtTy
         ytType = NYT::TNode("yson");
     }
 
-    if (ytType.IsString() && ytType.AsString() == "yson") {
-        // yson is always optional
-        required = false;
+    if (ytType.IsString()) {
+        const auto& ytTypeName = ytType.AsString();
+        if (ytTypeName == "yson") {
+            // yson is always optional
+            required = false;
+        } else if (ytTypeName == "null" || ytTypeName == "void") {
+            // Intended data loss in order to
+            // keep backward compatibility with existing tables
+            required = true;
+        }
     }
 
     if (!required) {

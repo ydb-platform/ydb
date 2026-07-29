@@ -11,14 +11,14 @@
   "blobstorage": "area/blobstorage",
   "ci": "area/ci",
   "cli": "area/cli",
-  "cpp-sdk": "area/sdk",
   "schemeshard": "area/schemeshard",
   "ui-backend": "area/ui-backend",
-  "appteam": "area/appteam",
+  "appteam": "area/sdk",
   "duty": "area/duty",
   "engineering": "area/engineering",
   "postgres-compatibility": "area/pg",
   "security": "area/security",
   "changelog-reviewers": "area/changelog",
-  "nbs": "area/nbs"
+  "nbs": "area/nbs",
+  "infra": "area/infra"
 }

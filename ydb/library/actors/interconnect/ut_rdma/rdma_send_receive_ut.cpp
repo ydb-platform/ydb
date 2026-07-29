@@ -456,6 +456,44 @@ TEST_P(RdmaSendReceiveTestCqMode, BidirectionalMainChannelTraffic) {
     UNIT_ASSERT_VALUES_EQUAL(GetSessionCounter(cluster, 1, 2, "BytesWrittenToSocket"), node1BytesWrittenToSocketBefore);
 }
 
+// Verifies that MaxSerializedEventSize is inclusive for the RDMA main-channel
+// serializer: an event whose serialized size equals the limit is delivered.
+TEST_P(RdmaSendReceiveTestCqMode, MaxSizedMainChannelEvent) {
+    constexpr size_t bufferSize = 1024;
+    auto sizeProbe = std::make_unique<TEvTestSerialization>();
+    sizeProbe->Record.SetBlobID(1);
+    sizeProbe->Record.SetBuffer(TString(bufferSize, 'X'));
+    const ui32 maxSerializedEventSize = sizeProbe->CalculateSerializedSize();
+
+    auto settingsCustomizer = [maxSerializedEventSize](ui32 nodeId, TInterconnectSettings& settings) {
+        EnableRdmaSendReceive(nodeId, settings);
+        settings.MaxSerializedEventSize = maxSerializedEventSize;
+    };
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(GetParam()),
+        TTestICCluster::TCheckerFactory(), TDuration::Seconds(30), TNode::DefaultInflight(), settingsCustomizer);
+
+    auto receiverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBlobID(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBuffer(), TString(bufferSize, 'X'));
+    });
+    const TActorId receiver = cluster.RegisterActor(receiverPtr, 1);
+
+    WaitForInterconnectConnection(cluster, 2, 1);
+    TString lastRdmaStatus;
+    UNIT_ASSERT_C(WaitForRdmaChecksumStatus(cluster, 2, 1, "On | SoftwareChecksum | SendReceive", 20, lastRdmaStatus),
+        "last RDMA status: " << FormatLastRdmaStatus(lastRdmaStatus));
+    const ui64 bytesWrittenToSocketBefore = WaitForSessionCounter(cluster, 2, 1, "BytesWrittenToSocket");
+
+    auto ev = std::make_unique<TEvTestSerialization>();
+    ev->Record.SetBlobID(1);
+    ev->Record.SetBuffer(TString(bufferSize, 'X'));
+    UNIT_ASSERT_VALUES_EQUAL(ev->CalculateSerializedSize(), maxSerializedEventSize);
+    cluster.RegisterActor(new TSendActor(receiver, std::move(ev)), 2);
+
+    UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
+    UNIT_ASSERT_VALUES_EQUAL(GetSessionCounter(cluster, 2, 1, "BytesWrittenToSocket"), bytesWrittenToSocketBefore);
+}
+
 namespace {
 
 void RunOversizedMainChannelEventTest(NInterconnect::NRdma::ECqMode cqMode,

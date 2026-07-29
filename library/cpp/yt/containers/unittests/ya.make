@@ -8,6 +8,7 @@ SRCS(
     default_map_ut.cpp
     enum_indexed_array_ut.cpp
     expiring_set_ut.cpp
+    intrusive_linked_list_ut.cpp
     non_empty_ut.cpp
     ordered_hash_map_ut.cpp
     ring_queue_ut.cpp

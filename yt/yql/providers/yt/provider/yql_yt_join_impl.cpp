@@ -2564,9 +2564,16 @@ bool RewriteYtCommonJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, TYtJoi
     bool leftUnique, bool rightUnique, ui64 leftSize, ui64 rightSize)
 {
     const auto pos = equiJoin.Pos();
+    const bool joinCommonAnySideFirst = state->Configuration->JoinCommonAnySideFirst.Get().GetOrElse(DEFAULT_JOIN_COMMON_ANY_SIDE_FIRST);
 
-    const auto leftNotFat = leftUnique || op.LinkSettings.LeftHints.contains("unique") || op.LinkSettings.LeftHints.contains("small");
-    const auto rightNotFat = rightUnique || op.LinkSettings.RightHints.contains("unique") || op.LinkSettings.RightHints.contains("small");
+    const auto leftNotFat = leftUnique
+        || op.LinkSettings.LeftHints.contains("unique")
+        || op.LinkSettings.LeftHints.contains("small")
+        || joinCommonAnySideFirst && op.LinkSettings.LeftHints.contains("any");
+    const auto rightNotFat = rightUnique
+        || op.LinkSettings.RightHints.contains("unique")
+        || op.LinkSettings.RightHints.contains("small")
+        || joinCommonAnySideFirst && op.LinkSettings.RightHints.contains("any");
     bool leftFirst = false;
     if (leftNotFat != rightNotFat) {
         // non-fat will be first

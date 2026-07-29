@@ -456,20 +456,35 @@ def _create_pm(unit: NotsUnitType) -> 'PackageManager':
 
 
 def _use_hermetic_node_modules(unit: NotsUnitType) -> bool:
-    # Only TS_LIBRARY and TS_PACKAGE enable eligibility. Deprecated builders
-    # keep their legacy prepare-deps and node_modules installation flow.
+    # Only supported TS module and check macros set the capability flag.
+    # Deprecated builders keep their legacy node_modules installation flow.
+    local_cli = unit.get("TS_LOCAL_CLI") == "yes"
+    injects_peers = unit.get("_INJECT_PEERS") == "yes"
+    module_supports_hermetic_node_modules = unit.get("_SUPPORTS_HERMETIC_NODE_MODULES") == "yes"
+    hermetic_node_modules_disabled = unit.get("TS_DISABLE_HERMETIC_NODE_MODULES") == "yes"
+
     return (
-        unit.get("TS_HERMETIC_NODE_MODULES") != "no"
-        and unit.get("_HERMETIC_NODE_MODULES_ELIGIBLE") == "yes"
-        and unit.get("_INJECT_PEERS") == "yes"
-        and unit.get("_HERMETIC_NODE_MODULES_DISABLED") != "yes"
+        not local_cli and injects_peers and module_supports_hermetic_node_modules and not hermetic_node_modules_disabled
     )
 
 
-def _enable_hermetic_node_modules(unit: NotsUnitType) -> None:
-    if _use_hermetic_node_modules(unit):
-        unit.set(["_HERMETIC_NODE_MODULES_ARG", "--hermetic-node-modules yes"])
-        unit.set(["NOTS_TOOL_REQUIREMENTS__NO_UID__", '${hide;requirements:"cpu:4 ram_disk:4"}'])
+def _configure_hermetic_node_modules(unit: NotsUnitType) -> None:
+    unit.set(["_HERMETIC_NODE_MODULES_ARG", "--hermetic-node-modules yes"])
+    unit.set(["NOTS_TOOL_REQUIREMENTS__NO_UID__", '${hide;requirements:"cpu:4 ram_disk:4"}'])
+    if unit.get("OS_LINUX") == "yes" and unit.get("ARCH_X86_64") == "yes":
+        unit.onpeerdir(["devtools/frontend_build_platform/nots/squashfs"])
+        unit.set(
+            [
+                "_SQUASHFS_TOOLS_ARG",
+                "--squashfs-tools-path $SQUASHFS_TOOLS_RESOURCE_GLOBAL",
+            ]
+        )
+        unit.set(
+            [
+                "_SQUASHFS_TOOLS_RECIPE_ARG",
+                "--squashfs-tools-path $SQUASHFS_TOOLS_RESOURCE_GLOBAL",
+            ]
+        )
 
 
 def _setup_prebuilder_resource(unit: NotsUnitType) -> None:
@@ -1047,7 +1062,7 @@ def _PREPARE_DEPS_CONFIGURE(unit: NotsUnitType) -> None:
         from lib.nots.package_manager import constants
         from lib.nots.package_manager.utils import b_rooted, s_rooted
 
-        _enable_hermetic_node_modules(unit)
+        _configure_hermetic_node_modules(unit)
         if pj.get_use_prebuilder():
             _setup_prebuilder_resource(unit)
         __set_append(unit, "_PREPARE_DEPS_INOUTS", "${hide:PEERS}")
@@ -1247,7 +1262,7 @@ def _NODE_MODULES_CONFIGURE(unit: NotsUnitType) -> None:
     pj = pm.load_package_json_from_dir(pm.sources_path)
     has_deps = pj.has_dependencies()
     if _use_hermetic_node_modules(unit):
-        _enable_hermetic_node_modules(unit)
+        _configure_hermetic_node_modules(unit)
 
     if has_deps:
         unit.onpeerdir(pm.get_local_peers_from_package_json())

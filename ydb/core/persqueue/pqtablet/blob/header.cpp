@@ -14,8 +14,8 @@ const ui32 MAX_HEADER_SIZE = 32; // max TBatchHeader size
 
 
 ui32 GetMaxHeaderSize() {
-    const ui32 MAX_HEADER_SIZE_WITH_OFFSET_DELTA = 64;
-    return (HasAppData() && AppData()->FeatureFlags.GetEnableTopicWriteOffsetDeltaInKeys() && AppData()->FeatureFlags.GetEnableTopicMessagesBatching()) ? MAX_HEADER_SIZE_WITH_OFFSET_DELTA : MAX_HEADER_SIZE;
+    const ui32 MAX_HEADER_SIZE_AFTER_BATCHING_ENABLED = 64;
+    return (HasAppData() && AppData()->FeatureFlags.GetEnableTopicWriteOffsetDeltaInKeys() && AppData()->FeatureFlags.GetEnableTopicMessagesBatching()) ? MAX_HEADER_SIZE_AFTER_BATCHING_ENABLED : MAX_HEADER_SIZE;
 }
 
 NKikimrPQ::TBatchHeader ExtractHeader(const char *data, ui32 size) {

@@ -9,6 +9,8 @@
 
 #include <ydb/library/actors/core/actorid.h>
 
+#include <library/cpp/threading/future/core/future.h>
+
 #include <util/generic/maybe.h>
 #include <util/generic/vector.h>
 #include <util/system/types.h>
@@ -118,9 +120,13 @@ struct TTxPartition
     struct TUpdateVChunkConfig
     {
         const TVChunkConfig VChunkConfig;
+        NThreading::TPromise<void> UpdateCompleted;
 
-        explicit TUpdateVChunkConfig(TVChunkConfig vChunkConfig)
+        explicit TUpdateVChunkConfig(
+            TVChunkConfig vChunkConfig,
+            NThreading::TPromise<void> updateCompleted)
             : VChunkConfig(std::move(vChunkConfig))
+            , UpdateCompleted(std::move(updateCompleted))
         {}
 
         void Clear()

@@ -135,6 +135,10 @@ struct TDBGFixture: public NUnitTest::TBaseFixture
         const TExecutorPtr& executor,
         const NThreading::TFuture<void>& future,
         TDuration timeout = DefaultWaitFutureTimeout);
+
+    // Sets all response Promises for update configs requests. Returns executed
+    // requests count.
+    size_t ReplyUpdateRequests();
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

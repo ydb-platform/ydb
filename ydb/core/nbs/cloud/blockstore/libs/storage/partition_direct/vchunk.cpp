@@ -235,14 +235,10 @@ void TVChunk::SetHostState(THostIndex hostIndex, EHostState state)
         }
         return TVChunkConfig{};
     };
-    auto apply = [weakSelf = weak_from_this()]()
-    {
-        if (auto self = weakSelf.lock()) {
-            self->ApplyConfig();
-        }
-    };
-
-    UpdateConfig(std::move(prepare), std::move(apply));
+    UpdateConfig(
+        std::move(prepare),
+        TStringBuilder() << "state of " << PrintHostAndNode(hostIndex)
+                         << " updated to " << ToString(state));
 }
 
 void TVChunk::UpdateHostCount(size_t newHostCount)
@@ -265,14 +261,7 @@ void TVChunk::UpdateHostCount(size_t newHostCount)
         }
         return TVChunkConfig{};
     };
-    auto apply = [weakSelf = weak_from_this()]()
-    {
-        if (auto self = weakSelf.lock()) {
-            self->ApplyConfig();
-        }
-    };
-
-    UpdateConfig(std::move(prepare), std::move(apply));
+    UpdateConfig(std::move(prepare), "Host count increased");
 }
 
 const TVChunkConfig& TVChunk::GetConfig() const
@@ -882,15 +871,13 @@ void TVChunk::UpdatePendingCounters()
         BlocksDirtyMap.GetMinErasePendingLsn());
 }
 
-void TVChunk::UpdateConfig(
-    TPrepareConfigFunc prepareConfig,
-    TApplyPersistedConfigFunc applyPersisted)
+void TVChunk::UpdateConfig(TPrepareConfigFunc prepareConfig, TString message)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     PendingVChunkConfigs.push_back(TPendingVChunkConfig{
         .PrepareConfig = std::move(prepareConfig),
-        .ApplyPersisted = std::move(applyPersisted)});
+        .Message = std::move(message)});
     PersistNextPendingConfig();
 }
 
@@ -905,19 +892,40 @@ void TVChunk::PersistNextPendingConfig()
     auto& pending = *PendingVChunkConfigs.begin();
 
     pending.Config = std::move(pending.PrepareConfig)();
+
+    if (pending.Config.Empty() || pending.Config == VChunkConfig) {
+        LOG_INFO(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "%s Skip update config: %s %s",
+            LogTitle.GetWithTime().c_str(),
+            pending.Message.Quote().c_str(),
+            pending.Config.DebugPrint().c_str());
+
+        PendingVChunkConfigs.pop_front();
+        PersistNextPendingConfig();
+        return;
+    }
+
     Y_ABORT_UNLESS(
         pending.Config.GetVChunkIndex() == VChunkConfig.GetVChunkIndex());
     Y_ABORT_UNLESS(pending.Config.IsValid());
 
-    PartitionDirectService->UpdateVChunkConfig(pending.Config);
-
-    DirectBlockGroup->Schedule(
-        TDuration::Seconds(1),
-        [weakSelf = weak_from_this()]()
+    auto onPersisted =
+        PartitionDirectService->UpdateVChunkConfig(pending.Config);
+    onPersisted.Subscribe(
+        [weakSelf = weak_from_this(), executor = Executor]   //
+        (const TFuture<void>& f)
         {
-            if (auto self = weakSelf.lock()) {
-                self->OnConfigPersisted();
-            }
+            Y_UNUSED(f);
+
+            executor->ExecuteSimple(
+                [weakSelf = std::move(weakSelf)]()
+                {
+                    if (auto self = weakSelf.lock()) {
+                        self->OnConfigPersisted();
+                    }
+                });
         });
 }
 
@@ -926,57 +934,27 @@ void TVChunk::OnConfigPersisted()
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
     Y_ABORT_UNLESS(!PendingVChunkConfigs.empty());
 
-    auto& pending = *PendingVChunkConfigs.begin();
-    VChunkConfig = pending.Config;
-    auto apply = std::move(pending.ApplyPersisted);
+    auto persisted = std::move(PendingVChunkConfigs.front());
     PendingVChunkConfigs.pop_front();
+
+    ApplyConfig(std::move(persisted.Config), persisted.Message);
     PersistNextPendingConfig();
-    apply();
 }
 
-TVChunkConfig TVChunk::PrepareNewConfig(
-    THostIndex hostIndex,
-    EHostState state) const
-{
-    auto newConfig = VChunkConfig;
-
-    switch (state) {
-        case EHostState::Online: {
-            newConfig.EnableHost(hostIndex);
-            break;
-        }
-        case EHostState::TemporaryOffline: {
-            newConfig.DisableHost(hostIndex);
-            break;
-        }
-        case EHostState::Offline: {
-            const TString message = newConfig.EvacuateHost(hostIndex);
-            if (!message.empty()) {
-                LOG_WARN(
-                    *ActorSystem,
-                    NKikimrServices::NBS_PARTITION,
-                    "%s %s",
-                    LogTitle.GetWithTime().c_str(),
-                    message.c_str());
-            }
-
-            break;
-        }
-    }
-    return newConfig;
-}
-
-void TVChunk::ApplyConfig()
+void TVChunk::ApplyConfig(TVChunkConfig newConfig, const TString& message)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     LOG_INFO(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "%s Applying config %s",
+        "%s Applying new config %s %s -> %s",
         LogTitle.GetWithTime().c_str(),
-        VChunkConfig.DebugPrint().c_str());
+        message.Quote().c_str(),
+        VChunkConfig.DebugPrint().c_str(),
+        newConfig.DebugPrint().c_str());
 
+    VChunkConfig = std::move(newConfig);
     BlocksDirtyMap.UpdateConfig(VChunkConfig);
 
     // Remove unnecessary copiers
@@ -995,7 +973,7 @@ void TVChunk::ApplyConfig()
             NKikimrServices::NBS_PARTITION,
             "%s Copier %s stopping",
             LogTitle.GetWithTime().c_str(),
-            PrintHostIndex(hostIndex).c_str());
+            PrintHostAndNode(hostIndex).c_str());
 
         (*copier)->Stop().Subscribe(
             [weakSelf = weak_from_this(), hostIndex]   //
@@ -1037,7 +1015,7 @@ void TVChunk::ApplyConfig()
             NKikimrServices::NBS_PARTITION,
             "%s Copier %s started",
             LogTitle.GetWithTime().c_str(),
-            PrintHostIndex(hostIndex).c_str());
+            PrintHostAndNode(hostIndex).c_str());
 
         newCopier->Start().Subscribe(
             [weakSelf = weak_from_this(), hostIndex]   //
@@ -1048,6 +1026,38 @@ void TVChunk::ApplyConfig()
                 }
             });
     }
+}
+
+TVChunkConfig TVChunk::PrepareNewConfig(
+    THostIndex hostIndex,
+    EHostState state) const
+{
+    auto newConfig = VChunkConfig;
+
+    switch (state) {
+        case EHostState::Online: {
+            newConfig.EnableHost(hostIndex);
+            break;
+        }
+        case EHostState::TemporaryOffline: {
+            newConfig.DisableHost(hostIndex);
+            break;
+        }
+        case EHostState::Offline: {
+            const TString message = newConfig.EvacuateHost(hostIndex);
+            if (!message.empty()) {
+                LOG_WARN(
+                    *ActorSystem,
+                    NKikimrServices::NBS_PARTITION,
+                    "%s %s",
+                    LogTitle.GetWithTime().c_str(),
+                    message.c_str());
+            }
+
+            break;
+        }
+    }
+    return newConfig;
 }
 
 void TVChunk::OnCopierStopped(
@@ -1061,7 +1071,7 @@ void TVChunk::OnCopierStopped(
         NKikimrServices::NBS_PARTITION,
         "%s Copier %s stopped %s",
         LogTitle.GetWithTime().c_str(),
-        PrintHostIndex(hostIndex).c_str(),
+        PrintHostAndNode(hostIndex).c_str(),
         ToString(result).c_str());
 }
 
@@ -1076,7 +1086,7 @@ void TVChunk::OnCopyComplete(
         NKikimrServices::NBS_PARTITION,
         "%s CopyDDisk %s finished: %s",
         LogTitle.GetWithTime().c_str(),
-        PrintHostIndex(hostIndex).c_str(),
+        PrintHostAndNode(hostIndex).c_str(),
         ToString(result).c_str());
 
     auto prepare = [weakSelf = weak_from_this(), hostIndex]()
@@ -1088,14 +1098,9 @@ void TVChunk::OnCopyComplete(
         }
         return TVChunkConfig{};
     };
-    auto apply = [weakSelf = weak_from_this()]()
-    {
-        if (auto self = weakSelf.lock()) {
-            self->ApplyConfig();
-        }
-    };
-
-    UpdateConfig(std::move(prepare), std::move(apply));
+    UpdateConfig(
+        std::move(prepare),
+        TStringBuilder() << PrintHostAndNode(hostIndex) << " copy finished");
 }
 
 void TVChunk::WaitForDirtyMapReady()
@@ -1104,6 +1109,11 @@ void TVChunk::WaitForDirtyMapReady()
         const auto dirtyMapReadyFuture = DirtyMapReady.GetFuture();
         Executor->WaitFor(dirtyMapReadyFuture);
     }
+}
+
+TString TVChunk::PrintHostAndNode(THostIndex host) const
+{
+    return PrintHostAndNodeId(host, DirectBlockGroup->GetNodeId(host));
 }
 
 TString TVChunk::PrintInflight() const

@@ -120,7 +120,8 @@ public:
         TDuration delay,
         NYdb::NBS::TCallback callback) override;
 
-    void UpdateVChunkConfig(const TVChunkConfig& cfg) override;
+    NThreading::TFuture<void> UpdateVChunkConfig(
+        const TVChunkConfig& cfg) override;
 
     void QueryAddHost(size_t directBlockGroupId, size_t newHostIndex) override;
 

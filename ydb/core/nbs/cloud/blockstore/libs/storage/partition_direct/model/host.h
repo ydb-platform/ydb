@@ -73,7 +73,7 @@ struct THostRoute
 
 TString PrintHostIndex(THostIndex hostIndex);
 TString PrintNodeId(ui32 nodeId);
-TString PrintHostAndNode(THostIndex hostIndex, ui32 nodeId);
+TString PrintHostAndNodeId(THostIndex hostIndex, ui32 nodeId);
 
 ////////////////////////////////////////////////////////////////////////////////
 

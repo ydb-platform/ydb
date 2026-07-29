@@ -97,6 +97,8 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
     void SetEraseResult(TDBGEraseResponse response, bool async);
     bool WaitEraseRequests(size_t count, TDuration timeout);
 
+    size_t ReplyUpdateRequests();
+
     static auto& AccessBlocksDirtyMap(TVChunk& vchunk)
     {
         return vchunk.BlocksDirtyMap;

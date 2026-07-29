@@ -37,11 +37,11 @@ constexpr size_t MinLockedDDiskSessionsToStart =
 
 NProto::TError MakeSessionError(ui32 nodeId, THostIndex host)
 {
-    TStringBuilder resut;
-    resut << "DDisk " << PrintHostAndNode(host, nodeId)
-          << " session is not established";
+    TStringBuilder result;
+    result << "DDisk " << PrintHostAndNodeId(host, nodeId)
+           << " session is not established";
 
-    return MakeError(E_REJECTED, resut);
+    return MakeError(E_REJECTED, result);
 }
 
 TListPBufferResponse MakeListPBufferResponse(
@@ -1277,36 +1277,6 @@ NThreading::TFuture<TListPBufferResponse> TDirectBlockGroup::ListPBuffers(
     return result;
 }
 
-ui32 TDirectBlockGroup::GetNodeId(THostIndex host)
-{
-    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
-
-    if (DDiskConnections.size() <= host) {
-        return Max<ui32>();
-    }
-    return DDiskConnections[host].HostConnection.DDiskId.NodeId;
-}
-
-NThreading::TFuture<TDBGDumpResponse> TDirectBlockGroup::Dump()
-{
-    auto promise = NewPromise<TDBGDumpResponse>();
-    auto future = promise.GetFuture();
-    Executor->ExecuteSimple(
-        [weakSelf = weak_from_this(),
-         index = DirectBlockGroupIndex,
-         promise = std::move(promise)]   //
-        () mutable
-        {
-            if (auto self = weakSelf.lock()) {
-                promise.SetValue(self->DoDebugPrintDirtyMap());
-            } else {
-                promise.SetValue({.DirectBlockGroupIndex = index});
-            }
-        });
-
-    return future;
-}
-
 void TDirectBlockGroup::OnAddHostResult(
     const NProto::TError& error,
     THostIndex newHostIndex,
@@ -1345,10 +1315,40 @@ void TDirectBlockGroup::OnAddHostResult(
         NKikimrServices::NBS_PARTITION,
         "%s AddHost %s request OK",
         LogTitle.GetWithTime().c_str(),
-        PrintHostAndNode(newHostIndex, GetNodeId(newHostIndex)).c_str());
+        PrintHostAndNode(newHostIndex).c_str());
 
     DoEstablishConnection(newHostIndex, EConnectionType::DDisk);
     DoEstablishConnection(newHostIndex, EConnectionType::PBuffer);
+}
+
+ui32 TDirectBlockGroup::GetNodeId(THostIndex host) const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    if (DDiskConnections.size() <= host) {
+        return Max<ui32>();
+    }
+    return DDiskConnections[host].HostConnection.DDiskId.NodeId;
+}
+
+NThreading::TFuture<TDBGDumpResponse> TDirectBlockGroup::Dump()
+{
+    auto promise = NewPromise<TDBGDumpResponse>();
+    auto future = promise.GetFuture();
+    Executor->ExecuteSimple(
+        [weakSelf = weak_from_this(),
+         index = DirectBlockGroupIndex,
+         promise = std::move(promise)]   //
+        () mutable
+        {
+            if (auto self = weakSelf.lock()) {
+                promise.SetValue(self->DoDebugPrintDirtyMap());
+            } else {
+                promise.SetValue({.DirectBlockGroupIndex = index});
+            }
+        });
+
+    return future;
 }
 
 NThreading::TFuture<TDbgSnapshot> TDirectBlockGroup::BuildMonSnapshot() const
@@ -1383,7 +1383,7 @@ void TDirectBlockGroup::SetHostState(
         NKikimrServices::NBS_PARTITION,
         "%s %s state changed: %s -> %s",
         LogTitle.GetWithTime().c_str(),
-        PrintHostAndNode(hostIndex, GetNodeId(hostIndex)).c_str(),
+        PrintHostAndNode(hostIndex).c_str(),
         ToString(oldState).c_str(),
         ToString(newState).c_str());
 
@@ -1499,7 +1499,7 @@ void TDirectBlockGroup::DoEstablishConnection(
             NKikimrServices::NBS_PARTITION,
             "%s %s starting session: new seq_no: %lu",
             LogTitle.GetWithTime().c_str(),
-            PrintHostAndNode(hostIndex, GetNodeId(hostIndex)).c_str(),
+            PrintHostAndNode(hostIndex).c_str(),
             actualSeqNo);
     }
 
@@ -1573,7 +1573,7 @@ void TDirectBlockGroup::OnConnectionEstablished(
                     "%s %s attempt to establish a session with an old "
                     "seq_no: %lu while actual seq_no: %lu",
                     LogTitle.GetWithTime().c_str(),
-                    PrintHostAndNode(hostIndex, GetNodeId(hostIndex)).c_str(),
+                    PrintHostAndNode(hostIndex).c_str(),
                     seqNo,
                     connection.ConfirmedSessionSeqNo);
                 return;
@@ -1595,7 +1595,7 @@ void TDirectBlockGroup::OnConnectionEstablished(
             NKikimrServices::NBS_PARTITION,
             "%s connection failed %s: %s",
             LogTitle.GetWithTime().c_str(),
-            PrintHostAndNode(hostIndex, GetNodeId(hostIndex)).c_str(),
+            PrintHostAndNode(hostIndex).c_str(),
             FormatError(error).c_str());
         ReEstablishConnection(connectionType, hostIndex);
         return;
@@ -1633,7 +1633,7 @@ void TDirectBlockGroup::ReEstablishConnection(
             "%s reconnect %s suppressed: blocked generation, suicide in "
             "progress",
             LogTitle.GetWithTime().c_str(),
-            PrintHostAndNode(hostIndex, GetNodeId(hostIndex)).c_str());
+            PrintHostAndNode(hostIndex).c_str());
         return;
     }
 
@@ -1658,7 +1658,7 @@ void TDirectBlockGroup::OnNodeDisconnected(THostIndex hostIndex, ui32 nodeId)
         NKikimrServices::NBS_PARTITION,
         "%s OnNodeDisconnected %s",
         LogTitle.GetWithTime().c_str(),
-        PrintHostAndNode(hostIndex, nodeId).c_str());
+        PrintHostAndNodeId(hostIndex, nodeId).c_str());
 
     Oracle.OnDDiskDisconnected(hostIndex, TInstant::Now());
 
@@ -1766,7 +1766,7 @@ void TDirectBlockGroup::OnResponse(
             NKikimrServices::NBS_PARTITION,
             "%s OnResponse %s %s %s",
             LogTitle.GetWithTime().c_str(),
-            PrintHostAndNode(hostIndex, GetNodeId(hostIndex)).c_str(),
+            PrintHostAndNode(hostIndex).c_str(),
             ToString(operation).c_str(),
             FormatError(error).c_str());
 
@@ -1986,6 +1986,11 @@ TConnectionSnapshot TDirectBlockGroup::MakeConnectionSnapshot(
         .DDiskSession = ToString(ddisk.SessionState),
         .PBufferConnected = pbuffer && pbuffer->ConnectPromise.HasValue(),
     };
+}
+
+TString TDirectBlockGroup::PrintHostAndNode(THostIndex host) const
+{
+    return PrintHostAndNodeId(host, GetNodeId(host));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -1330,8 +1330,12 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             "Enabled{+++++}",
             configBefore);
 
-        // Wait for DB request completed
-        DrainExecutor(executor);
+        // Reply UpdateConfig request.
+        {
+            UNIT_ASSERT_VALUES_EQUAL(1, ReplyUpdateRequests());
+            DrainExecutor(executor);
+        }
+
         TString configAfter;
         TString dirtyMapDDiskAfter;
 

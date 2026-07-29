@@ -32,6 +32,31 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
         }
     };
 
+    // Compaction / retries may temporarily inflate reported row counts via inactive portions.
+    // Poll DescribeTable until rows (and optionally size) match, or fail on timeout.
+    TTableDescription WaitForTableStatistics(NYdb::NTable::TSession& session, const TString& path, ui64 expectedRows,
+        const std::optional<ui64>& expectedSize = std::nullopt, TDuration timeout = TDuration::Seconds(60)) {
+        const auto settings = TDescribeTableSettings().WithTableStatistics(true);
+        const TInstant deadline = TInstant::Now() + timeout;
+        TString lastState;
+        while (TInstant::Now() < deadline) {
+            auto describeResult = session.DescribeTable(path, settings).GetValueSync();
+            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+            const auto description = describeResult.GetTableDescription();
+            const ui64 rows = description.GetTableRows();
+            const ui64 size = description.GetTableSize();
+            lastState = TStringBuilder() << "path=" << path << " rows=" << rows << " (expected " << expectedRows << ")"
+                                         << " size=" << size
+                                         << (expectedSize ? TStringBuilder() << " (expected " << *expectedSize << ")" : TStringBuilder());
+            if (rows == expectedRows && (!expectedSize || size == *expectedSize)) {
+                return description;
+            }
+            Sleep(TDuration::MilliSeconds(200));
+        }
+        UNIT_ASSERT_C(false, "Timeout waiting for table statistics: " << lastState);
+        Y_ABORT("unreachable");
+    }
+
     Y_UNIT_TEST(AddRowsTableStandalone) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<TOlapStatsController>();
 
@@ -54,17 +79,8 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
             testHelper.BulkUpsert(testTable, tableInserter);
         }
 
-        Sleep(TDuration::Seconds(10));
-
-        auto settings = TDescribeTableSettings().WithTableStatistics(true);
-        auto describeResult = testHelper.GetSession().DescribeTable("/Root/ColumnTableTest", settings).GetValueSync();
-
-        UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
-
-        const auto& description = describeResult.GetTableDescription();
-
-        UNIT_ASSERT_VALUES_EQUAL(inserted_rows, description.GetTableRows());
-        UNIT_ASSERT_VALUES_EQUAL(size_single_table, description.GetTableSize());
+        WaitForTableStatistics(
+            testHelper.GetSession(), "/Root/ColumnTableTest", inserted_rows, size_single_table);
     }
 
     Y_UNIT_TEST(AddRowsTableInTableStore) {
@@ -94,18 +110,8 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
             testHelper.BulkUpsert(testTable, tableInserter);
         }
 
-        Sleep(TDuration::Seconds(10));
-
-        auto settings = TDescribeTableSettings().WithTableStatistics(true);
-        auto describeResult =
-            testHelper.GetSession().DescribeTable("/Root/TableStoreTest/ColumnTableTest", settings).GetValueSync();
-
-        UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
-
-        const auto& description = describeResult.GetTableDescription();
-
-        UNIT_ASSERT_VALUES_EQUAL(inserted_rows, description.GetTableRows());
-        UNIT_ASSERT_VALUES_EQUAL(size_single_table, description.GetTableSize());
+        WaitForTableStatistics(
+            testHelper.GetSession(), "/Root/TableStoreTest/ColumnTableTest", inserted_rows, size_single_table);
     }
 
     Y_UNIT_TEST(AddRowsSomeTablesInTableStore) {
@@ -141,18 +147,9 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
             testHelper.BulkUpsert(testTable, tableInserter);
         }
 
-        Sleep(TDuration::Seconds(20));
-
-        auto settings = TDescribeTableSettings().WithTableStatistics(true);
         for (size_t t = 0; t < tables_in_store; t++) {
-            auto describeResult =
-                testHelper.GetSession()
-                    .DescribeTable("/Root/TableStoreTest/ColumnTableTest_" + std::to_string(t), settings)
-                    .GetValueSync();
-            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
-            const auto& description = describeResult.GetTableDescription();
-
-            UNIT_ASSERT_VALUES_EQUAL(t + inserted_rows, description.GetTableRows());
+            WaitForTableStatistics(testHelper.GetSession(),
+                "/Root/TableStoreTest/ColumnTableTest_" + std::to_string(t), t + inserted_rows);
         }
     }
 
@@ -189,16 +186,7 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
             testHelper.BulkUpsert(testTable, tableInserter);
         }
 
-        Sleep(TDuration::Seconds(10));
-
-        auto settings = TDescribeTableSettings().WithTableStatistics(true);
-
-        auto describeStoreResult =
-            testHelper.GetSession().DescribeTable("/Root/TableStoreTest/", settings).GetValueSync();
-        UNIT_ASSERT_C(describeStoreResult.IsSuccess(), describeStoreResult.GetIssues().ToString());
-        const auto& storeDescription = describeStoreResult.GetTableDescription();
-
-        UNIT_ASSERT_VALUES_EQUAL(2000, storeDescription.GetTableRows());
+        const auto storeDescription = WaitForTableStatistics(testHelper.GetSession(), "/Root/TableStoreTest/", 2000);
 
         {
             auto selectQuery = TString(R"(

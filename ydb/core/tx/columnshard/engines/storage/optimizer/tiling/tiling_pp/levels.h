@@ -149,8 +149,6 @@ struct LastLevel: ICompactionUnit<TKey, TPortion> {
             if (result.size() == 1) {
                 if (auto neighbour = NearestNeighbour(candidate, isLocked)) {
                     result.push_back(*neighbour);
-                } else {
-                    return std::nullopt;
                 }
             }
             return CompactionTask<TKey, TPortion>{ result, 1, BuildPriority(locked) };
@@ -235,9 +233,9 @@ struct Accumulator: ICompactionUnit<TKey, TPortion> {
             }
         }
 
-        if (result.Portions.size() > 1) {
+        if (result.Portions.size()) {
             result.Priority = BuildPriority(locked);
-            return { result };
+            return result;
         }
         return {};
     }
@@ -320,12 +318,13 @@ struct MiddleLevel: ICompactionUnit<TKey, TPortion> {
             }
             return true;
         });
-        if (result.Portions.size() < 2) {
-            return std::nullopt;
+        if (result.Portions.size()) {
+            result.TargetLevel = LevelIdx;
+            result.Priority = BuildPriority();
+            return result;
         }
-        result.TargetLevel = LevelIdx;
-        result.Priority = BuildPriority();
-        return result;
+
+        return {};
     }
 
     TOptimizationPriority DoGetUsefulMetric() const override {

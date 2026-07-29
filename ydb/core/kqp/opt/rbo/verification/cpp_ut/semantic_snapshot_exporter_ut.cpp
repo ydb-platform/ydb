@@ -223,6 +223,33 @@ NJson::TJsonValue ParseSupported(const TRBOSemanticSnapshotBoundaryResultV1& res
     return snapshot;
 }
 
+void AssertIntegralAverageState(const NJson::TJsonValue& trait) {
+    UNIT_ASSERT_VALUES_EQUAL(trait["function"].GetStringSafe(), "avg");
+    UNIT_ASSERT_VALUES_EQUAL(trait["type"].GetStringSafe(), "Double");
+    UNIT_ASSERT(trait["nullable"].GetBooleanSafe());
+    UNIT_ASSERT(!trait["distinct"].GetBooleanSafe());
+    UNIT_ASSERT(!trait["unwrap"].GetBooleanSafe());
+
+    const auto& state = trait["state"];
+    UNIT_ASSERT_VALUES_EQUAL(state.GetMapSafe().size(), 6);
+    UNIT_ASSERT_VALUES_EQUAL(
+        state["kind"].GetStringSafe(),
+        "integral_double_v1");
+    UNIT_ASSERT_VALUES_EQUAL(
+        state["source_type"].GetStringSafe(),
+        "Int64");
+    UNIT_ASSERT_VALUES_EQUAL(
+        state["sum_type"].GetStringSafe(),
+        "Double");
+    UNIT_ASSERT_VALUES_EQUAL(
+        state["count_type"].GetStringSafe(),
+        "Uint64");
+    UNIT_ASSERT(state["nullable"].GetBooleanSafe());
+    UNIT_ASSERT_VALUES_EQUAL(
+        state["exact_when_count_at_most"].GetUIntegerSafe(),
+        2);
+}
+
 class TRecordingSemanticSnapshotSink final : public IRBOSemanticSnapshotSink {
 public:
     void OnSemanticSnapshot(TRBOSemanticSnapshotBoundaryResultV1 result) override {
@@ -14406,6 +14433,569 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT_VALUES_EQUAL(
             finalTrait["state"]["nullable"].GetBooleanSafe(),
             true);
+    }
+
+    Y_UNIT_TEST(ExportsIntegralAvgUndefinedStateContract) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {
+            {"k", "Int64", true},
+            {"quantity", "Int64", false},
+            {"price", "Decimal(7,2)", false},
+        });
+        auto read = MakeRead(
+            ctx,
+            table,
+            "a",
+            {"k", "quantity", "price"});
+        const auto* keyType =
+            ScalarType(ctx, NUdf::EDataSlot::Int64);
+        const auto* quantityType =
+            ScalarType(ctx, NUdf::EDataSlot::Int64, true);
+        const auto* averageType =
+            ScalarType(ctx, NUdf::EDataSlot::Double, true);
+        const auto* priceType =
+            DecimalType(ctx, "7", "2", true);
+        SetExactOutputType(ctx, *read, {
+            {"a.k", keyType},
+            {"a.quantity", quantityType},
+            {"a.price", priceType},
+        });
+
+        const auto pos = TPositionHandle();
+        auto aggregate = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{
+                TOpAggregationTraits(
+                    TInfoUnit("a.quantity"),
+                    "avg",
+                    TInfoUnit("quantity_average")),
+                TOpAggregationTraits(
+                    TInfoUnit("a.price"),
+                    "avg",
+                    TInfoUnit("price_average")),
+            },
+            TVector<TInfoUnit>{TInfoUnit("a.k")},
+            EOpPhase::Undefined,
+            false,
+            pos);
+        SetExactOutputType(ctx, *aggregate, {
+            {"a.k", keyType},
+            {"quantity_average", averageType},
+            {"price_average", priceType},
+        });
+        TOpRoot root(
+            aggregate,
+            pos,
+            {"a.k", "quantity_average", "price_average"});
+
+        const auto snapshot = ParseSupported(
+            ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        const auto& node = FindNode(snapshot, "aggregate");
+        UNIT_ASSERT_VALUES_EQUAL(
+            node["phase"].GetStringSafe(),
+            "undefined");
+        const auto& traits = node["aggregates"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(traits.size(), 2);
+
+        const auto& integral = traits[0];
+        UNIT_ASSERT_VALUES_EQUAL(integral.GetMapSafe().size(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(
+            integral["input"].GetStringSafe(),
+            "a.quantity");
+        UNIT_ASSERT_VALUES_EQUAL(
+            integral["output"].GetStringSafe(),
+            "quantity_average");
+        AssertIntegralAverageState(integral);
+
+        const auto& decimal = traits[1];
+        UNIT_ASSERT_VALUES_EQUAL(
+            decimal["type"].GetStringSafe(),
+            "Decimal(7,2)");
+        UNIT_ASSERT_VALUES_EQUAL(
+            decimal["state"].GetMapSafe().size(),
+            3);
+        UNIT_ASSERT(!decimal["state"].Has("kind"));
+        UNIT_ASSERT(!decimal["state"].Has("source_type"));
+        UNIT_ASSERT(!decimal["state"].Has(
+            "exact_when_count_at_most"));
+        UNIT_ASSERT_VALUES_EQUAL(
+            decimal["state"]["sum_type"].GetStringSafe(),
+            "Decimal(35,2)");
+    }
+
+    Y_UNIT_TEST(ExportsIntegralAvgSplitStateContract) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/A", {
+            {"k", "Int64", true},
+            {"quantity", "Int64", false},
+        });
+        auto read = MakeRead(
+            ctx,
+            table,
+            "a",
+            {"k", "quantity"});
+        const auto* keyType =
+            ScalarType(ctx, NUdf::EDataSlot::Int64);
+        const auto* quantityType =
+            ScalarType(ctx, NUdf::EDataSlot::Int64, true);
+        const auto* averageType =
+            ScalarType(ctx, NUdf::EDataSlot::Double, true);
+        SetExactOutputType(ctx, *read, {
+            {"a.k", keyType},
+            {"a.quantity", quantityType},
+        });
+
+        const auto pos = TPositionHandle();
+        auto intermediate = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                TInfoUnit("a.quantity"),
+                "avg",
+                TInfoUnit("_intermediate_average"))},
+            TVector<TInfoUnit>{TInfoUnit("a.k")},
+            EOpPhase::Intermediate,
+            false,
+            pos);
+        SetExactOutputType(ctx, *intermediate, {
+            {"a.k", keyType},
+            {"_intermediate_average", averageType},
+        });
+
+        auto final = MakeIntrusive<TOpAggregate>(
+            intermediate,
+            TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                TInfoUnit("_intermediate_average"),
+                "avg",
+                TInfoUnit("average"))},
+            TVector<TInfoUnit>{TInfoUnit("a.k")},
+            EOpPhase::Final,
+            false,
+            pos);
+        SetExactOutputType(ctx, *final, {
+            {"a.k", keyType},
+            {"average", averageType},
+        });
+        TOpRoot root(final, pos, {"a.k", "average"});
+
+        const auto snapshot = ParseSupported(
+            ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        TVector<const NJson::TJsonValue*> aggregates;
+        for (const auto& node :
+             snapshot["plan"]["nodes"].GetArraySafe())
+        {
+            if (node["op"].GetStringSafe() == "aggregate") {
+                aggregates.push_back(&node);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(aggregates.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*aggregates[0])["phase"].GetStringSafe(),
+            "intermediate");
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*aggregates[1])["phase"].GetStringSafe(),
+            "final");
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*aggregates[1])["input"].GetStringSafe(),
+            (*aggregates[0])["id"].GetStringSafe());
+
+        const auto& intermediateTrait =
+            (*aggregates[0])["aggregates"][0];
+        UNIT_ASSERT_VALUES_EQUAL(
+            intermediateTrait["input"].GetStringSafe(),
+            "a.quantity");
+        UNIT_ASSERT_VALUES_EQUAL(
+            intermediateTrait["output"].GetStringSafe(),
+            "_intermediate_average");
+        AssertIntegralAverageState(intermediateTrait);
+
+        const auto& finalTrait =
+            (*aggregates[1])["aggregates"][0];
+        UNIT_ASSERT_VALUES_EQUAL(
+            finalTrait["input"].GetStringSafe(),
+            "_intermediate_average");
+        UNIT_ASSERT_VALUES_EQUAL(
+            finalTrait["output"].GetStringSafe(),
+            "average");
+        AssertIntegralAverageState(finalTrait);
+    }
+
+    Y_UNIT_TEST(IntegralAvgTypeContractFailsClosed) {
+        const auto exportCase = [](
+            NUdf::EDataSlot inputSlot,
+            bool inputNullable,
+            NUdf::EDataSlot outputSlot,
+            bool outputNullable,
+            TStringBuf function)
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/A", {
+                {"quantity", "Int64", false},
+            });
+            auto read = MakeRead(
+                ctx,
+                table,
+                "a",
+                {"quantity"});
+            SetOutputType(ctx, *read, {
+                {"a.quantity", inputSlot, inputNullable},
+            });
+
+            const auto pos = TPositionHandle();
+            auto aggregate = MakeIntrusive<TOpAggregate>(
+                read,
+                TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                    TInfoUnit("a.quantity"),
+                    TString(function),
+                    TInfoUnit("average"))},
+                TVector<TInfoUnit>{},
+                EOpPhase::Undefined,
+                false,
+                pos);
+            SetOutputType(ctx, *aggregate, {
+                {"average", outputSlot, outputNullable},
+            });
+            TOpRoot root(aggregate, pos, {"average"});
+            return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        };
+
+        struct TCase {
+            NUdf::EDataSlot InputSlot;
+            bool InputNullable;
+            NUdf::EDataSlot OutputSlot;
+            bool OutputNullable;
+            TStringBuf Function;
+            TStringBuf Reason;
+        };
+        const TVector<TCase> cases = {
+            {
+                NUdf::EDataSlot::Int64,
+                false,
+                NUdf::EDataSlot::Double,
+                true,
+                "avg",
+                "input must be exact Optional<Int64>",
+            },
+            {
+                NUdf::EDataSlot::Int32,
+                true,
+                NUdf::EDataSlot::Double,
+                true,
+                "avg",
+                "input must be exact Optional<Int64>",
+            },
+            {
+                NUdf::EDataSlot::Uint64,
+                true,
+                NUdf::EDataSlot::Double,
+                true,
+                "avg",
+                "input must be exact Optional<Int64>",
+            },
+            {
+                NUdf::EDataSlot::Int64,
+                true,
+                NUdf::EDataSlot::Double,
+                false,
+                "avg",
+                "Unsupported scalar type Double",
+            },
+            {
+                NUdf::EDataSlot::Int64,
+                true,
+                NUdf::EDataSlot::Int64,
+                true,
+                "avg",
+                "identical canonical Decimal input and output types",
+            },
+            {
+                NUdf::EDataSlot::Int64,
+                true,
+                NUdf::EDataSlot::Double,
+                true,
+                "sum",
+                "Unsupported scalar type Double",
+            },
+        };
+
+        for (const auto& testCase : cases) {
+            const auto result = exportCase(
+                testCase.InputSlot,
+                testCase.InputNullable,
+                testCase.OutputSlot,
+                testCase.OutputNullable,
+                testCase.Function);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS_C(
+                result.UnsupportedReason,
+                testCase.Reason,
+                result.UnsupportedReason);
+        }
+    }
+
+    Y_UNIT_TEST(IntegralAvgModifiersFailClosed) {
+        const auto exportCase = [](
+            bool distinct,
+            bool unwrap,
+            EOpPhase phase)
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/A", {
+                {"quantity", "Int64", false},
+            });
+            auto read = MakeRead(
+                ctx,
+                table,
+                "a",
+                {"quantity"});
+            SetOutputType(ctx, *read, {
+                {"a.quantity", NUdf::EDataSlot::Int64, true},
+            });
+
+            const auto pos = TPositionHandle();
+            auto aggregate = MakeIntrusive<TOpAggregate>(
+                read,
+                TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                    TInfoUnit("a.quantity"),
+                    "avg",
+                    TInfoUnit("average"),
+                    distinct,
+                    unwrap)},
+                TVector<TInfoUnit>{},
+                phase,
+                false,
+                pos);
+            SetOutputType(ctx, *aggregate, {
+                {"average", NUdf::EDataSlot::Double, true},
+            });
+            TOpRoot root(aggregate, pos, {"average"});
+            return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        };
+
+        const auto distinct = exportCase(
+            true,
+            false,
+            EOpPhase::Undefined);
+        UNIT_ASSERT(!distinct.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            distinct.UnsupportedReason,
+            "Ordinary distinct requires the count function");
+
+        const auto unwrap = exportCase(
+            false,
+            true,
+            EOpPhase::Final);
+        UNIT_ASSERT(!unwrap.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            unwrap.UnsupportedReason,
+            "Aggregate unwrap requires the sum function");
+    }
+
+    Y_UNIT_TEST(IntegralAvgFinalLineageFailsClosed) {
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/A", {
+                {"state", "Int64", false},
+            });
+            auto read = MakeRead(ctx, table, "a", {"state"});
+            SetOutputType(ctx, *read, {
+                {"a.state", NUdf::EDataSlot::Double, true},
+            });
+
+            const auto pos = TPositionHandle();
+            auto final = MakeIntrusive<TOpAggregate>(
+                read,
+                TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                    TInfoUnit("a.state"),
+                    "avg",
+                    TInfoUnit("average"))},
+                TVector<TInfoUnit>{},
+                EOpPhase::Final,
+                false,
+                pos);
+            SetOutputType(ctx, *final, {
+                {"average", NUdf::EDataSlot::Double, true},
+            });
+            TOpRoot root(final, pos, {"average"});
+
+            const auto result =
+                ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "must directly consume an intermediate Aggregate");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/A", {
+                {"quantity", "Int64", false},
+            });
+            auto read = MakeRead(ctx, table, "a", {"quantity"});
+            const auto* quantityType =
+                ScalarType(ctx, NUdf::EDataSlot::Int64, true);
+            const auto* averageType =
+                ScalarType(ctx, NUdf::EDataSlot::Double, true);
+            SetExactOutputType(ctx, *read, {
+                {"a.quantity", quantityType},
+            });
+
+            const auto pos = TPositionHandle();
+            auto undefined = MakeIntrusive<TOpAggregate>(
+                read,
+                TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                    TInfoUnit("a.quantity"),
+                    "avg",
+                    TInfoUnit("_state"))},
+                TVector<TInfoUnit>{},
+                EOpPhase::Undefined,
+                false,
+                pos);
+            SetExactOutputType(ctx, *undefined, {
+                {"_state", averageType},
+            });
+            auto final = MakeIntrusive<TOpAggregate>(
+                undefined,
+                TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                    TInfoUnit("_state"),
+                    "avg",
+                    TInfoUnit("average"))},
+                TVector<TInfoUnit>{},
+                EOpPhase::Final,
+                false,
+                pos);
+            SetExactOutputType(ctx, *final, {
+                {"average", averageType},
+            });
+            TOpRoot root(final, pos, {"average"});
+
+            const auto result =
+                ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "must directly consume an intermediate Aggregate");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/A", {
+                {"k", "Int64", true},
+                {"quantity", "Int64", false},
+            });
+            auto read = MakeRead(
+                ctx,
+                table,
+                "a",
+                {"k", "quantity"});
+            const auto* keyType =
+                ScalarType(ctx, NUdf::EDataSlot::Int64);
+            const auto* quantityType =
+                ScalarType(ctx, NUdf::EDataSlot::Int64, true);
+            const auto* averageType =
+                ScalarType(ctx, NUdf::EDataSlot::Double, true);
+            SetExactOutputType(ctx, *read, {
+                {"a.k", keyType},
+                {"a.quantity", quantityType},
+            });
+
+            const auto pos = TPositionHandle();
+            auto intermediate = MakeIntrusive<TOpAggregate>(
+                read,
+                TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                    TInfoUnit("a.quantity"),
+                    "avg",
+                    TInfoUnit("_state"))},
+                TVector<TInfoUnit>{TInfoUnit("a.k")},
+                EOpPhase::Intermediate,
+                false,
+                pos);
+            SetExactOutputType(ctx, *intermediate, {
+                {"a.k", keyType},
+                {"_state", averageType},
+            });
+            auto final = MakeIntrusive<TOpAggregate>(
+                intermediate,
+                TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                    TInfoUnit("_state"),
+                    "avg",
+                    TInfoUnit("average"))},
+                TVector<TInfoUnit>{},
+                EOpPhase::Final,
+                false,
+                pos);
+            SetExactOutputType(ctx, *final, {
+                {"average", averageType},
+            });
+            TOpRoot root(final, pos, {"average"});
+
+            const auto result =
+                ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "identical ordered intermediate keys");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/A", {
+                {"quantity", "Int64", false},
+            });
+            auto read = MakeRead(ctx, table, "a", {"quantity"});
+            const auto* quantityType =
+                ScalarType(ctx, NUdf::EDataSlot::Int64, true);
+            const auto* averageType =
+                ScalarType(ctx, NUdf::EDataSlot::Double, true);
+            SetExactOutputType(ctx, *read, {
+                {"a.quantity", quantityType},
+            });
+
+            const auto pos = TPositionHandle();
+            auto intermediate = MakeIntrusive<TOpAggregate>(
+                read,
+                TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                    TInfoUnit("a.quantity"),
+                    "avg",
+                    TInfoUnit("_state"))},
+                TVector<TInfoUnit>{},
+                EOpPhase::Intermediate,
+                false,
+                pos);
+            SetExactOutputType(ctx, *intermediate, {
+                {"_state", averageType},
+            });
+            auto final = MakeIntrusive<TOpAggregate>(
+                intermediate,
+                TVector<TOpAggregationTraits>{
+                    TOpAggregationTraits(
+                        TInfoUnit("_state"),
+                        "avg",
+                        TInfoUnit("average_a")),
+                    TOpAggregationTraits(
+                        TInfoUnit("_state"),
+                        "avg",
+                        TInfoUnit("average_b")),
+                },
+                TVector<TInfoUnit>{},
+                EOpPhase::Final,
+                false,
+                pos);
+            SetExactOutputType(ctx, *final, {
+                {"average_a", averageType},
+                {"average_b", averageType},
+            });
+            TOpRoot root(
+                final,
+                pos,
+                {"average_a", "average_b"});
+
+            const auto result =
+                ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "exactly one matching intermediate avg state");
+        }
     }
 
     Y_UNIT_TEST(DecimalAvgStateContractFailsClosed) {

@@ -31,7 +31,13 @@ from .relation import (
     merge_family,
     single,
 )
-from .scalar import DecimalAverageState, Encoder as ScalarEncoder, Value
+from .scalar import (
+    DecimalAverageState,
+    Encoder as ScalarEncoder,
+    IntegralAverageCertificate,
+    IntegralAverageState,
+    Value,
+)
 from .types import family
 
 
@@ -489,8 +495,8 @@ def _same_values(
         left.values[column.name].type == right.values[column.name].type
         and left.values[column.name].is_null == right.values[column.name].is_null
         and left.values[column.name].value == right.values[column.name].value
-        and left.values[column.name].decimal_average_state
-        == right.values[column.name].decimal_average_state
+        and left.values[column.name].average_metadata
+        == right.values[column.name].average_metadata
         for column in columns
     )
 
@@ -525,32 +531,103 @@ def _merge_exclusive_rows(rows: list[Row], columns: tuple[Column, ...]) -> Row:
             is_null = smt.ite(row.present, alternative.is_null, is_null)
             value = smt.ite(row.present, alternative.value, value)
         average_states = [
-            alternative.decimal_average_state
+            alternative.average_metadata
             for alternative in alternatives
         ]
+        result_states = [
+            state
+            for state in average_states
+            if isinstance(state, IntegralAverageCertificate)
+        ]
+        if result_states:
+            if any(
+                state is not None
+                and not isinstance(state, IntegralAverageCertificate)
+                for state in average_states
+            ):
+                raise StageError(
+                    "exclusive row compaction received different AVG state types"
+                )
+            if any(state.count.sort != smt.INT for state in result_states):
+                raise StageError(
+                    "exclusive row compaction received invalid integral AVG "
+                    "result state"
+                )
+            # Completed certificates are consumed before stage routing.
+            average_states = [None] * len(average_states)
         average_state = None
         if any(state is not None for state in average_states):
             if any(state is None for state in average_states):
                 raise StageError(
-                    "exclusive row compaction mixed Decimal avg state and scalar values"
+                    "exclusive row compaction mixed AVG state and scalar values"
                 )
             states = [state for state in average_states if state is not None]
-            if any(state.sum_type != states[0].sum_type for state in states[1:]):
+            if any(type(state) is not type(states[0]) for state in states[1:]):
                 raise StageError(
-                    "exclusive row compaction received different Decimal avg state types"
+                    "exclusive row compaction received different AVG state types"
                 )
-            state_sum = states[-1].sum
-            state_count = states[-1].count
-            for row, state in reversed(list(zip(rows[:-1], states[:-1]))):
-                state_sum = smt.ite(row.present, state.sum, state_sum)
-                state_count = smt.ite(row.present, state.count, state_count)
-            average_state = DecimalAverageState(
-                sum_type=states[0].sum_type,
-                sum=state_sum,
-                count=state_count,
-                finite_abs_bound=max(state.finite_abs_bound for state in states),
-                count_bound=max(state.count_bound for state in states),
-            )
+            first_state = states[0]
+            if isinstance(first_state, DecimalAverageState):
+                if any(
+                    not isinstance(state, DecimalAverageState)
+                    or state.sum_type != first_state.sum_type
+                    for state in states[1:]
+                ):
+                    raise StageError(
+                        "exclusive row compaction received different Decimal "
+                        "AVG state layouts"
+                    )
+                decimal_states = [
+                    state
+                    for state in states
+                    if isinstance(state, DecimalAverageState)
+                ]
+                state_sum = decimal_states[-1].sum
+                state_count = decimal_states[-1].count
+                for row, state in reversed(
+                    list(zip(rows[:-1], decimal_states[:-1]))
+                ):
+                    state_sum = smt.ite(row.present, state.sum, state_sum)
+                    state_count = smt.ite(row.present, state.count, state_count)
+                average_state = DecimalAverageState(
+                    sum_type=first_state.sum_type,
+                    sum=state_sum,
+                    count=state_count,
+                    finite_abs_bound=max(
+                        state.finite_abs_bound for state in decimal_states
+                    ),
+                    count_bound=max(state.count_bound for state in decimal_states),
+                )
+            else:
+                assert isinstance(first_state, IntegralAverageState)
+                integral_states = [
+                    state
+                    for state in states
+                    if isinstance(state, IntegralAverageState)
+                ]
+                state_count = integral_states[-1].count
+                state_minimum = integral_states[-1].minimum
+                state_maximum = integral_states[-1].maximum
+                for row, state in reversed(
+                    list(zip(rows[:-1], integral_states[:-1]))
+                ):
+                    state_count = smt.ite(row.present, state.count, state_count)
+                    state_minimum = smt.ite(
+                        row.present,
+                        state.minimum,
+                        state_minimum,
+                    )
+                    state_maximum = smt.ite(
+                        row.present,
+                        state.maximum,
+                        state_maximum,
+                    )
+                average_state = IntegralAverageState(
+                    count=state_count,
+                    minimum=state_minimum,
+                    maximum=state_maximum,
+                    count_bound=max(state.count_bound for state in integral_states),
+                )
         values[column.name] = Value(
             alternatives[0].type,
             is_null,

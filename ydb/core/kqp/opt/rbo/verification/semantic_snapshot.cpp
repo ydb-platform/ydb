@@ -6457,6 +6457,146 @@ TString Phase(EOpPhase phase) {
     Unsupported("Unknown operator phase");
 }
 
+bool IsIntegralAverageOutput(
+    const TOpAggregationTraits& trait,
+    const TTypeAnnotationNode* outputType)
+{
+    return trait.AggFunction == "avg" &&
+        IsExactDataAnnotation(
+            outputType,
+            NUdf::EDataSlot::Double,
+            true);
+}
+
+void ValidatePlainIntegralAverageTrait(
+    TOpAggregate& aggregate,
+    const TOpAggregationTraits& trait,
+    TStringBuf phase)
+{
+    if (aggregate.IsDistinctAll() || trait.Distinct || trait.Unwrap) {
+        Unsupported(TStringBuilder()
+            << "Integral avg " << phase
+            << " trait must be non-distinct, non-unwrapped, and outside DistinctAll");
+    }
+}
+
+void ValidateIntegralAverageContract(
+    TOpAggregate& aggregate,
+    const TOpAggregationTraits& trait)
+{
+    ValidatePlainIntegralAverageTrait(
+        aggregate,
+        trait,
+        Phase(aggregate.GetAggregationPhase()));
+
+    const TString input = trait.OriginalColName.GetFullName();
+    const TString output = trait.ResultColName.GetFullName();
+    if (!IsExactDataAnnotation(
+            OutputType(aggregate, output),
+            NUdf::EDataSlot::Double,
+            true))
+    {
+        Unsupported(
+            "Integral avg output must be exact Optional<Double>");
+    }
+
+    if (aggregate.GetAggregationPhase() == EOpPhase::Undefined ||
+        aggregate.GetAggregationPhase() == EOpPhase::Intermediate)
+    {
+        if (!IsExactDataAnnotation(
+                OutputType(*aggregate.GetInput(), input),
+                NUdf::EDataSlot::Int64,
+                true))
+        {
+            Unsupported(TStringBuilder()
+                << "Integral avg "
+                << Phase(aggregate.GetAggregationPhase())
+                << " input must be exact Optional<Int64>");
+        }
+        return;
+    }
+
+    if (aggregate.GetAggregationPhase() != EOpPhase::Final) {
+        Unsupported("Integral avg has an unknown aggregation phase");
+    }
+    if (!IsExactDataAnnotation(
+            OutputType(*aggregate.GetInput(), input),
+            NUdf::EDataSlot::Double,
+            true))
+    {
+        Unsupported(
+            "Final integral avg input must be exact Optional<Double> state");
+    }
+    if (aggregate.GetInput()->GetKind() != EOperator::Aggregate) {
+        Unsupported(
+            "Final integral avg must directly consume an intermediate Aggregate");
+    }
+
+    auto& intermediate =
+        static_cast<TOpAggregate&>(*aggregate.GetInput());
+    if (intermediate.GetAggregationPhase() != EOpPhase::Intermediate) {
+        Unsupported(
+            "Final integral avg must directly consume an intermediate Aggregate");
+    }
+    if (intermediate.GetKeyColumns() != aggregate.GetKeyColumns()) {
+        Unsupported(
+            "Final integral avg must preserve identical ordered intermediate keys");
+    }
+
+    const auto intermediateTraits = intermediate.GetAggregationTraits();
+    const TOpAggregationTraits* source = nullptr;
+    size_t sourceCount = 0;
+    for (const auto& candidate : intermediateTraits) {
+        if (candidate.ResultColName.GetFullName() == input) {
+            source = &candidate;
+            ++sourceCount;
+        }
+    }
+    const auto finalTraits = aggregate.GetAggregationTraits();
+    const size_t finalUseCount = std::count_if(
+        finalTraits.begin(),
+        finalTraits.end(),
+        [&](const TOpAggregationTraits& candidate) {
+            return candidate.OriginalColName.GetFullName() == input;
+        });
+    if (sourceCount != 1 || finalUseCount != 1 || !source ||
+        source->AggFunction != "avg")
+    {
+        Unsupported(
+            "Final integral avg must consume exactly one matching intermediate avg state");
+    }
+    ValidatePlainIntegralAverageTrait(
+        intermediate,
+        *source,
+        "intermediate");
+    if (!IsExactDataAnnotation(
+            OutputType(
+                *intermediate.GetInput(),
+                source->OriginalColName.GetFullName()),
+            NUdf::EDataSlot::Int64,
+            true) ||
+        !IsExactDataAnnotation(
+            OutputType(intermediate, input),
+            NUdf::EDataSlot::Double,
+            true))
+    {
+        Unsupported(
+            "Final integral avg source must be exact "
+            "Optional<Int64> to Optional<Double>");
+    }
+}
+
+NJson::TJsonValue IntegralAverageStateContract() {
+    auto state = JsonMap();
+    state["kind"] = "integral_double_v1";
+    state["source_type"] = "Int64";
+    state["sum_type"] = "Double";
+    state["count_type"] = "Uint64";
+    state["nullable"] = true;
+    state["exact_when_count_at_most"] = static_cast<ui64>(2);
+    return state;
+}
+
 class TPlanExporter {
 private:
     enum class ESubplanKind {
@@ -8829,6 +8969,7 @@ private:
                 }
 
                 auto aggregates = JsonArray();
+                THashSet<TString> integralAverageOutputs;
                 for (size_t index = 0; index < traits.size(); ++index) {
                     const auto& trait = traits[index];
                     const TString input = trait.OriginalColName.GetFullName();
@@ -8840,9 +8981,19 @@ private:
                     }
                     expectedOutputOrder.push_back(output);
                     bool outputNullable = false;
-                    const TString outputType = TypeName(
-                        OutputType(aggregate, output),
-                        &outputNullable);
+                    const auto* outputAnnotation =
+                        OutputType(aggregate, output);
+                    const bool integralAverage =
+                        IsIntegralAverageOutput(trait, outputAnnotation);
+                    const TString outputType = [&] {
+                        if (integralAverage) {
+                            outputNullable = true;
+                            return TString("Double");
+                        }
+                        return TypeName(
+                            outputAnnotation,
+                            &outputNullable);
+                    }();
                     if (trait.Distinct && trait.Unwrap) {
                         Unsupported(
                             "Aggregate unwrap requires distinct=false");
@@ -8950,6 +9101,17 @@ private:
                     item["distinct"] = trait.Distinct;
                     item["unwrap"] = trait.Unwrap;
                     if (trait.AggFunction == "avg") {
+                        if (integralAverage) {
+                            ValidateIntegralAverageContract(
+                                aggregate,
+                                trait);
+                            integralAverageOutputs.insert(output);
+                            item["state"] =
+                                IntegralAverageStateContract();
+                            aggregates.AppendValue(std::move(item));
+                            continue;
+                        }
+
                         bool inputNullable = false;
                         const TString inputType = TypeName(
                             OutputType(*aggregate.GetInput(), input),
@@ -8997,7 +9159,18 @@ private:
                     if (!expectedOutputs.contains(name)) {
                         Unsupported(TStringBuilder() << "Unexpected Aggregate output type field " << name);
                     }
-                    TypeName(item->GetItemType());
+                    if (integralAverageOutputs.contains(name)) {
+                        if (!IsExactDataAnnotation(
+                                item->GetItemType(),
+                                NUdf::EDataSlot::Double,
+                                true))
+                        {
+                            Unsupported(
+                                "Integral avg output field must remain exact Optional<Double>");
+                        }
+                    } else {
+                        TypeName(item->GetItemType());
+                    }
                 }
                 if (expectedOutputs.size() != outputNames.size()) {
                     Unsupported("Aggregate output IUs do not match keys and traits");

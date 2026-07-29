@@ -9,7 +9,11 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import (
     Row,
     single,
 )
-from ydb.core.kqp.opt.rbo.verification.rbo_verifier.scalar import Value
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier.scalar import (
+    IntegralAverageCertificate,
+    IntegralAverageState,
+    Value,
+)
 
 
 class StageCompactionTest(unittest.TestCase):
@@ -69,6 +73,85 @@ class StageCompactionTest(unittest.TestCase):
             merge_conditional_values=False,
         )
         self.assertEqual(explicit, rows)
+
+    def test_exclusive_compaction_keeps_integral_state_and_drops_result_certificate(self):
+        columns = (
+            Column("k", "Int64", False),
+            Column("state", "Double", True),
+            Column("result", "Double", True),
+        )
+        route = smt.symbol("route", smt.BOOL)
+        payloads = (
+            (10, 1, -4, 8, 100, 1),
+            (20, 2, -7, 9, 200, 3),
+        )
+        rows = tuple(
+            Row(
+                route if task else smt.not_(route),
+                {
+                    "k": Value("Int64", smt.FALSE, smt.int_value(carrier)),
+                    "state": Value(
+                        "Double",
+                        smt.FALSE,
+                        smt.int_value(carrier),
+                        average_metadata=IntegralAverageState(
+                            smt.int_value(count),
+                            smt.int_value(minimum),
+                            smt.int_value(maximum),
+                            count,
+                        ),
+                    ),
+                    "result": Value(
+                        "Double",
+                        smt.FALSE,
+                        smt.int_value(result),
+                        average_metadata=IntegralAverageCertificate(
+                            smt.int_value(proof_count)
+                        ),
+                    ),
+                },
+                self.OCCURRENCE,
+                frozenset((PartitionFact(route, task),)),
+            )
+            for task, (
+                carrier,
+                count,
+                minimum,
+                maximum,
+                result,
+                proof_count,
+            ) in enumerate(payloads)
+        )
+
+        compacted = stages._compact_exclusive_rows(rows, columns)
+
+        self.assertEqual(len(compacted), 1)
+        selected = compacted[0]
+        state_value = selected.values["state"]
+        state = state_value.average_metadata
+        self.assertIsInstance(state, IntegralAverageState)
+        assert isinstance(state, IntegralAverageState)
+        self.assertEqual(state.count_bound, 2)
+        result_value = selected.values["result"]
+        self.assertIsNone(result_value.average_metadata)
+        left_present = smt.not_(route)
+        self.assertEqual(
+            (
+                state_value.value,
+                state.count,
+                state.minimum,
+                state.maximum,
+                result_value.value,
+            ),
+            tuple(
+                smt.ite(
+                    left_present,
+                    smt.int_value(left),
+                    smt.int_value(right),
+                )
+                for left, right in zip(payloads[0][:5], payloads[1][:5])
+            ),
+        )
 
     def test_overlapping_broadcast_copies_retain_bag_multiplicity(self):
         present = smt.symbol("present", smt.BOOL)

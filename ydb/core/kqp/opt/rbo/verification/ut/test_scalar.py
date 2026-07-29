@@ -1672,5 +1672,35 @@ class PassiveDoubleScalarTest(unittest.TestCase):
         )
 
 
+class IntegralAverageCarrierTest(unittest.TestCase):
+    def test_carrier_is_shared_by_count_minimum_and_maximum(self):
+        script = smt.Script()
+        encoder = Encoder(script)
+
+        first = encoder.integral_int64_average(
+            smt.int_value(2),
+            smt.int_value(-3),
+            smt.int_value(5),
+        )
+        second = encoder.integral_int64_average(
+            smt.int_value(2),
+            smt.int_value(-3),
+            smt.int_value(5),
+        )
+        reordered = encoder.integral_int64_average(
+            smt.int_value(2),
+            smt.int_value(-3),
+            smt.int_value(6),
+        )
+
+        self.assertEqual(first, second)
+        self.assertEqual(first.operation, reordered.operation)
+        self.assertNotEqual(first.arguments, reordered.arguments)
+        self.assertEqual(
+            script.render().count('"integral_int64_average_at_most_two"'),
+            1,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

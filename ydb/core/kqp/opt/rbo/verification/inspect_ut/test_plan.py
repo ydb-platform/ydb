@@ -337,6 +337,34 @@ class OperatorRendererTest(unittest.TestCase):
                 'phase=intermediate distinct_all=false',
             ),
             (
+                ir.Aggregate(
+                    "integral_average",
+                    "scan",
+                    (),
+                    (
+                        ir.AggregateTrait(
+                            "a.k",
+                            "avg",
+                            "average",
+                            "Double",
+                            True,
+                            False,
+                            False,
+                            ir.INTEGRAL_DOUBLE_AVERAGE_STATE,
+                        ),
+                    ),
+                    "intermediate",
+                    False,
+                ),
+                'node "integral_average" aggregate input="scan" keys=[] '
+                'aggregates=[{input="a.k", function="avg", output="average", '
+                'type="Double", nullable=true, distinct=false, unwrap=false, '
+                'state={kind="integral_double_v1", source_type="Int64", '
+                'sum_type="Double", count_type="Uint64", nullable=true, '
+                'exact_when_count_at_most=2}}] '
+                'phase=intermediate distinct_all=false',
+            ),
+            (
                 ir.Join(
                     "join",
                     "left",

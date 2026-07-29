@@ -6,6 +6,7 @@ from itertools import product
 from pathlib import Path
 
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
+    INTEGRAL_DOUBLE_AVERAGE_STATE,
     MAX_BOUND_DEPTH,
     MAX_EXPR_DEPTH,
     MAX_EXPR_NODES,
@@ -2734,6 +2735,181 @@ class SnapshotTest(unittest.TestCase):
             "intermediate avg state may only be transported as payload",
         ):
             parse_snapshot(routed_state)
+
+    def test_integral_avg_requires_exact_tagged_state_and_split_lineage(self):
+        def state():
+            return {
+                "kind": "integral_double_v1",
+                "source_type": "Int64",
+                "sum_type": "Double",
+                "count_type": "Uint64",
+                "nullable": True,
+                "exact_when_count_at_most": 2,
+            }
+
+        def trait(input_name, output_name):
+            return {
+                "input": input_name,
+                "function": "avg",
+                "output": output_name,
+                "type": "Double",
+                "nullable": True,
+                "distinct": False,
+                "unwrap": False,
+                "state": state(),
+            }
+
+        logical = minimal_snapshot()
+        logical["schema"]["tables"][0]["columns"][0]["nullable"] = True
+        aggregate = {
+            "id": "aggregate",
+            "op": "aggregate",
+            "input": "scan",
+            "keys": [],
+            "aggregates": [trait("a.k", "result")],
+            "phase": "undefined",
+            "distinct_all": False,
+        }
+        logical["plan"].update(
+            nodes=[logical["plan"]["nodes"][0], aggregate],
+            root="aggregate",
+            output=["result"],
+        )
+        parsed = parse_snapshot(logical)
+        self.assertEqual(
+            parsed.plan.nodes[-1].aggregates[0].state,
+            INTEGRAL_DOUBLE_AVERAGE_STATE,
+        )
+
+        partial = copy.deepcopy(aggregate)
+        partial.update(id="partial", phase="intermediate")
+        partial["aggregates"][0].update(output="_state")
+        final = copy.deepcopy(aggregate)
+        final.update(id="final", input="partial", phase="final")
+        final["aggregates"][0].update(input="_state")
+        split = copy.deepcopy(logical)
+        split["plan"].update(
+            nodes=[split["plan"]["nodes"][0], partial, final],
+            root="final",
+            output=["result"],
+        )
+        parse_snapshot(split)
+
+        indirect = copy.deepcopy(split)
+        indirect["plan"]["nodes"].insert(2, {
+            "id": "bridge",
+            "op": "project",
+            "input": "partial",
+            "columns": [
+                {
+                    "output": "_state2",
+                    "expression": {
+                        "kind": "column",
+                        "column": "_state",
+                    },
+                }
+            ],
+            "ordered": False,
+        })
+        indirect["plan"]["nodes"][-1].update(input="bridge")
+        indirect["plan"]["nodes"][-1]["aggregates"][0]["input"] = "_state2"
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "intermediate avg state must have one direct final",
+        ):
+            parse_snapshot(indirect)
+
+        for field, replacement in (
+            ("kind", "integral_double_v2"),
+            ("source_type", "Uint64"),
+            ("sum_type", "Int64"),
+            ("count_type", "Int64"),
+            ("nullable", False),
+            ("exact_when_count_at_most", 1),
+        ):
+            malformed = copy.deepcopy(logical)
+            malformed["plan"]["nodes"][-1]["aggregates"][0]["state"][
+                field
+            ] = replacement
+            with self.subTest(field=field):
+                with self.assertRaises(SnapshotError):
+                    parse_snapshot(malformed)
+
+        for field in tuple(state()):
+            malformed = copy.deepcopy(logical)
+            del malformed["plan"]["nodes"][-1]["aggregates"][0]["state"][field]
+            with self.subTest(missing=field):
+                with self.assertRaisesRegex(SnapshotError, "missing fields|unknown fields"):
+                    parse_snapshot(malformed)
+
+        extra = copy.deepcopy(logical)
+        extra["plan"]["nodes"][-1]["aggregates"][0]["state"]["extra"] = True
+        with self.assertRaisesRegex(SnapshotError, "unknown fields: extra"):
+            parse_snapshot(extra)
+
+        for path, replacement, reason in (
+            (("schema", "nullable"), False, "input must be Optional<Int64>"),
+            (("schema", "type"), "Uint64", "input must be Optional<Int64>"),
+            (("trait", "type"), "Int64", "output must be Optional<Double>"),
+            (("trait", "nullable"), False, "output must be Optional<Double>"),
+            (("trait", "distinct"), True, "direct distinct is modeled only"),
+            (("trait", "unwrap"), True, "unwrap is modeled only"),
+        ):
+            malformed = copy.deepcopy(logical)
+            if path[0] == "schema":
+                malformed["schema"]["tables"][0]["columns"][0][path[1]] = replacement
+            else:
+                malformed["plan"]["nodes"][-1]["aggregates"][0][path[1]] = replacement
+            with self.subTest(path=path):
+                with self.assertRaisesRegex(SnapshotError, reason):
+                    parse_snapshot(malformed)
+
+        final_without_partial = copy.deepcopy(logical)
+        final_without_partial["plan"]["nodes"][-1]["phase"] = "final"
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "final input must be Optional<Double>",
+        ):
+            parse_snapshot(final_without_partial)
+
+        sorted_average = copy.deepcopy(logical)
+        sorted_average["plan"]["nodes"].append({
+            "id": "sort",
+            "op": "sort",
+            "input": "aggregate",
+            "order": [
+                {
+                    "column": "result",
+                    "ascending": True,
+                    "nulls_first": True,
+                }
+            ],
+            "limit": None,
+            "phase": "undefined",
+        })
+        sorted_average["plan"]["root"] = "sort"
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "ordering type 'Double' is unsupported",
+        ):
+            parse_snapshot(sorted_average)
+
+        tagged_decimal = copy.deepcopy(logical)
+        tagged_decimal["schema"]["tables"][0]["columns"][0]["type"] = "Decimal(7,2)"
+        tagged_decimal["plan"]["nodes"][-1]["aggregates"][0].update(
+            type="Decimal(7,2)",
+            state={
+                "kind": "decimal",
+                "sum_type": "Decimal(35,2)",
+                "count_type": "Uint64",
+                "nullable": True,
+            },
+        )
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "missing fields|unknown fields|unsupported avg state",
+        ):
+            parse_snapshot(tagged_decimal)
 
     def test_void_is_an_exact_non_nullable_count_input_expression(self):
         value = count_star_snapshot()

@@ -26,6 +26,7 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import (
 )
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.scalar import (
     DecimalAverageState,
+    IntegralAverageCertificate,
     Value,
 )
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.verify import build_problem
@@ -278,7 +279,7 @@ def _average_family(
                                 "Decimal(12,2)",
                                 is_null,
                                 smt.ONE,
-                                decimal_average_state=state,
+                                average_metadata=state,
                             )
                         },
                     ),
@@ -534,7 +535,7 @@ class ObserverTest(unittest.TestCase):
             [20, 10],
         )
 
-    def test_decimal_average_state_is_probed_and_rendered_as_optional_tuple(self):
+    def test_average_state_is_probed_and_rendered_as_optional_tuple(self):
         state_sum = smt.symbol("average_state_sum", smt.INT)
         state_count = smt.symbol("average_state_count", smt.INT)
         state = DecimalAverageState(
@@ -576,7 +577,7 @@ class ObserverTest(unittest.TestCase):
                     },
                 )
 
-    def test_decimal_average_state_cannot_be_silently_partially_rendered(self):
+    def test_average_state_cannot_be_silently_partially_rendered(self):
         state = DecimalAverageState(
             sum_type="Decimal(35,2)",
             sum=smt.symbol("unregistered_state_sum", smt.INT),
@@ -592,6 +593,47 @@ class ObserverTest(unittest.TestCase):
 
         with self.assertRaisesRegex(InspectionError, "unregistered trace term"):
             _family_json(family, probes, {}, {})
+
+    def test_integral_average_certificate_is_explicit_in_trace(self):
+        count = smt.symbol("integral_average_count", smt.INT)
+        family = RelationFamily((
+            Outcome(
+                smt.TRUE,
+                Relation(
+                    (Column("average", "Double", True),),
+                    (
+                        Row(
+                            smt.TRUE,
+                            {
+                                "average": Value(
+                                    "Double",
+                                    smt.FALSE,
+                                    smt.ONE,
+                                    average_metadata=(
+                                        IntegralAverageCertificate(count)
+                                    ),
+                                )
+                            },
+                        ),
+                    ),
+                ),
+                smt.FALSE,
+            ),
+        ))
+        probes = Probes(smt.Script())
+        _add_family(probes, family)
+
+        self.assertIn(count, probes.requested)
+        cell = _family_json(
+            family,
+            probes,
+            {"integral_average_count": 2},
+            {},
+        )["outcomes"][0]["rows"][0]["values"][0]
+        self.assertEqual(
+            cell["integral_average_certificate"],
+            {"kind": "integral_double_v1", "count": 2},
+        )
 
 
 @unittest.skipUnless(SOLVER, "run through ya or set RBO_Z3 for solver tests")

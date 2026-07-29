@@ -40,6 +40,7 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import (
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.scalar import (
     DecimalAverageState,
     Encoder as ScalarEncoder,
+    IntegralAverageCertificate,
 )
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.stages import (
     Evaluator as StageEvaluator,
@@ -1422,7 +1423,7 @@ class LimitOutcomeTest(unittest.TestCase):
                         _reference_limit(present, count, offset, values),
                     )
 
-    def test_symbolic_singleton_preserves_metadata_and_hidden_decimal_state(self):
+    def test_symbolic_singleton_preserves_outcome_metadata(self):
         script = smt.Script()
         present = (
             smt.symbol("left_present", smt.BOOL),
@@ -1431,22 +1432,6 @@ class LimitOutcomeTest(unittest.TestCase):
         common_route = smt.symbol("common_route", smt.BOOL)
         split_route = smt.symbol("split_route", smt.BOOL)
         common_fact = PartitionFact(common_route, True)
-        states = (
-            DecimalAverageState(
-                "Decimal(35,2)",
-                smt.int_value(110),
-                smt.int_value(2),
-                110,
-                2,
-            ),
-            DecimalAverageState(
-                "Decimal(35,2)",
-                smt.int_value(270),
-                smt.int_value(3),
-                270,
-                3,
-            ),
-        )
         rows = tuple(
             Row(
                 guard,
@@ -1456,7 +1441,6 @@ class LimitOutcomeTest(unittest.TestCase):
                         smt.FALSE,
                         smt.int_value(value),
                         bound,
-                        state,
                     )
                 },
                 partition_facts=frozenset((
@@ -1464,11 +1448,10 @@ class LimitOutcomeTest(unittest.TestCase):
                     PartitionFact(split_route, index == 1),
                 )),
             )
-            for index, (guard, value, bound, state) in enumerate(zip(
+            for index, (guard, value, bound) in enumerate(zip(
                 present,
                 (100, 250),
                 (100, 250),
-                states,
             ))
         )
         source_error = smt.symbol("source_error", smt.BOOL)
@@ -1518,16 +1501,9 @@ class LimitOutcomeTest(unittest.TestCase):
         self.assertEqual(selected_row.partition_facts, frozenset((common_fact,)))
         selected_value = selected_row.values["a.value"]
         self.assertEqual(selected_value.decimal_finite_abs_bound, 250)
-        self.assertIsNotNone(selected_value.decimal_average_state)
-        selected_state = selected_value.decimal_average_state
-        assert selected_state is not None
-        self.assertEqual(selected_state.finite_abs_bound, 270)
-        self.assertEqual(selected_state.count_bound, 3)
+        self.assertIsNone(selected_value.average_metadata)
 
-        for selected, value, state_sum, state_count in (
-            (0, 100, 110, 2),
-            (1, 250, 270, 3),
-        ):
+        for selected, value in ((0, 100), (1, 250)):
             constants = {
                 present[0].atom: True,
                 present[1].atom: True,
@@ -1539,8 +1515,6 @@ class LimitOutcomeTest(unittest.TestCase):
             self.assertTrue(_ground(outcome.enabled, constants))
             self.assertTrue(_ground(selected_row.present, constants))
             self.assertEqual(_ground(selected_value.value, constants), value)
-            self.assertEqual(_ground(selected_state.sum, constants), state_sum)
-            self.assertEqual(_ground(selected_state.count, constants), state_count)
 
         only_left = {
             present[0].atom: True,
@@ -1565,7 +1539,65 @@ class LimitOutcomeTest(unittest.TestCase):
             }
             self.assertFalse(_ground(outcome.enabled, constants))
 
-    def test_symbolic_singleton_rejects_mixed_decimal_average_state(self):
+    def test_symbolic_singleton_drops_integral_average_certificate(self):
+        columns = (
+            Column("k", "Int64", False),
+            Column("result", "Double", True),
+        )
+        payloads = (
+            (10, 100, 1),
+            (20, 200, 3),
+        )
+        rows = tuple(
+            Row(
+                smt.TRUE,
+                {
+                    "k": Value("Int64", smt.FALSE, smt.int_value(carrier)),
+                    "result": Value(
+                        "Double",
+                        smt.FALSE,
+                        smt.int_value(result),
+                        average_metadata=IntegralAverageCertificate(
+                            smt.int_value(proof_count)
+                        ),
+                    ),
+                },
+            )
+            for carrier, result, proof_count in payloads
+        )
+        script = smt.Script()
+        family = limit_family(
+            single(Relation(columns, rows)),
+            Expr(
+                kind="literal",
+                value=1,
+                result_type="Uint64",
+                nullable=False,
+            ),
+            None,
+            script,
+            "take",
+        )
+        outcome = family.outcomes[0]
+        self.assertEqual(len(outcome.choices), 1)
+        selector = outcome.choices[0]
+        selected = outcome.relation.rows[0]
+        key_value = selected.values["k"]
+        result_value = selected.values["result"]
+        self.assertIsNone(result_value.average_metadata)
+
+        for index, payload in enumerate(payloads):
+            constants = {selector.term.atom: index}
+            self.assertTrue(_ground(outcome.enabled, constants))
+            self.assertEqual(
+                (
+                    _ground(key_value.value, constants),
+                    _ground(result_value.value, constants),
+                ),
+                payload[:2],
+            )
+
+    def test_symbolic_singleton_rejects_hidden_intermediate_average_state(self):
         script = smt.Script()
         state = DecimalAverageState(
             "Decimal(35,2)",
@@ -1601,7 +1633,7 @@ class LimitOutcomeTest(unittest.TestCase):
         )
         with self.assertRaisesRegex(
             RelationError,
-            "mixed Decimal avg state and scalar values",
+            "cannot select hidden intermediate AVG state",
         ):
             limit_family(
                 single(

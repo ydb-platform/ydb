@@ -8,7 +8,13 @@ from typing import Any, Mapping
 
 from ..rbo_verifier import ir, smt
 from ..rbo_verifier.relation import FamilyComparison, Outcome, RelationFamily
-from ..rbo_verifier.scalar import DecimalAverageState, Value
+from ..rbo_verifier.scalar import (
+    DecimalAverageState,
+    IntegralAverageCertificate,
+    IntegralAverageState,
+    Value,
+    average_metadata_terms,
+)
 from ..rbo_verifier.stages import TASKS
 from ..rbo_verifier.types import family as type_family
 from ..rbo_verifier.verify import (
@@ -303,10 +309,10 @@ def _add_family(probes: Probes, result: RelationFamily) -> None:
             for value in row.values.values():
                 probes.add(value.is_null)
                 probes.add(value.value)
-                state = value.decimal_average_state
+                state = value.average_metadata
                 if state is not None:
-                    probes.add(state.sum)
-                    probes.add(state.count)
+                    for term in average_metadata_terms(state):
+                        probes.add(term)
 
 
 def _execution_json(
@@ -446,10 +452,19 @@ def _cell_json(
             literals,
         ),
     }
-    if cell.decimal_average_state is not None:
+    if isinstance(cell.average_metadata, IntegralAverageCertificate):
+        result["integral_average_certificate"] = (
+            _integral_average_certificate_json(
+                cell.is_null,
+                cell.average_metadata,
+                probes,
+                values,
+            )
+        )
+    elif cell.average_metadata is not None:
         result["average_state"] = _average_state_json(
             cell.is_null,
-            cell.decimal_average_state,
+            cell.average_metadata,
             probes,
             values,
         )
@@ -458,24 +473,60 @@ def _cell_json(
 
 def _average_state_json(
     is_null: smt.Term,
-    state: DecimalAverageState,
+    state: (
+        DecimalAverageState
+        | IntegralAverageState
+    ),
     probes: Probes,
     values: Mapping[str, bool | int | str],
 ) -> dict[str, Any]:
     optional_value = None
+    if isinstance(state, DecimalAverageState):
+        if probes.value(is_null, values) is not True:
+            optional_value = {
+                "sum": probes.value(state.sum, values),
+                "count": probes.value(state.count, values),
+            }
+        return {
+            "sum_type": state.sum_type,
+            "count_type": "Uint64",
+            "value": optional_value,
+            "proof_bounds": {
+                "finite_sum_abs": state.finite_abs_bound,
+                "count": state.count_bound,
+            },
+        }
+
     if probes.value(is_null, values) is not True:
         optional_value = {
-            "sum": probes.value(state.sum, values),
             "count": probes.value(state.count, values),
+            "minimum": probes.value(state.minimum, values),
+            "maximum": probes.value(state.maximum, values),
         }
     return {
-        "sum_type": state.sum_type,
+        "kind": "integral_double_v1",
+        "source_type": "Int64",
         "count_type": "Uint64",
         "value": optional_value,
         "proof_bounds": {
-            "finite_sum_abs": state.finite_abs_bound,
             "count": state.count_bound,
         },
+    }
+
+
+def _integral_average_certificate_json(
+    is_null: smt.Term,
+    certificate: IntegralAverageCertificate,
+    probes: Probes,
+    values: Mapping[str, bool | int | str],
+) -> dict[str, Any]:
+    return {
+        "kind": "integral_double_v1",
+        "count": (
+            None
+            if probes.value(is_null, values) is True
+            else probes.value(certificate.count, values)
+        ),
     }
 
 

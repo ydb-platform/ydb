@@ -174,13 +174,35 @@ def _order(item: ir.SortOrder) -> str:
 
 
 def _average_state(state: ir.AverageStateType | None) -> str:
+    def render(item: ir.AverageStateType) -> str:
+        if item.kind == "decimal":
+            return (
+                f"{{sum_type={_quote(item.sum_type)}, "
+                f"count_type={_quote(item.count_type)}, "
+                f"nullable={_boolean(item.nullable)}}}"
+            )
+        if item.kind == ir.INTEGRAL_DOUBLE_AVERAGE_STATE.kind:
+            if (
+                item.source_type is None
+                or item.exact_when_count_at_most is None
+            ):
+                raise InspectionError(
+                    "integral avg state is missing its source type or exact-count bound"
+                )
+            return (
+                f"{{kind={_quote(item.kind)}, "
+                f"source_type={_quote(item.source_type)}, "
+                f"sum_type={_quote(item.sum_type)}, "
+                f"count_type={_quote(item.count_type)}, "
+                f"nullable={_boolean(item.nullable)}, "
+                "exact_when_count_at_most="
+                f"{item.exact_when_count_at_most}}}"
+            )
+        raise InspectionError(f"unknown avg state kind {item.kind!r}")
+
     return _optional(
         state,
-        lambda item: (
-            f"{{sum_type={_quote(item.sum_type)}, "
-            f"count_type={_quote(item.count_type)}, "
-            f"nullable={_boolean(item.nullable)}}}"
-        ),
+        render,
     )
 
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Mapping
+from typing import Mapping, TypeAlias
 
 from . import decimal, smt
 from .ir import Expr
@@ -44,6 +44,40 @@ class DecimalAverageState:
 
 
 @dataclass(frozen=True, slots=True)
+class IntegralAverageState:
+    """Exact original-Int64 summary carried by one intermediate AVG state."""
+
+    count: smt.Term
+    minimum: smt.Term
+    maximum: smt.Term
+    count_bound: int
+
+
+@dataclass(frozen=True, slots=True)
+class IntegralAverageCertificate:
+    """Node-local cardinality certificate for one completed integral AVG."""
+
+    count: smt.Term
+
+
+AverageMetadata: TypeAlias = (
+    DecimalAverageState
+    | IntegralAverageState
+    | IntegralAverageCertificate
+)
+
+
+def average_metadata_terms(
+    metadata: AverageMetadata,
+) -> tuple[smt.Term, ...]:
+    if isinstance(metadata, DecimalAverageState):
+        return (metadata.sum, metadata.count)
+    if isinstance(metadata, IntegralAverageState):
+        return (metadata.count, metadata.minimum, metadata.maximum)
+    return (metadata.count,)
+
+
+@dataclass(frozen=True, slots=True)
 class Value:
     type: str
     is_null: smt.Term
@@ -52,9 +86,10 @@ class Value:
     # finite valuation. It intentionally says nothing about specials; None is
     # an unknown bound.
     decimal_finite_abs_bound: int | None = None
-    # Present only on the hidden state IU produced by an intermediate AVG.
-    # Snapshot validation forbids routing it through ordinary scalar flow.
-    decimal_average_state: DecimalAverageState | None = None
+    # Tagged hidden intermediate state or node-local completed-AVG proof
+    # metadata. Snapshot validation forbids intermediate state from ordinary
+    # scalar flow; the completed certificate is consumed by a node observer.
+    average_metadata: AverageMetadata | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +102,23 @@ class Encoder:
     def __init__(self, script: smt.Script) -> None:
         self.script = script
         self._opaque: dict[tuple[object, ...], _OpaqueFunctions] = {}
+        self._integral_average: smt.Function | None = None
+
+    def integral_int64_average(
+        self,
+        count: smt.Term,
+        minimum: smt.Term,
+        maximum: smt.Term,
+    ) -> smt.Term:
+        """Shared carrier, interpreted exactly only after proving count <= 2."""
+
+        if self._integral_average is None:
+            self._integral_average = self.script.fresh_function(
+                "integral_int64_average_at_most_two",
+                (smt.INT, smt.INT, smt.INT),
+                smt.INT,
+            )
+        return self._integral_average(count, minimum, maximum)
 
     def evaluate(self, expression: Expr, row: Mapping[str, Value]) -> Value:
         return self._evaluate(expression, row, ())

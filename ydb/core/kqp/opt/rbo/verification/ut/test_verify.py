@@ -462,14 +462,27 @@ def aggregate_stage_snapshot(
     nullable_key=False,
     shuffle_key="a.k",
     input_type="Int64",
+    aggregate_input="a.x",
+    project_average_away=False,
+    duplicate_input=False,
 ):
+    if duplicate_input and (not staged or grouped):
+        raise ValueError(
+            "duplicate aggregate input is supported only by the staged "
+            "keyless fixture"
+        )
     decimal_sum_type = decimal.sum_type(input_type)
+    integral_average = (
+        function == "avg"
+        and input_type == "Int64"
+        and nullable_input
+    )
     if function == "count":
         output_type = "Uint64"
     elif function in {"avg", "max", "min"}:
-        if function == "avg" and decimal_sum_type is None:
+        if function == "avg" and decimal_sum_type is None and not integral_average:
             raise ValueError("the aggregate test fixture only models Decimal avg")
-        output_type = input_type
+        output_type = "Double" if integral_average else input_type
     elif input_type.startswith("Uint"):
         output_type = "Uint64"
     else:
@@ -481,7 +494,7 @@ def aggregate_stage_snapshot(
     nullable_aggregate = function in {"avg", "max", "min", "sum"}
     logical_nullable = nullable_aggregate and (nullable_input or not grouped)
     trait = {
-        "input": "a.x",
+        "input": aggregate_input,
         "function": function,
         "output": "result",
         "type": output_type,
@@ -490,11 +503,22 @@ def aggregate_stage_snapshot(
         "unwrap": False,
     }
     if function == "avg":
-        trait["state"] = {
-            "sum_type": decimal_sum_type,
-            "count_type": "Uint64",
-            "nullable": nullable_input,
-        }
+        trait["state"] = (
+            {
+                "kind": "integral_double_v1",
+                "source_type": "Int64",
+                "sum_type": "Double",
+                "count_type": "Uint64",
+                "nullable": True,
+                "exact_when_count_at_most": 2,
+            }
+            if integral_average
+            else {
+                "sum_type": decimal_sum_type,
+                "count_type": "Uint64",
+                "nullable": nullable_input,
+            }
+        )
     aggregate = {
         "id": "aggregate",
         "op": "aggregate",
@@ -522,11 +546,92 @@ def aggregate_stage_snapshot(
             function=final_function,
             nullable=(nullable_aggregate and (nullable_input or not grouped)),
         )
-        nodes = [copy.deepcopy(SCAN_A), partial, final]
-        stages = [
-            _stage("source", ["a", "partial"], [], ["partial"], "column"),
-            _stage("root", ["final"], ["partial"], ["final"]),
-        ]
+        if duplicate_input:
+            copied_scan = copy.deepcopy(SCAN_A)
+            copied_scan.update(id="a_copy")
+            copied_scan["columns"] = [
+                {"source": "k", "output": "copy.k"},
+                {"source": "x", "output": "copy.x"},
+            ]
+            duplicate = {
+                "id": "duplicate",
+                "op": "union_all",
+                "inputs": [
+                    {"node": "a", "columns": ["a.k", "a.x"]},
+                    {
+                        "node": "a_copy",
+                        "columns": ["copy.k", "copy.x"],
+                    },
+                ],
+                "output": ["duplicate.k", "duplicate.x"],
+                "ordered": False,
+            }
+            partial["input"] = "duplicate"
+            partial["aggregates"][0]["input"] = "duplicate.x"
+            nodes = [
+                copy.deepcopy(SCAN_A),
+                copied_scan,
+                duplicate,
+                partial,
+                final,
+            ]
+            stages = [
+                _stage("source", ["a"], [], ["a"], "column"),
+                _stage(
+                    "copy_source",
+                    ["a_copy"],
+                    [],
+                    ["a_copy"],
+                    "column",
+                ),
+                _stage(
+                    "partial_stage",
+                    ["duplicate", "partial"],
+                    ["a", "a_copy"],
+                    ["partial"],
+                ),
+                _stage("root", ["final"], ["partial"], ["final"]),
+            ]
+            edges = [
+                _edge(
+                    "original_input",
+                    "source",
+                    "partial_stage",
+                    0,
+                    0,
+                    "map",
+                ),
+                _edge(
+                    "copied_input",
+                    "copy_source",
+                    "partial_stage",
+                    0,
+                    1,
+                    "union_all",
+                    parallel=True,
+                ),
+                _edge(
+                    "aggregate_edge",
+                    "partial_stage",
+                    "root",
+                    0,
+                    0,
+                    "union_all",
+                    parallel=False,
+                ),
+            ]
+        else:
+            nodes = [copy.deepcopy(SCAN_A), partial, final]
+            stages = [
+                _stage(
+                    "source",
+                    ["a", "partial"],
+                    [],
+                    ["partial"],
+                    "column",
+                ),
+                _stage("root", ["final"], ["partial"], ["final"]),
+            ]
         connection = (
             {
                 "kind": "hash_shuffle",
@@ -537,8 +642,40 @@ def aggregate_stage_snapshot(
             if grouped
             else {"kind": "union_all", "parallel": False}
         )
-        edges = [_edge("aggregate_edge", "source", "root", 0, 0, **connection)]
+        if edges is None:
+            edges = [
+                _edge(
+                    "aggregate_edge",
+                    "source",
+                    "root",
+                    0,
+                    0,
+                    **connection,
+                )
+            ]
         root = "final"
+    output = (["a.k"] if grouped else []) + ["result"]
+    if project_average_away:
+        if not grouped:
+            raise ValueError("projecting AVG away requires a grouped fixture")
+        project = {
+            "id": "project",
+            "op": "project",
+            "input": root,
+            "ordered": False,
+            "columns": [
+                {
+                    "output": "only_key",
+                    "expression": {"kind": "column", "column": "a.k"},
+                }
+            ],
+        }
+        nodes.append(project)
+        root = "project"
+        output = ["only_key"]
+        if stages is not None:
+            stages[-1]["nodes"].append("project")
+            stages[-1]["outputs"] = [{"index": 0, "node": "project"}]
     schema_value = _stage_schema("A")
     schema_value["tables"][0]["columns"][1]["type"] = input_type
     if nullable_key:
@@ -550,7 +687,7 @@ def aggregate_stage_snapshot(
             schema_value,
             nodes,
             root,
-            (["a.k"] if grouped else []) + ["result"],
+            output,
             stages,
             edges,
         )
@@ -1999,6 +2136,126 @@ class SolverProtocolTest(unittest.TestCase):
             for index, predicate in enumerate(predicates)
         )
         return Problem(script, {}, branches), requested, predicates
+
+    @staticmethod
+    def _integral_average_problem():
+        script = smt.Script()
+        exact = script.fresh_constant("semantic_mismatch", smt.BOOL)
+        inexact = script.fresh_constant("integral_average_count_gt_2", smt.BOOL)
+        script.assert_obligation(smt.or_(exact, inexact))
+        exact_branch = relation_model.MismatchBranch(
+            "semantic_mismatch",
+            exact,
+        )
+        inexact_branch = relation_model.MismatchBranch(
+            "integral_avg_count_gt_2",
+            inexact,
+        )
+        problem = Problem(
+            script=script,
+            witness={},
+            mismatch_branches=(
+                relation_model.MismatchBranch("exact_component", exact),
+            ),
+            semantic_mismatch=exact_branch,
+            soundness_exclusion=relation_model.MismatchBranch(
+                "integral_avg_model_domain",
+                inexact,
+            ),
+            soundness_exclusions=(inexact_branch,),
+        )
+        return problem, exact, inexact
+
+    def test_reachable_integral_average_inexact_region_is_inconclusive(self):
+        problem, _, _ = self._integral_average_problem()
+        sat = subprocess.CompletedProcess(["z3"], 0, "sat\n", "")
+
+        with mock.patch.object(verifier, "_run_solver", return_value=sat) as run:
+            query = verifier.query_solver(problem, "z3")
+
+        self.assertEqual(query.status, "unknown")
+        self.assertEqual(query.phase, "soundness")
+        self.assertIn("greater than two is reachable", query.reason)
+        run.assert_called_once()
+
+    def test_unresolved_integral_average_inexact_region_is_inconclusive(self):
+        problem, _, _ = self._integral_average_problem()
+        unknown = subprocess.CompletedProcess(["z3"], 0, "unknown\n", "")
+
+        with mock.patch.object(
+            verifier,
+            "_run_solver",
+            return_value=unknown,
+        ) as run:
+            query = verifier.query_solver(problem, "z3")
+
+        self.assertEqual(query.status, "unknown")
+        self.assertEqual(query.phase, "soundness")
+        self.assertIn("could not rule out", query.reason)
+        run.assert_called_once()
+
+    def test_semantic_mismatch_is_solved_only_after_inexact_region_is_unsat(self):
+        problem, exact, inexact = self._integral_average_problem()
+        unsat = subprocess.CompletedProcess(["z3"], 0, "unsat\n", "")
+
+        with mock.patch.object(
+            verifier,
+            "_run_solver",
+            side_effect=(unsat, unsat),
+        ) as run:
+            query = verifier.query_solver(problem, "z3")
+
+        self.assertEqual(query.status, "unsat")
+        self.assertEqual(run.call_count, 2)
+        safety_formula, exact_formula = (
+            call.args[1] for call in run.call_args_list
+        )
+        self.assertIn(f"(assert {inexact.render()})", safety_formula)
+        self.assertNotIn(f"(assert {exact.render()})", safety_formula)
+        self.assertIn(f"(assert {exact.render()})", exact_formula)
+        self.assertNotIn(f"(assert {inexact.render()})", exact_formula)
+
+    def test_abstract_integral_average_mismatch_requires_binary64_replay(self):
+        problem, exact, _ = self._integral_average_problem()
+        responses = (
+            subprocess.CompletedProcess(["z3"], 0, "unsat\n", ""),
+            subprocess.CompletedProcess(["z3"], 0, "sat\n", ""),
+        )
+
+        with mock.patch.object(
+            verifier,
+            "_run_solver",
+            side_effect=responses,
+        ) as run:
+            query = verifier.query_solver(problem, "z3", (exact,))
+
+        self.assertEqual(query.status, "unknown")
+        self.assertEqual(query.phase, "abstract")
+        self.assertIn("exact binary64 replay is required", query.reason)
+        self.assertEqual(run.call_count, 2)
+        self.assertTrue(
+            all("(get-value" not in call.args[1] for call in run.call_args_list)
+        )
+
+    def test_abstract_integral_average_branch_candidate_requires_replay(self):
+        problem, _, _ = self._integral_average_problem()
+        responses = (
+            subprocess.CompletedProcess(["z3"], 0, "unsat\n", ""),
+            subprocess.CompletedProcess(["z3"], 0, "unknown\n", ""),
+            subprocess.CompletedProcess(["z3"], 0, "sat\n", ""),
+        )
+
+        with mock.patch.object(
+            verifier,
+            "_run_solver",
+            side_effect=responses,
+        ) as run:
+            query = verifier.query_solver(problem, "z3")
+
+        self.assertEqual(query.status, "unknown")
+        self.assertEqual(query.phase, "abstract")
+        self.assertIn("exact binary64 replay is required", query.reason)
+        self.assertEqual(run.call_count, 3)
 
     def test_string_rank_decoder_is_exact_and_rejects_out_of_universe_values(self):
         representatives = {0: "", 1: "a", 2: "é"}
@@ -4921,6 +5178,133 @@ class VerificationTest(unittest.TestCase):
                     10_000,
                 )
                 self.assertEqual(result.status, "VERIFIED_BOUNDED")
+
+    def test_integral_average_is_exact_through_two_non_null_rows(self):
+        for grouped in (False, True):
+            with self.subTest(grouped=grouped):
+                logical = aggregate_stage_snapshot(
+                    "avg",
+                    grouped,
+                    False,
+                    nullable_input=True,
+                    input_type="Int64",
+                )
+                staged = aggregate_stage_snapshot(
+                    "avg",
+                    grouped,
+                    True,
+                    nullable_input=True,
+                    input_type="Int64",
+                )
+                problem = build_problem(logical, staged, 2, 30_000)
+                self.assertIsNotNone(problem.soundness_exclusion)
+                self.assertTrue(problem.soundness_exclusions)
+                result = solve(problem, SOLVER, 2, 30_000)
+                self.assertEqual(result.status, "VERIFIED_BOUNDED")
+
+    def test_integral_average_three_rows_is_inconclusive_not_counterexample(self):
+        logical = aggregate_stage_snapshot(
+            "avg",
+            False,
+            False,
+            nullable_input=True,
+            input_type="Int64",
+        )
+        staged = aggregate_stage_snapshot(
+            "avg",
+            False,
+            True,
+            nullable_input=True,
+            input_type="Int64",
+        )
+        result = solve(
+            build_problem(logical, staged, 3, 30_000),
+            SOLVER,
+            3,
+            30_000,
+        )
+        self.assertEqual(result.status, "UNKNOWN")
+        self.assertIn("greater than two is reachable", result.reason)
+
+    def test_projected_integral_average_still_checks_exactness_region(self):
+        logical = aggregate_stage_snapshot(
+            "avg",
+            True,
+            False,
+            nullable_input=True,
+            input_type="Int64",
+            project_average_away=True,
+        )
+        staged = aggregate_stage_snapshot(
+            "avg",
+            True,
+            True,
+            nullable_input=True,
+            input_type="Int64",
+            project_average_away=True,
+        )
+        result = solve(
+            build_problem(logical, staged, 3, 30_000),
+            SOLVER,
+            3,
+            30_000,
+        )
+        self.assertEqual(result.status, "UNKNOWN")
+        self.assertIn("greater than two is reachable", result.reason)
+
+    def test_integral_average_input_mutation_requires_exact_replay(self):
+        logical = aggregate_stage_snapshot(
+            "avg",
+            True,
+            False,
+            nullable_input=True,
+            nullable_key=True,
+            input_type="Int64",
+        )
+        corrupted = aggregate_stage_snapshot(
+            "avg",
+            True,
+            True,
+            nullable_input=True,
+            nullable_key=True,
+            input_type="Int64",
+            aggregate_input="a.k",
+        )
+        result = solve(
+            build_problem(logical, corrupted, 2, 30_000),
+            SOLVER,
+            2,
+            30_000,
+        )
+        self.assertEqual(result.status, "UNKNOWN")
+        self.assertIn("exact binary64 replay is required", result.reason)
+
+    def test_integral_average_carrier_collision_is_never_a_counterexample(self):
+        logical = aggregate_stage_snapshot(
+            "avg",
+            False,
+            False,
+            nullable_input=True,
+            input_type="Int64",
+        )
+        duplicated = aggregate_stage_snapshot(
+            "avg",
+            False,
+            True,
+            nullable_input=True,
+            input_type="Int64",
+            duplicate_input=True,
+        )
+
+        result = solve(
+            build_problem(logical, duplicated, 1, 30_000),
+            SOLVER,
+            1,
+            30_000,
+        )
+
+        self.assertEqual(result.status, "UNKNOWN")
+        self.assertIn("exact binary64 replay is required", result.reason)
 
     def test_grouped_nullable_sum_is_verified_at_two_rows_and_tasks(self):
         logical = aggregate_stage_snapshot(

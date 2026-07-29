@@ -32,7 +32,13 @@ from .ir import (
     plan_node_inputs,
     validate_snapshot,
 )
-from .scalar import DecimalAverageState, Encoder as ScalarEncoder
+from .scalar import (
+    DecimalAverageState,
+    Encoder as ScalarEncoder,
+    IntegralAverageCertificate,
+    IntegralAverageState,
+    average_metadata_terms,
+)
 from .scalar import Value, date_domain, integer_domain, smt_sort
 from .types import DATE, family, is_decimal_type, is_ordered_type
 
@@ -543,6 +549,9 @@ class Evaluator:
             node = self.nodes[node_id]
             self.cache[node_id] = self._evaluate(node)
         family = self.cache[node_id]
+        # Observation happens at the producer, before any parent can route,
+        # compact, sort, limit, project, or discard its rows. This lifecycle
+        # lets completed-AVG certificates remain node-local.
         if self.node_observer is not None and node_id not in self.observed_nodes:
             self.node_observer(self.choice_scope, node_id, family)
             self.observed_nodes.add(node_id)
@@ -1162,87 +1171,187 @@ class Evaluator:
             )
         if trait.function == "avg":
             assert trait.state is not None
-            guarded_sums: list[tuple[smt.Term, smt.Term]] = []
-            count_terms: list[smt.Term] = []
-            finite_abs_bound = 0
-            count_bound = 0
-            for guard, row in zip(non_null, source.rows):
-                if guard == smt.FALSE:
-                    continue
-                value = row.values[trait.input]
-                if node.phase == "final":
-                    state = value.decimal_average_state
-                    if state is None or state.sum_type != trait.state.sum_type:
-                        raise RelationError(
-                            "final avg input does not carry its validated "
-                            "intermediate Decimal state"
-                        )
-                    guarded_sums.append((guard, state.sum))
-                    finite_abs_bound += state.finite_abs_bound
-                    count_bound += state.count_bound
-                    count_terms.append(smt.ite(guard, state.count, smt.ZERO))
-                else:
-                    guarded_sums.append((guard, value.value))
-                    finite_abs_bound += _decimal_finite_abs_bound(value)
-                    count_bound += 1
-                    count_terms.append(smt.ite(guard, smt.ONE, smt.ZERO))
-
-            state_type = decimal.parse_type(trait.state.sum_type)
-            assert state_type is not None
-            if finite_abs_bound >= 10**state_type.precision:
-                raise RelationError(
-                    f"Decimal avg sum may overflow its {trait.state.sum_type} "
-                    "accumulator within the current bound; non-associative "
-                    "overflow is not modeled"
+            if trait.state.kind == "integral_double_v1":
+                return self._integral_average_value(
+                    node,
+                    trait,
+                    source,
+                    non_null,
                 )
-            if count_bound >= 1 << 64:
-                raise RelationError(
-                    "Decimal avg count may wrap its Uint64 accumulator "
-                    "within the current bound"
-                )
-            total = decimal.sum_with_headroom(
-                tuple(guarded_sums),
-                trait.state.sum_type,
-                finite_abs_bound,
-            )
-            count = smt.add(*count_terms)
-            average = decimal.narrow_same_scale(
-                decimal.divide(
-                    total,
-                    count,
-                    trait.state.sum_type,
-                    trait.state.count_type,
-                ),
-                trait.state.sum_type,
-                trait.output_type,
-            )
-            output_type = decimal.parse_type(trait.output_type)
-            assert output_type is not None
-            return Value(
-                trait.output_type,
-                (
-                    smt.not_(smt.or_(*non_null))
-                    if trait.output_nullable
-                    else smt.FALSE
-                ),
-                average,
-                decimal_finite_abs_bound=min(
-                    finite_abs_bound,
-                    10**output_type.precision - 1,
-                ),
-                decimal_average_state=(
-                    DecimalAverageState(
-                        sum_type=trait.state.sum_type,
-                        sum=total,
-                        count=count,
-                        finite_abs_bound=finite_abs_bound,
-                        count_bound=count_bound,
-                    )
-                    if node.phase == "intermediate"
-                    else None
-                ),
+            return self._decimal_average_value(
+                node,
+                trait,
+                source,
+                non_null,
             )
         raise AssertionError(f"unsupported aggregate function {trait.function!r}")
+
+    def _decimal_average_value(
+        self,
+        node: Aggregate,
+        trait: AggregateTrait,
+        source: Relation,
+        non_null: tuple[smt.Term, ...],
+    ) -> Value:
+        assert trait.state is not None and trait.state.kind == "decimal"
+        guarded_sums: list[tuple[smt.Term, smt.Term]] = []
+        count_terms: list[smt.Term] = []
+        finite_abs_bound = 0
+        count_bound = 0
+        for guard, row in zip(non_null, source.rows):
+            if guard == smt.FALSE:
+                continue
+            value = row.values[trait.input]
+            if node.phase == "final":
+                state = value.average_metadata
+                if (
+                    not isinstance(state, DecimalAverageState)
+                    or state.sum_type != trait.state.sum_type
+                ):
+                    raise RelationError(
+                        "final avg input does not carry its validated "
+                        "intermediate Decimal state"
+                    )
+                guarded_sums.append((guard, state.sum))
+                finite_abs_bound += state.finite_abs_bound
+                count_bound += state.count_bound
+                count_terms.append(smt.ite(guard, state.count, smt.ZERO))
+            else:
+                guarded_sums.append((guard, value.value))
+                finite_abs_bound += _decimal_finite_abs_bound(value)
+                count_bound += 1
+                count_terms.append(smt.ite(guard, smt.ONE, smt.ZERO))
+
+        state_type = decimal.parse_type(trait.state.sum_type)
+        assert state_type is not None
+        if finite_abs_bound >= 10**state_type.precision:
+            raise RelationError(
+                f"Decimal avg sum may overflow its {trait.state.sum_type} "
+                "accumulator within the current bound; non-associative "
+                "overflow is not modeled"
+            )
+        if count_bound >= 1 << 64:
+            raise RelationError(
+                "Decimal avg count may wrap its Uint64 accumulator "
+                "within the current bound"
+            )
+        total = decimal.sum_with_headroom(
+            tuple(guarded_sums),
+            trait.state.sum_type,
+            finite_abs_bound,
+        )
+        count = smt.add(*count_terms)
+        average = decimal.narrow_same_scale(
+            decimal.divide(
+                total,
+                count,
+                trait.state.sum_type,
+                trait.state.count_type,
+            ),
+            trait.state.sum_type,
+            trait.output_type,
+        )
+        output_type = decimal.parse_type(trait.output_type)
+        assert output_type is not None
+        return Value(
+            trait.output_type,
+            (
+                smt.not_(smt.or_(*non_null))
+                if trait.output_nullable
+                else smt.FALSE
+            ),
+            average,
+            decimal_finite_abs_bound=min(
+                finite_abs_bound,
+                10**output_type.precision - 1,
+            ),
+            average_metadata=(
+                DecimalAverageState(
+                    sum_type=trait.state.sum_type,
+                    sum=total,
+                    count=count,
+                    finite_abs_bound=finite_abs_bound,
+                    count_bound=count_bound,
+                )
+                if node.phase == "intermediate"
+                else None
+            ),
+        )
+
+    def _integral_average_value(
+        self,
+        node: Aggregate,
+        trait: AggregateTrait,
+        source: Relation,
+        non_null: tuple[smt.Term, ...],
+    ) -> Value:
+        assert trait.state is not None
+        assert trait.state.kind == "integral_double_v1"
+        assert trait.state.exact_when_count_at_most == 2
+
+        count_terms: list[smt.Term] = []
+        count_bound = 0
+        minimum = smt.int_value((1 << 63) - 1)
+        maximum = smt.int_value(-(1 << 63))
+        for guard, row in zip(non_null, source.rows):
+            if guard == smt.FALSE:
+                continue
+            value = row.values[trait.input]
+            if node.phase == "final":
+                state = value.average_metadata
+                if not isinstance(state, IntegralAverageState):
+                    raise RelationError(
+                        "final integral avg input does not carry its validated "
+                        "intermediate state"
+                    )
+                member_count = state.count
+                member_minimum = state.minimum
+                member_maximum = state.maximum
+                count_bound += state.count_bound
+            else:
+                member_count = smt.ONE
+                member_minimum = value.value
+                member_maximum = value.value
+                count_bound += 1
+
+            count_terms.append(smt.ite(guard, member_count, smt.ZERO))
+            minimum = smt.ite(
+                guard,
+                smt.ite(smt.lt(member_minimum, minimum), member_minimum, minimum),
+                minimum,
+            )
+            maximum = smt.ite(
+                guard,
+                smt.ite(smt.lt(maximum, member_maximum), member_maximum, maximum),
+                maximum,
+            )
+
+        if count_bound >= 1 << 64:
+            raise RelationError(
+                "integral avg count may wrap its Uint64 accumulator "
+                "within the current bound"
+            )
+        count = smt.add(*count_terms)
+        result = self.scalar.integral_int64_average(count, minimum, maximum)
+        return Value(
+            trait.output_type,
+            (
+                smt.not_(smt.or_(*non_null))
+                if trait.output_nullable
+                else smt.FALSE
+            ),
+            result,
+            average_metadata=(
+                IntegralAverageState(
+                    count=count,
+                    minimum=minimum,
+                    maximum=maximum,
+                    count_bound=count_bound,
+                )
+                if node.phase == "intermediate"
+                else IntegralAverageCertificate(count)
+            ),
+        )
 
     def _same_group(self, node: Aggregate, left: Row, right: Row) -> smt.Term:
         return smt.and_(
@@ -1626,7 +1735,10 @@ class Evaluator:
             selected = self.scalar.null(subplan.output.type)
             for row in outcome.relation.rows:
                 candidate = row.values[subplan.output.column]
-                if candidate.decimal_average_state is not None:
+                if isinstance(
+                    candidate.average_metadata,
+                    (DecimalAverageState, IntegralAverageState),
+                ):
                     raise RelationError(
                         f"scalar subplan {binding!r} exposes an intermediate AVG state"
                     )
@@ -2310,16 +2422,34 @@ def _enumerated_sort_family(
 
 
 @dataclass(frozen=True, slots=True)
+class _DecimalAverageStateLayout:
+    sum_type: str
+    sum_lane: int
+    count_lane: int
+    finite_abs_bound: int
+    count_bound: int
+
+
+@dataclass(frozen=True, slots=True)
+class _IntegralAverageStateLayout:
+    count_lane: int
+    minimum_lane: int
+    maximum_lane: int
+    count_bound: int
+
+
+_SortingAverageStateLayout: TypeAlias = (
+    _DecimalAverageStateLayout | _IntegralAverageStateLayout
+)
+
+
+@dataclass(frozen=True, slots=True)
 class _SortingNetworkColumnLayout:
     column: Column
     null_lane: int
     value_lane: int
     decimal_finite_abs_bound: int | None
-    average_sum_type: str | None = None
-    average_sum_lane: int | None = None
-    average_count_lane: int | None = None
-    average_finite_abs_bound: int | None = None
-    average_count_bound: int | None = None
+    average_metadata: _SortingAverageStateLayout | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -2355,13 +2485,21 @@ class _SortingNetworkRowCodec:
         for column in self.layout.columns:
             value = row.values[column.column.name]
             lanes.extend((value.is_null, value.value))
-            if column.average_sum_lane is not None:
-                state = value.decimal_average_state
-                if state is None:
+            state_layout = column.average_metadata
+            if isinstance(state_layout, _DecimalAverageStateLayout):
+                state = value.average_metadata
+                if not isinstance(state, DecimalAverageState):
                     raise RelationError(
                         "sorting network row lost its Decimal avg state"
                     )
                 lanes.extend((state.sum, state.count))
+            elif isinstance(state_layout, _IntegralAverageStateLayout):
+                state = value.average_metadata
+                if not isinstance(state, IntegralAverageState):
+                    raise RelationError(
+                        "sorting network row lost its integral avg state"
+                    )
+                lanes.extend((state.count, state.minimum, state.maximum))
         return self.product.pack(*lanes)
 
     def present(self, payload: smt.Term) -> smt.Term:
@@ -2373,17 +2511,21 @@ class _SortingNetworkRowCodec:
         column: _SortingNetworkColumnLayout,
     ) -> Value:
         average_state = None
-        if column.average_sum_lane is not None:
-            assert column.average_sum_type is not None
-            assert column.average_count_lane is not None
-            assert column.average_finite_abs_bound is not None
-            assert column.average_count_bound is not None
+        state_layout = column.average_metadata
+        if isinstance(state_layout, _DecimalAverageStateLayout):
             average_state = DecimalAverageState(
-                sum_type=column.average_sum_type,
-                sum=self.product.select(payload, column.average_sum_lane),
-                count=self.product.select(payload, column.average_count_lane),
-                finite_abs_bound=column.average_finite_abs_bound,
-                count_bound=column.average_count_bound,
+                sum_type=state_layout.sum_type,
+                sum=self.product.select(payload, state_layout.sum_lane),
+                count=self.product.select(payload, state_layout.count_lane),
+                finite_abs_bound=state_layout.finite_abs_bound,
+                count_bound=state_layout.count_bound,
+            )
+        elif isinstance(state_layout, _IntegralAverageStateLayout):
+            average_state = IntegralAverageState(
+                count=self.product.select(payload, state_layout.count_lane),
+                minimum=self.product.select(payload, state_layout.minimum_lane),
+                maximum=self.product.select(payload, state_layout.maximum_lane),
+                count_bound=state_layout.count_bound,
             )
         return Value(
             column.column.type,
@@ -2496,62 +2638,117 @@ def _sorting_network_layout(relation: Relation) -> _SortingNetworkLayout:
             )
         )
 
-        states = tuple(value.decimal_average_state for value in values)
+        states = tuple(value.average_metadata for value in values)
+        result_states = tuple(
+            state
+            for state in states
+            if isinstance(state, IntegralAverageCertificate)
+        )
+        if result_states:
+            if any(
+                state is not None
+                and not isinstance(state, IntegralAverageCertificate)
+                for state in states
+            ):
+                raise RelationError("sorting network mixed AVG state layouts")
+            if any(state.count.sort != smt.INT for state in result_states):
+                raise RelationError(
+                    "sorting network integral avg result state is invalid"
+                )
+            # A completed AVG certificate is node-local: its aggregate was
+            # observed before this downstream sort.
+            states = (None,) * len(states)
         present_states = tuple(state for state in states if state is not None)
         if present_states and len(present_states) != len(states):
             raise RelationError(
-                "sorting network mixed Decimal avg state and scalar values"
+                "sorting network mixed AVG state and scalar values"
             )
-        if not present_states:
-            columns.append(
-                _SortingNetworkColumnLayout(
-                    column,
-                    null_lane,
-                    value_lane,
-                    finite_abs_bound,
+        average_state_layout = None
+        if present_states:
+            first_state = present_states[0]
+            if any(
+                type(state) is not type(first_state)
+                for state in present_states[1:]
+            ):
+                raise RelationError("sorting network mixed AVG state layouts")
+            if isinstance(first_state, DecimalAverageState):
+                decimal_states = tuple(
+                    state
+                    for state in present_states
+                    if isinstance(state, DecimalAverageState)
                 )
-            )
-            continue
+                if any(
+                    state.sum_type != first_state.sum_type
+                    or state.sum.sort != first_state.sum.sort
+                    or state.count.sort != first_state.count.sort
+                    for state in decimal_states[1:]
+                ):
+                    raise RelationError(
+                        "sorting network mixed Decimal avg state layouts"
+                    )
+                if (
+                    not is_decimal_type(first_state.sum_type)
+                    or first_state.sum.sort != smt_sort(first_state.sum_type)
+                    or first_state.count.sort != smt.INT
+                    or any(
+                        type(state.finite_abs_bound) is not int
+                        or state.finite_abs_bound < 0
+                        or type(state.count_bound) is not int
+                        or state.count_bound < 0
+                        for state in decimal_states
+                    )
+                ):
+                    raise RelationError(
+                        "sorting network Decimal avg state has an invalid layout"
+                    )
+                sum_lane = len(lane_sorts)
+                count_lane = sum_lane + 1
+                lane_sorts.extend((first_state.sum.sort, first_state.count.sort))
+                average_state_layout = _DecimalAverageStateLayout(
+                    first_state.sum_type,
+                    sum_lane,
+                    count_lane,
+                    max(state.finite_abs_bound for state in decimal_states),
+                    max(state.count_bound for state in decimal_states),
+                )
+            else:
+                assert isinstance(first_state, IntegralAverageState)
+                integral_states = tuple(
+                    state
+                    for state in present_states
+                    if isinstance(state, IntegralAverageState)
+                )
+                if (
+                    any(
+                        state.count.sort != smt.INT
+                        or state.minimum.sort != smt.INT
+                        or state.maximum.sort != smt.INT
+                        or type(state.count_bound) is not int
+                        or state.count_bound < 0
+                        for state in integral_states
+                    )
+                ):
+                    raise RelationError(
+                        "sorting network integral avg state has an invalid layout"
+                    )
+                count_lane = len(lane_sorts)
+                minimum_lane = count_lane + 1
+                maximum_lane = count_lane + 2
+                lane_sorts.extend((smt.INT, smt.INT, smt.INT))
+                average_state_layout = _IntegralAverageStateLayout(
+                    count_lane,
+                    minimum_lane,
+                    maximum_lane,
+                    max(state.count_bound for state in integral_states),
+                )
 
-        first_state = present_states[0]
-        if any(
-            state.sum_type != first_state.sum_type
-            or state.sum.sort != first_state.sum.sort
-            or state.count.sort != first_state.count.sort
-            for state in present_states[1:]
-        ):
-            raise RelationError(
-                "sorting network mixed Decimal avg state layouts"
-            )
-        if (
-            not is_decimal_type(first_state.sum_type)
-            or first_state.sum.sort != smt_sort(first_state.sum_type)
-            or first_state.count.sort != smt.INT
-            or any(
-                type(state.finite_abs_bound) is not int
-                or state.finite_abs_bound < 0
-                or type(state.count_bound) is not int
-                or state.count_bound < 0
-                for state in present_states
-            )
-        ):
-            raise RelationError(
-                "sorting network Decimal avg state has an invalid layout"
-            )
-        average_sum_lane = len(lane_sorts)
-        average_count_lane = average_sum_lane + 1
-        lane_sorts.extend((first_state.sum.sort, first_state.count.sort))
         columns.append(
             _SortingNetworkColumnLayout(
                 column,
                 null_lane,
                 value_lane,
                 finite_abs_bound,
-                first_state.sum_type,
-                average_sum_lane,
-                average_count_lane,
-                max(state.finite_abs_bound for state in present_states),
-                max(state.count_bound for state in present_states),
+                average_state_layout,
             )
         )
 
@@ -3709,7 +3906,7 @@ def _select_limit_value(
     choice: smt.Term,
     alternatives: tuple[Value, ...],
 ) -> Value:
-    """Conditionally select one typed value and its hidden Decimal metadata."""
+    """Conditionally select one typed value and all hidden AVG metadata."""
 
     if not alternatives:
         raise RelationError("singleton limit has no value alternatives")
@@ -3734,47 +3931,32 @@ def _select_limit_value(
         else max(bound for bound in finite_bounds if bound is not None)
     )
 
-    states = tuple(
-        alternative.decimal_average_state
+    metadata = tuple(
+        alternative.average_metadata
         for alternative in alternatives
     )
-    average_state = None
-    if any(state is not None for state in states):
-        if any(state is None for state in states):
-            raise RelationError(
-                "singleton limit mixed Decimal avg state and scalar values"
-            )
-        present_states = tuple(state for state in states if state is not None)
-        first_state = present_states[0]
-        if any(
-            state.sum_type != first_state.sum_type
-            for state in present_states[1:]
-        ):
-            raise RelationError(
-                "singleton limit received different Decimal avg state types"
-            )
-        state_sum = first_state.sum
-        state_count = first_state.count
-        for index, state in enumerate(present_states[1:], start=1):
-            selected = smt.eq(choice, smt.int_value(index))
-            state_sum = smt.ite(selected, state.sum, state_sum)
-            state_count = smt.ite(selected, state.count, state_count)
-        average_state = DecimalAverageState(
-            sum_type=first_state.sum_type,
-            sum=state_sum,
-            count=state_count,
-            finite_abs_bound=max(
-                state.finite_abs_bound for state in present_states
-            ),
-            count_bound=max(state.count_bound for state in present_states),
+    if any(
+        isinstance(item, (DecimalAverageState, IntegralAverageState))
+        for item in metadata
+    ):
+        raise RelationError(
+            "singleton limit cannot select hidden intermediate AVG state"
         )
+    if any(
+        item is not None
+        and (
+            not isinstance(item, IntegralAverageCertificate)
+            or item.count.sort != smt.INT
+        )
+        for item in metadata
+    ):
+        raise RelationError("singleton limit integral AVG certificate is invalid")
 
     return Value(
         first.type,
         is_null,
         value,
         finite_bound,
-        average_state,
     )
 
 
@@ -4148,9 +4330,9 @@ def _bounded_choice_family(
             )
             for value in row.values.values():
                 observable_terms.extend((value.is_null, value.value))
-                state = value.decimal_average_state
+                state = value.average_metadata
                 if state is not None:
-                    observable_terms.extend((state.sum, state.count))
+                    observable_terms.extend(average_metadata_terms(state))
         dependencies = set(
             script.quantified_choice_dependencies(observable_terms)
         )
@@ -4175,6 +4357,31 @@ def _bounded_choice_family(
             )
         )
     return RelationFamily(tuple(bounded))
+
+
+def successful_family_reachable(
+    family: RelationFamily,
+    script: smt.Script,
+    scope: str,
+    predicate: Callable[[Relation], smt.Term],
+) -> smt.Term:
+    """Existentially test one successful outcome under its exact choice bounds."""
+
+    _register_family_choices(family, script)
+    bounded = _bounded_choice_family(family, script, scope)
+    return smt.or_(
+        *(
+            smt.exists(
+                tuple(choice.term for choice in outcome.choices),
+                smt.and_(
+                    outcome.enabled,
+                    smt.not_(outcome.error),
+                    predicate(outcome.relation),
+                ),
+            )
+            for outcome in bounded.outcomes
+        )
+    )
 
 
 def _relations_equal(

@@ -185,11 +185,24 @@ class Sort:
 
 @dataclass(frozen=True, slots=True)
 class AverageStateType:
-    """Physical Decimal AVG accumulator hidden by the logical RBO IU type."""
+    """Physical AVG accumulator hidden by the logical RBO IU type."""
 
     sum_type: str
     count_type: str
     nullable: bool
+    kind: str = "decimal"
+    source_type: str | None = None
+    exact_when_count_at_most: int | None = None
+
+
+INTEGRAL_DOUBLE_AVERAGE_STATE = AverageStateType(
+    sum_type=DOUBLE,
+    count_type="Uint64",
+    nullable=True,
+    kind="integral_double_v1",
+    source_type="Int64",
+    exact_when_count_at_most=2,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -442,6 +455,47 @@ def _scalar_type(value: Any, path: str) -> str:
     if not is_scalar_type(result):
         _fail(path, f"unsupported scalar type {result!r}")
     return result
+
+
+def _parse_average_state(value: Any, path: str) -> AverageStateType:
+    state = _object(value, path)
+    if "kind" not in state:
+        _keys(state, {"sum_type", "count_type", "nullable"}, path)
+        return AverageStateType(
+            sum_type=_scalar_type(state["sum_type"], f"{path}.sum_type"),
+            count_type=_scalar_type(state["count_type"], f"{path}.count_type"),
+            nullable=_bool(state["nullable"], f"{path}.nullable"),
+        )
+
+    _keys(
+        state,
+        {
+            "kind",
+            "source_type",
+            "sum_type",
+            "count_type",
+            "nullable",
+            "exact_when_count_at_most",
+        },
+        path,
+    )
+    kind = _string(state["kind"], f"{path}.kind")
+    if kind != INTEGRAL_DOUBLE_AVERAGE_STATE.kind:
+        _fail(f"{path}.kind", f"unsupported avg state kind {kind!r}")
+    return AverageStateType(
+        sum_type=_scalar_type(state["sum_type"], f"{path}.sum_type"),
+        count_type=_scalar_type(state["count_type"], f"{path}.count_type"),
+        nullable=_bool(state["nullable"], f"{path}.nullable"),
+        kind=kind,
+        source_type=_scalar_type(
+            state["source_type"],
+            f"{path}.source_type",
+        ),
+        exact_when_count_at_most=_index(
+            state["exact_when_count_at_most"],
+            f"{path}.exact_when_count_at_most",
+        ),
+    )
 
 
 def _literal(value: Any, scalar_type: str, path: str) -> bool | int | str | decimal.Literal:
@@ -957,25 +1011,9 @@ def _parse_node(value: Any, path: str) -> PlanNode:
             function = _string(trait["function"], f"{trait_path}.function")
             state = None
             if function == "avg":
-                raw_state = _object(trait["state"], f"{trait_path}.state")
-                _keys(
-                    raw_state,
-                    {"sum_type", "count_type", "nullable"},
+                state = _parse_average_state(
+                    trait["state"],
                     f"{trait_path}.state",
-                )
-                state = AverageStateType(
-                    sum_type=_scalar_type(
-                        raw_state["sum_type"],
-                        f"{trait_path}.state.sum_type",
-                    ),
-                    count_type=_scalar_type(
-                        raw_state["count_type"],
-                        f"{trait_path}.state.count_type",
-                    ),
-                    nullable=_bool(
-                        raw_state["nullable"],
-                        f"{trait_path}.state.nullable",
-                    ),
                 )
             aggregates.append(
                 AggregateTrait(
@@ -1778,6 +1816,39 @@ def _is_exact_scalar_int64_count_distinct(
     )
 
 
+def _is_integral_double_average(trait: AggregateTrait) -> bool:
+    return (
+        trait.function == "avg"
+        and trait.state is not None
+        and trait.state.kind == INTEGRAL_DOUBLE_AVERAGE_STATE.kind
+    )
+
+
+def _validate_integral_double_average(
+    node: Aggregate,
+    trait: AggregateTrait,
+    input_column: Column,
+    path: str,
+) -> None:
+    if trait.state != INTEGRAL_DOUBLE_AVERAGE_STATE:
+        _fail(
+            f"{path}.state",
+            "integral avg state must be exactly "
+            "{kind=integral_double_v1, source_type=Int64, "
+            "sum_type=Double, count_type=Uint64, nullable=true, "
+            "exact_when_count_at_most=2}",
+        )
+    expected_input_type = DOUBLE if node.phase == "final" else "Int64"
+    if input_column.type != expected_input_type or not input_column.nullable:
+        _fail(
+            path,
+            f"integral avg {node.phase} input must be "
+            f"Optional<{expected_input_type}>",
+        )
+    if trait.output_type != DOUBLE or not trait.output_nullable:
+        _fail(path, "integral avg output must be Optional<Double>")
+
+
 def plan_node_inputs(node: PlanNode) -> tuple[str, ...]:
     if isinstance(node, (EmptySource, Scan)):
         return ()
@@ -1798,9 +1869,9 @@ def _validate_average_state_dataflow(snapshot: Snapshot) -> None:
     """Keep hidden AVG tuples on one exact intermediate-to-final edge.
 
     The RBO operator graph annotates an intermediate AVG IU with its logical
-    Decimal result type even though physical lowering carries an optional
-    ``(Decimal(35, scale) sum, Uint64 count)`` tuple.  Admitting that IU as an
-    ordinary scalar would silently model an average of partial averages.
+    result type even though physical lowering carries a hidden accumulator.
+    Admitting that IU as an ordinary scalar would silently model an average of
+    partial averages.
     """
 
     nodes = snapshot.plan.node_map()
@@ -1841,7 +1912,7 @@ def _validate_average_state_dataflow(snapshot: Snapshot) -> None:
                         _fail(
                             f"node {node.id!r}.aggregates",
                             "final avg must consume the matching intermediate "
-                            "avg state with identical Decimal metadata",
+                            "avg state with identical metadata",
                         )
 
         if node.phase != "intermediate":
@@ -2788,9 +2859,12 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                 input_column = input_schema.get(trait.input)
                 if input_column is None:
                     _fail(trait_path, f"input column {trait.input!r} is not available")
-                if input_column.type == DOUBLE:
+                integral_average = _is_integral_double_average(trait)
+                if input_column.type == DOUBLE and not (
+                    integral_average and node.phase == "final"
+                ):
                     _fail(trait_path, "aggregate inputs may not consume Double")
-                if trait.output_type == DOUBLE:
+                if trait.output_type == DOUBLE and not integral_average:
                     _fail(trait_path, "aggregates may not produce Double")
                 if input_column.type == VOID and (
                     node.distinct_all
@@ -2904,38 +2978,46 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                             "input, phase, and keys",
                         )
                 elif trait.function == "avg":
-                    if not decimal.is_type(input_column.type):
-                        _fail(
+                    if integral_average:
+                        _validate_integral_double_average(
+                            node,
+                            trait,
+                            input_column,
                             trait_path,
-                            f"avg does not support {input_column.type!r}; "
-                            "only Decimal is modeled",
                         )
-                    if trait.output_type != input_column.type:
-                        _fail(
-                            trait_path,
-                            "avg output type must exactly match its Decimal input "
-                            f"{input_column.type!r}, got {trait.output_type!r}",
+                    else:
+                        if not decimal.is_type(input_column.type):
+                            _fail(
+                                trait_path,
+                                f"avg does not support {input_column.type!r}; "
+                                "only Decimal is modeled",
+                            )
+                        if trait.output_type != input_column.type:
+                            _fail(
+                                trait_path,
+                                "avg output type must exactly match its Decimal input "
+                                f"{input_column.type!r}, got {trait.output_type!r}",
+                            )
+                        expected_state = AverageStateType(
+                            sum_type=decimal.sum_type(input_column.type) or "",
+                            count_type="Uint64",
+                            nullable=input_column.nullable,
                         )
-                    expected_state = AverageStateType(
-                        sum_type=decimal.sum_type(input_column.type) or "",
-                        count_type="Uint64",
-                        nullable=input_column.nullable,
-                    )
-                    if trait.state != expected_state:
-                        _fail(
-                            f"{trait_path}.state",
-                            "avg state must be the exact "
-                            f"({expected_state.sum_type}, Uint64) accumulator "
-                            f"with nullable={str(expected_state.nullable).lower()}",
-                        )
-                    expected_nullable = input_column.nullable
-                    if not node.keys and node.phase != "intermediate":
-                        expected_nullable = True
-                    if trait.output_nullable != expected_nullable:
-                        _fail(
-                            trait_path,
-                            "avg output nullability does not match its input, phase, and keys",
-                        )
+                        if trait.state != expected_state:
+                            _fail(
+                                f"{trait_path}.state",
+                                "avg state must be the exact "
+                                f"({expected_state.sum_type}, Uint64) accumulator "
+                                f"with nullable={str(expected_state.nullable).lower()}",
+                            )
+                        expected_nullable = input_column.nullable
+                        if not node.keys and node.phase != "intermediate":
+                            expected_nullable = True
+                        if trait.output_nullable != expected_nullable:
+                            _fail(
+                                trait_path,
+                                "avg output nullability does not match its input, phase, and keys",
+                            )
 
                 result[trait.output] = Column(
                     trait.output,

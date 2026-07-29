@@ -10,20 +10,22 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, TypeAlias
 
 from . import smt
-from .ir import Snapshot
+from .ir import Aggregate, INTEGRAL_DOUBLE_AVERAGE_STATE, Snapshot
 from .relation import (
     Database,
     Evaluator,
     FamilyComparison,
     MismatchBranch,
     NodeObserver,
+    Relation,
     RelationError,
     RelationFamily,
     WitnessRow,
     compare_families,
     family_mismatch,
+    successful_family_reachable,
 )
-from .scalar import Encoder as ScalarEncoder
+from .scalar import Encoder as ScalarEncoder, IntegralAverageCertificate
 from .stages import (
     TASKS,
     EdgeObserver,
@@ -58,7 +60,12 @@ ComparisonObserver: TypeAlias = Callable[[FamilyComparison], None]
 class Problem:
     script: smt.Script
     witness: Mapping[str, tuple[WitnessRow, ...]]
+    # Semantic obligation: one canonical mismatch and its exact decomposition.
     mismatch_branches: tuple[MismatchBranch, ...] | None = None
+    semantic_mismatch: MismatchBranch | None = None
+    # Model-domain obligation: rule out every exclusion before semantics.
+    soundness_exclusion: MismatchBranch | None = None
+    soundness_exclusions: tuple[MismatchBranch, ...] = ()
 
     def witness_values(self) -> tuple[smt.Term, ...]:
         values: list[smt.Term] = []
@@ -87,10 +94,20 @@ class Problem:
         values: Iterable[smt.Term] = (),
         timeout_ms: int | None = None,
     ) -> str:
-        if self.mismatch_branches is None or not any(
-            branch is candidate
-            for candidate in self.mismatch_branches
-        ):
+        candidates = (
+            ()
+            if self.mismatch_branches is None
+            else self.mismatch_branches
+        ) + self.soundness_exclusions + (
+            ()
+            if self.semantic_mismatch is None
+            else (self.semantic_mismatch,)
+        ) + (
+            ()
+            if self.soundness_exclusion is None
+            else (self.soundness_exclusion,)
+        )
+        if not any(branch is candidate for candidate in candidates):
             raise VerificationError("solver branch does not belong to this problem")
         try:
             return self.script.render_branch(
@@ -259,6 +276,97 @@ def build_transformation_prefix_problem(
     )
 
 
+def _integral_average_count_gt_two(
+    relation: Relation,
+    output: str,
+) -> smt.Term:
+    predicates: list[smt.Term] = []
+    for row in relation.rows:
+        value = row.values.get(output)
+        if (
+            value is None
+            or not isinstance(
+                value.average_metadata,
+                IntegralAverageCertificate,
+            )
+        ):
+            raise RelationError(
+                f"integral AVG output {output!r} lost its exactness certificate"
+            )
+        predicates.append(
+            smt.and_(
+                row.present,
+                smt.not_(value.is_null),
+                smt.not_(
+                    smt.lt(
+                        value.average_metadata.count,
+                        smt.int_value(3),
+                    )
+                ),
+            )
+        )
+    return smt.or_(*predicates)
+
+
+def _integral_average_observer(
+    snapshot: Snapshot,
+    side: str,
+    script: smt.Script,
+    soundness_exclusions: list[MismatchBranch],
+    external: NodeObserver | None,
+) -> NodeObserver | None:
+    traits_by_node = {
+        node.id: tuple(
+            trait
+            for trait in node.aggregates
+            if (
+                trait.state is not None
+                and trait.state.kind == INTEGRAL_DOUBLE_AVERAGE_STATE.kind
+            )
+        )
+        for node in snapshot.plan.nodes
+        if isinstance(node, Aggregate) and node.phase != "intermediate"
+    }
+    traits_by_node = {
+        node_id: traits
+        for node_id, traits in traits_by_node.items()
+        if traits
+    }
+    if external is None and not traits_by_node:
+        return None
+
+    def observe(
+        scope: str,
+        node_id: str,
+        family: RelationFamily,
+    ) -> None:
+        if external is not None:
+            external(scope, node_id, family)
+        for trait in traits_by_node.get(node_id, ()):
+            predicate = successful_family_reachable(
+                family,
+                script,
+                (
+                    f"{side}:integral_avg_exactness:"
+                    f"{scope}:{node_id}:{trait.output}"
+                ),
+                lambda relation, output=trait.output: (
+                    _integral_average_count_gt_two(relation, output)
+                ),
+            )
+            soundness_exclusions.append(
+                MismatchBranch(
+                    (
+                        f"{side}:integral_avg_count_gt_2:"
+                        f"{scope}:{node_id}:{trait.output}"
+                    ),
+                    predicate,
+                )
+            )
+
+    return observe
+
+
 def _build_problem(
     before: Snapshot,
     after: Snapshot,
@@ -293,13 +401,28 @@ def _build_problem(
         database = Database(before, row_bound, script)
         scalar = ScalarEncoder(script)
         router = Router(script)
+        soundness_exclusions: list[MismatchBranch] = []
+        observed_before = _integral_average_observer(
+            before,
+            "before",
+            script,
+            soundness_exclusions,
+            before_node_observer,
+        )
+        observed_after = _integral_average_observer(
+            after,
+            "after",
+            script,
+            soundness_exclusions,
+            after_node_observer,
+        )
         before_family = (
             Evaluator(
                 before,
                 database,
                 scalar,
                 choice_scope="before:logical",
-                node_observer=before_node_observer,
+                node_observer=observed_before,
             ).root()
             if before.stage_graph is None
             else StageEvaluator(
@@ -307,7 +430,7 @@ def _build_problem(
                 database,
                 scalar,
                 router,
-                node_observer=before_node_observer,
+                node_observer=observed_before,
             ).root()
         )
         after_family = (
@@ -316,7 +439,7 @@ def _build_problem(
                 database,
                 scalar,
                 choice_scope="after:logical",
-                node_observer=after_node_observer,
+                node_observer=observed_after,
             ).root()
             if after.stage_graph is None
             else StageEvaluator(
@@ -324,7 +447,7 @@ def _build_problem(
                 database,
                 scalar,
                 router,
-                node_observer=after_node_observer,
+                node_observer=observed_after,
                 edge_observer=after_edge_observer,
             ).root()
         )
@@ -339,8 +462,38 @@ def _build_problem(
             mismatch = family_mismatch(before_family, after_family, scalar)
     except (RelationError, StageError, smt.SmtError) as error:
         raise VerificationError(str(error)) from error
-    script.assert_obligation(mismatch.counterexample)
-    return Problem(script, database.witness, mismatch.branches)
+    semantic_mismatch = MismatchBranch(
+        "semantic_mismatch",
+        mismatch.counterexample,
+    )
+    soundness_exclusion = (
+        MismatchBranch(
+            "integral_avg_model_domain",
+            smt.or_(
+                *(branch.predicate for branch in soundness_exclusions)
+            ),
+        )
+        if soundness_exclusions
+        else None
+    )
+    script.assert_obligation(
+        smt.or_(
+            semantic_mismatch.predicate,
+            (
+                smt.FALSE
+                if soundness_exclusion is None
+                else soundness_exclusion.predicate
+            ),
+        )
+    )
+    return Problem(
+        script,
+        database.witness,
+        mismatch.branches,
+        semantic_mismatch,
+        soundness_exclusion,
+        tuple(soundness_exclusions),
+    )
 
 
 def _check_boundary_roles(before: Snapshot, after: Snapshot) -> None:
@@ -367,14 +520,65 @@ def query_solver(
         else timeout_ms
     )
     budget = _SolverBudget.start(effective_timeout)
-    branches = problem.mismatch_branches
-    if branches is None:
-        return _query_obligation(
+    if problem.soundness_exclusion is not None:
+        exactness = _query_obligation(
             problem,
             solver,
-            requested,
+            (),
             budget,
-            None,
+            problem.soundness_exclusion,
+        )
+        if exactness.status == "sat":
+            return SolverQuery(
+                "unknown",
+                {},
+                "integral AVG count greater than two is reachable within "
+                "the bound; equivalence is inconclusive",
+                "soundness",
+            )
+        if exactness.status == "unknown":
+            return SolverQuery(
+                "unknown",
+                {},
+                "could not rule out integral AVG count greater than two: "
+                f"{exactness.reason or 'solver returned unknown'}",
+                "soundness",
+            )
+        if exactness.status != "unsat":
+            raise SolverError(
+                "unexpected integral AVG exactness status "
+                f"{exactness.status!r}"
+            )
+
+    # The shared integral-AVG carrier deliberately over-approximates exact
+    # binary64 results.  UNSAT is a proof, but SAT is only a replay candidate:
+    # distinct (count, min, max) tuples can round to the same Double.  Avoid a
+    # model query and never report such a candidate as a counterexample.
+    exact_requested = (
+        () if problem.soundness_exclusion is not None else requested
+    )
+
+    def classify_exact(query: SolverQuery) -> SolverQuery:
+        if query.status != "sat" or problem.soundness_exclusion is None:
+            return query
+        return SolverQuery(
+            "unknown",
+            {},
+            "the abstract integral AVG carrier admits a possible mismatch; "
+            "exact binary64 replay is required",
+            "abstract",
+        )
+
+    branches = problem.mismatch_branches
+    if branches is None:
+        return classify_exact(
+            _query_obligation(
+                problem,
+                solver,
+                exact_requested,
+                budget,
+                None,
+            )
         )
     if not branches:
         raise SolverError("exact mismatch decomposition has no branches")
@@ -392,13 +596,13 @@ def query_solver(
     canonical = _query_obligation(
         problem,
         solver,
-        requested,
+        exact_requested,
         budget,
-        None,
+        problem.semantic_mismatch,
         canonical_limit,
     )
     if canonical.status in {"sat", "unsat"} or canonical.phase == "model":
-        return canonical
+        return classify_exact(canonical)
 
     first_unknown: str | None = None
     for index, branch in enumerate(branches):
@@ -411,11 +615,13 @@ def query_solver(
         query = _query_obligation(
             problem,
             solver,
-            requested,
+            exact_requested,
             budget,
             branch,
         )
-        if query.status == "sat" or query.phase == "model":
+        if query.status == "sat":
+            return classify_exact(query)
+        if query.phase == "model":
             return query
         if query.status == "unknown" and first_unknown is None:
             first_unknown = (

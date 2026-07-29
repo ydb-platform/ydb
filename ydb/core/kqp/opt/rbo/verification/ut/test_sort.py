@@ -33,6 +33,8 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import (
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.scalar import (
     DecimalAverageState,
     Encoder as ScalarEncoder,
+    IntegralAverageCertificate,
+    IntegralAverageState,
     Value,
 )
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.stages import (
@@ -1835,7 +1837,7 @@ class SortingNetworkEncodingTest(unittest.TestCase):
         self.assertTrue(family.outcomes[0].relation.present_prefix)
         self.assertEqual(len(family.outcomes[0].choices), 6)
 
-    def test_network_moves_decimal_average_state_as_one_row(self):
+    def test_network_moves_average_state_as_one_row(self):
         columns = (
             Column("k", "Int64", False),
             Column("state", "Decimal(7,2)", False),
@@ -1883,7 +1885,7 @@ class SortingNetworkEncodingTest(unittest.TestCase):
             sequence = []
             for row in outcome.relation.rows:
                 value = row.values["state"]
-                state = value.decimal_average_state
+                state = value.average_metadata
                 self.assertIsNotNone(state)
                 self.assertEqual(value.decimal_finite_abs_bound, 20)
                 self.assertEqual(state.finite_abs_bound, 200)
@@ -1902,7 +1904,88 @@ class SortingNetworkEncodingTest(unittest.TestCase):
             },
         )
 
-    def test_network_rejects_malformed_decimal_average_state_lanes(self):
+    def test_network_keeps_integral_state_and_drops_result_certificate(self):
+        columns = (
+            Column("k", "Int64", False),
+            Column("state", "Double", True),
+            Column("result", "Double", True),
+        )
+        payloads = (
+            (10, 1, -4, 8, 100, 1),
+            (20, 2, -7, 9, 200, 3),
+        )
+        rows = tuple(
+            Row(
+                smt.TRUE,
+                {
+                    "k": Value("Int64", smt.FALSE, smt.ZERO),
+                    "state": Value(
+                        "Double",
+                        smt.FALSE,
+                        smt.int_value(carrier),
+                        average_metadata=IntegralAverageState(
+                            smt.int_value(count),
+                            smt.int_value(minimum),
+                            smt.int_value(maximum),
+                            count,
+                        ),
+                    ),
+                    "result": Value(
+                        "Double",
+                        smt.FALSE,
+                        smt.int_value(result),
+                        average_metadata=IntegralAverageCertificate(
+                            smt.int_value(proof_count)
+                        ),
+                    ),
+                },
+            )
+            for carrier, count, minimum, maximum, result, proof_count in payloads
+        )
+        script = smt.Script()
+        family = relation._sorting_network_family(
+            single(Relation(columns, rows)),
+            (SortOrder("k", True, False),),
+            script,
+            "network",
+        )
+        outcome = family.outcomes[0]
+        observed = set()
+        for assignment in product(
+            *(range(choice.bound) for choice in outcome.choices)
+        ):
+            constants = {
+                choice.term.atom: value
+                for choice, value in zip(outcome.choices, assignment)
+            }
+            if not _ground(outcome.enabled, constants):
+                continue
+            sequence = []
+            for row in outcome.relation.rows:
+                state_value = row.values["state"]
+                state = state_value.average_metadata
+                self.assertIsInstance(state, IntegralAverageState)
+                assert isinstance(state, IntegralAverageState)
+                self.assertEqual(state.count_bound, 2)
+                result_value = row.values["result"]
+                self.assertIsNone(result_value.average_metadata)
+                sequence.append((
+                    _ground(state_value.value, constants, script),
+                    _ground(state.count, constants, script),
+                    _ground(state.minimum, constants, script),
+                    _ground(state.maximum, constants, script),
+                    _ground(result_value.value, constants, script),
+                ))
+            observed.add(tuple(sequence))
+        self.assertEqual(
+            observed,
+            {
+                tuple(payload[:5] for payload in payloads),
+                tuple(payload[:5] for payload in reversed(payloads)),
+            },
+        )
+
+    def test_network_rejects_malformed_average_state_lanes(self):
         columns = (
             Column("k", "Int64", False),
             Column("state", "Decimal(7,2)", False),

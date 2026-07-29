@@ -99,7 +99,7 @@ A defect in these files can turn inequivalent supported plans into
 | File | Trusted responsibility |
 |---|---|
 | `semantic_snapshot.h` | Version-one catalog, snapshot, boundary, and fail-closed exporter contract. |
-| `semantic_snapshot.cpp` | Mechanical catalog and plan export; scalar normalization and safety gates, including exact literal-only String `Concat` folding, the passive-Double constructor, strict phase-linked integral-AVG admission, and independently tracked completed integral-AVG ordering provenance; operator, exact scalar- and one-level `IN`-inside-`IN` nesting, subplan, correlated outer-binding, StageGraph, topology, task, and resource validation; exact read-range integration; deterministic JSON serialization. |
+| `semantic_snapshot.cpp` | Mechanical catalog and plan export; scalar normalization and safety gates, including exact literal-only String `Concat` folding, the restricted nullable String-to-Utf8 `Unicode.ToUpper` bridge, the passive-Double constructor, strict phase-linked integral-AVG admission, and independently tracked completed integral-AVG ordering provenance; operator, exact scalar- and one-level `IN`-inside-`IN` nesting, subplan, correlated outer-binding, StageGraph, topology, task, and resource validation; exact read-range integration; deterministic JSON serialization. |
 | `read_range_predicate_impl.h` | Closed q9/q45 point and finite point-set `RangeInfo::ComputeNode` grammar, physical-key/catalog binding, extractor-cap and node-identity validation, and lowering to existing equality/static-`IN` predicate IR. Included exactly once inside `semantic_snapshot.cpp`'s anonymous namespace. |
 | `rbo_verifier/ir.py` | Strict JSON decoding, version/schema validation, normalized IR, expression typing, tagged aggregate-state contracts including phase-linked integral AVG, independently derived integral-AVG rank provenance, passive-Double use confinement, all-plan-root virtual-binding confinement, exact scalar- and one-level `IN`-inside-`IN` plus correlated-subplan shape checks, and operator/StageGraph invariants. |
 | `rbo_verifier/types.py` | Supported scalar identities, exact domains, opaque-carrier family, and compatibility predicates. |
@@ -287,7 +287,7 @@ Its q35 row emits after 565/121,012 ms. This is formula coverage only: the
 proof floor remains twenty-seven, with no optimizer bug or counterexample.
 
 Implementation commit `e8abaff7ff4` and policy commit `3e91814d64e` record the
-completed derived integral-AVG ordering slice. The current suites pass 619/619
+completed derived integral-AVG ordering slice. That checkpoint's suites passed 619/619
 Python verifier, 242/242 C++ exporter, 50/50 inspector, and 14/14 policy tests.
 Focused formula-only TPC-DS q22/q85 emit after 324/1,704 and 347/8,346 ms, with
 report SHA-256
@@ -442,9 +442,73 @@ and TPC-DS 64 / 17 / 18 at 64,839/660,548 ms (SHA-256
 Combined formula coverage is 82/121, 82/101 exact pairs, 82/93 successful
 preparations, and 82/87 verifier entrants. Unsupported primary outcomes split
 14 initial-export / 0 final-export / 5 verifier. The bounded proof floor is
-twenty-eight. No optimizer bug or counterexample was found. The next reviewed
-coverage slice is q24's `Optional<Utf8>` `Unicode::ToUpper` export gap; q64's
-8,192-row join output remains a separate construction problem.
+twenty-eight. No optimizer bug or counterexample was found. At that checkpoint
+q24's `Optional<Utf8>` `Unicode::ToUpper` export gap remained next; q64's
+8,192-row join output remained a separate construction problem.
+
+Milestone 67 is recorded by the semantics-neutral reviewed-UDF refactor
+`bed31799d83`, exporter commit `0ca4097d444`, q24 formula-policy commit
+`a26d42bdba8`, and cast-gate audit comment `f929a36b59c`. The proof-producing
+change is confined to the C++ exporter. There is no new snapshot or IR kind,
+Python semantic rule, Unicode implementation, or String quotient.
+
+The exporter accepts only an `Optional<Utf8>` Map whose input is
+`SafeCast` from one direct visible `Optional<String>` member to the exact
+`Optional<Utf8>` descriptor. Its unary Utf8 lambda must apply the same binder
+by pointer identity to the normalized built-in `Unicode.ToUpper` UDF. The gate
+checks the complete eight-child UDF envelope, callable and cached descriptors,
+one `AutoMap` Utf8 argument, zero optional arguments, Void configuration,
+empty type configuration and file alias, `(blocks, strict)` settings,
+scalar-safety metadata, the underlying String-to-Utf8 `MayFail`
+classification, and the global 64-binding limit. Every near miss fails closed.
+The generic reviewed-UDF refactor alone admits no callable: each bridge still
+requires an explicit immutable reviewed specification.
+
+The emitted expression reuses the existing
+`if_present(source, present, missing)` contract. The missing branch is exact
+typed Utf8 NULL. The present branch is a nullable opaque function with
+fingerprint `yql-string-to-utf8-unicode-upper-v1` and the non-NULL source
+payload as bound argument zero. It jointly covers invalid-UTF8 cast failure
+and every valid deterministic uppercase result. This is a conservative
+over-approximation: it can introduce `SAT` or `UNKNOWN`, but cannot remove a
+runtime behavior and therefore cannot manufacture a false `UNSAT`.
+Opaque-function congruence preserves the equal-input/equal-result property of
+the deterministic combined operation.
+
+Independent C++ evidence asserts the exact JSON and rejects thirty-two
+separately isolated mutations across the Map, source, cast, descriptor,
+lambda, Apply, UDF envelope, cached signature, and settings. Synthetic nesting
+accepts 63 existing bindings and rejects 64 before emitting another bound
+reference. The real q24 Initial and Final snapshots each contain exactly one
+such nullable opaque application. Validation passes 247/247 exporter tests,
+634/634 Python verifier tests, 14/14 policy tests, and the 5/5 focused
+proof-floor policy target.
+
+Focused q24 formula construction is `FORMULA_EMITTED` after 1,380/5,179 ms
+(report SHA-256
+`f9266984538cbb4ddfb7e0cbb8fa196d8137be1bb136841c185e23ef7f47c445`).
+The 14,998,792-byte, 1,319-line SMT artifact has SHA-256
+`cf0057462b5dce47c7ccc345e59286fe76cd93a59d4b174a338a13f4715f9e9d`.
+A separate 60-second attempt is `UNKNOWN` after 1,366/65,594 ms because its
+global deadline expires at branch 3/4 (`left_outcome_0_unmatched`); report
+SHA-256 is
+`83a4dd5c32b0c009d18245c7368a3cee23aba9130fc0575f25ec122566c52ce2`.
+This is formula coverage, not a proof, counterexample, or optimizer finding.
+
+The complete post-M67 dashboards are TPC-H 18 formula / 2 unsupported /
+2 no-pair at 2,850/95,985 ms (SHA-256
+`584cf92e304f0ef8ebc67937b4ed9ea80d0bd5d1bcbe7ae944a9da7a27978917`)
+and TPC-DS 65 / 16 / 18 at 64,487/673,727 ms (SHA-256
+`ab8422fcc7f830a6dd314cd4edd7f0203072846c9fcc73df0f5a36b922ce7d44`).
+Combined formula coverage is 83/121, 83/101 exact pairs, 83/93 successful
+preparations, and 83/88 verifier entrants. Unsupported primary outcomes split
+13 initial-export / 0 final-export / 5 verifier. The bounded proof floor
+remains twenty-eight. The complete proof-floor gate confirms 11/11 TPC-H
+obligations after 1,351/56,500 ms (report SHA-256
+`9fcc4b6967736dd408760b16469380aeb03871518e2dea9ea850ec08c3f1e563`)
+and 17/17 TPC-DS obligations after 12,900/88,785 ms (report SHA-256
+`c59c5e08f836e0a619969fa9afeac984f0c1715bd61a42e0c0f151001a86105c`).
+No optimizer bug or counterexample was found.
 
 The packed-row declaration substrate remains deliberately narrower than a
 general SMT datatype or macro facility. A product has exactly one constructor,
@@ -1201,8 +1265,31 @@ fixed-sequence singleton recognizer, one first-present payload fold, and one
 canonical typed fallback in `relation.py`; all rejected shapes use the old
 path. The larger test delta is outside the TCB and supplies exhaustive
 fixed-order, guard, provenance, metadata, bound, cap, and StageGraph evidence.
-Milestone 67 next targets q24's restricted `Optional<Utf8>`
-`Unicode::ToUpper` export gap.
+At that checkpoint Milestone 67 next targeted q24's restricted
+`Optional<Utf8>` `Unicode::ToUpper` export gap.
+
+The completed post-M67 physical-line audit uses reviewed-UDF refactor
+`bed31799d83`, exporter implementation `0ca4097d444`, q24 formula policy
+`a26d42bdba8`, and cast-gate clarification `f929a36b59c` for code and tests,
+plus this documentation update:
+
+| Area | Physical lines |
+|---|---:|
+| Ten trusted Python semantic modules | 13,562 |
+| C++ exporter (`semantic_snapshot.cpp`, `.h`, and `read_range_predicate_impl.h`) | 12,112 |
+| **Proof-producing code total** | **25,674** |
+| Tests, outside the TCB | 62,916 |
+| Diagnostic/orchestration tools, outside the TCB | 5,245 |
+| Documentation, outside the TCB | 10,096 |
+
+Relative to the post-M66 audit, Milestone 67 adds no trusted Python, 182 C++
+lines, 182 proof-producing lines, and 392 test lines. Diagnostic tooling is
+unchanged; documentation adds 280 lines. The trusted review seam is one
+immutable reviewed-UDF specification, one exact fail-closed host recognizer,
+and one lowering to existing `if_present`, bound, nullable-opaque, and typed-NULL
+IR. The larger test delta is outside the TCB and supplies the exact JSON,
+thirty-two isolated near misses, and binding-depth boundary. q64's independent
+8,192-row join-output guard remains a larger construction problem.
 
 ## External assumptions
 
@@ -1217,6 +1304,11 @@ the SMT obligation itself:
   optimization;
 - each accepted exporter encoding and Python semantic rule agrees with the
   corresponding YQL, RBO, KQP task-construction, and runtime behavior;
+- the accepted nullable Unicode-uppercase bridge identifies the deterministic
+  built-in `Unicode.ToUpper`; `SafeCast` from String to Utf8 deterministically
+  returns NULL for invalid bytes and otherwise supplies that UDF with the
+  decoded value, so equal raw String inputs have equal combined nullable
+  results;
 - for an accepted compact ordered singleton, a `sequence` relation without an
   ordinal vector is in the exact fixed runtime row order represented by its
   tuple; each enumerated StageGraph Merge outcome establishes one fixed global
@@ -1376,7 +1468,7 @@ each slice. It is an audit checklist, not a claim that tests are exhaustive.
 | Slice | Trusted path to review | Primary independent evidence |
 |---|---|---|
 | Capture, catalog, root schema | host hook assumption; `semantic_snapshot.*`; `ir.py`; `verify.py` | `cpp_ut/semantic_snapshot_exporter_ut.cpp`; `integration_ut/optimizer_snapshot_pair_ut.cpp`; schema-mutation tests |
-| Types, NULLs, scalar functions | `semantic_snapshot.cpp`; `ir.py`; `types.py`; `scalar.py`; `decimal.py`; `string_order.py` | `ut/test_scalar.py`; `test_decimal.py`; `test_string_order.py`; `test_string_proof.py`; `test_sql_in.py`; canonical literal-only String-`Concat`, String-predicate, Date-year, dynamic Date-shift, proven-total Date-`Unwrap`, direct-Uint64-`Just`, exact Decimal weak-`SafeCast`, proven-present raw-tuple Date-`SafeCast`, restricted whole-floating-predicate, passive-Double carrier, and exact literal-wrapper mutations; integral-right Decimal finite-bound boundary/special and two-row aggregate tests; passive-carrier identity/mutation and non-key Sort/Merge passenger proofs; `source_type`, NULL, overflow, widening-special, and fail-closed references; synthetic real-host proofs; exporter near-miss mutations |
+| Types, NULLs, scalar functions | `semantic_snapshot.cpp`; `ir.py`; `types.py`; `scalar.py`; `decimal.py`; `string_order.py` | `ut/test_scalar.py`; `test_decimal.py`; `test_string_order.py`; `test_string_proof.py`; `test_sql_in.py`; canonical literal-only String-`Concat`, String-predicate, Date-year, dynamic Date-shift, nullable String-to-Utf8 `Unicode.ToUpper`, proven-total Date-`Unwrap`, direct-Uint64-`Just`, exact Decimal weak-`SafeCast`, proven-present raw-tuple Date-`SafeCast`, restricted whole-floating-predicate, passive-Double carrier, and exact literal-wrapper mutations; q24 exact JSON, 32 isolated Map/cast/lambda/UDF mutations, and 63/64 binding-depth boundary; integral-right Decimal finite-bound boundary/special and two-row aggregate tests; passive-carrier identity/mutation and non-key Sort/Merge passenger proofs; `source_type`, NULL, overflow, widening-special, and fail-closed references; synthetic real-host proofs; exporter near-miss mutations |
 | Logical bags, order, limits, errors | `semantic_snapshot.cpp`; `ir.py`; `smt.py`; `sort_network.py`; `relation.py` | `ut/test_logical_reference.py`; `test_limit.py`; `test_sort.py`; exhaustive network topology/prefix/nullable/mixed-order/Merge-hole/AVG-state tests; completed-integral-AVG rank identity/order/mutation and provenance-forgery tests; fixed-sequence singleton-`Limit` permutations/presence masks, nullable payloads, tied-ordinal fallback, dead padding, metadata rejection, Decimal bounds, audit cap, and StageGraph Merge compaction; packed-layout, declaration-structure, present-prefix equality, and cap tests; deep stack-safe rendering plus 3,000-DAG byte differential; focused concrete differential tests |
 | Aggregates and subplans | `semantic_snapshot.cpp`; `ir.py`; `decimal.py`; `scalar.py`; `relation.py`; `verify.py` | aggregate/DistinctAll/count-distinct/unwrap exporter and IR mutations; integral-AVG strict contract, one/two/three-row semantics, split-state mutation, central producer-observe/parent-strip lifecycle, model-domain SAT/UNKNOWN/UNSAT protocol, and projected/sorted/limited/staged observation tests; fixed-width signed/unsigned integral-extrema boundary, NULL/group/split, odd-width exhaustive, and solver-mutation checks; exhaustive count-distinct duplicates and triangular cap; scalar-final unwrap empty/all-NULL/present references; Decimal-extrema raw-code differential, routing, and solver-mutation checks; nullable composite-key differential and staged-routing checks; `ut/test_subplans.py`; cardinality, demand, NULL, duplicate, error, exact scalar- and one-level `IN`-inside-`IN` ownership/nesting/cache/choice checks, nested finite references and sequential-semi solver differentials, correlated outer-binding, one- and exact two-dependency `EXISTS` ordering/shape/semi/anti checks, dynamic-`IN` mapping/cache/pair-cap and positive-nullable integral/Date-context checks, real-host Decimal-AVG and correlated-`EXISTS`, and non-null/nullable `IN`-to-`left_semi` cases |
 | StageGraph, reads, joins, and routing | `semantic_snapshot.cpp`; `read_range_predicate_impl.h`; `ir.py`; `scalar.py`; `stages.py`; `relation.py` | exact q9 point and q45 finite-set `ComputeNode` references; exhaustive range-grammar/key/annotation/pointer-identity mutations; pushed-range-plus-OLAP conjunction; `OriginalPredicate` irrelevance and `ComputeNode` sensitivity; tagged integral-AVG Merge propagation/mismatch tests; `ut/test_stagegraph_reference.py`; `test_stage_compaction.py`; shared-IU semi/anti exhaustive execution; JoinKey budget/mutation checks; direct unique-RHS exhaustive bags, composite/extra keys, cross-type coercion rejection, provenance/schema/predicate/Project/limit/metadata mutations, row/pair caps, and Broadcast/gather equivalence; C++ topology/task mutations; real-host integration |

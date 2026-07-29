@@ -185,7 +185,7 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
     NMonitoring::TDynamicCounterPtr dbgCountersRoot = MakeCountersChain(
         AppData()->Counters,
         StorageConfig->GetDDiskPoolName(),
-        TabletID());
+        DiskDescription);
 
     for (ui32 dbgIndex = 0; dbgIndex < DirectBlockGroupsCount; dbgIndex++) {
         const auto& conn =

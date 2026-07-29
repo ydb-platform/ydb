@@ -151,7 +151,7 @@ TFastPathService::TFastPathService(
           MakeCountersChain(
               counters,
               StorageConfig->GetDDiskPoolName(),
-              DiskDescription.TabletId)))
+              DiskDescription)))
     , LogTitle(
           GetCycleCount(),
           TLogTitle::TFastPathService{
@@ -162,7 +162,7 @@ TFastPathService::TFastPathService(
     , Counters(MakeCountersChain(
           std::move(counters),
           StorageConfig->GetDDiskPoolName(),
-          DiskDescription.TabletId))
+          DiskDescription))
     , VolumeConfig(std::make_shared<TVolumeConfig>(TVolumeConfig{
           .DiskId = DiskDescription.DiskId,
           .BlockSize = blockSize,

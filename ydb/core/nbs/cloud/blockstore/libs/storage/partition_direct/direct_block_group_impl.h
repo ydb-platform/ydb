@@ -55,7 +55,7 @@ public:
         const TVector<NKikimr::NBsController::TDDiskId>& ddisksIds,
         const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds,
         std::unique_ptr<NTransport::IStorageTransport> storageTransport,
-        NMonitoring::TDynamicCounterPtr counters = nullptr);
+        NMonitoring::TDynamicCounterPtr counters);
 
     ~TDirectBlockGroup() override = default;
 

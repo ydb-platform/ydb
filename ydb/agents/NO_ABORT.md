@@ -1,17 +1,11 @@
-# Do not crash the node on check failures
+# No abort
 
-Do **not** use:
+Never `Y_ABORT` / `Y_ABORT_UNLESS` / `Y_VERIFY` / `Y_FAIL` (kills process).
 
-- `Y_ABORT`
-- `Y_ABORT_UNLESS`
-- `Y_VERIFY`
+Use `AFL_ENSURE(cond)("key", value)...` or reply with an error. Always add localization keys (tablet, path, partition/shard, table, switch value, …).
 
-These terminate the process. Prefer:
+`Y_VERIFY_DEBUG` / `AFL_VERIFY_DEBUG` OK. Prefer `AFL_ENSURE` over `Y_ENSURE`.
 
-- `Y_ENSURE` — throws; caller can catch and recover
-- return / reply with an error to the user or peer — keep the node running
+Actors/tablets: inherit `IActorExceptionHandler` (log + recover). `AFL_ENSURE` only if the calling actor has it — otherwise the throw crashes the server.
 
-When writing code, do not introduce these macros.
-
-**PR review:** always check the diff for new `Y_ABORT` / `Y_ABORT_UNLESS` /
-`Y_VERIFY` and request replacing them with `Y_ENSURE` or a non-fatal error reply.
+**Review:** no new abort/verify; keys on every `AFL_ENSURE`; `IActorExceptionHandler` on new actors/tablets and anywhere `AFL_ENSURE` is used.

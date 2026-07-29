@@ -9,6 +9,7 @@
 #include <ydb/core/kafka_proxy/kafka_events.h>
 
 #include "ydb/services/persqueue_v1/actors/schema_actors.h"
+#include <ydb/library/actors/core/log.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
 
@@ -34,7 +35,8 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
                                                        NKikimr::NGRpcProxy::V1::TLocalRequestBase,
                                                        NKikimr::NGRpcProxy::V1::TEvPQProxy::TEvPartitionLocationResponse>,
                          public NKikimr::NGRpcProxy::V1::TDescribeTopicActorImpl,
-                         public NKikimr::NGRpcProxy::V1::TCdcStreamCompatible {
+                         public NKikimr::NGRpcProxy::V1::TCdcStreamCompatible,
+                         public TKafkaExceptionHandler<TTopicOffsetActor> {
     using TBase = NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<TTopicOffsetActor,
         NKikimr::NGRpcProxy::V1::TLocalRequestBase,
         NKikimr::NGRpcProxy::V1::TEvPQProxy::TEvPartitionLocationResponse>;
@@ -145,7 +147,7 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
                        const TActorContext& ctx) override {
         Y_UNUSED(ctx);
         Y_UNUSED(ev);
-        Y_ABORT();
+        AFL_ENSURE(false)("reason", "TOffsetFetchActor: unexpected TEvGetPartitionsLocationResponse")("database", Database)("path", TopicPath);
     };
 
     void HandleCacheNavigateResponse(NKikimr::TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) override {

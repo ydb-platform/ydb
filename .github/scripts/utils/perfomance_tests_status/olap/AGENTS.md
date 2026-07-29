@@ -96,4 +96,4 @@ Branch for cloud often from `CiBranch` (`trunk`) when `Branch`/`Version` empty.
 2. **Deep dive** — click inbox row → last runs (clickable focus), query catalog, report links  
 3. **History** — “Show history” charts (suite-level only); query charts highlight now/compare runs  
 4. **Duty context** — dive **Save context** / **Copy context** → `perf-duty-context/v1` for [`../duty_agent/`](../duty_agent/) (shared with TPC-C)
-5. **Known tickets** — `generate.py` searches open issues for `perf-duty-match` in body (no label); joins to inbox by `affected.suite`/`db`; pills `#N · title`. Agent expands `affected` via `dutyctl annotate-issue` when the same fingerprint hits another suite/query.
+5. **Known tickets** — `generate.py` searches **open + closed** issues for `perf-duty-match` in body (no label); joins to inbox by `affected.suite`/`db`; open pills blue `#N · title`, closed grey `#N · closed · title`. Agent expands `affected` via `dutyctl annotate-issue` when the same fingerprint hits another suite/query.

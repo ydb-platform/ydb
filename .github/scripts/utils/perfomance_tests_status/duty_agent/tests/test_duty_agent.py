@@ -1485,6 +1485,129 @@ https://github.com/ydb-platform/ydb/commit/f88e100
             self.assertEqual(proc.returncode, 0, proc.stderr + proc.stdout)
 
 
+class S3UploadHelpersTests(unittest.TestCase):
+    def test_content_type_and_public_url(self):
+        from tools.s3_upload import content_type_for, public_url
+
+        self.assertTrue(content_type_for(Path("analysis.md")).startswith("text/markdown"))
+        self.assertEqual(content_type_for(Path("result.json")), "application/json")
+        url = public_url(
+            "workload-log",
+            "perfomance_tests_status/duty_artifacts/run/stamp/analysis.md",
+        )
+        self.assertIn("workload-log", url)
+        self.assertTrue(url.endswith("analysis.md"))
+
+    def test_human_links_body_upsert_and_issue_detect(self):
+        from tools.s3_upload import (
+            detect_issue_number,
+            format_duty_report_links,
+            has_human_duty_report_links,
+            upsert_duty_report_in_body,
+        )
+
+        files = [
+            {"file": "analysis.md", "url": "https://example/a.md"},
+            {"file": "result.json", "url": "https://example/r.json"},
+            {"file": "problems.json", "url": "https://example/p.json"},
+        ]
+        links = format_duty_report_links(files)
+        self.assertEqual(
+            links,
+            "[полный отчёт](https://example/a.md) · "
+            "[result](https://example/r.json) · "
+            "[problems](https://example/p.json)",
+        )
+        body = (
+            "| Allure | https://proxy.example/1 |\n"
+            "| Failed | Query06 |\n"
+        )
+        out = upsert_duty_report_in_body(body, files)
+        self.assertIn("| Duty report | [полный отчёт](https://example/a.md)", out)
+        self.assertTrue(has_human_duty_report_links(out))
+        self.assertLess(out.index("Duty report"), out.index("Failed"))
+        body2 = (
+            "| Allure | https://proxy.example/1 |\n"
+            "| Duty report | [https://old/long](https://old/long) |\n"
+            "| Failed | Query06 |\n"
+        )
+        out2 = upsert_duty_report_in_body(body2, files)
+        self.assertEqual(out2.count("Duty report"), 1)
+        self.assertIn("[полный отчёт](https://example/a.md)", out2)
+        self.assertNotIn("https://old/long", out2)
+
+        with tempfile.TemporaryDirectory() as td:
+            d = Path(td)
+            (d / "analysis.md").write_text(
+                "Тикет: [#48256](https://github.com/ydb-platform/ydb/issues/48256)\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(detect_issue_number(d), 48256)
+
+
+class SightingCommentTests(unittest.TestCase):
+    def test_format_sighting_has_links(self):
+        from tools.known_issues import format_sighting_comment
+
+        md = format_sighting_comment(
+            suite="UploadTpch1000",
+            db="vla_small_column",
+            queries=["Query05", "Query06"],
+            branch="main",
+            sha="60199b53fb8af019f16d944ccb529784d993e01f",
+            label="2026-07-29_60199b5",
+            ts="2026-07-29T12:20:36",
+            allure_url="https://proxy.sandbox.yandex-team.ru/12968802365/index.html",
+            duty_report_md="[полный отчёт](https://example/analysis.md)",
+        )
+        self.assertIn("### Повтор", md)
+        self.assertIn("github.com/ydb-platform/ydb/commit/60199b53fb8af019f16d944ccb529784d993e01f", md)
+        self.assertIn("`60199b5`", md)
+        self.assertIn("proxy.sandbox.yandex-team.ru/12968802365", md)
+        self.assertIn("полный отчёт", md)
+        self.assertNotIn("also seen", md)
+
+    def test_sighting_from_run_reads_context(self):
+        from tools.known_issues import sighting_comment_from_run
+
+        with tempfile.TemporaryDirectory() as td:
+            d = Path(td)
+            (d / "context.json").write_text(
+                json.dumps(
+                    {
+                        "selection": {
+                            "branch": "main",
+                            "db": "vla_small_column",
+                            "suite": "UploadTpch1000",
+                            "focus_run": {
+                                "label": "2026-07-29_60199b5",
+                                "sha": "60199b5",
+                                "ts": "2026-07-29T12:20:36",
+                                "report": "https://example/allure",
+                            },
+                        },
+                        "ticket_coverage": {
+                            "uncovered_queries": ["Query05", "Query06"]
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (d / "analysis.md").write_text(
+                "commit 60199b53fb8af019f16d944ccb529784d993e01f\n",
+                encoding="utf-8",
+            )
+            (d / "s3_report.json").write_text(
+                json.dumps({"links_md": "[полный отчёт](https://example/a.md)"}),
+                encoding="utf-8",
+            )
+            md = sighting_comment_from_run(d)
+            self.assertIn("`Query05`", md)
+            self.assertIn("60199b53fb8af019f16d944ccb529784d993e01f", md)
+            self.assertIn("https://example/allure", md)
+            self.assertIn("https://example/a.md", md)
+
+
 class ZipBundleTests(unittest.TestCase):
     def test_load_zip_and_local_sandbox(self):
         with tempfile.TemporaryDirectory() as td:

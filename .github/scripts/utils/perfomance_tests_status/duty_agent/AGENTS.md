@@ -394,7 +394,9 @@ Label **не нужен**. Шаблон: [`REPORT_TEMPLATE.md`](REPORT_TEMPLATE.
 **Перед `open_ticket`:**  
 1. Ключи из fingerprint (`file.cpp:NN`, `AFL_VERIFY(…)`, symbol) — **не** suite alone.  
 2. `dutyctl known-issues --keys 'read.cpp:59' 'range.Offset'` (или `gh` + parse блоков).  
-3. Если hit → `update_known`: `dutyctl annotate-issue --issue N --suite … --db … --queries …` (расширяет `affected`; auto-коммент «also seen» **только** если suite/db/query новые — не после open_ticket на тот же кейс).  
+3. Если hit → `update_known`: `dutyctl annotate-issue --issue N --suite … --db … --queries …` (расширяет `affected` в body; **по умолчанию без коммента**). Хватает match-блока + `upload-report` (Duty report в Фактуре). Если нужен timeline-коммент — **после** dig стека/coredump и `upload-report`:
+   `dutyctl annotate-issue … --sighting-from $OUT` («Повтор»: branch / commit / Allure / Duty report / coredump + **полный** backtrace `#0…#N` из `host_dig/*crash_stack*` или `stderr/`).  
+   **Запрещены** голый `also seen` и таблица без стека при segfault/VERIFY. 
 4. Context `known_tickets` + `ticket_coverage` из Save — стартовые кандидаты; **uncovered** в pack = кандидат на новый issue (после search).  
 5. Если `compare.active` — сверь симптом на `compare.run` и на `focus_run` (появилось на now / уже было на cmp).
 
@@ -405,8 +407,11 @@ Label **не нужен**. Шаблон: [`REPORT_TEMPLATE.md`](REPORT_TEMPLATE.
    - заливает в `s3://workload-log/perfomance_tests_status/duty_artifacts/{run_id}/{utc_stamp}/`  
      (новый stamp каждый раз → без перезаписи);
    - нужен `boto3` (`pip install boto3` или `.cache/venv-s3`);
-   - сам находит `#N` и пишет в body Фактуры:  
-     `| Duty report | [полный отчёт](…) · [result](…) · [problems](…) |`.  
+   - для **нового** issue / пустой Фактуры пишет в body:  
+     `| Duty report | [полный отчёт](…) · [result](…) · [problems](…) |`;
+   - если в issue уже есть Duty report **другого** `run_id` — **не** перезаписывает  
+     первичную Фактуру (это opening report). Ссылки текущего прогона — в комментарии  
+     `annotate-issue --sighting-from $OUT`.  
    Явный override: `--issue N`. Только upload: `--no-issue`.  
 4. `dutyctl validate` после upload — если тикет уже указан, без `s3_report.json` / без «полный отчёт» будет error.  
 Не клади весь `analysis.md` в body.

@@ -55,6 +55,10 @@
     vertical-align: middle; margin: 2px 2px 0 0;
   }
   a.pill.ticket:hover { filter: brightness(0.97); box-shadow: inset 0 0 0 1px #0969da66; }
+  a.pill.ticket.closed {
+    background: #f6f8fa; color: #656d76; box-shadow: inset 0 0 0 1px #d0d7de;
+  }
+  a.pill.ticket.closed:hover { filter: brightness(0.97); box-shadow: inset 0 0 0 1px #8c959f66; }
   .counters {
     display: flex; flex-wrap: nowrap; gap: 10px; margin: 0 0 16px;
     max-width: 100%; min-width: 0;
@@ -791,9 +795,15 @@ function ticketPillsHtml(tickets, { maxTitle = 72 } = {}) {
     const short = title.length > maxTitle ? title.slice(0, maxTitle - 1) + '…' : title;
     const qhint = (t.queries && t.queries.length)
       ? ` · ${t.queries.slice(0, 6).join(', ')}` : '';
-    return `<a class="pill ticket" href="${esc(t.url || '#')}" target="_blank" rel="noopener" ` +
-      `title="${esc(title + qhint)}" onclick="event.stopPropagation()">` +
-      `#${esc(t.number)} · ${esc(short)}</a>`;
+    const closed = String(t.state || 'open').toLowerCase() === 'closed';
+    const cls = closed ? 'pill ticket closed' : 'pill ticket';
+    const label = closed
+      ? `#${t.number} · closed · ${short}`
+      : `#${t.number} · ${short}`;
+    const tip = closed ? `[closed] ${title}${qhint}` : title + qhint;
+    return `<a class="${cls}" href="${esc(t.url || '#')}" target="_blank" rel="noopener" ` +
+      `title="${esc(tip)}" onclick="event.stopPropagation()">` +
+      `${esc(label)}</a>`;
   }).join(' ');
 }
 

@@ -90,4 +90,4 @@ Now classification stays in `generate.py` (`classify_slice`).
 2. **Deep dive** — compare-run cards + charts on row expand
 3. **History** — tpmC + lat by run/commit date
 4. **Duty context** — dive **Save context** / **Copy context** → `perf-duty-context/v1` for [`../duty_agent/`](../duty_agent/) (shared with OLAP)
-5. **Known tickets** — open issues with `<!-- perf-duty-match -->` in body (no label) joined to inbox by `affected`; pills `#N · title`. Expand via `dutyctl annotate-issue`.
+5. **Known tickets** — open + closed issues with `<!-- perf-duty-match -->` in body (no label) joined to inbox by `affected`; open pills blue `#N · title`, closed grey `#N · closed · title`. Expand via `dutyctl annotate-issue`.

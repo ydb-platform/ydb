@@ -12,7 +12,9 @@ Route to the matching subfolder and follow its AGENTS.md.
 
 Duty: dive **Save context** / **Copy context** → JSON →  
 `cd duty_agent && eval "$(python3 dutyctl.py init-token --shell)"`  
-(YAV → `SANDBOX_TOKEN` + YDB SA key path) → follow [`duty_agent/AGENTS.md`](duty_agent/AGENTS.md).  
+(YAV → `SANDBOX_TOKEN` + YDB SA + `AWS_KEY_*` for `workload-log`) → follow [`duty_agent/AGENTS.md`](duty_agent/AGENTS.md).  
+After creating the issue: put `Тикет: #N` in analysis → `dutyctl upload-report -o $OUT`  
+(immutable S3 stamp under `workload-log` + `[полный отчёт]` in issue body; needs `boto3`).  
 Mart fetch: [`common/ydb_client.py`](common/ydb_client.py) (not MCP).  
 Report defaults (window, baseline, focus dbs, …): `tpcc/report_config.json`, `olap/report_config.json`.
 

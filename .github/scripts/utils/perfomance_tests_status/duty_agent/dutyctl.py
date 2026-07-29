@@ -71,6 +71,7 @@ from tools.s3_upload import (  # noqa: E402
     S3UploadError,
     content_type_for,
     detect_issue_number,
+    duty_report_run_id_in_body,
     format_duty_report_links,
     put_object,
     upload_duty_report,
@@ -1233,31 +1234,34 @@ def cmd_known_issues(args: argparse.Namespace) -> int:
 
 def cmd_annotate_issue(args: argparse.Namespace) -> int:
     """Upsert perf-duty-match block and expand affected on a GitHub issue."""
-    from tools.known_issues import expand_affected_on_issue, render_match_block
+    from tools.known_issues import (
+        expand_affected_on_issue,
+        render_match_block,
+        sighting_comment_from_run,
+    )
 
     queries = []
     if args.queries:
         for part in args.queries:
             queries.extend([q.strip() for q in part.split(",") if q.strip()])
     keys = list(args.keys or [])
-    # Explicit --comment always posts; auto «also seen» only if affected grows.
+    # Default: no GitHub comment (match block + upload-report are enough).
+    # Explicit --comment always posts. --sighting-from posts a linked «Повтор»
+    # table (only when affected grows, unless --force-comment).
     explicit_comment = args.comment is not None
     comment: str | None = None
-    if not args.no_comment:
-        if explicit_comment:
-            comment = args.comment
-        elif args.suite:
-            qbit = ",".join(queries) if queries else "—"
-            comment = (
-                f"also seen on `{args.suite}`"
-                + (
-                    f".{queries[0]}"
-                    if len(queries) == 1
-                    else f" ({qbit})" if queries else ""
-                )
-                + (f" @ `{args.db}`" if args.db else "")
-                + (f", label=`{args.label}`" if args.label else "")
-            )
+    if args.no_comment:
+        comment = None
+    elif explicit_comment:
+        comment = args.comment
+    elif getattr(args, "sighting_from", None):
+        comment = sighting_comment_from_run(
+            args.sighting_from,
+            suite=args.suite,
+            db=args.db,
+            queries=queries or None,
+        )
+    force = bool(getattr(args, "force_comment", False) or explicit_comment)
     try:
         block = expand_affected_on_issue(
             int(args.issue),
@@ -1268,7 +1272,7 @@ def cmd_annotate_issue(args: argparse.Namespace) -> int:
             fingerprint=args.fingerprint,
             keys=keys or None,
             comment=comment,
-            comment_only_if_expanded=not explicit_comment,
+            comment_only_if_expanded=not force,
         )
     except Exception as e:  # noqa: BLE001
         print(f"annotate-issue: {e}", file=sys.stderr)
@@ -1350,11 +1354,31 @@ def cmd_upload_report(args: argparse.Namespace) -> int:
 
     try:
         iss = fetch_issue(int(issue_n))
-        new_body = upsert_duty_report_in_body(str(iss.get("body") or ""), files)
-        if new_body != iss.get("body"):
+        body0 = str(iss.get("body") or "")
+        run_id = str(meta.get("run_id") or "")
+        existing_run = duty_report_run_id_in_body(body0)
+        # Never overwrite another run's primary Duty report in issue Фактура
+        # (update_known). Opening report stays the first one; sightings → comment.
+        keep_primary = bool(existing_run and run_id and existing_run != run_id)
+        if keep_primary:
+            print(
+                f"issue #{issue_n}: keep primary Duty report ({existing_run}); "
+                f"this upload is {run_id} — put links in a «Повтор» comment "
+                f"(annotate-issue --sighting-from), not in Фактура",
+                file=sys.stderr,
+            )
+            new_body = body0
+        else:
+            new_body = upsert_duty_report_in_body(
+                body0,
+                files,
+                replace_existing=True,
+                run_id=run_id or None,
+            )
+        if new_body != body0:
             patch_issue_body(int(issue_n), new_body)
             print(f"issue #{issue_n}: Duty report row updated in body")
-        else:
+        elif not keep_primary:
             print(f"issue #{issue_n}: Duty report row already up to date")
         if args.comment:
             comment = f"Duty report: {links}\n"
@@ -1673,17 +1697,28 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--kind", default="olap", help="olap | tpcc")
     p.add_argument("--fingerprint", default=None)
     p.add_argument("--keys", nargs="*", default=None, help="required if issue has no block yet")
-    p.add_argument("--label", default=None, help="run label for comment")
+    p.add_argument("--label", default=None, help="run label (legacy; prefer --sighting-from)")
     p.add_argument(
         "--comment",
         default=None,
-        help="override issue comment body (always posted; auto «also seen» "
-        "only when affected grows)",
+        help="post this comment body (always; use for a custom note)",
+    )
+    p.add_argument(
+        "--sighting-from",
+        default=None,
+        metavar="OUT",
+        help="build a «Повтор» comment from duty run dir (context.json + "
+        "s3_report.json): branch, commit link, Allure, Duty report",
+    )
+    p.add_argument(
+        "--force-comment",
+        action="store_true",
+        help="with --sighting-from: post even if affected did not grow",
     )
     p.add_argument(
         "--no-comment",
         action="store_true",
-        help="never post a GitHub comment (still upserts match block)",
+        help="never post a GitHub comment (default already; kept for clarity)",
     )
     p.set_defaults(func=cmd_annotate_issue)
 

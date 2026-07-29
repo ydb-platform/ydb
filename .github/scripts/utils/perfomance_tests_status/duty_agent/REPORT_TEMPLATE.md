@@ -95,8 +95,12 @@ Fingerprint в Title + `keys` в match-блоке достаточно. В «К�
 | Branch · Version | `{branch}` · [`{sha}`](https://github.com/ydb-platform/ydb/commit/{sha}) |
 | Run | `{label}` · `{ts}` UTC |
 | Allure | https://proxy.sandbox.yandex-team.ru/{id}/index.html |
+| Duty report | [полный отчёт](https://storage.yandexcloud.net/workload-log/perfomance_tests_status/duty_artifacts/{run_id}/{stamp}/analysis.md) · [result](…) · [problems](…) |
 | Failed | Query… (кратко: VERIFY / node down) |
 
+`Duty report` — после `dutyctl upload-report -o $OUT` (нужен `Тикет: #N` или `--issue N`).  
+Bucket `workload-log`, путь с `{stamp}` (immutable). Labels: **полный отчёт** / result / problems.  
+Не весь отчёт в body.  
 Без Kind / CI version / Fingerprint / Search keys в этой таблице — они в Title и в `perf-duty-match`.
 
 #### Что сломалось
@@ -151,4 +155,5 @@ affected:
 Язык: обычный русский. Английский — термины (`VERIFY`, имена файлов, SIGSEGV).  
 Не писать: фокус, волна, RC, last touch, priors, sticky, prev-green, jargon агента, `gh search` в Body.  
 Issue / PR / commit / sandbox — markdown-ссылками.  
-Quality: self-check → `dutyctl validate` → `write-result`. См. `AGENTS.md`.
+Quality: self-check → `dutyctl validate` → `write-result`.  
+При `open_ticket` / `update_known`: создать issue → `Тикет: #N` → `dutyctl upload-report -o $OUT` → validate. См. `AGENTS.md`.

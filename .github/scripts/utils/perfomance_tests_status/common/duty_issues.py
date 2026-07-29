@@ -206,9 +206,9 @@ def affected_would_expand(
 ) -> bool:
     """True if merge_affected would add a new suite/db row or a new query.
 
-    Used to suppress noisy «also seen» comments when annotate-issue is re-run
-    for the same suite@db@query already listed in the match block (e.g. right
-    after open_ticket that already pasted affected).
+    Used to suppress sighting comments when annotate-issue is re-run for the
+    same suite@db@query already listed in the match block (e.g. right after
+    open_ticket that already pasted affected).
     """
     queries = [q for q in (queries or []) if q]
     for a in (block or {}).get("affected") or []:

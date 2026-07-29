@@ -30,7 +30,7 @@ if str(PTS) not in sys.path:
 
 from common.duty_issues import (  # noqa: E402
     attach_tickets_to_report,
-    fetch_open_duty_issues,
+    fetch_duty_issues,
 )
 from common.report_config import cfg_float, cfg_int, cfg_str, load_report_config  # noqa: E402
 
@@ -1187,12 +1187,14 @@ def main():
         "reports_input": str(reports_path) if reports_path else None,
         "reports_matched": reports_matched,
     }
-    issues, iss_warn = fetch_open_duty_issues(kind="tpcc")
+    issues, iss_warn = fetch_duty_issues(kind="tpcc", include_closed=True)
     if iss_warn:
         print(f"known_issues: {iss_warn}", flush=True)
     n_tick = attach_tickets_to_report(data, issues, kind="tpcc")
     print(
-        f"known_issues: open={len(data.get('known_issues') or [])} "
+        f"known_issues: total={len(data.get('known_issues') or [])} "
+        f"open={sum(1 for i in (data.get('known_issues') or []) if i.get('state') != 'closed')} "
+        f"closed={sum(1 for i in (data.get('known_issues') or []) if i.get('state') == 'closed')} "
         f"suites_with_tickets={n_tick}",
         flush=True,
     )

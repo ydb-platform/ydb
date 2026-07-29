@@ -124,6 +124,8 @@ Written by `dutyctl write-result` (always, even on failure). Agent owns problem 
 | `problems.unknown` | explicitly could not determine |
 | `errors[]` | `{ "stage", "message", "retriable" }` |
 
-Human report: `analysis.md` (agent-written). Validate with `dutyctl validate`.
+Human report: `analysis.md` (agent-written). Validate with `dutyctl validate`.  
+After creating the issue: `Тикет: #N` → `dutyctl upload-report` → `s3_report.json`  
+(`workload-log` …/duty_artifacts/{run_id}/{stamp}/…, boto3) — `[полный отчёт]` in issue Фактура.
 
 Architecture / playbooks: [`AGENTS.md`](AGENTS.md). CLI: `dutyctl.py`.

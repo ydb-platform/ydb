@@ -81,6 +81,7 @@
   .counter.newfail .n { color: var(--broken); }
   .pill.ticket { background: #ddf4ff; color: #0550ae; }
   .pill.ticket.needs-branch { background: #fff8c5; color: #9a6700; }
+  .pill.ticket.closed { background: #f6f8fa; color: #656d76; box-shadow: inset 0 0 0 1px #d0d7de; }
   .pill.ticket.no-ticket { background: var(--broken-bg); color: var(--broken); }
   .run-card .run-tickets {
     margin-top: 3px; font-size: 10px; line-height: 1.35;
@@ -384,6 +385,10 @@
     vertical-align: middle; margin: 2px 2px 0 0;
   }
   a.pill.ticket:hover { filter: brightness(0.97); box-shadow: inset 0 0 0 1px #0969da66; }
+  a.pill.ticket.closed {
+    background: #f6f8fa; color: #656d76; box-shadow: inset 0 0 0 1px #d0d7de;
+  }
+  a.pill.ticket.closed:hover { filter: brightness(0.97); box-shadow: inset 0 0 0 1px #8c959f66; }
   .pill.qok { background: #dafbe1; color: var(--ok); }
   .pill.nodata { background: var(--miss-bg); color: var(--miss); box-shadow: inset 0 0 0 1px #8250df66; }
   .pill.noruns { background: #f6f8fa; color: var(--muted); box-shadow: inset 0 0 0 1px var(--border); }
@@ -1145,16 +1150,20 @@ function ticketPillsHtml(tickets, { maxTitle = 72, compact = false } = {}) {
     const short = title.length > maxTitle ? title.slice(0, maxTitle - 1) + '…' : title;
     const qhint = (t.queries && t.queries.length)
       ? ` · ${t.queries.slice(0, 6).join(', ')}` : '';
-    const needLbl = (t.branch_match === false && t.needs_branch) ? t.needs_branch : null;
-    const cls = needLbl ? 'pill ticket needs-branch' : 'pill ticket';
+    const closed = String(t.state || 'open').toLowerCase() === 'closed';
+    const needLbl = (!closed && t.branch_match === false && t.needs_branch) ? t.needs_branch : null;
+    const cls = needLbl
+      ? 'pill ticket needs-branch'
+      : (closed ? 'pill ticket closed' : 'pill ticket');
     const label = compact
-      ? (needLbl ? `#${t.number} · needs ${needLbl}` : `#${t.number}`)
+      ? (needLbl ? `#${t.number} · needs ${needLbl}`
+        : (closed ? `#${t.number} · closed` : `#${t.number}`))
       : (needLbl
         ? `#${t.number} · needs ${needLbl}`
-        : `#${t.number} · ${short}`);
+        : (closed ? `#${t.number} · closed · ${short}` : `#${t.number} · ${short}`));
     const tip = needLbl
       ? `${title}${qhint} — add GitHub label «${needLbl}» on this issue`
-      : title + qhint;
+      : (closed ? `[closed] ${title}${qhint}` : title + qhint);
     return `<a class="${cls}" href="${esc(t.url || '#')}" target="_blank" rel="noopener" ` +
       `title="${esc(tip)}" onclick="event.stopPropagation()">${esc(label)}</a>`;
   }).join(' ');
@@ -1213,6 +1222,7 @@ function classifyFailCoverageJS(issues, opts) {
     const stub = {
       number: iss.number, title: iss.title, url: iss.url,
       fingerprint: iss.fingerprint, queries: matchedQ, labels,
+      state: (String(iss.state || 'open').toLowerCase() === 'closed') ? 'closed' : 'open',
       branch_match: brOk,
       needs_branch: brOk ? null : (normBranchLabelJS(branch) || null),
     };
@@ -1357,7 +1367,7 @@ function runTicketsHtml(run) {
       || (failN > 0 && !tickets.length && cov !== 'covered' && cov !== 'wrong_branch')) {
     const uq = (run.uncovered_queries || []).slice(0, 4).join(', ');
     parts.push(
-      `<span class="pill ticket no-ticket" title="${esc('no open issue for: ' + (uq || 'failed / no-data queries'))}">no ticket</span>`
+      `<span class="pill ticket no-ticket" title="${esc('no matching issue (open or closed) for: ' + (uq || 'failed / no-data queries'))}">no ticket</span>`
     );
   }
   if (!parts.length && cov === 'wrong_branch') {
@@ -2259,7 +2269,10 @@ function renderHeader() {
     : rs.soft
       ? `<div class="counter warn"><div class="n">${fmtNM(s.soft, total.soft, !!sel)}</div><div class="lbl">Soft slow</div></div>`
       : `<div class="counter warn"><div class="n">${fmtNM(s.stale, total.stale, !!sel)}</div><div class="lbl">Stale</div></div>`;
-  const nIssues = (DATA.known_issues || []).length;
+  const known = DATA.known_issues || [];
+  const nIssues = known.length;
+  const nOpen = known.filter(i => String(i.state || 'open').toLowerCase() !== 'closed').length;
+  const nClosed = nIssues - nOpen;
   const nSuitesTick = [...(DATA.inbox || []), ...(DATA.ok || [])]
     .filter(r => (r.tickets || []).length).length;
   const sumNew = (DATA.summary || {}).new_issues ?? (DATA.summary || {}).new_fail;
@@ -2269,14 +2282,14 @@ function renderHeader() {
     <div class="counter miss"><div class="n">${fmtNM(s.missing, total.missing, !!sel)}</div><div class="lbl">Missing</div></div>
     <div class="counter info"><div class="n">${fmtNM(s.in_progress, total.in_progress, !!sel)}</div><div class="lbl">In progress</div></div>
     <div class="counter hot"><div class="n">${fmtNM(s.failing, total.failing, !!sel)}</div><div class="lbl">Failing</div></div>
-    <div class="counter newfail" title="Suites with fail or no-data query and no open issue matching affected + branch label">
+    <div class="counter newfail" title="Suites with fail or no-data query and no matching issue (open or closed) for affected + branch label">
       <div class="n">${fmtNM(nNew, nNewTotal, !!sel)}</div>
       <div class="lbl">New issues</div>
     </div>
     <div class="counter regress"><div class="n">${fmtNM(s.slower, total.slower, !!sel)}</div><div class="lbl">Hard slow</div></div>
     ${fifth}
     <div class="counter ok"><div class="n">${fmtNM(s.ok_slices, total.ok_slices, !!sel)}</div><div class="lbl">OK slices</div></div>
-    <div class="counter ticket" title="Open GitHub issues with perf-duty-match (kind=olap). Suites = inbox/ok rows with matched tickets.">
+    <div class="counter ticket" title="GitHub issues with perf-duty-match (kind=olap): ${nOpen} open + ${nClosed} closed. Suites = inbox/ok rows with matched tickets. Closed pills are grey.">
       <div class="n">${nIssues}<span class="sel">/${nSuitesTick}</span></div>
       <div class="lbl">Issues / suites</div>
     </div>
@@ -3568,6 +3581,7 @@ function packDutyRunSnapshot(item, run) {
       number: t.number,
       title: t.title || null,
       url: t.url || null,
+      state: t.state || 'open',
       branch_match: t.branch_match !== false,
       needs_branch: t.needs_branch || null,
       queries: t.queries || [],

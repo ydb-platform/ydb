@@ -14,6 +14,7 @@ if str(_PTS) not in sys.path:
 from common.duty_issues import parse_match_block  # noqa: E402
 
 from .run_dir import read_json
+from .s3_upload import detect_issue_number, has_human_duty_report_links
 from .trace import TRACE_MARK_END, TRACE_MARK_START
 
 REQUIRED_HEADINGS = (
@@ -872,6 +873,29 @@ def validate_analysis_md(
                             errors.append(
                                 f"{resolution}: perf-duty-match affected entries need suite:"
                             )
+
+    # After the human created/pointed an issue: require S3 publish + Duty report in Фактура.
+    if needs_paste and out_dir is not None:
+        ticket_n = detect_issue_number(out_dir)
+        s3_meta = out_dir / "s3_report.json"
+        if ticket_n:
+            if not s3_meta.is_file():
+                errors.append(
+                    f"{resolution}: issue #{ticket_n} mentioned but s3_report.json missing — "
+                    "run `dutyctl upload-report -o $OUT` "
+                    "(uploads + upserts Duty report into issue body)"
+                )
+            elif not has_human_duty_report_links(body):
+                errors.append(
+                    f"{resolution}: Фактура must include Duty report "
+                    "with «[полный отчёт](…)» — re-run `dutyctl upload-report -o $OUT`"
+                )
+        elif not s3_meta.is_file():
+            warnings.append(
+                f"{resolution}: after creating the GitHub issue, run "
+                "`dutyctl upload-report -o $OUT --issue N` "
+                "(or put Тикет: [#N](url) in analysis and re-run without --issue)"
+            )
 
     # Bare #123 / unlinked issue|PR — require markdown links
     # (skip fenced code: Title paste often has "#29944" as plain GitHub title text)

@@ -11,53 +11,6 @@
 namespace NKikimr {
 namespace NBsController {
 
-namespace {
-
-bool IsBsControllerDevUiAdminRequest(const TCgiParameters& cgi) {
-    if (cgi.Has("exec")) {
-        return true;
-    }
-
-    const TString page = cgi.Has("page") ? cgi.Get("page") : TString();
-    if (page.empty()
-        || page == "GetDown"
-        || page == "OperationLog"
-        || page == "OperationLogEntry"
-        || page == "HealthEvents"
-        || page == "Groups"
-        || page == "GroupDetail"
-        || page == "Scrub"
-        || page == "InternalTables"
-        || page == "Bridge"
-        || page == "VirtualGroups")
-    {
-        return false;
-    }
-
-    if (page == "SelfHeal") {
-        const bool isDisableSelfHealAction = cgi.Get("disable") == "1"
-            && cgi.Has("action") && cgi.Get("action") == "disableSelfHeal";
-        return isDisableSelfHealAction;
-    }
-
-    if (page == "Shred") {
-        return cgi.Has("startshred");
-    }
-
-    if (page == "SetDown"
-        || page == "StopGivingGroups"
-        || page == "StartGivingGroups")
-    {
-        return true;
-    }
-
-    STLOG(PRI_WARN, BS_CONTROLLER, BSCTXMO03, "BlobStorageController DevUI request to unknown page",
-        (Page, page), (Cgi, cgi.Print()));
-    return true;
-}
-
-} // namespace
-
 static const char *DataSizeSuffix[] = {"B", "KiB", "MiB", "GiB", nullptr};
 
 static void RenderBytesCell(IOutputStream& out, ui64 bytes) {
@@ -819,16 +772,6 @@ void TBlobStorageController::ProcessPostQuery(const NActorsProto::TRemoteHttpInf
         params.emplace(param.GetKey(), param.GetValue());
     }
 
-    if (!IsTabletDevUiAccessAllowed(
-            AppData(),
-            query.GetPath(),
-            query.GetUserToken(),
-            !IsBsControllerDevUiAdminRequest(params)))
-    {
-        Send(sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
-        return;
-    }
-
     auto sendResponse = [&](TString message, TString contentType, TString content) {
         Send(sender, new NMon::TEvRemoteBinaryInfoRes(TStringBuilder() << "HTTP/1.1 " << message << "\r\n"
             "Content-Type: " << contentType << "\r\n"
@@ -930,11 +873,15 @@ bool TBlobStorageController::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr e
         return true;
     }
     const TCgiParameters& cgi(ev->Get()->Cgi());
+    // BSController exposes no non-admin handlers: even the read-only pages walk large in-memory
+    // structures and can load the actor heavily, so the whole DevUI is admin-only. This is the
+    // single gate for the tablet — it must stay ahead of the POST branch and the page dispatch
+    // below, otherwise a CGI parameter would pick a handler before the access check runs.
     if (!IsTabletDevUiAccessAllowed(
             AppData(),
             ev->Get()->PathInfo(),
             ev->Get()->GetUserToken(),
-            !IsBsControllerDevUiAdminRequest(cgi)))
+            /*isMonitoringDevUiRequest=*/false))
     {
         Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
         return true;

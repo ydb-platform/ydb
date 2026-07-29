@@ -1,6 +1,5 @@
 #include "impl.h"
 #include "config.h"
-#include <ydb/core/base/mon_auth.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_SHRED
 
@@ -244,10 +243,10 @@ namespace NKikimr::NBsController {
                         str << "Start new shredding iteration";
                     }
                     DIV_CLASS("panel-body") {
-                        const TStringBuf tabletAppPath = UsesTabletDevUiSecurePath(AppData(), TTabletTypes::BSController)
-                            ? TABLET_DEV_UI_SECURE_MON_RELATIVE_PATH
-                            : TStringBuf("app");
-						str << "<form action='" << tabletAppPath << "' class='form-horizontal'>";
+                        // No `action`: the form submits to the current URL and therefore stays on
+                        // whichever DevUI path served the page. A relative "app"/"app/secure" would
+                        // resolve against the current directory and break on one of the two paths.
+						FORM_CLASS("form-horizontal") {
 							DIV_CLASS("control-group") {
 								LABEL_CLASS_FOR("control-label", "generation") { str << "Shred generation"; }
 								DIV_CLASS("controls") {
@@ -278,7 +277,7 @@ namespace NKikimr::NBsController {
 									str << "<button type='submit' name='startshred' class='btn btn-default'>Start</button>";
 								}
 							}
-						str << "</form>";
+						}
 
                     }
                 }

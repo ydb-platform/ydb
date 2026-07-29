@@ -610,54 +610,73 @@ def _bscontroller_get_status(cluster, endpoint_path, token=None):
     return response.status_code
 
 
-def _bscontroller_monitoring_page_access_cases(
-    tablet_id,
-    pages=(
-        ('Main', ''),
-        ('OperationLog', 'page=OperationLog'),
-        ('OperationLogEntry', 'page=OperationLogEntry'),
-        ('HealthEvents', 'page=HealthEvents'),
-        ('Groups', 'page=Groups'),
-        ('GroupDetail', 'page=GroupDetail'),
-        ('Scrub', 'page=Scrub'),
-        ('InternalTables', 'page=InternalTables'),
-        ('Bridge', 'page=Bridge'),
-        ('VirtualGroups', 'page=VirtualGroups'),
-        ('GetDown', 'page=GetDown'),
-        ('SelfHeal', 'page=SelfHeal'),
-        ('Shred', 'page=Shred'),
-    ),
-):
+# Read-only BSController pages. They are admin-only together with everything else: several of
+# them walk large in-memory structures and can load the tablet actor heavily, so BSC keeps no
+# non-admin whitelist at all.
+_BSCONTROLLER_READONLY_PAGES = (
+    '',  # main page
+    'page=OperationLog',
+    'page=OperationLogEntry',
+    'page=HealthEvents',
+    'page=Groups',
+    'page=GroupDetail',
+    'page=Scrub',
+    'page=InternalTables',
+    'page=Bridge',
+    'page=VirtualGroups',
+    'page=GetDown',
+    'page=SelfHeal',
+    'page=Shred',
+)
+
+# Mutating pages, plus a page that does not exist yet: with an empty whitelist a newly added
+# handler is admin-only without anyone having to remember to list it.
+_BSCONTROLLER_MUTATING_PAGES = (
+    'page=SetDown&group=0&down=1',
+    'page=SelfHeal&disable=1&action=disableSelfHeal',
+    'page=Shred&startshred=1&generation=0',
+    'page=StopGivingGroups',
+    'page=StartGivingGroups',
+    'page=NewAction',
+)
+
+
+def _bscontroller_non_admin_expectations():
+    """Identities that must never reach a BSController DevUI page on the secure path."""
+    _, _, admin_allowed = tablet_devui_sid_matrix()
+    return {token: status for token, status in admin_allowed.items() if token != 'root@builtin'}
+
+
+def _bscontroller_all_pages_cases(tablet_id, secure_path_mode):
+    """Deny-side coverage for the whole BSC DevUI, read-only pages included.
+
+    Only denials are asserted, so no mutating page is ever executed against the module-scoped
+    cluster shared with the other tablets' tests: on the legacy path every identity is rejected
+    once the flag is on, and on the secure path every non-admin identity is rejected always.
+    """
     q_base = f'TabletID={tablet_id}'
-    _, monitoring_allowed, _ = tablet_devui_sid_matrix()
+    all_forbidden, monitoring_allowed, _ = tablet_devui_sid_matrix()
+    non_admins = _bscontroller_non_admin_expectations()
     cases = []
-    for _page_name, query_suffix in pages:
+    for query_suffix in _BSCONTROLLER_READONLY_PAGES + _BSCONTROLLER_MUTATING_PAGES:
         q = q_base if not query_suffix else f'{q_base}&{query_suffix}'
-        cases.extend(_bscontroller_endpoint_cases([f'/tablets/app?{q}'], monitoring_allowed))
+        if secure_path_mode:
+            # With the flag on nothing is reachable on the legacy path, root included.
+            cases.extend(_bscontroller_endpoint_cases([f'/tablets/app?{q}'], all_forbidden))
+        cases.extend(_bscontroller_endpoint_cases([f'/tablets/app/secure?{q}'], non_admins))
+    # Tablets summary page keeps monitoring-level access (different handler).
     cases.extend(_bscontroller_endpoint_cases([f'/tablets?{q_base}'], monitoring_allowed))
     return cases
 
 
-def _bscontroller_admin_page_access_cases(
-    tablet_id,
-    secure_path_mode,
-    pages=(
-        ('SetDown', 'page=SetDown&group=0&down=1'),
-        ('SelfHealDisable', 'page=SelfHeal&disable=1&action=disableSelfHeal'),
-        ('ShredStart', 'page=Shred&startshred=1&generation=0'),
-        ('StopGivingGroups', 'page=StopGivingGroups'),
-        ('StartGivingGroups', 'page=StartGivingGroups'),
-        ('NewAction', 'page=NewAction'),
-    ),
-):
+def _bscontroller_legacy_readonly_cases(tablet_id):
+    """With the flag off the read-only pages keep monitoring-level access on /tablets/app."""
     q_base = f'TabletID={tablet_id}'
-    all_forbidden, monitoring_allowed, admin_allowed = tablet_devui_sid_matrix()
-    expected_on_app = tablet_devui_expected_on_app(secure_path_mode, monitoring_allowed, all_forbidden)
+    _, monitoring_allowed, _ = tablet_devui_sid_matrix()
     cases = []
-    for _page_name, query_suffix in pages:
-        q = f'{q_base}&{query_suffix}'
-        cases.extend(_bscontroller_endpoint_cases([f'/tablets/app?{q}'], expected_on_app))
-        cases.extend(_bscontroller_endpoint_cases([f'/tablets/app/secure?{q}'], admin_allowed))
+    for query_suffix in _BSCONTROLLER_READONLY_PAGES:
+        q = q_base if not query_suffix else f'{q_base}&{query_suffix}'
+        cases.extend(_bscontroller_endpoint_cases([f'/tablets/app?{q}'], monitoring_allowed))
     return cases
 
 
@@ -675,8 +694,8 @@ def test_bscontroller_tablet_devui_mon_paths_with_enforce_user_token(
 ):
     cluster = ydb_cluster_with_enforce_user_token
     cases = (
-        _bscontroller_monitoring_page_access_cases(BSC_TABLET_ID)
-        + _bscontroller_admin_page_access_cases(BSC_TABLET_ID, secure_path_mode=False)
+        _bscontroller_legacy_readonly_cases(BSC_TABLET_ID)
+        + _bscontroller_all_pages_cases(BSC_TABLET_ID, secure_path_mode=False)
     )
 
     for endpoint_path, token, expected_status in cases:
@@ -690,17 +709,36 @@ def test_bscontroller_tablet_devui_mon_paths_with_enforce_user_token(
 def test_bscontroller_tablet_devui_mon_paths_with_enforce_user_token_and_secure_path_mode(
     ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag,
 ):
+    """The whole BSC DevUI is admin-only once the flag is on — read-only pages included."""
     cluster = ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag
-    cases = (
-        _bscontroller_monitoring_page_access_cases(BSC_TABLET_ID)
-        + _bscontroller_admin_page_access_cases(BSC_TABLET_ID, secure_path_mode=True)
-    )
 
-    for endpoint_path, token, expected_status in cases:
+    for endpoint_path, token, expected_status in _bscontroller_all_pages_cases(
+        BSC_TABLET_ID, secure_path_mode=True
+    ):
         status = _bscontroller_get_status(cluster, endpoint_path, token)
         assert status == expected_status, (
             f'Expected GET {endpoint_path} with token={_bscontroller_token_desc(token)} '
             f'to return {expected_status}, got {status}'
+        )
+
+
+def test_bscontroller_secure_path_lets_administrator_through(
+    ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag,
+):
+    """The deny sweep above must not pass merely because every request is rejected.
+
+    Only read-only pages are exercised here, so nothing is mutated on the shared cluster.
+    """
+    cluster = ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag
+
+    for query_suffix in _BSCONTROLLER_READONLY_PAGES:
+        q = f'TabletID={BSC_TABLET_ID}'
+        if query_suffix:
+            q = f'{q}&{query_suffix}'
+        endpoint_path = f'/tablets/app/secure?{q}'
+        status = _bscontroller_get_status(cluster, endpoint_path, 'root@builtin')
+        assert status not in (401, 403), (
+            f'Expected GET {endpoint_path} with token=root@builtin to pass the access check, got {status}'
         )
 
 
@@ -731,58 +769,52 @@ def test_bscontroller_post_exec_with_enforce_user_token_and_secure_path_mode(
                 )
 
 
-def test_bscontroller_shred_form_uses_secure_path(
+def _bscontroller_has_hardcoded_app_path(text):
+    """True if the markup pins a link or form to an absolute DevUI path instead of a relative one."""
+    for attr in ("href='app", 'href="app', "action='app", 'action="app'):
+        if attr in text:
+            return True
+    return False
+
+
+def test_bscontroller_links_and_forms_stay_on_current_app_path(
     ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag,
 ):
+    """BSC pages are served from /tablets/app/secure once the flag is on, so every link and form
+    must be relative to the current URL.
+
+    A hardcoded "app" or "app/secure" would be resolved against the current directory: from
+    /tablets/app/secure the base is /tablets/app/, so action='app/secure' would point at
+    /tablets/app/app/secure. Query-only links and action-less forms keep the path untouched.
+    """
     cluster = ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag
-    host = cluster.nodes[1].host
-    mon_port = cluster.nodes[1].mon_port
-    url = f'https://{host}:{mon_port}/tablets/app?TabletID={BSC_TABLET_ID}&page=Shred'
-    response = requests.get(url, headers={'Authorization': 'monitoring@builtin'}, verify=False)
-    assert response.status_code == 200, response.text
-    assert "action='app/secure'" in response.text or 'action="app/secure"' in response.text
-    assert 'name=\'startshred\'' in response.text or 'name="startshred"' in response.text
+    base_url = _bscontroller_mon_base_url(cluster)
+    headers = {'Authorization': 'root@builtin'}
 
+    def get(query):
+        response = requests.get(
+            f'{base_url}/tablets/app/secure?TabletID={BSC_TABLET_ID}{query}',
+            headers=headers,
+            verify=False,
+        )
+        assert response.status_code == 200, response.text
+        return response.text
 
-def test_bscontroller_self_heal_disable_link_uses_secure_path(
-    ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag,
-):
-    cluster = ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag
-    host = cluster.nodes[1].host
-    mon_port = cluster.nodes[1].mon_port
-    url = f'https://{host}:{mon_port}/tablets/app?TabletID={BSC_TABLET_ID}&page=SelfHeal'
-    response = requests.get(url, headers={'Authorization': 'monitoring@builtin'}, verify=False)
-    assert response.status_code == 200, response.text
-    if 'DISABLE NOW' in response.text:
-        assert 'app/secure?TabletID=' in response.text
-        assert 'action=disableSelfHeal' in response.text
+    main_page = get('')
+    assert f"href='?TabletID={BSC_TABLET_ID}&page=OperationLog'" in main_page
+    assert f"href='?TabletID={BSC_TABLET_ID}&page=SelfHeal'" in main_page
+    assert not _bscontroller_has_hardcoded_app_path(main_page)
 
+    internal_tables = get('&page=InternalTables')
+    assert f"href='?TabletID={BSC_TABLET_ID}&page=InternalTables&table=pdisks'" in internal_tables
+    assert not _bscontroller_has_hardcoded_app_path(internal_tables)
 
-def test_bscontroller_read_only_links_keep_current_app_path(
-    ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag,
-):
-    cluster = ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag
-    host = cluster.nodes[1].host
-    mon_port = cluster.nodes[1].mon_port
+    shred = get('&page=Shred')
+    assert "name='startshred'" in shred or 'name="startshred"' in shred
+    assert not _bscontroller_has_hardcoded_app_path(shred)
 
-    response = requests.get(
-        f'https://{host}:{mon_port}/tablets/app?TabletID={BSC_TABLET_ID}',
-        headers={'Authorization': 'monitoring@builtin'},
-        verify=False,
-    )
-    assert response.status_code == 200, response.text
-    assert f"href='?TabletID={BSC_TABLET_ID}&page=OperationLog'" in response.text
-    assert f"href='?TabletID={BSC_TABLET_ID}&page=SelfHeal'" in response.text
-    assert f"href='app?TabletID={BSC_TABLET_ID}" not in response.text
-
-    response = requests.get(
-        f'https://{host}:{mon_port}/tablets/app?TabletID={BSC_TABLET_ID}&page=InternalTables',
-        headers={'Authorization': 'monitoring@builtin'},
-        verify=False,
-    )
-    assert response.status_code == 200, response.text
-    assert f"href='?TabletID={BSC_TABLET_ID}&page=InternalTables&table=pdisks'" in response.text
-    assert f"href='app?TabletID={BSC_TABLET_ID}" not in response.text
+    self_heal = get('&page=SelfHeal')
+    assert not _bscontroller_has_hardcoded_app_path(self_heal)
 
 
 def test_bscontroller_self_heal_disable_redirect_keeps_current_app_path(

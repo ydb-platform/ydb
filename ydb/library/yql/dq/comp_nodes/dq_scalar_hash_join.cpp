@@ -16,19 +16,9 @@ namespace {
 
 using TDqJoinImplRenames = TDqRenames<ESide>;
 
-// Filter callable inputs, appended after the 7 base inputs; must match TDqProgramBuilder::DqScalarHashJoin.
-namespace NScalarFilterParams {
-    enum : ui32 {
-        LeftArgs = 7,
-        LeftBody = 8,
-        RightArgs = 9,
-        RightBody = 10,
-        CommonLeftArgs = 11,
-        CommonRightArgs = 12,
-        CommonBody = 13,
-        Count = 14,
-    };
-}
+// Must match TDqProgramBuilder::DqScalarHashJoin.
+constexpr ui32 BaseInputs = 7;
+constexpr ui32 TotalInputs = BaseInputs + JoinFilterInputs;
 
 struct TDqScalarJoinMetadata {
     TSides<TVector<TType*>> InputTypes;
@@ -298,8 +288,7 @@ private:
                 MakeScalarLayoutConverter(helper, Meta_->UserTypes.SelectSide(side), roles, ctx.HolderFactory);
         }
 
-        // The filter path is only instantiated when a filter is present (HasFilter). It uses its own
-        // scalar converters (independent of the join's), and only for sides some filter references.
+        // The filter needs its own converters, independent of the join's.
         std::optional<TPackedTuplePairFilter> pairFilter;
         if constexpr (HasFilter) {
             const bool needLeft = Filters_.Left || Filters_.Common;
@@ -329,23 +318,17 @@ private:
     void RegisterDependencies() const final {
         const auto flow = this->FlowDependsOnBoth(Flows_.Build, Flows_.Probe);
         if constexpr (HasFilter) {
-            const auto ownArgs = [&](const TComputationExternalNodePtrVector& args) {
-                for (auto* arg : args) {
+            for (const auto* args : {&Filters_.Left.Args, &Filters_.Right.Args, &Filters_.Common.LeftArgs,
+                                     &Filters_.Common.RightArgs}) {
+                for (auto* arg : *args) {
                     this->Own(flow, arg);
                 }
-            };
-            const auto dependOnBody = [&](IComputationNode* body) {
+            }
+            for (auto* body : {Filters_.Left.Body, Filters_.Right.Body, Filters_.Common.Body}) {
                 if (body) {
                     this->DependsOn(flow, body);
                 }
-            };
-            ownArgs(Filters_.Left.Args);
-            dependOnBody(Filters_.Left.Body);
-            ownArgs(Filters_.Right.Args);
-            dependOnBody(Filters_.Right.Body);
-            ownArgs(Filters_.Common.LeftArgs);
-            ownArgs(Filters_.Common.RightArgs);
-            dependOnBody(Filters_.Common.Body);
+            }
         } else {
             Y_UNUSED(flow);
         }
@@ -363,7 +346,7 @@ template <EJoinKind K> using TScalarHashJoinWrapperPlain = TScalarHashJoinWrappe
 } // namespace
 
 IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == NScalarFilterParams::Count, "Expected 14 args");
+    MKQL_ENSURE(callable.GetInputsCount() == TotalInputs, "Expected 14 args");
 
     const auto joinType = callable.GetType()->GetReturnType();
     MKQL_ENSURE(joinType->IsFlow(), "Expected WideFlow as a resulting flow");
@@ -414,11 +397,7 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
 
     const TSides<IComputationWideFlowNode*> flows{.Build = rightFlow, .Probe = leftFlow};
 
-    // The three ON-clause predicates stay separate; empty argument tuples encode an absent filter.
-    TJoinFilters filters = ParseJoinFilters(
-        ctx, callable, NScalarFilterParams::LeftArgs, NScalarFilterParams::LeftBody, NScalarFilterParams::RightArgs,
-        NScalarFilterParams::RightBody, NScalarFilterParams::CommonLeftArgs, NScalarFilterParams::CommonRightArgs,
-        NScalarFilterParams::CommonBody);
+    TJoinFilters filters = ParseJoinFilters(ctx, callable, BaseInputs);
 
     if (filters) {
         return DispatchHashJoinByKind<TScalarHashJoinWrapperFiltered, IComputationWideFlowNode>(

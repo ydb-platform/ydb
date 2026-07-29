@@ -144,11 +144,7 @@ TRuntimeNode TDqProgramBuilder::DqBlockHashJoin(TRuntimeNode leftStream, TRuntim
     const bool hasFilters = leftFilter || rightFilter || commonFilter;
     MKQL_ENSURE(!hasFilters || !settings.LeftIsBuild(), "Join filters are not supported with LeftIsBuild block join");
 
-    // The three ON-clause predicates stay separate so the runtime can apply each at its natural
-    // granularity (left per probe row, right per build row, common per matched pair) and decode only
-    // the sides it actually needs. A wide-row arg list has one Arg per data column (the last wide
-    // component is the block-length scalar). For a LEFT join the right side is decoded as Optional,
-    // so its argument types are wrapped to match.
+    // One Arg per data column; the last wide component is the block-length scalar.
     const auto makeScalarRowArgs = [this](TRuntimeNode stream, bool wrapOptional) {
         const auto components = GetWideComponents(stream.GetStaticType());
         MKQL_ENSURE(!components.empty(), "Expected at least the block-length column");
@@ -165,7 +161,6 @@ TRuntimeNode TDqProgramBuilder::DqBlockHashJoin(TRuntimeNode leftStream, TRuntim
     };
     const bool rightIsOptional = joinKind == EJoinKind::Left;
 
-    // Absent filters are encoded as empty argument tuples plus a constant-true body.
     TRuntimeNode leftFilterArgs = NewEmptyTuple();
     TRuntimeNode leftFilterBody = NewDataLiteral<bool>(true);
     if (leftFilter) {
@@ -229,8 +224,6 @@ TRuntimeNode TDqProgramBuilder::DqScalarHashJoin(TRuntimeNode leftFlow, TRuntime
     const auto leftComponents = GetWideComponents(leftFlow.GetStaticType());
     const auto rightComponents = GetWideComponents(rightFlow.GetStaticType());
 
-    // Build a wide-row argument list (one Arg per input column) for a side. For a LEFT join the right
-    // side is decoded as Optional at runtime, so its argument types are wrapped to match.
     const auto makeRowArgs = [this](const TArrayRef<TType* const>& components, bool wrapOptional) {
         TRuntimeNode::TList args;
         args.reserve(components.size());
@@ -244,8 +237,6 @@ TRuntimeNode TDqProgramBuilder::DqScalarHashJoin(TRuntimeNode leftFlow, TRuntime
     };
     const bool rightIsOptional = joinKind == EJoinKind::Left;
 
-    // Absent filters are encoded as an empty argument tuple plus a constant-true body, so the
-    // runtime wrapper can cheaply detect and skip them (see WrapDqScalarHashJoin).
     TRuntimeNode leftFilterArgs = NewEmptyTuple();
     TRuntimeNode leftFilterBody = NewDataLiteral<bool>(true);
     if (leftFilter) {

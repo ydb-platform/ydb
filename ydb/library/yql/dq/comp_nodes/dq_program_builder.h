@@ -11,11 +11,9 @@ class TDqProgramBuilder : public TProgramBuilder {
   public:
     TDqProgramBuilder(const TTypeEnvironment& env, const IFunctionRegistry& functionRegistry);
 
-    // Single-side join filter: receives the wide row (one runtime node per input column) and
-    // must return a Bool (or Optional<Bool>) predicate. An empty callback means "no filter".
+    // Join filter predicates over a wide row (one node per input column), returning Bool or
+    // Optional<Bool>. An empty callback means "no filter".
     using TJoinFilterLambda = std::function<TRuntimeNode(TRuntimeNode::TList)>;
-    // Common (non-equi) join filter over both sides: receives (leftRow, rightRow) wide rows and
-    // must return a Bool (or Optional<Bool>) predicate. An empty callback means "no filter".
     using TJoinCommonFilterLambda = std::function<TRuntimeNode(TRuntimeNode::TList, TRuntimeNode::TList)>;
 
     TRuntimeNode DqHashCombine(TRuntimeNode flow, ui64 memLimit, const TWideLambda& keyExtractor,

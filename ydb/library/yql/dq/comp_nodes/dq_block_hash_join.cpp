@@ -20,18 +20,9 @@ namespace {
 
 using TDqJoinImplRenames = TDqRenames<ESide>;
 
-namespace NBlockFilterParams {
-    enum : ui32 {
-        LeftArgs = 8,
-        LeftBody = 9,
-        RightArgs = 10,
-        RightBody = 11,
-        CommonLeftArgs = 12,
-        CommonRightArgs = 13,
-        CommonBody = 14,
-        Count = 15,
-    };
-}
+// Must match TDqProgramBuilder::DqBlockHashJoin.
+constexpr ui32 BaseInputs = 8;
+constexpr ui32 TotalInputs = BaseInputs + JoinFilterInputs;
 
 struct TDqBlockJoinContext {
     TSides<TVector<TBlockType*>> InputTypes;
@@ -327,23 +318,17 @@ class TBlockHashJoinWrapper : public TMutableComputationNode<TBlockHashJoinWrapp
         this->DependsOn(Streams_.Build);
         this->DependsOn(Streams_.Probe);
         if constexpr (HasFilter) {
-            const auto ownArgs = [&](const TComputationExternalNodePtrVector& args) {
-                for (auto* arg : args) {
+            for (const auto* args : {&Filters_.Left.Args, &Filters_.Right.Args, &Filters_.Common.LeftArgs,
+                                     &Filters_.Common.RightArgs}) {
+                for (auto* arg : *args) {
                     this->Own(arg);
                 }
-            };
-            const auto dependOnBody = [&](IComputationNode* body) {
+            }
+            for (auto* body : {Filters_.Left.Body, Filters_.Right.Body, Filters_.Common.Body}) {
                 if (body) {
                     this->DependsOn(body);
                 }
-            };
-            ownArgs(Filters_.Left.Args);
-            dependOnBody(Filters_.Left.Body);
-            ownArgs(Filters_.Right.Args);
-            dependOnBody(Filters_.Right.Body);
-            ownArgs(Filters_.Common.LeftArgs);
-            ownArgs(Filters_.Common.RightArgs);
-            dependOnBody(Filters_.Common.Body);
+            }
         }
     }
 
@@ -358,7 +343,7 @@ template <EJoinKind K> using TBlockHashJoinWrapperPlain = TBlockHashJoinWrapper<
 } // namespace
 
 IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == NBlockFilterParams::Count, "Expected 15 args");
+    MKQL_ENSURE(callable.GetInputsCount() == TotalInputs, "Expected 15 args");
     TDqBlockJoinContext meta;
 
     const auto joinType = callable.GetType()->GetReturnType();
@@ -450,16 +435,10 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
         ? TSides<IComputationNode*>{.Build = leftStream, .Probe = rightStream}
         : TSides<IComputationNode*>{.Build = rightStream, .Probe = leftStream};
 
-    // The three ON-clause predicates stay separate; empty argument tuples encode an absent filter.
-    TJoinFilters filters = ParseJoinFilters(
-        ctx, callable, NBlockFilterParams::LeftArgs, NBlockFilterParams::LeftBody, NBlockFilterParams::RightArgs,
-        NBlockFilterParams::RightBody, NBlockFilterParams::CommonLeftArgs, NBlockFilterParams::CommonRightArgs,
-        NBlockFilterParams::CommonBody);
+    TJoinFilters filters = ParseJoinFilters(ctx, callable, BaseInputs);
     MKQL_ENSURE(!filters || !meta.Settings.LeftIsBuild(),
                 "Join filters are not supported with LeftIsBuild block join");
 
-    // Filter presence is known here, so we pick the HasFilter template instantiation and never
-    // compile the filter (decode/eval) path into the no-filter join, nor a runtime branch for it.
     if (filters) {
         return DispatchHashJoinByKind<TBlockHashJoinWrapperFiltered, IComputationNode>(
             joinKind, "unsupported join type in block hash join", ctx.Mutables, std::move(meta), streams,

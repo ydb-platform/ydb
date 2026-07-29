@@ -113,6 +113,16 @@ namespace NTable {
             THashSet<TPageId> NeedPages;
         };
 
+        struct TRunOptions {
+            // Marks that optional index pages should be loaded
+            //
+            // Effects only b-tree index as flat index is kept as sticky
+            bool PreloadIndex = true;
+
+            // Marks that all data pages from the main group should be loaded
+            bool PreloadData = false;
+        };
+
         TLoader(TPartComponents ou)
             : TLoader(TPartStore::Construct(std::move(ou.PageCollectionComponents)),
                     std::move(ou.Legacy),
@@ -128,7 +138,7 @@ namespace NTable {
                 TEpoch epoch = NTable::TEpoch::Max());
         ~TLoader();
 
-        TVector<TAutoPtr<NPageCollection::TFetch>> Run(bool preloadData)
+        TVector<TAutoPtr<NPageCollection::TFetch>> Run(TRunOptions options)
         {
             while (Stage < EStage::Result) {
                 TAutoPtr<NPageCollection::TFetch> fetch;
@@ -138,7 +148,7 @@ namespace NTable {
                         StageParseMeta();
                         break;
                     case EStage::PartView:
-                        fetch = StageCreatePartView();
+                        fetch = StageCreatePartView(options.PreloadIndex);
                         break;
                     case EStage::Slice:
                         fetch = StageSliceBounds();
@@ -147,7 +157,7 @@ namespace NTable {
                         StageDeltas();
                         break;
                     case EStage::PreloadData:
-                        if (preloadData) {
+                        if (options.PreloadData) {
                             fetch = StagePreloadData();
                         }
                         break;
@@ -241,7 +251,7 @@ namespace NTable {
         }
 
         void StageParseMeta() noexcept;
-        TAutoPtr<NPageCollection::TFetch> StageCreatePartView() noexcept;
+        TAutoPtr<NPageCollection::TFetch> StageCreatePartView(bool preloadIndex) noexcept;
         TAutoPtr<NPageCollection::TFetch> StageSliceBounds() noexcept;
         void StageDeltas() noexcept;
         TAutoPtr<NPageCollection::TFetch> StagePreloadData() noexcept;

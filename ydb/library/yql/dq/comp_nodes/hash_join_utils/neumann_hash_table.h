@@ -64,7 +64,13 @@ template <class T> class TBloomFilterMasks {
     }
 };
 
-template <bool ConsecutiveDuplicates = false, bool Prefetch = true>
+// ForceOutplace=true disables the inplace optimization for small rows. With
+// ForceOutplace, the matched row pointer in Apply/Find always points into the
+// original `Tuples_` buffer, so callers can recover the original row index via
+// `(matchedRow - Tuples_) / TotalRowSize`. The indexed-output path of
+// THybridHashJoin needs this to map matches to (chunk_id, row_in_chunk) refs.
+template <bool ConsecutiveDuplicates = false, bool Prefetch = true,
+          bool ForceOutplace = false>
 class TNeumannHashTable {
     /// hash = [...] [directory_bits] [...] [bloom_filter_bits]
     using Hash = ui32;
@@ -163,7 +169,7 @@ class TNeumannHashTable {
         Clear();
 
         Layout_ = layout;
-        IsInplace_ = layout->TotalRowSize <= kEmbeddedSize;
+        IsInplace_ = ForceOutplace ? false : (layout->TotalRowSize <= kEmbeddedSize);
         RowIndexSize_ = IsInplace_ ? layout->TotalRowSize : sizeof(TOutplace);
         BufferSlotSize_ = RowIndexSize_;
         if constexpr (ConsecutiveDuplicates) {

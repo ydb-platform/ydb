@@ -2295,7 +2295,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         UNIT_ASSERT(
             config.Selected ==
             std::set<ui32>({
-                3, 16, 34, 38, 42, 48, 52, 55, 69, 73, 87, 90, 93, 94, 95, 96,
+                3, 9, 16, 34, 38, 42, 48, 52, 55, 69, 73, 87, 90, 93, 94, 95, 96,
             }));
         UNIT_ASSERT(config.Solver);
         UNIT_ASSERT_STRING_CONTAINS(

@@ -2465,10 +2465,11 @@ class SnapshotTest(unittest.TestCase):
                 ):
                     parse_snapshot(malformed)
 
-    def test_decimal_extrema_require_exact_type_and_phase_aware_nullability(self):
+    def test_extrema_require_exact_type_and_phase_aware_nullability(self):
         def snapshot_value(
             function,
             *,
+            input_type="Decimal(7,2)",
             phase,
             grouped,
             input_nullable,
@@ -2476,7 +2477,7 @@ class SnapshotTest(unittest.TestCase):
         ):
             value = minimal_snapshot()
             value["schema"]["tables"][0]["columns"][0].update(
-                type="Decimal(7,2)",
+                type=input_type,
                 nullable=input_nullable,
             )
             keys = ["a.flag"] if grouped else []
@@ -2490,7 +2491,7 @@ class SnapshotTest(unittest.TestCase):
                         "input": "a.k",
                         "function": function,
                         "output": "result",
-                        "type": "Decimal(7,2)",
+                        "type": input_type,
                         "nullable": output_nullable,
                         "distinct": False,
                         "unwrap": False,
@@ -2503,7 +2504,8 @@ class SnapshotTest(unittest.TestCase):
             value["plan"]["output"] = keys + ["result"]
             return value
 
-        for function, phase, grouped, input_nullable in product(
+        for input_type, function, phase, grouped, input_nullable in product(
+            ("Decimal(7,2)", *sorted(INTEGER_TYPES)),
             ("max", "min"),
             ("undefined", "intermediate", "final"),
             (False, True),
@@ -2514,6 +2516,7 @@ class SnapshotTest(unittest.TestCase):
             )
             with self.subTest(
                 function=function,
+                input_type=input_type,
                 phase=phase,
                 grouped=grouped,
                 input_nullable=input_nullable,
@@ -2521,6 +2524,7 @@ class SnapshotTest(unittest.TestCase):
                 parse_snapshot(
                     snapshot_value(
                         function,
+                        input_type=input_type,
                         phase=phase,
                         grouped=grouped,
                         input_nullable=input_nullable,
@@ -2534,6 +2538,7 @@ class SnapshotTest(unittest.TestCase):
                     parse_snapshot(
                         snapshot_value(
                             function,
+                            input_type=input_type,
                             phase=phase,
                             grouped=grouped,
                             input_nullable=input_nullable,
@@ -2555,25 +2560,42 @@ class SnapshotTest(unittest.TestCase):
             with self.subTest(function=function, mutation="output type"):
                 with self.assertRaisesRegex(
                     SnapshotError,
-                    "must exactly match its Decimal input",
+                    "must exactly match its input",
                 ):
                     parse_snapshot(wrong_type)
 
-            non_decimal = snapshot_value(
+            wrong_integer_type = snapshot_value(
                 function,
+                input_type="Int32",
                 phase="undefined",
                 grouped=False,
                 input_nullable=False,
                 output_nullable=True,
             )
-            non_decimal["schema"]["tables"][0]["columns"][0]["type"] = "Int64"
-            non_decimal["plan"]["nodes"][-1]["aggregates"][0]["type"] = "Int64"
-            with self.subTest(function=function, mutation="input type"):
+            wrong_integer_type["plan"]["nodes"][-1]["aggregates"][0][
+                "type"
+            ] = "Int64"
+            with self.subTest(function=function, mutation="integer output type"):
                 with self.assertRaisesRegex(
                     SnapshotError,
-                    "only Decimal is modeled",
+                    "must exactly match its input",
                 ):
-                    parse_snapshot(non_decimal)
+                    parse_snapshot(wrong_integer_type)
+
+            unsupported = snapshot_value(
+                function,
+                input_type="Date",
+                phase="undefined",
+                grouped=False,
+                input_nullable=False,
+                output_nullable=True,
+            )
+            with self.subTest(function=function, mutation="unsupported input type"):
+                with self.assertRaisesRegex(
+                    SnapshotError,
+                    "only Decimal and fixed-width integers are modeled",
+                ):
+                    parse_snapshot(unsupported)
 
         invalid_min_state = snapshot_value(
             "min",

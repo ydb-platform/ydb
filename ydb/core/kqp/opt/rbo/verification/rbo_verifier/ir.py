@@ -2956,16 +2956,19 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                         )
                 elif trait.function in {"max", "min"}:
                     function = trait.function
-                    if not decimal.is_type(input_column.type):
+                    if (
+                        not decimal.is_type(input_column.type)
+                        and integer_bounds(input_column.type) is None
+                    ):
                         _fail(
                             trait_path,
                             f"{function} does not support {input_column.type!r}; "
-                            "only Decimal is modeled",
+                            "only Decimal and fixed-width integers are modeled",
                         )
                     if trait.output_type != input_column.type:
                         _fail(
                             trait_path,
-                            f"{function} output type must exactly match its Decimal input "
+                            f"{function} output type must exactly match its input "
                             f"{input_column.type!r}, got {trait.output_type!r}",
                         )
                     expected_nullable = input_column.nullable

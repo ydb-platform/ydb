@@ -31,6 +31,7 @@ __pycache__/
 *_pb2.pyi
 *.pb.h
 *.pb.cc
+*.protosrc
 
 # Other generated
 *.fbs.h

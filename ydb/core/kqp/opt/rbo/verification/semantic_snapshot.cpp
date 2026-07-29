@@ -3087,6 +3087,7 @@ i64 ParseDirectIntervalLiteral(const TExprNode& node) {
     {
         Unsupported("Direct Date/Interval fold requires a non-null Interval literal");
     }
+    CheckScalarSafetyMetadata(*node.Child(0));
     const i64 value = ParseInteger<i64>(
         node.Child(0)->Content(), "Interval");
     if (!NUdf::IsValidLayoutValue<NUdf::TInterval>(value)) {
@@ -3096,6 +3097,36 @@ i64 ParseDirectIntervalLiteral(const TExprNode& node) {
             << static_cast<i64>(NUdf::MAX_TIMESTAMP) << "): " << value);
     }
     return value;
+}
+
+i32 ParseDynamicIntervalFromDays(const TExprNode& node) {
+    if (node.IsCallable("Apply")) {
+        return ParseIntervalFromDays(node);
+    }
+
+    CheckScalarSafetyMetadata(node);
+    if (!node.IsCallable("Just") || node.ChildrenSize() != 1 ||
+        !IsExactDataAnnotation(
+            node.GetTypeAnn(), NUdf::EDataSlot::Interval, true))
+    {
+        Unsupported(
+            "Dynamic Date/IntervalFromDays requires reviewed Apply or "
+            "Just of a folded Interval literal");
+    }
+
+    const i64 interval = ParseDirectIntervalLiteral(*node.Child(0));
+    if (interval % NMiniKQL::DateScale != 0) {
+        Unsupported(
+            "Folded IntervalFromDays literal is not an exact whole-day interval");
+    }
+    const i64 days = interval / NMiniKQL::DateScale;
+    constexpr i64 MaxDays = static_cast<i64>(NUdf::MAX_DATE - 1);
+    if (days < -MaxDays || days > MaxDays) {
+        Unsupported(TStringBuilder()
+            << "Folded IntervalFromDays argument is outside ["
+            << -MaxDays << ", " << MaxDays << "]");
+    }
+    return static_cast<i32>(days);
 }
 
 NJson::TJsonValue ConstantDirectDateIntervalExpr(const TExprNode& node) {
@@ -3144,6 +3175,108 @@ NJson::TJsonValue ConstantDateIntervalExpr(const TExprNode& node) {
         }
     }
     return ConstantDateValue(std::nullopt);
+}
+
+// Dynamic Date arithmetic remains deliberately uninterpreted.  The reviewed
+// Apply and folded Just spellings describe one deterministic, total operation,
+// so an ordinary opaque function is a sound over-approximation: it may choose
+// any in-domain Date or NULL for a given present input, but equal input Dates
+// under the same operation and day literal must choose the same result.
+NJson::TJsonValue DynamicDateIntervalFromDaysExpr(
+    const TExprNode& node,
+    const TExprNode* rowArgument,
+    const THashSet<TString>& visibleColumns,
+    const TVector<const TExprNode*>& boundArguments,
+    TExactScalarBudget& budget,
+    size_t argumentDepth)
+{
+    CheckScalarSafetyMetadata(node);
+    if (!node.IsCallable({"+", "-"}) || node.ChildrenSize() != 2 ||
+        !IsExactDataAnnotation(
+            node.GetTypeAnn(), NUdf::EDataSlot::Date, true))
+    {
+        Unsupported(
+            "Dynamic Date/IntervalFromDays requires binary "
+            "Optional<Date> addition or subtraction");
+    }
+
+    const auto& date = *node.Child(0);
+    CheckScalarSafetyMetadata(date);
+    if (!date.IsCallable("Member") || date.ChildrenSize() != 2 ||
+        !date.Child(1)->IsAtom() ||
+        !IsExactDataAnnotation(
+            date.GetTypeAnn(), NUdf::EDataSlot::Date, true) ||
+        !rowArgument || date.Child(0) != rowArgument)
+    {
+        Unsupported(
+            "Dynamic Date/IntervalFromDays requires one direct "
+            "Optional<Date> input member");
+    }
+    CheckScalarSafetyMetadata(*rowArgument);
+    CheckScalarSafetyMetadata(*date.Child(1));
+    const TString column(date.Child(1)->Content());
+    if (column.empty() || !visibleColumns.contains(column)) {
+        Unsupported(TStringBuilder()
+            << "Dynamic Date/IntervalFromDays references invisible member "
+            << column);
+    }
+    if (boundArguments.size() >= MaxIfPresentBindingDepth) {
+        Unsupported(
+            "Dynamic Date/IntervalFromDays binding depth exceeds the audit limit");
+    }
+
+    const i32 days = ParseDynamicIntervalFromDays(*node.Child(1));
+    TStringBuilder fingerprint;
+    AppendIdentityField(
+        fingerprint, "format", "yql-date-interval-from-days-v1");
+    AppendIdentityField(fingerprint, "operation", node.Content());
+    AppendIdentityField(fingerprint, "days", ToString(days));
+
+    // The source Optional<Date> fixes the outer NULL case exactly.  The
+    // present branch remains opaque because Date overflow can still yield
+    // NULL, but its argument is now a proven-present Date value.
+    budget.Charge(argumentDepth, 3); // Column, opaque result, and typed NULL.
+    budget.Charge(argumentDepth + 1); // Bound Date argument to the opaque call.
+    auto opaqueArguments = JsonArray();
+    opaqueArguments.AppendValue(BoundExpr(0));
+    auto present = JsonMap();
+    present["kind"] = "opaque";
+    present["fingerprint"] = TString(fingerprint);
+    present["type"] = "Date";
+    present["nullable"] = true;
+    present["args"] = std::move(opaqueArguments);
+
+    auto result = JsonMap();
+    result["kind"] = "if_present";
+    result["optional"] = ColumnExpr(column);
+    result["present"] = std::move(present);
+    result["missing"] = ConstantDateValue(std::nullopt);
+    result["type"] = "Date";
+    result["nullable"] = true;
+    return result;
+}
+
+NJson::TJsonValue DateIntervalExpr(
+    const TExprNode& node,
+    const TExprNode* rowArgument,
+    const THashSet<TString>& visibleColumns,
+    const TVector<const TExprNode*>& boundArguments,
+    TExactScalarBudget& budget,
+    size_t argumentDepth)
+{
+    if (node.ChildrenSize() == 2 &&
+        (node.Child(0)->IsCallable("Date") ||
+         node.Child(0)->IsCallable("SafeCast")))
+    {
+        return ConstantDateIntervalExpr(node);
+    }
+    return DynamicDateIntervalFromDaysExpr(
+        node,
+        rowArgument,
+        visibleColumns,
+        boundArguments,
+        budget,
+        argumentDepth);
 }
 
 bool IsDateArithmetic(const TExprNode& node) {
@@ -4790,7 +4923,13 @@ NJson::TJsonValue ExportExprNode(
     }
 
     if (IsDateArithmetic(node)) {
-        return ConstantDateIntervalExpr(node);
+        return DateIntervalExpr(
+            node,
+            rowArgument,
+            visibleColumns,
+            boundArguments,
+            budget,
+            normalizedDepth + 1);
     }
 
     if (IsConstantShiftedDate(node)) {

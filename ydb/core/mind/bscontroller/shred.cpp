@@ -243,9 +243,6 @@ namespace NKikimr::NBsController {
                         str << "Start new shredding iteration";
                     }
                     DIV_CLASS("panel-body") {
-                        // No `action`: the form submits to the current URL and therefore stays on
-                        // whichever DevUI path served the page. A relative "app"/"app/secure" would
-                        // resolve against the current directory and break on one of the two paths.
 						FORM_CLASS("form-horizontal") {
 							DIV_CLASS("control-group") {
 								LABEL_CLASS_FOR("control-label", "generation") { str << "Shred generation"; }

@@ -814,8 +814,6 @@ namespace NKikimr::NBsController {
                             }
                             out << "'>" << Endl;
                             out << "<input class='btn btn-primary' type='submit' value='DISABLE NOW'/>" << Endl;
-                            // The form has no `action`, so it posts back to the current URL and stays
-                            // on whichever DevUI path the page was served from. Nothing to resolve here.
                             out << "</form>";
                         }
                     }

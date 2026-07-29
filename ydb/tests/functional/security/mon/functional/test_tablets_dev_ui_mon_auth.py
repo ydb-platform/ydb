@@ -610,9 +610,6 @@ def _bscontroller_get_status(cluster, endpoint_path, token=None):
     return response.status_code
 
 
-# Read-only BSController pages. They are admin-only together with everything else: several of
-# them walk large in-memory structures and can load the tablet actor heavily, so BSC keeps no
-# non-admin whitelist at all.
 _BSCONTROLLER_READONLY_PAGES = (
     '',  # main page
     'page=OperationLog',
@@ -629,8 +626,6 @@ _BSCONTROLLER_READONLY_PAGES = (
     'page=Shred',
 )
 
-# Mutating pages, plus a page that does not exist yet: with an empty whitelist a newly added
-# handler is admin-only without anyone having to remember to list it.
 _BSCONTROLLER_MUTATING_PAGES = (
     'page=SetDown&group=0&down=1',
     'page=SelfHeal&disable=1&action=disableSelfHeal',
@@ -642,18 +637,11 @@ _BSCONTROLLER_MUTATING_PAGES = (
 
 
 def _bscontroller_non_admin_expectations():
-    """Identities that must never reach a BSController DevUI page on the secure path."""
     _, _, admin_allowed = tablet_devui_sid_matrix()
     return {token: status for token, status in admin_allowed.items() if token != 'root@builtin'}
 
 
 def _bscontroller_all_pages_cases(tablet_id, secure_path_mode):
-    """Deny-side coverage for the whole BSC DevUI, read-only pages included.
-
-    Only denials are asserted, so no mutating page is ever executed against the module-scoped
-    cluster shared with the other tablets' tests: on the legacy path every identity is rejected
-    once the flag is on, and on the secure path every non-admin identity is rejected always.
-    """
     q_base = f'TabletID={tablet_id}'
     all_forbidden, monitoring_allowed, _ = tablet_devui_sid_matrix()
     non_admins = _bscontroller_non_admin_expectations()
@@ -670,7 +658,6 @@ def _bscontroller_all_pages_cases(tablet_id, secure_path_mode):
 
 
 def _bscontroller_legacy_readonly_cases(tablet_id):
-    """With the flag off the read-only pages keep monitoring-level access on /tablets/app."""
     q_base = f'TabletID={tablet_id}'
     _, monitoring_allowed, _ = tablet_devui_sid_matrix()
     cases = []
@@ -709,7 +696,6 @@ def test_bscontroller_tablet_devui_mon_paths_with_enforce_user_token(
 def test_bscontroller_tablet_devui_mon_paths_with_enforce_user_token_and_secure_path_mode(
     ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag,
 ):
-    """The whole BSC DevUI is admin-only once the flag is on — read-only pages included."""
     cluster = ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag
 
     for endpoint_path, token, expected_status in _bscontroller_all_pages_cases(
@@ -725,10 +711,6 @@ def test_bscontroller_tablet_devui_mon_paths_with_enforce_user_token_and_secure_
 def test_bscontroller_secure_path_lets_administrator_through(
     ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag,
 ):
-    """The deny sweep above must not pass merely because every request is rejected.
-
-    Only read-only pages are exercised here, so nothing is mutated on the shared cluster.
-    """
     cluster = ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag
 
     for query_suffix in _BSCONTROLLER_READONLY_PAGES:
@@ -770,7 +752,6 @@ def test_bscontroller_post_exec_with_enforce_user_token_and_secure_path_mode(
 
 
 def _bscontroller_has_hardcoded_app_path(text):
-    """True if the markup pins a link or form to an absolute DevUI path instead of a relative one."""
     for attr in ("href='app", 'href="app', "action='app", 'action="app'):
         if attr in text:
             return True
@@ -780,13 +761,6 @@ def _bscontroller_has_hardcoded_app_path(text):
 def test_bscontroller_links_and_forms_stay_on_current_app_path(
     ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag,
 ):
-    """BSC pages are served from /tablets/app/secure once the flag is on, so every link and form
-    must be relative to the current URL.
-
-    A hardcoded "app" or "app/secure" would be resolved against the current directory: from
-    /tablets/app/secure the base is /tablets/app/, so action='app/secure' would point at
-    /tablets/app/app/secure. Query-only links and action-less forms keep the path untouched.
-    """
     cluster = ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag
     base_url = _bscontroller_mon_base_url(cluster)
     headers = {'Authorization': 'root@builtin'}

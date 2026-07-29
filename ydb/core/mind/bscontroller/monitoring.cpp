@@ -873,10 +873,7 @@ bool TBlobStorageController::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr e
         return true;
     }
     const TCgiParameters& cgi(ev->Get()->Cgi());
-    // BSController exposes no non-admin handlers: even the read-only pages walk large in-memory
-    // structures and can load the actor heavily, so the whole DevUI is admin-only. This is the
-    // single gate for the tablet — it must stay ahead of the POST branch and the page dispatch
-    // below, otherwise a CGI parameter would pick a handler before the access check runs.
+    // BSController exposes no non-admin handlers.
     if (!IsTabletDevUiAccessAllowed(
             AppData(),
             ev->Get()->PathInfo(),

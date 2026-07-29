@@ -91,13 +91,14 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         planStep = ProposeSchemaTx(runtime, sender, TTestSchema::TruncateTableTxBody(pathId, 1), ++txId);
         PlanSchemaTx(runtime, sender, { planStep, txId });
 
-        // Reading at a pre-truncate snapshot returns empty result (same guarantee as DropTable).
-        // The mapping now points to the new empty InternalPathId, so any snapshot sees an empty table.
+        // Reading at a pre-truncate snapshot must still observe the pre-truncate data: TRUNCATE gives
+        // the same time-travel MVCC guarantee as DROP.
         {
             TShardReader reader(runtime, TTestTxConfig::TxTablet0, pathId, snapshotBeforeTruncate);
             reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
             auto rb = reader.ReadAll();
-            UNIT_ASSERT(!rb);
+            UNIT_ASSERT(rb);
+            UNIT_ASSERT_EQUAL(rb->num_rows(), 100);
             UNIT_ASSERT(!reader.IsError());
         }
 
@@ -134,6 +135,8 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
             PlanCommit(runtime, sender, planStep, txId);
         }
 
+        const auto snapshotBeforeTruncate = NOlap::TSnapshot(planStep, txId);
+
         // Truncate the table
         planStep = ProposeSchemaTx(runtime, sender, TTestSchema::TruncateTableTxBody(pathId, 1), ++txId);
         PlanSchemaTx(runtime, sender, { planStep, txId });
@@ -148,13 +151,23 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
             PlanCommit(runtime, sender, planStep, txId);
         }
 
-        // After truncation + insert, should see only the new 50 rows
+        // After truncation + insert, reading at the latest snapshot should see only the new 50 rows.
         {
             TShardReader reader(runtime, TTestTxConfig::TxTablet0, pathId, NOlap::TSnapshot(planStep, txId));
             reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
             auto rb = reader.ReadAll();
             UNIT_ASSERT(rb);
             UNIT_ASSERT_EQUAL(rb->num_rows(), 50);
+        }
+
+        // The two generations coexist: a time-travel read at the pre-truncate snapshot still observes
+        // the original 100 rows even though the live table now holds only the 50 post-truncate rows.
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, pathId, snapshotBeforeTruncate);
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(rb);
+            UNIT_ASSERT_EQUAL(rb->num_rows(), 100);
         }
     }
 

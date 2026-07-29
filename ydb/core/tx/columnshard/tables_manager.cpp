@@ -76,6 +76,42 @@ std::optional<TInternalPathId> TTablesManager::ResolveInternalPathIdOptional(
     }
 }
 
+std::optional<TInternalPathId> TTablesManager::ResolveInternalPathIdForSnapshot(
+    const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId, const NOlap::TSnapshot& readSnapshot, const bool withTabletPathId) const {
+    const auto* generations = SchemeShardLocalToInternalAll.FindPtr(schemeShardLocalPathId);
+    if (!generations) {
+        return ResolveInternalPathIdOptional(schemeShardLocalPathId, withTabletPathId);
+    }
+    std::optional<TInternalPathId> best;
+    std::optional<NOlap::TSnapshot> bestDrop;
+    std::optional<TInternalPathId> live;
+    for (const auto& internalPathId : *generations) {
+        const auto* table = Tables.FindPtr(internalPathId);
+        if (!table) {
+            continue;
+        }
+        const auto dropVersion = table->GetDropVersionOptional();
+        if (!dropVersion) {
+            live = internalPathId;
+            continue;
+        }
+        if (*dropVersion < readSnapshot) {
+            continue;   // this generation had already been dropped strictly before the read snapshot
+        }
+        if (!bestDrop || *dropVersion < *bestDrop) {
+            bestDrop = dropVersion;
+            best = internalPathId;
+        }
+    }
+    if (best) {
+        return best;
+    }
+    if (live) {
+        return live;
+    }
+    return ResolveInternalPathIdOptional(schemeShardLocalPathId, withTabletPathId);
+}
+
 std::optional<NOlap::TSnapshot> TTablesManager::GetCopyVersionOptional(const TSchemeShardLocalPathId schemeShardLocalPathId) const {
     if (const auto internalPathId = ResolveInternalPathId(schemeShardLocalPathId, false)) {
         if (const auto* table = Tables.FindPtr(*internalPathId)) {
@@ -163,6 +199,7 @@ void TTablesManager::AddTableInfo(const TUnifiedPathId unifiedPathId, TTableInfo
     if (!inserted && !it->second.IsDropped()) {
         mapIt->second = unifiedPathId.InternalPathId;
     }
+    SchemeShardLocalToInternalAll[unifiedPathId.SchemeShardLocalPathId].insert(unifiedPathId.InternalPathId);
 }
 
 bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* info) {
@@ -478,6 +515,12 @@ void TTablesManager::DropTable(
         Schema::EraseTableInfoV1(db, pathId, schemeShardLocalPathId);
         table->Remove(schemeShardLocalPathId);
         AFL_VERIFY(SchemeShardLocalToInternal.erase(schemeShardLocalPathId));
+        if (auto itAll = SchemeShardLocalToInternalAll.find(schemeShardLocalPathId); itAll != SchemeShardLocalToInternalAll.end()) {
+            itAll->second.erase(pathId);
+            if (itAll->second.empty()) {
+                SchemeShardLocalToInternalAll.erase(itAll);
+            }
+        }
         NYDBTest::TControllers::GetColumnShardController()->OnDeletePathId(TabletId, TUnifiedPathId::BuildValid(pathId, schemeShardLocalPathId));
     } else {
         Schema::SaveTableDropVersionV1(db, schemeShardLocalPathId, pathId, version.GetPlanStep(), version.GetTxId());
@@ -487,8 +530,6 @@ void TTablesManager::DropTable(
 TInternalPathId TTablesManager::TruncateTable(const TSchemeShardLocalPathId schemeShardLocalPathId, const TInternalPathId oldPathId,
     const NOlap::TSnapshot& version, NIceDb::TNiceDb& db) {
     DropTable(schemeShardLocalPathId, oldPathId, version, db);
-
-    AFL_VERIFY(SchemeShardLocalToInternal.erase(schemeShardLocalPathId));
 
     AFL_VERIFY(GenerateInternalPathId)("error", "truncate requires GenerateInternalPathId");
     const auto newPathId = TInternalPathId::FromRawValue(MaxInternalPathId.GetRawValue() + 1);
@@ -675,6 +716,13 @@ bool TTablesManager::TryFinalizeDropPathOnComplete(const TInternalPathId pathId)
         if (it != SchemeShardLocalToInternal.end() && it->second == pathId) {
             SchemeShardLocalToInternal.erase(it);
         }
+        auto itAll = SchemeShardLocalToInternalAll.find(unifiedPathId.GetSchemeShardLocalPathId());
+        if (itAll != SchemeShardLocalToInternalAll.end()) {
+            itAll->second.erase(pathId);
+            if (itAll->second.empty()) {
+                SchemeShardLocalToInternalAll.erase(itAll);
+            }
+        }
     }
     Tables.erase(itTable);
     RebuildReadOnlyTablesSnapshots();
@@ -840,8 +888,8 @@ TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::Buil
 }
 
 TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::BuildTableMetadataAccessor(
-    const TString& tablePath, const TSchemeShardLocalPathId externalPathId, const std::optional<NOlap::TSnapshot>& readSnapshot) {
-    const std::optional<TInternalPathId> internalPathId = ResolveInternalPathIdOptional(externalPathId, false);
+    const TString& tablePath, const TSchemeShardLocalPathId externalPathId, const NOlap::TSnapshot& readSnapshot) {
+    const std::optional<TInternalPathId> internalPathId = ResolveInternalPathIdForSnapshot(externalPathId, readSnapshot, false);
     auto path = TFsPath(tablePath).Fix();
     auto schemaAdapter = NOlap::NReader::NSimple::NSysView::NAbstract::ISchemaAdapter::TFactory::MakeHolder(
         std::tuple{ path.Parent().GetName(), path.GetName() });

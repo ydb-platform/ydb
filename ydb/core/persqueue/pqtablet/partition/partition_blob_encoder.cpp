@@ -429,6 +429,7 @@ void TPartitionBlobEncoder::NewPartitionedBlob(const TPartitionId& partitionId,
                                                bool headCleared,
                                                bool needCompactHead,
                                                const ui32 maxBlobSize,
+                                               ui32 maxHeaderSize,
                                                ui16 nextPartNo)
 {
     PartitionedBlob = TPartitionedBlob(partitionId,
@@ -442,11 +443,12 @@ void TPartitionBlobEncoder::NewPartitionedBlob(const TPartitionId& partitionId,
                                        headCleared,
                                        needCompactHead,
                                        maxBlobSize,
+                                       maxHeaderSize,
                                        nextPartNo,
                                        ForFastWrite);
 }
 
-void TPartitionBlobEncoder::ClearPartitionedBlob(const TPartitionId& partitionId, ui32 maxBlobSize)
+void TPartitionBlobEncoder::ClearPartitionedBlob(const TPartitionId& partitionId, ui32 maxBlobSize, ui32 maxHeaderSize)
 {
     PartitionedBlob = TPartitionedBlob(partitionId,
                                        0,
@@ -458,7 +460,8 @@ void TPartitionBlobEncoder::ClearPartitionedBlob(const TPartitionId& partitionId
                                        NewHead,
                                        true,
                                        false,
-                                       maxBlobSize);
+                                       maxBlobSize,
+                                       maxHeaderSize);
 }
 
 void TPartitionBlobEncoder::SyncHeadKeys()
@@ -621,12 +624,12 @@ bool TPartitionBlobEncoder::IsLastBatchPacked() const
     return NewHead.GetBatches().empty() || NewHead.GetLastBatch().Packed;
 }
 
-void TPartitionBlobEncoder::PackLastBatch()
+void TPartitionBlobEncoder::PackLastBatch(ui32 maxHeaderSize)
 {
-    NewHead.MutableLastBatch().Pack();
+    NewHead.MutableLastBatch().Pack(maxHeaderSize);
     NewHead.PackedSize += NewHead.GetLastBatch().GetPackedSize(); //add real packed size for this blob
 
-    NewHead.PackedSize -= GetMaxHeaderSize(); //instead of upper bound
+    NewHead.PackedSize -= maxHeaderSize; //instead of upper bound
     NewHead.PackedSize -= NewHead.GetLastBatch().GetUnpackedSize();
 }
 

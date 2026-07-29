@@ -6,6 +6,12 @@
 
 namespace NKikimr::NPQ {
 
+namespace {
+
+constexpr ui32 TEST_MAX_HEADER_SIZE = 64;
+
+} // namespace
+
 Y_UNIT_TEST_SUITE(BlobTest) {
     Y_UNIT_TEST(Flags_HasPartData) {
         TMessageFlags flags;
@@ -59,7 +65,7 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
         UNIT_ASSERT(!batch.Header.HasClientBlobCount());
         UNIT_ASSERT(batch.GetUnpackedSize() > 0);
 
-        batch.Pack();
+        batch.Pack(TEST_MAX_HEADER_SIZE);
         UNIT_ASSERT(batch.Packed);
         UNIT_ASSERT(!batch.Header.HasClientBlobCount());
         UNIT_ASSERT(batch.PackedData.Size() > 0);
@@ -82,7 +88,7 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
         UNIT_ASSERT_VALUES_EQUAL(batch.GetCount(), 5u);
         UNIT_ASSERT_VALUES_EQUAL(batch.Header.GetClientBlobCount(), 1u);
 
-        batch.Pack();
+        batch.Pack(TEST_MAX_HEADER_SIZE);
         batch.Unpack();
 
         UNIT_ASSERT_VALUES_EQUAL(batch.Blobs.size(), 1u);
@@ -101,7 +107,7 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
 
         UNIT_ASSERT_VALUES_EQUAL(batch.Blobs[0].UncompressedSize, 0u);
 
-        batch.Pack();
+        batch.Pack(TEST_MAX_HEADER_SIZE);
         batch.Unpack();
 
         UNIT_ASSERT_VALUES_EQUAL(batch.Blobs.size(), 1u);
@@ -118,7 +124,7 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
             ts, ts, 0, "", "", 5
         ));
 
-        batch.Pack();
+        batch.Pack(TEST_MAX_HEADER_SIZE);
         batch.Unpack();
 
         UNIT_ASSERT_VALUES_EQUAL(batch.Blobs.size(), 1u);
@@ -137,7 +143,7 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
         UNIT_ASSERT(batch.HasOffsetDelta());
         UNIT_ASSERT_VALUES_EQUAL(batch.GetOffsetDelta(), 42u);
 
-        batch.Pack();
+        batch.Pack(TEST_MAX_HEADER_SIZE);
         TString serialized;
         batch.SerializeTo(serialized);
 
@@ -258,7 +264,7 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
         UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(0, 0).BlobIdx, 0u);
         UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(1, 0).BlobIdx, 0u);
 
-        batch.Pack();
+        batch.Pack(TEST_MAX_HEADER_SIZE);
         batch.Unpack();
 
         UNIT_ASSERT_VALUES_EQUAL(batch.Blobs[0].LogicalMessageCount, 5u);

@@ -11,6 +11,8 @@
 namespace NKikimr::NPQ {
 namespace {
 
+constexpr ui32 TEST_MAX_HEADER_SIZE = 64;
+
 Y_UNIT_TEST_SUITE(TPQTestInternal) {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -50,10 +52,10 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
         if (!headCompacted)
             all.push_back(head.GetLastBatch().Blobs.back());
     }
-    head.MutableLastBatch().Pack();
+    head.MutableLastBatch().Pack(TEST_MAX_HEADER_SIZE);
     UNIT_ASSERT(head.GetLastBatch().Header.GetFormat() == NKikimrPQ::TBatchHeader::ECompressed);
     head.MutableLastBatch().Unpack();
-    head.MutableLastBatch().Pack();
+    head.MutableLastBatch().Pack(TEST_MAX_HEADER_SIZE);
     TString str;
     head.GetLastBatch().SerializeTo(str);
     auto header = ExtractHeader(str.c_str(), str.size());
@@ -61,7 +63,7 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
     batch.Unpack();
 
     head.PackedSize = head.GetLastBatch().GetPackedSize();
-    UNIT_ASSERT(head.GetLastBatch().GetUnpackedSize() + GetMaxHeaderSize() >= head.GetLastBatch().GetPackedSize());
+    UNIT_ASSERT(head.GetLastBatch().GetUnpackedSize() + TEST_MAX_HEADER_SIZE >= head.GetLastBatch().GetPackedSize());
     THead newHead;
     newHead.Offset = head.GetNextOffset();
     newHead.AddBatch(TBatch(newHead.Offset, 0));
@@ -150,7 +152,7 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
     }
 
     UNIT_ASSERT(c == leftInHead);
-    UNIT_ASSERT(s + GetMaxHeaderSize() <= maxBlobSize);
+    UNIT_ASSERT(s + TEST_MAX_HEADER_SIZE <= maxBlobSize);
     UNIT_ASSERT(real.size() == all.size());
     for (ui32 i = 0; i < all.size(); ++i) {
         UNIT_ASSERT_VALUES_EQUAL(all[i].SourceId, real[i].SourceId);
@@ -184,11 +186,11 @@ Y_UNIT_TEST(TestBatchPacking) {
             TInstant::MilliSeconds(1), TInstant::MilliSeconds(1), 0, "", ""
         ));
     }
-    batch.Pack();
+    batch.Pack(TEST_MAX_HEADER_SIZE);
     TBuffer b = batch.PackedData;
     UNIT_ASSERT(batch.Header.GetFormat() == NKikimrPQ::TBatchHeader::ECompressed);
     batch.Unpack();
-    batch.Pack();
+    batch.Pack(TEST_MAX_HEADER_SIZE);
     UNIT_ASSERT(batch.PackedData == b);
     TString str;
     batch.SerializeTo(str);
@@ -212,7 +214,7 @@ Y_UNIT_TEST(TestBatchPacking) {
         "sourceId", 999'999'999'999'999ll, std::move(value), TPartData{33, 66, 4'000'000'000u},
         TInstant::MilliSeconds(999'999'999'999ll), TInstant::MilliSeconds(1000), 0, "", ""
     ));
-    batch3.Pack();
+    batch3.Pack(TEST_MAX_HEADER_SIZE);
     batch3.Unpack();
     Y_ABORT_UNLESS(batch3.Blobs.size() == 1);
     UNIT_ASSERT_VALUES_EQUAL(batch3.Blobs[0].SourceId, "sourceId");

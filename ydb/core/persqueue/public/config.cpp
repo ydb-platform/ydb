@@ -80,12 +80,6 @@ bool IsTopicMessagesBatchingEnabled(const NActors::TActorContext& ctx) {
         AppData(ctx)->FeatureFlags.GetEnableTopicWriteOffsetDeltaInKeys();
 }
 
-bool IsTopicMessagesBatchingEnabled() {
-    return HasAppData() &&
-        AppData()->FeatureFlags.GetEnableTopicMessagesBatching() &&
-        AppData()->FeatureFlags.GetEnableTopicWriteOffsetDeltaInKeys();
-}
-
 } // namespace NPQ
 
 } // namespace NKikimr

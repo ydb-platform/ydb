@@ -13,6 +13,23 @@
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
+// The transforms a given DenseEncodingVersion turns on. This mapping is the ONLY place a new
+// on-disk encoding is introduced: add a version, never a new setting. Versions are permanent -
+// the reader must keep decoding every version ever written.
+//   0 - legacy: arrow IPC, no re-encoding (the default)
+//   1 - present-only length/index streams, each buffer framed separately
+struct TEncodingParams {
+    bool UseDenseEncoder = false;
+
+    bool IsEnabled() const {
+        return UseDenseEncoder;
+    }
+
+    static TEncodingParams FromVersion(ui32 version);
+};
+
+ui32 GetMaxDenseEncodingVersion();
+
 class TSettings {
 private:
     YDB_ACCESSOR(ui32, SparsedDetectorKff, 20);
@@ -21,6 +38,7 @@ private:
     YDB_READONLY(double, OthersAllowedFraction, 0.05);
     YDB_ACCESSOR(std::optional<double>, DictionaryUniqueFraction, std::nullopt);
     YDB_ACCESSOR(std::optional<bool>, EnableNativeColumns, std::nullopt);
+    YDB_ACCESSOR(std::optional<ui32>, DenseEncodingVersion, std::nullopt);
     YDB_ACCESSOR_DEF(TDataAdapterContainer, DataExtractor);
 
 public:
@@ -83,6 +101,9 @@ public:
         if (EnableNativeColumns) {
             result.InsertValue("enable_native_columns", *EnableNativeColumns);
         }
+        if (DenseEncodingVersion) {
+            result.InsertValue("dense_encoding_version", *DenseEncodingVersion);
+        }
         result.InsertValue("data_extractor", DataExtractor->DebugJson());
         return result;
     }
@@ -144,6 +165,9 @@ public:
         if (EnableNativeColumns) {
             result.SetEnableNativeColumns(*EnableNativeColumns);
         }
+        if (DenseEncodingVersion) {
+            result.SetDenseEncodingVersion(*DenseEncodingVersion);
+        }
         DataExtractor.SerializeToProto(*result.MutableDataExtractor());
     }
 
@@ -159,6 +183,9 @@ public:
         if (proto.HasEnableNativeColumns()) {
             EnableNativeColumns = proto.GetEnableNativeColumns();
         }
+        if (proto.HasDenseEncodingVersion()) {
+            DenseEncodingVersion = proto.GetDenseEncodingVersion();
+        }
         if (!proto.HasDataExtractor()) {
             AFL_VERIFY(DataExtractor.Initialize(TJsonScanExtractor::GetClassNameStatic()));
         } else if (!DataExtractor.DeserializeFromProto(proto.GetDataExtractor())) {
@@ -173,6 +200,15 @@ public:
 
     bool GetEnableNativeColumnsResolved() const {
         return EnableNativeColumns.value_or(false);
+    }
+
+    ui32 GetDenseEncodingVersionResolved() const {
+        return DenseEncodingVersion.value_or(0);
+    }
+
+    TEncodingParams GetEncodingParams() const {
+        const ui32 version = GetDenseEncodingVersionResolved();
+        return version ? TEncodingParams::FromVersion(version) : TEncodingParams{};
     }
 
     NKikimrArrowAccessorProto::TConstructor::TSubColumns::TSettings SerializeToProto() const {

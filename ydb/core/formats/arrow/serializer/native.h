@@ -138,6 +138,13 @@ public:
         }
         return {};
     }
+
+    virtual std::shared_ptr<arrow::util::Codec> GetCompressionCodec() const override {
+        if (!Options.codec || Options.codec->compression_type() == arrow::Compression::UNCOMPRESSED) {
+            return nullptr;
+        }
+        return Options.codec;
+    }
 };
 
 }

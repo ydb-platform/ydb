@@ -30,8 +30,9 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromStrin
                                                                              "schema", headerConclusion->GetColumnStats().GetColumnsCount())(
                                                                              "proto", proto.GetKeyColumns().size());
         for (ui32 i = 0; i < (ui32)proto.GetKeyColumns().size(); ++i) {
-            std::shared_ptr<TColumnLoader> columnLoader = std::make_shared<TColumnLoader>(
-                externalInfo.GetDefaultSerializer(), headerConclusion->GetColumnStats().GetAccessorConstructor(i), schema->field(i), nullptr, 0);
+            std::shared_ptr<TColumnLoader> columnLoader =
+                std::make_shared<TColumnLoader>(externalInfo.GetDefaultSerializer(),
+                    headerConclusion->GetColumnStats().GetAccessorConstructor(i, Settings.GetEncodingParams()), schema->field(i), nullptr, 0);
             const TStringBuf columnBlob(originalData.data() + currentIndex, proto.GetKeyColumns(i).GetSize());
             auto additionalData = NArrow::NAccessor::BuildAdditionalAccessorData(proto.GetKeyColumns(i).GetAdditionalAccessorData());
             columns.emplace_back(std::make_shared<TDeserializeChunkedArray>(

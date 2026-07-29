@@ -652,6 +652,49 @@ TEST_P(RdmaSendReceiveTestCqMode, FallsBackToTcpMainWhenPeerDoesNotSupportSendRe
     UNIT_ASSERT(GetSessionCounter(cluster, 1, 2, "RdmaBytesReadScheduled") > rdmaBytesReadScheduledBefore);
 }
 
+// Verifies the opposite asymmetric handshake direction: a sender without
+// Send/Receive support keeps TCP main while the receiver still uses RDMA READ.
+TEST_P(RdmaSendReceiveTestCqMode, FallsBackToTcpMainWhenSenderDoesNotSupportSendReceive) {
+    auto settingsCustomizer = [](ui32 nodeId, TInterconnectSettings& settings) {
+        if (nodeId == 2) {
+            EnableRdmaSendReceive(nodeId, settings);
+        }
+    };
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(GetParam()),
+        TTestICCluster::TCheckerFactory(), TDuration::Seconds(30), TNode::DefaultInflight(), settingsCustomizer);
+
+    constexpr size_t payloadSize = 5000;
+    auto receiverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBlobID(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBuffer(), "sender without send receive support");
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload().size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].ConvertToString(), TString(payloadSize, 'X'));
+    });
+    const TActorId receiver = cluster.RegisterActor(receiverPtr, 2);
+
+    WaitForInterconnectConnection(cluster, 1, 2);
+    TString lastRdmaStatus;
+    UNIT_ASSERT_C(WaitForRdmaChecksumStatus(cluster, 1, 2, "On | SoftwareChecksum", 20, lastRdmaStatus),
+        "last RDMA status: " << FormatLastRdmaStatus(lastRdmaStatus));
+
+    const ui64 bytesWrittenToSocketBefore = WaitForSessionCounter(cluster, 1, 2, "BytesWrittenToSocket");
+    const ui64 rdmaBytesReadScheduledBefore = WaitForSessionCounter(cluster, 2, 1, "RdmaBytesReadScheduled");
+
+    auto payload = cluster.GetNode(1)->GetRdmaMemPool()->AllocRcBuf(payloadSize, 0).value();
+    memset(payload.GetDataMut(), 'X', payloadSize);
+
+    auto ev = std::make_unique<TEvTestSerialization>();
+    ev->Record.SetBlobID(1);
+    ev->Record.SetBuffer("sender without send receive support");
+    ev->AddPayload(TRope(std::move(payload)));
+    UNIT_ASSERT(ev->AllowExternalDataChannel());
+    cluster.RegisterActor(new TSendActor(receiver, std::move(ev)), 1);
+
+    UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
+    UNIT_ASSERT(GetSessionCounter(cluster, 1, 2, "BytesWrittenToSocket") > bytesWrittenToSocketBefore);
+    UNIT_ASSERT(GetSessionCounter(cluster, 2, 1, "RdmaBytesReadScheduled") > rdmaBytesReadScheduledBefore);
+}
+
 INSTANTIATE_TEST_SUITE_P(
     RdmaSendReceive,
     RdmaSendReceiveTestCqMode,

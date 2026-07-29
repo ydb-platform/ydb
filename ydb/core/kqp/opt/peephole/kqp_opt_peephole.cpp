@@ -243,11 +243,18 @@ public:
         : TOptimizeTransformerBase(&ctx, NYql::NLog::EComponent::ProviderKqp, {})
     {
 #define HNDL(name) "KqpPeepholeBlockPackUnpack-"#name, Hndl(&TKqpPeepholeBlockPackUnpackTransformer::name)
+        AddHandler(0, Names({"BlockMember"}), HNDL(EliminateBlockMemberOverBlockAsStruct));
         AddHandler(0, &TCoWideMap::Match, HNDL(EliminateWideMapPackUnpack));
 #undef HNDL
     }
 
 private:
+    TMaybeNode<TExprBase> EliminateBlockMemberOverBlockAsStruct(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpEliminateBlockMemberOverBlockAsStruct(node, ctx, *GetTypes());
+        DumpAppliedRule(__func__, node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
     TMaybeNode<TExprBase> EliminateWideMapPackUnpack(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpEliminateWideMapPackUnpack(node, ctx, *GetTypes());
         DumpAppliedRule(__func__, node.Ptr(), output.Ptr(), ctx);

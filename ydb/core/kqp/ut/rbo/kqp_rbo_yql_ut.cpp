@@ -2949,15 +2949,15 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 ORDER BY Key, SubKey1, SubKey2;
             )",
             R"(
-                -- используется Index21 (not Index212), since Index21 is declared first, thus re-sort is expected
-                SELECT * 
-                FROM Table 
+                -- используется Index21 (not Index212), both tie on score, Index21 is lexicographically first, thus re-sort is expected
+                SELECT *
+                FROM Table
                 WHERE SubKey2 = "1"
                 ORDER BY Key, SubKey1, SubKey2;
             )",
             R"(
                 -- используется Index212, still re-order is expected
-                SELECT Value2 
+                SELECT Value2
                 FROM Table
                 WHERE SubKey2 = "0"
                 ORDER BY Value2;

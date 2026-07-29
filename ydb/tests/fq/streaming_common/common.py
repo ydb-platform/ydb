@@ -1,7 +1,10 @@
+import copy
 import logging
 import os
+import tempfile
 import time
 import yatest.common
+import yaml
 import ydb
 import pytest
 import random
@@ -86,6 +89,7 @@ def get_ydb_config(request):
             "enable_watermarks_advanced": enable_watermarks_advanced,
             "enable_streaming_partition_balancing": enable_streaming_partition_balancing,
             "enable_compile_cache_warmup": False,
+            "enable_channel_memory_tracking": False,
         },
         replication_config=replication_config,
         default_clusteradmin="root@builtin",
@@ -128,8 +132,11 @@ class YdbClient:
     def wait_connection(self, timeout: int = 5):
         self.driver.wait(timeout, fail_fast=True)
 
-    def query(self, statement: str):
-        return self.session_pool.execute_with_retries(statement, retry_settings=self.retry_settings)
+    def query(self, statement: str, timeout: Optional[float] = None):
+        settings = None
+        if timeout is not None:
+            settings = ydb.BaseRequestSettings().with_timeout(timeout)
+        return self.session_pool.execute_with_retries(statement, settings=settings, retry_settings=self.retry_settings)
 
     def query_async(self, statement: str, timeout: Optional[float] = None):
         settings = None
@@ -140,19 +147,94 @@ class YdbClient:
         )
 
 
+# Sections stripped from the startup yaml_config before the cluster is started.
+# They will be pushed to CMS via replace_config after the cluster is up.
+#
+# NOTE: "feature_flags" is intentionally NOT listed here — it must be present
+# in the static startup config because the NodeBroker uses feature flags (e.g.
+# allow_ydb_requests_without_database) during dynamic-node registration, which
+# happens before any CMS-delivered config is applied.
+_SECTIONS_FOR_CMS = [
+    "table_service_config",
+    "query_service_config",
+    "federated_query_config",
+    "auth_config",
+    "log_config",
+]
+
+
+def _replace_config_via_cms(cluster, full_yaml_config):
+    """Wrap *full_yaml_config* in the MainConfig envelope and upload via CMS."""
+    wrapped = {
+        "metadata": {
+            "kind": "MainConfig",
+            "version": 0,
+            "cluster": "",
+        },
+        "config": full_yaml_config,
+    }
+    logger.info("Config to be uploaded to CMS:\n%s", yaml.safe_dump(wrapped, default_flow_style=False))
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as tmp:
+        yaml.safe_dump(wrapped, tmp)
+        tmp_path = tmp.name
+    try:
+        logger.info("Uploading full config to CMS: %s", tmp_path)
+        cluster.replace_config(tmp_path)
+        logger.info("Full config uploaded to CMS successfully")
+    finally:
+        os.unlink(tmp_path)
+
+
 class Kikimr:
-    def __init__(self, config: KikimrConfigGenerator, timeout_seconds: int = 240, enable_discovery: bool = True):
+    def __init__(self, config: KikimrConfigGenerator, timeout_seconds: int = 240, enable_discovery: bool = True,
+                 tenant_database: Optional[str] = None):
         ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
         logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
+
+        # Save a copy of the full yaml_config so we can push it to CMS later.
+        full_yaml_config = copy.deepcopy(config.yaml_config)
+
+        # Strip "feature" sections so the startup config stays minimal and
+        # backward-compatible (older binaries will not reject unknown fields).
+        for section in _SECTIONS_FOR_CMS:
+            config.yaml_config.pop(section, None)
 
         self.cluster = KiKiMR(config)
         self.cluster.start(timeout_seconds=timeout_seconds)
 
-        # Затем добавить dynamic ноды (slots) для конкретного тенанта/БД
-        self.cluster.register_and_start_slots(database="/Root", count=2)
+        # Determine the database for dynamic nodes (slots).
+        # When a dedicated tenant_database is given, create it first so that
+        # KQP tasks are dispatched exclusively to dynamic nodes of that tenant.
+        # This must happen BEFORE _replace_config_via_cms so the Console is
+        # not busy processing an async config update when we send the tenant
+        # creation request.
+
+        if tenant_database is not None:
+            token = config.default_clusteradmin
+            logger.info(f"Sleep")
+            time.sleep(10)
+            logger.info(f"Creating tenant {tenant_database} with token={token!r}")
+            self.cluster.create_database(
+                tenant_database,
+                storage_pool_units_count={"hdd": 1},
+                token=token,
+            )
+            slot_database = tenant_database
+        else:
+            slot_database = f"/{config.domain_name}"
+
+        # Add dynamic nodes (slots) for the tenant/DB.
+        self.cluster.register_and_start_slots(database=slot_database, count=2)
+        time.sleep(10)
+
+        # Push the full config (with all feature-sections) into CMS.
+        # Nodes will pick it up dynamically without needing a restart.
+        _replace_config_via_cms(self.cluster, full_yaml_config)
+        time.sleep(10)
 
         self.first_node = random.choice(list(self.cluster.slots.values()))
-        self.endpoint = Endpoint(f"{self.first_node.host}:{self.first_node.port}", f"/{config.domain_name}")
+        self.endpoint = Endpoint(f"{self.first_node.host}:{self.first_node.port}", slot_database)
+        logger.info(f"Creating ydb client to {self.endpoint}, database={self.endpoint.database}")
         self.ydb_client = YdbClient(
             database=self.endpoint.database, endpoint=f"grpc://{self.endpoint.endpoint}", enable_discovery=False
         )
@@ -177,6 +259,7 @@ class StreamingTestBase(TestYdsBase):
         return Endpoint(os.getenv("YDB_ENDPOINT"), os.getenv("YDB_DATABASE"))
 
     def create_source(self, kikimr: Kikimr, source_name: str, shared: bool = False, endpoint: Endpoint = None):
+        logger.info("Creating source {source_name}")
         if endpoint is None:
             endpoint = self.get_endpoint(kikimr, local_topics=False)
         shared_opt = 'SHARED_READING = "TRUE",\n' if shared else '\n'
@@ -188,7 +271,7 @@ class StreamingTestBase(TestYdsBase):
                 {shared_opt}
                 AUTH_METHOD = "NONE"
             );
-        """)
+        """, timeout=60)
 
     def monitoring_endpoint(self, kikimr: Kikimr, node_id: int) -> str:
         node = kikimr.cluster.slots[node_id]

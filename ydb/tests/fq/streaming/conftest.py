@@ -1,4 +1,5 @@
 import logging
+import os
 import pytest
 import random
 import string
@@ -46,6 +47,7 @@ class KikimrRollingUpgrade(Kikimr):
         self.first_node = stable_node
         self.endpoint = stable_endpoint
 
+
     def _wait_for_readiness(self, timeout: int = 60) -> None:
         """Spin until the cluster accepts queries (verified via the stable node)."""
         deadline = time.time() + timeout
@@ -61,7 +63,6 @@ class KikimrRollingUpgrade(Kikimr):
         raise TimeoutError(f"Cluster not ready after {timeout}s") from last_exc
 
     def roll(self):
-        logger.info("ROLL666")
 
         rolling_slot_id = 1
         logger.info(f"roll: step 1 — switching slot {rolling_slot_id} to stable version")
@@ -130,6 +131,7 @@ def kikimr(request):
         config,
         main_binary_path=main_binary_path,
         stable_binary_path=init_stable_binary_path,
+        tenant_database="/Root/romashka",
     )
     yield kikimr
     kikimr.stop()

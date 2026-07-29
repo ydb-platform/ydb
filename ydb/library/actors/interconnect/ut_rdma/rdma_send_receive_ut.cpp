@@ -1,5 +1,48 @@
 #include "rdma_xdc_test_common.h"
 
+namespace {
+
+class THistogramSampleCountConsumer : public NMonitoring::ICountableConsumer {
+public:
+    explicit THistogramSampleCountConsumer(TStringBuf histogramName)
+        : HistogramName(histogramName)
+    {}
+
+    void OnCounter(const TString&, const TString&, const NMonitoring::TCounterForPtr*) override {
+    }
+
+    void OnHistogram(const TString&, const TString& labelValue,
+            NMonitoring::IHistogramSnapshotPtr snapshot, bool) override {
+        if (labelValue == HistogramName) {
+            for (ui32 i = 0; i != snapshot->Count(); ++i) {
+                SampleCount += snapshot->Value(i);
+            }
+        }
+    }
+
+    void OnGroupBegin(const TString&, const TString&, const NMonitoring::TDynamicCounters*) override {
+    }
+
+    void OnGroupEnd(const TString&, const TString&, const NMonitoring::TDynamicCounters*) override {
+    }
+
+    const TString HistogramName;
+    ui64 SampleCount = 0;
+};
+
+ui64 GetNodeHistogramSampleCount(TTestICCluster& cluster, ui32 nodeId, TStringBuf histogramName) {
+    const auto nodeCounters = cluster.GetCounters()->FindSubgroup("nodeId", ToString(nodeId));
+    if (!nodeCounters) {
+        return 0;
+    }
+
+    THistogramSampleCountConsumer consumer(histogramName);
+    nodeCounters->Accept({}, {}, consumer);
+    return consumer.SampleCount;
+}
+
+} // namespace
+
 TEST_P(RdmaSendReceiveTestCqMode, MainChannelTraffic) {
     TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(GetParam()),
         TTestICCluster::TCheckerFactory(), TDuration::Seconds(30), TNode::DefaultInflight(), EnableRdmaSendReceive);
@@ -313,6 +356,51 @@ TEST_P(RdmaSendReceiveTestCqMode, MainChannelAck) {
 
     UNIT_ASSERT_C(confirmed, "packetsConfirmedBefore# " << packetsConfirmedBefore
         << " packetsConfirmed# " << packetsConfirmed << " inflightDataAmount# " << inflightDataAmount);
+    UNIT_ASSERT_VALUES_EQUAL(GetSessionCounter(cluster, 2, 1, "BytesWrittenToSocket"), senderBytesWrittenToSocketBefore);
+    UNIT_ASSERT_VALUES_EQUAL(GetSessionCounter(cluster, 1, 2, "BytesWrittenToSocket"), receiverBytesWrittenToSocketBefore);
+}
+
+// Verifies that a ping request and response update the RTT histogram while
+// both directions of the main channel remain on RDMA.
+TEST_P(RdmaSendReceiveTestCqMode, MainChannelPing) {
+    auto settingsCustomizer = [](ui32 nodeId, TInterconnectSettings& settings) {
+        EnableRdmaSendReceive(nodeId, settings);
+        settings.PingPeriod = TDuration::MilliSeconds(100);
+    };
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(GetParam()),
+        TTestICCluster::TCheckerFactory(), TDuration::Seconds(30), TNode::DefaultInflight(), settingsCustomizer);
+
+    auto receiverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBlobID(), 1u);
+    });
+    const TActorId receiver = cluster.RegisterActor(receiverPtr, 1);
+
+    WaitForInterconnectConnection(cluster, 2, 1);
+    TString lastRdmaStatus;
+    UNIT_ASSERT_C(WaitForRdmaChecksumStatus(cluster, 2, 1, "On | SoftwareChecksum | SendReceive", 20, lastRdmaStatus),
+        "last RDMA status: " << FormatLastRdmaStatus(lastRdmaStatus));
+
+    const ui64 pingSamplesBefore = GetNodeHistogramSampleCount(cluster, 2, "PingTimeUs");
+    const ui64 senderBytesWrittenToSocketBefore = GetSessionCounter(cluster, 2, 1, "BytesWrittenToSocket");
+    const ui64 receiverBytesWrittenToSocketBefore = WaitForSessionCounter(cluster, 1, 2, "BytesWrittenToSocket");
+
+    auto ev = std::make_unique<TEvTestSerialization>();
+    ev->Record.SetBlobID(1);
+    cluster.RegisterActor(new TSendActor(receiver, std::move(ev)), 2);
+    UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
+
+    ui64 pingSamples = pingSamplesBefore;
+    const TInstant deadline = TInstant::Now() + TDuration::Seconds(20);
+    while (TInstant::Now() < deadline) {
+        pingSamples = GetNodeHistogramSampleCount(cluster, 2, "PingTimeUs");
+        if (pingSamples > pingSamplesBefore) {
+            break;
+        }
+        Sleep(TDuration::MilliSeconds(10));
+    }
+
+    UNIT_ASSERT_C(pingSamples > pingSamplesBefore,
+        "pingSamplesBefore# " << pingSamplesBefore << " pingSamples# " << pingSamples);
     UNIT_ASSERT_VALUES_EQUAL(GetSessionCounter(cluster, 2, 1, "BytesWrittenToSocket"), senderBytesWrittenToSocketBefore);
     UNIT_ASSERT_VALUES_EQUAL(GetSessionCounter(cluster, 1, 2, "BytesWrittenToSocket"), receiverBytesWrittenToSocketBefore);
 }

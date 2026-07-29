@@ -51,4 +51,4 @@ LIMIT $limit;
 {% endif %}
 * [Java](https://github.com/ydb-platform/ydb-java-examples/tree/master/ydb-cookbook/src/main/java/tech/ydb/examples/pagination)
 * [Python](https://github.com/ydb-platform/ydb-python-sdk/tree/main/examples/pagination)
-* [Go](https://github.com/ydb-platform/ydb-go-examples/tree/master/pagination)
+* [Go](https://github.com/ydb-platform/ydb-go-sdk/tree/master/examples/pagination)

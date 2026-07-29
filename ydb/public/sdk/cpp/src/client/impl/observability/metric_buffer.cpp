@@ -59,7 +59,7 @@ public:
         std::mutex Mutex;
         std::vector<std::uint64_t> CounterDeltas;
         std::vector<std::vector<double>> HistogramSamples;
-        std::atomic<std::size_t> PendingOps{0};
+        std::size_t PendingOps = 0;
         std::atomic<bool> Active{true}; // becomes false when owning thread exits
     };
 
@@ -142,23 +142,26 @@ public:
             return;
         }
         TThreadState& state = AcquireThreadState();
-        if (ShouldDropUpdate(state, 1)) {
-            ReportDroppedCounter(delta);
-            TriggerFlush(EFlushTrigger::Threshold);
-            return;
-        }
+        bool dropped = false;
         bool overThreshold = false;
         {
             std::lock_guard<std::mutex> lock(state.Mutex);
-            if (state.CounterDeltas.size() <= handle) {
-                state.CounterDeltas.resize(handle + 1, 0);
+            if (ShouldDropUpdate(state.PendingOps, 1)) {
+                dropped = true;
+            } else {
+                if (state.CounterDeltas.size() <= handle) {
+                    state.CounterDeltas.resize(handle + 1, 0);
+                }
+                state.CounterDeltas[handle] += delta;
+                ++state.PendingOps;
+                overThreshold = Settings_.ThreadPendingThreshold != 0
+                    && state.PendingOps >= Settings_.ThreadPendingThreshold;
             }
-            state.CounterDeltas[handle] += delta;
         }
-        const auto pending = state.PendingOps.fetch_add(1, std::memory_order_relaxed) + 1;
-        if (Settings_.ThreadPendingThreshold != 0
-            && pending >= Settings_.ThreadPendingThreshold) {
-            overThreshold = true;
+        if (dropped) {
+            ReportDroppedCounter(delta);
+            TriggerFlush(EFlushTrigger::Threshold);
+            return;
         }
         if (overThreshold) {
             TriggerFlush(EFlushTrigger::Threshold);
@@ -180,27 +183,30 @@ public:
             return;
         }
         TThreadState& state = AcquireThreadState();
-        if (ShouldDropUpdate(state, 1)) {
-            ReportDroppedHistogram(1);
-            TriggerFlush(EFlushTrigger::Threshold);
-            return;
-        }
+        bool dropped = false;
         bool overThreshold = false;
         {
             std::lock_guard<std::mutex> lock(state.Mutex);
-            if (state.HistogramSamples.size() <= handle) {
-                state.HistogramSamples.resize(handle + 1);
+            if (ShouldDropUpdate(state.PendingOps, 1)) {
+                dropped = true;
+            } else {
+                if (state.HistogramSamples.size() <= handle) {
+                    state.HistogramSamples.resize(handle + 1);
+                }
+                auto& bucket = state.HistogramSamples[handle];
+                if (bucket.capacity() == 0 && Settings_.HistogramReserveSamples > 0) {
+                    bucket.reserve(Settings_.HistogramReserveSamples);
+                }
+                bucket.push_back(value);
+                ++state.PendingOps;
+                overThreshold = Settings_.ThreadPendingThreshold != 0
+                    && state.PendingOps >= Settings_.ThreadPendingThreshold;
             }
-            auto& bucket = state.HistogramSamples[handle];
-            if (bucket.capacity() == 0 && Settings_.HistogramReserveSamples > 0) {
-                bucket.reserve(Settings_.HistogramReserveSamples);
-            }
-            bucket.push_back(value);
         }
-        const auto pending = state.PendingOps.fetch_add(1, std::memory_order_relaxed) + 1;
-        if (Settings_.ThreadPendingThreshold != 0
-            && pending >= Settings_.ThreadPendingThreshold) {
-            overThreshold = true;
+        if (dropped) {
+            ReportDroppedHistogram(1);
+            TriggerFlush(EFlushTrigger::Threshold);
+            return;
         }
         if (overThreshold) {
             TriggerFlush(EFlushTrigger::Threshold);
@@ -225,24 +231,27 @@ public:
             return;
         }
         TThreadState& state = AcquireThreadState();
-        if (ShouldDropUpdate(state, values.size())) {
-            ReportDroppedHistogram(values.size());
-            TriggerFlush(EFlushTrigger::Threshold);
-            return;
-        }
+        bool dropped = false;
         bool overThreshold = false;
         {
             std::lock_guard<std::mutex> lock(state.Mutex);
-            if (state.HistogramSamples.size() <= handle) {
-                state.HistogramSamples.resize(handle + 1);
+            if (ShouldDropUpdate(state.PendingOps, values.size())) {
+                dropped = true;
+            } else {
+                if (state.HistogramSamples.size() <= handle) {
+                    state.HistogramSamples.resize(handle + 1);
+                }
+                auto& bucket = state.HistogramSamples[handle];
+                bucket.insert(bucket.end(), values.begin(), values.end());
+                state.PendingOps += values.size();
+                overThreshold = Settings_.ThreadPendingThreshold != 0
+                    && state.PendingOps >= Settings_.ThreadPendingThreshold;
             }
-            auto& bucket = state.HistogramSamples[handle];
-            bucket.insert(bucket.end(), values.begin(), values.end());
         }
-        const auto pending = state.PendingOps.fetch_add(values.size(), std::memory_order_relaxed) + values.size();
-        if (Settings_.ThreadPendingThreshold != 0
-            && pending >= Settings_.ThreadPendingThreshold) {
-            overThreshold = true;
+        if (dropped) {
+            ReportDroppedHistogram(values.size());
+            TriggerFlush(EFlushTrigger::Threshold);
+            return;
         }
         if (overThreshold) {
             TriggerFlush(EFlushTrigger::Threshold);
@@ -320,11 +329,10 @@ private:
         Wakeup_.notify_all();
     }
 
-    bool ShouldDropUpdate(const TThreadState& state, std::size_t incomingOps) const noexcept {
+    bool ShouldDropUpdate(std::size_t pending, std::size_t incomingOps) const noexcept {
         if (Settings_.ThreadPendingLimit == 0) {
             return false;
         }
-        const std::size_t pending = state.PendingOps.load(std::memory_order_relaxed);
         if (pending >= Settings_.ThreadPendingLimit) {
             return true;
         }
@@ -460,7 +468,7 @@ private:
             for (const auto& samples : state->HistogramSamples) {
                 remainingOps += samples.size();
             }
-            state->PendingOps.store(remainingOps, std::memory_order_release);
+            state->PendingOps = remainingOps;
         }
 
         std::uint64_t addCalls = 0;

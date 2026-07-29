@@ -170,7 +170,7 @@ meta:
         UNIT_ASSERT_EXCEPTION_CONTAINS(
             mvp.TryGetMetaOptionsFromConfig(appConfig),
             yexception,
-            "tag is not supported when source is omitted"
+            "tag is not supported for source=url"
         );
     }
 

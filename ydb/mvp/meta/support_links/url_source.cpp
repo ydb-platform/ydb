@@ -168,9 +168,7 @@ private:
 } // namespace
 
 void ValidateUrlSourceConfig(const TSupportLinkEntryConfig& config, const TMetaSettings&) {
-    const TString sourceDescription = config.HasSource()
-        ? TStringBuilder() << "for source=" << config.GetSource()
-        : TString("when source is omitted");
+    const TString sourceDescription = TStringBuilder() << "for source=" << config.GetSource();
     if (config.GetUrl().empty()) {
         ythrow yexception() << "url is required " << sourceDescription;
     }

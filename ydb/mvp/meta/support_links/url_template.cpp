@@ -29,14 +29,14 @@ bool ScanUrlTemplateExpressions(TStringBuf urlTemplate, TStringBuf parameterName
     const bool findParameter = !parameterNameToFind.empty();
     TStringBuf tail = urlTemplate;
     while (!tail.empty()) {
-        TStringBuf literal;
+        TStringBuf prefix;
         TStringBuf rest;
-        if (!tail.TrySplit('{', literal, rest)) {
+        if (!tail.TrySplit('{', prefix, rest)) {
             ValidateLiteralSegment(tail);
             break;
         }
 
-        ValidateLiteralSegment(literal);
+        ValidateLiteralSegment(prefix);
         tail = rest;
 
         TStringBuf name;

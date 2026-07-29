@@ -108,7 +108,7 @@ Y_UNIT_TEST_SUITE(SupportLinksUrlSource) {
         UNIT_ASSERT_EXCEPTION_CONTAINS(
             context.CreateSource(),
             yexception,
-            "url is required when source is omitted"
+            "url is required for source=url"
         );
     }
 
@@ -118,7 +118,7 @@ Y_UNIT_TEST_SUITE(SupportLinksUrlSource) {
         UNIT_ASSERT_EXCEPTION_CONTAINS(
             context.CreateSource(),
             yexception,
-            "tag is not supported when source is omitted"
+            "tag is not supported for source=url"
         );
 
         context.Config.ClearTag();
@@ -126,7 +126,7 @@ Y_UNIT_TEST_SUITE(SupportLinksUrlSource) {
         UNIT_ASSERT_EXCEPTION_CONTAINS(
             context.CreateSource(),
             yexception,
-            "folder is not supported when source is omitted"
+            "folder is not supported for source=url"
         );
     }
 
@@ -239,7 +239,7 @@ Y_UNIT_TEST_SUITE(SupportLinksUrlSource) {
     }
 
     Y_UNIT_TEST(ResolvePreservesUrlFragmentAfterQueryMerge) {
-        TUrlSourceTestContext context("https://service.example.net/instance/{host}?dc={dc}#details");
+        TUrlSourceTestContext context("https://service.example.net/instance/{host}?dc={dc}#details-{host}");
         context.Config.SetSource("url");
 
         context.EntityType = EEntityType::Host;
@@ -249,7 +249,7 @@ Y_UNIT_TEST_SUITE(SupportLinksUrlSource) {
 
         AssertSingleResolvedLink(
             result,
-            "https://service.example.net/instance/node-1.example.net?dc=man&ticket=ABC-42#details"
+            "https://service.example.net/instance/node-1.example.net?dc=man&ticket=ABC-42#details-node-1.example.net"
         );
     }
 

@@ -14,6 +14,10 @@ Y_UNIT_TEST_SUITE(SupportLinksUrlTemplate) {
     constexpr TStringBuf InvalidNameError =
         "url template placeholders must use the form {name}, where name matches [A-Za-z_][A-Za-z0-9_]*";
 
+    Y_UNIT_TEST(NoParamsAreOk) {
+        UNIT_ASSERT_NO_EXCEPTION(NMVP::NSupportLinks::ValidateUrlTemplateSyntax("https://service.example.net/"));
+    }
+
     Y_UNIT_TEST(RecognizesTemplateExpressionsAndParameters) {
         const TStringBuf urlTemplate = "https://service.example.net/{host}?dc={dc}&copy={host}";
         UNIT_ASSERT(NMVP::NSupportLinks::HasUrlTemplateExpressions(urlTemplate));

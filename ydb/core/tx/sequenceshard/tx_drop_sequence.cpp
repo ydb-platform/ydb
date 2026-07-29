@@ -1,5 +1,7 @@
 #include "sequenceshard_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SEQUENCESHARD
+
 namespace NKikimr {
 namespace NSequenceShard {
 
@@ -16,21 +18,24 @@ namespace NSequenceShard {
 
             auto pathId = msg->GetPathId();
 
-            SLOG_T("TTxDropSequence.Execute"
-                << " PathId# " << pathId);
+            YDB_LOG_TRACE("TTxDropSequence.Execute",
+                {"logPrefix", LogPrefix},
+                {"pathId", pathId});
 
             if (!Self->CheckPipeRequest(Ev->Recipient)) {
                 SetResult(NKikimrTxSequenceShard::TEvDropSequenceResult::PIPE_OUTDATED);
-                SLOG_T("TTxDropSequence.Execute PIPE_OUTDATED"
-                    << " PathId# " << pathId);
+                YDB_LOG_TRACE("TTxDropSequence.Execute PIPE_OUTDATED",
+                    {"logPrefix", LogPrefix},
+                    {"pathId", pathId});
                 return true;
             }
 
             auto it = Self->Sequences.find(pathId);
             if (it == Self->Sequences.end()) {
                 SetResult(NKikimrTxSequenceShard::TEvDropSequenceResult::SEQUENCE_NOT_FOUND);
-                SLOG_T("TTxDropSequence.Execute SEQUENCE_NOT_FOUND"
-                    << " PathId# " << pathId);
+                YDB_LOG_TRACE("TTxDropSequence.Execute SEQUENCE_NOT_FOUND",
+                    {"logPrefix", LogPrefix},
+                    {"pathId", pathId});
                 return true;
             }
 
@@ -39,13 +44,15 @@ namespace NSequenceShard {
             Self->Sequences.erase(it);
 
             SetResult(NKikimrTxSequenceShard::TEvDropSequenceResult::SUCCESS);
-            SLOG_N("TTxDropSequence.Execute SUCCESS"
-                << " PathId# " << pathId);
+            YDB_LOG_NOTICE("TTxDropSequence.Execute SUCCESS",
+                {"logPrefix", LogPrefix},
+                {"pathId", pathId});
             return true;
         }
 
         void Complete(const TActorContext& ctx) override {
-            SLOG_T("TTxDropSequence.Complete");
+            YDB_LOG_TRACE("TTxDropSequence.Complete",
+                {"logPrefix", LogPrefix});
 
             if (Result) {
                 ctx.Send(Ev->Sender, Result.Release(), 0, Ev->Cookie);

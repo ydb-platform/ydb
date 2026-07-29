@@ -4,6 +4,8 @@
 
 #include <util/stream/output.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SEQUENCESHARD
+
 namespace NKikimr {
 namespace NSequenceShard {
 
@@ -35,7 +37,8 @@ namespace NSequenceShard {
     }
 
     void TSequenceShard::OnActivateExecutor(const TActorContext& ctx) {
-        SLOG_T("OnActivateExecutor");
+        YDB_LOG_TRACE("OnActivateExecutor",
+            {"logPrefix", LogPrefix});
 
         Executor()->RegisterExternalTabletCounters(TabletCountersPtr.Release());
         RunTxInitSchema(ctx);

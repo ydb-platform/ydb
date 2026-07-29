@@ -1,5 +1,7 @@
 #include "sequenceshard_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SEQUENCESHARD
+
 namespace NKikimr {
 namespace NSequenceShard {
 
@@ -16,22 +18,25 @@ namespace NSequenceShard {
 
             auto pathId = msg->GetPathId();
 
-            SLOG_T("TTxUpdateSequence.Execute"
-                << " PathId# " << pathId
-                << " Record# " << msg->Record.ShortDebugString());
+            YDB_LOG_TRACE("TTxUpdateSequence.Execute",
+                {"logPrefix", LogPrefix},
+                {"pathId", pathId},
+                {"record", msg->Record});
 
             if (!Self->CheckPipeRequest(Ev->Recipient)) {
                 SetResult(NKikimrTxSequenceShard::TEvUpdateSequenceResult::PIPE_OUTDATED);
-                SLOG_T("TTxUpdateSequence.Execute PIPE_OUTDATED"
-                    << " PathId# " << pathId);
+                YDB_LOG_TRACE("TTxUpdateSequence.Execute PIPE_OUTDATED",
+                    {"logPrefix", LogPrefix},
+                    {"pathId", pathId});
                 return true;
             }
 
             auto it = Self->Sequences.find(pathId);
             if (it == Self->Sequences.end()) {
                 SetResult(NKikimrTxSequenceShard::TEvUpdateSequenceResult::SEQUENCE_NOT_FOUND);
-                SLOG_T("TTxUpdateSequence.Execute SEQUENCE_NOT_FOUND"
-                    << " PathId# " << pathId);
+                YDB_LOG_TRACE("TTxUpdateSequence.Execute SEQUENCE_NOT_FOUND",
+                    {"logPrefix", LogPrefix},
+                    {"pathId", pathId});
                 return true;
             }
 
@@ -41,16 +46,18 @@ namespace NSequenceShard {
                     break;
                 case Schema::ESequenceState::Frozen: {
                     SetResult(NKikimrTxSequenceShard::TEvUpdateSequenceResult::SEQUENCE_FROZEN);
-                    SLOG_T("TTxUpdateSequence.Execute SEQUENCE_FROZEN"
-                        << " PathId# " << pathId);
+                    YDB_LOG_TRACE("TTxUpdateSequence.Execute SEQUENCE_FROZEN",
+                        {"logPrefix", LogPrefix},
+                        {"pathId", pathId});
                     return true;
                 }
                 case Schema::ESequenceState::Moved: {
                     SetResult(NKikimrTxSequenceShard::TEvUpdateSequenceResult::SEQUENCE_MOVED);
                     Result->Record.SetMovedTo(sequence.MovedTo);
-                    SLOG_T("TTxUpdateSequence.Execute SEQUENCE_MOVED"
-                        << " PathId# " << pathId
-                        << " MovedTo# " << sequence.MovedTo);
+                    YDB_LOG_TRACE("TTxUpdateSequence.Execute SEQUENCE_MOVED",
+                        {"logPrefix", LogPrefix},
+                        {"pathId", pathId},
+                        {"movedTo", sequence.MovedTo});
                     return true;
                 }
             }
@@ -99,13 +106,15 @@ namespace NSequenceShard {
             }
 
             SetResult(NKikimrTxSequenceShard::TEvUpdateSequenceResult::SUCCESS);
-            SLOG_T("TTxUpdateSequence.Execute SUCCESS"
-                << " PathId# " << pathId);
+            YDB_LOG_TRACE("TTxUpdateSequence.Execute SUCCESS",
+                {"logPrefix", LogPrefix},
+                {"pathId", pathId});
             return true;
         }
 
         void Complete(const TActorContext& ctx) override {
-            SLOG_T("TTxUpdateSequence.Complete");
+            YDB_LOG_TRACE("TTxUpdateSequence.Complete",
+                {"logPrefix", LogPrefix});
 
             if (Result) {
                 ctx.Send(Ev->Sender, Result.Release(), 0, Ev->Cookie);

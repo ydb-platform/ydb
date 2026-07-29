@@ -95,8 +95,12 @@ std::optional<TInternalPathId> TTablesManager::ResolveInternalPathIdForSnapshot(
             live = internalPathId;
             continue;
         }
-        if (*dropVersion < readSnapshot) {
-            continue;   // this generation had already been dropped strictly before the read snapshot
+        if (*dropVersion <= readSnapshot) {
+            // This generation was dropped at or before the read snapshot, so it is no longer visible:
+            // the drop version is exclusive, matching TTableInfo::CanBeUsedAt (`snapshot < dropVersion`).
+            // A read exactly AT the drop/truncate snapshot must observe the post-drop state, i.e. the
+            // freshly-allocated (empty) generation rather than the dropped one.
+            continue;
         }
         if (!bestDrop || *dropVersion < *bestDrop) {
             bestDrop = dropVersion;
@@ -455,14 +459,19 @@ bool TTablesManager::HasTable(
     return true;
 }
 
+TInternalPathId TTablesManager::GenerateNextInternalPathId() {
+    AFL_VERIFY(GenerateInternalPathId)("error", "internal path id generation is disabled for this tablet");
+    const auto result = TInternalPathId::FromRawValue(MaxInternalPathId.GetRawValue() + 1);
+    MaxInternalPathId = result;
+    return result;
+}
+
 TInternalPathId TTablesManager::GetOrCreateInternalPathId(const TSchemeShardLocalPathId schemeShardLocalPathId) {
     if (const auto& internalPathId = ResolveInternalPathId(schemeShardLocalPathId, true)) {
         return *internalPathId;
     }
     if (GenerateInternalPathId) {
-        const auto result = TInternalPathId::FromRawValue(MaxInternalPathId.GetRawValue() + 1);
-        MaxInternalPathId = result;
-        return result;
+        return GenerateNextInternalPathId();
     } else {
         return TInternalPathId::FromRawValue(schemeShardLocalPathId.GetRawValue());
     }
@@ -532,8 +541,7 @@ TInternalPathId TTablesManager::TruncateTable(const TSchemeShardLocalPathId sche
     DropTable(schemeShardLocalPathId, oldPathId, version, db);
 
     AFL_VERIFY(GenerateInternalPathId)("error", "truncate requires GenerateInternalPathId");
-    const auto newPathId = TInternalPathId::FromRawValue(MaxInternalPathId.GetRawValue() + 1);
-    MaxInternalPathId = newPathId;
+    const auto newPathId = GenerateNextInternalPathId();
 
     TTableInfo newTable({ TUnifiedPathId::BuildValid(newPathId, schemeShardLocalPathId) });
     RegisterTable(std::move(newTable), db);

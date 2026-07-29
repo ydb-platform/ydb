@@ -32,6 +32,47 @@ using TTypeId = NScheme::TTypeId;
 using TTypeInfo = NScheme::TTypeInfo;
 using TDefaultTestsController = NKikimr::NYDBTest::NColumnShard::TController;
 
+namespace {
+
+// Captures a pointer to the live TColumnShard so tests can inspect TablesManager state directly.
+class TShardCapturingController: public TDefaultTestsController {
+private:
+    mutable TMutex ShardMutex;
+    const TColumnShard* Shard = nullptr;
+
+public:
+    void DoOnTabletInitCompleted(const TColumnShard& shard) override {
+        TDefaultTestsController::DoOnTabletInitCompleted(shard);
+        TGuard<TMutex> g(ShardMutex);
+        Shard = &shard;
+    }
+
+    void DoOnTabletStopped(const TColumnShard& shard) override {
+        TDefaultTestsController::DoOnTabletStopped(shard);
+        TGuard<TMutex> g(ShardMutex);
+        if (Shard == &shard) {
+            Shard = nullptr;
+        }
+    }
+
+    const TColumnShard* GetShard() const {
+        TGuard<TMutex> g(ShardMutex);
+        return Shard;
+    }
+};
+
+const TColumnShard* WaitForShard(TShardCapturingController& controller, TTestBasicRuntime& runtime) {
+    const TInstant deadline = TInstant::Now() + TDuration::Seconds(5);
+    while (!controller.GetShard() && TInstant::Now() < deadline) {
+        runtime.SimulateSleep(TDuration::MilliSeconds(50));
+    }
+    const auto* shard = controller.GetShard();
+    UNIT_ASSERT(shard);
+    return shard;
+}
+
+}   // namespace
+
 Y_UNIT_TEST_SUITE(TruncateTable) {
     Y_UNIT_TEST(EmptyTable) {
         TTestBasicRuntime runtime;
@@ -273,6 +314,107 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
             auto rb = reader.ReadAll();
             UNIT_ASSERT(rb);
             UNIT_ASSERT_EQUAL(rb->num_rows(), 20);
+        }
+    }
+
+    // TRUNCATE allocates a brand-new InternalPathId for the table. The TTL/tiering settings of the
+    // truncated generation must be replayed onto that new path id, otherwise the table would silently
+    // lose its data-lifecycle configuration (SchemeShard does not resend TTL settings on TRUNCATE).
+    Y_UNIT_TEST(TruncatePreservesTtl) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TShardCapturingController>();
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        const ui64 pathId = 1;
+        TestTableDescription testTable{};
+        testTable.InStore = false;
+
+        // Create a standalone table WITH TTL enabled on the default ttl column.
+        auto specials = TTestSchema::TTableSpecials().SetTtl(TDuration::Seconds(3600));
+        specials.SetTtlColumn(TTestSchema::DefaultTtlColumn);
+        const auto initBody = TTestSchema::CreateStandaloneTableTxBody(pathId, testTable.Schema, testTable.Pk, specials);
+        auto planStep = PrepareTablet(runtime, initBody);
+        Y_UNUSED(planStep);
+
+        auto& csController = *csControllerGuard.operator->();
+        const auto* shard = WaitForShard(csController, runtime);
+
+        // Sanity: TTL is present for the original generation.
+        {
+            const auto internalPathId =
+                shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(pathId), false);
+            UNIT_ASSERT(internalPathId);
+            UNIT_ASSERT(shard->GetTablesManager().GetTableTtl(*internalPathId).has_value());
+        }
+
+        ui64 txId = 100;
+        planStep = ProposeSchemaTx(runtime, sender, TTestSchema::TruncateTableTxBody(pathId, 1), ++txId);
+        PlanSchemaTx(runtime, sender, { planStep, txId });
+
+        shard = WaitForShard(csController, runtime);
+
+        // After TRUNCATE the freshly generated InternalPathId must still carry the TTL settings.
+        {
+            const auto newInternalPathId =
+                shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(pathId), false);
+            UNIT_ASSERT(newInternalPathId);
+            const auto ttl = shard->GetTablesManager().GetTableTtl(*newInternalPathId);
+            UNIT_ASSERT_C(ttl.has_value(), "TTL settings were lost after TRUNCATE");
+        }
+    }
+
+    // Pins the MVCC boundary semantics of TRUNCATE: a read exactly at the truncate snapshot sees the
+    // post-truncate (empty) generation, while a read strictly before it still sees the old data. This
+    // guards ResolveInternalPathIdForSnapshot's `dropVersion < readSnapshot` boundary condition.
+    Y_UNIT_TEST(TruncateSnapshotBoundary) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        const ui64 pathId = 1;
+        TestTableDescription testTable{};
+        auto planStep = PrepareTablet(runtime, pathId, testTable.Schema);
+
+        ui64 txId = 10;
+        int writeId = 10;
+
+        // Write and commit 100 rows.
+        {
+            std::vector<ui64> writeIds;
+            const bool ok =
+                WriteData(runtime, sender, writeId++, pathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true, &writeIds);
+            UNIT_ASSERT(ok);
+            planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+            PlanCommit(runtime, sender, planStep, txId);
+        }
+
+        const auto snapshotBeforeTruncate = NOlap::TSnapshot(planStep, txId);
+
+        // Truncate the table.
+        planStep = ProposeSchemaTx(runtime, sender, TTestSchema::TruncateTableTxBody(pathId, 1), ++txId);
+        PlanSchemaTx(runtime, sender, { planStep, txId });
+        const auto truncateSnapshot = NOlap::TSnapshot(planStep, txId);
+
+        // Read strictly before the truncate snapshot: the old generation is still visible (100 rows).
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, pathId, snapshotBeforeTruncate);
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(rb);
+            UNIT_ASSERT_EQUAL(rb->num_rows(), 100);
+            UNIT_ASSERT(!reader.IsError());
+        }
+
+        // Read exactly AT the truncate snapshot: the drop version equals the read snapshot, so the old
+        // generation is no longer visible and the (empty) new generation is selected.
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, pathId, truncateSnapshot);
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(!rb);
+            UNIT_ASSERT(!reader.IsError());
         }
     }
 

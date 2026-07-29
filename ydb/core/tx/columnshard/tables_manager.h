@@ -333,6 +333,10 @@ public:
 class TTtlVersions {
 private:
     THashMap<TInternalPathId, std::map<NOlap::TSnapshot, std::optional<NOlap::TTiering>>> Ttl;
+    // Raw TTL settings proto kept alongside the deserialized TTiering, so that the exact original
+    // settings (column unit, tiers, etc.) can be replayed onto a new path id on TRUNCATE without a
+    // lossy TTiering->proto round trip (TTiering has no serialize-to-proto).
+    THashMap<TInternalPathId, std::map<NOlap::TSnapshot, NKikimrSchemeOp::TColumnDataLifeCycle>> TtlProtos;
 
     void AddVersion(const TInternalPathId pathId, const NOlap::TSnapshot& snapshot, std::optional<NOlap::TTiering> ttl) {
         auto [it, inserted] = Ttl[pathId].emplace(snapshot, ttl);
@@ -349,10 +353,26 @@ public:
             ttlVersion.emplace(std::move(deserializedTtl));
         }
         AddVersion(pathId, snapshot, ttlVersion);
+        TtlProtos[pathId].emplace(snapshot, ttlSettings);
     }
 
     std::optional<NOlap::TTiering> GetTableTtl(const TInternalPathId pathId, const NOlap::TSnapshot& snapshot = NOlap::TSnapshot::Max()) const {
         auto findTable = Ttl.FindPtr(pathId);
+        if (!findTable) {
+            return std::nullopt;
+        }
+        const auto findTtl = findTable->upper_bound(snapshot);
+        if (findTtl == findTable->begin()) {
+            return std::nullopt;
+        }
+        return std::prev(findTtl)->second;
+    }
+
+    // Returns the raw TTL settings proto effective at `snapshot`, if the table ever had TTL settings.
+    // Used by TRUNCATE to carry the table's lifecycle settings over to the freshly generated path id.
+    std::optional<NKikimrSchemeOp::TColumnDataLifeCycle> GetTableTtlProto(
+        const TInternalPathId pathId, const NOlap::TSnapshot& snapshot = NOlap::TSnapshot::Max()) const {
+        auto findTable = TtlProtos.FindPtr(pathId);
         if (!findTable) {
             return std::nullopt;
         }
@@ -397,6 +417,11 @@ private:
 
     void RegisterReadOnlyTableSnapshot(const NOlap::TSnapshot& version);
     void RebuildReadOnlyTablesSnapshots();
+
+    // Allocates the next free internal path id by advancing MaxInternalPathId. Only valid when the
+    // tablet owns internal-path-id generation (GenerateInternalPathId). Shared by table creation and
+    // TRUNCATE so the "+1" increment lives in exactly one place.
+    TInternalPathId GenerateNextInternalPathId();
 
     friend class TTxInit;
 
@@ -513,6 +538,13 @@ public:
 
     std::optional<NOlap::TTiering> GetTableTtl(const TInternalPathId pathId, const NOlap::TSnapshot& snapshot = NOlap::TSnapshot::Max()) const {
         return Ttl.GetTableTtl(pathId, snapshot);
+    }
+
+    // Returns the raw TTL settings proto effective for `pathId` at `snapshot`. Used by TRUNCATE to
+    // replay the truncated table's lifecycle settings onto the freshly generated internal path id.
+    std::optional<NKikimrSchemeOp::TColumnDataLifeCycle> GetTableTtlProto(
+        const TInternalPathId pathId, const NOlap::TSnapshot& snapshot = NOlap::TSnapshot::Max()) const {
+        return Ttl.GetTableTtlProto(pathId, snapshot);
     }
 
     const std::map<NOlap::TSnapshot, THashSet<TInternalPathId>>& GetPathsToDrop() const {

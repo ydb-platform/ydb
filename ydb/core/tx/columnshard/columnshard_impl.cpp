@@ -458,6 +458,10 @@ void TColumnShard::RunTruncateTable(
 
     LOG_S_DEBUG("TruncateTable for pathId: " << pathId << " at tablet " << TabletID());
 
+    // Capture the TTL/lifecycle settings of the table being truncated BEFORE TruncateTable() drops it,
+    // so the freshly generated internal path id inherits the same TTL and tiering configuration.
+    const auto ttlSettings = TablesManager.GetTableTtlProto(oldInternalPathId, version);
+
     const auto newInternalPathId = TablesManager.TruncateTable(schemeShardLocalPathId, oldInternalPathId, version, db);
 
     NKikimrTxColumnShard::TTableVersionInfo tableVerProto;
@@ -465,9 +469,22 @@ void TColumnShard::RunTruncateTable(
     if (!TablesManager.GetSchemaPresets().empty()) {
         tableVerProto.SetSchemaPresetId(*TablesManager.GetSchemaPresets().begin());
     }
+
+    if (ttlSettings) {
+        *tableVerProto.MutableTtlSettings() = *ttlSettings;
+        THashSet<NTiers::TExternalStorageId> usedTiers;
+        if (ttlSettings->HasEnabled()) {
+            usedTiers = NOlap::TTiering::GetUsedTiers(ttlSettings->GetEnabled());
+        }
+        if (!usedTiers.empty()) {
+            ActivateTiering(newInternalPathId, usedTiers);
+        }
+    }
+
     TablesManager.AddTableVersion(newInternalPathId, version, tableVerProto, std::nullopt, db);
 
     Counters.GetTabletCounters()->SetCounter(COUNTER_TABLES, TablesManager.GetTables().size());
+    Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_TTLS, TablesManager.GetTtl().size());
 }
 
 void TColumnShard::RunMoveTable(

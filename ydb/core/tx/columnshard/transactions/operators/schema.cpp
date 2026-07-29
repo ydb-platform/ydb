@@ -183,7 +183,7 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
                         TStringBuilder() << "Cannot truncate read-only table " << schemeShardLocalPathId);
                 }
             }
-            auto txIdsToWait = owner.GetProgressTxController().GetTxs();   //TODO get transactions for truncated pathId only
+            auto txIdsToWait = owner.GetProgressTxController().GetTxs();   //TODO #8650 Get transactions for truncated pathId only
             if (!txIdsToWait.empty()) {
                 AFL_VERIFY(!txIdsToWait.contains(GetTxId()))("tx_id", GetTxId())("tx_ids", JoinSeq(",", txIdsToWait));
                 WaitOnPropose = std::make_shared<TWaitTxs>(GetTxId(), std::move(txIdsToWait));

@@ -39,8 +39,8 @@ Y_UNIT_TEST_SUITE(InterconnectXdcShuffle) {
         TString headerBuffer(info.Sections[0].Size, '\0');
         auto getSerializedSize = [](std::span<TCoroutineChunkSerializer::TChunk> chunks) {
             size_t result = 0;
-            for (const auto& [_, size] : chunks) {
-                result += size;
+            for (const auto& chunk : chunks) {
+                result += chunk.Size;
             }
             return result;
         };

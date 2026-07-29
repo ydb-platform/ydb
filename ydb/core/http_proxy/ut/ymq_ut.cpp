@@ -1,5 +1,6 @@
 #include <ydb/core/http_proxy/ut/datastreams_fixture/datastreams_fixture.h>
 
+#include <ydb/core/http_proxy/ut/datastreams_fixture/sqs_xml_ut_helpers.h>
 #include <ydb/core/http_proxy/http_req.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/ymq/actor/metering.h>
@@ -21,6 +22,266 @@ using namespace NActors;
 
 
 Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
+    NYdb::TDriver CreateDriver(ui16 kikimrGrpcPort) {
+        TString endpoint = TStringBuilder() << "localhost:" << kikimrGrpcPort;
+        auto driverConfig = NYdb::TDriverConfig()
+            .SetEndpoint(endpoint)
+            .SetDatabase("/Root")
+            .SetAuthToken("root@builtin")
+            .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
+        return NYdb::TDriver(driverConfig);
+    }
+
+    void PrepareConfigs(NYdb::TKikimrWithGrpcAndRootSchema* kikimrServer) {
+        auto& pqConfig = kikimrServer->GetRuntime()->GetAppData().PQConfig;
+        pqConfig.ClearValidRetentionLimits();
+    }
+
+    enum class ESqsProtocol {
+        Json,
+        Xml,
+    };
+
+    enum class ETestCredentials {
+        UserAccountIam,
+        ServiceAccountIam,
+        StaticCredentials,
+    };
+
+    TStringBuf ToString(ESqsProtocol protocol) {
+        switch (protocol) {
+            case ESqsProtocol::Json:
+                return "Json";
+            case ESqsProtocol::Xml:
+                return "Xml";
+        }
+    }
+
+    TStringBuf ToString(ETestCredentials credentials) {
+        switch (credentials) {
+            case ETestCredentials::UserAccountIam:
+                return "UserAccountIam";
+            case ETestCredentials::ServiceAccountIam:
+                return "ServiceAccountIam";
+            case ETestCredentials::StaticCredentials:
+                return "StaticCredentials";
+        }
+    }
+
+    TString AuthHeader(THttpProxyTestMock& fixture, ETestCredentials credentials) {
+        switch (credentials) {
+            case ETestCredentials::UserAccountIam:
+                return "X-YaCloud-SubjectToken: user@builtin";
+            case ETestCredentials::ServiceAccountIam:
+                return "X-YaCloud-SubjectToken: proxy_sa@builtin";
+            case ETestCredentials::StaticCredentials:
+                return fixture.FormAuthorizationStr("ru-central1");
+        }
+    }
+
+    NJson::TJsonMap AsJsonMap(const NJson::TJsonValue& value) {
+        NJson::TJsonMap map;
+        map.GetMapSafe() = value.GetMapSafe();
+        return map;
+    }
+
+    THttpResult SendSqsRequest(
+        THttpProxyTestMock& fixture,
+        ESqsProtocol protocol,
+        ETestCredentials credentials,
+        bool withFolderId,
+        TStringBuf action,
+        const NJson::TJsonValue& request
+    ) {
+        const TString handler = withFolderId ? "/Root?folderId=folder4" : "/Root";
+        const TString auth = AuthHeader(fixture, credentials);
+
+        switch (protocol) {
+            case ESqsProtocol::Json:
+                return fixture.SendHttpRequest(handler, TStringBuilder() << "AmazonSQS." << action, request, auth);
+            case ESqsProtocol::Xml: {
+                const TString body = EncodeSqsXmlRequest(action, AsJsonMap(request));
+                return fixture.SendHttpRequestXmlRaw(handler, {body.data(), body.size()}, auth);
+            }
+        }
+    }
+
+    NJson::TJsonMap ParseSqsResponse(ESqsProtocol protocol, const TString& body) {
+        switch (protocol) {
+            case ESqsProtocol::Json: {
+                NJson::TJsonMap json;
+                UNIT_ASSERT(NJson::ReadJsonTree(body, &json));
+                return json;
+            }
+            case ESqsProtocol::Xml:
+                return ParseSqsXmlResponse(body);
+        }
+    }
+
+    TString MatrixCaseLabel(ESqsProtocol protocol, ETestCredentials credentials, bool withFolderId) {
+        return TStringBuilder() << "protocol=" << ToString(protocol)
+            << " credentials=" << ToString(credentials)
+            << " withFolderId=" << withFolderId;
+    }
+
+    void AssertAccessDenied(const THttpResult& res, const TString& label) {
+        UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 403, label << "\n" << res.Body);
+    }
+
+    void AssertQueueDoesNotExist(ESqsProtocol protocol, const THttpResult& res, const TString& label) {
+        UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 400, label << "\n" << res.Body);
+        const auto json = ParseSqsResponse(protocol, res.Body);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
+    }
+
+    TString CreateQueueForAuthMatrix(THttpProxyTestMock& fixture, ESqsProtocol protocol, bool withFolderId) {
+        auto createQueueReq = THttpProxyTestMock::CreateSqsCreateQueueRequest();
+        createQueueReq["QueueName"] = TStringBuilder() << "AuthMatrixQueue" << (protocol == ESqsProtocol::Json ? "Json" : "Xml") << (withFolderId ? "WithFolder" : "WithoutFolder");
+
+        auto createQueueRes = SendSqsRequest(
+            fixture,
+            protocol,
+            ETestCredentials::ServiceAccountIam,
+            withFolderId,
+            "CreateQueue",
+            std::move(createQueueReq));
+        UNIT_ASSERT_VALUES_EQUAL_C(createQueueRes.HttpCode, 200, createQueueRes.Body);
+
+        const auto json = ParseSqsResponse(protocol, createQueueRes.Body);
+        const TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+        UNIT_ASSERT(!queueUrl.empty());
+        return queueUrl;
+    }
+
+    TString QueueResourceDirFromQueueUrl(const TString& queueUrl, const TString& queueName, const TString& sqsDatabaseRoot) {
+        size_t pathBegin = TString::npos;
+        const size_t scheme = queueUrl.find("://");
+        if (scheme != TString::npos) {
+            pathBegin = queueUrl.find('/', scheme + 3);
+        }
+        if (pathBegin == TString::npos) {
+            pathBegin = queueUrl.find('/');
+        }
+        UNIT_ASSERT_C(pathBegin != TString::npos, queueUrl);
+
+        TString path = TString(queueUrl.substr(pathBegin));
+        const TString tail = TStringBuilder() << '/' << queueName;
+        UNIT_ASSERT_C(path.EndsWith(tail), queueUrl);
+        path.resize(path.size() - tail.size());
+
+        TString queueDir;
+        if (path.StartsWith("/Root/")) {
+            queueDir = std::move(path);
+        } else {
+            TString root = sqsDatabaseRoot;
+            while (root.EndsWith('/')) {
+                root.resize(root.size() - 1);
+            }
+            queueDir = root + path;
+        }
+        return queueDir;
+    }
+
+    std::optional<TString> TryMigrationTopicPathFromScheme(
+        NYdb::NScheme::TSchemeClient& schemeClient,
+        const TString& queueResourceDir
+    ) {
+        auto ld = schemeClient.ListDirectory(queueResourceDir).GetValueSync();
+        if (!ld.IsSuccess()) {
+            return {};
+        }
+        for (const auto& ch : ld.GetChildren()) {
+            TString name(ch.Name);
+            if (name.size() >= 2 && name[0] == 'v') {
+                return TStringBuilder() << queueResourceDir << '/' << name << "/streamImpl";
+            }
+        }
+        return {};
+    }
+
+    void WaitBothStdMigrationTopicsPresent(
+        NYdb::NTopic::TTopicClient& topicClient,
+        NYdb::NScheme::TSchemeClient& schemeClient,
+        const TString& queueResourceDirA,
+        const TString& queueResourceDirB,
+        TDuration timeout
+    ) {
+        const TInstant deadline = TInstant::Now() + timeout;
+        while (TInstant::Now() < deadline) {
+            const auto pathA = TryMigrationTopicPathFromScheme(schemeClient, queueResourceDirA);
+            const auto pathB = TryMigrationTopicPathFromScheme(schemeClient, queueResourceDirB);
+            if (!pathA || !pathB) {
+                Sleep(TDuration::MilliSeconds(250));
+                continue;
+            }
+            const auto da = topicClient.DescribeTopic(*pathA).GetValueSync();
+            const auto db = topicClient.DescribeTopic(*pathB).GetValueSync();
+            if (da.IsSuccess() && db.IsSuccess()) {
+                UNIT_ASSERT_VALUES_EQUAL(da.GetTopicDescription().GetPartitions().size(), 1u);
+                UNIT_ASSERT_VALUES_EQUAL(db.GetTopicDescription().GetPartitions().size(), 1u);
+                return;
+            }
+            Sleep(TDuration::MilliSeconds(250));
+        }
+        const auto pathA = TryMigrationTopicPathFromScheme(schemeClient, queueResourceDirA);
+        const auto pathB = TryMigrationTopicPathFromScheme(schemeClient, queueResourceDirB);
+        UNIT_ASSERT_C(pathA.has_value(), "no v* version directory under queue path A");
+        UNIT_ASSERT_C(pathB.has_value(), "no v* version directory under queue path B");
+        const auto da = topicClient.DescribeTopic(*pathA).GetValueSync();
+        const auto db = topicClient.DescribeTopic(*pathB).GetValueSync();
+        UNIT_ASSERT_C(da.IsSuccess(), da.GetIssues().ToString());
+        UNIT_ASSERT_C(db.IsSuccess(), db.GetIssues().ToString());
+    }
+
+    NYdb::NTopic::TTopicDescription DescribeMigrationTopicByQueueUrl(
+        THttpProxyTestMock& fixture,
+        const TString& queueUrl,
+        const TString& queueName,
+        TDuration timeout = TDuration::Seconds(30)
+    ) {
+        NYdb::TDriver driver(CreateDriver(fixture.KikimrGrpcPort));
+        NYdb::NTopic::TTopicClient topicClient(driver);
+        NYdb::NScheme::TSchemeClient schemeClient(driver);
+
+        const TString& sqsRoot = fixture.KikimrServer->GetRuntime()->GetAppData().SqsConfig.GetRoot();
+        const TString queueResourceDir = QueueResourceDirFromQueueUrl(queueUrl, queueName, sqsRoot);
+        const TInstant deadline = TInstant::Now() + timeout;
+
+        while (TInstant::Now() < deadline) {
+            const auto topicPath = TryMigrationTopicPathFromScheme(schemeClient, queueResourceDir);
+            if (topicPath) {
+                auto describe = topicClient.DescribeTopic(*topicPath).GetValueSync();
+                if (describe.IsSuccess()) {
+                    auto description = describe.GetTopicDescription();
+                    driver.Stop(true);
+                    return description;
+                }
+            }
+            Sleep(TDuration::MilliSeconds(250));
+        }
+
+        const auto topicPath = TryMigrationTopicPathFromScheme(schemeClient, queueResourceDir);
+        UNIT_ASSERT_C(topicPath.has_value(), TStringBuilder() << "no migration topic for queue " << queueName);
+
+        auto describe = topicClient.DescribeTopic(*topicPath).GetValueSync();
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+
+        auto description = describe.GetTopicDescription();
+        driver.Stop(true);
+        return description;
+    }
+
+    void EnableCompatibility(auto& kikimrServer,auto& driver) {
+        NYdb::NQuery::TQueryClient queryClient(driver);
+
+        auto execute = queryClient.ExecuteQuery(Sprintf(R"__(
+            INSERT INTO `%s/.Settings` (Account, Name, Value) VALUES ('cloud4', 'MigrationCompatibility', 'true')
+        )__", kikimrServer->GetRuntime()->GetAppData().SqsConfig.GetRoot().c_str()), NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(execute.IsSuccess(), execute.GetIssues().ToString());
+
+        // Wait for user settings to be updated.
+        Sleep(TDuration::Seconds(1));
+    }
 
     Y_UNIT_TEST_F(TestCreateQueue, THttpProxyTestMock) {
         CreateQueue({{"QueueName", "ExampleQueueName"}});
@@ -195,6 +456,10 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestGetQueueUrlWithIAM, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+
         auto req = CreateSqsGetQueueUrlRequest();
         req["QueueName"] = "not-existing-queue";
         auto res = SendHttpRequest("/Root?folderId=XXX", "AmazonSQS.GetQueueUrl", std::move(req), "X-YaCloud-SubjectToken: Bearer proxy_sa@builtin");
@@ -206,6 +471,210 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(resultType, "AWS.SimpleQueueService.NonExistentQueue");
         TString resultMessage = GetByPath<TString>(json, "message");
         UNIT_ASSERT_VALUES_EQUAL(resultMessage, "The specified queue doesn't exist.");
+    }
+
+    Y_UNIT_TEST_F(TestGetQueueUrlWithIAMWithoutFolderId, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+
+        auto req = CreateSqsGetQueueUrlRequest();
+        req["QueueName"] = "not-existing-queue";
+        auto res = SendHttpRequest("/Root", "AmazonSQS.GetQueueUrl", std::move(req), "X-YaCloud-SubjectToken: proxy_sa@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
+
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        TString resultType = GetByPath<TString>(json, "__type");
+        UNIT_ASSERT_VALUES_EQUAL(resultType, "AWS.SimpleQueueService.NonExistentQueue");
+        TString resultMessage = GetByPath<TString>(json, "message");
+        UNIT_ASSERT_VALUES_EQUAL(resultMessage, "The specified queue doesn't exist.");
+    }
+
+    Y_UNIT_TEST_F(TestGetQueueUrlWithIAM_TableImplementation, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+
+        auto req = CreateSqsGetQueueUrlRequest();
+        req["QueueName"] = "not-existing-queue";
+        auto res = SendHttpRequest("/Root?folderId=XXX", "AmazonSQS.GetQueueUrl", std::move(req), "X-YaCloud-SubjectToken: Bearer proxy_sa@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
+
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        TString resultType = GetByPath<TString>(json, "__type");
+        UNIT_ASSERT_VALUES_EQUAL(resultType, "AWS.SimpleQueueService.NonExistentQueue");
+        TString resultMessage = GetByPath<TString>(json, "message");
+        UNIT_ASSERT_VALUES_EQUAL(resultMessage, "The specified queue doesn't exist.");
+    }
+
+    Y_UNIT_TEST_F(TestGetQueueUrlWithIAMWithoutFolderId_TableImplementation, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+
+        auto req = CreateSqsGetQueueUrlRequest();
+        req["QueueName"] = "not-existing-queue";
+        auto res = SendHttpRequest("/Root", "AmazonSQS.GetQueueUrl", std::move(req), "X-YaCloud-SubjectToken: proxy_sa@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
+
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        TString resultType = GetByPath<TString>(json, "__type");
+        UNIT_ASSERT_VALUES_EQUAL(resultType, "AWS.SimpleQueueService.NonExistentQueue");
+        TString resultMessage = GetByPath<TString>(json, "message");
+        UNIT_ASSERT_VALUES_EQUAL(resultMessage, "The specified queue doesn't exist.");
+    }
+
+    Y_UNIT_TEST_F(TestSendMessageWithIAMWithoutFolderId, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        auto createQueueReq = CreateSqsCreateQueueRequest();
+        createQueueReq["QueueName"] = "ExampleQueueName";
+        auto createQueueRes = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(createQueueReq), "X-YaCloud-SubjectToken: proxy_sa@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(createQueueRes.HttpCode, 200);
+
+        NJson::TJsonValue createQueueJson;
+        UNIT_ASSERT(NJson::ReadJsonTree(createQueueRes.Body, &createQueueJson));
+        const TString queueUrl = GetByPath<TString>(createQueueJson, "QueueUrl");
+        UNIT_ASSERT(!queueUrl.empty());
+
+        NJson::TJsonValue sendMessageReq;
+        sendMessageReq["QueueUrl"] = queueUrl;
+        sendMessageReq["MessageBody"] = "MessageBody-0";
+        auto sendMessageRes = SendHttpRequest("/Root", "AmazonSQS.SendMessage", std::move(sendMessageReq), "X-YaCloud-SubjectToken: proxy_sa@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(sendMessageRes.HttpCode, 200);
+
+        NJson::TJsonValue sendMessageJson;
+        UNIT_ASSERT(NJson::ReadJsonTree(sendMessageRes.Body, &sendMessageJson));
+        UNIT_ASSERT(!GetByPath<TString>(sendMessageJson, "MD5OfMessageBody").empty());
+        UNIT_ASSERT(!GetByPath<TString>(sendMessageJson, "MessageId").empty());
+    }
+
+    Y_UNIT_TEST_F(TestSendMessageWithIAMWithoutFolderId_TableImplementation, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+
+        auto createQueueReq = CreateSqsCreateQueueRequest();
+        createQueueReq["QueueName"] = "ExampleQueueName";
+        auto createQueueRes = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(createQueueReq), "X-YaCloud-SubjectToken: proxy_sa@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(createQueueRes.HttpCode, 200);
+
+        NJson::TJsonValue createQueueJson;
+        UNIT_ASSERT(NJson::ReadJsonTree(createQueueRes.Body, &createQueueJson));
+        const TString queueUrl = GetByPath<TString>(createQueueJson, "QueueUrl");
+        UNIT_ASSERT(!queueUrl.empty());
+
+        NJson::TJsonValue sendMessageReq;
+        sendMessageReq["QueueUrl"] = queueUrl;
+        sendMessageReq["MessageBody"] = "MessageBody-0";
+        auto sendMessageRes = SendHttpRequest("/Root", "AmazonSQS.SendMessage", std::move(sendMessageReq), "X-YaCloud-SubjectToken: proxy_sa@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(sendMessageRes.HttpCode, 200);
+
+        NJson::TJsonValue sendMessageJson;
+        UNIT_ASSERT(NJson::ReadJsonTree(sendMessageRes.Body, &sendMessageJson));
+        UNIT_ASSERT(!GetByPath<TString>(sendMessageJson, "MD5OfMessageBody").empty());
+        UNIT_ASSERT(!GetByPath<TString>(sendMessageJson, "MessageId").empty());
+    }
+
+    Y_UNIT_TEST_F(TestAuthMatrixForGetQueueUrlJsonSqs, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        for (const auto credentials : {ETestCredentials::UserAccountIam, ETestCredentials::ServiceAccountIam, ETestCredentials::StaticCredentials}) {
+            for (const bool withFolderId : {false, true}) {
+                auto req = CreateSqsGetQueueUrlRequest();
+                req["QueueName"] = "not-existing-queue";
+                auto res = SendSqsRequest(*this, ESqsProtocol::Json, credentials, withFolderId, "GetQueueUrl", std::move(req));
+                const TString label = MatrixCaseLabel(ESqsProtocol::Json, credentials, withFolderId);
+
+                if (credentials == ETestCredentials::UserAccountIam && !withFolderId) {
+                    AssertAccessDenied(res, label);
+                } else {
+                    AssertQueueDoesNotExist(ESqsProtocol::Json, res, label);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST_F(TestAuthMatrixForGetQueueUrlXmlSqs, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        for (const auto credentials : {ETestCredentials::UserAccountIam, ETestCredentials::ServiceAccountIam, ETestCredentials::StaticCredentials}) {
+            for (const bool withFolderId : {false, true}) {
+                auto req = CreateSqsGetQueueUrlRequest();
+                req["QueueName"] = "not-existing-queue";
+                auto res = SendSqsRequest(*this, ESqsProtocol::Xml, credentials, withFolderId, "GetQueueUrl", std::move(req));
+                const TString label = MatrixCaseLabel(ESqsProtocol::Xml, credentials, withFolderId);
+
+                if (credentials == ETestCredentials::UserAccountIam && !withFolderId) {
+                    AssertAccessDenied(res, label);
+                } else {
+                    AssertQueueDoesNotExist(ESqsProtocol::Xml, res, label);
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST_F(TestAuthMatrixForSendMessageJsonSqs, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        for (const bool withFolderId : {false, true}) {
+            const TString queueUrl = CreateQueueForAuthMatrix(*this, ESqsProtocol::Json, withFolderId);
+
+            for (const auto credentials : {ETestCredentials::UserAccountIam, ETestCredentials::ServiceAccountIam, ETestCredentials::StaticCredentials}) {
+                NJson::TJsonValue req;
+                req["QueueUrl"] = queueUrl;
+                req["MessageBody"] = "MessageBody-0";
+                auto res = SendSqsRequest(*this, ESqsProtocol::Json, credentials, withFolderId, "SendMessage", std::move(req));
+                const TString label = MatrixCaseLabel(ESqsProtocol::Json, credentials, withFolderId);
+
+                if (credentials == ETestCredentials::UserAccountIam && !withFolderId) {
+                    AssertAccessDenied(res, label);
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 200, label << "\n" << res.Body);
+                    const auto json = ParseSqsResponse(ESqsProtocol::Json, res.Body);
+                    UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
+                    UNIT_ASSERT(!GetByPath<TString>(json, "MessageId").empty());
+                }
+            }
+        }
+    }
+
+    Y_UNIT_TEST_F(TestAuthMatrixForSendMessageXmlSqs, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        for (const bool withFolderId : {false, true}) {
+            const TString queueUrl = CreateQueueForAuthMatrix(*this, ESqsProtocol::Xml, withFolderId);
+
+            for (const auto credentials : {ETestCredentials::UserAccountIam, ETestCredentials::ServiceAccountIam, ETestCredentials::StaticCredentials}) {
+                NJson::TJsonValue req;
+                req["QueueUrl"] = queueUrl;
+                req["MessageBody"] = "MessageBody-0";
+                auto res = SendSqsRequest(*this, ESqsProtocol::Xml, credentials, withFolderId, "SendMessage", std::move(req));
+                const TString label = MatrixCaseLabel(ESqsProtocol::Xml, credentials, withFolderId);
+
+                if (credentials == ETestCredentials::UserAccountIam && !withFolderId) {
+                    AssertAccessDenied(res, label);
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 200, label << "\n" << res.Body);
+                    const auto json = ParseSqsResponse(ESqsProtocol::Xml, res.Body);
+                    UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
+                    UNIT_ASSERT(!GetByPath<TString>(json, "MessageId").empty());
+                }
+            }
+        }
     }
 
     Y_UNIT_TEST_F(TestSendMessage, THttpProxyTestMock) {

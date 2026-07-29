@@ -200,13 +200,37 @@ def run_actors_core(binary, configuration, output_directory, tool_revision, work
 
     for index in range(1, configuration.repetitions + 1):
         repetition_directory = output_directory / "repeat-{:03d}".format(index)
+        command = _command_record(binary.path)
+        started_at = _utc_now()
+        try:
+            result = run_command(
+                command,
+                environment,
+                configuration.timeout_seconds,
+                work_dir_hint=work_dir_hint,
+            )
+        except BenchmarkError as error:
+            failure = str(error)
+            finished_at = _utc_now()
+            manifest["runs"].append(
+                {
+                    "index": index,
+                    "command": command,
+                    "started_at": started_at,
+                    "finished_at": finished_at,
+                    "exit_code": None,
+                    "timed_out": False,
+                    "interrupted": False,
+                    "error": failure,
+                }
+            )
+            manifest["status"] = "failed"
+            manifest["finished_at"] = finished_at
+            manifest["error"] = failure
+            atomic_write_json(manifest_path, manifest)
+            raise
+
         repetition_directory.mkdir()
-        result = run_command(
-            _command_record(binary.path),
-            environment,
-            configuration.timeout_seconds,
-            work_dir_hint=work_dir_hint,
-        )
         atomic_write_text(repetition_directory / "stdout.txt", result.stdout)
         atomic_write_text(repetition_directory / "stderr.txt", result.stderr)
         run_record = {

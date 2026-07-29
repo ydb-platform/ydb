@@ -3768,7 +3768,26 @@ def limit_family(
         _live_row_count(outcome.relation) <= count
         for outcome in source.outcomes
     )
-    if offset == 0 and within_limit:
+    compact_ordered_singleton = (
+        source.sequence
+        and count == 1
+        and offset == 0
+        and any(
+            _can_compact_ordered_singleton(
+                outcome.relation,
+                count,
+                offset,
+            )
+            for outcome in source.outcomes
+        )
+    )
+    if compact_ordered_singleton:
+        result = _ordered_limit_family(
+            source,
+            count_expression,
+            offset_expression,
+        )
+    elif offset == 0 and within_limit:
         result = source
     elif count == 0 or (
         offset > 0
@@ -3853,6 +3872,9 @@ def _ordered_limit_family(
                 present_prefix=True,
             )
 
+        if _can_compact_ordered_singleton(relation, count, offset):
+            return _compact_ordered_singleton(relation)
+
         rows: list[Row] = []
         for index, row in enumerate(relation.rows):
             if count == 0 or offset >= len(relation.rows):
@@ -3886,6 +3908,126 @@ def _ordered_limit_family(
         )
 
     return map_family(source, take)
+
+
+def _can_compact_ordered_singleton(
+    relation: Relation,
+    count: int,
+    offset: int,
+) -> bool:
+    """Recognize the small exact ordered Take(1) representation."""
+
+    if count != 1 or offset != 0 or not relation.sequence:
+        return False
+    if relation.ordinals is not None:
+        return False
+    live_rows = tuple(
+        relation.rows[index]
+        for index in _live_row_indices(relation.rows)
+    )
+    return (
+        len(relation.rows) > 1
+        and 0 < len(live_rows) <= MAX_ENUMERATED_SEQUENCE_ROWS
+        and all(
+            value.average_metadata is None
+            for row in live_rows
+            for value in row.values.values()
+        )
+    )
+
+
+def _compact_ordered_singleton(relation: Relation) -> Relation:
+    """Select the compressed rank-zero row into one conditional slot."""
+
+    live_indices = _live_row_indices(relation.rows)
+    live_rows = tuple(relation.rows[index] for index in live_indices)
+    selected: list[smt.Term] = []
+    seen = smt.FALSE
+    for row in live_rows:
+        selected.append(smt.and_(row.present, smt.not_(seen)))
+        seen = smt.or_(seen, row.present)
+    selected_guards = tuple(selected)
+    values = {
+        column.name: _select_ordered_singleton_value(
+            selected_guards,
+            tuple(row.values[column.name] for row in live_rows),
+            _ordered_singleton_fallback(column),
+        )
+        for column in relation.columns
+    }
+    return Relation(
+        relation.columns,
+        (
+            Row(
+                smt.or_(*selected_guards),
+                values,
+                None,
+                _common_partition_facts(live_rows),
+            ),
+        ),
+        sequence=True,
+        order=relation.order,
+        present_prefix=True,
+    )
+
+
+def _select_ordered_singleton_value(
+    selected: tuple[smt.Term, ...],
+    alternatives: tuple[Value, ...],
+    fallback: Value,
+) -> Value:
+    """ITE-select one typed value over a canonical absent-slot payload."""
+
+    if not alternatives or len(selected) != len(alternatives):
+        raise RelationError(
+            "ordered singleton selection has inconsistent alternatives"
+        )
+    first = alternatives[0]
+    if any(value.type != first.type for value in alternatives[1:]):
+        raise RelationError(
+            "ordered singleton value alternatives have different types"
+        )
+    if fallback.type != first.type:
+        raise RelationError(
+            "ordered singleton fallback has a different type"
+        )
+    if any(value.average_metadata is not None for value in alternatives):
+        raise RelationError(
+            "ordered singleton cannot select hidden AVG metadata"
+        )
+
+    is_null = fallback.is_null
+    value = fallback.value
+    for guard, alternative in zip(selected, alternatives):
+        is_null = smt.ite(guard, alternative.is_null, is_null)
+        value = smt.ite(guard, alternative.value, value)
+
+    finite_bounds = tuple(
+        alternative.decimal_finite_abs_bound
+        for alternative in alternatives + (fallback,)
+    )
+    finite_bound = (
+        None
+        if any(bound is None for bound in finite_bounds)
+        else max(bound for bound in finite_bounds if bound is not None)
+    )
+    return Value(
+        first.type,
+        is_null,
+        value,
+        finite_bound,
+    )
+
+
+def _ordered_singleton_fallback(column: Column) -> Value:
+    """Build a task-stable typed payload for an absent compact slot."""
+
+    return Value(
+        column.type,
+        smt.TRUE if column.nullable else smt.FALSE,
+        smt.FALSE if smt_sort(column.type) == smt.BOOL else smt.ZERO,
+        0 if is_decimal_type(column.type) else None,
+    )
 
 
 def _unordered_limit_family(

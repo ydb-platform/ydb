@@ -429,6 +429,7 @@ public:
         if (Work) {
             const auto poolId = Work->GetPoolId();
             LOG_CORO_D("S3 Download: poolId=" << poolId);
+            LOG_CORO_D("S3 GetOrCreate: poolId=" << Work->GetPoolId());
             context = MakeIntrusive<TDefaultHttpRequestContext>(
                 poolId,
                 [w = std::weak_ptr(Work)](TDuration elapsed) {
@@ -567,6 +568,7 @@ public:
         }
         IHttpRequestContext::TPtr context;
         if (Work) {
+            LOG_CORO_D("S3 GetOrCreate: poolId=" << Work->GetPoolId());
             context = MakeIntrusive<TDefaultHttpRequestContext>(
                 Work->GetPoolId(),
                 [w = std::weak_ptr(Work)](TDuration elapsed) {
@@ -1205,6 +1207,7 @@ private:
     }
 
     void Run() final {
+        LOG_CORO_D("Run start: SchedulerContext=" << (SchedulerContext ? "set" : "null") << " Work=" << (Work ? "set" : "null"));
         if (Work) {
             Work->RegisterForResume(SelfActorId);
         }
@@ -1476,7 +1479,7 @@ public:
     }
 
     void Bootstrap() {
-        LOG_D("TS3StreamReadActor", "Bootstrap");
+        LOG_D("TS3StreamReadActor", "Bootstrap SchedulerContext=" << (SchedulerContext ? "set" : "null"));
 
         // Arrow blocks are currently not limited by mem quoter, so we use rough buffer quotation
         // After exact mem control implementation, this allocation should be deleted

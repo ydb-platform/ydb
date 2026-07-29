@@ -1533,12 +1533,12 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
                 2, 3, 5, 6, 7, 9, 10, 13, 15, 16, 18, 19, 21, 22, 25, 26, 29,
                 33, 34, 35, 37, 38, 40, 42, 43, 45, 46, 48, 50, 52, 54, 55, 56,
                 58, 59,
-                60, 61, 62, 65, 66, 68, 69, 71, 73, 75, 76, 77, 78, 79, 80, 82,
+                60, 61, 62, 65, 66, 68, 69, 71, 72, 73, 75, 76, 77, 78, 79, 80, 82,
                 83, 85, 87, 88, 90, 91, 93, 94, 95, 96, 97, 99,
             }));
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredVerifierEntryQueries ==
-            std::set<ui32>({5, 9, 59, 65, 78, 80}));
+            std::set<ui32>({5, 9, 59, 65, 72, 78, 80}));
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredFormulaQueries ==
             std::set<ui32>({
@@ -1792,7 +1792,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         UNIT_ASSERT(report["verifier_entry_floor_enforced"].GetBooleanSafe());
         UNIT_ASSERT_VALUES_EQUAL(
             report["required_verifier_entry_queries"].GetArraySafe().size(),
-            6);
+            7);
         size_t index = 0;
         for (const ui32 queryId :
              policy.Suites.at(Tpcds.Name).RequiredVerifierEntryQueries)

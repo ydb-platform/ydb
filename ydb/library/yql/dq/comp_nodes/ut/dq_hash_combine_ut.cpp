@@ -477,6 +477,43 @@ std::shared_ptr<ISpillerFactory> CreateSpillerFactory()
     );
 }
 
+// Spiller whose writes never complete: deterministically parks the spilling
+// coroutine on a pending future (models a query abort mid-spill).
+class TPendingSpiller: public ISpiller {
+public:
+    NThreading::TFuture<TKey> Put(NYql::TChunkedBuffer&&) override {
+        Promises.push_back(NThreading::NewPromise<TKey>());
+        return Promises.back().GetFuture();
+    }
+    NThreading::TFuture<std::optional<NYql::TChunkedBuffer>> Get(TKey) override {
+        return NThreading::MakeFuture<std::optional<NYql::TChunkedBuffer>>(std::nullopt);
+    }
+    NThreading::TFuture<std::optional<NYql::TChunkedBuffer>> Extract(TKey) override {
+        return NThreading::MakeFuture<std::optional<NYql::TChunkedBuffer>>(std::nullopt);
+    }
+    NThreading::TFuture<void> Delete(TKey) override {
+        return NThreading::MakeFuture();
+    }
+    void ReportAlloc(ui64) override {
+    }
+    void ReportFree(ui64) override {
+    }
+
+private:
+    std::vector<NThreading::TPromise<TKey>> Promises;
+};
+
+class TPendingSpillerFactory: public ISpillerFactory {
+public:
+    void SetTaskCounters(const TIntrusivePtr<NYql::NDq::TSpillingTaskCounters>&) override {
+    }
+    void SetMemoryReportingCallbacks(ISpiller::TMemoryReportCallback, ISpiller::TMemoryReportCallback) override {
+    }
+    ISpiller::TPtr CreateSpiller() override {
+        return std::make_shared<TPendingSpiller>();
+    }
+};
+
 template<typename TMap>
 size_t CollectStreamOutputs(const NUdf::TUnboxedValue& wideStream, const ui32 resultWidth, TMap& resultMap, const bool useBlocks, const bool sleepOnYield)
 {
@@ -570,7 +607,8 @@ void DisableDehydration(THolder<IComputationGraph>& graph)
 
 template<bool UseLLVM, bool Spilling, typename StreamCreator, typename StreamChecker>
 void RunDqAggregateEarlyStopTest(TDqSetup<UseLLVM, Spilling>& setup, const bool useFlow,
-    StreamCreator streamCreator, StreamChecker streamChecker, const bool disableDehydration)
+    StreamCreator streamCreator, StreamChecker streamChecker, const bool disableDehydration,
+    std::shared_ptr<ISpillerFactory> spillerFactory = {})
 {
     setup.Alloc.Ref().ForcefullySetMemoryYellowZone(false);
 
@@ -579,7 +617,7 @@ void RunDqAggregateEarlyStopTest(TDqSetup<UseLLVM, Spilling>& setup, const bool 
     auto graph = BuildWideGraph(setup, useFlow, true, 0, columnTypes);
 
     if (Spilling) {
-        graph->GetContext().SpillerFactory = CreateSpillerFactory();
+        graph->GetContext().SpillerFactory = spillerFactory ? spillerFactory : CreateSpillerFactory();
     }
 
     if (disableDehydration) {
@@ -891,6 +929,35 @@ Y_UNIT_TEST_SUITE(TDqHashCombineTest) {
             streamCreator,
             streamChecker,
             true
+        );
+    }
+
+    Y_UNIT_TEST_QUAD(TestTeardownDuringStateSpilling, UseLLVM, UseFlow) {
+        TDqSetup<UseLLVM, true> setup(GetDqNodeFactory());
+
+        auto streamCreator = [&](TComputationContext& ctx, std::vector<TType*>& columnTypes, ui32 keyWidth, auto& refMap) {
+            return new TWideKVStream(ctx, 1000, 1, columnTypes, keyWidth, refMap, [&](const size_t rowNum, bool&) {
+                if (rowNum == 500) {
+                    setup.Alloc.Ref().ForcefullySetMemoryYellowZone(true);
+                }
+            });
+        };
+
+        auto streamChecker = [](NUdf::EFetchStatus fetchStatus) -> bool {
+            return fetchStatus != NUdf::EFetchStatus::Yield;
+        };
+
+        // The never-completing spiller parks the state-spill coroutine on a pending write
+        // after some buckets were already written out and released; destroying the graph
+        // in this position must not double-release values still referenced from the arena
+        // (https://github.com/ydb-platform/ydb/issues/40326, run under ASAN).
+        RunDqAggregateEarlyStopTest(
+            setup,
+            UseFlow,
+            streamCreator,
+            streamChecker,
+            false,
+            std::make_shared<TPendingSpillerFactory>()
         );
     }
 

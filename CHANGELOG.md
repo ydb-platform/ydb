@@ -76,6 +76,9 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 25538:added basic monitoring tests and separate events file [#25538](https://github.com/ydb-platform/ydb/pull/25538) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 25458:Сейчас при автопартициронировании топиков учитывается скорость записи различными producer-ами: партиция делится не пополам, а стараемся разделить партицию таким образом, что бы producer-ы распределились по новым партициям равномерно с учетом скорости записи. [#25458](https://github.com/ydb-platform/ydb/pull/25458) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 25387:Change the audit logging logic from AllowedList checking to DenyList checking [#25387](https://github.com/ydb-platform/ydb/pull/25387) ([Andrei Rykov](https://github.com/StekPerepolnen))
+* 42860:Add a  pragma `OptDisableAutoIndexSelection` that turns off automatic secondary-index selection for a query. When enabled, reads are planned against the primary table even if an index would normally be picked by the optimizer. [#42860](https://github.com/ydb-platform/ydb/pull/42860) ([Iuliia Sidorina ](https://github.com/ulya-sidorina))
+* 42754:Adds a new support_links source (grafana/logging) to generate Grafana Explore URLs for viewing database logs, integrated into the existing support-links resolver/factory and configuration schema. [#42754](https://github.com/ydb-platform/ydb/pull/42754) ([Andrei Rykov](https://github.com/StekPerepolnen))
+* 42068:Added support for the max_inflight_actions field in CMS to limit the maximum number of granted permissions per single request [#42068](https://github.com/ydb-platform/ydb/pull/42068) ([stanislav_shchetinin](https://github.com/stanislav-shchetinin))
 
 ### Bug fixes
 
@@ -146,12 +149,45 @@ https://github.com/ydb-platform/ydb/issues/25454 [#25536](https://github.com/ydb
 * 25515:Fixed fault for checkpoint on not drained channels [#25515](https://github.com/ydb-platform/ydb/pull/25515) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 25412:https://github.com/ydb-platform/ydb/issues/23180 [#25412](https://github.com/ydb-platform/ydb/pull/25412) ([Vasily Gerasimov](https://github.com/UgnineSirdis))
 * 25408:Fixed tests:
+* None:CreateStreamingQueryMatchRecognize
+* 43224:Test: TModifyUserTest::ModifyUser fails at proxy_ut.cpp:1054
 
-* TestRetryLimiter 
-* RestoreScriptPhysicalGraphOnRetry 
-* CreateStreamingQueryMatchRecognize 
+```
+client.Grant("/", "dc-1", "user1", NACLib::EAccessRights::AlterSchema);
+UNIT_ASSERT_VALUES_EQUAL(client.ModifyUser("/dc-1", {.User="user2", ...}, user1Token), MSTATUS_OK);  // line 1054
+```
 
-Also increased default test logs level [#25408](https://github.com/ydb-platform/ydb/pull/25408) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+Root cause: race between ModifyACL success reply and SchemeBoard publication.
+
+Log timeline (txid `...665` = Grant/ModifyACL, txid `...666` = ModifyUser):
+
+1. `12:21:47.319610` - schemeshard executes `ESchemeOpModifyACL` (instant op, done in propose).
+2. `12:21:47.319731` - Grant reply `Status# 48` (OK). Test immediately fires ModifyUser.
+3. `12:21:47.320677` - schemereq for ModifyUser does `TEvNavigateKeySet` with SyncVersion; replicas still hold `/dc-1` Version 13 (pre-grant ACL). SyncVersion only guarantees subscriber↔replica consistency, not "publication finished" - replicas receive Version 15 (with `+(AS):user1`) only at `.321335+`.
+4. `12:21:47.320899` - access check against stale cached effective ACL: `Access denied for user1 on path /dc-1, with access AlterSchema` → `MSTATUS_ERROR` → assertion fails.
+
+The Grant on the domain root triggers republication of effective ACLs for 38 paths (root + 36 `.sys` sysview paths + `USER_0`, visible in the `ExamineTreeVFS` walk). Sysview path additions made the publication batch much larger/slower, widening the race window enough for the next request to slip in first. On fast runs publication wins and the test passes. [#43224](https://github.com/ydb-platform/ydb/pull/43224) ([Vladislav Serikov](https://github.com/NewBediver))
+* 43159:Fix possible dataloss in sync protocol with SyncDataCutting enabled due to premature commit of SyncState
+https://github.com/ydb-platform/ydb/issues/43217 [#43159](https://github.com/ydb-platform/ydb/pull/43159) ([Sergey Belyakov](https://github.com/serbel324))
+* 43082:Disabled local topics deduplication [#43082](https://github.com/ydb-platform/ydb/pull/43082) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 43068:Fixed local CDC reading form YQL [#43068](https://github.com/ydb-platform/ydb/pull/43068) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 42505:Disabled options:
+```sql
+CREATE TABLE tmp (
+    ....
+    INDEX ... USING json ...
+    ....
+) WITH (TTL = ...);
+```
+
+```sql
+-- tmp has vector/fulltext/json index
+ALTER TABLE tmp SET (TTL = ...)
+```
+
+Closes #42494
+
+... [#42505](https://github.com/ydb-platform/ydb/pull/42505) ([Daniil Timižev](https://github.com/dahbka-lis))
 
 ### YDB UI
 

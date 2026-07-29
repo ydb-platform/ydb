@@ -2497,7 +2497,7 @@ const TExprNode* ExactUint64DirectMemberJustArgument(
 
 constexpr TStringBuf DateTimeTmResource = "DateTime2.TM";
 
-struct TReviewedDateTimeType {
+struct TReviewedUdfType {
     NUdf::EDataSlot Slot = NUdf::EDataSlot::Date;
     bool Nullable = false;
     bool Resource = false;
@@ -2520,9 +2520,9 @@ bool IsExactResourceAnnotation(
         annotation->Cast<TResourceExprType>()->GetTag() == DateTimeTmResource;
 }
 
-bool IsExactReviewedDateTimeAnnotation(
+bool IsExactReviewedUdfAnnotation(
     const TTypeAnnotationNode* annotation,
-    TReviewedDateTimeType type)
+    TReviewedUdfType type)
 {
     return type.Resource
         ? IsExactResourceAnnotation(annotation, type.Nullable)
@@ -2542,13 +2542,13 @@ const TTypeAnnotationNode& DescribedType(
     return *annotation->Cast<TTypeExprType>()->GetType();
 }
 
-void CheckReviewedDateTimeTypeDescriptor(
+void CheckReviewedUdfTypeDescriptor(
     const TExprNode& node,
-    TReviewedDateTimeType type,
+    TReviewedUdfType type,
     TStringBuf label)
 {
     CheckScalarSafetyMetadata(node);
-    if (!IsExactReviewedDateTimeAnnotation(&DescribedType(node, label), type)) {
+    if (!IsExactReviewedUdfAnnotation(&DescribedType(node, label), type)) {
         Unsupported(TStringBuilder() << label << " annotation disagrees");
     }
 
@@ -2560,7 +2560,7 @@ void CheckReviewedDateTimeTypeDescriptor(
         leaf = node.Child(0);
         type.Nullable = false;
         CheckScalarSafetyMetadata(*leaf);
-        if (!IsExactReviewedDateTimeAnnotation(&DescribedType(*leaf, label), type)) {
+        if (!IsExactReviewedUdfAnnotation(&DescribedType(*leaf, label), type)) {
             Unsupported(TStringBuilder() << label << " item annotation disagrees");
         }
     }
@@ -2582,7 +2582,7 @@ void CheckDataDescriptor(
     bool nullable,
     TStringBuf label)
 {
-    CheckReviewedDateTimeTypeDescriptor(node, {slot, nullable, false}, label);
+    CheckReviewedUdfTypeDescriptor(node, {slot, nullable, false}, label);
 }
 
 void CheckVoidNode(const TExprNode& node, bool typeDescriptor, TStringBuf label) {
@@ -2609,60 +2609,60 @@ enum class EReviewedDateTimeUdf : ui8 {
     Count,
 };
 
-struct TReviewedDateTimeArgument {
-    TReviewedDateTimeType Type;
+struct TReviewedUdfArgument {
+    TReviewedUdfType Type;
     ui64 Flags = 0;
 };
 
-struct TReviewedDateTimeUdfSpec {
+struct TReviewedUdfSpec {
     TStringBuf Name;
-    TReviewedDateTimeType Result;
-    TReviewedDateTimeArgument Arguments[2];
+    TReviewedUdfType Result;
+    TReviewedUdfArgument Arguments[2];
     size_t ArgumentCount;
-    TReviewedDateTimeType UserArguments[2];
+    TReviewedUdfType UserArguments[2];
     size_t UserArgumentCount;
     bool Blocks;
 };
 
-constexpr ui64 DateTimeAutoMap = NUdf::ICallablePayload::TArgumentFlags::AutoMap;
-constexpr TReviewedDateTimeType DateType{NUdf::EDataSlot::Date};
-constexpr TReviewedDateTimeType TimestampType{NUdf::EDataSlot::Timestamp};
-constexpr TReviewedDateTimeType OptionalTimestampType{
+constexpr ui64 ReviewedUdfAutoMap = NUdf::ICallablePayload::TArgumentFlags::AutoMap;
+constexpr TReviewedUdfType DateType{NUdf::EDataSlot::Date};
+constexpr TReviewedUdfType TimestampType{NUdf::EDataSlot::Timestamp};
+constexpr TReviewedUdfType OptionalTimestampType{
     NUdf::EDataSlot::Timestamp, true};
-constexpr TReviewedDateTimeType Int32Type{NUdf::EDataSlot::Int32};
-constexpr TReviewedDateTimeType Uint16Type{NUdf::EDataSlot::Uint16};
-constexpr TReviewedDateTimeType OptionalIntervalType{
+constexpr TReviewedUdfType Int32Type{NUdf::EDataSlot::Int32};
+constexpr TReviewedUdfType Uint16Type{NUdf::EDataSlot::Uint16};
+constexpr TReviewedUdfType OptionalIntervalType{
     NUdf::EDataSlot::Interval, true};
-constexpr TReviewedDateTimeType TmType{NUdf::EDataSlot::Date, false, true};
-constexpr TReviewedDateTimeType OptionalTmType{
+constexpr TReviewedUdfType TmType{NUdf::EDataSlot::Date, false, true};
+constexpr TReviewedUdfType OptionalTmType{
     NUdf::EDataSlot::Date, true, true};
 
-const TReviewedDateTimeUdfSpec ReviewedDateTimeUdfs[] = {
+const TReviewedUdfSpec ReviewedDateTimeUdfs[] = {
     {"DateTime2.IntervalFromDays", OptionalIntervalType,
-        {{Int32Type, DateTimeAutoMap}, {}},
+        {{Int32Type, ReviewedUdfAutoMap}, {}},
         1, {}, 0, true},
-    {"DateTime2.Split", TmType, {{DateType, DateTimeAutoMap}, {}},
+    {"DateTime2.Split", TmType, {{DateType, ReviewedUdfAutoMap}, {}},
         1, {DateType}, 1, true},
-    {"DateTime2.Split", TmType, {{TimestampType, DateTimeAutoMap}, {}},
+    {"DateTime2.Split", TmType, {{TimestampType, ReviewedUdfAutoMap}, {}},
         1, {TimestampType}, 1, true},
     {"DateTime2.ShiftYears", OptionalTmType,
-        {{TmType, DateTimeAutoMap}, {Int32Type, 0}},
+        {{TmType, ReviewedUdfAutoMap}, {Int32Type, 0}},
         2, {DateType, Int32Type}, 2, false},
     {"DateTime2.ShiftMonths", OptionalTmType,
-        {{TmType, DateTimeAutoMap}, {Int32Type, 0}},
+        {{TmType, ReviewedUdfAutoMap}, {Int32Type, 0}},
         2, {DateType, Int32Type}, 2, false},
     {"DateTime2.MakeDate", DateType,
-        {{TmType, DateTimeAutoMap}, {}},
+        {{TmType, ReviewedUdfAutoMap}, {}},
         1, {}, 0, true},
     {"DateTime2.GetYear", Uint16Type,
-        {{TmType, DateTimeAutoMap}, {}},
+        {{TmType, ReviewedUdfAutoMap}, {}},
         1, {OptionalTimestampType}, 1, false},
 };
 
 static_assert(sizeof(ReviewedDateTimeUdfs) / sizeof(ReviewedDateTimeUdfs[0]) ==
     static_cast<size_t>(EReviewedDateTimeUdf::Count));
 
-const TReviewedDateTimeUdfSpec& ReviewedDateTimeUdf(EReviewedDateTimeUdf kind) {
+const TReviewedUdfSpec& ReviewedDateTimeUdf(EReviewedDateTimeUdf kind) {
     return ReviewedDateTimeUdfs[static_cast<size_t>(kind)];
 }
 
@@ -2705,9 +2705,9 @@ void CheckEmptyStructDescriptor(const TExprNode& node, TStringBuf label) {
 }
 
 
-const TCallableExprType& CheckReviewedDateTimeCallable(
+const TCallableExprType& CheckReviewedUdfCallable(
     const TTypeAnnotationNode* annotation,
-    const TReviewedDateTimeUdfSpec& spec,
+    const TReviewedUdfSpec& spec,
     TStringBuf label)
 {
     if (!annotation || annotation->GetKind() != ETypeAnnotationKind::Callable) {
@@ -2715,16 +2715,16 @@ const TCallableExprType& CheckReviewedDateTimeCallable(
     }
     const auto& callable = *annotation->Cast<TCallableExprType>();
     const auto& arguments = callable.GetArguments();
-    if (!IsExactReviewedDateTimeAnnotation(callable.GetReturnType(), spec.Result) ||
+    if (!IsExactReviewedUdfAnnotation(callable.GetReturnType(), spec.Result) ||
         callable.GetOptionalArgumentsCount() != 0 ||
         !callable.GetPayload().empty() ||
         arguments.size() != spec.ArgumentCount)
     {
         Unsupported(TStringBuilder() << label
-            << " is not the reviewed DateTime2 signature");
+            << " is not the reviewed Udf signature");
     }
     for (size_t index = 0; index < spec.ArgumentCount; ++index) {
-        if (!IsExactReviewedDateTimeAnnotation(
+        if (!IsExactReviewedUdfAnnotation(
                 arguments[index].Type, spec.Arguments[index].Type) ||
             !arguments[index].Name.empty() ||
             arguments[index].Flags != spec.Arguments[index].Flags)
@@ -2736,46 +2736,58 @@ const TCallableExprType& CheckReviewedDateTimeCallable(
     return callable;
 }
 
-void CheckReviewedDateTimeUserType(
+void CheckReviewedUdfUserType(
     const TExprNode& node,
-    const TReviewedDateTimeUdfSpec& spec)
+    const TReviewedUdfSpec& spec)
 {
+    const TString userTypeLabel =
+        TStringBuilder() << spec.Name << " Udf user type";
     if (spec.UserArgumentCount == 0) {
-        CheckVoidNode(node, true, "DateTime2 Udf user type");
+        CheckVoidNode(node, true, userTypeLabel);
         return;
     }
 
-    CheckTupleDescriptor(node, 3, "DateTime2 Udf user type");
+    CheckTupleDescriptor(node, 3, userTypeLabel);
     const auto& arguments = *node.Child(0);
+    const TString argumentsLabel =
+        TStringBuilder() << spec.Name << " Udf arguments";
     CheckTupleDescriptor(
-        arguments, spec.UserArgumentCount, "DateTime2 Udf arguments");
+        arguments, spec.UserArgumentCount, argumentsLabel);
     for (size_t index = 0; index < spec.UserArgumentCount; ++index) {
-        CheckReviewedDateTimeTypeDescriptor(
+        CheckReviewedUdfTypeDescriptor(
             *arguments.Child(index),
             spec.UserArguments[index],
-            "DateTime2 Udf user argument");
+            TStringBuilder() << spec.Name << " Udf user argument");
     }
-    CheckEmptyStructDescriptor(*node.Child(1), "DateTime2 Udf options");
-    CheckTupleDescriptor(*node.Child(2), 0, "DateTime2 Udf type parameters");
+    CheckEmptyStructDescriptor(
+        *node.Child(1), TStringBuilder() << spec.Name << " Udf options");
+    CheckTupleDescriptor(
+        *node.Child(2),
+        0,
+        TStringBuilder() << spec.Name << " Udf type parameters");
 }
 
-void CheckReviewedDateTimeCachedType(
+void CheckReviewedUdfCachedType(
     const TExprNode& node,
     const TCallableExprType& udfType,
-    const TReviewedDateTimeUdfSpec& spec)
+    const TReviewedUdfSpec& spec)
 {
     CheckScalarSafetyMetadata(node);
     if (!node.IsCallable("CallableType") ||
         node.ChildrenSize() != spec.ArgumentCount + 2)
     {
-        Unsupported("Cached DateTime2 CallableType has the wrong shape");
+        Unsupported(TStringBuilder() << "Cached " << spec.Name
+            << " CallableType has the wrong shape");
     }
-    const auto& cachedType = CheckReviewedDateTimeCallable(
-        &DescribedType(node, "cached DateTime2 type"),
+    const TString cachedTypeLabel =
+        TStringBuilder() << "cached " << spec.Name << " type";
+    const auto& cachedType = CheckReviewedUdfCallable(
+        &DescribedType(node, cachedTypeLabel),
         spec,
-        "cached DateTime2 type");
+        cachedTypeLabel);
     if (!IsSameAnnotation(cachedType, udfType)) {
-        Unsupported("Cached DateTime2 CallableType disagrees with Udf");
+        Unsupported(TStringBuilder() << "Cached " << spec.Name
+            << " CallableType disagrees with Udf");
     }
 
     const auto& main = *node.Child(0);
@@ -2785,28 +2797,32 @@ void CheckReviewedDateTimeCachedType(
     if (!main.IsList() || main.ChildrenSize() != 0 ||
         !result.IsList() || result.ChildrenSize() != 1)
     {
-        Unsupported("Cached DateTime2 CallableType has a noncanonical header");
+        Unsupported(TStringBuilder() << "Cached " << spec.Name
+            << " CallableType has a noncanonical header");
     }
-    CheckReviewedDateTimeTypeDescriptor(
-        *result.Child(0), spec.Result, "DateTime2 Udf return type");
+    CheckReviewedUdfTypeDescriptor(
+        *result.Child(0),
+        spec.Result,
+        TStringBuilder() << spec.Name << " Udf return type");
 
     for (size_t index = 0; index < spec.ArgumentCount; ++index) {
         const auto& argument = *node.Child(index + 2);
         const auto flags = spec.Arguments[index].Flags;
         CheckScalarSafetyMetadata(argument);
-        const bool exactFlags = flags == DateTimeAutoMap
+        const bool exactFlags = flags == ReviewedUdfAutoMap
             ? argument.IsList() && argument.ChildrenSize() == 3 &&
                 argument.Child(1)->IsAtom("") &&
                 argument.Child(2)->IsAtom("1")
             : flags == 0 && argument.IsList() &&
                 argument.ChildrenSize() == 1;
         if (!exactFlags) {
-            Unsupported("Cached DateTime2 argument flags are not canonical");
+            Unsupported(TStringBuilder() << "Cached " << spec.Name
+                << " argument flags are not canonical");
         }
-        CheckReviewedDateTimeTypeDescriptor(
+        CheckReviewedUdfTypeDescriptor(
             *argument.Child(0),
             spec.Arguments[index].Type,
-            "DateTime2 Udf argument type");
+            TStringBuilder() << spec.Name << " Udf argument type");
     }
 }
 
@@ -2816,9 +2832,9 @@ bool IsExactSetting(const TExprNode& node, TStringBuf name) {
         node.Child(0)->IsAtom(name);
 }
 
-const TCallableExprType& CheckReviewedDateTimeUdf(
+const TCallableExprType& CheckReviewedUdf(
     const TExprNode& node,
-    const TReviewedDateTimeUdfSpec& spec)
+    const TReviewedUdfSpec& spec)
 {
     CheckScalarSafetyMetadata(node);
     if (!node.IsCallable("Udf") || node.ChildrenSize() != 8 ||
@@ -2828,12 +2844,18 @@ const TCallableExprType& CheckReviewedDateTimeUdf(
         Unsupported(TStringBuilder() << spec.Name
             << " requires its normalized eight-child Udf");
     }
-    const auto& callable = CheckReviewedDateTimeCallable(
+    const auto& callable = CheckReviewedUdfCallable(
         node.GetTypeAnn(), spec, TStringBuilder() << spec.Name << " Udf");
-    CheckVoidNode(*node.Child(1), false, "DateTime2 Udf run config");
-    CheckReviewedDateTimeUserType(*node.Child(2), spec);
-    CheckReviewedDateTimeCachedType(*node.Child(4), callable, spec);
-    CheckVoidNode(*node.Child(5), true, "DateTime2 Udf run-config type");
+    CheckVoidNode(
+        *node.Child(1),
+        false,
+        TStringBuilder() << spec.Name << " Udf run config");
+    CheckReviewedUdfUserType(*node.Child(2), spec);
+    CheckReviewedUdfCachedType(*node.Child(4), callable, spec);
+    CheckVoidNode(
+        *node.Child(5),
+        true,
+        TStringBuilder() << spec.Name << " Udf run-config type");
 
     const auto& settings = *node.Child(7);
     CheckScalarSafetyMetadata(settings);
@@ -2851,19 +2873,19 @@ const TCallableExprType& CheckReviewedDateTimeUdf(
     return callable;
 }
 
-void CheckReviewedDateTimeApply(
+void CheckReviewedUdfApply(
     const TExprNode& node,
-    const TReviewedDateTimeUdfSpec& spec,
+    const TReviewedUdfSpec& spec,
     TStringBuf label)
 {
     CheckScalarSafetyMetadata(node);
     if (!node.IsCallable("Apply") ||
         node.ChildrenSize() != spec.ArgumentCount + 1 ||
-        !IsExactReviewedDateTimeAnnotation(node.GetTypeAnn(), spec.Result))
+        !IsExactReviewedUdfAnnotation(node.GetTypeAnn(), spec.Result))
     {
         Unsupported(TStringBuilder() << label << " has the wrong Apply shape");
     }
-    const auto& callable = CheckReviewedDateTimeUdf(*node.Child(0), spec);
+    const auto& callable = CheckReviewedUdf(*node.Child(0), spec);
     if (!IsSameAnnotation(*node.GetTypeAnn(), *callable.GetReturnType())) {
         Unsupported(TStringBuilder() << label << " result disagrees with its Udf");
     }
@@ -2945,7 +2967,7 @@ bool IsProvenPresentStaticSqlInDateSafeCast(const TExprNode& node) {
 }
 
 i32 ParseIntervalFromDays(const TExprNode& node) {
-    CheckReviewedDateTimeApply(
+    CheckReviewedUdfApply(
         node,
         ReviewedDateTimeUdf(EReviewedDateTimeUdf::IntervalFromDays),
         "IntervalFromDays Apply");
@@ -3308,7 +3330,7 @@ EConstantDateShift ConstantDateShiftKind(const TExprNode& udf) {
     Unsupported("Constant DateTime2 fold requires ShiftYears or ShiftMonths");
 }
 
-const TReviewedDateTimeUdfSpec& ConstantDateShiftUdf(
+const TReviewedUdfSpec& ConstantDateShiftUdf(
     EConstantDateShift kind)
 {
     return ReviewedDateTimeUdf(
@@ -3318,7 +3340,7 @@ const TReviewedDateTimeUdfSpec& ConstantDateShiftUdf(
 }
 
 ui16 ParseSplitDate(const TExprNode& node) {
-    CheckReviewedDateTimeApply(
+    CheckReviewedUdfApply(
         node,
         ReviewedDateTimeUdf(EReviewedDateTimeUdf::Split),
         "DateTime2.Split Apply");
@@ -3393,7 +3415,7 @@ NJson::TJsonValue ConstantShiftedDateExpr(const TExprNode& node) {
     }
     const auto& udf = *shift.Child(0);
     const auto kind = ConstantDateShiftKind(udf);
-    CheckReviewedDateTimeApply(
+    CheckReviewedUdfApply(
         shift, ConstantDateShiftUdf(kind), "DateTime2 shift Apply");
     const ui16 date = ParseSplitDate(*shift.Child(1));
 
@@ -3418,7 +3440,7 @@ NJson::TJsonValue ConstantShiftedDateExpr(const TExprNode& node) {
     }
 
     const auto& body = *lambda.Child(1);
-    CheckReviewedDateTimeApply(
+    CheckReviewedUdfApply(
         body,
         ReviewedDateTimeUdf(EReviewedDateTimeUdf::MakeDate),
         "DateTime2.MakeDate Apply");
@@ -3513,12 +3535,12 @@ TString CheckNullableDateYearMap(
     }
 
     const auto& getYear = *lambda.Child(1);
-    CheckReviewedDateTimeApply(
+    CheckReviewedUdfApply(
         getYear,
         ReviewedDateTimeUdf(EReviewedDateTimeUdf::GetYear),
         "DateTime2.GetYear Apply");
     const auto& split = *getYear.Child(1);
-    CheckReviewedDateTimeApply(
+    CheckReviewedUdfApply(
         split,
         ReviewedDateTimeUdf(EReviewedDateTimeUdf::SplitTimestamp),
         "DateTime2.Split Timestamp Apply");

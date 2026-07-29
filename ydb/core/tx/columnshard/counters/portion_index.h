@@ -113,6 +113,15 @@ public:
     }
 
 public:
+    class TActivePortions: public IStatsSelector {
+    public:
+        bool Select(const TPortionClass& portionClass) const override {
+            return IsIn({ NOlap::NPortion::EProduced::INSERTED, NOlap::NPortion::EProduced::COMPACTED,
+                            NOlap::NPortion::EProduced::SPLIT_COMPACTED }, portionClass.GetProduced()) &&
+                   portionClass.GetIsDefaultTier();
+        }
+    };
+
     class TDiskUsedPortions: public IStatsSelector {
     public:
         bool Select(const TPortionClass& portionClass) const override {

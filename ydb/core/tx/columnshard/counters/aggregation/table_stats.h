@@ -13,10 +13,10 @@ private:
     TCountersManager& Counters;
     const NTabletFlatExecutor::NFlatExecutorSetup::IExecutor* Executor;
 
-    void FillPortionStats(
-        ::NKikimrTableStats::TTableStats& to, const NOlap::TSimplePortionsGroupInfo& from, const NOlap::TSmallBlobsStat& smallBlobs) const {
-        to.SetRowCount(from.GetRecordsCount());
-        to.SetDataSize(from.GetBlobBytes());
+    void FillPortionStats(::NKikimrTableStats::TTableStats& to, const NOlap::TSimplePortionsGroupInfo& activePortions,
+        const NOlap::TSimplePortionsGroupInfo& diskUsedPortions, const NOlap::TSmallBlobsStat& smallBlobs) const {
+        to.SetRowCount(activePortions.GetRecordsCount());
+        to.SetDataSize(diskUsedPortions.GetBlobBytes());
         to.SetSmallBlobsVolumeBytes(smallBlobs.VolumeBytes);
         to.SetSmallBlobsCount(smallBlobs.Count);
     }
@@ -32,7 +32,8 @@ public:
         Counters.FillTableStats(pathId, tableStats);
 
         const auto& portionIndexCounters = Counters.GetPortionIndexCounters();
-        FillPortionStats(tableStats, portionIndexCounters->GetTableStats(pathId, TPortionIndexStats::TDiskUsedPortions()),
+        FillPortionStats(tableStats, portionIndexCounters->GetTableStats(pathId, TPortionIndexStats::TActivePortions()),
+            portionIndexCounters->GetTableStats(pathId, TPortionIndexStats::TDiskUsedPortions()),
             portionIndexCounters->GetTableSmallBlobs(pathId));
     }
 
@@ -45,8 +46,8 @@ public:
         }
 
         const auto& portionIndexCounters = Counters.GetPortionIndexCounters();
-        FillPortionStats(tableStats, portionIndexCounters->GetTotalStats(TPortionIndexStats::TDiskUsedPortions()),
-            portionIndexCounters->GetTotalSmallBlobs());
+        FillPortionStats(tableStats, portionIndexCounters->GetTotalStats(TPortionIndexStats::TActivePortions()),
+            portionIndexCounters->GetTotalStats(TPortionIndexStats::TDiskUsedPortions()), portionIndexCounters->GetTotalSmallBlobs());
     }
 };
 

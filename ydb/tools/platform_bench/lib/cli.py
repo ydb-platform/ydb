@@ -1,4 +1,5 @@
 import argparse
+import math
 import os
 import sys
 import tempfile
@@ -7,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from ydb.tools.platform_bench.lib.actors_core import RunConfiguration, run_actors_core
-from ydb.tools.platform_bench.lib.common import BenchmarkError, extract_executable
+from ydb.tools.platform_bench.lib.common import BenchmarkError, BenchmarkInterrupted, extract_executable
 
 
 SCENARIO_NAME = "actors-core"
@@ -81,8 +82,8 @@ def _positive_integer(value):
 
 def _positive_float(value):
     parsed = float(value)
-    if parsed <= 0:
-        raise argparse.ArgumentTypeError("must be positive")
+    if parsed <= 0 or not math.isfinite(parsed):
+        raise argparse.ArgumentTypeError("must be a finite positive number")
     return parsed
 
 
@@ -196,6 +197,9 @@ def main(argv=None, resource_loader=None, tool_revision=None):
             _describe()
             return 0
         return _run(arguments, resource_loader, tool_revision or {"commit_id": "unknown"})
+    except BenchmarkInterrupted as error:
+        print("platform_bench: error: {}".format(error), file=sys.stderr)
+        return 130
     except BenchmarkError as error:
         print("platform_bench: error: {}".format(error), file=sys.stderr)
-        return 130 if "interrupted" in str(error) else 1
+        return 1

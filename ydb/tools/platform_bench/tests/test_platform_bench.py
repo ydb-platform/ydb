@@ -7,7 +7,7 @@ import stat
 import tempfile
 import textwrap
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from ydb.tools.platform_bench.lib.actors_core import (
@@ -16,7 +16,7 @@ from ydb.tools.platform_bench.lib.actors_core import (
     parse_metrics,
     run_actors_core,
 )
-from ydb.tools.platform_bench.lib.common import BenchmarkError, extract_executable
+from ydb.tools.platform_bench.lib.common import BenchmarkError, BenchmarkInterrupted, extract_executable
 from ydb.tools.platform_bench.lib.cli import main
 from ydb.tools.platform_bench.lib.runner import run_command
 
@@ -81,6 +81,35 @@ class PlatformBenchTest(unittest.TestCase):
             self.assertEqual(main(["describe", "actors-core"]), 0)
         self.assertIn("actors-core", output.getvalue())
         self.assertIn("summary.csv", output.getvalue())
+
+    def test_timeout_rejects_non_finite_values(self):
+        for value in ("nan", "inf", "-inf"):
+            with self.subTest(value=value):
+                error = io.StringIO()
+                with redirect_stderr(error), self.assertRaises(SystemExit) as raised:
+                    main(["run", "actors-core", "--timeout={}".format(value)])
+                self.assertEqual(raised.exception.code, 2)
+                self.assertIn("must be a finite positive number", error.getvalue())
+
+    def test_cli_exit_code_uses_interruption_error_type(self):
+        def loader_for(error):
+            def loader(_):
+                raise error
+
+            return loader
+
+        error_output = io.StringIO()
+        with redirect_stderr(error_output):
+            generic_code = main(
+                ["run", "actors-core", "--output", str(self.root / "generic-error")],
+                resource_loader=loader_for(BenchmarkError("benchmark was interrupted by another component")),
+            )
+            interrupted_code = main(
+                ["run", "actors-core", "--output", str(self.root / "interrupted-error")],
+                resource_loader=loader_for(BenchmarkInterrupted("benchmark stopped")),
+            )
+        self.assertEqual(generic_code, 1)
+        self.assertEqual(interrupted_code, 130)
 
     def test_run_writes_manifest_raw_metrics_and_median_summary(self):
         script = self._script(

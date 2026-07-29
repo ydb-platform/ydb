@@ -3,9 +3,9 @@ RECURSE(
     cfg
     disk_obliterator
     mnc
-    platform_bench
     include_sanitizer
     partcheck
+    platform_bench
     query_replay
     query_replay_yt
     stress_tool

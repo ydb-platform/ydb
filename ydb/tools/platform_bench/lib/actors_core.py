@@ -5,7 +5,12 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ydb.tools.platform_bench.lib.common import BenchmarkError, atomic_write_json, atomic_write_text
+from ydb.tools.platform_bench.lib.common import (
+    BenchmarkError,
+    BenchmarkInterrupted,
+    atomic_write_json,
+    atomic_write_text,
+)
 from ydb.tools.platform_bench.lib.runner import run_command
 from ydb.tools.platform_bench.lib.system_info import collect_system_info
 
@@ -21,13 +26,6 @@ CSV_COLUMNS = (
 )
 CSV_HEADER = ",".join(CSV_COLUMNS)
 TEST_FILTER = "HeavyActorBenchmark::SendActivateReceiveCSVManual"
-ENVIRONMENT_KEYS = (
-    "ACTORSYSTEM_TEST_MODE",
-    "ACTORSYSTEM_THREADS",
-    "ACTORSYSTEM_ACTOR_PAIRS",
-    "ACTORSYSTEM_INFLIGHTS",
-    "ACTORSYSTEM_DURATION",
-)
 
 
 @dataclass(frozen=True)
@@ -272,6 +270,8 @@ def run_actors_core(binary, configuration, output_directory, tool_revision, work
             manifest["finished_at"] = _utc_now()
             manifest["error"] = failure
             atomic_write_json(manifest_path, manifest)
+            if result.interrupted:
+                raise BenchmarkInterrupted(failure)
             raise BenchmarkError(failure)
         atomic_write_json(manifest_path, manifest)
 

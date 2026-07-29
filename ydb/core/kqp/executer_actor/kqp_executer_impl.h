@@ -78,7 +78,6 @@ struct TEvPrivate {
         EvRetry = EventSpaceBegin(TEvents::ES_PRIVATE),
         EvResourcesSnapshot,
         EvReattachToShard,
-        EvDescribePqTopic,
     };
 
     struct TEvRetry : public TEventLocal<TEvRetry, EEv::EvRetry> {
@@ -102,19 +101,6 @@ struct TEvPrivate {
 
         explicit TEvReattachToShard(ui64 tabletId)
             : TabletId(tabletId) {}
-    };
-
-    struct TEvDescribePqTopic : public TEventLocal<TEvDescribePqTopic, EvDescribePqTopic> {
-        // On success: new total partition count for this topic.
-        // On error:   PartitionsCount == 0 and ErrorMessage is set.
-        ui32 PartitionsCount = 0;
-        TString ErrorMessage;
-
-        explicit TEvDescribePqTopic(ui32 partitionsCount)
-            : PartitionsCount(partitionsCount) {}
-
-        explicit TEvDescribePqTopic(TString errorMessage)
-            : ErrorMessage(std::move(errorMessage)) {}
     };
 };
 

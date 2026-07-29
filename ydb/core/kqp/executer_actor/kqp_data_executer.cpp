@@ -1,6 +1,7 @@
 #include "kqp_executer.h"
 #include "kqp_executer_impl.h"
 #include "kqp_planner.h"
+#include "kqp_pq_topic_resolver.h"
 #include "kqp_tasks_validate.h"
 
 #include <ydb/core/base/appdata.h>
@@ -392,7 +393,7 @@ public:
                 hFunc(TEvSaveScriptExternalEffectResponse, HandleResolve);
                 hFunc(TEvSaveScriptPhysicalGraphResponse, HandleResolve);
                 hFunc(TEvDescribeSecretsResponse, HandleResolve);
-                hFunc(TEvPrivate::TEvDescribePqTopic, HandleResolve);
+                hFunc(TEvKqpExecuter::TEvPqTopicResolveStatus, HandleResolve);
                 hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandlePartitionStats);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 hFunc(TEvKqpBuffer::TEvError, Handle);
@@ -523,7 +524,7 @@ private:
         SecretSnapshotRequired = false;
         // SecureParams is now populated — launch any deferred PQ topic describes
         // that need the resolved secret token.
-        LaunchPendingPqTopicDescribes();
+        StartPqTopicResolver();
         if (!WaitRequired()) {
             Execute();
         }
@@ -546,28 +547,22 @@ private:
         }
     }
 
-    void HandleResolve(TEvPrivate::TEvDescribePqTopic::TPtr& ev) {
-        if (!ev->Get()->ErrorMessage.empty()) {
-            YDB_LOG_ERROR("Failed to describe PQ topic for partition count refresh",
+    void HandleResolve(TEvKqpExecuter::TEvPqTopicResolveStatus::TPtr& ev) {
+        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+            YDB_LOG_ERROR("PQ topic resolver finished with error",
                 {"marker", "KQPDATA"},
                 {"actorId", SelfId()},
                 {"txId", TxId},
                 {"ctx", *GetUserRequestContext()},
-                {"error", ev->Get()->ErrorMessage},
+                {"issues", ev->Get()->Issues.ToOneLineString()},
                 {"traceId", TraceId()});
-            ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
-                YqlIssue({}, NYql::TIssuesIds::KIKIMR_SCHEME_ERROR,
-                    TStringBuilder() << "Failed to describe topic for partition count refresh: "
-                                     << ev->Get()->ErrorMessage));
+            ReplyErrorAndDie(ev->Get()->Status, ev->Get()->Issues);
             return;
         }
 
-        if (--PendingTopicDescribes == 0) {
-            PatchPqPartitionCount(ev->Get()->PartitionsCount);
-            TopicPartitionSnapshotRequired = false;
-            if (!WaitRequired()) {
-                Execute();
-            }
+        TopicPartitionSnapshotRequired = false;
+        if (!WaitRequired()) {
+            Execute();
         }
     }
 
@@ -611,11 +606,22 @@ private:
                                     && topicSourceProto.GetUsedPartitionPredicate();
                                 if (!usedPartitionPredicate) {
                                     TopicPartitionSnapshotRequired = true;
-                                    ++PendingTopicDescribes;
-                                    // Defer the actual describe call until after secrets are
-                                    // resolved so that SecureParams is populated and we can
+                                    // Collect the source; the resolver is launched after secrets
+                                    // are resolved so that SecureParams is populated and we can
                                     // fetch the auth token from the external data source.
-                                    PendingPqTopicDescribeSources.push_back(extSrc);
+                                    NYql::NPq::NProto::TDqPqTopicSource ts;
+                                    extSrc.GetSettings().UnpackTo(&ts);
+                                    TPqTopicResolverSource resolverSrc;
+                                    resolverSrc.Cluster   = extSrc.GetSourceName();
+                                    resolverSrc.Endpoint  = ts.GetEndpoint();
+                                    resolverSrc.Database  = ts.GetEndpoint().empty()
+                                                                ? Database
+                                                                : ts.GetDatabase();
+                                    resolverSrc.TopicPath = ts.GetTopicPath();
+                                    resolverSrc.TokenName = ts.GetToken().GetName();
+                                    resolverSrc.UseSsl    = ts.GetUseSsl();
+                                    resolverSrc.DatabaseForClusterConfig = ts.GetDatabase();
+                                    PendingPqTopicResolveSources.push_back(std::move(resolverSrc));
                                 }
                             }
                     }
@@ -637,12 +643,12 @@ private:
         }
         if (SecretSnapshotRequired) {
             GetSecretsSnapshot();
-            // PQ topic describes are deferred to HandleResolve(TEvDescribeSecretsResponse)
-            // where SecureParams will already be populated.
+            // PQ topic resolver is started after secrets are resolved
+            // in HandleResolve(TEvDescribeSecretsResponse).
         } else {
-            // No secrets needed — SecureParams is already up-to-date, so we can
-            // launch the PQ topic describes immediately.
-            LaunchPendingPqTopicDescribes();
+            // No secrets needed — SecureParams is already populated, so we can
+            // start the PQ topic resolver right away.
+            StartPqTopicResolver();
         }
         if (ResourceSnapshotRequired) {
             GetResourcesSnapshot();
@@ -1407,119 +1413,40 @@ private:
     }
 
 private:
-    // Launches DescribePqSourceTopic for all deferred PQ source stages.
+    // Starts TKqpPqTopicResolver for all collected PQ source stages.
     // Must be called only after SecureParams has been populated.
-    void LaunchPendingPqTopicDescribes() {
-        for (const auto& extSrc : PendingPqTopicDescribeSources) {
-            DescribePqSourceTopic(extSrc);
-        }
-        PendingPqTopicDescribeSources.clear();
-    }
-
-    // Fires an async DescribeFederatedTopic for the given PQ external source stage.
-    // On completion, sends TEvPrivate::TEvDescribePqTopic to SelfId().
-    void DescribePqSourceTopic(const NKqpProto::TKqpExternalSource& extSrc) {
-        NYql::NPq::NProto::TDqPqTopicSource topicSource;
-        YQL_ENSURE(extSrc.GetSettings().UnpackTo(&topicSource),
-            "Failed to unpack TDqPqTopicSource from external source settings");
-
-        const TString cluster = extSrc.GetSourceName();
-        // For local topics the endpoint is empty and the Database field in the source
-        // proto stores a YQL cluster alias (e.g. "local"), not a real YDB path.
-        // Use the executer's own Database (e.g. "/Root") so the local RPC handler can
-        // route the request to the correct tenant.
-        const TString database  = topicSource.GetEndpoint().empty()
-                                      ? Database
-                                      : topicSource.GetDatabase();
-        const TString topicPath = topicSource.GetTopicPath();
-        // Resolve the auth token from the external data source secret.
-        // The Token.Name field is the key in SecureParams (populated from the
-        // external data source secrets before this function is called).
-        const TString tokenName = topicSource.GetToken().GetName();
-        const auto& secureParams = TasksGraph.GetMeta().SecureParams;
-        const auto tokenIt = secureParams.find(tokenName);
-        const TString token = tokenIt != secureParams.end() ? tokenIt->second : TString{};
-        const TString sessionId = CreateGuidAsString();
-        auto gateway = FederatedQuerySetup->PqGatewayFactory->CreatePqGateway();
-
-        {
-            NYql::TPqClusterConfig clusterConfig;
-            clusterConfig.SetName(cluster);
-            clusterConfig.SetClusterType(NYql::TPqClusterConfig::CT_DATA_STREAMS);
-            clusterConfig.SetEndpoint(topicSource.GetEndpoint());
-            clusterConfig.SetToken(token);
-            clusterConfig.SetDatabase(topicSource.GetDatabase());
-            clusterConfig.SetUseSsl(topicSource.GetUseSsl());
-            gateway->AddCluster(clusterConfig);
-            gateway->OpenSession(sessionId, "username");
-        }
-        YDB_LOG_DEBUG("Describing PQ topic",
-            {"cluster", cluster},
-            {"database=", database},
-            {"topicPath=", topicPath},
-            {"sessionId=", sessionId});
-        gateway->DescribeFederatedTopic(sessionId, cluster, database, topicPath, token)
-            .Subscribe([actorSystem = TActivationContext::ActorSystem(), selfId = SelfId(), gateway = gateway](const auto& future)
-            {
-                try {
-                    const auto& result = future.GetValue();
-                    ui32 totalPartitions = 0;
-                    for (const auto& clusterInfo : result) {
-                        totalPartitions += clusterInfo.PartitionsCount; // TODO
-                    }
-                    actorSystem->Send(selfId,
-                        new TEvPrivate::TEvDescribePqTopic(totalPartitions));
-                } catch (const std::exception& ex) {
-                    actorSystem->Send(selfId,
-                        new TEvPrivate::TEvDescribePqTopic(TString(ex.what())));
-                }
-            });
-    }
-
-    // Updates TopicPartitionsCount in each task's ReadRanges that belong to PQ source stages.
-    // This ensures ExtractPartitionsFromParams() passes its consistency YQL_ENSURE and the
-    // read actor immediately sees the up-to-date partition count on restoration.
-    void PatchPqPartitionCount(ui32 newPartitionsCount) {
-        if (!Request.QueryPhysicalGraph || newPartitionsCount == 0) {
+    void StartPqTopicResolver() {
+        if (PendingPqTopicResolveSources.empty()) {
             return;
         }
 
-        auto* mutableGraph = const_cast<NKikimrKqp::TQueryPhysicalGraph*>(Request.QueryPhysicalGraph.get());
-        for (int taskIdx = 0; taskIdx < static_cast<int>(mutableGraph->TasksSize()); ++taskIdx) {
-            auto* task = mutableGraph->MutableTasks(taskIdx);
-            auto* dqTask = task->MutableDqTask();
-            bool hasPqRanges = false;
-            for (int rangeIdx = 0; rangeIdx < static_cast<int>(dqTask->ReadRangesSize()); ++rangeIdx) {
-                NYql::NPq::NProto::TDqReadTaskParams params;
-                if (!params.ParseFromString(dqTask->GetReadRanges(rangeIdx))) {
-                    continue;
-                }
-                if (params.PartitioningParamsSize() == 0) {
-                    continue;
-                }
-                hasPqRanges = true;
-                for (int ppIdx = 0; ppIdx < static_cast<int>(params.PartitioningParamsSize()); ++ppIdx) {
-                    params.MutablePartitioningParams(ppIdx)->SetTopicPartitionsCount(newPartitionsCount);
-                }
-                dqTask->SetReadRanges(rangeIdx, params.SerializeAsString());
-            }
-            (void)hasPqRanges;
-        }
+        // Pass a non-const mutable copy of the shared_ptr so the resolver can patch it.
+        auto mutableGraph = std::const_pointer_cast<NKikimrKqp::TQueryPhysicalGraph>(
+            Request.QueryPhysicalGraph);
+
+        auto* resolverActor = CreateKqpPqTopicResolver(
+            SelfId(),
+            TxId,
+            std::move(PendingPqTopicResolveSources),
+            THashMap<TString, TString>(TasksGraph.GetMeta().SecureParams),
+            FederatedQuerySetup->PqGatewayFactory,
+            std::move(mutableGraph));
+
+        RegisterWithSameMailbox(resolverActor);
+        PendingPqTopicResolveSources.clear();
     }
 
     TShardIdToTableInfoPtr ShardIdToTableInfo;
     TVector<NKikimr::TTableId> TableIdsForSnapshot;
 
-    // PQ source stages whose DescribeFederatedTopic call is deferred until after
-    // SecureParams is populated (i.e. after secrets have been resolved).
-    TVector<NKqpProto::TKqpExternalSource> PendingPqTopicDescribeSources;
+    // PQ source stages whose topic describes are deferred until after secrets are resolved.
+    TVector<TPqTopicResolverSource> PendingPqTopicResolveSources;
 
     bool HasExternalSources = false;
     bool SecretSnapshotRequired = false;
     bool ResourceSnapshotRequired = false;
     bool SaveScriptExternalEffectRequired = false;
     bool TopicPartitionSnapshotRequired = false;
-    ui32 PendingTopicDescribes = 0;
 
     const bool ReadOnlyTx;
     bool ImmediateTx = false;

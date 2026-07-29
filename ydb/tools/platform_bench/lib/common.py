@@ -10,6 +10,10 @@ class BenchmarkError(RuntimeError):
     pass
 
 
+class BenchmarkInterrupted(BenchmarkError):
+    pass
+
+
 @dataclass(frozen=True)
 class BinaryArtifact:
     path: Path

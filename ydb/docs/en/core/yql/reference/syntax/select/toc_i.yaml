@@ -31,3 +31,4 @@ items:
 - { name: TABLESAMPLE,          href: sample.md,                when: feature_tablesample     }
 - { name: MATCH_RECOGNIZE,      href: match_recognize.md                                      }
 - { name: STREAMING,            href: streaming.md                                            }
+- { name: FROM Topic,           href: topics.md                                               }

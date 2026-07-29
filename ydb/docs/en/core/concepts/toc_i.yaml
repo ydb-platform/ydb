@@ -5,6 +5,14 @@ items:
   include:
     path: analytics/toc_p.yaml
     mode: link
+<<<<<<< HEAD
+=======
+- name: Stream processing
+  href: streaming-query/index.md
+  include:
+    path: streaming-query/toc_p.yaml
+    mode: link
+>>>>>>> 6c2f08c6922 (Auto-translate docs from PR #30237 (#48223))
 - name: Architecture
   href: architecture/index.md
   include:

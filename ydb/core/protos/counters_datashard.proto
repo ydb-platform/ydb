@@ -41,7 +41,10 @@ enum ESimpleCounters {
     COUNTER_LOCK_ROWS_INFLIGHT = 29                                [(CounterOpts) = {Name: "LockRowsInFlight"}];
     COUNTER_LOCK_ROWS_WAITING = 30                                 [(CounterOpts) = {Name: "LockRowsWaiting"}];
     COUNTER_CHANGE_QUEUE_BYTES = 31                                [(CounterOpts) = {Name: "ChangeQueueBytes"}];
+<<<<<<< HEAD
 >>>>>>> 110b57fd92a (Account for overload metrics increment in TEvWrite pipelining (#48281))
+=======
+>>>>>>> 4051bccb4d2 (Account for overload metrics increment in TEvWrite pipelining)
 }
 
 enum ECumulativeCounters {
@@ -164,7 +167,10 @@ enum ECumulativeCounters {
 =======
     COUNTER_LOCK_ROWS_FINISHED = 115                      [(CounterOpts) = {Name: "LockRowsFinished"}];
     COUNTER_CHANGE_QUEUE_OVERFLOW_REJECTS = 116           [(CounterOpts) = {Name: "ChangeQueueOverflowRejects"}];
+<<<<<<< HEAD
 >>>>>>> 110b57fd92a (Account for overload metrics increment in TEvWrite pipelining (#48281))
+=======
+>>>>>>> 4051bccb4d2 (Account for overload metrics increment in TEvWrite pipelining)
 }
 
 enum EPercentileCounters {

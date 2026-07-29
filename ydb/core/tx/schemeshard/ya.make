@@ -24,6 +24,7 @@ RECURSE_FOR_TESTS(
     ut_export
     ut_export_reboots_s3
     ut_external_data_source
+    ut_external_data_source_iam_token
     ut_external_data_source_reboots
     ut_external_table
     ut_external_table_reboots

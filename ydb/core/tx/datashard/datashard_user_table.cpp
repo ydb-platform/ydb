@@ -325,8 +325,9 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
 
     TableSchemaVersion = descr.GetTableSchemaVersion();
     IsBackup = descr.GetIsBackup();
-    // descr is the full merged table description (not a delta), so an absent
-    // Configured status means the override was never set or was dropped.
+    // On the alter path descr is a delta, but the schemeshard always resends the
+    // current detailed metrics settings in it, so an absent Configured status
+    // means the override was never set or was dropped.
     DetailedMetricsLevel = descr.GetDetailedMetricsSettings().HasConfigured()
         ? descr.GetDetailedMetricsSettings().GetConfigured().GetMetricsLevel()
         : NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified;
@@ -426,6 +427,15 @@ void TUserTable::AlterSchema() {
 
     ReplicationConfig.Serialize(*schema.MutableReplicationConfig());
     IncrementalBackupConfig.Serialize(*schema.MutableIncrementalBackupConfig());
+
+    // Keep the persisted schema in sync with the parsed level, so that a restart
+    // does not resurrect an override, which an alter has just dropped
+    if (DetailedMetricsLevel != NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified) {
+        schema.MutableDetailedMetricsSettings()->MutableConfigured()
+            ->SetMetricsLevel(DetailedMetricsLevel);
+    } else {
+        schema.ClearDetailedMetricsSettings();
+    }
 
     schema.SetName(Name);
     schema.SetPath(Path);

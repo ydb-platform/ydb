@@ -8181,6 +8181,19 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
         proto->MutableIncrementalBackupConfig()->CopyFrom(tableInfo->IncrementalBackupConfig());
     }
 
+    // The detailed metrics settings have to be resent on every alter, because the shard
+    // parses the alter body as if it was the full table description and treats an absent
+    // DetailedMetricsSettings as a request to drop the currently configured settings
+    if (alterData->TableDescriptionFull.Defined() && alterData->TableDescriptionFull->HasDetailedMetricsSettings()) {
+        // The alter carries either the new settings (Configured) or a request
+        // to drop the existing ones (NotConfigured), pass it through as is
+        proto->MutableDetailedMetricsSettings()->CopyFrom(
+            alterData->TableDescriptionFull->GetDetailedMetricsSettings());
+    } else if (tableInfo->HasDetailedMetricsSettings()) {
+        proto->MutableDetailedMetricsSettings()->MutableConfigured()->CopyFrom(
+            tableInfo->GetDetailedMetricsSettings());
+    }
+
     TString txBody;
     Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
     return txBody;

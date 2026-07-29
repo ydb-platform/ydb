@@ -17,9 +17,8 @@ namespace NActors {
         , Pool(pool)
         , OwnerPool(pool)
         , SharedPool(sharedPool)
-        , UseRingQueueValue(::NActors::UseRingQueue(pool))
     {
-        AssignPool(pool);
+        AssignPool(pool); // sets UseRingQueueValue
     }
 
     TThreadContext::TThreadContext(TWorkerId workerId, IExecutorPool* pool, IExecutorPool* sharedPool)
@@ -52,6 +51,9 @@ namespace NActors {
 
     void TWorkerContext::AssignPool(IExecutorPool* pool, ui64 softDeadlineTs) {
         Pool = pool;
+        // Must be refreshed on every switch: a shared thread borrowed by another pool has to follow
+        // that pool's activation queue kind, not the one its owner pool was configured with.
+        UseRingQueueValue = ::NActors::UseRingQueue(pool);
         TimePerMailboxTs = pool ? pool->TimePerMailboxTs() : TBasicExecutorPoolConfig::DEFAULT_TIME_PER_MAILBOX.SecondsFloat() * NHPTimer::GetClockRate();
         EventsPerMailbox = pool ? pool->EventsPerMailbox() : TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX;
         SoftDeadlineTs = softDeadlineTs;

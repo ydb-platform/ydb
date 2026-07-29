@@ -59,6 +59,33 @@ namespace NActors {
         alignas(64) std::variant<TUnorderedCacheActivationQueue, TRingActivationQueueV4> Activations;
         TAtomic ActivationsRevolvingCounter = 0;
         std::atomic_bool StopFlag = false;
+
+        // Resolves the active activation queue without going through std::visit. The alternative is
+        // picked once at construction and never changes, so the visitor's table of function pointers
+        // buys nothing and only blocks inlining of Push/Pop into the caller -- which matters, these
+        // are the hottest calls in the actor system. std::get_if compiles to an index compare plus a
+        // pointer cast and keeps std::variant in charge of lifetime, so a wrong TQueue here is a null
+        // dereference rather than a read of a member that was never constructed.
+        //
+        // Callers must select TQueue from UseRingQueueValue (the pool that owns this queue), not from
+        // TlsThreadContext->UseRingQueue(): a shared thread may be running on behalf of another pool.
+        template <typename TQueue>
+        TQueue& GetActivations() {
+            TQueue* queue = std::get_if<TQueue>(&Activations);
+            Y_ABORT_UNLESS(queue, "activation queue kind mismatch; UseRingQueueValue# %d",
+                static_cast<int>(UseRingQueueValue));
+            return *queue;
+        }
+
+        // Same dispatch, when the caller does not care which alternative is active (cold paths).
+        template <typename TCallback>
+        decltype(auto) VisitActivations(TCallback&& callback) {
+            if (UseRingQueueValue) {
+                return callback(GetActivations<TRingActivationQueueV4>());
+            }
+            return callback(GetActivations<TUnorderedCacheActivationQueue>());
+        }
+
     public:
         TExecutorPoolBase(ui32 poolId, ui32 threads, TAffinity* affinity, bool useRingQueue);
         ~TExecutorPoolBase();

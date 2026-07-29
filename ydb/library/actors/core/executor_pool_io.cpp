@@ -31,7 +31,8 @@ namespace NActors {
             ;
     }
 
-    TMailbox* TIOExecutorPool::GetReadyActivation(ui64 revolvingCounter) {
+    template <typename TQueue>
+    TMailbox* TIOExecutorPool::GetReadyActivationImpl(ui64 revolvingCounter) {
         Y_ABORT_UNLESS(TlsThreadContext, "TlsThreadContext is nullptr");
         i16 workerId = TlsThreadContext->WorkerId();
         Y_DEBUG_ABORT_UNLESS(workerId < PoolThreads);
@@ -59,13 +60,20 @@ namespace NActors {
         }
 
         while (!StopFlag.load(std::memory_order_acquire)) {
-            if (const ui32 activation = std::visit([&revolvingCounter](auto &queue){return queue.Pop(++revolvingCounter);}, Activations)) {
+            if (const ui32 activation = GetActivations<TQueue>().Pop(++revolvingCounter)) {
                 return MailboxTable->Get(activation);
             }
             SpinLockPause();
         }
 
         return 0;
+    }
+
+    TMailbox* TIOExecutorPool::GetReadyActivation(ui64 revolvingCounter) {
+        if (UseRingQueueValue) {
+            return GetReadyActivationImpl<TRingActivationQueueV4>(revolvingCounter);
+        }
+        return GetReadyActivationImpl<TUnorderedCacheActivationQueue>(revolvingCounter);
     }
 
     void TIOExecutorPool::Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) {
@@ -92,9 +100,11 @@ namespace NActors {
     }
 
     void TIOExecutorPool::ScheduleActivationEx(TMailbox* mailbox, ui64 revolvingWriteCounter) {
-        std::visit([mailbox, revolvingWriteCounter](auto &queue) {
-            queue.Push(mailbox->Hint, revolvingWriteCounter);
-        }, Activations);
+        if (UseRingQueueValue) {
+            GetActivations<TRingActivationQueueV4>().Push(mailbox->Hint, revolvingWriteCounter);
+        } else {
+            GetActivations<TUnorderedCacheActivationQueue>().Push(mailbox->Hint, revolvingWriteCounter);
+        }
         const TAtomic semaphoreRaw = AtomicIncrement(Semaphore);
         if (semaphoreRaw <= 0) {
             for (;; ++revolvingWriteCounter) {

@@ -317,9 +317,10 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         }
     }
 
-    // TRUNCATE allocates a brand-new InternalPathId for the table. The TTL/tiering settings of the
+    // TRUNCATE allocates a brand-new InternalPathId for the table. The TTL settings of the
     // truncated generation must be replayed onto that new path id, otherwise the table would silently
     // lose its data-lifecycle configuration (SchemeShard does not resend TTL settings on TRUNCATE).
+    // Tables with tiering are rejected on SchemeShard, so this test covers pure TTL (delete action).
     Y_UNIT_TEST(TruncatePreservesTtl) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);

@@ -14777,6 +14777,126 @@ END DO)",
         }
     }
 
+    Y_UNIT_TEST(TruncateColumnTableWithTieringFails) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        runnerSettings.SetEnableTieringInColumnShard(true);
+        runnerSettings.AppConfig.MutableFeatureFlags()->SetEnableTruncateColumnTable(true);
+        TTestHelper testHelper(runnerSettings);
+        auto session = testHelper.GetSession();
+
+        testHelper.CreateTier("tier1");
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("created_at").SetType(NScheme::NTypeIds::Timestamp).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("value").SetType(NScheme::NTypeIds::Utf8),
+        };
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ColumnTableWithTiering")
+            .SetPrimaryKey({"created_at", "id"})
+            .SetSharding({"created_at"})
+            .SetSchema(schema);
+        testHelper.CreateTable(testTable);
+        testHelper.SetTiering(testTable.GetName(), "/Root/tier1", "created_at");
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                TRUNCATE TABLE `/Root/ColumnTableWithTiering`;
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot truncate column table with tiering");
+        }
+
+        {
+            auto desc = session.DescribeTable(testTable.GetName()).ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT(desc.GetTableDescription().GetTtlSettings());
+            auto ttl = desc.GetTableDescription().GetTtlSettings();
+            UNIT_ASSERT_VALUES_EQUAL(ttl->GetTiers().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(
+                std::get<TTtlEvictToExternalStorageAction>(ttl->GetTiers()[0].GetAction()).GetStorage(),
+                "/Root/tier1");
+        }
+    }
+
+    Y_UNIT_TEST(TruncateColumnTablePreservesTtl) {
+        TKikimrSettings runnerSettings;
+        runnerSettings.WithSampleTables = false;
+        runnerSettings.AppConfig.MutableFeatureFlags()->SetEnableTruncateColumnTable(true);
+        TTestHelper testHelper(runnerSettings);
+        auto session = testHelper.GetSession();
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("created_at").SetType(NScheme::NTypeIds::Timestamp).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("value").SetType(NScheme::NTypeIds::Utf8),
+        };
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ColumnTableWithTtl")
+            .SetPrimaryKey({"created_at", "id"})
+            .SetSharding({"created_at"})
+            .SetSchema(schema)
+            .SetTTL("created_at", "Interval(\"PT1H\")");
+        testHelper.CreateTable(testTable);
+
+        {
+            auto desc = session.DescribeTable(testTable.GetName()).ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT(desc.GetTableDescription().GetTtlSettings());
+            UNIT_ASSERT_VALUES_EQUAL(
+                desc.GetTableDescription().GetTtlSettings()->GetDateTypeColumn().GetExpireAfter(),
+                TDuration::Hours(1));
+        }
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                TRUNCATE TABLE `/Root/ColumnTableWithTtl`;
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto desc = session.DescribeTable(testTable.GetName()).ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT(desc.GetTableDescription().GetTtlSettings());
+            UNIT_ASSERT_VALUES_EQUAL(
+                desc.GetTableDescription().GetTtlSettings()->GetDateTypeColumn().GetExpireAfter(),
+                TDuration::Hours(1));
+        }
+    }
+
+    Y_UNIT_TEST(TruncateTableWithColumnFamiliesFails) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        TKikimrRunner kikimr(featureFlags);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/TableWithFamilies` (
+                    Key Uint64,
+                    Value1 String FAMILY Family1,
+                    Value2 Uint32,
+                    PRIMARY KEY (Key),
+                    FAMILY Family1 (
+                        COMPRESSION = "off"
+                    )
+                );
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                TRUNCATE TABLE `/Root/TableWithFamilies`;
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot truncate table with column families");
+        }
+    }
+
     Y_UNIT_TEST_TWIN(AlterTableCompactSql, UseQueryService) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableForcedCompactions(true);

@@ -345,6 +345,15 @@ public:
             return result;
         }
 
+        // Tiering (TTL eviction to external storage) is bound to the table's InternalPathId and
+        // external-storage activation on the column shard. Truncating would allocate a new
+        // InternalPathId; until tiering is fully re-wired across that swap, reject early.
+        if (!tableInfo->GetUsedTiers().empty()) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed,
+                "Cannot truncate column table with tiering");
+            return result;
+        }
+
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxTruncateColumnTable, tablePath.Base()->PathId);
         txState.State = TTxState::ConfigureParts;
 

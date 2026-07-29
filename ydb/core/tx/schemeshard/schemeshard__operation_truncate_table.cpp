@@ -591,6 +591,24 @@ TVector<ISubOperation::TPtr> CreateConsistentTruncateTable(TOperationId opId, co
         return result;
     }
 
+    {
+        Y_ABORT_UNLESS(context.SS->Tables.contains(mainTablePath.Base()->PathId));
+        const TTableInfo::TPtr table = context.SS->Tables.at(mainTablePath.Base()->PathId);
+        // Custom column families (beyond the implicit default family) are not supported with TRUNCATE yet.
+        if (table->PartitionConfig().ColumnFamiliesSize() > 1) {
+            result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed,
+                "Cannot truncate table with column families")};
+            return result;
+        }
+        for (const auto& [_, column] : table->Columns) {
+            if (!column.IsDropped() && column.Family != 0) {
+                result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed,
+                    "Cannot truncate table with column families")};
+                return result;
+            }
+        }
+    }
+
     DfsOnTableChildrenTree(opId, tx, context, mainTablePath.Base()->PathId, result, ESchemeObjectType::MainTable);
 
     return result;

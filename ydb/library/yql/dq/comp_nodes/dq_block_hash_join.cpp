@@ -20,7 +20,6 @@ namespace {
 
 using TDqJoinImplRenames = TDqRenames<ESide>;
 
-// Filter callable inputs, appended after the 8 base inputs; must match TDqProgramBuilder::DqBlockHashJoin.
 namespace NBlockFilterParams {
     enum : ui32 {
         LeftArgs = 8,
@@ -232,8 +231,6 @@ class TBlockHashJoinWrapper : public TMutableComputationNode<TBlockHashJoinWrapp
         }
         const auto& userNullTypes = (Kind == EJoinKind::Left && Meta_->Settings.LeftIsBuild()) ? userTypes.Probe : userTypes.Build;
 
-        // The filter path is only instantiated when a filter is present (HasFilter). A side's scalar
-        // converter is built only if some filter references that side.
         std::optional<TPackedTuplePairFilter> pairFilter;
         if constexpr (HasFilter) {
             const bool needLeft = Filters_.Left || Filters_.Common;

@@ -175,10 +175,26 @@ std::vector<TString> PQReadUntil(
         }
     }, false, false);
 
+<<<<<<< HEAD
     std::shared_ptr<NYdb::NTopic::IReadSession> session = client.CreateReadSession(sessionSettings);
     UNIT_ASSERT(promise.GetFuture().Wait(timeout));
     session->Close(TDuration::Zero());
     session = nullptr;
+=======
+        sessionSettings.EventHandlers_.SimpleDataHandlers([&](NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& ev) {
+            for (const auto& message : ev.GetMessages()) {
+                result.emplace_back(message.GetData());
+            }
+            if (result.size() >= size) {
+                promise.TrySetValue();
+            }
+        }, false, false);
+
+        auto session = client.CreateReadSession(sessionSettings);
+        UNIT_ASSERT(promise.GetFuture().Wait(timeout));
+        session->Close(TDuration::Zero());
+    }
+>>>>>>> 5f62627ce35 (pq_async_io: fix PQreadUntil flakyness (#48138))
     driver.Stop(true);
     return result;
 }

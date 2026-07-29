@@ -1,12 +1,15 @@
 #include "process_exit_profiler.h"
 
+#include <algorithm>
+#include <cctype>
+
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TProcessExitProfiler::TProcessExitProfiler(
     const NProfiling::TProfiler& parent,
-    const TString& prefix)
+    const std::string& prefix)
     : Profiler_(parent.WithPrefix(prefix))
     , ExitDelayTimer_(Profiler_.Timer("/exit_delay"))
     , ExitOKCounter_(Profiler_.Counter("/zero_exit_code"))
@@ -77,15 +80,14 @@ NProfiling::TCounter TProcessExitProfiler::MakeSignalExitCounter(int signal)
         .Counter("/count");
 }
 
-TString TProcessExitProfiler::GetSignalName(int signal)
+std::string TProcessExitProfiler::GetSignalName(int signal)
 {
 #ifdef _unix_
-    auto result = TString(strsignal(signal));
-    result.to_lower();
-    result.Transform([] (size_t, char c) {
+    auto result = std::string(strsignal(signal));
+    std::transform(result.begin(), result.end(), result.begin(), [] (unsigned char c) {
         return c == ' '
             ? '_'
-            : c;
+            : std::tolower(c);
     });
 
     return result;

@@ -12,6 +12,7 @@ General format of the command:
 * `options`: [Parameters of the subcommand](#options).
 * `kind`: The type of operation. Possible values:
 
+  * `analyze`: The [ANALYZE](../../yql/reference/syntax/analyze.md) statistics collection operations.
   * `buildindex`: The build index operations.
   * `compaction`: The table compaction operations.
   * `export/s3`: The export to S3 operations.

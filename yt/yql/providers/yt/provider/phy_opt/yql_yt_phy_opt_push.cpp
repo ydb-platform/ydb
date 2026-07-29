@@ -301,9 +301,17 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PushDownKeyExtract(TExp
 
                     auto updatedSectionList = Build<TYtSectionList>(ctx, innerOp.Input().Pos()).Add(updatedSection).Done();
                     auto updatedInnerOp = ctx.ChangeChild(innerOp.Ref(), TYtTransientOpBase::idx_Input, updatedSectionList.Ptr());
+                    auto innerWorld = innerOp.World().Ptr();
                     if (!syncList.empty()) {
-                        updatedInnerOp = ctx.ChangeChild(*updatedInnerOp, TYtTransientOpBase::idx_World, ApplySyncListToWorld(innerOp.World().Ptr(), syncList, ctx));
+                        innerWorld = ApplySyncListToWorld(innerWorld, syncList, ctx);
                     }
+                    if (!op.World().Ref().IsWorld()) {
+                        innerWorld = Build<TCoSync>(ctx, op.Pos())
+                            .Add(innerWorld)
+                            .Add(op.World())
+                            .Done().Ptr();
+                    }
+                    updatedInnerOp = ctx.ChangeChild(*updatedInnerOp, TYtTransientOpBase::idx_World, std::move(innerWorld));
 
                     updatedPaths.push_back(
                         Build<TYtPath>(ctx, path.Pos())
@@ -381,7 +389,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PushDownYtMapOverSorted
         return node;
     }
     auto path = section.Paths().Item(0);
-    if (!path.Columns().Maybe<TCoVoid>() || !path.Ranges().Maybe<TCoVoid>() || !path.QLFilter().Maybe<TCoVoid>()) {
+    if (!path.Columns().Maybe<TCoVoid>() || !path.Ranges().Maybe<TCoVoid>()) {
         return node;
     }
     auto maybeMerge = path.Table().Maybe<TYtOutput>().Operation().Maybe<TYtMerge>();
@@ -472,4 +480,4 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PushDownYtMapOverSorted
         .Done();
 }
 
-}  // namespace NYql
+} // namespace NYql

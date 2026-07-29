@@ -219,10 +219,10 @@ public:
         std::optional<ui32> restartNumber,
         bool commit,
         const THashMap<TString, TString>& secureParams,
-        ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+        IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
         const NYql::NDqProto::TExternalEffect& externalEffect)
     : ParentId(parentId)
-    , Gateway(gateway) 
+    , Gateway(gateway)
     , QueryId(queryId)
     , KeyPrefix(jobId ? jobId + "_" : "")
     , KeySubPrefix(restartNumber ? ToString(*restartNumber) + "_" : "")
@@ -231,7 +231,7 @@ public:
     , CredentialsFactory(credentialsFactory)
     , ExternalEffect(externalEffect)
     , ActorSystem(NActors::TActivationContext::ActorSystem())
-    , RetryPolicy(NYql::GetHTTPDefaultRetryPolicy(NYql::THttpRetryPolicyOptions{.MaxRetries = 3, .RetriedCurlCodes = NYql::FqRetriedCurlCodes()}))
+    , RetryPolicy(NYql::GetFqHTTPRetryPolicy())
     , RetryCount(GLOBAL_RETRY_LIMIT) {
         // ^^^ 3 retries in HTTP GW per operation
         // up to 100 retries at app level for all operations ^^^
@@ -641,7 +641,7 @@ private:
     const TString KeySubPrefix; // run_id ## _
     const bool Commit;
     const THashMap<TString, TString> SecureParams;
-    ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+    IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
     NYql::NDqProto::TExternalEffect ExternalEffect;
     NActors::TActorSystem* const ActorSystem;
     const IHTTPGateway::TRetryPolicy::TPtr RetryPolicy;
@@ -666,7 +666,7 @@ THolder<NActors::IActor> MakeS3ApplicatorActor(
     std::optional<ui32> restartNumber,
     bool commit,
     const THashMap<TString, TString>& secureParams,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
     const NYql::NDqProto::TExternalEffect& externalEffect) {
 
     return MakeHolder<TS3ApplicatorActor>(

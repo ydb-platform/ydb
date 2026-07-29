@@ -160,7 +160,7 @@ TOriginAttributes::TErasedExtensionData GetExtensionDataOverride()
     return TOriginAttributes::TErasedExtensionData{result};
 }
 
-TString FormatOriginOverride(const TOriginAttributes& attributes)
+std::string FormatOriginOverride(const TOriginAttributes& attributes)
 {
     TryExtractHost(attributes);
     return Format("%v (pid %v, thread %v, fid %x)",
@@ -429,7 +429,7 @@ void Deserialize(TError& error, const NYTree::INodePtr& node)
     error.SetCode(code);
 
     static const std::string MessageKey("message");
-    error.SetMessage(mapNode->GetChildValueOrThrow<TString>(MessageKey));
+    error.SetMessage(mapNode->GetChildValueOrThrow<std::string>(MessageKey));
 
     static const std::string AttributesKey("attributes");
     auto children = mapNode->GetChildOrThrow(AttributesKey)->AsMap()->GetChildren();
@@ -539,13 +539,13 @@ void FromProto(TError* error, const NYT::NProto::TError& protoError)
     }
 
     error->SetCode(TErrorCode(protoError.code()));
-    error->SetMessage(FromProto<TString>(protoError.message()));
+    error->SetMessage(FromProto<std::string>(protoError.message()));
     if (protoError.has_attributes()) {
         for (const auto& protoAttribute : protoError.attributes().attributes()) {
             // NB(arkady-e1ppa): Again for compatibility reasons we have to reconvert stuff
             // here as well.
-            auto key = FromProto<TString>(protoAttribute.key());
-            auto value = FromProto<TString>(protoAttribute.value());
+            auto key = FromProto<std::string>(protoAttribute.key());
+            auto value = FromProto<std::string>(protoAttribute.value());
             (*error) <<= TErrorAttribute(key, TYsonString(value));
         }
         error->UpdateOriginAttributes();
@@ -650,7 +650,7 @@ void TErrorSerializer::Save(TStreamSaveContext& context, const TError& error)
         for (const auto& [key, value] : attributePairs) {
             // NB(arkady-e1ppa): For the sake of compatibility we keep the old
             // serialization format.
-            Save(context, TString(key));
+            Save(context, std::string(key));
             Save(context, NYson::TYsonString(value));
         }
     } else {
@@ -667,12 +667,12 @@ void TErrorSerializer::Load(TStreamLoadContext& context, TError& error)
     error = {};
 
     auto code = Load<TErrorCode>(context);
-    auto message = Load<TString>(context);
+    auto message = Load<std::string>(context);
 
     if (Load<bool>(context)) {
         size_t size = TSizeSerializer::Load(context);
         for (size_t index = 0; index < size; ++index) {
-            auto key = Load<TString>(context);
+            auto key = Load<std::string>(context);
             auto value = Load<TYsonString>(context);
             error <<= TErrorAttribute(key, value);
         }

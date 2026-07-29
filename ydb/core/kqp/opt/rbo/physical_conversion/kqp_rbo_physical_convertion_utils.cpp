@@ -15,6 +15,34 @@ TString GetFullName(const TInfoUnit& name) {
     return name.GetFullName();
 }
 
+TVector<TInfoUnit> GetLiveOutputIUs(IOperator& op) {
+    const auto outputIUs = op.GetOutputIUs();
+    const auto& liveOut = GetLiveOut(&op);
+    TVector<TInfoUnit> liveOutputIUs;
+    liveOutputIUs.reserve(outputIUs.size());
+    for (const auto& output : outputIUs) {
+        if (liveOut.contains(output)) {
+            liveOutputIUs.push_back(output);
+        }
+    }
+    return liveOutputIUs;
+}
+
+TVector<TInfoUnit> GetLiveInputIUs(IOperator& op, ui32 childIndex) {
+    Y_ENSURE(childIndex < op.Children.size());
+    const auto outputIUs = op.Children[childIndex]->GetOutputIUs();
+    const auto& liveIn = GetLiveIn(&op, childIndex);
+
+    TVector<TInfoUnit> liveInputIUs;
+    liveInputIUs.reserve(outputIUs.size());
+    for (const auto& output : outputIUs) {
+        if (liveIn.contains(output)) {
+            liveInputIUs.push_back(output);
+        }
+    }
+    return liveInputIUs;
+}
+
 TCoAtomList BuildAtomList(TStringBuf value, TPositionHandle pos, TExprContext& ctx) {
     // clang-format off
     return Build<TCoAtomList>(ctx, pos)
@@ -105,37 +133,19 @@ TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprCont
 }
 
 TExprNode::TPtr ExtractMembers(TExprNode::TPtr input, TExprContext &ctx, TVector<TInfoUnit> members) {
-    TVector<TExprBase> items;
-    // clang-format off
-    auto arg = Build<TCoArgument>(ctx, input->Pos())
-        .Name("arg")
-    .Done().Ptr();
-    // clang-format on
-
+    TVector<TCoAtom> memberAtoms;
+    memberAtoms.reserve(members.size());
     for (const auto& iu : members) {
-        auto name = iu.GetFullName();
-        // clang-format off
-            auto tuple = Build<TCoNameValueTuple>(ctx, input->Pos())
-                .Name().Build(name)
-                .Value<TCoMember>()
-                    .Struct(arg)
-                    .Name().Build(name)
-                .Build()
-            .Done();
-        // clang-format on
-        items.push_back(tuple);
+        memberAtoms.push_back(Build<TCoAtom>(ctx, input->Pos())
+            .Value(iu.GetFullName())
+        .Done());
     }
 
     // clang-format off
-    return Build<TCoFlatMap>(ctx, input->Pos())
+    return Build<TCoExtractMembers>(ctx, input->Pos())
         .Input(input)
-        .Lambda<TCoLambda>()
-            .Args({arg})
-            .Body<TCoJust>()
-                .Input<TCoAsStruct>()
-                    .Add(items)
-                .Build()
-            .Build()
+        .Members<TCoAtomList>()
+            .Add(memberAtoms)
         .Build()
     .Done().Ptr();
     // clang-format on

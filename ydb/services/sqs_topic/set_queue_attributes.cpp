@@ -6,7 +6,6 @@
 #include "utils.h"
 
 #include <ydb/core/http_proxy/events.h>
-#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/core/ymq/error/error.h>
@@ -37,8 +36,9 @@
 
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 
-#include <ydb/library/actors/core/log.h>
 #include <ydb/services/sqs_topic/statuses.h>
+
+#include <ydb/library/actors/core/log.h>
 
 #include <library/cpp/json/json_writer.h>
 
@@ -84,6 +84,10 @@ namespace NKikimr::NSqsTopic::V1 {
             if (!FormalValidQueueUrl()) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "Invalid QueueUrl"));
             }
+            if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
+                return ReplyWithError(MakeError(NSQS::NErrors::UNSUPPORTED_OPERATION,
+                    "SetQueueAttributes is not supported"));
+            }
 
             DescribeTopic(NACLib::UpdateRow);
             Become(&TSetQueueAttributesActor::StateWork);
@@ -93,7 +97,7 @@ namespace NKikimr::NSqsTopic::V1 {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleCacheNavigateResponse);
                 hFunc(NDescriber::TEvDescribeTopicsResponse, Handle);
-                hFunc(NPQ::NSchema::TEvAlterTopicResponse, Handle);
+                hFunc(NPQ::NSchema::TEvSchemaResponse, Handle);
                 default:
                     TBase::StateWork(ev);
             }
@@ -105,7 +109,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
         void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
             const auto* result = ev->Get();
-            Y_ABORT_UNLESS(result->Topics.size() == 1);
+            AFL_ENSURE(result->Topics.size() == 1)("topics_size", result->Topics.size())("path", FullTopicPath_);
             const auto& topicInfo = result->Topics.begin()->second;
 
             switch(topicInfo.Status) {
@@ -184,13 +188,6 @@ namespace NKikimr::NSqsTopic::V1 {
 
             if (NewQueueAttributes.ContentBasedDeduplication.Defined()) {
                 topicRequest.set_set_content_based_deduplication(*NewQueueAttributes.ContentBasedDeduplication);
-                if (*NewQueueAttributes.ContentBasedDeduplication) {
-                    topicRequest.set_set_partition_write_speed_messages_per_second(NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_LIMIT);
-                    topicRequest.set_set_partition_write_burst_messages(NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_BURST);
-                } else {
-                    topicRequest.set_set_partition_write_speed_messages_per_second(NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND);
-                    topicRequest.set_set_partition_write_burst_messages(NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND);
-                }
             }
 
             auto* consumer = topicRequest.add_alter_consumers();
@@ -238,7 +235,7 @@ namespace NKikimr::NSqsTopic::V1 {
             }));
         }
 
-        void Handle(NPQ::NSchema::TEvAlterTopicResponse::TPtr& ev) {
+        void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
             const auto* result = ev->Get();
             if (result->Status != Ydb::StatusIds::SUCCESS) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, result->ErrorMessage));

@@ -2,9 +2,9 @@
 
 #include <yt/yql/providers/yt/lib/tvm_client/tvm_client.h>
 
-#include <yql/essentials/core/yql_type_annotation.h>
-
+#include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
+#include <util/datetime/base.h>
 
 namespace NYql {
 
@@ -19,10 +19,11 @@ public:
 
     virtual void RequestAccess(
         TStringBuf ytCluster,
-        EIdentityType type,
         TStringBuf path,
         TStringBuf requester,
-        const TYqlOperationOptions& operationOptions) = 0;
+        EIdentityType identityType,
+        TStringBuf identity,
+        TMaybe<TDuration> period = {}) = 0;
 };
 
 }; // namespace NYql

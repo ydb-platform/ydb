@@ -442,7 +442,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
 
         lHelper.CreateTestOlapTable("olapTable", 2);
         lHelper.StartSchemaRequest(
-            R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`l-buckets`))"
+            R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`))"
         );
         lHelper.StartSchemaRequest(
             R"(ALTER TABLE `/Root/olapStore/olapTable` SET TTL Interval("P10D") TO EXTERNAL DATA SOURCE `/Root/tier1`, Interval("P20D") TO EXTERNAL DATA SOURCE `/Root/tier2` ON timestamp)");
@@ -801,6 +801,12 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                 runtime.SimulateSleep(TDuration::Seconds(1));
             }
             Cerr << "CLEANED: " << bsCollector.GetChannelSize(2) << "/" << purposeSize << Endl;
+
+            // Internal TTL commits one plan step ahead of the current
+            // readable snapshot. 
+            // So we need to advance time again to let the readable snapshot cross the removal snapshot before reading.
+            runtime.AdvanceCurrentTime(TDuration::Minutes(6));
+            runtime.SimulateSleep(TDuration::Seconds(1));
 
             TVector<THashMap<TString, NYdb::TValue>> result;
             lHelper.StartScanRequest("SELECT MIN(timestamp) as b, COUNT(*) as c FROM `/Root/olapStore/olapTable`", true, &result);

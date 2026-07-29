@@ -1,9 +1,10 @@
 UNITTEST_FOR(ydb/core/kqp)
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(100)
+SPLIT_FACTOR(200)
 
 REQUIREMENTS(cpu:2)
+
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
@@ -15,6 +16,7 @@ SRCS(
     common.cpp
     datastreams_ut.cpp
     datastreams_table_mode_ut.cpp
+    kqp_has_path_ut.cpp
     streaming_ddl_ut.cpp
     streaming_sys_view_ut.cpp
 )
@@ -34,8 +36,10 @@ PEERDIR(
     ydb/library/testlib/solomon_helpers
     ydb/library/yql/providers/generic/connector/libcpp
     ydb/library/yql/providers/generic/connector/libcpp/ut_helpers
+    ydb/services/workload_manager/ut/common
     yql/essentials/sql/pg
     yql/essentials/parser/pg_wrapper
+    yql/essentials/udfs/common/yson2
 )
 
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)

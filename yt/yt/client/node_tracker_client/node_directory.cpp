@@ -41,7 +41,7 @@ constinit const auto Logger = NodeTrackerClientLogger;
 
 const std::string& NullNodeAddress()
 {
-    static const TString Result("<null>");
+    static const std::string Result("<null>");
     return Result;
 }
 
@@ -152,7 +152,7 @@ const std::vector<std::string>& TNodeDescriptor::GetTags() const
 
 std::optional<TInstant> TNodeDescriptor::GetLastSeenTime() const
 {
-    auto cpuTime = LastSeenTime_.Load();
+    auto cpuTime = LastSeenTime_.load();
     if (cpuTime != 0) {
         return CpuInstantToInstant(cpuTime);
     } else {
@@ -163,8 +163,8 @@ std::optional<TInstant> TNodeDescriptor::GetLastSeenTime() const
 void TNodeDescriptor::UpdateLastSeenTime(TInstant at) const
 {
     auto cpuTime = InstantToCpuInstant(at);
-    if (auto currentTime = LastSeenTime_.Load(); cpuTime > currentTime) {
-        LastSeenTime_.Store(cpuTime);
+    if (auto currentTime = LastSeenTime_.load(); cpuTime > currentTime) {
+        LastSeenTime_.store(cpuTime);
     }
 }
 

@@ -47,8 +47,8 @@ public:
 
     static void ValidateBinaryValue(TStringBuf binaryValue, int precision, int scale);
 
-    static TString BinaryToText(TStringBuf binaryDecimal, int precision, int scale);
-    static TString TextToBinary(TStringBuf textDecimal, int precision, int scale);
+    static std::string BinaryToText(TStringBuf binaryDecimal, int precision, int scale);
+    static std::string TextToBinary(TStringBuf textDecimal, int precision, int scale);
 
     // More efficient versions of conversion functions without allocations.
     // `buffer` must be at least of size MaxTextSize / MaxBinarySize.

@@ -8,18 +8,18 @@ namespace NYT::NScheduler {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-extern const TString OperationAliasPrefix;
+extern const std::string OperationAliasPrefix;
 
 // This wrapper is needed for ADL in FromProto/ToProto to work.
 struct TOperationIdOrAlias
 {
     TOperationIdOrAlias() = default;
     TOperationIdOrAlias(TOperationId id);
-    TOperationIdOrAlias(TString alias);
+    TOperationIdOrAlias(std::string alias);
 
-    static TOperationIdOrAlias FromString(TString operationIdOrAlias);
+    static TOperationIdOrAlias FromString(std::string operationIdOrAlias);
 
-    std::variant<TOperationId, TString> Payload;
+    std::variant<TOperationId, std::string> Payload;
 
     bool operator==(const TOperationIdOrAlias& other) const;
 

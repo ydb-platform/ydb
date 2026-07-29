@@ -1,4 +1,8 @@
-def onpy_extralibs(unit, *args):
+from ymake import macro, Unit
+
+
+@macro
+def PY_EXTRALIBS(unit: Unit, *args: tuple[str, ...]):
     """
     @usage: PY_EXTRALIBS(liblist)
     Add external dynamic libraries during program linkage stage" }

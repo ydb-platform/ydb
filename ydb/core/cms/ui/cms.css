@@ -549,3 +549,96 @@ td {
   border-color: rgb(172, 41, 37);
   color: white;
 }
+
+/* Unknown / deprecated config field highlighting (monaco inline decorations). */
+.unknown-field-red {
+  background: rgba(255, 0, 0, 0.18);
+  border-bottom: 2px solid #d33;
+}
+
+.deprecated-field-amber {
+  background: rgba(255, 191, 0, 0.20);
+  border-bottom: 2px solid #d8a200;
+}
+
+/* Consequence lines: parents and children of an unknown/deprecated field. A light whole-line
+   tint so a collapsed parent or a nested child still signals there is something invalid in the
+   block; these are only fallout from the real issue. */
+.unknown-consequence {
+  background: rgba(255, 0, 0, 0.06);
+}
+
+.deprecated-consequence {
+  background: rgba(255, 191, 0, 0.07);
+}
+
+/* Full-strength left gutter bar on the offending field itself. */
+.unknown-field-red-gutter {
+  background: #d33;
+  width: 3px !important;
+  margin-left: 3px;
+}
+
+.deprecated-field-amber-gutter {
+  background: #d8a200;
+  width: 3px !important;
+  margin-left: 3px;
+}
+
+/* Dimmed (50%) gutter bar for consequence lines (parents/children) -- only a consequence of
+   the original issue, so it is half as bright as the field's own bar. */
+.unknown-consequence-gutter {
+  background: rgba(221, 51, 51, 0.5);
+  width: 3px !important;
+  margin-left: 3px;
+}
+
+.deprecated-consequence-gutter {
+  background: rgba(216, 162, 0, 0.5);
+  width: 3px !important;
+  margin-left: 3px;
+}
+
+/* Unknown-fields list widget. */
+.unknown-fields-list {
+  padding: 4px 12px;
+}
+
+.unknown-fields-ul {
+  list-style: none;
+  padding-left: 0;
+  margin: 0;
+}
+
+.unknown-fields-ul li {
+  padding: 2px 0;
+  font-family: monospace;
+}
+
+.unknown-fields-clickable {
+  cursor: pointer;
+}
+
+.unknown-fields-clickable:hover {
+  text-decoration: underline;
+}
+
+.unknown-fields-badge {
+  display: inline-block;
+  min-width: 78px;
+  text-align: center;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 16px;
+  padding: 0 6px;
+  margin-right: 6px;
+  color: #fff;
+}
+
+.unknown-field-item .unknown-fields-badge {
+  background: #d33;
+}
+
+.deprecated-field-item .unknown-fields-badge {
+  background: #d8a200;
+}

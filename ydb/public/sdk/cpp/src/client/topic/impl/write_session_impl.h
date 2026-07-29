@@ -1,6 +1,7 @@
 #pragma once
 
 #include "transaction.h"
+#include "deferred_publication_ack_tracker.h"
 
 #include <ydb/public/sdk/cpp/src/client/topic/common/callback_context.h>
 #include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
@@ -8,6 +9,7 @@
 
 #include <util/generic/buffer.h>
 
+#include <variant>
 
 namespace NYdb::inline Dev::NTopic {
 
@@ -144,6 +146,9 @@ struct TMemoryUsageChange {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TWriteSessionImpl
 
+// WriteRequest.write_context is a oneof: either tx or deferred_publish, never both.
+using TWriteContext = std::variant<std::monostate, TTransactionId, TDeferredPublication>;
+
 class TWriteSessionImpl : public TContinuationTokenIssuer,
                           public TEnableSelfContext<TWriteSessionImpl> {
 private:
@@ -164,18 +169,18 @@ private:
         std::optional<ECodec> Codec;
         ui32 OriginalSize; // only for coded messages
         std::vector<std::pair<std::string, std::string>> MessageMeta;
-        std::optional<TTransactionId> Tx;
+        TWriteContext WriteContext;
 
         TMessage(uint64_t id, const TInstant& createdAt, std::string_view data, std::optional<ECodec> codec = {},
                  ui32 originalSize = 0, const std::vector<std::pair<std::string, std::string>>& messageMeta = {},
-                 std::optional<TTransactionId>&& tx = {})
+                 TWriteContext&& writeContext = std::monostate{})
             : Id(id)
             , CreatedAt(createdAt)
             , DataRef(data)
             , Codec(codec)
             , OriginalSize(originalSize)
             , MessageMeta(messageMeta)
-            , Tx(std::move(tx))
+            , WriteContext(std::move(writeContext))
         {}
     };
 
@@ -189,11 +194,11 @@ private:
 
         void Add(uint64_t id, const TInstant& createdAt, std::string_view data, std::optional<ECodec> codec, ui32 originalSize,
                  const std::vector<std::pair<std::string, std::string>>& messageMeta,
-                 std::optional<TTransactionId>&& tx) {
+                 TWriteContext&& writeContext = std::monostate{}) {
             if (StartedAt == TInstant::Zero())
                 StartedAt = TInstant::Now();
             CurrentSize += codec ? originalSize : data.size();
-            Messages.emplace_back(id, createdAt, data, codec, originalSize, messageMeta, std::move(tx));
+            Messages.emplace_back(id, createdAt, data, codec, originalSize, messageMeta, std::move(writeContext));
             Acquired = false;
         }
 
@@ -233,6 +238,8 @@ private:
         size_t OriginalMemoryUsage = 0;
         ui32 CodecID = static_cast<ui32>(ECodec::RAW);
         mutable std::vector<std::string_view> OriginalDataRefs;
+        mutable std::vector<TInstant> CreatedAt;
+        mutable std::vector<std::optional<std::string>> MessageKeys;
         mutable TBuffer Data;
         bool Compressed = false;
         mutable bool Valid = true;
@@ -250,11 +257,15 @@ private:
             OriginalMemoryUsage = rhs.OriginalMemoryUsage;
             CodecID = rhs.CodecID;
             OriginalDataRefs.swap(rhs.OriginalDataRefs);
+            CreatedAt.swap(rhs.CreatedAt);
+            MessageKeys.swap(rhs.MessageKeys);
             Data.Swap(rhs.Data);
             Compressed = rhs.Compressed;
 
             rhs.Data.Clear();
             rhs.OriginalDataRefs.clear();
+            rhs.CreatedAt.clear();
+            rhs.MessageKeys.clear();
         }
     };
 
@@ -263,24 +274,24 @@ private:
         TInstant CreatedAt;
         size_t Size;
         std::vector<std::pair<std::string, std::string>> MessageMeta;
-        std::optional<TTransactionId> Tx;
+        TWriteContext WriteContext;
 
         TOriginalMessage(const uint64_t id, const TInstant createdAt, const size_t size,
-                         std::optional<TTransactionId>&& tx)
+                         TWriteContext&& writeContext = std::monostate{})
             : Id(id)
             , CreatedAt(createdAt)
             , Size(size)
-            , Tx(std::move(tx))
+            , WriteContext(std::move(writeContext))
         {}
 
         TOriginalMessage(const uint64_t id, const TInstant createdAt, const size_t size,
                          std::vector<std::pair<std::string, std::string>>&& messageMeta,
-                         std::optional<TTransactionId>&& tx)
+                         TWriteContext&& writeContext = std::monostate{})
             : Id(id)
             , CreatedAt(createdAt)
             , Size(size)
             , MessageMeta(std::move(messageMeta))
-            , Tx(std::move(tx))
+            , WriteContext(std::move(writeContext))
         {}
     };
 
@@ -320,6 +331,14 @@ private:
     };
 
     using TTransactionInfoPtr = std::shared_ptr<TTransactionInfo>;
+
+    struct TDeferredInFlightWrite {
+        std::shared_ptr<TDeferredPublicationAckState> AckState;
+        uint64_t IntPublicationId = 0;
+        std::optional<std::string> ExtPublicationId;
+        // Number of StreamWrite acks still expected for this seqNo (duplicate seqNo => > 1).
+        ui64 UnackedCount = 0;
+    };
 
     THandleResult OnErrorImpl(NYdb::TPlainStatus&& status); // true - should Start(), false - should Close(), empty - no action
 
@@ -370,7 +389,16 @@ private:
 
     TStringBuilder LogPrefixImpl() const;
 
+    TString MakeOnAckPlainLogMessage(ui64 seqNo) const;
+    TString MakeOnAckTxLogMessage(ui64 seqNo, const TTransactionId& txId, ui64 writeCount, ui64 ackCount) const;
+    TString MakeOnAckDeferredLogMessage(
+        ui64 seqNo,
+        const TDeferredInFlightWrite& deferred,
+        ui64 writeCount,
+        ui64 ackCount) const;
+
     void UpdateTokenIfNeededImpl();
+    void UpdateTokenImpl(const NThreading::TFuture<std::string>& future);
 
     void WriteInternal(TContinuationToken&& continuationToken, TWriteMessage&& message);
 
@@ -405,6 +433,8 @@ private:
     uint64_t GetSeqNoImpl(uint64_t id);
     uint64_t GetIdImpl(uint64_t seqNo);
     void SendImpl();
+    void SendBatchBlock(const TBlock& block, Ydb::Topic::StreamWriteMessage_WriteRequest* writeRequest);
+    void SendStandardBlock(const TBlock& block, Ydb::Topic::StreamWriteMessage_WriteRequest* writeRequest);
     void AbortImpl();
     void CloseImpl(EStatus statusCode, NYdb::NIssue::TIssues&& issues);
     void CloseImpl(EStatus statusCode, const std::string& message);
@@ -424,9 +454,12 @@ private:
     std::optional<TEndpointKey> GetPreferredEndpointImpl(ui32 partitionId, uint64_t partitionNodeId);
 
     bool TxIsChanged(const Ydb::Topic::StreamWriteMessage_WriteRequest* writeRequest) const;
+    bool DeferredPublishIsChanged(const Ydb::Topic::StreamWriteMessage_WriteRequest& writeRequest) const;
 
     void TrySubscribeOnTransactionCommit(TTransactionBase* tx);
+    void CancelPendingWriteAcks();
     void CancelTransactions();
+    void CancelDeferredPublications();
     TTransactionInfoPtr GetOrCreateTxInfo(const TTransactionId& txId);
     void TrySignalAllAcksReceived(ui64 seqNo);
     void DeleteTx(const TTransactionId& txId);
@@ -439,7 +472,7 @@ private:
     std::shared_ptr<IWriteSessionConnectionProcessorFactory> ConnectionFactory;
     TDbDriverStatePtr DbDriverState;
     std::string PrevToken;
-    bool UpdateTokenInProgress = false;
+    std::atomic_bool UpdateTokenInProgress = false;
     TInstant LastTokenUpdate = TInstant::Zero();
     std::shared_ptr<TWriteSessionEventsQueue> EventsQueue;
     NYdbGrpc::IQueueClientContextPtr ClientContext; // Common client context.
@@ -461,19 +494,20 @@ private:
 
     TMessageBatch CurrentBatch;
 
-    std::queue<TOriginalMessage> OriginalMessagesToSend;
+    std::deque<TOriginalMessage> OriginalMessagesToSend;
     std::priority_queue<TBlock, std::vector<TBlock>, Greater> PackedMessagesToSend;
     //! Messages that are sent but yet not acknowledged
     std::queue<TOriginalMessage> SentOriginalMessages;
     std::queue<TBlock> SentPackedMessage;
 
     const size_t MaxBlockSize = std::numeric_limits<size_t>::max();
-    const size_t MaxBlockMessageCount = 1; //!< Max message count that can be packed into a single block. In block version 0 is equal to 1 for compatibility
+    const size_t MaxBlockMessageCount;
     bool Connected = false;
     bool Started = false;
     std::atomic<bool> SendImplScheduled = false;
     std::atomic<int> Aborting = 0;
     bool SessionEstablished = false;
+    bool BatchingSupported = false;
     ui32 PartitionId = 0;
     TPartitionLocation PreferredPartitionLocation = {};
     uint64_t NextId = 0;
@@ -495,6 +529,7 @@ protected:
 
     std::unordered_map<TTransactionId, TTransactionInfoPtr, THash<TTransactionId>> Txs;
     std::unordered_map<ui64, TTransactionId> WrittenInTx; // SeqNo -> TxId
+    std::unordered_map<ui64, TDeferredInFlightWrite> WrittenInDeferred; // SeqNo -> deferred write meta (+ UnackedCount)
 };
 
 } // namespace NYdb::NTopic

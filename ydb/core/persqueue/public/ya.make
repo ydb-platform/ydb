@@ -5,6 +5,7 @@ SRCS(
     inflight_limiter.cpp
     pq_database.cpp
     pq_rl_helpers.cpp
+    pqdata_transaction_compat.cpp
     utils.cpp
     write_id.cpp
 )
@@ -16,6 +17,7 @@ PEERDIR(
     ydb/core/persqueue/public/cloud_events
     ydb/core/protos
     ydb/core/tx/scheme_board
+    ydb/library/actors/core
 )
 
 END()

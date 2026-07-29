@@ -8,6 +8,8 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/ydb_convert/tx_proxy_status.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT Service
+
 namespace NKikimr::NPQ::NSchema {
 
 namespace {
@@ -37,18 +39,20 @@ public:
     }
 
     void OnException(const std::exception& exc) override {
-        Send(ParentId, new TEvCreateTopicResponse(Settings.Strategy->GetTopicName(), Ydb::StatusIds::INTERNAL_ERROR, exc.what(), NKikimrSchemeOp::TModifyScheme()), 0, Settings.Cookie);
+        Send(ParentId, new TEvSchemaResponse(Settings.Strategy->GetTopicName(), Ydb::StatusIds::INTERNAL_ERROR, exc.what(), NKikimrSchemeOp::TModifyScheme()), 0, Settings.Cookie);
     }
 
 private:
     void DoGetClustersList() {
-        LOG_D("DoGetClustersList");
+        YDB_LOG_DEBUG("DoGetClustersList",
+            {"logPrefix", NPQ_LOG_PREFIX});
         Become(&TCreateTopicOperationActor::GetClustersListState);
         Send(NPQ::NClusterTracker::MakeClusterTrackerID(), new NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersList());
     }
 
     void Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse::TPtr& ev) {
-        LOG_D("Handle NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse");
+        YDB_LOG_DEBUG("Handle NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse",
+            {"logPrefix", NPQ_LOG_PREFIX});
 
         auto& response = *ev->Get();
         if (response.Success) {
@@ -67,18 +71,23 @@ private:
 
 private:
     void DoCreate() {
-        LOG_D("DoCreate IfNotExists: " << Settings.IfNotExists);
+        YDB_LOG_DEBUG("DoCreate",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"ifNotExists", Settings.IfNotExists});
         Become(&TCreateTopicOperationActor::CreateState);
+
+        auto database = CanonizePath(Settings.Database);
+        auto topicName = CanonizePath(Settings.Strategy->GetTopicName());
 
         auto proposal = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
 
-        proposal->Record.SetDatabaseName(Settings.Database);
+        proposal->Record.SetDatabaseName(database);
         proposal->Record.SetPeerName(Settings.PeerName);
         if (Settings.UserToken) {
             proposal->Record.SetUserToken(Settings.UserToken->GetSerializedToken());
         }
 
-        auto path = NormalizePath(Settings.Database, Settings.Strategy->GetTopicName());
+        auto path = NormalizePath(database, topicName);
         auto [workingDir, name] = GetWorkingDirAndName(path);
         if (workingDir.empty()) {
             return ReplyAndDie(Ydb::StatusIds::SCHEME_ERROR, "Wrong topic name");
@@ -87,7 +96,7 @@ private:
         NKikimrSchemeOp::TModifyScheme& modifyScheme = *proposal->Record.MutableTransaction()->MutableModifyScheme();
 
         auto result = ProposeCreateTopic(modifyScheme, TProposeCreateTopicSettings{
-            .Database = Settings.Database,
+            .Database = std::move(database),
             .WorkingDir = workingDir,
             .Name = name,
             .ClustersList = ClustersList,
@@ -114,7 +123,8 @@ private:
     }
 
     void Handle(TEvSchemaOperationResponse::TPtr& ev) {
-        LOG_D("Handle TEvSchemaOperationResponse");
+        YDB_LOG_DEBUG("Handle TEvSchemaOperationResponse",
+            {"logPrefix", NPQ_LOG_PREFIX});
         auto& response = *ev->Get();
         return ReplyAndDie(response.Status, std::move(response.ErrorMessage));
     }
@@ -128,7 +138,10 @@ private:
 
 private:
     void ReplyAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
-        LOG_D("ReplyAndDie " << errorCode << " '" << errorMessage << "'");
+        YDB_LOG_DEBUG("ReplyAndDie",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"errorCode", errorCode},
+            {"errorMessage", errorMessage});
         if ((errorCode == Ydb::StatusIds::SUCCESS || errorCode == Ydb::StatusIds::ALREADY_EXISTS) && !Settings.PrepareOnly) {
             ModifyScheme = {};
         }
@@ -136,7 +149,7 @@ private:
             errorCode = Ydb::StatusIds::SUCCESS;
             errorMessage = "";
         }
-        Send(ParentId, new TEvCreateTopicResponse(Settings.Strategy->GetTopicName(), errorCode, std::move(errorMessage), std::move(ModifyScheme)), 0, Settings.Cookie);
+        Send(ParentId, new TEvSchemaResponse(Settings.Strategy->GetTopicName(), errorCode, std::move(errorMessage), std::move(ModifyScheme)), 0, Settings.Cookie);
         PassAway();
     }
 

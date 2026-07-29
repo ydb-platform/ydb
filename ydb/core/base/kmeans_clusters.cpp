@@ -17,7 +17,7 @@ namespace NKikimr::NKMeans {
 
 namespace {
     constexpr ui64 MinVectorDimension = 1;
-    constexpr ui64 MaxVectorDimension = 16384;
+    constexpr ui64 MaxVectorDimension = 65536;
     constexpr ui64 MinLevels = 1;
     constexpr ui64 MaxLevels = 16;
     constexpr ui64 MinClusters = 2;
@@ -963,12 +963,24 @@ void AutoSelectKMeansSettings(Ydb::Table::KMeansTreeSettings& settings, ui64 row
     const bool hasLevels = settings.has_levels() && settings.levels() > 0;
     const bool hasClusters = settings.has_clusters() && settings.clusters() > 0;
 
-    if (hasLevels && hasClusters) {
-        return;
-    }
-
     if (isPrefixed) {
         rowCount = static_cast<ui64>(std::sqrt(static_cast<double>(rowCount)));
+    }
+
+    if (!settings.has_overlap_clusters()) {
+        if (rowCount >= 50000) {
+            if (!settings.has_clusters() || settings.clusters() >= 3) {
+                settings.set_overlap_clusters(3);
+            }
+        }
+    }
+
+    if (settings.has_overlap_clusters() && settings.overlap_clusters() > 1 && !settings.has_overlap_ratio()) {
+        settings.set_overlap_ratio(1.2);
+    }
+
+    if (hasLevels && hasClusters) {
+        return;
     }
 
     if (rowCount < 100) {

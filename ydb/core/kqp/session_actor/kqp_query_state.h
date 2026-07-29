@@ -12,9 +12,11 @@
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/common/kqp_timeouts.h>
 #include <ydb/core/kqp/common/kqp_tx.h>
+#include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/simple/temp_tables.h>
+#include <ydb/core/kqp/compile_service/kqp_compile_service.h>
 
 #include <ydb/library/actors/core/monotonic_provider.h>
 
@@ -25,7 +27,13 @@
 #include <map>
 #include <memory>
 
-namespace NKikimr::NKqp {
+namespace NKikimr {
+
+namespace NWorkloadManager {
+class IQueryClassifier;
+} // namespace NWorkloadManager
+
+namespace NKqp {
 
 class TKqpQueryCache;
 
@@ -121,6 +129,7 @@ public:
         UserRequestContext->PoolId = RequestEv->GetPoolId();
         UserRequestContext->PoolConfig = RequestEv->GetPoolConfig();
         UserRequestContext->DatabaseId = RequestEv->GetDatabaseId();
+        QueryClassifier = RequestEv->GetWmQueryClassifier();
 
         if (RequestEv->GetSaveQueryPhysicalGraph() && !QueryPhysicalGraph) {
             YQL_ENSURE(QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_SCRIPT);
@@ -143,6 +152,7 @@ public:
     TActorId Sender;
     ui64 ProxyRequestId = 0;
     std::unique_ptr<TEvKqp::TEvQueryRequest> RequestEv;
+    std::shared_ptr<NWorkloadManager::IQueryClassifier> QueryClassifier;
     ui64 ParametersSize = 0;
     TPreparedQueryHolder::TConstPtr PreparedQuery;
     TKqpCompileResult::TConstPtr CompileResult;
@@ -184,6 +194,8 @@ public:
     TQueryTxId TxId; // User tx
     bool Commit = false;
     bool Commited = false;
+
+    std::optional<TCommitTimestamp> CommitTimestamp;
 
     NTopic::TTopicOperations TopicOperations;
     TDuration CpuTime;
@@ -300,6 +312,10 @@ public:
         return RequestEv->HasKafkaApiOperations();
     }
 
+    bool HasDeferredPublication() const {
+        return RequestEv->HasDeferredPublication();
+    }
+
     bool GetQueryKeepInCache() const {
         return RequestEv->GetQueryKeepInCache();
     }
@@ -357,7 +373,16 @@ public:
                 }
 
                 if (source.GetTypeCase() == NKqpProto::TKqpSource::kFullTextSource) {
-                    addTable(source.GetFullTextSource().GetTable());
+                    const auto& fullText = source.GetFullTextSource();
+                    addTable(fullText.GetTable());
+                    // The compiled plan also pins each index impl table's (dict/docs/stats/posting)
+                    // schema version, and those advance independently of the main table (e.g. on
+                    // build finalize). Track them too, otherwise a cached plan with a stale impl-table
+                    // version is never invalidated and every read fails with SCHEME_ERROR until the
+                    // plan is evicted.
+                    for (const auto& indexTable : fullText.GetIndexTables()) {
+                        addTable(indexTable.GetTable());
+                    }
                 }
             }
 
@@ -413,6 +438,10 @@ public:
 
     const ::NKikimrKqp::TKafkaApiOperationsRequest& GetKafkaApiOperationsFromRequest() const {
         return RequestEv->GetKafkaApiOperations();
+    }
+
+    const ::NKikimrKqp::TTopicDeferredPublicationRequest& GetDeferredPublicationFromRequest() const {
+        return RequestEv->GetDeferredPublication();
     }
 
     bool NeedPersistentSnapshot() const {
@@ -480,6 +509,7 @@ public:
     bool ShouldAcquireLocks(const TKqpPhyTxHolder::TConstPtr& tx) {
         Y_UNUSED(tx);
         if (*TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SERIALIZABLE &&
+                *TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE &&
                 *TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW &&
                 *TxCtx->EffectiveIsolationLevel != NKqpProto::ISOLATION_LEVEL_READ_COMMITTED_RW) {
             return false;
@@ -596,7 +626,8 @@ public:
         const TGUCSettings::TPtr& gUCSettingsPtr,
         TIntrusivePtr<TKqpCounters>& counters,
         const TActorId& sender,
-        TKqpTransactionContext* txCtx = nullptr);
+        TKqpTransactionContext* txCtx = nullptr,
+        EWarmupAttributionMode warmupAttribution = EWarmupAttributionMode::None);
 
     // build the compilation request.
     std::unique_ptr<TEvKqp::TEvCompileRequest> BuildCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr, TKqpTransactionContext* txCtx = nullptr);
@@ -676,6 +707,7 @@ public:
 
     //// Topic ops ////
     void FillTopicOperations();
+    void FillDeferredPublicationOperations();
     bool TryMergeTopicOffsets(const NTopic::TTopicOperations &operations, TString& message);
     std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigate();
     bool IsAccessDenied(const NSchemeCache::TSchemeCacheNavigate& response, TString& message);
@@ -685,5 +717,6 @@ public:
 
 };
 
+} //namespace NKqp
 
-}
+} //namespace NKikimr

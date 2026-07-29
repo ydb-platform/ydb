@@ -15,4 +15,8 @@ PEERDIR(
     ydb/library/testlib/service_mocks
 )
 
+DATA(
+    arcadia/ydb/mvp/oidc_proxy/examples
+)
+
 END()

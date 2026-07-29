@@ -82,7 +82,7 @@ IComputationNode* WrapBlockJust(TCallable& callable, const TComputationNodeFacto
         kernel = MakeBlockJustKernel<true>(argsTypes, callable.GetType()->GetReturnType());
     }
 
-    return new TBlockFuncNode(ctx.Mutables, ToDatumValidateMode(ctx.ValidateMode), callable.GetType()->GetName(), std::move(argsNodes), argsTypes, callable.GetType()->GetReturnType(), *kernel, kernel);
+    return new TBlockFuncNode(ctx.Mutables, ctx.RuntimeSettings->DatumValidation.Get(), callable.GetType()->GetName(), std::move(argsNodes), argsTypes, callable.GetType()->GetReturnType(), *kernel, kernel);
 }
 
 } // namespace NMiniKQL

@@ -48,6 +48,8 @@ struct TPartitionBlobEncoder {
     bool IsNothingWritten() const;
     bool IsLastBatchPacked() const;
 
+    bool IsKeyGreaterThan(const TKey& key, ui64 offset, ui32 partNo) const;
+
     TString SerializeForKey(const TKey& key, ui32 size,
                             ui64 endOffset,
                             TInstant& writeTimestamp) const;
@@ -102,6 +104,7 @@ struct TPartitionBlobEncoder {
     ui64 FirstUncompactedOffset = 0;
 
     void pop_front();
+    void PopFrontHeadKey();
     void ScheduleDelete(TDataKey& key);
 
     struct TDeletedKey {

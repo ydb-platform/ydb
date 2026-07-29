@@ -3,16 +3,6 @@
 import pathlib
 import re
 
-ALLOWED_INTERNAL = (
-    # pycore
-    "internal/pycore_frame.h",
-    "internal/pycore_genobject.h",
-    "internal/pycore_pyerrors.h",
-    "internal/pycore_setobject.h",
-    # mimalloc
-    "internal/mimalloc/",
-)
-
 
 def files(directory):
     for dirpath, dirnames, filenames in directory.walk():
@@ -25,7 +15,6 @@ def headers_set(directory):
         f
         for f in files(directory)
         if f.endswith(".h")
-        and (not f.startswith("internal/") or f.startswith(ALLOWED_INTERNAL))
         and not re.match(r"^pyconfig[.-].+\.h$", f)
     }
 

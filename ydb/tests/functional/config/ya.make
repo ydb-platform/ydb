@@ -3,7 +3,6 @@ PY3TEST()
 TEST_SRCS(
     test_config_migration.py
     test_config_with_metadata.py
-    test_configuration_version.py
     test_distconf.py
     test_distconf_reassign_state_storage.py
     test_distconf_self_heal.py
@@ -12,6 +11,7 @@ TEST_SRCS(
     test_module_parameter.py
     test_pdisk_metadata_cli.py
     test_distconf_faulty_pdisk_remove_host.py
+    test_distconf_static_group.py
 )
 
 SPLIT_FACTOR(10)

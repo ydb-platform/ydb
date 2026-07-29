@@ -186,6 +186,9 @@ struct TConfig
     int ReadRetryCount;
     int StartOperationRetryCount;
 
+    // The CheckClusterLiveness operation should be retried, but fewer times than other operations.
+    int CheckLivenessRetryCount;
+
     /// @brief Period for checking status of running operation.
     TDuration OperationTrackerPollPeriod = TDuration::Seconds(5);
 
@@ -294,10 +297,8 @@ struct TConfig
     /// Allow to create trace_id on client side and propogate with request
     bool EnableClientTracing = true;
 
-    /// Use a separate connection for lightweight control requests.
-    /// If this option is set to true, a separate connection is opened for lightweight requests (for example, ping_transaction).
-    /// This is needed so that important lightweight requests do not wait for heavy requests, such as file writes, to complete.
-    /// However, using this option increases the number of open TCP connections.
+    /// If true, all RPC requests share a single connection,
+    //  and the native client sends lightweight control requests via a separate multiplexing band.
     bool EnableControlMultiplexingBand = false;
 
     static bool GetBool(const char* var, bool defaultValue = false);

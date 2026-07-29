@@ -164,7 +164,7 @@ public:
     }
 
     NThreading::TFuture<void> GetAsyncFuture(const TExprNode& input) final {
-        TTransformScope scope(Statistics_, nullptr);
+        TTransformScope scope(Statistics_, /*exprCtx=*/nullptr);
         AsyncStart_ = TInstant::Now();
 
         return DoGetAsyncFuture(input);
@@ -408,7 +408,7 @@ WrapFutureCallback(const TFuture& future, const TCallback& callback, const TStri
                     else {
                         if (res.Repeat()) {
                             input->SetState(TExprNode::EState::ExecutionRequired);
-                            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, false);
+                            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/false);
                         }
                         return callback(res, input, output, ctx);
                     }
@@ -434,7 +434,7 @@ WrapModifyFuture(const TFuture& future, const TResultExtractor& extractor, const
         input->SetState(TExprNode::EState::ExecutionComplete);
         output->SetResult(std::move(resultNode));
         if (input != output) {
-            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
         }
         return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Ok);
     }, message);
@@ -457,7 +457,7 @@ inline std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> Sync
 }
 
 inline std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> SyncRepeatWithRestart() {
-    return SyncStatus(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true));
+    return SyncStatus(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true));
 }
 
 using TSyncMap = std::unordered_map<TExprNode::TPtr, ui64, TExprNode::TPtrHash>;

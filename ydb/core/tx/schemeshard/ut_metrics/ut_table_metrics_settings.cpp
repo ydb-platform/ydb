@@ -1,6 +1,7 @@
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_env.h>
+#include <ydb/library/testlib/helpers.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -54,14 +55,14 @@ void VerifyTableDescriptionAndRestartSchemeShard(
  */
 Y_UNIT_TEST_SUITE(TSchemeShardTableDetailedMetricsSettingsTest) {
     /**
-     * Verify that CREATE TABLE without the detailed metrics level specified works correctly.
-     *
-     * @note This test also verifies that the detailed metrics settings are preserved
-     *       across SchemeShard restarts.
+     * Verify that CREATE TABLE without the detailed metrics level specified works correctly
+     * regardless of EnableDataShardDetailedMetrics feature flag state.
      */
-    Y_UNIT_TEST(CreateTableNoDetailedMetricsLevel) {
+    Y_UNIT_TEST_TWIN(CreateTableNoDetailedMetricsLevel, EnableDetailedMetrics) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(EnableDetailedMetrics);
 
         TestCreateTable(
             runtime,
@@ -100,6 +101,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableDetailedMetricsSettingsTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
 
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+
         TestCreateTable(
             runtime,
             100,
@@ -129,6 +132,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableDetailedMetricsSettingsTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
 
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+
         TestCreateTable(
             runtime,
             100,
@@ -152,6 +157,186 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableDetailedMetricsSettingsTest) {
     }
 
     /**
+     * Verify that CREATE TABLE fails correctly, when the given detailed metrics
+     * level (or an explicit "drop") is specified in the request and
+     * the EnableDataShardDetailedMetrics feature flag is disabled.
+     *
+     * @param[in] metricsLevel The detailed metrics level to verify (unset == use drop)
+     */
+    void VerifyCreateTableWithDetailedMetricsFlagDisabled(
+        std::optional<NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel> metricsLevel
+    ) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(false);
+
+        TestCreateTable(
+            runtime,
+            100,
+            "/MyRoot",
+            (!metricsLevel)
+                ? R"(
+                    Name: "TestTable"
+                    Columns { Name: "key"   Type: "Uint64" }
+                    Columns { Name: "value" Type: "String" }
+                    KeyColumnNames: ["key"]
+                    DetailedMetricsSettings {
+                        NotConfigured {
+                        }
+                    }
+                )"
+                : Sprintf(
+                    R"(
+                        Name: "TestTable"
+                        Columns { Name: "key"   Type: "Uint64" }
+                        Columns { Name: "value" Type: "String" }
+                        KeyColumnNames: ["key"]
+                        DetailedMetricsSettings {
+                            Configured {
+                                MetricsLevel: %s
+                            }
+                        }
+                    )",
+                    NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel_Name(*metricsLevel).c_str()
+                ),
+            {{
+                NKikimrScheme::StatusInvalidParameter,
+                "The detailed metrics settings are specified in the request, "
+                "but the detailed metrics feature is disabled by the corresponding "
+                "feature flag (EnableDataShardDetailedMetrics)",
+            }}
+        );
+    }
+
+    /**
+     * Verify that CREATE TABLE fails correctly, with different detailed metrics levels
+     * and the EnableDataShardDetailedMetrics feature flag disabled.
+     */
+    Y_UNIT_TEST(CreateTableDroppingDetailedMetricsSettingsNotAllowedFeatureFlagDisabled) {
+        VerifyCreateTableWithDetailedMetricsFlagDisabled({});
+    }
+
+    Y_UNIT_TEST(CreateTableDetailedMetricsLevelUnspecifiedNotAllowedFeatureFlagDisabled) {
+        VerifyCreateTableWithDetailedMetricsFlagDisabled(
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified
+        );
+    }
+
+    Y_UNIT_TEST(CreateTableDetailedMetricsLevelDisabledNotAllowedFeatureFlagDisabled) {
+        VerifyCreateTableWithDetailedMetricsFlagDisabled(
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelDisabled
+        );
+    }
+
+    Y_UNIT_TEST(CreateTableDetailedMetricsLevelTableNotAllowedFeatureFlagDisabled) {
+        VerifyCreateTableWithDetailedMetricsFlagDisabled(
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable
+        );
+    }
+
+    Y_UNIT_TEST(CreateTableDetailedMetricsLevelPartitionNotAllowedFeatureFlagDisabled) {
+        VerifyCreateTableWithDetailedMetricsFlagDisabled(
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition
+        );
+    }
+
+    /**
+     * Verify that ALTER TABLE fails correctly, when the given detailed metrics
+     * level (or an explicit "drop") is specified in the request and
+     * the EnableDataShardDetailedMetrics feature flag is disabled.
+     *
+     * @param[in] metricsLevel The detailed metrics level to verify (unset == use drop)
+     */
+    void VerifyAlterTableWithDetailedMetricsFlagDisabled(
+        std::optional<NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel> metricsLevel
+    ) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(false);
+
+        // First, create a table without any detailed metrics settings
+        TestCreateTable(
+            runtime,
+            100,
+            "/MyRoot",
+            R"(
+                Name: "TestTable"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "String" }
+                KeyColumnNames: ["key"]
+            )"
+        );
+
+        env.TestWaitNotification(runtime, 100);
+
+        // Second, execute ALTER TABLE with the detailed metrics settings explicitly specified
+        TestAlterTable(
+            runtime,
+            101,
+            "/MyRoot",
+            (!metricsLevel)
+                ? R"(
+                    Name: "TestTable"
+                    DetailedMetricsSettings {
+                        NotConfigured {
+                        }
+                    }
+                )"
+                : Sprintf(
+                    R"(
+                        Name: "TestTable"
+                        DetailedMetricsSettings {
+                            Configured {
+                                MetricsLevel: %s
+                            }
+                        }
+                    )",
+                    NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel_Name(*metricsLevel).c_str()
+                ),
+            {{
+                NKikimrScheme::StatusInvalidParameter,
+                "The detailed metrics settings are specified in the request, "
+                "but the detailed metrics feature is disabled by the corresponding "
+                "feature flag (EnableDataShardDetailedMetrics)",
+            }}
+        );
+    }
+
+    /**
+     * Verify that CREATE TABLE fails correctly, with different detailed metrics levels
+     * and the EnableDataShardDetailedMetrics feature flag disabled.
+     */
+    Y_UNIT_TEST(AlterTableDroppingDetailedMetricsSettingsNotAllowedFeatureFlagDisabled) {
+        VerifyAlterTableWithDetailedMetricsFlagDisabled({});
+    }
+
+    Y_UNIT_TEST(AlterTableDetailedMetricsLevelUnspecifiedNotAllowedFeatureFlagDisabled) {
+        VerifyAlterTableWithDetailedMetricsFlagDisabled(
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified
+        );
+    }
+
+    Y_UNIT_TEST(AlterTableDetailedMetricsLevelDisabledNotAllowedFeatureFlagDisabled) {
+        VerifyAlterTableWithDetailedMetricsFlagDisabled(
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelDisabled
+        );
+    }
+
+    Y_UNIT_TEST(AlterTableDetailedMetricsLevelTableNotAllowedFeatureFlagDisabled) {
+        VerifyAlterTableWithDetailedMetricsFlagDisabled(
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable
+        );
+    }
+
+    Y_UNIT_TEST(AlterTableDetailedMetricsLevelPartitionNotAllowedFeatureFlagDisabled) {
+        VerifyAlterTableWithDetailedMetricsFlagDisabled(
+            NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition
+        );
+    }
+
+    /**
      * Verify that CREATE TABLE works correctly, when the given valid
      * detailed metrics level is specified in the request.
      *
@@ -165,6 +350,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableDetailedMetricsSettingsTest) {
     ) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
 
         TestCreateTable(
             runtime,
@@ -262,9 +449,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableDetailedMetricsSettingsTest) {
      * @note This test also verifies that the detailed metrics settings are preserved
      *       across Scheme Shard restarts.
      */
-    Y_UNIT_TEST(AlterTableSourceNoDetailedMetricsLevelTargetNoDetailedMetricsLevel) {
+    Y_UNIT_TEST_TWIN(AlterTableSourceNoDetailedMetricsLevelTargetNoDetailedMetricsLevel, EnableDetailedMetrics) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(EnableDetailedMetrics);
 
         // First, create a table without any detailed metrics settings
         TestCreateTable(
@@ -322,6 +511,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableDetailedMetricsSettingsTest) {
     void VerifyAlterTableRemoveDetailedMetricsLevel(bool sourceHasMetricsLevel) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
 
         // First, create a table with or without detailed metrics settings configured
         TestCreateTable(
@@ -401,6 +592,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableDetailedMetricsSettingsTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
 
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
+
         // First, create a table without any detailed metrics settings
         TestCreateTable(
             runtime,
@@ -453,6 +646,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableDetailedMetricsSettingsTest) {
     ) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
 
         // First, create a table with or without detailed metrics settings configured
         TestCreateTable(
@@ -591,6 +786,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableDetailedMetricsSettingsTest) {
     Y_UNIT_TEST(AlterTableSourceWithDetailedMetricsLevelTargetNoDetailedMetricsLevel) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
 
         // First, create a table with some detailed metrics settings configured
         TestCreateTable(

@@ -172,7 +172,7 @@ public:
         }
 
         auto& state = GetState(ctx);
-        return ctx.HolderFactory.CreateArrowBlock(CalculateImpl(providers, state.Accessors, ctx.ArrowMemoryPool, ctx));
+        return ctx.HolderFactory.CreateArrowBlock(CalculateImpl(providers, state.Accessors, ctx.ArrowMemoryPool, ctx), ctx.RuntimeSettings.DatumValidation.Get());
     }
 
     arrow::Datum CalculateImpl(const TVector<TDatumProvider>& providers, TAccessors& accessors, arrow::MemoryPool& memoryPool,

@@ -40,6 +40,18 @@ void TStartShuffleCommand::Register(TRegistrar registrar)
             return command->Options.ReplicationFactor;
         })
         .Default();
+    registrar.ParameterWithUniversalAccessor<bool>(
+        "use_push_based_shuffle",
+        [] (TThis* command) -> auto& {
+            return command->Options.UsePushBasedShuffle;
+        })
+        .Default(false);
+    registrar.ParameterWithUniversalAccessor<TTableSchemaPtr>(
+        "schema",
+        [] (TThis* command) -> auto& {
+            return command->Options.Schema;
+        })
+        .Default();
 }
 
 void TStartShuffleCommand::DoExecute(ICommandContextPtr context)
@@ -115,15 +127,15 @@ void TReadShuffleDataCommand::DoExecute(ICommandContextPtr context)
         New<TControlAttributesConfig>(),
         /*keyColumnCount*/ 0);
 
-    TRowBatchReadOptions options{
-        .MaxRowsPerRead = context->GetConfig()->ReadBufferRowCount,
-        .Columnar = (format.GetType() == EFormatType::Arrow),
-    };
-
     PipeReaderToWriterByBatches(
         reader,
         writer,
-        options);
+        TPipeReaderToWriterByBatchesOptions{
+            .StartingOptions = {
+                .MaxRowsPerRead = context->GetConfig()->ReadBufferRowCount,
+                .Columnar = (format.GetType() == EFormatType::Arrow),
+            },
+        });
 }
 
 //////////////////////////////////////////////////////////////////////////////

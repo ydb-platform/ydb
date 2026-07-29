@@ -1,0 +1,344 @@
+#include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_utils.h>
+
+namespace NKikimr {
+namespace NKqp {
+
+namespace {
+
+class TLogicalLiveness: public ILivenessContext {
+public:
+    explicit TLogicalLiveness(TPlanProps& props)
+        : Props(props) {
+    }
+
+    void Run(TOpRoot& root) {
+        for (const auto& iter : root) {
+            iter.Current->Props.Analysis.LiveInByChild.reset();
+            iter.Current->Props.Analysis.LiveOut.reset();
+        }
+
+        TVector<TInfoUnit> rootColumns;
+        rootColumns.reserve(root.ColumnOrder.size());
+        for (const auto& column : root.ColumnOrder) {
+            rootColumns.emplace_back(column);
+        }
+
+        AddLiveColumns(root.GetInput(), rootColumns);
+        SeedStageConnectionLiveness(root);
+        Propagate();
+    }
+
+    const TInfoUnitSet& GetLiveOut(IOperator* op) const override {
+        Y_ENSURE(op);
+        Y_ENSURE(
+            op->Props.Analysis.LiveOut.has_value(),
+            "Liveness requested for an operator without computed liveness, kind: " << static_cast<ui32>(op->Kind));
+        return *op->Props.Analysis.LiveOut;
+    }
+
+    void AddLiveInput(IOperator* op, ui32 childIndex, const TInfoUnitSet& columns) override {
+        Y_ENSURE(op);
+        Y_ENSURE(childIndex < op->Children.size());
+
+        if (!op->Props.Analysis.LiveInByChild) {
+            op->Props.Analysis.LiveInByChild.emplace(op->Children.size());
+        }
+
+        auto& liveInByChild = *op->Props.Analysis.LiveInByChild;
+        Y_ENSURE(liveInByChild.size() == op->Children.size());
+
+        AddInfoUnits(liveInByChild[childIndex], columns);
+
+        AddLiveColumns(op->Children[childIndex], columns);
+    }
+
+    bool AddLiveColumns(const TIntrusivePtr<IOperator>& op, const TVector<TInfoUnit>& columns) {
+        const bool firstVisit = !op->Props.Analysis.LiveOut;
+        bool changed = false;
+        if (firstVisit) {
+            op->Props.Analysis.LiveOut.emplace();
+        }
+        auto& live = *op->Props.Analysis.LiveOut;
+        for (const auto& column : columns) {
+            changed |= AddInfoUnit(live, column);
+        }
+        if (firstVisit || changed) {
+            Enqueue(op);
+        }
+        return firstVisit || changed;
+    }
+
+    bool AddLiveColumns(const TIntrusivePtr<IOperator>& op, const TInfoUnitSet& columns) {
+        const bool firstVisit = !op->Props.Analysis.LiveOut;
+        bool changed = false;
+        if (firstVisit) {
+            op->Props.Analysis.LiveOut.emplace();
+        }
+        auto& live = *op->Props.Analysis.LiveOut;
+        for (const auto& column : columns) {
+            changed |= AddInfoUnit(live, column);
+        }
+        if (firstVisit || changed) {
+            Enqueue(op);
+        }
+        return firstVisit || changed;
+    }
+
+    void AddExpressionDeps(const TExpression& expr, TInfoUnitSet& target) override {
+        const auto expression = TExpression(expr.Node, expr.Ctx, &Props);
+        AddInfoUnits(target, expression.GetInputIUs(false, true));
+
+        for (const auto& iu : expression.GetInputIUs(true, false)) {
+            if (!iu.IsSubplanContext()) {
+                continue;
+            }
+
+            const auto it = Props.Subplans.PlanMap.find(iu);
+            if (it == Props.Subplans.PlanMap.end()) {
+                continue;
+            }
+
+            auto subplan = CastOperator<IOperator>(it->second.Plan);
+            AddLiveColumns(subplan, subplan->GetOutputIUs());
+        }
+    }
+
+private:
+    void SeedStageConnectionLiveness(TOpRoot& root) {
+        for (const auto& iter : root) {
+            const auto& parent = iter.Current;
+            for (const auto& child : parent->Children) {
+                if (!parent->Props.StageId || !child->Props.StageId
+                    || *parent->Props.StageId == *child->Props.StageId)
+                {
+                    continue;
+                }
+
+                const auto producerStageId = static_cast<ui32>(*child->Props.StageId);
+                const auto consumerStageId = static_cast<ui32>(*parent->Props.StageId);
+                const auto& connections = Props.StageGraph.GetConnections(producerStageId, consumerStageId);
+
+                TInfoUnitSet required;
+                for (const auto& connection : connections) {
+                    AddInfoUnits(required, connection->GetUsedIUs());
+                }
+                if (required.empty()) {
+                    continue;
+                }
+
+                // Stage connections seed the producer's LiveOut directly.
+                AddLiveColumns(child, required);
+            }
+        }
+    }
+
+    void Enqueue(const TIntrusivePtr<IOperator>& op) {
+        if (op && Queued.insert(op.get()).second) {
+            Queue.push_back(op);
+        }
+    }
+
+    void Propagate() {
+        for (size_t index = 0; index < Queue.size(); ++index) {
+            auto op = Queue[index];
+            Queued.erase(op.get());
+            op->PropagateLiveness(*this);
+        }
+        Queue.clear();
+    }
+
+    TPlanProps& Props;
+    THashSet<IOperator*> Queued;
+    TVector<TIntrusivePtr<IOperator>> Queue;
+};
+
+} // anonymous namespace
+
+void IOperator::PropagateLiveness(ILivenessContext& ctx) {
+    Y_UNUSED(ctx);
+}
+
+void IUnaryOperator::PropagateLiveness(ILivenessContext& ctx) {
+    const auto& liveOut = ctx.GetLiveOut(this);
+    TInfoUnitSet inputLive;
+    for (const auto& iu : GetInput()->GetOutputIUs()) {
+        if (liveOut.contains(iu)) {
+            AddInfoUnit(inputLive, iu);
+        }
+    }
+    ctx.AddLiveInput(this, 0, inputLive);
+}
+
+void TOpRead::PropagateLiveness(ILivenessContext& ctx) {
+    Y_UNUSED(ctx);
+}
+
+void TOpMap::PropagateLiveness(ILivenessContext& ctx) {
+    const auto& liveOut = ctx.GetLiveOut(this);
+    auto input = GetInput();
+    TInfoUnitSet inputLive;
+    TInfoUnitSet renameSources;
+
+    for (const auto& mapElement : MapElements) {
+        if (mapElement.IsRename()) {
+            renameSources.insert(mapElement.GetRename());
+        }
+        // Keep dependencies of every current map expression live so local pruning
+        // cannot remove producer columns before the dead consumer expression is gone.
+        ctx.AddExpressionDeps(mapElement.GetExpression(), inputLive);
+    }
+
+    for (const auto& iu : input->GetOutputIUs()) {
+        if (!renameSources.contains(iu) && liveOut.contains(iu)) {
+            AddInfoUnit(inputLive, iu);
+        }
+    }
+
+    ctx.AddLiveInput(this, 0, inputLive);
+}
+
+void TOpFilter::PropagateLiveness(ILivenessContext& ctx) {
+    TInfoUnitSet inputLive = ctx.GetLiveOut(this);
+    ctx.AddExpressionDeps(FilterExpr, inputLive);
+    ctx.AddLiveInput(this, 0, inputLive);
+}
+
+void TOpJoin::PropagateLiveness(ILivenessContext& ctx) {
+    const auto& liveOut = ctx.GetLiveOut(this);
+    const auto leftInput = GetLeftInput();
+    const auto rightInput = GetRightInput();
+    const auto leftOutput = MakeInfoUnitSet(leftInput->GetOutputIUs());
+    const auto rightOutput = MakeInfoUnitSet(rightInput->GetOutputIUs());
+
+    TInfoUnitSet leftLive;
+    TInfoUnitSet rightLive;
+
+    const bool outputsLeft = JoinOutputsLeft(JoinKind);
+    const bool outputsRight = JoinOutputsRight(JoinKind);
+
+    if (outputsLeft) {
+        for (const auto& iu : leftOutput) {
+            if (liveOut.contains(iu)) {
+                AddInfoUnit(leftLive, iu);
+            }
+        }
+    }
+
+    if (outputsRight) {
+        for (const auto& iu : rightOutput) {
+            if (liveOut.contains(iu)) {
+                AddInfoUnit(rightLive, iu);
+            }
+        }
+    }
+
+    for (const auto& [leftKey, rightKey] : JoinKeys) {
+        AddInfoUnit(leftLive, leftKey);
+        AddInfoUnit(rightLive, rightKey);
+    }
+
+    for (const auto& filter : JoinFilters) {
+        TInfoUnitSet filterDeps;
+        ctx.AddExpressionDeps(filter, filterDeps);
+        for (const auto& iu : filterDeps) {
+            if (leftOutput.contains(iu)) {
+                AddInfoUnit(leftLive, iu);
+            }
+            if (rightOutput.contains(iu)) {
+                AddInfoUnit(rightLive, iu);
+            }
+        }
+    }
+
+    ctx.AddLiveInput(this, 0, leftLive);
+    ctx.AddLiveInput(this, 1, rightLive);
+}
+
+void TOpUnionAll::PropagateLiveness(ILivenessContext& ctx) {
+    const auto& liveOut = ctx.GetLiveOut(this);
+    TInfoUnitSet inputLive;
+    for (const auto& column : Columns) {
+        if (!liveOut.contains(column)) {
+            continue;
+        }
+        AddInfoUnit(inputLive, column);
+    }
+
+    // The union must keep at least one column; TPruneDeadUnionAllColumnsRule
+    // retains the first declared column in the same case.
+    if (inputLive.empty() && !Columns.empty()) {
+        AddInfoUnit(inputLive, Columns.front());
+    }
+
+    // Every input of the union sees the same set of live columns.
+    for (ui32 childIndex = 0; childIndex < Children.size(); ++childIndex) {
+        ctx.AddLiveInput(this, childIndex, inputLive);
+    }
+}
+
+void TOpLimit::PropagateLiveness(ILivenessContext& ctx) {
+    TInfoUnitSet inputLive = ctx.GetLiveOut(this);
+    ctx.AddExpressionDeps(LimitCond, inputLive);
+    if (auto offsetCond = GetOffsetCond()) {
+        ctx.AddExpressionDeps(*offsetCond, inputLive);
+    }
+    ctx.AddLiveInput(this, 0, inputLive);
+}
+
+void TOpSort::PropagateLiveness(ILivenessContext& ctx) {
+    TInfoUnitSet inputLive = ctx.GetLiveOut(this);
+    for (const auto& sortElement : SortElements) {
+        AddInfoUnit(inputLive, sortElement.SortColumn);
+    }
+    if (LimitCond) {
+        ctx.AddExpressionDeps(*LimitCond, inputLive);
+    }
+    ctx.AddLiveInput(this, 0, inputLive);
+}
+
+void TOpTableLookup::PropagateLiveness(ILivenessContext& ctx) {
+    TInfoUnitSet inputLive;
+    AddInfoUnits(inputLive, LookupKeys);
+    ctx.AddLiveInput(this, 0, inputLive);
+}
+
+void TOpAggregate::PropagateLiveness(ILivenessContext& ctx) {
+    TInfoUnitSet inputLive;
+    AddInfoUnits(inputLive, KeyColumns);
+    for (const auto& traits : AggregationTraitsList) {
+        AddInfoUnit(inputLive, traits.OriginalColName);
+    }
+    ctx.AddLiveInput(this, 0, inputLive);
+}
+
+void TOpCBOTree::PropagateLiveness(ILivenessContext& ctx) {
+    for (ui32 childIndex = 0; childIndex < Children.size(); ++childIndex) {
+        ctx.AddLiveInput(this, childIndex, MakeInfoUnitSet(Children[childIndex]->GetOutputIUs()));
+    }
+}
+
+void ComputePlanLiveness(TOpRoot& root) {
+    TLogicalLiveness(root.PlanProps).Run(root);
+}
+
+const TInfoUnitSet& GetLiveIn(IOperator* op, ui32 childIndex) {
+    Y_ENSURE(op);
+    Y_ENSURE(
+        op->Props.Analysis.LiveInByChild.has_value(),
+        "Liveness requested for an operator without computed input liveness, kind: " << static_cast<ui32>(op->Kind));
+    const auto& liveInByChild = *op->Props.Analysis.LiveInByChild;
+    Y_ENSURE(childIndex < liveInByChild.size());
+    return liveInByChild[childIndex];
+}
+
+const TInfoUnitSet& GetLiveOut(IOperator* op) {
+    Y_ENSURE(op);
+    Y_ENSURE(
+        op->Props.Analysis.LiveOut.has_value(),
+        "Liveness requested for an operator without computed liveness, kind: " << static_cast<ui32>(op->Kind));
+    return *op->Props.Analysis.LiveOut;
+}
+
+} // namespace NKqp
+} // namespace NKikimr

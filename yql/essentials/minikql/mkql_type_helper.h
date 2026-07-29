@@ -30,6 +30,8 @@ inline bool NeedWrapWithExternalOptional(TType* type) {
         return true;
     } else if (unpacked->IsPg() || IsSingularType(unpacked)) {
         return true;
+    } else if (unpacked->IsVariant()) {
+        return true;
     }
     return false;
 }

@@ -1,14 +1,21 @@
-#include <algorithm>
-#include <queue>
-#include <thread>
-#include <library/cpp/resource/resource.h>
+#include "yql_yt_coordinator_impl.h"
+
 #include <yt/cpp/mapreduce/common/helpers.h>
+
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_table_data_service_key.h>
+#include <yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/yql_yt_default_stage_operation_manager.h>
+
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <yql/essentials/utils/failure_injector/failure_injector.h>
-#include <yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/yql_yt_default_stage_operation_manager.h>
-#include "yql_yt_coordinator_impl.h"
+
+#include <library/cpp/resource/resource.h>
+
+#include <util/system/condvar.h>
+
+#include <algorithm>
+#include <queue>
+#include <thread>
 
 namespace NYql::NFmr {
 
@@ -54,9 +61,10 @@ namespace {
 template <typename TResponse>
 NThreading::TFuture<TResponse> MakeFailedResponse(TResponse response, const TFmrError& error, TStringBuf logPrefix) {
     if (error.Reason == EFmrErrorReason::FallbackOperation) {
-        YQL_CLOG(WARN, FastMapReduce) << "FMR fallback to YT: " << error.ErrorMessage;
+        YQL_CLOG(WARN, FastMapReduce) << logPrefix << "FMR fallback to YT: " << error.ErrorMessage;
+    } else {
+        YQL_CLOG(ERROR, FastMapReduce) << logPrefix << error.ErrorMessage;
     }
-    YQL_CLOG(ERROR, FastMapReduce) << logPrefix << error.ErrorMessage;
     response.ErrorMessages.emplace_back(error);
     return NThreading::MakeFuture(std::move(response));
 }
@@ -85,15 +93,23 @@ public:
         CheckWorkersAliveStatus();
         CheckGatewaySessionsActivity();
         StartGcThread();
+        StartWaitForOperationsThread();
+        StartWaitForTasksThread();
         GcService_->ClearAll();
     }
 
     ~TFmrCoordinator() {
         StopCoordinator_ = true;
+        OperationFinishedCondVar_.BroadCast();
+        TasksAvailableCondVar_.BroadCast();
+        MaintenanceCondVar_.BroadCast();
+        GcQueueCondVar_.BroadCast();
         ClearIdempotencyKeysThread_.join();
         CheckWorkersAliveStatusThread_.join();
         CheckGatewaySessionsActivityThread_.join();
         GcThread_.join();
+        WaitForOperationsThread_.join();
+        WaitForTasksThread_.join();
     }
 
     NThreading::TFuture<TStartOperationResponse> StartOperation(const TStartOperationRequest& request) override {
@@ -216,6 +232,7 @@ public:
             operationInfo.TaskIds.emplace(taskId);
             operationInfo.AllTaskIds.emplace(taskId);
         }
+        SignalTasksIfAvailable();
 
         return Nothing();
     }
@@ -289,6 +306,9 @@ public:
             }
         }
 
+        Operations_[operationId].OperationStatus = EOperationStatus::Aborted;
+        OperationFinishedCondVar_.BroadCast();
+
         return NThreading::MakeFuture(TDeleteOperationResponse(EOperationStatus::Aborted));
     }
 
@@ -346,11 +366,22 @@ public:
                 auto& workerInfo = Workers_[workerId];
                 workerInfo.LatestPing = TimeProvider_->Now();
                 if (request.VolatileId != Workers_[workerId].VolatileId) {
-                    // worker has restarted
-                    YQL_ENSURE(workerInfo.NeedsToRestart = true);
-                    YQL_ENSURE(request.TaskStates.empty());
-                    workerInfo.NeedsToRestart = false; // Assume worker is alive again and can handle new tasks.
+                    // Worker volatile ID changed — it has restarted.
+                    // Task states from before the restart are stale; skip them below.
+                    if (!request.TaskStates.empty()) {
+                        YQL_CLOG(WARN, FastMapReduce) << "Worker " << workerId
+                            << " sent new volatile id with " << request.TaskStates.size()
+                            << " non-empty task states; treating as stale and ignoring";
+                    }
+                    workerInfo.NeedsToRestart = false;
                     workerInfo.VolatileId = request.VolatileId;
+                    // Return immediately: stale task states must not be processed.
+                    // The worker will send a clean heartbeat on the next cycle.
+                    return NThreading::MakeFuture(THeartbeatResponse{
+                        .TasksToRun = {},
+                        .TaskToDeleteIds = TaskToDeleteIds_,
+                        .NeedToRestart = false,
+                    });
                 } else if (workerInfo.NeedsToRestart) {
                     // Worker has awoken after downtime, send signal to restart
                     return NThreading::MakeFuture(THeartbeatResponse{.NeedToRestart = true});
@@ -438,6 +469,11 @@ public:
                     YQL_CLOG(ERROR, FastMapReduce) << error->ErrorMessage << ", taskId: " << taskId;
                     SetUnfinishedTaskStatus(taskId, ETaskStatus::Failed, *error);
                     canRunTask = false;
+                } else {
+                    // Record ownership at dispatch time, not when the worker first reports the task back.
+                    // Otherwise a worker that dies in the gap between receiving a task and its next heartbeat
+                    // leaves the coordinator with no record of the task, so failover never reschedules it.
+                    Workers_[workerId].TaskIds.emplace(taskId);
                 }
             }
             if (canRunTask) {
@@ -565,6 +601,63 @@ public:
         return NThreading::MakeFuture(TPrepareOperationResponse{.PartitionId = partitionId, .TasksNum = OperationPartitions_[partitionId].TaskInputs.size()});
     }
 
+    NThreading::TFuture<TWaitForTasksResponse> WaitForTasks(const TWaitForTasksRequest& request) override {
+        YQL_ENSURE(request.AvailableSlots > 0, "WaitForTasks: AvailableSlots must be greater than 0");
+        auto promise = NThreading::NewPromise<TWaitForTasksResponse>();
+        auto future = promise.GetFuture();
+
+        bool resolveImmediately = false;
+        ui64 taskCount = 0;
+        with_lock(Mutex_) {
+            taskCount = TasksToRun_.size();
+            if (StopCoordinator_) {
+                resolveImmediately = true;
+            } else if (taskCount > 0 && WaitForTasksWaiters_.empty()) {
+                // No other waiters — resolve immediately without going through FIFO ordering.
+                resolveImmediately = true;
+            } else {
+                WaitForTasksWaiters_.push_back(TTaskWaiterInfo{
+                    .Deadline = TimeProvider_->Now() + request.Timeout,
+                    .AvailableSlots = request.AvailableSlots,
+                    .Promise = std::move(promise),
+                });
+                TasksAvailableCondVar_.Signal();
+            }
+        }
+
+        if (resolveImmediately) {
+            promise.SetValue(TWaitForTasksResponse{
+                .AvailableTasksCount = std::min(taskCount, request.AvailableSlots)});
+        }
+
+        return future;
+    }
+
+    NThreading::TFuture<TWaitForOperationsResponse> WaitForOperations(const TWaitForOperationsRequest& request) override {
+        auto promise = NThreading::NewPromise<TWaitForOperationsResponse>();
+        auto future = promise.GetFuture();
+
+        std::vector<TOperationIdWithStatus> finalized;
+        with_lock(Mutex_) {
+            auto watchedIds = std::unordered_set<TString>(request.OperationIds.begin(), request.OperationIds.end());
+            finalized = CollectFinalized(watchedIds);
+            if (finalized.empty()) {
+                WaitOperationsWaiters_.push_back(TWaiterInfo{
+                    .WatchedIds = std::move(watchedIds),
+                    .Deadline = TimeProvider_->Now() + request.Timeout,
+                    .Promise = std::move(promise),
+                });
+                OperationFinishedCondVar_.Signal();
+            }
+        }
+
+        if (!finalized.empty()) {
+            promise.SetValue(TWaitForOperationsResponse{.FinalizedOperations = std::move(finalized)});
+        }
+
+        return future;
+    }
+
 private:
     void StartClearingIdempotencyKeys() {
         auto ClearIdempotencyKeysFunc = [&] () {
@@ -580,8 +673,8 @@ private:
                             ++it;
                         }
                     }
+                    MaintenanceCondVar_.WaitD(Mutex_, TInstant::Now() + TimeToSleepBetweenClearKeyRequests_);
                 }
-                Sleep(TimeToSleepBetweenClearKeyRequests_);
             }
         };
         ClearIdempotencyKeysThread_ = std::thread(ClearIdempotencyKeysFunc);
@@ -613,11 +706,14 @@ private:
                                 YQL_ENSURE(Tasks_.contains(taskId));
                                 TasksToRun_.emplace(Tasks_[taskId].Task, taskId);
                             }
+                            SignalTasksIfAvailable();
                             workerInfo.TaskIds.clear();
                         }
                     }
                 }
-                Sleep(TimeToSleepBetweenCheckWorkerStatusRequests_);
+                with_lock(Mutex_) {
+                    MaintenanceCondVar_.WaitD(Mutex_, TInstant::Now() + TimeToSleepBetweenCheckWorkerStatusRequests_);
+                }
             }
         };
         CheckWorkersAliveStatusThread_ = std::thread(checkWorkersAliveStatusFunc);
@@ -645,7 +741,9 @@ private:
                     YQL_CLOG(INFO, FastMapReduce) << "Cleaning up inactive session " << sessionId;
                     ClearSessionImpl(sessionId);
                 }
-                Sleep(HealthCheckInterval_);
+                with_lock(Mutex_) {
+                    MaintenanceCondVar_.WaitD(Mutex_, TInstant::Now() + HealthCheckInterval_);
+                }
             }
         };
         CheckGatewaySessionsActivityThread_ = std::thread(checkFunc);
@@ -657,6 +755,9 @@ private:
                 TGcTask gcTask;
                 bool hasTask = false;
                 with_lock(GcQueueMutex_) {
+                    GcQueueCondVar_.WaitT(GcQueueMutex_, TDuration::MilliSeconds(100), [&] {
+                        return !GcQueue_.empty() || StopCoordinator_.load();
+                    });
                     if (!GcQueue_.empty()) {
                         gcTask = std::move(GcQueue_.front());
                         GcQueue_.pop();
@@ -689,7 +790,9 @@ private:
                         }
                     }
                 } else {
-                    Sleep(TDuration::MilliSeconds(100));
+                    with_lock(GcQueueMutex_) {
+                        GcQueueCondVar_.WaitD(GcQueueMutex_, TInstant::Now() + TDuration::MilliSeconds(100));
+                    }
                 }
             }
         };
@@ -739,8 +842,12 @@ private:
         YQL_ENSURE(Operations_.contains(taskInfo.OperationId));
         auto& currentTaskIdsForOperation = Operations_[taskInfo.OperationId];
         currentTaskIdsForOperation.TaskIds.erase(taskId);
-        if (currentTaskIdsForOperation.TaskIds.empty()) {
-            // All task for operation are cleared, can clear it
+        currentTaskIdsForOperation.AllTaskIds.erase(taskId);
+        if (currentTaskIdsForOperation.AllTaskIds.empty()) {
+            // All tasks across all stages for this operation are cleared, can clear it.
+            // Using AllTaskIds (not TaskIds) because TaskIds only tracks the current stage:
+            // after a stage transition TaskIds is cleared and refilled, so it can be empty
+            // while tasks from prior stages are still present in Tasks_.
             Operations_.erase(taskInfo.OperationId);
         }
         Tasks_.erase(taskId);
@@ -779,6 +886,10 @@ private:
         if (taskErrorMessage) {
             auto& errorMessages = operationInfo.ErrorMessages;
             errorMessages.emplace_back(*taskErrorMessage);
+        }
+        auto opStatus = operationInfo.OperationStatus;
+        if (opStatus == EOperationStatus::Completed || opStatus == EOperationStatus::Failed) {
+            OperationFinishedCondVar_.BroadCast();
         }
     }
 
@@ -829,9 +940,6 @@ private:
 
         if (taskStatuses.contains(ETaskStatus::Failed)) {
             return EOperationStatus::Failed;
-        }
-        if (taskStatuses.contains(ETaskStatus::InProgress)) {
-            return EOperationStatus::InProgress;
         }
         if (taskStatuses.contains(ETaskStatus::InProgress)) {
             return EOperationStatus::InProgress;
@@ -934,6 +1042,7 @@ private:
                 .GroupsToClear = std::move(groupsToClear),
                 .PartIdsToKeep = std::move(partIdsToKeep),
             });
+            GcQueueCondVar_.Signal();
         }
     }
 
@@ -1021,6 +1130,8 @@ private:
     std::unordered_map<ui64, TWorkerInfo> Workers_; // WorkerId -> Info About It
 
     TMutex Mutex_;
+    TCondVar OperationFinishedCondVar_;
+    TCondVar MaintenanceCondVar_; // woken on shutdown to unblock maintenance threads
     const ui32 WorkersNum_;
     std::unordered_map<ui32, TString> WorkerToVolatileId_; // worker id -> volatile id  // TODO - убрать это
     const TIntrusivePtr<IRandomProvider> RandomProvider_;
@@ -1050,8 +1161,169 @@ private:
     };
 
     TMutex GcQueueMutex_;
+    TCondVar GcQueueCondVar_;
     std::queue<TGcTask> GcQueue_;
     std::thread GcThread_;
+
+    struct TWaiterInfo {
+        std::unordered_set<TString> WatchedIds;
+        TInstant Deadline;
+        NThreading::TPromise<TWaitForOperationsResponse> Promise;
+        std::vector<TOperationIdWithStatus> Finalized;  // populated under Mutex_, consumed outside
+    };
+
+    // Must be called under Mutex_.
+    std::vector<TOperationIdWithStatus> CollectFinalized(const std::unordered_set<TString>& watchedIds) {
+        std::vector<TOperationIdWithStatus> finalized;
+        for (const auto& operationId : watchedIds) {
+            auto opIt = Operations_.find(operationId);
+            EOperationStatus status = (opIt != Operations_.end())
+                ? opIt->second.OperationStatus
+                : EOperationStatus::NotFound;
+            bool isTerminal = (status == EOperationStatus::Completed
+                || status == EOperationStatus::Failed
+                || status == EOperationStatus::Aborted
+                || status == EOperationStatus::NotFound);
+            if (isTerminal) {
+                std::vector<TFmrError> errors;
+                if (opIt != Operations_.end()) {
+                    errors = opIt->second.ErrorMessages;
+                }
+                finalized.push_back(TOperationIdWithStatus{
+                    .OperationId = operationId,
+                    .Status = status,
+                    .ErrorMessages = std::move(errors),
+                });
+            }
+        }
+        return finalized;
+    }
+
+    void StartWaitForOperationsThread() {
+        auto waitFunc = [this]() {
+            while (!StopCoordinator_) {
+                std::vector<TWaiterInfo> toResolve;
+                TInstant nextDeadline = TInstant::Max();
+
+                with_lock(Mutex_) {
+                    TInstant now = TimeProvider_->Now();
+                    for (auto it = WaitOperationsWaiters_.begin(); it != WaitOperationsWaiters_.end();) {
+                        auto finalized = CollectFinalized(it->WatchedIds);
+                        if (!finalized.empty() || now >= it->Deadline) {
+                            it->Finalized = std::move(finalized);
+                            toResolve.push_back(std::move(*it));
+                            it = WaitOperationsWaiters_.erase(it);
+                        } else {
+                            if (it->Deadline < nextDeadline) {
+                                nextDeadline = it->Deadline;
+                            }
+                            ++it;
+                        }
+                    }
+                }
+
+                for (auto& waiter : toResolve) {
+                    waiter.Promise.SetValue(TWaitForOperationsResponse{.FinalizedOperations = std::move(waiter.Finalized)});
+                }
+
+                with_lock(Mutex_) {
+                    if (WaitOperationsWaiters_.empty() && !StopCoordinator_) {
+                        OperationFinishedCondVar_.WaitI(Mutex_);
+                    } else if (nextDeadline != TInstant::Max()) {
+                        OperationFinishedCondVar_.WaitD(Mutex_, nextDeadline);
+                    }
+                }
+            }
+
+            // Drain remaining waiters on shutdown with empty responses — outside the lock.
+            std::vector<TWaiterInfo> remaining;
+            with_lock(Mutex_) {
+                remaining = std::move(WaitOperationsWaiters_);
+            }
+            for (auto& waiter : remaining) {
+                waiter.Promise.SetValue(TWaitForOperationsResponse{});
+            }
+        };
+        WaitForOperationsThread_ = std::thread(waitFunc);
+    }
+
+    std::vector<TWaiterInfo> WaitOperationsWaiters_;
+    std::thread WaitForOperationsThread_;
+
+    struct TTaskWaiterInfo {
+        TInstant Deadline;
+        ui64 AvailableSlots = 0;      // from request, worker's capacity
+        NThreading::TPromise<TWaitForTasksResponse> Promise;
+        ui64 AvailableTasksCount = 0; // populated under Mutex_, consumed outside
+    };
+
+    // Must be called under Mutex_.
+    void SignalTasksIfAvailable() {
+        if (!TasksToRun_.empty() && !WaitForTasksWaiters_.empty()) {
+            TasksAvailableCondVar_.Signal();
+        }
+    }
+
+    void StartWaitForTasksThread() {
+        auto waitFunc = [this]() {
+            while (!StopCoordinator_) {
+                std::vector<TTaskWaiterInfo> toResolve;
+                TInstant nextDeadline = TInstant::Max();
+
+                with_lock(Mutex_) {
+                    TInstant now = TimeProvider_->Now();
+                    ui64 remainingTasks = TasksToRun_.size();
+                    for (auto it = WaitForTasksWaiters_.begin(); it != WaitForTasksWaiters_.end();) {
+                        if (now >= it->Deadline) {
+                            // Timed out — resolve with 0 regardless of remaining tasks.
+                            it->AvailableTasksCount = 0;
+                            toResolve.push_back(std::move(*it));
+                            it = WaitForTasksWaiters_.erase(it);
+                        } else if (remainingTasks > 0) {
+                            // Assign up to this worker's capacity, then deduct from the pool.
+                            it->AvailableTasksCount = std::min(remainingTasks, it->AvailableSlots);
+                            remainingTasks -= it->AvailableTasksCount;
+                            toResolve.push_back(std::move(*it));
+                            it = WaitForTasksWaiters_.erase(it);
+                        } else {
+                            // Tasks fully distributed — keep remaining waiters sleeping,
+                            // but track their deadlines for the next WaitD.
+                            if (it->Deadline < nextDeadline) {
+                                nextDeadline = it->Deadline;
+                            }
+                            ++it;
+                        }
+                    }
+                }
+
+                for (auto& waiter : toResolve) {
+                    waiter.Promise.SetValue(TWaitForTasksResponse{.AvailableTasksCount = waiter.AvailableTasksCount});
+                }
+
+                with_lock(Mutex_) {
+                    if (WaitForTasksWaiters_.empty() && !StopCoordinator_) {
+                        TasksAvailableCondVar_.WaitI(Mutex_);
+                    } else if (nextDeadline != TInstant::Max()) {
+                        TasksAvailableCondVar_.WaitD(Mutex_, nextDeadline);
+                    }
+                }
+            }
+
+            // Drain remaining waiters on shutdown with AvailableTasksCount = 0.
+            std::vector<TTaskWaiterInfo> remaining;
+            with_lock(Mutex_) {
+                remaining = std::move(WaitForTasksWaiters_);
+            }
+            for (auto& waiter : remaining) {
+                waiter.Promise.SetValue(TWaitForTasksResponse{.AvailableTasksCount = 0});
+            }
+        };
+        WaitForTasksThread_ = std::thread(waitFunc);
+    }
+
+    TCondVar TasksAvailableCondVar_;
+    std::vector<TTaskWaiterInfo> WaitForTasksWaiters_;
+    std::thread WaitForTasksThread_;
 
     //////////////////////////////////////////////////////////////////////////////////////////////////////////
 

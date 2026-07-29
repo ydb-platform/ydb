@@ -1,3 +1,2 @@
-/* postgres can not */
 $x = "false";
 PRAGMA ClassicDivision = $x;

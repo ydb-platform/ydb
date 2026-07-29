@@ -18,17 +18,7 @@ namespace NYql::NConnector {
             return true;
         }
 
-        const NApi::TError& error = response.error();
-
-        YQL_ENSURE(error.status() != Ydb::StatusIds_StatusCode::StatusIds_StatusCode_STATUS_CODE_UNSPECIFIED,
-                   "error status code is not initialized");
-
-        auto ok = error.status() == Ydb::StatusIds_StatusCode::StatusIds_StatusCode_SUCCESS;
-        if (ok) {
-            YQL_ENSURE(error.issues_size() == 0, "request succeeded, but issues are not empty");
-        }
-
-        return ok;
+        return response.error().status() == Ydb::StatusIds_StatusCode::StatusIds_StatusCode_SUCCESS;
     }
 
     TIssues ErrorToIssues(const NApi::TError& error, TString prefix = "");

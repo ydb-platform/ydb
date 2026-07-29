@@ -4,8 +4,9 @@
 #include <ydb/core/persqueue/pqtablet/common/constants.h>
 #include <ydb/core/persqueue/public/config.h>
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_map.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -169,7 +170,7 @@ void TUserInfo::ReadDone(const TActorContext& ctx, const TInstant& now, ui64 rea
 }
 
 static TUserInfo::TPerPartitionCounters CreateDetailedMetricsForSubgroup(const TActorContext& ctx, const TString& user, NMonitoring::TDynamicCounterPtr subgroup) {
-    Y_ABORT_UNLESS(subgroup);
+    AFL_ENSURE(subgroup);
 
     bool fcc = AppData()->PQConfig.GetTopicsAreFirstClassCitizen();
 
@@ -320,7 +321,8 @@ TUsersInfoStorage::TUsersInfoStorage(
     const TString& dbId,
     const TString& dbPath,
     const bool isServerless,
-    const TString& folderId
+    const TString& folderId,
+    bool isSupportive
 )
     : DCId(std::move(dcId))
     , TopicConverter(topicConverter)
@@ -331,6 +333,7 @@ TUsersInfoStorage::TUsersInfoStorage(
     , DbPath(dbPath)
     , IsServerless(isServerless)
     , FolderId(folderId)
+    , IsSupportive(isSupportive)
     , CurReadRuleGeneration(0)
 {
 }
@@ -451,6 +454,9 @@ TUsersInfoStorage::TDetailedCounterSubgroup TUsersInfoStorage::GetPartitionCount
 }
 
 TUsersInfoStorage::TDetailedCounterSubgroup TUsersInfoStorage::GetPartitionCounterSubgroupImpl(const TActorContext& ctx, const TString& monitoringProjectId) const {
+    if (IsSupportive) {
+        return {nullptr, monitoringProjectId};
+    }
     NMonitoring::TDynamicCounterPtr s = AppData(ctx)->Counters;
     if (!s) {
         return {nullptr, monitoringProjectId};

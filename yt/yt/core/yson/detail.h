@@ -7,11 +7,13 @@
 
 #include <yt/yt/core/misc/error.h>
 #include <yt/yt/core/misc/parser_helpers.h>
-#include <yt/yt/core/misc/property.h>
-#include <yt/yt/core/misc/static_ring_queue.h>
 
 #include <library/cpp/yt/coding/varint.h>
 #include <library/cpp/yt/coding/zig_zag.h>
+
+#include <library/cpp/yt/containers/static_ring_queue.h>
+
+#include <library/cpp/yt/misc/property.h>
 
 #include <library/cpp/yt/yson_string/format.h>
 
@@ -139,11 +141,11 @@ public:
     }
 
     // Return pair <context, context_position>.
-    std::pair<TString, size_t> GetContextFromCheckpoint() const
+    std::pair<std::string, size_t> GetContextFromCheckpoint() const
     {
-        TString result(MaxContextSize, '\0');
+        std::string result(MaxContextSize, '\0');
         size_t size, position;
-        SaveContext(result.Detach(), &size, &position);
+        SaveContext(result.data(), &size, &position);
         result.resize(size);
         return {result, position};
     }
@@ -216,7 +218,7 @@ public:
     void CheckpointContext()
     { }
 
-    std::pair<TString, size_t> GetContextFromCheckpoint() const
+    std::pair<std::string, size_t> GetContextFromCheckpoint() const
     {
         return {"<context is disabled>", 0};
     }

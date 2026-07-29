@@ -13,6 +13,8 @@
 
 namespace NYdb::inline Dev::NPersQueue {
 
+namespace NGrpc = NTopic::NWriteSessionGrpc;
+
 const TDuration UPDATE_TOKEN_PERIOD = TDuration::Hours(1);
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -27,11 +29,10 @@ TWriteSessionImpl::TWriteSessionImpl(
     , Client(std::move(client))
     , Connections(std::move(connections))
     , DbDriverState(std::move(dbDriverState))
-    , PrevToken(DbDriverState->CredentialsProvider ? DbDriverState->CredentialsProvider->GetAuthInfo() : "")
     , InitSeqNoPromise(NThreading::NewPromise<ui64>())
     , WakeupInterval(
-            Settings.BatchFlushInterval_.value_or(TDuration::Zero()) ?
-                std::min(Settings.BatchFlushInterval_.value_or(TDuration::Seconds(1)) / 5, TDuration::MilliSeconds(100))
+            Settings.BatchFlushInterval_ != TDuration::Zero() ?
+                std::min(Settings.BatchFlushInterval_ / 5, TDuration::MilliSeconds(100))
                 :
                 TDuration::MilliSeconds(100)
     )
@@ -992,7 +993,7 @@ void TWriteSessionImpl::FlushWriteIfRequiredImpl() {
 
     if (!CurrentBatch.Empty() && !CurrentBatch.FlushRequested) {
         MessagesAcquired += static_cast<ui64>(CurrentBatch.Acquire());
-        if (TInstant::Now() - CurrentBatch.StartedAt >= Settings.BatchFlushInterval_.value_or(TDuration::Zero())
+        if (TInstant::Now() - CurrentBatch.StartedAt >= Settings.BatchFlushInterval_
             || CurrentBatch.CurrentSize >= Settings.BatchFlushSizeBytes_.value_or(0)
             || CurrentBatch.CurrentSize >= MaxBlockSize
             || CurrentBatch.Messages.size() >= MaxBlockMessageCount
@@ -1062,8 +1063,33 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
     return size;
 }
 
-size_t GetMaxGrpcMessageSize() {
-    return 120_MB;
+size_t EstimatePackedInt64FieldUpperBound(ui32 fieldNumber, size_t itemsCount) {
+    static constexpr size_t MaxInt64VarintPayloadSize = 10;
+
+    return NGrpc::ProtoPackedInt64FieldSize(fieldNumber, itemsCount * MaxInt64VarintPayloadSize);
+}
+
+template <typename TBlock>
+size_t EstimateWriteRequestBlockSize(const TBlock& block) {
+    size_t size = 0;
+    size += EstimatePackedInt64FieldUpperBound(2, block.MessageCount); // sequence_numbers
+    size += EstimatePackedInt64FieldUpperBound(3, block.MessageCount); // created_at_ms
+    size += EstimatePackedInt64FieldUpperBound(4, block.MessageCount); // sent_at_ms
+    size += EstimatePackedInt64FieldUpperBound(5, block.MessageCount); // message_sizes
+
+    size += NGrpc::ProtoPackedInt64FieldSize(6, NGrpc::TWireFormatLite::Int64Size(static_cast<i64>(block.Offset)));
+    size += NGrpc::ProtoPackedInt64FieldSize(7, NGrpc::TWireFormatLite::Int64Size(static_cast<i64>(block.PartNumber)));
+    size += NGrpc::ProtoPackedInt64FieldSize(8, NGrpc::TWireFormatLite::Int64Size(static_cast<i64>(block.MessageCount)));
+    size += NGrpc::ProtoPackedInt64FieldSize(9, NGrpc::TWireFormatLite::Int64Size(static_cast<i64>(block.OriginalSize)));
+    size += NGrpc::ProtoBytesFieldSize(10, block.CodecID.size());
+    if (block.Compressed) {
+        size += NGrpc::ProtoBytesFieldSize(11, block.Data.size());
+    } else {
+        for (const auto& buffer : block.OriginalDataRefs) {
+            size += NGrpc::ProtoBytesFieldSize(11, buffer.size());
+        }
+    }
+    return size;
 }
 
 bool TWriteSessionImpl::IsReadyToSendNextImpl() {
@@ -1156,19 +1182,63 @@ void TWriteSessionImpl::UpdateTokenIfNeededImpl() {
 
     LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session: try to update token");
 
-    if (!DbDriverState->CredentialsProvider || UpdateTokenInProgress || !SessionEstablished)
+    auto credentialsProvider = DbDriverState->GetCredentialsProvider();
+    if (!credentialsProvider || UpdateTokenInProgress || !SessionEstablished || Aborting)
         return;
-    TClientMessage clientMessage;
-    auto* updateRequest = clientMessage.mutable_update_token_request();
-    auto token = DbDriverState->CredentialsProvider->GetAuthInfo();
-    if (token == PrevToken)
+    auto authInfo = credentialsProvider->GetAuthInfoAsync();
+    if (authInfo.IsReady()) {
+        UpdateTokenImpl(authInfo);
         return;
+    }
     UpdateTokenInProgress = true;
-    updateRequest->set_token(TStringType{token});
+    try {
+        authInfo.Subscribe([cbContext = SelfContext](const auto& future) {
+            if (auto self = cbContext->LockShared()) try {
+                self->Connections->ScheduleCallback(TDuration::Zero(), [cbContext, future](bool ok) {
+                    if (auto self = cbContext->LockShared()) {
+                        if (!ok) {
+                            self->UpdateTokenInProgress = false;
+                            return;
+                        }
+                        std::lock_guard guard(self->Lock);
+                        self->UpdateTokenImpl(future);
+                    }
+                });
+            } catch (...) {
+                self->UpdateTokenInProgress = false;
+            }
+        });
+    } catch (...) {
+        UpdateTokenInProgress = false;
+    }
+}
+
+void TWriteSessionImpl::UpdateTokenImpl(const NThreading::TFuture<std::string>& future) {
+    Y_ABORT_UNLESS(Lock.IsLocked());
+
+    UpdateTokenInProgress = false;
+    if (!SessionEstablished || Aborting) {
+        return;
+    }
+
+    std::string token;
+    try {
+        token = future.GetValue();
+    } catch (...) {
+        CloseImpl(EStatus::CLIENT_UNAUTHENTICATED, CurrentExceptionMessage());
+        return;
+    }
+    if (token == PrevToken) {
+        return;
+    }
+
+    UpdateTokenInProgress = true;
     PrevToken = token;
 
     LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefix() << "Write session: updating token");
 
+    TClientMessage clientMessage;
+    clientMessage.mutable_update_token_request()->set_token(TStringType{token});
     Processor->Write(std::move(clientMessage));
 }
 
@@ -1180,11 +1250,18 @@ void TWriteSessionImpl::SendImpl() {
         TClientMessage clientMessage;
         auto* writeRequest = clientMessage.mutable_write_request();
         auto sentAtMs = TInstant::Now().MilliSeconds();
+        NGrpc::TRequestSizeLimiter sizeLimiter(2);
 
         // Sent blocks while we can without messages reordering
-        while (IsReadyToSendNextImpl() && clientMessage.ByteSizeLong() < GetMaxGrpcMessageSize()) {
+        while (IsReadyToSendNextImpl()) {
             const auto& block = PackedMessagesToSend.top();
             Y_ABORT_UNLESS(block.Valid);
+
+            const size_t blockSize = EstimateWriteRequestBlockSize(block);
+            if (!sizeLimiter.CanAdd(blockSize)) {
+                break;
+            }
+
             for (size_t i = 0; i != block.MessageCount; ++i) {
                 Y_ABORT_UNLESS(!OriginalMessagesToSend.empty());
 
@@ -1216,6 +1293,7 @@ void TWriteSessionImpl::SendImpl() {
             moveBlock.Move(block);
             SentPackedMessage.emplace(std::move(moveBlock));
             PackedMessagesToSend.pop();
+            sizeLimiter.Add(blockSize);
         }
         UpdateTokenIfNeededImpl();
         LOG_LAZY(DbDriverState->Log,

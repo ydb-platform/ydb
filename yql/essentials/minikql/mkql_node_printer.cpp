@@ -881,5 +881,5 @@ void Out<NKikimr::NMiniKQL::TType>(
     IOutputStream& out,
     TTypeTraits<NKikimr::NMiniKQL::TType>::TFuncParam value)
 {
-    out << PrintNode(&value, true);
+    out << PrintNode(&value, /*singleLine=*/true);
 }

@@ -14,8 +14,14 @@ namespace NKikimr::NKqp {
             o << ", CurrentExecutionId: " << CurrentExecutionId;
             o << ", RunScriptActorId: " << RunScriptActorId.ToString();
         }
+        if (StreamingQueryPath) {
+            o << ", StreamingQueryPath: " << StreamingQueryPath;
+        }
         if (CheckpointId) {
             o << ", CheckpointId: " << CheckpointId;
+        }
+        if (WatermarkLateEventsPolicy) {
+            o << ", WatermarkLateEventsPolicy: " << WatermarkLateEventsPolicy;
         }
         o << ", IsStreamingQuery: " << IsStreamingQuery;
         o << "}";
@@ -31,5 +37,7 @@ namespace NKikimr::NKqp {
         resultMap["PoolId"] = ctx.PoolId;
         resultMap["RunScriptActorId"] = ctx.RunScriptActorId.ToString();  // Only for logging
         resultMap["CheckpointId"] = ctx.CheckpointId;
+        resultMap["StreamingQueryPath"] = ctx.StreamingQueryPath;
+        resultMap["WatermarkLateEventsPolicy"] = ctx.WatermarkLateEventsPolicy;
     }
 }

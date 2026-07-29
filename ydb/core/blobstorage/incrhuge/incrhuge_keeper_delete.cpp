@@ -4,6 +4,8 @@
 #include "incrhuge_keeper.h"
 #include <ydb/core/protos/blobstorage_vdisk_internal.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_INCRHUGE
+
 namespace NKikimr {
     namespace NIncrHuge {
 
@@ -46,8 +48,11 @@ namespace NKikimr {
                 }
                 return s.Str();
             };
-            IHLOG_DEBUG(ctx, "Owner# %d SeqNo# %" PRIu64 " HandleDelete Ids# [%s]", msg->Owner, msg->SeqNo,
-                    makeIdList().data());
+            YDB_LOG_DEBUG_CTX((ctx), "HandleDelete",
+                {"logPrefix", LogPrefix},
+                {"owner", msg->Owner},
+                {"seqNo", msg->SeqNo},
+                {"ids", makeIdList().data()});
 
             // verify sequence number -- it should exceed maximum value of stored number and all requests in-flight or
             // else this is duplicate query
@@ -96,8 +101,11 @@ namespace NKikimr {
                     Y_ABORT_UNLESS(!WriteInProgress.count(id));
                     WriteInProgress.emplace(id, it);
                     item.State = EItemState::WaitingForDefrag;
-                    IHLOG_DEBUG(ctx, "Owner# %d SeqNo# %" PRIu64 " Id# %016" PRIx64 " deferred delete",
-                            item.Owner, item.SeqNo, id);
+                    YDB_LOG_DEBUG_CTX((ctx), "Dump logPrefix, owner, seqNo, id",
+                        {"logPrefix", LogPrefix},
+                        {"owner", item.Owner},
+                        {"seqNo", item.SeqNo},
+                        {"id", id});
                 } else {
                     // find matching chunk, check that it is not being deleted
                     auto it = Keeper.State.Chunks.find(locator.ChunkIdx);
@@ -146,7 +154,10 @@ namespace NKikimr {
 
             Y_ABORT_UNLESS(item.NumDefragItems > 0);
             if (!--item.NumDefragItems) {
-                IHLOG_DEBUG(ctx, "Owner# %d SeqNo# %" PRIu64 " delete resumed", item.Owner, item.SeqNo);
+                YDB_LOG_DEBUG_CTX((ctx), "Dump logPrefix, owner, seqNo",
+                    {"logPrefix", LogPrefix},
+                    {"owner", item.Owner},
+                    {"seqNo", item.SeqNo});
                 item.State = EItemState::Ready;
                 ProcessDeleteItem(itemIt, ctx);
 
@@ -192,8 +203,11 @@ namespace NKikimr {
             auto callback = [this, it](NKikimrProto::EReplyStatus status, const TActorContext& ctx) {
                 TDeleteQueueItem& item = *it;
 
-                IHLOG_DEBUG(ctx, "Owner# %d SeqNo# %" PRIu64 " finished Status# %s",
-                        item.Owner, item.SeqNo, NKikimrProto::EReplyStatus_Name(status).data());
+                YDB_LOG_DEBUG_CTX((ctx), "Dump logPrefix, owner, seqNo, status",
+                    {"logPrefix", LogPrefix},
+                    {"owner", item.Owner},
+                    {"seqNo", item.SeqNo},
+                    {"status", NKikimrProto::EReplyStatus_Name(status).data()});
 
                 if (status == NKikimrProto::OK) {
                     // handle deleted locators; remove them from lookup also
@@ -246,7 +260,9 @@ namespace NKikimr {
                 const TActorContext& ctx) {
             if (deleteFromLookup) {
                 for (const TBlobDeleteLocator& deleteLocator : deleteLocators) {
-                    IHLOG_DEBUG(ctx, "deleting %016" PRIx64 " from lookup table", deleteLocator.Id);
+                    YDB_LOG_DEBUG_CTX((ctx), "Dump logPrefix, deletingId",
+                        {"logPrefix", LogPrefix},
+                        {"deletingId", deleteLocator.Id});
                     TBlobLocator locator;
                     bool status = Keeper.State.BlobLookup.Delete(deleteLocator.Id, &locator);
                     Y_ABORT_UNLESS(status);
@@ -305,8 +321,10 @@ namespace NKikimr {
 
             // create callback that will actually delete this chunk from index when log is completed
             auto callback = [this, chunkIdx](NKikimrProto::EReplyStatus status, const TActorContext& ctx) {
-                IHLOG_DEBUG(ctx, "finished chunk delete ChunkIdx# %" PRIu32 " Status# %s", chunkIdx,
-                        NKikimrProto::EReplyStatus_Name(status).data());
+                YDB_LOG_DEBUG_CTX((ctx), "Finished chunk delete",
+                    {"logPrefix", LogPrefix},
+                    {"chunkIdx", chunkIdx},
+                    {"status", NKikimrProto::EReplyStatus_Name(status).data()});
 
                 // find chunk and ensure that it is in deleting state
                 auto it = Keeper.State.Chunks.find(chunkIdx);
@@ -323,7 +341,9 @@ namespace NKikimr {
                 }
             };
 
-            IHLOG_DEBUG(ctx, "sending chunk delete ChunkIdx# %" PRIu32, chunkIdx);
+            YDB_LOG_DEBUG_CTX((ctx), "Sending chunk delete",
+                {"logPrefix", LogPrefix},
+                {"chunkIdx", chunkIdx});
 
             // log chunk deletion; generate "DeletedChunks" item for this record in order to remove this chunk from
             // chunks set on recovery

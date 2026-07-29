@@ -2,8 +2,6 @@
 
 #include "public.h"
 
-#include "protocol_version.h"
-
 #include <yt/yt/core/actions/future.h>
 #include <yt/yt/core/actions/signal.h>
 
@@ -47,6 +45,19 @@ struct TStreamingParameters
     std::optional<TDuration> ReadTimeout;
     //! Timeout for writes to attachments output stream.
     std::optional<TDuration> WriteTimeout;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+//! Controls direct placement transfer (DPT) of a message's attachments between
+//! clients and services. When enabled (and supported by the underlying
+//! transport), the attachments are not delivered inline with the message but are
+//! fetched, under the receiver's control, via an #NBus::IDirectPlacementTransfer
+//! (potentially enabling a true zero-copy receive into the receiver's buffers).
+struct TDirectPlacementTransferParameters
+{
+    //! Whether direct placement transfer is requested for the attachments.
+    bool Enabled = false;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -104,7 +115,7 @@ struct IChannel
     /*!
      *  \param request A request to send.
      *  \param responseHandler An object that will handle a response.
-     *  \param timeout Request processing timeout.
+     *  \param options Request send options.
      *  \returns an object controlling the lifetime of the request;
      *  the latter could be |nullptr| if no control is supported by the implementation in general
      *  or for this particular request.

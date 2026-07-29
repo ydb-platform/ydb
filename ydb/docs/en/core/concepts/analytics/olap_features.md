@@ -27,7 +27,7 @@ Core concepts for organizing, scaling, and managing data.
 
 ### Batch Ingestion
 
-  - [Apache Spark Connector](../../integrations/ingestion/spark.md): Read and write data for ETL/ELT tasks.
+  - [Apache Spark Connector](../../integrations/query-engines/spark.md): Read and write data for ETL/ELT tasks.
   - [BulkUpsert API](../../recipes/ydb-sdk/bulk-upsert.md): High-performance bulk inserts via SDK.
 
 ### Integration with External Systems

@@ -2,6 +2,8 @@
 #include "config.h"
 #include "connection.h"
 
+#include <yt/yt/core/bus/message_handler.h>
+
 #include <yt/yt/core/concurrency/periodic_executor.h>
 #include <yt/yt/core/concurrency/thread_pool_poller.h>
 
@@ -346,7 +348,7 @@ void TDispatcher::TImpl::OnPeriodicCheck()
     });
 }
 
-std::optional<TString> TDispatcher::TImpl::GetBusCertsDirectoryPath() const
+std::optional<std::string> TDispatcher::TImpl::GetBusCertsDirectoryPath() const
 {
     return Config_.Acquire()->BusCertsDirectoryPath;
 }

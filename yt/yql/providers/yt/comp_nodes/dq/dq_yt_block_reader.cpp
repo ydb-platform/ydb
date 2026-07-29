@@ -524,12 +524,13 @@ private:
 class TReaderState: public TComputationValue<TReaderState> {
     using TBase = TComputationValue<TReaderState>;
 public:
-    TReaderState(TMemoryUsageInfo* memInfo, TSource::TPtr source, size_t width, std::shared_ptr<std::vector<std::shared_ptr<arrow::DataType>>> arrowTypes)
+    TReaderState(TMemoryUsageInfo* memInfo, TSource::TPtr source, size_t width, std::shared_ptr<std::vector<std::shared_ptr<arrow::DataType>>> arrowTypes, NYql::EDatumValidationMode validationMode)
         : TBase(memInfo)
         , Source_(std::move(source))
         , Width_(width)
         , Types_(arrowTypes)
         , Result_(width)
+        , ValidationMode_(validationMode)
     {
     }
 
@@ -548,9 +549,9 @@ public:
 
             for (size_t i = 0; i < Width_; ++i) {
                 YQL_ENSURE(batch->Columns[i].type()->Equals(Types_->at(i)));
-                output[i] = Source_->HolderFactory.CreateArrowBlock(std::move(batch->Columns[i]));
+                output[i] = Source_->HolderFactory.CreateArrowBlock(std::move(batch->Columns[i]), ValidationMode_);
             }
-            output[Width_] = Source_->HolderFactory.CreateArrowBlock(arrow::Datum(ui64(batch->RowsCnt)));
+            output[Width_] = Source_->HolderFactory.CreateArrowBlock(arrow::Datum(ui64(batch->RowsCnt)), ValidationMode_);
         } catch (...) {
             Cerr << "YT RPC Reader exception:\n";
             throw;
@@ -564,6 +565,7 @@ private:
     std::shared_ptr<std::vector<std::shared_ptr<arrow::DataType>>> Types_;
     std::vector<NUdf::TUnboxedValue*> Result_;
     bool GotFinish_ = 0;
+    const NYql::EDatumValidationMode ValidationMode_;
 };
 };
 
@@ -592,6 +594,7 @@ public:
         Specs_.SetUseSkiff("", 0);
         Specs_.Init(CodecCtx_, inputSpec, inputGroups, tableNames, itemType, {}, {}, jobStats);
         Specs_.SetTableOffsets(tableOffsets);
+        Specs_.SetDatumValidationMode(ctx.RuntimeSettings->DatumValidation.Get());
     }
 
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
@@ -611,7 +614,7 @@ public:
         settings->SetColumns(columnNames);
         auto source = std::make_shared<TSource>(std::move(settings), Inflight_, Type_, types, ctx.HolderFactory, JobStats_);
         source->SetSelfAndRun(source);
-        return ctx.HolderFactory.Create<TReaderState>(source, Width_, types);
+        return ctx.HolderFactory.Create<TReaderState>(source, Width_, types, Specs_.DatumValidationMode_);
     }
 
     void RegisterDependencies() const final {}

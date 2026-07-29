@@ -256,7 +256,8 @@ namespace NKikimr {
                             }
                             const auto loc = State.HostRecords->GetLocation(pdiskId.NodeId);
 
-                            pdiskLocations[pdiskId] = NLayoutChecker::TPDiskLayoutPosition(domainMapper, loc, pdiskId, Geometry);
+                            pdiskLocations[pdiskId] = NLayoutChecker::TPDiskLayoutPosition(domainMapper, loc,
+                                vslot->PDisk->DiskScope, pdiskId, Geometry);
                         }
 
                         TString errorReason;
@@ -399,7 +400,9 @@ namespace NKikimr {
                         if ((State.Self.IsGroupLayoutSanitizerEnabled() && replacedSlots.size() == 1 && hasMissingSlots && !layoutIsValid) ||
                                 (replacedSlots.empty() && sanitizingRequest)) {
 
-                            STLOG(PRI_INFO, BS_CONTROLLER, BSCFG01, "Attempt to sanitize group layout", (GroupId, groupId));
+                            YDB_LOG_INFO_COMP(BS_CONTROLLER, "Attempt to sanitize group layout",
+                                {"marker", "BSCFG01"},
+                                {"groupId", groupId});
                             // Use group layout sanitizing algorithm on direct requests or when initial group layout is invalid
                             auto result = AllocateOrSanitizeGroup(groupId, group, {}, std::move(forbid), groupSizeInUnits, requiredSpace,
                                 AllowUnusableDisks, groupInfo->BridgePileId, &TGroupGeometryInfo::SanitizeGroup);
@@ -531,10 +534,12 @@ namespace NKikimr {
                             }
                             return static_cast<TString>(s << "]");
                         };
-                        STLOG(PRI_INFO, BS_CONTROLLER_AUDIT, BSCA04, "ReconfigGroup", (UniqueId, State.UniqueId),
-                            (GroupId, groupInfo->ID),
-                            (GroupGeneration, groupInfo->Generation),
-                            (Replacements, makeReplacements()));
+                        YDB_LOG_INFO_COMP(BS_CONTROLLER_AUDIT, "ReconfigGroup",
+                            {"marker", "BSCA04"},
+                            {"uniqueId", State.UniqueId},
+                            {"groupId", groupInfo->ID},
+                            {"groupGeneration", groupInfo->Generation},
+                            {"replacements", makeReplacements()});
                     }
 
                     for (const TVSlotId& vslotId : donors) {
@@ -741,12 +746,14 @@ namespace NKikimr {
                     .NumSlots = numSlots,
                     .MaxSlots = maxSlots,
                     .SlotSizeInUnits = slotSizeInUnits,
+                    .SlotSizeInBytes = info.GetEffectiveExpectedSlotSize(),
                     .Groups = std::move(groups),
                     .SpaceAvailable = availableSpace,
                     .Operational = info.Operational,
                     .Decommitted = info.Decommitted(),
                     .WhyUnusable = std::move(whyUnusable),
                     .BridgePileId = bridgePileId,
+                    .DiskScope = info.DiskScope,
                 });
 
                 bool populateSlotTracker = State.Fit.PreferLessOccupiedRack || State.Fit.WithAttentionToReplication;
@@ -942,8 +949,9 @@ namespace NKikimr {
                     // process all groups in this pool and skip the rest
                     processSingleStoragePool(spIt->first, spIt->second, true, [&](const auto& callback) {
                         const auto& storagePoolGroups = state.StoragePoolGroups.Get();
-                        for (auto [begin, end] = storagePoolGroups.equal_range(spIt->first); begin != end; ++begin) {
-                            callback(begin->second);
+                        for (auto it = storagePoolGroups.lower_bound({spIt->first, Min<TGroupId>()});
+                                it != storagePoolGroups.end() && it->first == spIt->first; ++it) {
+                            callback(it->second);
                         }
                     });
                     for (; it != poolsAndGroups.end() && std::get<0>(*it) == storagePoolId; ++it)

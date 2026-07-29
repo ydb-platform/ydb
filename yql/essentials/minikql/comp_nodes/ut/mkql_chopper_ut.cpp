@@ -85,7 +85,7 @@ TRuntimeNode MakeStream(TSetup<UseLLVM>& setup, ui64 count = 9U) {
 template <bool UseLLVM>
 TRuntimeNode MakeFlow(TSetup<UseLLVM>& setup, ui64 count = 9U) {
     TProgramBuilder& pb = *setup.PgmBuilder;
-    return pb.ToFlow(MakeStream<UseLLVM>(setup, count));
+    return pb.ToFlow(MakeStream<UseLLVM>(setup, count), {});
 }
 
 template <bool UseLLVM>
@@ -132,7 +132,7 @@ TRuntimeNode GroupGetKeysFirst(TSetup<UseLLVM>& setup, TRuntimeNode stream, cons
                                                   [&](TRuntimeNode item) { return pb.ToString(item); },
                                                   [&](TRuntimeNode, TRuntimeNode) { return pb.NewDataLiteral<bool>(false); },
                                                   [&](TRuntimeNode item, TRuntimeNode state) { return pb.Concat(state, pb.ToString(item)); })))));
-        return isFlow ? pb.ToFlow(list) : pb.Iterator(list, {});
+        return isFlow ? pb.ToFlow(list, {}) : pb.Iterator(list, {});
     });
 }
 
@@ -183,7 +183,7 @@ Y_UNIT_TEST_LLVM(TestSubStreamFetchAfterFinish) {
                                    [&](TRuntimeNode, TRuntimeNode group) { return WrapWithFetchAfterFinish(pb, group); }));
 
     const auto graph = setup.BuildGraph(stream);
-    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), TVector{1U, 1U, 2U, 2U});
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector{1U, 1U, 2U, 2U});
 }
 
 Y_UNIT_TEST_LLVM(TestEmpty) {

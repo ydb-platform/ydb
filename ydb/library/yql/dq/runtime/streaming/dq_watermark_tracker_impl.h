@@ -18,7 +18,7 @@ namespace NYql::NDq {
 #define WATERMARK_LOG_T(X) do { if constexpr (false) TStringBuilder() << "Watermarks. " << X; } while(false)
 #define WATERMARK_LOG_D(X) do { if constexpr (false) TStringBuilder() << "Watermarks. " << X; } while(false)
 template <typename TInputKey>
-struct TDqWatermarkTrackerImpl {
+class TDqWatermarkTrackerImpl {
 public:
     explicit TDqWatermarkTrackerImpl(const TString& logPrefix, const ::NMonitoring::TDynamicCounterPtr& counters = {})
         : LogPrefix_(logPrefix)
@@ -39,6 +39,10 @@ public:
             Y_DEBUG_ABORT_UNLESS(idleableCount >= ExpiresQueue_.size());
             IdleInputs_->Sub(idleableCount - ExpiresQueue_.size());
         }
+    }
+
+    [[nodiscard]] const TString& GetLogPrefix() const {
+        return LogPrefix_;
     }
 
     void SetLogPrefix(const TString& logPrefix) {

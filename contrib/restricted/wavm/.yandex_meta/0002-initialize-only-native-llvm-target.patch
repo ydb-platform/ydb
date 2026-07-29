@@ -1,0 +1,34 @@
+From 290330d41a0fa2a493f740e7e66fd96451e46c46 Mon Sep 17 00:00:00 2001
+From: Dmitry Torilov <dtorilov@yandex-team.ru>
+Date: Mon, 24 Apr 2023 16:56:36 +0300
+Subject: [PATCH 3/3] initialize only native llvm target
+
+---
+ Lib/LLVMJIT/LLVMJIT.cpp | 11 +++++------
+ 1 file changed, 5 insertions(+), 6 deletions(-)
+
+diff --git a/Lib/LLVMJIT/LLVMJIT.cpp b/Lib/LLVMJIT/LLVMJIT.cpp
+index 935c2a8b..37333826 100644
+--- a/Lib/LLVMJIT/LLVMJIT.cpp
++++ b/Lib/LLVMJIT/LLVMJIT.cpp
+@@ -83,12 +83,11 @@ llvm::JITEvaluatedSymbol LLVMJIT::resolveJITImport(llvm::StringRef name)
+ 
+ static bool globalInitLLVM()
+ {
+-	llvm::InitializeAllTargetInfos();
+-	llvm::InitializeAllTargets();
+-	llvm::InitializeAllTargetMCs();
+-	llvm::InitializeAllAsmPrinters();
+-	llvm::InitializeAllAsmParsers();
+-	llvm::InitializeAllDisassemblers();
++	llvm::InitializeNativeTarget();
++	llvm::InitializeNativeTargetAsmParser();
++	llvm::InitializeNativeTargetAsmPrinter();
++	llvm::InitializeNativeTargetDisassembler();
++
+ 	llvm::sys::DynamicLibrary::LoadLibraryPermanently(nullptr);
+ 	return true;
+ }
+-- 
+2.17.1
+

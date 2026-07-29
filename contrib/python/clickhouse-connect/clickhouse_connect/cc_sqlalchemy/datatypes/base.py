@@ -1,9 +1,8 @@
 import logging
-from typing import Dict, Type, Optional
 
 from sqlalchemy.exc import CompileError
 
-from clickhouse_connect.datatypes.base import ClickHouseType, TypeDef, EMPTY_TYPE_DEF
+from clickhouse_connect.datatypes.base import EMPTY_TYPE_DEF, ClickHouseType, TypeDef
 from clickhouse_connect.datatypes.registry import parse_name, type_map
 from clickhouse_connect.driver.binding import str_query_value
 
@@ -15,11 +14,11 @@ class ChSqlaType:
     A SQLAlchemy TypeEngine that wraps a ClickHouseType.  We don't extend TypeEngine directly, instead all concrete
     subclasses will inherit from TypeEngine.
     """
-    ch_type: ClickHouseType = None
+
+    ch_type: ClickHouseType | None = None
     generic_type: None
-    _ch_type_cls = None
-    _instance = None
-    _instance_cache: Dict[TypeDef, 'ChSqlaType'] = None
+    _ch_type_cls: type[ClickHouseType] | None = None
+    _instance_cache: dict[TypeDef, "ChSqlaType"] | None = None
 
     def __init_subclass__(cls):
         """
@@ -31,7 +30,7 @@ class ChSqlaType:
             try:
                 cls._ch_type_cls = type_map[base]
             except KeyError:
-                logger.warning('Attempted to register SQLAlchemy type without corresponding ClickHouse Type')
+                logger.warning("Attempted to register SQLAlchemy type without corresponding ClickHouse Type")
                 return
         schema_types.append(base)
         sqla_type_map[base] = cls
@@ -44,7 +43,7 @@ class ChSqlaType:
         :param type_def: -- TypeDef tuple that defines arguments for this instance
         :return: Shared instance of a configured ChSqlaType
         """
-        return cls._instance_cache.setdefault(type_def, cls(type_def=type_def))
+        return cls._instance_cache.setdefault(type_def, cls(type_def=type_def))  # type: ignore[union-attr]
 
     def __init__(self, type_def: TypeDef = EMPTY_TYPE_DEF):
         """
@@ -55,7 +54,7 @@ class ChSqlaType:
         parse_name function
         """
         self.type_def = type_def
-        self.ch_type = self._ch_type_cls.build(type_def)
+        self.ch_type = self._ch_type_cls.build(type_def)  # type: ignore[union-attr]
 
     @property
     def name(self):
@@ -106,8 +105,7 @@ class ChSqlaType:
         """
         return self.name
 
-    # pylint: disable=unused-argument
-    def _with_collation(self, collation: Optional[str]) -> "ChSqlaType":
+    def _with_collation(self, collation: str | None) -> "ChSqlaType":
         """
         SQLAlchemy 2.x compatibility: TypeEngine declares this abstract to support
         text types that can carry a collation. ClickHouse types in this dialect
@@ -124,8 +122,8 @@ class CaseInsensitiveDict(dict):
         return super().__getitem__(item.lower())
 
 
-sqla_type_map: Dict[str, Type[ChSqlaType]] = CaseInsensitiveDict()
-schema_types = []
+sqla_type_map: dict[str, type[ChSqlaType]] = CaseInsensitiveDict()
+schema_types: list[str] = []
 
 
 def sqla_type_from_name(name: str) -> ChSqlaType:
@@ -138,7 +136,7 @@ def sqla_type_from_name(name: str) -> ChSqlaType:
     try:
         type_cls = sqla_type_map[base]
     except KeyError:
-        err_str = f'Unrecognized ClickHouse type base: {base} name: {name}'
+        err_str = f"Unrecognized ClickHouse type base: {base} name: {name}"
         logger.error(err_str)
         raise CompileError(err_str) from KeyError
     return type_cls.build(type_def)

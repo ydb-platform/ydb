@@ -35,8 +35,9 @@
 
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 
-#include <ydb/library/actors/core/log.h>
 #include <ydb/services/sqs_topic/statuses.h>
+
+#include <ydb/library/actors/core/log.h>
 
 #include <library/cpp/json/json_writer.h>
 
@@ -78,6 +79,10 @@ namespace NKikimr::NSqsTopic::V1 {
             if (!FormalValidQueueUrl()) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "Invalid QueueUrl"));
             }
+            if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
+                return ReplyWithError(MakeError(NSQS::NErrors::UNSUPPORTED_OPERATION,
+                    "DeleteQueue is not supported"));
+            }
 
             DescribeTopic(NACLib::UpdateRow); // TODO почему update row?
             Become(&TDeleteQueueActor::StateWork);
@@ -86,8 +91,7 @@ namespace NKikimr::NSqsTopic::V1 {
         void StateWork(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 hFunc(NDescriber::TEvDescribeTopicsResponse, Handle);
-                hFunc(NPQ::NSchema::TEvDropTopicResponse, Handle);
-                hFunc(NPQ::NSchema::TEvAlterTopicResponse, Handle);
+                hFunc(NPQ::NSchema::TEvSchemaResponse, Handle);
                 default:
                     TBase::StateWork(ev);
             }
@@ -95,7 +99,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
         void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
             const auto* result = ev->Get();
-            Y_ABORT_UNLESS(result->Topics.size() == 1);
+            AFL_ENSURE(result->Topics.size() == 1)("topics_size", result->Topics.size())("path", FullTopicPath_);
             const auto& topicInfo = result->Topics.begin()->second;
 
             switch(topicInfo.Status) {
@@ -123,7 +127,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
             const auto& pqGroup = topicInfo.Info->Description;
 
-            auto consumerConfig = GetConsumerConfig(pqGroup.GetPQTabletConfig(), QueueUrl_->Consumer);
+            auto consumerConfig = GetConsumerConfig(pqGroup.GetPQTabletConfig(), QueueUrl_->Consumer, ActorContext());
             if (!consumerConfig) {
                 return ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE,
                     std::format("The specified queue doesn't exist (consumer: \"{}\")", QueueUrl_->Consumer.c_str())));
@@ -153,15 +157,7 @@ namespace NKikimr::NSqsTopic::V1 {
             }
         }
 
-        void Handle(NPQ::NSchema::TEvDropTopicResponse::TPtr& ev) {
-            const auto* result = ev->Get();
-            if (result->Status != Ydb::StatusIds::SUCCESS) {
-                return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, result->ErrorMessage));
-            }
-            this->Reply(Ydb::StatusIds::SUCCESS);
-        }
-
-        void Handle(NPQ::NSchema::TEvAlterTopicResponse::TPtr& ev) {
+        void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
             const auto* result = ev->Get();
             if (result->Status != Ydb::StatusIds::SUCCESS) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, result->ErrorMessage));

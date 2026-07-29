@@ -46,11 +46,11 @@ public:
         TLoggingAnchor* position,
         ::TSourceLocation sourceLocation,
         TStringBuf anchorMessage) override;
-    TLoggingAnchor* RegisterDynamicAnchor(TString anchorMessage);
+    TLoggingAnchor* RegisterDynamicAnchor(std::string anchorMessage);
     void UpdateAnchor(TLoggingAnchor* position) override;
 
-    void RegisterWriterFactory(const TString& typeName, const ILogWriterFactoryPtr& factory);
-    void UnregisterWriterFactory(const TString& typeName);
+    void RegisterWriterFactory(const std::string& typeName, const ILogWriterFactoryPtr& factory);
+    void UnregisterWriterFactory(const std::string& typeName);
 
     int GetVersion() const;
     bool GetAbortOnAlert() const override;
@@ -136,7 +136,7 @@ struct THash<NYT::NLogging::TLogWriterCacheKey>
     size_t operator()(const NYT::NLogging::TLogWriterCacheKey& obj) const
     {
         size_t hash = 0;
-        NYT::HashCombine(hash, THash<TString>()(obj.Category));
+        NYT::HashCombine(hash, THash<std::string>()(obj.Category));
         NYT::HashCombine(hash, static_cast<size_t>(obj.LogLevel));
         NYT::HashCombine(hash, static_cast<size_t>(obj.Family));
         return hash;

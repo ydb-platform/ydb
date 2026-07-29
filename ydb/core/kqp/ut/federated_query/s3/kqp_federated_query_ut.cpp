@@ -5,6 +5,7 @@
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
@@ -14,6 +15,7 @@
 #include <yql/essentials/utils/log/log.h>
 
 #include <library/cpp/protobuf/interop/cast.h>
+#include <library/cpp/testing/common/network.h>
 
 #include <fmt/format.h>
 
@@ -3037,7 +3039,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     }
 
     Y_UNIT_TEST(TestRestartQueryAndCleanupWithGetOperation) {
-        auto kikimr = NTestUtils::MakeKikimrRunner(std::nullopt, {.EnableScriptExecutionBackgroundChecks = false});
+        auto kikimr = NTestUtils::MakeKikimrRunner(std::nullopt, {.EnableScriptExecutionBackgroundChecks = true}); // Script execution may be restarted only by background check
         auto db = kikimr->GetQueryClient();
 
         constexpr char BUCKET[] = "test_restart_query_and_cleanup_with_get_operation_bucket";
@@ -3189,6 +3191,86 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
 
         UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(BUCKET), "42");
         UNIT_ASSERT_VALUES_EQUAL(GetObjectKeys(BUCKET).size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetUncommittedUploadsCount(BUCKET), 0);
+    }
+
+    Y_UNIT_TEST(TestAtomicUploadCommitWithMultipleTransactions) {
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto db = kikimr->GetQueryClient();
+
+        constexpr char BUCKET[] = "test_atomic_upload_commit_with_multiple_transactions";
+        constexpr char EXTERNAL_DATA_SOURCE_NAME[] = "test_bucket";
+        CreateBucket(BUCKET);
+
+        {   // Create external data source
+            const TString query = fmt::format(R"(
+                CREATE EXTERNAL DATA SOURCE `{source_name}` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="{location}",
+                    AUTH_METHOD="NONE"
+                ))",
+                "location"_a = GetBucketLocation(BUCKET),
+                "source_name"_a = EXTERNAL_DATA_SOURCE_NAME
+            );
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        constexpr char TABLE_NAME[] = "failure_table";
+
+        {   // Create sample table
+            const TString query = fmt::format(R"(
+                CREATE TABLE `{table_name}` (
+                    Key Int32 NOT NULL,
+                    Value String NOT NULL,
+                    PRIMARY KEY (Key)
+                );)",
+                "table_name"_a = TABLE_NAME
+            );
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        const TString sql = fmt::format(R"(
+                PRAGMA s3.AtomicUploadCommit = "true";
+
+                INSERT INTO `{table_name}` (Key, Value) VALUES (42, "value");
+
+                INSERT INTO `{source_name}`.`f/` WITH (FORMAT = "json_each_row") SELECT 42;
+
+                SELECT * FROM `{table_name}`;
+
+                INSERT INTO `{source_name}`.`x/` WITH (FORMAT = "json_each_row") SELECT 42;
+            )",
+            "source_name"_a=EXTERNAL_DATA_SOURCE_NAME,
+            "table_name"_a=TABLE_NAME
+        );
+
+        auto scriptExecutionOperation = db.ExecuteScript(sql, TExecuteScriptSettings().StatsMode(EStatsMode::Profile)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+        UNIT_ASSERT(!scriptExecutionOperation.Metadata().ExecutionId.empty());
+
+        TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
+        const auto& metadata = readyOp.Metadata();
+        UNIT_ASSERT_VALUES_EQUAL_C(metadata.ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToOneLineString());
+
+        const auto& ast = metadata.ExecStats.GetAst();
+        UNIT_ASSERT(ast);
+        AstChecker(3, 5)(*ast);
+
+        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(results.GetStatus(), EStatus::SUCCESS, results.GetIssues().ToString());
+
+        TResultSetParser resultSet(results.ExtractResultSet());
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
+
+        UNIT_ASSERT(resultSet.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("Key").GetInt32(), 42);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("Value").GetString(), "value");
+
+        UNIT_ASSERT_VALUES_EQUAL(GetObjectKeys(BUCKET).size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(BUCKET), "{\"column0\":42}\n{\"column0\":42}\n");
         UNIT_ASSERT_VALUES_EQUAL(GetUncommittedUploadsCount(BUCKET), 0);
     }
 
@@ -3751,6 +3833,57 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             auto result = resultFuture.GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
         }
+    }
+
+    Y_UNIT_TEST(TestSuccessfulReadAfterPartialFileError) {
+        using NKikimr::NWrappers::NTestHelpers::TS3Mock;
+
+        constexpr TStringBuf bucket = "partial-read-bucket";
+        constexpr TStringBuf object = "test.json";
+        const TString objectPath = TStringBuilder() << "/" << bucket << "/" << object;
+        const auto port = NTesting::GetFreePort();
+
+        THashMap<TString, TString> data{{objectPath, TString(TEST_CONTENT)}};
+        TS3Mock s3Mock(
+            std::move(data),
+            TS3Mock::TSettings(port).WithPartialReadFailure(objectPath));
+        UNIT_ASSERT_C(s3Mock.Start(), s3Mock.GetError());
+
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto db = kikimr->GetQueryClient();
+
+        auto result = db.ExecuteQuery(fmt::format(R"(
+            CREATE EXTERNAL DATA SOURCE `/Root/partial_read_source` WITH (
+                SOURCE_TYPE = "ObjectStorage",
+                LOCATION = "http://localhost:{port}/{bucket}/",
+                AUTH_METHOD = "NONE"
+            );
+            CREATE EXTERNAL TABLE `/Root/partial_read_table` (
+                key Utf8 NOT NULL,
+                value Utf8 NOT NULL
+            ) WITH (
+                DATA_SOURCE = "/Root/partial_read_source",
+                LOCATION = "{object}",
+                FORMAT = "json_each_row"
+            );)",
+            "port"_a = port,
+            "bucket"_a = bucket,
+            "object"_a = object
+        ), TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+        result = db.ExecuteQuery(R"(
+            SELECT COUNT(*)
+            FROM `/Root/partial_read_table`;
+        )", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+
+        TResultSetParser parser(result.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(0).GetUint64(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetPartialReadFailureCount(), 1);
+        UNIT_ASSERT_GE(s3Mock.GetPartialReadRequestCount(), 2);
     }
 }
 

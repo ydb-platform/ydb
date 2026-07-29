@@ -25,6 +25,11 @@ TSnapshotHoldersPerTable TRegistrySnapshotHolders::BuildHoldersForTable(
                 snapshots.emplace(snapshot);
             }
         }
+        if (const auto readOnlySnapshot = PathIdTranslator.GetCopyVersionOptional(schemeShardLocalPathId)) {
+            if (*readOnlySnapshot < MinSnapshotForNewReads) {
+                snapshots.emplace(*readOnlySnapshot);
+            }
+        }
     }
     std::vector<TSnapshot> txInFlight(snapshots.begin(), snapshots.end());
     return TSnapshotHoldersPerTable(MinSnapshotForNewReads, std::move(txInFlight));

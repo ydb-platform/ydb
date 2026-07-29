@@ -6,7 +6,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 
 TEvTransportPrivate::TConnect::~TConnect()
 {
-    Y_ABORT_UNLESS(Promise.IsReady());
+    Y_ABORT_UNLESS(ConnectPromise.IsReady() || DisconnectPromise.IsReady());
 }
 
 TEvTransportPrivate::TWriteToPBuffer::~TWriteToPBuffer()
@@ -16,7 +16,13 @@ TEvTransportPrivate::TWriteToPBuffer::~TWriteToPBuffer()
 
 TEvTransportPrivate::TWriteToManyPBuffers::~TWriteToManyPBuffers()
 {
-    Y_ABORT_UNLESS(Promise.IsReady());
+    Y_ABORT_UNLESS(CallbackCallCount > 0);
+}
+
+void TEvTransportPrivate::TWriteToManyPBuffers::Reply(const TResult& result)
+{
+    Callback(result);
+    ++CallbackCallCount;
 }
 
 TEvTransportPrivate::TWriteToDDisk::~TWriteToDDisk()
@@ -24,7 +30,12 @@ TEvTransportPrivate::TWriteToDDisk::~TWriteToDDisk()
     Y_ABORT_UNLESS(Promise.IsReady());
 }
 
-TEvTransportPrivate::TEraseFromPBuffer::~TEraseFromPBuffer()
+TEvTransportPrivate::TBatchEraseFromPBuffer::~TBatchEraseFromPBuffer()
+{
+    Y_ABORT_UNLESS(Promise.IsReady());
+}
+
+TEvTransportPrivate::TBarrierEraseFromPBuffer::~TBarrierEraseFromPBuffer()
 {
     Y_ABORT_UNLESS(Promise.IsReady());
 }

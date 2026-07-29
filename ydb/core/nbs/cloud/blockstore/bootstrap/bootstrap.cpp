@@ -89,6 +89,9 @@ const NKikimrConfig::TNbsConfig& TNbsService::GetConfig() const
 
 void CreateNbsService(const NKikimrConfig::TNbsConfig& config)
 {
+    // Ensure existing NbsService (if any) is destroyed BEFORE a new one
+    // is constructed to prevent global vhost queue contention.
+    NbsService = nullptr;
     NbsService = std::make_shared<TNbsService>(config);
 }
 

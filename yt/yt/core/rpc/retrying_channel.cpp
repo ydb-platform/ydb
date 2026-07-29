@@ -198,6 +198,7 @@ private:
 
         std::optional<TError> FirstError_;
         std::optional<TError> LastError_;
+        std::string LastAddress_;
         int OmittedInnerErrorCount_ = 0;
 
         // IClientResponseHandler implementation.
@@ -210,8 +211,10 @@ private:
             // NB: The underlying handler is not notified.
         }
 
-        void HandleError(TError error) override
+        void HandleError(TError error, const std::string& address) override
         {
+            LastAddress_ = address;
+
             YT_LOG_DEBUG(error, "Request attempt failed (RequestId: %v, Attempt: %v)",
                 Request_->GetRequestId(),
                 MakeFormatterWrapper([&] (auto* builder) {
@@ -243,12 +246,18 @@ private:
             Retry();
         }
 
-        void HandleResponse(TSharedRefArray message, const std::string& address) override
+        void HandleResponse(
+            TSharedRefArray message,
+            const std::string& address,
+            NYT::NBus::IDirectPlacementTransferPtr attachmentsTransfer) override
         {
             YT_LOG_DEBUG("Request attempt succeeded (RequestId: %v)",
                 Request_->GetRequestId());
 
-            ResponseHandler_->HandleResponse(std::move(message), address);
+            ResponseHandler_->HandleResponse(
+                std::move(message),
+                address,
+                std::move(attachmentsTransfer));
         }
 
         void HandleStreamingPayload(const TStreamingPayload& /*payload*/) override
@@ -282,7 +291,7 @@ private:
             if (LastError_) {
                 detailedError = detailedError << *LastError_;
             }
-            ResponseHandler_->HandleError(std::move(detailedError));
+            ResponseHandler_->HandleError(std::move(detailedError), LastAddress_);
         }
 
         void Retry()
@@ -317,7 +326,9 @@ private:
             }
 
             if (RequestControlThunk_->IsCanceled()) {
-                ResponseHandler_->HandleError(TError(NYT::EErrorCode::Canceled, "Request canceled"));
+                ResponseHandler_->HandleError(
+                    TError(NYT::EErrorCode::Canceled, "Request canceled"),
+                    LastAddress_);
                 return;
             }
 

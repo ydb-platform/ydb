@@ -6,7 +6,6 @@ SIZE(MEDIUM)
 REQUIREMENTS(cpu:2)
 
 SRCS(
-    kqp_rbo_pg_ut.cpp
     kqp_rbo_yql_ut.cpp
     kqp_rbo_olap_ut.cpp
 )

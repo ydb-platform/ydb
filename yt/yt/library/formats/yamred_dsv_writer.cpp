@@ -60,7 +60,7 @@ private:
 
     std::vector<int> KeyColumnIds_;
     std::vector<int> SubkeyColumnIds_;
-    std::vector<TString> EscapedColumnNames_;
+    std::vector<std::string> EscapedColumnNames_;
 
     // In lenval mode key, subkey and value are first written into
     // this buffer in order to calculate their length.

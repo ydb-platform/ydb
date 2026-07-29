@@ -1,6 +1,4 @@
-/* syntax version 1 */
 /* multirun can not */
-/* postgres can not */
 /* custom check: len(yt_res_yson[0][b'Write'][0][b'Data']) == 10 */
 use plato;
 

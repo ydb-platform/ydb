@@ -1,20 +1,20 @@
 # Changing columns
 
-{{ backend_name }} supports adding columns to {% if backend_name == "YDB" %} [row](../../../../concepts/datamodel/table.md#row-oriented-tables) and [column](../../../../concepts/datamodel/table.md#column-oriented-tables) tables{% else %} [tables](../../../../concepts/datamodel/table.md) {% endif %}, deleting non-key columns from tables, and changing properties of existing columns.
+{{ backend_name }} supports adding columns to {% if backend_name == "YDB" and oss == true %} row and column tables{% else %} tables {% endif %}, deleting non-key columns from tables, and changing properties of existing columns.
 
 ## ADD COLUMN
 
 Builds a new column with the specified name, type, and options for the specified table.
 
 ```yql
-ALTER TABLE table_name ADD COLUMN column_name column_data_type [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>] [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])];
+ALTER TABLE table_name ADD COLUMN column_name column_data_type [FAMILY <family_name>] [NULL | NOT NULL] [DEFAULT <default_value>] [COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])] [ENCODING([OFF|DICT])];
 ```
 
 ## Request parameters
 
 ### table_name
 
-The path of the table to be modified.
+The path of the table to which you want to add a new column.
 
 ### column_name
 
@@ -62,11 +62,11 @@ The name of the column to change in the specified table.
 
 #### SET
 
-Set a column option.
+Set a column property.
 
 #### DROP
 
-Remove a column option.
+Remove a column property.
 
 {% include [column_option_list_alter.md](../_includes/column_option_list_alter.md) %}
 
@@ -97,6 +97,11 @@ ALTER TABLE compressed_table ALTER COLUMN info SET COMPRESSION();
 
 After the query runs, the column uses the default compression algorithm again (see the `COMPRESSION` option above).
 
+Enable dictionary encoding on a column:
+
+```yql
+ALTER TABLE movies ALTER COLUMN genre SET ENCODING(DICT);
+```
 
 ## DROP COLUMN
 
@@ -110,7 +115,7 @@ ALTER TABLE table_name DROP COLUMN column_name;
 
 #### table_name
 
-The path of the table to be modified.
+The path of the table from which you want to delete a column.
 
 #### column_name
 

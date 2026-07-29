@@ -276,6 +276,7 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "DROP BACKUP COLLECTION";
 
     case NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCollection:
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateFullBackupOp:
         return "BACKUP";
     case NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrementalBackupCollection:
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalBackupOp:
@@ -314,6 +315,11 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "ALTER STREAMING QUERY";
     case NKikimrSchemeOp::EOperationType::ESchemeOpTruncateTable:
         return "TRUNCATE TABLE";
+    // test shard set
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTestShardSet:
+        return "CREATE TEST SHARD SET";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTestShardSet:
+        return "DROP TEST SHARD SET";
     }
     Y_ABORT("switch should cover all operation types");
 }
@@ -674,6 +680,11 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateLongIncrementalBackupOp:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetBackupIncrementalBackupCollection().GetName()}));
         break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateFullBackupOp:
+        // The aggregator does not carry a target name in its proto; its
+        // WorkingDir already points at the backup-collection path.
+        result.emplace_back(tx.GetWorkingDir());
+        break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName()}));
         break;
@@ -723,6 +734,12 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpTruncateTable:
         result.emplace_back(tx.GetTruncateTable().GetTableName());
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTestShardSet:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateTestShardSet().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropTestShardSet:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
         break;
     }
 
@@ -811,7 +828,7 @@ TChangeLogin ExtractLoginChange(const NKikimrSchemeOp::TModifyScheme& tx) {
                 const auto& modify = alter.GetModifyUser();
                 result.LoginUser = modify.GetUser();
 
-                if (modify.HasPassword()) { // there is no difference beetwen password and password's hash
+                if (modify.HasHashedPassword()) {
                     result.LoginUserChange.push_back("password");
                 }
 

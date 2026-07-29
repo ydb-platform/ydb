@@ -16,6 +16,7 @@ PEERDIR(
     library/cpp/threading/local_executor
     ydb/core/kqp
     ydb/core/kqp/ut/common
+    ydb/core/kqp/ut/indexes/common
     ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/udfs/common/knn
     yql/essentials/sql/pg_dummy

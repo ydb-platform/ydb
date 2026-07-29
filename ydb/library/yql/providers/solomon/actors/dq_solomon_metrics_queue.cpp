@@ -1,6 +1,5 @@
 #include "dq_solomon_metrics_queue.h"
 
-#include <ydb/core/base/events.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/services/services.pb.h>

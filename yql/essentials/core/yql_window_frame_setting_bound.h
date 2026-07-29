@@ -19,7 +19,7 @@ public:
         : FrameBound_(std::move(frameBound))
         , ColumnCast_(std::move(columnCast))
         , BoundCast_(std::move(boundCast))
-        , ProcId_(std::move(procId))
+        , ProcId_(procId)
     {
     }
 

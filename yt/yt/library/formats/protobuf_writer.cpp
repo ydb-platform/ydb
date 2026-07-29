@@ -653,7 +653,7 @@ public:
     {
         if (MatchesCompositeType(fieldDescription)) {
             ValidateUnversionedValueType(value, EValueType::Composite);
-            TMemoryInput input(value.Data.String, value.Length);
+            TMemoryInput input(value.AsStringBuf());
             TYsonPullParser parser(&input, EYsonType::Node);
             auto maxVarIntSize = GetMaxVarIntSizeOfProtobufSizeOfComplexType();
             Traverse(writer, fieldDescription, &parser, maxVarIntSize);

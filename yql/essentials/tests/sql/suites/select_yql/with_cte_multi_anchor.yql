@@ -1,0 +1,11 @@
+/* custom error: Recursive query does not have the form non-recursive-term UNION [ALL] recursive-term */
+PRAGMA YqlSelect = 'force';
+
+WITH RECURSIVE multi_anchor AS (
+    SELECT 10 AS val
+    UNION ALL
+    SELECT 20 AS val
+    UNION ALL
+    SELECT val + 1 AS val FROM multi_anchor WHERE val IN (10, 20)
+)
+SELECT * FROM multi_anchor ORDER BY val;

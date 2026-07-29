@@ -17,7 +17,6 @@
 #include <yt/yt/core/net/address.h>
 
 #include <yt/yt/core/misc/mpsc_stack.h>
-#include <yt/yt/core/misc/ring_queue.h>
 #include <yt/yt/core/misc/atomic_ptr.h>
 
 #include <yt/yt/core/net/public.h>
@@ -25,6 +24,8 @@
 #include <yt/yt/core/concurrency/pollable_detail.h>
 
 #include <yt/yt/core/misc/memory_usage_tracker.h>
+
+#include <library/cpp/yt/containers/ring_queue.h>
 
 #include <library/cpp/yt/memory/blob.h>
 
@@ -136,6 +137,7 @@ private:
             , PayloadSize(GetByteSize(Message))
             , Options(options)
             , PacketId(TPacketId::Create())
+            , RequestId(options.RequestId)
         { }
 
         TPromise<void> Promise;
@@ -143,6 +145,7 @@ private:
         size_t PayloadSize;
         TSendOptions Options;
         TPacketId PacketId;
+        TRequestId RequestId;
     };
 
     struct TPacket final
@@ -192,8 +195,8 @@ private:
     const NYTree::IAttributeDictionaryPtr EndpointAttributes_;
     const NNet::TNetworkAddress EndpointNetworkAddress_;
     const std::optional<std::string> EndpointAddress_;
-    const std::optional<TString> UnixDomainSocketPath_;
-    const std::optional<TString> AbstractUnixDomainSocketName_;
+    const std::optional<std::string> UnixDomainSocketPath_;
+    const std::optional<std::string> AbstractUnixDomainSocketName_;
     const IMessageHandlerPtr Handler_;
     const NConcurrency::IPollerPtr Poller_;
 
@@ -202,9 +205,9 @@ private:
 
     const TPromise<void> ReadyPromise_ = NewPromise<void>();
 
-    TString NetworkName_;
+    std::string NetworkName_;
     // Endpoint host name is used for peer's certificate verification.
-    TString EndpointHostName_;
+    std::string EndpointHostName_;
 
     TBusNetworkCounters BusCounters_;
     TBusNetworkCounters BusCountersDelta_;

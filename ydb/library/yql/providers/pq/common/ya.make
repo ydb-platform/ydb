@@ -2,7 +2,7 @@ LIBRARY()
 
 SRCS(
     pq_meta_fields.cpp
-    pq_partition_key.cpp
+    pq_partitions.cpp
     yql_names.cpp
 )
 
@@ -16,3 +16,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

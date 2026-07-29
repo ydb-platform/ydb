@@ -449,13 +449,13 @@ public:
 
     // Files
     DELEGATE_METHOD(TFuture<TGetFileFromCacheResult>, GetFileFromCache, (
-        const TString& md5,
+        const std::string& md5,
         const TGetFileFromCacheOptions& options),
         (md5, options))
 
     DELEGATE_METHOD(TFuture<TPutFileToCacheResult>, PutFileToCache, (
         const NYPath::TYPath& path,
-        const TString& expectedMD5,
+        const std::string& expectedMD5,
         const TPutFileToCacheOptions& options),
         (path, expectedMD5, options))
 
@@ -632,7 +632,7 @@ public:
 
     DELEGATE_METHOD(TFuture<TPollJobShellResponse>, PollJobShell, (
         NJobTrackerClient::TJobId jobId,
-        const std::optional<TString>& shellName,
+        const std::optional<std::string>& shellName,
         const NYson::TYsonString& parameters,
         const TPollJobShellOptions& options),
         (jobId, shellName, parameters, options))
@@ -734,7 +734,7 @@ public:
         const TKillProcessOptions& options),
         (address, options))
 
-    DELEGATE_METHOD(TFuture<TString>, WriteCoreDump, (
+    DELEGATE_METHOD(TFuture<std::string>, WriteCoreDump, (
         const std::string& address,
         const TWriteCoreDumpOptions& options),
         (address, options))
@@ -744,7 +744,7 @@ public:
         const TWriteLogBarrierOptions& options),
         (address, options))
 
-    DELEGATE_METHOD(TFuture<TString>, WriteOperationControllerCoreDump, (
+    DELEGATE_METHOD(TFuture<std::string>, WriteOperationControllerCoreDump, (
         NJobTrackerClient::TOperationId operationId,
         const TWriteOperationControllerCoreDumpOptions& options),
         (operationId, options))
@@ -793,7 +793,7 @@ public:
         EMaintenanceComponent component,
         const std::string& address,
         EMaintenanceType type,
-        const TString& comment,
+        const std::string& comment,
         const TAddMaintenanceOptions& options),
         (component, address, type, comment, options))
 
@@ -835,27 +835,27 @@ public:
 
     DELEGATE_METHOD(TFuture<void>, SetUserPassword, (
         const std::string& user,
-        const TString& currentPasswordSha256,
-        const TString& newPasswordSha256,
+        const std::string& currentPasswordSha256,
+        const std::string& newPasswordSha256,
         const TSetUserPasswordOptions& options),
         (user, currentPasswordSha256, newPasswordSha256, options))
 
     DELEGATE_METHOD(TFuture<TIssueTokenResult>, IssueToken, (
         const std::string& user,
-        const TString& passwordSha256,
+        const std::string& passwordSha256,
         const TIssueTokenOptions& options),
         (user, passwordSha256, options))
 
     DELEGATE_METHOD(TFuture<void>, RevokeToken, (
         const std::string& user,
-        const TString& passwordSha256,
-        const TString& tokenSha256,
+        const std::string& passwordSha256,
+        const std::string& tokenSha256,
         const TRevokeTokenOptions& options),
         (user, passwordSha256, tokenSha256, options))
 
     DELEGATE_METHOD(TFuture<TListUserTokensResult>, ListUserTokens, (
         const std::string& user,
-        const TString& passwordSha256,
+        const std::string& passwordSha256,
         const TListUserTokensOptions& options),
         (user, passwordSha256, options))
 
@@ -866,7 +866,7 @@ public:
     // Query tracker
     DELEGATE_METHOD(TFuture<NQueryTrackerClient::TQueryId>, StartQuery, (
         NQueryTrackerClient::EQueryEngine engine,
-        const TString& query,
+        const std::string& query,
         const TStartQueryOptions& options),
         (engine, query, options))
 

@@ -134,6 +134,10 @@ TUnboxedValue MakeTuple(TVector<TUnboxedValue> elements) {
     return TUnboxedValuePod(IBoxedValuePtr(new TTestTuple(std::move(elements))));
 }
 
+TUnboxedValue MakeStruct(TVector<TUnboxedValue> elements) {
+    return MakeTuple(elements);
+}
+
 TUnboxedValue MakeVariant(ui32 index, TUnboxedValue value) {
     return TUnboxedValuePod(IBoxedValuePtr(new TTestVariant(index, std::move(value))));
 }
@@ -172,6 +176,18 @@ Y_UNIT_TEST(StringNotEqual) {
     UNIT_ASSERT(!IsUnboxedValueElementEqual(TUnboxedValue::Embedded("hello"), TString("world")));
     UNIT_ASSERT(!IsUnboxedValueElementEqual(TUnboxedValue::Embedded("abc"), TString("ab")));
     UNIT_ASSERT(!IsUnboxedValueElementEqual(TUnboxedValue::Embedded(""), TString("x")));
+}
+
+Y_UNIT_TEST(StringBufEqual) {
+    AssertUnboxedValueElementEqual(TUnboxedValue::Embedded("hello"), TStringBuf("hello"));
+    AssertUnboxedValueElementEqual(TUnboxedValue::Embedded(""), TStringBuf(""));
+    AssertUnboxedValueElementEqual(TUnboxedValue::Embedded("abc"), TStringBuf("abc"));
+}
+
+Y_UNIT_TEST(StringBufNotEqual) {
+    UNIT_ASSERT(!IsUnboxedValueElementEqual(TUnboxedValue::Embedded("hello"), TStringBuf("world")));
+    UNIT_ASSERT(!IsUnboxedValueElementEqual(TUnboxedValue::Embedded("abc"), TStringBuf("ab")));
+    UNIT_ASSERT(!IsUnboxedValueElementEqual(TUnboxedValue::Embedded(""), TStringBuf("x")));
 }
 
 Y_UNIT_TEST(MaybeNothing) {
@@ -345,6 +361,38 @@ Y_UNIT_TEST(StreamViewOfTuples) {
     });
     TVector<TRow> expected = {TRow{i32(7), TString("A")}, TRow{i32(1), TString("D")}};
     AssertUnboxedValueElementEqual(stream, TUnboxedValueComparatorStreamView<TRow>(expected));
+}
+
+Y_UNIT_TEST(StructEqual) {
+    auto structUnboxedValue = MakeStruct({TUnboxedValuePod(ui32(42)), TUnboxedValue::Embedded("hello")});
+    AssertUnboxedValueElementEqual(structUnboxedValue,
+                                   NTest::TStructType<
+                                       NTest::TStructMember<"value", TStringBuf>,
+                                       NTest::TStructMember<"key", ui32>>{{{"hello"}, {ui32(42)}}});
+    AssertUnboxedValueElementEqual(structUnboxedValue,
+                                   NTest::TStructType<
+                                       NTest::TStructMember<"key", ui32>,
+                                       NTest::TStructMember<"value", TStringBuf>>{{{ui32(42)}, {TStringBuf("hello")}}});
+}
+
+Y_UNIT_TEST(StructNotEqual) {
+    auto structUnboxedValue = MakeStruct({TUnboxedValuePod(ui32(42)), TUnboxedValue::Embedded("hello")});
+    UNIT_ASSERT(!IsUnboxedValueElementEqual(structUnboxedValue,
+                                            NTest::TStructType<
+                                                NTest::TStructMember<"value", TStringBuf>,
+                                                NTest::TStructMember<"key", ui32>>{{{"hello"}, {ui32(7)}}}));
+    UNIT_ASSERT(!IsUnboxedValueElementEqual(structUnboxedValue,
+                                            NTest::TStructType<
+                                                NTest::TStructMember<"key", ui32>,
+                                                NTest::TStructMember<"value", TStringBuf>>{{{ui32(42)}, {TStringBuf("world")}}}));
+}
+
+Y_UNIT_TEST(StructWithMaybe) {
+    auto structUnboxedValue = MakeStruct({TUnboxedValuePod(i64(99)).MakeOptional(), TUnboxedValuePod()});
+    AssertUnboxedValueElementEqual(structUnboxedValue,
+                                   NTest::TStructType<
+                                       NTest::TStructMember<"a", TMaybe<i64>>,
+                                       NTest::TStructMember<"b", TMaybe<i32>>>{{{TMaybe<i64>{99}}, {TMaybe<i32>{}}}});
 }
 
 } // Y_UNIT_TEST_SUITE(TUdfValueComparatorTest)

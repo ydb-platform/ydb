@@ -6,6 +6,10 @@
 
 #include <ydb/library/actors/core/event_local.h>
 
+#include <library/cpp/threading/future/core/future.h>
+
+#include <memory>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -23,6 +27,12 @@ struct TEvPartitionDirectPrivate
                   LocalEventsOffset,
 
         EvUpdateVChunkConfig,
+        EvFastPathServiceReady,
+
+        EvFastPathServiceShutdown,
+        EvFastPathServiceStopped,
+        EvPoisonByBlockedGeneration,
+        EvAddHostToDBG,
 
         EvEnd,
     };
@@ -32,9 +42,55 @@ struct TEvPartitionDirectPrivate
               TEventLocal<TEvUpdateVChunkConfig, EvUpdateVChunkConfig>
     {
         TVChunkConfig VChunkConfig;
+        NThreading::TPromise<void> UpdateCompleted = NThreading::NewPromise();
 
         explicit TEvUpdateVChunkConfig(TVChunkConfig cfg)
             : VChunkConfig(std::move(cfg))
+        {}
+    };
+
+    // Signals that FastPathServiceReady (and its DBGs) are ready.
+    struct TEvFastPathServiceReady
+        : public NActors::
+              TEventLocal<TEvFastPathServiceReady, EvFastPathServiceReady>
+    {
+    };
+
+    // Triggers the shutdown of the fast path service
+    struct TEvFastPathServiceShutdown
+        : public NActors::
+              TEventLocal<TEvFastPathServiceShutdown, EvFastPathServiceShutdown>
+    {
+    };
+
+    // Signals that FastPathService stopped.
+    struct TEvFastPathServiceStopped
+        : public NActors::
+              TEventLocal<TEvFastPathServiceStopped, EvFastPathServiceStopped>
+    {
+    };
+
+    // DDisk replied BLOCKED: the current tablet generation is stale, so the
+    // tablet must suicide. Carries diagnostics coordinates and a reason string.
+    struct TEvPoison
+        : public NActors::TEventLocal<TEvPoison, EvPoisonByBlockedGeneration>
+    {
+        const TString Reason;
+
+        explicit TEvPoison(TString reason)
+            : Reason(std::move(reason))
+        {}
+    };
+
+    struct TEvAddHostToDBG
+        : public NActors::TEventLocal<TEvAddHostToDBG, EvAddHostToDBG>
+    {
+        size_t DirectBlockGroupId;
+        size_t NewHostIndex;
+
+        TEvAddHostToDBG(size_t dbgId, size_t newHostIndex)
+            : DirectBlockGroupId(dbgId)
+            , NewHostIndex(newHostIndex)
         {}
     };
 };

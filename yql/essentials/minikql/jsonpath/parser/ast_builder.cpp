@@ -221,11 +221,11 @@ TAstNodePtr TAstBuilder::BuildPrimary(const TRule_primary& node) {
         }
         case TRule_primary::kAltPrimary6: {
             const auto& token = node.GetAlt_primary6().GetToken1();
-            return new TBooleanLiteralNode(GetPos(token), true);
+            return new TBooleanLiteralNode(GetPos(token), /*value=*/true);
         }
         case TRule_primary::kAltPrimary7: {
             const auto& token = node.GetAlt_primary7().GetToken1();
-            return new TBooleanLiteralNode(GetPos(token), false);
+            return new TBooleanLiteralNode(GetPos(token), /*value=*/false);
         }
         case TRule_primary::kAltPrimary8: {
             const auto& token = node.GetAlt_primary8().GetToken1();

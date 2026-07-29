@@ -9,9 +9,9 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString SurroundWithQuotes(const TString& s)
+std::string SurroundWithQuotes(const std::string& s)
 {
-    TString quote = "\"";
+    std::string quote = "\"";
     return quote + s + quote;
 }
 
@@ -31,7 +31,7 @@ TEST(TJsonConsumerTest, List)
     consumer->OnEndList();
     consumer->Flush();
 
-    TString output = "[1,\"aaa\",3.5]";
+    std::string output = "[1,\"aaa\",3.5]";
     EXPECT_EQ(output, outputStream.Str());
 }
 
@@ -48,7 +48,7 @@ TEST(TJsonConsumerTest, Map)
     consumer->OnEndMap();
     consumer->Flush();
 
-    TString output = "{\"hello\":\"world\",\"foo\":\"bar\"}";
+    std::string output = "{\"hello\":\"world\",\"foo\":\"bar\"}";
     EXPECT_EQ(output, outputStream.Str());
 }
 
@@ -69,7 +69,7 @@ TEST(TJsonConsumerTest, DoubleMap)
     consumer->OnEndMap();
     consumer->Flush();
 
-    TString output = "{\"hello\":\"world\"}\n{\"foo\":\"bar\"}\n";
+    std::string output = "{\"hello\":\"world\"}\n{\"foo\":\"bar\"}\n";
     EXPECT_EQ(output, outputStream.Str());
 }
 
@@ -96,7 +96,7 @@ TEST(TJsonConsumerTest, ListFragmentWithEntity)
     consumer->OnEndMap();
     consumer->Flush();
 
-    TString output = "{\"$attributes\":{\"x\":\"y\"},\"$value\":null}\n{\"hello\":\"world\"}\n{\"foo\":\"bar\"}\n";
+    std::string output = "{\"$attributes\":{\"x\":\"y\"},\"$value\":null}\n{\"hello\":\"world\"}\n{\"foo\":\"bar\"}\n";
     EXPECT_EQ(output, outputStream.Str());
 }
 
@@ -108,7 +108,7 @@ TEST(TJsonConsumerTest, Entity)
     consumer->OnEntity();
     consumer->Flush();
 
-    TString output = "null";
+    std::string output = "null";
     EXPECT_EQ(output, outputStream.Str());
 }
 
@@ -128,7 +128,7 @@ TEST(TJsonConsumerTest, SupportInfinity)
 
     consumer->Flush();
 
-    TString output = "{\"a\":-inf,\"b\":inf}";
+    std::string output = "{\"a\":-inf,\"b\":inf}";
     EXPECT_EQ(output, outputStream.Str());
 }
 
@@ -150,7 +150,7 @@ TEST(TJsonConsumerTest, StringifyNanAndInfinity)
 
     consumer->Flush();
 
-    TString output = "{\"a\":\"-inf\",\"b\":\"inf\",\"c\":\"nan\"}";
+    std::string output = "{\"a\":\"-inf\",\"b\":\"inf\",\"c\":\"nan\"}";
     EXPECT_EQ(output, outputStream.Str());
 }
 
@@ -162,7 +162,7 @@ TEST(TJsonConsumerTest, EmptyString)
     consumer->OnStringScalar("");
     consumer->Flush();
 
-    TString output = SurroundWithQuotes("");
+    std::string output = SurroundWithQuotes("");
     EXPECT_EQ(output, outputStream.Str());
 }
 
@@ -171,11 +171,11 @@ TEST(TJsonConsumerTest, AsciiString)
     TStringStream outputStream;
     auto consumer = CreateJsonConsumer(&outputStream);
 
-    TString s = TString("\x7F\x32", 2);
+    std::string s = std::string("\x7F\x32", 2);
     consumer->OnStringScalar(s);
     consumer->Flush();
 
-    TString output = SurroundWithQuotes(s);
+    std::string output = SurroundWithQuotes(s);
     EXPECT_EQ(output, outputStream.Str());
 }
 
@@ -184,11 +184,11 @@ TEST(TJsonConsumerTest, NonAsciiString)
     TStringStream outputStream;
     auto consumer = CreateJsonConsumer(&outputStream);
 
-    TString s = TString("\xFF\x00\x80", 3);
+    std::string s = std::string("\xFF\x00\x80", 3);
     consumer->OnStringScalar(s);
     consumer->Flush();
 
-    TString output = SurroundWithQuotes("\xC3\xBF\\u0000\xC2\x80");
+    std::string output = SurroundWithQuotes("\xC3\xBF\\u0000\xC2\x80");
     EXPECT_EQ(output, outputStream.Str());
 }
 
@@ -199,11 +199,11 @@ TEST(TJsonConsumerTest, NonAsciiStringWithoutEscaping)
     config->EncodeUtf8 = false;
     auto consumer = CreateJsonConsumer(&outputStream, EYsonType::Node, config);
 
-    TString s = TString("\xC3\xBF", 2);
+    std::string s = std::string("\xC3\xBF", 2);
     consumer->OnStringScalar(s);
     consumer->Flush();
 
-    TString output = SurroundWithQuotes(TString("\xC3\xBF", 2));
+    std::string output = SurroundWithQuotes(std::string("\xC3\xBF", 2));
     EXPECT_EQ(output, outputStream.Str());
 }
 
@@ -214,7 +214,7 @@ TEST(TJsonConsumerTest, IncorrectUtfWithoutEscaping)
     config->EncodeUtf8 = false;
     auto consumer = CreateJsonConsumer(&outputStream, EYsonType::Node, config);
 
-    TString s = TString("\xFF", 1);
+    std::string s = std::string("\xFF", 1);
     EXPECT_ANY_THROW(
         consumer->OnStringScalar(s););
 }
@@ -224,11 +224,11 @@ TEST(TJsonConsumerTest, StringStartingWithSpecialSymbol)
     TStringStream outputStream;
     auto consumer = CreateJsonConsumer(&outputStream);
 
-    TString s = "&some_string";
+    std::string s = "&some_string";
     consumer->OnStringScalar(s);
     consumer->Flush();
 
-    TString output = SurroundWithQuotes(s);
+    std::string output = SurroundWithQuotes(s);
     EXPECT_EQ(output, outputStream.Str());
 }
 
@@ -251,7 +251,7 @@ TEST(TJsonConsumerTest, ListWithAttributes)
     consumer->OnEndList();
     consumer->Flush();
 
-    TString output =
+    std::string output =
         "{"
             "\"$attributes\":{\"foo\":\"bar\"}"
             ","
@@ -276,7 +276,7 @@ TEST(TJsonConsumerTest, MapWithAttributes)
     consumer->OnEndMap();
     consumer->Flush();
 
-    TString output =
+    std::string output =
         "{"
             "\"$attributes\":{\"foo\":\"bar\"}"
             ","
@@ -298,7 +298,7 @@ TEST(TJsonConsumerTest, Int64WithAttributes)
     consumer->OnInt64Scalar(42);
     consumer->Flush();
 
-    TString output =
+    std::string output =
         "{"
             "\"$attributes\":{\"foo\":\"bar\"}"
             ","
@@ -315,7 +315,7 @@ TEST(TJsonConsumerTest, Uint64)
     consumer->OnUint64Scalar(42);
     consumer->Flush();
 
-    TString output = "42";
+    std::string output = "42";
     EXPECT_EQ(output, outputStream.Str());
 }
 
@@ -332,7 +332,7 @@ TEST(TJsonConsumerTest, EntityWithAttributes)
     consumer->OnEntity();
     consumer->Flush();
 
-    TString output =
+    std::string output =
         "{"
             "\"$attributes\":{\"foo\":\"bar\"}"
             ","
@@ -354,7 +354,7 @@ TEST(TJsonConsumerTest, StringWithAttributes)
     consumer->OnStringScalar("some_string");
     consumer->Flush();
 
-    TString output =
+    std::string output =
         "{"
             "\"$attributes\":{\"foo\":\"bar\"}"
             ","
@@ -380,7 +380,7 @@ TEST(TJsonConsumerTest, DoubleAttributes)
     consumer->OnStringScalar("some_string");
     consumer->Flush();
 
-    TString output =
+    std::string output =
         "{"
             "\"$attributes\":{\"foo\":"
                 "{"
@@ -421,7 +421,7 @@ TEST(TJsonConsumerTest, NeverAttributes)
     consumer->OnEndMap();
     consumer->Flush();
 
-    TString output =
+    std::string output =
         "{"
             "\"answer\":42,"
             "\"question\":\"strange question\""
@@ -454,7 +454,7 @@ TEST(TJsonConsumerTest, AlwaysAttributes)
     consumer->OnEndMap();
     consumer->Flush();
 
-    TString output =
+    std::string output =
         "{"
             "\"$attributes\":{\"foo\":{\"$attributes\":{},\"$value\":\"bar\"}},"
             "\"$value\":"
@@ -485,7 +485,7 @@ TEST(TJsonConsumerTest, SpecialKeys)
     consumer->OnEndMap();
     consumer->Flush();
 
-    TString output = "{\"$$value\":\"foo\",\"$$$attributes\":\"bar\",\"$$other\":42}";
+    std::string output = "{\"$$value\":\"foo\",\"$$$attributes\":\"bar\",\"$$other\":42}";
     EXPECT_EQ(output, outputStream.Str());
 }
 
@@ -498,11 +498,11 @@ TEST(TJsonConsumerTest, TestStringLengthLimit)
 
     consumer->OnBeginMap();
         consumer->OnKeyedItem("hello");
-        consumer->OnStringScalar(TString(10000, 'A'));
+        consumer->OnStringScalar(std::string(10000, 'A'));
     consumer->OnEndMap();
     consumer->Flush();
 
-    TString output = "{\"hello\":{\"$incomplete\":true,\"$value\":\"AA\"}}";
+    std::string output = "{\"hello\":{\"$incomplete\":true,\"$value\":\"AA\"}}";
     EXPECT_EQ(output, outputStream.Str());
 }
 
@@ -519,7 +519,7 @@ TEST(TJsonConsumerTest, TestAnnotateWithTypes)
     consumer->OnEndMap();
     consumer->Flush();
 
-    TString output = "{\"hello\":{\"$type\":\"string\",\"$value\":\"world\"}}";
+    std::string output = "{\"hello\":{\"$type\":\"string\",\"$value\":\"world\"}}";
     EXPECT_EQ(output, outputStream.Str());
 }
 
@@ -539,7 +539,7 @@ TEST(TJsonConsumerTest, TestAnnotateWithTypesStringify)
     consumer->OnEndMap();
     consumer->Flush();
 
-    TString output = "{\"hello\":{\"$type\":\"uint64\",\"$value\":\"18446744073709551615\"},"
+    std::string output = "{\"hello\":{\"$type\":\"uint64\",\"$value\":\"18446744073709551615\"},"
         "\"world\":{\"$type\":\"double\",\"$value\":\"1.7976931348623157e+308\"}}";
     EXPECT_EQ(output, outputStream.Str());
 }
@@ -554,11 +554,11 @@ TEST(TJsonConsumerTest, SeveralOptions)
 
     consumer->OnBeginMap();
         consumer->OnKeyedItem("hello");
-        consumer->OnStringScalar(TString(10000, 'A'));
+        consumer->OnStringScalar(std::string(10000, 'A'));
     consumer->OnEndMap();
     consumer->Flush();
 
-    TString output = "{\"hello\":{\"$incomplete\":true,\"$type\":\"string\",\"$value\":\"AA\"}}";
+    std::string output = "{\"hello\":{\"$incomplete\":true,\"$type\":\"string\",\"$value\":\"AA\"}}";
     EXPECT_EQ(output, outputStream.Str());
 }
 
@@ -576,11 +576,11 @@ TEST(TJsonConsumerTest, SeveralOptions2)
             consumer->OnKeyedItem("mood");
             consumer->OnInt64Scalar(42);
         consumer->OnEndAttributes();
-        consumer->OnStringScalar(TString(10000, 'A'));
+        consumer->OnStringScalar(std::string(10000, 'A'));
     consumer->OnEndMap();
     consumer->Flush();
 
-    TString output = "{\"hello\":{\"$attributes\":{\"mood\":{\"$type\":\"int64\",\"$value\":42}},"
+    std::string output = "{\"hello\":{\"$attributes\":{\"mood\":{\"$type\":\"int64\",\"$value\":42}},"
         "\"$incomplete\":true,\"$type\":\"string\",\"$value\":\"AAAA\"}}";
     EXPECT_EQ(output, outputStream.Str());
 }
@@ -594,10 +594,10 @@ TEST(TJsonConsumerTest, SeveralOptionsFlushBuffer)
     auto consumer = CreateJsonConsumer(&outputStream, EYsonType::ListFragment, config);
 
     consumer->OnListItem();
-    consumer->OnStringScalar(TString(10000, 'A'));
+    consumer->OnStringScalar(std::string(10000, 'A'));
     consumer->Flush();
 
-    TString output = "{\"$incomplete\":true,\"$type\":\"string\",\"$value\":\"AA\"}\n";
+    std::string output = "{\"$incomplete\":true,\"$type\":\"string\",\"$value\":\"AA\"}\n";
     EXPECT_EQ(output, outputStream.Str());
 }
 
@@ -614,7 +614,7 @@ TEST(TJsonConsumerTest, TestPrettyFormat)
     consumer->OnEndMap();
     consumer->Flush();
 
-    TString output = "{\n"
+    std::string output = "{\n"
                     "    \"hello\": 1\n"
                     "}";
     EXPECT_EQ(output, StripInPlace(outputStream.Str()));
@@ -627,11 +627,11 @@ TEST(TJsonConsumerTest, TestNodeWeightLimitAccepted)
     config->AnnotateWithTypes = true;
     auto consumer = CreateJsonConsumer(&outputStream, EYsonType::Node, std::move(config));
 
-    TString yson = "<\"attr\"=123>\"456\"";
+    std::string yson = "<\"attr\"=123>\"456\"";
     consumer->OnNodeWeightLimited(yson, yson.size() - 1);
     consumer->Flush();
 
-    TString expectedOutput =
+    std::string expectedOutput =
         "{"
             "\"$incomplete\":true,"
             "\"$type\":\"any\","
@@ -645,11 +645,11 @@ TEST(TJsonConsumerTest, TestNodeWeightLimitRejected)
     TStringStream outputStream;
     auto consumer = CreateJsonConsumer(&outputStream);
 
-    TString yson = "<\"attr\"=123>\"456\"";
+    std::string yson = "<\"attr\"=123>\"456\"";
     consumer->OnNodeWeightLimited(yson, yson.size());
     consumer->Flush();
 
-    TString expectedOutput =
+    std::string expectedOutput =
         "{"
             "\"$attributes\":{"
                 "\"attr\":123"
@@ -669,7 +669,7 @@ TEST(TJsonConsumerTest, TestStringScalarWeightLimitAccepted)
     consumer->OnStringScalarWeightLimited("1234567", 5);
     consumer->Flush();
 
-    TString expectedOutput =
+    std::string expectedOutput =
         "{"
             "\"$incomplete\":true,"
             "\"$type\":\"string\","
@@ -683,7 +683,7 @@ TEST(TJsonConsumerTest, TestStringScalarWeightLimitRejected)
     TStringStream outputStream;
     auto consumer = CreateJsonConsumer(&outputStream);
 
-    TString value = "1234567";
+    std::string value = "1234567";
     consumer->OnStringScalarWeightLimited(value, value.size());
     consumer->Flush();
 
@@ -710,7 +710,7 @@ TEST(TJsonConsumerTest, TestSetAnnotateWithTypesParameter)
 
     consumer->Flush();
 
-    TString expectedOutput =
+    std::string expectedOutput =
         "["
             "{"
                 "\"$type\":\"string\","
@@ -740,7 +740,7 @@ TEST(TJsonConsumerTest, ThroughJsonWriter)
     consumer->OnEndMap();
     consumer->Flush();
 
-    TString output = "{\"hello\":{\"$type\":\"uint64\",\"$value\":\"18446744073709551615\"},"
+    std::string output = "{\"hello\":{\"$type\":\"uint64\",\"$value\":\"18446744073709551615\"},"
         "\"world\":{\"$type\":\"double\",\"$value\":\"1.7976931348623157e+308\"}}";
     EXPECT_EQ(output, outputStream.Str());
 }

@@ -86,6 +86,7 @@ namespace NYdb::NConsoleClient {
     private:
         TDuration RetentionPeriod_ = TDuration::Hours(24);
         ui64 RetentionStorageMb_;
+        bool ContentBasedDeduplication_ = false;
         ui32 MinActivePartitions_;
         TMaybe<ui32> MaxActivePartitions_;
         ui32 PartitionWriteSpeedKbps_;
@@ -120,7 +121,7 @@ namespace NYdb::NConsoleClient {
         TMaybe<ui32> DlqMaxProcessingAttempts_;
         TMaybe<bool> DlqEnabled_;
         TMaybe<TString> DlqQueueName_;
-        bool ContentBasedDeduplication_ = false;
+        TMaybe<bool> ContentBasedDeduplication_;
 
         NYdb::NTopic::TAlterTopicSettings PrepareAlterSettings(NYdb::NTopic::TDescribeTopicResult& describeResult);
     };
@@ -230,6 +231,7 @@ namespace NYdb::NConsoleClient {
 
     private:
         TString Consumer_ = "";
+        bool ReadWithoutConsumer_ = false;
         TVector<ui64> PartitionIds_;
         TMaybe<uint64_t> Offset_;
         TMaybe<uint32_t> Partition_;

@@ -9,11 +9,6 @@
             "uri": "file://test_sql_negative.test_hopping_window-GroupByHoppingWindowTimeLimitBad-default.txt_/err_file.out"
         }
     ],
-    "test_sql_negative.test[watermarks-bad-watermarks-no-rd-default.txt]": [
-        {
-            "uri": "file://test_sql_negative.test_watermarks-bad-watermarks-no-rd-default.txt_/err_file.out"
-        }
-    ],
     "test_sql_negative.test[watermarks-bad_column-default.txt]": [
         {
             "uri": "file://test_sql_negative.test_watermarks-bad_column-default.txt_/err_file.out"
@@ -22,6 +17,11 @@
     "test_sql_negative.test[watermarks-bad_pushdown-default.txt]": [
         {
             "uri": "file://test_sql_negative.test_watermarks-bad_pushdown-default.txt_/err_file.out"
+        }
+    ],
+    "test_sql_negative.test[watermarks-bad_type-default.txt]": [
+        {
+            "uri": "file://test_sql_negative.test_watermarks-bad_type-default.txt_/err_file.out"
         }
     ],
     "test_sql_streaming.test[hop-GroupByHop-default.txt]": {
@@ -78,14 +78,6 @@
         },
         "Plan": {
             "uri": "file://test_sql_streaming.test_hop-GroupByHopTimeExtractorUnusedColumns-default.txt_/plan.json"
-        }
-    },
-    "test_sql_streaming.test[hop-GroupByHopWithDataWatermarks-default.txt]": {
-        "Ast": {
-            "uri": "file://test_sql_streaming.test_hop-GroupByHopWithDataWatermarks-default.txt_/ast.txt"
-        },
-        "Plan": {
-            "uri": "file://test_sql_streaming.test_hop-GroupByHopWithDataWatermarks-default.txt_/plan.json"
         }
     },
     "test_sql_streaming.test[hopping_window-GroupByHoppingWindow-default.txt]": {
@@ -176,12 +168,12 @@
             "uri": "file://test_sql_streaming.test_hopping_window-GroupByHoppingWindowWatermark-default.txt_/plan.json"
         }
     },
-    "test_sql_streaming.test[hopping_window-GroupByHoppingWindowWatermarkNoRd-default.txt]": {
+    "test_sql_streaming.test[hopping_window-GroupByHoppingWindowWatermarkRd-]": {
         "Ast": {
-            "uri": "file://test_sql_streaming.test_hopping_window-GroupByHoppingWindowWatermarkNoRd-default.txt_/ast.txt"
+            "uri": "file://test_sql_streaming.test_hopping_window-GroupByHoppingWindowWatermarkRd-_/ast.txt"
         },
         "Plan": {
-            "uri": "file://test_sql_streaming.test_hopping_window-GroupByHoppingWindowWatermarkNoRd-default.txt_/plan.json"
+            "uri": "file://test_sql_streaming.test_hopping_window-GroupByHoppingWindowWatermarkRd-_/plan.json"
         }
     },
     "test_sql_streaming.test[pq-ReadTopic-default.txt]": {
@@ -288,14 +280,6 @@
             "uri": "file://test_sql_streaming.test_watermarks-watermark_over_unused_column-default.txt_/plan.json"
         }
     },
-    "test_sql_streaming.test[watermarks-watermarks-conditional-default.txt]": {
-        "Ast": {
-            "uri": "file://test_sql_streaming.test_watermarks-watermarks-conditional-default.txt_/ast.txt"
-        },
-        "Plan": {
-            "uri": "file://test_sql_streaming.test_watermarks-watermarks-conditional-default.txt_/plan.json"
-        }
-    },
     "test_sql_streaming.test[watermarks-watermarks-default.txt]": {
         "Ast": {
             "uri": "file://test_sql_streaming.test_watermarks-watermarks-default.txt_/ast.txt"
@@ -304,36 +288,36 @@
             "uri": "file://test_sql_streaming.test_watermarks-watermarks-default.txt_/plan.json"
         }
     },
-    "test_sql_streaming.test[watermarks-watermarks-no-rd-default.txt]": {
+    "test_sql_streaming.test[watermarks-watermarks_after_parsing-default.txt]": {
         "Ast": {
-            "uri": "file://test_sql_streaming.test_watermarks-watermarks-no-rd-default.txt_/ast.txt"
+            "uri": "file://test_sql_streaming.test_watermarks-watermarks_after_parsing-default.txt_/ast.txt"
         },
         "Plan": {
-            "uri": "file://test_sql_streaming.test_watermarks-watermarks-no-rd-default.txt_/plan.json"
+            "uri": "file://test_sql_streaming.test_watermarks-watermarks_after_parsing-default.txt_/plan.json"
         }
     },
-    "test_sql_streaming.test[watermarks-watermarks_adjust-default.txt]": {
+    "test_sql_streaming.test[watermarks-watermarks_after_parsing_metadata-default.txt]": {
         "Ast": {
-            "uri": "file://test_sql_streaming.test_watermarks-watermarks_adjust-default.txt_/ast.txt"
+            "uri": "file://test_sql_streaming.test_watermarks-watermarks_after_parsing_metadata-default.txt_/ast.txt"
         },
         "Plan": {
-            "uri": "file://test_sql_streaming.test_watermarks-watermarks_adjust-default.txt_/plan.json"
+            "uri": "file://test_sql_streaming.test_watermarks-watermarks_after_parsing_metadata-default.txt_/plan.json"
         }
     },
-    "test_sql_streaming.test[watermarks-watermarks_as-default.txt]": {
+    "test_sql_streaming.test[watermarks-watermarks_conditional-default.txt]": {
         "Ast": {
-            "uri": "file://test_sql_streaming.test_watermarks-watermarks_as-default.txt_/ast.txt"
+            "uri": "file://test_sql_streaming.test_watermarks-watermarks_conditional-default.txt_/ast.txt"
         },
         "Plan": {
-            "uri": "file://test_sql_streaming.test_watermarks-watermarks_as-default.txt_/plan.json"
+            "uri": "file://test_sql_streaming.test_watermarks-watermarks_conditional-default.txt_/plan.json"
         }
     },
-    "test_sql_streaming.test[watermarks-watermarks_drop-default.txt]": {
+    "test_sql_streaming.test[watermarks-watermarks_rd-]": {
         "Ast": {
-            "uri": "file://test_sql_streaming.test_watermarks-watermarks_drop-default.txt_/ast.txt"
+            "uri": "file://test_sql_streaming.test_watermarks-watermarks_rd-_/ast.txt"
         },
         "Plan": {
-            "uri": "file://test_sql_streaming.test_watermarks-watermarks_drop-default.txt_/plan.json"
+            "uri": "file://test_sql_streaming.test_watermarks-watermarks_rd-_/plan.json"
         }
     }
 }

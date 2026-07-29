@@ -388,14 +388,23 @@ TMaybe<TString> DeriveClusterFromSection(const NNodes::TYtSection& section, ERun
     return result;
 }
 
-void GetNodesToCalculateFromQLFilter(const TExprNode& qlFilter, TExprNode::TListType &needCalc, TNodeSet &uniqNodes) {
+bool IsQLFilterCompatibleOperation(const TExprNode& node) {
+    return node.IsCallable({"And", "Or", "Not", "Coalesce", "Exists", "<", "<=", ">", ">=", "==", "!="});
+}
+
+bool IsQLFilterRowMember(const TExprNode& node, const TExprNode* rowArg) {
+    return node.IsCallable("Member") && node.Child(0) == rowArg;
+}
+
+void GetNodesToCalculateFromQLFilter(const TExprNode& qlFilter, TExprNode::TListType& needCalc, TNodeSet& uniqNodes, bool stopEarly) {
     YQL_ENSURE(qlFilter.IsCallable("YtQLFilter"));
+    const auto rowArg = qlFilter.Child(1)->Child(0)->Child(0);
     const auto lambdaBody = qlFilter.Child(1)->Child(1);
-    VisitExpr(lambdaBody, [&needCalc, &uniqNodes](const TExprNode::TPtr& node) {
-        if (node->IsCallable({"And", "Or", "Not", "Coalesce", "Exists", "<", "<=", ">", ">=", "==", "!="})) {
-            return true;
+    VisitExpr(lambdaBody, [&needCalc, &uniqNodes, rowArg, stopEarly](const TExprNode::TPtr& node) {
+        if (IsQLFilterCompatibleOperation(*node)) {
+            return !stopEarly || needCalc.empty();
         }
-        if (node->IsCallable("Member")) {
+        if (IsQLFilterRowMember(*node, rowArg)) {
             return false;
         }
         if (uniqNodes.insert(node.Get()).second) {
@@ -405,6 +414,92 @@ void GetNodesToCalculateFromQLFilter(const TExprNode& qlFilter, TExprNode::TList
         }
         return false;
     });
+}
+
+TExprNode::TListType GetNodesToCalculateImpl(const TExprNode::TPtr& input, bool stopEarly) {
+    TExprNode::TListType needCalc;
+    TNodeSet uniqNodes;
+    VisitExpr(input, [&needCalc, &uniqNodes, stopEarly](const TExprNode::TPtr& node) {
+        if (stopEarly && !needCalc.empty()) {
+            return false;
+        }
+        if (auto maybeOp = TMaybeNode<TYtTransientOpBase>(node)) {
+            auto op = maybeOp.Cast();
+            for (auto setting: op.Settings()) {
+                switch (FromString<EYtSettingType>(setting.Name().Value())) {
+                case EYtSettingType::Limit:
+                    for (auto expr: setting.Value().Cast().Ref().Children()) {
+                        for (auto item: expr->Children()) {
+                            if (uniqNodes.insert(item->Child(1)).second) {
+                                if (NeedCalc(TExprBase(item->Child(1)))) {
+                                    needCalc.push_back(item->ChildPtr(1));
+                                    if (stopEarly) {
+                                        return false;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    break;
+                default:
+                    break;
+                }
+            }
+        }
+        else if (auto maybeSection = TMaybeNode<TYtSection>(node)) {
+            TYtSection section = maybeSection.Cast();
+            for (auto setting: section.Settings()) {
+                switch (FromString<EYtSettingType>(setting.Name().Value())) {
+                case EYtSettingType::Take:
+                case EYtSettingType::Skip:
+                    if (uniqNodes.insert(setting.Value().Cast().Raw()).second) {
+                        if (NeedCalc(setting.Value().Cast())) {
+                            needCalc.push_back(setting.Value().Cast().Ptr());
+                        }
+                    }
+                    break;
+                case EYtSettingType::KeyFilter: {
+                    auto value = setting.Value().Cast<TExprList>();
+                    if (value.Size() > 0) {
+                        for (auto member: value.Item(0).Cast<TCoNameValueTupleList>()) {
+                            for (auto cmp: member.Value().Cast<TCoNameValueTupleList>()) {
+                                if (cmp.Value() && uniqNodes.insert(cmp.Value().Cast().Raw()).second) {
+                                    if (NeedCalc(cmp.Value().Cast())) {
+                                        needCalc.push_back(cmp.Value().Cast().Ptr());
+                                        if (stopEarly) {
+                                            return false;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    break;
+                }
+                case EYtSettingType::KeyFilter2: {
+                    auto value = setting.Value().Cast<TExprList>();
+                    if (value.Size() > 0) {
+                        if (uniqNodes.insert(value.Item(0).Raw()).second && NeedCalc(value.Item(0))) {
+                            needCalc.push_back(value.Item(0).Ptr());
+                        }
+                    }
+                    break;
+                }
+                default:
+                    break;
+                }
+            }
+        }
+        else if (auto maybeQLFilter = TMaybeNode<TYtQLFilter>(node)) {
+            GetNodesToCalculateFromQLFilter(maybeQLFilter.Ref(), needCalc, uniqNodes, stopEarly);
+        }
+        else if (TMaybeNode<TYtOutput>(node)) {
+            // Stop traversing dependent operations
+            return false;
+        }
+        return !stopEarly || needCalc.empty();
+    });
+    return needCalc;
 }
 
 } // unnamed
@@ -735,156 +830,11 @@ bool IsConstExpSortDirections(NNodes::TExprBase sortDirections) {
 }
 
 TExprNode::TListType GetNodesToCalculate(const TExprNode::TPtr& input) {
-    TExprNode::TListType needCalc;
-    TNodeSet uniqNodes;
-    VisitExpr(input, [&needCalc, &uniqNodes](const TExprNode::TPtr& node) {
-        if (auto maybeOp = TMaybeNode<TYtTransientOpBase>(node)) {
-            auto op = maybeOp.Cast();
-            for (auto setting: op.Settings()) {
-                switch (FromString<EYtSettingType>(setting.Name().Value())) {
-                case EYtSettingType::Limit:
-                    for (auto expr: setting.Value().Cast().Ref().Children()) {
-                        for (auto item: expr->Children()) {
-                            if (uniqNodes.insert(item->Child(1)).second) {
-                                if (NeedCalc(TExprBase(item->Child(1)))) {
-                                    needCalc.push_back(item->ChildPtr(1));
-                                }
-                            }
-                        }
-                    }
-                    break;
-                default:
-                    break;
-                }
-            }
-        }
-        else if (auto maybeSection = TMaybeNode<TYtSection>(node)) {
-            TYtSection section = maybeSection.Cast();
-            for (auto setting: section.Settings()) {
-                switch (FromString<EYtSettingType>(setting.Name().Value())) {
-                case EYtSettingType::Take:
-                case EYtSettingType::Skip:
-                    if (uniqNodes.insert(setting.Value().Cast().Raw()).second) {
-                        if (NeedCalc(setting.Value().Cast())) {
-                            needCalc.push_back(setting.Value().Cast().Ptr());
-                        }
-                    }
-                    break;
-                case EYtSettingType::KeyFilter: {
-                    auto value = setting.Value().Cast<TExprList>();
-                    if (value.Size() > 0) {
-                        for (auto member: value.Item(0).Cast<TCoNameValueTupleList>()) {
-                            for (auto cmp: member.Value().Cast<TCoNameValueTupleList>()) {
-                                if (cmp.Value() && uniqNodes.insert(cmp.Value().Cast().Raw()).second) {
-                                    if (NeedCalc(cmp.Value().Cast())) {
-                                        needCalc.push_back(cmp.Value().Cast().Ptr());
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    break;
-                }
-                case EYtSettingType::KeyFilter2: {
-                    auto value = setting.Value().Cast<TExprList>();
-                    if (value.Size() > 0) {
-                        if (uniqNodes.insert(value.Item(0).Raw()).second && NeedCalc(value.Item(0))) {
-                            needCalc.push_back(value.Item(0).Ptr());
-                        }
-                    }
-                    break;
-                }
-                case EYtSettingType::QLFilter: {
-                    for (const auto& p : section.Paths()) {
-                        TYtPathInfo pathInfo(p);
-                        if (pathInfo.QLFilter) {
-                            GetNodesToCalculateFromQLFilter(*pathInfo.QLFilter, needCalc, uniqNodes);
-                        }
-                    }
-                }
-                default:
-                    break;
-                }
-            }
-        }
-        else if (TMaybeNode<TYtOutput>(node)) {
-            // Stop traversing dependent operations
-            return false;
-        }
-        return true;
-    });
-    return needCalc;
+    return GetNodesToCalculateImpl(input, /* stopEarly */ false);
 }
 
 bool HasNodesToCalculate(const TExprNode::TPtr& input) {
-    bool needCalc = false;
-    VisitExpr(input, [&needCalc](const TExprNode::TPtr& node) {
-        if (auto maybeOp = TMaybeNode<TYtTransientOpBase>(node)) {
-            auto op = maybeOp.Cast();
-            for (auto setting: op.Settings()) {
-                switch (FromString<EYtSettingType>(setting.Name().Value())) {
-                case EYtSettingType::Limit:
-                    for (auto expr: setting.Value().Cast().Ref().Children()) {
-                        for (auto item: expr->Children()) {
-                            if (NeedCalc(TExprBase(item->Child(1)))) {
-                                needCalc = true;
-                                return false;
-                            }
-                        }
-                    }
-                    break;
-                default:
-                    break;
-                }
-            }
-        }
-        else if (auto maybeSection = TMaybeNode<TYtSection>(node)) {
-            TYtSection section = maybeSection.Cast();
-            for (auto setting: section.Settings()) {
-                switch (FromString<EYtSettingType>(setting.Name().Value())) {
-                case EYtSettingType::Take:
-                case EYtSettingType::Skip:
-                    if (NeedCalc(setting.Value().Cast())) {
-                        needCalc = true;
-                        return false;
-                    }
-                    break;
-                case EYtSettingType::KeyFilter: {
-                    auto value = setting.Value().Cast<TExprList>();
-                    if (value.Size() > 0) {
-                        for (auto member: value.Item(0).Cast<TCoNameValueTupleList>()) {
-                            for (auto cmp: member.Value().Cast<TCoNameValueTupleList>()) {
-                                if (cmp.Value() && NeedCalc(cmp.Value().Cast())) {
-                                    needCalc = true;
-                                    return false;
-                                }
-                            }
-                        }
-                    }
-                    break;
-                }
-                case EYtSettingType::KeyFilter2: {
-                    auto value = setting.Value().Cast<TExprList>();
-                    if (value.Size() > 0) {
-                        if (value.Item(0).Raw() && NeedCalc(value.Item(0))) {
-                            needCalc = true;
-                            return false;
-                        }
-                    }
-                    break;
-                }
-                default:
-                    break;
-                }
-            }
-        }
-        else if (TMaybeNode<TYtOutput>(node)) {
-            // Stop traversing dependent operations
-            return false;
-        }
-        return !needCalc;
-    });
-    return needCalc;
+    return !GetNodesToCalculateImpl(input, /* stopEarly */ true).empty();
 }
 
 std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> CalculateNodes(TYtState::TPtr state,
@@ -1601,8 +1551,8 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
     bool exactCopySort = false;
     bool hasAux = false;
     TVector<std::pair<TYqlRowSpecInfo::TPtr, bool>> rowSpecs;
-    const ui64 outNativeYtTypeFlags = outRowSpec ? outRowSpec->GetNativeYtTypeFlags() : (state->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
-    TYtOutTableInfo outTable(scheme.Cast<TStructExprType>(), outNativeYtTypeFlags);
+    const ui64 nativeTypeCompatibility = GetNativeYtTypeCompatibility(dataSink.Cluster().StringValue(), *state->Configuration);
+    TYtOutTableInfo outTable(scheme.Cast<TStructExprType>(), nativeTypeCompatibility);
     outTable.RowSpec->SetConstraints(opts.Constraints);
     TMaybe<NYT::TNode> outNativeType;
     if (outRowSpec) {
@@ -1729,7 +1679,7 @@ TYtPath CopyOrTrivialMap(TPositionHandle pos, TExprBase world, TYtDSink dataSink
             for (size_t i = 0; i < section.Paths().Size(); ++i) {
                 auto path = section.Paths().Item(i);
                 if (rowSpecs[i].second) {
-                    TYtOutTableInfo mapOutTable(scheme.Cast<TStructExprType>(), outNativeYtTypeFlags);
+                    TYtOutTableInfo mapOutTable(scheme.Cast<TStructExprType>(), nativeTypeCompatibility);
                     if (outNativeType) {
                         mapOutTable.RowSpec->CopyTypeOrders(*outNativeType, useNativeYtDefaultColumnOrder);
                     }
@@ -2327,6 +2277,54 @@ bool HasNonEmptyKeyFilter(const NNodes::TYtSection& section) {
            AnyOf(NYql::GetAllSettingValues(section.Settings().Ref(), EYtSettingType::KeyFilter2), hasChildren);
 }
 
+TYtPath RemoveYtQLFilters(TYtPath path, TExprContext& ctx) {
+    if (path.QLFilter().Maybe<TCoVoid>()) {
+        return path;
+    }
+
+    return Build<TYtPath>(ctx, path.Pos())
+        .InitFrom(path)
+        .QLFilter<TCoVoid>().Build()
+        .Done();
+}
+
+TYtSection RemoveYtQLFilters(TYtSection section, TExprContext& ctx) {
+    bool hasUpdated = false;
+    TVector<TYtPath> updatedPaths;
+    updatedPaths.reserve(section.Paths().Size());
+    for (const auto& path : section.Paths()) {
+        updatedPaths.push_back(RemoveYtQLFilters(path, ctx));
+        hasUpdated = hasUpdated || updatedPaths.back().Raw() != path.Raw();
+    }
+
+    if (!hasUpdated) {
+        return section;
+    }
+
+    return Build<TYtSection>(ctx, section.Pos())
+        .InitFrom(section)
+        .Paths()
+            .Add(updatedPaths)
+        .Build()
+        .Done();
+}
+
+TYtSectionList RemoveYtQLFilters(TYtSectionList sections, TExprContext& ctx) {
+    bool hasUpdated = false;
+    TVector<TYtSection> updatedSections;
+    updatedSections.reserve(sections.Size());
+    for (const auto& section : sections) {
+        updatedSections.push_back(RemoveYtQLFilters(section, ctx));
+        hasUpdated = hasUpdated || updatedSections.back().Raw() != section.Raw();
+    }
+
+    if (!hasUpdated) {
+        return sections;
+    }
+
+    return Build<TYtSectionList>(ctx, sections.Pos()).Add(updatedSections).Done();
+}
+
 TYtReadTable ConvertContentInputToRead(TExprBase input, TMaybeNode<TCoNameValueTupleList> settings, TExprContext& ctx, TMaybeNode<TCoAtomList> customFields) {
     TExprNode::TPtr world;
     TVector<TYtSection> sections;
@@ -2539,6 +2537,12 @@ bool CanReplaceParentOutputHash(const TExprNode& node) {
     }
 
     return true;
+}
+
+ui64 GetNativeYtTypeCompatibility(const TString& cluster, const TYtSettings& config) {
+    const auto useNativeYtTypes = config.UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES);
+    const auto nativeTypeCompatibility = config.NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
+    return useNativeYtTypes ? nativeTypeCompatibility : NTCF_NONE;
 }
 
 } // NYql

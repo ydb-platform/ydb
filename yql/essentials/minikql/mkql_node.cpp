@@ -138,15 +138,15 @@ TStructLiteral* TTypeEnvironment::GetEmptyStructLazy() const {
     if (!EmptyStruct_) {
         EmptyStruct_ = TStructLiteral::Create(
             0,
-            nullptr,
-            TStructType::Create(0, nullptr, *this), *this, false);
+            /*values=*/nullptr,
+            TStructType::Create(0, /*members=*/nullptr, *this), *this, /*useCachedEmptyStruct=*/false);
     }
     return EmptyStruct_;
 }
 
 TListLiteral* TTypeEnvironment::GetListOfVoidLazy() const {
     if (!ListOfVoid_) {
-        ListOfVoid_ = TListLiteral::Create(nullptr, 0, TListType::Create(GetVoidLazy()->GetGenericType(), *this), *this);
+        ListOfVoid_ = TListLiteral::Create(/*items=*/nullptr, 0, TListType::Create(GetVoidLazy()->GetGenericType(), *this), *this);
     }
     return ListOfVoid_;
 }
@@ -160,7 +160,7 @@ TAnyType* TTypeEnvironment::GetAnyTypeLazy() const {
 
 TTupleLiteral* TTypeEnvironment::GetEmptyTupleLazy() const {
     if (!EmptyTuple_) {
-        EmptyTuple_ = TTupleLiteral::Create(0, nullptr, TTupleType::Create(0, nullptr, *this), *this, false);
+        EmptyTuple_ = TTupleLiteral::Create(0, /*items=*/nullptr, TTupleType::Create(0, /*elements=*/nullptr, *this), *this, /*useCachedEmptyTuple=*/false);
     }
     return EmptyTuple_;
 }
@@ -473,7 +473,7 @@ void TTypeType::DoFreeze(const TTypeEnvironment& env) {
 }
 
 TDataType::TDataType(NUdf::TDataTypeId schemeType, const TTypeEnvironment& env)
-    : TType(EKind::Data, env.GetTypeOfTypeLazy(), true)
+    : TType(EKind::Data, env.GetTypeOfTypeLazy(), /*supportsPresort=*/true)
     , SchemeType_(schemeType)
     , DataSlot_(NUdf::FindDataSlot(schemeType))
 {
@@ -787,7 +787,7 @@ TNode* TStructType::DoCloneOnCallableWrite(const TTypeEnvironment& env) const {
         }
     }
 
-    return ::new (env.Allocate<TStructType>()) TStructType(MembersCount_, allocatedMembers, env, false);
+    return ::new (env.Allocate<TStructType>()) TStructType(MembersCount_, allocatedMembers, env, /*validate=*/false);
 }
 
 void TStructType::DoFreeze(const TTypeEnvironment& env) {
@@ -897,7 +897,7 @@ TNode* TStructLiteral::DoCloneOnCallableWrite(const TTypeEnvironment& env) const
     }
 
     return ::new (env.Allocate<TStructLiteral>()) TStructLiteral(allocatedValues,
-                                                                 typeNewNode ? static_cast<TStructType*>(typeNewNode) : GetType(), false);
+                                                                 typeNewNode ? static_cast<TStructType*>(typeNewNode) : GetType(), /*validate=*/false);
 }
 
 void TStructLiteral::DoFreeze(const TTypeEnvironment& env) {
@@ -951,7 +951,7 @@ TNode* TListType::DoCloneOnCallableWrite(const TTypeEnvironment& env) const {
         return const_cast<TListType*>(this);
     }
 
-    return ::new (env.Allocate<TListType>()) TListType(static_cast<TType*>(newTypeNode), env, false);
+    return ::new (env.Allocate<TListType>()) TListType(static_cast<TType*>(newTypeNode), env, /*validate=*/false);
 }
 
 void TListType::DoFreeze(const TTypeEnvironment& env) {
@@ -1030,7 +1030,7 @@ TNode* TListLiteral::DoCloneOnCallableWrite(const TTypeEnvironment& env) const {
     }
 
     return ::new (env.Allocate<TListLiteral>()) TListLiteral(allocatedItems, newList.size(),
-                                                             newTypeNode ? static_cast<TListType*>(newTypeNode) : GetType(), env, false);
+                                                             newTypeNode ? static_cast<TListType*>(newTypeNode) : GetType(), env, /*validate=*/false);
 }
 
 void TListLiteral::DoFreeze(const TTypeEnvironment&) {
@@ -1075,7 +1075,7 @@ bool TListLiteral::Equals(const TListLiteral& nodeToCompare) const {
 }
 
 TStreamType::TStreamType(TType* itemType, const TTypeEnvironment& env, bool validate)
-    : TType(EKind::Stream, env.GetTypeOfTypeLazy(), false)
+    : TType(EKind::Stream, env.GetTypeOfTypeLazy(), /*supportsPresort=*/false)
     , Data_(itemType)
 {
     Y_UNUSED(validate);
@@ -1103,7 +1103,7 @@ TNode* TStreamType::DoCloneOnCallableWrite(const TTypeEnvironment& env) const {
         return const_cast<TStreamType*>(this);
     }
 
-    return ::new (env.Allocate<TStreamType>()) TStreamType(static_cast<TType*>(newTypeNode), env, false);
+    return ::new (env.Allocate<TStreamType>()) TStreamType(static_cast<TType*>(newTypeNode), env, /*validate=*/false);
 }
 
 void TStreamType::DoFreeze(const TTypeEnvironment& env) {
@@ -1111,7 +1111,7 @@ void TStreamType::DoFreeze(const TTypeEnvironment& env) {
 }
 
 TFlowType::TFlowType(TType* itemType, const TTypeEnvironment& env, bool validate)
-    : TType(EKind::Flow, env.GetTypeOfTypeLazy(), false)
+    : TType(EKind::Flow, env.GetTypeOfTypeLazy(), /*supportsPresort=*/false)
     , Data_(itemType)
 {
     Y_UNUSED(validate);
@@ -1139,7 +1139,7 @@ TNode* TFlowType::DoCloneOnCallableWrite(const TTypeEnvironment& env) const {
         return const_cast<TFlowType*>(this);
     }
 
-    return ::new (env.Allocate<TFlowType>()) TFlowType(static_cast<TType*>(newTypeNode), env, false);
+    return ::new (env.Allocate<TFlowType>()) TFlowType(static_cast<TType*>(newTypeNode), env, /*validate=*/false);
 }
 
 void TFlowType::DoFreeze(const TTypeEnvironment& env) {
@@ -1175,7 +1175,7 @@ TNode* TOptionalType::DoCloneOnCallableWrite(const TTypeEnvironment& env) const 
         return const_cast<TOptionalType*>(this);
     }
 
-    return ::new (env.Allocate<TOptionalType>()) TOptionalType(static_cast<TType*>(newTypeNode), env, false);
+    return ::new (env.Allocate<TOptionalType>()) TOptionalType(static_cast<TType*>(newTypeNode), env, /*validate=*/false);
 }
 
 void TOptionalType::DoFreeze(const TTypeEnvironment& env) {
@@ -1212,7 +1212,7 @@ TNode* TLinearType::DoCloneOnCallableWrite(const TTypeEnvironment& env) const {
         return const_cast<TLinearType*>(this);
     }
 
-    return ::new (env.Allocate<TLinearType>()) TLinearType(static_cast<TType*>(newTypeNode), IsDynamic_, env, false);
+    return ::new (env.Allocate<TLinearType>()) TLinearType(static_cast<TType*>(newTypeNode), IsDynamic_, env, /*validate=*/false);
 }
 
 void TLinearType::DoFreeze(const TTypeEnvironment& env) {
@@ -1294,11 +1294,11 @@ TNode* TOptionalLiteral::DoCloneOnCallableWrite(const TTypeEnvironment& env) con
 
     if (!Item_.GetNode()) {
         return ::new (env.Allocate<TOptionalLiteral>()) TOptionalLiteral(
-            newTypeNode ? static_cast<TOptionalType*>(newTypeNode) : GetType(), false);
+            newTypeNode ? static_cast<TOptionalType*>(newTypeNode) : GetType(), /*validate=*/false);
     } else {
         return ::new (env.Allocate<TOptionalLiteral>()) TOptionalLiteral(
             newItemNode ? TRuntimeNode(newItemNode, Item_.IsImmediate()) : Item_,
-            newTypeNode ? static_cast<TOptionalType*>(newTypeNode) : GetType(), false);
+            newTypeNode ? static_cast<TOptionalType*>(newTypeNode) : GetType(), /*validate=*/false);
     }
 }
 
@@ -1342,7 +1342,7 @@ TNode* TDictType::DoCloneOnCallableWrite(const TTypeEnvironment& env) const {
 
     return ::new (env.Allocate<TDictType>()) TDictType(
         newKeyType ? static_cast<TType*>(newKeyType) : KeyType_,
-        newPayloadType ? static_cast<TType*>(newPayloadType) : PayloadType_, env, false);
+        newPayloadType ? static_cast<TType*>(newPayloadType) : PayloadType_, env, /*validate=*/false);
 }
 
 void TDictType::DoFreeze(const TTypeEnvironment& env) {
@@ -1445,7 +1445,7 @@ TNode* TDictLiteral::DoCloneOnCallableWrite(const TTypeEnvironment& env) const {
     }
 
     return ::new (env.Allocate<TDictLiteral>()) TDictLiteral(ItemsCount_, allocatedItems,
-                                                             newTypeNode ? static_cast<TDictType*>(newTypeNode) : GetType(), false);
+                                                             newTypeNode ? static_cast<TDictType*>(newTypeNode) : GetType(), /*validate=*/false);
 }
 
 void TDictLiteral::DoFreeze(const TTypeEnvironment& env) {
@@ -1472,7 +1472,7 @@ bool TDictLiteral::Equals(const TDictLiteral& nodeToCompare) const {
 
 TCallableType::TCallableType(const TInternName& name, TType* returnType, ui32 argumentsCount,
                              TType** arguments, TNode* payload, const TTypeEnvironment& env)
-    : TType(EKind::Callable, env.GetTypeOfTypeLazy(), false)
+    : TType(EKind::Callable, env.GetTypeOfTypeLazy(), /*supportsPresort=*/false)
     , IsMergeDisabled0_(false)
     , ArgumentsCount_(argumentsCount)
     , Name_(name)
@@ -1760,10 +1760,10 @@ TNode* TCallable::DoCloneOnCallableWrite(const TTypeEnvironment& env) const {
     if (Result_.GetNode()) {
         newCallable = ::new (env.Allocate<TCallable>()) TCallable(
             newResultNode ? TRuntimeNode(newResultNode, Result_.IsImmediate()) : Result_,
-            newTypeNode ? static_cast<TCallableType*>(newTypeNode) : GetType(), false);
+            newTypeNode ? static_cast<TCallableType*>(newTypeNode) : GetType(), /*validate=*/false);
     } else {
         newCallable = ::new (env.Allocate<TCallable>()) TCallable(InputsCount_, allocatedInputs,
-                                                                  newTypeNode ? static_cast<TCallableType*>(newTypeNode) : GetType(), false);
+                                                                  newTypeNode ? static_cast<TCallableType*>(newTypeNode) : GetType(), /*validate=*/false);
     }
 
     newCallable->SetUniqueId(GetUniqueId());
@@ -2018,7 +2018,7 @@ TNode* TTupleLiteral::DoCloneOnCallableWrite(const TTypeEnvironment& env) const 
     }
 
     return ::new (env.Allocate<TTupleLiteral>()) TTupleLiteral(allocatedValues,
-                                                               newTypeNode ? static_cast<TTupleType*>(newTypeNode) : GetType(), false);
+                                                               newTypeNode ? static_cast<TTupleType*>(newTypeNode) : GetType(), /*validate=*/false);
 }
 
 void TTupleLiteral::DoFreeze(const TTypeEnvironment& env) {
@@ -2106,7 +2106,7 @@ TNode* TVariantType::DoCloneOnCallableWrite(const TTypeEnvironment& env) const {
         return const_cast<TVariantType*>(this);
     }
 
-    return ::new (env.Allocate<TVariantType>()) TVariantType(static_cast<TType*>(newTypeNode), env, false);
+    return ::new (env.Allocate<TVariantType>()) TVariantType(static_cast<TType*>(newTypeNode), env, /*validate=*/false);
 }
 
 void TVariantType::DoFreeze(const TTypeEnvironment& env) {
@@ -2155,7 +2155,7 @@ TNode* TVariantLiteral::DoCloneOnCallableWrite(const TTypeEnvironment& env) cons
 
     return ::new (env.Allocate<TVariantLiteral>()) TVariantLiteral(
         newItemNode ? TRuntimeNode(newItemNode, Item_.IsImmediate()) : Item_, Index_,
-        newTypeNode ? static_cast<TVariantType*>(newTypeNode) : GetType(), false);
+        newTypeNode ? static_cast<TVariantType*>(newTypeNode) : GetType(), /*validate=*/false);
 }
 
 void TVariantLiteral::DoFreeze(const TTypeEnvironment& env) {
@@ -2164,7 +2164,7 @@ void TVariantLiteral::DoFreeze(const TTypeEnvironment& env) {
 }
 
 TBlockType::TBlockType(TType* itemType, EShape shape, const TTypeEnvironment& env)
-    : TType(EKind::Block, env.GetTypeOfTypeLazy(), false)
+    : TType(EKind::Block, env.GetTypeOfTypeLazy(), /*supportsPresort=*/false)
     , ItemType_(itemType)
     , Shape_(shape)
 {

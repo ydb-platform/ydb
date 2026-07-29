@@ -103,13 +103,10 @@ SIMPLE_UDF(TSleep, ui64(ui64)) {
     return TUnboxedValuePod(static_cast<ui64>(0));
 }
 
-SIMPLE_UDF(TSecureParam, ui64()) {
-    Y_UNUSED(args);
+SIMPLE_UDF(TSecureParamLength, ui32(char*)) {
     TStringRef secureParamValue;
-    TString paramKey("test_key");
-    if (!valueBuilder->GetSecureParam(paramKey, secureParamValue)) {
-        return TUnboxedValuePod(0);
-    }
+    auto paramKey = args[0].AsStringRef();
+    Y_ENSURE(valueBuilder->GetSecureParam(paramKey, secureParamValue));
     return TUnboxedValuePod(secureParamValue.Size());
 }
 
@@ -183,7 +180,7 @@ public:
         TUnboxedValue* items = nullptr;
         auto result = valueBuilder->NewArray(Argc_, items);
         for (size_t i = 0; i < Argc_; ++i) {
-            items[i] = std::move(args[i]);
+            items[i] = args[i];
         }
         return result;
     }
@@ -227,7 +224,7 @@ public:
                 auto argType = argsTypeInspector.GetElementType(i);
                 argBuilder->Add(argType);
                 TString name = TStringBuilder() << "arg_" << i;
-                structBuilder->AddField(name, argType, nullptr);
+                structBuilder->AddField(name, argType, /*index=*/nullptr);
             }
 
             argBuilder->Done().Returns(builder.Optional()->Item(structBuilder->Build()).Build());
@@ -345,7 +342,7 @@ SIMPLE_MODULE(TSimpleUdfModule,
               TConst,
               TConcat,
               TRepeat,
-              TSecureParam,
+              TSecureParamLength,
               TSleep,
               TComplexReturnType,
               TNamedArgs,

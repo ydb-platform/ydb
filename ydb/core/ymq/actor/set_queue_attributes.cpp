@@ -5,7 +5,6 @@
 #include "params.h"
 #include "serviceid.h"
 
-#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/schema/schema.h>
 #include <ydb/core/ymq/base/limits.h>
 #include <ydb/core/ymq/base/dlq_helpers.h>
@@ -117,7 +116,7 @@ private:
             hFunc(TEvWakeup,      HandleWakeup);
             hFunc(TSqsEvents::TEvExecuted, HandleExecuted);
             hFunc(TSqsEvents::TEvQueueId,  HandleQueueId);
-            hFunc(NPQ::NSchema::TEvAlterTopicResponse, Handle);
+            hFunc(NPQ::NSchema::TEvSchemaResponse, Handle);
         }
     }
 
@@ -173,13 +172,6 @@ private:
 
         if (ValidatedAttributes_.ContentBasedDeduplication) {
             request.set_set_content_based_deduplication(*ValidatedAttributes_.ContentBasedDeduplication);
-            if (*ValidatedAttributes_.ContentBasedDeduplication) {
-                request.set_set_partition_write_speed_messages_per_second(NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_LIMIT);
-                request.set_set_partition_write_burst_messages(NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_BURST);
-            } else {
-                request.set_set_partition_write_speed_messages_per_second(NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND);
-                request.set_set_partition_write_burst_messages(NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND);
-            }
         }
 
         auto* type = consumer->mutable_alter_shared_consumer_type();
@@ -215,7 +207,7 @@ private:
         Send(QueueLeader_, MakeHolder<TSqsEvents::TEvClearQueueAttributesCache>());
     }
 
-    void Handle(NPQ::NSchema::TEvAlterTopicResponse::TPtr& ev) {
+    void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
         const auto& response = *ev->Get();
         if (response.Status == Ydb::StatusIds::SUCCESS) {
             NotifyQueueLeader();

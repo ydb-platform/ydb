@@ -9,22 +9,28 @@ using namespace NThreading;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TICStorageTransport::TICStorageTransport(NActors::TActorSystem* actorSystem)
+TICStorageTransport::TICStorageTransport(
+    NActors::TActorSystem* actorSystem,
+    NActors::TActorId icStorageTransportActorId)
     : ActorSystem(actorSystem)
-    , ICStorageTransportActorId(CreateTransportActor())
+    , ICStorageTransportActorId(icStorageTransportActorId)
 {}
 
-TFuture<NKikimrBlobStorage::NDDisk::TEvConnectResult>
-TICStorageTransport::Connect(const THostConnection& connection)
+IStorageTransport::TConnectResultFutures TICStorageTransport::Connect(
+    const THostConnection& connection)
 {
     auto request = std::make_unique<TEvTransportPrivate::TEvConnect>(
         connection.GetServiceId(),
         connection.Credentials);
-    auto future = request->Promise.GetFuture();
+
+    IStorageTransport::TConnectResultFutures result = {
+        .ConnectFuture = request->ConnectPromise.GetFuture(),
+        .DisconnectFuture = request->DisconnectPromise.GetFuture(),
+    };
 
     ActorSystem->Send(ICStorageTransportActorId, request.release());
 
-    return future;
+    return result;
 }
 
 TFuture<NKikimrBlobStorage::NDDisk::TEvWritePersistentBufferResult>
@@ -57,8 +63,7 @@ TICStorageTransport::WriteToPBuffer(
     return future;
 }
 
-TFuture<TEvTransportPrivate::TProtoEvWriteToManyPersistentBuffersResult>
-TICStorageTransport::WriteToManyPBuffers(
+void TICStorageTransport::WriteToManyPBuffers(
     const THostConnection& connection,
     const NDDisk::TBlockSelector& selector,
     const ui64 lsn,
@@ -66,9 +71,22 @@ TICStorageTransport::WriteToManyPBuffers(
     TVector<NKikimrBlobStorage::NDDisk::TDDiskId> persistentBufferIds,
     TDuration replyTimeout,
     const TGuardedSgList& data,
-    NWilson::TSpan* span)
+    std::shared_ptr<NWilson::TSpan> span,
+    TWriteToManyPBuffersCallback callback)
 {
+    using TEvWriteToManyPersistentBuffersResult =
+        NTransport::IStorageTransport::TEvWriteToManyPersistentBuffersResult;
+
     Y_ABORT_UNLESS(connection.ConnectionType == EConnectionType::PBuffer);
+
+    auto wrappedCallback = [callback = std::move(callback), span]   //
+        (const TEvWriteToManyPersistentBuffersResult& result)
+    {
+        if (span) {
+            span->Event("Reply on actor thread");
+        }
+        callback(result, span);
+    };
 
     auto request =
         std::make_unique<TEvTransportPrivate::TEvWriteToManyPBuffers>(
@@ -80,16 +98,14 @@ TICStorageTransport::WriteToManyPBuffers(
             std::move(persistentBufferIds),
             replyTimeout,
             data,
+            std::move(wrappedCallback),
             span ? span->GetTraceId() : NWilson::TTraceId());
-
-    auto future = request->Promise.GetFuture();
 
     if (span) {
         span->Event("ActorSystem_Send");
     }
-    ActorSystem->Send(ICStorageTransportActorId, request.release());
 
-    return future;
+    ActorSystem->Send(ICStorageTransportActorId, request.release());
 }
 
 TFuture<NKikimrBlobStorage::NDDisk::TEvWriteResult>
@@ -121,20 +137,44 @@ TICStorageTransport::WriteToDDisk(
 }
 
 TFuture<NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult>
-TICStorageTransport::EraseFromPBuffer(
+TICStorageTransport::BatchEraseFromPBuffer(
     const THostConnection& connection,
-    TVector<NKikimr::NDDisk::TBlockSelector> selectors,
     TVector<ui64> lsns,
     NWilson::TSpan* span)
 {
     Y_ABORT_UNLESS(connection.ConnectionType == EConnectionType::PBuffer);
 
-    auto request = std::make_unique<TEvTransportPrivate::TEvEraseFromPBuffer>(
-        connection.GetServiceId(),
-        connection.Credentials,
-        std::move(selectors),
-        std::move(lsns),
-        span ? span->GetTraceId() : NWilson::TTraceId());
+    auto request =
+        std::make_unique<TEvTransportPrivate::TEvBatchEraseFromPBuffer>(
+            connection.GetServiceId(),
+            connection.Credentials,
+            std::move(lsns),
+            span ? span->GetTraceId() : NWilson::TTraceId());
+
+    auto future = request->Promise.GetFuture();
+
+    if (span) {
+        span->Event("ActorSystem_Send");
+    }
+    ActorSystem->Send(ICStorageTransportActorId, request.release());
+
+    return future;
+}
+
+TFuture<NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult>
+TICStorageTransport::BarrierEraseFromPBuffer(
+    const THostConnection& connection,
+    ui64 lsn,
+    NWilson::TSpan* span)
+{
+    Y_ABORT_UNLESS(connection.ConnectionType == EConnectionType::PBuffer);
+
+    auto request =
+        std::make_unique<TEvTransportPrivate::TEvBarrierEraseFromPBuffer>(
+            connection.GetServiceId(),
+            connection.Credentials,
+            lsn,
+            span ? span->GetTraceId() : NWilson::TTraceId());
 
     auto future = request->Promise.GetFuture();
 
@@ -204,7 +244,7 @@ TICStorageTransport::ReadFromDDisk(
     return future;
 }
 
-TFuture<NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult>
+TFuture<NKikimrBlobStorage::NDDisk::TEvSyncResult>
 TICStorageTransport::SyncWithPBuffer(
     const THostConnection& pbufferConnection,
     const THostConnection& ddiskConnection,

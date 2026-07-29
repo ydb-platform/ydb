@@ -30,14 +30,18 @@ struct TDqRobinHoodBatchRequestItem {
     }
 
     // intermediate data
-    ui64 Hash;
+    ui32 Hash;
     char* InitialIterator;
 };
 
 
 // TODO: only POD key & payloads are now supported
-// This modification doesn't mix per-instance random SelfHash into the hash value; please do it in your Hasher instead
-template <typename TKey, typename TEqual, typename THash, typename TAllocator>
+//
+// This modification always uses the user-supplied hash and doesn't call any external hash functions.
+// Also it doesn't mix a per-instance seed into the supplied hash value
+// and doesn't perform Fibonacci hash value optimization.
+// Users should do their own seeding/Fibonacci optimization.
+template <typename TKey, typename TEqual, typename TAllocator>
 class TDqRobinHoodHashSet {
 public:
     static constexpr const ui32 PrefetchBatchSize = 64;
@@ -49,7 +53,6 @@ public:
     using const_iterator = const char*;
 
 protected:
-    THash HashLocal_;
     TEqual EqualLocal_;
 
 public:
@@ -68,11 +71,10 @@ public:
         }
     };
 
-    explicit TDqRobinHoodHashSet(THash hash, TEqual equal, const ui64 initialCapacity)
-        : HashLocal_(std::move(hash))
-        , EqualLocal_(std::move(equal))
+    explicit TDqRobinHoodHashSet(TEqual equal, const ui64 initialCapacity)
+        : EqualLocal_(std::move(equal))
         , Capacity_(initialCapacity)
-        , CapacityShift_(32 - MostSignificantBit(initialCapacity))
+        , CapacityShift_(64 - MostSignificantBit(initialCapacity))
         , Allocator_()
     {
         Y_ENSURE((Capacity_ & (Capacity_ - 1)) == 0);
@@ -91,17 +93,11 @@ public:
     void operator=(TDqRobinHoodHashSet&&) = delete;
 
     // returns iterator
-    Y_FORCE_INLINE char* Insert(TKey key, const ui64 hash, bool& isNew) {
-        auto shortHash = static_cast<ui32>(hash);
-        auto ptr = MakeIterator(shortHash, Data_, CapacityShift_);
-        auto ret = InsertImpl(key, shortHash, isNew, Data_, DataEnd_, ptr);
+    Y_FORCE_INLINE char* Insert(TKey key, const ui32 hash, bool& isNew) {
+        auto ptr = MakeIterator(hash, Data_, CapacityShift_);
+        auto ret = InsertImpl(key, hash, isNew, Data_, DataEnd_, ptr);
         Size_ += isNew ? 1 : 0;
         return ret;
-    }
-
-    // returns iterator
-    Y_FORCE_INLINE char* Insert(TKey key, bool& isNew) {
-        return Insert(key, HashLocal_(key), isNew);
     }
 
     // should be called after Insert if isNew is true
@@ -194,8 +190,9 @@ private:
     };
 
     Y_FORCE_INLINE char* MakeIterator(const ui32 hash, char* data, ui32 capacityShift) {
-        // https://web.archive.org/web/20180620004325/https://probablydance.com/2018/06/16/fibonacci-hashing-the-optimization-that-the-world-forgot-or-a-better-alternative-to-integer-modulo/
-        ui32 bucket = static_cast<ui32>((static_cast<ui64>(hash) * 11400714819323198485ull)) >> capacityShift;
+        // Use most significant bits; only top 32 bits of (hash << 32) can be non-zero, lower bits of the bucket will be zeroes when growing beyond 32-bit capacities.
+        // Affects performance somewhat but at least you can have humongous hash maps
+        ui64 bucket = (static_cast<ui64>(hash) << 32) >> capacityShift;
         char* ptr = data + GetCellSize() * bucket;
         return ptr;
     }
@@ -271,7 +268,7 @@ private:
 
     Y_NO_INLINE void Grow() {
         auto newCapacity = Capacity_ * CalculateRHHashTableGrowFactor(Capacity_);
-        ui32 newCapacityShift = 32 - MostSignificantBit(newCapacity);
+        ui32 newCapacityShift = 64 - MostSignificantBit(newCapacity);
         char *newData, *newDataEnd;
         Allocate(newCapacity, newData, newDataEnd);
         Y_DEFER {

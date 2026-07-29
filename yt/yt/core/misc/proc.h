@@ -119,8 +119,6 @@ std::optional<i64> GetCgroupAnonymousMemoryLimit(
 THashMap<std::string, i64> GetVmstat();
 
 ui64 GetProcessCumulativeMajorPageFaults(int pid = -1);
-size_t GetCurrentProcessId();
-size_t GetCurrentThreadId();
 std::vector<size_t> GetCurrentProcessThreadIds();
 bool IsUserspaceThread(size_t tid);
 

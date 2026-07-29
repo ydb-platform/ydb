@@ -11,6 +11,30 @@ import ydb
 from typing import List, Dict, Any, Optional, Callable, Tuple
 from contextlib import contextmanager
 
+# Explicit settings for long-running read queries via Query Service.
+# Without these the server applies its default deadline (~600s) which
+# is too short for full-day analytics scans.
+_LONG_QUERY_SETTINGS = (
+    ydb.BaseRequestSettings()
+    .with_operation_timeout(3600)   # 1h server-side
+    .with_cancel_after(3600)
+    .with_timeout(3600)             # 1h gRPC deadline
+)
+
+# Preserve Table Service semantics: return raw integers/bytes instead of
+# Python datetime/str so downstream scripts (e.g. get_test_history.py)
+# don't break. Table Service had native_*_in_result_sets=False by default;
+# Query Service flips them all to True by default.
+_QUERY_CLIENT_SETTINGS = (
+    ydb.QueryClientSettings()
+    .with_native_date_in_result_sets(False)
+    .with_native_datetime_in_result_sets(False)
+    .with_native_timestamp_in_result_sets(False)
+    .with_native_interval_in_result_sets(False)
+    .with_native_json_in_result_sets(False)
+)
+
+
 class YDBWrapper:
     """Wrapper for YDB with statistics logging.
 
@@ -259,20 +283,15 @@ class YDBWrapper:
         """Get YDB cluster version"""
         if self._cluster_version is not None:
             return self._cluster_version
-            
+
         try:
-            tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=True)
-            table_client = ydb.TableClient(driver, tc_settings)
-            scan_query = ydb.ScanQuery("SELECT Version() as version", {})
-            it = table_client.scan_query(scan_query)
-            result = next(it)
-            
-            if result.result_set.rows:
-                self._cluster_version = result.result_set.rows[0]['version']
-                return self._cluster_version
-            else:
-                raise RuntimeError("No version data returned from cluster")
-                
+            with ydb.QuerySessionPool(driver, query_client_settings=_QUERY_CLIENT_SETTINGS) as pool:
+                result_sets = pool.execute_with_retries("SELECT Version() as version")
+            for result_set in result_sets:
+                if result_set.rows:
+                    self._cluster_version = result_set.rows[0]["version"]
+                    return self._cluster_version
+            raise RuntimeError("No version data returned from cluster")
         except Exception as e:
             raise RuntimeError(f"Failed to get cluster version: {e}")
     
@@ -336,11 +355,8 @@ class YDBWrapper:
                 credentials=ydb.credentials_from_env_variables()
             )
             driver.wait(timeout=self._stats_connection_timeout, fail_fast=True)
-            tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=True)
-            table_client = ydb.TableClient(driver, tc_settings)
-            scan_query = ydb.ScanQuery("SELECT 1 as test", {})
-            it = table_client.scan_query(scan_query)
-            next(it)
+            with ydb.QuerySessionPool(driver, query_client_settings=_QUERY_CLIENT_SETTINGS) as pool:
+                pool.execute_with_retries("SELECT 1 as test")
             self._stats_driver = driver
             return True
         except Exception:
@@ -501,36 +517,29 @@ class YDBWrapper:
             start_time = time.time()
 
             if operation_type == "scan_query":
-                tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=False)
-                table_client = ydb.TableClient(driver, tc_settings)
-                scan_query = ydb.ScanQuery(query, {})
-                it = table_client.scan_query(scan_query)
-
                 results = []
                 batch_count = 0
                 scan_start = time.time()
 
-                while True:
-                    try:
-                        result = next(it)
-                        batch_count += 1
-                        batch_size = len(result.result_set.rows) if result.result_set.rows else 0
-                        results.extend(result.result_set.rows)
-                        rows_affected += batch_size
+                with ydb.QuerySessionPool(driver, query_client_settings=_QUERY_CLIENT_SETTINGS) as pool:
+                    with pool.checkout() as session:
+                        for result_set in session.execute(query, settings=_LONG_QUERY_SETTINGS):
+                            batch_count += 1
+                            batch_rows = result_set.rows or []
+                            batch_size = len(batch_rows)
+                            results.extend(batch_rows)
+                            rows_affected += batch_size
 
-                        if (batch_count % 50 == 0 or (rows_affected > 0 and rows_affected % 10000 == 0)) and rows_affected > 0:
-                            elapsed = time.time() - scan_start
-                            self._log("progress", f"Batch {batch_count}: {batch_size} rows (total: {rows_affected})", f"{elapsed:.2f}s")
-
-                    except StopIteration:
-                        break
+                            if (batch_count % 50 == 0 or (rows_affected > 0 and rows_affected % 10000 == 0)) and rows_affected > 0:
+                                elapsed = time.time() - scan_start
+                                self._log("progress", f"Batch {batch_count}: {batch_size} rows (total: {rows_affected})", f"{elapsed:.2f}s")
 
                 duration = time.time() - scan_start
 
                 if rows_affected == 0:
-                    self._log("success", f"Scan query completed", f"No results found, Duration: {duration:.2f}s")
+                    self._log("success", "Scan query completed", f"No results found, Duration: {duration:.2f}s")
                 else:
-                    self._log("success", f"Scan query completed", f"Total results: {rows_affected} rows, Duration: {duration:.2f}s")
+                    self._log("success", "Scan query completed", f"Total results: {rows_affected} rows, Duration: {duration:.2f}s")
 
                 self._log_statistics(
                     operation_type=operation_type,
@@ -635,33 +644,23 @@ class YDBWrapper:
     def execute_scan_query_with_metadata(self, query: str, query_name: str = None) -> Tuple[List[Dict[str, Any]], List[Tuple[str, Any]]]:
         """Execute scan query with return of data and column metadata"""
         def operation(driver):
-            tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=True)
-            table_client = ydb.TableClient(driver, tc_settings)
-            scan_query = ydb.ScanQuery(query, {})
-            it = table_client.scan_query(scan_query)
-            
             results = []
             column_types = None
             scan_start = time.time()
-            
-            while True:
-                try:
-                    result = next(it)
-                    if column_types is None:
-                        column_types = [(col.name, col.type) for col in result.result_set.columns]
-                    
-                    results.extend(result.result_set.rows)
-                
-                except StopIteration:
-                    break
-            
+
+            with ydb.QuerySessionPool(driver, query_client_settings=_QUERY_CLIENT_SETTINGS) as pool:
+                with pool.checkout() as session:
+                    for result_set in session.execute(query, settings=_LONG_QUERY_SETTINGS):
+                        if column_types is None:
+                            column_types = [(col.name, col.type) for col in result_set.columns]
+                        results.extend(result_set.rows or [])
+
             self._last_scan_duration = time.time() - scan_start
-            # If no results, column_types may be None
             if column_types is None:
                 column_types = []
-            
+
             return results, column_types
-        
+
         return self._execute_with_logging("scan_query_with_metadata", operation, query, None, query_name)
     
     def create_table(self, table_path: str, create_sql: str):
@@ -795,7 +794,7 @@ class YDBWrapper:
         def operation(driver):
             # Use Query Service API because Table Service DML does not support
             # modifications for column shard tables.
-            with ydb.QuerySessionPool(driver) as pool:
+            with ydb.QuerySessionPool(driver, query_client_settings=_QUERY_CLIENT_SETTINGS) as pool:
                 pool.execute_with_retries(query=query, parameters=parameters or {})
                 return 1  # Successful execution
         

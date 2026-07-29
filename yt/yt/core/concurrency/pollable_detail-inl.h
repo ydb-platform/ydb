@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "pollable_detail.h"
 #endif
-#undef POLLABLE_DETAIL_INL_H_
 
 namespace NYT::NConcurrency {
 

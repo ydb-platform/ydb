@@ -133,6 +133,9 @@ void TConnectionConfig::Register(TRegistrar registrar)
     registrar.Parameter("do_not_drop_pure_exclusive_locks", &TThis::DoNotDropPureExclusiveLocks)
         .Default(true);
 
+    registrar.Parameter("enable_control_multiplexing_band", &TThis::EnableControlMultiplexingBand)
+        .Default(false);
+
     registrar.Postprocessor([] (TThis* config) {
         if (!config->ClusterName && config->ClusterUrl) {
             config->ClusterName = InferYTClusterFromClusterUrl(*config->ClusterUrl);

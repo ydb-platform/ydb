@@ -10,6 +10,7 @@
 #include <ydb/core/kqp/host/kqp_translate.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 
+#include <ydb/library/security/util.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -24,9 +25,19 @@
 
 #include <ydb/core/base/cputime.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPILE_ACTOR
+
 namespace NKikimr::NKqp {
 
-static const TString YqlName = "CompileActor";
+namespace {
+
+const TString YqlName = "CompileActor";
+
+inline TString GetQueryTextForLog(const TString& queryText) {
+    return EscapeC(NKikimr::ProtectQueryForLoggingIfSensitive(queryText));
+}
+
+} // namespace
 
 using namespace NKikimrConfig;
 using namespace NThreading;
@@ -104,11 +115,9 @@ public:
         if (tableServiceConfig.GetSqlVersion() != 0) {
             EnforcedSqlVersion = false;
         } else if (EnforcedSqlVersion) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_ACTOR,
-                "Enforced SQL version 1, "
-                << "current sql version: " << tableServiceConfig.GetSqlVersion()
-                << " queryText: " << EscapeC(QueryId.Text)
-            );
+            YDB_LOG_DEBUG("Enforced SQL version 1, current sql",
+                {"version", tableServiceConfig.GetSqlVersion()},
+                {"queryText", GetQueryTextForLog(QueryId.Text)});
 
             config->SetSqlVersion(1);
         } else {
@@ -125,6 +134,10 @@ public:
             } else {
                 config->_ResultRowsLimit.Clear();
             }
+        }
+
+        if (IsIn({NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY, NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY}, QueryId.Settings.QueryType)) {
+            config->_KqpYqlConstraintsTransformerEnabled = AppData()->FeatureFlags.GetEnableKqpConstraintsTransformer() && AppData()->FeatureFlags.GetEnableStreamingQueries();
         }
 
         if (UserRequestContext && UserRequestContext->IsStreamingQuery) {
@@ -196,10 +209,8 @@ private:
         TKqpTranslationSettingsBuilder settingsBuilder(ConvertType(QueryId.Settings.QueryType), cluster, QueryId.Text, Config->GetYqlBindingsMode(), GUCSettings);
         settingsBuilder.SetKqpTablePathPrefix(Config->_KqpTablePathPrefix.Get().GetRef())
             .SetIsEnableExternalDataSources(AppData(ctx)->FeatureFlags.GetEnableExternalDataSources())
-            .SetIsEnablePgConstsToParams(Config->GetEnablePgConstsToParams())
             .SetApplicationName(ApplicationName)
             .SetQueryParameters(QueryId.QueryParameterTypes)
-            .SetIsEnablePgSyntax(AppData(ctx)->FeatureFlags.GetEnablePgSyntax())
             .SetFromConfig(*Config);
 
         return ParseStatements(QueryId.Text, QueryId.Settings.Syntax, QueryId.IsSql(), settingsBuilder, PerStatementResult);
@@ -207,11 +218,11 @@ private:
 
     void ReplySplitResult(const TActorContext &ctx, IKqpHost::TSplitResult&& result) {
         Y_UNUSED(ctx);
-        ALOG_DEBUG(NKikimrServices::KQP_COMPILE_ACTOR, "Send split result"
-            << ", self: " << SelfId()
-            << ", owner: " << Owner
-            << ", success: " << GetYdbStatus(result)
-            << ", issues: " << result.Issues().ToOneLineString());
+        YDB_LOG_DEBUG("Send split result",
+            {"self", SelfId()},
+            {"owner", Owner},
+            {"success", GetYdbStatus(result)},
+            {"issues", result.Issues().ToOneLineString()});
 
         auto responseEv = MakeHolder<TEvKqp::TEvSplitResponse>(
             GetYdbStatus(result), result.Issues(),
@@ -229,6 +240,10 @@ private:
 
     void StartSplitting(const TActorContext &ctx) {
         Become(&TKqpCompileActor::SplitState);
+        if (QueryId.Settings.Syntax == Ydb::Query::Syntax::SYNTAX_PG) {
+            NYql::TIssue issue(NYql::TPosition(), "PostgreSQL syntax is not supported");
+            return ReplyError(Ydb::StatusIds::BAD_REQUEST, {issue});
+        }
         TimeoutTimerActorId = CreateLongTimer(ctx, CompilationTimeout, new IEventHandle(SelfId(), SelfId(),
             new TEvents::TEvWakeup()));
 
@@ -272,16 +287,16 @@ private:
 
         Counters->ReportCompileStart(DbCounters);
 
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "traceId: verbosity = "
-            << std::to_string(CompileActorSpan.GetTraceId().GetVerbosity()) << ", trace_id = "
-            << std::to_string(CompileActorSpan.GetTraceId().GetTraceId()));
+        YDB_LOG_DEBUG_CTX(ctx, "Starting query compilation",
+            {"traceVerbosity", std::to_string(CompileActorSpan.GetTraceId().GetVerbosity())},
+            {"traceId", std::to_string(CompileActorSpan.GetTraceId().GetTraceId())});
 
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Start compilation"
-            << ", self: " << ctx.SelfID
-            << ", cluster: " << QueryId.Cluster
-            << ", database: " << QueryId.Database
-            << ", text: \"" << EscapeC(QueryId.Text) << "\""
-            << ", startTime: " << StartTime);
+        YDB_LOG_DEBUG_CTX(ctx, "Starting query compilation",
+            {"self", ctx.SelfID},
+            {"cluster", QueryId.Cluster},
+            {"database", QueryId.Database},
+            {"queryText", GetQueryTextForLog(QueryId.Text)},
+            {"startTime", StartTime});
 
         TimeoutTimerActorId = CreateLongTimer(ctx, CompilationTimeout, new IEventHandle(SelfId(), SelfId(),
             new TEvents::TEvWakeup()));
@@ -296,6 +311,10 @@ private:
                 && QueryId.Settings.QueryType != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY
                 && QueryId.Settings.QueryType != NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY) {
             NYql::TIssue issue(NYql::TPosition(), "Read Committed isolation level is supported only for generic query.");
+            return ReplyError(Ydb::StatusIds::BAD_REQUEST, {issue});
+        }
+        if (QueryId.Settings.Syntax == Ydb::Query::Syntax::SYNTAX_PG) {
+            NYql::TIssue issue(NYql::TPosition(), "PostgreSQL syntax is not supported");
             return ReplyError(Ydb::StatusIds::BAD_REQUEST, {issue});
         }
 
@@ -390,10 +409,6 @@ private:
                 prepareSettings.SyntaxVersion = 1;
                 break;
 
-            case Ydb::Query::Syntax::SYNTAX_PG:
-                prepareSettings.UsePgParser = true;
-                break;
-
             default:
                 break;
         }
@@ -402,6 +417,11 @@ private:
     }
 
     void AddMessageToReplayLog(const TString& queryPlan) {
+        if (NKikimr::IsQueryWithSensitiveInfo(QueryId.Text)) {
+            // Skip both replay log and QueryDiagnostics replay message for sensitive queries.
+            return;
+        }
+
         NJson::TJsonValue replayMessage(NJson::JSON_MAP);
 
         NJson::TJsonValue tablesMeta(NJson::JSON_ARRAY);
@@ -445,20 +465,21 @@ private:
         GUCSettings->ExportToJson(replayMessage);
 
         TString message(NJson::WriteJson(replayMessage, /*formatOutput*/ false));
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_ACTOR, "[" << SelfId() << "]: "
-            << "Built the replay message " << message);
+        YDB_LOG_DEBUG("Built the replay message",
+            {"selfId", SelfId()},
+            {"message", message});
 
         ReplayMessage = std::move(message);
     }
 
     void Reply() {
         Y_ENSURE(KqpCompileResult);
-        ALOG_DEBUG(NKikimrServices::KQP_COMPILE_ACTOR, "Send response"
-            << ", self: " << SelfId()
-            << ", owner: " << Owner
-            << ", status: " << KqpCompileResult->Status
-            << ", issues: " << KqpCompileResult->Issues.ToString()
-            << ", uid: " << KqpCompileResult->Uid);
+        YDB_LOG_DEBUG("Send response",
+            {"self", SelfId()},
+            {"owner", Owner},
+            {"status", KqpCompileResult->Status},
+            {"issues", KqpCompileResult->Issues},
+            {"uid", KqpCompileResult->Uid});
 
         if (ReplayMessageUserView) {
             KqpCompileResult->ReplayMessageUserView = std::move(*ReplayMessageUserView);
@@ -495,9 +516,9 @@ private:
     }
 
     void InternalError(const TString message) {
-        ALOG_ERROR(NKikimrServices::KQP_COMPILE_ACTOR, "Internal error"
-            << ", self: " << SelfId()
-            << ", message: " << message);
+        YDB_LOG_ERROR("Internal error",
+            {"self", SelfId()},
+            {"message", message});
 
 
         NYql::TIssue issue(NYql::TPosition(), "Internal error while compiling query.");
@@ -522,10 +543,10 @@ private:
 
         for (size_t statementId = 0; statementId < astStatements.size(); ++statementId) {
             if (!astStatements[statementId].Ast || !astStatements[statementId].Ast->IsOk() || !astStatements[statementId].Ast->Root) {
-                ALOG_ERROR(NKikimrServices::KQP_COMPILE_ACTOR, "Get parsing result with error"
-                    << ", self: " << SelfId()
-                    << ", owner: " << Owner
-                    << ", statement id: " << statementId);
+                YDB_LOG_ERROR("Get parsing result with error statement",
+                    {"self", SelfId()},
+                    {"owner", Owner},
+                    {"id", statementId});
 
                 auto status = GetYdbStatus(astStatements[statementId].Ast->Issues);
 
@@ -539,10 +560,10 @@ private:
             }
         }
 
-        ALOG_DEBUG(NKikimrServices::KQP_COMPILE_ACTOR, "Send parsing result"
-            << ", self: " << SelfId()
-            << ", owner: " << Owner
-            << ", statements size: " << astStatements.size());
+        YDB_LOG_DEBUG("Send parsing result statements",
+            {"self", SelfId()},
+            {"owner", Owner},
+            {"size", astStatements.size()});
 
         auto responseEv = MakeHolder<TEvKqp::TEvParseResponse>(QueryId, std::move(astStatements));
         Send(Owner, responseEv.Release());
@@ -560,6 +581,7 @@ private:
             bool allowCache, bool success) {
         auto preparedQueryHolder = std::make_shared<TPreparedQueryHolder>(
             preparingQuery.release(), AppData()->FunctionRegistry, !success);
+        preparedQueryHolder->SetUseKqpTasksGraphV2(Config->GetUseKqpTasksGraphV2());
         preparedQueryHolder->MutableLlvmSettings().Fill(Config, queryType);
         KqpCompileResult->PreparedQuery = preparedQueryHolder;
         KqpCompileResult->AllowCache = CanCacheQuery(KqpCompileResult->PreparedQuery->GetPhysicalQuery()) && allowCache;
@@ -635,18 +657,18 @@ private:
             auto duration = now - StartTime;
             Counters->ReportCompileDurations(DbCounters, duration, CompileCpuTime);
 
-            LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Compilation successful"
-                << ", self: " << ctx.SelfID
-                << ", duration: " << duration);
+            YDB_LOG_DEBUG_CTX(ctx, "Compilation successful",
+                {"self", ctx.SelfID},
+                {"duration", duration});
         } else {
             if (kqpResult.PreparingQuery) {
                 FillCompileResult(std::move(kqpResult.PreparingQuery), queryType, kqpResult.AllowCache, false);
             }
 
-            LOG_ERROR_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Compilation failed"
-                << ", self: " << ctx.SelfID
-                << ", status: " << Ydb::StatusIds_StatusCode_Name(status)
-                << ", issues: " << kqpResult.Issues().ToString());
+            YDB_LOG_ERROR_CTX(ctx, "Compilation failed",
+                {"self", ctx.SelfID},
+                {"status", Ydb::StatusIds_StatusCode_Name(status)},
+                {"issues", kqpResult.Issues()});
             Counters->ReportCompileError(DbCounters);
         }
 
@@ -654,12 +676,12 @@ private:
     }
 
     void HandleTimeout() {
-        ALOG_NOTICE(NKikimrServices::KQP_COMPILE_ACTOR, "Compilation timeout"
-            << ", self: " << SelfId()
-            << ", cluster: " << QueryId.Cluster
-            << ", database: " << QueryId.Database
-            << ", text: \"" << EscapeC(QueryId.Text) << "\""
-            << ", startTime: " << StartTime);
+        YDB_LOG_NOTICE("Query compilation timed out",
+            {"self", SelfId()},
+            {"cluster", QueryId.Cluster},
+            {"database", QueryId.Database},
+            {"queryText", GetQueryTextForLog(QueryId.Text)},
+            {"startTime", StartTime});
 
         NYql::TIssue issue(NYql::TPosition(), "Query compilation timed out.");
         return ReplyError(Ydb::StatusIds::TIMEOUT, {issue});
@@ -681,10 +703,11 @@ private:
 
 private:
     void RebuildConfigAndStartCompilation(const TActorContext &ctx, TString&& logMessage) {
-        LOG_ERROR_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, logMessage
-                << ", self: " << ctx.SelfID
-                << ", database: " << QueryId.Database
-                << ", text: \"" << EscapeC(QueryId.Text) << "\"");
+        YDB_LOG_ERROR_CTX(ctx, "Rebuilding compile configuration and restarting compilation",
+            {"logMessage", logMessage},
+            {"self", ctx.SelfID},
+            {"database", QueryId.Database},
+            {"queryText", GetQueryTextForLog(QueryId.Text)});
 
         // Explicitly drop a pointer to result, it holds pointer `TExprNode` allocated from `TExprContext` in KqpHost
         // and we want rebuild a KqpHost.

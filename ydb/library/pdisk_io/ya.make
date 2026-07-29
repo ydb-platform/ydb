@@ -6,7 +6,7 @@ GENERATE_ENUM_SERIALIZATION(uring_router.h)
 IF (OS_LINUX)
     PEERDIR(
         contrib/libs/libaio
-        contrib/libs/liburing
+        ydb/library/uring
     )
     SRCS(
         aio_linux.cpp
@@ -34,6 +34,7 @@ ENDIF(OS_WINDOWS)
 PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/wilson
+    library/cpp/containers/stack_vector
     library/cpp/monlib/dynamic_counters
     ydb/core/debug
     ydb/library/pdisk_io/protos

@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "scheduler_api.h"
 #endif
-#undef SCHEDULER_API_INL_H_
 
 namespace NYT::NConcurrency {
 
@@ -39,9 +38,9 @@ template <CFuture TFuture>
 TErrorOr<typename TFuture::TValueType> WaitForWithStrategy(TFuture future, EWaitForStrategy strategy)
 {
     switch (strategy) {
-        case EWaitForStrategy::WaitFor:
+        case EWaitForStrategy::SuspendFiber:
             return WaitFor(future);
-        case EWaitForStrategy::Get:
+        case EWaitForStrategy::BlockThread:
             return future.BlockingGet();
         default:
             YT_ABORT();
@@ -60,4 +59,4 @@ inline void SwitchTo(IInvokerPtr invoker)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} //namespace NYT::NConcurrency
+} // namespace NYT::NConcurrency

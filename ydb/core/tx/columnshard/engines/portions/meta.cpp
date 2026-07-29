@@ -1,7 +1,7 @@
 #include "meta.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/blobs_action/common/const.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
@@ -77,6 +77,9 @@ NKikimrTxColumnShard::TIndexPortionMeta TPortionMeta::SerializeToProto(
     portionMeta.SetColumnBlobBytes(ColumnBlobBytes);
     portionMeta.SetIndexRawBytes(IndexRawBytes);
     portionMeta.SetIndexBlobBytes(IndexBlobBytes);
+    if (BsIndexBlobBytes.has_value()) {
+        portionMeta.SetBsIndexBlobBytes(BsIndexBlobBytes.value());
+    }
     portionMeta.SetNumSlices(NumSlices);
     switch (produced) {
         case NPortion::EProduced::UNSPECIFIED:

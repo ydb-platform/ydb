@@ -23,6 +23,19 @@ AWS_PUSH_SANE_WARNING_LEVEL
  * Note that this structure allocates memory at the buffer pointer only. The
  * struct itself does not get dynamically allocated and must be either
  * maintained or copied to avoid losing access to the memory.
+ *
+ * GROWABILITY CONTRACT:
+ * - When `allocator != NULL`: the buffer owns its memory and can be grown
+ *   via aws_byte_buf_reserve / aws_byte_buf_append_dynamic / etc.
+ * - When `allocator == NULL`: the buffer's memory is externally owned
+ *   (e.g. by a buffer pool, by static storage, or by a stack frame) and
+ *   MUST NOT be reallocated. Functions that would grow the buffer
+ *   (aws_byte_buf_reserve, aws_byte_buf_append_dynamic, etc.) fail with
+ *   AWS_ERROR_INVALID_ARGUMENT when called on such a buffer.
+ *
+ * Callers that may receive a buffer of either kind (e.g. from a buffer
+ * pool ticket) should use aws_byte_buf_append_auto, which selects
+ * the right append path automatically.
  */
 struct aws_byte_buf {
     /* do not reorder this, this struct lines up nicely with windows buffer structures--saving us allocations.*/
@@ -274,6 +287,17 @@ bool aws_byte_cursor_next_split(
     struct aws_byte_cursor *AWS_RESTRICT substr);
 
 /**
+ * same as aws_byte_cursor_next_split, but splits on a cursor instead of a single char.
+ * ex. can split on delims like "--" or "<<".
+ * Note: splits on the whole split_on cursor, it does not treat split_on as array of different chars to split on
+ */
+AWS_COMMON_API
+bool aws_byte_cursor_next_split_on_cursor(
+    const struct aws_byte_cursor *AWS_RESTRICT input_str,
+    struct aws_byte_cursor split_on,
+    struct aws_byte_cursor *AWS_RESTRICT substr);
+
+/**
  * No copies, no buffer allocations. Fills in output with a list of
  * aws_byte_cursor instances where buffer is an offset into the input_str and
  * len is the length of that string in the original buffer.
@@ -402,6 +426,28 @@ int aws_byte_buf_append_with_lookup(
  */
 AWS_COMMON_API
 int aws_byte_buf_append_dynamic(struct aws_byte_buf *to, const struct aws_byte_cursor *from);
+
+/**
+ * Copies `from` to `to`, selecting between static and dynamic append based
+ * on whether `to` has an allocator.
+ *
+ * - If `to->allocator != NULL`: uses aws_byte_buf_append_dynamic (grows
+ *   the buffer as needed; same behavior as calling that function directly).
+ * - If `to->allocator == NULL`: uses aws_byte_buf_append (no grow; returns
+ *   AWS_ERROR_DEST_COPY_TOO_SMALL if `from` does not fit in remaining
+ *   capacity).
+ *
+ * This is intended for callers that receive a buffer from a source whose
+ * growability is not known at the call site — most commonly a buffer
+ * obtained from an aws_s3_buffer_pool ticket, where pool-backed tickets
+ * return a fixed-size buffer (allocator == NULL) and the default pool may
+ * return a growable one.
+ *
+ * `from` and `to` may be the same buffer, permitting copying a buffer
+ * into itself.
+ */
+AWS_COMMON_API
+int aws_byte_buf_append_auto(struct aws_byte_buf *to, const struct aws_byte_cursor *from);
 
 /**
  * Copies `from` to `to`. If `to` is too small, the buffer will be grown appropriately and
@@ -677,6 +723,16 @@ AWS_COMMON_API bool aws_byte_cursor_read_u8(struct aws_byte_cursor *AWS_RESTRICT
 AWS_COMMON_API bool aws_byte_cursor_read_be16(struct aws_byte_cursor *cur, uint16_t *var);
 
 /**
+ * Reads a 16-bit value in little-endian byte order from cur, and places it in host
+ * byte order into var.
+ *
+ * On success, returns true and updates the cursor pointer/length accordingly.
+ * If there is insufficient space in the cursor, returns false, leaving the
+ * cursor unchanged.
+ */
+AWS_COMMON_API bool aws_byte_cursor_read_le16(struct aws_byte_cursor *cur, uint16_t *var);
+
+/**
  * Reads an unsigned 24-bit value (3 bytes) in network byte order from cur,
  * and places it in host byte order into 32-bit var.
  * Ex: if cur's next 3 bytes are {0xAA, 0xBB, 0xCC}, then var becomes 0x00AABBCC.
@@ -696,6 +752,36 @@ AWS_COMMON_API bool aws_byte_cursor_read_be24(struct aws_byte_cursor *cur, uint3
  * cursor unchanged.
  */
 AWS_COMMON_API bool aws_byte_cursor_read_be32(struct aws_byte_cursor *cur, uint32_t *var);
+
+/**
+ * Reads a 32-bit value in little endian byte order from cur, and places it in host
+ * byte order into var.
+ *
+ * On success, returns true and updates the cursor pointer/length accordingly.
+ * If there is insufficient space in the cursor, returns false, leaving the
+ * cursor unchanged.
+ */
+AWS_COMMON_API bool aws_byte_cursor_read_le32(struct aws_byte_cursor *cur, uint32_t *var);
+
+/**
+ * Reads a signed 32-bit value in network byte order from cur, and places it in host
+ * byte order into var.
+ *
+ * On success, returns true and updates the cursor pointer/length accordingly.
+ * If there is insufficient space in the cursor, returns false, leaving the
+ * cursor unchanged.
+ */
+AWS_COMMON_API bool aws_byte_cursor_read_be_i32(struct aws_byte_cursor *cur, int32_t *var);
+
+/**
+ * Reads a signed 32-bit value in little-endian order from cur, and places it in host
+ * byte order into var.
+ *
+ * On success, returns true and updates the cursor pointer/length accordingly.
+ * If there is insufficient space in the cursor, returns false, leaving the
+ * cursor unchanged.
+ */
+AWS_COMMON_API bool aws_byte_cursor_read_le_i32(struct aws_byte_cursor *cur, int32_t *var);
 
 /**
  * Reads a 64-bit value in network byte order from cur, and places it in host
@@ -941,6 +1027,27 @@ AWS_COMMON_API bool aws_isspace(uint8_t ch);
  */
 AWS_COMMON_API
 int aws_byte_cursor_utf8_parse_u64(struct aws_byte_cursor cursor, uint64_t *dst);
+
+/**
+ * Read entire cursor as ASCII/UTF-8 signed base-10 number.
+ * Stricter than strtoll(), which allows whitespace and inputs that start with "0x"
+ *
+ * Examples:
+ * "0" -> 0
+ * "123" -> 123
+ * "00004" -> 4 // leading zeros ok
+ * "-1" -> -1
+ *
+ * Rejects things like:
+ * "1,000" // only characters 0-9 allowed
+ * "" // blank string not allowed
+ * " 0 " // whitespace not allowed
+ * "0x0" // hex not allowed
+ * "FF" // hex not allowed
+ * "999999999999999999999999999999999999999999" // larger than max i64
+ */
+AWS_COMMON_API
+int aws_byte_cursor_utf8_parse_i64(struct aws_byte_cursor cursor, int64_t *dst);
 
 /**
  * Read entire cursor as ASCII/UTF-8 unsigned base-16 number with NO "0x" prefix.

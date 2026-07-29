@@ -44,8 +44,8 @@ void TFileSparseCoreDumpWriter::OnZeroBlock(i64 length)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TSharedRef TStreamSparseCoreDumpWriter::ZeroBlockHeader = TSharedRef::FromString("0");
-const TSharedRef TStreamSparseCoreDumpWriter::RegularBlockHeader = TSharedRef::FromString("1");
+const TSharedRef TStreamSparseCoreDumpWriter::ZeroBlockHeader = TSharedRef::FromString(std::string("0"));
+const TSharedRef TStreamSparseCoreDumpWriter::RegularBlockHeader = TSharedRef::FromString(std::string("1"));
 
 TStreamSparseCoreDumpWriter::TStreamSparseCoreDumpWriter(
     NYT::NConcurrency::IAsyncOutputStreamPtr outputStream,

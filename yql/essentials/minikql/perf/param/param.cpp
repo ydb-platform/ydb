@@ -31,7 +31,7 @@ int main(int, char**) {
         auto graph = pattern->Clone(opts.ToComputationOptions(*randomProvider, *timeProvider));
         TBindTerminator terminator(graph->GetTerminator());
 
-        auto param = graph->GetEntryPoint(0, false);
+        auto param = graph->GetEntryPoint(0, /*require=*/false);
         auto& ctx = graph->GetContext();
 
         TSimpleTimer timer;

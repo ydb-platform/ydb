@@ -2047,6 +2047,35 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         CheckEvCheckSpace(testCtx, vdisk2, sharedFree, fairQuota, 0, 0.99, 0.0, 99.6, 3, 4, TColor::RED);
     }
 
+    Y_UNIT_TEST(ExpectedSlotSizeHardLimitRoundsDownToChunkSize) {
+        TActorTestContext testCtx({
+            .DiskSize = 1_GB,
+            .ChunkSize = 1_MB,
+        });
+
+        const ui32 formatChunkSize = testCtx.SafeRunOnPDisk([](const NPDisk::TPDisk* pdisk) {
+            return pdisk->Format.ChunkSize;
+        });
+        const ui64 expectedSlotSize = 3ull * formatChunkSize + 1;
+
+        auto pdiskConfig = testCtx.GetPDiskConfig();
+        pdiskConfig->ExpectedSlotSize = expectedSlotSize;
+        testCtx.UpdateConfigRecreatePDisk(pdiskConfig);
+
+        TVDiskMock vdisk(&testCtx);
+        vdisk.InitFull();
+        vdisk.SendEvLogSync();
+
+        const auto evCheckSpaceResult = testCtx.TestResponse<NPDisk::TEvCheckSpaceResult>(
+            new NPDisk::TEvCheckSpace(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound),
+            NKikimrProto::OK);
+
+        const ui32 expectedHardLimitChunks = expectedSlotSize / formatChunkSize;
+        UNIT_ASSERT_VALUES_EQUAL(expectedHardLimitChunks, 3u);
+        UNIT_ASSERT_VALUES_EQUAL(evCheckSpaceResult->TotalChunks, expectedHardLimitChunks);
+        UNIT_ASSERT_LE(ui64(evCheckSpaceResult->TotalChunks) * formatChunkSize, expectedSlotSize);
+    }
+
     Y_UNIT_TEST(PDiskCapacityAlertWithFullCommonLog) {
         using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
 
@@ -2731,6 +2760,85 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         // For comparison, the noop scheduler produces ~×60 latency in the same test.
         UNIT_ASSERT_LE(avgLatencyMs, ioDuration.MillisecondsFloat() * 10);
     }
+
+    Y_UNIT_TEST(TestPDiskFormattingCases) {
+        TActorTestContext testCtx{{}};
+        auto cfg = testCtx.GetPDiskConfig();
+
+        TVDiskMock vdisk(&testCtx);
+
+        auto writeFormatArea = [&](bool fillWithGarbage, bool addIncompleteMagic) {
+            constexpr ui32 formatAreaSize = NPDisk::FormatSectorSize * NPDisk::ReplicationFactor;
+            NPDisk::TAlignedData data(formatAreaSize);
+            ui8 fillByte = 0xab;
+            memset(data.Get(), fillByte, data.Size());
+
+            if (fillWithGarbage) {
+                UNIT_ASSERT(testCtx.TestCtx.SectorMap->Write(data.Get(), data.Size(), 0));
+            }
+
+            if (addIncompleteMagic) {
+                auto* magicBegin = reinterpret_cast<ui64*>(data.Get());
+                auto* magicEnd = reinterpret_cast<ui64*>(data.Get() + NPDisk::MagicIncompleteFormatSize);
+                for (auto* p = magicBegin; p != magicEnd; ++p) {
+                    *p = NPDisk::MagicIncompleteFormat;
+                }
+                // write only one Format record
+                UNIT_ASSERT(testCtx.TestCtx.SectorMap->Write(data.Get(), NPDisk::FormatSectorSize, 0));
+            }
+        };
+
+        auto restartPDiskFromErrorState = [&] {
+            testCtx.TestResponse<NPDisk::TEvYardControlResult>(
+                new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStart, reinterpret_cast<void*>(&testCtx.MainKey)),
+                NKikimrProto::OK);
+        };
+
+        auto assertVDiskIsKnown = [&] {
+            const ui64 expectedLogRecords = vdisk.OwnedLogRecords();
+            vdisk.Init();
+            UNIT_ASSERT_VALUES_EQUAL(vdisk.ReadLog(), expectedLogRecords);
+            vdisk.CutLogAllButOne();
+        };
+
+        auto assertVDiskIsNew = [&] {
+            vdisk.Init();
+            UNIT_ASSERT_VALUES_EQUAL(vdisk.ReadLog(), 0);
+
+            vdisk.Chunks.clear();
+            vdisk.LastUsedLsn = 0;
+            vdisk.FirstLsnToKeep = 1;
+            vdisk.CutLogAllButOne();
+        };
+
+        auto assertVDiskInitFails = [&] {
+            testCtx.Send(new NPDisk::TEvYardInit(TVDiskMock::OwnerRound.fetch_add(1), vdisk.VDiskID,
+                testCtx.TestCtx.PDiskGuid, testCtx.Sender));
+            const auto evInitRes = testCtx.Recv<NPDisk::TEvYardInitResult>();
+            UNIT_ASSERT_C(evInitRes->Status != NKikimrProto::OK, evInitRes->ToString());
+            UNIT_ASSERT_C(!evInitRes->ErrorReason.empty(), evInitRes->ToString());
+        };
+
+        // Test start
+
+        assertVDiskIsNew();
+
+        testCtx.UpdateConfigRecreatePDisk(cfg);
+        assertVDiskIsKnown();
+
+        writeFormatArea(false, true);
+        testCtx.UpdateConfigRecreatePDisk(cfg);
+        assertVDiskIsKnown();
+
+        writeFormatArea(true, false);
+        testCtx.UpdateConfigRecreatePDisk(cfg);
+        assertVDiskInitFails();
+
+        writeFormatArea(true, true);
+        restartPDiskFromErrorState();
+        assertVDiskIsNew();
+    }
+
 }
 
 Y_UNIT_TEST_SUITE(PDiskCompatibilityInfo) {

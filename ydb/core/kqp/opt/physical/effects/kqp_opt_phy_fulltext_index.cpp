@@ -10,6 +10,47 @@ using namespace NYql;
 using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
+bool FulltextUsesRowIdAsDocId(const TIndexDescription* indexDesc) {
+    auto* ft = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexDesc->SpecializedIndexDescription);
+    return ft && ft->GetUseRowIdAsDocId();
+}
+
+void AddFulltextDocIdColumns(const TIndexDescription* indexDesc,
+    TVector<TStringBuf>& indexTableColumns, THashSet<TStringBuf>& indexTableColumnsSet)
+{
+    // The synthetic doc-id column (__ydb_row_id) is not part of the index KeyColumns, the
+    // base-table PK, or DataColumns, so DML maintenance must thread it through explicitly.
+    if (FulltextUsesRowIdAsDocId(indexDesc)) {
+        if (indexTableColumnsSet.emplace(NTableIndex::NFulltext::RowIdColumn).second) {
+            indexTableColumns.emplace_back(NTableIndex::NFulltext::RowIdColumn);
+        }
+    }
+}
+
+namespace {
+
+template <class F>
+void ForEachFulltextDocIdColumn(const NYql::TKikimrTableMetadata& table, const TIndexDescription* indexDesc, F&& f) {
+    if (FulltextUsesRowIdAsDocId(indexDesc)) {
+        f(TStringBuf(NTableIndex::NFulltext::RowIdColumn));
+    } else {
+        for (const auto& column : table.KeyColumnNames) {
+            f(TStringBuf(column));
+        }
+    }
+}
+
+// Fulltext index key columns are [prefix..., text]; the text column is the last one.
+// Invokes f for each leading prefix column (none for a non-prefixed index).
+template <class F>
+void ForEachFulltextPrefixColumn(const TIndexDescription* indexDesc, F&& f) {
+    for (size_t i = 0; i + 1 < indexDesc->KeyColumns.size(); ++i) {
+        f(TStringBuf(indexDesc->KeyColumns[i]));
+    }
+}
+
+}
+
 TExprBase BuildFulltextAnalyze(const TKikimrTableDescription& table, const TExprBase& inputRow,
     const TIndexDescription* indexDesc, TPositionHandle pos, NYql::TExprContext& ctx)
 {
@@ -142,10 +183,15 @@ TExprBase BuildFulltextIndexRows(const TKikimrTableDescription& table, const TIn
         .Done();
     tokenRowTuples.emplace_back(tokenTuple);
 
-    // Add primary key columns
-    for (const auto& column : table.Metadata->KeyColumnNames) {
+    // Add leading prefix key columns (read from the input row).
+    ForEachFulltextPrefixColumn(indexDesc, [&](TStringBuf column) {
         addIndexColumn(column);
-    }
+    });
+
+    // Add document-id columns (main-table PK, or __ydb_row_id when UseRowIdAsDocId is set)
+    ForEachFulltextDocIdColumn(*table.Metadata, indexDesc, [&](TStringBuf column) {
+        addIndexColumn(column);
+    });
 
     // Add data columns (covered columns)
     if (!forDelete && !withRelevance) {
@@ -226,10 +272,10 @@ TExprBase BuildFulltextDocsRows(const TKikimrTableDescription& table, const TInd
 
     // During delete, we only care about total document length and that's all
     if (!forDelete) {
-        // Add primary key columns
-        for (const auto& column : table.Metadata->KeyColumnNames) {
+        // Add document-id columns (main-table PK, or __ydb_row_id when UseRowIdAsDocId is set)
+        ForEachFulltextDocIdColumn(*table.Metadata, indexDesc, [&](TStringBuf column) {
             addIndexColumn(column);
-        }
+        });
         // Add data columns (covered columns)
         for (const auto& column : indexDesc->DataColumns) {
             addIndexColumn(column);
@@ -448,14 +494,20 @@ TExprBase CombineFulltextDictRows(const TVector<TExprBase>& deltas, TPositionHan
 
 // This is...
 // SELECT <pk columns>, token FROM <tokenRows> - to delete this set of keys during deletion
-TExprBase BuildFulltextPostingKeys(const TKikimrTableDescription& table, const NNodes::TExprBase& tokenRows,
-    TPositionHandle pos, NYql::TExprContext& ctx)
+TExprBase BuildFulltextPostingKeys(const TKikimrTableDescription& table, const TIndexDescription* indexDesc,
+    const NNodes::TExprBase& tokenRows, TPositionHandle pos, NYql::TExprContext& ctx)
 {
+    // Posting-table key is [__ydb_token, doc-id...]. The doc-id is __ydb_row_id when the index uses
+    // UseRowIdAsDocId, otherwise the main-table PK.
     TVector<TExprBase> keyColumns;
-    keyColumns.push_back(Build<TCoAtom>(ctx, pos).Value(NTableIndex::NFulltext::TokenColumn).Done());
-    for (const auto& column : table.Metadata->KeyColumnNames) {
+    // Posting key is [prefix..., __ydb_token, doc_id...].
+    ForEachFulltextPrefixColumn(indexDesc, [&](TStringBuf column) {
         keyColumns.push_back(Build<TCoAtom>(ctx, pos).Value(column).Done());
-    }
+    });
+    keyColumns.push_back(Build<TCoAtom>(ctx, pos).Value(NTableIndex::NFulltext::TokenColumn).Done());
+    ForEachFulltextDocIdColumn(*table.Metadata, indexDesc, [&](TStringBuf column) {
+        keyColumns.push_back(Build<TCoAtom>(ctx, pos).Value(column).Done());
+    });
 
     auto rowsArg = TCoArgument(ctx.NewArgument(pos, "rows"));
     auto keyStage = Build<TDqStage>(ctx, pos)

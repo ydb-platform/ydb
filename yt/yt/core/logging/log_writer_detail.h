@@ -57,7 +57,7 @@ public:
     //! The return value of the callback corresponds to the number of bytes logged by writing this event.
     TRateLimitingLogWriterBase(
         std::unique_ptr<ISystemLogEventProvider> systemgEventProvider,
-        TString name,
+        std::string name,
         TLogWriterConfigPtr config);
 
     //! Can produce zero or multiple synchronous calls to the underlying write implementation.
@@ -68,7 +68,7 @@ public:
 
     void SetRateLimit(std::optional<i64> limit) override;
 
-    void SetCategoryRateLimits(const THashMap<TString, i64>& categoryRateLimits) override;
+    void SetCategoryRateLimits(const THashMap<std::string, i64>& categoryRateLimits) override;
 
 protected:
     const std::unique_ptr<ISystemLogEventProvider> SystemEventProvider_;
@@ -78,7 +78,7 @@ protected:
     void ResetSegmentSize(i64 size);
 
 private:
-    const TString Name_;
+    const std::string Name_;
     const TLogWriterConfigPtr Config_;
     const NProfiling::TProfiler Profiler_;
 
@@ -105,7 +105,7 @@ public:
     TStreamLogWriterBase(
         std::unique_ptr<ILogFormatter> formatter,
         std::unique_ptr<ISystemLogEventProvider> systemEventProvider,
-        TString name,
+        std::string name,
         TLogWriterConfigPtr config);
 
     void Flush() override;

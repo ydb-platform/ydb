@@ -138,12 +138,20 @@ namespace NKikimr::NDDisk {
 
         TRope payload = ev->Get()->GetPayload(payloadId);
 
-        NDDisk::TQueryCredentials creds{inflight.TabletId, inflight.TabletGeneration, true};
+        NDDisk::TQueryCredentials creds = NDDisk::TQueryCredentials::ForInternal(
+            inflight.TabletId,
+            inflight.TabletGeneration,
+            std::nullopt);
         const NDDisk::TBlockSelector selector{record.GetVChunkIndex(), record.GetOffsetInBytes(), record.GetSizeInBytes()};
 
         auto msg = std::make_unique<TEvWritePersistentBuffers>(creds, selector, inflight.Lsn, NDDisk::TWriteInstruction(0),
             inflight.PersistentBufferIds, inflight.Timeout);
         msg->AddPayload(TRope(payload));
+        // Forward the checksums persisted on the source record, if any (TEvReadPersistentBufferResult
+        // carries them opt-in, see TPersistentBuffer::TRecord::PayloadChecksums). Without this, records
+        // re-replicated via TEvReadThenWritePersistentBuffers would silently lose their checksums on
+        // every target PB, exactly the recovery scenario where corruption detection matters most.
+        msg->Record.MutableChecksums()->CopyFrom(record.GetChecksums());
         auto h = std::make_unique<IEventHandle>(SelfId(), inflight.Sender, msg.release(), 0, inflight.Cookie);
         TActivationContext::Send(h.release());
 
@@ -153,11 +161,11 @@ namespace NKikimr::NDDisk {
     void TWritePersistentBuffersRequestActor::Handle(TEvReadThenWritePersistentBuffers::TPtr ev) {
         auto cookie = NextCookie++;
         const auto& record = ev->Get()->Record;
-        TQueryCredentials creds;
         auto recordCreds = record.GetCredentials();
-        creds.TabletId = recordCreds.GetTabletId();
-        creds.Generation = recordCreds.GetGeneration();
-        creds.FromPersistentBuffer = true;
+        TQueryCredentials creds = TQueryCredentials::ForInternal(
+            recordCreds.GetTabletId(),
+            recordCreds.GetGeneration(),
+            std::nullopt);
         auto requestGeneration = record.GetGeneration();
         auto lsn = record.GetLsn();
         auto timeout = record.GetReplyTimeoutMicroseconds();
@@ -199,11 +207,11 @@ namespace NKikimr::NDDisk {
 
         Y_ABORT_UNLESS(inserted);
         const auto& record = ev->Get()->Record;
-        TQueryCredentials creds;
         auto recordCreds = record.GetCredentials();
-        creds.TabletId = recordCreds.GetTabletId();
-        creds.Generation = recordCreds.GetGeneration();
-        creds.FromPersistentBuffer = true;
+        TQueryCredentials creds = TQueryCredentials::ForInternal(
+            recordCreds.GetTabletId(),
+            recordCreds.GetGeneration(),
+            std::nullopt);
         const TBlockSelector selector(record.GetSelector());
         const ui64 lsn = record.GetLsn();
         const TWriteInstruction instr(record.GetInstruction());
@@ -216,6 +224,7 @@ namespace NKikimr::NDDisk {
             auto partCookie = NextCookie++;
             auto msg = std::make_unique<TEvWritePersistentBuffer>(creds, selector, lsn, NDDisk::TWriteInstruction(0));
             msg->AddPayload(TRope(payload));
+            msg->Record.MutableChecksums()->CopyFrom(record.GetChecksums());
             auto pbServiceId = MakeBlobStoragePersistentBufferId(pbId.GetNodeId(), pbId.GetPDiskId(), pbId.GetDDiskSlotId());
             auto h = std::make_unique<IEventHandle>(pbServiceId, SelfId(), msg.release(), IEventHandle::FlagSubscribeOnSession, partCookie);
             TActivationContext::Send(h.release());

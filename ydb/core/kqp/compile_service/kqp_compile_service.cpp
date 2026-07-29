@@ -21,6 +21,8 @@
 
 #include <util/string/escape.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPILE_SERVICE
+
 LWTRACE_USING(KQP_PROVIDER);
 
 namespace NKikimr {
@@ -150,8 +152,7 @@ public:
 
             if (!request.IsIntrestedInResult()) {
                 auto result = std::move(request);
-                LOG_DEBUG(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,
-                    "Drop compilation request because session is not longer wait for response");
+                YDB_LOG_DEBUG_CTX(*TlsActivationContext, "Drop compilation request because session is not longer wait for response");
                 if (auto qIt = QueryIndex.find(result.Query); qIt != QueryIndex.end()) {
                     qIt->second.erase(curIt);
                     if (qIt->second.empty()) {
@@ -298,13 +299,13 @@ private:
 
 private:
     void HandleConfig(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr&) {
-        LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Subscribed for config changes");
+        YDB_LOG_INFO_CTX(*TlsActivationContext, "Subscribed for config changes");
     }
 
     void Handle(TEvKqp::TEvListQueryCacheQueriesRequest::TPtr& ev) {
         auto snapshot = QueryCache->GetSnapshot();
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,
-            "Got query compile cache request, snapshot has " << snapshot.size() << " entries");
+        YDB_LOG_DEBUG("Got query compile cache request",
+            {"snapshotSize", snapshot.size()});
         const auto& tenant = ev->Get()->Record.GetTenantName();
         auto response = std::make_unique<TEvKqp::TEvListQueryCacheQueriesResponse>();
 
@@ -386,15 +387,14 @@ private:
 
         auto diff = ShouldInvalidateCompileCache(TableServiceConfig, event.GetConfig().GetTableServiceConfig());
         if (diff.has_value()) {
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,
-                "Query cache was invalidated due to config change, config change differencer output: "
-                << diff.value());
+            YDB_LOG_NOTICE("Query cache was invalidated due to config change, config change differencer",
+                {"output", diff.value()});
 
             QueryCache->Clear();
         }
 
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
-        LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
+        YDB_LOG_INFO_CTX(*TlsActivationContext, "Updated config");
 
         auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
@@ -403,16 +403,14 @@ private:
     void HandleUndelivery(TEvents::TEvUndelivered::TPtr& ev) {
         switch (ev->Get()->SourceType) {
             case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
-                LOG_CRIT(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,
-                    "Failed to deliver subscription request to config dispatcher");
+                YDB_LOG_CRIT_CTX(*TlsActivationContext, "Failed to deliver subscription request to config dispatcher");
                 break;
             case NConsole::TEvConsole::EvConfigNotificationResponse:
-                LOG_ERROR(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,
-                    "Failed to deliver config notification response");
+                YDB_LOG_ERROR_CTX(*TlsActivationContext, "Failed to deliver config notification response");
                 break;
             default:
-                LOG_ERROR(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,
-                    "Undelivered event with unexpected source type: %d", ev->Get()->SourceType);
+                YDB_LOG_ERROR_CTX(*TlsActivationContext, "Undelivered event with unexpected source",
+                    {"type", ev->Get()->SourceType});
                 break;
         }
     }
@@ -435,17 +433,18 @@ private:
     void PerformRequest(TEvKqp::TEvCompileRequest::TPtr& ev, const TActorContext& ctx) {
         auto& request = *ev->Get();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Perform request, TraceId.SpanIdPtr: " << ev->TraceId.GetSpanIdPtr());
+        YDB_LOG_DEBUG_CTX(ctx, "Performing compile request",
+            {"spanIdPtr", ev->TraceId.GetSpanIdPtr()});
 
         NWilson::TSpan compileServiceSpan(TWilsonKqp::CompileService, std::move(ev->TraceId), "CompileService");
 
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Received compile request"
-            << ", sender: " << ev->Sender
-            << ", queryUid: " << (request.Uid ? *request.Uid : "<empty>")
-            << ", queryText: \"" << (request.Query ? EscapeC(request.Query->Text) : "<empty>") << "\""
-            << ", keepInCache: " << request.KeepInCache
-            << ", split: " << request.Split
-            << *request.UserRequestContext);
+        YDB_LOG_DEBUG_CTX(ctx, "Received compile request",
+            {"sender", ev->Sender},
+            {"queryUid", (request.Uid ? *request.Uid : "<empty>")},
+            {"queryText", (request.Query ? EscapeC(request.Query->Text) : "<empty>")},
+            {"keepInCache", request.KeepInCache},
+            {"split", request.Split},
+            {"userRequestContext", *request.UserRequestContext});
 
         auto userSid = request.UserToken->GetUserSID();
         auto dbCounters = request.DbCounters;
@@ -459,30 +458,31 @@ private:
             Counters,
             dbCounters,
             ev->Sender,
-            ctx);
+            ctx,
+            request.IsWarmupCompilation ? EWarmupAttributionMode::Warmup : EWarmupAttributionMode::Client);
 
         if (request.Uid) {
             if (compileResult) {
                 Y_ENSURE(compileResult->Query);
                 if (compileResult->Query->UserSid == userSid) {
-                    LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Served query from cache by uid"
-                        << ", sender: " << ev->Sender
-                        << ", queryUid: " << *request.Uid);
+                    YDB_LOG_DEBUG_CTX(ctx, "Served query from cache by uid",
+                        {"sender", ev->Sender},
+                        {"queryUid", *request.Uid});
 
                     ReplyFromCache(ev->Sender, compileResult, ctx, ev->Cookie, std::move(ev->Get()->Orbit), std::move(compileServiceSpan));
                     return;
                 } else {
-                    LOG_NOTICE_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Non-matching user sid for query"
-                        << ", sender: " << ev->Sender
-                        << ", queryUid: " << *request.Uid
-                        << ", expected sid: " <<  compileResult->Query->UserSid
-                        << ", actual sid: " << userSid);
+                    YDB_LOG_NOTICE_CTX(ctx, "Non-matching user sid for query",
+                        {"sender", ev->Sender},
+                        {"queryUid", *request.Uid},
+                        {"expectedSid", compileResult->Query->UserSid},
+                        {"actualSid", userSid});
                 }
             } else {
                 Counters->ReportQueryCacheHit(dbCounters, false);
-                LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Query not found"
-                    << ", sender: " << ev->Sender
-                    << ", queryUid: " << *request.Uid);
+                YDB_LOG_DEBUG_CTX(ctx, "Query not found",
+                    {"sender", ev->Sender},
+                    {"queryUid", *request.Uid});
 
                 NYql::TIssue issue(NYql::TPosition(), TStringBuilder() << "Query not found: " << *request.Uid);
                 ReplyError(ev->Sender, *request.Uid, Ydb::StatusIds::NOT_FOUND, {issue}, ctx, ev->Cookie, std::move(ev->Get()->Orbit), std::move(compileServiceSpan));
@@ -491,9 +491,9 @@ private:
         } else if (compileResult) {
             Y_ENSURE(request.Query);
 
-            LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Served query from cache from query text"
-                << ", sender: " << ev->Sender
-                << ", queryUid: " << compileResult->Uid);
+            YDB_LOG_DEBUG_CTX(ctx, "Served query from cache from query text",
+                {"sender", ev->Sender},
+                {"queryUid", compileResult->Uid});
 
             ReplyFromCache(ev->Sender, compileResult, ctx, ev->Cookie, std::move(ev->Get()->Orbit), std::move(compileServiceSpan));
             return;
@@ -521,7 +521,7 @@ private:
         TKqpCompileRequest compileRequest(ev->Sender, CreateGuidAsString(), std::move(*request.Query),
             compileSettings, request.UserToken, request.ClientAddress, dbCounters, request.GUCSettings, request.ApplicationName, ev->Cookie, std::move(ev->Get()->IntrestedInResult),
             ev->Get()->UserRequestContext, std::move(ev->Get()->Orbit), std::move(compileServiceSpan),
-            std::move(ev->Get()->TempTablesState), Nothing(), request.SplitCtx, request.SplitExpr, request.UsePessimisticLocks);
+            std::move(ev->Get()->TempTablesState), Nothing(), request.SplitCtx, std::move(request.SplitExpr), request.UsePessimisticLocks);
 
         if (TableServiceConfig.GetEnableAstCache() && request.QueryAst) {
             return CompileByAst(*request.QueryAst, std::move(compileRequest), ctx);
@@ -531,9 +531,9 @@ private:
         if (overflow.has_value()) {
             Counters->ReportCompileRequestRejected(dbCounters);
 
-            LOG_WARN_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Requests queue size limit exceeded"
-                << ", sender: " << ev->Sender
-                << ", queueSize: " << RequestsQueue.Size());
+            YDB_LOG_WARN_CTX(ctx, "Requests queue size limit exceeded",
+                {"sender", ev->Sender},
+                {"queueSize", RequestsQueue.Size()});
 
             NYql::TIssue issue(NYql::TPosition(), TStringBuilder() <<
                 "Exceeded maximum number of requests in compile service queue.");
@@ -542,9 +542,9 @@ private:
             return;
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Added request to queue"
-            << ", sender: " << ev->Sender
-            << ", queueSize: " << RequestsQueue.Size());
+        YDB_LOG_DEBUG_CTX(ctx, "Added request to queue",
+            {"sender", ev->Sender},
+            {"queueSize", RequestsQueue.Size()});
 
         ProcessQueue(ctx);
     }
@@ -562,8 +562,8 @@ private:
     void PerformRequest(TEvKqp::TEvRecompileRequest::TPtr& ev, const TActorContext& ctx) {
         auto& request = *ev->Get();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Received recompile request"
-            << ", sender: " << ev->Sender);
+        YDB_LOG_DEBUG_CTX(ctx, "Received recompile request",
+            {"sender", ev->Sender});
 
         auto dbCounters = request.DbCounters;
         Counters->ReportRecompileRequestGet(dbCounters);
@@ -592,10 +592,9 @@ private:
             if (compileResult) {
                 query.UserSid = compileResult->Query->UserSid;
                 if (query != *compileResult->Query) {
-                    LOG_WARN_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "queryId in recompile request and queryId in cache are different"
-                      << ", queryId in request: " << query.SerializeToString()
-                      << ", queryId in cache: " << compileResult->Query->SerializeToString()
-                    );
+                    YDB_LOG_WARN_CTX(ctx, "QueryId in recompile request and queryId in cache are different queryId in queryId",
+                        {"request", query.SerializeToString()},
+                        {"cache", compileResult->Query->SerializeToString()});
                 }
             }
             TKqpCompileRequest compileRequest(ev->Sender, request.Uid, compileResult ? *compileResult->Query : *request.Query,
@@ -614,9 +613,9 @@ private:
             if (overflow.has_value()) {
                 Counters->ReportCompileRequestRejected(dbCounters);
 
-                LOG_WARN_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Requests queue size limit exceeded"
-                    << ", sender: " << ev->Sender
-                    << ", queueSize: " << RequestsQueue.Size());
+                YDB_LOG_WARN_CTX(ctx, "Requests queue size limit exceeded",
+                    {"sender", ev->Sender},
+                    {"queueSize", RequestsQueue.Size()});
 
                 NYql::TIssue issue(NYql::TPosition(), TStringBuilder() <<
                     "Exceeded maximum number of requests in compile service queue.");
@@ -625,9 +624,9 @@ private:
                 return;
             }
         } else {
-            LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Query not found"
-                << ", sender: " << ev->Sender
-                << ", queryUid: " << request.Uid);
+            YDB_LOG_DEBUG_CTX(ctx, "Query not found",
+                {"sender", ev->Sender},
+                {"queryUid", request.Uid});
 
             NYql::TIssue issue(NYql::TPosition(), TStringBuilder() << "Query not found: " << request.Uid);
 
@@ -638,9 +637,9 @@ private:
             return;
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Added request to queue"
-            << ", sender: " << ev->Sender
-            << ", queueSize: " << RequestsQueue.Size());
+        YDB_LOG_DEBUG_CTX(ctx, "Added request to queue",
+            {"sender", ev->Sender},
+            {"queueSize", RequestsQueue.Size()});
 
         ProcessQueue(ctx);
     }
@@ -656,10 +655,10 @@ private:
         Y_ABORT_UNLESS(compileRequest.CompileActor == compileActorId);
         Y_ABORT_UNLESS(compileRequest.Uid == compileResult->Uid);
 
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Received response"
-            << ", sender: " << compileRequest.Sender
-            << ", status: " << compileResult->Status
-            << ", compileActor: " << ev->Sender);
+        YDB_LOG_DEBUG_CTX(ctx, "Received response",
+            {"sender", compileRequest.Sender},
+            {"status", compileResult->Status},
+            {"compileActor", ev->Sender});
 
         if (compileResult->NeedToSplit) {
             Reply(compileRequest.Sender, compileResult, compileStats, ctx,
@@ -724,9 +723,9 @@ private:
         Y_UNUSED(ctx);
         auto& request = *ev->Get();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Received invalidate request"
-            << ", sender: " << ev->Sender
-            << ", queryUid: " << request.Uid);
+        YDB_LOG_DEBUG_CTX(ctx, "Received invalidate request",
+            {"sender", ev->Sender},
+            {"queryUid", request.Uid});
 
         auto dbCounters = request.DbCounters;
         Counters->ReportCompileRequestInvalidate(dbCounters);
@@ -735,7 +734,7 @@ private:
     }
 
     void HandleTtlTimer(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Received check queries TTL timeout");
+        YDB_LOG_DEBUG_CTX(ctx, "Received check queries TTL timeout");
 
         auto evicted = QueryCache->EraseExpiredQueries();
         if (evicted != 0) {
@@ -748,11 +747,16 @@ private:
     void UpdateQueryCache(const TActorContext& ctx, TKqpCompileResult::TConstPtr compileResult, bool keepInCache, bool isQueryActionPrepare, bool isPerStatementExecution, bool isWarmupCompilation) {
         if (QueryCache->FindByUid(compileResult->Uid, false)) {
             QueryCache->Replace(compileResult);
+            // Warmup re-validated an already-cached entry: keep client hit attribution.
+            if (isWarmupCompilation) {
+                QueryCache->MarkWarmupInsert(compileResult->Uid);
+            }
         } else if (keepInCache) {
             if (compileResult->Query) {
-                LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Insert query into compile cache, queryId: " << compileResult->Query->SerializeToString());
+                YDB_LOG_DEBUG_CTX(ctx, "Insert query into compile cache",
+                    {"queryId", compileResult->Query->SerializeToString()});
                 if (QueryCache->FindByQuery(*compileResult->Query, keepInCache)) {
-                    LOG_ERROR_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Trying to insert query into compile cache when it is already there");
+                    YDB_LOG_ERROR_CTX(ctx, "Trying to insert query into compile cache when it is already there");
                 }
             }
             if (QueryCache->Insert(compileResult, TableServiceConfig.GetEnableAstCache(), isPerStatementExecution)) {
@@ -763,6 +767,9 @@ private:
                     Counters->CompileQueryCacheEvicted->Inc();
                 };
             }
+            if (isWarmupCompilation) {
+                QueryCache->MarkWarmupInsert(compileResult->Uid);
+            }
         }
     }
 
@@ -770,20 +777,28 @@ private:
         YQL_ENSURE(queryAst.Ast);
         YQL_ENSURE(queryAst.Ast->IsOk());
         YQL_ENSURE(queryAst.Ast->Root);
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Try to find query by ast, queryId: " << compileRequest.Query.SerializeToString()
-            << ", ast: " << queryAst.Ast->Root->ToString());
-        auto compileResult = QueryCache->FindByAst(compileRequest.Query, *queryAst.Ast, compileRequest.CompileSettings.KeepInCache);
+        YDB_LOG_DEBUG_CTX(ctx, "Try to find query by ast",
+            {"queryId", compileRequest.Query.SerializeToString()},
+            {"ast", queryAst.Ast->Root->ToString()});
 
-        if (!compileRequest.FindInCache || HasTempTablesNameClashes(compileResult, compileRequest.TempTablesState)) {
+        auto compileResult = QueryCache->FindByAst(
+            compileRequest.Query, *queryAst.Ast, compileRequest.CompileSettings.KeepInCache,
+            compileRequest.CompileSettings.IsWarmupCompilation
+                ? EWarmupAttributionMode::Warmup
+                : EWarmupAttributionMode::Client,
+            Counters,
+            compileRequest.TempTablesState);
+
+        if (!compileRequest.FindInCache) {
             compileResult = nullptr;
         }
 
         if (compileResult) {
             Counters->ReportQueryCacheHit(compileRequest.DbCounters, true);
 
-            LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Served query from cache from ast"
-                << ", sender: " << compileRequest.Sender
-                << ", queryUid: " << compileResult->Uid);
+            YDB_LOG_DEBUG_CTX(ctx, "Served query from cache from ast",
+                {"sender", compileRequest.Sender},
+                {"queryUid", compileResult->Uid});
 
             compileResult->GetAst()->PgAutoParamValues = std::move(queryAst.Ast->PgAutoParamValues);
 
@@ -804,9 +819,9 @@ private:
         if (overflow.has_value()) {
             Counters->ReportCompileRequestRejected(overflow->DbCounters);
 
-            LOG_WARN_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Requests queue size limit exceeded"
-                << ", sender: " << overflow->Sender
-                << ", queueSize: " << RequestsQueue.Size());
+            YDB_LOG_WARN_CTX(ctx, "Requests queue size limit exceeded",
+                {"sender", overflow->Sender},
+                {"queueSize", RequestsQueue.Size()});
 
             NYql::TIssue issue(NYql::TPosition(), TStringBuilder() <<
                 "Exceeded maximum number of requests in compile service queue.");
@@ -814,9 +829,9 @@ private:
             return;
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Added request to queue"
-            << ", sender: " << sender
-            << ", queueSize: " << RequestsQueue.Size());
+        YDB_LOG_DEBUG_CTX(ctx, "Added request to queue",
+            {"sender", sender},
+            {"queueSize", RequestsQueue.Size()});
 
         ProcessQueue(ctx);
     }
@@ -861,14 +876,17 @@ private:
         if (QueryCache->FindByQuery(query, keepInCache)) {
             return false;
         }
-        if (compileResult->GetAst() && QueryCache->FindByAst(query, *compileResult->GetAst(), keepInCache)) {
+        if (compileResult->GetAst() && QueryCache->FindByAst(
+                query, *compileResult->GetAst(), keepInCache,
+                EWarmupAttributionMode::None, /*counters=*/nullptr)) {
             return false;
         }
         auto newCompileResult = TKqpCompileResult::Make(CreateGuidAsString(), compileResult->Status, compileResult->Issues, compileResult->MaxReadType, compileResult->CompilationDuration ,std::move(query), compileResult->QueryAst,
             false, {}, compileResult->ReplayMessageUserView);
         newCompileResult->AllowCache = compileResult->AllowCache;
         newCompileResult->PreparedQuery = compileResult->PreparedQuery;
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Insert preparing query with params, queryId: " << compileResult->Query->SerializeToString());
+        YDB_LOG_DEBUG_CTX(ctx, "Insert preparing query with params",
+            {"queryId", compileResult->Query->SerializeToString()});
         return QueryCache->Insert(newCompileResult, TableServiceConfig.GetEnableAstCache(), isPerStatementExecution);
     }
 
@@ -882,9 +900,9 @@ private:
             }
 
             if (request->CompileSettings.Deadline && request->CompileSettings.Deadline < TAppData::TimeProvider->Now()) {
-                LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Compilation timed out"
-                    << ", sender: " << request->Sender
-                    << ", deadline: " << request->CompileSettings.Deadline);
+                YDB_LOG_DEBUG_CTX(ctx, "Compilation timed out",
+                    {"sender", request->Sender},
+                    {"deadline", request->CompileSettings.Deadline});
 
                 Counters->ReportCompileRequestTimeout(request->DbCounters);
 
@@ -903,13 +921,13 @@ private:
         auto compileActor = CreateKqpCompileActor(ctx.SelfID, KqpSettings, TableServiceConfig, QueryServiceConfig, ModuleResolverState, Counters,
             request.Uid, request.Query, request.UserToken, request.ClientAddress, FederatedQuerySetup, request.DbCounters, request.GUCSettings, request.ApplicationName, request.UserRequestContext,
             request.CompileServiceSpan.GetTraceId(), request.TempTablesState, request.CompileSettings.Action, std::move(request.QueryAst), CollectDiagnostics,
-            request.CompileSettings.PerStatementResult, request.SplitCtx, request.SplitExpr, request.UsePessimisticLocks);
+            request.CompileSettings.PerStatementResult, request.SplitCtx, std::move(request.SplitExpr), request.UsePessimisticLocks);
         auto compileActorId = ctx.Register(compileActor, TMailboxType::HTSwap,
             AppData(ctx)->UserPoolId);
 
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Created compile actor"
-            << ", sender: " << request.Sender
-            << ", compileActor: " << compileActorId);
+        YDB_LOG_DEBUG_CTX(ctx, "Created compile actor",
+            {"sender", request.Sender},
+            {"compileActor", compileActorId});
         request.CompileActor = compileActorId;
 
         RequestsQueue.AddActiveRequest(std::move(request));
@@ -929,10 +947,10 @@ private:
             query ? query->UserSid : "",
             compileResult->Issues.ToString());
 
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Send response"
-            << ", sender: " << sender
-            << ", queryUid: " << compileResult->Uid
-            << ", status:" << compileResult->Status);
+        YDB_LOG_DEBUG_CTX(ctx, "Send response",
+            {"sender", sender},
+            {"queryUid", compileResult->Uid},
+            {"status", compileResult->Status});
 
         auto responseEv = MakeHolder<TEvKqp::TEvCompileResponse>(compileResult, std::move(orbit));
         responseEv->Stats = compileStats;
@@ -978,10 +996,10 @@ private:
     static void LogException(const TString& scope, const TActorId& sender, const std::exception& e,
         const TActorContext& ctx)
     {
-        LOG_CRIT_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Exception"
-            << ", scope: " << scope
-            << ", sender: " << sender
-            << ", message: " << e.what());
+        YDB_LOG_CRIT_CTX(ctx, "Exception",
+            {"scope", scope},
+            {"sender", sender},
+            {"message", e.what()});
     }
 
     void Reply(const TActorId& sender, const TVector<TQueryAst>& astStatements, const TKqpQueryId query,
@@ -992,7 +1010,7 @@ private:
             query.UserSid,
             {});
 
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Send ast statements response");
+        YDB_LOG_DEBUG_CTX(ctx, "Send ast statements response");
 
         auto responseEv = MakeHolder<TEvKqp::TEvParseResponse>(std::move(query), astStatements, std::move(orbit));
 
@@ -1222,6 +1240,68 @@ void TKqpQueryCache::Replace(const TKqpCompileResult::TConstPtr& compileResult) 
     }
 }
 
+// Must be called under Lock, only after SID / TempTables rejection checks passed.
+namespace {
+
+// Drops entry on temp-table clash; returns whether an entry existed before the
+// drop so callers can distinguish a rejected hit from a true miss.
+bool RejectOnTempTableClash(
+    TKqpCompileResult::TConstPtr& compileResult,
+    const TKqpTempTablesState::TConstPtr& tempTablesState)
+{
+    const bool hadEntry = static_cast<bool>(compileResult);
+    if (HasTempTablesNameClashes(compileResult, tempTablesState)) {
+        compileResult = nullptr;
+    }
+    return hadEntry;
+}
+
+} // anonymous namespace
+
+void TKqpQueryCache::AccountWarmupHitImpl(
+    const TKqpCompileResult::TConstPtr& compileResult,
+    EWarmupAttributionMode mode,
+    const TIntrusivePtr<TKqpCounters>& counters)
+{
+    switch (mode) {
+        case EWarmupAttributionMode::None:
+            return;
+        case EWarmupAttributionMode::Warmup:
+            // Warmup raced a client that already cached this uid -- still
+            // mark so a later client hit is attributed.
+            if (!AtomicGet(WarmupWindowClosedAtomic)) {
+                WarmupPendingHitUids.insert(compileResult->Uid);
+                AtomicSet(WarmupHasPendingAtomic, 1);
+            }
+            return;
+        case EWarmupAttributionMode::Client: {
+            if (WarmupAccountingIsNoopFast()) {
+                return;
+            }
+            if (TryConsumeWarmupHitImpl(compileResult->Uid)) {
+                Y_ABORT_UNLESS(counters, "Client warmup attribution requires counters");
+                counters->WarmupHitsInWindow->Inc();
+                counters->WarmupSavedCompileMs->Add(compileResult->CompilationDuration.MilliSeconds());
+            }
+            return;
+        }
+    }
+}
+
+// Must be called under Lock. For true misses only (rejected hits filter out earlier).
+void TKqpQueryCache::AccountWarmupMissImpl(
+    EWarmupAttributionMode mode,
+    const TIntrusivePtr<TKqpCounters>& counters)
+{
+    if (mode != EWarmupAttributionMode::Client || WarmupAccountingIsNoopFast()) {
+        return;
+    }
+    if (ShouldCountWarmupMissImpl()) {
+        Y_ABORT_UNLESS(counters, "Client warmup attribution requires counters");
+        counters->WarmupMissesInWindow->Inc();
+    }
+}
+
 // find by either uid or query
 TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
     const TMaybe<TString>& uid,
@@ -1232,7 +1312,8 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
     TIntrusivePtr<TKqpCounters> counters,
     TKqpDbCountersPtr& dbCounters,
     const TActorId& sender,
-    const TActorContext& ctx)
+    const TActorContext& ctx,
+    EWarmupAttributionMode warmupAttribution)
 {
     TGuard<TAdaptiveLock> guard(Lock);
 
@@ -1243,29 +1324,32 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
         counters->ReportCompileRequestGet(dbCounters);
 
         auto compileResult = FindByUidImpl(*uid, promote);
-        if (HasTempTablesNameClashes(compileResult, tempTablesState)) {
-            compileResult = nullptr;
-        }
+        const bool hadEntry = RejectOnTempTableClash(compileResult, tempTablesState);
 
         if (compileResult) {
             Y_ENSURE(compileResult->Query);
             if (compileResult->Query->UserSid == userSid) {
                 counters->ReportQueryCacheHit(dbCounters, true);
 
-                LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Served query from cache by uid"
-                    << ", sender: " << sender
-                    << ", queryUid: " << *uid);
+                YDB_LOG_DEBUG_CTX(ctx, "Served query from cache by uid",
+                    {"sender", sender},
+                    {"queryUid", *uid});
 
+                AccountWarmupHitImpl(compileResult, warmupAttribution, counters);
                 return compileResult;
             } else {
-                LOG_NOTICE_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Non-matching user sid for query"
-                    << ", sender: " << sender
-                    << ", queryUid: " << *uid
-                    << ", expected sid: " <<  compileResult->Query->UserSid
-                    << ", actual sid: " << userSid);
+                YDB_LOG_NOTICE_CTX(ctx, "Non-matching user sid for query",
+                    {"sender", sender},
+                    {"queryUid", *uid},
+                    {"expectedSid", compileResult->Query->UserSid},
+                    {"actualSid", userSid});
             }
         }
 
+        // hadEntry => uid was present but rejected (SID / TempTables) -- not a true miss.
+        if (!hadEntry) {
+            AccountWarmupMissImpl(warmupAttribution, counters);
+        }
         return nullptr;
     }
 
@@ -1277,20 +1361,23 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
         Y_ENSURE(query->UserSid == userSid);
     }
 
-    LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Try to find query by queryId, queryId: "
-        << query->SerializeToString());
+    YDB_LOG_DEBUG_CTX(ctx, "Try to find query by queryId",
+        {"queryId", query->SerializeToString()});
     auto compileResult = FindByQueryImpl(*query, promote);
-    if (HasTempTablesNameClashes(compileResult, tempTablesState)) {
-        return nullptr;
-    }
+    const bool hadEntry = RejectOnTempTableClash(compileResult, tempTablesState);
 
     if (compileResult) {
         counters->ReportQueryCacheHit(dbCounters, true);
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Served query from cache from query text"
-            << ", sender: " << sender
-            << ", queryUid: " << compileResult->Uid);
+        YDB_LOG_DEBUG_CTX(ctx, "Served query from cache from query text",
+            {"sender", sender},
+            {"queryUid", compileResult->Uid});
 
+        AccountWarmupHitImpl(compileResult, warmupAttribution, counters);
         return compileResult;
+    }
+
+    if (!hadEntry) {
+        AccountWarmupMissImpl(warmupAttribution, counters);
     }
 
     // note, we don't report cache miss, because it's up to caller to decide what to do:
@@ -1302,7 +1389,10 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::Find(
 TKqpCompileResult::TConstPtr TKqpQueryCache::FindByAst(
     const TKqpQueryId& query,
     const NYql::TAstParseResult& ast,
-    bool promote)
+    bool promote,
+    EWarmupAttributionMode warmupAttribution,
+    TIntrusivePtr<TKqpCounters> counters,
+    TKqpTempTablesState::TConstPtr tempTablesState)
 {
     TGuard<TAdaptiveLock> guard(Lock);
 
@@ -1311,7 +1401,13 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::FindByAst(
         return nullptr;
     }
 
-    return FindByUidImpl(*uid, promote);
+    auto compileResult = FindByUidImpl(*uid, promote);
+    RejectOnTempTableClash(compileResult, tempTablesState);
+
+    if (compileResult) {
+        AccountWarmupHitImpl(compileResult, warmupAttribution, counters);
+    }
+    return compileResult;
 }
 
 TVector<TKqpQueryCacheSnapshot::TEntry> TKqpQueryCache::GetSnapshot() const {
@@ -1342,6 +1438,44 @@ void TKqpQueryCache::Clear() {
     AstIndex.clear();
     ByteSize = 0;
     Snapshot.Clear();
+    WarmupPendingHitUids.clear();
+    WarmupWindowStart = TInstant::Zero();
+    WarmupWindowOpened = false;
+    AtomicSet(WarmupWindowClosedAtomic, 0);
+    AtomicSet(WarmupHasPendingAtomic, 0);
+}
+
+void TKqpQueryCache::MarkWarmupInsert(const TString& uid) {
+    if (AtomicGet(WarmupWindowClosedAtomic)) {
+        return;
+    }
+    TGuard<TAdaptiveLock> guard(Lock);
+    if (AtomicGet(WarmupWindowClosedAtomic)) {
+        return;
+    }
+    WarmupPendingHitUids.insert(uid);
+    AtomicSet(WarmupHasPendingAtomic, 1);
+}
+
+bool TKqpQueryCache::RefreshWarmupWindowStateImpl() {
+    if (AtomicGet(WarmupWindowClosedAtomic)) {
+        return false;
+    }
+    if (!WarmupWindowOpened) {
+        if (WarmupPendingHitUids.empty()) {
+            return false;
+        }
+        WarmupWindowOpened = true;
+        WarmupWindowStart = TAppData::TimeProvider->Now();
+        return true;
+    }
+    if (TAppData::TimeProvider->Now() - WarmupWindowStart >= WarmupObservationWindow) {
+        WarmupWindowOpened = false;
+        AtomicSet(WarmupWindowClosedAtomic, 1);
+        WarmupPendingHitUids.clear();
+        return false;
+    }
+    return true;
 }
 
 void TKqpQueryCache::InsertQuery(const TKqpCompileResult::TConstPtr& compileResult) {

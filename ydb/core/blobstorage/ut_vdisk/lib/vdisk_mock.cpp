@@ -4,6 +4,8 @@
 #include <util/generic/hash_set.h>
 #include <util/system/guard.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::TEST
+
 namespace NKikimr {
 
 using namespace NActors;
@@ -94,7 +96,8 @@ public:
                 VDiskIDFromVDiskID(record.GetVDiskID()).ToString().data(), VDiskId.ToString().data());
         TLogoBlobID id{LogoBlobIDFromLogoBlobID(record.GetBlobID())};
 
-        LOG_DEBUG(ctx, NActorsServices::TEST, "TEvVPut# %s", ev->Get()->ToString().data());
+        YDB_LOG_DEBUG_CTX(ctx, "Dump event",
+            {"event", ev->Get()->ToString().data()});
 
         auto sendResponse = [&](NKikimrProto::EReplyStatus status, const TString& errorReason) {
             ui64 cookie = record.GetCookie();
@@ -134,7 +137,8 @@ public:
                 "record.VDiskId# %s VDiskId# %s",
                 VDiskIDFromVDiskID(record.GetVDiskID()).ToString().data(), VDiskId.ToString().data());
 
-        LOG_DEBUG(ctx, NActorsServices::TEST, "TEvVMultiPut# %s", ev->Get()->ToString().data());
+        YDB_LOG_DEBUG_CTX(ctx, "Dump event",
+            {"event", ev->Get()->ToString().data()});
 
         ui64 cookie = record.GetCookie();
         auto response = std::make_unique<TEvBlobStorage::TEvVMultiPutResult>(NKikimrProto::OK,
@@ -143,8 +147,9 @@ public:
                 &record, nullptr, nullptr, nullptr, 0, 0, TString());
         if (ErrorMode) {
             response->MakeError(NKikimrProto::ERROR, "error mode", record);
-            LOG_DEBUG(ctx, NActorsServices::TEST, "TEvVMultiPut %s -> %s", ev->Get()->ToString().data(),
-                    response->ToString().data());
+            YDB_LOG_DEBUG_CTX(ctx, "TEvVMultiPut ->",
+                {"event", ev->Get()->ToString().data()},
+                {"response", response->ToString().data()});
             FinalizeAndSend(std::move(response), ctx, ev->Sender);
             return;
         }
@@ -182,7 +187,9 @@ public:
 
         if (ErrorMode) {
             response->MakeError(NKikimrProto::ERROR, "error mode", record);
-            LOG_DEBUG(ctx, NActorsServices::TEST, "TEvVGet# %s -> %s", ev->Get()->ToString().data(), response->ToString().data());
+            YDB_LOG_DEBUG_CTX(ctx, "->",
+                {"event", ev->Get()->ToString().data()},
+                {"response", response->ToString().data()});
             FinalizeAndSend(std::move(response), ctx, ev->Sender);
             return;
         }
@@ -322,7 +329,9 @@ public:
         }
 
         // send final response
-        LOG_DEBUG(ctx, NActorsServices::TEST, "TEvVGet# %s -> %s", ev->Get()->ToString().data(), response->ToString().data());
+        YDB_LOG_DEBUG_CTX(ctx, "->",
+            {"event", ev->Get()->ToString().data()},
+            {"response", response->ToString().data()});
         FinalizeAndSend(std::move(response), ctx, ev->Sender);
     }
 

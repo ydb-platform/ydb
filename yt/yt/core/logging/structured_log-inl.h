@@ -4,7 +4,6 @@
 #include "fluent_log.h"
 #include "structured_log.h"
 #endif
-#undef STRUCTURED_LOG_INL_H_
 
 #include "fluent_log.h"
 

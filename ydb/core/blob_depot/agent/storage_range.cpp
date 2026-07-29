@@ -1,5 +1,7 @@
 #include "agent_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
+
 namespace NKikimr::NBlobDepot {
 
     template<>
@@ -21,8 +23,17 @@ namespace NKikimr::NBlobDepot {
             using TBlobStorageQuery::TBlobStorageQuery;
 
             void Initiate() override {
-                BDEV_QUERY(BDEV21, "TEvRange_new", (U.TabletId, Request.TabletId), (U.From, Request.From), (U.To, Request.To),
-                    (U.MustRestoreFirst, Request.MustRestoreFirst), (U.IndexOnly, Request.IsIndexOnly));
+                YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvRange_new",
+                    {"marker", "BDEV21"},
+                    {"VG", Agent.VirtualGroupId},
+                    {"BDT", Agent.TabletId},
+                    {"G", Agent.BlobDepotGeneration},
+                    {"Q", QueryId},
+                    {"U.TabletId", Request.TabletId},
+                    {"U.From", Request.From},
+                    {"U.To", Request.To},
+                    {"U.MustRestoreFirst", Request.MustRestoreFirst},
+                    {"U.IndexOnly", Request.IsIndexOnly});
 
                 Response = std::make_unique<TEvBlobStorage::TEvRangeResult>(NKikimrProto::OK, Request.From, Request.To,
                     TGroupId::FromValue(Agent.VirtualGroupId));
@@ -66,8 +77,11 @@ namespace NKikimr::NBlobDepot {
             }
 
             void HandleResolveResult(ui64 id, TRequestContext::TPtr context, NKikimrBlobDepot::TEvResolveResult& msg) {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA47, "HandleResolveResult", (AgentId, Agent.LogId),
-                    (QueryId, GetQueryId()), (Msg, msg));
+                YDB_LOG_DEBUG("HandleResolveResult",
+                    {"marker", "BDA47"},
+                    {"agentId", Agent.LogId},
+                    {"queryId", GetQueryId()},
+                    {"msg", msg});
 
                 if (msg.GetStatus() != NKikimrProto::OK && msg.GetStatus() != NKikimrProto::OVERRUN) {
                     return EndWithError(msg.GetStatus(), msg.GetErrorReason());
@@ -163,15 +177,36 @@ namespace NKikimr::NBlobDepot {
             void EndWithSuccess() {
                 if (IS_LOG_PRIORITY_ENABLED(NLog::PRI_TRACE, NKikimrServices::BLOB_DEPOT_EVENTS)) {
                     for (const auto& r : Response->Responses) {
-                        BDEV_QUERY(BDEV22, "TEvRange_item", (BlobId, r.Id), (Buffer.size, r.Buffer.size()));
+                        YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvRange_item",
+                            {"marker", "BDEV22"},
+                            {"VG", Agent.VirtualGroupId},
+                            {"BDT", Agent.TabletId},
+                            {"G", Agent.BlobDepotGeneration},
+                            {"Q", QueryId},
+                            {"blobId", r.Id},
+                            {"Buffer.size", r.Buffer.size()});
                     }
-                    BDEV_QUERY(BDEV14, "TEvRange_end", (Status, NKikimrProto::OK), (ErrorReason, ""));
+                    YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvRange_end",
+                        {"marker", "BDEV14"},
+                        {"VG", Agent.VirtualGroupId},
+                        {"BDT", Agent.TabletId},
+                        {"G", Agent.BlobDepotGeneration},
+                        {"Q", QueryId},
+                        {"status", NKikimrProto::OK},
+                        {"errorReason", ""});
                 }
                 TBlobStorageQuery::EndWithSuccess(std::move(Response));
             }
 
             void EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason) {
-                BDEV_QUERY(BDEV15, "TEvRange_end", (Status, status), (ErrorReason, errorReason));
+                YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "TEvRange_end",
+                    {"marker", "BDEV15"},
+                    {"VG", Agent.VirtualGroupId},
+                    {"BDT", Agent.TabletId},
+                    {"G", Agent.BlobDepotGeneration},
+                    {"Q", QueryId},
+                    {"status", status},
+                    {"errorReason", errorReason});
                 TBlobStorageQuery::EndWithError(status, errorReason);
             }
 

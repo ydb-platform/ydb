@@ -30,6 +30,7 @@ from typing import (
 from hypothesis.errors import (
     CannotProceedScopeT,
     ChoiceTooLarge,
+    FlakyStrategyDefinition,
     Frozen,
     InvalidArgument,
     StopTest,
@@ -716,10 +717,9 @@ class ConjectureData:
         self.start_span(TOP_LABEL)
 
     def __repr__(self) -> str:
-        return "ConjectureData(%s, %d choices%s)" % (
-            self.status.name,
-            len(self.nodes),
-            ", frozen" if self.frozen else "",
+        return (
+            f"ConjectureData({self.status.name}, {len(self.nodes)} "
+            f"choices{', frozen' if self.frozen else ''})"
         )
 
     @property
@@ -1202,7 +1202,15 @@ class ConjectureData:
         self.start_span(label=label)
         try:
             if not at_top_level:
-                return unwrapped.do_draw(self)
+                try:
+                    return unwrapped.do_draw(self)
+                except FlakyStrategyDefinition as err:
+                    # Record the strategy stack as the error unwinds, so that an
+                    # inconsistent-generation failure is explained in terms of the
+                    # strategies being drawn from, not just the choice sequence.
+                    # The top-level draw adds its own "while generating ..." note.
+                    add_note(err, f"while drawing from {strategy!r}")
+                    raise
             assert start_time is not None
             key = observe_as or f"generate:unlabeled_{len(self.draw_times)}"
             try:

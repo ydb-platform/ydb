@@ -18,13 +18,15 @@ public:
         const std::vector<std::string>& queueNames,
         const THashMap<std::string, std::vector<std::string>>& bucketToQueues,
         NThreading::TThreadOptions threadOptions,
-        NProfiling::IRegistryPtr registry)
+        NProfiling::IRegistryPtr registry,
+        const NProfiling::TTagSet& extraTags)
         : Queue_(CreateFairShareActionQueue(
             threadName,
             queueNames,
             bucketToQueues,
             threadOptions,
-            std::move(registry)))
+            std::move(registry),
+            extraTags))
     { }
 
     const IInvokerPtr& GetInvoker(EQueue queue) override
@@ -48,7 +50,8 @@ IEnumIndexedFairShareActionQueuePtr<EQueue> CreateEnumIndexedFairShareActionQueu
     std::string threadName,
     const THashMap<EBucket, std::vector<EQueue>>& bucketToQueues,
     NThreading::TThreadOptions threadOptions,
-    NProfiling::IRegistryPtr registry)
+    NProfiling::IRegistryPtr registry,
+    const NProfiling::TTagSet& extraTags)
 {
     std::vector<std::string> queueNames;
     for (const auto& queueName : TEnumTraits<EQueue>::GetDomainNames()) {
@@ -67,7 +70,8 @@ IEnumIndexedFairShareActionQueuePtr<EQueue> CreateEnumIndexedFairShareActionQueu
         queueNames,
         stringBuckets,
         threadOptions,
-        std::move(registry));
+        std::move(registry),
+        extraTags);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

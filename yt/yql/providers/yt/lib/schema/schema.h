@@ -32,5 +32,6 @@ NYT::TTableSchema RowSpecToYTSchema(const NYT::TNode& rowSpec, ui64 nativeTypeCo
 NYT::TSortColumns ToYTSortColumns(const TVector<std::pair<TString, bool>>& sortColumns);
 TString GetTypeV3String(const TTypeAnnotationNode& type, ui64 nativeTypeCompatibility = NTCF_ALL);
 TString GetColumnGroupSpecFromSchema(const NYT::TNode& schema);
+TMap<TString, TString> GetExpressionColumnsFromSchema(const NYT::TNode& schema);
 
 } // NYql

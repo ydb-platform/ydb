@@ -2,10 +2,16 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <yql/essentials/minikql/udf_value_test_support/dynumber.h>
+#include <yql/essentials/minikql/udf_value_test_support/struct_type.h>
+#include <yql/essentials/minikql/udf_value_test_support/utf8.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
 #include <yql/essentials/public/udf/arrow/block_item.h>
 #include <yql/essentials/public/udf/udf_value.h>
+#include <yql/essentials/types/dynumber/dynumber.h>
 
 #include <util/generic/array_ref.h>
+#include <util/generic/guid.h>
 #include <util/generic/maybe.h>
 #include <util/generic/string.h>
 #include <util/generic/strbuf.h>
@@ -13,13 +19,14 @@
 #include <util/string/builder.h>
 #include <util/system/yassert.h>
 
+#include <algorithm>
 #include <expected>
+#include <string_view>
 #include <tuple>
 #include <type_traits>
 #include <variant>
 
 namespace NYql::NUdf {
-namespace NPrivate {
 
 using TUnboxedValueComparatorResult = std::expected<void, TString>;
 
@@ -45,7 +52,7 @@ private:
 };
 
 template <CComparatorUtilsUdfValue THolder, typename T>
-TUnboxedValueComparatorResult IsElementEqualImpl(const THolder& value, const T& expected);
+TUnboxedValueComparatorResult IsUnboxedValueElementEqual(const THolder& value, const T& expected);
 
 template <typename T, typename = void>
 struct TUnboxedValueComparator {
@@ -61,7 +68,31 @@ struct TUnboxedValueComparator<T> {
     static TUnboxedValueComparatorResult IsEqual(const THolder& value, const T& expected) {
         const T got = value.template Get<T>();
         if (got != expected) {
-            return std::unexpected(TStringBuilder() << "Expected " << expected << " but got " << got);
+            return std::unexpected(TStringBuilder()
+                                   << "Expected " << ToString(expected)
+                                   << " but got " << ToString(got));
+        }
+        return {};
+    }
+
+private:
+    template <typename U>
+    static TString ToString(const U& value) {
+        return TStringBuilder() << value;
+    }
+
+    static TString ToString(const NYql::NDecimal::TInt128& value) {
+        return NYql::NDecimal::ToString(value, NYql::NDecimal::MaxPrecision);
+    }
+};
+
+template <>
+struct TUnboxedValueComparator<TStringBuf> {
+    template <CComparatorUtilsUdfValue THolder>
+    static TUnboxedValueComparatorResult IsEqual(const THolder& value, TStringBuf expected) {
+        const TStringBuf got(value.AsStringRef());
+        if (got != expected) {
+            return std::unexpected(TStringBuilder() << "Expected string \"" << expected << "\" but got \"" << got << "\"");
         }
         return {};
     }
@@ -71,11 +102,15 @@ template <>
 struct TUnboxedValueComparator<TString> {
     template <CComparatorUtilsUdfValue THolder>
     static TUnboxedValueComparatorResult IsEqual(const THolder& value, const TString& expected) {
-        const TStringBuf got(value.AsStringRef());
-        if (got != TStringBuf(expected)) {
-            return std::unexpected(TStringBuilder() << "Expected string \"" << expected << "\" but got \"" << got << "\"");
-        }
-        return {};
+        return TUnboxedValueComparator<TStringBuf>::IsEqual(value, TStringBuf(expected));
+    }
+};
+
+template <>
+struct TUnboxedValueComparator<NTest::TUtf8> {
+    template <CComparatorUtilsUdfValue THolder>
+    static TUnboxedValueComparatorResult IsEqual(const THolder& value, const NTest::TUtf8& expected) {
+        return TUnboxedValueComparator<TStringBuf>::IsEqual(value, TStringBuf(expected.Value));
     }
 };
 
@@ -92,7 +127,7 @@ struct TUnboxedValueComparator<TMaybe<T>> {
         if (!value) {
             return std::unexpected(TString("Expected a value but got Nothing"));
         }
-        auto r = IsElementEqualImpl(value.GetOptionalValue(), *expected);
+        auto r = IsUnboxedValueElementEqual(value.GetOptionalValue(), *expected);
         if (!r) {
             return std::unexpected(TStringBuilder() << "Optional inner value: " << r.error());
         }
@@ -108,7 +143,7 @@ struct TUnboxedValueComparator<std::tuple<Ts...>> {
             TUnboxedValueComparatorResult result{};
             size_t failedIdx = 0;
             bool ok = ((failedIdx = Is,
-                        result = IsElementEqualImpl(value.GetElement(Is), std::get<Is>(expected)),
+                        result = IsUnboxedValueElementEqual(value.GetElement(Is), std::get<Is>(expected)),
                         result.has_value()) &&
                        ...);
             if (!ok) {
@@ -131,7 +166,7 @@ struct TUnboxedValueComparator<TVector<T>> {
                                        << "List too short: expected " << expected.size()
                                        << " elements but ended at [" << i << "]");
             }
-            auto r = IsElementEqualImpl(item, expected[i]);
+            auto r = IsUnboxedValueElementEqual(item, expected[i]);
             if (!r) {
                 return std::unexpected(TStringBuilder() << "List[" << i << "]: " << r.error());
             }
@@ -163,7 +198,7 @@ struct TUnboxedValueComparator<TUnboxedValueComparatorStreamView<T>> {
                                        << "Stream ended early at [" << i << "], expected "
                                        << data.size() << " elements");
             }
-            auto r = IsElementEqualImpl(item, data[i]);
+            auto r = IsUnboxedValueElementEqual(item, data[i]);
             if (!r) {
                 return std::unexpected(TStringBuilder() << "Stream[" << i << "]: " << r.error());
             }
@@ -192,7 +227,7 @@ struct TUnboxedValueComparator<std::variant<Ts...>> {
         TUnboxedValueComparatorResult result{};
         [&]<size_t... Is>(std::index_sequence<Is...>) {
             Y_UNUSED(((Is == expected.index() &&
-                       (result = IsElementEqualImpl(item, std::get<Is>(expected)), true)) ||
+                       (result = IsUnboxedValueElementEqual(item, std::get<Is>(expected)), true)) ||
                       ...));
         }(std::index_sequence_for<Ts...>{});
         if (!result) {
@@ -203,23 +238,104 @@ struct TUnboxedValueComparator<std::variant<Ts...>> {
     }
 };
 
-template <CComparatorUtilsUdfValue THolder, typename T>
-TUnboxedValueComparatorResult IsElementEqualImpl(const THolder& value, const T& expected) {
-    return NPrivate::TUnboxedValueComparator<T>::IsEqual(value, expected);
-}
+template <typename... TMembers>
+struct TUnboxedValueComparator<NTest::TStructType<TMembers...>> {
+private:
+    static constexpr auto SortedIndexMapping =
+        NTest::TStructType<TMembers...>::SortedIndexMapping;
 
-} // namespace NPrivate
+    template <size_t SortedIdx>
+    static consteval size_t GetOriginalIndex() {
+        return SortedIndexMapping[SortedIdx];
+    }
 
-using TUnboxedValueComparatorResult = NPrivate::TUnboxedValueComparatorResult;
-template <typename T>
-using TUnboxedValueComparatorStreamView = NPrivate::TUnboxedValueComparatorStreamView<T>;
+    template <size_t SortedIdx, CComparatorUtilsUdfValue THolder>
+    static auto CompareElement(
+        const THolder& value,
+        const NTest::TStructType<TMembers...>& expected)
+    {
+        constexpr size_t OriginalIdx = GetOriginalIndex<SortedIdx>();
+        using TMember = std::tuple_element_t<OriginalIdx, std::tuple<TMembers...>>;
 
-template <typename T>
-concept CComparatorUtilsUdfValue = (NPrivate::CComparatorUtilsUdfValue<T>);
+        return std::pair{
+            TMember::MemberName(),
+            IsUnboxedValueElementEqual(
+                value.GetElement(SortedIdx),
+                std::get<OriginalIdx>(expected.Members).Value)};
+    }
+
+    template <size_t SortedIdx = 0, CComparatorUtilsUdfValue THolder>
+    static TUnboxedValueComparatorResult CompareAll(
+        const THolder& value,
+        const NTest::TStructType<TMembers...>& expected)
+    {
+        if constexpr (SortedIdx == sizeof...(TMembers)) {
+            return {};
+        } else {
+            auto [memberName, result] = CompareElement<SortedIdx>(value, expected);
+
+            if (!result.has_value()) {
+                return std::unexpected(
+                    TStringBuilder()
+                    << "Struct." << memberName
+                    << "[sorted=" << SortedIdx
+                    << ", original=" << GetOriginalIndex<SortedIdx>()
+                    << "]: " << result.error());
+            }
+
+            return CompareAll<SortedIdx + 1>(value, expected);
+        }
+    }
+
+public:
+    template <CComparatorUtilsUdfValue THolder>
+    static TUnboxedValueComparatorResult IsEqual(
+        const THolder& value,
+        const NTest::TStructType<TMembers...>& expected)
+    {
+        return CompareAll(value, expected);
+    }
+};
+
+template <>
+struct TUnboxedValueComparator<TGUID> {
+    template <CComparatorUtilsUdfValue THolder>
+    static TUnboxedValueComparatorResult IsEqual(const THolder& value, const TGUID& expected) {
+        const auto ref = value.AsStringRef();
+        if (ref.Size() != sizeof(TGUID)) {
+            return std::unexpected(TStringBuilder() << "Expected Uuid of " << sizeof(TGUID) << " bytes but got " << ref.Size());
+        }
+        const TGUID got = ReadUnaligned<TGUID>(ref.Data());
+        if (got != expected) {
+            return std::unexpected(TStringBuilder()
+                                   << "Expected Uuid " << expected.AsGuidString()
+                                   << " but got " << got.AsGuidString());
+        }
+        return {};
+    }
+};
+
+template <>
+struct TUnboxedValueComparator<NTest::TTestDyNumber> {
+    template <CComparatorUtilsUdfValue THolder>
+    static TUnboxedValueComparatorResult IsEqual(const THolder& value, const NTest::TTestDyNumber& expected) {
+        const auto parsed = NKikimr::NDyNumber::ParseDyNumberString(expected.Value);
+        if (!parsed) {
+            return std::unexpected(TStringBuilder() << "Invalid expected DyNumber: " << expected.Value);
+        }
+        if (value.AsStringRef() != NUdf::TStringRef(*parsed)) {
+            const auto& got = NKikimr::NDyNumber::DyNumberToString(value.AsStringRef());
+            return std::unexpected(TStringBuilder()
+                                   << "Expected DyNumber \"" << expected.Value << "\" but got \""
+                                   << (got ? *got : TString("<invalid>")) << "\"");
+        }
+        return {};
+    }
+};
 
 template <CComparatorUtilsUdfValue THolder, typename T>
 TUnboxedValueComparatorResult IsUnboxedValueElementEqual(const THolder& value, const T& expected) {
-    return NPrivate::IsElementEqualImpl<THolder, T>(value, expected);
+    return TUnboxedValueComparator<T>::IsEqual(value, expected);
 }
 
 template <CComparatorUtilsUdfValue TValue, typename TExpected>

@@ -36,7 +36,7 @@ If you run into bugs, you can file them in our `issue tracker`_.
 
 We maintain a cryptography-dev_ mailing list for both user and development discussions.
 
-You can also join ``#cryptography-dev`` on Freenode to ask questions or get involved.
+You can also join ``#pyca`` on ``irc.libera.chat`` to ask questions or get involved.
 
 
 .. _documentation: https://pyopenssl.org/

@@ -41,6 +41,9 @@ class TpccSuiteBase(LoadSuiteBase):
 
     @classmethod
     def get_tpcc_path(cls) -> str:
+        env_path = getenv('TPCC_TABLE_PATH')
+        if env_path:
+            return env_path
         return get_external_param(f'table-path-{cls.suite()}', f'tpcc/w{cls.warehouses}')
 
     @classmethod
@@ -119,6 +122,7 @@ class TpccSuiteBase(LoadSuiteBase):
 
     def test(self):
         assert len(self.get_users()) == 1, 'multiuser TPC-C not supported'
+        self.save_nodes_state()
         result = YdbCliHelper.run_tpcc(
             remote_cli_path=self._remote_cli_path,
             users=self.get_users(),
@@ -128,22 +132,19 @@ class TpccSuiteBase(LoadSuiteBase):
             threads=self.threads,
             tx_mode=self.tx_mode
         )[self.get_users()[0]]
+        end_time = time()
+        verify_errors = type(self).check_nodes_verifies_with_timing(result.start_time, end_time)
+        node_errors = type(self).check_nodes_diagnostics_with_timing(result, result.start_time, end_time)
         stats = result.get_stats('test')
         measure_start_time = stats.get('tpcc_json', {}).get('summary', {}).get('measure_start_ts', result.start_time)
         allure_table_strings = {
             'time_warmup': time_interval_str(result.start_time, measure_start_time),
-            'time_measure': time_interval_str(measure_start_time, time())
+            'time_measure': time_interval_str(measure_start_time, end_time)
         }
-        self.process_query_result(result, 'test', True, allure_table_strings=allure_table_strings)
+        self.process_query_result(result, 'test', True, allure_table_strings=allure_table_strings, node_errors=node_errors, verify_errors=verify_errors)
         if result.success and 'tpcc_json' in stats:
             run_type = f'ydb_cli_{str(self.tx_mode).replace("-rw", "")}_{getenv("TPCC_RUN_TYPE", "default")}'
             ResultsProcessor.upload_tpcc_results(stats['tpcc_json'], run_type, result.start_time)
-
-
-class TestTpccW3000T0Serializable(TpccSuiteBase):
-    warehouses: int = 3000
-    threads: int = 0
-    tx_mode = TxMode.SerializableRW
 
 
 class TestTpccW5000T0Serializable(TpccSuiteBase):
@@ -164,14 +165,20 @@ class TestTpccW16000T0Serializable(TpccSuiteBase):
     tx_mode = TxMode.SerializableRW
 
 
-class TestTpccW18000T0Serializable(TpccSuiteBase):
-    warehouses: int = 18000
+class TestTpccW20000T0Serializable(TpccSuiteBase):
+    warehouses: int = 20000
     threads: int = 0
     tx_mode = TxMode.SerializableRW
 
 
-class TestTpccW3000T0Snapshot(TpccSuiteBase):
-    warehouses: int = 3000
+class TestTpccUniversalSerializable(TpccSuiteBase):
+    warehouses: int = int(getenv('TPCC_WAREHOUSES', 10))
+    threads: int = 0
+    tx_mode = TxMode.SerializableRW
+
+
+class TestTpccW5000T0Snapshot(TpccSuiteBase):
+    warehouses: int = 5000
     threads: int = 0
     tx_mode = TxMode.SnapshotRW
 
@@ -188,7 +195,13 @@ class TestTpccW16000T0Snapshot(TpccSuiteBase):
     tx_mode = TxMode.SnapshotRW
 
 
-class TestTpccW25000T0Snapshot(TpccSuiteBase):
-    warehouses: int = 25000
+class TestTpccW20000T0Snapshot(TpccSuiteBase):
+    warehouses: int = 20000
+    threads: int = 0
+    tx_mode = TxMode.SnapshotRW
+
+
+class TestTpccUniversalT0Snapshot(TpccSuiteBase):
+    warehouses: int = int(getenv('TPCC_WAREHOUSES', 10))
     threads: int = 0
     tx_mode = TxMode.SnapshotRW

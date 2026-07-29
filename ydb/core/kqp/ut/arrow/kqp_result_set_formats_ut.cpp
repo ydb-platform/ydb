@@ -21,16 +21,13 @@ namespace NTypeIds = NScheme::NTypeIds;
 namespace {
 
 TKikimrRunner CreateKikimrRunner(bool withSampleTables, ui64 channelBufferSize = 8_MB) {
-    NKikimrConfig::TFeatureFlags featureFlags;
-    featureFlags.SetEnableArrowResultSetFormat(true);
-
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
     appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetChannelBufferSize(channelBufferSize);
     appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMinChannelBufferSize(std::min(2_KB, channelBufferSize));
     appConfig.MutableTableServiceConfig()->MutableResourceManager()->SetChannelChunkSizeLimit(channelBufferSize);
 
-    auto settings = TKikimrSettings(appConfig).SetFeatureFlags(featureFlags).SetWithSampleTables(withSampleTables);
+    auto settings = TKikimrSettings(appConfig).SetWithSampleTables(withSampleTables);
     return TKikimrRunner(settings);
 }
 
@@ -501,27 +498,6 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
         for (const auto& [idx, count] : counts) {
             UNIT_ASSERT_GT_C(count, 1, "Expected at least 2 result sets for statement with ResultSetIndex = " << idx);
         }
-    }
-
-    /**
-     * Arrow format is rejected when EnableArrowResultSetFormat feature flag is false.
-     */
-    Y_UNIT_TEST(ArrowFormat_FeatureFlagDisabled) {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableArrowResultSetFormat(false);
-
-        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags).SetWithSampleTables(true);
-        auto kikimr = TKikimrRunner(settings);
-        auto client = kikimr.GetQueryClient();
-
-        auto arrowSettings = TExecuteQuerySettings().Format(TResultSet::EFormat::Arrow);
-
-        auto result = client.ExecuteQuery(R"(
-            SELECT Comment, Amount, Name FROM Test ORDER BY Amount DESC;
-        )", TTxControl::BeginTx().CommitTx(), arrowSettings).GetValueSync();
-
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Arrow result set format is not enabled");
     }
 
     /**

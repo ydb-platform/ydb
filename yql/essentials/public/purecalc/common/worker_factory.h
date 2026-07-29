@@ -20,7 +20,7 @@ struct TWorkerFactoryOptions {
     TStringBuf Query;
     TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> FuncRegistry;
     IModuleResolver::TPtr ModuleResolver;
-    const TUserDataTable& UserData;
+    TUserDataTable UserData;
     const THashMap<TString, TString>& Modules;
     TString LLVMSettings;
     EBlockEngineMode BlockEngineMode;
@@ -35,6 +35,7 @@ struct TWorkerFactoryOptions {
     bool UseWorkerPool;
     TInternalProgramSettings InternalSettings;
     TString IssueReportTarget;
+    bool RemoveUnsupportedPragmas;
 
     TWorkerFactoryOptions(
         IProgramFactoryPtr Factory,
@@ -43,7 +44,7 @@ struct TWorkerFactoryOptions {
         TStringBuf Query,
         TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> FuncRegistry,
         IModuleResolver::TPtr ModuleResolver,
-        const TUserDataTable& UserData,
+        TUserDataTable UserData,
         const THashMap<TString, TString>& Modules,
         TString LLVMSettings,
         EBlockEngineMode BlockEngineMode,
@@ -57,14 +58,15 @@ struct TWorkerFactoryOptions {
         bool useSystemColumns,
         bool useWorkerPool,
         const TInternalProgramSettings& internalSettings,
-        TString issueReportTarget)
+        TString issueReportTarget,
+        bool removeUnsupportedPragmas)
         : Factory(std::move(Factory))
         , InputSpec(InputSpec)
         , OutputSpec(OutputSpec)
         , Query(Query)
         , FuncRegistry(std::move(FuncRegistry))
         , ModuleResolver(std::move(ModuleResolver))
-        , UserData(UserData)
+        , UserData(std::move(UserData))
         , Modules(Modules)
         , LLVMSettings(std::move(LLVMSettings))
         , BlockEngineMode(BlockEngineMode)
@@ -79,6 +81,7 @@ struct TWorkerFactoryOptions {
         , UseWorkerPool(useWorkerPool)
         , InternalSettings(internalSettings)
         , IssueReportTarget(std::move(issueReportTarget))
+        , RemoveUnsupportedPragmas(removeUnsupportedPragmas)
     {
     }
 };
@@ -90,7 +93,7 @@ private:
 
 protected:
     TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> FuncRegistry_;
-    const TUserDataTable& UserData_;
+    TUserDataTable UserData_;
     TExprContext ExprContext_;
     TExprNode::TPtr ExprRoot_;
     TString SerializedProgram_;
@@ -113,6 +116,7 @@ protected:
     NYql::TRuntimeSettings::TConstPtr RuntimeSettings_;
     TVector<THolder<IWorker>> WorkerPool_;
     const TString IssueReportTarget_;
+    bool RemoveUnsupportedPragmas_;
 
 public:
     TWorkerFactory(TWorkerFactoryOptions, EProcessorMode);

@@ -18,13 +18,29 @@ DEFAULT_FETCH_RETRY_DELAY_SEC = 1.0
 DEFAULT_PREFETCH_RETRY_PASSES = 2
 DEFAULT_PREFETCH_RETRY_DELAY_SEC = 5.0
 
+# Backfill mode (test_history_fast): many URLs point to deleted log files,
+# so use shorter timeout and fewer attempts to avoid long hangs.
+BACKFILL_FETCH_TIMEOUT_SEC = 2
+BACKFILL_FETCH_MAX_ATTEMPTS = 1
+BACKFILL_PREFETCH_RETRY_PASSES = 0
+
 # Sentinel stored in the fetch cache when a URL was attempted but all retries failed.
 # Distinguishes "fetch error" from "URL absent" (None / key not present).
 _FETCH_FAILED = object()
 
 _ERROR_TYPE_BLACKLIST = frozenset({"REGULAR"})
-_STORAGE_TAG_ORDER = ("TIMEOUT", "XFAILED", "NOT_LAUNCHED", "VERIFY", "SANITIZER")
+_STORAGE_TAG_ORDER = (
+    "TIMEOUT",
+    "XFAILED",
+    "NOT_LAUNCHED",
+    "VERIFY",
+    "SANITIZER",
+    "POSSIBLE_OOM",
+)
 _KNOWN_STORAGE_TAGS = frozenset(_STORAGE_TAG_ORDER)
+
+# Test runner reports `Process exit_code = -9` when killed by SIGKILL (typical OOM-killer).
+_POSSIBLE_OOM_RE = re.compile(r"\bProcess exit_code\s*=\s*-9\b")
 
 
 def _normalize_text(value):
@@ -109,6 +125,14 @@ def is_sanitizer_classification(status_description=None, stderr_text=None, log_t
     )
 
 
+def is_possible_oom_classification(status_description=None, stderr_text=None, log_text=None):
+    """True if snippet or logs show SIGKILL exit (likely kernel OOM-killer)."""
+    for text in (status_description, stderr_text, log_text):
+        if text is not None and _POSSIBLE_OOM_RE.search(_normalize_text(text)):
+            return True
+    return False
+
+
 def build_error_type_csv_for_storage(
     status,
     status_description,
@@ -120,7 +144,7 @@ def build_error_type_csv_for_storage(
     """Return stable comma-separated error_type tags for DB storage.
 
     Seeds from upstream ``source_error_type``, then adds text-derived tags
-    (VERIFY, SANITIZER) for failure-like statuses. Blacklisted tags stripped.
+    (VERIFY, SANITIZER, POSSIBLE_OOM) for failure-like statuses. Blacklisted tags stripped.
     """
     tags = set()
     for part in re.split(r"\s*,\s*", _normalize_text(source_error_type).strip()):
@@ -133,6 +157,8 @@ def build_error_type_csv_for_storage(
             tags.add("VERIFY")
         if is_sanitizer_classification(status_description, stderr_text, log_text):
             tags.add("SANITIZER")
+        if is_possible_oom_classification(status_description, stderr_text, log_text):
+            tags.add("POSSIBLE_OOM")
         if status_name_for_not_launched is not None and is_not_launched_issue(
             source_error_type, status_name_for_not_launched
         ):
@@ -166,14 +192,69 @@ def failure_row_from_ydb(row: Dict[str, Any]) -> FailureRow:
     )
 
 
-def failure_row_from_test_result(test: Any, status_str: str) -> FailureRow:
+def _link_url_from_report(links, *keys):
+    for key in keys:
+        vals = links.get(key)
+        if isinstance(vals, list) and vals:
+            return vals[0]
+    return None
+
+
+def failure_row_from_report_result(result: Dict[str, Any], status_str: str) -> FailureRow:
+    links = result.get("links") or {}
     return FailureRow(
         status=status_str,
-        status_description=getattr(test, "status_description", None),
-        source_error_type=getattr(test, "error_type", None),
-        stderr_url=getattr(test, "stderr_url", None),
-        log_url=getattr(test, "log_url", None),
+        status_description=result.get("rich-snippet"),
+        source_error_type=result.get("error_type"),
+        stderr_url=_link_url_from_report(links, "stderr"),
+        log_url=_link_url_from_report(links, "log", "Log"),
     )
+
+
+def _failure_status_str_for_report(result: Dict[str, Any]) -> Optional[str]:
+    status = _normalize_text(result.get("status")).upper()
+    if status == "FAILED":
+        return "failure"
+    if status == "ERROR":
+        return "error"
+    if status == "MUTE":
+        return "mute"
+    return None
+
+
+def enrich_error_types_in_results(
+    results: Sequence[Dict[str, Any]],
+    public_dir: Optional[str] = None,
+    public_dir_url: Optional[str] = None,
+) -> None:
+    """Classify failure-like test rows and write merged tags into ``error_type``."""
+    failure_rows = []
+    targets = []
+    for result in results:
+        status_str = _failure_status_str_for_report(result)
+        if not status_str:
+            continue
+        failure_rows.append(failure_row_from_report_result(result, status_str))
+        targets.append(result)
+
+    if not failure_rows:
+        return
+
+    cache = prefetch_text_cache_for_failure_rows(
+        failure_rows,
+        local_dir=public_dir,
+        local_url_prefix=public_dir_url,
+    )
+    for result, fr in zip(targets, failure_rows):
+        stderr_text, log_text = get_debug_texts_from_cache(fr, cache)
+        result["error_type"] = build_error_type_csv_for_storage(
+            fr.status,
+            fr.status_description,
+            fr.source_error_type,
+            stderr_text,
+            log_text,
+            status_name_for_not_launched=result.get("status"),
+        )
 
 
 def get_debug_texts_from_cache(fr: FailureRow, fetch_cache: Dict[str, Any]) -> Tuple[Optional[str], Optional[str]]:
@@ -193,35 +274,41 @@ def get_debug_texts_from_cache(fr: FailureRow, fetch_cache: Dict[str, Any]) -> T
     return _resolve(se), _resolve(lg)
 
 
-def _fetch_text_slice(url: str, byte_range: Optional[str], max_bytes: int) -> str:
+def _fetch_text_slice(url: str, byte_range: Optional[str], max_bytes: int, timeout: int = DEFAULT_FETCH_TIMEOUT_SEC) -> str:
     req = urllib_request.Request(url)
     if byte_range:
         req.add_header("Range", byte_range)
-    with urllib_request.urlopen(req, timeout=DEFAULT_FETCH_TIMEOUT_SEC) as resp:
+    with urllib_request.urlopen(req, timeout=timeout) as resp:
         data = resp.read(max_bytes)
     return data.decode("utf-8", errors="replace")
 
 
-def _fetch_text_by_url(url):
+def _fetch_text_by_url(url, timeout: int = DEFAULT_FETCH_TIMEOUT_SEC, attempts: int = DEFAULT_FETCH_MAX_ATTEMPTS):
     """Return response text, "" for empty body, _FETCH_FAILED sentinel on failure."""
-    for attempt in range(DEFAULT_FETCH_MAX_ATTEMPTS):
+    for attempt in range(attempts):
         try:
             return _fetch_text_slice(
                 url,
                 byte_range=f"bytes=-{DEFAULT_FETCH_TAIL_MAX_BYTES}",
                 max_bytes=DEFAULT_FETCH_TAIL_MAX_BYTES,
+                timeout=timeout,
             )
         except (urllib_error.URLError, TimeoutError, ValueError, OSError):
-            if attempt < DEFAULT_FETCH_MAX_ATTEMPTS - 1:
+            if attempt < attempts - 1:
                 time.sleep(DEFAULT_FETCH_RETRY_DELAY_SEC)
     return _FETCH_FAILED
 
 
-def _fetch_urls_parallel(urls: List[str], cache: Dict[str, Any], workers: int) -> None:
+def _fetch_urls_parallel(urls: List[str], cache: Dict[str, Any], workers: int,
+                         fetch_timeout: int = DEFAULT_FETCH_TIMEOUT_SEC,
+                         fetch_attempts: int = DEFAULT_FETCH_MAX_ATTEMPTS) -> None:
     """Fetch *urls* in parallel, writing results into *cache* in-place."""
     future_to_url = {}
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        future_to_url = {pool.submit(_fetch_text_by_url, url): url for url in urls}
+        future_to_url = {
+            pool.submit(_fetch_text_by_url, url, fetch_timeout, fetch_attempts): url
+            for url in urls
+        }
         for future in as_completed(future_to_url):
             url = future_to_url[future]
             try:
@@ -264,6 +351,9 @@ def prefetch_text_cache_for_failure_rows(
     max_workers: Optional[int] = None,
     local_dir: Optional[str] = None,
     local_url_prefix: Optional[str] = None,
+    fetch_timeout: int = DEFAULT_FETCH_TIMEOUT_SEC,
+    fetch_attempts: int = DEFAULT_FETCH_MAX_ATTEMPTS,
+    retry_passes: int = DEFAULT_PREFETCH_RETRY_PASSES,
 ) -> Dict[str, Any]:
     """Download stderr/log URLs from failure_rows in parallel; return url→text cache.
 
@@ -274,7 +364,10 @@ def prefetch_text_cache_for_failure_rows(
     not yet uploaded to S3).
 
     After the HTTP pass, any URL that still failed is retried up to
-    DEFAULT_PREFETCH_RETRY_PASSES times with a short delay between passes.
+    *retry_passes* times with a short delay between passes.
+
+    *fetch_timeout* and *fetch_attempts* tune per-URL behaviour: lower values
+    speed up backfill runs where many URLs point to already-deleted log files.
     """
     cache = existing_cache if existing_cache is not None else {}
     seen: set = set()
@@ -306,22 +399,21 @@ def prefetch_text_cache_for_failure_rows(
     total = len(urls_to_fetch)
     workers = min(max_workers or DEFAULT_PREFETCH_MAX_WORKERS, total)
     t0 = time.time()
-    print(f"[prefetch] {total} URL(s), {workers} workers...", flush=True)
-    _fetch_urls_parallel(urls_to_fetch, cache, workers)
+    print(f"[prefetch] {total} URL(s), {workers} workers, timeout={fetch_timeout}s, attempts={fetch_attempts}...", flush=True)
+    _fetch_urls_parallel(urls_to_fetch, cache, workers, fetch_timeout, fetch_attempts)
 
-    # Retry passes for URLs that failed in the main run.
-    for retry_pass in range(1, DEFAULT_PREFETCH_RETRY_PASSES + 1):
+    for retry_pass in range(1, retry_passes + 1):
         failed_urls = [u for u in urls_to_fetch if cache.get(u) is _FETCH_FAILED]
         if not failed_urls:
             break
         print(
-            f"[prefetch] retry pass {retry_pass}/{DEFAULT_PREFETCH_RETRY_PASSES}: "
+            f"[prefetch] retry pass {retry_pass}/{retry_passes}: "
             f"{len(failed_urls)} URL(s) failed, retrying in {DEFAULT_PREFETCH_RETRY_DELAY_SEC:.0f}s...",
             flush=True,
         )
         time.sleep(DEFAULT_PREFETCH_RETRY_DELAY_SEC)
         retry_workers = min(workers, len(failed_urls))
-        _fetch_urls_parallel(failed_urls, cache, retry_workers)
+        _fetch_urls_parallel(failed_urls, cache, retry_workers, fetch_timeout, fetch_attempts)
 
     failed = sum(1 for u in urls_to_fetch if cache.get(u) is _FETCH_FAILED)
     print(f"[prefetch] done {total} URL(s) in {time.time() - t0:.1f}s, failed={failed}", flush=True)

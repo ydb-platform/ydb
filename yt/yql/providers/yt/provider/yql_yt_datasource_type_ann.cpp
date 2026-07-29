@@ -399,8 +399,7 @@ public:
             | EYtSettingType::UserSchema
             | EYtSettingType::UserColumns
             | EYtSettingType::StatColumns
-            | EYtSettingType::SysColumns
-            | EYtSettingType::QLFilter;
+            | EYtSettingType::SysColumns;
         if (!ValidateSettings(*input.Ref().Child(TYtSection::idx_Settings), acceptedSettings, ctx)) {
             return TStatus::Error;
         }

@@ -2,7 +2,7 @@
 
 #include <library/cpp/monlib/metrics/metric_registry.h>
 #include <library/cpp/string_utils/quote/quote.h>
-
+#include <ranges>
 #include <util/random/random.h>
 
 #include <set>
@@ -51,6 +51,8 @@ private:
 };
 
 ////////////////////////////////////////////////////////////////////////////////
+
+constexpr std::int32_t PessimizedPriority = std::numeric_limits<std::int32_t>::max();
 
 // Returns index of last resord with same priority or -1 in case of empty input
 static std::int32_t GetBestK(const std::vector<TEndpointRecord>& records) {
@@ -157,27 +159,68 @@ TEndpointRecord TEndpointElectorSafe::GetEndpoint(const TEndpointKey& preferredE
         return Records_[idx];
     }
 }
+bool TEndpointElectorSafe::PessimizeEndpointUnlocked(const std::string& endpoint) {
+    const auto recordIt = std::ranges::find_if(Records_, [&](const TEndpointRecord& r) {
+        return r.Endpoint == endpoint && r.Priority != PessimizedPriority;
+    });
+    if (recordIt == Records_.end()) {
+        return false;
+    }
 
-// TODO: Suboptimal, but should not be used often
+    const auto nodeId = recordIt->NodeId;
+    recordIt->Priority = PessimizedPriority;
+
+    if (auto it = KnownEndpoints_.find(endpoint); it != KnownEndpoints_.end()) {
+        it->second.Priority = PessimizedPriority;
+    }
+
+    if (auto it = KnownEndpointsByNodeId_.find(nodeId); it != KnownEndpointsByNodeId_.end()
+        && it->second.Record.Endpoint == endpoint)
+    {
+        it->second.Record.Priority = PessimizedPriority;
+    }
+
+    const int pessimizationRatio = PessimizationRatio_.load();
+    const auto newRatio = (pessimizationRatio * Records_.size() + 100) / Records_.size();
+    PessimizationRatio_.store(newRatio);
+    PessimizationRatioGauge_.SetValue(newRatio);
+    EndpointActiveGauge_.Dec();
+
+    return true;
+}
+
 void TEndpointElectorSafe::PessimizeEndpoint(const std::string& endpoint) {
     std::unique_lock guard(Mutex_);
-    for (auto& r : Records_) {
-        if (r.Endpoint == endpoint && r.Priority != std::numeric_limits<std::int32_t>::max()) {
-            int pessimizationRatio = PessimizationRatio_.load();
-            auto newRatio = (pessimizationRatio * Records_.size() + 100) / Records_.size();
-            PessimizationRatio_.store(newRatio);
-            PessimizationRatioGauge_.SetValue(newRatio);
-            EndpointActiveGauge_.Dec();
-            r.Priority = std::numeric_limits<std::int32_t>::max();
-
-            auto it = KnownEndpoints_.find(endpoint);
-            if (it != KnownEndpoints_.end()) {
-                it->second.Priority = std::numeric_limits<std::int32_t>::max();
-            }
-        }
+    if (PessimizeEndpointUnlocked(endpoint)) {
+        Sort(Records_.begin(), Records_.end());
+        BestK_ = GetBestK(Records_);
     }
-    Sort(Records_.begin(), Records_.end());
-    BestK_ = GetBestK(Records_);
+}
+
+void TEndpointElectorSafe::PessimizeNode(const std::uint64_t nodeId) {
+    if (nodeId == 0) {
+        return;
+    }
+
+    std::unique_lock guard(Mutex_);
+
+    auto endpoints = Records_
+        | std::views::filter([nodeId](const TEndpointRecord& r) {
+            return r.NodeId == nodeId && r.Priority != PessimizedPriority;
+        })
+        | std::views::transform([](const TEndpointRecord& r) {
+            return r.Endpoint;
+        });
+
+    bool changed = false;
+    for (const auto& endpoint : endpoints) {
+        changed |= PessimizeEndpointUnlocked(endpoint);
+    }
+
+    if (changed) {
+        Sort(Records_.begin(), Records_.end());
+        BestK_ = GetBestK(Records_);
+    }
 }
 
 // % of endpoints which was pessimized

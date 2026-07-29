@@ -1,14 +1,14 @@
 #include "basic_example.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/retry/retry.h>
-
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/rows.h>
 #include <util/string/cast.h>
 
-#include <format>
 
 using namespace NYdb;
 using namespace NYdb::NQuery;
 using namespace NYdb::NStatusHelpers;
+using NYdb::NRetry::TRetryOperationSettings;
 
 template <class T>
 std::string OptionalToString(const std::optional<T>& opt) {
@@ -338,14 +338,18 @@ void MultiStep(TQueryClient client) {
         return result2;
     })); // The end of the retried lambda
 
-    TResultSetParser parser(*resultSet);
     std::cout << "> MultiStep:" << std::endl;
-    while (parser.TryNextRow()) {
-        auto airDate = TInstant::Days(*parser.ColumnParser("air_date").GetOptionalUint64());
+    TRowRange range(std::move(*resultSet));
+    for (auto [episodeId, seasonId, title, airDateDays] : range.Get<
+            std::optional<uint64_t>,
+            std::optional<uint64_t>,
+            std::optional<std::string>,
+            std::optional<uint64_t>>({"episode_id", "season_id", "title", "air_date"})) {
+        auto airDate = TInstant::Days(*airDateDays);
 
-        std::cout << "Episode " << OptionalToString(parser.ColumnParser("episode_id").GetOptionalUint64())
-            << ", Season: " << OptionalToString(parser.ColumnParser("season_id").GetOptionalUint64())
-            << ", Title: " << OptionalToString(parser.ColumnParser("title").GetOptionalUtf8())
+        std::cout << "Episode " << OptionalToString(episodeId)
+            << ", Season: " << OptionalToString(seasonId)
+            << ", Title: " << OptionalToString(title)
             << ", Air date: " << airDate.FormatLocalTime("%a %b %d, %Y")
             << std::endl;
     }
@@ -395,7 +399,7 @@ void ExplicitTcl(TQueryClient client) {
 void StreamQuerySelect(TQueryClient client) {
     std::cout << "> StreamQuery:" << std::endl;
 
-    ThrowOnError(client.RetryQuerySync([](TQueryClient client) -> TStatus {
+    ThrowOnError(client.RetryQuerySync([](TSession session) -> TStatus {
         auto query = R"(
             DECLARE $series AS List<UInt64>;
 
@@ -419,44 +423,16 @@ void StreamQuerySelect(TQueryClient client) {
                                 .Build()
                                 .Build();
 
-        // Executes stream query
-        auto resultStreamQuery = client.StreamExecuteQuery(query, TTxControl::NoTx(), parameters).GetValueSync();
-
-        if (!resultStreamQuery.IsSuccess()) {
-            return resultStreamQuery;
-        }
-
-        // Iterates over results
-        bool eos = false;
-
-        while (!eos) {
-            auto streamPart = resultStreamQuery.ReadNext().ExtractValueSync();
-
-            if (!streamPart.IsSuccess()) {
-                eos = true;
-                if (!streamPart.EOS()) {
-                    return streamPart;
-                }
-                continue;
-            }
-
-            // It is possible to duplicate lines in the output stream due to an external retryer.
-            if (streamPart.HasResultSet()) {
-                auto rs = streamPart.ExtractResultSet();
-                TResultSetParser parser(rs);
-                while (parser.TryNextRow()) {
-                    std::cout << "Season"
-                            << ", SeriesId: " << OptionalToString(parser.ColumnParser("series_id").GetOptionalUint64())
-                            << ", SeasonId: " << OptionalToString(parser.ColumnParser("season_id").GetOptionalUint64())
-                            << ", Title: " << OptionalToString(parser.ColumnParser("title").GetOptionalUtf8())
-                            << ", Air date: " << parser.ColumnParser("first_aired").GetOptionalDate()->FormatLocalTime("%Y-%m-%d")
-                            << std::endl;
-                }
-            }
+        for (auto& parser : TRowRange(
+                session.StreamExecuteQuery(query, TTxControl::NoTx(), parameters).ExtractValueSync())) {
+            std::cout << "Season" << ", SeriesId: " << OptionalToString(parser.ColumnParser("series_id").GetOptionalUint64())
+                    << ", SeasonId: " << OptionalToString(parser.ColumnParser("season_id").GetOptionalUint64())
+                    << ", Title: " << OptionalToString(parser.ColumnParser("title").GetOptionalUtf8())
+                    << ", Air date: " << parser.ColumnParser("first_aired").GetOptionalDate()->FormatLocalTime("%Y-%m-%d")
+                    << std::endl;
         }
         return TStatus(EStatus::SUCCESS, NYdb::NIssue::TIssues());
     }));
-
 }
 
 

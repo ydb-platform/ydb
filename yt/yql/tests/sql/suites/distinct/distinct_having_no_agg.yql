@@ -1,4 +1,3 @@
-/* syntax version 1 */
 pragma warning("disable", "4526");
 use plato;
 

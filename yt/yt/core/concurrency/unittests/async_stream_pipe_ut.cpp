@@ -22,7 +22,7 @@ TEST(TAsyncStreamPipeTest, Simple)
         const auto readResult = pipe->Read();
         EXPECT_FALSE(readResult.IsSet());
 
-        auto writeResult = pipe->Write(TSharedRef::FromString("FOO"));
+        auto writeResult = pipe->Write(TSharedRef::FromString(std::string("FOO")));
         ASSERT_TRUE(readResult.IsSet());
         EXPECT_TRUE(readResult.GetOrCrash().IsOK());
         EXPECT_EQ(GetString(readResult.GetOrCrash().Value()), "FOO");
@@ -31,7 +31,7 @@ TEST(TAsyncStreamPipeTest, Simple)
     }
 
     {
-        auto writeResult = pipe->Write(TSharedRef::FromString("BAR_BAZ"));
+        auto writeResult = pipe->Write(TSharedRef::FromString(std::string("BAR_BAZ")));
         EXPECT_FALSE(writeResult.IsSet());
 
         const auto readResult = pipe->Read();
@@ -66,7 +66,7 @@ TEST(TBoundedAsyncStreamPipeTest, Simple)
         const auto readResult = pipe->Read();
         EXPECT_FALSE(readResult.IsSet());
 
-        auto writeResult = pipe->Write(TSharedRef::FromString("FOO"));
+        auto writeResult = pipe->Write(TSharedRef::FromString(std::string("FOO")));
         ASSERT_TRUE(readResult.IsSet());
         EXPECT_TRUE(readResult.GetOrCrash().IsOK());
         EXPECT_EQ(GetString(readResult.GetOrCrash().Value()), "FOO");
@@ -76,7 +76,7 @@ TEST(TBoundedAsyncStreamPipeTest, Simple)
     }
 
     {
-        auto writeResult = pipe->Write(TSharedRef::FromString("BAR"));
+        auto writeResult = pipe->Write(TSharedRef::FromString(std::string("BAR")));
         ASSERT_TRUE(writeResult.IsSet());
         EXPECT_TRUE(writeResult.GetOrCrash().IsOK());
 
@@ -87,11 +87,11 @@ TEST(TBoundedAsyncStreamPipeTest, Simple)
     }
 
     {
-        auto writeResult1 = pipe->Write(TSharedRef::FromString("BAZ_1"));
+        auto writeResult1 = pipe->Write(TSharedRef::FromString(std::string("BAZ_1")));
         ASSERT_TRUE(writeResult1.IsSet());
         EXPECT_TRUE(writeResult1.GetOrCrash().IsOK());
 
-        auto writeResult2 = pipe->Write(TSharedRef::FromString("BAZ_2"));
+        auto writeResult2 = pipe->Write(TSharedRef::FromString(std::string("BAZ_2")));
         EXPECT_FALSE(writeResult2.IsSet());
 
         const auto readResult1 = pipe->Read();
@@ -115,11 +115,11 @@ TEST(TBoundedAsyncStreamPipeTest, Simple)
         const auto readResult2 = pipe->Read();
         EXPECT_FALSE(readResult2.IsSet());
 
-        auto writeResult1 = pipe->Write(TSharedRef::FromString("ABC_1"));
+        auto writeResult1 = pipe->Write(TSharedRef::FromString(std::string("ABC_1")));
         ASSERT_TRUE(writeResult1.IsSet());
         EXPECT_TRUE(writeResult1.GetOrCrash().IsOK());
 
-        auto writeResult2 = pipe->Write(TSharedRef::FromString("ABC_2"));
+        auto writeResult2 = pipe->Write(TSharedRef::FromString(std::string("ABC_2")));
         ASSERT_TRUE(writeResult2.IsSet());
         EXPECT_TRUE(writeResult2.GetOrCrash().IsOK());
 
@@ -179,7 +179,7 @@ TEST(TBoundedAsyncStreamPipeTest, AbortWaitRead)
     const auto readResult1 = pipe->Read();
     EXPECT_FALSE(readResult1.IsSet());
 
-    auto writeResult1 = pipe->Write(TSharedRef::FromString("FOO"));
+    auto writeResult1 = pipe->Write(TSharedRef::FromString(std::string("FOO")));
     ASSERT_TRUE(writeResult1.IsSet());
     EXPECT_TRUE(writeResult1.GetOrCrash().IsOK());
 
@@ -204,7 +204,7 @@ TEST(TBoundedAsyncStreamPipeTest, AbortWaitWrite)
     const auto readResult1 = pipe->Read();
     EXPECT_FALSE(readResult1.IsSet());
 
-    auto writeResult1 = pipe->Write(TSharedRef::FromString("FOO"));
+    auto writeResult1 = pipe->Write(TSharedRef::FromString(std::string("FOO")));
     ASSERT_TRUE(writeResult1.IsSet());
     EXPECT_TRUE(writeResult1.GetOrCrash().IsOK());
 
@@ -212,11 +212,11 @@ TEST(TBoundedAsyncStreamPipeTest, AbortWaitWrite)
     EXPECT_TRUE(readResult1.GetOrCrash().IsOK());
     EXPECT_EQ(GetString(readResult1.GetOrCrash().Value()), "FOO");
 
-    const auto writeResult2 = pipe->Write(TSharedRef::FromString("BAR"));
+    const auto writeResult2 = pipe->Write(TSharedRef::FromString(std::string("BAR")));
     ASSERT_TRUE(writeResult2.IsSet());
     EXPECT_TRUE(writeResult2.GetOrCrash().IsOK());
 
-    const auto writeResult3 = pipe->Write(TSharedRef::FromString("BAZ"));
+    const auto writeResult3 = pipe->Write(TSharedRef::FromString(std::string("BAZ")));
     EXPECT_FALSE(writeResult3.IsSet());
 
     pipe->Abort(TError("fail"));
@@ -225,7 +225,7 @@ TEST(TBoundedAsyncStreamPipeTest, AbortWaitWrite)
     EXPECT_FALSE(writeResult3.GetOrCrash().IsOK());
     EXPECT_THROW_WITH_SUBSTRING(writeResult3.GetOrCrash().ThrowOnError(), "was drained");
 
-    const auto writeResult4 = pipe->Write(TSharedRef::FromString("ABC"));
+    const auto writeResult4 = pipe->Write(TSharedRef::FromString(std::string("ABC")));
     ASSERT_TRUE(writeResult4.IsSet());
     EXPECT_FALSE(writeResult4.GetOrCrash().IsOK());
     EXPECT_THROW_WITH_SUBSTRING(writeResult4.GetOrCrash().ThrowOnError(), "fail");

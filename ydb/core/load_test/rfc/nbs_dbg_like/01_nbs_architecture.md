@@ -116,13 +116,13 @@ Volume → Region (4 GiB each) → vChunk → DirectBlockGroup (5 hosts):
 Before any I/O, the partition issues `TEvConnect` to each PB and DDisk it
 talks to (`TICStorageTransport::Connect` →
 `ic_storage_transport_actor.cpp:103-128`). The DDisk validates
-`TQueryCredentials{TabletId, Generation, DDiskInstanceGuid, FromPersistentBuffer}`
+`TQueryCredentials{TabletId, Generation, DDiskInstanceGuid, RequestKind}`
 on every subsequent request via `ValidateConnection` / `CheckQuery`
 (`ddisk_actor.h:478-563`). A partition with a stale generation gets
 `SESSION_MISMATCH`.
 
-PB-to-PB requests reuse the partition's tablet creds but mark
-`creds.FromPersistentBuffer = true`
+PB-to-PB requests reuse the partition's tablet creds but set
+`RequestKind = REQUEST_KIND_INTERNAL`
 (`write_persistent_buffers_request_actor.cpp:202-206`).
 
 ## 3. The hot path — write
@@ -220,7 +220,7 @@ This is the mode shown in the architecture diagram (Tablet→PB2→{PB1,PB3}).
 In `TWritePersistentBuffersRequestActor::Handle(TEvWritePersistentBuffers)`
 (`write_persistent_buffers_request_actor.cpp:189-239`):
 
-1. Marks `creds.FromPersistentBuffer = true`.
+1. Uses `REQUEST_KIND_INTERNAL` credentials.
 2. For each `pbId` in `PersistentBufferIds` (including itself), sends a plain
    `TEvWritePersistentBuffer` over interconnect with
    `FlagSubscribeOnSession`. Same payload is shared via `TRope`.
@@ -850,7 +850,7 @@ TQueryCredentials {
     ui64 TabletId;
     ui32 Generation;
     std::optional<ui64> DDiskInstanceGuid;
-    bool FromPersistentBuffer = false;   // set true when source is another PB
+    ERequestKind RequestKind;            // controls sender/session and DDisk seqno validation
 };
 ```
 

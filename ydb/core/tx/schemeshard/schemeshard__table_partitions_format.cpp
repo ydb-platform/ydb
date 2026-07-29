@@ -118,11 +118,10 @@ struct TSchemeShard::TTxTablePartitionsFormatSweepStep : public TTransactionBase
 
         NIceDb::TNiceDb db(txc.DB);
 
-        // Self-cancel if the live flag diverged from the captured target.
-        const bool liveTarget = AppData()->FeatureFlags.GetEnableTablePartitionsFormatShardIdx();
-        if (liveTarget != sweep.TargetIsShardIdx) {
+        // Self-cancel if shardidx format support is disabled during the sweep.
+        if (!AppData()->FeatureFlags.GetEnableTablePartitionsFormatShardIdx()) {
             LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TablePartitionsFormatSweep step:"
-                << " flag EnableTablePartitionsFormatShardIdx flipped during sweep, cancelling"
+                << " flag EnableTablePartitionsFormatShardIdx turned off during sweep, cancelling"
             );
             Self->CancelTablePartitionsFormatSweep(db);
             return true;
@@ -204,6 +203,14 @@ void TSchemeShard::Handle(TEvPrivate::TEvProgressTablePartitionsFormatSweep::TPt
 void TSchemeShard::StartTablePartitionsFormatSweep(NIceDb::TNiceDb& db, bool targetIsShardIdx) {
     auto& sweep = TablePartitionsFormatSweep;
 
+    if (!AppData()->FeatureFlags.GetEnableTablePartitionsFormatShardIdx()) {
+        LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "TablePartitionsFormatSweep start: cannot start as EnableTablePartitionsFormatShardIdx is disabled"
+            << ", schemeshardId: " << TabletID()
+        );
+        return;
+    }
+
     sweep.Status = TTablePartitionsFormatSweepState::EStatus::Running;
     sweep.TargetIsShardIdx = targetIsShardIdx;
     sweep.Done = 0;
@@ -214,6 +221,16 @@ void TSchemeShard::StartTablePartitionsFormatSweep(NIceDb::TNiceDb& db, bool tar
         if (tableInfoPtr->PartitionsInShardIdxFormat != sweep.TargetIsShardIdx) {
             sweep.Queue.push_back(pathId);
         }
+    }
+
+    if (sweep.Queue.empty()) {
+        LOG_NOTICE_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "TablePartitionsFormatSweep start: no tables to process"
+            << ", schemeshardId: " << TabletID()
+        );
+        sweep.Status = TTablePartitionsFormatSweepState::EStatus::Idle;
+        sweep.Queue.clear();
+        return;
     }
 
     LOG_NOTICE_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -301,16 +318,17 @@ void TSchemeShard::ClearTablePartitionsFormatSweep(NIceDb::TNiceDb& db) {
 void TSchemeShard::InitializeTablePartitionsFormatSweep() {
     auto& sweep = TablePartitionsFormatSweep;
 
-    if (sweep.Status == TTablePartitionsFormatSweepState::EStatus::Running) {
+    if (sweep.Status != TTablePartitionsFormatSweepState::EStatus::Idle) {
+        // sweep running or paused
         ContinueTablePartitionsFormatSweep();
 
-    } else if (sweep.Status == TTablePartitionsFormatSweepState::EStatus::Idle
+    } else if (AppData()->FeatureFlags.GetEnableTablePartitionsFormatShardIdx()
         && AppData()->FeatureFlags.GetEnableTablePartitionsFormatAutoConvert()
         && (TabletCounters->Simple()[COUNTER_FORMAT_POSITION_TABLE_COUNT].Get() > 0)
     ) {
+        // sweep on idle but should be started
         Execute(CreateTxTablePartitionsFormatSweepAutoStart());
     }
-    // else: sweep paused -- do nothing
 }
 
 // ContinueTablePartitionsFormatSweep -- continue running sweep on reboot.
@@ -318,7 +336,7 @@ void TSchemeShard::InitializeTablePartitionsFormatSweep() {
 void TSchemeShard::ContinueTablePartitionsFormatSweep() {
     auto& sweep = TablePartitionsFormatSweep;
 
-    if (sweep.Status != TTablePartitionsFormatSweepState::EStatus::Running) {
+    if (sweep.Status == TTablePartitionsFormatSweepState::EStatus::Idle) {
         return;
     }
 
@@ -328,6 +346,10 @@ void TSchemeShard::ContinueTablePartitionsFormatSweep() {
         if (tableInfoPtr->PartitionsInShardIdxFormat != sweep.TargetIsShardIdx) {
             sweep.Queue.push_back(pathId);
         }
+    }
+
+    if (sweep.Status == TTablePartitionsFormatSweepState::EStatus::Paused) {
+        return;
     }
 
     LOG_NOTICE_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,

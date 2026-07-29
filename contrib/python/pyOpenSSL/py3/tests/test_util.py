@@ -3,7 +3,7 @@ import pytest
 from OpenSSL._util import exception_from_error_queue, lib
 
 
-class TestErrors(object):
+class TestErrors:
     """
     Tests for handling of certain OpenSSL error cases.
     """

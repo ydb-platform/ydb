@@ -74,4 +74,28 @@ std::expected<std::vector<TDirectBlockGroup>, TString> ParseAllocateResult(
     return dbgs;
 }
 
+TRoutingParams ComputeRoutingParams(
+    const TEvLoadTestRequest::TNbsDbgLikeLoad::TConfigureTablet& cfg,
+    const TEvLoadTestRequest::TNbsDbgLikeLoad::TAllocConfig& allocConfig,
+    ui32 numDbgs)
+{
+    TRoutingParams params;
+
+    const ui32 want = cfg.GetNumDirectBlockGroupsToUse();
+    params.ActiveDbgs = (want == 0 || want > numDbgs) ? numDbgs : want;
+
+    const ui32 wantIo = cfg.GetIoSizeBytes();
+    const ui64 vChunkSizeBytes = allocConfig.GetVChunkSizeBytes();
+    const ui32 targetNumVChunks = allocConfig.GetTargetNumVChunks();
+    const ui64 bytesPerDbg = static_cast<ui64>(targetNumVChunks) * vChunkSizeBytes;
+    params.IoValid = wantIo != 0 && vChunkSizeBytes != 0 && bytesPerDbg != 0
+        && wantIo <= vChunkSizeBytes && vChunkSizeBytes % wantIo == 0;
+    if (params.IoValid) {
+        params.IoSizeBytes = wantIo;
+        params.BytesPerDbg = bytesPerDbg;
+    }
+
+    return params;
+}
+
 } // namespace NKikimr::NNbsDbgLike

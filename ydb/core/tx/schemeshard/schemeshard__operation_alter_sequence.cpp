@@ -434,8 +434,8 @@ public:
             if (checks) {
                 if (parentPath.Parent()->IsTableIndex()) {
                     checks.IsInsideTableIndexPath();
-                    // Only __ydb_id sequence can be altered and only by internal transactions (build_index__progress)
-                    if (name != NTableIndex::NKMeans::IdColumnSequence || !Transaction.GetInternal()) {
+                    // Index sequences can be altered only by internal transactions (build_index__progress)
+                    if (!Transaction.GetInternal()) {
                         result->SetError(NKikimrScheme::EStatus::StatusNameConflict, "sequences are not allowed in indexes");
                         return result;
                     }

@@ -1,8 +1,32 @@
 #include "kqp_rbo_physical_source_builder.h"
+
+#include <ydb/core/kqp/opt/rbo/kqp_olap_expr_inspection.h>
+
 #include <yql/essentials/core/yql_expr_optimize.h>
+
 using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
+
+namespace {
+
+THashMap<TString, TString> BuildOutputToPhysicalColumnMap(const TOpRead& read) {
+    THashMap<TString, TString> renameMap;
+    Y_ENSURE(read.Columns.size() == read.OutputIUs.size());
+    for (ui32 i = 0; i < read.Columns.size(); ++i) {
+        const auto& physicalColumn = read.Columns[i];
+        const auto& outputIU = read.OutputIUs[i];
+        if (outputIU.GetFullName() != physicalColumn) {
+            renameMap[outputIU.GetFullName()] = physicalColumn;
+        }
+        if (outputIU.GetColumnName() != physicalColumn) {
+            renameMap[outputIU.GetColumnName()] = physicalColumn;
+        }
+    }
+    return renameMap;
+}
+
+} // anonymous namespace
 
 TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
     TExprNode::TPtr source;
@@ -10,6 +34,8 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
     for (const auto& column : Read->Columns) {
         columns.push_back(Ctx.NewAtom(Pos, column));
     }
+    // Extract ranges.
+    TExprNode::TPtr ranges = Read->GetRanges() ? Read->GetRanges() : Build<TCoVoid>(Ctx, Pos).Done().Ptr();
 
     switch (Read->GetTableStorageType()) {
         case NYql::EStorageType::RowStorage: {
@@ -24,7 +50,7 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
                         .Add(columns)
                     .Build()
                     .Settings<TCoNameValueTupleList>().Build()
-                    .RangesExpr<TCoVoid>().Build()
+                    .RangesExpr(ranges)
                     .ExplainPrompt<TCoNameValueTupleList>().Build()
                 .Build()
             .Done().Ptr();
@@ -65,6 +91,10 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
 
             if (Read->OlapFilterLambda) {
                 processLambda = Read->OlapFilterLambda;
+                const auto renameMap = BuildOutputToPhysicalColumnMap(*Read);
+                if (!renameMap.empty()) {
+                    processLambda = NOpt::TOlapFilterInspector::RenameColumns(processLambda, renameMap, Ctx);
+                }
             }
 
             TKqpReadTableSettings settings;
@@ -80,7 +110,6 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
                 settings.SequentialInFlight = 1;
             }
 
-            TExprNode::TPtr ranges = Read->GetRanges() ? Read->GetRanges() : Build<TCoVoid>(Ctx, Pos).Done().Ptr();
             // clang-format off
             auto olapRead = Build<TKqpBlockReadOlapTableRanges>(Ctx, Pos)
                 .Table(Read->TableCallable)
@@ -111,7 +140,7 @@ TExprNode::TPtr TPhysicalSourceBuilder::BuildPhysicalOp() {
             break;
         }
         default:
-            Y_ENSURE(false, "Unsupported table source type");
+            Y_ENSURE(false, "Unsupported table source type.");
     }
 
     YQL_CLOG(TRACE, CoreDq) << "[NEW RBO Physical source] " << KqpExprToPrettyString(TExprBase(source), Ctx);

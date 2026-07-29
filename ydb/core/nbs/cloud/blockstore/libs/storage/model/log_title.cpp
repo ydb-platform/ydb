@@ -75,9 +75,8 @@ TString ToString(const TLogTitle::TVolume& data)
 {
     TStringBuilder stream;
 
-    stream << "[v:" << data.TabletId;
-    stream << " g:" << TOptional{data.Generation};
-    stream << " d:" << TOptional{data.DiskId};
+    stream << "[v:" << TOptional{data.DiskId};
+    stream << " tbl:" << data.TabletId << "/" << data.Generation;
 
     return stream;
 }
@@ -86,9 +85,18 @@ TString ToString(const TLogTitle::TPartitionDirect& data)
 {
     TStringBuilder stream;
 
-    stream << "[pd:" << data.TabletId;
-    stream << " g:" << TOptional{data.Generation};
-    stream << " d:" << TOptional{data.DiskId};
+    stream << "[pd:" << TOptional{data.DiskId};
+    stream << " tbl:" << data.TabletId << "/" << TOptional{data.Generation};
+
+    return stream;
+}
+
+TString ToString(const TLogTitle::TFastPathService& data)
+{
+    TStringBuilder stream;
+
+    stream << "[fps:" << TOptional{data.DiskId};
+    stream << " tbl:" << data.TabletId << "/" << data.Generation;
 
     return stream;
 }
@@ -97,7 +105,8 @@ TString ToString(const TLogTitle::TDirectBlockGroup& data)
 {
     TStringBuilder stream;
 
-    stream << "[dbg:" << data.DiskId;
+    stream << "[dbg:" << data.DiskId << "/" << data.DBGIndex;
+    stream << " tbl:" << data.TabletId << "/" << data.Generation;
 
     return stream;
 }
@@ -106,8 +115,9 @@ TString ToString(const TLogTitle::TVChunk& data)
 {
     TStringBuilder stream;
 
-    stream << "[vchk:" << data.DiskId;
-    stream << " indx:" << data.VChunkIndex;
+    stream << "[vchk:" << data.DiskId << "/" << data.DBGIndex << "/"
+           << data.VChunkIndex;
+    stream << " tbl:" << data.TabletId << "/" << data.Generation;
 
     return stream;
 }
@@ -116,8 +126,20 @@ TString ToString(const TLogTitle::TDDiskDataCopier& data)
 {
     TStringBuilder stream;
 
-    stream << "[copy:" << data.DiskId;
+    stream << "[copy:" << data.DiskId << "/" << data.DBGIndex << "/"
+           << data.VChunkIndex;
+    stream << " tbl:" << data.TabletId << "/" << data.Generation;
     stream << " dst:" << data.Destination;
+
+    return stream;
+}
+
+TString ToString(const TLogTitle::TInterconnectTransport& data)
+{
+    TStringBuilder stream;
+
+    stream << "[ic:" << data.DiskId << "/" << data.DBGIndex;
+    stream << " tbl:" << data.TabletId << "/" << data.Generation;
 
     return stream;
 }

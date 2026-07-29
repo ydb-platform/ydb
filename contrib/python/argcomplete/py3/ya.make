@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(3.6.3)
+VERSION(3.7.0)
 
 LICENSE(Apache-2.0)
 
@@ -23,7 +23,6 @@ PY_SRCS(
     argcomplete/packages/_shlex.py
     argcomplete/scripts/__init__.py
     argcomplete/scripts/activate_global_python_argcomplete.py
-    argcomplete/scripts/python_argcomplete_check_easy_install_script.py
     argcomplete/scripts/register_python_argcomplete.py
     argcomplete/shell_integration.py
 )

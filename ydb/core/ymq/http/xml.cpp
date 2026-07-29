@@ -1,6 +1,6 @@
 #include "xml.h"
-#include "xml_builder.h"
 
+#include <ydb/core/http_proxy/sqs_xml/xml_builder.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <ydb/core/protos/sqs.pb.h>
@@ -9,6 +9,8 @@
 #include <util/string/cast.h>
 
 namespace NKikimr::NSQS {
+
+using namespace NKikimr::NHttpProxy::NSQS;
 
 using NKikimrClient::TSqsResponse;
 

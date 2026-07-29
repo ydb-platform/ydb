@@ -659,6 +659,38 @@ TEST(TLockMaskTest, ConvertToLegacy)
     }
 }
 
+TEST(TLegacyLockMaskTest, GetLockedPrefixLength)
+{
+    EXPECT_EQ(TLegacyLockMask().GetLockedPrefixLength(), 0);
+
+    for (auto lock : {ELockType::SharedWeak, ELockType::SharedStrong, ELockType::Exclusive}) {
+        for (int index = 0; index < TLegacyLockMask::MaxCount; ++index) {
+            TLegacyLockMask mask;
+            mask.Set(index, lock);
+            EXPECT_EQ(mask.GetLockedPrefixLength(), index + 1);
+        }
+    }
+
+    TLegacyLockMask mask;
+    mask.Set(3, ELockType::Exclusive);
+    mask.Set(20, ELockType::SharedWeak);
+    EXPECT_EQ(mask.GetLockedPrefixLength(), 21);
+    mask.Set(20, ELockType::None);
+    EXPECT_EQ(mask.GetLockedPrefixLength(), 4);
+
+    std::mt19937_64 rng(42);
+    for (int iteration = 0; iteration < 100'000; ++iteration) {
+        TLegacyLockMask randomMask(rng());
+        int expected = 0;
+        for (int index = 0; index < TLegacyLockMask::MaxCount; ++index) {
+            if (randomMask.Get(index) != ELockType::None) {
+                expected = index + 1;
+            }
+        }
+        EXPECT_EQ(randomMask.GetLockedPrefixLength(), expected);
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace

@@ -16,7 +16,10 @@
 
 #include <yt/yt/core/ytree/fluent.h>
 
+#include <library/cpp/yt/string/stream.h>
+
 #include <util/stream/buffer.h>
+#include <util/stream/mem.h>
 
 #include <util/generic/buffer.h>
 
@@ -49,8 +52,8 @@ void FillYTError(
     const THeadersPtr& headers,
     const TError& error)
 {
-    TString errorString;
-    TStringOutput errorStringOutput(errorString);
+    std::string errorString;
+    TStdStringOutput errorStringOutput(errorString);
 
     auto consumer = CreateJsonConsumer(&errorStringOutput);
 
@@ -107,7 +110,7 @@ TError ParseYTError(
         errorHeader = rsp->GetHeaders()->Find(XYTErrorHeaderName);
     }
 
-    TString errorString;
+    std::string errorString;
     if (errorHeader) {
         errorString = *errorHeader;
     } else {
@@ -116,7 +119,7 @@ TError ParseYTError(
         errorString = ToString(rsp->ReadAll());
     }
 
-    TStringInput errorStringInput(errorString);
+    TMemoryInput errorStringInput(errorString);
 
     std::unique_ptr<IBuildingYsonConsumer<TError>> buildingConsumer;
     CreateBuildingYsonConsumer(&buildingConsumer, EYsonType::Node);
@@ -303,12 +306,12 @@ THashMap<std::string, std::string> ParseCookies(TStringBuf cookies)
 
         auto valueStartIndex = nameEndIndex + 1;
         auto valueEndIndex = cookies.find(';', valueStartIndex);
-        if (valueEndIndex == TString::npos) {
+        if (valueEndIndex == std::string::npos) {
             valueEndIndex = cookies.size();
         }
         auto value = StripString(cookies.substr(valueStartIndex, valueEndIndex - valueStartIndex));
 
-        map.emplace(TString(name), TString(value));
+        map.emplace(std::string(name), std::string(value));
 
         index = valueEndIndex + 1;
     }
@@ -379,7 +382,7 @@ void ReplyJson(const IResponseWriterPtr& rsp, std::function<void(NYson::IYsonCon
     producer(json.get());
     json->Flush();
 
-    TString body;
+    std::string body;
     out.Buffer().AsString(body);
     WaitFor(rsp->WriteBody(TSharedRef::FromString(body)))
         .ThrowOnError();

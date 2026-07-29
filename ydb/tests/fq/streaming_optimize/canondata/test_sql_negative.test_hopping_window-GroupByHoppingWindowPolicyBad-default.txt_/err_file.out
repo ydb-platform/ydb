@@ -1,6 +1,7 @@
-Failed to execute query, invalid final status FAILED, issues:
-<main>: Error: Query failed with code ABORTED at ISOTIME
-    <main>: Error: Run query failed: Error
-        <main>: Error: Optimization, code: 1070
-            <main>:27:10: Error: HoppingWindow: EarlyPolicy: expected one of 'drop', 'adjust', 'close', but got foobar
+Failed to execute query, reason:
+Request finished with status: GENERIC_ERROR
+Issues:
+<main>: Error: Execution, code: 1060
+    <main>:5:9: Warning: Streaming topic reading (without checkpoints) use for debugging purposes only
+    <main>:17:9: Error: HoppingWindow: EarlyPolicy: expected one of 'drop', 'adjust', 'close', but got foobar
 

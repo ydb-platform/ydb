@@ -18,6 +18,9 @@ namespace NMiniKQL {
 
 namespace {
 
+using TKeyItemsRef = TConstArrayRef<NYql::NUdf::TBlockItem>;
+using TKeyItemsMutableRef = TArrayRef<NYql::NUdf::TBlockItem>;
+
 size_t CalcMaxBlockLength(const TVector<TType*>& items) {
     return CalcBlockLen(std::accumulate(items.cbegin(), items.cend(), 0ULL,
                                         [](size_t max, const TType* type) {
@@ -26,7 +29,7 @@ size_t CalcMaxBlockLength(const TVector<TType*>& items) {
                                         }));
 }
 
-TMaybe<ui64> CalculateTupleHash(const std::vector<NYql::NUdf::TBlockItem>& items, const std::vector<ui64>& hashes) {
+TMaybe<ui64> CalculateTupleHash(TKeyItemsRef items, const std::vector<ui64>& hashes) {
     ui64 hash = 0;
     for (size_t i = 0; i < hashes.size(); i++) {
         if (!items[i]) {
@@ -130,13 +133,13 @@ public:
         OutputRows_++;
     }
 
-    void MakeBlocks(const THolderFactory& holderFactory) {
-        Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(OutputRows_)));
+    void MakeBlocks(const THolderFactory& holderFactory, NYql::EDatumValidationMode validationMode) {
+        Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(OutputRows_)), validationMode);
         OutputRows_ = 0;
         BuilderAllocatedSize_ = 0;
 
         for (size_t i = 0; i < Builders_.size(); i++) {
-            Values[i] = holderFactory.CreateArrowBlock(Builders_[i]->Build(IsFinished_));
+            Values[i] = holderFactory.CreateArrowBlock(Builders_[i]->Build(IsFinished_), validationMode);
         }
         FillArrays();
     }
@@ -687,7 +690,7 @@ public:
         {
         }
 
-        TIterator(const TBlockIndex* blockIndex, TBlockStorage::TRowEntry entry, std::vector<NYql::NUdf::TBlockItem> itemsToLookup)
+        TIterator(const TBlockIndex* blockIndex, TBlockStorage::TRowEntry entry, TKeyItemsRef itemsToLookup)
             : Type_(EIteratorType::INPLACE)
             , BlockIndex_(blockIndex)
             , Entry_(entry)
@@ -696,7 +699,7 @@ public:
         {
         }
 
-        TIterator(const TBlockIndex* blockIndex, TIndexNode* node, std::vector<NYql::NUdf::TBlockItem> itemsToLookup)
+        TIterator(const TBlockIndex* blockIndex, TIndexNode* node, TKeyItemsRef itemsToLookup)
             : Type_(EIteratorType::LIST)
             , BlockIndex_(blockIndex)
             , Node_(node)
@@ -716,7 +719,7 @@ public:
             };
         };
 
-        std::vector<NYql::NUdf::TBlockItem> ItemsToLookup_;
+        TKeyItemsRef ItemsToLookup_;
     };
 
 public:
@@ -743,14 +746,17 @@ public:
         Y_ENSURE(blockStorage.IsFinished(), "Index build should be done after all data has been read");
 
         Index_ = std::make_unique<TIndexMap>(CalculateRHHashTableCapacity(blockStorage.GetRowCount()));
+        const size_t keyWidth = KeyColumns_.size();
         for (size_t blockOffset = 0; blockOffset < blockStorage.GetBlockCount(); blockOffset++) {
             const auto& block = blockStorage.GetBlock(blockOffset);
             auto blockSize = block.Size;
 
             std::array<TRobinHoodBatchRequestItem<ui64>, PrefetchBatchSize> insertBatch;
             std::array<TBlockStorage::TRowEntry, PrefetchBatchSize> insertBatchEntries;
-            std::array<std::vector<NYql::NUdf::TBlockItem>, PrefetchBatchSize> insertBatchKeys;
+            // Consumed synchronously below, so a local buffer suffices.
+            TVector<NYql::NUdf::TBlockItem> insertBatchKeyItems(PrefetchBatchSize * keyWidth);
             ui32 insertBatchLen = 0;
+            auto keySlot = [&](size_t i) { return TKeyItemsMutableRef(&insertBatchKeyItems[i * keyWidth], keyWidth); };
 
             auto processInsertBatch = [&]() {
                 Index_->BatchInsert({insertBatch.data(), insertBatchLen}, [&](size_t i, TIndexMap::iterator iter, bool isNew) {
@@ -760,7 +766,7 @@ public:
                         WriteUnaligned<TIndexMapValue>(valuePtr, TIndexMapValue(insertBatchEntries[i]));
                         Index_->CheckGrow();
                     } else {
-                        if (Any_ && ContainsKey(ReadUnaligned<TIndexMapValue>(valuePtr), insertBatchKeys[i])) {
+                        if (Any_ && ContainsKey(ReadUnaligned<TIndexMapValue>(valuePtr), keySlot(i))) {
                             return;
                         }
 
@@ -779,7 +785,7 @@ public:
             Y_ENSURE(blockOffset <= std::numeric_limits<ui32>::max());
             Y_ENSURE(blockSize <= std::numeric_limits<ui32>::max());
             for (size_t itemOffset = 0; itemOffset < blockSize; itemOffset++) {
-                auto keyHash = GetKey(block, itemOffset, insertBatchKeys[insertBatchLen]);
+                auto keyHash = GetKey(block, itemOffset, keySlot(insertBatchLen));
                 if (!keyHash) {
                     continue;
                 }
@@ -805,7 +811,7 @@ public:
         Y_ENSURE(batchSize <= PrefetchBatchSize);
 
         std::array<TRobinHoodBatchRequestItem<ui64>, PrefetchBatchSize> lookupBatch;
-        std::array<std::vector<NYql::NUdf::TBlockItem>, PrefetchBatchSize> itemsBatch;
+        std::array<TKeyItemsRef, PrefetchBatchSize> itemsBatch;
         std::array<bool, PrefetchBatchSize> notNullBatch = {};
 
         for (size_t i = 0; i < batchSize; i++) {
@@ -837,18 +843,18 @@ public:
         });
     }
 
-    bool IsKeyEquals(TBlockStorage::TRowEntry entry, const std::vector<NYql::NUdf::TBlockItem>& keyItems) const {
+    bool IsKeyEquals(TBlockStorage::TRowEntry entry, TKeyItemsRef keyItems) const {
         auto& blockStorage = *static_cast<TBlockStorage*>(BlockStorage_.GetResource());
 
         Y_ENSURE(keyItems.size() == KeyColumns_.size());
         for (size_t i = 0; i < KeyColumns_.size(); i++) {
             auto indexItem = blockStorage.GetItem(entry, KeyColumns_[i]);
-            if (blockStorage.GetItemComparators()[KeyColumns_[i]]->Equals(indexItem, keyItems[i])) {
-                return true;
+            if (!blockStorage.GetItemComparators()[KeyColumns_[i]]->Equals(indexItem, keyItems[i])) {
+                return false;
             }
         }
 
-        return false;
+        return true;
     }
 
     const NUdf::TUnboxedValue& GetBlockStorage() const {
@@ -856,20 +862,19 @@ public:
     }
 
 private:
-    TMaybe<ui64> GetKey(const TBlockStorage::TBlock& block, size_t offset, std::vector<NYql::NUdf::TBlockItem>& keyItems) const {
+    TMaybe<ui64> GetKey(const TBlockStorage::TBlock& block, size_t offset, TKeyItemsMutableRef keyItems) const {
         auto& blockStorage = *static_cast<TBlockStorage*>(BlockStorage_.GetResource());
 
         ui64 keyHash = 0;
-        keyItems.clear();
-        for (ui32 keyColumn : KeyColumns_) {
+        for (size_t i = 0; i < KeyColumns_.size(); i++) {
+            const ui32 keyColumn = KeyColumns_[i];
             auto item = blockStorage.GetItemFromBlock(block, keyColumn, offset);
             if (!item) {
-                keyItems.clear();
                 return {};
             }
 
             keyHash = CombineHashes(keyHash, blockStorage.GetItemHashers()[keyColumn]->Hash(item));
-            keyItems.push_back(std::move(item));
+            keyItems[i] = item;
         }
 
         return keyHash;
@@ -879,7 +884,7 @@ private:
         return &IndexNodes_.emplace_back(entry, currentHead);
     }
 
-    bool ContainsKey(const TIndexMapValue& chain, const std::vector<NYql::NUdf::TBlockItem>& keyItems) const {
+    bool ContainsKey(const TIndexMapValue& chain, TKeyItemsRef keyItems) const {
         if (chain.IsInplace()) {
             return IsKeyEquals(chain.GetEntry(), keyItems);
         } else {
@@ -993,7 +998,8 @@ public:
                                                       LeftKeyColumns_,
                                                       RightIOMap_,
                                                       std::move(LeftStream_->GetValue(ctx)),
-                                                      std::move(RightBlockIndex_->GetValue(ctx)));
+                                                      std::move(RightBlockIndex_->GetValue(ctx)),
+                                                      ctx.RuntimeSettings.DatumValidation.Get());
     }
 
 private:
@@ -1008,7 +1014,8 @@ private:
             const TVector<ui32>& leftKeyColumns,
             const TVector<ui32>& rightIOMap,
             NUdf::TUnboxedValue&& leftStream,
-            NUdf::TUnboxedValue&& rightBlockIndex)
+            NUdf::TUnboxedValue&& rightBlockIndex,
+            NYql::EDatumValidationMode validationMode)
             : TBase(memInfo)
             , JoinState_(joinState)
             , LeftKeyColumns_(leftKeyColumns)
@@ -1016,7 +1023,9 @@ private:
             , LeftStream_(leftStream)
             , RightBlockIndex_(rightBlockIndex)
             , HolderFactory_(holderFactory)
+            , ValidationMode_(validationMode)
         {
+            LookupBatchKeyItems_.resize(PrefetchBatchSize * LeftKeyColumns_.size());
         }
 
     private:
@@ -1041,7 +1050,6 @@ private:
             MKQL_ENSURE(width == outputWidth,
                         "The given width doesn't equal to the result type size");
 
-            std::vector<NYql::NUdf::TBlockItem> leftKeyColumns(LeftKeyColumns_.size());
             std::vector<ui64> leftKeyColumnHashes(LeftKeyColumns_.size());
             std::vector<NYql::NUdf::TBlockItem> rightRow(RightIOMap_.size());
 
@@ -1080,9 +1088,9 @@ private:
                 if (joinState.IsNotFull() && joinState.RemainingRowsCount() > 0) {
                     LookupBatchSize_ = std::min(PrefetchBatchSize, static_cast<ui32>(joinState.RemainingRowsCount()));
                     indexState.BatchLookup(LookupBatchSize_, LookupBatchIterators_, [&](size_t i) {
-                        MakeLeftKeys(leftKeyColumns, leftKeyColumnHashes, i);
-                        auto keyHash = CalculateTupleHash(leftKeyColumns, leftKeyColumnHashes);
-                        return std::make_pair(std::ref(leftKeyColumns), keyHash);
+                        const auto keyItems = MakeLeftKeys(leftKeyColumnHashes, i);
+                        auto keyHash = CalculateTupleHash(keyItems, leftKeyColumnHashes);
+                        return std::make_pair(keyItems, keyHash);
                     });
 
                     LookupBatchCurrent_ = 0;
@@ -1106,7 +1114,7 @@ private:
                 if (joinState.IsEmpty()) {
                     return NUdf::EFetchStatus::Finish;
                 }
-                joinState.MakeBlocks(HolderFactory_);
+                joinState.MakeBlocks(HolderFactory_, ValidationMode_);
             }
 
             const auto sliceSize = joinState.Slice();
@@ -1118,14 +1126,17 @@ private:
             return NUdf::EFetchStatus::Ok;
         }
 
-        void MakeLeftKeys(std::vector<NYql::NUdf::TBlockItem>& items, std::vector<ui64>& hashes, size_t offset) const {
+        // `offset` is both the batch slot and the input row offset.
+        TKeyItemsRef MakeLeftKeys(std::vector<ui64>& hashes, size_t offset) {
             auto& joinState = *static_cast<TJoinState*>(JoinState_.AsBoxed().Get());
 
-            Y_ENSURE(items.size() == LeftKeyColumns_.size());
-            Y_ENSURE(hashes.size() == LeftKeyColumns_.size());
-            for (size_t i = 0; i < LeftKeyColumns_.size(); i++) {
-                std::tie(items[i], hashes[i]) = joinState.GetItemWithHash(LeftKeyColumns_[i], offset);
+            const size_t keyWidth = LeftKeyColumns_.size();
+            Y_ENSURE(hashes.size() == keyWidth);
+            NYql::NUdf::TBlockItem* slot = &LookupBatchKeyItems_[offset * keyWidth];
+            for (size_t i = 0; i < keyWidth; i++) {
+                std::tie(slot[i], hashes[i]) = joinState.GetItemWithHash(LeftKeyColumns_[i], offset);
             }
+            return TKeyItemsRef(slot, keyWidth);
         }
 
         NUdf::TUnboxedValue JoinState_;
@@ -1136,6 +1147,9 @@ private:
         bool RightInputConsumed_ = false;
 
         std::array<typename TIndexState::TIterator, PrefetchBatchSize> LookupBatchIterators_;
+        // Backs the lookup iterators' key views; reused per batch, which is safe only
+        // because a batch is fully drained before the next BatchLookup overwrites it.
+        TVector<NYql::NUdf::TBlockItem> LookupBatchKeyItems_;
         ui32 LookupBatchCurrent_ = 0;
         ui32 LookupBatchSize_ = 0;
 
@@ -1143,6 +1157,7 @@ private:
         NUdf::TUnboxedValue RightBlockIndex_;
 
         const THolderFactory& HolderFactory_;
+        const NYql::EDatumValidationMode ValidationMode_;
     };
 
     void RegisterDependencies() const final {
@@ -1201,7 +1216,8 @@ public:
                                                       std::move(joinState),
                                                       RightIOMap_,
                                                       std::move(LeftStream_->GetValue(ctx)),
-                                                      std::move(RightBlockStorage_->GetValue(ctx)));
+                                                      std::move(RightBlockStorage_->GetValue(ctx)),
+                                                      ctx.RuntimeSettings.DatumValidation.Get());
     }
 
 private:
@@ -1215,13 +1231,15 @@ private:
             NUdf::TUnboxedValue&& joinState,
             const TVector<ui32>& rightIOMap,
             NUdf::TUnboxedValue&& leftStream,
-            NUdf::TUnboxedValue&& rightBlockStorage)
+            NUdf::TUnboxedValue&& rightBlockStorage,
+            NYql::EDatumValidationMode validationMode)
             : TBase(memInfo)
             , JoinState_(joinState)
             , RightIOMap_(rightIOMap)
             , LeftStream_(leftStream)
             , RightBlockStorage_(rightBlockStorage)
             , HolderFactory_(holderFactory)
+            , ValidationMode_(validationMode)
         {
         }
 
@@ -1277,7 +1295,7 @@ private:
                 if (joinState.IsEmpty()) {
                     return NUdf::EFetchStatus::Finish;
                 }
-                joinState.MakeBlocks(HolderFactory_);
+                joinState.MakeBlocks(HolderFactory_, ValidationMode_);
             }
 
             const auto sliceSize = joinState.Slice();
@@ -1300,6 +1318,7 @@ private:
         NUdf::TUnboxedValue RightBlockStorage_;
 
         const THolderFactory& HolderFactory_;
+        const NYql::EDatumValidationMode ValidationMode_;
     };
 
     void RegisterDependencies() const final {

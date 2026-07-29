@@ -13,19 +13,19 @@ $ssr = (
         Sum(Coalesce(sr_return_amt, $const_0)) AS returns,
         Sum(ss_net_profit - Coalesce(sr_net_loss, $const_0)) AS profit
     FROM
-        `/Root/test/ds/store_sales`
+        `/Root/test/ds/store_sales` as store_sales
     LEFT OUTER JOIN
-        `/Root/test/ds/store_returns`
+        `/Root/test/ds/store_returns` as store_returns
     ON
         (ss_item_sk == sr_item_sk AND ss_ticket_number == sr_ticket_number)
     ,
-        `/Root/test/ds/date_dim`
+        `/Root/test/ds/date_dim` as date_dim
     ,
-        `/Root/test/ds/store`
+        `/Root/test/ds/store` as store
     ,
-        `/Root/test/ds/item`
+        `/Root/test/ds/item` as item
     ,
-        `/Root/test/ds/promotion`
+        `/Root/test/ds/promotion` as promotion
     WHERE
         ss_sold_date_sk == d_date_sk
         AND d_date BETWEEN CAST('1998-08-04' AS Date) AND (
@@ -47,19 +47,19 @@ $csr = (
         Sum(Coalesce(cr_return_amount, $const_0)) AS returns,
         Sum(cs_net_profit - Coalesce(cr_net_loss, $const_0)) AS profit
     FROM
-        `/Root/test/ds/catalog_sales`
+        `/Root/test/ds/catalog_sales` as catalog_sales
     LEFT OUTER JOIN
-        `/Root/test/ds/catalog_returns`
+        `/Root/test/ds/catalog_returns` as catalog_returns
     ON
         (cs_item_sk == cr_item_sk AND cs_order_number == cr_order_number)
     ,
-        `/Root/test/ds/date_dim`
+        `/Root/test/ds/date_dim` as date_dim
     ,
-        `/Root/test/ds/catalog_page`
+        `/Root/test/ds/catalog_page` as catalog_page
     ,
-        `/Root/test/ds/item`
+        `/Root/test/ds/item` as item
     ,
-        `/Root/test/ds/promotion`
+        `/Root/test/ds/promotion` as promotion
     WHERE
         cs_sold_date_sk == d_date_sk
         AND d_date BETWEEN CAST('1998-08-04' AS Date) AND (CAST('1998-08-04' AS Date) + DateTime::IntervalFromDays(30))
@@ -79,19 +79,19 @@ $wsr = (
         Sum(Coalesce(wr_return_amt, $const_0)) AS returns,
         Sum(ws_net_profit - Coalesce(wr_net_loss, $const_0)) AS profit
     FROM
-        `/Root/test/ds/web_sales`
+        `/Root/test/ds/web_sales` as web_sales
     LEFT OUTER JOIN
-        `/Root/test/ds/web_returns`
+        `/Root/test/ds/web_returns` as web_returns
     ON
         (ws_item_sk == wr_item_sk AND ws_order_number == wr_order_number)
     ,
-        `/Root/test/ds/date_dim`
+        `/Root/test/ds/date_dim` as date_dim
     ,
-        `/Root/test/ds/web_site`
+        `/Root/test/ds/web_site` as web_site
     ,
-        `/Root/test/ds/item`
+        `/Root/test/ds/item` as item
     ,
-        `/Root/test/ds/promotion`
+        `/Root/test/ds/promotion` as promotion
     WHERE
         ws_sold_date_sk == d_date_sk
         AND d_date BETWEEN CAST('1998-08-04' AS Date) AND (CAST('1998-08-04' AS Date) + DateTime::IntervalFromDays(30))

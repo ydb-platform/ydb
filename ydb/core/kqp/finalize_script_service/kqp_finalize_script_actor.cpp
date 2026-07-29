@@ -1,21 +1,25 @@
 #include "kqp_finalize_script_actor.h"
 
 #include <ydb/core/fq/libs/events/events.h>
+#include <ydb/core/kqp/common/kqp_script_executions.h>
+#include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
 #include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_compression.h>
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
 #include <ydb/core/tx/datashard/const.h>
 #include <ydb/core/protos/config.pb.h>
-
-#include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_applicator_actor.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
 
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 
 namespace NKikimr::NKqp {
 
 namespace {
+
+// Actor for performing finalization of script execution external effects (for example commit / roll back S3 uploads).
+// NOTE: if S3 become unavailable and/or secrets unavailable script execution will be never finalized and therefore can not be removed.
 
 class TScriptFinalizerActor : public TActorBootstrapped<TScriptFinalizerActor> {
 public:
@@ -54,7 +58,8 @@ public:
 
     void Handle(TEvSaveScriptFinalStatusResponse::TPtr& ev) {
         if (!ev->Get()->ApplicateScriptExternalEffectRequired || ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
-            Reply(ev->Get()->OperationAlreadyFinalized, ev->Get()->WaitRetry, ev->Get()->Status, std::move(ev->Get()->Issues));
+            auto& into = *ev->Get();
+            Reply(into.Status, into.ExecutionEntryExists, into.FinalStatusAlreadySaved, std::move(into.Issues));
             return;
         }
 
@@ -169,11 +174,7 @@ private:
 
     void Handle(NFq::TEvents::TEvEffectApplicationResult::TPtr& ev) {
         if (ev->Get()->FatalError) {
-            NYql::TIssue rootIssue("Failed to commit/abort s3 multipart uploads");
-            for (const NYql::TIssue& issue : ev->Get()->Issues) {
-                rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
-            }
-            FinishScriptFinalization(Ydb::StatusIds::BAD_REQUEST, {rootIssue});
+            FinishScriptFinalization(Ydb::StatusIds::BAD_REQUEST, AddRootIssue("Failed to commit/abort s3 multipart uploads", ev->Get()->Issues));
         } else {
             FinishScriptFinalization();
         }
@@ -188,7 +189,7 @@ private:
     )
 
     void FinishScriptFinalization(std::optional<Ydb::StatusIds::StatusCode> status, NYql::TIssues issues) {
-        Register(CreateScriptFinalizationFinisherActor(SelfId(), ExecutionId, Database, status, std::move(issues), LeaseGeneration));
+        Register(CreateScriptFinalizationFinisherActor(SelfId(), Database, ExecutionId, status, std::move(issues), LeaseGeneration));
         Become(&TScriptFinalizerActor::FinishState);
     }
 
@@ -201,13 +202,16 @@ private:
     }
 
     void Handle(TEvScriptExecutionFinished::TPtr& ev) {
-        Reply(ev->Get()->OperationAlreadyFinalized, ev->Get()->WaitingRetry, ev->Get()->Status, std::move(ev->Get()->Issues));
+        const auto& info = ev->Get()->Info;
+        Reply(ev->Get()->Status, info.ExecutionEntryExists, info.AlreadyStopped, std::move(ev->Get()->Issues));
     }
 
-    void Reply(bool operationAlreadyFinalized, bool waitRetry, Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) {
-        Send(ReplyActor, new TEvScriptExecutionFinished(operationAlreadyFinalized, waitRetry, status, std::move(issues)));
+    void Reply(const Ydb::StatusIds::StatusCode status, bool executionEntryExists, bool alreadyStopped, NYql::TIssues&& issues) {
+        Send(ReplyActor, new TEvScriptExecutionFinished(status, {
+            .ExecutionEntryExists = executionEntryExists,
+            .AlreadyStopped = alreadyStopped,
+        }, std::move(issues)));
         Send(MakeKqpFinalizeScriptServiceId(SelfId().NodeId()), new TEvScriptFinalizeResponse(ExecutionId));
-
         PassAway();
     }
 

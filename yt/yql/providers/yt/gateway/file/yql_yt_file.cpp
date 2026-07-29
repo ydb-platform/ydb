@@ -1,6 +1,8 @@
 #include "yql_yt_file.h"
 #include "yql_yt_file_mkql_compiler.h"
 #include "yql_yt_file_comp_nodes.h"
+#include "yql_yt_file_row_count.h"
+#include "yql_yt_file_text_yson.h"
 
 #include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
@@ -369,7 +371,7 @@ public:
             for (const TTableReq& req: options.Tables()) {
 
                 auto path = Services_->GetTablePath(req.Cluster(), req.Table(), req.Anonymous());
-                const bool exists = NFs::Exists(path) && !ShouldEmulateOutputForMultirun(req);
+                const bool exists = (NFs::Exists(path) || NFs::Exists(path + ".part.0")) && !ShouldEmulateOutputForMultirun(req);
 
                 res.Data.emplace_back();
 
@@ -454,7 +456,6 @@ public:
                     TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(),
                         Services_->GetFunctionRegistry()->SupportsSizedAllocators());
                     alloc.SetLimit(options.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
-                    options.SecureParams().insert(Services_->GetSecureParams().begin(), Services_->GetSecureParams().end());
                     auto secureParamsProvider = MakeSimpleSecureParamsProvider(options.SecureParams());
                     TVector<TFileLinkPtr> externalFiles;
                     TFileYtLambdaBuilder builder(alloc, *session,
@@ -788,7 +789,6 @@ public:
             TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(),
                 Services_->GetFunctionRegistry()->SupportsSizedAllocators());
             alloc.SetLimit(options.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
-            options.SecureParams().insert(Services_->GetSecureParams().begin(), Services_->GetSecureParams().end());
             auto secureParamsProvider = MakeSimpleSecureParamsProvider(options.SecureParams());
             TVector<TFileLinkPtr> externalFiles;
             TFileYtLambdaBuilder builder(alloc, *session,
@@ -900,18 +900,44 @@ public:
             ThrowNonConsumedLinear(*compGraph);
             YQL_ENSURE(1 == outTableContent.size());
 
-            {
+            ui64 publishedRowCount = 0;
+            TString srcFilePath = Services_->GetTmpTablePath(GetOutTable(publish.Input().Item(0)).Cast<TYtOutTable>().Name().Value());
+            const i64 numParts = NFile::ReadSplittedPartsCount(srcFilePath);
+
+            if (numParts > 0) {
+                // Part files are already formatted — hardlink or copy them directly.
+                for (i64 p = 0; p < numParts; ++p) {
+                    NFs::HardLinkOrCopy(
+                        srcFilePath + ".part." + ToString(p),
+                        destFilePath + ".part." + ToString(p));
+                }
+                if (Services_->GetWriteOutputRowCount()) {
+                    const TString srcAttrPath = srcFilePath + ".attr";
+                    if (NFs::Exists(srcAttrPath)) {
+                        TIFStream input(srcAttrPath);
+                        const auto srcAttrs = NYT::NodeFromYsonStream(&input);
+                        if (srcAttrs.HasKey("row_count")) {
+                            publishedRowCount = static_cast<ui64>(srcAttrs["row_count"].AsInt64());
+                        }
+                    }
+                }
+            } else {
                 TMemoryInput in(outTableContent.front());
                 TOFStream of(destFilePath);
                 TDoubleHighPrecisionYsonWriter writer(&of, ::NYson::EYsonType::ListFragment);
-                NYson::TYsonParser parser(&writer, &in, ::NYson::EYsonType::ListFragment);
-                parser.Parse();
+                if (Services_->GetWriteOutputRowCount()) {
+                    auto counting = NFile::MakeRowCountingYsonConsumer(&writer, publishedRowCount);
+                    NYson::TYsonParser parser(counting.get(), &in, ::NYson::EYsonType::ListFragment);
+                    parser.Parse();
+                } else {
+                    NYson::TYsonParser parser(&writer, &in, ::NYson::EYsonType::ListFragment);
+                    parser.Parse();
+                }
             }
 
             {
                 NYT::TNode attrs = NYT::TNode::CreateMap();
                 NYT::TNode destAttrs = NYT::TNode::CreateMap();
-                TString srcFilePath = Services_->GetTmpTablePath(GetOutTable(publish.Input().Item(0)).Cast<TYtOutTable>().Name().Value());
                 if (NFs::Exists(srcFilePath + ".attr")) {
                     TIFStream input(srcFilePath + ".attr");
                     attrs = NYT::NodeFromYsonStream(&input);
@@ -921,9 +947,9 @@ public:
                     destAttrs = NYT::NodeFromYsonStream(&input);
                 }
 
-                const auto nativeYtTypeCompatibility = options.Config()->NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
+                const auto nativeYtTypeCompatibility = GetNativeYtTypeCompatibility(cluster, *options.Config());
                 const bool rowSpecCompactForm = options.Config()->UseYqlRowSpecCompactForm.Get().GetOrElse(DEFAULT_ROW_SPEC_COMPACT_FORM);
-                dstRowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], nativeYtTypeCompatibility, rowSpecCompactForm);
+                dstRowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], rowSpecCompactForm);
                 NYT::TNode columnGroupsSpec;
                 if (options.Config()->OptimizeFor.Get(cluster).GetOrElse(NYT::OF_LOOKUP_ATTR) != NYT::OF_LOOKUP_ATTR) {
                     if (auto setting = NYql::GetSetting(publish.Settings().Ref(), EYtSettingType::ColumnGroups)) {
@@ -1003,6 +1029,9 @@ public:
                     }
                 }
 
+                if (Services_->GetWriteOutputRowCount()) {
+                    attrs["row_count"] = static_cast<i64>(publishedRowCount);
+                }
                 TOFStream ofAttr(destFilePath + ".attr");
                 ofAttr.Write(NYT::NodeToYsonString(attrs, NYson::EYsonFormat::Pretty));
             }
@@ -1120,9 +1149,9 @@ public:
             for (auto& a: options.OutTable().Meta->Attrs) {
                 attrs[a.first] = a.second;
             }
-            const auto nativeYtTypeCompatibility = options.Config()->NativeYtTypeCompatibility.Get(TString{cluster}).GetOrElse(NTCF_LEGACY);
+            const auto nativeYtTypeCompatibility = GetNativeYtTypeCompatibility(cluster, *options.Config());
             const bool rowSpecCompactForm = options.Config()->UseYqlRowSpecCompactForm.Get().GetOrElse(DEFAULT_ROW_SPEC_COMPACT_FORM);
-            options.OutTable().RowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], nativeYtTypeCompatibility, rowSpecCompactForm);
+            options.OutTable().RowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], rowSpecCompactForm);
             NYT::TNode rowSpecYson;
             options.OutTable().RowSpec->FillCodecNode(rowSpecYson);
             attrs["schema"] = RowSpecToYTSchema(rowSpecYson, nativeYtTypeCompatibility).ToNode();
@@ -1282,17 +1311,55 @@ private:
     }
 
     static void LoadTableStatInfo(const TString& path, TYtTableStatInfo& info) {
-        NYT::TNode inputList = LoadTableContent(path);
-        info.RecordsCount = inputList.AsList().size();
+        NYT::TNode attrs = LoadTableAttrs(path);
+
+        const TMaybe<i64> numParts = attrs.HasKey("splitted")
+            ? TMaybe<i64>(attrs["splitted"].AsInt64())
+            : Nothing();
+
+        if (attrs.HasKey("row_count")) {
+            info.RecordsCount = attrs["row_count"].AsInt64();
+        } else {
+            NYT::TNode inputList = LoadTableContent(path, numParts);
+            info.RecordsCount = inputList.AsList().size();
+        }
         if (!info.IsEmpty()) {
-            info.DataSize = TFileStat(path).Size;
-            info.ChunkCount = 1;
+            if (numParts.Defined()) {
+                i64 totalSize = 0;
+                for (i64 p = 0; p < *numParts; ++p) {
+                    totalSize += static_cast<i64>(TFileStat(path + ".part." + ToString(p)).Size);
+                }
+                info.DataSize = totalSize;
+                info.ChunkCount = *numParts;
+            } else {
+                info.DataSize = TFileStat(path).Size;
+                info.ChunkCount = 1;
+            }
         }
     }
 
-    static NYT::TNode LoadTableContent(const TString& path) {
+
+    // numParts: when Defined, use the provided count directly (caller already has attrs loaded);
+    // when Nothing, read the .attr file to detect splitted format.
+    static NYT::TNode LoadTableContent(const TString& path, TMaybe<i64> numParts = Nothing()) {
         NYT::TNode inputList = NYT::TNode::CreateList();
-        if (TFileStat(path).Size) {
+        if (!numParts.Defined()) {
+            const i64 n = NFile::ReadSplittedPartsCount(path);
+            if (n > 0) {
+                numParts = n;
+            }
+        }
+        if (numParts.Defined()) {
+            for (i64 p = 0; p < *numParts; ++p) {
+                const TString partPath = path + ".part." + ToString(p);
+                if (TFileStat(partPath).Size) {
+                    TIFStream input(partPath);
+                    NYT::TNodeBuilder builder(&inputList);
+                    NYson::TYsonParser parser(&builder, &input, ::NYson::EYsonType::ListFragment);
+                    parser.Parse();
+                }
+            }
+        } else if (TFileStat(path).Size) {
             TIFStream input(path);
             NYT::TNodeBuilder builder(&inputList);
             NYson::TYsonParser parser(&builder, &input, ::NYson::EYsonType::ListFragment);
@@ -1307,7 +1374,6 @@ private:
         TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(),
             Services_->GetFunctionRegistry()->SupportsSizedAllocators());
         alloc.SetLimit(options.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
-        options.SecureParams().insert(Services_->GetSecureParams().begin(), Services_->GetSecureParams().end());
         auto secureParamsProvider = MakeSimpleSecureParamsProvider(options.SecureParams());
         TVector<TFileLinkPtr> externalFiles;
         TFileYtLambdaBuilder builder(alloc, session,
@@ -1390,7 +1456,6 @@ private:
             TScopedAlloc alloc(__LOCATION__, TAlignedPagePoolCounters(),
                 Services_->GetFunctionRegistry()->SupportsSizedAllocators());
             alloc.SetLimit(options.Config()->DefaultCalcMemoryLimit.Get().GetOrElse(0));
-            options.SecureParams().insert(Services_->GetSecureParams().begin(), Services_->GetSecureParams().end());
             auto secureParamsProvider = MakeSimpleSecureParamsProvider(options.SecureParams());
             TVector<TFileLinkPtr> externalFiles;
             TFileYtLambdaBuilder builder(alloc, session,
@@ -1417,7 +1482,6 @@ private:
             TYtTableStatInfo::TPtr statInfo = MakeIntrusive<TYtTableStatInfo>();
             statInfo->Id = outTableInfos[i].Name;
             LoadTableStatInfo(outTablePaths.at(i), *statInfo);
-
             outStat.emplace_back(statInfo->Id, statInfo);
         }
         return outStat;
@@ -1435,8 +1499,8 @@ private:
 
             TYtTableStatInfo::TPtr statInfo = MakeIntrusive<TYtTableStatInfo>();
             statInfo->Id = name;
-            LoadTableStatInfo(Services_->GetTmpTablePath(name), *statInfo);
-
+            const TString touchPath = Services_->GetTmpTablePath(name);
+            LoadTableStatInfo(touchPath, *statInfo);
             outStat.emplace_back(statInfo->Id, statInfo);
         }
 
@@ -1502,14 +1566,21 @@ private:
     {
         auto outPath = Services_->GetTmpTablePath(outTableInfo.Name);
         session.DeleteAtFinalize(config, cluster, outPath);
+
+        ui64 rowCount = 0;
         if (binaryYson) {
             TMemoryInput in(binaryYson);
             TOFStream of(outPath);
             TDoubleHighPrecisionYsonWriter writer(&of, ::NYson::EYsonType::ListFragment);
-            NYson::TYsonParser parser(&writer, &in, ::NYson::EYsonType::ListFragment);
-            parser.Parse();
-        }
-        else {
+            if (Services_->GetWriteOutputRowCount()) {
+                auto counting = NFile::MakeRowCountingYsonConsumer(&writer, rowCount);
+                NYson::TYsonParser parser(counting.get(), &in, ::NYson::EYsonType::ListFragment);
+                parser.Parse();
+            } else {
+                NYson::TYsonParser parser(&writer, &in, ::NYson::EYsonType::ListFragment);
+                parser.Parse();
+            }
+        } else {
             YQL_ENSURE(TFile(outPath, CreateAlways | WrOnly).IsOpen(), "Failed to create " << outPath.Quote() << " file");
         }
 
@@ -1518,14 +1589,17 @@ private:
             for (auto& a: outTableInfo.Meta->Attrs) {
                 attrs[a.first] = a.second;
             }
-            const auto nativeYtTypeCompatibility = config->NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
+            const auto nativeYtTypeCompatibility = GetNativeYtTypeCompatibility(cluster, *config);
             const bool rowSpecCompactForm = config->UseYqlRowSpecCompactForm.Get().GetOrElse(DEFAULT_ROW_SPEC_COMPACT_FORM);
             const bool optimizeForScan = config->OptimizeFor.Get(cluster).GetOrElse(NYT::EOptimizeForAttr::OF_LOOKUP_ATTR) != NYT::EOptimizeForAttr::OF_LOOKUP_ATTR;
-            outTableInfo.RowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], nativeYtTypeCompatibility, rowSpecCompactForm);
+            outTableInfo.RowSpec->FillAttrNode(attrs[YqlRowSpecAttribute], rowSpecCompactForm);
             NYT::TNode rowSpecYson;
             outTableInfo.RowSpec->FillCodecNode(rowSpecYson);
 
             attrs["schema"] = RowSpecToYTSchema(rowSpecYson, nativeYtTypeCompatibility, optimizeForScan ? outTableInfo.GetColumnGroups() : NYT::TNode{}).ToNode();
+            if (Services_->GetWriteOutputRowCount()) {
+                attrs["row_count"] = static_cast<i64>(rowCount);
+            }
             TOFStream ofAttr(outPath + ".attr");
             NYson::TYsonWriter writer(&ofAttr, NYson::EYsonFormat::Pretty, ::NYson::EYsonType::Node);
             NYT::TNodeVisitor visitor(&writer);

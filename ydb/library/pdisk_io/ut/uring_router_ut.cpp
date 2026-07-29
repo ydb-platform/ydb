@@ -685,7 +685,268 @@ void DoStopWhileCallbackRunning(TUringRouterConfig config) {
     router.Stop();
 }
 
+// Prepare a vectored write op from a pre-built iovec array.
+void PrepareWriteVectored(TUringOperationBase& op, const struct iovec* iovs, int count, ui64 offset) {
+    op.SetOperationType(TUringOperationBase::EWRITE);
+    op.PrepareScatterGather(count, offset);
+    for (int i = 0; i < count; ++i) {
+        op.AddIov(iovs[i].iov_base, iovs[i].iov_len);
+    }
+}
+
+// -------------------------------------------------------------------------
+// Scatter-gather round-trip helpers
+// -------------------------------------------------------------------------
+
+// Write N 4K segments via one scatter-gather writev, read back into a single
+// flat buffer, verify each segment.
+void DoScatterGatherWriteReadBack(TUringRouterConfig config) {
+    SKIP_IF_NO_URING(config);
+    TTempFile tmp(MakeTempName(nullptr, "uring_test"));
+    TFile f(tmp.Name(), CreateAlways | RdWr);
+    constexpr int N = 3;
+    constexpr ui32 segSize = 4096;
+    constexpr ui32 totalSize = N * segSize;
+    f.Resize(totalSize);
+
+    TUringRouter router(f.GetHandle(), nullptr, config);
+    AssertSuccess(router.RegisterFile());
+    router.Start();
+
+    // Three distinct page-aligned write buffers
+    TAlignedBuf wBufs[N] = {TAlignedBuf(segSize), TAlignedBuf(segSize), TAlignedBuf(segSize)};
+    for (int i = 0; i < N; ++i) {
+        memset(wBufs[i].Data(), (ui8)(0x11 * (i + 1)), segSize);
+    }
+
+    struct iovec iovs[N];
+    for (int i = 0; i < N; ++i) {
+        iovs[i].iov_base = wBufs[i].Data();
+        iovs[i].iov_len  = segSize;
+    }
+
+    TManualEvent writeEv;
+    TTestOp writeOp;
+    writeOp.Event = &writeEv;
+    PrepareWriteVectored(writeOp, iovs, N, /*offset=*/0);
+    UNIT_ASSERT(router.Write(&writeOp));
+    router.Flush();
+    writeEv.WaitI();
+    UNIT_ASSERT_VALUES_EQUAL(writeOp.GetResult(), (i32)totalSize);
+
+    // Read back into one flat buffer and verify per-segment patterns.
+    TAlignedBuf readBuf(totalSize);
+    memset(readBuf.Data(), 0, totalSize);
+
+    TManualEvent readEv;
+    TTestOp readOp;
+    readOp.Event = &readEv;
+    PrepareReadOp(readOp, readBuf.Data(), totalSize, 0);
+    UNIT_ASSERT(router.Read(&readOp));
+    router.Flush();
+    readEv.WaitI();
+    UNIT_ASSERT_VALUES_EQUAL(readOp.GetResult(), (i32)totalSize);
+
+    for (int i = 0; i < N; ++i) {
+        UNIT_ASSERT(memcmp(wBufs[i].Data(),
+                           static_cast<ui8*>(readBuf.Data()) + i * segSize,
+                           segSize) == 0);
+    }
+
+    router.Stop();
+}
+
+void DoScatterGatherSingleIovec(TUringRouterConfig config) {
+    SKIP_IF_NO_URING(config);
+    TTempFile tmp(MakeTempName(nullptr, "uring_test"));
+    TFile f(tmp.Name(), CreateAlways | RdWr);
+    constexpr ui32 size = 4096;
+    f.Resize(size);
+
+    TUringRouter router(f.GetHandle(), nullptr, config);
+    AssertSuccess(router.RegisterFile());
+    router.Start();
+
+    TAlignedBuf writeBuf(size);
+    memset(writeBuf.Data(), 0xBB, size);
+
+    struct iovec iov;
+    iov.iov_base = writeBuf.Data();
+    iov.iov_len  = size;
+
+    TManualEvent writeEv;
+    TTestOp writeOp;
+    writeOp.Event = &writeEv;
+    PrepareWriteVectored(writeOp, &iov, 1, 0);
+    UNIT_ASSERT(router.Write(&writeOp));
+    router.Flush();
+    writeEv.WaitI();
+    UNIT_ASSERT_VALUES_EQUAL(writeOp.GetResult(), (i32)size);
+
+    TAlignedBuf readBuf(size);
+    memset(readBuf.Data(), 0, size);
+
+    TManualEvent readEv;
+    TTestOp readOp;
+    readOp.Event = &readEv;
+    PrepareReadOp(readOp, readBuf.Data(), size, 0);
+    UNIT_ASSERT(router.Read(&readOp));
+    router.Flush();
+    readEv.WaitI();
+    UNIT_ASSERT_VALUES_EQUAL(readOp.GetResult(), (i32)size);
+    UNIT_ASSERT(memcmp(writeBuf.Data(), readBuf.Data(), size) == 0);
+
+    router.Stop();
+}
+
+void DoScatterGatherErrorPropagation(TUringRouterConfig config) {
+    SKIP_IF_NO_URING(config);
+    TTempFile tmp(MakeTempName(nullptr, "uring_test"));
+    TFile f(tmp.Name(), CreateAlways | RdWr);
+    f.Resize(4096);
+
+    TUringRouter router(f.GetHandle(), nullptr, config);
+    AssertSuccess(router.RegisterFile());
+    router.Start();
+
+    TAlignedBuf buf1(4096), buf2(4096);
+    memset(buf1.Data(), 0xCC, 4096);
+    memset(buf2.Data(), 0xCC, 4096);
+
+    struct iovec iovs[2];
+    iovs[0].iov_base = buf1.Data(); iovs[0].iov_len = 4096;
+    iovs[1].iov_base = buf2.Data(); iovs[1].iov_len = 4096;
+
+    const ui64 badOffset = static_cast<ui64>(1) << 60;
+
+    TManualEvent ev;
+    TTestOp op;
+    op.Event = &ev;
+    PrepareWriteVectored(op, iovs, 2, badOffset);
+    UNIT_ASSERT(router.Write(&op));
+    router.Flush();
+    ev.WaitI();
+    UNIT_ASSERT_LT(op.GetResult(), 0);
+
+    router.Stop();
+}
+
 } // anonymous namespace
+
+// =========================================================================
+// Pure logic tests for TUringOperationBase (no kernel ring required)
+// =========================================================================
+
+Y_UNIT_TEST_SUITE(TUringOperationBaseTest) {
+
+    Y_UNIT_TEST(PrepareIovSingleBuffer) {
+        TTestOp op;
+        char buf[4096];
+        op.SetOperationType(TUringOperationBase::EWRITE);
+        op.PrepareIov(buf, 4096, 1024);
+
+        UNIT_ASSERT_VALUES_EQUAL(op.GetTotalSize(), 4096u);
+        UNIT_ASSERT_VALUES_EQUAL(op.GetOperationBytes(), 4096u);
+        UNIT_ASSERT_VALUES_EQUAL(op.GetDiskOffset(), 1024u);
+        UNIT_ASSERT_EQUAL(op.GetIovBase(), static_cast<void*>(buf));
+    }
+
+#if defined(__linux__)
+    Y_UNIT_TEST(PrepareIovVectored) {
+        TTestOp op;
+        char buf1[4096], buf2[4096], buf3[4096];
+        struct iovec iovs[3];
+        iovs[0] = {buf1, 4096};
+        iovs[1] = {buf2, 4096};
+        iovs[2] = {buf3, 4096};
+
+        PrepareWriteVectored(op, iovs, 3, 8192);
+
+        UNIT_ASSERT_VALUES_EQUAL(op.GetTotalSize(), 3 * 4096u);
+        UNIT_ASSERT_VALUES_EQUAL(op.GetOperationBytes(), 3 * 4096u);
+        UNIT_ASSERT_VALUES_EQUAL(op.GetDiskOffset(), 8192u);
+        UNIT_ASSERT_EQUAL(op.GetIovBase(), static_cast<void*>(buf1));
+    }
+
+    Y_UNIT_TEST(AdvanceIovFullSegments) {
+        TTestOp op;
+        char buf1[4096], buf2[4096], buf3[4096];
+        struct iovec iovs[3];
+        iovs[0] = {buf1, 4096};
+        iovs[1] = {buf2, 4096};
+        iovs[2] = {buf3, 4096};
+
+        PrepareWriteVectored(op, iovs, 3, 0);
+
+        // Advance past the first full segment.
+        op.AdvanceIov(4096);
+        UNIT_ASSERT_VALUES_EQUAL(op.GetOperationBytes(), 2 * 4096u);
+        UNIT_ASSERT_VALUES_EQUAL(op.GetDiskOffset(), 4096u);
+        UNIT_ASSERT_EQUAL(op.GetIovBase(), static_cast<void*>(buf2));
+
+        // Advance past the second full segment.
+        op.AdvanceIov(4096);
+        UNIT_ASSERT_VALUES_EQUAL(op.GetOperationBytes(), 1 * 4096u);
+        UNIT_ASSERT_VALUES_EQUAL(op.GetDiskOffset(), 8192u);
+        UNIT_ASSERT_EQUAL(op.GetIovBase(), static_cast<void*>(buf3));
+
+        // TotalSize is unchanged throughout.
+        UNIT_ASSERT_VALUES_EQUAL(op.GetTotalSize(), 3 * 4096u);
+    }
+
+    Y_UNIT_TEST(AdvanceIovPartialSegment) {
+        TTestOp op;
+        char buf1[4096], buf2[4096];
+        struct iovec iovs[2];
+        iovs[0] = {buf1, 4096};
+        iovs[1] = {buf2, 4096};
+
+        PrepareWriteVectored(op, iovs, 2, 0);
+
+        // Partial advance within the first iovec.
+        op.AdvanceIov(1024);
+        UNIT_ASSERT_VALUES_EQUAL(op.GetOperationBytes(), 4096u + 3072u);
+        UNIT_ASSERT_VALUES_EQUAL(op.GetDiskOffset(), 1024u);
+        // iov_base of the first remaining iovec should be advanced.
+        UNIT_ASSERT_EQUAL(op.GetIovBase(), static_cast<void*>(buf1 + 1024));
+    }
+
+    Y_UNIT_TEST(AdvanceIovCrossSegmentBoundary) {
+        TTestOp op;
+        char buf1[4096], buf2[8192];
+        struct iovec iovs[2];
+        iovs[0] = {buf1, 4096};
+        iovs[1] = {buf2, 8192};
+
+        PrepareWriteVectored(op, iovs, 2, 0);
+
+        // Advance exactly one full segment + 2048 into the next.
+        op.AdvanceIov(4096 + 2048);
+        UNIT_ASSERT_VALUES_EQUAL(op.GetOperationBytes(), 8192u - 2048u);
+        UNIT_ASSERT_VALUES_EQUAL(op.GetDiskOffset(), 4096u + 2048u);
+        UNIT_ASSERT_EQUAL(op.GetIovBase(), static_cast<void*>(buf2 + 2048));
+        UNIT_ASSERT_VALUES_EQUAL(op.GetTotalSize(), 4096u + 8192u);
+    }
+
+    Y_UNIT_TEST(ResetSubmissionStateClearsIov) {
+        TTestOp op;
+        char buf1[4096], buf2[4096];
+        struct iovec iovs[2];
+        iovs[0] = {buf1, 4096};
+        iovs[1] = {buf2, 4096};
+
+        PrepareWriteVectored(op, iovs, 2, 512);
+        op.AdvanceIov(4096);
+
+        op.ResetSubmissionState();
+        UNIT_ASSERT_VALUES_EQUAL(op.GetTotalSize(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(op.GetOperationBytes(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(op.GetDiskOffset(), 0u);
+        UNIT_ASSERT_EQUAL(op.GetIovBase(), nullptr);
+    }
+#endif // __linux__
+
+}
 
 Y_UNIT_TEST_SUITE(TUringRouterTest) {
 
@@ -748,6 +1009,18 @@ Y_UNIT_TEST_SUITE(TUringRouterTest) {
     Y_UNIT_TEST(StopWhileCallbackRunning) {
         DoStopWhileCallbackRunning(NoPollingConfig());
     }
+
+    Y_UNIT_TEST(ScatterGatherWriteReadBack) {
+        DoScatterGatherWriteReadBack(NoPollingConfig());
+    }
+
+    Y_UNIT_TEST(ScatterGatherSingleIovec) {
+        DoScatterGatherSingleIovec(NoPollingConfig());
+    }
+
+    Y_UNIT_TEST(ScatterGatherErrorPropagation) {
+        DoScatterGatherErrorPropagation(NoPollingConfig());
+    }
 }
 
 Y_UNIT_TEST_SUITE(TUringRouterSQPollTest) {
@@ -809,5 +1082,17 @@ Y_UNIT_TEST_SUITE(TUringRouterSQPollTest) {
 
     Y_UNIT_TEST(StopWhileCallbackRunning) {
         DoStopWhileCallbackRunning(SQPollConfig());
+    }
+
+    Y_UNIT_TEST(ScatterGatherWriteReadBack) {
+        DoScatterGatherWriteReadBack(SQPollConfig());
+    }
+
+    Y_UNIT_TEST(ScatterGatherSingleIovec) {
+        DoScatterGatherSingleIovec(SQPollConfig());
+    }
+
+    Y_UNIT_TEST(ScatterGatherErrorPropagation) {
+        DoScatterGatherErrorPropagation(SQPollConfig());
     }
 }

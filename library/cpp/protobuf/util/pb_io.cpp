@@ -12,6 +12,7 @@
 #include <util/stream/file.h>
 #include <util/stream/str.h>
 #include <util/string/cast.h>
+#include <util/stream/mem.h>
 
 namespace NProtoBuf {
 
@@ -260,4 +261,17 @@ bool TryMergeFromTextFormat(IInputStream& in, NProtoBuf::Message& m,
     }
 
     return true;
+}
+
+
+void ParseTextFormatFromString(TStringBuf in, NProtoBuf::Message& m,
+                               const EParseFromTextFormatOptions options, IOutputStream* warningStream) {
+    TMemoryInput inS(in);
+    return ParseFromTextFormat(inS, m, options, warningStream);
+}
+
+bool TryParseTextFormatFromString(TStringBuf in, NProtoBuf::Message& m, const EParseFromTextFormatOptions options,
+                                  IOutputStream* warningStream) {
+    TMemoryInput inS(in);
+    return TryParseFromTextFormat(inS, m, options, warningStream);
 }

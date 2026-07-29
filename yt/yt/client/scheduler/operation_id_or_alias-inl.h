@@ -47,7 +47,7 @@ void ToProto(TProtoClassPtr enclosingProtoMessage, const TOperationIdOrAlias& op
         [&] (const TOperationId& operationId) {
             ToProto(enclosingProtoMessage->mutable_operation_id(), operationId);
         },
-        [&] (const TString& alias) {
+        [&] (const std::string& alias) {
             enclosingProtoMessage->set_operation_alias(alias);
         });
 }

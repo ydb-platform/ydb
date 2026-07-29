@@ -808,6 +808,13 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     WarmupQueriesTruncated = KqpGroup->GetCounter("Warmup/QueriesTruncated", false);
     WarmupQueriesEmptyQueryType = KqpGroup->GetCounter("Warmup/QueriesEmptyQueryType", false);
 
+    /* Compile cache view (federated .sys/compile_cache_queries) */
+    CompileCacheViewPeerScanWarnings = KqpGroup->GetCounter("CompileCacheView/PeerScanWarnings", true);
+
+    WarmupHitsInWindow = KqpGroup->GetCounter("Warmup/HitsInWindow", true);
+    WarmupMissesInWindow = KqpGroup->GetCounter("Warmup/MissesInWindow", true);
+    WarmupSavedCompileMs = KqpGroup->GetCounter("Warmup/SavedCompileMs", true);
+
     /* Resource Manager */
     RmComputeActors = KqpGroup->GetCounter("RM/ComputeActors", false);
     RmMemory = KqpGroup->GetCounter("RM/Memory", false);
@@ -860,6 +867,8 @@ TKqpCounters::TKqpCounters(const ::NMonitoring::TDynamicCounterPtr& counters, co
     ModifiedRowsCount = KqpGroup->GetCounter("PessimisticLocks/ModifiedRowsCount", true);
     LockedRowsCount = KqpGroup->GetCounter("PessimisticLocks/LockedRowsCount", true);
     MaxInFlightLockTimeOnExit = KqpGroup->GetHistogram("PessimisticLocks/MaxInFlightLockTimeOnExitMs", NMonitoring::ExponentialHistogram(20, 2, 1));
+    StreamLookupLockTotalQuotaBytesInFlight = KqpGroup->GetCounter("PessimisticLocks/StreamLookupLockTotalQuotaBytesInFlight", false);
+    StreamLookupLockTotalQuotaBytesExceeded = KqpGroup->GetCounter("PessimisticLocks/StreamLookupLockTotalQuotaBytesExceeded", true);
 
     /* sink writes */
     WriteActorsShardResolve = KqpGroup->GetCounter("SinkWrites/WriteActorShardResolve", true);

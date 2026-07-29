@@ -31,6 +31,10 @@
 #include <util/generic/set.h>
 #include <util/generic/vector.h>
 
+namespace Ydb::Maintenance {
+    class Node;
+}
+
 namespace NKikimr::NCms {
 
 // Forward declarations.
@@ -268,7 +272,7 @@ public:
             const NKikimrCms::TAction &action)
     {
         AddLockByRequest(notification.NotificationId);
-    
+
         TExternalLock lock(notification, action);
         auto pos = LowerBound(ExternalLocks.begin(), ExternalLocks.end(), lock, [](auto &l, auto &r) {
                 return l.LockStart < r.LockStart;
@@ -722,7 +726,7 @@ public:
     void GenerateSysTabletsNodesCheckers();
     void GenerateClusterNodesCheckers();
 
-    bool IsStateStorageReplicaNode(ui32 nodeId) {
+    bool IsStateStorageReplicaNode(ui32 nodeId) const {
         return StateStorageReplicas.contains(nodeId);
     }
 
@@ -796,6 +800,21 @@ public:
 
     size_t NodesCount() const {
         return Nodes.size();
+    }
+
+    bool HostHasSysTablet(const TString &hostName) const {
+        ui32 nodeId;
+        if (TryFromString(hostName, nodeId)) {
+            return HasNode(nodeId) && NodeToTabletTypes.contains(nodeId);
+        }
+
+        auto pr = HostNameToNodeId.equal_range(hostName);
+        for (auto it = pr.first; it != pr.second; ++it) {
+            if (NodeToTabletTypes.contains(it->second)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     size_t NodesCount(const TString &hostName) const {
@@ -941,7 +960,7 @@ public:
     }
 
     ui64 AddExternalLocks(const TNotificationInfo &notification, const TActorContext *ctx);
-    
+
     TSet<TLockableItem *> FindLockedItems(const NKikimrCms::TAction &action, const TActorContext *ctx);
 
     void SetHostMarkers(const TString &hostName, const THashSet<NKikimrCms::EMarker> &markers);
@@ -979,6 +998,10 @@ public:
 
     static bool IsStaticGroupVDisk(const TVDiskID &vdId) { return EGroupConfigurationType::Static == VDiskConfigurationType(vdId); }
     static bool IsDynamicGroupVDisk(const TVDiskID &vdId) { return EGroupConfigurationType::Dynamic == VDiskConfigurationType(vdId); }
+
+    // Computes cluster roles for the given node and appends them to the
+    // repeated `roles` field of the maintenance Node message.
+    void FillNodeRoles(const TNodeInfo &node, Ydb::Maintenance::Node &out) const;
 
 private:
     TNodeInfo &NodeRef(ui32 nodeId) const {

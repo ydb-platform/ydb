@@ -102,11 +102,14 @@ void AssertScanHasSingleMessageValue(TScanContext& context, const NOlap::TSnapsh
     UNIT_ASSERT_VALUES_EQUAL(TString(messageColumn->GetString(0)), expectedMessage);
 }
 
-void ConfigureRegistry(
-    TScanContext& context, const std::optional<TRowVersion>& border = std::nullopt, const TVector<TRowVersion>& snapshots = {}) {
+void ConfigureRegistry(TScanContext& context, const std::optional<TRowVersion>& border = std::nullopt,
+    const TVector<TRowVersion>& snapshots = {}, const std::optional<TInstant>& oldestCollectionTime = std::nullopt) {
     auto registryBuilder = CreateImmutableSnapshotRegistryBuilder();
     if (border) {
         registryBuilder->SetSnapshotBorder(*border);
+    }
+    if (oldestCollectionTime) {
+        registryBuilder->SetOldestCollectionTime(*oldestCollectionTime);
     }
     for (const auto& snapshot : snapshots) {
         registryBuilder->AddSnapshot({}, snapshot);
@@ -184,21 +187,23 @@ Y_UNIT_TEST_SUITE(TScanSnapshotGuardIntegration) {
 
         auto& longTxConfig = context.Runtime.GetAppData(0).LongTxServiceConfig;
         longTxConfig.SetLocalSnapshotPromotionTimeSeconds(1);
-        longTxConfig.SetSnapshotsExchangeIntervalSeconds(2);
-        longTxConfig.SetSnapshotsRegistryUpdateIntervalSeconds(3);
+        longTxConfig.SetMaxClockSkewMs(5000);
 
         const ui64 write1Step = WriteValueOnShard(context, /*key*/ 1, /*message*/ 1);
         const TRowVersion border(write1Step, 2000);
-        ConfigureRegistry(context, border);
+        ConfigureRegistry(context, border, {}, context.Runtime.GetCurrentTime());
 
         const NOlap::TSnapshot snapshotAtBorder(border.Step, border.TxId);
         AssertScanHasSingleMessageValue(context, snapshotAtBorder, "1");
 
-        // Delay > (1 + 2 + 3 + 10)s so service cutoff becomes newer than border.
-        // This makes border the effective min snapshot for new reads.
+        // Advance well past the freshness margin (promotion 1s + skew 5s) and write a newer version.
         context.Runtime.SimulateSleep(TDuration::Seconds(17));
         const ui64 write2Step = WriteValueOnShard(context, /*key*/ 1, /*message*/ 3);
         UNIT_ASSERT(write2Step > write1Step);
+        // Refresh the registry so its freshness (OldestCollectionTime) reflects "now"; the border is unchanged.
+        // The resulting freshness floor (now - margin) is newer than the border, so the border becomes the
+        // effective min snapshot for new reads.
+        ConfigureRegistry(context, border, {}, context.Runtime.GetCurrentTime());
         RunCleanupAndWait(context);
 
         const NOlap::TSnapshot snapshotYoungerThanBorder(write2Step, 3000);
@@ -221,23 +226,26 @@ Y_UNIT_TEST_SUITE(TScanSnapshotGuardIntegration) {
 
         auto& longTxConfig = context.Runtime.GetAppData(0).LongTxServiceConfig;
         longTxConfig.SetLocalSnapshotPromotionTimeSeconds(1);
-        longTxConfig.SetSnapshotsExchangeIntervalSeconds(2);
-        longTxConfig.SetSnapshotsRegistryUpdateIntervalSeconds(3);
-        const ui64 delayMs =
-            TDuration::Seconds(longTxConfig.GetLocalSnapshotPromotionTimeSeconds() + longTxConfig.GetSnapshotsExchangeIntervalSeconds() +
-                               longTxConfig.GetSnapshotsRegistryUpdateIntervalSeconds() + 10)
-                .MilliSeconds();
+        longTxConfig.SetMaxClockSkewMs(5000);
+        const ui64 marginMs =
+            TDuration::Seconds(longTxConfig.GetLocalSnapshotPromotionTimeSeconds()).MilliSeconds() + longTxConfig.GetMaxClockSkewMs();
+
+        ConfigureRegistry(context);
 
         const ui64 write1Step = WriteValueOnShard(context, /*key*/ 1, /*message*/ 1);
         const NOlap::TSnapshot activeSnapshot(write1Step, 2000);
         AssertScanHasSingleMessageValue(context, activeSnapshot, "1");
-        ConfigureRegistry(context, std::nullopt, { TRowVersion(activeSnapshot.GetPlanStep(), activeSnapshot.GetTxId()) });
 
         Y_UNUSED(WriteValueOnShard(context, /*key*/ 1, /*message*/ 3));
         context.Runtime.SimulateSleep(TDuration::Seconds(20));
         const ui64 passedStep = UpdateSnapshotOnShard(context);
-        UNIT_ASSERT(passedStep > delayMs + 10);
-        const ui64 minStep = passedStep - delayMs;
+
+        // Publish the registry under test: OldestCollectionTime = now, old snapshot still tracked as active.
+        const TInstant oldestCollectionTime = context.Runtime.GetCurrentTime();
+        ConfigureRegistry(context, std::nullopt, { TRowVersion(activeSnapshot.GetPlanStep(), activeSnapshot.GetTxId()) }, oldestCollectionTime);
+
+        // Freshness floor = OldestCollectionTime - margin, capped at passedStep.
+        const ui64 minStep = std::min(oldestCollectionTime.MilliSeconds() - marginMs, passedStep);
         UNIT_ASSERT(minStep > activeSnapshot.GetPlanStep() + 1);
         RunCleanupAndWait(context);
 

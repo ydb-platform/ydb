@@ -19,7 +19,7 @@ protected:
 
 private:
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, Lock_);
-    THashMap<TString, NApi::IClientPtr> Clients_;
+    THashMap<std::string, NApi::IClientPtr> Clients_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

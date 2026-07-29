@@ -1,6 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -16,7 +18,8 @@ public:
     TTxType GetTxType() const override { return NHive::TXTYPE_UPDATE_DC_FOLLOWERS; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        BLOG_D("TTxProcessUpdateFollowers::Execute()");
+        YDB_LOG_DEBUG("THive::TTxProcessUpdateFollowers::Execute processing pending follower updates",
+            {"logPrefix", GetLogPrefix()});
         NIceDb::TNiceDb db(txc.DB);
         SideEffects.Reset(Self->SelfId());
         for (size_t i = 0; !Self->PendingFollowerUpdates.Empty() && i < MAX_UPDATES_PROCESSED; ++i) {
@@ -38,7 +41,8 @@ public:
                         continue;
                     }
                     TFollowerTabletInfo& follower = tablet->AsLeader().AddFollower(group);
-                    follower.NodeFilter.AllowedDataCenters = {op.DataCenter};
+                    follower.NodeFilter.AllowedDataCenters.Clear();
+                    follower.NodeFilter.AllowedDataCenters.AddDataCenter(op.DataCenter);
                     follower.Statistics.SetLastAliveTimestamp(TlsActivationContext->Now().MilliSeconds());
                     db.Table<Schema::TabletFollowerTablet>().Key(op.TabletId.first, follower.Id).Update(
                                 NIceDb::TUpdate<Schema::TabletFollowerTablet::GroupID>(follower.FollowerGroup.Id),
@@ -49,7 +53,9 @@ public:
                     follower.BecomeStopped();
                     follower.InitiateBoot();
                     followers.push_back(std::prev(tablet->AsLeader().Followers.end()));
-                    BLOG_D("THive::TTxProcessUpdateFollowers::Execute(): created follower " << follower.GetFullTabletId());
+                    YDB_LOG_DEBUG("THive::TTxProcessUpdateFollowers::Execute created follower",
+                        {"logPrefix", GetLogPrefix()},
+                        {"followerTabletId", follower.GetFullTabletId()});
                     break;
                 }
                 case TFollowerUpdates::EAction::Update:

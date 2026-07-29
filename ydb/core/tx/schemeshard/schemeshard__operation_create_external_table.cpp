@@ -214,47 +214,6 @@ private:
         return true;
     }
 
-    static void AddPathInSchemeShard(const THolder<TProposeResponse> &result,
-                                     TPath &dstPath, const TString &owner) {
-        dstPath.MaterializeLeaf(owner);
-        result->SetPathId(dstPath.Base()->PathId.LocalPathId);
-    }
-
-    TPathElement::TPtr CreateExternalTablePathElement(const TPath& dstPath) const {
-        TPathElement::TPtr externalTable = dstPath.Base();
-        externalTable->CreateTxId        = OperationId.GetTxId();
-        externalTable->PathType  = TPathElement::EPathType::EPathTypeExternalTable;
-        externalTable->PathState = TPathElement::EPathState::EPathStateCreate;
-        externalTable->LastTxId  = OperationId.GetTxId();
-
-        return externalTable;
-    }
-
-    void CreateTransaction(const TOperationContext &context,
-                           const TPathId &externalTablePathId,
-                           const TPathId &externalDataSourcePathId) const {
-      TTxState &txState =
-          context.SS->CreateTx(OperationId, TTxState::TxCreateExternalTable,
-                               externalTablePathId, externalDataSourcePathId);
-      txState.Shards.clear();
-    }
-
-    void RegisterParentPathDependencies(const TOperationContext& context,
-                                        const TPath& parentPath) const {
-        if (parentPath.Base()->HasActiveChanges()) {
-            const auto parentTxId = parentPath.Base()->PlannedToCreate()
-                                   ? parentPath.Base()->CreateTxId
-                                   : parentPath.Base()->LastTxId;
-            context.OnComplete.Dependence(parentTxId, OperationId.GetTxId());
-        }
-    }
-
-    void AdvanceTransactionStateToPropose(const TOperationContext& context,
-                                          NIceDb::TNiceDb& db) const {
-        context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
-        context.OnComplete.ActivateTx(OperationId);
-    }
-
     static void LinkExternalDataSourceWithExternalTable(
         const TExternalDataSourceInfo::TPtr& externalDataSource,
         const TPathElement::TPtr& externalTable,
@@ -262,28 +221,6 @@ private:
         auto& reference = *externalDataSource->ExternalTableReferences.AddReferences();
         reference.SetPath(dstPath.PathString());
         externalTable->PathId.ToProto(reference.MutablePathId());
-    }
-
-    void PersistExternalTable(
-        const TOperationContext& context,
-        NIceDb::TNiceDb& db,
-        const TPathElement::TPtr& externalTable,
-        const TExternalTableInfo::TPtr& externalTableInfo,
-        const TPathId& externalDataSourcePathId,
-        const TExternalDataSourceInfo::TPtr& externalDataSource,
-        const TString& acl) const {
-        context.SS->ExternalTables[externalTable->PathId] = externalTableInfo;
-        context.SS->IncrementPathDbRefCount(externalTable->PathId);
-
-
-        if (!acl.empty()) {
-            externalTable->ApplyACL(acl);
-        }
-        context.SS->PersistPath(db, externalTable->PathId);
-
-        context.SS->PersistExternalDataSource(db, externalDataSourcePathId, externalDataSource);
-        context.SS->PersistExternalTable(db, externalTable->PathId, externalTableInfo);
-        context.SS->PersistTxState(db, OperationId);
     }
 
 public:
@@ -344,27 +281,49 @@ public:
         }
         Y_ABORT_UNLESS(externalTableInfo);
 
-        AddPathInSchemeShard(result, dstPath, owner);
+        const auto newPathId = context.SS->AllocatePathId();
 
-        const auto externalTable = CreateExternalTablePathElement(dstPath);
-        CreateTransaction(context, externalTable->PathId, dataSourcePath->PathId);
+        auto guard = context.DbGuard();
 
-        NIceDb::TNiceDb db(context.GetDB());
+        context.MemChanges.GrabNewPath(context.SS, newPathId);
+        context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
+        context.MemChanges.GrabPath(context.SS, dataSourcePath.Base()->PathId);
+        context.MemChanges.GrabNewExternalTable(context.SS, newPathId);
+        context.MemChanges.GrabExternalDataSource(context.SS, dataSourcePath.Base()->PathId);
+        context.MemChanges.GrabNewTxState(context.SS, OperationId);
 
-        RegisterParentPathDependencies(context, parentPath);
-        AdvanceTransactionStateToPropose(context, db);
+        context.DbChanges.PersistPath(newPathId);
+        context.DbChanges.PersistPath(parentPath.Base()->PathId);
+        context.DbChanges.PersistExternalDataSource(dataSourcePath.Base()->PathId);
+        context.DbChanges.PersistExternalTable(newPathId);
+        context.DbChanges.PersistTxState(OperationId);
+
+        dstPath.MaterializeLeaf(owner, newPathId);
+        result->SetPathId(newPathId.LocalPathId);
+
+        TPathElement::TPtr externalTable = dstPath.Base();
+        externalTable->CreateTxId = OperationId.GetTxId();
+        externalTable->PathType  = TPathElement::EPathType::EPathTypeExternalTable;
+        externalTable->PathState = TPathElement::EPathState::EPathStateCreate;
+        externalTable->LastTxId  = OperationId.GetTxId();
 
         LinkExternalDataSourceWithExternalTable(externalDataSource,
                                                 externalTable,
                                                 dstPath);
 
-        PersistExternalTable(context,
-                             db,
-                             externalTable,
-                             externalTableInfo,
-                             dataSourcePath->PathId,
-                             externalDataSource,
-                             acl);
+        context.SS->ExternalTables[newPathId] = externalTableInfo;
+        context.SS->IncrementPathDbRefCount(newPathId);
+        if (!acl.empty()) {
+            externalTable->ApplyACL(acl);
+        }
+
+        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateExternalTable,
+                                                  newPathId, dataSourcePath.Base()->PathId);
+        txState.Shards.clear();
+        txState.State = TTxState::Propose;
+        context.OnComplete.ActivateTx(OperationId);
+
+        RegisterParentPathDependencies(OperationId, context, parentPath);
 
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId,
                                                           dstPath,
@@ -372,7 +331,7 @@ public:
                                                           context.OnComplete);
 
         dstPath.DomainInfo()->IncPathsInside(context.SS);
-        IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
+        IncAliveChildrenSafeWithUndo(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
 
         SetState(NextState());
         return result;
@@ -381,7 +340,6 @@ public:
     void AbortPropose(TOperationContext& context) override {
         LOG_N("TCreateExternalTable AbortPropose"
             << ": opId# " << OperationId);
-        Y_ABORT("no AbortPropose for TCreateExternalTable");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
@@ -432,7 +390,7 @@ TVector<ISubOperation::TPtr> CreateNewExternalTable(TOperationId id, const TTxTr
     };
 
     const auto &operation = tx.GetCreateExternalTable();
-    const auto replaceIfExists = operation.GetReplaceIfExists();
+    const auto replaceIfExists = tx.GetReplaceIfExists();
     const TString &name = operation.GetName();
 
     if (replaceIfExists && !context.SS->EnableReplaceIfExistsForExternalEntities) {

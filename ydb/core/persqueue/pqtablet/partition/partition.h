@@ -61,6 +61,7 @@ struct TTransaction {
         : Tx(tx)
         , Predicate(predicate)
         , SupportivePartitionActor(tx->SupportivePartitionActor)
+        , DeferredFinalizeOp(tx->DeferredFinalizeOp)
         , CalcPredicateSpan(std::move(tx->Span))
         , CalcPredicateTimestamp(calcPredicateTimestamp)
     {
@@ -101,9 +102,20 @@ struct TTransaction {
         return {};
     }
 
+    TMaybe<ui64> GetStep() const {
+        if (Tx) {
+            return Tx->Step;
+        } else if (ProposeConfig) {
+            return ProposeConfig->Step;
+        }
+        return {};
+    }
+
     TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> Tx;
     TMaybe<bool> Predicate;
     TActorId SupportivePartitionActor;
+    NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::EOp DeferredFinalizeOp =
+        NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi::Unspecified;
 
 
     TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> ChangeConfig;
@@ -189,6 +201,7 @@ private:
     bool CanEnqueue() const;
 
     bool LastOffsetHasBeenCommited(const TUserInfoBase& userInfo) const;
+    void SendInfoToAutopartitioningManager(const TWriteMsg& p);
 
     TActorId ReplyTo(const ui64 destination, const TActorId& replyTo) const;
     void ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, const TActorId& replyTo = {});
@@ -256,6 +269,8 @@ private:
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvUpdateReadMetrics::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvConsumerBatchProcessorMetrics::TPtr& ev, const TActorContext& ctx);
+    void Handle(NBatching::TEvProcessBatchKeysResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvRunCompaction::TPtr& ev);
     void Handle(TEvPQ::TEvForceCompaction::TPtr& ev);
     void Handle(TEvPQ::TEvExclusiveLockAcquired::TPtr& ev);
@@ -290,6 +305,7 @@ private:
     void ProcessChangeOwnerRequests(const TActorContext& ctx);
     void ProcessHasDataRequests(const TActorContext& ctx);
     bool ProcessHasDataRequest(const THasDataReq& request, const TActorContext& ctx);
+    void FailStaleSessionReadRequests(const TString& user, const TActorContext& ctx);
     void ProcessRead(const TActorContext& ctx, TReadInfo&& info, const ui64 cookie, bool subscription);
     void ProcessReserveRequests(const TActorContext& ctx);
     void ProcessTimestampRead(const TActorContext& ctx);
@@ -329,8 +345,13 @@ private:
     // Removes blobs that are no longer required. Blobs are no longer required if the storage time of all messages
     // stored in this blob has expired and they have been read by all important consumers.
     bool CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorContext& ctx);
+    bool CleanUpBlobsLegacy(TEvKeyValue::TEvRequest *request, const TActorContext& ctx);
     // Checks if any consumer has uncommited messages in their availability window
     bool ImportantConsumersNeedToKeepCurrentKey(const TDataKey& currentKey, const TDataKey& nextKey, const TInstant now) const;
+    bool ImportantConsumersNeedToKeepLastKey(const TDataKey& currentKey, const TInstant now) const;
+    bool CleanUpBlobsInEncoder(TPartitionBlobEncoder& encoder, bool isCompactionZone, const TActorContext& ctx);
+    void FinalizeEmptyBlobEncoder(TPartitionBlobEncoder& encoder, ui64 startOffset, bool updateEndOffset);
+    ui64 GetCompactionZoneEmptyStartOffset() const;
     bool IsQuotingEnabled() const;
     bool WaitingForPreviousBlobQuota() const;
     bool WaitingForSubDomainQuota(const ui64 withSize = 0) const;
@@ -549,6 +570,7 @@ public:
                const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
                const NKikimrPQ::TPQTabletConfig& config, const std::shared_ptr<TTabletCountersBase>& counters, bool SubDomainOutOfSpace, ui32 numChannels,
                const TActorId& writeQuoterActorId,
+               const TActorId& batchProcessorActorId,
                TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> samplingControl,
                bool newPartition = false);
 
@@ -568,6 +590,9 @@ public:
     ui64 UsedReserveSize(const TActorContext& ctx) const;
 
     TInstant GetEndWriteTimestamp() const; // For tests only
+    bool IsTopicRetentionDeleteLastBlobEnabled() const {
+        return AppData()->FeatureFlags.GetEnableTopicRetentionDeleteLastBlob();
+    }
 
     //Bootstrap sends kvRead
     //Become StateInit
@@ -599,7 +624,9 @@ private:
     {
         NPersQueue::TCounterTimeKeeper keeper(TabletCounters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]);
 
-        ALOG_TRACE(NKikimrServices::PERSQUEUE, EventStr("StateInit", ev));
+        YDB_LOG_TRACE_COMP(NKikimrServices::PERSQUEUE, "Handle event",
+            {"actorState", "StateInit"},
+            {"event", EventStr("StateIdle", ev)});
 
         TRACE_EVENT(NKikimrServices::PERSQUEUE);
         switch (ev->GetTypeRewrite()) {
@@ -614,6 +641,8 @@ private:
             HFuncTraced(TEvPQ::TEvMirrorerCounters, Handle);
             HFuncTraced(TEvPQ::TBroadcastPartitionError, Handle);
             HFuncTraced(TEvPQ::TEvUpdateReadMetrics, Handle);
+            HFuncTraced(TEvPQ::TEvConsumerBatchProcessorMetrics, Handle);
+            HFuncTraced(NBatching::TEvProcessBatchKeysResult, Handle);
             HFuncTraced(TEvPQ::TEvGetPartitionClientInfo, Handle);
             HFuncTraced(TEvPQ::TEvTxCalcPredicate, HandleOnInit);
             HFuncTraced(TEvPQ::TEvProposePartitionConfig, HandleOnInit);
@@ -644,7 +673,8 @@ private:
             hFuncTraced(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest, Handle);
         default:
             if (!Initializer.Handle(ev)) {
-                ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
+                YDB_LOG_ERROR_COMP(NKikimrServices::PERSQUEUE, "Unexpected",
+                    {"event", EventStr("StateInit", ev)});
             }
             break;
         };
@@ -654,7 +684,9 @@ private:
     {
         NPersQueue::TCounterTimeKeeper keeper(TabletCounters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]);
 
-        ALOG_TRACE(NKikimrServices::PERSQUEUE, EventStr("StateIdle", ev));
+        YDB_LOG_TRACE_COMP(NKikimrServices::PERSQUEUE, "Handle event",
+            {"actorState", "StateIdle"},
+            {"event", EventStr("StateIdle", ev)});
 
         TRACE_EVENT(NKikimrServices::PERSQUEUE);
         switch (ev->GetTypeRewrite()) {
@@ -692,6 +724,8 @@ private:
             HFuncTraced(TEvPQ::TEvDeregisterMessageGroup, HandleOnIdle);
             HFuncTraced(TEvPQ::TEvSplitMessageGroup, HandleOnIdle);
             HFuncTraced(TEvPQ::TEvUpdateReadMetrics, Handle);
+            HFuncTraced(TEvPQ::TEvConsumerBatchProcessorMetrics, Handle);
+            HFuncTraced(NBatching::TEvProcessBatchKeysResult, Handle);
             HFuncTraced(TEvPQ::TEvPartitionScaleStatusChanged, Handle);
             HFuncTraced(TEvPersQueue::TEvProposeTransaction, Handle);
             HFuncTraced(TEvPQ::TEvTxCalcPredicate, Handle);
@@ -724,7 +758,8 @@ private:
             hFuncTraced(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId, Handle);
             hFuncTraced(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest, Handle);
         default:
-            ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev));
+            YDB_LOG_ERROR_COMP(NKikimrServices::PERSQUEUE, "Unexpected",
+                {"event", EventStr("StateIdle", ev)});
             break;
         };
     }
@@ -887,6 +922,7 @@ private:
     void ExecRequest(TDeregisterMessageGroupMsg& msg, ProcessParameters& parameters);
     void ExecRequest(TSplitMessageGroupMsg& msg, ProcessParameters& parameters);
     bool ExecRequest(TWriteMsg& msg, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request);
+    bool ValidateBatchMessage(const TActorContext& ctx, const TWriteMsg& msg);
 
     [[nodiscard]] EProcessResult BeginTransactionData(TTransaction& t,
                                                       TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
@@ -942,6 +978,20 @@ private:
 
     THashMap<ui64, TSimpleSharedPtr<TTransaction>> TransactionsInflight;
     THashMap<TActorId, TSimpleSharedPtr<TTransaction>> WriteInfosToTx;
+
+    // stable-25-4 -> stable-26-1: tablet may replay TEvTxCommit while partition PlanStep/TxId is already ahead.
+    // Persist SerializedTx (and optional config sub-writes) to KV before TEvTxDone so tablet recovery sees partition tx meta.
+    struct TStaleTxMetaEntry {
+        ui64 Step = 0;
+        ui64 TxId = 0;
+        TMaybe<NKikimrPQ::TTransaction> SerializedTx;
+        TMaybe<NKikimrPQ::TPQTabletConfig> TabletConfig;
+        TMaybe<NKikimrPQ::TBootstrapConfig> BootstrapConfig;
+        TMaybe<NKikimrPQ::TPartitions> PartitionsData;
+    };
+
+    THashMap<ui64, TStaleTxMetaEntry> StaleTxMetaPending;
+    THashMap<ui64, TStaleTxMetaEntry> StaleTxMetaInFlight;
 
     size_t ImmediateTxCount = 0;
     THashMap<TString, size_t> UserActCount;
@@ -1022,6 +1072,7 @@ private:
 
     TActorId ReadQuotaTrackerActor;
     const TActorId WriteQuotaTrackerActor;
+    const TActorId BatchProcessorActor;
     THolder<TPercentileCounter> PartitionWriteQuotaWaitCounter;
     TInstant QuotaDeadline = TInstant::Zero();
 
@@ -1175,6 +1226,7 @@ private:
     void UpdateAvgWriteBytes(ui64 size, const TInstant& now);
 
     size_t WriteNewSizeFromSupportivePartitions = 0;
+    size_t WriteNewMessagesFromSupportivePartitions = 0;
 
     bool TryAddDeleteHeadKeysToPersistRequest();
     void DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& request) const;
@@ -1303,6 +1355,11 @@ private:
     bool IsCommitOffsetForbiddenForMLPConsumer(const TString& consumer, bool explicitMLPAction) const;
 
     void TryAddCmdWriteForTransaction(const TTransaction& tx);
+
+    void EnqueueStaleTxMetaPersist(std::unique_ptr<TEvPQ::TEvTxCommit> ev, const TActorContext& ctx);
+    void TryAppendStaleTxMetaWrites();
+    void FlushStaleTxMetaDone(const TActorContext& ctx);
+    void AddCmdWritePersistStaleTxMeta(const TStaleTxMetaEntry& entry);
 };
 
 inline ui64 TPartition::GetStartOffset() const {

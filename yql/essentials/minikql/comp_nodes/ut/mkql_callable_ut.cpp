@@ -1,4 +1,7 @@
 #include "mkql_computation_node_ut.h"
+#include "mkql_program_builder_test_utils.h"
+
+#include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -6,8 +9,8 @@ namespace NMiniKQL {
 namespace {
 
 TCallableType* MakeComparatorCallableType(TProgramBuilder& pb) {
-    const auto returnType = pb.NewDataType(NUdf::TDataType<bool>::Id);
-    const auto argType = pb.NewDataType(NUdf::TDataType<i32>::Id);
+    const auto returnType = NTest::ConvertToMinikqlType<bool>(pb);
+    const auto argType = NTest::ConvertToMinikqlType<i32>(pb);
     return TCallableTypeBuilder(pb.GetTypeEnvironment(), "", returnType)
         .Add(argType)
         .Build();
@@ -22,9 +25,9 @@ void TestSimpleClosure(bool WithCollect) {
     constexpr i32 to = 3;
     constexpr i32 arg = 1;
 
-    const auto upvalues = pb.ListFromRange(pb.NewDataLiteral(from),
-                                           pb.NewDataLiteral(to),
-                                           pb.NewDataLiteral(1));
+    const auto upvalues = pb.ListFromRange(NTest::ConvertValueToLiteralNode(pb, from),
+                                           NTest::ConvertValueToLiteralNode(pb, to),
+                                           NTest::ConvertValueToLiteralNode(pb, i32(1)));
     const auto fnew = [&pb](const TRuntimeNode upvalue) {
         const auto closure = pb.Callable(MakeComparatorCallableType(pb),
                                          [&pb, upvalue](const TArrayRef<const TRuntimeNode>& args) {
@@ -37,19 +40,11 @@ void TestSimpleClosure(bool WithCollect) {
         callables = pb.Collect(callables);
     }
     const auto pgmReturn = pb.OrderedFlatMap(callables, [&pb](const TRuntimeNode callable) {
-        return pb.NewOptional(pb.Apply(callable, {pb.NewDataLiteral(arg)}));
+        return pb.NewOptional(pb.Apply(callable, {NTest::ConvertValueToLiteralNode(pb, arg)}));
     });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-
-    NUdf::TUnboxedValue item;
-    for (i32 i = from; i < to; i++) {
-        UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.Get<bool>(), i == arg);
-    }
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<bool>{false, true, false});
 }
 
 template <bool LLVM>
@@ -63,12 +58,12 @@ void TestNestedClosure(bool WithCollect) {
     constexpr i32 supTo = 5;
     constexpr i32 arg = 2;
 
-    const auto infValues = pb.ListFromRange(pb.NewDataLiteral(infFrom),
-                                            pb.NewDataLiteral(infTo),
-                                            pb.NewDataLiteral(1));
-    const auto supValues = pb.ListFromRange(pb.NewDataLiteral(supFrom),
-                                            pb.NewDataLiteral(supTo),
-                                            pb.NewDataLiteral(1));
+    const auto infValues = pb.ListFromRange(NTest::ConvertValueToLiteralNode(pb, infFrom),
+                                            NTest::ConvertValueToLiteralNode(pb, infTo),
+                                            NTest::ConvertValueToLiteralNode(pb, i32(1)));
+    const auto supValues = pb.ListFromRange(NTest::ConvertValueToLiteralNode(pb, supFrom),
+                                            NTest::ConvertValueToLiteralNode(pb, supTo),
+                                            NTest::ConvertValueToLiteralNode(pb, i32(1)));
     const auto boundaries = pb.Zip({infValues, supValues});
 
     const auto ltnew = [&pb](const TRuntimeNode sup) {
@@ -91,19 +86,11 @@ void TestNestedClosure(bool WithCollect) {
         callables = pb.Collect(callables);
     }
     const auto pgmReturn = pb.OrderedFlatMap(callables, [&pb](const TRuntimeNode callable) {
-        return pb.NewOptional(pb.Apply(callable, {pb.NewDataLiteral(arg)}));
+        return pb.NewOptional(pb.Apply(callable, {NTest::ConvertValueToLiteralNode(pb, arg)}));
     });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-
-    NUdf::TUnboxedValue item;
-    for (i32 i = infFrom, j = supFrom; i < infTo && j < supTo; i++, j++) {
-        UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.Get<bool>(), i < arg && arg < j);
-    }
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<bool>{false, true, false});
 }
 
 template <bool LLVM>
@@ -117,12 +104,12 @@ void TestChildClosure(bool WithCollect) {
     constexpr i32 supTo = 5;
     constexpr i32 arg = 2;
 
-    const auto infValues = pb.ListFromRange(pb.NewDataLiteral(infFrom),
-                                            pb.NewDataLiteral(infTo),
-                                            pb.NewDataLiteral(1));
-    const auto supValues = pb.ListFromRange(pb.NewDataLiteral(supFrom),
-                                            pb.NewDataLiteral(supTo),
-                                            pb.NewDataLiteral(1));
+    const auto infValues = pb.ListFromRange(NTest::ConvertValueToLiteralNode(pb, infFrom),
+                                            NTest::ConvertValueToLiteralNode(pb, infTo),
+                                            NTest::ConvertValueToLiteralNode(pb, i32(1)));
+    const auto supValues = pb.ListFromRange(NTest::ConvertValueToLiteralNode(pb, supFrom),
+                                            NTest::ConvertValueToLiteralNode(pb, supTo),
+                                            NTest::ConvertValueToLiteralNode(pb, i32(1)));
     const auto boundaries = pb.Zip({infValues, supValues});
 
     const auto ltnew = [&pb](const TRuntimeNode sup) {
@@ -151,19 +138,12 @@ void TestChildClosure(bool WithCollect) {
         callables = pb.Collect(callables);
     }
     const auto pgmReturn = pb.OrderedFlatMap(callables, [&pb](const TRuntimeNode callable) {
-        return pb.NewOptional(pb.Apply(callable, {pb.NewDataLiteral(arg)}));
+        return pb.NewOptional(pb.Apply(callable, {NTest::ConvertValueToLiteralNode(pb, arg)}));
     });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-
-    NUdf::TUnboxedValue item;
-    for (i32 i = infFrom, j = supFrom; i < infTo && j < supTo; i++, j++) {
-        UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.Get<bool>(), i < arg && arg < j);
-    }
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    // infFrom=0..infTo=3, supFrom=2..supTo=5, arg=2: (0<2&&2<2)=F, (1<2&&2<3)=T, (2<2&&2<4)=F
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<bool>{false, true, false});
 }
 
 }; // namespace

@@ -30,6 +30,7 @@ message Statuses {
         RSTATUS_OVERRUN = 6;
         RSTATUS_WRONG_LOCK_GENERATION = 7;
         RSTATUS_BLOCKED = 8;
+        RSTATUS_BAD_REQUEST = 9;
     }
 }
 

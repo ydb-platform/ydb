@@ -16,12 +16,13 @@ namespace NTable {
         TColumn() = default;
 
         TColumn(const TString& name, TTag tag, NScheme::TTypeInfo type,
-            const TString& typeMod, bool notNull = false, bool isSensitive = false)
+            const TString& typeMod, bool notNull = false, bool isSensitive = false, bool setNotNullInProgress = false)
             : Id(tag)
             , PType(type)
             , PTypeMod(typeMod)
             , Name(name)
             , NotNull(notNull)
+            , SetNotNullInProgress(setNotNullInProgress)
             , IsSensitive(isSensitive)
         {
 
@@ -55,6 +56,7 @@ namespace NTable {
         TCell Null;
         TString Storage;
         bool NotNull = false;
+        bool SetNotNullInProgress = false;
         bool IsSensitive = false;
     };
 }

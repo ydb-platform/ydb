@@ -6,7 +6,7 @@
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/sql/sql.h>
-#include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/sql/v1/translation/sql.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
@@ -32,7 +32,7 @@
 namespace NYql {
 
 TString DumpNode(const TExprNode& node, TExprContext& exprCtx) {
-    auto ast = ConvertToAst(node, exprCtx, TExprAnnotationFlags::None, true);
+    auto ast = ConvertToAst(node, exprCtx, TExprAnnotationFlags::None, /*refAtoms=*/true);
     return ast.Root->ToString(TAstPrintFlags::PerLine | TAstPrintFlags::ShortQuote | TAstPrintFlags::AdaptArbitraryContent);
 }
 
@@ -82,7 +82,7 @@ TExprNode::TPtr ParseAndOptimize(const TString& program, TExprContext& exprCtx, 
     typesCtx = MakeIntrusive<TTypeAnnotationContext>();
     typesCtx->RandomProvider = CreateDeterministicRandomProvider(1);
 
-    typesCtx->AddDataSource(ConfigProviderName, CreateConfigProvider(*typesCtx, nullptr, ""));
+    typesCtx->AddDataSource(ConfigProviderName, CreateConfigProvider(*typesCtx, /*config=*/nullptr, ""));
     auto pureState = MakeIntrusive<TPureState>();
     pureState->Types = typesCtx.Get();
     pureState->FunctionRegistry = functionRegistry.Get();
@@ -187,7 +187,7 @@ struct TRunSingleProgram {
         TVector<TDataProviderInitializer> dataProvidersInit;
         dataProvidersInit.push_back(GetPureDataProviderInitializer());
 
-        TProgramFactory factory(true, funcReg, 0ULL, dataProvidersInit, "ut");
+        TProgramFactory factory(/*useRepeatableRandomAndTimeProviders=*/true, funcReg, 0ULL, dataProvidersInit, "ut");
 
         TProgramPtr program = factory.Create("-stdin-", Src);
         program->ConfigureYsonResultFormat(NYson::EYsonFormat::Text);

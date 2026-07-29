@@ -31,7 +31,6 @@
 #include <ydb/library/yql/dq/actors/input_transforms/dq_input_transform_lookup_factory.h>
 #include <ydb/library/yql/dq/comp_nodes/yql_common_dq_factory.h>
 #include <ydb/library/yql/dq/transform/yql_common_dq_transform.h>
-#include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
 #include <ydb/library/yql/providers/dq/task_runner/tasks_runner_local.h>
 #include <ydb/library/yql/providers/dq/worker_manager/local_worker_manager.h>
 #include <ydb/library/yql/providers/generic/actors/yql_generic_provider_factories.h>
@@ -190,18 +189,17 @@ void Init(
 
     auto asyncIoFactory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
 
-    NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory;
-
     const auto httpGateway = NYql::IHTTPGateway::Make(
         &protoConfig.GetGateways().GetHttpGateway(),
         yqCounters->GetSubgroup("subcomponent", "http_gateway"));
 
-    NYql::NConnector::IClient::TPtr connectorClient = nullptr;
+    NYql::NConnector::IClient::TPtr connectorClient;
 
     if (protoConfig.GetGateways().GetGeneric().HasConnector()) {
         connectorClient = NYql::NConnector::MakeClientGRPC(protoConfig.GetGateways().GetGeneric());
     }
 
+    NYql::ISecuredServiceAccountCredentialsFactory::TPtr securedCredentialsFactory;
     if (protoConfig.GetTokenAccessor().GetEnabled()) {
         const auto& tokenAccessorConfig = protoConfig.GetTokenAccessor();
 
@@ -210,9 +208,10 @@ void Init(
             caContent = TUnbufferedFileInput(path).ReadAll();
         }
 
-        credentialsFactory = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(tokenAccessorConfig.GetEndpoint(), tokenAccessorConfig.GetUseSsl(), caContent, tokenAccessorConfig.GetConnectionPoolSize());
+        securedCredentialsFactory = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(tokenAccessorConfig.GetEndpoint(), tokenAccessorConfig.GetUseSsl(), caContent, tokenAccessorConfig.GetConnectionPoolSize());
     }
 
+    const NYql::IStructuredTokenCredentialsFactory::TPtr credentialsFactory = NYql::CreateStructuredTokenCredentialsFactory(securedCredentialsFactory);
     auto commonTopicClientSettings = NKqp::MakeCommonTopicClientSettings(commonConfig.GetTopicClientHandlersExecutorThreadsNum(), commonConfig.GetTopicClientCompressionExecutorThreadsNum());
 
     if (protoConfig.GetRowDispatcher().GetEnabled()) {
@@ -245,7 +244,7 @@ void Init(
     auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
 
     if (protoConfig.GetPrivateApi().GetEnabled()) {
-        auto s3HttpRetryPolicy = NYql::GetHTTPDefaultRetryPolicy(NYql::THttpRetryPolicyOptions{.MaxTime = TDuration::Max(), .RetriedCurlCodes = NYql::FqRetriedCurlCodes()});
+        auto s3HttpRetryPolicy = NYql::GetFqHTTPRetryPolicy();
         NYql::NDq::TS3ReadActorFactoryConfig readActorFactoryCfg = NYql::NDq::CreateReadActorFactoryConfig(protoConfig.GetGateways().GetS3());
 
         RegisterDqInputTransformLookupActorFactory(*asyncIoFactory);
@@ -260,7 +259,7 @@ void Init(
             commonTopicClientSettings
         );
         auto pqGateway = pqGatewayFactory ? pqGatewayFactory->CreatePqGateway() : NYql::CreatePqNativeGateway(std::move(pqServices));
-        RegisterDqPqReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, pqGateway, 
+        RegisterDqPqReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, pqGateway,
             yqCounters->GetSubgroup("subsystem", "DqSourceTracker"), commonConfig.GetPqReconnectPeriod(), true);
 
         s3ActorsFactory->RegisterS3ReadActorFactory(*asyncIoFactory, credentialsFactory, httpGateway, s3HttpRetryPolicy, readActorFactoryCfg,

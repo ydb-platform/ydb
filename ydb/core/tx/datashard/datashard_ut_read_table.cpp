@@ -2,6 +2,8 @@
 #include "datashard_active_transaction.h"
 #include "datashard_ut_read_table.h"
 
+#include <ydb/core/testlib/actors/block_events.h>
+
 namespace NKikimr {
 
 using namespace NKikimr::NDataShard;
@@ -632,6 +634,101 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
             "key = 5e32442b-4613-40b7-8506-b14d86b74ef1, value = 65d4d0aa-1612-4887-86dd-834e4cfc3df5\n"
             "key = bbf1d45a-af5f-4939-b58a-2be39fd2f06e, value = 710c9ea5-9fa2-4606-a35f-608d0556eb6f\n"
             "key = 303f21b5-3805-4133-b706-bfc0e071c528, value = 522e048c-9b4b-4d38-8c89-3996cdaa1c8d\n");
+    }
+
+    Y_UNIT_TEST(ReadTableSnapshotAfterMerge) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        SetSplitMergePartCountLimit(server->GetRuntime(), -1);
+
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        auto shards = GetTableShards(server, sender, "/Root/table-1");
+
+        // Pre-split into 2 shards: shard[0] covers [1,2], shard[1] covers [3,4]
+        {
+            auto senderSplit = runtime.AllocateEdgeActor();
+            ui64 txId = AsyncSplitTable(server, senderSplit, "/Root/table-1", shards[0], 3);
+            WaitTxNotification(server, senderSplit, txId);
+        }
+
+        ExecSQL(server, sender,
+            "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
+
+        shards = GetTableShards(server, sender, "/Root/table-1");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+        // Resolve the tablet actor for shard[0] (range [1,2])
+        auto shard0actor = ResolveTablet(runtime, shards[0]);
+        Cerr << "Shard 0 id: " << shards[0] << ", actor id: " << shard0actor << Endl;
+
+        // Block TX_KIND_SCAN proposes to shard[0] so its read is held back until we
+        // trigger the split.  Shard[1]'s scan proceeds normally.
+        NActors::TBlockEvents<TEvDataShard::TEvProposeTransaction> blockedScans(runtime,
+            [&](const TEvDataShard::TEvProposeTransaction::TPtr& ev) {
+                return ev->Get()->Record.GetTxKind() == NKikimrTxDataShard::TX_KIND_SCAN &&
+                       ev->GetRecipientRewrite() == shard0actor;
+            });
+
+        // Start ReadTable driver reading only from shard 0 without waiting for TEvReady.
+        auto edge = runtime.AllocateEdgeActor();
+        auto rts = MakeReadTableSettings("/Root/table-1");
+        rts.KeyRange.mutable_less()->mutable_type()->mutable_tuple_type()
+            ->add_elements()->mutable_optional_type()->mutable_item()->Settype_id(
+                ::Ydb::Type_PrimitiveTypeId::Type_PrimitiveTypeId_UINT32);
+        rts.KeyRange.mutable_less()->mutable_value()->add_items()->set_uint32_value(3);
+        auto driver = runtime.Register(new TReadTableDriver(edge, rts));
+        runtime.EnableScheduleForActor(driver);
+
+        runtime.WaitFor("TX_KIND_SCAN captured", [&] { return blockedScans.size() >= 1; });
+
+        // merge shards 0 and 1 (that doesn't have the snapshot).
+        {
+            Cerr << "... merging shards" << Endl;
+            auto senderMerge = runtime.AllocateEdgeActor();
+            ui64 txId = AsyncMergeTable(server, senderMerge, "/Root/table-1", {shards[0], shards[1]});
+            WaitTxNotification(server, senderMerge, txId);
+            Cerr << "... merge done" << Endl;
+        }
+
+
+        // Release the captured scan to old shard[0]
+        // The tx proxy gets WRONG_SHARD_STATE, retries, re-resolves to the merged shard,
+        // and re-sends the scan with the original snapshot (step, txId).
+        // If there is no snapshot on the merged shard the scan fails with SNAPSHOT_NOT_EXIST.
+        blockedScans.Stop();
+        blockedScans.Unblock();
+
+        {
+            auto ev = runtime.GrabEdgeEventRethrow<TReadTableDriver::TEvReady>(edge);
+            Y_UNUSED(ev);
+        }
+        bool isError = false;
+        TStringBuilder result;
+        while (true) {
+            runtime.Send(
+                new IEventHandle(driver, TActorId(), new TReadTableDriver::TEvNext()),
+                0, true);
+            auto ev = runtime.GrabEdgeEventRethrow<TReadTableDriver::TEvResult>(edge);
+            isError = ev->Get()->IsError;
+            result << ev->Get()->Result;
+            if (ev->Get()->Finished) {
+                break;
+            }
+        }
+        // Check that ProxyShardTryLater (that maps to a retryable status) is returned.
+        UNIT_ASSERT(isError);
+        UNIT_ASSERT_VALUES_EQUAL(result, "ERROR: ProxyShardTryLater\n");
     }
 
 } // Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots)

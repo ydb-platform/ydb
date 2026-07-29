@@ -3,6 +3,8 @@
 #include "direct_block_group.h"
 #include "read_request_executor.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_roles.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
@@ -33,8 +35,10 @@ public:
 
     TDDiskDataCopier(
         NActors::TActorSystem* actorSystem,
+        ITraceService* traceService,
+        IPartitionDirectService* partitionDirectService,
+        const TDiskDescription& diskDescription,
         const TVChunkConfig& vChunkConfig,
-        IPartitionDirectServicePtr partitionDirectService,
         IDirectBlockGroupPtr directBlockGroup,
         TBlocksDirtyMap* dirtyMap,
         THostIndex destination);
@@ -59,9 +63,9 @@ private:
         const TDBGWriteBlocksResponse& response);
 
     NActors::TActorSystem* const ActorSystem = nullptr;
+    ITraceService* const TraceService = nullptr;
     const TVChunkConfig VChunkConfig;
     const TVolumeConfigPtr VolumeConfig;
-    const IPartitionDirectServicePtr PartitionDirectService;
     const IDirectBlockGroupPtr DirectBlockGroup;
     const THostIndex Destination;
     TBlocksDirtyMap* const DirtyMap;

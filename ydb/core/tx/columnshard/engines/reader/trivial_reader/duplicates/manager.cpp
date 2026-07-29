@@ -78,10 +78,6 @@ std::map<ui32, std::shared_ptr<arrow::Field>> TDuplicateManager::GetFetchingColu
     return fieldsByColumn;
 }
 
-#define LOCAL_LOG_TRACE                                                                                                                      \
-    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)( \
-        "borders_flow_controller", BordersFlowController.DebugString())
-
 TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, const std::deque<std::shared_ptr<TPortionInfo>>& portions)
     : TActor(&TDuplicateManager::StateMain)
     , LastSchema(context.GetCommonContext()->GetReadMetadata()->GetIndexVersions().GetLastSchema())
@@ -104,6 +100,19 @@ TDuplicateManager::TDuplicateManager(const TSpecialReadContext& context, const s
 }
 
 void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
+    if (InflightFilterRequests < MaxInflightFilterRequests) {
+        ++InflightFilterRequests;
+        auto evCopy = ev;
+        HandleFilterRequestImpl(evCopy);
+    } else {
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)(
+            "borders_flow_controller", BordersFlowController.DebugString())("event", "TEvRequestFilter")("type", "queued")(
+            "portion_id", ev->Get()->GetPortionId())("pending_count", PendingFilterRequests.size());
+        PendingFilterRequests.emplace_back(ev);
+    }
+}
+
+void TDuplicateManager::HandleFilterRequestImpl(TEvRequestFilter::TPtr& ev) {
     TPortionInfo::TConstPtr mainPortion = Portions->GetPortionVerified(ev->Get()->GetPortionId());
     auto constructor = std::make_shared<TFilterAccumulator>(ev, Counters);
     if (BordersFlowController.ExtractExclusiveInterval(mainPortion->GetPortionId())) {
@@ -112,8 +121,10 @@ void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
         constructor->AddFilter(std::move(filter));
         AFL_VERIFY(constructor->IsDone());
         Counters->OnRowsMerged(0, 0, mainPortion->GetRecordsCount());
-        LOCAL_LOG_TRACE("event", "TEvRequestFilter")
-        ("type", "exclusive")("info", constructor->DebugString());
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)(
+            "borders_flow_controller", BordersFlowController.DebugString())("event", "TEvRequestFilter")("type", "exclusive")(
+            "info", constructor->DebugString());
+        OnFilterRequestCompleted();
         return;
     }
 
@@ -122,15 +133,18 @@ void TDuplicateManager::Handle(const TEvRequestFilter::TPtr& ev) {
     auto& filterGuard = task->GetRequestGuard();
     NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::SendToAllocation(filterGuard->GetMemoryProcessId(),
         filterGuard->GetMemoryScopeId(), filterGuard->GetMemoryGroupId(), { task }, (ui64)TFilterAccumulator::EFetchingStage::FILTERS);
-    LOCAL_LOG_TRACE("event", "TEvRequestFilter")
-    ("type", "shared")("info", constructor->DebugString());
+    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)(
+        "borders_flow_controller", BordersFlowController.DebugString())("event", "TEvRequestFilter")("type", "shared")(
+        "info", constructor->DebugString());
 }
 
 void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocated::TPtr& ev) {
     std::shared_ptr<TFilterAccumulator> constructor = ev->Get()->GetRequest();
     if (FiltersStore.NotifyReadyFilter(constructor)) {
-        LOCAL_LOG_TRACE("event", "TEvFilterRequestResourcesAllocated")
-        ("type", "cached")("info", constructor->DebugString());
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)(
+            "borders_flow_controller", BordersFlowController.DebugString())("event", "TEvFilterRequestResourcesAllocated")("type", "cached")(
+            "info", constructor->DebugString());
+        OnFilterRequestCompleted();
         return;
     }
 
@@ -154,20 +168,34 @@ void TDuplicateManager::Handle(const NPrivate::TEvFilterRequestResourcesAllocate
         std::move(portionsToFetch), GetFetchingColumns(), PKSchema, LastSchema, ColumnDataManager, DataAccessorsManager, Counters,
         std::move(requestGuard), memoryGuard);
     std::shared_ptr<TBuildFilterTaskExecutor> executor = std::make_shared<TBuildFilterTaskExecutor>(std::move(bordersIterator));
-    auto startSchedule = executor->ScheduleNext(std::move(columnFetchingRequest));
-    LOCAL_LOG_TRACE("event", "TEvFilterRequestResourcesAllocated")
-    ("type", "inflight")("info", constructor->DebugString())("was_started", startSchedule);
+    if (InflightExecutors < MaxInflightExecutors) {
+        auto startSchedule = executor->ScheduleNext(std::move(columnFetchingRequest));
+        if (startSchedule) {
+            ++InflightExecutors;
+            Counters->OnFetchInflight(1);
+        }
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)(
+            "borders_flow_controller", BordersFlowController.DebugString())("event", "TEvFilterRequestResourcesAllocated")("type", "inflight")(
+            "info", constructor->DebugString())("was_started", startSchedule);
+    } else {
+        PendingExecutors.emplace_back(std::move(executor), std::move(columnFetchingRequest));
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)(
+            "borders_flow_controller", BordersFlowController.DebugString())("event", "TEvFilterRequestResourcesAllocated")("type", "queued")(
+            "info", constructor->DebugString())("pending_count", PendingExecutors.size());
+    }
 }
 
 void TDuplicateManager::Handle(const TEvBordersConstructionResult::TPtr& ev) {
     if (ev->Get()->Result.IsFail()) {
-        LOCAL_LOG_TRACE("event", "TEvBordersConstructionResult")("error", ev->Get()->Result.GetErrorMessage());
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)(
+            "borders_flow_controller", BordersFlowController.DebugString())("event", "TEvBordersConstructionResult")(
+            "error", ev->Get()->Result.GetErrorMessage());
         AbortAndPassAway(ev->Get()->Result.GetErrorMessage());
         return;
     }
-    LOCAL_LOG_TRACE("event", "TEvBordersConstructionResult")
-    ("type", "finish")("portions", ev->Get()->Context.GetBatch().GetPortionIds().size())(
-        "borders", ev->Get()->Context.GetBatch().GetBorders().size());
+    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)(
+        "borders_flow_controller", BordersFlowController.DebugString())("event", "TEvBordersConstructionResult")("type", "finish")(
+        "portions", ev->Get()->Context.GetBatch().GetPortionIds().size())("borders", ev->Get()->Context.GetBatch().GetBorders().size());
 
     BordersFlowController.Enqueue(ev);
 }
@@ -175,15 +203,51 @@ void TDuplicateManager::Handle(const TEvBordersConstructionResult::TPtr& ev) {
 void TDuplicateManager::Handle(const TEvMergeBordersResult::TPtr& ev) {
     auto& event = *ev->Get();
     if (event.Result.IsFail()) {
-        LOCAL_LOG_TRACE("event", "TEvMergeBordersResult")("error", event.Result.GetErrorMessage());
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)(
+            "borders_flow_controller", BordersFlowController.DebugString())("event", "TEvMergeBordersResult")(
+            "error", event.Result.GetErrorMessage());
         AbortAndPassAway(event.Result.GetErrorMessage());
         return;
     }
-    event.Context.GetExecutor()->ScheduleNext(event.Context.ExtractGlobalContext());
+    if (!event.Context.GetExecutor()->ScheduleNext(event.Context.ExtractGlobalContext())) {
+        Counters->OnFetchInflight(-1);
+        AFL_VERIFY(InflightExecutors > 0);
+        --InflightExecutors;
+        TryStartPendingExecutor();
+    }
     for (auto&& [portionId, filter] : event.ReadyFilters) {
-        FiltersStore.AddReadyFilter(portionId, std::move(filter));
+        if (FiltersStore.AddReadyFilter(portionId, std::move(filter))) {
+            OnFilterRequestCompleted();
+        }
     }
     BordersFlowController.OnReadyMergeBorders();
+}
+
+void TDuplicateManager::TryStartPendingExecutor() {
+    while (!PendingExecutors.empty() && InflightExecutors < MaxInflightExecutors) {
+        auto pending = std::move(PendingExecutors.front());
+        PendingExecutors.pop_front();
+        auto startSchedule = pending.Executor->ScheduleNext(std::move(pending.Context));
+        if (startSchedule) {
+            ++InflightExecutors;
+            Counters->OnFetchInflight(1);
+        }
+    }
+}
+
+void TDuplicateManager::OnFilterRequestCompleted() {
+    AFL_VERIFY(InflightFilterRequests > 0);
+    --InflightFilterRequests;
+    TryStartPendingFilterRequest();
+}
+
+void TDuplicateManager::TryStartPendingFilterRequest() {
+    while (!PendingFilterRequests.empty() && InflightFilterRequests < MaxInflightFilterRequests) {
+        auto ev = std::move(PendingFilterRequests.front());
+        PendingFilterRequests.pop_front();
+        ++InflightFilterRequests;
+        HandleFilterRequestImpl(ev);
+    }
 }
 
 }   // namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering

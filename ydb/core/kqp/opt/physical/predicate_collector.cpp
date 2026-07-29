@@ -135,15 +135,12 @@ bool CanPushdownStringUdf(const TExprNode& udf, bool pushdownSubstring) {
     return substringMatchUdfs.contains(name);
 }
 
-bool IfPresentCanBePushed(const TCoIfPresent& ifPresent, const TExprNode* lambdaArg, bool allowOlapApply) {
-
+bool IfPresentCanBePushed(const TCoIfPresent& ifPresent, bool allowOlapApply) {
     Y_UNUSED(ifPresent);
-    Y_UNUSED(lambdaArg);
-
     return allowOlapApply;
 }
 
-bool AbstractTreeCanBePushed(const TExprBase& expr, const TExprNode* lambdaArg, const TPushdownOptions& pushdownOptions) {
+bool AbstractTreeCanBePushed(const TExprBase& expr, const TPushdownOptions& pushdownOptions) {
     if (!expr.Ref().IsCallable({"Apply", "Coalesce", "NamedApply", "IfPresent", "Visit"})) {
         return false;
     }
@@ -175,8 +172,11 @@ bool AbstractTreeCanBePushed(const TExprBase& expr, const TExprNode* lambdaArg, 
         }
     }
 
-    if (auto maybeIfPresent = expr.Maybe<TCoIfPresent>(); maybeIfPresent.IsValid()) {
-        return IfPresentCanBePushed(maybeIfPresent.Cast(), lambdaArg, pushdownOptions.AllowOlapApply);
+    if (auto maybeIfPresent = expr.Maybe<TCoIfPresent>(); applies.empty() && maybeIfPresent.IsValid()) {
+        auto ifPresent = maybeIfPresent.Cast();
+        // Special case, when we cannot push a todict.
+        const auto hasToDict = [](const TExprNode::TPtr& node) { return !!TMaybeNode<TCoToDict>(node); };
+        return !FindNode(ifPresent.PresentHandler().Ptr(), hasToDict);
     }
 
     return !applies.empty();
@@ -234,9 +234,9 @@ bool CheckExpressionNodeForPushdown(const TExprBase& node, const TExprNode* lamb
 
     if (options.AllowOlapApply) {
         if (const auto maybeIfPresent = node.Maybe<TCoIfPresent>()) {
-            return IfPresentCanBePushed(maybeIfPresent.Cast(), lambdaArg, options.AllowOlapApply);
+            return IfPresentCanBePushed(maybeIfPresent.Cast(), options.AllowOlapApply);
         }
-        return AbstractTreeCanBePushed(node, lambdaArg, options);
+        return AbstractTreeCanBePushed(node, options);
     }
 
     return false;
@@ -410,7 +410,7 @@ bool CoalesceCanBePushed(const TCoCoalesce& coalesce, const TExprNode* lambdaArg
     } else if (const auto maybeJsonExists = predicate.Maybe<TCoJsonExists>()) {
         return JsonExistsCanBePushed(maybeJsonExists.Cast(), lambdaArg);
     } else if (const auto maybeIfPresent = predicate.Maybe<TCoIfPresent>()) {
-        return IfPresentCanBePushed(maybeIfPresent.Cast(), lambdaArg, options.AllowOlapApply);
+        return IfPresentCanBePushed(maybeIfPresent.Cast(), options.AllowOlapApply);
     }
 
     return false;
@@ -466,7 +466,7 @@ void CollectPredicates(const TExprBase& predicate, TOLAPPredicateNode& predicate
             CollectChildrenPredicates(predicate.Ref(), predicateTree, lambdaArg, inputType, {true, options.PushdownSubstring});
         }
         if (!predicateTree.CanBePushedApply) {
-            predicateTree.CanBePushedApply = AbstractTreeCanBePushed(predicate, lambdaArg, options);
+            predicateTree.CanBePushedApply = AbstractTreeCanBePushed(predicate, options);
         }
     }
 }

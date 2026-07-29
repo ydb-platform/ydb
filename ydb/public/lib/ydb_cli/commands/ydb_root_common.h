@@ -46,7 +46,9 @@ struct TClientSettings {
     // Name of a directory in user home directory to save profile config
     TString YdbDir;
     // AI Mode Settings
-    std::optional<bool> EnableAiInteractive;
+    std::optional<bool> EnableAiInteractive = true;
+    // Interactive transactions (BEGIN/COMMIT/ROLLBACK) in REPL
+    std::optional<bool> EnableInteractiveTransactions;
 
     // Called lazily on first driver creation to get distribution name and version.
     std::function<TYdbCliBuildInfo()> BuildInfoProvider;

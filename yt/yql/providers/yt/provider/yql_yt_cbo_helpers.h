@@ -11,4 +11,4 @@ IGraphTransformer::TStatus PopulateJoinStrategySizeInfo(TRelSizeInfo& outLeft, T
 
 TVector<TString> JoinLeafLabels(TExprNode::TPtr label);
 
-}  // namespace NYql
+} // namespace NYql

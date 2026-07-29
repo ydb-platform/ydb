@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: platformdirs
-Version: 4.9.6
+Version: 4.10.0
 Summary: A small Python package for determining appropriate platform-specific dirs, e.g. a `user data dir`.
 Project-URL: Changelog, https://platformdirs.readthedocs.io/en/latest/changelog.html
 Project-URL: Documentation, https://platformdirs.readthedocs.io
@@ -75,14 +75,26 @@ user_config_path("MyApp", "MyCompany")  # returns pathlib.Path
 
 ## Directory types
 
+**Application directories** — scoped to your app name and version:
+
 - **Data**: Persistent application data (`user_data_dir`, `site_data_dir`)
 - **Config**: Configuration files and settings (`user_config_dir`, `site_config_dir`)
+- **Preference**: User preferences, distinct from config on macOS (`user_preference_dir`)
 - **Cache**: Cached data that can be regenerated (`user_cache_dir`, `site_cache_dir`)
 - **State**: Non-essential runtime state like window positions (`user_state_dir`, `site_state_dir`)
 - **Logs**: Log files (`user_log_dir`, `site_log_dir`)
 - **Runtime**: Runtime files like sockets and PIDs (`user_runtime_dir`, `site_runtime_dir`)
 
-Each type has both `user_*` (per-user, writable) and `site_*` (system-wide, read-only for users) variants.
+App dirs have both `user_*` (per-user, writable) and `site_*` (system-wide, read-only) variants where applicable.
+
+**User media directories** — standard user-facing folders, not scoped to app name:
+
+- **Documents** (`user_documents_dir`), **Downloads** (`user_downloads_dir`)
+- **Pictures** (`user_pictures_dir`), **Videos** (`user_videos_dir`), **Music** (`user_music_dir`)
+- **Desktop** (`user_desktop_dir`), **Projects** (`user_projects_dir`)
+- **Public share** (`user_publicshare_dir`), **Templates** (`user_templates_dir`)
+- **Fonts** (`user_fonts_dir`) — user-writable font installation directory
+- **Executable** (`user_bin_dir`, `site_bin_dir`), **Applications** (`user_applications_dir`, `site_applications_dir`)
 
 ## Documentation
 

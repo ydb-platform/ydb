@@ -18,17 +18,7 @@ TRangeLock::TRangeLock(TRangeLock&& other) noexcept
 
 TRangeLock::~TRangeLock()
 {
-    if (!Armed) {
-        return;
-    }
-
-    Y_ABORT_UNLESS(LockableRanges);
-
-    if (Lsn) {
-        LockableRanges->UnlockPBuffer(Lsn);
-    } else {
-        LockableRanges->UnLockDDiskRange(LockRange);
-    }
+    Disarm();
 }
 
 TRangeLock& TRangeLock::operator=(TRangeLock&& other) noexcept
@@ -58,6 +48,22 @@ void TRangeLock::Arm()
     } else {
         Y_ABORT_UNLESS(!Mask.Empty());
         LockRange = LockableRanges->LockDDiskRange(Range, Mask);
+    }
+}
+
+void TRangeLock::Disarm()
+{
+    if (!Armed) {
+        return;
+    }
+    Armed = false;
+
+    Y_ABORT_UNLESS(LockableRanges);
+
+    if (Lsn) {
+        LockableRanges->UnlockPBuffer(Lsn);
+    } else {
+        LockableRanges->UnLockDDiskRange(LockRange);
     }
 }
 

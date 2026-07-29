@@ -103,7 +103,7 @@ NKikimr::NMiniKQL::TType* BuildTypeImpl(const TTypeAnnotationNode& annotation, c
             if (!keyType || !payloadType) {
                 return nullptr;
             }
-            return typeBuilder.NewDictType(keyType, payloadType, false);
+            return typeBuilder.NewDictType(keyType, payloadType, /*multi=*/false);
         }
 
         case ETypeAnnotationKind::Type: {
@@ -216,7 +216,7 @@ NKikimr::NMiniKQL::TType* BuildTypeImpl(const TTypeAnnotationNode& annotation, c
             if (!itemType) {
                 return nullptr;
             }
-            return typeBuilder.NewLinearType(itemType, false);
+            return typeBuilder.NewLinearType(itemType, /*isDynamic=*/false);
         }
 
         case ETypeAnnotationKind::DynamicLinear: {
@@ -225,7 +225,7 @@ NKikimr::NMiniKQL::TType* BuildTypeImpl(const TTypeAnnotationNode& annotation, c
             if (!itemType) {
                 return nullptr;
             }
-            return typeBuilder.NewLinearType(itemType, true);
+            return typeBuilder.NewLinearType(itemType, /*isDynamic=*/true);
         }
 
         case ETypeAnnotationKind::Item:

@@ -164,12 +164,12 @@ TLogicalTypePtr UnwrapTaggedType(const TLogicalTypePtr& type)
     return type;
 }
 
-TString GetTag(const TLogicalTypePtr& type)
+std::string GetTag(const TLogicalTypePtr& type)
 {
     return type->AsTaggedTypeRef().GetTag();
 }
 
-TString ExtractTagFromOneOfTypes(
+std::string ExtractTagFromOneOfTypes(
     const TLogicalTypePtr& firstType,
     const TLogicalTypePtr& secondType)
 {

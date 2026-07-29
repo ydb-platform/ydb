@@ -369,6 +369,16 @@ TMultiTablePartitions TClientBase::GetTablePartitions(
         });
 }
 
+void TClient::CheckClusterLiveness(const TCheckClusterLivenessOptions& options)
+{
+    CheckShutdown();
+    RequestWithRetry<void>(
+        ClientRetryPolicy_->CreatePolicyForCheckClusterLiveness(),
+        [this, &options] (TMutationId /*mutationId*/) {
+            RawClient_->CheckClusterLiveness(options);
+        });
+}
+
 TMaybe<TYPath> TClientBase::GetFileFromCache(
     const TString& md5Signature,
     const TYPath& cachePath,
@@ -1185,9 +1195,9 @@ void TTransaction::Unlock(
         });
 }
 
-void TTransaction::Commit()
+void TTransaction::Commit(const TCommitTransactionOptions& options)
 {
-    PingableTx_->Commit();
+    PingableTx_->Commit(options);
 }
 
 void TTransaction::Abort()

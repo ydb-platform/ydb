@@ -22,42 +22,73 @@ public:
 
     struct TVolume
     {
-        ui64 TabletId;
         TString DiskId;
+        ui64 TabletId = 0;
         ui32 Generation = 0;
     };
 
     struct TPartitionDirect
     {
-        ui64 TabletId = 0;
         TString DiskId;
+        ui64 TabletId = 0;
+        ui32 Generation = 0;
+    };
+
+    struct TFastPathService
+    {
+        TString DiskId;
+        ui64 TabletId = 0;
         ui32 Generation = 0;
     };
 
     struct TDirectBlockGroup
     {
         TString DiskId;
+        ui64 TabletId = 0;
+        ui32 Generation = 0;
+
+        size_t DBGIndex = 0;
     };
 
     struct TVChunk
     {
         TString DiskId;
-        ui32 VChunkIndex;
+        ui64 TabletId = 0;
+        ui32 Generation = 0;
+
+        ui32 DBGIndex = 0;
+        ui32 VChunkIndex = 0;
     };
 
     struct TDDiskDataCopier
     {
         TString DiskId;
+        ui64 TabletId = 0;
+        ui32 Generation = 0;
+
+        ui32 DBGIndex = 0;
+        ui32 VChunkIndex = 0;
         int Destination = 0;
+    };
+
+    struct TInterconnectTransport
+    {
+        TString DiskId;
+        ui64 TabletId = 0;
+        ui32 Generation = 0;
+
+        size_t DBGIndex = 0;
     };
 
 private:
     using TData = std::variant<
         TVolume,
         TPartitionDirect,
+        TFastPathService,
         TDirectBlockGroup,
         TVChunk,
-        TDDiskDataCopier>;
+        TDDiskDataCopier,
+        TInterconnectTransport>;
 
     ui64 StartTime = 0;
     TData Data;

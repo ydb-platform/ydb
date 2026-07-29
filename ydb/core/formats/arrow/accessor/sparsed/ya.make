@@ -4,6 +4,7 @@ PEERDIR(
     ydb/core/formats/arrow/accessor/abstract
     ydb/library/formats/arrow
     ydb/library/formats/arrow/protos
+    ydb/core/formats/arrow/filter
     ydb/core/formats/arrow/save_load
     ydb/core/formats/arrow/serializer
     ydb/core/formats/arrow/splitter

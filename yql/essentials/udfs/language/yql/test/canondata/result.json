@@ -54,6 +54,11 @@
             "uri": "file://test.test_ObfuscateTable_/results.txt"
         }
     ],
+    "test.test[Sql2Yql]": [
+        {
+            "uri": "file://test.test_Sql2Yql_/results.txt"
+        }
+    ],
     "test.test[TestSyntax]": [
         {
             "uri": "file://test.test_TestSyntax_/results.txt"

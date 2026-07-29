@@ -14,3 +14,7 @@ This command forces the synchronous collection of table statistics and column st
 * `column_name` — collect column statistics only for the specified columns of the table.
 
 The current set of statistics is described in [{#T}](../../../concepts/query_execution/optimizer.md#statistics).
+
+## Background operation
+
+SQL operation `ANALYZE` executes synchronously and waits for completion. In addition a background operation is created for observability. Use the [operation list](../../../reference/ydb-cli/operation-list.md) command to monitor the progress of background `ANALYZE` operations.

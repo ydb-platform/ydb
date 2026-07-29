@@ -75,6 +75,11 @@ const NKikimrPQ::TPQTabletConfig_TPartition* GetPartitionConfigFromAllPartitions
     return nullptr;
 }
 
+bool IsTopicMessagesBatchingEnabled(const NActors::TActorContext& ctx) {
+    return AppData(ctx)->FeatureFlags.GetEnableTopicMessagesBatching() &&
+        AppData(ctx)->FeatureFlags.GetEnableTopicWriteOffsetDeltaInKeys();
+}
+
 } // namespace NPQ
 
 } // namespace NKikimr

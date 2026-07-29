@@ -3,6 +3,7 @@
 #include "ut_helpers.h"
 #include "rate_accounting.h"
 
+#include <ydb/core/base/counters.h>
 #include <ydb/core/metering/metering.h>
 
 #include <ydb/core/testlib/actors/block_events.h>
@@ -2348,6 +2349,84 @@ Y_UNIT_TEST_SUITE(TKesusTest) {
         // Kill pipe and then session must be deactivated on kesus.
         ctx.Runtime->Send(new IEventHandle(edgeAndSession2.second, edgeAndSession2.first, new TEvents::TEvPoisonPill()));
         WaitAllocation(edgeAndSession1.first, 10); // Now first session is the only active session and it receives all resource.
+    }
+
+    Y_UNIT_TEST(TestQuoterTotalCounters) {
+        TTestContext ctx;
+        ctx.Setup();
+
+        std::vector<TString> bills;
+        ctx.Runtime->SetObserverFunc([&bills](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NMetering::TEvMetering::EvWriteMeteringJson) {
+                bills.push_back(ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>()->MeteringJson);
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        NKikimrKesus::TStreamingQuoterResource root;
+        root.SetResourcePath("/Root");
+        root.MutableHierarchicalDRRResourceConfig()->SetMaxUnitsPerSecond(100.0);
+        root.MutableHierarchicalDRRResourceConfig()->SetPrefetchCoefficient(300.0);
+        ctx.AddQuoterResource(root);
+
+        auto makeChild = [](const TString& path, const TString& db, const std::map<TString, TString>& labels) {
+            NKikimrKesus::TStreamingQuoterResource child;
+            child.SetResourcePath(path);
+            child.MutableHierarchicalDRRResourceConfig();
+            auto& acc = *child.MutableAccountingConfig();
+            acc.SetEnabled(true);
+            auto& onDemand = *acc.MutableOnDemand();
+            onDemand.SetEnabled(true);
+            onDemand.SetBillingPeriodSec(2);
+            onDemand.SetCloudId("cloud");
+            onDemand.SetFolderId("folder");
+            onDemand.SetResourceId("resource");
+            onDemand.SetDatabase(db);
+            for (const auto& [k, v] : labels) {
+                onDemand.MutableLabels()->emplace(k, v);
+            }
+            return child;
+        };
+        ctx.AddQuoterResource(makeChild("/Root/Res1", "db1", {{"category", "generic"}}));
+        ctx.AddQuoterResource(makeChild("/Root/Res2", "db2", {{"category", "generic"}}));
+        ctx.AddQuoterResource(makeChild("/Root/Res2/category", "db2", {{"category", "special"}}));
+
+        auto edge = ctx.Runtime->AllocateEdgeActor();
+        auto client = ctx.Runtime->AllocateEdgeActor();
+        const auto sub1 = ctx.SubscribeOnResource(client, edge, "/Root/Res1", false, 0);
+        const auto sub2 = ctx.SubscribeOnResource(client, edge, "/Root/Res2", false, 0);
+        const auto sub3 = ctx.SubscribeOnResource(client, edge, "/Root/Res2/category", false, 0);
+
+        TInstant start = ctx.Runtime->GetCurrentTime();
+        TDuration interval = TConsumptionHistory::Interval();
+        ctx.AccountResources(client, edge, sub1.GetResults(0).GetResourceId(), start, interval, {30.0});
+        ctx.AccountResources(client, edge, sub2.GetResults(0).GetResourceId(), start, interval, {20.0});
+        ctx.AccountResources(client, edge, sub3.GetResults(0).GetResourceId(), start, interval, {10.0});
+
+        if (bills.size() < 3) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&bills](IEventHandle&) -> bool {
+                return bills.size() >= 3;
+            });
+            ctx.Runtime->DispatchEvents(opts);
+        }
+
+        auto dbCounters = [&](const TString& db) {
+            return GetServiceCounters(ctx.Runtime->GetAppData().Counters, "ydb_serverless", false)
+                ->GetSubgroup("host", "")
+                ->GetSubgroup("cloud_id", "cloud")
+                ->GetSubgroup("folder_id", "folder")
+                ->GetSubgroup("database_id", "resource")
+                ->GetSubgroup("database", db);
+        };
+
+        for (const char* db : {"db1", "db2"}) {
+            auto counters = dbCounters(db);
+            auto limitTotal = counters->GetExpiringNamedCounter("name", "resources.request_units.limit_total", false);
+            auto consumedTotal = counters->GetExpiringNamedCounter("name", "resources.request_units.consumed_total", true);
+            UNIT_ASSERT_VALUES_EQUAL(limitTotal->Val(), 100);
+            UNIT_ASSERT_VALUES_EQUAL(consumedTotal->Val(), 60);
+        }
     }
 }
 

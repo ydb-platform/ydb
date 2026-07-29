@@ -53,8 +53,8 @@ struct TUnversionedValue
 
     //! Assuming #IsStringLikeType(Type), return string data as a TStringBuf.
     TStringBuf AsStringBuf() const;
-    //! Assuming #IsStringLikeType(Type), return string data as a TString.
-    TString AsString() const;
+    //! Assuming #IsStringLikeType(Type), return string data as a std::string.
+    std::string AsString() const;
 };
 
 static_assert(
@@ -75,7 +75,7 @@ TFingerprint GetFarmFingerprint(const TUnversionedValue& value);
 void PrintTo(const TUnversionedValue& value, ::std::ostream* os);
 
 void FormatValue(TStringBuilderBase* builder, const TUnversionedValue& value, TStringBuf format);
-TString ToString(const TUnversionedValue& value, bool valueOnly = false);
+std::string ToString(const TUnversionedValue& value, bool valueOnly = false);
 
 ////////////////////////////////////////////////////////////////////////////////
 

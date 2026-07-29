@@ -1,15 +1,24 @@
 #include "kafka_produce_actor.h"
 #include <library/cpp/string_utils/base64/base64.h>
 #include <ydb/core/kafka_proxy/kafka_metrics.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 
 #include <contrib/libs/protobuf/src/google/protobuf/util/time_util.h>
 
 #include <ydb/core/persqueue/public/utils.h>
+#include <ydb/core/persqueue/public/config.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/public/api/protos/draft/persqueue_common.pb.h>
+#include <ydb/public/api/protos/ydb_topic.pb.h>
+#include <limits>
 #include <util/string/join.h>
+#include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
 
 namespace NKafka {
+
+namespace {
 
 static constexpr TDuration WAKEUP_INTERVAL = TDuration::Seconds(1);
 static constexpr TDuration TOPIC_OK_EXPIRATION_INTERVAL = TDuration::Minutes(15);
@@ -18,26 +27,118 @@ static constexpr TDuration TOPIC_UNATHORIZED_EXPIRATION_INTERVAL = TDuration::Mi
 static constexpr TDuration REQUEST_EXPIRATION_INTERVAL = TDuration::Seconds(30);
 static constexpr TDuration WRITER_EXPIRATION_INTERVAL = TDuration::Minutes(5);
 
+NPersQueueCommon::ECodec KafkaBatchCodec() {
+    return static_cast<NPersQueueCommon::ECodec>(static_cast<int>(Ydb::Topic::CODEC_KAFKA_BATCH) - 1);
+}
+
+bool IsRecordBatchV2OrNewer(const TKafkaBatchHeader& header) {
+    return header.Magic >= TKafkaRecordBatch::MagicMeta::Default;
+}
+
+ECompressionType CompressionType(const TKafkaBatchHeader& header) {
+    return static_cast<ECompressionType>(header.Attributes & 0x07);
+}
+
+bool IsRawRecordBatch(const TKafkaBatchHeader& header) {
+    return CompressionType(header) == ECompressionType::NONE;
+}
+
+bool CanStoreRawRecords(const TKafkaBatchHeader& header, bool batchingEnabled) {
+    return batchingEnabled && (IsRecordBatchV2OrNewer(header) || IsRawRecordBatch(header));
+}
+
+EKafkaErrors ValidateBatchCompression(const TKafkaBatchHeader& header, bool batchingEnabled) {
+    if (!IsRecordBatchV2OrNewer(header) && !IsRawRecordBatch(header)) {
+        YDB_LOG_ERROR("Compressed legacy Kafka record batches are not supported",
+            {LogPrefix()},
+            {"magic", header.Magic},
+            {"compressionType", static_cast<int>(CompressionType(header))});
+        return EKafkaErrors::UNSUPPORTED_COMPRESSION_TYPE;
+    }
+
+    if (!batchingEnabled && !IsRawRecordBatch(header)) {
+        YDB_LOG_ERROR("Compressed Kafka record batches are not supported when topic messages batching is disabled",
+            {LogPrefix()},
+            {"magic", header.Magic},
+            {"compressionType", static_cast<int>(CompressionType(header))});
+        return EKafkaErrors::UNSUPPORTED_COMPRESSION_TYPE;
+    }
+
+    return EKafkaErrors::NONE_ERROR;
+}
+
+TStringBuf AsStringBuf(const TKafkaBytes& records) {
+    if (!records) {
+        return {};
+    }
+    return TStringBuf(records->data(), records->size());
+}
+
+TString MakeSourceId(const TString& transactionalId, i64 producerId) {
+    TString sourceId;
+    TBuffer buf;
+    buf.Reserve(transactionalId.size() + sizeof(producerId));
+    buf.Append(transactionalId.data(), transactionalId.size());
+    buf.Append(static_cast<const char*>(static_cast<const void*>(&producerId)), sizeof(producerId));
+    buf.AsString(sourceId);
+    return Base64Encode(sourceId);
+}
+
+} // namespace
+
 NActors::IActor* CreateKafkaProduceActor(const TContext::TPtr context) {
     return new TKafkaProduceActor(context);
 }
 
-TString TKafkaProduceActor::LogPrefix() {
-    TStringBuilder sb;
-    sb << "TKafkaProduceActor " << SelfId() << " State: ";
+NKikimrPQClient::TDataChunk MakeDataChunk(const TKafkaRecord& record) {
+    NKikimrPQClient::TDataChunk proto;
+    proto.set_codec(NPersQueueCommon::RAW);
+
+    for (const auto& header : record.Headers) {
+        auto meta = proto.AddMessageMeta();
+        if (header.Key) {
+            meta->set_key(static_cast<const char*>(header.Key->data()), header.Key->size());
+        }
+        if (header.Value) {
+            meta->set_value(static_cast<const char*>(header.Value->data()), header.Value->size());
+        }
+    }
+
+    if (record.Key) {
+        auto meta = proto.AddMessageMeta();
+        meta->set_key("__key");
+        meta->set_value(static_cast<const char*>(record.Key->data()), record.Key->size());
+    }
+
+    if (record.Value) {
+        proto.SetData(static_cast<const void*>(record.Value->data()), record.Value->size());
+    }
+
+    return proto;
+}
+
+NStructuredLog::TStructuredMessage TKafkaProduceActor::LogPrefix() {
+    TString state;
+
     auto stateFunc = CurrentStateFunc();
     if (stateFunc == &TKafkaProduceActor::StateInit) {
-        sb << "Init ";
+        state = "Init";
     } else if (stateFunc == &TKafkaProduceActor::StateWork) {
-        sb << "Work ";
+        state = "Work";
     } else {
-        sb << "Unknown ";
+        state = "Unknown";
     }
-    return sb;
+
+    return YDB_LOG_CREATE_MESSAGE(
+        {"actorClassName", "TKafkaProduceActor"},
+        {"selfId", SelfId()},
+        {"state", state});
 }
 
 void TKafkaProduceActor::LogEvent(IEventHandle& ev) {
-    KAFKA_LOG_T("Produce actor: Received event: " << ev.GetTypeName());
+    YDB_LOG_TRACE("Produce actor: Received",
+        {LogPrefix()},
+        {"event", ev.GetTypeName()});
 }
 
 void TKafkaProduceActor::SendMetrics(const TString& topicName, size_t delta, const TString& name, const TActorContext& ctx) {
@@ -59,7 +160,8 @@ void TKafkaProduceActor::Bootstrap(const NActors::TActorContext& /*ctx*/) {
 }
 
 void TKafkaProduceActor::Handle(TEvKafka::TEvWakeup::TPtr /*request*/, const TActorContext& ctx) {
-    KAFKA_LOG_T("Produce actor: Wakeup");
+    YDB_LOG_TRACE("Produce actor: Wakeup",
+        {LogPrefix()});
 
     SendResults(ctx);
     CleanTopics(ctx);
@@ -67,11 +169,13 @@ void TKafkaProduceActor::Handle(TEvKafka::TEvWakeup::TPtr /*request*/, const TAc
 
     Schedule(WAKEUP_INTERVAL, new TEvKafka::TEvWakeup());
 
-    KAFKA_LOG_T("Produce actor: Wakeup was completed successfully");
+    YDB_LOG_TRACE("Produce actor: Wakeup was completed successfully",
+        {LogPrefix()});
 }
 
 void TKafkaProduceActor::PassAway() {
-    KAFKA_LOG_D("Produce actor: PassAway");
+    YDB_LOG_DEBUG("Produce actor: PassAway",
+        {LogPrefix()});
 
     for(const auto& [_, partitionWriters] : NonTransactionalWriters) {
         for(const auto& [_, w] : partitionWriters) {
@@ -86,7 +190,8 @@ void TKafkaProduceActor::PassAway() {
 
     TActorBootstrapped::PassAway();
 
-    KAFKA_LOG_T("Produce actor: PassAway was completed successfully");
+    YDB_LOG_TRACE("Produce actor: PassAway was completed successfully",
+        {LogPrefix()});
 }
 
 void TKafkaProduceActor::CleanTopics(const TActorContext& ctx) {
@@ -102,7 +207,8 @@ void TKafkaProduceActor::CleanTopics(const TActorContext& ctx) {
 }
 
 void TKafkaProduceActor::CleanWriters(const TActorContext& ctx) {
-    KAFKA_LOG_T("Produce actor: CleanWriters");
+    YDB_LOG_TRACE("Produce actor: CleanWriters",
+        {LogPrefix()});
     const auto earliestAllowedTs = ctx.Now() - WRITER_EXPIRATION_INTERVAL;
 
     for (auto& [topicPath, partitionWriters] : NonTransactionalWriters) {
@@ -125,11 +231,15 @@ void TKafkaProduceActor::CleanWriters(const TActorContext& ctx) {
         }
     }
 
-    KAFKA_LOG_T("Produce actor: CleanWriters was completed successfully");
+    YDB_LOG_TRACE("Produce actor: CleanWriters was completed successfully",
+        {LogPrefix()});
 }
 
 void TKafkaProduceActor::CleanWriter(const TTopicPartition& topicPartition, const TActorId& writerId) {
-    KAFKA_LOG_D("Produce actor: Destroing inactive PartitionWriter. Topic='" << topicPartition.TopicPath << "', Partition=" << topicPartition.PartitionId);
+    YDB_LOG_DEBUG("Produce actor: Destroing inactive PartitionWriter. Topic='",
+        {LogPrefix()},
+        {"topicPath", topicPartition.TopicPath},
+        {"partition", topicPartition.PartitionId});
     Send(writerId, new TEvents::TEvPoison());
 }
 
@@ -143,7 +253,9 @@ void TKafkaProduceActor::HandleInit(TEvTxProxySchemeCache::TEvNavigateKeySetResu
     for (auto& info : navigate->ResultSet) {
         if (NSchemeCache::TSchemeCacheNavigate::EStatus::Ok == info.Status) {
             auto topicPath = CanonizePath(NKikimr::JoinPath(info.Path));
-            KAFKA_LOG_D("Produce actor: Received topic '" << topicPath << "' description");
+            YDB_LOG_DEBUG("Produce actor: Received topic description",
+                {LogPrefix()},
+                {"topicPath", topicPath});
             TopicsForInitialization.erase(topicPath);
             auto& topic = Topics[topicPath];
 
@@ -154,7 +266,9 @@ void TKafkaProduceActor::HandleInit(TEvTxProxySchemeCache::TEvNavigateKeySetResu
                 topic.ExpirationTime = now + TOPIC_OK_EXPIRATION_INTERVAL;
                 topic.PartitionChooser = CreatePartitionChooser(info.PQGroupInfo->Description);
             } else {
-                KAFKA_LOG_W("Produce actor: Unauthorized PRODUCE to topic '" << topicPath << "'");
+                YDB_LOG_WARN("Produce actor: Unauthorized PRODUCE to topic",
+                    {LogPrefix()},
+                    {"topicPath", topicPath});
                 topic.Status = UNAUTHORIZED;
                 topic.ExpirationTime = now + TOPIC_UNATHORIZED_EXPIRATION_INTERVAL;
             }
@@ -166,7 +280,9 @@ void TKafkaProduceActor::HandleInit(TEvTxProxySchemeCache::TEvNavigateKeySetResu
     }
 
     for(auto& topicPath : TopicsForInitialization) {
-        KAFKA_LOG_D("Produce actor: Topic '" << topicPath << "' not found");
+        YDB_LOG_DEBUG("Produce actor: Topic not found",
+            {LogPrefix()},
+            {"topicPath", topicPath});
         auto& topicInfo = Topics[topicPath];
         topicInfo.Status = NOT_FOUND;
         topicInfo.ExpirationTime = now + TOPIC_NOT_FOUND_EXPIRATION_INTERVAL;
@@ -176,14 +292,17 @@ void TKafkaProduceActor::HandleInit(TEvTxProxySchemeCache::TEvNavigateKeySetResu
 
     Become(&TKafkaProduceActor::StateWork);
 
-    KAFKA_LOG_T("Produce actor: HandleInit(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr) was completed successfully");
+    YDB_LOG_TRACE("Produce actor: HandleInit(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr) was completed successfully",
+        {LogPrefix()});
 
     ProcessRequests(ctx);
 }
 
 void TKafkaProduceActor::Handle(TEvTxProxySchemeCache::TEvWatchNotifyDeleted::TPtr& ev, const TActorContext& ctx) {
     auto& path = ev->Get()->Path;
-    KAFKA_LOG_I("Produce actor: Topic '" << path << "' was deleted");
+    YDB_LOG_INFO("Produce actor: Topic was deleted",
+        {LogPrefix()},
+        {"path", path});
 
     auto it = NonTransactionalWriters.find(path);
     if (it != NonTransactionalWriters.end()) {
@@ -209,7 +328,9 @@ void TKafkaProduceActor::Handle(TEvTxProxySchemeCache::TEvWatchNotifyDeleted::TP
 void TKafkaProduceActor::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx) {
     auto* e = ev->Get();
     auto& path = e->Path;
-    KAFKA_LOG_I("Produce actor: Topic '" << path << "' was updated");
+    YDB_LOG_INFO("Produce actor: Topic was updated",
+        {LogPrefix()},
+        {"path", path});
 
     auto& topic = Topics[path];
     if (topic.Status == UNAUTHORIZED) {
@@ -273,26 +394,71 @@ size_t TKafkaProduceActor::EnqueueInitialization() {
     return canProcess;
 }
 
+struct TParsedProduceRecords {
+    TStringBuf Records;
+    std::optional<TKafkaBatchHeader> BatchHeader;
+    TKafkaRecordBatch Batch;
+    bool StoreRawRecords = false;
+    size_t RecordsCount = 0;
+    i64 ProducerId = TKafkaRecordBatch::ProducerIdMeta::Default;
+    i16 ProducerEpoch = TKafkaRecordBatch::ProducerEpochMeta::Default;
+};
+
+std::pair<EKafkaErrors, TParsedProduceRecords> ParseProduceRecords(
+    const TKafkaBytes& records,
+    bool batchingEnabled
+) {
+    TParsedProduceRecords result;
+    result.Records = AsStringBuf(records);
+    if (result.Records.empty()) {
+        return {EKafkaErrors::INVALID_RECORD, result};
+    }
+
+    result.BatchHeader = ReadKafkaBatchHeader(result.Records);
+    if (result.BatchHeader) {
+        if (const auto error = ValidateBatchCompression(*result.BatchHeader, batchingEnabled);
+            error != EKafkaErrors::NONE_ERROR) {
+            return {error, result};
+        }
+    }
+
+    result.StoreRawRecords = result.BatchHeader && CanStoreRawRecords(*result.BatchHeader, batchingEnabled);
+    if (result.StoreRawRecords) {
+        result.RecordsCount = result.BatchHeader->RecordsCount;
+        result.ProducerId = result.BatchHeader->ProducerId;
+        result.ProducerEpoch = result.BatchHeader->ProducerEpoch;
+    } else {
+        result.Batch = ReadRecordBatch(result.Records);
+        result.RecordsCount = result.Batch.Records.size();
+        result.ProducerId = result.Batch.ProducerId;
+        result.ProducerEpoch = result.Batch.ProducerEpoch;
+    }
+
+    return {EKafkaErrors::NONE_ERROR, std::move(result)};
+}
+
 std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
     const TString& transactionalId,
     const TProduceRequestData::TTopicProduceData::TPartitionProduceData& data,
+    const TParsedProduceRecords& parsedRecords,
     const TString& topicName,
     ui64 cookie,
     const TString& clientDC,
     bool ruPerRequest
 ) {
+    if (!data.Records) {
+        return {EKafkaErrors::INVALID_RECORD, nullptr};
+    }
+
     auto ev = MakeHolder<TEvPartitionWriter::TEvWriteRequest>();
     auto& request = ev->Record;
 
-    const auto& batch = data.Records;
-
-    TString sourceId;
-    TBuffer buf;
-    buf.Reserve(transactionalId.size() + sizeof(batch->ProducerId));
-    buf.Append(transactionalId.data(), transactionalId.size());
-    buf.Append(static_cast<const char*>(static_cast<const void*>(&batch->ProducerId)), sizeof(batch->ProducerId));
-    buf.AsString(sourceId);
-    sourceId = Base64Encode(sourceId);
+    const TStringBuf records = parsedRecords.Records;
+    const auto& batchHeader = parsedRecords.BatchHeader;
+    const auto& batch = parsedRecords.Batch;
+    const i64 producerId = parsedRecords.ProducerId;
+    const i16 producerEpoch = parsedRecords.ProducerEpoch;
+    const TString sourceId = MakeSourceId(transactionalId, producerId);
 
     auto* partitionRequest = request.MutablePartitionRequest();
     partitionRequest->SetTopic(topicName);
@@ -304,71 +470,103 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
 
     ui64 totalSize = 0;
 
-    for (ui64 batchIndex = 0; batchIndex < batch->Records.size(); ++batchIndex) {
-        const auto& record = batch->Records[batchIndex];
+    if (parsedRecords.StoreRawRecords) {
+        if (batchHeader->RecordsCount <= 0) {
+            return {EKafkaErrors::INVALID_RECORD, nullptr};
+        }
+
+        auto [error, seqNo] = GetBatchBaseSeqNo(*batchHeader);
+        if (error != EKafkaErrors::NONE_ERROR) {
+            return {error, nullptr};
+        }
+        auto [maxSeqNoError, maxSeqNo] = GetBatchMaxSeqNo(*batchHeader, seqNo);
+        if (maxSeqNoError != EKafkaErrors::NONE_ERROR) {
+            return {maxSeqNoError, nullptr};
+        }
 
         NKikimrPQClient::TDataChunk proto;
-        proto.set_codec(NPersQueueCommon::RAW);
-        for(auto& h : record.Headers) {
-            auto res = proto.AddMessageMeta();
-            if (h.Key) {
-                res->set_key(static_cast<const char*>(h.Key->data()), h.Key->size());
-            }
-            if (h.Value) {
-                res->set_value(static_cast<const char*>(h.Value->data()), h.Value->size());
-            }
-        }
-
-        if (record.Key) {
-            auto res = proto.AddMessageMeta();
-            res->set_key("__key");
-            res->set_value(static_cast<const char*>(record.Key->data()), record.Key->size());
-        }
-        if (record.Value) {
-            proto.SetData(static_cast<const void*>(record.Value->data()), record.Value->size());
-        }
+        proto.SetChunkType(NKikimrPQClient::TDataChunk::REGULAR);
+        proto.SetCodec(KafkaBatchCodec());
+        proto.SetData(records.data(), records.size());
 
         TString str;
-        bool res = proto.SerializeToString(&str);
-        Y_ABORT_UNLESS(res);
+        const bool res = proto.SerializeToString(&str);
+        if (!res) {
+            YDB_LOG_ERROR("Produce actor: Failed to serialize TDataChunk to string",
+                {LogPrefix()},
+                {"message", proto.DebugString()});
+
+            return {EKafkaErrors::INVALID_RECORD, nullptr};
+        }
 
         auto w = partitionRequest->AddCmdWrite();
         w->SetSourceId(NPQ::NSourceIdEncoding::EncodeSimple(sourceId));
 
-        bool enableKafkaDeduplication = batch->ProducerId >= 0;
+        const bool enableKafkaDeduplication = producerId >= 0;
         w->SetEnableKafkaDeduplication(enableKafkaDeduplication);
-        if (batch->ProducerEpoch >= 0) {
-            w->SetProducerEpoch(batch->ProducerEpoch);
-        } else if (batch->ProducerEpoch == -1) {
-            // Kafka accepts messages with producer epoch == -1, as long as it's the first "epoch" for this producer ID,
-            // and ignores sequence numbers. I.e. you can send seqnos in any order with epoch == -1.
-        } else if (batch->ProducerEpoch < -1) {
+        if (producerEpoch >= 0) {
+            w->SetProducerEpoch(producerEpoch);
+        } else if (producerEpoch < -1) {
             return {EKafkaErrors::INVALID_PRODUCER_EPOCH, nullptr};
         }
 
-        // set seqno
-        if (enableKafkaDeduplication) {
-            if (batch->BaseSequence >= 0) {
-                // Handle int32 overflow.
-                w->SetSeqNo((static_cast<ui64>(batch->BaseSequence) + batchIndex) % (static_cast<ui64>(std::numeric_limits<i32>::max()) + 1));
-            } else {
-                KAFKA_LOG_ERROR("Idempotent producer enabled and batch base sequence is less then zero: " << batch->BaseSequence);
-                return {EKafkaErrors::INVALID_RECORD, nullptr};
-            }
-        } else {
-            w->SetSeqNo(batch->BaseOffset + record.OffsetDelta);
-        }
-
+        w->SetSeqNo(seqNo);
+        w->SetMaxSeqNo(maxSeqNo);
+        w->SetLogicalMessageCount(batchHeader->RecordsCount);
+        w->SetIsBatch(true);
         w->SetData(str);
-        ui64 createTime = batch->BaseTimestamp + record.TimestampDelta;
-        w->SetCreateTimeMS(createTime ? createTime : TInstant::Now().MilliSeconds());
+        w->SetCreateTimeMS(batchHeader->BaseTimestamp > 0 ? batchHeader->BaseTimestamp : TInstant::Now().MilliSeconds());
         w->SetDisableDeduplication(true);
-        w->SetUncompressedSize(record.Value ? record.Value->size() : 0);
+        w->SetUncompressedSize(records.size());
         w->SetClientDC(clientDC);
         w->SetIgnoreQuotaDeadline(true);
         w->SetExternalOperation(true);
 
-        totalSize += record.Value ? record.Value->size() : 0;
+        totalSize += records.size();
+    } else {
+        for (ui64 batchIndex = 0; batchIndex < batch.Records.size(); ++batchIndex) {
+            const auto& record = batch.Records[batchIndex];
+
+            NKikimrPQClient::TDataChunk proto = MakeDataChunk(record);
+
+            TString str;
+            bool res = proto.SerializeToString(&str);
+            AFL_ENSURE(res)("reason", "failed to serialize TDataChunk");
+
+            auto w = partitionRequest->AddCmdWrite();
+            w->SetSourceId(NPQ::NSourceIdEncoding::EncodeSimple(sourceId));
+
+            bool enableKafkaDeduplication = batch.ProducerId >= 0;
+            w->SetEnableKafkaDeduplication(enableKafkaDeduplication);
+            if (batch.ProducerEpoch >= 0) {
+                w->SetProducerEpoch(batch.ProducerEpoch);
+            } else if (batch.ProducerEpoch == -1) {
+                // Kafka accepts messages with producer epoch == -1, as long as it's the first "epoch" for this producer ID,
+                // and ignores sequence numbers. I.e. you can send seqnos in any order with epoch == -1.
+            } else if (batch.ProducerEpoch < -1) {
+                return {EKafkaErrors::INVALID_PRODUCER_EPOCH, nullptr};
+            }
+
+            // set seqno
+            if (enableKafkaDeduplication && batch.BaseSequence < 0) {
+                YDB_LOG_ERROR("Idempotent producer enabled and batch base sequence is less then zero",
+                    {LogPrefix()},
+                    {"baseSequence", batch.BaseSequence});
+                return {EKafkaErrors::INVALID_RECORD, nullptr};
+            }
+            w->SetSeqNo(GetRecordSeqNo(batch, batchIndex, record));
+
+            w->SetData(str);
+            ui64 createTime = batch.BaseTimestamp + record.TimestampDelta;
+            w->SetCreateTimeMS(createTime ? createTime : TInstant::Now().MilliSeconds());
+            w->SetDisableDeduplication(true);
+            w->SetUncompressedSize(record.Value ? record.Value->size() : 0);
+            w->SetClientDC(clientDC);
+            w->SetIgnoreQuotaDeadline(true);
+            w->SetExternalOperation(true);
+
+            totalSize += record.Value ? record.Value->size() : 0;
+        }
     }
 
     partitionRequest->SetPutUnitsSize(NPQ::PutUnitsSize(totalSize));
@@ -386,7 +584,8 @@ size_t PartsCount(const TMessagePtr<TProduceRequestData>& r) {
 
 void TKafkaProduceActor::ProcessRequest(TPendingRequest::TPtr pendingRequest, const TActorContext& ctx) {
     auto r = pendingRequest->Request->Get()->Request;
-    KAFKA_LOG_D("Processing request");
+    YDB_LOG_DEBUG("Processing request",
+        {LogPrefix()});
 
     pendingRequest->Results.resize(PartsCount(r));
     pendingRequest->StartTime = ctx.Now();
@@ -413,7 +612,9 @@ void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvWriteAccepted::TPtr reque
 
     auto it = Cookies.find(cookie);
     if (it == Cookies.end()) {
-        KAFKA_LOG_W("Produce actor: Received TEvWriteAccepted with unexpected cookie " << cookie);
+        YDB_LOG_WARN("Produce actor: Received TEvWriteAccepted with unexpected cookie",
+            {LogPrefix()},
+            {"cookie", cookie});
         return;
     }
 
@@ -424,22 +625,31 @@ void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvWriteAccepted::TPtr reque
     if (expectedCookies.empty()) {
         ProcessRequests(ctx);
     } else {
-        KAFKA_LOG_W("Still in accepting after receive TEvPartitionWriter::TEvWriteAccepted cause cookies are expected: " << JoinSeq(", ", expectedCookies));
+        YDB_LOG_WARN("Still in accepting after receive TEvPartitionWriter::TEvWriteAccepted cause cookies are expected",
+            {LogPrefix()},
+            {"expected", JoinSeq(", ", expectedCookies)});
     }
 }
 
 void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvInitResult::TPtr request, const TActorContext& /*ctx*/) {
-    KAFKA_LOG_D("Produce actor: Init " << request->Get()->ToString());
+    YDB_LOG_DEBUG("Produce actor: Init",
+        {LogPrefix()},
+        {"request", request->Get()->ToString()});
 
     if (!request->Get()->IsSuccess()) {
         auto sender = request->Sender;
 
         if (WriterDied(sender, EKafkaErrors::UNKNOWN_SERVER_ERROR, request->Get()->GetError().Reason)) {
-            KAFKA_LOG_D("Produce actor: Received TEvPartitionWriter::TEvInitResult for " << sender << " with error: " << request->Get()->GetError().Reason);
+            YDB_LOG_DEBUG("Produce actor: Received TEvPartitionWriter::TEvInitResult for with error",
+                {LogPrefix()},
+                {"sender", sender},
+                {"error", request->Get()->GetError().Reason});
             return;
         }
 
-        KAFKA_LOG_D("Produce actor: Received TEvPartitionWriter::TEvInitResult with unexpected writer " << sender);
+        YDB_LOG_DEBUG("Produce actor: Received TEvPartitionWriter::TEvInitResult with unexpected writer",
+            {LogPrefix()},
+            {"sender", sender});
     }
 }
 
@@ -447,11 +657,15 @@ void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvDisconnected::TPtr reques
     auto sender = request->Sender;
 
     if (WriterDied(sender, EKafkaErrors::NOT_LEADER_OR_FOLLOWER, TStringBuilder() << "Partition writer " << sender << " disconnected")) {
-        KAFKA_LOG_D("Produce actor: Received TEvPartitionWriter::TEvDisconnected for " << sender);
+        YDB_LOG_DEBUG("Produce actor: Received TEvPartitionWriter::TEvDisconnected",
+            {LogPrefix()},
+            {"sender", sender});
         return;
     }
 
-    KAFKA_LOG_D("Produce actor: Received TEvPartitionWriter::TEvDisconnected with unexpected writer " << sender);
+    YDB_LOG_DEBUG("Produce actor: Received TEvPartitionWriter::TEvDisconnected with unexpected writer",
+        {LogPrefix()},
+        {"sender", sender});
 }
 
 bool TKafkaProduceActor::WriterDied(const TActorId& writerId, EKafkaErrors errorCode, TStringBuf errorMessage) {
@@ -510,11 +724,15 @@ bool TKafkaProduceActor::WriterDied(const TActorId& writerId, EKafkaErrors error
 void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr request, const TActorContext& ctx) {
     auto r = request->Get();
     auto cookie = r->Record.GetPartitionResponse().GetCookie();
-    KAFKA_LOG_T("Handling TEvPartitionWriter::TEvWriteResponse with cookie " << cookie);
+    YDB_LOG_TRACE("Handling TEvPartitionWriter::TEvWriteResponse with cookie",
+        {LogPrefix()},
+        {"cookie", cookie});
 
     auto it = Cookies.find(cookie);
     if (it == Cookies.end()) {
-        KAFKA_LOG_W("Produce actor: Received TEvWriteResponse with unexpected cookie " << cookie);
+        YDB_LOG_WARN("Produce actor: Received TEvWriteResponse with unexpected cookie",
+            {LogPrefix()},
+            {"cookie", cookie});
         return;
     }
     auto& cookieInfo = it->second;
@@ -549,7 +767,9 @@ void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr reque
     if (cookieInfo.Request->WaitResultCookies.empty()) {
         SendResults(ctx);
     } else {
-        KAFKA_LOG_T("Skipping sending results in Handle TEvPartitionWriter::TEvWriteResponse. WaitResultCookies=" << JoinSeq(", ", cookieInfo.Request->WaitResultCookies));
+        YDB_LOG_TRACE("Skipping sending results in Handle TEvPartitionWriter::TEvWriteResponse",
+            {LogPrefix()},
+            {"waitResultCookies", JoinSeq(", ", cookieInfo.Request->WaitResultCookies)});
     }
 
     Cookies.erase(cookie);
@@ -569,7 +789,10 @@ EKafkaErrors Convert(TEvPartitionWriter::TEvWriteResponse::EErrorCode value) {
 
 void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
     auto expireTime = ctx.Now() - REQUEST_EXPIRATION_INTERVAL;
-    KAFKA_LOG_T("Produce actor: Sending results. QueueSize= " << PendingRequests.size() << ", ExpirationTime=" << expireTime);
+    YDB_LOG_TRACE("Produce actor: Sending results",
+        {LogPrefix()},
+        {"queueSize", PendingRequests.size()},
+        {"expirationTime", expireTime});
 
     // We send the results in the order of receipt of the request
     while (!PendingRequests.empty()) {
@@ -579,7 +802,10 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
         bool expired = expireTime > pendingRequest->StartTime;
 
         if (!expired && !pendingRequest->WaitResultCookies.empty()) {
-            KAFKA_LOG_T("Skipping sending results. Expired=" << expired << " WaitResultCookies=" << JoinSeq(", ", pendingRequest->WaitResultCookies));
+            YDB_LOG_TRACE("Skipping sending results",
+                {LogPrefix()},
+                {"expired", expired},
+                {"waitResultCookies", JoinSeq(", ", pendingRequest->WaitResultCookies)});
             return;
         }
 
@@ -587,7 +813,10 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
         auto correlationId = pendingRequest->Request->Get()->CorrelationId;
         EKafkaErrors metricsErrorCode = EKafkaErrors::NONE_ERROR;
 
-        KAFKA_LOG_D("Produce actor: Send result for correlation=" << correlationId << ". Expired=" << expired);
+        YDB_LOG_DEBUG("Produce actor: Send result",
+            {LogPrefix()},
+            {"correlation", correlationId},
+            {"expired", expired});
 
         const auto topicsCount = request->TopicData.size();
         auto response = std::make_shared<TProduceResponseData>();
@@ -606,18 +835,21 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
                 const auto& partitionData = topicData.PartitionData[j];
                 auto& partitionResponse = topicResponse.PartitionResponses[j];
                 const auto& result = pendingRequest->Results[position++];
-                size_t recordsCount = partitionData.Records.has_value() ? partitionData.Records->Records.size() : 0;
+                size_t recordsCount = result.RecordsCount;
                 partitionResponse.Index = partitionData.Index;
                 if (EKafkaErrors::NONE_ERROR != result.ErrorCode) {
-                    KAFKA_LOG_ERROR("Produce actor: Partition result with error: ErrorCode=" << static_cast<int>(result.ErrorCode)
-                        << ", ErrorMessage=" << result.ErrorMessage << ", #01");
+                    YDB_LOG_ERROR("Produce actor: Partition result with error: #01",
+                        {LogPrefix()},
+                        {"errorCode", static_cast<int>(result.ErrorCode)},
+                        {"errorMessage", result.ErrorMessage});
                     partitionResponse.ErrorCode = result.ErrorCode;
                     metricsErrorCode = result.ErrorCode;
                     partitionResponse.ErrorMessage = result.ErrorMessage;
 
                     SendMetrics(TStringBuilder() << topicData.Name, recordsCount, "failed_messages", ctx);
                 } else if (expired) {
-                    KAFKA_LOG_ERROR("Partition write expired.");
+                    YDB_LOG_ERROR("Partition write expired",
+                        {LogPrefix()});
                     SendMetrics(TStringBuilder() << topicData.Name, recordsCount, "failed_messages", ctx);
                     partitionResponse.ErrorCode = EKafkaErrors::REQUEST_TIMED_OUT;
                     metricsErrorCode = EKafkaErrors::REQUEST_TIMED_OUT;
@@ -625,21 +857,22 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
                 } else {
                     auto* msg = result.Value->Get();
                     if (msg->IsSuccess()) {
-                        KAFKA_LOG_T("Produce actor: Partition result success.");
+                        YDB_LOG_TRACE("Produce actor: Partition result success",
+                            {LogPrefix()});
                         partitionResponse.ErrorCode = EKafkaErrors::NONE_ERROR;
                         auto& writeResults = msg->Record.GetPartitionResponse().GetCmdWriteResult();
                         if (!writeResults.empty()) {
-                            SendMetrics(TStringBuilder() << topicData.Name, writeResults.size(), "successful_messages", ctx);
+                            SendMetrics(TStringBuilder() << topicData.Name, recordsCount, "successful_messages", ctx);
                             auto& lastResult = writeResults.at(writeResults.size() - 1);
                             partitionResponse.LogAppendTimeMs = lastResult.GetWriteTimestampMS();
                             partitionResponse.BaseOffset = writeResults.at(0).GetOffset();
                         }
                     } else {
-                        KAFKA_LOG_ERROR("Produce actor: Partition result with error: ErrorCode="
-                            << static_cast<int>(Convert(msg->GetError().Code))
-                            << ", ErrorMessage=" << msg->GetError().Reason
-                            << ", Error from writer=" << static_cast<int>(msg->Record.GetErrorCode())
-                            << ", #02");
+                        YDB_LOG_ERROR("Produce actor: Partition result with error: Error #02",
+                            {LogPrefix()},
+                            {"errorCode", static_cast<int>(Convert(msg->GetError().Code))},
+                            {"errorMessage", msg->GetError().Reason},
+                            {"fromWriter", static_cast<int>(msg->Record.GetErrorCode())});
                         SendMetrics(TStringBuilder() << topicData.Name, recordsCount, "failed_messages", ctx);
 
                         if (msg->Record.GetErrorCode() == NPersQueue::NErrorCode::KAFKA_INVALID_PRODUCER_EPOCH) {
@@ -685,7 +918,9 @@ void TKafkaProduceActor::ProcessInitializationRequests(const TActorContext& ctx)
     auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
 
     for(auto& topicPath : TopicsForInitialization) {
-        KAFKA_LOG_D("Produce actor: Describe topic '" << topicPath << "'");
+        YDB_LOG_DEBUG("Produce actor: Describe topic",
+            {LogPrefix()},
+            {"topicPath", topicPath});
         NSchemeCache::TSchemeCacheNavigate::TEntry entry;
         entry.Path = NKikimr::SplitPath(topicPath);
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
@@ -703,7 +938,8 @@ void TKafkaProduceActor::RecreatePartitionWriterAndRetry(ui64 cookie, const TAct
     auto it = Cookies.find(cookie);
     if (it != Cookies.end()) {
         auto& cookieInfo = it->second;
-        KAFKA_LOG_D("Transaction was committed. Retrying produce request as a part of next transaction");
+        YDB_LOG_DEBUG("Transaction was committed. Retrying produce request as a part of next transaction",
+            {LogPrefix()});
         auto txnIt = TransactionalWriters.find({cookieInfo.TopicPath, cookieInfo.PartitionId});
         if (txnIt != TransactionalWriters.end()) {
             Send(txnIt->second.ActorId, new TEvents::TEvPoison());
@@ -753,18 +989,42 @@ void TKafkaProduceActor::SendWriteRequest(const TProduceRequestData::TTopicProdu
     auto r = pendingRequest->Request->Get()->Request;
     const TString& topicPath = NormalizePath(Context->DatabasePath, topicName);
     const auto partitionId = partitionData.Index;
-    TProducerInstanceId producerInstanceId{partitionData.Records->ProducerId, partitionData.Records->ProducerEpoch};
+    const bool batchingEnabled = NPQ::IsTopicMessagesBatchingEnabled(ctx);
+
+    auto& result = pendingRequest->Results[position];
+    if (!partitionData.Records) {
+        result.ErrorCode = EKafkaErrors::INVALID_RECORD;
+        return;
+    }
+
+    TParsedProduceRecords parsedRecords;
+    try {
+        auto [parseError, parsed] = ParseProduceRecords(partitionData.Records, batchingEnabled);
+        if (parseError != EKafkaErrors::NONE_ERROR) {
+            result.ErrorCode = parseError;
+            return;
+        }
+        parsedRecords = std::move(parsed);
+        result.RecordsCount = parsedRecords.RecordsCount;
+    } catch (const yexception& e) {
+        YDB_LOG_ERROR("Failed to read Kafka records",
+            {LogPrefix()},
+            {"metadata", e.what()});
+        result.ErrorCode = EKafkaErrors::INVALID_RECORD;
+        return;
+    }
+
+    TProducerInstanceId producerInstanceId{parsedRecords.ProducerId, parsedRecords.ProducerEpoch};
     TMaybe<TString> transactionalId;
     if (r->TransactionalId) {
         transactionalId.ConstructInPlace(r->TransactionalId->c_str());
     }
 
     auto writer = PartitionWriter({topicPath, static_cast<ui32>(partitionId)}, producerInstanceId, transactionalId, ctx);
-    auto& result = pendingRequest->Results[position];
     if (OK == writer.first) {
         auto ownCookie = ++Cookie;
 
-        auto [error, ev] = Convert(transactionalId.GetOrElse(""), partitionData, topicPath, ownCookie, ClientDC, ruPerRequest);
+        auto [error, ev] = Convert(transactionalId.GetOrElse(""), partitionData, parsedRecords, topicPath, ownCookie, ClientDC, ruPerRequest);
         if (error == EKafkaErrors::NONE_ERROR) {
             auto& cookieInfo = Cookies[ownCookie];
             cookieInfo.TopicPath = topicPath;
@@ -777,7 +1037,10 @@ void TKafkaProduceActor::SendWriteRequest(const TProduceRequestData::TTopicProdu
             pendingRequest->WaitResultCookies.insert(ownCookie);
 
             ruPerRequest = false;
-            KAFKA_LOG_T("Sending TEvPartitionWriter::TEvWriteRequest to " << writer.second << " with cookie " << ownCookie);
+            YDB_LOG_TRACE("Sending TEvPartitionWriter::TEvWriteRequest to with cookie",
+                {LogPrefix()},
+                {"writerSecond", writer.second},
+                {"ownCookie", ownCookie});
             Send(writer.second, std::move(ev));
             result.ErrorCode = NONE_ERROR;
         } else {
@@ -800,14 +1063,19 @@ void TKafkaProduceActor::SendWriteRequest(const TProduceRequestData::TTopicProdu
     }
 
     if (result.ErrorCode != EKafkaErrors::NONE_ERROR) {
-        KAFKA_LOG_ERROR("Write request failed with error " << result.ErrorCode << " and message " << result.ErrorMessage);
+        YDB_LOG_ERROR("Write request failed with error and message",
+            {LogPrefix()},
+            {"errorCode", result.ErrorCode},
+            {"errorMessage", result.ErrorMessage});
     }
 }
 
 std::pair<TKafkaProduceActor::ETopicStatus, TActorId> TKafkaProduceActor::PartitionWriter(const TTopicPartition& topicPartition, const TProducerInstanceId& producerInstanceId, const TMaybe<TString>& transactionalId, const TActorContext& ctx) {
     auto it = Topics.find(topicPartition.TopicPath);
     if (it == Topics.end()) {
-        KAFKA_LOG_ERROR("Produce actor: Internal error: topic '" << topicPartition.TopicPath << "' isn`t initialized");
+        YDB_LOG_ERROR("Produce actor: Internal error: topic isn`t initialized",
+            {LogPrefix()},
+            {"topicPath", topicPartition.TopicPath});
         return { NOT_FOUND, TActorId{} };
     }
 
@@ -872,7 +1140,12 @@ std::pair<TKafkaProduceActor::ETopicStatus, TActorId> TKafkaProduceActor::GetOrC
 }
 
 std::pair<TKafkaProduceActor::ETopicStatus, TActorId> TKafkaProduceActor::CreateTransactionalWriter(const TTopicPartition& topicPartition, const TTopicInfo& topicInfo, const TProducerInstanceId& producerInstanceId, const TString& transactionalId, const TActorContext& ctx) {
-    KAFKA_LOG_D("Created transactional writer for producerId=" << producerInstanceId.Id << " and producerEpoch=" << producerInstanceId.Epoch << " for topic-partition " << topicPartition.TopicPath << ":" << topicPartition.PartitionId);
+    YDB_LOG_DEBUG("Created transactional writer for and for topic-partition",
+        {LogPrefix()},
+        {"producerId", producerInstanceId.Id},
+        {"producerEpoch", producerInstanceId.Epoch},
+        {"topicPath", topicPartition.TopicPath},
+        {"partitionId", topicPartition.PartitionId});
     auto* partition = topicInfo.PartitionChooser->GetPartition(topicPartition.PartitionId);
     if (!partition) {
         return { NOT_FOUND, TActorId{} };

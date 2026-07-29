@@ -104,6 +104,8 @@ namespace NKikimr {
         TVector<NLocRecovery::TReadLogReply> ReadLogReplies;
         // lsn we starting with after local recovery and lsn shift
         ui64 RecoveredLogStartLsn = 0;
+        // last replayed SignatureLocalSyncData recovery-log record lsn, if any
+        ui64 RecoveredLocalSyncDataLsn = 0;
         // found starting points
         using TSignatureToLsn = TMap<TLogSignature, ui64>;
         TSignatureToLsn StartingPoints;
@@ -275,6 +277,8 @@ namespace NKikimr {
         void SetStartingPoint(TLogSignature signature, ui64 lsn);
         void HandleReadLogResult(const NPDisk::TEvReadLogResult::TResults &results);
         void SetRecoveredLogStartLsn(ui64 lsn);
+        void SetRecoveredLocalSyncDataLsn(ui64 lsn);
+        ui64 GetRecoveredLocalSyncDataLsn() const;
         void CheckConsistency();
         // finish dispatching
         void FinishDispatching();

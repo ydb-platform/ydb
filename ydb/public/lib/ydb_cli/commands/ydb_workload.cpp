@@ -160,7 +160,7 @@ void TWorkloadCommand::PrepareForRun(TConfig& config) {
 
     AppendYdbCliBuildInfo(driverConfig, config.GetBuildInfo(), config.GetBuildInfoCommandTag());
 
-    Driver = std::make_unique<NYdb::TDriver>(NYdb::TDriver(driverConfig));
+    Driver = std::make_unique<TScopedDriver>(TDriver(driverConfig));
     auto tableClientSettings = NTable::TClientSettings()
                         .SessionPoolSettings(
                             NTable::TSessionPoolSettings()
@@ -427,7 +427,7 @@ void TWorkloadCommandBase::Config(TConfig& config) {
 
 int TWorkloadCommandBase::Run(TConfig& config) {
     if (!DryRun) {
-        Driver = MakeHolder<NYdb::TDriver>(CreateDriver(config));
+        Driver = MakeHolder<TScopedDriver>(CreateDriver(config));
         TableClient = MakeHolder<NTable::TTableClient>(*Driver);
         TopicClient = MakeHolder<NTopic::TTopicClient>(*Driver);
         SchemeClient = MakeHolder<NScheme::TSchemeClient>(*Driver);
@@ -445,7 +445,6 @@ int TWorkloadCommandBase::Run(TConfig& config) {
         SchemeClient.Reset();
         TopicClient.Reset();
         TableClient.Reset();
-        Driver->Stop(true);
         Driver.Reset();
     }
     return result;

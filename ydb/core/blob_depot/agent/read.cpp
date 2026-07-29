@@ -1,5 +1,7 @@
 #include "agent_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT_AGENT
+
 namespace NKikimr::NBlobDepot {
 
     struct TBlobDepotAgent::TQuery::TReadContext
@@ -77,9 +79,15 @@ namespace NKikimr::NBlobDepot {
     };
 
     bool TBlobDepotAgent::TQuery::IssueRead(TReadArg&& arg, TString& error) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA34, "IssueRead", (AgentId, Agent.LogId), (QueryId, GetQueryId()),
-            (ReadId, arg.Tag), (Key, Agent.PrettyKey(arg.Key)), (Offset, arg.Offset), (Size, arg.Size),
-            (Value, arg.Value));
+        YDB_LOG_DEBUG("IssueRead",
+            {"marker", "BDA34"},
+            {"agentId", Agent.LogId},
+            {"queryId", GetQueryId()},
+            {"readId", arg.Tag},
+            {"key", Agent.PrettyKey(arg.Key)},
+            {"offset", arg.Offset},
+            {"size", arg.Size},
+            {"value", arg.Value});
 
         ui64 outputOffset = 0;
 
@@ -133,9 +141,15 @@ namespace NKikimr::NBlobDepot {
 
             if (end <= begin || itemLen < end) {
                 error = "incorrect SubrangeBegin/SubrangeEnd pair";
-                STLOG(PRI_CRIT, BLOB_DEPOT_AGENT, BDA24, error, (AgentId, Agent.LogId), (QueryId, GetQueryId()),
-                    (ReadId, arg.Tag), (Key, Agent.PrettyKey(arg.Key)), (Offset, arg.Offset), (Size, arg.Size),
-                    (Value, arg.Value));
+                YDB_LOG_CRIT(error,
+                    {"marker", "BDA24"},
+                    {"agentId", Agent.LogId},
+                    {"queryId", GetQueryId()},
+                    {"readId", arg.Tag},
+                    {"key", Agent.PrettyKey(arg.Key)},
+                    {"offset", arg.Offset},
+                    {"size", arg.Size},
+                    {"value", arg.Value});
                 return false;
             }
 
@@ -152,9 +166,15 @@ namespace NKikimr::NBlobDepot {
 
         if (size) {
             error = "incorrect offset/size provided";
-            STLOG(PRI_ERROR, BLOB_DEPOT_AGENT, BDA25, error, (AgentId, Agent.LogId), (QueryId, GetQueryId()),
-                (ReadId, arg.Tag), (Key, Agent.PrettyKey(arg.Key)), (Offset, arg.Offset), (Size, arg.Size),
-                (Value, arg.Value));
+            YDB_LOG_ERROR(error,
+                {"marker", "BDA25"},
+                {"agentId", Agent.LogId},
+                {"queryId", GetQueryId()},
+                {"readId", arg.Tag},
+                {"key", Agent.PrettyKey(arg.Key)},
+                {"offset", arg.Offset},
+                {"size", arg.Size},
+                {"value", arg.Value});
             return false;
         }
 
@@ -184,17 +204,29 @@ namespace NKikimr::NBlobDepot {
 
             auto event = std::make_unique<TEvBlobStorage::TEvGet>(q, sz, TInstant::Max(), context->ReadArg.GetHandleClass);
             event->ReaderTabletData = context->ReadArg.ReaderTabletData;
-            STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA39, "issuing TEvGet", (AgentId, Agent.LogId), (QueryId, GetQueryId()),
-                (ReadId, context->GetTag()), (Key, Agent.PrettyKey(context->ReadArg.Key)), (GroupId, groupId), (Msg, *event));
+            YDB_LOG_DEBUG("Issuing TEvGet",
+                {"marker", "BDA39"},
+                {"agentId", Agent.LogId},
+                {"queryId", GetQueryId()},
+                {"readId", context->GetTag()},
+                {"key", Agent.PrettyKey(context->ReadArg.Key)},
+                {"groupId", groupId},
+                {"msg", *event});
             Agent.SendToProxy(groupId, std::move(event), this, std::move(partContext));
             ++context->NumPartsPending;
         }
 
         for (TS3ReadItem& item : s3items) {
 #ifndef KIKIMR_DISABLE_S3_OPS
-            STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA57, "starting S3 read", (AgentId, Agent.LogId), (QueryId, GetQueryId()),
-                (ReadId, context->GetTag()), (Key, item.Key), (Offset, item.Offset), (Size, item.Size),
-                (OutputOffset, item.OutputOffset));
+            YDB_LOG_DEBUG("Starting S3 read",
+                {"marker", "BDA57"},
+                {"agentId", Agent.LogId},
+                {"queryId", GetQueryId()},
+                {"readId", context->GetTag()},
+                {"key", item.Key},
+                {"offset", item.Offset},
+                {"size", item.Size},
+                {"outputOffset", item.OutputOffset});
             auto finish = [contextPtr = context, outputOffset = item.OutputOffset, this](std::optional<TString> data, const char *error) {
                 auto& context = *contextPtr;
                 if (!context.Terminated && !context.StopProcessingParts) {
@@ -224,9 +256,14 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepotAgent::TQuery::HandleGetResult(const TRequestContext::TPtr& context, TEvBlobStorage::TEvGetResult& msg) {
         auto& partContext = context->Obtain<TReadContext::TPartContext>();
         auto& readContext = *partContext.Read;
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA41, "HandleGetResult", (AgentId, Agent.LogId), (QueryId, GetQueryId()),
-            (ReadId, readContext.GetTag()), (Key, Agent.PrettyKey(readContext.ReadArg.Key)), (Msg, msg),
-            (Terminated, readContext.Terminated));
+        YDB_LOG_DEBUG("HandleGetResult",
+            {"marker", "BDA41"},
+            {"agentId", Agent.LogId},
+            {"queryId", GetQueryId()},
+            {"readId", readContext.GetTag()},
+            {"key", Agent.PrettyKey(readContext.ReadArg.Key)},
+            {"msg", msg},
+            {"terminated", readContext.Terminated});
         if (readContext.Terminated || readContext.StopProcessingParts) {
             return; // just ignore this read
         }
@@ -240,8 +277,13 @@ namespace NKikimr::NBlobDepot {
                 auto *item = resolve.AddItems();
                 item->SetExactKey(readContext.ReadArg.Key);
                 item->SetMustRestoreFirst(readContext.ReadArg.MustRestoreFirst);
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA48, "issuing extra resolve", (Agent, Agent.LogId), (QueryId, GetQueryId()),
-                    (ReadId, readContext.GetTag()), (Key, Agent.PrettyKey(readContext.ReadArg.Key)), (Msg, resolve));
+                YDB_LOG_DEBUG("Issuing extra resolve",
+                    {"marker", "BDA48"},
+                    {"agent", Agent.LogId},
+                    {"queryId", GetQueryId()},
+                    {"readId", readContext.GetTag()},
+                    {"key", Agent.PrettyKey(readContext.ReadArg.Key)},
+                    {"msg", resolve});
                 Agent.Issue(std::move(resolve), this, readContext.shared_from_this());
                 readContext.StopProcessingParts = true;
                 readContext.BlobWithoutData = blob.Id;
@@ -266,8 +308,13 @@ namespace NKikimr::NBlobDepot {
         if (readContext.Terminated) {
             return;
         }
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA42, "HandleResolveResult", (AgentId, Agent.LogId), (QueryId, GetQueryId()),
-            (ReadId, readContext.GetTag()), (Key, Agent.PrettyKey(readContext.ReadArg.Key)), (Msg, msg.Record));
+        YDB_LOG_DEBUG("HandleResolveResult",
+            {"marker", "BDA42"},
+            {"agentId", Agent.LogId},
+            {"queryId", GetQueryId()},
+            {"readId", readContext.GetTag()},
+            {"key", Agent.PrettyKey(readContext.ReadArg.Key)},
+            {"msg", msg.Record});
         if (msg.Record.GetStatus() != NKikimrProto::OK) {
             readContext.EndWithError(this, msg.Record.GetStatus(), msg.Record.GetErrorReason());
         } else if (msg.Record.ResolvedKeysSize() == 1) {
@@ -281,9 +328,13 @@ namespace NKikimr::NBlobDepot {
             } else if (!item.GetReliablyWritten()) { // this was unassimilated value and we got NODATA for it
                 readContext.EndWithNoData(this);
             } else {
-                STLOG(PRI_CRIT, BLOB_DEPOT_AGENT, BDA40, "failed to read blob: data seems to be lost", (AgentId, Agent.LogId),
-                    (QueryId, GetQueryId()), (ReadId, readContext.GetTag()), (Key, Agent.PrettyKey(readContext.ReadArg.Key)),
-                    (BlobId, readContext.BlobWithoutData));
+                YDB_LOG_CRIT("Failed to read blob: data seems to be lost",
+                    {"marker", "BDA40"},
+                    {"agentId", Agent.LogId},
+                    {"queryId", GetQueryId()},
+                    {"readId", readContext.GetTag()},
+                    {"key", Agent.PrettyKey(readContext.ReadArg.Key)},
+                    {"blobId", readContext.BlobWithoutData});
                 Y_VERIFY_DEBUG_S(false, "data seems to be lost AgentId# " << Agent.LogId << " QueryId# " << GetQueryId()
                     << " ReadId# " << readContext.GetTag() << " BlobId# " << readContext.BlobWithoutData);
                 readContext.EndWithError(this, NKikimrProto::ERROR, TStringBuilder() << "failed to read BlobId# "
@@ -296,8 +347,12 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::TQuery::IssueCheckIntegrity(TReadArg&& arg) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA62, "IssueCheckIntegrity", (AgentId, Agent.LogId),
-            (QueryId, GetQueryId()), (Key, Agent.PrettyKey(arg.Key)), (Value, arg.Value));
+        YDB_LOG_DEBUG("IssueCheckIntegrity",
+            {"marker", "BDA62"},
+            {"agentId", Agent.LogId},
+            {"queryId", GetQueryId()},
+            {"key", Agent.PrettyKey(arg.Key)},
+            {"value", arg.Value});
 
         auto checkContext = std::make_shared<TCheckContext>(std::move(arg));
 
@@ -307,8 +362,13 @@ namespace NKikimr::NBlobDepot {
                 auto event = std::make_unique<TEvBlobStorage::TEvCheckIntegrity>(
                     blobId, TInstant::Max(), checkContext->ReadArg.GetHandleClass);
 
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA63, "issuing TEvCheckIntegrity", (AgentId, Agent.LogId), (QueryId, GetQueryId()),
-                    (Key, Agent.PrettyKey(checkContext->ReadArg.Key)), (GroupId, groupId), (Msg, *event));
+                YDB_LOG_DEBUG("Issuing TEvCheckIntegrity",
+                    {"marker", "BDA63"},
+                    {"agentId", Agent.LogId},
+                    {"queryId", GetQueryId()},
+                    {"key", Agent.PrettyKey(checkContext->ReadArg.Key)},
+                    {"groupId", groupId},
+                    {"msg", *event});
 
                 Agent.SendToProxy(groupId, std::move(event), this, checkContext);
                 ++checkContext->NumPartsPending;
@@ -320,8 +380,12 @@ namespace NKikimr::NBlobDepot {
             TEvBlobStorage::TEvCheckIntegrityResult& msg) {
         auto& checkContext = context->Obtain<TCheckContext>();
 
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA64, "HandleCheckIntegrityResult", (AgentId, Agent.LogId),
-            (QueryId, GetQueryId()), (Key, Agent.PrettyKey(checkContext.ReadArg.Key)), (Msg, msg));
+        YDB_LOG_DEBUG("HandleCheckIntegrityResult",
+            {"marker", "BDA64"},
+            {"agentId", Agent.LogId},
+            {"queryId", GetQueryId()},
+            {"key", Agent.PrettyKey(checkContext.ReadArg.Key)},
+            {"msg", msg});
 
         auto& result = checkContext.Result;
         switch (msg.Status) {

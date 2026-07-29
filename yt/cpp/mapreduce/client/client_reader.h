@@ -65,6 +65,8 @@ private:
 
     IRequestRetryPolicyPtr CurrentRequestRetryPolicy_;
 
+    NTracing::TTraceContextWrapperPtr TraceContext_;
+
 private:
     void TransformYPath();
     void CreateRequest(const TMaybe<ui32>& rangeIndex = Nothing(), const TMaybe<ui64>& rowIndex = Nothing());

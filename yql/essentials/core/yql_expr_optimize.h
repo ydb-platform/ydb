@@ -52,6 +52,7 @@ IGraphTransformer::TStatus OptimizeExprEx(const TExprNode::TPtr& input, TExprNod
 
 IGraphTransformer::TStatus ExpandSeq(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, TTypeAnnotationContext& types);
 IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx);
+IGraphTransformer::TStatus ExpandApplyWithoutCons(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx);
 IGraphTransformer::TStatus ExpandApplyNoRepeat(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx);
 TExprNode::TPtr ApplySyncListToWorld(const TExprNode::TPtr& main, const TSyncMap& syncList, TExprContext& ctx);
 

@@ -109,6 +109,20 @@ private:
 
 } // namespace NYT
 
+//! Defines a type alias for |TSentinelOptional<type, ...>| with an inline sentinel struct.
+/*!
+ *  Example:
+ *    YT_DEFINE_SENTINEL_OPTIONAL(TInstantOpt, TInstant, TInstant::Zero());
+ */
+#define YT_DEFINE_SENTINEL_OPTIONAL(name, type, sentinel_value)  \
+    struct name##Sentinel                                        \
+    {                                                            \
+        static constexpr auto Sentinel = (sentinel_value);       \
+    };                                                           \
+    using name = ::NYT::TSentinelOptional<type, name##Sentinel>
+
+////////////////////////////////////////////////////////////////////////////////
+
 #define SENTINEL_OPTIONAL_INL_H_
 #include "sentinel_optional-inl.h"
 #undef SENTINEL_OPTIONAL_INL_H_

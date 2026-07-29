@@ -25,6 +25,7 @@ namespace NActors {
             , ShortHostName("")
             , ClusterName("")
             , TenantName("")
+            , NodeId(0)
         {
             Append(minVal, maxVal, func);
         }
@@ -49,6 +50,7 @@ namespace NActors {
             , ShortHostName("")
             , ClusterName("")
             , TenantName("")
+            , NodeId(0)
         {
         }
 

@@ -9,6 +9,7 @@ SRCS(
     halting_stream.cpp
     helpers.cpp
     retry_lib.cpp
+    trace_context.cpp
     wait_proxy.cpp
 )
 

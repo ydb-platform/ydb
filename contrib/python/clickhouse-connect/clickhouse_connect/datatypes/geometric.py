@@ -1,4 +1,5 @@
-from typing import Sequence, Any
+from collections.abc import Sequence
+from typing import Any
 
 from clickhouse_connect.datatypes.base import ClickHouseType
 from clickhouse_connect.driver.insert import InsertContext
@@ -9,6 +10,8 @@ POINT_DATA_TYPE: ClickHouseType
 RING_DATA_TYPE: ClickHouseType
 POLYGON_DATA_TYPE: ClickHouseType
 MULTI_POLYGON_DATA_TYPE: ClickHouseType
+
+# ruff: noqa: F821 (Undefine name)
 
 
 class Point(ClickHouseType):
@@ -40,7 +43,7 @@ class Polygon(ClickHouseType):
     def read_column_prefix(self, source: ByteSource, ctx: QueryContext):
         return POLYGON_DATA_TYPE.read_column_prefix(source, ctx)
 
-    def read_column_data(self, source: ByteSource, num_rows: int, ctx: QueryContext, read_state:Any) -> Sequence:
+    def read_column_data(self, source: ByteSource, num_rows: int, ctx: QueryContext, read_state: Any) -> Sequence:
         return POLYGON_DATA_TYPE.read_column_data(source, num_rows, ctx, read_state)
 
 
@@ -51,7 +54,7 @@ class MultiPolygon(ClickHouseType):
     def read_column_prefix(self, source: ByteSource, ctx: QueryContext):
         return MULTI_POLYGON_DATA_TYPE.read_column_prefix(source, ctx)
 
-    def read_column_data(self, source: ByteSource, num_rows: int, ctx: QueryContext, read_state:Any) -> Sequence:
+    def read_column_data(self, source: ByteSource, num_rows: int, ctx: QueryContext, read_state: Any) -> Sequence:
         return MULTI_POLYGON_DATA_TYPE.read_column_data(source, num_rows, ctx, read_state)
 
 

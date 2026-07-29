@@ -261,12 +261,11 @@ def main():
         return
 
     elif args.command == "stop":
-        # Stop mode: stop all services on cluster
         print("Stopping nemesis services on cluster...")
         hosts = get_hosts_from_yaml(settings.yaml_config_location)
         print(f"Hosts: {hosts}")
 
-        stop_agent_services(hosts)
+        stop_agent_services(hosts, app_port=settings.app_port)
 
         print("\n" + "=" * 60)
         print("All services stopped successfully!")
@@ -284,7 +283,9 @@ def main():
         # Second Flask app + thread: no conflict as long as nemesis_mon_port != app_port.
         monitor.setup_page(settings.app_host, settings.nemesis_mon_port)
         # threaded=True is important for concurrent request handling
-        from ydb.tests.stability.nemesis.app import app
+        from ydb.tests.stability.nemesis.app import app, require_failure_model_or_die
+        # No usable cluster.yaml → no failure model → no chaos: exit instead of serving unguarded.
+        require_failure_model_or_die(app)
         app.run(
             host=settings.app_host,
             port=settings.app_port,

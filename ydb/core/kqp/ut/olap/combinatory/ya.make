@@ -10,11 +10,13 @@ SRCS(
     variator.cpp
     select.cpp
     bulk_upsert.cpp
+    wait_background_processes.cpp
 )
 
 PEERDIR(
     ydb/core/testlib
     ydb/core/protos
+    ydb/core/kqp/ut/olap/helpers
 )
 
 YQL_LAST_ABI_VERSION()

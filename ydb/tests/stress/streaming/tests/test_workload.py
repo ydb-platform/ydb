@@ -18,7 +18,8 @@ class TestYdbWorkload(StressFixture):
             erasure=Erasure.MIRROR_3_DC,
             extra_feature_flags={
                 "enable_external_data_sources": True,
-                "enable_streaming_queries": True
+                "enable_streaming_queries": True,
+                "enable_topics_sql_io_operations": True,
             },
             additional_log_configs={
                 'KQP_COMPUTE': LogLevels.DEBUG,
@@ -26,17 +27,22 @@ class TestYdbWorkload(StressFixture):
                 'STREAMS_STORAGE_SERVICE': LogLevels.DEBUG,
                 'FQ_ROW_DISPATCHER': LogLevels.DEBUG,
                 'KQP_PROXY': LogLevels.DEBUG,
-                'KQP_EXECUTOR': LogLevels.DEBUG}
+                'KQP_EXECUTER': LogLevels.DEBUG,
+            },
+            table_service_config={
+                "enable_watermarks": True,
+                "enable_watermarks_advanced": True,
+            },
         )
 
     def test(self):
         logger.info("TestYdbWorkload::start test")
         cmd = [
             yatest.common.binary_path(os.getenv("YDB_TEST_PATH")),
-            "--endpoint",  f"localhost:{self.cluster.nodes[1].port}",
+            "--endpoint", f"localhost:{self.cluster.nodes[1].port}",
             "--database", self.database,
             "--duration", self.base_duration,
             "--partitions-count", "10",
-            "--prefix", "streaming_stress"
+            "--prefix", "streaming_stress",
         ]
         yatest.common.execute(cmd, wait=True)

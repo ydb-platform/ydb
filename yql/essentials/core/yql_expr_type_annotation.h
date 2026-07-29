@@ -238,13 +238,13 @@ const TTypeAnnotationNode* DryType(const TTypeAnnotationNode* type, bool& hasOpt
 const TTypeAnnotationNode* JoinDryKeyType(bool outer, const TTypeAnnotationNode* primary, const TTypeAnnotationNode* secondary, TExprContext& ctx);
 const TTypeAnnotationNode* JoinDryKeyType(const TTypeAnnotationNode* primary, const TTypeAnnotationNode* secondary, bool& hasOptional, TExprContext& ctx);
 // Key type for inner or full join.
-const TTypeAnnotationNode* JoinCommonDryKeyType(TPositionHandle position, bool outer, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx);
+const TTypeAnnotationNode* JoinCommonDryKeyType(TPositionHandle position, bool outer, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx, const TTypeAnnotationContext& typesCtx);
 
 template <bool Strict, bool Silent = false> // Strict + DryType before - common type for join key.
-const TTypeAnnotationNode* CommonType(TPositionHandle position, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx, bool warn = false);
+const TTypeAnnotationNode* CommonType(TPositionHandle position, const TTypeAnnotationNode* one, const TTypeAnnotationNode* two, TExprContext& ctx, const TTypeAnnotationContext& typesCtx, bool warn = false);
 
-const TTypeAnnotationNode* CommonType(TPositionHandle position, const TTypeAnnotationNode::TSpanType& types, TExprContext& ctx, bool warn = false);
-const TTypeAnnotationNode* CommonTypeForChildren(const TExprNode& node, TExprContext& ctx, bool warn = false);
+const TTypeAnnotationNode* CommonType(TPositionHandle position, const TTypeAnnotationNode::TSpanType& types, TExprContext& ctx, const TTypeAnnotationContext& typesCtx, bool warn = false);
+const TTypeAnnotationNode* CommonTypeForChildren(const TExprNode& node, TExprContext& ctx, const TTypeAnnotationContext& typesCtx, bool warn = false);
 
 size_t GetOptionalLevel(const TTypeAnnotationNode* type);
 
@@ -262,50 +262,29 @@ using TConvertFlags = TEnumBitSet<EFlags, DisableTruncation, Last>;
 
 using NConvertFlags::TConvertFlags;
 
-//FIXME remove deprecated functions
-//#define DEPRECATED [[deprecated]]
-#define DEPRECATED
-
-DEPRECATED
-IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& sourceType,
-    const TTypeAnnotationNode& expectedType, TExprContext& ctx, TConvertFlags flags = {}, bool useTypeDiff = false);
 IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& sourceType,
     const TTypeAnnotationNode& expectedType, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, TConvertFlags flags = {});
-DEPRECATED
-IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& expectedType,
-    TExprContext& ctx, TConvertFlags flags = {}, bool useTypeDiff = false);
+
 IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& expectedType,
     TExprContext& ctx, const TTypeAnnotationContext& typeCtx, TConvertFlags flags = {});
-DEPRECATED
-IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& expectedType, TExprContext& ctx,
-    TConvertFlags flags = {});
+
 IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& expectedType, TExprContext& ctx,
     const TTypeAnnotationContext& typeCtx, TConvertFlags flags = {});
-DEPRECATED
-IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& sourceType,
-    const TTypeAnnotationNode& expectedType, TExprContext& ctx, TConvertFlags flags = {});
+
 IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& sourceType,
     const TTypeAnnotationNode& expectedType, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, TConvertFlags flags = {});
+
 TMaybe<EDataSlot> GetSuperType(EDataSlot dataSlot1, EDataSlot dataSlot2, bool warn = false, TExprContext* ctx = nullptr, TPositionHandle* pos = nullptr);
-DEPRECATED
-IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, TExprNode::TPtr& node2, TExprContext& ctx,
-    const TTypeAnnotationNode*& commonType, TConvertFlags flags = {});
+
 IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, TExprNode::TPtr& node2, TExprContext& ctx,
     const TTypeAnnotationContext& typeCtx, const TTypeAnnotationNode*& commonType, TConvertFlags flags = {});
-DEPRECATED
-IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, const TTypeAnnotationNode& type1,
-    TExprNode::TPtr& node2, const TTypeAnnotationNode& type2, TExprContext& ctx,
-    const TTypeAnnotationNode*& commonType, TConvertFlags flags = {});
+
 IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, const TTypeAnnotationNode& type1,
     TExprNode::TPtr& node2, const TTypeAnnotationNode& type2, TExprContext& ctx, const TTypeAnnotationContext& typeCtx,
     const TTypeAnnotationNode*& commonType, TConvertFlags flags = {});
-DEPRECATED
-IGraphTransformer::TStatus ConvertChildrenToType(const TExprNode::TPtr& input,const TTypeAnnotationNode* targetType, TExprContext& ctx,
-    bool useTypeDiff = false);
+
 IGraphTransformer::TStatus ConvertChildrenToType(const TExprNode::TPtr& input,const TTypeAnnotationNode* targetType, TExprContext& ctx,
     const TTypeAnnotationContext& typeCtx);
-
-#undef DEPRECATED
 
 bool IsSqlInCollectionItemsNullable(const NNodes::TCoSqlIn& node);
 
@@ -343,6 +322,7 @@ bool EnsureComparableDataType(TPositionHandle position, EDataSlot dataSlot, TExp
 bool EnsureEquatableDataType(TPositionHandle position, EDataSlot dataSlot, TExprContext& ctx);
 bool EnsureHashableDataType(TPositionHandle position, EDataSlot dataSlot, TExprContext& ctx);
 
+bool HasAnyError(const TTypeAnnotationNode* type, TExprContext& ctx);
 bool HasError(const TTypeAnnotationNode* type, TExprContext& ctx);
 bool HasError(const TTypeAnnotationNode* type, TIssue& errIssue);
 bool IsNull(const TExprNode& node);
@@ -355,6 +335,8 @@ bool IsFlowOrStream(const TExprNode& node);
 
 bool IsBoolLike(const TTypeAnnotationNode& type);
 bool IsBoolLike(const TExprNode& node);
+
+bool IsUniversalLiteral(const TExprNode::TPtr& node);
 
 TString GetTypeDiff(const TTypeAnnotationNode& left, const TTypeAnnotationNode& right);
 TString GetTypePrettyDiff(const TTypeAnnotationNode& left, const TTypeAnnotationNode& right);

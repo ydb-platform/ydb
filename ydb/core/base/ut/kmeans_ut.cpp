@@ -357,6 +357,96 @@ Y_UNIT_TEST_SUITE(NKMeans) {
         UNIT_ASSERT(ValidateSettings(settings, error));
     }
 
+    Y_UNIT_TEST(AutoSelectOverlapEnabledForLargeDataset) {
+        // N=100000: without overlap T=10,P=1 → L=2, so overlap should be auto-enabled.
+        Ydb::Table::KMeansTreeSettings settings;
+        TString error;
+        settings.mutable_settings()->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        settings.mutable_settings()->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        settings.mutable_settings()->set_vector_dimension(4);
+
+        AutoSelectKMeansSettings(settings, 100000);
+        UNIT_ASSERT(settings.has_overlap_clusters());
+        UNIT_ASSERT_VALUES_EQUAL(settings.overlap_clusters(), 3u);
+        UNIT_ASSERT(settings.has_overlap_ratio());
+        UNIT_ASSERT_DOUBLES_EQUAL(settings.overlap_ratio(), 1.2, 1e-9);
+        UNIT_ASSERT(settings.levels() >= 2);
+        UNIT_ASSERT(ValidateSettings(settings, error));
+    }
+
+    Y_UNIT_TEST(AutoSelectOverlapDisabledForSmallDataset) {
+        // N=10000: without overlap T=10,P=1 → L=1 (S < 1500), so overlap should NOT be auto-enabled.
+        // S(L=1) = 2*sqrt(10*10000) = 2*316 = 632 < 1500.
+        Ydb::Table::KMeansTreeSettings settings;
+        settings.mutable_settings()->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        settings.mutable_settings()->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        settings.mutable_settings()->set_vector_dimension(4);
+
+        AutoSelectKMeansSettings(settings, 10000);
+        UNIT_ASSERT(!settings.has_overlap_clusters());
+        UNIT_ASSERT(!settings.has_overlap_ratio());
+        UNIT_ASSERT_VALUES_EQUAL(settings.levels(), 1u);
+    }
+
+    Y_UNIT_TEST(AutoSelectOverlapUserSpecifiedPreserved) {
+        // User sets overlap_clusters=2 → must not be overwritten; only overlap_ratio is auto-set.
+        Ydb::Table::KMeansTreeSettings settings;
+        TString error;
+        settings.mutable_settings()->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        settings.mutable_settings()->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        settings.mutable_settings()->set_vector_dimension(4);
+        settings.set_overlap_clusters(2);
+
+        AutoSelectKMeansSettings(settings, 100000);
+        UNIT_ASSERT_VALUES_EQUAL(settings.overlap_clusters(), 2u);
+        UNIT_ASSERT(settings.has_overlap_ratio());
+        UNIT_ASSERT_DOUBLES_EQUAL(settings.overlap_ratio(), 1.2, 1e-9);
+        UNIT_ASSERT(ValidateSettings(settings, error));
+    }
+
+    Y_UNIT_TEST(AutoSelectOverlapUserRatioPreserved) {
+        // User sets both overlap_clusters=3 and overlap_ratio=1.5 → neither should be overwritten.
+        Ydb::Table::KMeansTreeSettings settings;
+        TString error;
+        settings.mutable_settings()->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        settings.mutable_settings()->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        settings.mutable_settings()->set_vector_dimension(4);
+        settings.set_overlap_clusters(3);
+        settings.set_overlap_ratio(1.5);
+
+        AutoSelectKMeansSettings(settings, 100000);
+        UNIT_ASSERT_VALUES_EQUAL(settings.overlap_clusters(), 3u);
+        UNIT_ASSERT_DOUBLES_EQUAL(settings.overlap_ratio(), 1.5, 1e-9);
+        UNIT_ASSERT(ValidateSettings(settings, error));
+    }
+
+    Y_UNIT_TEST(AutoSelectOverlapRatioNotSetWhenOverlapDisabled) {
+        // overlap_clusters=1 → overlap is disabled, overlap_ratio must not be auto-set.
+        Ydb::Table::KMeansTreeSettings settings;
+        settings.mutable_settings()->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        settings.mutable_settings()->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        settings.mutable_settings()->set_vector_dimension(4);
+        settings.set_overlap_clusters(1);
+
+        AutoSelectKMeansSettings(settings, 100000);
+        UNIT_ASSERT_VALUES_EQUAL(settings.overlap_clusters(), 1u);
+        UNIT_ASSERT(!settings.has_overlap_ratio());
+    }
+
+    Y_UNIT_TEST(AutoSelectOverlapPrefixedSmallEffectiveN) {
+        // isPrefixed=true, rowCount=1000000 → effectiveN = sqrt(1000000) = 1000.
+        // With effectiveN=1000: S(L=1) = 2*sqrt(10000) = 200 < 1500 → L=1 → no overlap.
+        Ydb::Table::KMeansTreeSettings settings;
+        settings.mutable_settings()->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        settings.mutable_settings()->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        settings.mutable_settings()->set_vector_dimension(4);
+
+        AutoSelectKMeansSettings(settings, 1000000, true);
+        UNIT_ASSERT(!settings.has_overlap_clusters());
+        UNIT_ASSERT(!settings.has_overlap_ratio());
+        UNIT_ASSERT_VALUES_EQUAL(settings.levels(), 1u);
+    }
+
     Y_UNIT_TEST(AutoSelectKMeansPrefixed) {
         Ydb::Table::KMeansTreeSettings settings;
         TString error;

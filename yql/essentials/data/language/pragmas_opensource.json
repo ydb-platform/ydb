@@ -264,6 +264,9 @@
     "name": "yt.JoinColumnarStatisticsFetcherMode"
   },
   {
+    "name": "yt.JoinCommonAnySideFirst"
+  },
+  {
     "name": "yt.JoinCommonUseMapMultiOut"
   },
   {

@@ -5,6 +5,8 @@
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_WRITE_PROXY
+
 namespace NKikimr {
 namespace NGRpcProxy {
 
@@ -78,7 +80,8 @@ void TClustersUpdater::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr &ev, const TA
         }
         ctx.Schedule(TDuration::Seconds(AppData(ctx)->PQConfig.GetClustersUpdateTimeoutSec()), new TEvPQClustersUpdater::TEvUpdateClusters());
     } else {
-        LOG_ERROR_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "can't update clusters " << record);
+        YDB_LOG_ERROR_CTX(ctx, "Can't update clusters",
+            {"record", record});
         ctx.Schedule(TDuration::Seconds(CLUSTERS_UPDATER_TIMEOUT_ON_ERROR), new TEvPQClustersUpdater::TEvUpdateClusters());
     }
 }

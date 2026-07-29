@@ -29,7 +29,7 @@ void TDynamicTableTransactionMixin::WriteRows(
     switch (lockType) {
         case ELockType::Exclusive: {
             for (auto row : rows) {
-                modifications.push_back({ERowModificationType::Write, row.ToTypeErasedRow(), TLockMask()});
+                modifications.push_back(NRowModifications::TWriteRow(row));
             }
 
             break;
@@ -57,7 +57,7 @@ void TDynamicTableTransactionMixin::WriteRows(
                     }
                 }
 
-                modifications.push_back({ERowModificationType::WriteAndLock, row.ToTypeErasedRow(), lockMask});
+                modifications.push_back(NRowModifications::TWriteAndLockRow(row, lockMask));
             }
 
             break;
@@ -84,7 +84,7 @@ void TDynamicTableTransactionMixin::WriteRows(
     modifications.reserve(rows.Size());
 
     for (auto row : rows) {
-        modifications.push_back({ERowModificationType::VersionedWrite, row.ToTypeErasedRow(), TLockMask()});
+        modifications.push_back(NRowModifications::TVersionedWriteRow(row.ToTypeErasedRow()));
     }
 
     ModifyRows(
@@ -103,7 +103,7 @@ void TDynamicTableTransactionMixin::DeleteRows(
     std::vector<TRowModification> modifications;
     modifications.reserve(keys.Size());
     for (auto key : keys) {
-        modifications.push_back({ERowModificationType::Delete, key.ToTypeErasedRow(), TLockMask()});
+        modifications.push_back(NRowModifications::TDeleteRow(key));
     }
 
     ModifyRows(
@@ -123,11 +123,7 @@ void TDynamicTableTransactionMixin::LockRows(
     modifications.reserve(keys.Size());
 
     for (auto key : keys) {
-        TRowModification modification;
-        modification.Type = ERowModificationType::WriteAndLock;
-        modification.Row = key.ToTypeErasedRow();
-        modification.Locks = lockMask;
-        modifications.push_back(modification);
+        modifications.push_back(NRowModifications::TWriteAndLockRow(key, lockMask));
     }
 
     ModifyRows(

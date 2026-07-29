@@ -83,9 +83,9 @@ class HTMLTree:
 
     def _doc_has_handler(self, tag, is_start):
         if is_start:
-            handler_name = 'start_%s' % tag
+            handler_name = f'start_{tag}'
         else:
-            handler_name = 'end_%s' % tag
+            handler_name = f'end_{tag}'
 
         return hasattr(self.doc.style, handler_name)
 
@@ -226,12 +226,12 @@ class TagNode(StemNode):
             child.collapse_whitespace()
 
     def _write_start(self, doc):
-        handler_name = 'start_%s' % self.tag
+        handler_name = f'start_{self.tag}'
         if hasattr(doc.style, handler_name):
             getattr(doc.style, handler_name)(self.attrs)
 
     def _write_end(self, doc, next_child):
-        handler_name = 'end_%s' % self.tag
+        handler_name = f'end_{self.tag}'
         if hasattr(doc.style, handler_name):
             if handler_name == 'end_a':
                 # We use lookahead to determine if a space is needed after a link node
@@ -248,7 +248,7 @@ class DataNode(Node):
     def __init__(self, data, parent=None):
         super().__init__(parent)
         if not isinstance(data, str):
-            raise ValueError("Expecting string type, %s given." % type(data))
+            raise ValueError(f"Expecting string type, {type(data)} given.")
         self._leading_whitespace = ''
         self._trailing_whitespace = ''
         self._stripped_data = ''

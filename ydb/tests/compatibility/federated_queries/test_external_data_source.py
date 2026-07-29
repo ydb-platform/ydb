@@ -28,9 +28,8 @@ class ExternalDataTableTestBase:
         )
 
         yield from super().setup_cluster(
-            extra_feature_flags={
-                "enable_external_data_sources": True,
-            }
+            disabled_feature_flags=["enable_drain_on_shutdown"],
+            extra_feature_flags=["enable_external_data_sources"]
         )
 
     @staticmethod

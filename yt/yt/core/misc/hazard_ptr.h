@@ -16,7 +16,13 @@ class TRefCountedBase;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void ReclaimHazardPointers(bool flush = true);
+//! Reclaims retired hazard pointers retired by the current thread.
+//! Returns |true| if some retired pointers still could not be reclaimed
+//! (e.g. they are currently protected) and thus remain pending on this thread.
+//! A thread that is about to park indefinitely should keep retrying maintenance
+//! while this returns |true|; otherwise such pointers may be stranded until the
+//! thread happens to run again.
+bool ReclaimHazardPointers(bool flush = true);
 
 using THazardPtrReclaimer = void(*)(void* reclaimPtr);
 void RetireHazardPointer(

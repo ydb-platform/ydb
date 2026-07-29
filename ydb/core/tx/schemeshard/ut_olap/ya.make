@@ -16,6 +16,7 @@ PEERDIR(
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/testlib/default
+    ydb/core/kqp/compute_actor
     ydb/core/formats
     ydb/core/tx
     ydb/core/tx/columnshard
@@ -29,6 +30,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     ut_olap.cpp
+    ut_olap_schema_entity_id.cpp
 )
 
 END()

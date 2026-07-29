@@ -286,7 +286,6 @@ public:
                 "TCopyTable TPropose::HandleReply: source path is dropped at plan step"
                 << ", srcPathId: " << srcPathId
                 << ", StepDropped: " << srcPath->StepDropped);
-            srcPath->LastTxId = InvalidTxId;
             context.SS->PersistPath(db, srcPathId);
             context.SS->ClearDescribePathCaches(srcPath);
 
@@ -634,7 +633,6 @@ public:
                 checks
                     .IsValidLeafName(context.UserToken.Get())
                     .IsTheSameDomain(srcPath)
-                    .PathShardsLimit(maxShardsToCreate)
                     .IsValidACL(acl);
             }
 
@@ -642,7 +640,9 @@ public:
                 checks
                     .PathsLimit()
                     .DirChildrenLimit()
-                    .ShardsLimit(maxShardsToCreate);
+                    .PathShardsLimit(maxShardsToCreate)
+                    .ShardsLimit(maxShardsToCreate)
+                ;
             }
 
             if (!checks) {
@@ -757,6 +757,8 @@ public:
             .EnableTablePgTypes = true,
             .EnableTableDatetime64 = true,
             .EnableParameterizedDecimal = true,
+            .EnableDetailedMetrics = true,
+            .EnableColumnStatistics = AppData()->FeatureFlags.GetEnableColumnStatistics(),
         };
         TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(nullptr, schema, *typeRegistry,
             limits, *domainInfo, featureFlags, errStr, LocalSequences);
@@ -1046,6 +1048,11 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
         Y_ABORT_UNLESS(childPath.Base()->PathId == pathId);
 
         TTableIndexInfo::TPtr indexInfo = context.SS->Indexes.at(pathId);
+
+        if (indexInfo->State != NKikimrSchemeOp::EIndexState::EIndexStateReady) {
+            continue;
+        }
+
         {
             auto schema = TransactionTemplate(dstPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);
             schema.SetFailOnExist(tx.GetFailOnExist());
@@ -1065,9 +1072,19 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
                 case NKikimrSchemeOp::EIndexTypeGlobal:
                 case NKikimrSchemeOp::EIndexTypeGlobalAsync:
                 case NKikimrSchemeOp::EIndexTypeGlobalUnique:
-                case NKikimrSchemeOp::EIndexTypeGlobalJson:
+                case NKikimrSchemeOp::EIndexTypeLocalMinMax:
+                case NKikimrSchemeOp::EIndexTypeLocalCountMinSketch:
                     // no specialized index description
                     Y_ASSERT(std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription));
+                    break;
+                case NKikimrSchemeOp::EIndexTypeGlobalJson:
+                case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+                    // JSON indexes carry a fulltext description only in rowid mode (__ydb_row_id as doc_id).
+                    if (const auto* ft = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexInfo->SpecializedIndexDescription)) {
+                        *operation->MutableFulltextIndexDescription() = *ft;
+                    } else {
+                        Y_ASSERT(std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription));
+                    }
                     break;
                 case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
                     *operation->MutableVectorIndexKmeansTreeDescription() =
@@ -1075,14 +1092,34 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
                     break;
                 case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
                 case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+                case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+                case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
                     *operation->MutableFulltextIndexDescription() =
                         std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexInfo->SpecializedIndexDescription);
+                    break;
+                case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
+                    *operation->MutableBloomFilterDescription() =
+                        std::get<NKikimrSchemeOp::TBloomFilter>(indexInfo->SpecializedIndexDescription);
+                    break;
+                case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
+                    *operation->MutableBloomNGrammFilterDescription() =
+                        std::get<NKikimrSchemeOp::TBloomNGrammFilter>(indexInfo->SpecializedIndexDescription);
                     break;
                 default:
                     return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, InvalidIndexType(indexInfo->Type))};
             }
 
-            result.push_back(CreateNewTableIndex(NextPartId(nextId, result), schema));
+            if (TTableIndexInfo::IsLocalIndex(indexInfo->Type)) {
+                // Column tables use the OLAP local-index op; row tables use the generic one.
+                if (srcPath.Base()->IsColumnTable()) {
+                    result.push_back(CreateNewColumnTableLocalIndex(NextPartId(nextId, result), schema));
+                } else {
+                    result.push_back(CreateNewTableIndex(NextPartId(nextId, result), schema));
+                }
+                continue; // local indexes have no impl tables
+            } else {
+                result.push_back(CreateNewTableIndex(NextPartId(nextId, result), schema));
+            }
         }
 
         // Skip impl table copies if OmitIndexes is set (handled by CreateConsistentCopyTables for incremental backups)

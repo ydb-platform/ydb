@@ -667,7 +667,7 @@ public:
         WaitFor(BIND(std::forward<F>(func)).AsyncVia(invoker).Run()).ThrowOnError();
     }
 
-    auto GetSensors(std::string json)
+    auto GetSensors(const std::string& json)
     {
         auto yson = NYson::TYsonString(NJson2Yson::SerializeJsonValueAsYson(NJson::ReadJsonFastTree(json)));
 
@@ -681,14 +681,14 @@ public:
     // Implementation detail is that if sensor present
     // for one tagset, it is present for all of them
     // thus I can't be bothered verifying it here.
-    void VerifyCountersArePresent(int invokerCount, TString json)
+    void VerifyCountersArePresent(int invokerCount, const std::string& json)
     {
-        TString sensorPrefix = "\"sensor\":\"yt.fair_share_invoker_pool";
-        TString bucketPrefix = "\"bucket\":\"invoker_";
+        std::string sensorPrefix = "\"sensor\":\"yt.fair_share_invoker_pool";
+        std::string bucketPrefix = "\"bucket\":\"invoker_";
         std::string threadName = "\"thread\":\"TestInvokerPool\"";
 
         auto checker = [&] (const std::string& pattern) {
-            EXPECT_TRUE(json.Contains(pattern))
+            EXPECT_TRUE(json.contains(pattern))
                 << Format("Pattern %Qv is missing", pattern);
         };
 
@@ -706,11 +706,11 @@ public:
         }
     }
 
-    void VerifyJson(int invokerCount, TString json)
+    void VerifyJson(int invokerCount, const std::string& json)
     {
         VerifyCountersArePresent(invokerCount, json);
 
-        THashMap<TString, int> invokerNameToEnqueued;
+        THashMap<std::string, int> invokerNameToEnqueued;
         bool taglessEnqueuedPresent = false;
         bool taglessDequeuedPresent = false;
         bool threadOnlyTagEnqueuedPresent = false;
@@ -723,13 +723,13 @@ public:
             totalActions += i;
         }
 
-        THashMap<TString, int> invokerNameToDequeued = invokerNameToEnqueued;
+        THashMap<std::string, int> invokerNameToDequeued = invokerNameToEnqueued;
 
         for (const auto& entry : GetSensors(std::move(json))) {
             auto mapEntry = entry->AsMap();
             auto labels = mapEntry->FindChild("labels")->AsMap();
 
-            auto sensor = labels->FindChildValue<TString>("sensor");
+            auto sensor = labels->FindChildValue<std::string>("sensor");
 
             if (!sensor ||
                 !(sensor == "yt.fair_share_invoker_pool.dequeued" ||
@@ -749,8 +749,8 @@ public:
             if (auto threadName = labels->FindChildValue<std::string>("thread")) {
                 EXPECT_EQ(threadName, "TestInvokerPool");
 
-                if (auto bucketName = labels->FindChildValue<TString>("bucket")) {
-                    EXPECT_TRUE(bucketName->StartsWith("invoker_"));
+                if (auto bucketName = labels->FindChildValue<std::string>("bucket")) {
+                    EXPECT_TRUE(bucketName->starts_with("invoker_"));
 
                     EXPECT_TRUE(invokerNameToValue.contains(*bucketName));
                     EXPECT_EQ(invokerNameToValue[*bucketName], *value);
@@ -878,10 +878,10 @@ TEST_F(TProfiledFairShareInvokerPoolProfilingTest, TestEnumIndexedProfilerGeneri
     for (const auto& sensor : GetSensors(*json)) {
         auto labels = sensor->AsMap()->FindChild("labels")->AsMap();
 
-        if (auto bucketName = labels->FindChildValue<TString>("bucket")) {
+        if (auto bucketName = labels->FindChildValue<std::string>("bucket")) {
             mentions[TEnumTraits<EInvokerBuckets>::FromString(*bucketName)] = true;
 
-            if (auto sensorName = labels->FindChildValue<TString>("sensor");
+            if (auto sensorName = labels->FindChildValue<std::string>("sensor");
                 sensorName &&
                 sensorName == "yt.fair_share_invoker_pool.dequeued")
             {

@@ -9,6 +9,11 @@
             "uri": "file://test.test_Access_/results.txt"
         }
     ],
+    "test.test[AsBoolAndFilter]": [
+        {
+            "uri": "file://test.test_AsBoolAndFilter_/results.txt"
+        }
+    ],
     "test.test[AsFail]": [
         {
             "uri": "file://test.test_AsFail_/extracted"

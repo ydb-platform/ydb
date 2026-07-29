@@ -183,10 +183,7 @@ std::shared_ptr<arrow::RecordBatch> THelper::TestArrowBatch(ui64 pathIdBegin, ui
 
 }
 
-void THelper::SetForcedCompaction(const TString& storeName) {
-    //In some tests we expect, that a compaction will start immidiately
-    //For now, we use l-bucket optimizer for this purpose
-    //In the future it should be replaced with lc-bucket or more sophisticated compaction optimizer planner
+void THelper::SetTilingPlanner(const TString& storeName) {
     auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
     request->Record.SetExecTimeoutPeriod(Max<ui64>());
     NKikimrSchemeOp::TModifyScheme modyfySchemeOp;
@@ -198,46 +195,31 @@ void THelper::SetForcedCompaction(const TString& storeName) {
     schemaPreset->SetName("default");
     auto schemaOptions = schemaPreset->MutableAlterSchema()->MutableOptions();
     schemaOptions->SetSchemeNeedActualization(false);
-    auto plannerConstructot =schemaOptions->MutableCompactionPlannerConstructor();
-    plannerConstructot->SetClassName("l-buckets");
-    *plannerConstructot->MutableLBuckets() = NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TLOptimizer{};
+    auto plannerConstructor = schemaOptions->MutableCompactionPlannerConstructor();
+    plannerConstructor->SetClassName("tiling++");
+    plannerConstructor->MutableTiling()->SetJson(TILING_NO_COMPACTION_FEATURES_JSON);
 
     ExecuteModifyScheme(modyfySchemeOp);
 }
 
-TString THelper::GetTilingNoCompactionAlter(const TString& tablePath) {
-    // tiling++ with thresholds high enough to keep every portion in the
-    // accumulator and never produce a compaction task.
-    return TStringBuilder() <<
-        "ALTER OBJECT `" << tablePath << "` (TYPE TABLE) SET ("
-        "ACTION=UPSERT_OPTIONS, "
-        "`COMPACTION_PLANNER.CLASS_NAME`=`tiling++`, "
-        "`COMPACTION_PLANNER.FEATURES`=`{"
-            "\"accumulator_portion_size_limit\":18446744073709551615,"
-            "\"accumulator_trigger_portions\":18446744073709551615,"
-            "\"accumulator_trigger_bytes\":18446744073709551615,"
-            "\"accumulator_overload_portions\":18446744073709551615,"
-            "\"accumulator_overload_bytes\":18446744073709551615"
-        "}`);";
-}
+void THelper::SetForcedCompaction(const TString& storeName) {
+    auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
+    request->Record.SetExecTimeoutPeriod(Max<ui64>());
+    NKikimrSchemeOp::TModifyScheme modyfySchemeOp;
+    modyfySchemeOp.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnStore);
+    modyfySchemeOp.SetWorkingDir(ROOT_PATH);
+    NKikimrSchemeOp::TAlterColumnStore* alterColumnStore = modyfySchemeOp.MutableAlterColumnStore();
+    alterColumnStore->SetName(storeName);
+    auto schemaPreset = alterColumnStore->AddAlterSchemaPresets();
+    schemaPreset->SetName("default");
+    auto schemaOptions = schemaPreset->MutableAlterSchema()->MutableOptions();
+    schemaOptions->SetSchemeNeedActualization(false);
+    auto* plannerConstructor = schemaOptions->MutableCompactionPlannerConstructor();
+    plannerConstructor->SetClassName("tiling++");
+    plannerConstructor->MutableTiling()->SetJson("{}");
 
-TString THelper::GetTilingForceLastLevelCompactionAlter(const TString& tablePath) {
-    // tiling++ with thresholds that route every portion directly to the
-    // last level and trigger compaction there as soon as more than one
-    // candidate appears.
-    return TStringBuilder() <<
-        "ALTER OBJECT `" << tablePath << "` (TYPE TABLE) SET ("
-        "ACTION=UPSERT_OPTIONS, "
-        "`COMPACTION_PLANNER.CLASS_NAME`=`tiling++`, "
-        "`COMPACTION_PLANNER.FEATURES`=`{"
-            "\"accumulator_portion_size_limit\":0,"
-            "\"k\":255,"
-            "\"last_level_candidate_portions_overload\":1,"
-            "\"last_level_compaction_portions\":1000000000,"
-            "\"last_level_compaction_bytes\":1099511627776"
-        "}`);";
+    ExecuteModifyScheme(modyfySchemeOp);
 }
-
 
 TString THelper::GetTestTableSchema() const {
     TStringBuilder sb;

@@ -308,7 +308,7 @@ NKikimr::NUdf::TUnboxedValue FromPyStream(
 
     // assume that this function will returns generator
     if (PyCallable_Check(value.Get())) {
-        TPyObjectPtr generator(PyObject_CallObject(value.Get(), nullptr));
+        TPyObjectPtr generator(PyObject_CallObject(value.Get(), /*args=*/nullptr));
         if (!generator || !PyGen_Check(generator.Get())) {
             UdfTerminate((TStringBuilder() << castCtx->PyCtx->Pos << "Expected generator as a result of function call").c_str());
         }

@@ -226,6 +226,15 @@ public:
         return Portions.size();
     }
 
+    std::vector<ui64> GetPortionIds() const {
+        std::vector<ui64> result;
+        result.reserve(Portions.size());
+        for (auto&& [id, _] : Portions) {
+            result.emplace_back(id);
+        }
+        return result;
+    }
+
     bool IsEmpty() const {
         return Portions.empty();
     }

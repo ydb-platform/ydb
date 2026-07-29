@@ -17,7 +17,6 @@ struct IMemoryUsageTracker
 {
     virtual TError TryAcquire(i64 size) = 0;
     virtual TError TryChange(i64 size) = 0;
-    //! Returns true unless overcommit occurred.
     virtual void SetLimit(i64 size) = 0;
     virtual void AdjustLimit(i64 adjustedLimit) = 0;
     virtual i64 GetLimit() const = 0;

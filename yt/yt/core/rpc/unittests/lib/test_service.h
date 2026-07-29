@@ -26,6 +26,7 @@ public:
     DEFINE_RPC_PROXY_METHOD(NTestRpc, PassCall);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, AllocationCall);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, RegularAttachments);
+    DEFINE_RPC_PROXY_METHOD(NTestRpc, DirectPlacementAttachments);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, NullAndEmptyAttachments);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, Compression);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, DoNothing);

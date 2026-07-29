@@ -228,7 +228,7 @@ void ValidateSimpleLogicalType(TStringBuf value)
 
             using TInt = TUnderlyingTimestampIntegerType<underlyingDateType>;
 
-            const auto& [timestamp, tzName] = NTzTypes::ParseTzValue<TInt>(value);
+            const auto& [timestamp, tzId] = NTzTypes::ParseTzValue<TInt>(value);
 
             try {
                 if constexpr (std::is_signed_v<TInt>) {
@@ -241,7 +241,7 @@ void ValidateSimpleLogicalType(TStringBuf value)
                     << ex;
             }
 
-            NTzTypes::ValidateTzName(tzName);
+            NTzTypes::ValidateTzId(tzId);
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION(
                 NTableClient::EErrorCode::SchemaViolation,

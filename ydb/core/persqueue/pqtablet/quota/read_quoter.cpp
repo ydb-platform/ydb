@@ -1,6 +1,7 @@
 #include "read_quoter.h"
 
 #include <ydb/core/persqueue/public/constants.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NPQ {
 
@@ -155,7 +156,7 @@ THolder<TAccountQuoterHolder> TReadQuoter::CreateAccountQuotaTracker(const TStri
     const auto& quotingConfig = AppData()->PQConfig.GetQuotingConfig();
     TActorId actorId;
     if (GetTabletActor() && quotingConfig.GetEnableQuoting()) {
-        Y_ENSURE(TopicConverter);
+        AFL_ENSURE(TopicConverter)("tablet_id", TabletId)("partition_id", Partition);
         if (quotingConfig.GetEnableReadQuoting()) {
             actorId = TActivationContext::RegisterWithSameMailbox(
                 new TAccountReadQuoter(

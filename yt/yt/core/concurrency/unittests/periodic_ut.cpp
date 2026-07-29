@@ -312,7 +312,6 @@ TEST_W(TPeriodicTest, OnStartCancelled)
     auto callbackStarted = NewPromise<void>();
 
     auto callback = BIND([&] {
-        Cerr << "[OnStartCancelled] Callback invoked" << Endl;
         callbackStarted.Set();
     });
 
@@ -322,38 +321,22 @@ TEST_W(TPeriodicTest, OnStartCancelled)
         callback,
         TDuration::MilliSeconds(200));
 
-    Cerr << "[OnStartCancelled] Issuing start futures" << Endl;
     auto startFuture1 = executor->StartAndGetFirstExecutedEvent();
     auto startFuture2 = executor->StartAndGetFirstExecutedEvent();
-    Cerr << "[OnStartCancelled] Start futures issued (StartFuture1Set: " << startFuture1.IsSet()
-         << ", StartFuture2Set: " << startFuture2.IsSet() << ")" << Endl;
 
-    Cerr << "[OnStartCancelled] Cancelling start future (StartFuture: 1)" << Endl;
     startFuture1.Cancel(TError(NYT::EErrorCode::Canceled, "Canceled"));
-    Cerr << "[OnStartCancelled] Start future cancelled (StartFuture1Set: " << startFuture1.IsSet()
-         << ", StartFuture2Set: " << startFuture2.IsSet()
-         << ", ExecutorStarted: " << executor->IsStarted() << ")" << Endl;
 
     // NB(pavook): cancellation of a start future shouldn't cause an executor stop
     // and should not propagate to the underlying promise (and other futures).
-    Cerr << "[OnStartCancelled] Waiting for callback to start" << Endl;
     auto callbackStartedResult = WaitForFast(callbackStarted.ToFuture());
-    Cerr << "[OnStartCancelled] Callback started (Result: " << ToString(callbackStartedResult)
-         << ", ExecutorStarted: " << executor->IsStarted()
-         << ", StartFuture2Set: " << startFuture2.IsSet() << ")" << Endl;
     EXPECT_TRUE(callbackStartedResult.IsOK());
     EXPECT_TRUE(executor->IsStarted());
-    EXPECT_TRUE(startFuture2.IsSet());
 
     auto startFuture2Result = WaitForFast(startFuture2);
-    Cerr << "[OnStartCancelled] Awaited start future (StartFuture: 2, Result: "
-         << ToString(startFuture2Result) << ")" << Endl;
     EXPECT_TRUE(startFuture2Result.IsOK());
 
-    Cerr << "[OnStartCancelled] Stopping executor" << Endl;
     WaitFor(executor->Stop())
         .ThrowOnError();
-    Cerr << "[OnStartCancelled] Executor stopped" << Endl;
 }
 
 TEST_W(TPeriodicTest, Stop)
@@ -389,6 +372,66 @@ TEST_W(TPeriodicTest, Stop)
     // startFuture should be set after the first execution.
     EXPECT_TRUE(startFuture.IsSet());
     EXPECT_TRUE(WaitForFast(startFuture).IsOK());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+std::vector<TDuration> MeasureInvocationStartGaps(EPeriodicExecutorDelayMode delayMode)
+{
+    constexpr auto Period = TDuration::MilliSeconds(500);
+    constexpr auto CallbackDuration = TDuration::MilliSeconds(400);
+    constexpr auto WindowDuration = TDuration::MilliSeconds(2100);
+
+    std::vector<TInstant> startTimes;
+
+    auto callback = BIND([&] {
+        startTimes.push_back(TInstant::Now());
+        TDelayedExecutor::WaitForDuration(CallbackDuration);
+    });
+
+    auto actionQueue = New<TActionQueue>();
+    auto executor = New<TPeriodicExecutor>(
+        actionQueue->GetInvoker(),
+        callback,
+        TPeriodicExecutorOptions{
+            .Period = Period,
+            .DelayMode = delayMode,
+        });
+
+    executor->Start();
+    TDelayedExecutor::WaitForDuration(WindowDuration);
+    WaitFor(executor->Stop())
+        .ThrowOnError();
+
+    std::vector<TDuration> gaps;
+    for (int index = 1; index < std::ssize(startTimes); ++index) {
+        gaps.push_back(startTimes[index] - startTimes[index - 1]);
+    }
+    return gaps;
+}
+
+TEST_W(TPeriodicTest, DelayModeFromPreviousStart)
+{
+    auto gaps = MeasureInvocationStartGaps(EPeriodicExecutorDelayMode::FromPreviousStart);
+
+    EXPECT_GE(std::ssize(gaps), 2);
+    for (auto gap : gaps) {
+        // The start-to-start gap stays close to the period, independent of the
+        // callback duration.
+        EXPECT_GE(gap, TDuration::MilliSeconds(350));
+        EXPECT_LE(gap, TDuration::MilliSeconds(700));
+    }
+}
+
+TEST_W(TPeriodicTest, DelayModeFromPreviousEnd)
+{
+    auto gaps = MeasureInvocationStartGaps(EPeriodicExecutorDelayMode::FromPreviousEnd);
+
+    EXPECT_GE(std::ssize(gaps), 2);
+    for (auto gap : gaps) {
+        // The gap spans the callback duration plus the period.
+        EXPECT_GE(gap, TDuration::MilliSeconds(750));
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

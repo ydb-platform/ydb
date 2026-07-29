@@ -22,13 +22,24 @@ LWTRACE_USING(YDB_CS_DATA_SOURCE);
 
 bool TStepAction::DoApply(IDataReader& owner) {
     AFL_VERIFY(FinishedFlag);
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "apply");
+    YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
+        {"event", "apply"});
     Source->StartSyncSection();
     Source->OnSourceFetchingFinishedSafe(owner, Source);
     return true;
 }
 
 TConclusion<bool> TStepAction::DoExecuteImpl() {
+    Source->StartStepExecution(Cursor.GetName());
+
+    struct TStepExecutionGuard {
+        IDataSource* Source;
+
+        ~TStepExecutionGuard() {
+            Source->FinishStepExecution();
+        }
+    } stepGuard{ Source.get() };
+
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Source->AddEvent("step_action"));
     if (Source->GetContext()->IsAborted()) {
         AFL_VERIFY(!FinishedFlag);
@@ -73,16 +84,13 @@ TStepAction::TStepAction(
     }
 }
 
-void TProgramStep::ReportTracing(
-    const std::shared_ptr<IDataSource>& source, const TDuration executionDurationMs, const TString& currentExecutionResult) const {
-    if (!source->GetExecutionContext().HasProgramIterator()) {
+NO_SANITIZE_THREAD
+void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, const TDuration executionDurationMs,
+    const TString& currentExecutionResult, const ui32 nodeId, const TString& currentCategoryName,
+    const std::shared_ptr<NArrow::NSSA::IResourceProcessor>& processor) const {
+    if (!processor) {
         return;
     }
-    auto iterator = source->GetExecutionContext().GetProgramIteratorVerified();
-    if (!iterator->IsValid()) {
-        return;
-    }
-    const auto& currentCategoryName = iterator->GetCurrentNode().GetSignalCategoryName();
     const auto& scanOrbit = source->GetContext()->GetCommonContext()->GetScanOrbit();
     if (!NLWTrace::HasShuttles(source->GetDataSourceOrbit()) && !(scanOrbit && NLWTrace::HasShuttles(*scanOrbit)) &&
         !LWPROBE_ENABLED(ProgramConst) && !LWPROBE_ENABLED(ProgramCalculation) && !LWPROBE_ENABLED(ProgramProjection) &&
@@ -97,14 +105,13 @@ void TProgramStep::ReportTracing(
     const TString tracingName = source->GetExecutionContext().GetPrevCategoryName() + " - " + currentCategoryName;
     const TString tracingExecutionResult = source->GetExecutionContext().GetPrevExecutionResult() + " - " + currentExecutionResult;
     const TDuration finishDurationMs = source->GetAndResetWaitDuration();
-    const auto& processor = iterator->GetProcessorVerified();
     const auto processorType = processor->GetProcessorType();
     const TString details = processor->DebugJson().GetStringRobust();
     const auto& resources = source->GetExecutionContext().GetExecutionVisitorVerified()->MutableContext().GetResources();
     const ui32 filteredRows = resources.GetRecordsCountActualOptional().value_or(source->GetRecordsCount());
 #define PROGRAM_PROBE_ARGS                                                                                                            \
     source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(), source->GetDeprecatedPortionId(), \
-        step.GetStepIndex(), tracingName, iterator->GetCurrentNodeId(), finishDurationMs, executionDurationMs, filteredRows
+        step.GetStepIndex(), tracingName, nodeId, finishDurationMs, executionDurationMs, filteredRows
 #define PROGRAM_PROBE_RESERVED source->GetReservedMemory()
 #define PROGRAM_PROBE_TAIL tracingExecutionResult, details
     switch (processorType) {
@@ -243,6 +250,7 @@ void TProgramStep::ReportTracing(
     source->MutableExecutionContext().SetPrevExecutionResult(currentExecutionResult);
 }
 
+NO_SANITIZE_THREAD
 TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
     const bool started = !source->GetExecutionContext().HasProgramIterator();
     if (!source->GetExecutionContext().HasProgramIterator()) {
@@ -268,8 +276,11 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
             continue;
         }
         AFL_VERIFY(source->GetExecutionContext().GetExecutionVisitorVerified()->GetExecutionNode()->GetIdentifier() == iterator->GetCurrentNodeId());
-        source->MutableExecutionContext().OnStartProgramStepExecution(iterator->GetCurrentNodeId(), GetSignals(iterator->GetCurrentNodeId()));
-        auto signals = GetSignals(iterator->GetCurrentNodeId());
+        const ui32 tracingNodeId = iterator->GetCurrentNodeId();
+        const TString tracingCategoryName = iterator->GetCurrentNode().GetSignalCategoryName();
+        const auto tracingProcessor = iterator->GetProcessorVerified();
+        source->MutableExecutionContext().OnStartProgramStepExecution(tracingNodeId, GetSignals(tracingNodeId));
+        auto signals = GetSignals(tracingNodeId);
 
         const TMonotonic start = TMonotonic::Now();
         auto conclusion = source->GetExecutionContext().GetExecutionVisitorVerified()->Execute();
@@ -279,7 +290,7 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
         source->AddExecutionDuration(executionDurationMs);
 
         const TString currentExecutionResult = conclusion.IsFail() ? "Fail" : ToString(*conclusion);
-        ReportTracing(source, executionDurationMs, currentExecutionResult);
+        ReportTracing(source, executionDurationMs, currentExecutionResult, tracingNodeId, tracingCategoryName, tracingProcessor);
         if (conclusion.IsFail()) {
             source->MutableExecutionContext().OnFailedProgramStepExecution();
             return conclusion;
@@ -295,8 +306,8 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
         }
     }
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("fgraph"));
-    AFL_DEBUG(NKikimrServices::SSA_GRAPH_EXECUTION)(
-        "graph_constructed", Program->DebugDOT(source->GetExecutionContext().GetExecutionVisitorVerified()->GetExecutedIds()));
+    YDB_LOG_DEBUG_COMP(NKikimrServices::SSA_GRAPH_EXECUTION, "",
+        {"graphConstructed", Program->DebugDOT(source->GetExecutionContext().GetExecutionVisitorVerified()->GetExecutedIds())});
     source->MutableStageData().ReturnTable(source->GetExecutionContext().GetExecutionVisitorVerified()->MutableContext().ExtractResources());
 
     return true;

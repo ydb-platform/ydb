@@ -10,6 +10,7 @@ TEST_SRCS(
     test_ydb_interactive_sql.py
     test_ydb_profile.py
     test_ydb_recursive_remove.py
+    test_ydb_operation.py
     test_ydb_scheme.py
     test_ydb_scripting.py
     test_ydb_sql.py
@@ -19,6 +20,7 @@ TEST_SRCS(
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/harness_dep.inc)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
+ENV(YDB_CLI_EXPERIMENTAL_BINARY="ydb/apps/ydb/experimental/ydb/ydb")
 ENV(YDB_CLI_WITH_ENABLED_AI_BINARY="ydb/tests/functional/ydb_cli/ai_interactive/ydb")
 ENV(YDB_ENABLE_COLUMN_TABLES="true")
 
@@ -31,6 +33,7 @@ ENDIF()
 
 DEPENDS(
     ydb/apps/ydb
+    ydb/apps/ydb/experimental/ydb
     ydb/tests/functional/ydb_cli/ai_interactive
 )
 

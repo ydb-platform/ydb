@@ -14,6 +14,8 @@
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::YQ_TEST_CONNECTION
+
 namespace NFq {
 
 LWTRACE_USING(YQ_TEST_CONNECTION_PROVIDER);
@@ -29,7 +31,7 @@ class TTestMonitoringConnectionActor : public NActors::TActorBootstrapped<TTestM
     TString User;
     TString Token;
     TTestConnectionRequestCountersPtr Counters;
-    NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+    NYql::IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
     NFq::TSigner::TPtr Signer;
     NYql::TSolomonClusterConfig ClusterConfig;
     const TInstant StartTime = TInstant::Now();
@@ -40,7 +42,7 @@ public:
         const TActorId& sender,
         ui64 cookie,
         const TString& endpoint,
-        const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
+        const NYql::IStructuredTokenCredentialsFactory::TPtr& credentialsFactory,
         const TString& scope,
         const TString& user,
         const TString& token,
@@ -63,7 +65,11 @@ public:
     static constexpr char ActorName[] = "YQ_TEST_MONITORING_CONNECTION";
 
     void Bootstrap() {
-        TC_LOG_D(Scope << " " << User << " " << NKikimr::MaskTicket(Token) << " Starting test monitoring connection actor. Actor id: " << SelfId());
+        YDB_LOG_DEBUG("Starting test monitoring connection actor",
+            {"scope", Scope},
+            {"user", User},
+            {"ticket", NKikimr::MaskTicket(Token)},
+            {"selfId", SelfId()});
         Become(&TTestMonitoringConnectionActor::StateFunc);
 
         try {
@@ -72,7 +78,15 @@ public:
             auto retryPolicy = NYql::NDq::THttpSenderRetryPolicy::GetNoRetryPolicy();
             const TActorId httpSenderId = Register(NYql::NDq::CreateHttpSenderActor(SelfId(), HttpProxyId, retryPolicy));
             Send(httpSenderId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest), /*flags=*/0, Cookie);
-            TC_LOG_T(Scope << " " << User << " " << NKikimr::MaskTicket(Token) << " send request " << httpRequest->Method << " " << httpRequest->Protocol << " " << httpRequest->Host << " " << httpRequest->URL << " " << httpRequest->Body);
+            YDB_LOG_TRACE("Send request",
+                {"scope", Scope},
+                {"user", User},
+                {"ticket", NKikimr::MaskTicket(Token)},
+                {"method", httpRequest->Method},
+                {"protocol", httpRequest->Protocol},
+                {"host", httpRequest->Host},
+                {"url", httpRequest->URL},
+                {"body", httpRequest->Body});
         } catch (...) {
             ReplyError(CurrentExceptionMessage());
         }
@@ -80,8 +94,8 @@ public:
 
     void FillAuth(NHttp::THttpOutgoingRequestPtr& httpRequest) {
         const TString authorizationHeader = "Authorization";
-        const auto structedToken = NYql::ComposeStructuredTokenJsonForServiceAccount(ClusterConfig.GetServiceAccountId(), ClusterConfig.GetServiceAccountIdSignature(), ClusterConfig.GetToken());
-        const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(CredentialsFactory, structedToken);
+        const auto structuredToken = NYql::ComposeStructuredTokenJsonForServiceAccount(ClusterConfig.GetServiceAccountId(), ClusterConfig.GetServiceAccountIdSignature(), ClusterConfig.GetToken());
+        const auto credentialsProviderFactory = CredentialsFactory->Create(structuredToken);
         const auto authToken = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
 
         switch (static_cast<NYql::NSo::NProto::ESolomonClusterType>(ClusterConfig.GetClusterType())) {
@@ -117,13 +131,22 @@ public:
     void Handle(NYql::NDq::TEvHttpBase::TEvSendResult::TPtr& ev) {
         const auto* res = ev->Get();
         if (res->HttpIncomingResponse->Get()->Response->Status == "400") {
-            TC_LOG_T(Scope << " " << User << " " << NKikimr::MaskTicket(Token) << " ok " << res->HttpIncomingResponse->Get()->ToString());
+            YDB_LOG_TRACE("Ok",
+                {"scope", Scope},
+                {"user", User},
+                {"ticket", NKikimr::MaskTicket(Token)},
+                {"response", res->HttpIncomingResponse->Get()->ToString()});
             ReplyOk();
             return;
         }
 
         const TString& error = res->HttpIncomingResponse->Get()->GetError();
-        TC_LOG_T(Scope << " " << User << " " << NKikimr::MaskTicket(Token) << " access problem " << res->HttpIncomingResponse->Get()->ToString() << " " << error);
+        YDB_LOG_TRACE("Access problem",
+            {"scope", Scope},
+            {"user", User},
+            {"ticket", NKikimr::MaskTicket(Token)},
+            {"response", res->HttpIncomingResponse->Get()->ToString()},
+            {"error", error});
         ReplyError(error);
     }
 
@@ -154,7 +177,7 @@ NActors::IActor* CreateTestMonitoringConnectionActor(
         const TActorId& sender,
         ui64 cookie,
         const TString& endpoint,
-        const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
+        const NYql::IStructuredTokenCredentialsFactory::TPtr& credentialsFactory,
         const TString& scope,
         const TString& user,
         const TString& token,

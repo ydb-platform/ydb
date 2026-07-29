@@ -135,6 +135,25 @@ struct TSchemeShard::TTxNotifyCompletion : public TSchemeShard::TRwTxBase {
 
             compactionInfo.AddNotifySubscriber(Ev->Sender);
             Result = new TEvSchemeShard::TEvNotifyTxCompletionRegistered(txId);
+        } else if (const auto txId = TIndexBuildId(rawTxId); const auto* operationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(txId)) {
+            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "NotifyTxCompletion"
+                            << " set column constraint in-flight"
+                            << ", txId: " << txId
+                            << ", at schemeshard: " << Self->TabletID());
+            auto& operationInfo = *operationInfoPtr->get();
+            if (operationInfo.IsFinished()) {
+                LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                           "NotifyTxCompletion"
+                               << ", set column constraint is ready to notify"
+                               << ", txId: " << txId
+                               << ", at schemeshard: " << Self->TabletID());
+                Result = new TEvSchemeShard::TEvNotifyTxCompletionResult(ui64(txId));
+                return;
+            }
+
+            operationInfo.AddNotifySubscriber(Ev->Sender);
+            Result = new TEvSchemeShard::TEvNotifyTxCompletionRegistered(ui64(txId));
         } else {
             LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                        "NotifyTxCompletion"

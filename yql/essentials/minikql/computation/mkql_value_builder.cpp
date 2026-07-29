@@ -242,7 +242,7 @@ NUdf::TUnboxedValue TDefaultValueBuilder::ImportArrowBlock(ArrowArray* arrays, u
         }
 
         auto scalar = std::move(scalarRes).ValueOrDie();
-        return HolderFactory_.CreateArrowBlock(std::move(scalar));
+        return HolderFactory_.CreateArrowBlock(std::move(scalar), NYql::DefaultDatumValidationMode);
     } else {
         if (chunkCount < 1) {
             UdfTerminate("Bad chunkCount value");
@@ -259,9 +259,9 @@ NUdf::TUnboxedValue TDefaultValueBuilder::ImportArrowBlock(ArrowArray* arrays, u
         }
 
         if (chunkCount == 1) {
-            return HolderFactory_.CreateArrowBlock(imported.front());
+            return HolderFactory_.CreateArrowBlock(imported.front(), NYql::DefaultDatumValidationMode);
         } else {
-            return HolderFactory_.CreateArrowBlock(arrow::ChunkedArray::Make(std::move(imported), dataType).ValueOrDie());
+            return HolderFactory_.CreateArrowBlock(arrow::ChunkedArray::Make(std::move(imported), dataType).ValueOrDie(), NYql::DefaultDatumValidationMode);
         }
     }
 }

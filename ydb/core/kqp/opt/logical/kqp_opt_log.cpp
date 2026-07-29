@@ -1,6 +1,7 @@
 #include "kqp_opt_log_rules.h"
 #include "kqp_opt_cbo.h"
 
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join.h>
 #include <ydb/core/kqp/opt/cbo/solver/kqp_opt_join_cost_based.h>
@@ -9,6 +10,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/library/yql/dq/opt/dq_opt_hopping.h>
+#include <ydb/library/yql/dq/opt/dq_opt_join.h>
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 
@@ -36,6 +38,7 @@ public:
         , Config(config)
     {
 #define HNDL(name) "KqpLogical-"#name, Hndl(&TKqpLogicalOptTransformer::name)
+        AddHandler(0, &TCoTopBase::Match, HNDL(RewriteHybridRankTopSort));
         AddHandler(0, &TCoTop::Match, HNDL(TopSortSelectIndex));
         AddHandler(0, &TCoTopSort::Match, HNDL(TopSortSelectIndex));
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(PushExtractedPredicateToReadTable));
@@ -163,6 +166,13 @@ protected:
             if (!input) {
                 return node;
             }
+
+            TMaybe<NHoppingWindow::EPolicy> defaultLatePolicy;
+            if (KqpCtx.UserRequestContext && KqpCtx.UserRequestContext->WatermarkLateEventsPolicy) {
+                const auto policy = to_lower(KqpCtx.UserRequestContext->WatermarkLateEventsPolicy);
+                defaultLatePolicy = TryFromString<NHoppingWindow::EPolicy>(policy).GetOrElse(NHoppingWindow::EPolicy::Drop);
+            }
+
             output = NHopping::RewriteAsHoppingWindow(
                 node,
                 ctx,
@@ -170,7 +180,9 @@ protected:
                 input.Cast(),
                 false,
                 TDuration::MilliSeconds(TDqSettings::TDefault::WatermarksLateArrivalDelayMs),
-                KqpCtx.Config->GetEnableWatermarks());
+                KqpCtx.Config->GetEnableWatermarks(),
+                defaultLatePolicy
+            );
         } else {
             NDq::TSpillingSettings spillingSettings(KqpCtx.Config->GetEnabledSpillingNodes());
             output = DqRewriteAggregate(node, ctx, TypesCtx, false, KqpCtx.Config->HasOptEnableOlapPushdown() || KqpCtx.Config->HasOptUseFinalizeByKey(), KqpCtx.Config->HasOptUseFinalizeByKey(), spillingSettings.IsAggregationSpillingEnabled());
@@ -200,6 +212,7 @@ protected:
     }
 
     TMaybeNode<TExprBase> RewriteStreamEquiJoinWithLookup(TExprBase node, TExprContext& ctx) {
+        // First step of stream lookup join with DQ external sources (not kqp tables)
         TExprBase output = DqRewriteStreamEquiJoinWithLookup(node, ctx, TypesCtx);
         DumpAppliedRule("KqpRewriteStreamEquiJoinWithLookup", node.Ptr(), output.Ptr(), ctx);
         return output;
@@ -235,8 +248,10 @@ protected:
 
     TMaybeNode<TExprBase> RewriteEquiJoin(TExprBase node, TExprContext& ctx) {
         bool useCBO = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->GetDefaultCostBasedOptimizationLevel()) >= 2;
-        TExprBase output = NKikimr::NKqp::KqpRewriteEquiJoin(node, KqpCtx.Config->GetHashJoinMode(), useCBO, ctx, TypesCtx, KqpCtx.KqpStats, KqpCtx.JoinsCount, KqpCtx.GetOptimizerHints());
-        DumpAppliedRule("RewriteEquiJoin", node.Ptr(), output.Ptr(), ctx);
+        TMaybeNode<TExprBase> output = NKikimr::NKqp::KqpRewriteEquiJoin(node, KqpCtx.Config->GetHashJoinMode(), useCBO, ctx, TypesCtx, KqpCtx.KqpStats, KqpCtx.JoinsCount, KqpCtx.GetOptimizerHints());
+        if (output) {
+            DumpAppliedRule("RewriteEquiJoin", node.Ptr(), output.Cast().Ptr(), ctx);
+        }
         return output;
     }
 
@@ -302,6 +317,16 @@ protected:
     TMaybeNode<TExprBase> RewriteTopSortOverIndexRead(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
         TExprBase output = KqpRewriteTopSortOverIndexRead(node, ctx, TypesCtx, KqpCtx, *getParents());
         DumpAppliedRule("RewriteTopSortOverIndexRead", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> RewriteHybridRankTopSort(TExprBase node, TExprContext& ctx) {
+        auto output = KqpRewriteHybridRankTopSort(node, ctx, KqpCtx);
+        if (!output.IsValid()) {
+            return {};
+        }
+
+        DumpAppliedRule("RewriteHybridRankTopSort", node.Ptr(), output.Cast().Ptr(), ctx);
         return output;
     }
 

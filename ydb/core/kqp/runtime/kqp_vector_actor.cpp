@@ -4,7 +4,6 @@
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/base/table_index.h>
-#include <ydb/core/base/table_index.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
@@ -13,6 +12,8 @@
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
 
 #include <util/string/vector.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE
 
 namespace NKikimr {
 namespace NKqp {
@@ -63,7 +64,7 @@ public:
     }
 
     virtual ~TKqpVectorResolveActor() {
-        if (Input.HasValue() && Alloc) {
+        if (Alloc) {
             TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
             Input.Clear();
 
@@ -75,7 +76,8 @@ public:
     void Bootstrap() {
         //Counters->VectorResolveActorsCount->Inc();
 
-        CA_LOG_D("Start vector resolve actor");
+        YDB_LOG_DEBUG("Start vector resolve actor",
+            {"logPrefix", this->LogPrefix});
         Become(&TKqpVectorResolveActor::StateFunc);
     }
 
@@ -89,6 +91,7 @@ private:
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvNewAsyncInputDataArrived, HandleRead);
                 hFunc(IDqComputeActorAsyncInput::TEvAsyncInputError, OnAsyncInputError);
+                cFunc(TEvents::TEvPoison::EventType, PassAway);
             }
         } catch (const yexception& e) {
             RuntimeError(e.what(), NYql::NDqProto::StatusIds::INTERNAL_ERROR);
@@ -106,17 +109,14 @@ private:
     void PassAway() final {
         //Counters->VectorResolveActorsCount->Dec();
 
-        if (ReadActorId) {
-            Send(ReadActorId, new TEvents::TEvPoison);
-            ReadActorId = {};
-        }
-
         {
             auto guard = BindAllocator();
             Input.Clear();
             NKikimr::NMiniKQL::TUnboxedValueDeque emptyList;
             emptyList.swap(PendingRows);
         }
+
+        DestroyReadActor();
 
         MySpan.End();
 
@@ -141,7 +141,10 @@ private:
             }
         }
 
-        CA_LOG_D("Returned " << totalDataSize << " bytes, finished: " << finished);
+        YDB_LOG_DEBUG("Returned bytes",
+            {"logPrefix", this->LogPrefix},
+            {"totalDataSize", totalDataSize},
+            {"finished", finished});
         return totalDataSize;
     }
 
@@ -352,10 +355,10 @@ private:
         }
         TMaybe<TInstant> watermark;
         ui64 freeSpace = 32*1024*1024; // FIXME The value doesn't really matter, but where to take it from?
-        NKikimr::NMiniKQL::TUnboxedValueBatch rows;
         bool finished = false;
         {
             auto guard = BindAllocator();
+            NKikimr::NMiniKQL::TUnboxedValueBatch rows;
             ReadActorInput->GetAsyncInputData(rows, watermark, finished, freeSpace);
             rows.ForEachRow([&](NUdf::TUnboxedValue& value) {
                 NTableIndex::NKMeans::TClusterId parent = value.GetElement(0).Get<ui64>();
@@ -377,18 +380,24 @@ private:
                     Locks.push_back(resultInfo.GetLocks(i));
                 }
             }
-            Send(ReadActorId, new TEvents::TEvPoison);
-            ReadActorId = {};
-            ReadActorInput = nullptr;
+            DestroyReadActor();
             ReadingChildClusters = false;
             // Convert to NKikimr::NKMeans::TClusters
             if (!Failed) {
+                auto guard = BindAllocator();
                 ParseFetchedClusters();
             }
         }
-        {
-            auto guard = BindAllocator();
-            rows.clear();
+    }
+
+    void DestroyReadActor() {
+        if (ReadActorInput) {
+            // Destroy ReadActor directly, just like library/yql/dq compute actor destroys us
+            // Otherwise it may reference an already destroyed TypeEnv and crash in BindAllocator
+            // when handling TEvPoison
+            ReadActorInput->PassAway();
+            ReadActorId = {};
+            ReadActorInput = nullptr;
         }
     }
 
@@ -468,8 +477,9 @@ private:
             }
             for (size_t i = 0; i < Settings.CopyColumnIndexesSize(); i++) {
                 auto colIdx = Settings.GetCopyColumnIndexes(i);
-                *rowItems++ = row.GetElement(colIdx);
-                rowSize += NMiniKQL::GetUnboxedValueSize(row.GetElement(colIdx), ColumnTypeInfos[colIdx]).AllocatedBytes;
+                auto elem = row.GetElement(colIdx);
+                rowSize += NMiniKQL::GetUnboxedValueSize(elem, ColumnTypeInfos[colIdx]).AllocatedBytes;
+                *rowItems++ = std::move(elem);
                 if (Settings.GetClusterColumnOutPos() == i+1) {
                     // We support inserting cluster ID column into any position to maintain alphabetical order of columns
                     *rowItems++ = NUdf::TUnboxedValuePod((ui64)rowClusters[rowClusters.size()-1].first);

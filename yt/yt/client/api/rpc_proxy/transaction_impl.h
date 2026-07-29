@@ -24,6 +24,7 @@ DEFINE_ENUM(ETransactionState,
     (Aborted)
     (AbortFailed)
     (Detached)
+    (Abandoned)
 );
 
 class TTransaction
@@ -327,6 +328,8 @@ private:
         TGuard<NThreading::TSpinLock>* guard,
         const TTransactionAbortOptions& options = {});
 
+    void Abandon(TGuard<NThreading::TSpinLock>* guard);
+
     void ValidateActive();
     void DoValidateActive();
 
@@ -339,8 +342,6 @@ private:
     NApi::TTransactionStartOptions PatchTransactionId(const NApi::TTransactionStartOptions& options);
     template <class T>
     T PatchTransactionTimestamp(const T& options);
-
-    void SetControlMultiplexingBandIfNeeded(NRpc::TClientRequest& req);
 };
 
 DEFINE_REFCOUNTED_TYPE(TTransaction)

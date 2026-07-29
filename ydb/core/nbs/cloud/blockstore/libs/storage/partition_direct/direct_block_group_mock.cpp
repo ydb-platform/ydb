@@ -8,16 +8,93 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TOracleMock::OnRequestStarted(
+    THostIndex hostIndex,
+    EOperation operation,
+    TInstant now)
+{
+    Y_UNUSED(hostIndex, operation, now);
+}
+
+void TOracleMock::OnRequestSucceeded(
+    THostIndex hostIndex,
+    EOperation operation,
+    TInstant now,
+    TDuration executionTime)
+{
+    Y_UNUSED(hostIndex, operation, now, executionTime);
+}
+
+void TOracleMock::OnRequestFailed(
+    THostIndex hostIndex,
+    EOperation operation,
+    TInstant now)
+{
+    Y_UNUSED(hostIndex, operation, now);
+}
+
+void TOracleMock::OnRequestCancelled(
+    THostIndex hostIndex,
+    EOperation operation,
+    TInstant now)
+{
+    Y_UNUSED(hostIndex, operation, now);
+}
+
+void TOracleMock::OnDDiskDisconnected(THostIndex hostIndex, TInstant now)
+{
+    Y_UNUSED(hostIndex, now);
+}
+
+void TOracleMock::OnDDiskConnected(THostIndex hostIndex, TInstant now)
+{
+    Y_UNUSED(hostIndex, now);
+}
+
+void TOracleMock::OnDDiskBroken(THostIndex hostIndex)
+{
+    Y_UNUSED(hostIndex);
+}
+
+TDuration TOracleMock::GetHostReconnectDelay(THostIndex hostIndex)
+{
+    Y_UNUSED(hostIndex);
+    return TDuration::MilliSeconds(1);
+}
+
 THostIndex TOracleMock::SelectBestPBufferHost(
-    std::span<const THostIndex> hostIndexes,
+    THostMask hosts,
     EOperation operation) const
 {
     Y_UNUSED(operation);
-    return hostIndexes[0];
+    return *hosts.First();
 }
 
-TDuration TOracleMock::GetWriteHedgingDelay() const
+TDuration TOracleMock::GetReadHedgingDelay(
+    THostIndex host,
+    EDataLocation dataLocation) const
 {
+    Y_UNUSED(host, dataLocation);
+
+    return ReadHedgingDelay;
+}
+
+TDuration TOracleMock::GetReadRequestTimeout() const
+{
+    return ReadRequestTimeout;
+}
+
+EWriteMode TOracleMock::GetWriteMode() const
+{
+    return WriteMode;
+}
+
+TDuration TOracleMock::GetWriteHedgingDelay(
+    THostMask hosts,
+    bool indirect) const
+{
+    Y_UNUSED(hosts, indirect);
+
     return WriteHedgingDelay;
 }
 
@@ -26,14 +103,35 @@ TDuration TOracleMock::GetWriteRequestTimeout() const
     return WriteRequestTimeout;
 }
 
-TDuration TOracleMock::GetPBufferReplyTimeout() const
+TDuration TOracleMock::GetIndirectWriteReplyTimeout() const
 {
     return PBufferReplyTimeout;
 }
 
-EWriteMode TOracleMock::GetWriteMode() const
+TDuration TOracleMock::GetFlushRequestCooldown(THostMask hosts) const
 {
-    return WriteMode;
+    Y_UNUSED(hosts);
+    return FlushRequestCooldown;
+}
+
+TDuration TOracleMock::GetFlushRequestTimeout() const
+{
+    return FlushRequestTimeout;
+}
+
+TDuration TOracleMock::GetEraseRequestTimeout() const
+{
+    return EraseRequestTimeout;
+}
+
+const THostStat& TOracleMock::GetHostStatistics(THostIndex hostIndex) const
+{
+    return HostStatistics[hostIndex];
+}
+
+TString TOracleMock::Dump() const
+{
+    return {};
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -77,9 +175,9 @@ TDirectBlockGroupMock::TDirectBlockGroupMock()
         Y_ABORT_UNLESS(false, "Should set SyncWithPBufferHandler");
         return NThreading::TFuture<TDBGFlushResponse>();
     };
-    EraseFromPBufferHandler = [](const auto&...)
+    BatchEraseFromPBufferHandler = [](const auto&...)
     {
-        Y_ABORT_UNLESS(false, "Should set EraseFromPBufferHandler");
+        Y_ABORT_UNLESS(false, "Should set BatchEraseFromPBufferHandler");
         return NThreading::TFuture<TDBGEraseResponse>();
     };
     RestoreDBGPBuffersHandler = [](const auto&...)
@@ -96,6 +194,10 @@ TDirectBlockGroupMock::TDirectBlockGroupMock()
     {
         Y_ABORT_UNLESS(false, "Should set DumpHandler");
         return NThreading::TFuture<TDBGDumpResponse>();
+    };
+    OnAddHostResultHandler = [](const auto&...)
+    {
+        Y_ABORT_UNLESS(false, "Should set OnAddHostResultHandler");
     };
 }
 
@@ -128,9 +230,15 @@ std::shared_ptr<NWilson::TSpan> TDirectBlockGroupMock::CreateChildSpan(
     return nullptr;
 }
 
-void TDirectBlockGroupMock::Run(IPartitionDirectService* service)
+NThreading::TFuture<void> TDirectBlockGroupMock::Run(
+    ITraceService* traceService,
+    IPartitionDirectService* service)
 {
+    Y_UNUSED(traceService);
     Y_UNUSED(service);
+    // The mock is considered ready immediately - tests that do not exercise
+    // session locking should not block on the initial-ready gate.
+    return NThreading::MakeFuture();
 }
 
 NThreading::TFuture<TDBGReadBlocksResponse>
@@ -201,26 +309,27 @@ TDirectBlockGroupMock::WriteBlocksToPBuffer(
         traceId);
 }
 
-NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>
-TDirectBlockGroupMock::WriteBlocksToManyPBuffers(
+void TDirectBlockGroupMock::WriteBlocksToManyPBuffers(
     ui32 vChunkIndex,
     THostIndex coordinatorHostIndex,
-    TVector<THostIndex> hostIndexes,
+    THostMask hostIndexes,
     ui64 lsn,
     TBlockRange64 range,
     TDuration replyTimeout,
     const TGuardedSgList& guardedSglist,
-    const NWilson::TTraceId& traceId)
+    const NWilson::TTraceId& traceId,
+    TWriteBlocksToManyPBuffersCallback callback)
 {
-    return WriteBlocksToManyPBuffersHandler(
+    WriteBlocksToManyPBuffersHandler(
         vChunkIndex,
         coordinatorHostIndex,
-        std::move(hostIndexes),
+        hostIndexes,
         lsn,
         range,
         replyTimeout,
         guardedSglist,
-        traceId);
+        traceId,
+        std::move(callback));
 }
 
 NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroupMock::SyncWithPBuffer(
@@ -238,13 +347,24 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroupMock::SyncWithPBuffer(
         traceId);
 }
 
-NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroupMock::EraseFromPBuffer(
-    ui32 vChunkIndex,
+NThreading::TFuture<TDBGEraseResponse>
+TDirectBlockGroupMock::BatchEraseFromPBuffer(
     THostIndex hostIndex,
-    const TVector<TPBufferSegment>& segments,
+    const TEraseSegments& segments,
     const NWilson::TTraceId& traceId)
 {
-    return EraseFromPBufferHandler(vChunkIndex, hostIndex, segments, traceId);
+    return BatchEraseFromPBufferHandler(hostIndex, segments, traceId);
+}
+
+void TDirectBlockGroupMock::BarrierEraseFromPBuffer(ui64 lsn)
+{
+    Y_UNUSED(lsn);
+}
+
+NThreading::TFuture<std::optional<ui64>>
+TDirectBlockGroupMock::GatherSafeBarrierForErase()
+{
+    return NThreading::MakeFuture<std::optional<ui64>>(std::nullopt);
 }
 
 NThreading::TFuture<TDBGRestoreResponse>
@@ -259,9 +379,33 @@ NThreading::TFuture<TListPBufferResponse> TDirectBlockGroupMock::ListPBuffers(
     return ListPBuffersHandler(hostIndex);
 }
 
+void TDirectBlockGroupMock::OnAddHostResult(
+    const NProto::TError& error,
+    THostIndex newHostIndex,
+    NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
+    NKikimrBlobStorage::NDDisk::TDDiskId pbufferId)
+{
+    OnAddHostResultHandler(
+        error,
+        newHostIndex,
+        std::move(ddiskId),
+        std::move(pbufferId));
+}
+
+ui32 TDirectBlockGroupMock::GetNodeId(THostIndex host) const
+{
+    return host + 10;
+}
+
 NThreading::TFuture<TDBGDumpResponse> TDirectBlockGroupMock::Dump()
 {
     return DumpHandler();
+}
+
+NThreading::TFuture<TDbgSnapshot>
+TDirectBlockGroupMock::BuildMonSnapshot() const
+{
+    return NThreading::MakeFuture(TDbgSnapshot{});
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -117,7 +117,7 @@ public:
     bool HasNontrivialRanges() const;
 
     // "file_name"
-    std::optional<TString> GetFileName() const;
+    std::optional<std::string> GetFileName() const;
 
     // "executable"
     std::optional<bool> GetExecutable() const;
@@ -201,10 +201,10 @@ public:
     NTableClient::TVersionedWriteOptions GetVersionedWriteOptions() const;
 
     // "access_method"
-    std::optional<TString> GetAccessMethod() const;
+    std::optional<std::string> GetAccessMethod() const;
 
     // "input_query"
-    std::optional<TString> GetInputQuery() const;
+    std::optional<std::string> GetInputQuery() const;
 
     // "queue_consumer_name"
     std::optional<std::string> GetQueueConsumerName() const;
@@ -254,7 +254,7 @@ void FromProto(TConstrainedRichYPath<TValidator...>* path, const std::string& pr
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const std::vector<TString>& GetWellKnownRichYPathAttributes();
+const std::vector<std::string>& GetWellKnownRichYPathAttributes();
 
 ////////////////////////////////////////////////////////////////////////////////
 

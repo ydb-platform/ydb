@@ -1,7 +1,10 @@
 #include "write_session_impl.h"
 
+#include "deferred_publication_ack_tracker.h"
+
 #include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
 #include <ydb/public/sdk/cpp/src/client/topic/common/trace_lazy.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
 
 #include <library/cpp/string_utils/url/url.h>
 
@@ -9,6 +12,7 @@
 
 #include <util/generic/store_policy.h>
 #include <util/generic/utility.h>
+#include <util/generic/yexception.h>
 #include <util/stream/buffer.h>
 #include <util/generic/guid.h>
 
@@ -27,6 +31,37 @@ const uint64_t WRITE_ERROR_PARTITION_INACTIVE = 500029;
 namespace {
 
 using TTxId = std::pair<std::string_view, std::string_view>;
+
+constexpr std::string_view MESSAGE_ATTRIBUTE_KEY = "__key";
+
+std::optional<std::string> GetMessageKey(const std::vector<std::pair<std::string, std::string>>& messageMeta) {
+    for (const auto& [key, value] : messageMeta) {
+        if (key == MESSAGE_ATTRIBUTE_KEY) {
+            return value;
+        }
+    }
+
+    return std::nullopt;
+}
+
+bool ValidateWriteSessionSettings(const TWriteSessionSettings& settings, NYdb::NIssue::TIssues& issues) {
+    if (!settings.BatchInnerCodec_.has_value()) {
+        return true;
+    }
+
+    if (settings.Codec_ != ECodec::KAFKA_BATCH) {
+        issues.AddIssue("BatchInnerCodec can be set only when Codec is KAFKA_BATCH.");
+        return false;
+    }
+
+    const ECodec innerCodec = *settings.BatchInnerCodec_;
+    if (innerCodec != ECodec::GZIP && innerCodec != ECodec::ZSTD) {
+        issues.AddIssue("BatchInnerCodec supports only GZIP and ZSTD when Codec is KAFKA_BATCH.");
+        return false;
+    }
+
+    return true;
+}
 using TTxIdOpt = std::optional<TTxId>;
 
 TTxIdOpt GetTransactionId(const Ydb::Topic::StreamWriteMessage_WriteRequest& request)
@@ -41,13 +76,82 @@ TTxIdOpt GetTransactionId(const Ydb::Topic::StreamWriteMessage_WriteRequest& req
     return TTxId(tx.session(), tx.id());
 }
 
-TTxIdOpt GetTransactionId(const std::optional<TTransactionId>& tx)
+void SetWriteContext(
+    Ydb::Topic::StreamWriteMessage_WriteRequest& writeRequest,
+    const TWriteContext& writeContext)
 {
-    if (!tx) {
-        return std::nullopt;
+    if (auto* deferred = std::get_if<TDeferredPublication>(&writeContext)) {
+        auto* proto = writeRequest.mutable_deferred_publish();
+        proto->set_int_publication_id(deferred->IntPublicationId);
+        if (deferred->ExtPublicationId) {
+            proto->set_ext_publication_id(TStringType{*deferred->ExtPublicationId});
+        }
+        return;
     }
 
-    return TTxId(tx->SessionId, tx->TxId);
+    if (auto* tx = std::get_if<TTransactionId>(&writeContext)) {
+        writeRequest.mutable_tx()->set_id(tx->TxId);
+        writeRequest.mutable_tx()->set_session(tx->SessionId);
+    }
+}
+
+NYdb::NIssue::TIssues ValidateDeferredPublicationMessage(const TWriteMessage& message)
+{
+    if (!message.DeferredPublication_) {
+        return {};
+    }
+
+    NYdb::NIssue::TIssues issues;
+    if (message.GetTxPtr()) {
+        issues.AddIssue("deferred_publish is incompatible with transaction");
+    }
+    if (message.DeferredPublication_->IntPublicationId == 0) {
+        issues.AddIssue("int_publication_id must be greater than zero");
+    }
+    // On Write, ext_publication_id is informational for the server (omit, "" or any string).
+    // Only enforce MaxExtPublicationIdLength so a huge value cannot DoS the request path.
+    // BeginPublication separately requires a non-empty ext id as the client-chosen key.
+    if (message.DeferredPublication_->ExtPublicationId
+        && message.DeferredPublication_->ExtPublicationId->size()
+            > TDeferredPublication::MaxExtPublicationIdLength)
+    {
+        issues.AddIssue("ext_publication_id is too long");
+    }
+    return issues;
+}
+
+TTxIdOpt GetTransactionId(const TWriteContext& writeContext)
+{
+    if (auto* tx = std::get_if<TTransactionId>(&writeContext)) {
+        return TTxId(tx->SessionId, tx->TxId);
+    }
+    return std::nullopt;
+}
+
+bool DeferredPublishIdentityChanged(
+    const Ydb::Topic::StreamWriteMessage_WriteRequest& writeRequest,
+    const TWriteContext& messageContext)
+{
+    const auto* messageDeferred = std::get_if<TDeferredPublication>(&messageContext);
+    if (!writeRequest.has_deferred_publish()) {
+        return messageDeferred != nullptr;
+    }
+    if (!messageDeferred) {
+        return true;
+    }
+
+    const auto& requestDeferred = writeRequest.deferred_publish();
+    if (requestDeferred.int_publication_id() != messageDeferred->IntPublicationId) {
+        return true;
+    }
+
+    const bool requestHasExt = requestDeferred.has_ext_publication_id();
+    const bool messageHasExt = messageDeferred->ExtPublicationId.has_value();
+    if (requestHasExt != messageHasExt) {
+        return true;
+    }
+    return requestHasExt
+        && requestDeferred.ext_publication_id() != *messageDeferred->ExtPublicationId;
 }
 
 std::optional<TTransactionId> MakeTransactionId(const TTransactionBase* tx)
@@ -81,11 +185,11 @@ TWriteSessionImpl::TWriteSessionImpl(
     , Client(std::move(client))
     , Connections(std::move(connections))
     , DbDriverState(std::move(dbDriverState))
-    , PrevToken(DbDriverState->CredentialsProvider ? DbDriverState->CredentialsProvider->GetAuthInfo() : "")
+    , MaxBlockMessageCount(Settings.BatchFlushMessageCount_)
     , InitSeqNoPromise(NThreading::NewPromise<uint64_t>())
     , WakeupInterval(
-            Settings.BatchFlushInterval_.value_or(TDuration::Zero()) ?
-                std::min(Settings.BatchFlushInterval_.value_or(TDuration::Seconds(1)) / 5, TDuration::MilliSeconds(100))
+            Settings.BatchFlushInterval_ != TDuration::Zero() ?
+                std::min(Settings.BatchFlushInterval_ / 5, TDuration::MilliSeconds(100))
                 :
                 TDuration::MilliSeconds(100)
     )
@@ -122,6 +226,16 @@ void TWriteSessionImpl::Start(const TDuration& delay) {
     }
 
     if (!Started) {
+        NYdb::NIssue::TIssues issues;
+        if (!ValidateWriteSessionSettings(Settings, issues)) {
+            with_lock(Lock) {
+                CloseImpl(
+                    EStatus::BAD_REQUEST,
+                    MakeIssueWithSubIssues("Invalid write session settings", issues));
+            }
+            return;
+        }
+
         with_lock(Lock) {
             HandleWakeUpImpl();
         }
@@ -585,10 +699,26 @@ void TWriteSessionImpl::TrySignalAllAcksReceived(ui64 seqNo)
 {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
+    if (auto deferredIt = WrittenInDeferred.find(seqNo); deferredIt != WrittenInDeferred.end()) {
+        auto& deferred = deferredIt->second;
+        ui64 writeCount = 0;
+        ui64 ackCount = 0;
+        if (deferred.AckState) {
+            std::tie(writeCount, ackCount) = deferred.AckState->OnAck();
+        }
+        LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
+                 MakeOnAckDeferredLogMessage(seqNo, deferred, writeCount, ackCount));
+        Y_ABORT_UNLESS(deferred.UnackedCount > 0);
+        if (--deferred.UnackedCount == 0) {
+            WrittenInDeferred.erase(deferredIt);
+        }
+        return;
+    }
+
     auto p = WrittenInTx.find(seqNo);
     if (p == WrittenInTx.end()) {
         LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
-                 LogPrefixImpl() << "OnAck: seqNo=" << seqNo << ", txId=?");
+                 MakeOnAckPlainLogMessage(seqNo));
         return;
     }
 
@@ -599,7 +729,7 @@ void TWriteSessionImpl::TrySignalAllAcksReceived(ui64 seqNo)
         ++txInfo->AckCount;
 
         LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
-                 LogPrefixImpl() << "OnAck: seqNo=" << seqNo << ", txId=" << txId << ", WriteCount=" << txInfo->WriteCount << ", AckCount=" << txInfo->AckCount);
+                 MakeOnAckTxLogMessage(seqNo, txId, txInfo->WriteCount, txInfo->AckCount));
 
         if (txInfo->CommitCalled && (txInfo->WriteCount == txInfo->AckCount)) {
             txInfo->AllAcksReceived.SetValue(MakeCommitTransactionSuccess());
@@ -630,35 +760,73 @@ void TWriteSessionImpl::DeleteTx(const TTransactionId& txId)
 }
 
 void TWriteSessionImpl::WriteInternal(TContinuationToken&&, TWriteMessage&& message) {
+    auto issues = ValidateDeferredPublicationMessage(message);
+    if (!issues.Empty()) {
+        with_lock(Lock) {
+            CloseImpl(EStatus::BAD_REQUEST, std::move(issues));
+        }
+        return;
+    }
+
     TInstant createdAtValue = message.CreateTimestamp_.value_or(TInstant::Now());
     bool readyToAccept = false;
     size_t bufferSize = message.Data.size();
+    TWriteContext writeContext = std::monostate{};
+    // After ValidateDeferredPublicationMessage: neither Tx nor DeferredPublication is set, or exactly one of them.
+    if (message.DeferredPublication_) {
+        writeContext = std::move(*message.DeferredPublication_);
+    } else if (auto tx = MakeTransactionId(message.GetTxPtr())) {
+        writeContext = std::move(*tx);
+    }
     {
         std::lock_guard guard(Lock);
+        if (!CurrentBatch.Empty()
+            && CurrentBatch.Messages.front().WriteContext != writeContext) {
+            WriteBatchImpl();
+        }
+
         TrySubscribeOnTransactionCommit(message.GetTxPtr());
 
         ui64 seqNo = GetNextIdImpl(message.SeqNo_);
 
-        if (message.GetTxPtr()) {
-            const auto& txId = MakeTransactionId(*message.GetTxPtr());
-            TTransactionInfoPtr txInfo = GetOrCreateTxInfo(txId);
+        if (auto* tx = std::get_if<TTransactionId>(&writeContext)) {
+            TTransactionInfoPtr txInfo = GetOrCreateTxInfo(*tx);
             with_lock(txInfo->Lock) {
                 ++txInfo->WriteCount;
 
                 LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
-                         LogPrefixImpl() << "OnWrite: seqNo=" << seqNo << ", txId=" << txId << ", WriteCount=" << txInfo->WriteCount << ", AckCount=" << txInfo->AckCount);
+                         LogPrefixImpl() << "OnWrite: seqNo=" << seqNo << ", txId=" << *tx << ", WriteCount=" << txInfo->WriteCount << ", AckCount=" << txInfo->AckCount);
             }
-            WrittenInTx[seqNo] = txId;
+            WrittenInTx[seqNo] = *tx;
+        } else if (auto* deferred = std::get_if<TDeferredPublication>(&writeContext)) {
+            auto& ackState = TDeferredPublication::TAccess::AckState(*deferred);
+            if (!ackState->TryOnWrite()) {
+                CloseImpl(
+                    EStatus::BAD_REQUEST,
+                    "Write after Publish/Cancel is not allowed for this deferred publication");
+                return;
+            }
+            auto& inFlight = WrittenInDeferred[seqNo];
+            if (!inFlight.AckState) {
+                inFlight.AckState = ackState;
+                inFlight.IntPublicationId = deferred->IntPublicationId;
+                inFlight.ExtPublicationId = deferred->ExtPublicationId;
+            }
+            ++inFlight.UnackedCount;
+            LOG_LAZY(DbDriverState->Log, TLOG_DEBUG,
+                     LogPrefixImpl() << "OnWrite: seqNo=" << seqNo
+                                     << ", intPublicationId=" << deferred->IntPublicationId
+                                     << ", UnackedCount=" << inFlight.UnackedCount);
         }
 
         CurrentBatch.Add(
                 seqNo, createdAtValue, message.Data, message.Codec, message.OriginalSize,
                 message.MessageMeta_,
-                MakeTransactionId(message.GetTxPtr())
+                std::move(writeContext)
         );
 
-        FlushWriteIfRequiredImpl();
         readyToAccept = OnMemoryUsageChangedImpl(static_cast<i64>(bufferSize)).NowOk;
+        FlushWriteIfRequiredImpl();
     }
     if (readyToAccept) {
         EventsQueue->PushEvent(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
@@ -873,6 +1041,7 @@ void TWriteSessionImpl::InitImpl() {
     for (const auto& attr : Settings.Meta_.Fields) {
         (*init->mutable_write_session_meta())[attr.first] = attr.second;
     }
+
     LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefixImpl() << "Write session: send init request: "<< req.ShortDebugString());
 
     TRACE_LAZY(DbDriverState->Log, "InitRequest",
@@ -1019,6 +1188,39 @@ TStringBuilder TWriteSessionImpl::LogPrefixImpl() const {
     return ret;
 }
 
+TString TWriteSessionImpl::MakeOnAckPlainLogMessage(ui64 seqNo) const {
+    return TStringBuilder() << LogPrefixImpl() << "OnAck: seqNo=" << seqNo;
+}
+
+TString TWriteSessionImpl::MakeOnAckTxLogMessage(
+    ui64 seqNo,
+    const TTransactionId& txId,
+    ui64 writeCount,
+    ui64 ackCount) const
+{
+    return TStringBuilder()
+        << LogPrefixImpl() << "OnAck: seqNo=" << seqNo
+        << ", txId=" << txId
+        << ", WriteCount=" << writeCount
+        << ", AckCount=" << ackCount;
+}
+
+TString TWriteSessionImpl::MakeOnAckDeferredLogMessage(
+    ui64 seqNo,
+    const TDeferredInFlightWrite& deferred,
+    ui64 writeCount,
+    ui64 ackCount) const
+{
+    TStringBuilder log;
+    log << LogPrefixImpl() << "OnAck: seqNo=" << seqNo
+        << ", int_publication_id=" << deferred.IntPublicationId;
+    if (deferred.ExtPublicationId) {
+        log << ", ext_publication_id=" << *deferred.ExtPublicationId;
+    }
+    log << ", WriteCount=" << writeCount << ", AckCount=" << ackCount;
+    return std::move(log);
+}
+
 template<>
 void TPrintable<TWriteSessionEvent::TAcksEvent>::DebugString(TStringBuilder& res, bool) const {
     const auto* self = static_cast<const TWriteSessionEvent::TAcksEvent*>(this);
@@ -1064,8 +1266,10 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
             LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefixImpl() << "Write session established. Init response: " << initResponse.ShortDebugString());
             TRACE_LAZY(DbDriverState->Log, "InitResponse",
                 TRACE_KV("partition_id", initResponse.partition_id()),
-                TRACE_KV("session_id", initResponse.session_id()));
+                TRACE_KV("session_id", initResponse.session_id()),
+                TRACE_KV("is_batching_supported", initResponse.is_batching_supported()));
             SessionId = initResponse.session_id();
+            BatchingSupported = initResponse.is_batching_supported();
 
             auto prevDirectWriteToPartitionId = DirectWriteToPartitionId;
             if (Settings.DirectWriteToPartition_ && !Settings.PartitionId_.has_value()) {
@@ -1124,12 +1328,14 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
             writeStat->TopicQuotedTime = durationConv(stat.topic_quota_wait_time());
 
             for (const auto& ack : batchWriteResponse.acks()) {
-                // TODO: Fill writer statistics
-                uint64_t msgId = GetIdImpl(ack.seq_no());
+                const uint64_t firstMsgId = GetIdImpl(ack.seq_no());
+
+                size_t ackCount = 1;
+                if (!SentPackedMessage.empty() && SentPackedMessage.front().Offset == firstMsgId) {
+                    ackCount = SentPackedMessage.front().MessageCount;
+                }
 
                 Y_ABORT_UNLESS(ack.has_written() || ack.has_skipped() || ack.has_written_in_tx());
-
-                TrySignalAllAcksReceived(msgId);
 
                 TWriteSessionEvent::TWriteAck::EEventState msgWriteStatus;
                 if (ack.has_written_in_tx()) {
@@ -1143,19 +1349,24 @@ TWriteSessionImpl::TProcessSrvMessageResult TWriteSessionImpl::ProcessServerMess
                         : TWriteSessionEvent::TWriteAck::EES_DISCARDED;
                 }
 
-                uint64_t offset = ack.has_written() ? ack.written().offset() : 0;
+                const uint64_t baseOffset = ack.has_written() ? ack.written().offset() : 0;
 
-                acksEvent.Acks.push_back(TWriteSessionEvent::TWriteAck{
-                    msgId,
-                    msgWriteStatus,
-                    TWriteSessionEvent::TWriteAck::TWrittenMessageDetails {
-                        offset,
-                        PartitionId,
-                    },
-                    writeStat,
-                });
+                for (size_t i = 0; i < ackCount; ++i) {
+                    const uint64_t msgId = firstMsgId + i;
+                    TrySignalAllAcksReceived(msgId);
 
-                if (CleanupOnAcknowledgedImpl(msgId)) {
+                    acksEvent.Acks.push_back(TWriteSessionEvent::TWriteAck{
+                        msgId,
+                        msgWriteStatus,
+                        TWriteSessionEvent::TWriteAck::TWrittenMessageDetails {
+                            baseOffset + i,
+                            PartitionId,
+                        },
+                        writeStat,
+                    });
+                }
+
+                if (CleanupOnAcknowledgedImpl(firstMsgId)) {
                     result.Events.emplace_back(TWriteSessionEvent::TReadyToAcceptEvent{IssueContinuationToken()});
                 }
             }
@@ -1182,14 +1393,17 @@ bool TWriteSessionImpl::CleanupOnAcknowledgedImpl(uint64_t id) {
     const auto& sentFront = SentOriginalMessages.front();
     uint64_t size = 0;
     uint64_t compressedSize = 0;
+    size_t packedMessageCount = 1;
     if(!SentPackedMessage.empty() && SentPackedMessage.front().Offset == id) {
-        auto memoryUsage = OnMemoryUsageChangedImpl(-static_cast<i64>(SentPackedMessage.front().Data.size()));
-        result = memoryUsage.NowOk && !memoryUsage.WasOk;
         const auto& front = SentPackedMessage.front();
+        const ui64 memoryToRelease = front.Compressed ? front.Data.size() : front.OriginalMemoryUsage;
+        auto memoryUsage = OnMemoryUsageChangedImpl(-static_cast<i64>(memoryToRelease));
+        result = memoryUsage.NowOk && !memoryUsage.WasOk;
+        packedMessageCount = front.MessageCount;
         if (front.Compressed) {
             compressedSize = front.Data.size();
         } else {
-            size = front.Data.size();
+            size = front.OriginalSize;
         }
 
         (*Counters->MessagesWritten) += front.MessageCount;
@@ -1211,12 +1425,20 @@ bool TWriteSessionImpl::CleanupOnAcknowledgedImpl(uint64_t id) {
     Y_ABORT_UNLESS(Counters->BytesInflightCompressed->Val() >= 0);
     Y_ABORT_UNLESS(Counters->BytesInflightUncompressed->Val() >= 0);
 
-    Y_ABORT_UNLESS(sentFront.Id == id);
+    if (packedMessageCount > 1) {
+        for (size_t i = 0; i < packedMessageCount; ++i) {
+            Y_ABORT_UNLESS(!SentOriginalMessages.empty());
+            Y_ABORT_UNLESS(SentOriginalMessages.front().Id == id + i);
+            WrittenInTx.erase(SentOriginalMessages.front().Id);
+            SentOriginalMessages.pop();
+        }
+    } else {
+        Y_ABORT_UNLESS(sentFront.Id == id);
+        WrittenInTx.erase(id);
+        SentOriginalMessages.pop();
+    }
 
     (*Counters->BytesInflightTotal) = MemoryUsage;
-    SentOriginalMessages.pop();
-
-    WrittenInTx.erase(id);
 
     return result;
 }
@@ -1275,23 +1497,33 @@ void TWriteSessionImpl::CompressImpl(TBlock&& block_) {
     }
     Y_ABORT_UNLESS(block_.Valid);
 
+    const i64 baseSequence = static_cast<i64>(GetSeqNoImpl(block_.Offset));
     std::shared_ptr<TBlock> blockPtr(std::make_shared<TBlock>());
     blockPtr->Move(block_);
     auto lambda = [cbContext = SelfContext,
                    codec = Settings.Codec_,
+                   batchInnerCodec = Settings.BatchInnerCodec_,
                    level = Settings.CompressionLevel_,
+                   baseSequence,
                    isSyncCompression = !CompressionExecutor->IsAsync(),
                    blockPtr,
                    client = Client]() mutable {
         Y_ABORT_UNLESS(!blockPtr->Compressed);
 
-        auto compressedData = CompressBuffer(
-            std::move(client), blockPtr->OriginalDataRefs, codec, level
-        );
-        Y_ABORT_UNLESS(!compressedData.Empty());
-        blockPtr->Data = std::move(compressedData);
-        blockPtr->Compressed = true;
-        blockPtr->CodecID = static_cast<ui32>(codec);
+        const ICodec* codecImpl = TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(codec));
+        TWriteBlockCompression compression{
+            .Codec = codec,
+            .Payloads = blockPtr->OriginalDataRefs,
+            .CreatedAt = blockPtr->CreatedAt,
+            .MessageKeys = blockPtr->MessageKeys,
+            .Data = blockPtr->Data,
+            .CodecID = blockPtr->CodecID,
+            .Compressed = blockPtr->Compressed,
+            .BaseSequence = baseSequence,
+            .BatchInnerCodec = batchInnerCodec,
+            .CompressionLevel = level,
+        };
+        codecImpl->CompressWriteBlock(compression);
         if (auto self = cbContext->LockShared()) {
             self->OnCompressed(std::move(*blockPtr), isSyncCompression);
         }
@@ -1318,9 +1550,13 @@ TMemoryUsageChange TWriteSessionImpl::OnCompressedImpl(TBlock&& block) {
 
     UpdateTimedCountersImpl();
     Y_ABORT_UNLESS(block.Valid);
-    auto memoryUsage = OnMemoryUsageChangedImpl(static_cast<i64>(block.Data.size()) - static_cast<i64>(block.OriginalMemoryUsage));
-    (*Counters->BytesInflightUncompressed) -= block.OriginalSize;
-    (*Counters->BytesInflightCompressed) += block.Data.size();
+
+    TMemoryUsageChange memoryUsage{MemoryUsage <= Settings.MaxMemoryUsage_, MemoryUsage <= Settings.MaxMemoryUsage_};
+    if (block.Compressed) {
+        memoryUsage = OnMemoryUsageChangedImpl(static_cast<i64>(block.Data.size()) - static_cast<i64>(block.OriginalMemoryUsage));
+        (*Counters->BytesInflightUncompressed) -= block.OriginalSize;
+        (*Counters->BytesInflightCompressed) += block.Data.size();
+    }
 
     PackedMessagesToSend.emplace(std::move(block));
 
@@ -1349,15 +1585,15 @@ void TWriteSessionImpl::ResetForRetryImpl() {
         SentPackedMessage.pop();
     }
     uint64_t minId = PackedMessagesToSend.empty() ? NextId + 1 : PackedMessagesToSend.top().Offset;
-    std::queue<TOriginalMessage> freshOriginalMessagesToSend;
+    std::deque<TOriginalMessage> freshOriginalMessagesToSend;
     OriginalMessagesToSend.swap(freshOriginalMessagesToSend);
     while (!SentOriginalMessages.empty()) {
-        OriginalMessagesToSend.emplace(std::move(SentOriginalMessages.front()));
+        OriginalMessagesToSend.emplace_back(std::move(SentOriginalMessages.front()));
         SentOriginalMessages.pop();
     }
     while (!freshOriginalMessagesToSend.empty()) {
-        OriginalMessagesToSend.emplace(std::move(freshOriginalMessagesToSend.front()));
-        freshOriginalMessagesToSend.pop();
+        OriginalMessagesToSend.emplace_back(std::move(freshOriginalMessagesToSend.front()));
+        freshOriginalMessagesToSend.pop_front();
     }
     if (!OriginalMessagesToSend.empty() && OriginalMessagesToSend.front().Id < minId)
         minId = OriginalMessagesToSend.front().Id;
@@ -1371,8 +1607,10 @@ void TWriteSessionImpl::FlushWriteIfRequiredImpl() {
 
     if (!CurrentBatch.Empty() && !CurrentBatch.FlushRequested) {
         MessagesAcquired += static_cast<uint64_t>(CurrentBatch.Acquire());
-        if (TInstant::Now() - CurrentBatch.StartedAt >= Settings.BatchFlushInterval_.value_or(TDuration::Zero())
-            || CurrentBatch.CurrentSize >= Settings.BatchFlushSizeBytes_.value_or(0)
+        if (TInstant::Now() - CurrentBatch.StartedAt >= Settings.BatchFlushInterval_
+            || (Settings.BatchFlushSizeBytes_.has_value()
+                && (Settings.BatchFlushSizeBytes_.value() == 0
+                    || CurrentBatch.CurrentSize >= Settings.BatchFlushSizeBytes_.value()))
             || CurrentBatch.CurrentSize >= MaxBlockSize
             || CurrentBatch.Messages.size() >= MaxBlockMessageCount
             || CurrentBatch.HasCodec()
@@ -1393,6 +1631,24 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
     );
 
     Y_ABORT_UNLESS(CurrentBatch.Messages.size() <= MaxBlockMessageCount);
+
+    while (!CurrentBatch.Acquired) {
+        if (!CurrentBatch.Acquire()) {
+            break;
+        }
+    }
+
+    // TBuffer::Append in Acquire() may reallocate the batch buffer, invalidating
+    // DataRefs of previously acquired messages. Payloads are laid out in the buffer
+    // contiguously in message order, so re-base all refs onto the final buffer.
+    {
+        size_t dataOffset = 0;
+        for (auto& message : CurrentBatch.Messages) {
+            Y_ABORT_UNLESS(dataOffset + message.DataRef.size() <= CurrentBatch.Data.size());
+            message.DataRef = std::string_view(CurrentBatch.Data.data() + dataOffset, message.DataRef.size());
+            dataOffset += message.DataRef.size();
+        }
+    }
 
     const bool skipCompression = Settings.Codec_ == ECodec::RAW || CurrentBatch.HasCodec();
     if (!skipCompression && Settings.CompressionExecutor_->IsAsync()) {
@@ -1419,28 +1675,36 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
             block.MessageCount += 1;
             const auto& datum = currMessage.DataRef;
             block.OriginalSize += datum.size();
-            block.OriginalMemoryUsage = CurrentBatch.Data.size();
+            block.OriginalMemoryUsage += datum.size();
             block.OriginalDataRefs.emplace_back(datum);
+            block.CreatedAt.emplace_back(createTs);
+            block.MessageKeys.emplace_back(GetMessageKey(currMessage.MessageMeta));
             if (CurrentBatch.Messages[i].Codec.has_value()) {
                 Y_ABORT_UNLESS(CurrentBatch.Messages.size() == 1);
                 block.CodecID = static_cast<ui32>(*currMessage.Codec);
                 block.OriginalSize = currMessage.OriginalSize;
-                block.Compressed = false;
+                block.Compressed = true;
             }
             size += datum.size();
             UpdateTimedCountersImpl();
-            (*Counters->BytesInflightUncompressed) += datum.size();
+            if (block.Compressed) {
+                (*Counters->BytesInflightCompressed) += datum.size();
+            } else {
+                (*Counters->BytesInflightUncompressed) += datum.size();
+            }
             (*Counters->MessagesInflight)++;
             if (!currMessage.MessageMeta.empty()) {
-                OriginalMessagesToSend.emplace(id, createTs, datum.size(),
+                OriginalMessagesToSend.emplace_back(id, createTs, datum.size(),
                                                std::move(currMessage.MessageMeta),
-                                               std::move(currMessage.Tx));
+                                               std::move(currMessage.WriteContext));
             } else {
-                OriginalMessagesToSend.emplace(id, createTs, datum.size(),
-                                               std::move(currMessage.Tx));
+                OriginalMessagesToSend.emplace_back(id, createTs, datum.size(),
+                                               std::move(currMessage.WriteContext));
             }
         }
+
         block.Data = std::move(CurrentBatch.Data);
+
         if (skipCompression) {
             PackedMessagesToSend.emplace(std::move(block));
         } else {
@@ -1454,9 +1718,7 @@ size_t TWriteSessionImpl::WriteBatchImpl() {
     return size;
 }
 
-size_t GetMaxGrpcMessageSize() {
-    return 120_MB;
-}
+namespace NGrpc = NWriteSessionGrpc;
 
 bool TWriteSessionImpl::IsReadyToSendNextImpl() const {
     Y_ABORT_UNLESS(Lock.IsLocked());
@@ -1481,11 +1743,54 @@ void TWriteSessionImpl::UpdateTokenIfNeededImpl() {
 
     LOG_LAZY(DbDriverState->Log, TLOG_DEBUG, LogPrefixImpl() << "Write session: try to update token");
 
-    if (!DbDriverState->CredentialsProvider || UpdateTokenInProgress || !SessionEstablished) {
+    auto credentialsProvider = DbDriverState->GetCredentialsProvider();
+    if (!credentialsProvider || UpdateTokenInProgress || !SessionEstablished || Aborting) {
         return;
     }
 
-    auto token = DbDriverState->CredentialsProvider->GetAuthInfo();
+    auto authInfo = credentialsProvider->GetAuthInfoAsync();
+    if (authInfo.IsReady()) {
+        UpdateTokenImpl(authInfo);
+        return;
+    }
+    UpdateTokenInProgress = true;
+    try {
+        authInfo.Subscribe([cbContext = SelfContext](const auto& future) {
+            if (auto self = cbContext->LockShared()) try {
+                self->Connections->ScheduleCallback(TDuration::Zero(), [cbContext, future](bool ok) {
+                    if (auto self = cbContext->LockShared()) {
+                        if (!ok) {
+                            self->UpdateTokenInProgress = false;
+                            return;
+                        }
+                        std::lock_guard guard(self->Lock);
+                        self->UpdateTokenImpl(future);
+                    }
+                });
+            } catch (...) {
+                self->UpdateTokenInProgress = false;
+            }
+        });
+    } catch (...) {
+        UpdateTokenInProgress = false;
+    }
+}
+
+void TWriteSessionImpl::UpdateTokenImpl(const NThreading::TFuture<std::string>& future) {
+    Y_ABORT_UNLESS(Lock.IsLocked());
+
+    UpdateTokenInProgress = false;
+    if (!SessionEstablished || Aborting) {
+        return;
+    }
+
+    std::string token;
+    try {
+        token = future.GetValue();
+    } catch (...) {
+        CloseImpl(EStatus::CLIENT_UNAUTHENTICATED, CurrentExceptionMessage());
+        return;
+    }
     if (token == PrevToken) {
         return;
     }
@@ -1510,7 +1815,117 @@ bool TWriteSessionImpl::TxIsChanged(const Ydb::Topic::StreamWriteMessage_WriteRe
 
     Y_ABORT_UNLESS(!OriginalMessagesToSend.empty());
 
-    return GetTransactionId(*writeRequest) != GetTransactionId(OriginalMessagesToSend.front().Tx);
+    return GetTransactionId(*writeRequest) != GetTransactionId(OriginalMessagesToSend.front().WriteContext);
+}
+
+bool TWriteSessionImpl::DeferredPublishIsChanged(const Ydb::Topic::StreamWriteMessage_WriteRequest& writeRequest) const
+{
+    Y_ABORT_UNLESS(Lock.IsLocked());
+
+    if (!writeRequest.messages_size()) {
+        return false;
+    }
+
+    Y_ABORT_UNLESS(!OriginalMessagesToSend.empty());
+
+    return DeferredPublishIdentityChanged(
+        writeRequest,
+        OriginalMessagesToSend.front().WriteContext);
+}
+
+void TWriteSessionImpl::SendBatchBlock(
+        const TBlock& block,
+        Ydb::Topic::StreamWriteMessage_WriteRequest* writeRequest)
+{
+    Y_ABORT_UNLESS(Lock.IsLocked());
+    Y_ABORT_UNLESS(writeRequest);
+    Y_ABORT_UNLESS(block.MessageCount > 1);
+
+    if (!BatchingSupported) {
+        ThrowFatalError("Server does not support messages batching");
+    }
+
+    Y_ABORT_UNLESS(!OriginalMessagesToSend.empty());
+    std::vector<TOriginalMessage> batchMessages;
+    batchMessages.reserve(block.MessageCount);
+    for (size_t i = 0; i < block.MessageCount; ++i) {
+        Y_ABORT_UNLESS(!OriginalMessagesToSend.empty());
+        batchMessages.emplace_back(std::move(OriginalMessagesToSend.front()));
+        OriginalMessagesToSend.pop_front();
+    }
+
+    const auto& firstMessage = batchMessages.front();
+    if (writeRequest->messages_size() == 0) {
+        SetWriteContext(*writeRequest, firstMessage.WriteContext);
+    }
+    auto* msgData = writeRequest->add_messages();
+
+    msgData->set_seq_no(static_cast<i64>(GetSeqNoImpl(batchMessages.back().Id)));
+    *msgData->mutable_created_at() =
+        ::google::protobuf::util::TimeUtil::MillisecondsToTimestamp(firstMessage.CreatedAt.MilliSeconds());
+
+    for (auto& [k, v] : firstMessage.MessageMeta) {
+        auto* pair = msgData->add_metadata_items();
+        pair->set_key(TStringType{k});
+        pair->set_value(TStringType{v});
+    }
+    for (size_t i = 1; i < batchMessages.size(); ++i) {
+        for (auto& [k, v] : batchMessages[i].MessageMeta) {
+            if (k != NGrpc::PARTITION_KEY_META_KEY) {
+                continue;
+            }
+            auto* pair = msgData->add_metadata_items();
+            pair->set_key(TStringType{k});
+            pair->set_value(TStringType{v});
+        }
+    }
+
+    msgData->set_uncompressed_size(static_cast<i64>(block.OriginalSize));
+    msgData->set_data(block.Data.data(), block.Data.size());
+
+    for (auto& message : batchMessages) {
+        SentOriginalMessages.emplace(std::move(message));
+    }
+}
+
+void TWriteSessionImpl::SendStandardBlock(
+        const TBlock& block,
+        Ydb::Topic::StreamWriteMessage_WriteRequest* writeRequest)
+{
+    Y_ABORT_UNLESS(Lock.IsLocked());
+    Y_ABORT_UNLESS(writeRequest);
+    Y_ABORT_UNLESS(block.MessageCount == 1);
+
+    for (size_t i = 0; i != block.MessageCount; ++i) {
+        Y_ABORT_UNLESS(!OriginalMessagesToSend.empty());
+
+        auto& message = OriginalMessagesToSend.front();
+        if (writeRequest->messages_size() == 0) {
+            SetWriteContext(*writeRequest, message.WriteContext);
+        }
+        auto* msgData = writeRequest->add_messages();
+
+        msgData->set_seq_no(GetSeqNoImpl(message.Id));
+        *msgData->mutable_created_at() =
+            ::google::protobuf::util::TimeUtil::MillisecondsToTimestamp(message.CreatedAt.MilliSeconds());
+
+        for (auto& [k, v] : message.MessageMeta) {
+            auto* pair = msgData->add_metadata_items();
+            pair->set_key(TStringType{k});
+            pair->set_value(TStringType{v});
+        }
+        SentOriginalMessages.emplace(std::move(message));
+        OriginalMessagesToSend.pop_front();
+
+        msgData->set_uncompressed_size(block.OriginalSize);
+        if (block.Compressed) {
+            msgData->set_data(block.Data.data(), block.Data.size());
+        } else {
+            for (auto& buffer : block.OriginalDataRefs) {
+                msgData->set_data(buffer.data(), buffer.size());
+            }
+        }
+    }
 }
 
 void TWriteSessionImpl::SendImpl() {
@@ -1523,10 +1938,10 @@ void TWriteSessionImpl::SendImpl() {
 
         ui32 prevCodec = 0;
 
-        ui64 currentSize = 0;
+        NGrpc::TRequestSizeLimiter sizeLimiter(2);
 
         // Send blocks while we can without messages reordering.
-        while (IsReadyToSendNextImpl() && currentSize < GetMaxGrpcMessageSize()) {
+        while (IsReadyToSendNextImpl()) {
             const auto& block = PackedMessagesToSend.top();
             Y_ABORT_UNLESS(block.Valid);
             if (writeRequest->messages_size() > 0 && prevCodec != block.CodecID) {
@@ -1535,47 +1950,31 @@ void TWriteSessionImpl::SendImpl() {
             if (TxIsChanged(writeRequest)) {
                 break;
             }
+            if (DeferredPublishIsChanged(*writeRequest)) {
+                break;
+            }
+
+            const size_t blockSize = NGrpc::EstimateTopicWriteRequestBlockSize(block, OriginalMessagesToSend, sizeLimiter.Empty());
+            if (!sizeLimiter.CanAdd(blockSize)) {
+                break;
+            }
+
             prevCodec = block.CodecID;
             writeRequest->set_codec(static_cast<i32>(block.CodecID));
-            Y_ABORT_UNLESS(block.MessageCount == 1);
-            for (size_t i = 0; i != block.MessageCount; ++i) {
-                Y_ABORT_UNLESS(!OriginalMessagesToSend.empty());
 
-                auto& message = OriginalMessagesToSend.front();
-                auto* msgData = writeRequest->add_messages();
+            const bool sendAsBatchBlock = block.MessageCount > 1;
 
-                if (message.Tx) {
-                    writeRequest->mutable_tx()->set_id(message.Tx->TxId);
-                    writeRequest->mutable_tx()->set_session(message.Tx->SessionId);
-                }
-
-                msgData->set_seq_no(GetSeqNoImpl(message.Id));
-                *msgData->mutable_created_at() = ::google::protobuf::util::TimeUtil::MillisecondsToTimestamp(message.CreatedAt.MilliSeconds());
-
-                for (auto& [k, v] : message.MessageMeta) {
-                    auto* pair = msgData->add_metadata_items();
-                    pair->set_key(TStringType{k});
-                    pair->set_value(TStringType{v});
-                }
-                SentOriginalMessages.emplace(std::move(message));
-                OriginalMessagesToSend.pop();
-
-                msgData->set_uncompressed_size(block.OriginalSize);
-                if (block.Compressed) {
-                    msgData->set_data(block.Data.data(), block.Data.size());
-                } else {
-                    for (auto& buffer: block.OriginalDataRefs) {
-                        msgData->set_data(buffer.data(), buffer.size());
-                    }
-                }
+            if (sendAsBatchBlock) {
+                SendBatchBlock(block, writeRequest);
+            } else {
+                SendStandardBlock(block, writeRequest);
             }
 
             TBlock moveBlock;
             moveBlock.Move(block);
             SentPackedMessage.emplace(std::move(moveBlock));
             PackedMessagesToSend.pop();
-
-            currentSize += writeRequest->ByteSizeLong();
+            sizeLimiter.Add(blockSize);
         }
         UpdateTokenIfNeededImpl();
         LOG_LAZY(DbDriverState->Log,
@@ -1596,6 +1995,12 @@ bool TWriteSessionImpl::Close(TDuration closeTimeout) {
     {
         std::lock_guard guard(Lock);
         LOG_LAZY(DbDriverState->Log, TLOG_INFO, LogPrefixImpl() << "Write session: close. Timeout " << closeTimeout);
+        // Messages buffered in CurrentBatch are not yet in OriginalMessagesToSend,
+        // so the wait loop below would not see them. Flush them to avoid losing
+        // a partially filled batch on close.
+        if (!CurrentBatch.Empty()) {
+            WriteBatchImpl();
+        }
     }
     auto startTime = TInstant::Now();
     auto remaining = closeTimeout;
@@ -1715,8 +2120,14 @@ void TWriteSessionImpl::AbortImpl() {
         Cancel(ClientContext);
         ClientContext.reset(); // removes context from contexts set from underlying gRPC-client.
 
-        CancelTransactions();
+        CancelPendingWriteAcks();
     }
+}
+
+void TWriteSessionImpl::CancelPendingWriteAcks()
+{
+    CancelTransactions();
+    CancelDeferredPublications();
 }
 
 void TWriteSessionImpl::CancelTransactions()
@@ -1731,6 +2142,21 @@ void TWriteSessionImpl::CancelTransactions()
     }
 
     Txs.clear();
+}
+
+void TWriteSessionImpl::CancelDeferredPublications()
+{
+    std::unordered_map<std::shared_ptr<TDeferredPublicationAckState>, ui64> unackedByState;
+    for (const auto& [_, deferred] : WrittenInDeferred) {
+        if (deferred.AckState) {
+            unackedByState[deferred.AckState] += deferred.UnackedCount;
+        }
+    }
+    WrittenInDeferred.clear();
+
+    for (const auto& [state, unackedCount] : unackedByState) {
+        state->OnUnackedAbort(unackedCount);
+    }
 }
 
 void TWriteSessionImpl::CloseImpl(EStatus statusCode, NYdb::NIssue::TIssues&& issues) {

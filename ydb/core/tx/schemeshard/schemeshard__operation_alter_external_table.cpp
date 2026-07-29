@@ -212,32 +212,6 @@ private:
         return externalTable;
     }
 
-    void CreateTransaction(const TOperationContext& context,
-                           const TPathId& externalTablePathId,
-                           const TPathId& externalDataSourcePathId) const {
-        TTxState& txState = context.SS->CreateTx(OperationId,
-                                                 TTxState::TxAlterExternalTable,
-                                                 externalTablePathId,
-                                                 externalDataSourcePathId);
-        txState.Shards.clear();
-    }
-
-    void RegisterParentPathDependencies(const TOperationContext& context,
-                                        const TPath& parentPath) const {
-        if (parentPath.Base()->HasActiveChanges()) {
-            const auto parentTxId = parentPath.Base()->PlannedToCreate()
-                                   ? parentPath.Base()->CreateTxId
-                                   : parentPath.Base()->LastTxId;
-            context.OnComplete.Dependence(parentTxId, OperationId.GetTxId());
-        }
-    }
-
-    void AdvanceTransactionStateToPropose(const TOperationContext& context,
-                                          NIceDb::TNiceDb& db) const {
-        context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
-        context.OnComplete.ActivateTx(OperationId);
-    }
-
     static void LinkExternalDataSourceWithExternalTable(
         const TExternalDataSourceInfo::TPtr& externalDataSource,
         const TPathElement::TPtr& externalTable,
@@ -258,36 +232,6 @@ private:
         }
     }
 
-    void PersistExternalTable(
-        const TOperationContext& context,
-        NIceDb::TNiceDb& db,
-        const TPathElement::TPtr& externalTable,
-        const TExternalTableInfo::TPtr& externalTableInfo,
-        const TExternalTableInfo::TPtr& oldExternalTableInfo,
-        const TPathId& externalDataSourcePathId,
-        const TExternalDataSourceInfo::TPtr& externalDataSource,
-        const TPathId& oldExternalDataSourcePathId,
-        const TExternalDataSourceInfo::TPtr& oldExternalDataSource,
-        bool isSameDataSource) const {
-        context.SS->ExternalTables[externalTable->PathId] = externalTableInfo;
-
-        context.SS->PersistPath(db, externalTable->PathId);
-
-        if (!isSameDataSource) {
-            context.SS->PersistExternalDataSource(db, externalDataSourcePathId, externalDataSource);
-            context.SS->PersistExternalDataSource(db, oldExternalDataSourcePathId, oldExternalDataSource);
-        }
-
-        for (const auto& [oldColId, _] : oldExternalTableInfo->Columns) {
-            if (!externalTableInfo->Columns.contains(oldColId)) {
-                db.Table<Schema::MigratedColumns>().Key(externalTable->PathId.OwnerId, externalTable->PathId.LocalPathId, oldColId).Delete();
-            }
-        }
-
-        context.SS->PersistExternalTable(db, externalTable->PathId, externalTableInfo);
-        context.SS->PersistTxState(db, OperationId);
-    }
-
 public:
     using TSubOperation::TSubOperation;
 
@@ -301,7 +245,7 @@ public:
 
         LOG_N("TAlterExternalTable Propose"
             << ": opId# " << OperationId
-            << ", path# " << parentPathStr << "/" << name << ", ReplaceIfExists: " << externalTableDescription.GetReplaceIfExists());
+            << ", path# " << parentPathStr << "/" << name << ", ReplaceIfExists: " << Transaction.GetReplaceIfExists());
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
                                                    static_cast<ui64>(OperationId.GetTxId()),
@@ -368,12 +312,27 @@ public:
         AddPathInSchemeShard(result, dstPath);
 
         const auto externalTable = ReplaceExternalTablePathElement(dstPath);
-        CreateTransaction(context, externalTable->PathId, dataSourcePath->PathId);
 
-        NIceDb::TNiceDb db(context.GetDB());
+        auto guard = context.DbGuard();
 
-        RegisterParentPathDependencies(context, parentPath);
-        AdvanceTransactionStateToPropose(context, db);
+        context.MemChanges.GrabPath(context.SS, externalTable->PathId);
+        context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
+        context.MemChanges.GrabExternalTable(context.SS, externalTable->PathId);
+        context.MemChanges.GrabExternalDataSource(context.SS, dataSourcePath.Base()->PathId);
+        if (!IsSameDataSource) {
+            context.MemChanges.GrabPath(context.SS, dataSourcePath.Base()->PathId);
+            context.MemChanges.GrabExternalDataSource(context.SS, OldDataSourcePathId);
+        }
+        context.MemChanges.GrabNewTxState(context.SS, OperationId);
+
+        context.DbChanges.PersistPath(externalTable->PathId);
+        context.DbChanges.PersistPath(parentPath.Base()->PathId);
+        context.DbChanges.PersistExternalTable(externalTable->PathId);
+        if (!IsSameDataSource) {
+            context.DbChanges.PersistExternalDataSource(dataSourcePath.Base()->PathId);
+            context.DbChanges.PersistExternalDataSource(OldDataSourcePathId);
+        }
+        context.DbChanges.PersistTxState(OperationId);
 
         LinkExternalDataSourceWithExternalTable(externalDataSource,
                                                 externalTable,
@@ -381,10 +340,24 @@ public:
                                                 oldDataSource,
                                                 IsSameDataSource);
 
-        PersistExternalTable(context, db, externalTable, externalTableInfo, oldExternalTableInfo,
-                             dataSourcePath->PathId, externalDataSource,
-                             OldDataSourcePathId, oldDataSource,
-                             IsSameDataSource);
+        // Carry over removed columns with DeleteVersion set (soft-delete, like regular tables)
+        for (const auto& [oldColId, oldCol] : oldExternalTableInfo->Columns) {
+            if (!externalTableInfo->Columns.contains(oldColId)) {
+                auto deletedCol = oldCol;
+                deletedCol.DeleteVersion = externalTableInfo->AlterVersion;
+                externalTableInfo->Columns[oldColId] = deletedCol;
+            }
+        }
+
+        context.SS->ExternalTables[externalTable->PathId] = externalTableInfo;
+
+        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterExternalTable,
+                                                  externalTable->PathId, dataSourcePath.Base()->PathId);
+        txState.Shards.clear();
+        txState.State = TTxState::Propose;
+        context.OnComplete.ActivateTx(OperationId);
+
+        RegisterParentPathDependencies(OperationId, context, parentPath);
 
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId,
                                                           dstPath,
@@ -398,7 +371,6 @@ public:
     void AbortPropose(TOperationContext& context) override {
         LOG_N("TAlterExternalTable AbortPropose"
             << ": opId# " << OperationId);
-        Y_ABORT("no AbortPropose for TAlterExternalTable");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

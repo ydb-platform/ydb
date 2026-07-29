@@ -15,5 +15,6 @@ constexpr TStringBuf WriteName = "Write!";
 constexpr TStringBuf ConfigureName = "Configure!";
 constexpr TStringBuf ConsName = "Cons!";
 constexpr TStringBuf SeqName = "Seq!";
+constexpr TStringBuf MaterializeName = "Materialize!";
 
 } // namespace NYql

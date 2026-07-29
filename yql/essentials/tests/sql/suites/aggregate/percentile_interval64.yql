@@ -1,0 +1,1 @@
+select EnsureType(Percentile(CAST(key AS Interval64), 0.5), Interval64?) from (select Interval64('P1D') as key);

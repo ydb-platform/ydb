@@ -1400,5 +1400,5 @@ std::unique_ptr<MessageReader> MessageReader::Open(
 
 }
 
-}  // namespace ipc::NDqs
-}  // namespace arrow
+} // namespace ipc::NDqs
+} // namespace arrow

@@ -76,6 +76,7 @@ class TPersistentBufferWriterLoadTestActor : public TActorBootstrapped<TPersiste
     NDDisk::TQueryCredentials Credentials;
     bool Finished = false;
     bool Connected = false;
+    bool CleanupEraseSent = false;
     bool DisconnectSent = false;
     bool TestStarted = false;
 
@@ -155,8 +156,7 @@ public:
         DDiskSlotId = ddiskId.GetDDiskSlotId();
         DDiskServiceId = MakeBlobStoragePersistentBufferId(DDiskNodeId, DDiskPDiskId, DDiskSlotId);
 
-        Credentials.TabletId = Tag ? Tag : 1;
-        Credentials.Generation = 1;
+        Credentials = NDDisk::TQueryCredentials::ToPersistentBuffer(Tag ? Tag : 1, 1, std::nullopt);
 
         FillRatio = cmd.GetFillRatio();
         Y_ABORT_UNLESS(FillRatio <= 100, "FillRatio percentage should be less than or equal to 100");
@@ -271,17 +271,20 @@ public:
     }
 
     void CheckDie(const TActorContext& ctx) {
-        if (!MaxInFlight && !InFlight) {
-            if (Connected && !DisconnectSent) {
-                auto eraseEv = std::make_unique<NDDisk::TEvErasePersistentBuffer>(Credentials, Lsns.back().first);
-                SendRequest(ctx, std::move(eraseEv), NextRequestIdx++);
-                DisconnectSent = true;
-                auto ev = std::make_unique<NDDisk::TEvDisconnect>();
-                Credentials.Serialize(ev->Record.MutableCredentials());
-                SendRequest(ctx, std::move(ev));
-            } else {
-                FinishAndDie(ctx);
-            }
+        if (MaxInFlight || InFlight) {
+            return;
+        }
+        if (!Connected) {
+            FinishAndDie(ctx);
+        } else if (!CleanupEraseSent && !Lsns.empty()) {
+            CleanupEraseSent = true;
+            auto eraseEv = std::make_unique<NDDisk::TEvErasePersistentBuffer>(Credentials, Lsns.back().first);
+            SendRequest(ctx, std::move(eraseEv), NextRequestIdx++);
+        } else if (!DisconnectSent) {
+            DisconnectSent = true;
+            auto ev = std::make_unique<NDDisk::TEvDisconnect>();
+            Credentials.Serialize(ev->Record.MutableCredentials());
+            SendRequest(ctx, std::move(ev));
         }
     }
 
@@ -346,8 +349,10 @@ public:
                     Report->Size += it.second;
                 }
                 auto msg = std::make_unique<NDDisk::TEvReadPersistentBuffer>();
-                NDDisk::TQueryCredentials creds = Credentials;
-                creds.FromPersistentBuffer = true;
+                auto creds = NDDisk::TQueryCredentials::ForInternal(
+                    Credentials.TabletId,
+                    Credentials.Generation,
+                    Credentials.DDiskInstanceGuid);
                 creds.Serialize(msg->Record.MutableCredentials());
                 msg->Record.SetLsn(it.first);
                 msg->Record.SetGeneration(Credentials.Generation);
@@ -424,7 +429,11 @@ public:
         if (!ok) {
             Cerr << "EraseError: " << (ui32)msg.GetStatus() << " "<< msg.GetErrorReason() << Endl;
         }
-        if (Finished || DisconnectSent) {
+        if (Finished) {
+            return;
+        }
+        if (CleanupEraseSent) {
+            CheckDie(ctx);
             return;
         }
         const ui64 requestIdx = ev->Cookie;

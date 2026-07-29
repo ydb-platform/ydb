@@ -1,12 +1,15 @@
 from _common import rootrel_arc_src
+from ymake import macro, Unit
 
 
-def oncredits_disclaimer(unit, *args):
+@macro
+def CREDITS_DISCLAIMER(unit: Unit, *args: tuple[str, ...]):
     if unit.get('WITH_CREDITS'):
         unit.message(["warn", "CREDITS WARNING: {}".format(' '.join(args))])
 
 
-def oncheck_contrib_credits(unit, *args):
+@macro
+def CHECK_CONTRIB_CREDITS(unit: Unit, *args: tuple[str, ...]):
     module_path = rootrel_arc_src(unit.path(), unit)
     excepts = set()
     if 'EXCEPT' in args:

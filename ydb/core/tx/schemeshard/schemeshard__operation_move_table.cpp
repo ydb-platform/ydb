@@ -275,6 +275,9 @@ public:
             Y_ABORT_UNLESS(context.SS->Tables.contains(srcPath.Base()->PathId));
 
             TTableInfo::TPtr tableInfo = TTableInfo::DeepCopy(*context.SS->Tables.at(srcPath.Base()->PathId));
+            // report TTableInfo::VerifyConsistency() time
+            context.SS->TabletCounters->Cumulative()[COUNTER_TABLE_PARTITIONS_CONSISTENCY_CHECK_TIME_NS].Increment(tableInfo->LastVerifyConsistencyTime);
+
             tableInfo->ResetDescriptionCache();
             tableInfo->AlterVersion += 1;
 
@@ -825,6 +828,7 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .NotBackupTable()
+                .NotReadOnlyColumnTable()
                 .NotAsyncReplicaTable()
                 .NotUnderTheSameOperation(OperationId.GetTxId())
                 .NotUnderOperation();

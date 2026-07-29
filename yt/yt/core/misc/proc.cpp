@@ -3,12 +3,13 @@
 #include <yt/yt/core/logging/log.h>
 
 #include <yt/yt/core/misc/common.h>
-#include <yt/yt/core/misc/error_code.h>
 #include <yt/yt/core/misc/fs.h>
 
 #include <yt/yt/core/ytree/convert.h>
 
 #include <yt/yt/core/misc/fs.h>
+
+#include <library/cpp/yt/error/error_code.h>
 
 #include <library/cpp/yt/misc/enum.h>
 
@@ -324,16 +325,6 @@ std::vector<int> GetPidsUnderParent(int targetPid)
     Y_UNUSED(targetPid);
     return {};
 #endif
-}
-
-size_t GetCurrentProcessId()
-{
-    return GetPID();
-}
-
-size_t GetCurrentThreadId()
-{
-    return TThread::CurrentThreadNumericId();
 }
 
 std::vector<size_t> GetCurrentProcessThreadIds()

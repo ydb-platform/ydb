@@ -77,7 +77,7 @@ public:
             auto mapEntry = entry->AsMap();
             auto labels = mapEntry->FindChild("labels")->AsMap();
 
-            auto sensor = labels->FindChildValue<TString>("sensor");
+            auto sensor = labels->FindChildValue<std::string>("sensor");
 
             if (!sensor ||
                 sensor != "yt.action_queue.enqueued")
@@ -91,8 +91,8 @@ public:
             if (auto threadName = labels->FindChildValue<std::string>("thread")) {
                 EXPECT_EQ(threadName, "ActionQueue");
 
-                if (auto bucketName = labels->FindChildValue<TString>("bucket")) {
-                    if (auto queueName = labels->FindChildValue<TString>("queue")) {
+                if (auto bucketName = labels->FindChildValue<std::string>("bucket")) {
+                    if (auto queueName = labels->FindChildValue<std::string>("queue")) {
                         enqueuedPerQueue[TEnumTraits<EQueues>::FromString(*queueName)] = *value;
                         continue;
                     }

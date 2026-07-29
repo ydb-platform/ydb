@@ -1,6 +1,6 @@
 #include "schemeshard_impl.h"
 
-#define LOG_N(stream) LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << Self->SelfTabletId() << "][ForcedCompaction] " << stream)
+#define LOG_D(stream) LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << Self->SelfTabletId() << "][ForcedCompaction] " << stream)
 
 namespace NKikimr::NSchemeShard {
 
@@ -18,7 +18,7 @@ struct TSchemeShard::TForcedCompaction::TTxCancel: public TRwTxBase {
 
     void DoExecute(TTransactionContext &txc, const TActorContext &ctx) override {
         const auto& request = Request->Get()->Record;
-        LOG_N("TForcedCompaction::TTxCancel DoExecute " << request.ShortDebugString());
+        LOG_D("TForcedCompaction::TTxCancel DoExecute " << request.ShortDebugString());
 
         auto response = MakeHolder<TEvForcedCompaction::TEvCancelResponse>(request.GetTxId());
         TPath database = TPath::Resolve(request.GetDatabaseName(), Self);
@@ -92,15 +92,15 @@ struct TSchemeShard::TForcedCompaction::TTxCancel: public TRwTxBase {
         forcedCompactionInfo.ShardsInFlight.clear();
 
         Self->CancellingForcedCompactions.emplace_back(*forcedCompactionInfoPtr, Request->Sender, request.GetTxId(), Request->Cookie);
+        Self->ForcedCompactionNeedsImmediatePersist = true;
 
         SideEffects.ApplyOnExecute(Self, txc, ctx);
     }
 
     void DoComplete(const TActorContext &ctx) override {
-        LOG_N("TForcedCompaction::TTxCancel DoComplete " << Request->Get()->Record.ShortDebugString());
+        LOG_D("TForcedCompaction::TTxCancel DoComplete " << Request->Get()->Record.ShortDebugString());
+        Self->ScheduleForcedCompactionProgress(ctx);
         SideEffects.ApplyOnComplete(Self, ctx);
-        Self->ForcedCompactionProgressStartTime = ctx.Now();
-        Self->Execute(Self->CreateTxProgressForcedCompaction());
     }
 
 private:
@@ -115,7 +115,6 @@ private:
             auto& issue = *record.MutableIssues()->Add();
             issue.set_severity(NYql::TSeverityIds::S_ERROR);
             issue.set_message(errorMessage);
-
         }
 
         SideEffects.Send(Request->Sender, std::move(response), 0, Request->Cookie);

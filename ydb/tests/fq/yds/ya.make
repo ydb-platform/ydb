@@ -28,7 +28,6 @@ TEST_SRCS(
     test_bad_syntax.py
     test_big_state.py
     test_continue_mode.py
-    test_cpu_quota.py
     test_delete_read_rules_after_abort_by_system.py
     test_disposition.py
     test_eval.py

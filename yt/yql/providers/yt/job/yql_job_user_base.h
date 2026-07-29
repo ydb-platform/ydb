@@ -95,6 +95,8 @@ protected:
 
     virtual void ChangeMkqlIOSpecIfNeeded();
 
+    virtual void PostInitMkqlIOSpec();
+
     void Do();
 
 protected:

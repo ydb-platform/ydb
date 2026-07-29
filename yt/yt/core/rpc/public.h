@@ -26,7 +26,13 @@ class TCredentialsExt;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct IBackend;
+constexpr auto DefaultProtocolName = "yt-tcp"_sb;
+DECLARE_REFCOUNTED_STRUCT(TMultiProtocolClientConfig)
+DECLARE_REFCOUNTED_STRUCT(TMultiProtocolServerConfig)
+
 struct TStreamingParameters;
+struct TDirectPlacementTransferParameters;
 struct TStreamingPayload;
 struct TStreamingFeedback;
 
@@ -64,6 +70,7 @@ DECLARE_REFCOUNTED_STRUCT(IServer)
 DECLARE_REFCOUNTED_STRUCT(IService)
 DECLARE_REFCOUNTED_STRUCT(IServiceWithReflection)
 DECLARE_REFCOUNTED_STRUCT(IServiceContext)
+DECLARE_REFCOUNTED_STRUCT(IDirectPlacementTransfer)
 DECLARE_REFCOUNTED_STRUCT(IChannel)
 DECLARE_REFCOUNTED_STRUCT(IThrottlingChannel)
 DECLARE_REFCOUNTED_STRUCT(IChannelFactory)

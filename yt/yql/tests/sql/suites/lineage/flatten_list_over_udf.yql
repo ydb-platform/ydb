@@ -1,0 +1,15 @@
+USE plato;
+
+$type = Struct<outer:Struct<inner:List<Struct<a:Uint64>>>?>;
+
+$phrases = SELECT
+    key,
+    Yson::ConvertTo(Yson::From(TableRow()), $type).outer.inner AS inner
+FROM Input;
+
+INSERT INTO Output
+SELECT
+    key,
+    struct_field.a AS a
+FROM $phrases
+FLATTEN LIST BY inner AS struct_field;

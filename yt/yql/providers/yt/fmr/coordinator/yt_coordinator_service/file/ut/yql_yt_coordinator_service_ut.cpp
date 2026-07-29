@@ -38,6 +38,59 @@ Y_UNIT_TEST_SUITE(FileYtCoordinatorServiceTests) {
         }
         UNIT_ASSERT_VALUES_EQUAL(gottenFileParititons, expectedFilePartitions);
     }
+
+    Y_UNIT_TEST(SplitLargeFileByByteRanges) {
+        // Build a file with 6 rows of equal length (10 bytes each including ";\n"):
+        //   {0};\n  {1};\n  {2};\n  {3};\n  {4};\n  {5};\n   → 60 bytes total.
+        // maxDataWeightPerPart = 25 → expect 3 parts of ~20 bytes, each split on \n.
+        TTempFileHandle dataFile;
+
+        TString fileContent;
+        const TString rowTemplate = "{\"k\"=%d};\n"; // exactly 10 bytes for single-digit k
+        for (int i = 0; i < 6; ++i) {
+            fileContent += Sprintf("{\"k\"=%d};\n", i);
+        }
+        {
+            TFileOutput out(dataFile.Name());
+            out << fileContent;
+        }
+        const i64 fileSize = static_cast<i64>(fileContent.size());
+
+        TYtTableRef ytTable;
+        ytTable.FilePath = dataFile.Name();
+
+        auto fileService = MakeFileYtCoordinatorService();
+        auto settings = TYtPartitionerSettings{.MaxDataWeightPerPart = 25, .MaxParts = 100};
+        auto [partitions, ok] = fileService->PartitionYtTables({ytTable}, {}, settings);
+        UNIT_ASSERT(ok);
+        UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 3u);
+
+        // Every partition must reference the same file.
+        for (auto& part : partitions) {
+            UNIT_ASSERT_VALUES_EQUAL(part.FilePaths.size(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(part.FilePaths[0], dataFile.Name());
+            UNIT_ASSERT_VALUES_EQUAL(part.RichPaths.size(), 1u);
+        }
+
+        // Byte ranges must be contiguous, start at 0, end at fileSize,
+        // and every boundary must fall on a \n.
+        i64 prevEnd = 0;
+        for (auto& part : partitions) {
+            const auto& ranges = part.RichPaths[0].GetRanges();
+            UNIT_ASSERT(ranges.Defined() && ranges->size() == 1u);
+            const auto& r = ranges->front();
+            UNIT_ASSERT(r.LowerLimit_.RowIndex_.Defined());
+            UNIT_ASSERT(r.UpperLimit_.RowIndex_.Defined());
+            const i64 lo = *r.LowerLimit_.RowIndex_;
+            const i64 hi = *r.UpperLimit_.RowIndex_;
+            UNIT_ASSERT_VALUES_EQUAL(lo, prevEnd);
+            UNIT_ASSERT(hi > lo && hi <= fileSize);
+            // The byte just before hi must be '\n' (split on row boundary).
+            UNIT_ASSERT_VALUES_EQUAL(fileContent[hi - 1], '\n');
+            prevEnd = hi;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(prevEnd, fileSize);
+    }
 }
 
 } // namespace NYql::NFmr

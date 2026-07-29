@@ -1,12 +1,15 @@
 #include "datashard_user_db.h"
 
 #include "datashard_impl.h"
+#include <ydb/core/base/fulltext.h>
 #include <ydb/core/io_formats/cell_maker/cell_maker.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
 
 #include <ydb/library/aclib/user_context.h>
 
 namespace NKikimr::NDataShard {
+
+using NTableIndex::NFulltext::TGen;
 
 TDataShardUserDb::TDataShardUserDb(TDataShard& self, NTable::TDatabase& db, ui64 globalTxId, const TRowVersion& mvccVersion, NMiniKQL::TEngineHostCounters& counters, TInstant now)
     : Self(self)
@@ -85,6 +88,13 @@ ui64 CalculateKeyBytes(const TArrayRef<const TRawTypeValue> key) {
     ui64 bytes = 0ull;
     for (const TRawTypeValue& value : key)
         bytes += value.IsEmpty() ? 1ull : value.Size();
+    return bytes;
+};
+
+ui64 CalculateKeyBytes(const TArrayRef<const TCell> key) {
+    ui64 bytes = 0ull;
+    for (const TCell& value : key)
+        bytes += value.IsNull() ? 1ull : value.Size();
     return bytes;
 };
 
@@ -357,6 +367,16 @@ void TDataShardUserDb::IncreaseSelectCounters(
     Counters.SelectRowBytes += keyBytes;
 }
 
+void TDataShardUserDb::IncreaseSelectCounters(
+    const TArrayRef<const TCell> key)
+{
+    ui64 keyBytes = CalculateKeyBytes(key);
+
+    Counters.NSelectRow++;
+    Counters.SelectRowRows++;
+    Counters.SelectRowBytes += keyBytes;
+}
+
 void TDataShardUserDb::UpsertRowInt(
     NTable::ERowOp rowOp,
     const TTableId& tableId,
@@ -577,11 +597,13 @@ public:
     }
 
     void OnSkipCommitted(const TRowVersion&) override {
-        // We already use InvisibleRowSkips for these
+        // Select uses stats.InvisibleRowSkips for these, IterateRange uses our InvisibleRowSkips
+        ConflictChecker.AddInvisibleRowSkip();
     }
 
     void OnSkipCommitted(const TRowVersion&, ui64) override {
-        // We already use InvisibleRowSkips for these
+        // Select uses stats.InvisibleRowSkips for these, IterateRange uses our InvisibleRowSkips
+        ConflictChecker.AddInvisibleRowSkip();
     }
 
     void OnApplyCommitted(const TRowVersion& rowVersion) override {
@@ -610,11 +632,13 @@ public:
     }
 
     void OnSkipCommitted(const TRowVersion&) override {
-        // We already use InvisibleRowSkips for these
+        // Select uses stats.InvisibleRowSkips for these, IterateRange uses our InvisibleRowSkips
+        ConflictChecker.AddInvisibleRowSkip();
     }
 
     void OnSkipCommitted(const TRowVersion&, ui64) override {
-        // We already use InvisibleRowSkips for these
+        // Select uses stats.InvisibleRowSkips for these, IterateRange uses our InvisibleRowSkips
+        ConflictChecker.AddInvisibleRowSkip();
     }
 
     void OnApplyCommitted(const TRowVersion& rowVersion) override {
@@ -1045,6 +1069,10 @@ NTable::ITransactionObserverPtr TDataShardUserDb::GetReadTxObserver(const TTable
     }
 
     return ptr;
+}
+
+void TDataShardUserDb::AddInvisibleRowSkip() {
+    InvisibleRowSkips++;
 }
 
 void TDataShardUserDb::AddReadConflict(ui64 txId) {

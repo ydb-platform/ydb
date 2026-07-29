@@ -23,4 +23,4 @@ TError TClusterDirectoryUpdateResult::GetCumulativeError() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-}  // namespace NYT::NHiveClient
+} // namespace NYT::NHiveClient

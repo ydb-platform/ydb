@@ -204,7 +204,7 @@ std::string EscapeHeaderValue(TStringBuf value)
 
 void ValidateHeaderValue(TStringBuf header, TStringBuf value)
 {
-    if (value.find('\n') != TString::npos) {
+    if (value.find('\n') != std::string::npos) {
         THROW_ERROR_EXCEPTION("Header value should not contain newline symbol")
             << TErrorAttribute("header", header)
             << TErrorAttribute("value", value);

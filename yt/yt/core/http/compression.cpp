@@ -349,7 +349,7 @@ const std::vector<TContentEncoding>& GetSupportedContentEncodings()
     static const auto result = [] {
         auto result = GetInternallySupportedContentEncodings();
         for (auto blockCodec : NBlockCodecs::ListAllCodecs()) {
-            result.push_back(TString("z-") + blockCodec);
+            result.push_back(std::string("z-") + std::string(blockCodec));
         }
         return result;
     }();
@@ -379,7 +379,7 @@ TErrorOr<TContentEncoding> GetBestAcceptedContentEncoding(TStringBuf clientAccep
     }
 
     for (const auto& blockcodec : NBlockCodecs::ListAllCodecs()) {
-        auto candidate = TString("z-") + blockcodec;
+        auto candidate = std::string("z-") + std::string(blockcodec);
 
         auto position = clientAcceptEncodingHeader.find(candidate);
         checkCandidate(candidate, position);

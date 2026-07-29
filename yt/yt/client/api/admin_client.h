@@ -84,7 +84,7 @@ struct TWriteCoreDumpOptions
 struct TWriteLogBarrierOptions
     : public TTimeoutOptions
 {
-    TString Category;
+    std::string Category;
 };
 
 struct TWriteOperationControllerCoreDumpOptions
@@ -94,8 +94,8 @@ struct TWriteOperationControllerCoreDumpOptions
 struct THealExecNodeOptions
     : public TTimeoutOptions
 {
-    std::vector<TString> Locations;
-    std::vector<TString> AlertTypesToReset;
+    std::vector<std::string> Locations;
+    std::vector<std::string> AlertTypesToReset;
     bool ForceReset = false;
 };
 
@@ -211,7 +211,7 @@ struct TCollectCoverageOptions
 
 struct TCollectCoverageResult
 {
-    TString CoverageMap;
+    std::string CoverageMap;
 };
 
 struct TFreezeHydraPeerOptions
@@ -290,7 +290,7 @@ struct IAdminClient
         const std::string& address,
         const TKillProcessOptions& options = {}) = 0;
 
-    virtual TFuture<TString> WriteCoreDump(
+    virtual TFuture<std::string> WriteCoreDump(
         const std::string& address,
         const TWriteCoreDumpOptions& options = {}) = 0;
 
@@ -298,7 +298,7 @@ struct IAdminClient
         const std::string& address,
         const TWriteLogBarrierOptions& options) = 0;
 
-    virtual TFuture<TString> WriteOperationControllerCoreDump(
+    virtual TFuture<std::string> WriteOperationControllerCoreDump(
         NJobTrackerClient::TOperationId operationId,
         const TWriteOperationControllerCoreDumpOptions& options = {}) = 0;
 
@@ -338,7 +338,7 @@ struct IAdminClient
         EMaintenanceComponent component,
         const std::string& address,
         EMaintenanceType type,
-        const TString& comment,
+        const std::string& comment,
         const TAddMaintenanceOptions& options = {}) = 0;
 
     virtual TFuture<TMaintenanceCountsPerTarget> RemoveMaintenance(

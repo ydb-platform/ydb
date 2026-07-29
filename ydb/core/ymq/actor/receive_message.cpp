@@ -6,6 +6,8 @@
 #include "log.h"
 #include "params.h"
 
+#include "topic_pqrb_metrics.h"
+
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 #include <ydb/core/ymq/attributes/attributes.h>
 #include <ydb/core/ymq/attributes/attributes_md5.h>
@@ -170,9 +172,13 @@ private:
             .WaitTime = WaitTime_,
             .ProcessingTimeout = GetVisibilityTimeout(),
             .MaxNumberOfMessage = static_cast<ui32>(MaxMessagesCount_),
-            .UncompressMessages = true,
             .SkipMessageGroups = std::move(LockedMessageGroups_),
         };
+        // Only client-supplied receive-request-attempt-id enables replay semantics; an
+        // auto-generated id would be unique per request and never replayed.
+        if (IsFifoQueue() && Request().GetReceiveRequestAttemptId()) {
+            settings.ReceiveAttemptId = Request().GetReceiveRequestAttemptId();
+        }
         Register(NPQ::NMLP::CreateReader(SelfId(), std::move(settings)));
     }
 
@@ -272,67 +278,119 @@ private:
     void Handle(NPQ::NMLP::TEvReadResponse::TPtr& ev) {
         const auto status = ev->Get()->Status;
         if (status != Ydb::StatusIds::SUCCESS) {
-            MakeError(Response_.MutableReceiveMessage(), NErrors::INTERNAL_FAILURE, ev->Get()->ErrorDescription);
+            if (status == Ydb::StatusIds::SCHEME_ERROR) {
+                // The topic is temporarily missing (the queue is being deleted or recreated
+                // and the leader is not updated yet). Report a generic retryable internal
+                // failure instead of leaking the internal topic path so clients retry.
+                MakeError(Response_.MutableReceiveMessage(), NErrors::INTERNAL_FAILURE);
+            } else {
+                MakeError(Response_.MutableReceiveMessage(), NErrors::INTERNAL_FAILURE, ev->Get()->ErrorDescription);
+            }
         } else {
             auto&& messages = ev->Get()->Messages;
-            for (auto&& message : messages) {
-                auto* item = Response_.MutableReceiveMessage()->AddMessages();
-                if (message.ApproximateFirstReceiveTimestamp) {
-                    item->SetApproximateFirstReceiveTimestamp(message.ApproximateFirstReceiveTimestamp->MilliSeconds());
+            if (messages.empty()) {
+                if (QueueCounters_ && !ShouldReportTopicActionMetricsToPqrb()) {
+                    INC_COUNTER_COUPLE(QueueCounters_, ReceiveMessage_EmptyCount, empty_receive_attempts_count_per_second);
                 }
-                if (message.ApproximateReceiveCount) {
-                    item->SetApproximateReceiveCount(message.ApproximateReceiveCount.value());
-                }
-                item->SetMessageId(ToMessageId(message.MessageId));
-                item->SetMD5OfMessageBody(MD5::Calc(message.Data));
-                item->SetData(std::move(message.Data));
+                ReportTopicReceiveMetricsToPqrb(ev->Get()->BalancerTabletId, 0, 0, 1);
+            } else {
+                ui64 bytesRead = 0;
+                const TInstant now = TActivationContext::Now();
+                for (auto&& message : messages) {
+                    bytesRead += message.Data.size();
+                    if (QueueCounters_ && !ShouldReportTopicActionMetricsToPqrb()) {
+                        const ui32 receiveCount = message.ApproximateReceiveCount ? message.ApproximateReceiveCount.value() : 1;
+                        COLLECT_HISTOGRAM_COUNTER(QueueCounters_, MessageReceiveAttempts, receiveCount);
+                        COLLECT_HISTOGRAM_COUNTER(QueueCounters_, receive_attempts_count_rate, receiveCount);
 
-                TReceipt receipt;
-                receipt.SetSource(NSQS::TReceipt::Topic);
-                receipt.SetOffset(message.MessageId.Offset);
-                receipt.SetShard(message.MessageId.PartitionId);
-                item->SetReceiptHandle(EncodeReceiptHandle(receipt));
+                        const TDuration messageResideDuration = now - message.SentTimestamp;
+                        COLLECT_HISTOGRAM_COUNTER(QueueCounters_, MessageReside_Duration, messageResideDuration.MilliSeconds());
+                        COLLECT_HISTOGRAM_COUNTER(QueueCounters_, reside_duration_milliseconds, messageResideDuration.MilliSeconds());
+                    }
 
-                item->SetSentTimestamp(message.SentTimestamp.MilliSeconds());
+                    auto* item = Response_.MutableReceiveMessage()->AddMessages();
+                    if (message.ApproximateFirstReceiveTimestamp) {
+                        item->SetApproximateFirstReceiveTimestamp(message.ApproximateFirstReceiveTimestamp->MilliSeconds());
+                    }
+                    if (message.ApproximateReceiveCount) {
+                        item->SetApproximateReceiveCount(message.ApproximateReceiveCount.value());
+                    }
+                    item->SetMessageId(ToMessageId(message.MessageId));
+                    item->SetMD5OfMessageBody(MD5::Calc(message.Data));
+                    item->SetData(std::move(message.Data));
 
-                if (auto it = message.Attributes.find("sender_id"); it != message.Attributes.end()) {
-                    item->SetSenderId(std::move(it->second));
-                }
+                    TReceipt receipt;
+                    receipt.SetSource(NSQS::TReceipt::Topic);
+                    receipt.SetOffset(message.MessageId.Offset);
+                    receipt.SetShard(message.MessageId.PartitionId);
+                    item->SetReceiptHandle(EncodeReceiptHandle(receipt));
 
-                Ydb::Ymq::V1::Message ymqMessage;
-                if (NSQS::DeserializeUserAttributes(ymqMessage, message.Attributes)) {
-                    if (ymqMessage.message_attributes_size() > 0) {
-                        item->SetMD5OfMessageAttributes(ymqMessage.m_d_5_of_message_attributes());
-                        for (auto&& [name, v] : ymqMessage.message_attributes()) {
-                            auto* value = item->AddMessageAttributes();
-                            value->SetName(std::move(name));
-                            if (auto&& d = v.string_value()) {
-                                value->SetStringValue(std::move(d));
-                            } else if (auto&& d = v.binary_value()) {
-                                value->SetBinaryValue(std::move(d));
-                            } else {
-                                continue;
+                    item->SetSentTimestamp(message.SentTimestamp.MilliSeconds());
+
+                    if (auto it = message.Attributes.find("sender_id"); it != message.Attributes.end()) {
+                        item->SetSenderId(std::move(it->second));
+                    }
+
+                    Ydb::Ymq::V1::Message ymqMessage;
+                    if (NSQS::DeserializeUserAttributes(ymqMessage, message.Attributes)) {
+                        if (ymqMessage.message_attributes_size() > 0) {
+                            item->SetMD5OfMessageAttributes(ymqMessage.m_d_5_of_message_attributes());
+                            for (auto&& [name, v] : ymqMessage.message_attributes()) {
+                                auto* value = item->AddMessageAttributes();
+                                value->SetName(std::move(name));
+                                if (auto&& d = v.string_value()) {
+                                    value->SetStringValue(std::move(d));
+                                } else if (auto&& d = v.binary_value()) {
+                                    value->SetBinaryValue(std::move(d));
+                                } else {
+                                    continue;
+                                }
+                                value->SetDataType(std::move(v.data_type()));
                             }
-                            value->SetDataType(std::move(v.data_type()));
                         }
+                    } else {
+                        RLOG_SQS_WARN("Unable to deserialize message attributes");
                     }
-                } else {
-                    RLOG_SQS_WARN("Unable to deserialize message attributes");
+
+                    if (!message.MessageGroupId.empty()) {
+                        item->SetMessageGroupId(message.MessageGroupId);
+                    }
+
+                    if (IsFifoQueue()) {
+                        if (!message.MessageDeduplicationId.empty()) {
+                            item->SetMessageDeduplicationId(message.MessageDeduplicationId);
+                        }
+                        item->SetSequenceNumber(message.MessageId.Offset);
+                    }
                 }
 
-                if (!message.MessageGroupId.empty()) {
-                    item->SetMessageGroupId(message.MessageGroupId);
+                if (QueueCounters_ && !ShouldReportTopicActionMetricsToPqrb()) {
+                    ADD_COUNTER_COUPLE(QueueCounters_, ReceiveMessage_Count, received_count_per_second, messages.size());
+                    ADD_COUNTER_COUPLE(QueueCounters_, ReceiveMessage_BytesRead, received_bytes_per_second, bytesRead);
                 }
-
-                if (IsFifoQueue()) {
-                    if (!message.MessageDeduplicationId.empty()) {
-                        item->SetMessageDeduplicationId(message.MessageDeduplicationId);
-                    }
-                    item->SetSequenceNumber(message.MessageId.Offset);
-                }
+                ReportTopicReceiveMetricsToPqrb(ev->Get()->BalancerTabletId, messages.size(), bytesRead, 0);
             }
         }
+        SetBalancerTabletId(ev->Get()->BalancerTabletId);
         SendReplyAndDie();
+    }
+
+    void ReportTopicReceiveMetricsToPqrb(
+        ui64 balancerTabletId,
+        ui64 receivedCount,
+        ui64 bytesRead,
+        ui64 emptyCount
+    ) {
+        NKikimrPQ::TEvTopicSqsActionMetrics metrics;
+        auto* receive = metrics.MutableReceiveMessage();
+        if (receivedCount > 0) {
+            receive->SetReceiveMessageCount(receivedCount);
+            receive->SetReceiveMessageBytesRead(bytesRead);
+        }
+        if (emptyCount > 0) {
+            receive->SetReceiveMessageEmptyCount(emptyCount);
+        }
+        SendTopicPqrbMetrics(balancerTabletId, GetDatabaseName(), GetTopicName(), metrics);
     }
 
     bool HandleWakeup(TEvWakeup::TPtr& ev) override {

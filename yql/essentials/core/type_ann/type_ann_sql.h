@@ -44,6 +44,18 @@ TMap<TString, ui32> ExtractExternalColumns(const TExprNode& select);
 
 ////////////////////////////////////////////////////////////////////////////////
 
+IGraphTransformer::TStatus AddSqlSelectWarning(
+    const TExprNode::TPtr& input,
+    TExprNode::TPtr& output,
+    TExprContext& ctx,
+    TStringBuf name);
+
+////////////////////////////////////////////////////////////////////////////////
+
+IGraphTransformer::TStatus SqlSelfWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
+
+IGraphTransformer::TStatus SqlIterateWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
+
 IGraphTransformer::TStatus SqlStarWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
 
 IGraphTransformer::TStatus SqlColumnRefWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);

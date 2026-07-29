@@ -131,7 +131,11 @@ public:
 
         HttpCodes code = HTTP_NOT_FOUND;
         TString content;
-        if (parsed.Path == "/api/v3/start_tx") {
+        if (parsed.Path == "/auth/whoami") {
+            content = "{\"login\":\"robot-unit-test\", \"realm\":\"blackbox:token:foo:YT\"}";
+            code = HTTP_OK;
+        }
+        else if (parsed.Path == "/api/v3/start_tx") {
             if (CurrTx_ < CYPRESS_TX_IDS.size()) {
                 content = CYPRESS_TX_IDS[CurrTx_++];
                 code = HTTP_OK;

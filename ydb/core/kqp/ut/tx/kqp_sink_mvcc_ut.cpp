@@ -968,10 +968,6 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
     class TUpdateColumns: public TTableDataModificationTester {
     protected:
         void DoExecute() override {
-            if (GetIsOlap()) {
-                //TODO fix https://github.com/ydb-platform/ydb/issues/25020
-                return;
-            }
             auto client = Kikimr->GetQueryClient();
             auto session1 = client.GetSession().GetValueSync().GetSession();
             auto session2 = client.GetSession().GetValueSync().GetSession();
@@ -993,13 +989,23 @@ Y_UNIT_TEST_SUITE(KqpSinkMvcc) {
             auto commitResult1 = tx1->Commit().GetValueSync();
             UNIT_ASSERT_EQUAL_C(NYdb::EStatus::SUCCESS, commitResult1.GetStatus(), commitResult1.GetIssues().ToString());
             auto commitResult2 = tx2->Commit().GetValueSync();
-            UNIT_ASSERT_EQUAL_C(commitResult2.GetStatus(), NYdb::EStatus::SUCCESS, commitResult2.GetIssues().ToString());
+            if (GetIsOlap()) {
+                // columnshards go through coordinator and the txs conflict with each other, so only the first one commits
+                UNIT_ASSERT_EQUAL_C(commitResult2.GetStatus(), NYdb::EStatus::ABORTED, commitResult2.GetIssues().ToString());
+                UNIT_ASSERT_C(HasIssue(commitResult2.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED), commitResult2.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_EQUAL_C(commitResult2.GetStatus(), NYdb::EStatus::SUCCESS, commitResult2.GetIssues().ToString());
+            }
 
             auto readResult = client.ExecuteQuery(R"(
                         SELECT * FROM `/Root/Test` WHERE Group = 1u AND Name = "Anna";
                     )", NQuery::TTxControl::NoTx()) .GetValueSync();
             UNIT_ASSERT_EQUAL_C(NYdb::EStatus::SUCCESS, readResult.GetStatus(), readResult.GetIssues().ToString());
-            CompareYson("[[[7000u];[\"Changed\"];1u;\"Anna\"]]", FormatResultSetYson(readResult.GetResultSet(0)));
+            if (GetIsOlap()) {
+                CompareYson("[[[7000u];[\"None\"];1u;\"Anna\"]]", FormatResultSetYson(readResult.GetResultSet(0)));
+            } else {
+                CompareYson("[[[7000u];[\"Changed\"];1u;\"Anna\"]]", FormatResultSetYson(readResult.GetResultSet(0)));
+            }
         }
     };
 

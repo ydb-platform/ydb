@@ -27,7 +27,7 @@ void TProtobufBase::BuildFunctionTypeInfo(
         TProtoInfo typeInfo;
         ProtoTypeBuild(GetDescriptor(),
                        EEnumFormat::Number,
-                       ERecursionTraits::Fail, true, builder, &typeInfo);
+                       ERecursionTraits::Fail, /*optionalLists=*/true, builder, &typeInfo);
 
         auto stringType = builder.SimpleType<char*>();
 
@@ -55,22 +55,22 @@ void TProtobufBase::BuildFunctionTypeInfo(
 
         if (TStringRef::Of("Serialize") == name) {
             if ((flags & TFlags::TypesOnly) == 0) {
-                builder.Implementation(this->CreateSerialize(typeInfo, false));
+                builder.Implementation(this->CreateSerialize(typeInfo, /*asText=*/false));
             }
         }
         if (TStringRef::Of("SerializeText") == name) {
             if ((flags & TFlags::TypesOnly) == 0) {
-                builder.Implementation(this->CreateSerialize(typeInfo, true));
+                builder.Implementation(this->CreateSerialize(typeInfo, /*asText=*/true));
             }
         }
         if (TStringRef::Of("Parse") == name) {
             if ((flags & TFlags::TypesOnly) == 0) {
-                builder.Implementation(this->CreateValue(typeInfo, false));
+                builder.Implementation(this->CreateValue(typeInfo, /*asText=*/false));
             }
         }
         if (TStringRef::Of("ParseText") == name) {
             if ((flags & TFlags::TypesOnly) == 0) {
-                builder.Implementation(this->CreateValue(typeInfo, true));
+                builder.Implementation(this->CreateValue(typeInfo, /*asText=*/true));
             }
         }
     } catch (...) {

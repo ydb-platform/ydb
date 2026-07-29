@@ -108,6 +108,31 @@ class Android(PlatformDirsABC):  # noqa: PLR0904
         return "/storage/emulated/0/Desktop"
 
     @property
+    def user_projects_dir(self) -> str:
+        """:returns: projects directory tied to the user e.g. ``/storage/emulated/0/Projects``"""
+        return "/storage/emulated/0/Projects"
+
+    @property
+    def user_publicshare_dir(self) -> str:
+        """:returns: public share directory tied to the user e.g. ``/storage/emulated/0/Public``"""
+        return "/storage/emulated/0/Public"
+
+    @property
+    def user_templates_dir(self) -> str:
+        """:returns: templates directory tied to the user e.g. ``/storage/emulated/0/Templates``"""
+        return "/storage/emulated/0/Templates"
+
+    @property
+    def user_fonts_dir(self) -> str:
+        """:returns: fonts directory tied to the user e.g. ``/storage/emulated/0/fonts``"""
+        return "/storage/emulated/0/fonts"
+
+    @property
+    def user_preference_dir(self) -> str:
+        """:returns: preference directory tied to the user, same as ``user_config_dir``"""
+        return self.user_config_dir
+
+    @property
     def user_bin_dir(self) -> str:
         """:returns: bin directory tied to the user, e.g. ``/data/user/<userid>/<packagename>/files/bin``"""
         return os.path.join(cast("str", _android_folder()), "files", "bin")  # noqa: PTH118

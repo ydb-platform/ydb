@@ -11,7 +11,7 @@ extend google.protobuf.FieldOptions {
 }
 
 extend google.protobuf.MessageOptions {
-  bool include = 100800;
+  bool include = 100801;
 
   // Contains main information about the event type.
   EventDescriptor event_descriptor = 102404;

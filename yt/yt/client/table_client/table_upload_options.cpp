@@ -323,7 +323,7 @@ TTableUploadOptions GetTableUploadOptions(
     }
     if (versionedWriteOptions.WriteMode != EVersionedIOMode::Default && path.GetSchemaModification() != ETableSchemaModification::None) {
         THROW_ERROR_EXCEPTION("YPath attributes \"versioned_write_options/write_mode\" and \"schema_modification\""
-            "can not be set in non-trivial state together: \"versioned_write_options/write_mode\" is %Qlv, \"schema_modification\" is %Qlv",
+            "cannot be set in non-trivial state together: \"versioned_write_options/write_mode\" is %Qlv, \"schema_modification\" is %Qlv",
             versionedWriteOptions.WriteMode,
             path.GetSchemaModification())
             << TErrorAttribute("path", path);

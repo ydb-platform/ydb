@@ -1,5 +1,8 @@
 #include "common.h"
 
+#include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
+
+#include <ydb/core/base/counters.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
@@ -109,12 +112,13 @@ std::shared_ptr<TKikimrRunner> TStreamingTestFixture::GetKikimrRunner() {
         Kikimr = MakeKikimrRunner(true, ConnectorClient, nullptr, AppConfig, NYql::NDq::CreateS3ActorsFactory(), {
             .NodeCount = NodeCount,
             .DynamicNodeCount = DynamicNodeCount,
-            .CredentialsFactory = CreateCredentialsFactory(),
+            .CredentialsFactory = CreateCredentialsFactory(BUILTIN_ACL_ROOT),
             .PqGateway = PqGateway,
             .CheckpointPeriod = CheckpointPeriod,
             .LogSettings = LogSettings,
             .UseLocalCheckpointsInStreamingQueries = true,
             .InternalInitFederatedQuerySetupFactory = InternalInitFederatedQuerySetupFactory,
+            .NeedsStatsCollectors = NeedsStatsCollectors,
             .StoragePoolTypes = StoragePoolTypes,
         });
 
@@ -195,6 +199,10 @@ void TStreamingTestFixture::KillTopicPqrbTablet(const std::string& topicPath) {
     tabletClient->KillTablet(GetKikimrRunner()->GetTestServer(), persQueueGroup.GetBalancerTabletID());
 }
 
+TIntrusivePtr<NMonitoring::TDynamicCounters> TStreamingTestFixture::GetCounters(const TString& svc, ui32 nodeIdx) {
+    return NKikimr::GetServiceCounters(GetRuntime().GetAppData(nodeIdx).Counters, svc);
+}
+
 // External YDB recipe
 
 std::shared_ptr<TDriver> TStreamingTestFixture::GetExternalDriver() {
@@ -251,6 +259,11 @@ void TStreamingTestFixture::CreateTopic(const std::string& topicName, std::optio
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 }
 
+void TStreamingTestFixture::DropTopic(const std::string& topicName, bool local) {
+    const auto result = GetTopicClient(local)->DropTopic(topicName).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+}
+
 void TStreamingTestFixture::WriteTopicMessage(const std::string& topicName, const std::string& message, ui64 partition, bool local) {
     auto writeSession = GetTopicClient(local)->CreateSimpleBlockingWriteSession(NYdb::NTopic::TWriteSessionSettings()
         .Path(topicName)
@@ -303,6 +316,9 @@ std::vector<std::pair<std::string, TInstant>> TStreamingTestFixture::ReadTopicMe
         auto event = readSession->GetEvent(/* block */ true);
         if (const auto dataEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
             for (const auto& message : dataEvent->GetMessages()) {
+                if (message.GetWriteTime() < disposition) {
+                    continue;
+                }
                 received.push_back(std::make_pair(message.GetData(), message.GetWriteTime()));
             }
 
@@ -311,11 +327,11 @@ std::vector<std::pair<std::string, TInstant>> TStreamingTestFixture::ReadTopicMe
             }
         }
 
-        auto firsts_view = received | std::views::transform([](const auto& p) { return p.first; });
+        auto firstsView = received | std::views::transform([](const auto& p) { return p.first; });
         UNIT_ASSERT_C(expectedMessages.size() >= received.size(), TStringBuilder()
             << "expected #" << expectedMessages.size() << " messages ("
             << JoinSeq(", ", expectedMessages) << "), got #" << received.size() << " messages ("
-            << JoinSeq(", ",  std::vector<std::string>(firsts_view.begin(), firsts_view.end())) << ")");
+            << JoinSeq(", ",  std::vector<std::string>(firstsView.begin(), firstsView.end())) << ")");
 
         error = TStringBuilder() << "got new event, received #" << received.size() << " / " << expectedMessages.size() << " messages";
         return false;
@@ -326,14 +342,16 @@ std::vector<std::pair<std::string, TInstant>> TStreamingTestFixture::ReadTopicMe
             Sort(expectedMessages);
             Sort(received);
         }
-        
+
         UNIT_ASSERT(received.size() == expectedMessages.size());
         for (size_t i = 0; i < received.size(); ++i) {
             UNIT_ASSERT_VALUES_EQUAL(received[i].first, expectedMessages[i]);
         }
     }
+
     return received;
 }
+
 void TStreamingTestFixture::TestReadTopicBasic(const std::string& testSuffix) {
     const std::string sourceName = "sourceName" + testSuffix;
     const std::string topicName = "topicName" + testSuffix;
@@ -385,9 +403,12 @@ std::vector<TResultSet> TStreamingTestFixture::ExecQuery(const std::string& quer
     if (astValidator) {
         settings.StatsMode(EStatsMode::Full);
     }
+    if (expectedStatus != NYdb::EStatus::SUCCESS) {
+        settings.RetrySettings(NYdb::NRetry::TRetryOperationSettings().MaxRetries(0));
+    }
 
     auto result = GetQueryClient()->ExecuteQuery(query, TTxControl::NoTx(), settings).ExtractValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToOneLineString());
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expectedStatus, result.GetIssues().ToOneLineString() << "\nQuery text:\n" << query);
 
     if (astValidator) {
         const auto& stats = result.GetStats();
@@ -398,7 +419,7 @@ std::vector<TResultSet> TStreamingTestFixture::ExecQuery(const std::string& quer
     }
 
     if (!expectedError.empty()) {
-        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), expectedError);
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), expectedError, "Query text:\n" << query);
     }
 
     return result.GetResultSets();
@@ -494,7 +515,7 @@ void TStreamingTestFixture::CreateSolomonSource(const std::string& solomonSource
     ExecQuery(fmt::format(
         R"sql(
             CREATE EXTERNAL DATA SOURCE `{solomon_source}` WITH (
-                SOURCE_TYPE = "Solomon",
+                SOURCE_TYPE = "Monium.Metrics",
                 LOCATION = "localhost:{solomon_port}",
                 AUTH_METHOD = "NONE",
                 USE_TLS = "false"
@@ -670,6 +691,7 @@ NKikimrKqp::TQueryPhysicalGraph TStreamingTestFixture::LoadPhysicalGraph(const s
 
     const auto& graphProto = graph->Get()->PhysicalGraph;
     UNIT_ASSERT(graphProto);
+    UNIT_ASSERT_VALUES_EQUAL(graphProto->GetPreparedQuery().GetVersion(), static_cast<ui32>(NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1));
 
     return *graphProto;
 }
@@ -815,23 +837,6 @@ void TStreamingTestFixture::SetupMockConnectorTableData(std::shared_ptr<TConnect
     }
 }
 
-// Other helpers
-
-std::function<void(const std::string&)> TStreamingTestFixture::AstChecker(ui64 txCount, ui64 stagesCount) {
-    const auto stringCounter = [](const std::string& str, const std::string& subStr) {
-        ui64 count = 0;
-        for (size_t i = str.find(subStr); i != std::string::npos; i = str.find(subStr, i + subStr.size())) {
-            ++count;
-        }
-        return count;
-    };
-
-    return [txCount, stagesCount, stringCounter](const std::string& ast) {
-        UNIT_ASSERT_VALUES_EQUAL(stringCounter(ast, "KqpPhysicalTx"), txCount);
-        UNIT_ASSERT_VALUES_EQUAL(stringCounter(ast, "DqPhyStage"), stagesCount);
-    };
-}
-
 void TStreamingTestFixture::EnsureNotInitialized(const std::string& info) {
     UNIT_ASSERT_C(!Kikimr, "Kikimr runner is already initialized, can not setup " << info);
 }
@@ -899,7 +904,11 @@ std::vector<TStreamingSysViewTestFixture::TSysViewResult> TStreamingSysViewTestF
 
         const bool expectExecutions = row.Run && IsIn({"RUNNING", "COMPLETED", "CANCELLED", "FAILED"}, row.Status);
         if (expectExecutions || row.CheckPlan) {
-            UNIT_ASSERT_STRING_CONTAINS(*resultSet.ColumnParser("Plan").GetOptionalUtf8(), TStringBuilder() << "Write " << PQ_SOURCE);
+            if (row.CheckPlan || IsIn({"RUNNING", "COMPLETED", "CANCELLED"}, row.Status)) {
+                UNIT_ASSERT_STRING_CONTAINS(*resultSet.ColumnParser("Plan").GetOptionalUtf8(), TStringBuilder() << "Write " << PQ_SOURCE);
+            } else {
+                UNIT_ASSERT(resultSet.ColumnParser("Plan").GetOptionalUtf8());
+            }
             UNIT_ASSERT_STRING_CONTAINS(*resultSet.ColumnParser("Ast").GetOptionalUtf8(), row.Ast ? *row.Ast : JoinPath({"/Root", PQ_SOURCE}));
         }
 
@@ -923,7 +932,7 @@ std::vector<TStreamingSysViewTestFixture::TSysViewResult> TStreamingSysViewTestF
         }
 
         result.ExecutionId = *resultSet.ColumnParser("LastExecutionId").GetOptionalUtf8();
-        UNIT_ASSERT_VALUES_EQUAL(!result.ExecutionId.empty(), expectExecutions);
+        UNIT_ASSERT_VALUES_EQUAL(!result.ExecutionId.empty(), expectExecutions && IsIn({"RUNNING", "COMPLETED", "CANCELLED"}, row.Status));
 
         const auto previousExecutionIds = *resultSet.ColumnParser("PreviousExecutionIds").GetOptionalUtf8();
         NJson::TJsonValue value;
@@ -1020,6 +1029,10 @@ void TTabletKiller::Bootstrap() {
 void TTabletKiller::KillTablet() const {
     RestartTablet(*ActorContext().ActorSystem(), TabletId);
     Schedule(KillerInterval, new TEvents::TEvWakeup());
+}
+
+void TStreamingTestFixture::WaitForClassifierPropagation() {
+    NWorkloadManager::WaitForClassifierPropagation(GetRuntime());
 }
 
 } // namespace NKikimr::NKqp

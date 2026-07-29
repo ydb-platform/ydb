@@ -46,7 +46,8 @@ public:
             Request->Get()->Record.GetForceBlockTabletData().GetId(),
             Request->Get()->Record.GetForceBlockTabletData().GetGeneration(),
             VDiskIDFromVDiskID(Request->Get()->Record.GetVDiskID()),
-            deadline
+            deadline,
+            TWriteSource::SkeletonForceBlock
         );
 
         // send TEvVBlock request

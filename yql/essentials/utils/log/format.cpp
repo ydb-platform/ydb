@@ -93,7 +93,7 @@ TString GetBasicLoggingFormatFromRecord(const TLogRecord& rec) {
 class TFormattingLogBackend final: public TForwardingLogBackend {
 public:
     explicit TFormattingLogBackend(TFormatter formatter, bool isStrict, TAutoPtr<TLogBackend> child)
-        : TForwardingLogBackend(std::move(child))
+        : TForwardingLogBackend(child)
         , Formatter_(std::move(formatter))
         , IsStrict_(isStrict)
     {
@@ -112,7 +112,7 @@ public:
             TStringBuilder message;
             message << "LogRecord is not supported: ";
             PrintBody(message, rec, /* flagBegin = */ 0);
-            ythrow yexception() << std::move(message);
+            ythrow yexception() << message;
         } else {
             message = FallbackFormat(rec);
         }
@@ -190,7 +190,7 @@ TString JsonFormat(const TLogRecord& rec) {
 }
 
 TAutoPtr<TLogBackend> MakeFormattingLogBackend(TFormatter formatter, bool isStrict, TAutoPtr<TLogBackend> child) {
-    return new TFormattingLogBackend(std::move(formatter), isStrict, std::move(child));
+    return new TFormattingLogBackend(std::move(formatter), isStrict, child);
 }
 
 } // namespace NYql::NLog

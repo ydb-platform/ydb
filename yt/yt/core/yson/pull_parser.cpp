@@ -538,11 +538,11 @@ std::vector<TErrorAttribute> TYsonPullParser::GetErrorAttributes() const
 
     TStringStream markedContext;
     markedContext
-        << EscapeC(context.substr(0, contextPosition))
+        << EscapeC(TStringBuf(context.substr(0, contextPosition)))
         << "  ERROR>>>  "
-        << EscapeC(context.substr(contextPosition));
+        << EscapeC(TStringBuf(context.substr(contextPosition)));
 
-    result.emplace_back("context", EscapeC(context));
+    result.emplace_back("context", EscapeC(TStringBuf(context)));
     result.emplace_back("context_pos", contextPosition);
     result.emplace_back("marked_context", markedContext.Str());
     return result;
@@ -622,7 +622,7 @@ bool TYsonPullParserCursor::TryConsumeFragmentStart()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString CreateExpectedItemTypesString(const std::vector<EYsonItemType>& expected)
+std::string CreateExpectedItemTypesString(const std::vector<EYsonItemType>& expected)
 {
     YT_VERIFY(!expected.empty());
     if (expected.size() > 1) {
@@ -675,7 +675,7 @@ void ThrowUnexpectedTokenException(
         allExpected.push_back(EYsonItemType::EntityValue);
     }
 
-    auto fullDescription = TString(optional ? "optional " : "") + description;
+    auto fullDescription = std::string(optional ? "optional " : "") + std::string(description);
     ThrowUnexpectedYsonTokenException(
         fullDescription,
         parser,

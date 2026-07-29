@@ -1,6 +1,6 @@
 #include "distinct_limit.h"
 
-#include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
 #include <ydb/core/tx/columnshard/counters/scan.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/collections/abstract.h>
 
@@ -48,9 +48,15 @@ ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(
 
     const auto existing = source->GetStageResult().GetNotAppliedFilter();
     const bool hasRowFilter = existing && !existing->IsTotalAllowFilter();
+    const bool isDictionaryOnlyFetch = sr.IsDictionaryOnlyFetch(KeyColumnId);
+    bool applyRowFilter = false;
     std::optional<NArrow::TColumnFilter::TIterator> filterIterator;
-    if (hasRowFilter) {
+    if (isDictionaryOnlyFetch) {
+        // Dictionary accessor is indexed by dict entries; portion-row deny filters are incompatible.
+        AFL_VERIFY(!hasRowFilter);
+    } else if (hasRowFilter) {
         AFL_VERIFY(existing->GetRecordsCountVerified() == recordsCount);
+        applyRowFilter = true;
         filterIterator.emplace(existing->GetBegin(false, recordsCount));
     }
 
@@ -63,8 +69,8 @@ ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(
         }
 
         for (int64_t i = 0; i < chunk->length(); ++i) {
-            const bool rowAllowed = !filterIterator || filterIterator->GetCurrentAcceptance();
-            if (filterIterator) {
+            const bool rowAllowed = !applyRowFilter || filterIterator->GetCurrentAcceptance();
+            if (applyRowFilter) {
                 // Last row may return false (iterator exhausted).
                 filterIterator->Next(1);
             }
@@ -90,7 +96,7 @@ ISyncPoint::ESourceAction TSyncPointDistinctLimitControl::OnSourceReady(
 
     AFL_VERIFY(distinctFilter.GetRecordsCountVerified() == recordsCount);
 
-    if (existing) {
+    if (existing && applyRowFilter) {
         distinctFilter = existing->And(distinctFilter);
     }
     source->MutableStageResult().SetNotAppliedFilter(std::make_shared<NArrow::TColumnFilter>(std::move(distinctFilter)));

@@ -88,6 +88,7 @@ TMaybe<NActors::NLog::EPriority> ParseLogLevel(const TString& level) {
 } // anonymous namespace
 
 void WaitFor(TDuration timeout, const TString& description, std::function<bool(TString&)> predicate) {
+    auto delay = TDuration::MilliSeconds(1);
     const TInstant start = TInstant::Now();
     TString errorString;
     while (TInstant::Now() - start <= timeout) {
@@ -96,7 +97,8 @@ void WaitFor(TDuration timeout, const TString& description, std::function<bool(T
         }
 
         Cerr << "Wait " << description << " " << TInstant::Now() - start << ": " << errorString << "\n";
-        Sleep(TDuration::Seconds(1));
+        Sleep(delay);
+        delay = std::min(2 * delay, TDuration::Seconds(1));
     }
 
     UNIT_FAIL("Waiting " << description << " timeout. Spent time " << TInstant::Now() - start << " exceeds limit " << timeout << ", last error: " << errorString);

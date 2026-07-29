@@ -293,17 +293,11 @@
     "test_ydb_impex.TestImpex.test_stdin[tsv-additional_args3-row]": {
         "uri": "file://test_ydb_impex.TestImpex.test_stdin_tsv-additional_args3-row_/result.output"
     },
-    "test_ydb_scheme.TestViewSchemeDescribe.test_describe_view[show_create_disabled_view_service_disabled]": {
-        "uri": "file://test_ydb_scheme.TestViewSchemeDescribe.test_describe_view_show_create_disabled_view_service_disabled_/result.output"
+    "test_ydb_scheme.TestViewSchemeDescribe.test_describe_view[view_service_disabled]": {
+        "uri": "file://test_ydb_scheme.TestViewSchemeDescribe.test_describe_view_view_service_disabled_/result.output"
     },
-    "test_ydb_scheme.TestViewSchemeDescribe.test_describe_view[show_create_disabled_view_service_enabled]": {
-        "uri": "file://test_ydb_scheme.TestViewSchemeDescribe.test_describe_view_show_create_disabled_view_service_enabled_/result.output"
-    },
-    "test_ydb_scheme.TestViewSchemeDescribe.test_describe_view[show_create_enabled_view_service_disabled]": {
-        "uri": "file://test_ydb_scheme.TestViewSchemeDescribe.test_describe_view_show_create_enabled_view_service_disabled_/result.output"
-    },
-    "test_ydb_scheme.TestViewSchemeDescribe.test_describe_view[show_create_enabled_view_service_enabled]": {
-        "uri": "file://test_ydb_scheme.TestViewSchemeDescribe.test_describe_view_show_create_enabled_view_service_enabled_/result.output"
+    "test_ydb_scheme.TestViewSchemeDescribe.test_describe_view[view_service_enabled]": {
+        "uri": "file://test_ydb_scheme.TestViewSchemeDescribe.test_describe_view_view_service_enabled_/result.output"
     },
     "test_ydb_scripting.TestExecuteScriptFromStdinWithWideOutput.test_wide_table": {
         "uri": "file://test_ydb_scripting.TestExecuteScriptFromStdinWithWideOutput.test_wide_table/result.output"
@@ -685,9 +679,6 @@
     },
     "test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_stdin_par_tsv[sql]": {
         "uri": "file://test_ydb_sql.TestExecuteSqlWithParamsFromStdin.test_stdin_par_tsv_sql_/result.output"
-    },
-    "test_ydb_sql.TestExecuteSqlWithPgSyntax.test_pg_syntax": {
-        "uri": "file://test_ydb_sql.TestExecuteSqlWithPgSyntax.test_pg_syntax/result.output"
     },
     "test_ydb_sql.TestExecuteSqlWithStdinDetection.test_empty_stdin_no_params": {
         "uri": "file://test_ydb_sql.TestExecuteSqlWithStdinDetection.test_empty_stdin_no_params/result.output"

@@ -60,6 +60,7 @@ static TMaybe<Ydb::Table::CreateTableRequest> GenRowTableScheme(
     FillPartitioningSettings(scheme, tableDesc);
     FillKeyBloomFilter(scheme, tableDesc);
     FillReadReplicasSettings(scheme, tableDesc);
+    FillMultiColumnStatisticsDescription(scheme, tableDesc);
 
     TString error;
     Ydb::StatusIds::StatusCode status;
@@ -94,7 +95,6 @@ static TMaybe<Ydb::Table::CreateTableRequest> GenColumnTableScheme(
     FillColumnFamilies(scheme, tableDesc);
     FillAttributes(scheme, pathDesc);
     FillPartitioningSettings(scheme, tableDesc);
-    FillColumnTableIndexDescription(scheme, tableDesc);
 
     return scheme;
 }

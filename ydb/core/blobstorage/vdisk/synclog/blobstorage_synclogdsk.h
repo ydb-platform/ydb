@@ -570,7 +570,7 @@ namespace NKikimr {
             // returns new LogStartLsn
             ui64 DeleteChunks(ui32 nchunks,
                               std::shared_ptr<IActorNotify> notifier,
-                              TVector<ui32> &chunks);
+                              TVector<TDeletedChunk> &chunks);
             void UpdateIndex(ui32 chunkIdx, const TVector<TSyncLogPageSnap> &pages);
             void UpdateIndex(const TDeltaToDiskRecLog &delta);
             // returns number of index records

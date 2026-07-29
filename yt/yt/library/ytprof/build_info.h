@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/generic/string.h>
+#include <string>
 
 namespace NYT::NYTProf {
 
@@ -11,15 +11,15 @@ struct TBuildInfo
     // Semantic version of current binary.
     //
     // Meaning of this field is application specific. Empty by default.
-    TString BinaryVersion;
+    std::string BinaryVersion;
 
     // ArcRevision this binary was built from.
-    TString ArcRevision;
+    std::string ArcRevision;
     int ArcLastChangeNum;
     bool ArcDirty;
 
     // BuildType this binary was built with.
-    TString BuildType;
+    std::string BuildType;
 
     static TBuildInfo GetDefault();
 };

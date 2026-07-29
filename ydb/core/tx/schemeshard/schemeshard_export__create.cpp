@@ -7,11 +7,14 @@
 #include "schemeshard_xxport__helpers.h"
 #include "schemeshard_xxport__tx_base.h"
 
+#include <ydb/core/tx/datashard/export_data_format.h>
+
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <ydb/core/backup/common/encryption.h>
+#include <ydb/core/backup/common/feature_flags.h>
 #include <ydb/core/backup/common/fields_wrappers.h>
 
 #include <util/generic/algorithm.h>
@@ -192,6 +195,24 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                         Ydb::StatusIds::PRECONDITION_FAILED,
                         "Index materialization is not enabled"
                     );
+                }
+            }
+            if constexpr (std::is_same_v<TSettings, Ydb::Export::ExportToS3Settings>) {
+                if (settings.format_case() == Ydb::Export::ExportToS3Settings::kParquet) {
+                    if (!AppData()->FeatureFlags.GetEnableExportInParquet()) {
+                        return Reply(
+                            std::move(response),
+                            Ydb::StatusIds::UNSUPPORTED,
+                            "Parquet export to S3 is disabled by feature flag EnableExportInParquet"
+                        );
+                    }
+                    if (settings.has_encryption_settings()) {
+                        return Reply(
+                            std::move(response),
+                            Ydb::StatusIds::BAD_REQUEST,
+                            "Encryption is not supported for Parquet export"
+                        );
+                    }
                 }
             }
             exportInfo = new TExportInfo(id, uid, kind, settings, domainPath.Base()->PathId, request.GetPeerName());
@@ -777,7 +798,7 @@ private:
         for (size_t i : xrange(exportInfo.Items.size())) {
             const auto& item = exportInfo.Items[i];
 
-            if (item.SourcePathType != NKikimrSchemeOp::EPathTypeTable) {
+            if (!IsPathTypeTable(item)) {
                 // only tables can be targets of the copy tables operation
                 continue;
             }
@@ -862,16 +883,17 @@ private:
     TMaybe<TString> GetIssues(const TExportInfo& exportInfo, TTxId backupTxId, ui32 itemIdx) {
         Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
         const auto& item = exportInfo.Items[itemIdx];
-        if (item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable) {
-            if (!Self->ColumnTables.contains(item.SourcePathId)) {
-                return TStringBuilder() << "Cannot find table: " << item.SourcePathId;
-            }
-
-            TColumnTableInfo::TPtr table = Self->ColumnTables.at(item.SourcePathId).GetPtr();
-            return GetIssues(table, item.SourcePathId, backupTxId);
-        }
 
         auto itemPathId = ItemPathId(Self, exportInfo, itemIdx);
+        if (item.SourcePathType == NKikimrSchemeOp::EPathTypeColumnTable) {
+            if (!Self->ColumnTables.contains(itemPathId)) {
+                return TStringBuilder() << "Cannot find table: " << itemPathId;
+            }
+
+            TColumnTableInfo::TPtr table = Self->ColumnTables.at(itemPathId).GetPtr();
+            return GetIssues(table, itemPathId, backupTxId);
+        }
+
         if (!Self->Tables.contains(itemPathId)) {
             return TStringBuilder() << "Cannot find table: " << itemPathId;
         }
@@ -1205,9 +1227,11 @@ private:
                     }
 
                     if (exportInfo->State == EState::CopyTables && isMultipleMods) {
+                        bool sourcePathMissing = false;
                         for (const auto& item : exportInfo->Items) {
                             if (!Self->PathsById.contains(item.SourcePathId)) {
                                 exportInfo->DependencyTxIds.clear();
+                                sourcePathMissing = true;
                                 break;
                             }
 
@@ -1223,6 +1247,10 @@ private:
 
                         if (!exportInfo->DependencyTxIds.empty()) {
                             return;
+                        }
+
+                        if (!sourcePathMissing) {
+                            return AllocateTxId(*exportInfo);
                         }
                     }
 
@@ -1476,8 +1504,8 @@ private:
         case EState::CreateExportDir: {
             exportInfo->WaitTxId = InvalidTxId;
 
-            const bool supportEncryptedExport = AppData()->FeatureFlags.GetEnableEncryptedExport();
-            if (TString issues; supportEncryptedExport && !FillExportMetadata(*exportInfo, issues)) {
+            const bool supportExportFiltering = NBackup::IsExportFilteringEnabled(*AppData());
+            if (TString issues; supportExportFiltering && !FillExportMetadata(*exportInfo, issues)) {
                 exportInfo->State = EState::Cancelled;
                 exportInfo->EndTime = TAppData::TimeProvider->Now();
                 exportInfo->Issue = issues;
@@ -1485,7 +1513,7 @@ private:
                 break;
             }
 
-            if (supportEncryptedExport && UploadExportMetadata(*exportInfo, ctx)) {
+            if (supportExportFiltering && UploadExportMetadata(*exportInfo, ctx)) {
                 exportInfo->State = EState::UploadExportMetadata;
 
                 // Persist modified metadata and new settings

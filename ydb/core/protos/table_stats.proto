@@ -80,4 +80,9 @@ message TTableStats {
     optional uint32 SplitProtocolVersion = 38;
     optional bytes SplitByLoadSuggestedKey = 39;
     optional bytes SplitBySizeSuggestedKey = 40;
+
+    // logical bytes
+    optional uint64 SmallBlobsVolumeBytes = 41;
+    // normalized index-record count (x BlobSubgroupSize / storage coef, see TSmallBlobsQuotaConfig)
+    optional uint64 SmallBlobsCount = 42;
 }

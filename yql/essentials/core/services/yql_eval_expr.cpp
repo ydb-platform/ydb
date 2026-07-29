@@ -490,7 +490,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
     pipeline.AddPostTypeAnnotation(forSubGraph);
     pipeline.Add(TExprLogTransformer::Sync("EvalExpressionOpt", NLog::EComponent::CoreEval, NLog::ELevel::TRACE),
                  "EvalOptTrace", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR, "EvalOptTrace");
-    pipeline.AddOptimization(false);
+    pipeline.AddOptimization(/*checkWorld=*/false);
     pipeline.Add(CreateFunctorTransformer(
                      [&](TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus {
                          output = input;
@@ -542,7 +542,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
                                                  return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Error);
                                              }
 
-                                             return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+                                             return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
                                          }
                                      }
                                  }
@@ -583,8 +583,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
     TOptimizeExprSettings settings(nullptr);
     settings.VisitChanges = true;
     settings.TrackFrames = true;
-    static const char ReuseLambdaFlag[] = "EvalReuseLambda";
-    settings.ReuseLambda = !IsOptimizerDisabled<ReuseLambdaFlag>(types);
+    settings.ReuseLambda = true;
     auto status = OptimizeExpr(output, output, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         if (node->IsCallable("EvaluateIf!")) {
             if (!EnsureMinArgsCount(*node, 3, ctx)) {
@@ -748,7 +747,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             // clang-format on
 
             ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas).Repeat(TExprStep::ExpandSeq);
-            hasPendingEvaluations = hasPendingEvaluations.Combine(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true));
+            hasPendingEvaluations = hasPendingEvaluations.Combine(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true));
             return ret;
         }
 
@@ -838,7 +837,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
                 // clang-format on
 
                 ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas).Repeat(TExprStep::ExpandSeq);
-                hasPendingEvaluations = hasPendingEvaluations.Combine(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true));
+                hasPendingEvaluations = hasPendingEvaluations.Combine(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true));
                 return sorted;
             } else {
                 auto list = node->Child(0);
@@ -865,7 +864,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
                     return node;
                 }
 
-                const auto status = ConvertToLambda(node->ChildRef(1), ctx, 2, 2, false);
+                const auto status = ConvertToLambda(node->ChildRef(1), ctx, 2, 2, /*withTypes=*/false);
                 if (status.Level == IGraphTransformer::TStatus::Error) {
                     return nullptr;
                 }
@@ -888,7 +887,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
                 auto merged = ctx.NewLambda(node->Pos(), std::move(args), std::move(body));
 
                 ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas).Repeat(TExprStep::ExpandSeq);
-                hasPendingEvaluations = hasPendingEvaluations.Combine(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true));
+                hasPendingEvaluations = hasPendingEvaluations.Combine(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true));
                 return merged;
             }
         }
@@ -991,7 +990,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
             TNodeSet visited;
             TNodeMap<const TExprNode*> activeArgs;
             bool hasUnresolvedTypes = false;
-            if (!CheckPendingArgs(*newArg, visited, activeArgs, marked.ExternalWorlds, ctx, false, hasUnresolvedTypes)) {
+            if (!CheckPendingArgs(*newArg, visited, activeArgs, marked.ExternalWorlds, ctx, /*underTypeOf=*/false, hasUnresolvedTypes)) {
                 return nullptr;
             }
 
@@ -1010,7 +1009,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
         TExprNode::TPtr clonedArg;
         {
             TNodeOnNodeOwnedMap deepClones;
-            clonedArg = ctx.DeepCopy(*newArg, ctx, deepClones, false, true, true);
+            clonedArg = ctx.DeepCopy(*newArg, ctx, deepClones, /*internStrings=*/false, /*copyTypes=*/true, /*copyResult=*/true);
         }
 
         // trim modifications
@@ -1076,7 +1075,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
                 }
 
                 // execute calcWorldRoot
-                auto execTransformer = CreateExecutionTransformer(types, [](const TOperationProgress&) {}, false);
+                auto execTransformer = CreateExecutionTransformer(types, [](const TOperationProgress&) {}, /*withFinalize=*/false);
                 status = SyncTransform(*execTransformer, calcWorldRoot, ctx);
                 if (status.Level == IGraphTransformer::TStatus::Error) {
                     return nullptr;
@@ -1209,7 +1208,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
 
             result = ctx.ReplaceNodes(std::move(result), replaces);
             ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas).Repeat(TExprStep::ExpandSeq);
-            hasPendingEvaluations = hasPendingEvaluations.Combine(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true));
+            hasPendingEvaluations = hasPendingEvaluations.Combine(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true));
             return result;
         }
 
@@ -1230,7 +1229,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
     ctx.Step.Repeat(TExprStep::ValidateProviders);
     ctx.Step.Repeat(TExprStep::Configure);
     ctx.Step.Done(TExprStep::ExprEval);
-    return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
+    return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, /*hasRestart=*/true);
 }
 
 } // namespace NYql

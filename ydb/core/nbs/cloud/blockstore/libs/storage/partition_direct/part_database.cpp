@@ -8,49 +8,63 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-using TVChunkConfigProto = ::NYdb::NBS::PartitionDirect::NProto::TVChunkConfig;
+using TVChunkConfigProto = PartitionDirect::NProto::TVChunkConfig;
 
 TVChunkConfigProto ToProto(const TVChunkConfig& cfg)
 {
     TVChunkConfigProto proto;
-    proto.SetVChunkIndex(cfg.VChunkIndex);
-    for (THostIndex i = 0; i < cfg.PBufferHosts.HostCount(); ++i) {
-        proto.AddPBufferHostRoles(
-            static_cast<ui32>(cfg.PBufferHosts.GetRole(i)));
+    proto.SetVChunkIndex(cfg.GetVChunkIndex());
+    const auto disabled = cfg.GetDisabledHosts();
+    for (THostIndex i = 0; i < cfg.GetHostCount(); ++i) {
+        proto.AddPBufferHostRoles(static_cast<ui32>(cfg.GetPBufferRole(i)));
+        proto.AddDDiskHostRoles(static_cast<ui32>(cfg.GetDDiskRole(i)));
+        if (!disabled.Get(i)) {
+            proto.AddEnabledHosts(i);
+        }
+
+        if (const auto watermark = cfg.GetWatermark(i)) {
+            auto* w = proto.AddWatermarks();
+            w->SetHostIndex(i);
+            w->SetValue(watermark.value());
+        }
     }
-    for (THostIndex i = 0; i < cfg.DDiskHosts.HostCount(); ++i) {
-        proto.AddDDiskHostRoles(static_cast<ui32>(cfg.DDiskHosts.GetRole(i)));
-    }
-    for (const THostIndex host: cfg.EnabledHosts) {
-        proto.AddEnabledHosts(host);
-    }
+
     return proto;
 }
 
 TVChunkConfig FromProto(const TVChunkConfigProto& proto)
 {
-    TVChunkConfig cfg;
-    cfg.VChunkIndex = proto.GetVChunkIndex();
+    THostRoles pbufferHosts(proto.PBufferHostRolesSize());
+    THostRoles ddiskHosts(proto.DDiskHostRolesSize());
+    THostMask enabledHosts;
+    TVector<std::optional<ui64>> watermarks(proto.DDiskHostRolesSize());
 
-    cfg.PBufferHosts = THostRoles(proto.PBufferHostRolesSize());
     for (THostIndex i = 0; i < proto.PBufferHostRolesSize(); ++i) {
-        cfg.PBufferHosts.SetRole(
+        pbufferHosts.SetRole(
             i,
             static_cast<EHostRole>(proto.GetPBufferHostRoles(i)));
     }
 
-    cfg.DDiskHosts = THostRoles(proto.DDiskHostRolesSize());
     for (THostIndex i = 0; i < proto.DDiskHostRolesSize(); ++i) {
-        cfg.DDiskHosts.SetRole(
+        ddiskHosts.SetRole(
             i,
             static_cast<EHostRole>(proto.GetDDiskHostRoles(i)));
     }
 
     for (THostIndex i = 0; i < proto.EnabledHostsSize(); ++i) {
-        cfg.EnabledHosts.Set(static_cast<THostIndex>(proto.GetEnabledHosts(i)));
+        enabledHosts.Set(static_cast<THostIndex>(proto.GetEnabledHosts(i)));
     }
 
-    return cfg;
+    for (const auto& w: proto.GetWatermarks()) {
+        watermarks[w.GetHostIndex()] = w.GetValue();
+    }
+
+    return TVChunkConfig::Make(
+        proto.GetVChunkIndex(),
+        pbufferHosts,
+        ddiskHosts,
+        enabledHosts,
+        std::move(watermarks));
 }
 
 }   // namespace
@@ -159,8 +173,48 @@ void TPartitionDatabase::StoreVChunkConfig(const TVChunkConfig& cfg)
     using TTable = TPartitionSchema::VChunkConfigs;
 
     Table<TTable>()
-        .Key(cfg.VChunkIndex)
+        .Key(cfg.GetVChunkIndex())
         .Update(NKikimr::NIceDb::TUpdate<TTable::Config>(ToProto(cfg)));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool TPartitionDatabase::ReadAddHostInProgress(
+    TMaybe<TAddHostInProgress>& addHostInProgress)
+{
+    using TTable = TPartitionSchema::TabletInfo;
+
+    auto it = Table<TTable>().Key(1).Select<TTable::AddHostInProgress>();
+
+    if (!it.IsReady()) {
+        return false;
+    }
+
+    if (it.IsValid() && it.HaveValue<TTable::AddHostInProgress>()) {
+        addHostInProgress = it.GetValue<TTable::AddHostInProgress>();
+    }
+
+    return true;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TPartitionDatabase::StoreAddHostInProgress(
+    const TAddHostInProgress& addHostInProgress)
+{
+    using TTable = TPartitionSchema::TabletInfo;
+
+    Table<TTable>().Key(1).Update(
+        NKikimr::NIceDb::TUpdate<TTable::AddHostInProgress>(addHostInProgress));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TPartitionDatabase::ClearAddHostInProgress()
+{
+    using TTable = TPartitionSchema::TabletInfo;
+
+    Table<TTable>().Key(1).UpdateToNull<TTable::AddHostInProgress>();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

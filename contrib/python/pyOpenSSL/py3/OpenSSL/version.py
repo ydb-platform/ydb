@@ -17,7 +17,7 @@ __all__ = [
     "__version__",
 ]
 
-__version__ = "21.0.0"
+__version__ = "23.3.0"
 
 __title__ = "pyOpenSSL"
 __uri__ = "https://pyopenssl.org/"
@@ -25,4 +25,4 @@ __summary__ = "Python wrapper module around the OpenSSL library"
 __author__ = "The pyOpenSSL developers"
 __email__ = "cryptography-dev@python.org"
 __license__ = "Apache License, Version 2.0"
-__copyright__ = "Copyright 2001-2020 {0}".format(__author__)
+__copyright__ = f"Copyright 2001-2023 {__author__}"

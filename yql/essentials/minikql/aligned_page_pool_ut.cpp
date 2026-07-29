@@ -22,11 +22,11 @@ public:
 
     explicit TScopedMemoryMapper(bool aligned) {
         Aligned_ = aligned;
-        TFakeMmap::OnMunmap = [this](void* addr, size_t s) {
+        TFakeMmap::GetInstance().OnMunmap = [this](void* addr, size_t s) {
             Munmaps_.push_back({addr, s});
         };
 
-        TFakeMmap::OnMmap = [this](size_t size) -> void* {
+        TFakeMmap::GetInstance().OnMmap = [this](size_t size) -> void* {
             // Allocate more memory to ensure we have enough space for alignment
             Storage_ = THolder<char, TDeleteArray>(new char[AlignUp(size + EXTRA_SPACE_FOR_UNALIGNMENT, TAlignedPagePool::POOL_PAGE_SIZE)]);
             UNIT_ASSERT(Storage_.Get());
@@ -44,8 +44,8 @@ public:
     }
 
     ~TScopedMemoryMapper() {
-        TFakeMmap::OnMunmap = {};
-        TFakeMmap::OnMmap = {};
+        TFakeMmap::GetInstance().OnMunmap = {};
+        TFakeMmap::GetInstance().OnMmap = {};
         Storage_.Reset();
     }
 

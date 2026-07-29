@@ -17,4 +17,6 @@ message TLongTxServiceConfig {
     optional TRetrySettings PublisherSettings = 7;
     optional TRetrySettings SubscriberSettings = 8;
     optional uint64 PrefillTimeoutSeconds = 9 [default = 5];
+    // Wall-clock skew margin subtracted from OldestCollectionTime when used as a cleanup floor.
+    optional uint64 MaxClockSkewMs = 10 [default = 5000];
 }

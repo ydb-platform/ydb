@@ -27,10 +27,11 @@ class PlanConverter {
     TIntrusivePtr<IOperator> ConvertTKqpOpJoin(TExprNode::TPtr node);
     TIntrusivePtr<IOperator> ConvertTKqpOpLimit(TExprNode::TPtr node);
     TIntrusivePtr<IOperator> ConvertTKqpOpProject(TExprNode::TPtr node);
-    TIntrusivePtr<IOperator> ConvertTKqpOpUnionAll(TExprNode::TPtr node);
+    TIntrusivePtr<IOperator> ConvertTKqpOpSetOp(TExprNode::TPtr node);
     TIntrusivePtr<IOperator> ConvertTKqpOpSort(TExprNode::TPtr node);
     TIntrusivePtr<IOperator> ConvertTKqpOpAggregate(TExprNode::TPtr node);
     TIntrusivePtr<IOperator> ConvertTKqpInfuseDependents(TExprNode::TPtr node);
+    TIntrusivePtr<IOperator> ConvertTKqpOpReplaceAlias(TExprNode::TPtr node);
 
     TExprNode::TPtr RemoveSubplans(TExprNode::TPtr lambda);
 

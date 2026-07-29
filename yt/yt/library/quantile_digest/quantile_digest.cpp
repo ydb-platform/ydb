@@ -45,7 +45,7 @@ public:
         return UnderlyingDigest_.GetRank(value);
     }
 
-    TString Serialize() override
+    std::string Serialize() override
     {
         NProto::TQuantileDigest quantileDigest;
 

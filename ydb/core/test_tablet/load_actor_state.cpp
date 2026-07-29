@@ -1,12 +1,18 @@
 #include "load_actor_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT TEST_SHARD
+
 namespace NKikimr::NTestShard {
 
     void TLoadActor::RegisterTransition(TKey& key, ::NTestShard::TStateServer::EEntityState from,
             ::NTestShard::TStateServer::EEntityState to, std::unique_ptr<TEvKeyValue::TEvRequest> ev,
             NWilson::TTraceId traceId) {
-        STLOG(PRI_DEBUG, TEST_SHARD, TS14, "RegisterTransition", (TabletId, TabletId), (Key, key.first), (From, from),
-            (To, to));
+        YDB_LOG_DEBUG("RegisterTransition",
+            {"marker", "TS14"},
+            {"tabletId", TabletId},
+            {"key", key.first},
+            {"from", from},
+            {"to", to});
 
         // some sanity checks
         Y_VERIFY_S(key.second.ConfirmedState == key.second.PendingState, "key# " << key.first
@@ -69,7 +75,9 @@ namespace NKikimr::NTestShard {
     }
 
     void TLoadActor::Handle(TEvStateServerWriteResult::TPtr ev) {
-        STLOG(PRI_DEBUG, TEST_SHARD, TS15, "received TEvStateServerWriteResult", (TabletId, TabletId));
+        YDB_LOG_DEBUG("Received TEvStateServerWriteResult",
+            {"marker", "TS15"},
+            {"tabletId", TabletId});
 
         // check response
         auto& r = ev->Get()->Record;
@@ -81,7 +89,9 @@ namespace NKikimr::NTestShard {
                 Y_FAIL_S("ERROR from StateServer TabletId# " << TabletId);
 
             case ::NTestShard::TStateServer::RACE:
-                STLOG(PRI_ERROR, TEST_SHARD, TS35, "received RACE in TEvStateServerWriteResult", (TabletId, TabletId));
+                YDB_LOG_ERROR("Received RACE in TEvStateServerWriteResult",
+                    {"marker", "TS35"},
+                    {"tabletId", TabletId});
                 TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, TabletActorId, SelfId(), nullptr, 0));
                 PassAway();
                 return;

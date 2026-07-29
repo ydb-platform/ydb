@@ -15,7 +15,7 @@ struct ILogWriter
     virtual void Reload() = 0;
 
     virtual void SetRateLimit(std::optional<i64> limit) = 0;
-    virtual void SetCategoryRateLimits(const THashMap<TString, i64>& categoryRateLimits) = 0;
+    virtual void SetCategoryRateLimits(const THashMap<std::string, i64>& categoryRateLimits) = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(ILogWriter)
@@ -25,7 +25,7 @@ DEFINE_REFCOUNTED_TYPE(ILogWriter)
 struct IFileLogWriter
     : public virtual ILogWriter
 {
-    virtual const TString& GetFileName() const = 0;
+    virtual const std::string& GetFileName() const = 0;
     virtual void CheckSpace(i64 minSpace) = 0;
     virtual void MaybeRotate() = 0;
 };

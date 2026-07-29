@@ -42,6 +42,8 @@
 
 #include <ydb/core/protos/auth.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_GATEWAY
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -302,8 +304,9 @@ public:
 
     void Handle(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
         const TString msg = ev->Get()->GetIssues().ToOneLineString();
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, SelfId()
-            << "Received abort execution event for scan query: " << msg);
+        YDB_LOG_DEBUG_CTX(ctx, "Received abort execution event for scan",
+            {"selfId", SelfId()},
+            {"query", msg});
 
         TBase::HandleError(msg, ctx);
     }
@@ -381,26 +384,27 @@ public:
                 ResponseHandle = ev.Release();
             } else {
                 // Response has no result sets. Forward to main pipeline
-                Callback(Promise, std::move(*ev->Get()));
+                Callback(std::move(Promise), std::move(*ev->Get()));
                 this->Die(ctx);
             }
         } else {
             // Forward error to main pipeline
-            Callback(Promise, std::move(*ev->Get()));
+            Callback(std::move(Promise), std::move(*ev->Get()));
             this->Die(ctx);
         }
     }
 
     void Handle(NKqp::TEvKqp::TEvDataQueryStreamPartAck::TPtr& ev, const TActorContext& ctx) {
         Y_UNUSED(ev);
-        Callback(Promise, std::move(*ResponseHandle->Get()));
+        Callback(std::move(Promise), std::move(*ResponseHandle->Get()));
         this->Die(ctx);
     }
 
     void Handle(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
         const TString msg = ev->Get()->GetIssues().ToOneLineString();
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, this->SelfId()
-            << "Received abort execution event for data query: " << msg);
+        YDB_LOG_DEBUG_CTX(ctx, "Received abort execution event for data query",
+            {"selfId", this->SelfId()},
+            {"query", msg});
 
         TBase::HandleError(msg, ctx);
     }
@@ -465,8 +469,9 @@ public:
 
     void Handle(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
         const TString msg = ev->Get()->GetIssues().ToOneLineString();
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_GATEWAY, SelfId()
-            << "Received abort execution event for query: " << msg);
+        YDB_LOG_DEBUG_CTX(ctx, "Received abort execution event",
+            {"selfId", SelfId()},
+            {"query", msg});
 
         TBase::HandleError(msg, ctx);
     }
@@ -915,10 +920,6 @@ public:
         return tablePromise.GetFuture();
     }
 
-    TFuture<TGenericResult> SetConstraint(const TString&, TVector<NYql::TSetColumnConstraintSettings>&&) override {
-        return NotImplemented<TGenericResult>();
-    }
-
     TFuture<TGenericResult> AlterDatabase(const TString&, const NYql::TAlterDatabaseSettings&) override {
         return NotImplemented<TGenericResult>();
     }
@@ -1042,8 +1043,8 @@ public:
         Y_UNUSED(existingOk);
     }
 
-    TFuture<NKikimr::NPQ::NSchema::TCreateTopicResponse> CreateTopicPrepared(NYql::TCreateTopicSettings&& settings) override {
-        auto schemaTxPromise = NewPromise<NPQ::NSchema::TCreateTopicResponse>();
+    TFuture<NKikimr::NPQ::NSchema::TSchemaResponse> CreateTopicPrepared(NYql::TCreateTopicSettings&& settings) override {
+        auto schemaTxPromise = NewPromise<NPQ::NSchema::TSchemaResponse>();
         auto schemaTxFuture = schemaTxPromise.GetFuture();
 
         IActor* requestHandler = NPQ::NSchema::CreateCreateTopicActor(std::move(schemaTxPromise), {
@@ -1057,8 +1058,8 @@ public:
         return schemaTxFuture;
     }
 
-    TFuture<NKikimr::NPQ::NSchema::TAlterTopicResponse> AlterTopicPrepared(NYql::TAlterTopicSettings&& settings) override {
-        auto schemaTxPromise = NewPromise<NPQ::NSchema::TAlterTopicResponse>();
+    TFuture<NKikimr::NPQ::NSchema::TSchemaResponse> AlterTopicPrepared(NYql::TAlterTopicSettings&& settings) override {
+        auto schemaTxPromise = NewPromise<NPQ::NSchema::TSchemaResponse>();
         auto schemaTxFuture = schemaTxPromise.GetFuture();
 
         IActor* requestHandler = NPQ::NSchema::CreateAlterTopicActor(std::move(schemaTxPromise), {
@@ -1193,9 +1194,10 @@ public:
             schemeTx.SetWorkingDir(pathPair.first);
             schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateExternalTable);
             schemeTx.SetFailedOnAlreadyExists(!existingOk);
+            schemeTx.SetReplaceIfExists(replaceIfExists);
 
             NKikimrSchemeOp::TExternalTableDescription& externalTableDesc = *schemeTx.MutableCreateExternalTable();
-            NSchemeHelpers::FillCreateExternalTableColumnDesc(externalTableDesc, pathPair.second, replaceIfExists, settings);
+            NSchemeHelpers::FillCreateExternalTableColumnDesc(externalTableDesc, pathPair.second, settings);
             return SendSchemeRequest(ev.Release(), true);
         }
         catch (yexception& e) {

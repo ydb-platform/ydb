@@ -1,6 +1,7 @@
 #include "utils.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/http_config.pb.h>
@@ -13,6 +14,14 @@
 #include <format>
 
 namespace NKikimr::NSqsTopic {
+
+    namespace {
+
+        TString ConvertOldConsumerName(const TString& consumer) {
+            return NPersQueue::ConvertOldConsumerName(consumer, AppData()->PQConfig);
+        }
+
+    } // namespace
 
     TQueueNameWithConsumer SplitExtendedQueueName(TStringBuf queueNameExt) {
         TQueueNameWithConsumer result;
@@ -79,7 +88,7 @@ namespace NKikimr::NSqsTopic {
             {"database", databasePath},
             {"method", method},
             {"topic", adjustedTopicPath},
-            {"consumer", consumerName},
+            {"consumer", ConvertOldConsumerName(consumerName)},
         };
         std::move(labels.begin(), labels.end(), std::back_inserter(common));
         return common;

@@ -9,12 +9,13 @@ namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 class TICStorageTransport: public IStorageTransport
 {
 public:
-    explicit TICStorageTransport(NActors::TActorSystem* actorSystem);
+    TICStorageTransport(
+        NActors::TActorSystem* actorSystem,
+        NActors::TActorId icStorageTransportActorId);
 
     ~TICStorageTransport() override = default;
 
-    NThreading::TFuture<TEvConnectResult> Connect(
-        const THostConnection& connection) override;
+    TConnectResultFutures Connect(const THostConnection& connection) override;
 
     NThreading::TFuture<TEvReadPersistentBufferResult> ReadFromPBuffer(
         const THostConnection& connection,
@@ -39,8 +40,7 @@ public:
         const TGuardedSgList& data,
         NWilson::TSpan* span) override;
 
-    NThreading::TFuture<TEvWriteToManyPersistentBuffersResult>
-    WriteToManyPBuffers(
+    void WriteToManyPBuffers(
         const THostConnection& connection,
         const NKikimr::NDDisk::TBlockSelector& selector,
         const ui64 lsn,
@@ -48,7 +48,8 @@ public:
         TVector<NKikimrBlobStorage::NDDisk::TDDiskId> persistentBufferIds,
         TDuration replyTimeout,
         const TGuardedSgList& data,
-        NWilson::TSpan* span) override;
+        std::shared_ptr<NWilson::TSpan> span,
+        TWriteToManyPBuffersCallback callback) override;
 
     NThreading::TFuture<TEvWriteResult> WriteToDDisk(
         const THostConnection& connection,
@@ -57,17 +58,21 @@ public:
         const TGuardedSgList& data,
         NWilson::TSpan* span) override;
 
-    NThreading::TFuture<TEvSyncWithPersistentBufferResult> SyncWithPBuffer(
+    NThreading::TFuture<TEvSyncResult> SyncWithPBuffer(
         const THostConnection& pbufferConnection,
         const THostConnection& ddiskConnection,
         TVector<NKikimr::NDDisk::TBlockSelector> selectors,
         TVector<ui64> lsns,
         NWilson::TSpan* span) override;
 
-    NThreading::TFuture<TEvErasePersistentBufferResult> EraseFromPBuffer(
+    NThreading::TFuture<TEvErasePersistentBufferResult> BatchEraseFromPBuffer(
         const THostConnection& connection,
-        TVector<NKikimr::NDDisk::TBlockSelector> selectors,
         TVector<ui64> lsns,
+        NWilson::TSpan* span) override;
+
+    NThreading::TFuture<TEvErasePersistentBufferResult> BarrierEraseFromPBuffer(
+        const THostConnection& connection,
+        ui64 lsn,
         NWilson::TSpan* span) override;
 
     NThreading::TFuture<TEvListPersistentBufferResult> ListPBufferEntries(

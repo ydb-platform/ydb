@@ -2,7 +2,6 @@
 #error "Direct inclusion of this file is not allowed, include queue.h"
 #include "queue.h"
 #endif
-#undef QUEUE_INL_H_
 
 namespace NYT::NYTProf {
 

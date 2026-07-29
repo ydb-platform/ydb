@@ -3,6 +3,7 @@
 #include "public.h"
 
 #include <yt/yt/core/misc/error.h>
+#include <yt/yt/core/misc/protobuf_helpers.h>
 
 #include <yt/yt/core/dns/public.h>
 
@@ -85,8 +86,8 @@ private:
 
     static socklen_t GetGenericLength(const sockaddr& sockAddr);
 
-    friend void ToProto(TString* protoAddress, const TNetworkAddress& address);
-    friend void FromProto(TNetworkAddress* address, const TString& protoAddress);
+    friend void ToProto(TProtobufString* protoAddress, const TNetworkAddress& address);
+    friend void FromProto(TNetworkAddress* address, const TProtobufString& protoAddress);
 };
 
 extern const TNetworkAddress NullNetworkAddress;
@@ -192,7 +193,7 @@ public:
      *  Calls |getaddrinfo| and returns the first entry belonging to |AF_INET| or |AF_INET6| family.
      *  Caches successful resolutions.
      */
-    TFuture<TNetworkAddress> Resolve(const std::string& address);
+    TFuture<TNetworkAddress> Resolve(TStringBuf address);
 
     //! Returns the currently installed global DNS resolver.
     NDns::IDnsResolverPtr GetDnsResolver();

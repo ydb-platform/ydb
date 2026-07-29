@@ -15,7 +15,7 @@ using namespace NConcurrency;
 
 TEST(TThreadLocalExpiringCacheTest, Simple)
 {
-    TThreadLocalExpiringCache<TString, int> cache(TDuration::Hours(1));
+    TThreadLocalExpiringCache<std::string, int> cache(TDuration::Hours(1));
 
     EXPECT_EQ(std::nullopt, cache.Get("hello"));
     EXPECT_EQ(std::nullopt, cache.Get("hello"));
@@ -26,7 +26,7 @@ TEST(TThreadLocalExpiringCacheTest, Simple)
 
 TEST(TThreadLocalExpiringCacheTest, ThreadLocal)
 {
-    TThreadLocalExpiringCache<TString, int> cache(TDuration::Hours(1));
+    TThreadLocalExpiringCache<std::string, int> cache(TDuration::Hours(1));
 
     std::vector<std::thread> threads;
     for (int i = 0; i < 16; ++i) {
@@ -49,7 +49,7 @@ TEST(TThreadLocalExpiringCacheTest, Expiration)
     auto duration = TDuration::MilliSeconds(100);
     auto cpuDuration = DurationToCpuDuration(duration);
 
-    TThreadLocalExpiringCache<TString, int> cache(duration);
+    TThreadLocalExpiringCache<std::string, int> cache(duration);
     cache.Set("hello", 42);
     EXPECT_EQ(42, cache.Get("hello"));
     auto now = GetCpuInstant();

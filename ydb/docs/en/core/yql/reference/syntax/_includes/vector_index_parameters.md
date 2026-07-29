@@ -2,10 +2,11 @@
     * `vector_dimension` - embedding vector dimensionality (should be between 1 and 16384)
     * `vector_type` - vector value type (`float`, `uint8`, or `int8`)
     * `distance` - [distance function](../../../reference/udf/list/knn.md#functions-distance) (`cosine`, `manhattan`, or `euclidean`), mutually exclusive with `similarity`
-	  * `similarity` - [similarity function](../../../reference/udf/list/knn.md#functions-distance) (`inner_product` or `cosine`), mutually exclusive with `distance`
+    * `similarity` - [similarity function](../../../reference/udf/list/knn.md#functions-distance) (`inner_product` or `cosine`), mutually exclusive with `distance`
   * specific parameters for `vector_kmeans_tree` ([read more about the index type](../../../../dev/vector-indexes.md#kmeans-tree-type)):
     * `clusters` - number of centroids for k-means algorithm (should be between 2 and 2048)
     * `levels` - number of levels in the tree (should be between 1 and 16)
     * `overlap_clusters` - the number of nearest clusters to add each vector to (default 1)
+    * `adaptive_clusters` - for [filtered indexes](../../../../dev/vector-indexes.md#filtered), automatically choose the number of clusters per filtering-column value based on how many vectors that value has (`true` or `false`, default `false`). See [Adaptive clusters](../../../../dev/vector-indexes-kmeans-tree-type.md#adaptive-clusters).
     * the total number of nodes in the tree, calculated as `clusters` raised to the power of `levels`, should be no more than 1073741824
     * the product of `vector_dimension` and `clusters` should be no more than 4194304

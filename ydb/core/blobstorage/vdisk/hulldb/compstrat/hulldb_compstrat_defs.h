@@ -29,6 +29,17 @@ namespace NKikimr {
             }
         }
 
+        enum class ESelectStrategy {
+            None,
+            DelSst,
+            PromoteSsts,
+            Explicit,
+            BalanceLevel,
+            BalanceFull,
+            FreeSpace,
+            Squeeze,
+        };
+
         ////////////////////////////////////////////////////////////////////////////
         // NHullComp::TFullCompactionAttrs
         // Contains full compaction attributes, which are used to understand
@@ -302,6 +313,7 @@ namespace NKikimr {
             TMoveSsts MoveSsts;
             TCompactSsts CompactSsts;
             bool IsFullCompaction = false;
+            ESelectStrategy SelectStrategy = ESelectStrategy::None;
             // this field contains
             // * original std::optional<TFullCompactionAttrs>
             // * if 'first' was set, than result of full compaction: second=true -- full compaction has been finished
@@ -318,6 +330,7 @@ namespace NKikimr {
                 MoveSsts.Clear();
                 CompactSsts.Clear();
                 IsFullCompaction = false;
+                SelectStrategy = ESelectStrategy::None;
                 FullCompactionInfo.first.reset();
                 FullCompactionInfo.second = false;
             }

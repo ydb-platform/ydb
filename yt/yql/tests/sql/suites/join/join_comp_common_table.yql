@@ -1,5 +1,4 @@
 PRAGMA DisableSimpleColumns;
-/* postgres can not */
 use plato;
 
 $i = (select AsList(key) as x from Input);

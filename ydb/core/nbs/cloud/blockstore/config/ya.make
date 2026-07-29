@@ -1,5 +1,7 @@
 LIBRARY()
 
+GENERATE_ENUM_SERIALIZATION(public.h)
+
 SRCS(
     config.cpp
 )

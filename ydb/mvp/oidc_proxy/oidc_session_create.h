@@ -13,6 +13,9 @@
 
 namespace NMVP::NOIDC {
 
+struct TCheckStateResult;
+struct TRestoreOidcContextResult;
+
 class THandlerSessionCreate
     : public NActors::TActorBootstrapped<THandlerSessionCreate>
     , protected TMvpLogContextProvider {
@@ -46,6 +49,7 @@ protected:
     void ReplyBadRequestAndPassAway(TString errorMessage);
 
 private:
+    TRestoreOidcContextResult RestoreOidcContext(const NHttp::TCookies& cookies, const TCheckStateResult& checkStateResult);
     void SendUnknownErrorResponseAndDie();
 };
 

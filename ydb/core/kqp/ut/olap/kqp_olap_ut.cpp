@@ -252,13 +252,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             }
             {
                 const auto result = client.ExecuteQuery(
-                    "ALTER TABLE `/Root/olapTable` ALTER FAMILY default SET compression 'LZ4';",
-                    NYdb::NQuery::TTxControl::NoTx()
-                ).ExtractValueSync();
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            }
-            {
-                const auto result = client.ExecuteQuery(
                     "ALTER TABLE `/Root/olapTable` set TTL Interval('P1D') on timestamp;",
                     NYdb::NQuery::TTxControl::NoTx()
                 ).ExtractValueSync();
@@ -1879,6 +1872,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 b Uint32 NOT NULL,
                 c Timestamp NOT NULL,
                 d Utf8,
+                e Utf8,
                 primary key(a)
             )
             PARTITION BY HASH(a)
@@ -1925,6 +1919,14 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     `/Root/t1` as t1
                 WHERE
                     t1.d is not distinct from "some_str";
+            )",
+            R"(
+                SELECT
+                    d, b, e
+                FROM
+                    `/Root/t1` as t1
+                WHERE
+                    t1.e in ["some_str_0", "some_str_1", "some_str_2"] and t1.d is not distinct from "some_str";
             )",
         };
 
@@ -3820,7 +3822,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({ "id" }).SetSharding({ "id" }).SetSchema(schema);
         testHelper.CreateTable(testTable);
         {
-            auto result = testHelper.GetSession().ExecuteSchemeQuery("ALTER OBJECT `/Root/ColumnTableTest` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`l-buckets`)").GetValueSync();
+            auto result = testHelper.GetSession().ExecuteSchemeQuery("ALTER OBJECT `/Root/ColumnTableTest` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`)").GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
         {
@@ -4100,7 +4102,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         {
             auto alterQuery = TStringBuilder() <<
-                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`l-buckets`);
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
@@ -5192,7 +5194,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
     Y_UNIT_TEST(TruncateColumnTableFails) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableTruncateTable(true);
         auto settings = TKikimrSettings().SetWithSampleTables(false).SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
         auto client = kikimr.GetQueryClient();
@@ -5233,6 +5234,161 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_C(result.GetIssues().ToString().contains("path is not a table"),
                 "Unexpected error message: " << result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(AlterTableDropNotNullOnColumnTable) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                CREATE TABLE `/Root/table_name` (
+                    a Uint64 NOT NULL,
+                    b Timestamp NOT NULL,
+                    c Float NOT NULL,
+                    PRIMARY KEY (a, b)
+                )
+                PARTITION BY HASH(b)
+                WITH (
+                    STORE = COLUMN
+                );
+            )", NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                ALTER TABLE `/Root/table_name` ALTER COLUMN c DROP NOT NULL;
+            )", NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                UPSERT INTO `/Root/table_name` (a, b, c) VALUES (1u, Timestamp('1970-01-01T00:00:00.000002Z'), NULL);
+            )", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                SELECT a, c FROM `/Root/table_name`;
+            )", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[1u;#]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(AlterTableDropNotNullOnColumnTableViaAlterTableOp) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                CREATE TABLE `/Root/table_name` (
+                    a Uint64 NOT NULL,
+                    b Timestamp NOT NULL,
+                    c Float NOT NULL,
+                    PRIMARY KEY (a, b)
+                )
+                PARTITION BY HASH(b)
+                WITH (
+                    STORE = COLUMN
+                );
+            )", NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            NKikimrSchemeOp::TTableDescription alter;
+            alter.SetName("table_name");
+            auto* column = alter.AddColumns();
+            column->SetName("c");
+            column->SetNotNull(false);
+
+            auto status = kikimr.GetTestClient().AlterTable("/Root", alter);
+            UNIT_ASSERT_VALUES_EQUAL_C(status, NMsgBusProxy::MSTATUS_OK, "AlterTable DROP NOT NULL via ESchemeOpAlterTable");
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                UPSERT INTO `/Root/table_name` (a, b, c) VALUES (1u, Timestamp('1970-01-01T00:00:00.000002Z'), NULL);
+            )", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                SELECT a, c FROM `/Root/table_name`;
+            )", NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[1u;#]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(AlterTableDropNotNullOnColumnTableRejectsPkAndSetNotNull) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                CREATE TABLE `/Root/table_name` (
+                    a Uint64 NOT NULL,
+                    b Timestamp NOT NULL,
+                    c Float,
+                    PRIMARY KEY (a, b)
+                )
+                PARTITION BY HASH(b)
+                WITH (
+                    STORE = COLUMN
+                );
+            )", NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            NKikimrSchemeOp::TTableDescription alter;
+            alter.SetName("table_name");
+            auto* column = alter.AddColumns();
+            column->SetName("a");
+            column->SetNotNull(false);
+
+            auto status = kikimr.GetTestClient().AlterTable("/Root", alter);
+            UNIT_ASSERT_VALUES_UNEQUAL_C(status, NMsgBusProxy::MSTATUS_OK,
+                "DROP NOT NULL on primary key column must fail");
+        }
+
+        {
+            NKikimrSchemeOp::TTableDescription alter;
+            alter.SetName("table_name");
+            auto* column = alter.AddColumns();
+            column->SetName("c");
+            column->SetNotNull(true);
+
+            auto status = kikimr.GetTestClient().AlterTable("/Root", alter);
+            UNIT_ASSERT_VALUES_UNEQUAL_C(status, NMsgBusProxy::MSTATUS_OK,
+                "SET NOT NULL on column table must fail");
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                ALTER TABLE `/Root/table_name` ALTER COLUMN a DROP NOT NULL;
+            )", NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = client.ExecuteQuery(R"(
+                ALTER TABLE `/Root/table_name` ALTER COLUMN c SET NOT NULL;
+            )", NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
         }
     }
 

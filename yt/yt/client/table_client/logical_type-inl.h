@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "logical_type.h"
 #endif
-#undef LOGICAL_TYPE_INL_H_
 
 namespace NYT::NTableClient {
 
@@ -137,7 +136,7 @@ const TLogicalTypePtr& TDictLogicalType::GetValue() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TString& TTaggedLogicalType::GetTag() const
+const std::string& TTaggedLogicalType::GetTag() const
 {
     return Tag_;
 }

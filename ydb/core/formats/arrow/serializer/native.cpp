@@ -2,13 +2,12 @@
 #include "parsing.h"
 #include "stream.h"
 
-#include <ydb/core/formats/arrow/dictionary/conversion.h>
-
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/formats/arrow/validation/validation.h>
 #include <ydb/library/services/services.pb.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/buffer.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/dictionary.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/reader.h>

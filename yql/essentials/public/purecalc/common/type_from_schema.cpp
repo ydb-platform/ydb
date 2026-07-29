@@ -241,16 +241,16 @@ const TStructExprType* ExtendStructType(
 
 bool ValidateInputSchema(const TTypeAnnotationNode* type, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
     TIssueScopeGuard issueScope(ctx.IssueManager, []() { return new TIssue(TPosition(), "Input schema"); });
-    return CheckSchema(type, nullptr, ctx, typeCtx, false);
+    return CheckSchema(type, /*expected=*/nullptr, ctx, typeCtx, /*allowVariant=*/false);
 }
 
 bool ValidateOutputSchema(const TTypeAnnotationNode* type, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
     TIssueScopeGuard issueScope(ctx.IssueManager, []() { return new TIssue(TPosition(), "Output schema"); });
-    return CheckSchema(type, nullptr, ctx, typeCtx, true);
+    return CheckSchema(type, /*expected=*/nullptr, ctx, typeCtx, /*allowVariant=*/true);
 }
 
 bool ValidateOutputType(const TTypeAnnotationNode* type, const TTypeAnnotationNode* expected, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
     TIssueScopeGuard issueScope(ctx.IssueManager, []() { return new TIssue(TPosition(), "Program return type"); });
-    return CheckSchema(type, expected, ctx, typeCtx, true);
+    return CheckSchema(type, expected, ctx, typeCtx, /*allowVariant=*/true);
 }
 } // namespace NYql::NPureCalc

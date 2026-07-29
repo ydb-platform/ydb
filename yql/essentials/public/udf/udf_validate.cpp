@@ -51,15 +51,4 @@ EValidatePolicy ValidatePolicyByStr(const TString& verifyPolicy) {
     ythrow yexception() << "Unknown udf validate policy: " << verifyPolicy;
 }
 
-EValidateDatumMode ToDatumValidateMode(EValidateMode validateMode) {
-    switch (validateMode) {
-        case EValidateMode::None:
-            return EValidateDatumMode::None;
-        case EValidateMode::Lazy:
-            return EValidateDatumMode::Cheap;
-        case EValidateMode::Greedy:
-        case EValidateMode::Max:
-            return EValidateDatumMode::Expensive;
-    }
-}
 } // namespace NYql::NUdf

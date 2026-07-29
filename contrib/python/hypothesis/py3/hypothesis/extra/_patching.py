@@ -129,20 +129,20 @@ class AddExamplesCodemod(VisitorBasedCodemodCommand):
                 else node.args
             ),
         )
-        via: cst.BaseExpression = cst.Call(
+        expr: cst.BaseExpression = cst.Call(
             func=cst.Attribute(node, cst.Name("via")),
             args=[cst.Arg(cst.SimpleString(repr(via)))],
         )
         if black:  # pragma: no branch
             try:
                 pretty = black.format_str(
-                    cst.Module([]).code_for_node(via),
+                    cst.Module([]).code_for_node(expr),
                     mode=black.Mode(line_length=self.line_length),
                 )
             except (ImportError, AttributeError):  # pragma: no cover
                 return None  # See https://github.com/psf/black/pull/4224
-            via = cst.parse_expression(pretty.strip())
-        return cst.Decorator(via)
+            expr = cst.parse_expression(pretty.strip())
+        return cst.Decorator(expr)
 
     def leave_FunctionDef(
         self, _original_node: cst.FunctionDef, updated_node: cst.FunctionDef
@@ -317,7 +317,18 @@ def make_patch(
             fromfile=f"./{fname}",  # git strips the first part of the path by default
             tofile=f"./{fname}",
         )
-        diffs.append("".join(ud))
+        # difflib.unified_diff omits the `\ No newline at end of file` marker
+        # that git requires; add it ourselves. We check every line because the
+        # marker may apply to a `-` line that isn't the last line of the diff.
+        # See https://github.com/HypothesisWorks/hypothesis/issues/4744.
+        lines = []
+        for line in ud:
+            if line.endswith("\n"):
+                lines.append(line)
+            else:
+                lines.append(line + "\n")
+                lines.append("\\ No newline at end of file\n")
+        diffs.append("".join(lines))
     return "".join(diffs)
 
 

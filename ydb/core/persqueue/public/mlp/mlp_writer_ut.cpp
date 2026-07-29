@@ -76,7 +76,6 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
             .WaitTime = TDuration::Seconds(1),
             .ProcessingTimeout = TDuration::Seconds(5),
             .MaxNumberOfMessage = 10,
-            .UncompressMessages = true
         });
 
         {
@@ -352,7 +351,6 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
                 .WaitTime = TDuration::Seconds(0),
                 .ProcessingTimeout = TDuration::Seconds(5),
                 .MaxNumberOfMessage = 1,
-                .UncompressMessages = true
             });
             auto r = GetReadResponse(runtime);
 
@@ -381,7 +379,6 @@ Y_UNIT_TEST_SUITE(TMLPWriterTests) {
             .WaitTime = TDuration::Seconds(1),
             .ProcessingTimeout = TDuration::Seconds(5),
             .MaxNumberOfMessage = 1,
-            .UncompressMessages = true
         });
         auto r = GetReadResponse(runtime);
         UNIT_ASSERT_C(r->Messages.empty(), "all messages have already been read successfully");

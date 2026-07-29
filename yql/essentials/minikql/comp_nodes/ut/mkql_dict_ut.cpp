@@ -1,7 +1,9 @@
 #include "mkql_computation_node_ut.h"
+#include "mkql_program_builder_test_utils.h"
 
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -11,44 +13,33 @@ Y_UNIT_TEST_LLVM(TestDictLength) {
     TSetup<LLVM> setup;
     TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
-    const auto key1 = pgmBuilder.NewDataLiteral<ui32>(1);
-    const auto key2 = pgmBuilder.NewDataLiteral<ui32>(2);
-    const auto key3 = pgmBuilder.NewDataLiteral<ui32>(2);
-    const auto payload1 = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("A");
-    const auto payload2 = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("B");
-    const auto payload3 = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("C");
-    TVector<std::pair<TRuntimeNode, TRuntimeNode>> dictItems;
-    dictItems.push_back(std::make_pair(key1, payload1));
-    dictItems.push_back(std::make_pair(key2, payload2));
-    dictItems.push_back(std::make_pair(key3, payload3));
+    const auto key1 = NTest::ConvertValueToLiteralNode(pgmBuilder, ui32(1));
+    const auto key2 = NTest::ConvertValueToLiteralNode(pgmBuilder, ui32(2));
+    const auto payload1 = NTest::ConvertValueToLiteralNode(pgmBuilder, TStringBuf("A"));
+    const auto payload2 = NTest::ConvertValueToLiteralNode(pgmBuilder, TStringBuf("B"));
+    const auto payload3 = NTest::ConvertValueToLiteralNode(pgmBuilder, TStringBuf("C"));
     const auto dictType = pgmBuilder.NewDictType(pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id),
                                                  pgmBuilder.NewDataType(NUdf::TDataType<char*>::Id), false);
-    const auto dict = pgmBuilder.NewDict(dictType, dictItems);
+    const auto dict = pgmBuilder.NewDict(dictType, {{key1, payload1}, {key2, payload2}, {key2, payload3}});
     const auto pgmReturn = pgmBuilder.Length(dict);
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    UNIT_ASSERT_VALUES_EQUAL(graph->GetValue().template Get<ui64>(), 2);
+    AssertUnboxedValueElementEqual(graph->GetValue(), ui64(2));
 }
 
 Y_UNIT_TEST_LLVM(TestDictContains) {
     TSetup<LLVM> setup;
     TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
-    const auto key1 = pgmBuilder.NewDataLiteral<ui32>(1);
-    const auto key2 = pgmBuilder.NewDataLiteral<ui32>(2);
-    const auto key3 = pgmBuilder.NewDataLiteral<ui32>(2);
-    const auto missingKey = pgmBuilder.NewDataLiteral<ui32>(3);
-    const auto payload1 = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("A");
-    const auto payload2 = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("B");
-    const auto payload3 = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("C");
-    TVector<std::pair<TRuntimeNode, TRuntimeNode>> dictItems;
-    dictItems.push_back(std::make_pair(key1, payload1));
-    dictItems.push_back(std::make_pair(key2, payload2));
-    dictItems.push_back(std::make_pair(key3, payload3));
+    const auto key1 = NTest::ConvertValueToLiteralNode(pgmBuilder, ui32(1));
+    const auto key2 = NTest::ConvertValueToLiteralNode(pgmBuilder, ui32(2));
+    const auto payload1 = NTest::ConvertValueToLiteralNode(pgmBuilder, TStringBuf("A"));
+    const auto payload2 = NTest::ConvertValueToLiteralNode(pgmBuilder, TStringBuf("B"));
+    const auto payload3 = NTest::ConvertValueToLiteralNode(pgmBuilder, TStringBuf("C"));
     const auto dictType = pgmBuilder.NewDictType(pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id),
                                                  pgmBuilder.NewDataType(NUdf::TDataType<char*>::Id), false);
-    const auto dict = pgmBuilder.NewDict(dictType, dictItems);
-    const auto keys = pgmBuilder.NewList(pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id), {key1, key2, missingKey});
+    const auto dict = pgmBuilder.NewDict(dictType, {{key1, payload1}, {key2, payload2}, {key2, payload3}});
+    const auto keys = NTest::ConvertValueToLiteralNode(pgmBuilder, TVector<ui32>{1, 2, 3});
 
     const auto pgmReturn = pgmBuilder.Map(keys,
                                           [&](TRuntimeNode key) {
@@ -56,37 +47,22 @@ Y_UNIT_TEST_LLVM(TestDictContains) {
                                           });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<bool>{true, true, false});
 }
 
 Y_UNIT_TEST_LLVM(TestDictLookup) {
     TSetup<LLVM> setup;
     TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
 
-    const auto key1 = pgmBuilder.NewDataLiteral<ui32>(1);
-    const auto key2 = pgmBuilder.NewDataLiteral<ui32>(2);
-    const auto key3 = pgmBuilder.NewDataLiteral<ui32>(2);
-    const auto missingKey = pgmBuilder.NewDataLiteral<ui32>(3);
-    const auto payload1 = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("A");
-    const auto payload2 = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("B");
-    const auto payload3 = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("C");
-    TVector<std::pair<TRuntimeNode, TRuntimeNode>> dictItems;
-    dictItems.push_back(std::make_pair(key1, payload1));
-    dictItems.push_back(std::make_pair(key2, payload2));
-    dictItems.push_back(std::make_pair(key3, payload3));
+    const auto key1 = NTest::ConvertValueToLiteralNode(pgmBuilder, ui32(1));
+    const auto key2 = NTest::ConvertValueToLiteralNode(pgmBuilder, ui32(2));
+    const auto payload1 = NTest::ConvertValueToLiteralNode(pgmBuilder, TStringBuf("A"));
+    const auto payload2 = NTest::ConvertValueToLiteralNode(pgmBuilder, TStringBuf("B"));
+    const auto payload3 = NTest::ConvertValueToLiteralNode(pgmBuilder, TStringBuf("C"));
     const auto dictType = pgmBuilder.NewDictType(pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id),
                                                  pgmBuilder.NewDataType(NUdf::TDataType<char*>::Id), false);
-    const auto dict = pgmBuilder.NewDict(dictType, dictItems);
-    const auto keys = pgmBuilder.NewList(pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id), {key1, key2, missingKey});
+    const auto dict = pgmBuilder.NewDict(dictType, {{key1, payload1}, {key2, payload2}, {key2, payload3}});
+    const auto keys = NTest::ConvertValueToLiteralNode(pgmBuilder, TVector<ui32>{1, 2, 3});
 
     const auto pgmReturn = pgmBuilder.Map(keys,
                                           [&](TRuntimeNode key) {
@@ -94,41 +70,22 @@ Y_UNIT_TEST_LLVM(TestDictLookup) {
                                           });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item);
-    UNBOXED_VALUE_STR_EQUAL(item, "A");
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item);
-    UNBOXED_VALUE_STR_EQUAL(item, "B");
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TMaybe<TString>>{"A", "B", {}});
 }
 
 template <bool Multi>
 TRuntimeNode PrepareTestDict(TProgramBuilder& pgmBuilder, TRuntimeNode (TProgramBuilder::*factory)(TRuntimeNode list, bool multi,
                                                                                                    const TProgramBuilder::TUnaryLambda& keySelector,
                                                                                                    const TProgramBuilder::TUnaryLambda& payloadSelector, bool isCompact, ui64 itemsCountHint)) {
-    const auto key1 = pgmBuilder.NewDataLiteral<ui32>(1);
-    const auto key2 = pgmBuilder.NewDataLiteral<ui32>(2);
-    const auto key3 = pgmBuilder.NewDataLiteral<ui32>(2);
-    const auto key4 = pgmBuilder.NewDataLiteral<ui32>(5);
-    const auto key5 = pgmBuilder.NewDataLiteral<ui32>(7);
-    const auto payload1 = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("A");
-    const auto payload2 = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("B");
-    const auto payload3 = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("C");
-    const auto payload4 = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("D");
-    const auto payload5 = pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("E");
-    auto structType = pgmBuilder.NewStructType(pgmBuilder.NewEmptyStructType(), "Key", pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id));
-    structType = pgmBuilder.NewStructType(structType, "Payload", pgmBuilder.NewDataType(NUdf::TDataType<char*>::Id));
-    const auto list = pgmBuilder.NewList(structType, {pgmBuilder.AddMember(pgmBuilder.AddMember(pgmBuilder.NewEmptyStruct(), "Key", key3), "Payload", payload3),
-                                                      pgmBuilder.AddMember(pgmBuilder.AddMember(pgmBuilder.NewEmptyStruct(), "Key", key1), "Payload", payload1),
-                                                      pgmBuilder.AddMember(pgmBuilder.AddMember(pgmBuilder.NewEmptyStruct(), "Key", key5), "Payload", payload5),
-                                                      pgmBuilder.AddMember(pgmBuilder.AddMember(pgmBuilder.NewEmptyStruct(), "Key", key4), "Payload", payload4),
-                                                      pgmBuilder.AddMember(pgmBuilder.AddMember(pgmBuilder.NewEmptyStruct(), "Key", key2), "Payload", payload2)});
+    using TKeyPayloadRow = NTest::TStructType<NTest::TStructMember<"Key", ui32>,
+                                              NTest::TStructMember<"Payload", TStringBuf>>;
+    const auto list = NTest::ConvertValueToLiteralNode(pgmBuilder, TVector<TKeyPayloadRow>{
+                                                                       {{{ui32(2)}, {"C"}}},
+                                                                       {{{ui32(1)}, {"A"}}},
+                                                                       {{{ui32(7)}, {"E"}}},
+                                                                       {{{ui32(5)}, {"D"}}},
+                                                                       {{{ui32(2)}, {"B"}}},
+                                                                   });
     const auto dict = (pgmBuilder.*factory)(list, Multi,
                                             [&](TRuntimeNode item) { return pgmBuilder.Member(item, "Key"); },
                                             [&](TRuntimeNode item) { return pgmBuilder.Member(item, "Payload"); }, false, 0);
@@ -143,10 +100,7 @@ void TestConvertedDictContains(TRuntimeNode (TProgramBuilder::*factory)(TRuntime
     TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
     const auto dict = PrepareTestDict<false>(pgmBuilder, factory);
 
-    const auto key1 = pgmBuilder.NewDataLiteral<ui32>(1);
-    const auto key2 = pgmBuilder.NewDataLiteral<ui32>(2);
-    const auto missingKey = pgmBuilder.NewDataLiteral<ui32>(42);
-    const auto keys = pgmBuilder.NewList(pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id), {key1, key2, missingKey});
+    const auto keys = NTest::ConvertValueToLiteralNode(pgmBuilder, TVector<ui32>{1, 2, 42});
 
     const auto pgmReturn = pgmBuilder.Map(keys,
                                           [&](TRuntimeNode key) {
@@ -154,16 +108,7 @@ void TestConvertedDictContains(TRuntimeNode (TProgramBuilder::*factory)(TRuntime
                                           });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<bool>{true, true, false});
 }
 
 template <bool LLVM>
@@ -174,10 +119,7 @@ void TestConvertedDictLookup(TRuntimeNode (TProgramBuilder::*factory)(TRuntimeNo
     TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
     const auto dict = PrepareTestDict<false>(pgmBuilder, factory);
 
-    const auto key1 = pgmBuilder.NewDataLiteral<ui32>(1);
-    const auto key2 = pgmBuilder.NewDataLiteral<ui32>(2);
-    const auto missingKey = pgmBuilder.NewDataLiteral<ui32>(18);
-    const auto keys = pgmBuilder.NewList(pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id), {key1, key2, missingKey});
+    const auto keys = NTest::ConvertValueToLiteralNode(pgmBuilder, TVector<ui32>{1, 2, 18});
 
     const auto pgmReturn = pgmBuilder.Map(keys,
                                           [&](TRuntimeNode key) {
@@ -185,18 +127,7 @@ void TestConvertedDictLookup(TRuntimeNode (TProgramBuilder::*factory)(TRuntimeNo
                                           });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item);
-    UNBOXED_VALUE_STR_EQUAL(item, "A");
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item);
-    UNBOXED_VALUE_STR_EQUAL(item, "C");
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TMaybe<TStringBuf>>{"A", "C", {}});
 }
 
 Y_UNIT_TEST_LLVM(TestSortedDictContains) {
@@ -334,41 +265,17 @@ void TestConvertedMultiDictLookup(TRuntimeNode (TProgramBuilder::*factory)(TRunt
     TSetup<LLVM> setup;
     TProgramBuilder& pgmBuilder = *setup.PgmBuilder;
     const auto dict = PrepareTestDict<true>(pgmBuilder, factory);
-    const auto key1 = pgmBuilder.NewDataLiteral<ui32>(1);
-    const auto key2 = pgmBuilder.NewDataLiteral<ui32>(2);
-    const auto missingKey = pgmBuilder.NewDataLiteral<ui32>(3);
-    const auto keys = pgmBuilder.NewList(pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id), {key1, key2, missingKey});
+    const auto keys = NTest::ConvertValueToLiteralNode(pgmBuilder, TVector<ui32>{1, 2, 3});
     const auto pgmReturn = pgmBuilder.Map(keys,
                                           [&](TRuntimeNode key) {
                                               return pgmBuilder.Lookup(dict, key);
                                           });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item, item2;
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item);
-    auto iter2 = item.GetListIterator();
-    UNIT_ASSERT(iter2.Next(item2));
-    UNBOXED_VALUE_STR_EQUAL(item2, "A");
-    UNIT_ASSERT(!iter2.Next(item2));
-    UNIT_ASSERT(!iter2.Next(item2));
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item);
-    iter2 = item.GetListIterator();
-    UNIT_ASSERT(iter2.Next(item2));
-    UNBOXED_VALUE_STR_EQUAL(item2, "C");
-    UNIT_ASSERT(iter2.Next(item2));
-    UNBOXED_VALUE_STR_EQUAL(item2, "B");
-    UNIT_ASSERT(!iter2.Next(item2));
-    UNIT_ASSERT(!iter2.Next(item2));
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TMaybe<TVector<TStringBuf>>>{
+                                                          TVector<TStringBuf>{"A"},
+                                                          TVector<TStringBuf>{"C", "B"},
+                                                          {}});
 }
 
 Y_UNIT_TEST_LLVM(TestSortedMultiDictLookup) {

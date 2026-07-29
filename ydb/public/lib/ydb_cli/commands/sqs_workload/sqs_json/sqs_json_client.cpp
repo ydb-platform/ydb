@@ -1,8 +1,10 @@
 #include "sqs_json_client.h"
 #include <aws/core/auth/AWSCredentials.h>
 #include <aws/core/auth/AWSCredentialsProvider.h>
+#include <aws/core/client/CoreErrors.h>
 #include <aws/core/http/HttpClient.h>
 #include <aws/core/http/HttpClientFactory.h>
+#include <aws/core/http/HttpResponse.h>
 #include <aws/core/utils/Array.h>
 #include <aws/core/utils/HashingUtils.h>
 #include <aws/core/utils/memory/stl/SimpleStringStream.h>
@@ -537,12 +539,31 @@ namespace NYdb::NConsoleClient {
         if (response->GetResponseCode() != Aws::Http::HttpResponseCode::OK) {
             Aws::OStringStream oss;
             auto responseBody = response->GetResponseBody().rdbuf();
-            oss << response->GetClientErrorType() << " " << response->GetResponseCode() << " " << responseBody;
+            oss << response->GetClientErrorType() << " " << response->GetResponseCode()
+                << " " << response->GetClientErrorMessage() << " " << responseBody;
             Cerr << "got error response: " << oss.str() << Endl;
-            Aws::SQS::SQSError error;
-            error.SetResponseHeaders(response->GetHeaders());
-            error.SetResponseCode(response->GetResponseCode());
-            return GetQueueUrlOutcome(error);
+
+            // Match AWSJsonClient::BuildAWSError / CoreErrorsMapper::GetErrorForHttpResponseCode.
+            const auto responseCode = response->GetResponseCode();
+            Aws::Client::AWSError<Aws::Client::CoreErrors> coreError;
+            if (response->HasClientError()) {
+                const bool retryable =
+                    response->GetClientErrorType() == Aws::Client::CoreErrors::NETWORK_CONNECTION;
+                coreError = Aws::Client::AWSError<Aws::Client::CoreErrors>(
+                    response->GetClientErrorType(),
+                    "",
+                    response->GetClientErrorMessage(),
+                    retryable);
+            } else if (responseCode == Aws::Http::HttpResponseCode::REQUEST_NOT_MADE) {
+                coreError = Aws::Client::AWSError<Aws::Client::CoreErrors>(
+                    Aws::Client::CoreErrors::NETWORK_CONNECTION, true);
+            } else {
+                coreError = Aws::Client::CoreErrorsMapper::GetErrorForHttpResponseCode(responseCode);
+            }
+            coreError.SetResponseHeaders(response->GetHeaders());
+            coreError.SetResponseCode(responseCode);
+            coreError.SetMessage(oss.str());
+            return GetQueueUrlOutcome(Aws::SQS::SQSError(std::move(coreError)));
         }
 
         auto responseJson = ReadResponseBody(*response);

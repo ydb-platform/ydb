@@ -165,24 +165,28 @@ struct IMapNode
 {
     using ICompositeNode::RemoveChild;
 
+    using TKey = std::string;
+    using TKeyView = TStringBuf;
+    using TValue = INodePtr;
+
     //! Returns the current snapshot of the map.
     /*!
      *  Map items are returned in unspecified order.
      */
-    virtual std::vector<std::pair<std::string, INodePtr>> GetChildren() const = 0;
+    virtual std::vector<std::pair<TKey, TValue>> GetChildren() const = 0;
 
     //! Returns map keys.
     /*!
      *  Keys are returned in unspecified order.
      */
-    virtual std::vector<std::string> GetKeys() const = 0;
+    virtual std::vector<TKey> GetKeys() const = 0;
 
     //! Gets a child by its key.
     /*!
      *  \param key A key.
      *  \return A child with the given #key or null if no child with the given #key exists.
      */
-    virtual INodePtr FindChild(const std::string& key) const = 0;
+    virtual TValue FindChild(TKeyView key) const = 0;
 
     //! Adds a new child with a given key.
     /*!
@@ -193,48 +197,48 @@ struct IMapNode
      *  \note
      *  #child must be a root.
      */
-    virtual bool AddChild(const std::string& key, const INodePtr& child) = 0;
+    virtual bool AddChild(TKeyView key, const TValue& child) = 0;
 
     //! Removes a child by its key.
     /*!
      *  \param key A key.
      *  \return True iff there was a child with the given key.
      */
-    virtual bool RemoveChild(const std::string& key) = 0;
+    virtual bool RemoveChild(TKeyView key) = 0;
 
     //! Similar to #FindChild but throws if no child is found.
-    INodePtr GetChildOrThrow(const std::string& key) const;
+    TValue GetChildOrThrow(TKeyView key) const;
 
     //! Returns the key for a given child.
     /*!
      *  \param child A possible child.
      *  \return Child's key or null if the node is not a child.
      */
-    virtual std::optional<std::string> FindChildKey(const IConstNodePtr& child) const = 0;
+    virtual std::optional<TKey> FindChildKey(const IConstNodePtr& child) const = 0;
 
     //! Returns the key for a given child or throws if the node is not a child.
     /*!
      *  \param child A possible child.
      *  \return Child's key.
      */
-    std::string GetChildKeyOrThrow(const IConstNodePtr& child) const;
+    TKey GetChildKeyOrThrow(const IConstNodePtr& child) const;
 
     // Extension methods.
 
     //! Converts the value of the child with #key to a given type.
     //! Throws if no child with #key exists.
     template <class T>
-    T GetChildValueOrThrow(const std::string& key) const;
+    T GetChildValueOrThrow(TKeyView key) const;
 
     //! Converts the value of the child with #key to a given type.
     //! Returns #defaultValue if no child with #key exists.
     template <class T>
-    T GetChildValueOrDefault(const std::string& key, const T& defaultValue) const;
+    T GetChildValueOrDefault(TKeyView key, const T& defaultValue) const;
 
     //! Converts the value of the child with #key to a given type.
     //! Returns null if no child with #key exists.
     template <class T>
-    std::optional<T> FindChildValue(const std::string& key) const;
+    std::optional<T> FindChildValue(TKeyView key) const;
 };
 
 DEFINE_REFCOUNTED_TYPE(IMapNode)

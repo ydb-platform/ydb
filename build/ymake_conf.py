@@ -101,18 +101,21 @@ class Platform(object):
         self.is_intel = self.is_x86 or self.is_x86_64
 
         self.is_armv6 = self.arch in ('armv6hf',)
-        self.is_armv7 = self.arch in ('armv7', 'armv7a', 'armv7ahf', 'armv7a_neon', 'arm', 'armv7a_cortex_a9', 'armv7ahf_cortex_a35', 'armv7ahf_cortex_a53')
+        self.is_armv7 = self.arch in ('armv7', 'armv7a', 'armv7ahf', 'armv7a_neon', 'arm', 'armv7ahf_cortex_a7', 'armv7a_cortex_a9', 'armv7ahf_cortex_a35', 'armv7ahf_cortex_a53')
         self.is_armv8 = self.arch in ('armv8', 'armv8a', 'arm64', 'aarch64', 'armv8a_cortex_a35', 'armv8a_cortex_a53')
+        self.is_armv9a = self.arch in ('armv9a', 'armv9a_grace')
         self.is_armv8m = self.arch in ('armv8m_cortex_m33', 'armv8m_cortex_m23')
         self.is_armv7em = self.arch in ('armv7em_cortex_m4', 'armv7em_cortex_m7')
         self.is_arm64 = self.arch in ('arm64',)
-        self.is_arm = self.is_armv6 or self.is_armv7 or self.is_armv8 or self.is_armv8m or self.is_armv7em
-        self.is_armv7_neon = self.arch in ('armv7a_neon', 'armv7ahf', 'armv7a_cortex_a9', 'armv7ahf_cortex_a35', 'armv7ahf_cortex_a53')
+        self.is_arm = self.is_armv6 or self.is_armv7 or self.is_armv8 or self.is_armv9a or self.is_armv8m or self.is_armv7em
+        self.is_armv7_neon = self.arch in ('armv7a_neon', 'armv7ahf', 'armv7ahf_cortex_a7', 'armv7a_cortex_a9', 'armv7ahf_cortex_a35', 'armv7ahf_cortex_a53')
         self.is_armv6hf = self.arch in ('armv6hf',)
-        self.is_armv7hf = self.arch in ('armv7ahf', 'armv7ahf_cortex_a35', 'armv7ahf_cortex_a53')
+        self.is_armv7hf = self.arch in ('armv7ahf', 'armv7ahf_cortex_a7', 'armv7ahf_cortex_a35', 'armv7ahf_cortex_a53')
         self.is_armv5te = self.arch in ('armv5te_arm968e_s',)
+        self.is_grace = self.arch in ('armv9a_grace',)
         self.is_arm_aml403 = self.arch == 'arm_aml403'
         self.is_arm64_aml403 = self.arch == 'arm64_aml403'
+        self.is_arm_ats3089p = self.arch == 'arm_ats3089p'
 
         self.is_rv32imc = self.arch in ('riscv32_imc', 'riscv32_esp')
         self.is_rv32imc_zicsr = self.arch in ('riscv32_imc_zicsr',)
@@ -139,6 +142,7 @@ class Platform(object):
             else:
                 self.armv7_float_abi = 'softfp'
 
+        self.is_cortex_a7 = self.arch in ('armv7ahf_cortex_a7',)
         self.is_cortex_a9 = self.arch in ('armv7a_cortex_a9',)
         self.is_cortex_a35 = self.arch in ('armv7ahf_cortex_a35', 'armv8a_cortex_a35')
         self.is_cortex_a53 = self.arch in ('armv7ahf_cortex_a53', 'armv8a_cortex_a53')
@@ -159,9 +163,9 @@ class Platform(object):
         self.is_32_bit = (
             self.is_x86 or
             self.is_armv5te or self.is_armv6 or self.is_armv7 or self.is_armv7em or self.is_armv8m or self.is_arm_aml403 or
-            self.is_riscv32 or self.is_nds32 or self.is_xtensa or self.is_tc32 or self.is_wasm32
+            self.is_riscv32 or self.is_nds32 or self.is_xtensa or self.is_tc32 or self.is_wasm32 or self.is_arm_ats3089p
         )
-        self.is_64_bit = self.is_x86_64 or self.is_armv8 or self.is_powerpc or self.is_wasm64 or self.is_riscv64 or self.is_arm64_aml403
+        self.is_64_bit = self.is_x86_64 or self.is_armv8 or self.is_armv9a or self.is_powerpc or self.is_wasm64 or self.is_riscv64 or self.is_arm64_aml403
 
         assert self.is_32_bit or self.is_64_bit
         assert not (self.is_32_bit and self.is_64_bit)
@@ -172,6 +176,7 @@ class Platform(object):
         self.is_linux = self.os == 'linux' or 'yocto' in self.os
         self.is_linux_x86_64 = self.is_linux and self.is_x86_64
         self.is_linux_armv8 = self.is_linux and self.is_armv8
+        self.is_linux_armv9a = self.is_linux and self.is_armv9a
         self.is_linux_armv7 = self.is_linux and self.is_armv7
         self.is_linux_power8le = self.is_linux and self.is_power8le
         self.is_linux_power9le = self.is_linux and self.is_power9le
@@ -197,6 +202,7 @@ class Platform(object):
         self.is_none = self.os == 'none'
 
         self.is_freertos = self.os == 'freertos'
+        self.is_zephyr = self.os == 'zephyr'
 
         self.is_posix = self.is_linux or self.is_apple or self.is_android or self.is_yocto or self.is_freebsd
 
@@ -241,13 +247,18 @@ class Platform(object):
             (self.is_armv7, 'ARCH_ARM7'),
             (self.is_armv7_neon, 'ARCH_ARM7_NEON'),
             (self.is_armv8, 'ARCH_ARM64'),
+            (self.is_armv9a, 'ARCH_ARM64'),
             (self.is_armv8m, 'ARCH_ARM8M'),
             (self.is_armv7em, 'ARCH_ARM7EM'),
             (self.is_armv5te, 'ARCH_ARM5TE'),
             (self.is_arm, 'ARCH_ARM'),
             (self.is_arm_aml403, 'ARCH_ARM_AML403'),
             (self.is_arm64_aml403, 'ARCH_ARM64_AML403'),
-            (self.is_linux_armv8 or self.is_macos_arm64, 'ARCH_AARCH64'),
+            (self.is_arm_ats3089p, 'ARCH_ARM_ATS3089P'),
+            (self.is_linux_armv8, 'ARCH_AARCH64'),
+            (self.is_linux_armv9a, 'ARCH_AARCH64'),
+            (self.is_macos_arm64, 'ARCH_AARCH64'),
+            (self.is_grace, 'ARCH_ARMV9A_GRACE'),
             (self.is_powerpc, 'ARCH_PPC64LE'),
             (self.is_power8le, 'ARCH_POWER8LE'),
             (self.is_power9le, 'ARCH_POWER9LE'),
@@ -524,7 +535,7 @@ def get_target_triple(target):
             (target.is_freebsd and target.is_x86_64, 'x86_64-freebsd-unknown'),
 
             (target.is_linux and target.is_x86_64, 'x86_64-linux-gnu'),
-            (target.is_linux and target.is_armv8, 'aarch64-linux-gnu'),
+            (target.is_linux and (target.is_armv8 or target.is_armv9a), 'aarch64-linux-gnu'),
             (target.is_linux and target.is_armv6 and target.armv6_float_abi == 'hard', 'armv6-linux-gnueabihf'),
             (target.is_linux and target.is_armv7 and target.armv7_float_abi == 'hard', 'armv7-linux-gnueabihf'),
             (target.is_linux and target.is_armv7 and target.armv7_float_abi == 'softfp', 'armv7-linux-gnueabi'),
@@ -1273,6 +1284,9 @@ class GnuToolchain(Toolchain):
             for root in list(self.tc.isystem):
                 self.c_flags_platform.extend(['-isystem', root])
 
+        if target.is_cortex_a7:
+            self.c_flags_platform.append('-mcpu=cortex-a7')
+
         if target.is_cortex_a9:
             self.c_flags_platform.append('-mcpu=cortex-a9')
 
@@ -1316,6 +1330,10 @@ class GnuToolchain(Toolchain):
             self.c_flags_platform.append('-march=armv8-a -mcpu=cortex-a35')
             self.setup_amlogic64_rtos_sdk()
 
+        if target.is_arm_ats3089p and target.is_zephyr:
+            self.c_flags_platform.append('-mcpu=cortex-m33+nodsp -mfpu=fpv5-sp-d16 -mabi=aapcs -mthumb -mfloat-abi=hard')
+            self.setup_actions_zephyr_sdk()
+
         if target.is_rv32imc:
             self.c_flags_platform.append('-march=rv32imc')
 
@@ -1333,6 +1351,20 @@ class GnuToolchain(Toolchain):
             target_flags = select(default=[], selectors=[
                 (target.is_linux and target.is_power8le, ['-mcpu=power8', '-mtune=power8', '-maltivec']),
                 (target.is_linux and target.is_power9le, ['-mcpu=power9', '-mtune=power9', '-maltivec']),
+                (
+                    target.is_linux and target.is_grace and (
+                        (self.tc.is_clang and self.tc.version_at_least(16)) or
+                        (self.tc.is_gcc and self.tc.version_at_least(13))
+                    ),
+                    ['-mcpu=neoverse-v2+norng+crypto+sve2-sm4+sve2-aes+sve2-sha3'],
+                ),
+                (
+                    target.is_linux and target.is_grace,
+                    [
+                        '-march=armv9-a+crypto+sve2+sve2-bitperm+bf16+i8mm+fp16fml+sve2-aes+sve2-sha3+sve2-sm4+sha3+sm4+crc+dotprod+lse+rcpc+rdm+nossbs+noras+norng',
+                        '-mtune=neoverse-n2',
+                    ],
+                ),
                 (target.is_linux and target.is_armv8, ['-march=armv8-a']),
                 (target.is_macos, ['-mmacosx-version-min={}'.format(MACOS_VERSION_MIN)]),
                 (target.is_ios and not target.is_iossim, ['-mios-version-min={}'.format(IOS_VERSION_MIN)]),
@@ -1366,7 +1398,7 @@ class GnuToolchain(Toolchain):
                             self.setup_tools(project='build/platform/binutils', var='$BINUTILS_ROOT_RESOURCE_GLOBAL', bin='x86_64-linux-gnu/bin', ldlibs=None)
                     elif target.is_powerpc:
                         self.setup_tools(project='build/platform/linux_sdk', var='$OS_SDK_ROOT_RESOURCE_GLOBAL', bin='usr/bin', ldlibs='usr/x86_64-linux-gnu/powerpc64le-linux-gnu/lib')
-                    elif target.is_armv8:
+                    elif target.is_armv8 or target.is_armv9a:
                         self.setup_tools(project='build/platform/linux_sdk', var='$OS_SDK_ROOT_RESOURCE_GLOBAL', bin='usr/bin', ldlibs='usr/lib/x86_64-linux-gnu')
 
                 if target.is_yocto:
@@ -1382,6 +1414,9 @@ class GnuToolchain(Toolchain):
 
     def setup_amlogic64_rtos_sdk(self):
         self.platform_projects.insert(0, 'build/internal/platform/amlogic64_rtos')
+
+    def setup_actions_zephyr_sdk(self):
+        self.platform_projects.insert(0, 'build/internal/platform/actions_zephyr')
 
     def setup_allwinner_rtos_sdk(self):
         self.platform_projects.insert(0, 'build/internal/platform/allwinner_rtos')
@@ -1495,6 +1530,8 @@ class GnuCompiler(Compiler):
             if self.build.is_release:
                 # Clang's more accurate debug info for sampling-PGO purposes. PGO only makes sense in release builds
                 self.debug_info_flags.append('-fdebug-info-for-profiling')
+        if self.target.is_arm_ats3089p:
+            self.debug_info_flags.append('-gdwarf-4')
 
         self.c_foptions = [
             # Enable standard-conforming behavior and generate duplicate symbol error in case of duplicated global constants.
@@ -1505,6 +1542,8 @@ class GnuCompiler(Compiler):
             '-ffunction-sections',
             '-fdata-sections'
         ]
+
+        self.cxx_foptions = []
 
         if self.target.is_arm or self.target.is_powerpc:
             self.c_foptions += [
@@ -1527,7 +1566,7 @@ class GnuCompiler(Compiler):
             self.c_foptions.append('-fexceptions')
 
         if is_positive('NO_CXX_RTTI'):
-            self.c_foptions.append('-fno-rtti')
+            self.cxx_foptions.append('-fno-rtti')
         else:
             # RTTI is enabled by default
             pass
@@ -1590,11 +1629,14 @@ class GnuCompiler(Compiler):
             # Arcadia have API 16 for 32-bit Androids.
             self.c_defines.append('-D_FILE_OFFSET_BITS=64')
 
-        if self.target.is_linux or self.target.is_android or self.target.is_none or self.target.is_freertos:
+        if self.target.is_linux or self.target.is_android or self.target.is_none or self.target.is_freertos or self.target.is_zephyr:
             self.c_defines.append('-D_GNU_SOURCE')
 
         if self.target.is_freertos:
             self.c_defines.append('-D__FREERTOS__')
+
+        if self.target.is_zephyr:
+            self.c_defines.append('-D__ZEPHYR__')
 
         if self.tc.is_clang and self.target.is_linux and self.target.is_x86_64:
             self.c_defines.append('-D_YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE')
@@ -1649,6 +1691,26 @@ class GnuCompiler(Compiler):
             self.c_foptions.append('-fno-delete-null-pointer-checks')
             self.c_foptions.append('-fabi-version=8')
 
+        elif self.tc.is_gcc and self.target.is_arm_ats3089p:
+            self.c_warnings += [
+                '-Wno-char-subscripts',
+                '-Wno-unused-function',
+                '-Wno-unused-variable',
+                '-Wformat',
+                '-Wformat-security',
+                '-Wno-format-zero-length',
+                '-Wno-main',
+                '-Wpointer-arith',
+                '-Wexpansion-to-defined',
+                '-Wno-address-of-packed-member',
+                '-Wno-unused-but-set-variable',
+            ]
+
+            self.cxx_warnings += [
+                '-Wno-register',
+                '-Wno-volatile',
+            ]
+
     def configure_build_type(self):
         if self.build.is_valgrind:
             self.c_defines.append('-DWITH_VALGRIND=1')
@@ -1690,6 +1752,7 @@ class GnuCompiler(Compiler):
         emit('_DEBUG_INFO_FLAGS', self.debug_info_flags)
         emit('_C_FLAGS', self.c_flags)
         emit('_C_FOPTIONS', self.c_foptions)
+        emit('_CXX_FOPTIONS', self.cxx_foptions)
         emit('_STD_CXX_VERSION', preset('USER_STD_CXX_VERSION') or self.tc.cxx_std)
         append('C_DEFINES', self.c_defines)
         append('C_WARNING_OPTS', self.c_warnings)
@@ -1744,6 +1807,9 @@ class Linker(object):
         if not self.tc.is_from_arcadia or is_positive('EXPORT_CMAKE'):
             # External (e.g. system) toolchain: disable linker selection logic
             return None
+
+        if self.build.target.is_freertos or self.build.target.is_zephyr:
+            return Linker.BFD
 
         if self.build.target.is_android:
             # Android toolchain is NDK, LLD works on all supported platforms
@@ -2544,14 +2610,14 @@ class Cuda(object):
             return False
 
         if host != target:
-            if not (host.is_linux_x86_64 and target.is_linux_armv8):
+            if not (host.is_linux_x86_64 and (target.is_linux_armv8 or target.is_linux_armv9a)):
                 return False
             if not self.cuda_version.from_user:
                 return False
 
         if self.cuda_version.value in ('11.4', '11.8', '12.1', '12.2', '12.6', '12.6.2', '12.6.3', '12.8', '12.9', '13.0'):
             return True
-        elif self.cuda_version.value in ('10.2', '11.4.19') and target.is_linux_armv8:
+        elif self.cuda_version.value in ('10.2', '11.4.19') and (target.is_linux_armv8 or target.is_linux_armv9a):
             return True
         else:
             raise ConfigureError('CUDA version {} is not supported in Arcadia'.format(self.cuda_version.value))
@@ -2686,6 +2752,7 @@ class Cuda(object):
         return select((
             (host.is_linux_x86_64 and target.is_linux_x86_64, '$CUDA_HOST_TOOLCHAIN_RESOURCE_GLOBAL/bin/clang'),
             (host.is_linux_x86_64 and target.is_linux_armv8, '$CUDA_HOST_TOOLCHAIN_RESOURCE_GLOBAL/bin/clang'),
+            (host.is_linux_x86_64 and target.is_linux_armv9a, '$CUDA_HOST_TOOLCHAIN_RESOURCE_GLOBAL/bin/clang'),
         ))
 
     def cuda_windows_host_compiler(self):

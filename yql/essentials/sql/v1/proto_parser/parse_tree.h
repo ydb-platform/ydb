@@ -10,7 +10,11 @@ TVector<const TRule_sql_stmt_core*> Statements(const TRule_sql_query& rule Y_LIF
 
 bool IsEmptyQuery(google::protobuf::Message* message);
 
+const TRule_id_table_or_type* GetCTERef(const TRule_table_ref& rule Y_LIFETIME_BOUND);
+
 const TRule_tuple_or_expr* GetTupleOrExpr(const TRule_smart_parenthesis& msg Y_LIFETIME_BOUND);
+
+bool IsSelect(const TRule_select_or_expr& msg);
 
 bool IsSelect(const TRule_smart_parenthesis& msg);
 

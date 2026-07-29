@@ -18,7 +18,7 @@ class TReadFileCommand
 private:
     NYPath::TRichYPath Path;
     NYTree::INodePtr FileReader;
-    TString Etag;
+    std::string Etag;
 
     void DoExecute(ICommandContextPtr context) override;
     bool HasResponseParameters() const override;
@@ -51,7 +51,7 @@ class TGetFileFromCacheCommand
     static void Register(TRegistrar registrar);
 
 private:
-    TString MD5;
+    std::string MD5;
 
     void DoExecute(ICommandContextPtr context) override;
 };
@@ -67,7 +67,7 @@ class TPutFileToCacheCommand
 
 private:
     NYPath::TYPath Path;
-    TString MD5;
+    std::string MD5;
 
     void DoExecute(ICommandContextPtr context) override;
 };

@@ -190,10 +190,11 @@ public:
     template<typename TReq, typename TEvPtr>
     [[nodiscard]] TReq* CreateFromEvPtr(TEvPtr &ev, double *burstMs = nullptr) {
         auto& sender = ev->Sender;
-        P_LOG(PRI_DEBUG, BPD01, "CreateReqFromEv",
-            (ev, ToString(ev)),
-            (Sender, sender.LocalId()),
-            (ReqId, AtomicGet(LastReqId)));
+        YDB_LOG_P_LOG(PRI_DEBUG, "CreateReqFromEv",
+            {"marker", "BPD01"},
+            {"ev", ToString(ev)},
+            {"sender", sender.LocalId()},
+            {"reqId", AtomicGet(LastReqId)});
         auto req = MakeHolder<TReq>(ev, PCtx->PDiskId, AtomicIncrement(LastReqId));
         req->SetCookie(ev->Cookie);
         NewRequest(req.Get(), burstMs);
@@ -202,10 +203,11 @@ public:
 
     template<typename TReq, typename TEv>
     [[nodiscard]] TReq* CreateFromEv(TEv &&ev, const TActorId &sender, ui64 cookie = 0, double *burstMs = nullptr) {
-        P_LOG(PRI_DEBUG, BPD01, "CreateReqFromEv with sender",
-            (ev, ToString(ev)),
-            (Sender, sender.LocalId()),
-            (ReqId, AtomicGet(LastReqId)));
+        YDB_LOG_P_LOG(PRI_DEBUG, "CreateReqFromEv with sender",
+            {"marker", "BPD01"},
+            {"ev", ToString(ev)},
+            {"sender", sender.LocalId()},
+            {"reqId", AtomicGet(LastReqId)});
         auto req = MakeHolder<TReq>(std::forward<TEv>(ev), sender, AtomicIncrement(LastReqId));
         req->SetCookie(cookie);
         NewRequest(req.Get(), burstMs);
@@ -214,9 +216,10 @@ public:
 
     template<typename TReq, typename... TArgs>
     [[nodiscard]] TReq* CreateFromArgs(TArgs&&... args) {
-        P_LOG(PRI_DEBUG, BPD01, "CreateReqFromArgs",
-            (Req, TypeName<TReq>()),
-            (ReqId, AtomicGet(LastReqId)));
+        YDB_LOG_P_LOG(PRI_DEBUG, "CreateReqFromArgs",
+            {"marker", "BPD01"},
+            {"req", TypeName<TReq>()},
+            {"reqId", AtomicGet(LastReqId)});
         auto req = MakeHolder<TReq>(std::forward<TArgs>(args)..., AtomicIncrement(LastReqId));
         NewRequest(req.Get(), nullptr);
         return req.Release();
@@ -234,13 +237,15 @@ public:
         span.Attribute("pdisk_id", PCtx->PDiskId);
 
         TReqId reqId(TReqId::LogWrite, AtomicIncrement(LastReqId));
-        P_LOG(PRI_DEBUG, BPD01, "CreateLogWrite",
-            (Event, ev.ToString()),
-            (Sender, sender.LocalId()),
-            (ReqId, reqId.Id));
+        YDB_LOG_P_LOG(PRI_DEBUG, "CreateLogWrite",
+            {"marker", "BPD01"},
+            {"event", ev},
+            {"sender", sender.LocalId()},
+            {"reqId", reqId.Id});
         Mon->QueueRequests->Inc();
         *Mon->QueueBytes += ev.Data.size();
         Mon->WriteLog.CountRequest(ev.Data.size());
+        Mon->CountLogWriteOpRequest(ev.WriteSource, ev.Data.size());
         if (ev.Data.size() > (1 << 20)) {
             Mon->WriteHugeLog.CountRequest();
         }
@@ -253,10 +258,11 @@ public:
         span.Attribute("pdisk_id", PCtx->PDiskId);
 
         TReqId reqId(TReqId::ChunkRead, AtomicIncrement(LastReqId));
-        P_LOG(PRI_DEBUG, BPD01, "CreateChunkRead",
-            (Event, ev.ToString()),
-            (Sender, sender.LocalId()),
-            (ReqId, reqId.Id));
+        YDB_LOG_P_LOG(PRI_DEBUG, "CreateChunkRead",
+            {"marker", "BPD01"},
+            {"event", ev},
+            {"sender", sender.LocalId()},
+            {"reqId", reqId.Id});
         Mon->QueueRequests->Inc();
         *Mon->QueueBytes += ev.Size;
         Mon->GetReadCounter(ev.PriorityClass)->CountRequest(ev.Size);
@@ -278,15 +284,17 @@ public:
         span.Attribute("pdisk_id", PCtx->PDiskId);
 
         TReqId reqId(TReqId::ChunkWrite, AtomicIncrement(LastReqId));
-        P_LOG(PRI_DEBUG, BPD01, "CreateChunkWrite",
-            (Event, ev.ToString()),
-            (Sender, sender.LocalId()),
-            (ReqId, reqId.Id));
+        YDB_LOG_P_LOG(PRI_DEBUG, "CreateChunkWrite",
+            {"marker", "BPD01"},
+            {"event", ev},
+            {"sender", sender.LocalId()},
+            {"reqId", reqId.Id});
         Mon->QueueRequests->Inc();
         ui32 size = ev.PartsPtr ? ev.PartsPtr->ByteSize() : 0;
         ev.Validate();
         *Mon->QueueBytes += size;
         Mon->GetWriteCounter(ev.PriorityClass)->CountRequest(size);
+        Mon->CountChunkWriteOpRequest(ev.WriteSource, size);
         return NewRequest(new TChunkWrite(ev, sender, reqId, std::move(span)), &burstMs);
     }
 

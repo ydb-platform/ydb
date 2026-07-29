@@ -53,13 +53,9 @@ struct TClientOptions
      */
     std::optional<std::string> MultiproxyTargetCluster;
 
-    //! Use a separate connection for lightweight control requests.
-    /**
-    *  If this option is set to true, a separate connection is opened for lightweight requests (for example, ping_transaction).
-    *  This is needed so that important lightweight requests do not wait for heavy requests, such as file writes, to complete.
-    *  However, using this option increases the number of open TCP connections.
-    */
-    bool EnableControlMultiplexingBand = false;
+    //! If set, a master transaction whose commit fails is abandoned (dropped locally, no
+    //! abort) instead of aborted, so a retrier can re-issue the commit. RPC proxy only.
+    bool AbandonMasterTransactionsOnFailedCommit = false;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -26,9 +26,8 @@ void TReduceJobBuilder::SetReduceJobParams(
     const THashSet<TString>& auxColumns
 ) {
     const bool useSkiff = execCtx->Options_.Config()->UseSkiff.Get(execCtx->Cluster_).GetOrElse(DEFAULT_USE_SKIFF);
-    const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
-    reduceJob->SetInputSpec(execCtx->GetInputSpec(!useSkiff, nativeTypeCompat, false));
-    reduceJob->SetOutSpec(execCtx->GetOutSpec(!useSkiff, nativeTypeCompat));
+    reduceJob->SetInputSpec(execCtx->GetInputSpec(!useSkiff, false));
+    reduceJob->SetOutSpec(execCtx->GetOutSpec(!useSkiff));
 
     YQL_ENSURE(!groups.empty());
     if (groups.back() != 0) {

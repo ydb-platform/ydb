@@ -85,6 +85,56 @@ div > pre {
 .panel-body { padding: 0 }
 .doc-link { margin-top: 10px }
 
+.sql-completion-popup {
+    position: absolute;
+    z-index: 2000;
+    min-width: 260px;
+    max-width: 520px;
+    max-height: 260px;
+    overflow-y: auto;
+    background: #fff;
+    border: 1px solid #c9c9c9;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.18);
+    font: 12px Menlo, Monaco, Consolas, monospace;
+}
+
+.sql-completion-popup ul {
+    margin: 0;
+    padding: 3px 0;
+    list-style: none;
+}
+
+.sql-completion-popup li {
+    padding: 3px 8px;
+    color: #222;
+    cursor: default;
+    white-space: nowrap;
+}
+
+.sql-completion-popup li.active {
+    color: #fff;
+    background: #2b6dad;
+}
+
+.sql-completion-value {
+    display: inline-block;
+    max-width: 380px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: bottom;
+}
+
+.sql-completion-kind {
+    display: inline-block;
+    float: right;
+    margin-left: 16px;
+    color: #777;
+}
+
+.sql-completion-popup li.active .sql-completion-kind {
+    color: #d8e8f8;
+}
+
 .nav-tabs > .active > a, .nav-tabs > .active > a:hover {
     outline: 0;
     color: #555555;

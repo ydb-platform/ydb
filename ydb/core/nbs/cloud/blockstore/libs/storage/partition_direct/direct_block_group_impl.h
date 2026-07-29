@@ -6,12 +6,18 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/thread_checker.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_stat.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_state.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/public.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ddisk_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/error_utils.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/public.h>
 
@@ -19,6 +25,17 @@
 #include <ydb/core/mind/bscontroller/types.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
+
+////////////////////////////////////////////////////////////////////////////////
+
+// State of a logical session (lock) with a DDisk.
+// Sessions are used only for DDisk connections.
+enum class EDDiskSessionState
+{
+    NotLocked,
+    Locked,
+    Broken,
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -32,11 +49,11 @@ public:
         NActors::TActorSystem* actorSystem,
         TStorageConfigPtr storageConfig,
         TExecutorPtr executor,
-        ui64 tabletId,
-        ui32 generation,
+        const TDiskDescription& diskDescription,
         size_t directBlockGroupIndex,
         const TVector<NKikimr::NBsController::TDDiskId>& ddisksIds,
-        const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds);
+        const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds,
+        std::unique_ptr<NTransport::IStorageTransport> storageTransport);
 
     ~TDirectBlockGroup() override = default;
 
@@ -54,7 +71,9 @@ public:
         const NWilson::TTraceId& traceId,
         TStringBuf name) override;
 
-    void Run(IPartitionDirectService* service) override;
+    NThreading::TFuture<void> Run(
+        ITraceService* traceService,
+        IPartitionDirectService* service) override;
 
     NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
         ui32 vChunkIndex,
@@ -86,16 +105,16 @@ public:
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) override;
 
-    NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>
-    WriteBlocksToManyPBuffers(
+    void WriteBlocksToManyPBuffers(
         ui32 vChunkIndex,
         THostIndex coordinatorHostIndex,
-        TVector<THostIndex> hostIndexes,
+        THostMask hostIndexes,
         ui64 lsn,
         TBlockRange64 range,
         TDuration replyTimeout,
         const TGuardedSgList& guardedSglist,
-        const NWilson::TTraceId& traceId) override;
+        const NWilson::TTraceId& traceId,
+        TWriteBlocksToManyPBuffersCallback callback) override;
 
     NThreading::TFuture<TDBGFlushResponse> SyncWithPBuffer(
         ui32 vChunkIndex,
@@ -104,11 +123,15 @@ public:
         const TVector<TPBufferSegment>& segments,
         const NWilson::TTraceId& traceId) override;
 
-    NThreading::TFuture<TDBGEraseResponse> EraseFromPBuffer(
-        ui32 vChunkIndex,
+    NThreading::TFuture<TDBGEraseResponse> BatchEraseFromPBuffer(
         THostIndex hostIndex,
-        const TVector<TPBufferSegment>& segments,
+        const TEraseSegments& segments,
         const NWilson::TTraceId& traceId) override;
+
+    void BarrierEraseFromPBuffer(ui64 lsn) override;
+
+    NThreading::TFuture<std::optional<ui64>>
+    GatherSafeBarrierForErase() override;
 
     NThreading::TFuture<TDBGRestoreResponse> RestoreDBGPBuffers(
         ui32 vChunkIndex) override;
@@ -116,15 +139,29 @@ public:
     NThreading::TFuture<TListPBufferResponse> ListPBuffers(
         THostIndex hostIndex) override;
 
+    void OnAddHostResult(
+        const NProto::TError& error,
+        THostIndex newHostIndex,
+        NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
+        NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) override;
+
+    ui32 GetNodeId(THostIndex host) const override;
+
     NThreading::TFuture<TDBGDumpResponse> Dump() override;
 
+    NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() const override;
+
     // IHostStateController implementation
-    void SetHostState(THostIndex hostIndex, EHostState state) override;
+    void SetHostState(
+        THostIndex hostIndex,
+        EHostState oldState,
+        EHostState newState) override;
     ui64 GetHostPBufferUsedSize(THostIndex hostIndex) const override;
+    void QueryAddHost(THostIndex newHostIndex) override;
 
 private:
-    using TEvSyncWithPersistentBufferResult =
-        NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult;
+    friend struct TDBGFixture;
+    using TEvSyncResult = NKikimrBlobStorage::NDDisk::TEvSyncResult;
     using EConnectionType = NTransport::THostConnection::EConnectionType;
     using TDDiskIdToHostIndex =
         TMap<NKikimrBlobStorage::NDDisk::TDDiskId, THostIndex, TDDiskIdLess>;
@@ -138,17 +175,41 @@ private:
         TPromise ConnectPromise = NThreading::NewPromise<NProto::TError>();
         TFuture ConnectFuture{ConnectPromise.GetFuture()};
 
+        EDDiskSessionState SessionState = EDDiskSessionState::NotLocked;
+
+        ui64 ConfirmedSessionSeqNo = 0;
+
+        void ResetSession();
         [[nodiscard]] const TFuture& GetFuture() const;
+        [[nodiscard]] TString DebugPrint() const;
     };
 
+    [[nodiscard]] size_t GetHostCount() const;
+    void AddDDiskAndPBufferConnection(
+        THostIndex host,
+        const NKikimr::NBsController::TDDiskId& ddiskId,
+        const NKikimr::NBsController::TDDiskId& pbufferId);
     void DoEstablishConnections();
     void DoEstablishConnection(
-        size_t index,
-        const TDDiskConnection& connection);
+        THostIndex hostIndex,
+        EConnectionType connectionType);
     void OnConnectionEstablished(
         EConnectionType connectionType,
-        size_t index,
+        THostIndex hostIndex,
+        ui64 seqNo,
         const NKikimrBlobStorage::NDDisk::TEvConnectResult& result);
+    void ReEstablishConnection(
+        EConnectionType connectionType,
+        THostIndex hostIndex);
+    void OnNodeDisconnected(THostIndex hostIndex, ui32 nodeId);
+
+    [[nodiscard]] bool HasPBufferQuorum() const;
+    [[nodiscard]] bool HasLockedQuorum() const;
+
+    [[nodiscard]] bool IsInitialized() const
+    {
+        return InitialReadyPromise.HasValue();
+    }
 
     void DoListPBuffers();
     void OnPBuffersListed(const TAggregatedListPBufferResponse& response);
@@ -157,12 +218,18 @@ private:
         const NKikimrBlobStorage::NDDisk::TEvWritePersistentBuffersResult&
             response,
         THostIndex coordinatorHostIndex,
-        NThreading::TPromise<TDBGWriteBlocksToManyPBuffersResponse> promise,
+        TWriteBlocksToManyPBuffersCallback callback,
         TDuration executionTime);
 
     TDBGFlushResponse HandleSyncWithPBufferResponse(
-        const TEvSyncWithPersistentBufferResult& response,
+        THostIndex ddiskHostIndex,
+        const TEvSyncResult& response,
         size_t segmentCount);
+
+    void DoBarrierEraseFromPBuffer(
+        THostIndex hostIndex,
+        ui64 lsn,
+        const NWilson::TTraceId& traceId);
 
     void DoRestore(
         NThreading::TPromise<TDBGRestoreResponse> promise,
@@ -176,6 +243,7 @@ private:
         THostIndex hostIndex,
         TDuration executionTime,
         EOperation operation,
+        bool needDecreaseInflightCounters,
         const NProto::TError& error);
     void OnMultiFlushResponse(
         THostIndex pbufferHostIndex,
@@ -185,28 +253,42 @@ private:
 
     void Thinking();
     void ScheduleOracleThinking();
-    TDBGDumpResponse DoDebugPrintDirtyMap();
+
+    void HandleBlockedGeneration(THostIndex hostIndex, TStringBuf context);
+
+    [[nodiscard]] TDBGDumpResponse DoDebugPrintDirtyMap() const;
+
+    [[nodiscard]] TDbgSnapshot DoBuildMonSnapshot() const;
+
+    [[nodiscard]] TConnectionSnapshot MakeConnectionSnapshot(
+        size_t hostIndex) const;
+
+    [[nodiscard]] TString PrintHostAndNode(THostIndex host) const;
 
     NActors::TActorSystem* const ActorSystem = nullptr;
     const TStorageConfigPtr StorageConfig;
     const TExecutorPtr Executor;
     const TThreadChecker ExecutorThreadChecker{Executor};
     const ui64 TabletId;
+    const ui32 TabletGeneration;
     const size_t DirectBlockGroupIndex;
     const std::unique_ptr<NTransport::IStorageTransport> StorageTransport;
 
+    TLogTitle LogTitle;
+    ITraceService* TraceService = nullptr;
     IPartitionDirectService* Service = nullptr;
     TVector<TDDiskConnection> DDiskConnections;
     TVector<TDDiskConnection> PBufferConnections;
-    TVector<THostStat> HostStatistics;
-    TVector<THostState> HostStates;
     TDDiskIdToHostIndex PBufferIdToHostIndex;
     TVector<TVChunkWeakPtr> VChunks;
     TOracle Oracle;
 
-    bool Initialized = false;
-    NThreading::TPromise<void> ConnectionEstablishedPromise =
-        NThreading::NewPromise();
+    bool BlockedGenerationDetected = false;
+
+    // One-shot signal of the FIRST time the locked quorum was reached. Used
+    // ONLY to gate the synchronous tablet start (wait for readiness before
+    // opening the endpoint). It does NOT reflect the current runtime readiness.
+    NThreading::TPromise<void> InitialReadyPromise = NThreading::NewPromise();
 
     THashMap<ui32, TDBGRestoreResponse> RestoredPBuffers;
     NThreading::TPromise<void> RestoredPBuffersPromise =

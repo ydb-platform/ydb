@@ -1,9 +1,7 @@
 import sys
-
 import traceback
 
 from cffi import api as _api
-
 
 sys.modules["ssl"] = None
 sys.modules["_hashlib"] = None
@@ -23,7 +21,7 @@ _ffi.cdef(
     char **backtrace_symbols(void *const *buffer, int size);
     void backtrace_symbols_fd(void *const *buffer, int size, int fd);
     """
-)  # noqa
+)
 _api = _ffi.verify(
     """
     #include <openssl/crypto.h>
@@ -80,7 +78,7 @@ def free(p):
     if p != _ffi.NULL:
         C.free(p)
         del heap[p]
-        log("free(0x%x)" % (int(_ffi.cast("int", p)),))
+        log("free(0x{:x})".format(int(_ffi.cast("int", p))))
 
 
 if _api.CRYPTO_set_mem_functions(malloc, realloc, free):

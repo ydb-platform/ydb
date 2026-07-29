@@ -7,6 +7,8 @@ SRCS(
 
 PEERDIR(
     library/cpp/yt/assert
+    library/cpp/yt/misc
+    library/cpp/yt/string
 )
 
 END()

@@ -415,7 +415,7 @@ class TestAiOpenAIPexpect(BaseAiInteractiveTest):
             child.expect("Mock OpenAI response", timeout=15)
             self._wait_for_ai_prompt(child)
 
-            assert self.mock_server.last_request["body"]["max_completion_tokens"] == 1024
+            assert self.mock_server.last_request["body"]["max_completion_tokens"] == 8192
 
             self._send_query(child, "exit")
             child.expect("Bye!", timeout=10)
@@ -739,7 +739,7 @@ class TestAiAnthropicPexpect(BaseAiInteractiveTest):
             self._wait_for_ai_prompt(child)
 
             body = self.mock_server.last_request["body"]
-            assert body["max_tokens"] == 1024
+            assert body["max_tokens"] == 8192
             assert "max_completion_tokens" not in body
 
             self._send_query(child, "exit")
@@ -2892,7 +2892,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
         """docs_search get action returns Markdown content of the requested page."""
         handler, call_count = self._make_tool_handler(
             "docs_search",
-            {"action": "get", "language": "en", "path": "core/concepts/architecture.md"},
+            {"action": "get", "language": "en", "path": "core/concepts/architecture/index.md"},
             "Page content retrieved."
         )
         self._set_handler(handler)
@@ -3130,13 +3130,13 @@ class _ToolTestBase(BaseAiInteractiveTest):
     def test_docs_search_get_resolves_variables(self):
         """docs_search get expands {{ variable }} placeholders via presets.yaml.
 
-        architecture.md contains ``{{ ydb-short-name }}`` which must be
+        architecture/index.md contains ``{{ ydb-short-name }}`` which must be
         replaced with "YDB" by TTemplateResolver before the page is returned.
         The raw template marker must not survive in the output.
         """
         handler, call_count = self._make_tool_handler(
             "docs_search",
-            {"action": "get", "language": "en", "path": "core/concepts/architecture.md"},
+            {"action": "get", "language": "en", "path": "core/concepts/architecture/index.md"},
             "Variables resolved."
         )
         self._set_handler(handler)
@@ -3175,7 +3175,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
         """
         handler, call_count = self._make_tool_handler(
             "docs_search",
-            {"action": "get", "language": "en", "path": "core/concepts/scan_query.md"},
+            {"action": "get", "language": "en", "path": "core/concepts/query_execution/scan_query.md"},
             "Include resolved."
         )
         self._set_handler(handler)

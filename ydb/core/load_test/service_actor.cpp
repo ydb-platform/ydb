@@ -29,6 +29,7 @@
 
 #include <util/generic/algorithm.h>
 #include <util/generic/guid.h>
+#include <util/string/strip.h>
 #include <util/string/type.h>
 
 namespace NKikimr {
@@ -208,6 +209,7 @@ class TLoadActor : public TActorBootstrapped<TLoadActor> {
         ui32 Offset = 0;
         ui32 Limit = 0;
         bool IsTabletListFragment = false; // true for mode=tablet_list (returns fragment only)
+        TString ResultsUuid; // optional mode=results filter
     };
 
     struct TNodeFinishedTestInfo {
@@ -763,14 +765,30 @@ public:
                 const double sec = s->MeasuredMs > 0 ? s->MeasuredMs / 1000.0 : 1.0;
                 auto& jr = msg->JsonResult;
                 jr["write_rps"]     = s->WritesOk / sec;
-                jr["write_p50"]     = s->WriteE2eUs.GetValueAtPercentile(50.0) / 1000.0;
-                jr["write_p95"]     = s->WriteE2eUs.GetValueAtPercentile(95.0) / 1000.0;
-                jr["write_p99"]     = s->WriteE2eUs.GetValueAtPercentile(99.0) / 1000.0;
+                jr["write_p50"]     = static_cast<double>(s->WriteE2eUs.GetValueAtPercentile(50.0));
+                jr["write_p95"]     = static_cast<double>(s->WriteE2eUs.GetValueAtPercentile(95.0));
+                jr["write_p99"]     = static_cast<double>(s->WriteE2eUs.GetValueAtPercentile(99.0));
                 jr["read_rps"]      = (s->ReadsPbOk + s->ReadsDDiskOk) / sec;
-                jr["read_p50"]      = s->ReadPbUs.GetValueAtPercentile(50.0) / 1000.0;
-                jr["read_p95"]      = s->ReadPbUs.GetValueAtPercentile(95.0) / 1000.0;
-                jr["read_p99"]      = s->ReadPbUs.GetValueAtPercentile(99.0) / 1000.0;
+                jr["read_p50"]      = static_cast<double>(s->ReadPbUs.GetValueAtPercentile(50.0));
+                jr["read_p95"]      = static_cast<double>(s->ReadPbUs.GetValueAtPercentile(95.0));
+                jr["read_p99"]      = static_cast<double>(s->ReadPbUs.GetValueAtPercentile(99.0));
                 jr["max_in_flight"] = static_cast<ui64>(s->MaxInFlight);
+
+                // Attach typed stats (counters + serialized latency histograms)
+                // so a multi-tablet coordinator on another node can merge them
+                // into an exact combined result.
+                auto* ns = record.MutableNbsDbgLikeStats();
+                ns->SetNodeId(SelfId().NodeId());
+                ns->SetWritesOk(s->WritesOk);
+                ns->SetWriteBytes(s->WriteBytes);
+                ns->SetWritesErr(s->WritesErr);
+                ns->SetReadsOk(s->ReadsPbOk + s->ReadsDDiskOk);
+                ns->SetReadBytes(s->ReadsPbBytes + s->ReadsDDiskBytes);
+                ns->SetReadsErr(s->ReadsErr);
+                ns->SetMeasuredMs(s->MeasuredMs);
+                ns->SetMaxInFlight(s->MaxInFlight);
+                SerializeNbsDbgLikeHistogram(s->WriteE2eUs, *ns->MutableWriteLatencyUs());
+                SerializeNbsDbgLikeHistogram(s->ReadPbUs, *ns->MutableReadLatencyUs());
             }
 
             const NJson::TJsonValue& jsonResult = msg->JsonResult;
@@ -914,16 +932,26 @@ public:
         LOG_N("handle http GET request, mode: " << mode << " LoadActors.size(): " << LoadActors.size());
 
         if (mode == "results") {
+            info.ResultsUuid = params.Has("uuid") ? params.Get("uuid") : "";
+
             if (IsJsonContentType(info.AcceptFormat)) {
                 GenerateJsonInfoRes(id);
                 return;
             }
 
             // send messages to subactors
+            info.HttpInfoResPending = 0;
             for (const auto& [tag, actorId] : LoadActors) {
-                Send(actorId, new NMon::TEvHttpInfo(request, id));
-                info.ActorMap[actorId].Tag = tag;
                 auto reqIt = RequestsInProcessing.find(UuidByTag.at(tag));
+                if (info.ResultsUuid) {
+                    if (reqIt == RequestsInProcessing.end() || reqIt->second.GetUuid() != info.ResultsUuid) {
+                        continue;
+                    }
+                }
+
+                Send(actorId, new NMon::TEvHttpInfo(request, id));
+                ++info.HttpInfoResPending;
+                info.ActorMap[actorId].Tag = tag;
                 if (reqIt != RequestsInProcessing.end()) {
                     const TEvLoadTestRequest& req = reqIt->second;
                     info.ActorMap[actorId].Uuid = req.GetUuid();
@@ -932,7 +960,6 @@ public:
             }
 
             // record number of responses pending
-            info.HttpInfoResPending = LoadActors.size();
             if (!info.HttpInfoResPending) {
                 GenerateHttpInfoRes(mode, id);
             }
@@ -1063,6 +1090,10 @@ public:
                 << " origin# " << origin);
         } else if (mode == "tablet_run") {
             const ui64 tabletId    = FromStringWithDefault<ui64>(params.Get("tablet_id"), 0);
+            // Multi-tablet: CSV of "tabletId:nodeId" pairs. When present the run
+            // is dispatched to a coordinator that fans out one child run per
+            // tablet, placed on that tablet's node.
+            const TString targetsStr = params.Has("targets") ? params.Get("targets") : TString();
             const ui64 tag         = FromStringWithDefault<ui64>(params.Get("tag"), 0);
             const ui32 duration    = FromStringWithDefault<ui32>(params.Get("duration_seconds"), 0);
             const ui32 delayBefore = FromStringWithDefault<ui32>(params.Get("delay_before_seconds"), 15);
@@ -1071,10 +1102,27 @@ public:
             const ui32 sizeKib            = FromStringWithDefault<ui32>(params.Get("read_write_size_kib"), 4);
             const bool sequential         = params.Get("sequential") == "1";
             const ui32 numDbg             = FromStringWithDefault<ui32>(params.Get("num_dbg_to_use"), 0);
+            const ui32 maxInflightLsns    = FromStringWithDefault<ui32>(params.Get("max_inflight_lsns"), 4096);
             const bool disableReplication = params.Get("disable_replication") == "1";
 
-            if (!tabletId) {
-                GenerateJsonTagInfoRes(id, 0, "", "tablet_id is required");
+            std::vector<std::pair<ui64, ui32>> targets;
+            for (TStringBuf rest(targetsStr); rest;) {
+                TStringBuf token = rest.NextTok(',');
+                token = StripString(token);
+                if (!token) {
+                    continue;
+                }
+                TStringBuf tidBuf, nidBuf;
+                token.Split(':', tidBuf, nidBuf);
+                const ui64 tid = FromStringWithDefault<ui64>(StripString(tidBuf), 0);
+                const ui32 nid = FromStringWithDefault<ui32>(StripString(nidBuf), 0);
+                if (tid) {
+                    targets.emplace_back(tid, nid);
+                }
+            }
+
+            if (targets.empty() && !tabletId) {
+                GenerateJsonTagInfoRes(id, 0, "", "tablet_id or targets is required");
                 return;
             }
             if (disableReplication && readRatio > 0) {
@@ -1084,7 +1132,15 @@ public:
 
             NKikimr::TEvLoadTestRequest loadReq;
             auto* cmd = loadReq.MutableNbsDbgLikeLoad();
-            cmd->SetNbsDbgLikeTabletId(tabletId);
+            if (targets.empty()) {
+                cmd->SetNbsDbgLikeTabletId(tabletId);
+            } else {
+                for (const auto& [tid, nid] : targets) {
+                    auto* t = cmd->AddTargets();
+                    t->SetTabletId(tid);
+                    t->SetNodeId(nid);
+                }
+            }
             if (tag) {
                 cmd->SetTag(tag);
             }
@@ -1100,6 +1156,7 @@ public:
             if (numDbg) {
                 wc->SetNumDirectBlockGroupsToUse(numDbg);
             }
+            wc->MutableTabletConfig()->SetMaxInflightLsns(maxInflightLsns);
             if (disableReplication) {
                 wc->MutableTabletConfig()->SetDisableReplication(true);
             }
@@ -1255,6 +1312,9 @@ public:
         for (auto it = FinishedTests.rbegin(); it != FinishedTests.rend(); ++it) {
             NJson::TJsonValue value;
             const TFinishedTestInfo& testInfo = *it;
+            if (info.ResultsUuid && testInfo.Uuid != info.ResultsUuid) {
+                continue;
+            }
             value["uuid"] = testInfo.Uuid;
             value["tag"] = testInfo.Tag;
 
@@ -1435,10 +1495,15 @@ public:
                     str << "UUID# " << uuid << " (node tag# " << tag << ")";
                 };
 
+                bool printed = false;
                 for (auto it = info.ActorMap.rbegin(); it != info.ActorMap.rend(); ++it) {
                     const TActorInfo& perActorInfo = it->second;
                     auto uuidIter = UuidByTag.find(perActorInfo.Tag);
                     const TString uuid = uuidIter != UuidByTag.end() ? uuidIter->second : "";
+                    if (info.ResultsUuid && uuid != info.ResultsUuid) {
+                        continue;
+                    }
+                    printed = true;
                     DIV_CLASS("panel panel-info") {
                         DIV_CLASS("panel-heading") {
                             printUuidTag(uuid, perActorInfo.Tag);
@@ -1451,6 +1516,10 @@ public:
 
                 for (auto it = FinishedTests.rbegin(); it != FinishedTests.rend(); ++it) {
                     const TFinishedTestInfo& testInfo = *it;
+                    if (info.ResultsUuid && testInfo.Uuid != info.ResultsUuid) {
+                        continue;
+                    }
+                    printed = true;
                     DIV_CLASS("panel panel-info") {
                         DIV_CLASS("panel-heading") {
                             printUuidTag(testInfo.Uuid, testInfo.Tag);
@@ -1462,6 +1531,13 @@ public:
                                 str << "Finish time# " << nodeInfo.Finish.ToStringUpToSeconds() << "<br/>";
                                 str << nodeInfo.LastHtmlPage;
                             }
+                        }
+                    }
+                }
+                if (info.ResultsUuid && !printed) {
+                    DIV_CLASS("panel panel-info") {
+                        DIV_CLASS("panel-body") {
+                            str << "No load actor result found for requested UUID";
                         }
                     }
                 }

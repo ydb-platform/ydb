@@ -3,13 +3,14 @@
 #include "public.h"
 
 #include <yt/yt/core/misc/error.h>
-#include <yt/yt/core/misc/property.h>
 
 #include <yt/yt/core/yson/public.h>
 
 #include <yt/yt/core/ytree/public.h>
 
 #include <library/cpp/yt/memory/range.h>
+
+#include <library/cpp/yt/misc/property.h>
 
 #include <util/digest/multi.h>
 
@@ -48,6 +49,10 @@ public:
     void Enrich(int columnCount);
 
     TLegacyLockBitmap GetBitmap() const;
+
+    //! Returns the length of the shortest prefix containing all non-None locks
+    //! (one past the largest set index), or 0 if all locks are None.
+    int GetLockedPrefixLength() const;
 
     TLegacyLockMask(const TLegacyLockMask& other) = default;
     TLegacyLockMask& operator=(const TLegacyLockMask& other) = default;

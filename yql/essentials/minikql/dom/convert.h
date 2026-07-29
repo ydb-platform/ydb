@@ -425,4 +425,101 @@ private:
     const TConverter Converter_;
 };
 
+template <ENodeType NodeType, bool IsStrict>
+TUnboxedValuePod AsScalar(TUnboxedValuePod value, TStringBuf name) {
+    if (IsNodeType<ENodeType::Attr>(value)) {
+        value = value.GetVariantItem().Release();
+    }
+
+    if (IsNodeType<NodeType>(value)) {
+        static_assert(NodeType == ENodeType::Bool || NodeType == ENodeType::Int64 || NodeType == ENodeType::Uint64 || NodeType == ENodeType::Double, "Expected bool, int64, uint64 or double");
+        switch (NodeType) {
+            case ENodeType::Bool:
+                return NUdf::TUnboxedValuePod(value.Get<bool>());
+            case ENodeType::Int64:
+                return NUdf::TUnboxedValuePod(value.Get<i64>());
+            case ENodeType::Uint64:
+                return NUdf::TUnboxedValuePod(value.Get<ui64>());
+            case ENodeType::Double:
+                return NUdf::TUnboxedValuePod(value.Get<double>());
+        }
+        throw yexception() << "Expected " << name << ", but got: " << TDebugPrinter(value);
+    } else if constexpr (IsStrict) {
+        throw yexception() << "Expected " << name << ", but got: " << TDebugPrinter(value);
+    } else {
+        return {};
+    }
+}
+
+template <bool IsStrict>
+TUnboxedValuePod AsString(TUnboxedValuePod value) {
+    if (IsNodeType<ENodeType::Attr>(value)) {
+        value = value.GetVariantItem().Release();
+    }
+
+    if (IsNodeType(value, ENodeType::String)) {
+        // should clear upper bits in the length byte for embedded strings
+        return ClearUtf8Mark(value);
+    } else if constexpr (IsStrict) {
+        throw yexception() << "Expected string, but got: " << TDebugPrinter(value);
+    } else {
+        return {};
+    }
+}
+
+template <bool IsStrict>
+TUnboxedValuePod AsUtf8(TUnboxedValuePod value) {
+    if (IsNodeType<ENodeType::Attr>(value)) {
+        value = value.GetVariantItem().Release();
+    }
+
+    if (IsUtf8Node(value)) {
+        // should clear upper bits in the length byte for embedded strings
+        return ClearUtf8Mark(value);
+    } else if constexpr (IsStrict) {
+        throw yexception() << "Expected utf8, but got: " << TDebugPrinter(value);
+    } else {
+        return {};
+    }
+}
+
+template <bool IsStrict>
+TUnboxedValuePod AsList(TUnboxedValuePod value, const IValueBuilder* valueBuilder) {
+    if (IsNodeType<ENodeType::Attr>(value)) {
+        value = value.GetVariantItem().Release();
+    }
+
+    if (IsNodeType<ENodeType::List>(value)) {
+        if (!value.IsBoxed()) {
+            return valueBuilder->NewEmptyList().Release();
+        }
+
+        return value;
+    } else if constexpr (IsStrict) {
+        throw yexception() << "Expected list, but got: " << TDebugPrinter(value);
+    } else {
+        return {};
+    }
+}
+
+template <bool IsStrict>
+TUnboxedValuePod AsDict(TUnboxedValuePod value, const IValueBuilder* valueBuilder) {
+    if (IsNodeType<ENodeType::Attr>(value)) {
+        value = value.GetVariantItem().Release();
+    }
+
+    if (IsNodeType<ENodeType::Dict>(value)) {
+        if (!value.IsBoxed()) {
+            // it implements empty dict protocol too
+            return valueBuilder->NewEmptyList().Release();
+        }
+
+        return value;
+    } else if constexpr (IsStrict) {
+        throw yexception() << "Expected dict, but got: " << TDebugPrinter(value);
+    } else {
+        return {};
+    }
+}
+
 } // namespace NYql::NDom

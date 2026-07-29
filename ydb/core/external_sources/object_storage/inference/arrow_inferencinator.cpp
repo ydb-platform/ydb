@@ -18,14 +18,7 @@
 
 #include <optional>
 
-#define LOG_E(name, stream) \
-    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::OBJECT_STORAGE_INFERENCINATOR, name << ": " << this->SelfId() << ". " << stream)
-#define LOG_I(name, stream) \
-    LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::OBJECT_STORAGE_INFERENCINATOR, name << ": " << this->SelfId() << ". " << stream)
-#define LOG_D(name, stream) \
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::OBJECT_STORAGE_INFERENCINATOR, name << ": " << this->SelfId() << ". " << stream)
-#define LOG_T(name, stream) \
-    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::OBJECT_STORAGE_INFERENCINATOR, name << ": " << this->SelfId() << ". " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::OBJECT_STORAGE_INFERENCINATOR
 
 namespace NKikimr::NExternalSource::NObjectStorage::NInference {
 
@@ -295,7 +288,9 @@ public:
     }
 
     void HandleFileError(TEvFileError::TPtr& ev, const NActors::TActorContext& ctx) {
-        LOG_D("TArrowInferencinator", "HandleFileError: " << ev->Get()->Issues.ToOneLineString());
+        YDB_LOG_DEBUG("TArrowInferencinator",
+            {"selfId", SelfId()},
+            {"ev", ev->Get()->Issues.ToOneLineString()});
         ReplyAndReset(ctx, new TEvInferredFileSchema(ev->Get()->Path, std::move(ev->Get()->Issues)));
     }
 

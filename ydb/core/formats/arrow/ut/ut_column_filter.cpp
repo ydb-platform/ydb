@@ -1,4 +1,4 @@
-#include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
 
 #include <ydb/library/actors/core/log.h>
 

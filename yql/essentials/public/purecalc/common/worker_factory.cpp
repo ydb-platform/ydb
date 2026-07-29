@@ -6,7 +6,7 @@
 #include "default_runtime_settings.h"
 
 #include <yql/essentials/sql/sql.h>
-#include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/sql/v1/translation/sql.h>
 
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
@@ -18,6 +18,7 @@
 #include <yql/essentials/core/yql_type_helpers.h>
 #include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
 #include <yql/essentials/core/langver/yql_core_langver.h>
+#include <yql/essentials/core/sql_types/yql_callable_names.h>
 #include <yql/essentials/providers/common/codec/yql_codec.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <yql/essentials/providers/common/arrow_resolve/yql_simple_arrow_resolver.h>
@@ -82,6 +83,7 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
     , LangVer_(options.LangVer)
     , RuntimeSettings_(::GetRuntimeSettings())
     , IssueReportTarget_(options.IssueReportTarget)
+    , RemoveUnsupportedPragmas_(options.RemoveUnsupportedPragmas)
 {
     HandleInternalSettings(options.InternalSettings);
 
@@ -143,7 +145,7 @@ TWorkerFactory<TBase>::TWorkerFactory(TWorkerFactoryOptions options, EProcessorM
                             options.SyntaxVersion, options.Modules,
                             options.InputSpec, options.OutputSpec, processorMode, typeCtx.Get());
 
-        RawOutputType_ = GetSequenceItemType(ExprRoot_->Pos(), ExprRoot_->GetTypeAnn(), true, ExprContext_);
+        RawOutputType_ = GetSequenceItemType(ExprRoot_->Pos(), ExprRoot_->GetTypeAnn(), /*allowMultiIO=*/true, ExprContext_);
 
         // Deduce output type if it wasn't provided by output spec
 
@@ -194,7 +196,7 @@ TIntrusivePtr<TTypeAnnotationContext> TWorkerFactory<TBase>::PrepareTypeContext(
     typeContext->UserDataStorage = MakeIntrusive<TUserDataStorage>(nullptr, UserData_, nullptr, nullptr);
     typeContext->Modules = moduleResolver;
     typeContext->BlockEngineMode = BlockEngineMode_;
-    auto configProvider = CreateConfigProvider(*typeContext, nullptr, "");
+    auto configProvider = CreateConfigProvider(*typeContext, /*config=*/nullptr, "");
     typeContext->AddDataSource(ConfigProviderName, configProvider);
     typeContext->Initialize(ExprContext_);
     typeContext->SqlFlags = GetSqlFlags(BlockEngineMode_);
@@ -258,8 +260,12 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
         settings.File = "generated.sql";
         settings.Flags = GetSqlFlags(BlockEngineMode_);
         settings.AllowTablesFunction = true;
-        for (const auto& [key, block] : UserData_) {
+        const TString libraryPrefix = NYql::GetDefaultFilePrefix() + "yql_libs/";
+        for (auto& [key, block] : UserData_) {
             TStringBuf alias(key.Alias());
+            if (alias.StartsWith(libraryPrefix)) {
+                block.Usage.Set(EUserDataBlockUsage::Library, /*val=*/true); // See YQL-21401
+            }
             if (block.Usage.Test(EUserDataBlockUsage::Library) && !alias.StartsWith("/lib")) {
                 alias.SkipPrefix("/home/");
                 settings.Libraries.emplace(alias);
@@ -270,8 +276,14 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
         lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
         lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
         NSQLTranslationV1::TParsers parsers;
-        parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
-        parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+        parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(
+            /*isAmbiguityError=*/false,
+            /*isAmbiguityDebugging=*/false,
+            settings.MaxParseTreeDepth);
+        parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
+            /*isAmbiguityError=*/false,
+            /*isAmbiguityDebugging=*/false,
+            settings.MaxParseTreeDepth);
 
         NSQLTranslation::TTranslators translators(
             nullptr,
@@ -300,7 +312,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
     // Translate AST into expression
 
     TExprNode::TPtr exprRoot;
-    if (!CompileExpr(*astRes.Root, exprRoot, ExprContext_, typeContext->Modules.get(), nullptr, 0, syntaxVersion)) {
+    if (!CompileExpr(*astRes.Root, exprRoot, ExprContext_, typeContext->Modules.get(), /*urlListerManager=*/nullptr, 0, syntaxVersion)) {
         TStringStream astStr;
         astRes.Root->PrettyPrintTo(astStr, TAstPrintFlags::ShortQuote | TAstPrintFlags::PerLine);
         ythrow TCompileError(astStr.Str(), GetIssues().ToString()) << "failed to compile";
@@ -319,7 +331,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
         }
 
         TStringStream out;
-        NYson::TYsonWriter writer(&out, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, true);
+        NYson::TYsonWriter writer(&out, NYson::EYsonFormat::Text, ::NYson::EYsonType::Node, /*enableRaw=*/true);
         writer.OnBeginMap();
 
         writer.OnKeyedItem("Data");
@@ -340,12 +352,12 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
             NativeYtTypeFlags_,
             DeterministicTimeProviderSeed_,
             LangVer_,
-            true,
+            /*insideEvaluation=*/true,
             RuntimeSettings_);
 
         with_lock (graph.ScopedAlloc) {
             const auto value = graph.ComputationGraph->GetValue();
-            NCommon::WriteYsonValue(writer, value, const_cast<NKikimr::NMiniKQL::TType*>(graph.OutputType), nullptr);
+            NCommon::WriteYsonValue(writer, value, const_cast<NKikimr::NMiniKQL::TType*>(graph.OutputType), /*structPositions=*/nullptr);
         }
         writer.OnEndMap();
 
@@ -368,7 +380,27 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
                  "ReplaceTableReads", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
                  "Replace reads from tables");
     pipeline.AddServiceTransformers();
-    pipeline.AddPreTypeAnnotation();
+    if (RemoveUnsupportedPragmas_) {
+        pipeline.Add(CreateFunctorTransformer(
+                         [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+                             return OptimizeExpr(input, output, [typeContext](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+                                 if (node->IsCallable(ConfigureName)) {
+                                     if (!EnsureMinArgsCount(*node, 2, ctx)) {
+                                         return nullptr;
+                                     }
+                                     if (!EnsureMinArgsCount(*node->Child(1), 1, ctx)) {
+                                         return nullptr;
+                                     }
+                                     if (!typeContext->DataSourceMap.contains(node->Child(1)->Head().Content())) {
+                                         return node->HeadPtr();
+                                     }
+                                 }
+                                 return node;
+                             }, ctx, TOptimizeExprSettings(nullptr));
+                         }), "Unsupported pragmas", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
+                     "Unsupported pragmas optimizations");
+    }
+    pipeline.AddPreTypeAnnotation(/*expandCons=*/false);
     pipeline.AddExpressionEvaluation(*FuncRegistry_, calcTransformer.Get());
     pipeline.AddIOAnnotation();
     pipeline.AddTypeAnnotationTransformer();
@@ -388,6 +420,9 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
                          return OptimizeExpr(input, output, [](const TExprNode::TPtr& node, TExprContext&) -> TExprNode::TPtr {
                              if (node->IsCallable("Right!") && node->Head().IsCallable("Cons!")) {
                                  return node->Head().ChildPtr(1);
+                             }
+                             if (node->IsCallable("Left!") && node->Head().IsCallable("Cons!")) {
+                                 return node->Head().ChildPtr(0);
                              }
 
                              return node;
@@ -411,7 +446,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
     pipeline.Add(MakePeepholeOptimization(typeContext),
                  "PeepHole", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
                  "Peephole optimizations");
-    pipeline.AddCheckExecution(false);
+    pipeline.AddCheckExecution(/*checkWorld=*/false);
 
     // Apply optimizations
 
@@ -435,7 +470,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
 
     if (exprOut) {
         *exprOut << "After optimization:" << Endl;
-        ConvertToAst(*exprRoot, ExprContext_, 0, true).Root->PrettyPrintTo(*exprOut, TAstPrintFlags::PerLine | TAstPrintFlags::ShortQuote | TAstPrintFlags::AdaptArbitraryContent);
+        ConvertToAst(*exprRoot, ExprContext_, 0, /*refAtoms=*/true).Root->PrettyPrintTo(*exprOut, TAstPrintFlags::PerLine | TAstPrintFlags::ShortQuote | TAstPrintFlags::AdaptArbitraryContent);
     }
     return exprRoot;
 }

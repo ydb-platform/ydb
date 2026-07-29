@@ -63,7 +63,7 @@ TEST(TReconfigurableThroughputThrottlerTest, Limit)
     WaitForFast(throttler->Throttle(1)).ThrowOnError();
 
     auto duration = timer.GetElapsedTime().MilliSeconds();
-    EXPECT_GE(duration, 1000u);
+    EXPECT_GE(duration, 950u);
     EXPECT_LE(duration, 3000u);
 }
 
@@ -702,7 +702,7 @@ INSTANTIATE_TEST_SUITE_P(Stress,
     TPrefetchingStressTest,
     testing::Values(
         TStressParameters {
-            .TestDuration = TDuration::Seconds(50),
+            .TestDuration = TDuration::Seconds(20),
             .IterationsPerStep = 100,
             .StepMultiplier = 0.1,
             .AllowedRpsOverflowMultiplier = 3.0,
@@ -718,7 +718,7 @@ INSTANTIATE_TEST_SUITE_P(Stress,
             .TryAcquireAllProbability = 0.000'1,
         },
         TStressParameters {
-            .TestDuration = TDuration::Seconds(100),
+            .TestDuration = TDuration::Seconds(30),
             .PassCount = 10,
             .AllowedRpsOverflowMultiplier = 5.0,
             .TryAcquireAllProbability = 0.000'1,

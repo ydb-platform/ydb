@@ -1,8 +1,10 @@
--- PR-check: все падения тестов в окне lookback для пары (pr_number, branch) — и прошлые job'ы, и текущий last.
+-- PR-check: все падения тестов в окне lookback для пары (pr_number, branch, build_type).
 -- Разрез по attempt (1/2/3 из pull). Не rich-фильтр — любой failure.
 --
--- is_last_run_in_pr: 1 если job_id = последний PR-check по (pr_number, branch) в окне
---   (MAX_BY(job_id, run_timestamp) по всем PR-check строкам, как в pr_blocked_by_failed_tests_rich), иначе 0.
+-- is_last_run_in_pr: 1 если job_id = последний PR-check по (pr_number, branch, build_type) в окне
+--   (MAX_BY(job_id, run_timestamp) по PR-check строкам этого build_type), иначе 0.
+--
+-- relwithdebinfo и release-asan считаются отдельно: matrix-джобы делят один workflow run_id.
 --
 -- Отличается от pr_with_test_failures / pr_blocked_by_tests:
 --   там последний job исторически считался по строкам с attempt = 3; здесь last_job считается по всем attempt.
@@ -22,6 +24,7 @@
 PRAGMA AnsiInForEmptyOrNullableItemsCollections;
 
 $pr_check_lookback_days = 30;
+$pr_check_build_types = ('relwithdebinfo', 'release-asan');
 
 $raw_pr_check = (
     SELECT
@@ -76,7 +79,7 @@ $raw_pr_check = (
     FROM
         `test_results/test_runs_column`
     WHERE
-        build_type = 'relwithdebinfo'
+        build_type IN $pr_check_build_types
         AND job_name = 'PR-check'
         AND run_timestamp > CurrentUtcDate() - $pr_check_lookback_days * Interval("P1D")
         AND pull IS NOT NULL
@@ -88,32 +91,36 @@ $raw_pr_check = (
         AND test_name IS NOT NULL
 );
 
--- Один timestamp на (job_id, pr_number, branch) — как в pr_blocked_by_failed_tests_rich.$all_pr_check_runs
+-- Один timestamp на (job_id, pr_number, branch, build_type)
 $job_ts = (
     SELECT
         job_id,
         pr_number,
         branch,
+        build_type,
         MAX(run_timestamp) AS run_timestamp
     FROM
         $raw_pr_check
     GROUP BY
         job_id,
         pr_number,
-        branch
+        branch,
+        build_type
 );
 
 $last_job_per_pr_branch = (
     SELECT
         pr_number,
         branch,
+        build_type,
         MAX_BY(job_id, run_timestamp) AS last_job_id,
         MAX(run_timestamp) AS last_job_run_timestamp
     FROM
         $job_ts
     GROUP BY
         pr_number,
-        branch
+        branch,
+        build_type
 );
 
 $pr_latest = (
@@ -165,7 +172,7 @@ $monitor_today = (
     FROM
         `test_results/analytics/tests_monitor`
     WHERE
-        build_type = 'relwithdebinfo'
+        build_type IN $pr_check_build_types
         AND date_window = CurrentUtcDate()
 );
 
@@ -179,7 +186,7 @@ $monitor_run_day = (
     FROM
         `test_results/analytics/tests_monitor`
     WHERE
-        build_type = 'relwithdebinfo'
+        build_type IN $pr_check_build_types
         AND date_window >= CurrentUtcDate() - $pr_check_lookback_days * Interval("P1D")
         AND date_window <= CurrentUtcDate()
 );
@@ -227,6 +234,7 @@ LEFT JOIN
 ON
     f.pr_number = lj.pr_number
     AND f.branch = lj.branch
+    AND f.build_type = lj.build_type
 INNER JOIN
     $pr_latest AS pr
 ON

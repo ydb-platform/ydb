@@ -11,14 +11,43 @@
 
 using namespace NYdb::NConsoleClient;
 
+TVector<NYdb::NTopic::ECodec> TCommandWorkloadTopicParams::GetWriteAllowedCodecs() {
+    return {
+        NYdb::NTopic::ECodec::RAW,
+        NYdb::NTopic::ECodec::GZIP,
+        NYdb::NTopic::ECodec::ZSTD,
+        NYdb::NTopic::ECodec::KAFKA_BATCH,
+    };
+}
+
+TVector<NYdb::NTopic::ECodec> TCommandWorkloadTopicParams::GetBatchInnerAllowedCodecs() {
+    return {
+        NYdb::NTopic::ECodec::GZIP,
+        NYdb::NTopic::ECodec::ZSTD,
+    };
+}
+
 ui32 TCommandWorkloadTopicParams::StrToCodec(const TString& str) {
     THashMap<TString, NYdb::NTopic::ECodec> codecs{
         {"raw", NYdb::NTopic::ECodec::RAW},
         {"gzip", NYdb::NTopic::ECodec::GZIP},
-        {"zstd", NYdb::NTopic::ECodec::ZSTD}};
+        {"zstd", NYdb::NTopic::ECodec::ZSTD},
+        {"kafka-batch", NYdb::NTopic::ECodec::KAFKA_BATCH},
+    };
     TString loweredStr(str);
     loweredStr.to_lower();
     codecs.contains(loweredStr) ?: throw yexception() << "Unsupported codec: " << str;
+    return (ui32)codecs[loweredStr];
+}
+
+ui32 TCommandWorkloadTopicParams::StrToBatchInnerCodec(const TString& str) {
+    THashMap<TString, NYdb::NTopic::ECodec> codecs{
+        {"gzip", NYdb::NTopic::ECodec::GZIP},
+        {"zstd", NYdb::NTopic::ECodec::ZSTD},
+    };
+    TString loweredStr(str);
+    loweredStr.to_lower();
+    codecs.contains(loweredStr) ?: throw yexception() << "Unsupported batch inner codec: " << str;
     return (ui32)codecs[loweredStr];
 }
 

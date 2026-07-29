@@ -40,8 +40,9 @@
 
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 
-#include <ydb/library/actors/core/log.h>
 #include <ydb/services/sqs_topic/statuses.h>
+
+#include <ydb/library/actors/core/log.h>
 
 #include <library/cpp/json/json_writer.h>
 
@@ -82,7 +83,11 @@ namespace NKikimr::NSqsTopic::V1 {
             if (!Request_->GetDatabaseName()) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "Request without database is forbidden"));
             }
-            if (auto check = ValidateQueueName(QueueName, false); !check.has_value()) {
+            if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
+                return ReplyWithError(MakeError(NSQS::NErrors::UNSUPPORTED_OPERATION,
+                    "CreateQueue is not supported"));
+            }
+            if (auto check = ValidateQueueName(QueueName, true); !check.has_value()) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, std::format("Invalid queue name: {}", check.error())));
             }
             if (auto cc = ParseQueueAttributes(request.attributes(), QueueName, ConsumerName, this->Database, EConsumerAttributeUsageTarget::Create); !cc.has_value()) {
@@ -100,8 +105,7 @@ namespace NKikimr::NSqsTopic::V1 {
         void StateWork(TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
                 hFunc(NDescriber::TEvDescribeTopicsResponse, Handle);
-                hFunc(NPQ::NSchema::TEvAlterTopicResponse, Handle);
-                hFunc(NPQ::NSchema::TEvCreateTopicResponse, Handle);
+                hFunc(NPQ::NSchema::TEvSchemaResponse, Handle);
                 default:
                     TBase::StateWork(ev);
             }
@@ -113,7 +117,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
         void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
             const auto* result = ev->Get();
-            Y_ABORT_UNLESS(result->Topics.size() == 1);
+            AFL_ENSURE(result->Topics.size() == 1)("topics_size", result->Topics.size())("path", TopicPath);
             const auto& topicInfo = result->Topics.begin()->second;
 
             switch(topicInfo.Status) {
@@ -154,6 +158,11 @@ namespace NKikimr::NSqsTopic::V1 {
                 autoPartitioning->set_strategy(::Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP);
                 partitioningSettings->set_min_active_partitions(DEFAULT_MIN_PARTITION_COUNT);
                 partitioningSettings->set_max_active_partitions(DEFAULT_MAX_PARTITION_COUNT);
+
+                auto* writeSpeed = autoPartitioning->mutable_partition_write_speed();
+                writeSpeed->set_up_utilization_percent(80);
+                writeSpeed->set_down_utilization_percent(20);
+                writeSpeed->mutable_stabilization_window()->set_seconds(30);
             }
 
             SetDuration(QueueAttributes.MessageRetentionPeriod.GetOrElse(DEFAULT_MESSAGE_RETENTION_PERIOD), *topicRequest.mutable_retention_period());
@@ -161,9 +170,9 @@ namespace NKikimr::NSqsTopic::V1 {
             topicRequest.mutable_supported_codecs()->add_codecs(Ydb::Topic::CODEC_RAW);
 
             topicRequest.set_content_based_deduplication(QueueAttributes.ContentBasedDeduplication.GetOrElse(false));
-            if (QueueAttributes.ContentBasedDeduplication.GetOrElse(false)) {
-                topicRequest.set_partition_write_speed_messages_per_second(NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_LIMIT);
-                topicRequest.set_partition_write_burst_messages(NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_BURST);
+            if (QueueAttributes.FifoQueue) {
+                topicRequest.set_partition_write_speed_messages_per_second(NPQ::FIFO_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND);
+                topicRequest.set_partition_write_burst_messages(NPQ::FIFO_PARTITION_WRITE_BURST_MESSAGES);
             }
 
             AddConsumerToRequest(topicRequest.add_consumers());
@@ -208,17 +217,11 @@ namespace NKikimr::NSqsTopic::V1 {
             if (QueueAttributes.DeadLetterQueue.Defined()) {
                 consumerType->mutable_dead_letter_policy()->mutable_move_action()->set_dead_letter_queue(*QueueAttributes.DeadLetterQueue);
             }
+
+            (*consumer->mutable_attributes())["_sqs_read_request_attempt_id_period_ms"] = ToString(Cfg().GetGroupsReadAttemptIdsPeriodMs());
         }
 
-        void Handle(NPQ::NSchema::TEvAlterTopicResponse::TPtr& ev) {
-            const auto* result = ev->Get();
-            if (result->Status != Ydb::StatusIds::SUCCESS) {
-                return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, result->ErrorMessage));
-            }
-            return ReplyAndDie(ActorContext());
-        }
-
-        void Handle(NPQ::NSchema::TEvCreateTopicResponse::TPtr& ev) {
+        void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
             const auto* result = ev->Get();
             if (result->Status != Ydb::StatusIds::SUCCESS) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, result->ErrorMessage));

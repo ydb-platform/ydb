@@ -7,6 +7,7 @@
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/count_min_sketch/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
@@ -14,6 +15,8 @@
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 #include <util/string/join.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
 
 namespace NKikimr::NOlap {
 
@@ -138,7 +141,7 @@ void TIndexInfo::SetAllKeys(const std::shared_ptr<IStoragesManager>& operators, 
         Precalculate();
     }
     for (auto&& [id, column] : columns) {
-        Columns.emplace_back(TNameTypeInfo(column.Name, column.PType));
+        Columns[id] = TNameTypeInfo(column.Name, column.PType);
     }
 }
 
@@ -167,7 +170,9 @@ std::optional<ui32> TIndexInfo::GetColumnIndexOptional(const ui32 id) const {
 std::shared_ptr<arrow::Field> TIndexInfo::GetColumnFieldOptional(const ui32 columnId) const {
     const std::optional<ui32> index = GetColumnIndexOptional(columnId);
     if (!index) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("column_id", columnId)("event", "incorrect_column_id");
+        YDB_LOG_DEBUG("",
+            {"columnId", columnId},
+            {"event", "incorrect_column_id"});
         return nullptr;
     }
     return ArrowSchemaWithSpecials()->GetFieldByIndexVerified(*index);
@@ -206,11 +211,34 @@ std::shared_ptr<arrow::Schema> TIndexInfo::GetColumnSchema(const ui32 columnId) 
     return GetColumnsSchema({ columnId });
 }
 
+bool TInsertOptionsPolicy::MeetsMinBlobBytes(const ui64 totalBlobBytes) const {
+    return totalBlobBytes >= BuildIndexesMinBlobBytes.value_or(0);
+}
+
+bool TInsertOptionsPolicy::ShouldBuildIndexesOnInsert(const NEvWrite::EModificationType mType, const ui64 totalBlobBytes) const {
+    if (!BuildIndexesEnabled.value_or(false)) {
+        return false;
+    }
+    if (mType != NEvWrite::EModificationType::Replace) {
+        return false;
+    }
+    return MeetsMinBlobBytes(totalBlobBytes);
+}
+
 void TIndexInfo::DeserializeOptionsFromProto(const NKikimrSchemeOp::TColumnTableSchemeOptions& optionsProto) {
     TMemoryProfileGuard g("TIndexInfo::DeserializeFromProto::Options");
     SchemeNeedActualization = optionsProto.GetSchemeNeedActualization();
     if (optionsProto.HasScanReaderPolicyName()) {
         ScanReaderPolicyName = optionsProto.GetScanReaderPolicyName();
+    }
+    if (optionsProto.HasInsertOptions()) {
+        const auto& options = optionsProto.GetInsertOptions();
+        if (options.HasBuildIndexesEnabled()) {
+            InsertOptions.BuildIndexesEnabled = options.GetBuildIndexesEnabled();
+        }
+        if (options.HasBuildIndexesMinBlobBytes()) {
+            InsertOptions.BuildIndexesMinBlobBytes = options.GetBuildIndexesMinBlobBytes();
+        }
     }
     if (optionsProto.HasCompactionPlannerConstructor()) {
         auto container =
@@ -237,7 +265,9 @@ bool TIndexInfo::DeserializeDefaultCompressionFromProto(const NKikimrSchemeOp::T
     TMemoryProfileGuard g("TIndexInfo::DeserializeFromProto::Serializer");
     NArrow::NSerialization::TSerializerContainer container;
     if (!container.DeserializeFromProto(compressionProto)) {
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_index_info")("reason", "cannot_parse_default_serializer");
+        YDB_LOG_ERROR("",
+            {"event", "cannot_parse_index_info"},
+            {"reason", "cannot_parse_default_serializer"});
         return false;
     }
     DefaultSerializer = container;
@@ -307,7 +337,9 @@ bool TIndexInfo::DeserializeFromProto(const NKikimrSchemeOp::TColumnTableSchema&
             AFL_VERIFY(it != columns.end());
             auto fConclusion = CreateColumnFeatures(it->second, col, operators, cache);
             if (fConclusion.IsFail()) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_build_column_feature")("reason", fConclusion.GetErrorMessage());
+                YDB_LOG_ERROR("",
+                    {"event", "cannot_build_column_feature"},
+                    {"reason", fConclusion.GetErrorMessage()});
                 return false;
             }
             ColumnFeatures.emplace_back(fConclusion.DetachResult());
@@ -450,24 +482,17 @@ std::shared_ptr<arrow::Scalar> TIndexInfo::GetColumnExternalDefaultValueVerified
     return GetColumnFeaturesVerified(columnId).GetDefaultValue().GetValue();
 }
 
-NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& originalData,
-    const ui32 indexId, const std::shared_ptr<IStoragesManager>& operators, const ui32 recordsCount, const TString& specialTier,
-    TSecondaryData& result) const {
-    auto it = Indexes.find(indexId);
-    AFL_VERIFY(it != Indexes.end());
-    auto& index = it->second;
-    TMemoryProfileGuard mpg("IndexConstruction::" + index->GetIndexName());
-    TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> indexChunkConclusion =
-        index->BuildIndexOptional(originalData, recordsCount, *this);
-    if (indexChunkConclusion.IsFail()) {
-        return indexChunkConclusion;
-    }
-    if (indexChunkConclusion->empty()) {
+NKikimr::TConclusionStatus TIndexInfo::ReuseIndexChunks(std::vector<std::shared_ptr<IPortionDataChunk>> chunks, const ui32 indexId,
+    const std::shared_ptr<IStoragesManager>& operators, const ui32 recordsCount, const TString& specialTier, TSecondaryData& result) const {
+    if (chunks.empty()) {
         return TConclusionStatus::Success();
     }
-    std::vector<std::shared_ptr<IPortionDataChunk>> chunks(
-        std::make_move_iterator(indexChunkConclusion->begin()), std::make_move_iterator(indexChunkConclusion->end()));
-    const TString indexStorageId = GetIndexStorageId(indexId, specialTier);
+    ui32 checkRecordsCount = 0;
+    for (auto&& chunk : chunks) {
+        checkRecordsCount += chunk->GetRecordsCountVerified();
+    }
+    AFL_VERIFY(checkRecordsCount == recordsCount)("index_id", indexId)("sum", checkRecordsCount)("portion", recordsCount);
+    const TString& indexStorageId = GetIndexStorageId(indexId, specialTier);
     auto opStorage = operators->GetOperatorVerified(indexStorageId);
     for (auto&& chunk : chunks) {
         if ((i64)chunk->GetPackedSize() > opStorage->GetBlobSplitSettings().GetMaxBlobSize()) {
@@ -485,6 +510,26 @@ NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vec
     return TConclusionStatus::Success();
 }
 
+NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& originalData,
+    const ui32 indexId, const std::shared_ptr<IStoragesManager>& operators, const ui32 recordsCount, const TString& specialTier,
+    TSecondaryData& result) const {
+    auto it = Indexes.find(indexId);
+    AFL_VERIFY(it != Indexes.end());
+    auto& index = it->second;
+    TMemoryProfileGuard mpg("IndexConstruction::" + index->GetIndexName());
+    TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> indexChunkConclusion =
+        index->BuildIndexOptional(originalData, recordsCount, *this);
+    if (indexChunkConclusion.IsFail()) {
+        return indexChunkConclusion;
+    }
+    if (indexChunkConclusion->empty()) {
+        return TConclusionStatus::Success();
+    }
+    std::vector<std::shared_ptr<IPortionDataChunk>> chunks(
+        std::make_move_iterator(indexChunkConclusion->begin()), std::make_move_iterator(indexChunkConclusion->end()));
+    return ReuseIndexChunks(std::move(chunks), indexId, operators, recordsCount, specialTier, result);
+}
+
 std::shared_ptr<NIndexes::NMax::TIndexMeta> TIndexInfo::GetIndexMetaMax(const ui32 columnId) const {
     for (auto&& i : Indexes) {
         if (i.second->GetClassName() != NIndexes::NMax::TIndexMeta::GetClassNameStatic()) {
@@ -493,6 +538,19 @@ std::shared_ptr<NIndexes::NMax::TIndexMeta> TIndexInfo::GetIndexMetaMax(const ui
         auto maxIndex = static_pointer_cast<NIndexes::NMax::TIndexMeta>(i.second.GetObjectPtr());
         if (maxIndex->GetColumnId() == columnId) {
             return maxIndex;
+        }
+    }
+    return nullptr;
+}
+
+std::shared_ptr<NIndexes::NMinMax::TIndexMeta> TIndexInfo::GetIndexMetaMinMax(const ui32 columnId) const {
+    for (auto&& i : Indexes) {
+        if (i.second->GetClassName() != NIndexes::NMinMax::TIndexMeta::GetClassNameStatic()) {
+            continue;
+        }
+        auto minMaxIndex = static_pointer_cast<NIndexes::NMinMax::TIndexMeta>(i.second.GetObjectPtr());
+        if (minMaxIndex->GetColumnId() == columnId) {
+            return minMaxIndex;
         }
     }
     return nullptr;
@@ -558,6 +616,9 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
             SchemaColumnIdsWithSpecials.emplace_back(originalColId);
             if (!IIndexInfo::IsSpecialColumn(originalColId)) {
                 AFL_VERIFY(index < original.SchemaColumnIdsWithSpecials.size() - SpecialColumnsCount);
+                auto it = original.Columns.find(originalColId);
+                AFL_VERIFY(it != original.Columns.end())("column_id", originalColId);
+                Columns.emplace(originalColId, it->second);
                 fields.emplace_back(original.SchemaWithSpecials->field(index));
             }
         };
@@ -567,6 +628,7 @@ TIndexInfo::TIndexInfo(const TIndexInfo& original, const TSchemaDiffView& diff, 
             AFL_VERIFY(!IIndexInfo::IsSpecialColumn(colId));
             SchemaColumnIdsWithSpecials.emplace_back(colId);
             auto tableCol = BuildColumnFromProto(col, cache);
+            Columns.emplace(colId, TNameTypeInfo(tableCol.Name, tableCol.PType));
             fields.emplace_back(BuildArrowField(tableCol, cache));
         };
         diff.ApplyForColumns(original.SchemaColumnIdsWithSpecials, addFromOriginal, addFromDiff);

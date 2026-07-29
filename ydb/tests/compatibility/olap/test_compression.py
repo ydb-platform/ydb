@@ -11,10 +11,7 @@ logger = logging.getLogger(__name__)
 class TestCompressionRestart(RestartToAnotherVersionFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
-
-        yield from self.setup_cluster(extra_feature_flags={
-            "enable_olap_compression": True,
-        })
+        yield from self.setup_cluster(extra_feature_flags=["enable_olap_compression"])
 
     def _create_table_with_family_compression(self, name):
         with ydb.QuerySessionPool(self.driver) as session_pool:

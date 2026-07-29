@@ -30,6 +30,8 @@
 #include <yt/yt/core/ytree/attributes.h>
 #include <yt/yt/core/ytree/helpers.h>
 
+#include <library/cpp/yt/system/thread_id.h>
+
 #include <library/cpp/yt/threading/count_down_latch.h>
 
 #include <util/system/compiler.h>
@@ -151,14 +153,14 @@ TEST_W(TSchedulerTest, SwitchToInvoker1)
 {
     auto invoker = Queue1->GetInvoker();
 
-    auto id0 = GetCurrentThreadId();
+    auto id0 = GetSystemThreadId();
     auto id1 = invoker->GetThreadId();
 
     EXPECT_NE(id0, id1);
 
     for (int i = 0; i < 10; ++i) {
         SwitchTo(invoker);
-        EXPECT_EQ(GetCurrentThreadId(), id1);
+        EXPECT_EQ(GetSystemThreadId(), id1);
     }
 }
 
@@ -167,7 +169,7 @@ TEST_W(TSchedulerTest, SwitchToInvoker2)
     auto invoker1 = Queue1->GetInvoker();
     auto invoker2 = Queue2->GetInvoker();
 
-    auto id0 = GetCurrentThreadId();
+    auto id0 = GetSystemThreadId();
     auto id1 = invoker1->GetThreadId();
     auto id2 = invoker2->GetThreadId();
 
@@ -177,10 +179,10 @@ TEST_W(TSchedulerTest, SwitchToInvoker2)
 
     for (int i = 0; i < 10; ++i) {
         SwitchTo(invoker1);
-        EXPECT_EQ(GetCurrentThreadId(), id1);
+        EXPECT_EQ(GetSystemThreadId(), id1);
 
         SwitchTo(invoker2);
-        EXPECT_EQ(GetCurrentThreadId(), id2);
+        EXPECT_EQ(GetSystemThreadId(), id2);
     }
 }
 
@@ -258,6 +260,83 @@ TEST_W(TSchedulerTest, WaitForCancelableInvoker2)
         })
         .AsyncVia(invoker)
         .Run()).ThrowOnError();
+}
+
+TEST_W(TSchedulerTest, ContextCancelationCancelsWaitingFiber)
+{
+    auto context = New<TCancelableContext>();
+    auto invoker = context->CreateInvoker(Queue1->GetInvoker());
+
+    auto started = NewPromise<void>();
+    auto promise = NewPromise<void>();
+    auto future = promise.ToFuture();
+
+    auto asyncResult = BIND([=] {
+            started.Set();
+            WaitFor(future)
+                .ThrowOnError();
+        })
+        .AsyncVia(invoker)
+        .Run();
+
+    WaitFor(started.ToFuture())
+        .ThrowOnError();
+
+    constexpr auto CancelationCode = TErrorCode(42);
+    context->Cancel(TError(CancelationCode, "Canceled by context"));
+
+    auto result = WaitFor(asyncResult);
+    EXPECT_FALSE(result.IsOK());
+    EXPECT_EQ(CancelationCode, result.GetCode());
+}
+
+TEST_W(TSchedulerTest, ContextCancelationCancelsSubsequentWaits)
+{
+    auto context = New<TCancelableContext>();
+    auto invoker = context->CreateInvoker(Queue1->GetInvoker());
+
+    auto started = NewPromise<void>();
+    auto firstPromise = NewPromise<void>();
+    auto secondPromise = NewPromise<void>();
+
+    // Once the context cancels the fiber, every subsequent wait -- even on a
+    // future that is never resolved (secondPromise) -- must be canceled at once,
+    // because the whole fiber is canceled, not just the single await. Otherwise
+    // the second WaitFor would hang.
+    auto asyncResult = BIND([=] {
+            started.Set();
+            EXPECT_THROW(WaitFor(firstPromise.ToFuture()).ThrowOnError(), TFiberCanceledException);
+            EXPECT_THROW(WaitFor(secondPromise.ToFuture()).ThrowOnError(), TFiberCanceledException);
+        })
+        .AsyncVia(invoker)
+        .Run();
+
+    WaitFor(started.ToFuture())
+        .ThrowOnError();
+    context->Cancel(TError("Canceled by context"));
+
+    WaitFor(asyncResult)
+        .ThrowOnError();
+}
+
+TEST_W(TSchedulerTest, CurrentCancelableContextFollowsFiberAcrossSwitchTo)
+{
+    auto context = New<TCancelableContext>();
+    auto invoker = context->CreateInvoker(Queue1->GetInvoker());
+    auto otherInvoker = Queue2->GetInvoker();
+
+    WaitFor(BIND([=] {
+            // Running under the cancelable invoker: the context is current.
+            EXPECT_EQ(TryGetCurrentCancelableContext(), context.Get());
+
+            // Switching to an unrelated invoker must not rebind the current
+            // cancelable context -- it is fiber-local, not invoker-bound.
+            SwitchTo(otherInvoker);
+            EXPECT_EQ(TryGetCurrentCancelableContext(), context.Get());
+        })
+        .AsyncVia(invoker)
+        .Run())
+        .ThrowOnError();
 }
 
 TEST_W(TSchedulerTest, TerminatedCaught)

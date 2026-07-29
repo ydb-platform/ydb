@@ -303,6 +303,8 @@ TAutoPtr<IGraphTransformer> CreateKiSourceTypeAnnotationTransformer(TIntrusivePt
     TTypeAnnotationContext& types);
 TAutoPtr<IGraphTransformer> CreateKiSinkTypeAnnotationTransformer(TIntrusivePtr<IKikimrGateway> gateway,
     TIntrusivePtr<TKikimrSessionContext> sessionCtx, TTypeAnnotationContext& types);
+TAutoPtr<IGraphTransformer> CreateKiSourceConstraintsTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx);
+TAutoPtr<IGraphTransformer> CreateKiSinkConstraintsTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx);
 TAutoPtr<IGraphTransformer> CreateKiLogicalOptProposalTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx,
     TTypeAnnotationContext& types);
 TAutoPtr<IGraphTransformer> CreateKiPhysicalOptProposalTransformer(TIntrusivePtr<TKikimrSessionContext> sessionCtx);
@@ -353,7 +355,7 @@ void FillLiteralProto(const NNodes::TCoPgConst& literal, Ydb::TypedValue& proto)
 
 // Optimizer rules
 TExprNode::TPtr KiBuildQuery(NNodes::TExprBase node, TExprContext& ctx, TStringBuf database, TIntrusivePtr<TKikimrTablesData> tablesData,
-    TTypeAnnotationContext& types, bool sequentialResults);
+    TTypeAnnotationContext& types, bool concurrentResults, bool isolateEffects = false);
 TExprNode::TPtr KiBuildResult(NNodes::TExprBase node,  const TString& cluster, TExprContext& ctx);
 
 const THashSet<TStringBuf>& KikimrDataSourceFunctions();
@@ -372,6 +374,19 @@ bool ValidateTableHasIndex(TKikimrTableMetadataPtr metadata, TExprContext& ctx, 
 
 TExprNode::TPtr BuildExternalTableSettings(TPositionHandle pos, TExprContext& ctx, const TMap<TString, NYql::TKikimrColumnMetadata>& columns, const NKikimr::NExternalSource::IExternalSource::TPtr& source, const TString& content);
 TString FillAuthProperties(THashMap<TString, TString>& properties, const TExternalSource& externalSource);
+
+// Single source of truth for the SHOW CREATE setting names attached to
+// KiReadTable nodes and the corresponding PathType values understood by
+// the .sys/show_create system view.
+bool IsShowCreateSettingName(TStringBuf name);
+// Returns the PathType ("Table" / "View" / "ExternalDataSource") for a
+// SHOW CREATE setting name, or an empty string-buf if `name` is not one
+// of the known SHOW CREATE settings.
+TStringBuf ShowCreateSettingToPathType(TStringBuf name);
+// Returns the first SHOW CREATE setting name found in `settings`, or an
+// empty string-buf if none is present. The returned view is backed by static
+// storage and outlives any TExprNode.
+TStringBuf GetShowCreateSetting(const TExprNode& settings);
 
 TWriteBackupCollectionSettings ParseWriteBackupCollectionSettings(NNodes::TExprList node, TExprContext& ctx);
 

@@ -128,8 +128,7 @@ void TListQueueConsumerRegistrationsCommand::DoExecute(ICommandContextPtr contex
 void TPullQueueCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("queue_path", &TThis::QueuePath);
-    registrar.Parameter("offset", &TThis::Offset)
-        .Optional();
+    registrar.Parameter("offset", &TThis::Offset);
     registrar.Parameter("partition_index", &TThis::PartitionIndex);
 
     registrar.ParameterWithUniversalAccessor<i64>(
@@ -206,7 +205,8 @@ void TPullQueueConsumerCommand::Register(TRegistrar registrar)
 
     registrar.Parameter("queue_path", &TThis::QueuePath);
 
-    registrar.Parameter("offset", &TThis::Offset);
+    registrar.Parameter("offset", &TThis::Offset)
+        .Optional();
 
     registrar.Parameter("partition_index", &TThis::PartitionIndex);
 

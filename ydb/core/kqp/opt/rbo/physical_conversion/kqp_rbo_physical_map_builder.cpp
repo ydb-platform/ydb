@@ -5,7 +5,8 @@ using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
 TExprNode::TPtr TPhysicalMapBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
-    const auto inputColumns = Map->GetInput()->GetOutputIUs();
+    const auto inputColumns = NPhysicalConvertionUtils::GetLiveInputIUs(*Map, 0);
+    const auto liveOutputs = NPhysicalConvertionUtils::BuildNameSet(NPhysicalConvertionUtils::GetLiveOutputIUs(*Map));
 
     // clang-format off
     input = Build<TCoToFlow>(Ctx, Pos)
@@ -20,24 +21,39 @@ TExprNode::TPtr TPhysicalMapBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
     TVector<TExprNode::TPtr> lambdaResults;
 
     TVector<TString> outputColumns;
-    THashMap<ui32, TString> renameMap;
+    THashSet<TInfoUnit, TInfoUnit::THashFunction> renameSources;
 
     for (ui32 i = 0; i < inputColumns.size(); ++i) {
         lambdaArgs.push_back(Ctx.NewArgument(Pos, "arg_" + ToString(i)));
         colNamesToIndices.emplace(inputColumns[i].GetFullName(), i);
     }
 
-    if (!Map->Project) {
-        for (const auto& input : inputColumns) {
-            const auto& fullName = input.GetFullName();
-            auto it = colNamesToIndices.find(fullName);
-            Y_ENSURE(it != colNamesToIndices.end());
-            lambdaResults.push_back(lambdaArgs[it->second]);
-            outputColumns.push_back(fullName);
+    for (const auto& mapElement : Map->MapElements) {
+        if (mapElement.IsRename()) {
+            renameSources.insert(mapElement.GetRename());
         }
     }
 
+    for (const auto& input : inputColumns) {
+        if (renameSources.contains(input)) {
+            continue;
+        }
+        const auto& fullName = input.GetFullName();
+        if (!liveOutputs.contains(fullName)) {
+            continue;
+        }
+        auto it = colNamesToIndices.find(fullName);
+        Y_ENSURE(it != colNamesToIndices.end());
+        lambdaResults.push_back(lambdaArgs[it->second]);
+        outputColumns.push_back(fullName);
+    }
+
     for (const auto& mapElement : Map->MapElements) {
+        const auto outColName = mapElement.GetElementName().GetFullName();
+        if (!liveOutputs.contains(outColName)) {
+            continue;
+        }
+
         if (mapElement.IsRename()){
             const auto colName = mapElement.GetRename().GetFullName();
             auto it = colNamesToIndices.find(colName);
@@ -67,8 +83,6 @@ TExprNode::TPtr TPhysicalMapBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
             lambdaResults.push_back(Ctx.ReplaceNodes(std::move(lambdaBody), replaces));
         }
 
-        const auto outColName = mapElement.GetElementName().GetFullName();
-        renameMap.emplace(outputColumns.size(), outColName);
         outputColumns.push_back(outColName);
     }
 
@@ -82,7 +96,7 @@ TExprNode::TPtr TPhysicalMapBuilder::BuildPhysicalOp(TExprNode::TPtr input) {
     .Done().Ptr();
     // clang-format on
 
-    input = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(input, outputColumns, renameMap, Ctx);
+    input = NPhysicalConvertionUtils::BuildNarrowMapForWideInput(input, outputColumns, liveOutputs, Ctx);
 
     // clang-format off
     input = Build<TCoFromFlow>(Ctx, Pos)

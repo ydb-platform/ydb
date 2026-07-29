@@ -7,6 +7,7 @@
 #include <ydb/library/yql/dq/runtime/dq_input_producer.h>
 #include <ydb/library/yql/dq/runtime/dq_async_output.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/runtime_settings/runtime_settings.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
 #include <util/generic/ptr.h>
@@ -178,6 +179,11 @@ struct IDqComputeActorAsyncOutput {
 
     virtual void PassAway() = 0; // The same signature as IActor::PassAway()
 
+    // Called by compute actor when the output consumer (TransformOutput) has been
+    // drained and can accept more data. Only meaningful for output transforms that
+    // push data into an IDqOutputConsumer.
+    virtual void OnOutputConsumerReady() {}
+
     // You must also destroy all internal UnboxedValues inside destructor (same as in PassAway)
     // But you should explicitly bind MKQL allocator here, because it is called from actor system thread.
     virtual ~IDqComputeActorAsyncOutput() = default;
@@ -266,6 +272,7 @@ public:
         const google::protobuf::Message* SourceSettings = nullptr;  // used only in case if we execute compute actor locally
         TIntrusivePtr<NActors::TProtoArenaHolder> Arena;  // Arena for SourceSettings
         NWilson::TTraceId TraceId;
+        NYql::EDatumValidationMode DatumValidationMode = DefaultDatumValidationMode;
     };
 
     struct TLookupSourceArguments {

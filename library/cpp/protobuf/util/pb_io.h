@@ -2,6 +2,7 @@
 
 #include <util/generic/fwd.h>
 #include <util/generic/flags.h>
+#include <util/generic/strbuf.h>
 
 struct IBinSaver;
 
@@ -98,6 +99,20 @@ T ParseFromTextFormat(IInputStream& in, const EParseFromTextFormatOptions option
     ParseFromTextFormat(in, message, options, warningStream);
     return message;
 }
+
+void ParseTextFormatFromString(TStringBuf in, NProtoBuf::Message& m,
+                               const EParseFromTextFormatOptions options = {}, IOutputStream* warningStream = nullptr);
+
+template <typename T>
+T ParseTextFormatFromString(TStringBuf in, const EParseFromTextFormatOptions options = {},
+                            IOutputStream* warningStream = nullptr) {
+    T message;
+    ParseTextFormatFromString(in, message, options, warningStream);
+    return message;
+}
+
+bool TryParseTextFormatFromString(TStringBuf in, NProtoBuf::Message& m, const EParseFromTextFormatOptions options = {},
+                                  IOutputStream* warningStream = nullptr);
 
 // Merge a text-format protocol message from the given file into message object.
 //

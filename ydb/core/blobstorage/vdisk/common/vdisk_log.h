@@ -42,6 +42,13 @@ namespace NKikimr {
             ui64 lineNumber,
             TString&& str,
             bool json) = 0;
+        virtual void DeliverLogMessage(
+            NLog::EPriority mPriority,
+            NLog::EComponent mComponent,
+            const char* fileName,
+            ui64 lineNumber,
+            TString&& str,
+            NActors::NStructuredLog::TStructuredMessage&& structuredMessage) = 0;
         virtual NActors::NLog::TSettings* LoggerSettings() = 0;
         virtual ~ILoggerCtx() = default;
     };
@@ -73,6 +80,24 @@ namespace NKikimr {
                 json);
         }
 
+        void DeliverLogMessage(
+            NLog::EPriority mPriority,
+            NLog::EComponent mComponent,
+            const char* fileName,
+            ui64 lineNumber,
+            TString&& str,
+            NActors::NStructuredLog::TStructuredMessage&& structuredMessage) override
+        {
+            ::NActors::DeliverLogMessage(
+                *ActorSystem,
+                mPriority,
+                mComponent,
+                fileName,
+                lineNumber,
+                std::move(str),
+                std::move(structuredMessage));
+        }
+
         virtual NActors::NLog::TSettings* LoggerSettings() override {
             return ActorSystem->LoggerSettings();
         }
@@ -100,6 +125,22 @@ namespace NKikimr {
             Y_UNUSED(mPriority);
             Y_UNUSED(mComponent);
             Y_UNUSED(str);
+        }
+
+        void DeliverLogMessage(
+            NLog::EPriority mPriority,
+            NLog::EComponent mComponent,
+            const char* fileName,
+            ui64 lineNumber,
+            TString&& str,
+            NActors::NStructuredLog::TStructuredMessage&& structuredMessage) override
+        {
+            Y_UNUSED(fileName);
+            Y_UNUSED(lineNumber);
+            Y_UNUSED(mPriority);
+            Y_UNUSED(mComponent);
+            Y_UNUSED(str);
+            Y_UNUSED(structuredMessage);
         }
 
         virtual NActors::NLog::TSettings* LoggerSettings() override {
@@ -131,6 +172,25 @@ namespace NActors {
             lineNumber,
             std::move(str),
             json);
+    }
+
+    template <>
+    inline void DeliverLogMessage<NKikimr::ILoggerCtx>(
+            NKikimr::ILoggerCtx& ctx,
+            NLog::EPriority mPriority,
+            NLog::EComponent mComponent,
+            const char *fileName,
+            ui64 lineNumber,
+            TString &&str,
+            NActors::NStructuredLog::TStructuredMessage&& structuredMessage)
+    {
+        ctx.DeliverLogMessage(
+            mPriority,
+            mComponent,
+            fileName,
+            lineNumber,
+            std::move(str),
+            std::move(structuredMessage));
     }
 
 } // NActors

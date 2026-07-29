@@ -18,14 +18,15 @@ jobs:
     permissions: write-all
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Build
         uses: diplodoc-platform/docs-build-action@v3
         with:
           revision: "${{ github.sha }}"
           src-root: ${{ vars.SRC_ROOT }}
-          cli-version: stable
+          cli-version: "4.59.12"
+          use-ya-opensource: true
 
   upload:
     needs: build

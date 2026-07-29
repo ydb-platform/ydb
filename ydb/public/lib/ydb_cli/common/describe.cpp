@@ -14,8 +14,10 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/accessor.h>
 #include <ydb/public/api/protos/ydb_scheme.pb.h>
 #include <ydb/public/api/protos/ydb_secret.pb.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
 
 #include <util/generic/hash.h>
+#include <util/generic/map.h>
 #include <util/stream/format.h>
 #include <util/string/join.h>
 
@@ -1142,8 +1144,57 @@ int TDescribeLogic::DescribeExternalDataSource(const TString& path, EDataFormat 
     }
 }
 
-int TDescribeLogic::PrintExternalDataSourceResponsePretty(const NYdb::NTable::TExternalDataSourceDescription& /*result*/) const {
-    // to do
+int TDescribeLogic::PrintExternalDataSourceResponsePretty(const NYdb::NTable::TExternalDataSourceDescription& result) const {
+    const auto& proto = NYdb::TProtoAccessor::GetProto(result);
+
+    Out << Endl << "Source type: " << proto.source_type();
+    Out << Endl << "Location: " << proto.location();
+
+    // Properties is a flat string map that also carries the auth method and the
+    // (optional) managed database reference. Pull the well-known fields out so they
+    // are shown as dedicated lines and the rest goes into the properties table below.
+    TMap<TString, TString> properties(proto.properties().begin(), proto.properties().end());
+
+    // Pulls a well-known field out of the properties map. The key is always removed
+    // (so it does not also appear in the properties table), but an empty value is
+    // reported as absent: the server stores AUTH_METHOD with an empty value when the
+    // auth identity is not set, and "Auth method: " with nothing after it is confusing.
+    auto extract = [&properties](TStringBuf key) -> std::optional<TString> {
+        auto it = properties.find(TString(key));
+        if (it == properties.end()) {
+            return std::nullopt;
+        }
+        TString value = std::move(it->second);
+        properties.erase(it);
+        if (value.empty()) {
+            return std::nullopt;
+        }
+        return value;
+    };
+
+    if (auto authMethod = extract("AUTH_METHOD")) {
+        Out << Endl << "Auth method: " << *authMethod;
+    }
+    if (auto database = extract("DATABASE_NAME")) {
+        Out << Endl << "Database: " << *database;
+    }
+    if (auto databaseId = extract("DATABASE_ID")) {
+        Out << Endl << "Database id: " << *databaseId;
+    }
+
+    Out << Endl << "Created: " << FormatTime(TInstant::MilliSeconds(proto.self().created_at().plan_step()));
+
+    if (!properties.empty()) {
+        TPrettyTable table({ "Name", "Value" }, TPrettyTableConfig().WithoutRowDelimiters());
+        for (const auto& [name, value] : properties) {
+            table.AddRow()
+                .Column(0, name)
+                .Column(1, value);
+        }
+        Out << Endl << "Properties: " << Endl << table;
+    }
+
+    Out << Endl;
     return EXIT_SUCCESS;
 }
 

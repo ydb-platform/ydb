@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(25.5.0)
+VERSION(26.4.0)
 
 LICENSE(MIT)
 
@@ -127,6 +127,7 @@ PY_SRCS(
     twisted/internet/_posixstdio.py
     twisted/internet/_producer_helpers.py
     twisted/internet/_resolver.py
+    twisted/internet/_service_identity.py
     twisted/internet/_signals.py
     twisted/internet/_sslverify.py
     twisted/internet/_threadedselect.py
@@ -273,6 +274,8 @@ PY_SRCS(
     twisted/positioning/ipositioning.py
     twisted/positioning/nmea.py
     twisted/protocols/__init__.py
+    twisted/protocols/_sni.py
+    twisted/protocols/_tls_legacy.py
     twisted/protocols/amp.py
     twisted/protocols/basic.py
     twisted/protocols/finger.py

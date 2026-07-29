@@ -5,6 +5,8 @@
 #include <ydb/core/util/backoff.h>
 #include <ydb/core/util/stlog.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT KEYVALUE_GC
+
 namespace NKikimr {
 namespace NKeyValue {
 
@@ -44,7 +46,9 @@ public:
     }
 
     void Bootstrap() {
-        STLOG(PRI_DEBUG, KEYVALUE_GC, KVC04, "Start KeyValueCollector", (TabletId, TabletInfo->TabletID));
+        YDB_LOG_DEBUG("Start KeyValueCollector",
+            {"marker", "KVC04"},
+            {"tabletId", TabletInfo->TabletID});
 
         // prepare keep/doNotKeep flags
         auto push = [&](const TLogoBlobID& id, auto flagsMember) {
@@ -95,13 +99,20 @@ public:
             auto ev = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(TabletInfo->TabletID, RecordGeneration,
                 PerGenerationCounter, channel, advanceBarrier, CollectOperation->Header.CollectGeneration,
                 CollectOperation->Header.CollectStep, value.Keep ? new TVector<TLogoBlobID>(value.Keep) : nullptr,
-                value.DoNotKeep ? new TVector<TLogoBlobID>(value.DoNotKeep) : nullptr, TInstant::Max(), true);
-            STLOG(PRI_DEBUG, KEYVALUE_GC, KVC00, "Sending TEvCollectGarbage", (TabletId, TabletInfo->TabletID),
-                (GroupId, groupId), (Channel, (int)channel), (RecordGeneration, RecordGeneration),
-                (PerGenerationCounter, PerGenerationCounter), (AdvanceBarrier, advanceBarrier),
-                (CollectGeneration, CollectOperation->Header.CollectGeneration),
-                (CollectStep, CollectOperation->Header.CollectStep), (Keep.size, value.Keep.size()),
-                (DoNotKeep.size, value.DoNotKeep.size()));
+                value.DoNotKeep ? new TVector<TLogoBlobID>(value.DoNotKeep) : nullptr, TInstant::Max(), true,
+                TWriteSource::KeyValueGC);
+            YDB_LOG_DEBUG("Sending TEvCollectGarbage",
+                {"marker", "KVC00"},
+                {"tabletId", TabletInfo->TabletID},
+                {"groupId", groupId},
+                {"channel", (int)channel},
+                {"recordGeneration", RecordGeneration},
+                {"perGenerationCounter", PerGenerationCounter},
+                {"advanceBarrier", advanceBarrier},
+                {"collectGeneration", CollectOperation->Header.CollectGeneration},
+                {"collectStep", CollectOperation->Header.CollectStep},
+                {"keepSize", value.Keep.size()},
+                {"doNotKeepSize", value.DoNotKeep.size()});
             SendToBSProxy(SelfId(), groupId, ev.release(), static_cast<ui64>(groupId) << 8 | channel);
             value.RequestInFlight = true;
         }
@@ -120,9 +131,12 @@ public:
 
         const TCollectKey key(ev->Cookie >> 8, static_cast<ui8>(ev->Cookie));
 
-        STLOG(PRI_DEBUG, KEYVALUE_GC, KVC11, "Receive TEvCollectGarbageResult",
-            (TabletId, TabletInfo->TabletID), (GroupId, std::get<0>(key)), (Channel, (int)std::get<1>(key)),
-            (Status, status));
+        YDB_LOG_DEBUG("Receive TEvCollectGarbageResult",
+            {"marker", "KVC11"},
+            {"tabletId", TabletInfo->TabletID},
+            {"groupId", std::get<0>(key)},
+            {"channel", (int)std::get<1>(key)},
+            {"status", status});
 
         const auto it = Collects.find(key);
         Y_ABORT_UNLESS(it != Collects.end());
@@ -142,14 +156,17 @@ public:
     }
 
     void SendCompleteGCAndDie() {
-        STLOG(PRI_DEBUG, KEYVALUE_GC, KVC19, "Collector send CompleteGC", (TabletId, TabletInfo->TabletID));
+        YDB_LOG_DEBUG("Collector send CompleteGC",
+            {"marker", "KVC19"},
+            {"tabletId", TabletInfo->TabletID});
         Send(KeyValueActorId, new TEvKeyValue::TEvCompleteGC(false));
         PassAway();
     }
 
     void HandleErrorAndDie() {
-        STLOG(PRI_ERROR, KEYVALUE_GC, KVC18, "Garbage Collector catch the error, send PoisonPill to the tablet",
-            (TabletId, TabletInfo->TabletID));
+        YDB_LOG_ERROR("Garbage Collector catch the error, send PoisonPill to the tablet",
+            {"marker", "KVC18"},
+            {"tabletId", TabletInfo->TabletID});
         Send(KeyValueActorId, new TEvents::TEvPoisonPill());
         PassAway();
     }

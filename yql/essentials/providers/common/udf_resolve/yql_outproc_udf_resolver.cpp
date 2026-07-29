@@ -408,7 +408,7 @@ void LoadSystemModulePaths(
     TUdfModulePathsMap* paths)
 {
     const TList<TString> args = {TString("--list"), dir};
-    RunResolver(resolverPath, args, nullptr, [&](const TString& output) {
+    RunResolver(resolverPath, args, /*input=*/nullptr, [&](const TString& output) {
         // output format is:
         // {{module_name}}\t{{module_path}}\n
 

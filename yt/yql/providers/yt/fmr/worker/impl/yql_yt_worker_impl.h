@@ -21,7 +21,7 @@ enum EFmrResourceType {
 struct TFmrWorkerSettings {
     ui32 WorkerId;
     TIntrusivePtr<IRandomProvider> RandomProvider = CreateDefaultRandomProvider();
-    TDuration TimeToSleepBetweenRequests = TDuration::MilliSeconds(100);
+    TDuration TimeToSleepBetweenRequests = TDuration::Seconds(1);
     ui64 MemoryLimitBytes = 0;
     TFmrJobFactorySettings JobFactorySettings;
 };

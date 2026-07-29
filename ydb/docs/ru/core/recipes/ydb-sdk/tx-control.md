@@ -123,22 +123,43 @@
 
 - Java
 
+  В Java SDK режим транзакции задаётся через `TxMode` при вызове `QueryClient.createQuery`. В JDBC — через `Connection.setAutoCommit`, `setReadOnly`, `setTransactionIsolation` и [свойства драйвера](../../reference/languages-and-apis/jdbc-driver/properties.md). Подробнее о режимах — в [документации по транзакциям](../../concepts/transactions.md#modes); инициализация клиента — в [Инициализация драйвера](./init.md).
+
   {% list tabs %}
 
   - Native SDK
 
     ```java
+    import tech.ydb.common.transaction.TxMode;
+    import tech.ydb.core.grpc.GrpcTransport;
     import tech.ydb.query.QueryClient;
+    import tech.ydb.query.result.ResultSetReader;
     import tech.ydb.query.tools.QueryReader;
     import tech.ydb.query.tools.SessionRetryContext;
+    import tech.ydb.table.query.Params;
 
-    // ...
-    try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-        QueryReader reader = retryCtx.supplyResult(
-            session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.NONE))
-        );
-        // работа с reader
+    public class ImplicitTxExample {
+
+        public static void main(String[] args) {
+            String connectionString = System.getenv().getOrDefault(
+                    "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+
+            try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
+                 QueryClient queryClient = QueryClient.newClient(transport).build()) {
+
+                SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+
+                // ImplicitTx — один запрос без явного BEGIN/COMMIT
+                QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(
+                        session.createQuery("SELECT 1 AS value", TxMode.NONE, Params.empty())
+                )).join().getValue();
+
+                ResultSetReader rs = reader.getResultSet(0);
+                if (rs.next()) {
+                    System.out.println("ImplicitTx: SELECT 1 = " + rs.getColumn("value").getInt32());
+                }
+            }
+        }
     }
     ```
 
@@ -155,16 +176,34 @@
     {% endnote %}
 
     ```java
-    public static void main(String[] args) {
-        String connectionUrl = args[0];
+    import java.sql.Connection;
+    import java.sql.DriverManager;
+    import java.sql.ResultSet;
+    import java.sql.SQLException;
+    import java.sql.Statement;
 
-        try (Connection connection = DriverManager.getConnection(connectionUrl)) {
-            try (Statement statement = connection.createStatement()) {
-                // Запрос автоматические будет выполнен в режиме ImplicitTx
-                statement.execute("CREATE TABLE test (id Int32, value Text, PRIMARY KEY (id))");
+    public class JdbcImplicitTxExample {
+
+        public static void main(String[] args) {
+            String connectionUrl = System.getenv().getOrDefault(
+                    "YDB_JDBC_URL", "jdbc:ydb:grpc://localhost:2136/local");
+
+            try (Connection connection = DriverManager.getConnection(connectionUrl)) {
+                // autocommit=true по умолчанию — неявная транзакция (ImplicitTx)
+                try (Statement statement = connection.createStatement();
+                     ResultSet rs = statement.executeQuery("SELECT 1 AS value")) {
+                    rs.next();
+                    System.out.println("ImplicitTx: SELECT 1 = " + rs.getInt("value"));
+                }
+
+                // DDL также выполняется в ImplicitTx
+                try (Statement statement = connection.createStatement()) {
+                    statement.execute(
+                            "CREATE TABLE IF NOT EXISTS tx_demo (id Int32, value Text, PRIMARY KEY (id))");
+                }
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
             }
-        } catch (SQLException e) {
-            e.printStackTrace();
         }
     }
     ```
@@ -262,7 +301,12 @@
 
 - Rust
 
-  Режим ImplicitTx не поддерживается
+  ```rust
+  let mut qc = client.query_client();
+  // ImplicitTx — режим по умолчанию для вспомогательных методов QueryClient, выполняющих один транзакционный SQL-запрос:
+  // сервер выбирает изоляцию по типу SQL (SELECT → snapshot RO, DML → serializable RW).
+  let mut row = qc.query_row("SELECT 1 AS one").await?;
+  ```
 
 - PHP
 
@@ -426,18 +470,35 @@
   - Native SDK
 
     ```java
+    import tech.ydb.common.transaction.TxMode;
+    import tech.ydb.core.grpc.GrpcTransport;
     import tech.ydb.query.QueryClient;
-    import tech.ydb.query.TxMode;
+    import tech.ydb.query.result.ResultSetReader;
     import tech.ydb.query.tools.QueryReader;
     import tech.ydb.query.tools.SessionRetryContext;
+    import tech.ydb.table.query.Params;
 
-    // ...
-    try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-        QueryReader reader = retryCtx.supplyResult(
-            session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SERIALIZABLE_RW))
-        );
-        // Работа с reader
+    public class SerializableTxExample {
+
+        public static void main(String[] args) {
+            String connectionString = System.getenv().getOrDefault(
+                    "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+
+            try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
+                 QueryClient queryClient = QueryClient.newClient(transport).build()) {
+
+                SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+
+                QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(
+                        session.createQuery("SELECT 1 AS value", TxMode.SERIALIZABLE_RW, Params.empty())
+                )).join().getValue();
+
+                ResultSetReader rs = reader.getResultSet(0);
+                if (rs.next()) {
+                    System.out.println("Serializable RW: SELECT 1 = " + rs.getColumn("value").getInt32());
+                }
+            }
+        }
     }
     ```
 
@@ -446,27 +507,33 @@
     JDBC-драйвер использует режим `Serializable` по умолчанию для выполнения всех не read-only запросов.
 
     ```java
-    public static void main(String[] args) {
-        String connectionUrl = args[0];
+    import java.sql.Connection;
+    import java.sql.DriverManager;
+    import java.sql.PreparedStatement;
+    import java.sql.ResultSet;
+    import java.sql.SQLException;
 
-        try (Connection connection = DriverManager.getConnection(connectionUrl)) {
-            connection.setAutoCommit(false);
-            connection.setReadOnly(false);
-            connection.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
+    public class JdbcSerializableTxExample {
 
-            try (PreparedStatement ps = connection.prepareStatement("UPSERT INTO test (id, value) VALUES (?, ?)")) {
-                ps.setInt(1, 1);
-                ps.setString(2, "value-1");
-                ps.executeUpdate();
+        public static void main(String[] args) {
+            String connectionUrl = System.getenv().getOrDefault(
+                    "YDB_JDBC_URL", "jdbc:ydb:grpc://localhost:2136/local");
 
-                ps.setInt(1, 2);
-                ps.setString(2, "value-2");
-                ps.executeUpdate();
+            try (Connection connection = DriverManager.getConnection(connectionUrl)) {
+                connection.setAutoCommit(false);
+                connection.setReadOnly(false);
+                connection.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
+
+                try (PreparedStatement ps = connection.prepareStatement("SELECT 1 AS value");
+                     ResultSet rs = ps.executeQuery()) {
+                    rs.next();
+                    System.out.println("Serializable RW: SELECT 1 = " + rs.getInt("value"));
+                }
+
+                connection.commit();
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
             }
-
-            connection.commit();
-        } catch (SQLException e) {
-            e.printStackTrace();
         }
     }
     ```
@@ -627,16 +694,17 @@
 - Rust
 
   ```rust
-  use ydb::{TransactionOptions};
+  use ydb::TxMode;
 
-  let tx_options = TransactionOptions::default().with_mode(
-    ydb::Mode::SerializableReadWrite
-  );
-  let table_client = db.table_client().clone_with_transaction_options(tx_options);
-  let result = table_client.retry_transaction(|mut tx| async move {
-    let res = tx.query("SELECT 1".into()).await?;
-    return Ok(res)
-  }).await?;
+  client
+      .query_client()
+      .retry_tx(async |tx| {
+          tx.query_row("SELECT 1 AS one").await?;
+          Ok(())
+      })
+      .isolation(TxMode::SerializableReadWrite)
+      .idempotent(true)
+      .await?;
   ```
 
 - PHP
@@ -807,18 +875,35 @@
   - Native SDK
 
     ```java
+    import tech.ydb.common.transaction.TxMode;
+    import tech.ydb.core.grpc.GrpcTransport;
     import tech.ydb.query.QueryClient;
-    import tech.ydb.query.TxMode;
+    import tech.ydb.query.result.ResultSetReader;
     import tech.ydb.query.tools.QueryReader;
     import tech.ydb.query.tools.SessionRetryContext;
+    import tech.ydb.table.query.Params;
 
-    // ...
-    try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-        QueryReader reader = retryCtx.supplyResult(
-            session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.ONLINE_RO))
-        );
-        // Работа с reader
+    public class OnlineReadOnlyTxExample {
+
+        public static void main(String[] args) {
+            String connectionString = System.getenv().getOrDefault(
+                    "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+
+            try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
+                 QueryClient queryClient = QueryClient.newClient(transport).build()) {
+
+                SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+
+                QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(
+                        session.createQuery("SELECT 1 AS value", TxMode.ONLINE_RO, Params.empty())
+                )).join().getValue();
+
+                ResultSetReader rs = reader.getResultSet(0);
+                if (rs.next()) {
+                    System.out.println("Online RO: SELECT 1 = " + rs.getColumn("value").getInt32());
+                }
+            }
+        }
     }
     ```
 
@@ -833,21 +918,31 @@
     {% endnote %}
 
     ```java
-    public static void main(String[] args) {
-        String connectionUrl = args[0];
+    import java.sql.Connection;
+    import java.sql.DriverManager;
+    import java.sql.ResultSet;
+    import java.sql.SQLException;
+    import java.sql.Statement;
 
-        try (Connection connection = DriverManager.getConnection(connectionUrl)) {
-            connection.setAutoCommit(true); // Режим не поддерживает интерактивные транзакции
-            connection.setReadOnly(true);
-            connection.setTransactionIsolation(16); // 16 - нестандартное значение драйвера YDB для ONLINE_RO
+    public class JdbcOnlineReadOnlyTxExample {
 
-            try (Statement statement = connection.createStatement()) {
-                try (ResultSet rs = statement.executeQuery("SELECT * FROM test")) {
-                   // Обработка результата запроса
+        public static void main(String[] args) {
+            String connectionUrl = System.getenv().getOrDefault(
+                    "YDB_JDBC_URL", "jdbc:ydb:grpc://localhost:2136/local");
+
+            try (Connection connection = DriverManager.getConnection(connectionUrl)) {
+                connection.setAutoCommit(true); // режим не поддерживает интерактивные транзакции
+                connection.setReadOnly(true);
+                connection.setTransactionIsolation(16); // ONLINE_RO в YDB JDBC
+
+                try (Statement statement = connection.createStatement();
+                     ResultSet rs = statement.executeQuery("SELECT 1 AS value")) {
+                    rs.next();
+                    System.out.println("Online RO: SELECT 1 = " + rs.getInt("value"));
                 }
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
             }
-        } catch (SQLException e) {
-            e.printStackTrace();
         }
     }
     ```
@@ -955,14 +1050,21 @@
 - Rust
 
   ```rust
-  let tx_options = TransactionOptions::default().with_mode(
-    ydb::Mode::OnlineReadonly,
-  ).with_autocommit(true);
-  let table_client = db.table_client().clone_with_transaction_options(tx_options);
-  let result = table_client.retry_transaction(|mut tx| async move {
-    let res = tx.query("SELECT 1".into()).await?;
-    return Ok(res)
-  }).await?;
+  use ydb::TxMode;
+
+  let mut qc = client.query_client();
+
+  // Online RO — согласованное чтение (allow_inconsistent_reads = false)
+  let mut row = qc
+      .query_row("SELECT 1 AS one")
+      .with_tx_mode(TxMode::OnlineReadOnly)
+      .await?;
+
+  // Online inconsistent RO — максимальная производительность (allow_inconsistent_reads = true)
+  let mut row = qc
+      .query_row("SELECT 1 AS one")
+      .with_tx_mode(TxMode::OnlineReadOnlyInconsistent)
+      .await?;
   ```
 
 - PHP
@@ -1128,18 +1230,35 @@
   - Native SDK
 
     ```java
+    import tech.ydb.common.transaction.TxMode;
+    import tech.ydb.core.grpc.GrpcTransport;
     import tech.ydb.query.QueryClient;
-    import tech.ydb.query.TxMode;
+    import tech.ydb.query.result.ResultSetReader;
     import tech.ydb.query.tools.QueryReader;
     import tech.ydb.query.tools.SessionRetryContext;
+    import tech.ydb.table.query.Params;
 
-    // ...
-    try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-        QueryReader reader = retryCtx.supplyResult(
-            session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.STALE_RO))
-        );
-        // Работа с reader
+    public class StaleReadOnlyTxExample {
+
+        public static void main(String[] args) {
+            String connectionString = System.getenv().getOrDefault(
+                    "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+
+            try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
+                 QueryClient queryClient = QueryClient.newClient(transport).build()) {
+
+                SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+
+                QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(
+                        session.createQuery("SELECT 1 AS value", TxMode.STALE_RO, Params.empty())
+                )).join().getValue();
+
+                ResultSetReader rs = reader.getResultSet(0);
+                if (rs.next()) {
+                    System.out.println("Stale RO: SELECT 1 = " + rs.getColumn("value").getInt32());
+                }
+            }
+        }
     }
     ```
 
@@ -1154,21 +1273,31 @@
     {% endnote %}
 
     ```java
-    public static void main(String[] args) {
-        String connectionUrl = args[0];
+    import java.sql.Connection;
+    import java.sql.DriverManager;
+    import java.sql.ResultSet;
+    import java.sql.SQLException;
+    import java.sql.Statement;
 
-        try (Connection connection = DriverManager.getConnection(connectionUrl)) {
-            connection.setAutoCommit(true); // Режим не поддерживает интерактивные транзакции
-            connection.setReadOnly(true);
-            connection.setTransactionIsolation(32); // 32 - нестандартное значение драйвера YDB для STALE_RO
+    public class JdbcStaleReadOnlyTxExample {
 
-            try (Statement statement = connection.createStatement()) {
-                try (ResultSet rs = statement.executeQuery("SELECT * FROM test")) {
-                   // Обработка результата запроса
+        public static void main(String[] args) {
+            String connectionUrl = System.getenv().getOrDefault(
+                    "YDB_JDBC_URL", "jdbc:ydb:grpc://localhost:2136/local");
+
+            try (Connection connection = DriverManager.getConnection(connectionUrl)) {
+                connection.setAutoCommit(true); // режим не поддерживает интерактивные транзакции
+                connection.setReadOnly(true);
+                connection.setTransactionIsolation(32); // STALE_RO в YDB JDBC
+
+                try (Statement statement = connection.createStatement();
+                     ResultSet rs = statement.executeQuery("SELECT 1 AS value")) {
+                    rs.next();
+                    System.out.println("Stale RO: SELECT 1 = " + rs.getInt("value"));
                 }
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
             }
-        } catch (SQLException e) {
-            e.printStackTrace();
         }
     }
     ```
@@ -1266,7 +1395,16 @@
 
 - Rust
 
-  Режим Stale Read-Only не поддерживается в rust sdk.
+  ```rust
+  use ydb::TxMode;
+
+  let mut qc = client.query_client();
+  // Режим Stale Read-Only поддерживается только для one-shot вызовов на query-клиенте (не для retry_tx).
+  let mut row = qc
+      .query_row("SELECT 1 AS one")
+      .with_tx_mode(TxMode::StaleReadOnly)
+      .await?;
+  ```
 
 - PHP
 
@@ -1429,18 +1567,35 @@
   - Native SDK
 
     ```java
+    import tech.ydb.common.transaction.TxMode;
+    import tech.ydb.core.grpc.GrpcTransport;
     import tech.ydb.query.QueryClient;
-    import tech.ydb.query.TxMode;
+    import tech.ydb.query.result.ResultSetReader;
     import tech.ydb.query.tools.QueryReader;
     import tech.ydb.query.tools.SessionRetryContext;
+    import tech.ydb.table.query.Params;
 
-    // ...
-    try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-        QueryReader reader = retryCtx.supplyResult(
-            session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SNAPSHOT_RO))
-        );
-        // Работа с reader
+    public class SnapshotReadOnlyTxExample {
+
+        public static void main(String[] args) {
+            String connectionString = System.getenv().getOrDefault(
+                    "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+
+            try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
+                 QueryClient queryClient = QueryClient.newClient(transport).build()) {
+
+                SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+
+                QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(
+                        session.createQuery("SELECT 1 AS value", TxMode.SNAPSHOT_RO, Params.empty())
+                )).join().getValue();
+
+                ResultSetReader rs = reader.getResultSet(0);
+                if (rs.next()) {
+                    System.out.println("Snapshot RO: SELECT 1 = " + rs.getColumn("value").getInt32());
+                }
+            }
+        }
     }
     ```
 
@@ -1449,23 +1604,33 @@
     JDBC-драйвер использует режим `Snapshot Read-Only` для выполнения всех read-only запросов, при условии что используются стандартные режимы транзакций (TRANSACTION_SERIALIZABLE или REPEATABLE_READ).
 
     ```java
-    public static void main(String[] args) {
-        String connectionUrl = args[0];
+    import java.sql.Connection;
+    import java.sql.DriverManager;
+    import java.sql.PreparedStatement;
+    import java.sql.ResultSet;
+    import java.sql.SQLException;
 
-        try (Connection connection = DriverManager.getConnection(connectionUrl)) {
-            connection.setAutoCommit(false); 
-            connection.setReadOnly(true); // Будет использован  Snapshot Read-Only
-            connection.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
+    public class JdbcSnapshotReadOnlyTxExample {
 
-            try (Statement statement = connection.createStatement()) {
-                try (ResultSet rs = statement.executeQuery("SELECT * FROM test")) {
-                   // Обработка результата запроса
+        public static void main(String[] args) {
+            String connectionUrl = System.getenv().getOrDefault(
+                    "YDB_JDBC_URL", "jdbc:ydb:grpc://localhost:2136/local");
+
+            try (Connection connection = DriverManager.getConnection(connectionUrl)) {
+                connection.setAutoCommit(false);
+                connection.setReadOnly(true); // Snapshot Read-Only
+                connection.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
+
+                try (PreparedStatement ps = connection.prepareStatement("SELECT 1 AS value");
+                     ResultSet rs = ps.executeQuery()) {
+                    rs.next();
+                    System.out.println("Snapshot RO: SELECT 1 = " + rs.getInt("value"));
                 }
-            }
 
-            connection.commit();
-        } catch (SQLException e) {
-            e.printStackTrace();
+                connection.commit();
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
+            }
         }
     }
     ```
@@ -1561,7 +1726,22 @@
 
 - Rust
 
-  Режим Snapshot Read-Only не поддерживается в rust sdk.
+  ```rust
+  use ydb::TxMode;
+
+  let mut qc = client.query_client();
+  qc.query_row("SELECT 1 AS one")
+      .with_tx_mode(TxMode::SnapshotReadOnly)
+      .await?;
+
+  qc.retry_tx(async |tx| {
+      tx.query_row("SELECT 1 AS one").await?;
+      Ok(())
+  })
+  .isolation(TxMode::SnapshotReadOnly)
+  .idempotent(true)
+  .await?;
+  ```
 
 - PHP
 
@@ -1728,18 +1908,35 @@
   - Native SDK
 
     ```java
+    import tech.ydb.common.transaction.TxMode;
+    import tech.ydb.core.grpc.GrpcTransport;
     import tech.ydb.query.QueryClient;
-    import tech.ydb.query.TxMode;
+    import tech.ydb.query.result.ResultSetReader;
     import tech.ydb.query.tools.QueryReader;
     import tech.ydb.query.tools.SessionRetryContext;
+    import tech.ydb.table.query.Params;
 
-    // ...
-    try (QueryClient queryClient = QueryClient.newClient(transport).build()) {
-        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-        QueryReader reader = retryCtx.supplyResult(
-            session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.SNAPSHOT_RW))
-        );
-        // Работа с reader
+    public class SnapshotReadWriteTxExample {
+
+        public static void main(String[] args) {
+            String connectionString = System.getenv().getOrDefault(
+                    "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+
+            try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
+                 QueryClient queryClient = QueryClient.newClient(transport).build()) {
+
+                SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+
+                QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(
+                        session.createQuery("SELECT 1 AS value", TxMode.SNAPSHOT_RW, Params.empty())
+                )).join().getValue();
+
+                ResultSetReader rs = reader.getResultSet(0);
+                if (rs.next()) {
+                    System.out.println("Snapshot RW: SELECT 1 = " + rs.getColumn("value").getInt32());
+                }
+            }
+        }
     }
     ```
 
@@ -1754,29 +1951,37 @@
     {% endnote %}
 
     ```java
-    public static void main(String[] args) {
-        String connectionUrl = args[0];
-        Properties props = new Properties();
-        props.setProperty("repeatableReadEnabled", "true"); // Режим REPEATABLE_READ не доступен по умолчанию
+    import java.sql.Connection;
+    import java.sql.DriverManager;
+    import java.sql.PreparedStatement;
+    import java.sql.ResultSet;
+    import java.sql.SQLException;
+    import java.util.Properties;
 
-        try (Connection connection = DriverManager.getConnection(connectionUrl, props)) {
-            connection.setAutoCommit(false); 
-            connection.setReadOnly(false);
-            connection.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+    public class JdbcSnapshotReadWriteTxExample {
 
-            try (PreparedStatement ps = connection.prepareStatement("UPSERT INTO test (id, value) VALUES (?, ?)")) {
-                ps.setInt(1, 1);
-                ps.setString(2, "value-1");
-                ps.executeUpdate();
+        public static void main(String[] args) {
+            String connectionUrl = System.getenv().getOrDefault(
+                    "YDB_JDBC_URL", "jdbc:ydb:grpc://localhost:2136/local");
 
-                ps.setInt(1, 2);
-                ps.setString(2, "value-2");
-                ps.executeUpdate();
+            Properties props = new Properties();
+            props.setProperty("repeatableReadEnabled", "true");
+
+            try (Connection connection = DriverManager.getConnection(connectionUrl, props)) {
+                connection.setAutoCommit(false);
+                connection.setReadOnly(false);
+                connection.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+
+                try (PreparedStatement ps = connection.prepareStatement("SELECT 1 AS value");
+                     ResultSet rs = ps.executeQuery()) {
+                    rs.next();
+                    System.out.println("Snapshot RW: SELECT 1 = " + rs.getInt("value"));
+                }
+
+                connection.commit();
+            } catch (SQLException e) {
+                throw new RuntimeException(e);
             }
-
-            connection.commit();
-        } catch (SQLException e) {
-            e.printStackTrace();
         }
     }
     ```
@@ -1915,7 +2120,22 @@
 
 - Rust
 
-  Режим Snapshot Read-Write не поддерживается в rust sdk.
+  ```rust
+  use ydb::TxMode;
+
+  let mut qc = client.query_client();
+  qc.query_row("SELECT 1 AS one")
+      .with_tx_mode(TxMode::SnapshotReadWrite)
+      .await?;
+
+  qc.retry_tx(async |tx| {
+      tx.query_row("SELECT 1 AS one").await?;
+      Ok(())
+  })
+  .isolation(TxMode::SnapshotReadWrite)
+  .idempotent(true)
+  .await?;
+  ```
 
 - PHP
 

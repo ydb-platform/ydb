@@ -1,0 +1,8 @@
+use plato;
+
+DEFINE SUBQUERY $process() AS
+    MATERIALIZE Input INTO $tmp;
+    SELECT * FROM $tmp;
+END DEFINE;
+
+SELECT * FROM $process();

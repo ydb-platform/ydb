@@ -1,3 +1,23 @@
+## v3.21.0
+
+* Fixed Query SDK `CreateSession` metrics being recorded when reusing a session from the pool.
+
+* Added `TQueryClient::DeleteSession` to explicitly delete a query session by session id.
+
+* Driver now supports async credentials initialisation: the first request is delayed until they are ready.
+
+* Added a flag to support deferred session creation(when client timeout exceeded, the session is created in the backgroud)
+
+* Added a distributed lock primitive based on the coordination service, which implements basic_lockable concept.
+
+## v3.20.0
+
+* Added automatic retries for unary methods of table and query clients(ExecuteQuery, ExecuteScript, BulkUpsert, ReadRows).
+
+* Implemented native ranges(TRowRange) and iterators over both streaming query results and TResultSet.
+
+## v3.19.0
+
 * Added metric buffer for batched metric writes to reduce OpenTelemetry hot-path overhead.
 
 * Added a helper to detect specific issue codes within a TStatus (including nested sub-issues) and introduces the CONSTRAINT_VIOLATION issue code constant, intended to make it easier for SDK users to detect primary key / unique index conflicts.

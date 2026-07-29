@@ -15,6 +15,7 @@ IF (ARCH_X86_64 AND OS_LINUX)
 SRCS(
     accumulator_ut.cpp
     scalar_layout_converter_ut.cpp
+    scalar_layout_converter_test_enums.h
     block_layout_converter_ut.cpp
     block_layout_converter_sliced_blocks_ut.cpp
     hash_table_ut.cpp
@@ -39,6 +40,8 @@ CFLAGS(
 )
 
 ENDIF()
+
+GENERATE_ENUM_SERIALIZATION(scalar_layout_converter_test_enums.h)
 
 YQL_LAST_ABI_VERSION()
 

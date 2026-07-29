@@ -53,6 +53,11 @@ public:
                 auto pathInfo = TYtPathInfo(path);
                 auto tableInfo = pathInfo.Table;
 
+                if (!tableInfo->Meta) {
+                    AddIssue(ctx, TIssue("table without meta"));
+                    return false;
+                }
+
                 if (!tableInfo->Meta->IsDynamic) {
                     AddIssue(ctx, TIssue("static table"));
                     return false;
@@ -155,9 +160,19 @@ public:
 
                 uniqueKeys = true;
 
+
+                auto ytState = State_.lock();
+                YQL_ENSURE(ytState, "Failed to get yt state");
+
+                const auto& tableDescription = ytState->TablesData->GetTable(
+                    pathInfo.Table->Cluster, pathInfo.Table->Name, pathInfo.Table->Epoch);
+                const auto& expressionColumns = tableDescription.RowSpec->ExpressionColumns;
+
                 TVector<TStringBuf> sortKeys;
                 for (const auto& [key, _] : pathInfo.Table->RowSpec->GetForeignSort()) {
-                    sortKeys.push_back(key);
+                    if (!expressionColumns.contains(key)) {
+                        sortKeys.push_back(key);
+                    }
                 }
 
                 if (keys != sortKeys) {
@@ -279,6 +294,15 @@ public:
 
             sinkSettings.SetDoesExist(tableDesc.Meta->DoesExist);
             sinkSettings.SetTruncate(tableDesc.Intents & TYtTableIntent::Override);
+
+            const auto& rowSpec = tableDesc.RowSpec;
+            if (rowSpec) {
+                for (const auto& [column, _] : rowSpec->GetForeignSort()) {
+                    if (!rowSpec->ExpressionColumns.contains(column)) {
+                        sinkSettings.AddKeyColumns(column);
+                    }
+                }
+            }
         }
 
         settings.PackFrom(sinkSettings);

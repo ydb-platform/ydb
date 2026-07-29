@@ -1,13 +1,16 @@
 import logging
 import os
+import pytest
 import time
+from typing import Self
 import yatest.common
 import ydb
-import pytest
 
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.tools.datastreams_helpers.control_plane import Endpoint
+from ydb.tests.tools.datastreams_helpers.control_plane import create_stream
+from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 from ydb.tests.tools.fq_runner.kikimr_metrics import load_metrics, Sensors
 from ydb.tests.tools.fq_runner.kikimr_runner import plain_or_under_sanitizer_wrapper
@@ -26,20 +29,23 @@ def set_test_env(request):
     os.environ["YDB_TEST_ROW_DISPATCHER_REBALANCING_TIMEOUT_MS"] = rebalancing_timeout_ms
 
 
-def get_ydb_config(request):
+def get_ydb_config(request, enable_fq_connector=None):
     param = getattr(request, "param", {})
-    enable_watermarks = param.get("enable_watermarks", False)
-    enable_watermarks_advanced = param.get("enable_watermarks_advanced", False)
+    enable_watermarks = param.get("enable_watermarks", True)
+    enable_watermarks_advanced = param.get("enable_watermarks_advanced", True)
     enable_shared_reading_in_streaming_queries = param.get("enable_shared_reading_in_streaming_queries", True)
     enable_streaming_queries = param.get("enable_streaming_queries", True)
     enable_streaming_partition_balancing = param.get("use_partition_balancing", True)
     enable_user_attributes_in_topic_query = param.get("enable_user_attributes_in_topic_query", True)
+    enable_dq_source_stream_lookup_join = param.get("enable_dq_source_stream_lookup_join", True)
+    enable_kqp_constraints_transformer = param.get("kqp_constraints_transformer", True)
 
     extra_feature_flags = {
         "enable_external_data_sources",
         "enable_streaming_queries_counters",
         "enable_topics_sql_io_operations",
         "enable_streaming_queries_pq_sink_deduplication",
+        "enable_external_data_source_auth_method_iam",
     }
     if enable_shared_reading_in_streaming_queries:
         extra_feature_flags.add("enable_shared_reading_in_streaming_queries")
@@ -51,6 +57,8 @@ def get_ydb_config(request):
         extra_feature_flags.add("enable_user_attributes_in_topic_query")
     else:
         disabled_feature_flags.append("enable_user_attributes_in_topic_query")
+    if not enable_kqp_constraints_transformer:
+        disabled_feature_flags.append("enable_kqp_constraints_transformer")
 
     config = KikimrConfigGenerator(
         erasure=Erasure.MIRROR_3_DC,
@@ -66,72 +74,208 @@ def get_ydb_config(request):
             "enable_watermarks": enable_watermarks,
             "enable_watermarks_advanced": enable_watermarks_advanced,
             "enable_streaming_partition_balancing": enable_streaming_partition_balancing,
+            "enable_compile_cache_warmup": False,
+            "enable_channel_memory_tracking": False,  # Remove after fix https://github.com/ydb-platform/ydb/issues/46891
+            "enable_dq_source_stream_lookup_join": enable_dq_source_stream_lookup_join,
+        },
+        replication_config={
+            "iam_service_control": {
+                "endpoint": os.environ.get("IAM_EMULATOR_ENDPOINT", "localhost:6666"),
+                "service_id": "ydb",
+                "microservice_id": "data-plane",
+                "resource_type": "resource-manager.cloud",
+                "enable_ssl": False,
+            },
         },
         default_clusteradmin="root@builtin",
         use_in_memory_pdisks=False,
     )
 
+    if enable_fq_connector:
+        config.yaml_config["query_service_config"]["generic"] = {
+            "connector": {
+                "use_ssl": False,
+                "endpoint": {
+                    "host": enable_fq_connector.connector.grpc_host,
+                    "port": enable_fq_connector.connector.grpc_port,
+                },
+            },
+        }
+
     config.yaml_config["log_config"]["default_level"] = 8
+    if "auth_config" not in config.yaml_config:
+        config.yaml_config["auth_config"] = {}
+    config.yaml_config["auth_config"]["local_metadata_service"] = {
+        "host": os.environ.get("VM_METADATA_EMULATOR_HOST", "localhost"),
+        "port": int(os.environ.get("VM_METADATA_EMULATOR_PORT", 80)),
+    }
     return config
 
 
 class YdbClient:
-    def __init__(self, endpoint: str, database: str):
-        driver_config = ydb.DriverConfig(endpoint, database, auth_token="root@builtin")
-        self.driver = ydb.Driver(driver_config)
+    WAIT_TIMEOUT: int = 5
+
+    def __init__(self, driver: ydb.Driver, owns_driver: bool = False):
+        self.owns_driver = owns_driver
+        self.driver = driver
+        if self.owns_driver:
+            self.driver.wait(self.WAIT_TIMEOUT, fail_fast=True)
+
         self.session_pool = ydb.QuerySessionPool(self.driver)
+        self.retry_settings = ydb.RetrySettings(
+            on_ydb_error_callback=lambda e: logger.error(f"Query execution failed and may be retried: {e}"),
+        )
+
+    @classmethod
+    def from_driver_config(
+        cls, endpoint: str, database: str, token: str = "root@builtin", enable_discovery: bool = True
+    ) -> Self:
+        driver_config = ydb.DriverConfig(endpoint, database, auth_token=token, disable_discovery=not enable_discovery)
+        driver = ydb.Driver(driver_config)
+        return cls(driver, True)
 
     def stop(self):
         self.session_pool.stop()
-        self.driver.stop()
-
-    def wait_connection(self, timeout: int = 5):
-        self.driver.wait(timeout, fail_fast=True)
+        if self.owns_driver:
+            self.driver.stop()
 
     def query(self, statement: str):
-        return self.session_pool.execute_with_retries(statement)
+        return self.session_pool.execute_with_retries(statement, retry_settings=self.retry_settings)
 
-    def query_async(self, statement: str):
-        return self.session_pool.execute_with_retries_async(statement)
+    def query_async(self, statement: str, timeout: float | None = None):
+        settings = None
+        if timeout is not None:
+            settings = ydb.BaseRequestSettings().with_timeout(timeout)
+        return self.session_pool.execute_with_retries_async(
+            statement, settings=settings, retry_settings=self.retry_settings
+        )
+
+    def create_external_data_source(
+        self, source_name: str, endpoint: str, database: str, shared_reading: bool = False
+    ) -> None:
+        self.query(f'''
+            CREATE EXTERNAL DATA SOURCE `{source_name}` WITH (
+                SOURCE_TYPE = 'Ydb',
+                LOCATION = '{endpoint}',
+                DATABASE_NAME = '{database}',
+                {"SHARED_READING = 'TRUE'," if shared_reading else ""}
+                AUTH_METHOD = 'NONE'
+            );
+        ''')
+
+    def topic_write(
+        self,
+        topic: str,
+        messages: list[str],
+        timeout: int = plain_or_under_sanitizer_wrapper(120, 150),
+        *args,
+        **kwargs,
+    ) -> None:
+        writer = self.driver.topic_client.writer(topic, *args, **kwargs)
+
+        try:
+            writer.write(messages, timeout)
+            writer.flush()
+        finally:
+            writer.close(flush=False)
+
+    def topic_read(
+        self,
+        topic: str,
+        consumer: str,
+        messages_count: int,
+        timeout: int = plain_or_under_sanitizer_wrapper(30, 300),
+        commit: bool = True,
+    ) -> list[str]:
+        deadline = time.monotonic() + timeout
+
+        with self.driver.topic_client.reader(topic, consumer=consumer) as reader:
+
+            def _read_single() -> str:
+                remaining = deadline - time.monotonic()
+                message = reader.receive_message(timeout=remaining)
+
+                if commit:
+                    reader.commit(message)
+
+                data = message.data
+                return data.decode() if isinstance(data, bytes) else str(data)
+
+            return [_read_single() for _ in range(messages_count)]
+
+    def topic_read_until(
+        self,
+        topic: str,
+        consumer: str,
+        messages_count: int,
+        timeout: int = plain_or_under_sanitizer_wrapper(30, 300),
+        commit: bool = True,
+    ) -> list[str]:
+        deadline = time.monotonic() + timeout
+
+        with self.driver.topic_client.reader(topic, consumer=consumer) as reader:
+
+            def _read_batch() -> list[str]:
+                remaining = deadline - time.monotonic()
+                batch = reader.receive_batch(timeout=remaining)
+
+                if commit:
+                    reader.commit(batch)
+
+                datas = [message.data for message in batch.messages]
+                return [data.decode() if isinstance(data, bytes) else str(data) for data in datas]
+
+            result: list[str] = []
+            while len(result) < messages_count:
+                result.extend(_read_batch())
+            return result
 
 
 class Kikimr:
-    def __init__(self, config: KikimrConfigGenerator, timeout_seconds: int = 240):
+    def __init__(self, config: KikimrConfigGenerator, timeout_seconds: int = 240, enable_discovery: bool = True):
         ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
         logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
 
         self.cluster = KiKiMR(config)
         self.cluster.start(timeout_seconds=timeout_seconds)
 
-        first_node = list(self.cluster.nodes.values())[0]
-        self.endpoint = Endpoint(f"{first_node.host}:{first_node.port}", f"/{config.domain_name}")
-        self.ydb_client = YdbClient(database=self.endpoint.database, endpoint=f"grpc://{self.endpoint.endpoint}")
-        self.ydb_client.wait_connection()
+        self.first_node = list(self.cluster.nodes.values())[0]
+        self.endpoint = Endpoint(f"{self.first_node.host}:{self.first_node.port}", f"/{config.domain_name}")
+        self.ydb_client = self._setup_ydb_client(self.endpoint, enable_discovery)
 
-    def stop(self):
+        if os.getenv("YDB_ENDPOINT") is None or os.getenv("YDB_DATABASE") is None:
+            self.external_endpoint = None
+            self.external_ydb_client = None
+        else:
+            self.external_endpoint = Endpoint(os.getenv("YDB_ENDPOINT"), os.getenv("YDB_DATABASE"))
+            self.external_ydb_client = self._setup_ydb_client(self.external_endpoint, enable_discovery)
+
+    @staticmethod
+    def _setup_ydb_client(endpoint: Endpoint, enable_discovery: bool) -> YdbClient:
+        return YdbClient.from_driver_config(
+            database=endpoint.database,
+            endpoint=f"grpc://{endpoint.endpoint}",
+            enable_discovery=enable_discovery,
+        )
+
+    def stop(self) -> None:
+        if self.external_ydb_client is not None:
+            self.external_ydb_client.stop()
         self.ydb_client.stop()
         self.cluster.stop()
 
 
 class StreamingTestBase(TestYdsBase):
-    def get_endpoint(self, kikimr, local_topics):
-        if local_topics:
-            return kikimr.endpoint
-        return Endpoint(os.getenv("YDB_ENDPOINT"), os.getenv("YDB_DATABASE"))
+    def get_endpoint(self, kikimr: Kikimr, local_topics: bool) -> Endpoint:
+        return kikimr.endpoint if local_topics else kikimr.external_endpoint
 
-    def create_source(self, kikimr: Kikimr, source_name: str, shared: bool = False, endpoint: Endpoint = None):
+    def get_ydb_client(self, kikimr: Kikimr, local_topics: bool) -> YdbClient:
+        return kikimr.ydb_client if local_topics else kikimr.external_ydb_client
+
+    def create_source(self, kikimr: Kikimr, source_name: str, shared: bool = False, endpoint: Endpoint = None) -> None:
         if endpoint is None:
             endpoint = self.get_endpoint(kikimr, local_topics=False)
-        shared_opt = 'SHARED_READING = "TRUE",\n' if shared else '\n'
-        kikimr.ydb_client.query(f"""
-            CREATE EXTERNAL DATA SOURCE `{source_name}` WITH (
-                SOURCE_TYPE = "Ydb",
-                LOCATION = "{endpoint.endpoint}",
-                DATABASE_NAME = "{endpoint.database}",
-                {shared_opt}
-                AUTH_METHOD = "NONE"
-            );
-        """)
+        kikimr.ydb_client.create_external_data_source(source_name, endpoint.endpoint, endpoint.database, shared)
 
     def monitoring_endpoint(self, kikimr: Kikimr, node_id: int) -> str:
         node = kikimr.cluster.nodes[node_id]
@@ -239,6 +383,35 @@ class StreamingTestBase(TestYdsBase):
             return f"`{self.input_topic}`", f"`{self.output_topic}`", endpoint
         else:
             return f"`{source_name}`.`{self.input_topic}`", f"`{source_name}`.`{self.output_topic}`", endpoint
+
+    def get_write_topics(self, kikimr, name, local_topics, entity_name, topics_count=1, partitions_count=1):
+        """Create an external data source + ``topics_count`` write-target topics, each with a read rule
+        for ``self.consumer_name``. ``partitions_count=1`` keeps message order deterministic.
+
+        Returns ``(endpoint, refs, paths)``: ``refs`` are the SQL names to INSERT into (direct topic when
+        ``local_topics``, ``source``.``topic`` otherwise), ``paths`` are topic paths to read back with
+        ``self.read_stream(count, topic_path=path, endpoint=endpoint)``.
+        """
+        endpoint = self.get_endpoint(kikimr, local_topics)
+        source_name = entity_name(name)
+        self.create_source(kikimr, source_name, endpoint=endpoint)
+        self.consumer_name = f"{source_name}_consumer"
+
+        refs, paths = [], []
+        for i in range(topics_count):
+            path = f"{source_name}_topic{i}"
+            create_stream(path, partitions_count=partitions_count, default_endpoint=endpoint)
+            create_read_rule(path, self.consumer_name, default_endpoint=endpoint)
+            paths.append(path)
+            refs.append(f"`{path}`" if local_topics else f"`{source_name}`.`{path}`")
+        return endpoint, refs, paths
+
+    def get_write_topic(self, kikimr, name, local_topics, entity_name, partitions_count=1):
+        """Single-topic convenience wrapper. Returns ``(endpoint, ref, path)``."""
+        endpoint, refs, paths = self.get_write_topics(
+            kikimr, name, local_topics, entity_name, topics_count=1, partitions_count=partitions_count
+        )
+        return endpoint, refs[0], paths[0]
 
     def roll(self, kikimr):
         all_nodes = [(id, n, "node") for id, n in kikimr.cluster.nodes.items()] + [

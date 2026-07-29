@@ -17,6 +17,7 @@ SRCS(
     assimilation.cpp
     backpressure.cpp
     block_race.cpp
+    blob_checker.cpp
     bsc_cache.cpp
     cancellation.cpp
     counting_events.cpp
@@ -32,7 +33,7 @@ SRCS(
     gc_quorum_3dc.cpp
     get.cpp
     get_block.cpp
-    group_reconfiguration.cpp
+    group_mapping.cpp
     incorrect_queries.cpp
     index_restore_get.cpp
     main.cpp
@@ -40,11 +41,12 @@ SRCS(
     mirror3of4.cpp
     monitoring.cpp
     multiget.cpp
+    node_warden_cache.cpp
     patch.cpp
     recovery.cpp
-    retro_tracing.cpp
     sanitize_groups.cpp
     scrub_fast.cpp
+    select_groups.cpp
     self_heal.cpp
     shred.cpp
     snapshots.cpp
@@ -54,6 +56,7 @@ SRCS(
     vdisk_malfunction.cpp
     group_size_in_units.cpp
     pdisk_status_flags.cpp
+    retro_tracing.cpp
 )
 
 PEERDIR(
@@ -64,6 +67,7 @@ PEERDIR(
     ydb/core/blobstorage/vdisk/common
     ydb/core/blobstorage/vdisk/scrub
     ydb/core/blobstorage/vdisk/synclog
+    ydb/core/mind/bscontroller
 )
 
 END()
@@ -73,11 +77,12 @@ RECURSE_FOR_TESTS(
     ut_blob_depot
     ut_blob_depot_fat
     ut_bridge
+    ut_bsc_migration
     ut_check_integrity
     ut_comp_defrag
     ut_ddisk
     ut_donor
-    ut_group_reconfiguration
+    ut_group_mapping
     ut_huge
     ut_startup_brokers
     ut_read_only_vdisk
@@ -87,6 +92,7 @@ RECURSE_FOR_TESTS(
     ut_scrub
     ut_statestorage
     ut_vdisk_restart
+    ut_race
     ut_restart_pdisk
     ut_read_only_pdisk
     ut_stop_pdisk

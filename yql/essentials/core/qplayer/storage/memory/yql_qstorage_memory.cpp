@@ -130,15 +130,15 @@ public:
 
     IQReaderPtr MakeReader(const TString& operationId, const TQReaderSettings& readerSettings) const final {
         Y_UNUSED(readerSettings);
-        return std::make_shared<TReader>(GetOperation(operationId, false)->ReadMap);
+        return std::make_shared<TReader>(GetOperation(operationId, /*forWrite=*/false)->ReadMap);
     }
 
     IQWriterPtr MakeWriter(const TString& operationId, const TQWriterSettings& writerSettings) const final {
-        return MakeCloseAwareWriterDecorator(std::make_shared<TWriter>(GetOperation(operationId, true), writerSettings));
+        return MakeCloseAwareWriterDecorator(std::make_shared<TWriter>(GetOperation(operationId, /*forWrite=*/true), writerSettings));
     }
 
     IQIteratorPtr MakeIterator(const TString& operationId, const TQIteratorSettings& iteratorSettings) const final {
-        return std::make_shared<TIterator>(iteratorSettings, GetOperation(operationId, false)->ReadMap);
+        return std::make_shared<TIterator>(iteratorSettings, GetOperation(operationId, /*forWrite=*/false)->ReadMap);
     }
 
 private:

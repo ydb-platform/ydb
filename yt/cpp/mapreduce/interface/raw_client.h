@@ -143,7 +143,8 @@ public:
 
     virtual void CommitTransaction(
         TMutationId& mutationId,
-        const TTransactionId& transactionId) = 0;
+        const TTransactionId& transactionId,
+        const TCommitTransactionOptions& options = {}) = 0;
 
     // Operations
 
@@ -403,6 +404,8 @@ public:
         const TTransactionId& transactionId,
         const TVector<TRichYPath>& paths,
         const TGetTablePartitionsOptions& options = {}) = 0;
+
+    virtual void CheckClusterLiveness(const TCheckClusterLivenessOptions& options = {}) = 0;
 
     virtual ui64 GenerateTimestamp() = 0;
 

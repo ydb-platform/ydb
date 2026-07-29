@@ -26,6 +26,7 @@ def calculate_estimated_usage(pdisk_map, vslot_map, groups):
     max_used_size = 0
     min_fair_size = 0
     vslot_fair_usages = []
+    total_size_in_units = 0
     for group in groups:
         vslot_fair_sizes = []
         vslot_used_sizes = []
@@ -55,11 +56,13 @@ def calculate_estimated_usage(pdisk_map, vslot_map, groups):
         else:
             vslot_fair_usages.append(0.0)
 
+        total_size_in_units += group.GroupSizeInUnits or 1
+
     estimated_usage = max_used_size / min_fair_size if min_fair_size else 0.0
     max_vslot_fair_usage = apply_func(max, vslot_fair_usages)
     mean_vslot_fair_usage = apply_func(sum, vslot_fair_usages) / len(vslot_fair_usages) if len(vslot_fair_usages) > 0 else 0.0
     std_dev_vslot_fair_usage = math.sqrt(sum((x - mean_vslot_fair_usage)**2 for x in vslot_fair_usages) / len(vslot_fair_usages)) if len(vslot_fair_usages) > 0 else 0.0
-    groups_fair_count = math.ceil(len(vslot_fair_usages) * estimated_usage / 0.85)
+    groups_fair_count = math.ceil(total_size_in_units * estimated_usage / 0.85)
 
     res = {}
     res['EstimatedUsage'] = estimated_usage

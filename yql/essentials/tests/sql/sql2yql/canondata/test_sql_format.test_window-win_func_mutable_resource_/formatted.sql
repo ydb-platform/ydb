@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     median(x) OVER w,
     median(x) OVER w

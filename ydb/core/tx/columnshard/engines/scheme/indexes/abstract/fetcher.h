@@ -210,9 +210,9 @@ private:
     using TBase = NReader::NCommon::IKernelFetchLogic;
     THashMap<NRequest::TOriginalDataAddress, TIndexDataAddress> DataAddresses;
     THashMap<TIndexDataAddress, std::vector<NRequest::TOriginalDataAddress>> IndexAddresses;
-    TString StorageId;
     std::shared_ptr<IIndexMeta> IndexMeta;
     std::vector<TIndexChunkFetching> Fetching;
+    std::vector<TString> FetchingStorageIds;
     std::vector<TIndexDataAddress> IndexAddressesVector;
 
     virtual void DoStart(TReadActionsCollection& nextRead, NReader::NCommon::TFetchingResultContext& context) override;

@@ -312,21 +312,21 @@ void TListOperationsCommand::Register(TRegistrar registrar)
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
         "filter",
         [] (TThis* command) -> auto& {
             return command->Options.SubstrFilter;
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
         "pool_tree",
         [] (TThis* command) -> auto& {
             return command->Options.PoolTree;
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
         "pool",
         [] (TThis* command) -> auto& {
             return command->Options.Pool;
@@ -361,7 +361,7 @@ void TListOperationsCommand::Register(TRegistrar registrar)
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<std::optional<THashSet<TString>>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<THashSet<std::string>>>(
         "attributes",
         [] (TThis* command) -> auto& {
             return command->Options.Attributes;
@@ -532,7 +532,7 @@ void TListJobsCommand::Register(TRegistrar registrar)
         [] (TThis* command) -> auto& { return command->Options.ToTime; })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
         "continuation_token",
         [] (TThis* command) -> auto& { return command->Options.ContinuationToken; })
         .Optional(/*init*/ false);
@@ -547,7 +547,7 @@ void TListJobsCommand::Register(TRegistrar registrar)
         [] (TThis* command) -> auto& { return command->Options.JobCompetitionId; })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
         "task_name",
         [] (TThis* command) -> auto& { return command->Options.TaskName; })
         .Optional(/*init*/ false);
@@ -613,7 +613,7 @@ void TListJobsCommand::Register(TRegistrar registrar)
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<std::optional<THashSet<TString>>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<THashSet<std::string>>>(
         "attributes",
         [] (TThis* command) -> auto& {
             return command->Options.Attributes;
@@ -713,7 +713,7 @@ void TGetJobCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("job_id", &TThis::JobId);
 
-    registrar.ParameterWithUniversalAccessor<std::optional<THashSet<TString>>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<THashSet<std::string>>>(
         "attributes",
         [] (TThis* command) -> auto& {
             return command->Options.Attributes;
@@ -939,7 +939,7 @@ void TRemoteCopyCommand::Register(TRegistrar registrar)
 
 void TAbortOperationCommand::Register(TRegistrar registrar)
 {
-    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
         "abort_message",
         [] (TThis* command) -> auto& {
             return command->Options.AbortMessage;
@@ -965,7 +965,7 @@ void TSuspendOperationCommand::Register(TRegistrar registrar)
             return command->Options.AbortRunningJobs;
         })
         .Optional(/*init*/ false);
-    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
         "reason",
         [] (TThis* command) -> auto& {
             return command->Options.Reason;
@@ -1041,7 +1041,7 @@ void TPatchOperationSpecCommand::DoExecute(ICommandContextPtr context)
 
 void TGetOperationCommand::Register(TRegistrar registrar)
 {
-    registrar.ParameterWithUniversalAccessor<std::optional<THashSet<TString>>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<THashSet<std::string>>>(
         "attributes",
         [] (TThis* command) -> auto& {
             return command->Options.Attributes;

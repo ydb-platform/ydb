@@ -501,7 +501,7 @@ private:
 
     static TSharedMutableRef AllocateBuffer(i64 capacity)
     {
-        return TSharedMutableRef::Allocate<TKafkaProtocolWriterTag>(capacity);
+        return TSharedMutableRef::Allocate<TKafkaProtocolWriterTag>(capacity, {.InitializeStorage = false});
     }
 };
 

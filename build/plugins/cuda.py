@@ -1,5 +1,7 @@
 import os
 
+from ymake import macro, Unit
+
 DEFAULT_CUDA_ARCHITECTURES="sm_50"
 
 
@@ -10,7 +12,8 @@ def arch2num(arch):
     return f"{arch}0"
 
 
-def oncuda_srcs(unit, *args):
+@macro
+def CUDA_SRCS(unit: Unit, *args: tuple[str, ...]):
     """
     @usage: CUDA_SRCS(File...)
 

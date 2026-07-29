@@ -15,11 +15,9 @@ class TestMinMaxIndex(RollingUpgradeAndDowngradeFixture):
 
         self.index_min_max_name = "idx_min_max"
         self.rows_count = 20
-        extra_flags = {}
-        extra_flags["enable_local_min_max_index"] = True
 
         yield from self.setup_cluster(
-            extra_feature_flags=extra_flags,
+            extra_feature_flags=["enable_local_min_max_index"],
             column_shard_config={
                 "disabled_on_scheme_shard": False,
                 "alter_object_enabled": True,

@@ -231,7 +231,8 @@ void TYsonWriter::OnInt64Scalar(i64 value)
         Stream_->Write(NDetail::Int64Marker);
         WriteVarInt64(Stream_, value);
     } else {
-        Stream_->Write(::ToString(value));
+        char buffer[32];
+        Stream_->Write(buffer, ::ToString(value, buffer, sizeof(buffer)));
     }
     EndNode();
 }
@@ -242,7 +243,8 @@ void TYsonWriter::OnUint64Scalar(ui64 value)
         Stream_->Write(NDetail::Uint64Marker);
         WriteVarUint64(Stream_, value);
     } else {
-        Stream_->Write(::ToString(value));
+        char buffer[32];
+        Stream_->Write(buffer, ::ToString(value, buffer, sizeof(buffer)));
         Stream_->Write("u");
     }
     EndNode();
@@ -257,7 +259,7 @@ void TYsonWriter::OnDoubleScalar(double value)
         char buf[256];
         auto str = TStringBuf(buf, NYT::NDetail::FloatToStringWithNanInf(value, buf, sizeof(buf)));
         Stream_->Write(str);
-        if (str.find('.') == TString::npos && str.find('e') == TString::npos && std::isfinite(value)) {
+        if (str.find('.') == std::string::npos && str.find('e') == std::string::npos && std::isfinite(value)) {
             Stream_->Write(".");
         }
     }

@@ -9,6 +9,8 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/discovery/discovery.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::YQ_HEALTH
+
 namespace NFq {
 namespace {
 
@@ -34,7 +36,8 @@ public:
     static constexpr char ActorName[] = "YQ_HEALTH";
 
     void Bootstrap() {
-        HEALTH_LOG_D("Starting yandex query health. Actor id: " << SelfId());
+        YDB_LOG_DEBUG("Starting yandex query health. Actor",
+            {"id", SelfId()});
 
         NActors::TMon* mon = NKikimr::AppData()->Mon;
         if (mon) {

@@ -41,7 +41,7 @@ TEST(TWebJsonConsumerTest, List)
     consumer->OnEndList();
     consumer->Flush();
 
-    TString output = "[100,\"foo\"]";
+    std::string output = "[100,\"foo\"]";
     EXPECT_EQ(output, outputStream.Str());
 }
 
@@ -64,7 +64,7 @@ TEST(TWebJsonConsumerTest, UnsafeSignedIntegers)
     consumer->OnEndList();
     consumer->Flush();
 
-    TString output = "[9007199254740991,"
+    std::string output = "[9007199254740991,"
                      "{\"$type\":\"int64\",\"$value\":\"9007199254740992\"},"
                      "-9007199254740991,"
                      "{\"$type\":\"int64\",\"$value\":\"-9007199254740992\"}]";
@@ -86,7 +86,7 @@ TEST(TWebJsonConsumerTest, UnsafeUnsignedIntegers)
     consumer->OnEndList();
     consumer->Flush();
 
-    TString output = "[9007199254740991,"
+    std::string output = "[9007199254740991,"
                      "{\"$type\":\"uint64\",\"$value\":\"9007199254740992\"}]";
     EXPECT_EQ(output, outputStream.Str());
 }

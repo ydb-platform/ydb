@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     CAST(Yql::Date(AsAtom('1')) AS Uint8)
 ;
@@ -111,7 +110,6 @@ SELECT
     CAST(-1 / 1 AS Date)
 ;
 
-/* postgres can not */
 SELECT
     CAST(Yql::Date(AsAtom('1')) AS Uint8)
 ;

@@ -338,7 +338,7 @@ struct TBalancerStats {
 struct TNodeFilter {
     TVector<TSubDomainKey> AllowedDomains;
     TVector<TNodeId> AllowedNodes;
-    TVector<TDataCenterId> AllowedDataCenters;
+    NKikimrHive::TDataCentersGroup AllowedDataCenters;
     TSubDomainKey ObjectDomain;
     TTabletTypes::EType TabletType = TTabletTypes::TypeInvalid;
     bool MustBePrimaryPile = true;
@@ -434,6 +434,8 @@ struct TReassignOperation {
         return new TEvHive::TEvReassignTablet(TabletId, TabletChannels, ForcedGroups, Async);
     }
 };
+
+TFullTabletId ToFullTabletId(TTabletId tabletId);
 
 } // NHive
 } // NKikimr

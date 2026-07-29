@@ -7,6 +7,8 @@
 #include <ydb/core/tx/columnshard/transactions/locks_db.h>
 #include <ydb/core/tx/tiering/manager.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NColumnShard::NLoading {
 
 bool TTxControllerInitializer::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
@@ -126,6 +128,12 @@ bool TSpecialValuesInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
     }
     Self->SpaceWatcher->SubDomainOutOfSpace = outOfSpace;
 
+    ui64 smallBlobsQuotaExceeded = 0;
+    if (!Schema::GetSpecialValueOpt(db, Schema::EValueIds::SubDomainSmallBlobsQuotaExceeded, smallBlobsQuotaExceeded)) {
+        return false;
+    }
+    Self->SpaceWatcher->SubDomainSmallBlobsQuotaExceeded = smallBlobsQuotaExceeded;
+
     {
         ui64 lastCompletedStep = 0;
         ui64 lastCompletedTx = 0;
@@ -166,8 +174,10 @@ bool TSpecialValuesInitializer::DoExecute(NTabletFlatExecutor::TTransactionConte
                 Self->LastCompletedBackupTransactions[schemeShardLocalPathId] = backupTx;
                 Self->LastCompletedBackupTransactionsByTxId[backupTx.GetTxId()] = backupTx;
             } else {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot_parse_last_completed_backup_transaction")(
-                    "scheme_shard_local_path_id", schemeShardLocalPathId)("serialized_size", serializedBackupTx.size());
+                YDB_LOG_ERROR("",
+                    {"event", "cannot_parse_last_completed_backup_transaction"},
+                    {"schemeShardLocalPathId", schemeShardLocalPathId},
+                    {"serializedSize", serializedBackupTx.size()});
             }
         }
         if (!rowset.Next()) {

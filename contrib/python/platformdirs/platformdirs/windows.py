@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
 from .api import PlatformDirsABC
@@ -132,6 +133,31 @@ class Windows(PlatformDirsABC):  # noqa: PLR0904
     def user_desktop_dir(self) -> str:
         r""":returns: desktop directory tied to the user, e.g. ``%USERPROFILE%\Desktop``"""
         return os.path.normpath(get_win_folder("CSIDL_DESKTOPDIRECTORY"))
+
+    @property
+    def user_projects_dir(self) -> str:
+        r""":returns: projects directory tied to the user, e.g. ``%USERPROFILE%\Projects``"""
+        return os.path.normpath(os.path.expanduser("~/Projects"))  # noqa: PTH111
+
+    @property
+    def user_publicshare_dir(self) -> str:
+        r""":returns: public share directory e.g. ``C:\Users\Public``"""
+        return os.path.normpath(os.environ.get("PUBLIC", str(Path("~").expanduser().parent / "Public")))
+
+    @property
+    def user_templates_dir(self) -> str:
+        r""":returns: templates directory tied to the user e.g. ``%APPDATA%\Microsoft\Windows\Templates``"""
+        return os.path.normpath(str(Path(get_win_folder("CSIDL_APPDATA")) / "Microsoft" / "Windows" / "Templates"))
+
+    @property
+    def user_fonts_dir(self) -> str:
+        r""":returns: fonts directory tied to the user e.g. ``%LOCALAPPDATA%\Microsoft\Windows\Fonts``"""
+        return os.path.normpath(str(Path(get_win_folder("CSIDL_LOCAL_APPDATA")) / "Microsoft" / "Windows" / "Fonts"))
+
+    @property
+    def user_preference_dir(self) -> str:
+        r""":returns: preference directory tied to the user, same as ``user_config_dir``"""
+        return self.user_config_dir
 
     @property
     def user_bin_dir(self) -> str:

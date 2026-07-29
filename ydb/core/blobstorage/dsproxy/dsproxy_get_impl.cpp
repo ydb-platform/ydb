@@ -302,7 +302,7 @@ void TGetImpl::PrepareVPuts(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBlobS
         const bool checksumming = Blackboard.GroupQueues->ChecksumExpected(Info->GetTopology(), vdiskId,
             TGroupQueues::TVDisk::TQueues::VDiskQueueId(Blackboard.PutHandleClass));
         auto vput = std::make_unique<TEvBlobStorage::TEvVPut>(put.Id, put.Buffer, vdiskId, true, nullptr, Deadline,
-            Blackboard.PutHandleClass, checksumming);
+            Blackboard.PutHandleClass, checksumming, TWriteSource::DSProxyGetAccelerate);
         DSP_LOG_DEBUG_SX(logCtx, "BPG15", "Send put to orderNumber# " << put.OrderNumber << " vput# " << vput->ToString());
         History.AddVPutToWaitingList(put.Id, put.OrderNumber);
         outVPuts.push_back(std::move(vput));

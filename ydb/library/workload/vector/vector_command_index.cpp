@@ -20,7 +20,7 @@ void TWorkloadCommandIndexBase::Config(TConfig& config) {
 int TWorkloadCommandIndexBase::Run(TConfig& config) {
     Params.DbPath = config.Database;
 
-    Driver = MakeHolder<NYdb::TDriver>(CreateDriver(config));
+    Driver = MakeHolder<NYdb::NConsoleClient::TScopedDriver>(CreateDriver(config));
     QueryClient = MakeHolder<NYdb::NQuery::TQueryClient>(*Driver);
     Params.SetClients(QueryClient.get(), nullptr, nullptr, nullptr);
 
@@ -48,28 +48,27 @@ void TWorkloadCommandBuildIndex::DoConfig(TConfig& config) {
 }
 
 int TWorkloadCommandBuildIndex::DoRun() {
-    const TString ddlQuery = std::format(R"_(
-            ALTER TABLE `{0}/{1}`
-            ADD INDEX `{2}`
-            GLOBAL USING vector_kmeans_tree
-            ON (embedding)
-            WITH (
-                {3},
-                vector_type={4},
-                vector_dimension={5},
-                levels={6},
-                clusters={7}
-            );
-        )_",
-        Params.DbPath.c_str(),
-        Params.TableOpts.Name.c_str(),
-        Params.IndexName.c_str(),
-        Params.Distance.c_str(),
-        Params.VectorOpts.VectorType.c_str(),
-        Params.VectorOpts.VectorDimension,
-        Params.KmeansTreeLevels,
-        Params.KmeansTreeClusters
-    );
+    TStringBuilder ddlQuery;
+    ddlQuery << "ALTER TABLE `" << Params.DbPath << "/" << Params.TableOpts.Name << "`\n";
+    ddlQuery << "ADD INDEX `" << Params.IndexName << "`\n";
+    ddlQuery << "GLOBAL USING vector_kmeans_tree\n";
+    ddlQuery << "ON (embedding)\n";
+    ddlQuery << "WITH (\n";
+    ddlQuery << "    " << Params.GetDistanceDDL();
+    // When VectorDimension is 0, omit vector_type/vector_dimension so the server
+    // autodetects them from the table data. This is used for datasets imported
+    // from an external source (e.g. S3) whose dimension is not known in advance.
+    if (Params.VectorOpts.VectorDimension) {
+        ddlQuery << ",\n    vector_type=" << Params.VectorOpts.VectorType;
+        ddlQuery << ",\n    vector_dimension=" << Params.VectorOpts.VectorDimension;
+    }
+    if (Params.KmeansTreeLevels) {
+        ddlQuery << ",\n    levels=" << Params.KmeansTreeLevels;
+    }
+    if (Params.KmeansTreeClusters) {
+        ddlQuery << ",\n    clusters=" << Params.KmeansTreeClusters;
+    }
+    ddlQuery << "\n);";
 
     if (!ddlQuery.empty()) {
         Cout << "Build vector index ..."  << Endl;

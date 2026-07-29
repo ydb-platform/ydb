@@ -1,0 +1,184 @@
+PRAGMA YqlSelect = 'force';
+
+SELECT
+    Ensure(c, c == 'pgint4', c)
+FROM (
+    SELECT
+        FormatType(TypeOf(Some(c))) AS c
+    FROM (
+        VALUES
+            (1p, 1p, 1p)
+    ) AS x (
+        a,
+        b,
+        c
+    )
+);
+
+SELECT
+    Ensure(c, c == 'pgint4', c)
+FROM (
+    SELECT
+        a,
+        FormatType(TypeOf(Some(c))) AS c
+    FROM (
+        VALUES
+            (1p, 1p, 1p)
+    ) AS x (
+        a,
+        b,
+        c
+    )
+    GROUP BY
+        a
+);
+
+SELECT
+    Ensure(c, c == 'pgint4', c)
+FROM (
+    SELECT
+        a,
+        FormatType(TypeOf(Some(c))) AS c
+    FROM (
+        VALUES
+            (1p, 1p, 1p)
+    ) AS x (
+        a,
+        b,
+        c
+    )
+    GROUP BY
+        ROLLUP (a)
+);
+
+SELECT
+    Ensure(c, c == 'pgint4', c)
+FROM (
+    SELECT
+        a,
+        b,
+        FormatType(TypeOf(Some(c))) AS c
+    FROM (
+        VALUES
+            (1p, 1p, 1p)
+    ) AS x (
+        a,
+        b,
+        c
+    )
+    GROUP BY
+        ROLLUP (a, b)
+);
+
+SELECT
+    Ensure(c, c == 'pgint4', c)
+FROM (
+    SELECT
+        a,
+        b,
+        FormatType(TypeOf(Some(c))) AS c
+    FROM (
+        VALUES
+            (1p, 1p, 1p)
+    ) AS x (
+        a,
+        b,
+        c
+    )
+    GROUP BY
+        GROUPING SETS (
+            a,
+            b
+        )
+);
+
+SELECT
+    Ensure(c, c == 'pgint4', c)
+FROM (
+    SELECT
+        a,
+        b,
+        FormatType(TypeOf(Some(c))) AS c
+    FROM (
+        VALUES
+            (1p, 1p, 1p)
+    ) AS x (
+        a,
+        b,
+        c
+    )
+    GROUP BY
+        GROUPING SETS (
+            (a, b),
+            (b)
+        )
+);
+
+SELECT
+    Ensure(c, c == 'pgint4', c)
+FROM (
+    SELECT
+        a,
+        b,
+        FormatType(TypeOf(Some(c))) AS c
+    FROM (
+        VALUES
+            (1p, 1p, 1p)
+    ) AS x (
+        a,
+        b,
+        c
+    )
+    GROUP BY
+        GROUPING SETS (
+            (a, b),
+            (b),
+            ()
+        )
+);
+
+SELECT
+    Ensure(d, d == 'pgint4', d)
+FROM (
+    SELECT
+        FormatType(TypeOf(Some(d))) AS d
+    FROM (
+        VALUES
+            (1p, 1p, 1p, 1p)
+    ) AS x (
+        a,
+        b,
+        c,
+        d
+    )
+    GROUP BY
+        a,
+        GROUPING SETS (
+            (b, c),
+            (c),
+            ()
+        )
+);
+
+SELECT
+    Ensure(d, d == 'pgint4', d)
+FROM (
+    SELECT
+        FormatType(TypeOf(Some(d))) AS d
+    FROM (
+        VALUES
+            (1p, 1p, 1p, 1p)
+    ) AS x (
+        a,
+        b,
+        c,
+        d
+    )
+    GROUP BY
+        GROUPING SETS (
+            (b, c),
+            (c),
+            ()
+        ),
+        a
+);

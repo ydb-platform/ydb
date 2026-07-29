@@ -1,4 +1,5 @@
 #include "ydb_root_common.h"
+#include <ydb/public/lib/ydb_cli/common/scoped_driver.h>
 #include "ydb_config.h"
 #include "ydb_profile.h"
 #include "ydb_admin.h"
@@ -215,9 +216,8 @@ int TClientCommandRootCommon::Process(TConfig& config) {
             TClientCommand::Prepare(config);
             ExtractParams(config);
             config.BuildInfoCommandTag = "completion-scheme";
-            TDriver driver(config.CreateDriverConfigWithBuildInfo());
+            TScopedDriver driver(TDriver(config.CreateDriverConfigWithBuildInfo()));
             RunSchemeCompletion(driver, config.Database, *SchemeCompletionContext_);
-            driver.Stop(true);
         } catch (...) {
         }
         return EXIT_SUCCESS;
@@ -312,6 +312,10 @@ void TClientCommandRootCommon::FillConfig(TConfig& config) {
 
     if (Settings.EnableAiInteractive) {
         config.EnableAiInteractive = *Settings.EnableAiInteractive;
+    }
+
+    if (Settings.EnableInteractiveTransactions) {
+        config.EnableInteractiveTransactions = *Settings.EnableInteractiveTransactions;
     }
 
     config.BuildInfoProvider = Settings.BuildInfoProvider;

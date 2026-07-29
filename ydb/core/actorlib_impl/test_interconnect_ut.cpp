@@ -15,6 +15,8 @@
 #include <util/system/sanitizers.h>
 #include <util/thread/factory.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::TEST
+
 namespace NKikimr {
     using namespace NActors;
 
@@ -85,7 +87,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         }
 
         void OnConnect(const NActors::TActorContext &ctx) noexcept {
-            LOG_NOTICE(ctx, NActorsServices::TEST, "Node connected.");
+            YDB_LOG_NOTICE_CTX(ctx, "Node connected");
             Become(&TThis::StateFunc);
             for (ui64 i = 0; i < Counter; ++i) {
                 ctx.Send(Peer, new TEvents::TEvPing, 0, i);
@@ -98,7 +100,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
 
             if (++Responses == Counter) {
                Send(Edge, new TEvents::TEvWakeup);
-               ALOG_NOTICE(NActorsServices::TEST, "Done.");
+               YDB_LOG_NOTICE("Done");
             }
         }
 

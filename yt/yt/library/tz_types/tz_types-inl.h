@@ -5,6 +5,8 @@
 
 #include <library/cpp/type_info/tz/tz.h>
 
+#include <util/system/byteorder.h>
+
 namespace NYT::NTzTypes {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -21,7 +23,6 @@ public:
         for (int index = 0; index < std::ssize(timezones); ++index) {
             TzBuffer_[index] = std::string(timezones[index]);
             if (!timezones[index].empty()) {
-                MaxPossibleTzSize_ = std::max(MaxPossibleTzSize_, static_cast<int>(std::ssize(timezones[index])));
                 NameToTimezoneIndex_[std::string_view(TzBuffer_[index])] = index;
             }
         }
@@ -61,15 +62,9 @@ public:
         }
     }
 
-    int GetMaxPossibleTzSize() const
-    {
-        return MaxPossibleTzSize_;
-    }
-
 private:
     THashMap<std::string_view, int> NameToTimezoneIndex_;
     std::vector<std::string> TzBuffer_;
-    int MaxPossibleTzSize_ = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -88,65 +83,87 @@ T FlipHighestBit(T value)
 }
 
 template <typename T>
-T ParseTimestampFromTzString(std::string_view tzString, bool isSigned)
+T ParsePresorted(std::string_view from)
 {
-    constexpr size_t byteCount = sizeof(T);
-    if (byteCount > tzString.size()) {
-        THROW_ERROR_EXCEPTION("The number of bytes in the tz time string is not sufficient")
-            << TErrorAttribute("actual_byte_coun", tzString.size())
-            << TErrorAttribute("min_expected_bytes_count", byteCount);
+    auto value = ReadUnaligned<T>(from.data());
+    value = InetToHost(value);
+
+    if constexpr (std::is_signed_v<T>) {
+        return FlipHighestBit(value);
+    } else {
+        return value;
     }
-    auto byteDate = std::string(std::make_reverse_iterator(tzString.begin() + byteCount),
-        std::make_reverse_iterator(tzString.begin()));
-    auto value = ReadUnaligned<T>(byteDate.data());
-    return isSigned ? FlipHighestBit(value) : value;
 }
 
+// Inplace
 template <typename T>
-T ParseTimestampFromTzString(std::string_view tzString)
+void MakePresorted(T* number)
 {
     if constexpr (std::is_signed_v<T>) {
-        return ParseTimestampFromTzString<T>(tzString, true);
-    } else {
-        return ParseTimestampFromTzString<T>(tzString, false);
+        *number = FlipHighestBit<T>(*number);
     }
+    *number = HostToInet(*number);
 }
 
 } // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <typename T>
-TTZItem<T> ParseTzValue(std::string_view tzString)
+constexpr int GetMaxPossibleTzStringSize()
 {
-    return TTZItem<T>({ParseTimestampFromTzString<T>(tzString), ParseTzNameFromTzString(tzString, sizeof(T))});
+    return sizeof(i64) + sizeof(ui16);
 }
 
 template <typename T>
-std::string_view MakeTzString(T timeValue, std::string_view tzName, char* buffer, size_t bufferSize)
+constexpr int GetTzStringSize() {
+    return sizeof(T) + sizeof(ui16);
+}
+
+template <typename T>
+TTZItem<T> ParseTzValue(std::string_view from)
 {
-    YT_VERIFY(bufferSize >= sizeof(T) + tzName.size());
-
-    auto converted = timeValue;
-    if constexpr (std::is_signed_v<T>) {
-        converted = FlipHighestBit<T>(timeValue);
+    constexpr size_t expectedLength = sizeof(T) + sizeof(ui16);
+    if (expectedLength != from.size()) {
+        THROW_ERROR_EXCEPTION("Invalid length of TzType<%v>: %v", TypeName<T>(), std::ssize(from))
+            << TErrorAttribute("actual_length", std::ssize(from))
+            << TErrorAttribute("expected_length", expectedLength);
     }
-    // Make big-endian representation of numeric value.
-    auto* bytes = reinterpret_cast<unsigned char*>(&converted);
-    std::reverse(bytes, bytes + sizeof(T));
+    return TTZItem<T>({ParsePresorted<T>(from), ParsePresorted<ui16>(from.substr(sizeof(T)))});
+}
 
-    std::memcpy(buffer, &converted, sizeof(T));
-    std::memcpy(buffer + sizeof(T), tzName.data(), tzName.size());
-    return std::string_view(buffer, sizeof(T) + tzName.size());
+template <typename T>
+std::string_view MakeTzString(T timeValue, ui16 tzId, char* buffer, size_t bufferSize)
+{
+    YT_VERIFY(bufferSize >= sizeof(timeValue) + sizeof(tzId));
+
+    MakePresorted(&timeValue);
+    std::memcpy(buffer, &timeValue, sizeof(timeValue));
+
+    MakePresorted(&tzId);
+    std::memcpy(buffer + sizeof(timeValue), &tzId, sizeof(tzId));
+
+    return std::string_view(buffer, sizeof(timeValue) + sizeof(tzId));
+}
+
+template <typename T>
+std::string MakeTzString(T timeValue, ui16 tzId)
+{
+    std::string buffer;
+    buffer.resize(GetTzStringSize<T>());
+    MakeTzString<T>(timeValue, tzId, buffer.data(), buffer.size());
+    return buffer;
 }
 
 template <typename T>
 std::string MakeTzString(T timeValue, std::string_view tzName)
 {
-    std::string buffer;
-    buffer.resize(sizeof(T) + tzName.size());
-    Y_UNUSED(MakeTzString<T>(timeValue, tzName, buffer.data(), buffer.size()));
-    return buffer;
+    return MakeTzString(timeValue, GetTzIndex(tzName));
+}
+
+template <typename T>
+std::string_view MakeTzString(T timeValue, std::string_view tzName, char* buffer, size_t bufferSize)
+{
+    return MakeTzString(timeValue, GetTzIndex(tzName), buffer, bufferSize);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

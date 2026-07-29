@@ -9,7 +9,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/formats/arrow
+    ydb/core/formats/arrow/filter
     ydb/core/tx/columnshard/counters
 )
 

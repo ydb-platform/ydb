@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "bind.h"
 #endif
-#undef BIND_INL_H_
 
 #include <yt/yt/core/actions/invoker.h>
 #include <yt/yt/core/concurrency/propagating_storage.h>
@@ -599,12 +598,7 @@ public:
     template <class... TAs>
     static auto Run(TCallArg<TAs>... args, NDetail::TBindStateBase* base)
     {
-        auto* volatile state = static_cast<TBindState*>(base);
-
-        // Prevent optimizing |state| away for GDB printer.
-        // See devtools/gdb/yt_fibers_printer.py.
-        auto* volatile unoptimizedState = state;
-        Y_UNUSED(unoptimizedState);
+        auto* state = static_cast<TBindState*>(base);
 
         auto propagatingStorageGuard = state->MakePropagatingStorageGuard();
         Y_UNUSED(propagatingStorageGuard);

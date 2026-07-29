@@ -21,6 +21,7 @@
 
 #include <library/cpp/lwtrace/shuttle.h>
 #include <util/string/join.h>
+#include <util/system/thread.h>
 
 namespace NKikimr::NOlap {
 class IDataReader;
@@ -89,6 +90,9 @@ public:
 
 private:
     TAtomic SyncSectionFlag = 1;
+    TAtomic StepExecutionDepth = 0;
+    TAtomic StepExecutionThreadId = 0;
+    TString ExecutingStepName;
     YDB_READONLY(EType, Type, EType::Undefined);
     YDB_READONLY(ui32, SourceIdx, 0);
     YDB_READONLY_DEF(ui64, DeprecatedPortionId);
@@ -115,6 +119,7 @@ private:
     virtual ui64 DoGetEntityRecordsCount() const override;
 
     std::optional<bool> IsSourceInMemoryFlag;
+    bool InFlightReleasedFlag = false;
     TAtomic SourceFinishedSafeFlag = 0;
     TAtomic StageResultBuiltFlag = 0;
     virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<IDataSource>& sourcePtr) = 0;
@@ -277,6 +282,9 @@ public:
 
     ui32 GetRecordsCount() const;
 
+    void StartStepExecution(const TString& stepName);
+    void FinishStepExecution();
+
     void StartAsyncSection();
 
     void CheckAsyncSection();
@@ -357,6 +365,15 @@ public:
 
     bool StartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) {
         return DoStartFetchingColumns(sourcePtr, step, columns);
+    }
+
+    bool IsInFlightReleased() const {
+        return InFlightReleasedFlag;
+    }
+
+    void SetInFlightReleased() {
+        AFL_VERIFY(!InFlightReleasedFlag);
+        InFlightReleasedFlag = true;
     }
 
     void ResetSourceFinishedFlag();

@@ -40,7 +40,7 @@ If the `VIEW` expression is not used, the query will perform a full table scan w
 
 {% endnote %}
 
-## KMeansTreeSearchTopSize
+## KMeansTreeSearchTopSize {#KMeansTreeSearchTopSize}
 
 Indexed vector search is based on an approximate algorithm (ANN, Approximate Nearest Neighbors). That means that indexed search may produce a result that differs from a similar full-scan nearest neighbor search.
 

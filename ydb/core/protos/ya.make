@@ -15,6 +15,7 @@ SRCS(
     backup.proto
     base.proto
     bind_channel_storage_pool.proto
+    blob_checker.proto
     blob_depot.proto
     blob_depot_config.proto
     blobstorage.proto
@@ -71,6 +72,7 @@ SRCS(
     counters_tx_allocator.proto
     counters_tx_proxy.proto
     data_events.proto
+    data_format_settings.proto
     data_integrity_trails.proto
     database_basic_sausage_metainfo.proto
     datashard_backup.proto
@@ -83,6 +85,7 @@ SRCS(
     feature_flags.proto
     filestore_config.proto
     flat_scheme_op.proto
+    analyze_operation.proto
     flat_tx_scheme.proto
     follower_group.proto
     forced_compaction.proto
@@ -125,6 +128,7 @@ SRCS(
     node_whiteboard.proto
     pdiskfit.proto
     pqconfig.proto
+    pqdata_deferred_publish_destination.proto
     pqdata_mlp.proto
     pqdata_transaction.proto
     pqevents_global.proto
@@ -141,6 +145,7 @@ SRCS(
     scheme_type_operation.proto
     schemeshard_config.proto
     serverless_proxy_config.proto
+    set_column_constraint.proto
     shared_cache.proto
     sqs.proto
     statestorage.proto
@@ -191,7 +196,6 @@ PEERDIR(
     ydb/core/protos/schemeshard
     ydb/core/scheme/protos
     ydb/core/tx/columnshard/common/protos
-    ydb/core/tx/columnshard/engines/protos
     ydb/core/tx/columnshard/engines/scheme/defaults/protos
     ydb/library/actors/protos
     ydb/library/formats/arrow/protos

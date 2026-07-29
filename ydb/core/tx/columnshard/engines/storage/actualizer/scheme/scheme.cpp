@@ -86,6 +86,7 @@ void TSchemeActualizer::DoExtractTasks(
             auto info = BuildActualizationInfo(*portion);
             if (!info) {   // its possible through chains with equivalent schemas collapsed
                 portionsToRemove.emplace(portion->GetPortionId());
+                continue;
             }
             auto portionScheme = portion->GetSchema(VersionedIndex);
             TPortionEvictionFeatures features(
@@ -97,6 +98,7 @@ void TSchemeActualizer::DoExtractTasks(
                 case TTieringProcessContext::EAddPortionResult::TASK_LIMIT_EXCEEDED:
                     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_ACTUALIZATION)("event", "cannot_add_portion")("reason", "limit_exceeded")(
                         "context", tasksContext.DebugString());
+                    TSchemeGlobalCounters::OnSkipNotReadyWrite();
                     limitExceeded = true;
                     break;
                 case TTieringProcessContext::EAddPortionResult::PORTION_LOCKED:

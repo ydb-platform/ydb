@@ -76,6 +76,7 @@ class TPersistentBufferWriterLoadTestActor : public TActorBootstrapped<TPersiste
     NDDisk::TQueryCredentials Credentials;
     bool Finished = false;
     bool Connected = false;
+    bool CleanupEraseSent = false;
     bool DisconnectSent = false;
     bool TestStarted = false;
 
@@ -270,17 +271,20 @@ public:
     }
 
     void CheckDie(const TActorContext& ctx) {
-        if (!MaxInFlight && !InFlight) {
-            if (Connected && !DisconnectSent) {
-                auto eraseEv = std::make_unique<NDDisk::TEvErasePersistentBuffer>(Credentials, Lsns.back().first);
-                SendRequest(ctx, std::move(eraseEv), NextRequestIdx++);
-                DisconnectSent = true;
-                auto ev = std::make_unique<NDDisk::TEvDisconnect>();
-                Credentials.Serialize(ev->Record.MutableCredentials());
-                SendRequest(ctx, std::move(ev));
-            } else {
-                FinishAndDie(ctx);
-            }
+        if (MaxInFlight || InFlight) {
+            return;
+        }
+        if (!Connected) {
+            FinishAndDie(ctx);
+        } else if (!CleanupEraseSent && !Lsns.empty()) {
+            CleanupEraseSent = true;
+            auto eraseEv = std::make_unique<NDDisk::TEvErasePersistentBuffer>(Credentials, Lsns.back().first);
+            SendRequest(ctx, std::move(eraseEv), NextRequestIdx++);
+        } else if (!DisconnectSent) {
+            DisconnectSent = true;
+            auto ev = std::make_unique<NDDisk::TEvDisconnect>();
+            Credentials.Serialize(ev->Record.MutableCredentials());
+            SendRequest(ctx, std::move(ev));
         }
     }
 
@@ -425,7 +429,11 @@ public:
         if (!ok) {
             Cerr << "EraseError: " << (ui32)msg.GetStatus() << " "<< msg.GetErrorReason() << Endl;
         }
-        if (Finished || DisconnectSent) {
+        if (Finished) {
+            return;
+        }
+        if (CleanupEraseSent) {
+            CheckDie(ctx);
             return;
         }
         const ui64 requestIdx = ev->Cookie;

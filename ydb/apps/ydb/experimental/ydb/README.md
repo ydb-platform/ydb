@@ -43,6 +43,8 @@ ydb experimental topic deferred-publication publish --int-id "$INT_ID"
 
 Commands: `begin`, `publish`, `cancel`, `list`, `describe`.
 `write` accepts `--deferred-int-id` and optional `--deferred-ext-id`.
+Run `publish` / `cancel` only after `write` exits successfully; they do not wait
+for in-flight writes from another process.
 
 ## Building
 

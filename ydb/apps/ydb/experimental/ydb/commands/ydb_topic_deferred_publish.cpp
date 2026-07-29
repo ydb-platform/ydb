@@ -8,6 +8,9 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/deferred_publications.h>
 
+#include <library/cpp/json/json_value.h>
+#include <library/cpp/json/json_writer.h>
+
 #include <openssl/sha.h>
 #include <util/stream/file.h>
 #include <util/string/hex.h>
@@ -15,6 +18,15 @@
 namespace NYdb::NConsoleClient {
 
 using NTopic::TDeferredPublishClient;
+
+namespace {
+
+void WriteJsonLine(const NJson::TJsonValue& value) {
+    NJson::WriteJson(&Cout, &value, /*formatOutput*/ false);
+    Cout << Endl;
+}
+
+} // namespace
 
 TCommandExperimentalTopic::TCommandExperimentalTopic()
     : TClientCommandTree("topic", {}, "Topic commands with experimental deferred publish support")
@@ -208,8 +220,10 @@ int TCommandTopicDeferredPublicationBegin::Run(TConfig& config) {
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     if (OutputFormat == EDataFormat::Json) {
-        Cout << "{\"int_publication_id\":" << result.GetIntPublicationId()
-             << ",\"ext_publication_id\":\"" << ExtPublicationId_ << "\"}" << Endl;
+        NJson::TJsonValue json(NJson::JSON_MAP);
+        json["int_publication_id"] = result.GetIntPublicationId();
+        json["ext_publication_id"] = ExtPublicationId_;
+        WriteJsonLine(json);
     } else {
         Cout << result.GetIntPublicationId() << Endl;
     }
@@ -217,7 +231,12 @@ int TCommandTopicDeferredPublicationBegin::Run(TConfig& config) {
 }
 
 TCommandTopicDeferredPublicationPublish::TCommandTopicDeferredPublicationPublish()
-    : TYdbCommand("publish", {}, "Publish staged messages of a deferred publication")
+    : TYdbCommand(
+          "publish",
+          {},
+          "Publish staged messages of a deferred publication. "
+          "Run only after deferred write exits successfully; this command does not wait "
+          "for in-flight writes from another process.")
 {
 }
 
@@ -239,7 +258,12 @@ int TCommandTopicDeferredPublicationPublish::Run(TConfig& config) {
 }
 
 TCommandTopicDeferredPublicationCancel::TCommandTopicDeferredPublicationCancel()
-    : TYdbCommand("cancel", {}, "Cancel a deferred publication and discard staged messages")
+    : TYdbCommand(
+          "cancel",
+          {},
+          "Cancel a deferred publication and discard staged messages. "
+          "Run only after deferred write exits successfully; this command does not wait "
+          "for in-flight writes from another process.")
 {
 }
 
@@ -295,21 +319,17 @@ int TCommandTopicDeferredPublicationList::Run(TConfig& config) {
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     if (OutputFormat == EDataFormat::Json) {
-        Cout << "[";
-        bool first = true;
+        NJson::TJsonValue json(NJson::JSON_ARRAY);
         for (const auto& publication : result.GetPublications()) {
-            if (!first) {
-                Cout << ",";
-            }
-            first = false;
-            Cout << "{\"int_publication_id\":" << publication.IntPublicationId
-                 << ",\"ext_publication_id\":\"" << publication.ExtPublicationId << "\"";
+            NJson::TJsonValue item(NJson::JSON_MAP);
+            item["int_publication_id"] = publication.IntPublicationId;
+            item["ext_publication_id"] = TString(publication.ExtPublicationId);
             if (publication.WriterIdentity) {
-                Cout << ",\"writer_identity\":\"" << *publication.WriterIdentity << "\"";
+                item["writer_identity"] = TString(*publication.WriterIdentity);
             }
-            Cout << "}";
+            json.AppendValue(std::move(item));
         }
-        Cout << "]" << Endl;
+        WriteJsonLine(json);
         return EXIT_SUCCESS;
     }
 
@@ -359,33 +379,28 @@ int TCommandTopicDeferredPublicationDescribe::Run(TConfig& config) {
 
     const auto& publication = result.GetPublication();
     if (OutputFormat == EDataFormat::Json) {
-        Cout << "{\"ext_publication_id\":\"" << publication.ExtPublicationId << "\"";
+        NJson::TJsonValue json(NJson::JSON_MAP);
+        json["ext_publication_id"] = TString(publication.ExtPublicationId);
         if (publication.WriterIdentity) {
-            Cout << ",\"writer_identity\":\"" << *publication.WriterIdentity << "\"";
+            json["writer_identity"] = TString(*publication.WriterIdentity);
         }
-        Cout << ",\"created_at\":\"" << publication.CreatedAt.ToString() << "\"";
+        json["created_at"] = publication.CreatedAt.ToString();
         if (publication.CreatedBy) {
-            Cout << ",\"created_by\":\"" << *publication.CreatedBy << "\"";
+            json["created_by"] = TString(*publication.CreatedBy);
         }
-        Cout << ",\"destinations\":[";
-        bool firstDest = true;
+        NJson::TJsonValue destinations(NJson::JSON_ARRAY);
         for (const auto& destination : publication.Destinations) {
-            if (!firstDest) {
-                Cout << ",";
-            }
-            firstDest = false;
-            Cout << "{\"topic_path\":\"" << destination.TopicPath << "\",\"partition_ids\":[";
-            bool firstPart = true;
+            NJson::TJsonValue dest(NJson::JSON_MAP);
+            dest["topic_path"] = TString(destination.TopicPath);
+            NJson::TJsonValue partitionIds(NJson::JSON_ARRAY);
             for (const auto partitionId : destination.PartitionIds) {
-                if (!firstPart) {
-                    Cout << ",";
-                }
-                firstPart = false;
-                Cout << partitionId;
+                partitionIds.AppendValue(partitionId);
             }
-            Cout << "]}";
+            dest["partition_ids"] = std::move(partitionIds);
+            destinations.AppendValue(std::move(dest));
         }
-        Cout << "]}" << Endl;
+        json["destinations"] = std::move(destinations);
+        WriteJsonLine(json);
         return EXIT_SUCCESS;
     }
 

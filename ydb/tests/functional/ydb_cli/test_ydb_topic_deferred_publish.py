@@ -10,6 +10,7 @@ Publish/Cancel finalize transactions.
 """
 
 import logging
+import json
 import os
 import tempfile
 import uuid
@@ -154,11 +155,11 @@ class TestTopicDeferredPublishCli(BaseCliTestWithDatabase):
         return cls.execute_exp(args)
 
     @classmethod
-    def _describe(cls, int_id, check_exit_code=True):
-        return cls.execute_exp(
-            ["experimental", "topic", "deferred-publication", "describe", "--int-id", int_id],
-            check_exit_code=check_exit_code,
-        )
+    def _describe(cls, int_id, check_exit_code=True, output_format=None):
+        args = ["experimental", "topic", "deferred-publication", "describe", "--int-id", int_id]
+        if output_format is not None:
+            args.extend(["--format", output_format])
+        return cls.execute_exp(args, check_exit_code=check_exit_code)
 
     @classmethod
     def _read(cls, topic_path, limit=10):
@@ -358,8 +359,10 @@ class TestTopicDeferredPublishCliServerless(TestTopicDeferredPublishCli):
         self._assert_registry_tables_only_under(self.SERVERLESS_DB)
 
         self._write_deferred(topic, int_id, payload, ext_id=ext_id)
-        describe = self._describe(int_id)
-        assert topic in describe.stdout or topic.rsplit("/", 1)[-1] in describe.stdout
+        describe = self._describe(int_id, output_format="json")
+        description = json.loads(describe.stdout)
+        destination_paths = [item["topic_path"] for item in description["destinations"]]
+        assert topic in destination_paths
 
         before = self._read(topic)
         assert payload not in before.stdout

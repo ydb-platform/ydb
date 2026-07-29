@@ -75,7 +75,6 @@ namespace NActors {
         EvRegisterSession,
         EvUnregisterSession,
         EvStop,
-        EvMigrateDone,
         EvUringMonRequest,
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

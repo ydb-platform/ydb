@@ -155,11 +155,14 @@ void TTablesManager::Init(NIceDb::TNiceDb& db, const TSchemeShardLocalPathId tab
 void TTablesManager::AddTableInfo(const TUnifiedPathId unifiedPathId, TTableInfo&& tableInfo) {
     auto it = Tables.find(unifiedPathId.InternalPathId);
     if (it == Tables.end()) {
-        Tables.emplace(unifiedPathId.InternalPathId, std::move(tableInfo));
+        it = Tables.emplace(unifiedPathId.InternalPathId, std::move(tableInfo)).first;
     } else {
         it->second.Merge(std::move(tableInfo));
     }
-    SchemeShardLocalToInternal.emplace(unifiedPathId.SchemeShardLocalPathId, unifiedPathId.InternalPathId);
+    const auto [mapIt, inserted] = SchemeShardLocalToInternal.emplace(unifiedPathId.SchemeShardLocalPathId, unifiedPathId.InternalPathId);
+    if (!inserted && !it->second.IsDropped()) {
+        mapIt->second = unifiedPathId.InternalPathId;
+    }
 }
 
 bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* info) {
@@ -481,6 +484,25 @@ void TTablesManager::DropTable(
     }
 }
 
+TInternalPathId TTablesManager::TruncateTable(const TSchemeShardLocalPathId schemeShardLocalPathId, const TInternalPathId oldPathId,
+    const NOlap::TSnapshot& version, NIceDb::TNiceDb& db) {
+    DropTable(schemeShardLocalPathId, oldPathId, version, db);
+
+    AFL_VERIFY(SchemeShardLocalToInternal.erase(schemeShardLocalPathId));
+
+    AFL_VERIFY(GenerateInternalPathId)("error", "truncate requires GenerateInternalPathId");
+    const auto newPathId = TInternalPathId::FromRawValue(MaxInternalPathId.GetRawValue() + 1);
+    MaxInternalPathId = newPathId;
+
+    TTableInfo newTable({ TUnifiedPathId::BuildValid(newPathId, schemeShardLocalPathId) });
+    RegisterTable(std::move(newTable), db);
+
+    AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("method", "TruncateTable")("ss_local_path_id", schemeShardLocalPathId)(
+        "old_internal_path_id", oldPathId)("new_internal_path_id", newPathId)("version", version.DebugString());
+
+    return newPathId;
+}
+
 void TTablesManager::DropPreset(const ui32 presetId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db) {
     AFL_VERIFY(SchemaPresetsIds.contains(presetId));
     SchemaPresetsIds.erase(presetId);
@@ -649,7 +671,10 @@ bool TTablesManager::TryFinalizeDropPathOnComplete(const TInternalPathId pathId)
     AFL_VERIFY(!GetPrimaryIndexSafe().HasDataInPathId(pathId));
     AFL_VERIFY(MutablePrimaryIndex().ErasePathId(pathId));
     for (const auto& unifiedPathId : itTable->second.GetPathIds()) {
-        AFL_VERIFY(SchemeShardLocalToInternal.erase(unifiedPathId.GetSchemeShardLocalPathId()));
+        auto it = SchemeShardLocalToInternal.find(unifiedPathId.GetSchemeShardLocalPathId());
+        if (it != SchemeShardLocalToInternal.end() && it->second == pathId) {
+            SchemeShardLocalToInternal.erase(it);
+        }
     }
     Tables.erase(itTable);
     RebuildReadOnlyTablesSnapshots();

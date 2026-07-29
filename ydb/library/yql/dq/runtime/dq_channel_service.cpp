@@ -1428,6 +1428,7 @@ void TNodeState::HandleData(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
         LOG_D(LogPrefix << "OBSOLETE DATA, OutputNodeActorId=" << OutputNodeActorId << ", G=" << OutputNodeGenMajor.load() << '.' << OutputNodeGenMinor.load()
             << " vs Sender=" << ev->Sender << ", G=" << genMajor << '.' << genMinor
             << ", SeqNo=" << seqNo);
+        return;
     } else {
         LOG_T(LogPrefix << "RECV DATA, G=" << genMajor << '.' << genMinor << ", SeqNo=" << seqNo
             << ", ChannelSeqNo=" << record.GetChannelSeqNo() << ", ChannelId=" << record.GetChannelId()

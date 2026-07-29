@@ -1,3 +1,5 @@
+/* yt can not : no gw patch support */
+/* hybridfile can not : no gw patch support */
 USE plato;
 
 DROP TABLE IF EXISTS Output;

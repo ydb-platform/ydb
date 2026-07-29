@@ -365,6 +365,13 @@ namespace NActors {
             return Payload.size();
         }
 
+        TVector<TRope> ReleasePayload() {
+            auto payload = std::move(Payload);
+            Payload.clear();
+            TotalPayloadSize = 0;
+            return payload;
+        }
+
         void StripPayload() {
             Payload.clear();
             TotalPayloadSize = 0;

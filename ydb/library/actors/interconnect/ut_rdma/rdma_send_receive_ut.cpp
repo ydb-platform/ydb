@@ -535,6 +535,36 @@ TEST_P(RdmaSendReceiveTestCqMode, OversizedMultiPacketMainChannelEventDoesNotCra
     RunOversizedMainChannelEventTest(GetParam(), maxSerializedEventSize, 3 * TTcpPacketBuf::PacketDataLen);
 }
 
+// Verifies that an oversized external payload terminates the session and is
+// reported as undelivered instead of crashing in the external chunk consumer.
+TEST_P(RdmaSendReceiveTestCqMode, OversizedExternalChannelEventDoesNotCrash) {
+    constexpr ui32 maxSerializedEventSize = 1024;
+    auto settingsCustomizer = [](ui32 nodeId, TInterconnectSettings& settings) {
+        EnableRdmaSendReceive(nodeId, settings);
+        settings.MaxSerializedEventSize = maxSerializedEventSize;
+    };
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(GetParam()),
+        TTestICCluster::TCheckerFactory(), TDuration::Seconds(30), TNode::DefaultInflight(), settingsCustomizer);
+
+    auto receiverPtr = new TReceiveActor([](TEvTestSerialization::TPtr) {});
+    const TActorId receiver = cluster.RegisterActor(receiverPtr, 1);
+
+    WaitForInterconnectConnection(cluster, 2, 1);
+    TString lastRdmaStatus;
+    UNIT_ASSERT_C(WaitForRdmaChecksumStatus(cluster, 2, 1, "On | SoftwareChecksum | SendReceive", 20, lastRdmaStatus),
+        "last RDMA status: " << FormatLastRdmaStatus(lastRdmaStatus));
+
+    auto extCtx = std::make_shared<TSendActor::TExtCtx>();
+    auto ev = std::make_unique<TEvTestSerialization>();
+    ev->AddPayload(TRope(TString(5000, 'X')));
+    UNIT_ASSERT_VALUES_EQUAL(ev->Record.ByteSize(), 0);
+    UNIT_ASSERT(ev->AllowExternalDataChannel());
+    cluster.RegisterActor(new TSendActor(receiver, std::move(ev), extCtx), 2);
+
+    UNIT_ASSERT(extCtx->WaitForUndelivered(20));
+    UNIT_ASSERT_VALUES_EQUAL(receiverPtr->ReceivedEvents.load(std::memory_order_relaxed), 0u);
+}
+
 INSTANTIATE_TEST_SUITE_P(
     RdmaSendReceive,
     RdmaSendReceiveTestCqMode,

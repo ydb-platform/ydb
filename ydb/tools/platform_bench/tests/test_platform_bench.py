@@ -136,6 +136,32 @@ class PlatformBenchTest(unittest.TestCase):
         manifest = json.loads((output / "run.json").read_text())
         self.assertEqual(manifest["status"], "failed")
 
+    def test_start_failure_finalizes_manifest(self):
+        script = self._script("exit 0")
+        binary = self._binary(script)
+        binary.path.chmod(0o644)
+        output = self.root / "start-failure-output"
+        output.mkdir()
+
+        with self.assertRaisesRegex(BenchmarkError, "noexec"):
+            run_actors_core(
+                binary,
+                self._configuration(),
+                output,
+                tool_revision={"commit_id": "test"},
+                work_dir_hint=self.root,
+            )
+
+        manifest = json.loads((output / "run.json").read_text())
+        self.assertEqual(manifest["status"], "failed")
+        self.assertIn("finished_at", manifest)
+        self.assertIn("noexec", manifest["error"])
+        self.assertEqual(len(manifest["runs"]), 1)
+        self.assertIn("finished_at", manifest["runs"][0])
+        self.assertIsNone(manifest["runs"][0]["exit_code"])
+        self.assertEqual(manifest["runs"][0]["error"], manifest["error"])
+        self.assertFalse((output / "repeat-001").exists())
+
     @unittest.skipUnless(hasattr(os, "killpg"), "requires POSIX process groups")
     def test_timeout_signals_the_whole_process_group(self):
         marker = self.root / "child-terminated"

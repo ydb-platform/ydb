@@ -79,6 +79,11 @@ TVChunkConfig TVChunkConfig::Make(
     return result;
 }
 
+bool TVChunkConfig::Empty() const
+{
+    return HostCount == 0;
+}
+
 size_t TVChunkConfig::GetHostCount() const
 {
     return HostCount;
@@ -294,6 +299,8 @@ bool TVChunkConfig::IsValid() const
     }
     return !PBufferHosts.GetActive().Empty() && !DDiskHosts.GetActive().Empty();
 }
+
+bool TVChunkConfig::operator==(const TVChunkConfig& other) const = default;
 
 TString TVChunkConfig::DebugPrint() const
 {

@@ -6,6 +6,8 @@
 
 #include <ydb/library/actors/core/event_local.h>
 
+#include <library/cpp/threading/future/core/future.h>
+
 #include <memory>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -40,6 +42,7 @@ struct TEvPartitionDirectPrivate
               TEventLocal<TEvUpdateVChunkConfig, EvUpdateVChunkConfig>
     {
         TVChunkConfig VChunkConfig;
+        NThreading::TPromise<void> UpdateCompleted = NThreading::NewPromise();
 
         explicit TEvUpdateVChunkConfig(TVChunkConfig cfg)
             : VChunkConfig(std::move(cfg))

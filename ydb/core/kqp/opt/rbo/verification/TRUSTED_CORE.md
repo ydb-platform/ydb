@@ -103,12 +103,12 @@ A defect in these files can turn inequivalent supported plans into
 | `read_range_predicate_impl.h` | Closed q9/q45 point and finite point-set `RangeInfo::ComputeNode` grammar, physical-key/catalog binding, extractor-cap and node-identity validation, and lowering to existing equality/static-`IN` predicate IR. Included exactly once inside `semantic_snapshot.cpp`'s anonymous namespace. |
 | `rbo_verifier/ir.py` | Strict JSON decoding, version/schema validation, normalized IR, expression typing, tagged aggregate-state contracts including phase-linked integral AVG, passive-Double use confinement, all-plan-root virtual-binding confinement, exact scalar- and one-level `IN`-inside-`IN` plus correlated-subplan shape checks, and operator/StageGraph invariants. |
 | `rbo_verifier/types.py` | Supported scalar identities, exact domains, opaque-carrier family, and compatibility predicates. |
-| `rbo_verifier/smt.py` | Typed immutable SMT terms, script-owned one-constructor product datatypes, closed quantifier-free exact function definitions, quantifier-safe sharing, deterministic canonical rendering, exact marked-obligation substitution, and solver-output parsing primitives. |
+| `rbo_verifier/smt.py` | Typed immutable SMT terms, script-owned one-constructor product datatypes, closed quantifier-free exact function definitions, quantifier-safe sharing, stack-safe occurrence/level/output rendering, deterministic canonical bytes, exact marked-obligation substitution, and solver-output parsing primitives. |
 | `rbo_verifier/string_order.py` | Finite exact bounded quotient for String/Utf8 equality and unsigned byte ordering. |
 | `rbo_verifier/decimal.py` | Decimal representation, domains, comparison, arithmetic, extrema, specials, and proof bounds. |
 | `rbo_verifier/scalar.py` | Nullable values, SQL three-valued predicates, exact scalar evaluation, conservative Decimal finite-coefficient propagation, tagged `AverageMetadata`, the shared cardinality-certified integral-AVG carrier, typed opaque functions, and the domain-free passive carrier encoding. |
 | `rbo_verifier/sort_network.py` | Audited power-of-two bitonic compare-exchange topology and exact construction cost. |
-| `rbo_verifier/relation.py` | Symbolic database, unique-key constraints, logical operators, aggregate ghost state and node-local integral-AVG certificates, per-row scalar subplans, bags/sequences, packed exact Sort/Merge transport with concrete or symbolic producer order, exact present-prefix equality, errors, choices, result-family equality, and the exact mismatch cover. |
+| `rbo_verifier/relation.py` | Symbolic database, unique-key constraints, logical operators, exact fixed-width integral extrema, aggregate ghost state and producer-local integral-AVG certificates, per-row scalar subplans, bags/sequences, packed exact Sort/Merge transport with concrete or symbolic producer order, exact present-prefix equality, errors, choices, result-family equality, and the exact mismatch cover. |
 | `rbo_verifier/stages.py` | Two-task StageGraph execution, routing, connection semantics, per-task evaluation, and root gathering. |
 | `rbo_verifier/verify.py` | Boundary/catalog/schema checks, shared model construction, producer-local integral-AVG observation, mandatory model-domain precheck, canonical/branch solver portfolio, one-deadline status interpretation, and witness decoding. |
 
@@ -123,6 +123,14 @@ a verifier limit. The cache changes the cost of repeated routing-fact and set
 lookups, not the formula or proof obligation. Deep independently constructed
 shared-DAG regressions check both equal-key coalescing and separation of unequal
 terms with deliberately colliding hashes.
+
+Canonical rendering likewise does not use Python recursion for ordinary term
+DAG depth. Occurrence discovery is an explicit preorder worklist, dependency
+levels use iterative postorder, and term output uses an explicit task stack.
+Quantifier bodies still define separate lexical scopes. Deep unshared and
+shared-under-quantifier regressions exceed 2,000 term levels, and an independent
+old/new differential matched exact bytes on 3,000 randomized shared and
+quantified DAGs.
 
 The exact read-range audit seam is intentionally closed and C++-only.
 `RangeInfo::ComputeNode` is authoritative because it is the program consumed
@@ -174,13 +182,15 @@ whenever it is equal on both sides.
 The completed result carries a tagged node-local
 `IntegralAverageCertificate(count)`, distinct from transportable
 `IntegralAverageState`. `Evaluator.node()` invokes the observer at the
-producer before returning the family to any parent. The observer builds an
-exact bounded reachability predicate over successful present non-NULL rows;
-the certificate is then removed before downstream projection, sorting,
-limiting, compaction, or routing. Sorting-network and StageGraph paths enforce
-that lifecycle rather than transporting completed certificates. This design
-keeps one `AverageMetadata` union instead of parallel hidden fields and makes
-the proof-domain dependency explicit at its origin.
+producer. The observer builds an exact bounded reachability predicate over
+successful present non-NULL rows; one central evaluator boundary then removes
+the completed certificate before caching the family or returning it to any
+parent projection, sorting, limiting, compaction, or StageGraph route.
+Intermediate state is deliberately not removed. Direct Project, tiny
+enumerated Sort, ordinal/network Sort, ordered Limit, split finalization, and
+StageGraph regressions pin that lifecycle. This design keeps one
+`AverageMetadata` union instead of parallel hidden fields and makes the
+proof-domain dependency explicit at its origin.
 
 The solver protocol first proves that no completed integral average with count
 greater than two is reachable. `SAT` and `UNKNOWN` both become verifier
@@ -190,6 +200,15 @@ binary64 value; exact binary64 replay is required before treating it as a
 runtime candidate. Only semantic `UNSAT` proves equivalence. The raw formula's
 top-level OR is intentional and auditable, but its standalone `SAT` result is
 not a counterexample.
+
+Exact integral extrema are a separate, fully exact aggregate seam. `ir.py`
+admits `Int8/16/32/64` and `Uint8/16/32/64` only when input and result have the
+same fixed-width type and phase-aware nullability. `relation.py` uses a
+guarded, balanced, sentinel-free reducer, so every selected value is an actual
+input and no type boundary doubles as an empty marker. Scalar-empty,
+all-NULL, grouped, split intermediate/final, signed/unsigned boundary, and
+three-row odd-width staged regressions cover both `MIN` and `MAX`. Decimal
+extrema retain their existing independent implementation.
 
 Focused two-row/two-task TPC-DS q7/q13/q26 runs all emit formulas after
 194/1,181, 247/1,830, and 204/1,122 ms, with combined report SHA-256
@@ -201,13 +220,14 @@ remains twenty-seven. The policy pins all three at preparation plus formula
 construction.
 
 Commits `8d3e44f59a6` and `abe190f6344` record the completed implementation and
-coverage policy. The final suites pass 608/608 Python verifier, 237/237 C++
+coverage policy. The Slice A suites passed 608/608 Python verifier, 237/237 C++
 exporter, 47/47 inspector, and 14/14 policy tests. The complete semantic
 partition is TPCH 18 formula / 2 unsupported / 2 no-pair and TPC-DS 59 / 22 /
 18, with preparation 20/2 and 73/26. The 20 TPCH plus 81 TPC-DS exact pairs
 produce 18 plus 66 verifier entrants. q35 is the fourth new TPC-DS entrant and
-rejects unsupported integral `MAX` in Python; q7/q13/q26 are the three new
-formulas. Coverage is therefore 77/121 corpus, 77/101 exact-pair, 77/93
+at that checkpoint rejects unsupported integral `MAX` in Python; q7/q13/q26
+are the three new formulas. Coverage is therefore 77/121 corpus, 77/101
+exact-pair, 77/93
 preparation-success, and 77/84 verifier-entry formulas.
 
 The complete TPCH dashboard spends 3,273/37,511 ms in preparation/verifier
@@ -217,6 +237,35 @@ TPC-DS spends 76,727/851,301 ms and has report SHA-256
 `c37f457d0335a8b94ee10d48a5e15bffb86d6ec671050fba4538297e89688867`.
 Its q7/q13/q26 rows spend 210/1,258, 279/2,049, and 224/1,361 ms. Slice A adds
 no proof or optimizer finding; the proof floor remains twenty-seven.
+
+Commits `b6c8e8863bb`, `cb50a1ee896`, `7785d8dd23c`, `90a7abd2334`, and
+`a39863e5b33` record exact integral extrema, the stack-safe renderer, q35's
+formula policy, the odd-width exhaustive regression, and the central
+producer-local certificate lifecycle. Before this slice q35 rejected
+`max(Int64)` at `n16.aggregates[2]` after 598/265 ms; report SHA-256 is
+`829ff76b7d3fb9849db3a13b86bac9a604bca84eaa7f64c939517560822d50b1`.
+The first exact semantics run exposed the renderer `RecursionError`, a verifier
+bug rather than an optimizer finding; preserved report SHA-256
+`d19f0e233fad50d4b6be279eaaa8fc9fdac2d48a01fb23f79ba7a33cc30cd7e1`.
+After repair, focused q35 is `FORMULA_EMITTED` after 542/120,515 ms, report
+SHA-256
+`b312b43d1ba4d20aeeb615c2fe75b54b8baeed87cfdb54bea85aa4a0e9ccc9b5`.
+Its separate 60-second solver run is `UNKNOWN` after 614/199,928 ms because it
+cannot exclude an integral-AVG count greater than two; report SHA-256
+`164398b163725598b676c231349a19c30f161fdb012dc61f951934c89676f2e4`.
+
+The current suites pass 615/615 Python verifier, 237/237 C++ exporter, 47/47
+inspector, and 14/14 policy tests. The semantic partition is TPCH 18 formula /
+2 unsupported / 2 no-pair and TPC-DS 60 / 21 / 18, with preparation 20/2 and
+73/26. Exact pairs remain 20 plus 81, and verifier entrants remain 18 plus 66.
+Coverage is 78/121 corpus, 78/101 exact-pair, 78/93
+preparation-success, and 78/84 verifier-entry formulas. The complete TPCH
+dashboard spends 3,207/36,148 ms and has report SHA-256
+`499e0098afda7bed5198b2cb4cc2dfe35ca81e24252aa15c8e7b1803f26e2b3f`;
+TPC-DS spends 70,746/858,347 ms and has report SHA-256
+`8b194da2b89d4da4dbd9fd088bf8cc07e5224239e1b656322e3cfa43198d662a`.
+Its q35 row emits after 565/121,012 ms. This is formula coverage only: the
+proof floor remains twenty-seven, with no optimizer bug or counterexample.
 
 The packed-row declaration substrate remains deliberately narrower than a
 general SMT datatype or macro facility. A product has exactly one constructor,
@@ -731,15 +780,17 @@ evidence update:
 | Documentation, outside the TCB | 7,716 |
 
 These are raw physical `wc -l` counts over tracked files. The Python and C++
-rows enumerate the trusted files in the table above. Tests are source files
-under `ut/`, `*_ut/`, and `prefix_capture/ut/`; documentation is every tracked
-Markdown file under this verification directory. The diagnostic row is the
-remaining non-test, non-document,
-non-TCB source. Build/configuration metadata (`ya.make`, `.gitignore`, and the
-coverage policy) is excluded. These figures are a review baseline, not a
-generated invariant. The trusted core is a medium-sized verification
-subsystem, so it should be audited by vertical semantic slice rather than
-treated as one small script.
+rows enumerate the trusted files in the table above. The test row counts every
+tracked file under `ut/`, `*_ut/`, and `prefix_capture/ut/`, including
+test-local fixtures, `ya.make`, policy JSON, and README files. Documentation is
+every tracked Markdown file under this verification directory. Consequently a
+test-local README appears in both audit-surface rows; the rows are not intended
+as a disjoint partition. The diagnostic row is the remaining non-test,
+non-document, non-TCB source. Build/configuration metadata outside test
+directories (`ya.make` and `.gitignore`) is excluded. These figures are a
+review baseline, not a generated invariant. The trusted core is a medium-sized
+verification subsystem, so it should be audited by vertical semantic slice
+rather than treated as one small script.
 
 Relative to the preceding post-q58 audit, these two q83 precursor slices add 19
 physical trusted Python lines, 40 C++ exporter lines, and 1,107 test lines;
@@ -849,9 +900,32 @@ diagnostic tooling is unchanged, while documentation adds 303 lines. The new
 review seams are the strict C++
 aggregate contract, `ir.py`'s tagged state validation, `scalar.py`'s
 `AverageMetadata` and shared carrier, `relation.py`'s exact
-summary/certificate lifecycle, and `verify.py`'s model-domain protocol. The
-next recommended exact slice is fixed-width integral `MIN`/`MAX` for q35,
-before derived-`Double` ordering for q22/q85.
+summary/certificate lifecycle, and `verify.py`'s model-domain protocol. At that
+checkpoint, fixed-width integral `MIN`/`MAX` for q35 was the next slice.
+
+The completed post-integral-extrema physical-line audit uses committed tree
+`a39863e5b33` for code, tests, and diagnostic tooling, plus this documentation
+update:
+
+| Area | Physical lines |
+|---|---:|
+| Ten trusted Python semantic modules | 13,108 |
+| C++ exporter (`semantic_snapshot.cpp`, `.h`, and `read_range_predicate_impl.h`) | 11,505 |
+| **Proof-producing code total** | **24,613** |
+| Tests, outside the TCB | 59,982 |
+| Diagnostic/orchestration tools, outside the TCB | 5,230 |
+| Documentation, outside the TCB | 8,915 |
+
+Relative to the post-integral-AVG audit, exact integral extrema, stack-safe
+rendering, and central certificate stripping add a net 60 trusted Python lines,
+no C++ exporter lines, 60 proof-producing lines, and 313 test lines;
+diagnostic tooling is unchanged, while documentation adds 191 lines. The small
+net size reflects deletion of
+path-local certificate handling as the central evaluator boundary was added.
+The new audit seams are the fixed-width extrema decoder/reducer, iterative SMT
+renderer, and observer-before-strip lifecycle. The next slice is narrowly
+tagged derived-`Double` ordering for q22/q85, initially targeting formula
+construction rather than a proof-floor promotion.
 
 ## External assumptions
 
@@ -908,6 +982,10 @@ the SMT obligation itself:
   composes exactly across the directly linked final phase, and non-NULL count
   at most two makes that summary sufficient to identify the unordered input
   multiset;
+- each accepted fixed-width integral `MIN`/`MAX` trait uses the recorded
+  signed/unsigned comparison for its exact input/output type, ignores NULL
+  inputs, and combines intermediate values with the same associative extremum
+  operation;
 - the producer observer sees every successful completed integral-AVG result
   before any parent transformation, and the completed certificate has no
   runtime value or downstream transport semantics beyond constructing the
@@ -1009,8 +1087,8 @@ each slice. It is an audit checklist, not a claim that tests are exhaustive.
 |---|---|---|
 | Capture, catalog, root schema | host hook assumption; `semantic_snapshot.*`; `ir.py`; `verify.py` | `cpp_ut/semantic_snapshot_exporter_ut.cpp`; `integration_ut/optimizer_snapshot_pair_ut.cpp`; schema-mutation tests |
 | Types, NULLs, scalar functions | `semantic_snapshot.cpp`; `ir.py`; `types.py`; `scalar.py`; `decimal.py`; `string_order.py` | `ut/test_scalar.py`; `test_decimal.py`; `test_string_order.py`; `test_string_proof.py`; `test_sql_in.py`; canonical literal-only String-`Concat`, String-predicate, Date-year, proven-total Date-`Unwrap`, direct-Uint64-`Just`, exact Decimal weak-`SafeCast`, proven-present raw-tuple Date-`SafeCast`, restricted whole-floating-predicate, passive-Double carrier, and exact literal-wrapper mutations; integral-right Decimal finite-bound boundary/special and two-row aggregate tests; passive-carrier identity/mutation and non-key Sort/Merge passenger proofs; `source_type`, NULL, overflow, widening-special, and fail-closed references; synthetic real-host proofs; exporter near-miss mutations |
-| Logical bags, order, limits, errors | `semantic_snapshot.cpp`; `ir.py`; `smt.py`; `sort_network.py`; `relation.py` | `ut/test_logical_reference.py`; `test_limit.py`; `test_sort.py`; exhaustive network topology/prefix/nullable/mixed-order/Merge-hole/AVG-state tests; packed-layout, declaration-structure, present-prefix equality, and cap tests; focused concrete differential tests |
-| Aggregates and subplans | `semantic_snapshot.cpp`; `ir.py`; `decimal.py`; `scalar.py`; `relation.py`; `verify.py` | aggregate/DistinctAll/count-distinct/unwrap exporter and IR mutations; integral-AVG strict contract, one/two/three-row semantics, split-state mutation, node-local certificate, model-domain SAT/UNKNOWN/UNSAT protocol, and projected-result observation tests; exhaustive count-distinct duplicates and triangular cap; scalar-final unwrap empty/all-NULL/present references; Decimal-extrema raw-code differential, routing, and solver-mutation checks; nullable composite-key differential and staged-routing checks; `ut/test_subplans.py`; cardinality, demand, NULL, duplicate, error, exact scalar- and one-level `IN`-inside-`IN` ownership/nesting/cache/choice checks, nested finite references and sequential-semi solver differentials, correlated outer-binding, one- and exact two-dependency `EXISTS` ordering/shape/semi/anti checks, dynamic-`IN` mapping/cache/pair-cap and positive-nullable integral/Date-context checks, real-host Decimal-AVG and correlated-`EXISTS`, and non-null/nullable `IN`-to-`left_semi` cases |
+| Logical bags, order, limits, errors | `semantic_snapshot.cpp`; `ir.py`; `smt.py`; `sort_network.py`; `relation.py` | `ut/test_logical_reference.py`; `test_limit.py`; `test_sort.py`; exhaustive network topology/prefix/nullable/mixed-order/Merge-hole/AVG-state tests; packed-layout, declaration-structure, present-prefix equality, and cap tests; deep stack-safe rendering plus 3,000-DAG byte differential; focused concrete differential tests |
+| Aggregates and subplans | `semantic_snapshot.cpp`; `ir.py`; `decimal.py`; `scalar.py`; `relation.py`; `verify.py` | aggregate/DistinctAll/count-distinct/unwrap exporter and IR mutations; integral-AVG strict contract, one/two/three-row semantics, split-state mutation, central producer-observe/parent-strip lifecycle, model-domain SAT/UNKNOWN/UNSAT protocol, and projected/sorted/limited/staged observation tests; fixed-width signed/unsigned integral-extrema boundary, NULL/group/split, odd-width exhaustive, and solver-mutation checks; exhaustive count-distinct duplicates and triangular cap; scalar-final unwrap empty/all-NULL/present references; Decimal-extrema raw-code differential, routing, and solver-mutation checks; nullable composite-key differential and staged-routing checks; `ut/test_subplans.py`; cardinality, demand, NULL, duplicate, error, exact scalar- and one-level `IN`-inside-`IN` ownership/nesting/cache/choice checks, nested finite references and sequential-semi solver differentials, correlated outer-binding, one- and exact two-dependency `EXISTS` ordering/shape/semi/anti checks, dynamic-`IN` mapping/cache/pair-cap and positive-nullable integral/Date-context checks, real-host Decimal-AVG and correlated-`EXISTS`, and non-null/nullable `IN`-to-`left_semi` cases |
 | StageGraph, reads, joins, and routing | `semantic_snapshot.cpp`; `read_range_predicate_impl.h`; `ir.py`; `scalar.py`; `stages.py`; `relation.py` | exact q9 point and q45 finite-set `ComputeNode` references; exhaustive range-grammar/key/annotation/pointer-identity mutations; pushed-range-plus-OLAP conjunction; `OriginalPredicate` irrelevance and `ComputeNode` sensitivity; `ut/test_stagegraph_reference.py`; `test_stage_compaction.py`; shared-IU semi/anti exhaustive execution; JoinKey budget/mutation checks; C++ topology/task mutations; real-host integration |
 | SMT construction and verdict | `smt.py`; `verify.py` | `ut/test_smt.py`; `test_verify.py`; product ownership, closed-definition, free-symbol, nullary-capture, and foreign-declaration rejections; emitted-SMT inspection; identity and semantic-mutation obligations |
 | Workload reach and regressions | no additional trusted code | `benchmark_ut/`, coverage policy, TPCH/TPC-DS reports, inspector and replay for candidates |

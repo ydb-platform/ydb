@@ -889,7 +889,6 @@ void TBlobStorageController::SetHostRecords(THostRecordMap hostRecords) {
         ClusterBalanceActorId = Register(CreateClusterBalancingActor(SelfId(), ClusterBalancingSettings));
     }
 
-    PushStaticGroupsToSelfHeal();
     Execute(CreateTxInitScheme());
 }
 

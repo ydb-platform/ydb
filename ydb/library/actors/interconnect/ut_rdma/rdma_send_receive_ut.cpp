@@ -565,6 +565,50 @@ TEST_P(RdmaSendReceiveTestCqMode, OversizedExternalChannelEventDoesNotCrash) {
     UNIT_ASSERT_VALUES_EQUAL(receiverPtr->ReceivedEvents.load(std::memory_order_relaxed), 0u);
 }
 
+// Verifies that terminating an RDMA session because of an oversized event does
+// not prevent a subsequent session from delivering regular traffic.
+TEST_P(RdmaSendReceiveTestCqMode, RecoversAfterOversizedMainChannelEvent) {
+    constexpr ui32 maxSerializedEventSize = 1024;
+    auto settingsCustomizer = [](ui32 nodeId, TInterconnectSettings& settings) {
+        EnableRdmaSendReceive(nodeId, settings);
+        settings.MaxSerializedEventSize = maxSerializedEventSize;
+    };
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(GetParam()),
+        TTestICCluster::TCheckerFactory(), TDuration::Seconds(30), TNode::DefaultInflight(), settingsCustomizer);
+
+    auto receiverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBlobID(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBuffer(), "after oversized event");
+    });
+    const TActorId receiver = cluster.RegisterActor(receiverPtr, 1);
+
+    WaitForInterconnectConnection(cluster, 2, 1);
+    TString lastRdmaStatus;
+    UNIT_ASSERT_C(WaitForRdmaChecksumStatus(cluster, 2, 1, "On | SoftwareChecksum | SendReceive", 20, lastRdmaStatus),
+        "last RDMA status: " << FormatLastRdmaStatus(lastRdmaStatus));
+
+    auto extCtx = std::make_shared<TSendActor::TExtCtx>();
+    auto oversized = std::make_unique<TEvTestSerialization>();
+    oversized->Record.SetBuffer(TString(2 * maxSerializedEventSize, 'X'));
+    UNIT_ASSERT(!oversized->AllowExternalDataChannel());
+    cluster.RegisterActor(new TSendActor(receiver, std::move(oversized), extCtx), 2);
+
+    UNIT_ASSERT(extCtx->WaitForUndelivered(20));
+    UNIT_ASSERT_VALUES_EQUAL(receiverPtr->ReceivedEvents.load(std::memory_order_relaxed), 0u);
+
+    WaitForInterconnectConnection(cluster, 2, 1);
+    lastRdmaStatus.clear();
+    UNIT_ASSERT_C(WaitForRdmaChecksumStatus(cluster, 2, 1, "On | SoftwareChecksum | SendReceive", 20, lastRdmaStatus),
+        "last RDMA status after reconnect: " << FormatLastRdmaStatus(lastRdmaStatus));
+
+    auto ev = std::make_unique<TEvTestSerialization>();
+    ev->Record.SetBlobID(1);
+    ev->Record.SetBuffer("after oversized event");
+    cluster.RegisterActor(new TSendActor(receiver, std::move(ev)), 2);
+
+    UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
+}
+
 INSTANTIATE_TEST_SUITE_P(
     RdmaSendReceive,
     RdmaSendReceiveTestCqMode,

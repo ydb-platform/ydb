@@ -1,11 +1,12 @@
 #include "kqp_http_pool_cap_pusher.h"
 
 #include "log.h"
-#include "tree/snapshot.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+
+#include <numeric>
 
 namespace NKikimr::NKqp::NScheduler {
 
@@ -41,15 +42,8 @@ private:
     void Handle(NActors::TEvents::TEvWakeup::TPtr&) {
         if (auto gw = Gateway.lock()) {
             THashMap<TString, size_t> caps;
-            const auto totalCpu = Scheduler->GetTotalCpuLimit();
-            if (auto snapshot = Scheduler->GetSnapshot(); snapshot && totalCpu > 0) {
-                snapshot->ForEachChild<NHdrf::NSnapshot::TDatabase>([&](auto* database, size_t) {
-                    database->template ForEachChild<NHdrf::NSnapshot::TPool>([&](auto* pool, size_t) {
-                        const auto& poolId = std::get<NHdrf::TPoolId>(pool->GetId());
-                        const double share = double(pool->FairShare) / totalCpu;
-                        caps[poolId] = static_cast<size_t>(MaxHandlers * share);
-                    });
-                });
+            for (const auto& [poolId, share] : Scheduler->GetPoolShares()) {
+                caps[poolId] = static_cast<size_t>(MaxHandlers * share);
             }
             const size_t s3Sum = std::accumulate(caps.begin(), caps.end(), size_t{0},
                 [](size_t acc, const auto& kv) { return acc + kv.second; });
@@ -58,7 +52,7 @@ private:
             caps[NYql::IHTTPGateway::DefaultPoolId] = defaultCap;
 
             TStringBuilder log;
-            log << "HttpPoolCapPusher tick: totalCpu=" << totalCpu << " maxHandlers=" << MaxHandlers << " caps:";
+            log << "HttpPoolCapPusher tick: maxHandlers=" << MaxHandlers << " caps:";
             for (const auto& [poolId, cap] : caps) {
                 log << " [" << poolId << "]=" << cap;
             }

@@ -150,9 +150,9 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetTotalHardLimit(), 10);
         chunkTracker.AddOwner(101, TVDiskID(), 1);
 
-        // in the count-based mode the owner quota is force-allocated before the shared quota
-        // check; when the shared quota rejects the request, the owner quota accounting must
-        // be rolled back instead of keeping the never-used allocation
+        // The owner quota is force-allocated before the shared quota check.
+        // When the shared quota rejects the request, the owner quota accounting
+        // must be rolled back instead of keeping the never-used allocation.
         UNIT_ASSERT(!chunkTracker.TryAllocate(101, 11, errorReason));
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerUsed(101), 0);
 
@@ -193,8 +193,9 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(102), 50);
     }
 
-    Y_UNIT_TEST(ExpectedOwnerSizeLimitsOwnerAllocation) {
+    Y_UNIT_TEST(ExpectedOwnerSizeUsesColorBorderForEnforcement) {
         using namespace NPDisk;
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
 
         TChunkTracker chunkTracker;
         TKeeperParams params {
@@ -207,12 +208,27 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
         UNIT_ASSERT_C(chunkTracker.Reset(params, TColorLimits::MakeLogLimits(), errorReason), errorReason);
         chunkTracker.AddOwner(101, TVDiskID(), 1);
 
-        UNIT_ASSERT_C(chunkTracker.TryAllocate(101, 27, errorReason), errorReason);
-        UNIT_ASSERT(!chunkTracker.TryAllocate(101, 1, errorReason));
-        UNIT_ASSERT_C(errorReason.Contains("Owner# 101"), errorReason);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(101), 30);
+
+        // Allocating 28 chunks puts the owner into BLACK according to its
+        // personal quota. The default GREEN border hides the personal color,
+        // so the allocation must remain possible.
+        double occupancy;
+        UNIT_ASSERT_EQUAL_X(
+            chunkTracker.EstimateSpaceColor(101, 28, &occupancy),
+            TColor::GREEN);
+        UNIT_ASSERT_C(chunkTracker.TryAllocate(101, 28, errorReason), errorReason);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerUsed(101), 28);
+
+        // TPDisk checks this color before allocating. Raising the border to
+        // BLACK therefore makes the personal quota hard.
+        chunkTracker.SetColorBorder(TColor::BLACK);
+        UNIT_ASSERT_EQUAL_X(
+            chunkTracker.EstimateSpaceColor(101, 1, &occupancy),
+            TColor::BLACK);
     }
 
-    Y_UNIT_TEST(ExpectedOwnerSizeRuntimeUpdateLimitsOwnerAllocation) {
+    Y_UNIT_TEST(ExpectedOwnerSizeRuntimeUpdateKeepsOwnerQuotaSoft) {
         using namespace NPDisk;
 
         TChunkTracker chunkTracker;
@@ -226,9 +242,9 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
         chunkTracker.AddOwner(101, TVDiskID(), 1);
         chunkTracker.SetExpectedOwnerSettings(4, 30);
 
-        UNIT_ASSERT_C(chunkTracker.TryAllocate(101, 27, errorReason), errorReason);
-        UNIT_ASSERT(!chunkTracker.TryAllocate(101, 1, errorReason));
-        UNIT_ASSERT_C(errorReason.Contains("Owner# 101"), errorReason);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(101), 30);
+        UNIT_ASSERT_C(chunkTracker.TryAllocate(101, 28, errorReason), errorReason);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerUsed(101), 28);
     }
 
     Y_UNIT_TEST(ZeroWeight) {

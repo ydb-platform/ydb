@@ -558,13 +558,7 @@ public:
 
     bool TryAllocate(TOwner owner, i64 count, TString &outErrorReason) {
         if (IsOwnerUser(owner)) {
-            if (Params.ExpectedOwnerSize) {
-                if (!OwnerQuota->TryAllocate(owner, count, outErrorReason)) {
-                    return false;
-                }
-            } else {
-                OwnerQuota->ForceAllocate(owner, count);
-            }
+            OwnerQuota->ForceAllocate(owner, count);
             if (SharedQuota->TryAllocate(count, outErrorReason)) {
                 return true;
             }

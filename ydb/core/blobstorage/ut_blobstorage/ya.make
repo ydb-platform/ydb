@@ -55,6 +55,7 @@ SRCS(
     vdisk_malfunction.cpp
     group_size_in_units.cpp
     pdisk_status_flags.cpp
+    retro_tracing.cpp
 )
 
 PEERDIR(

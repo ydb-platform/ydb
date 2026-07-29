@@ -473,6 +473,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
 
     // Logical state I
     TVector<std::unique_ptr<IRule>> logicalStage_I_Rules;
+    logicalStage_I_Rules.emplace_back(std::make_unique<TMergeUnionAllRule>());
     logicalStage_I_Rules.emplace_back(std::make_unique<TExtractJoinExpressionsRule>());
     logicalStage_I_Rules.emplace_back(std::make_unique<TExtractCommonConjunctsRule>());
     logicalStage_I_Rules.emplace_back(std::make_unique<TPushFilterIntoJoinRule>());

@@ -1,6 +1,6 @@
 # YQL queries to topics {#yql-syntax}
 
-To read and write messages in [topics](../datamodel/topic.md), familiar YQL constructs are used: [SELECT](../../yql/reference/syntax/select/index.md) for reading and [INSERT](../../yql/reference/syntax/insert_into.md) for writing.
+To read and write messages to [topics](../datamodel/topic.md), familiar YQL constructs are used: [SELECT](../../yql/reference/syntax/select/index.md) for reading and [INSERT](../../yql/reference/syntax/insert_into.md) for writing.
 
 ## Local and external topics {#local-external-topics}
 
@@ -8,7 +8,7 @@ YQL queries to topics work the same regardless of whether the topic is in the cu
 
 ### Local topics {#local-topics}
 
-**Local topics** are topics created in the **same {{ ydb-short-name }} database** as the executed query.
+**Local topics** are topics created in the **same {{ ydb-short-name }} database** as the query being executed.
 
 In the query text, they are referred to **by a short name** — just like a table in the current database:
 
@@ -29,7 +29,7 @@ INSERT INTO output_topic SELECT ...;
 
 Access to them is performed only through a pre-created [external data source](../datamodel/external_data_source.md) with the YDB source type.
 
-After creating a source, for example named `ext_source`, accessing the `input_topic` topic in an external database is written as follows:
+After creating a source, for example named `ext_source`, referring to the topic `input_topic` in the external database is written as follows:
 
 
 ```yql
@@ -41,11 +41,11 @@ The name `ext_source` in the documentation is **conditional** — in your databa
 
 ## Reading from a topic {#topic-read}
 
-Reading from a topic can be limited to only the current data of the topic or work with waiting for new written messages.
+Reading from a topic can be limited to only the current data of the topic, or it can wait for newly written messages.
 
 ### Reading current data {#table-read}
 
-In this mode, reading is performed from the first to the last offset stored in the topic at the time the query is started. If data continues to be written to the topic, the query will stop after reaching the last offset known at startup. Specifying filters on [Service fields](#system-metadata) speeds up reading, as reading occurs only over the specified ranges.
+In this mode, reading is performed from the first to the last offset stored in the topic at the time the query is started. If data continues to be written to the topic, the query will stop after reaching the last offset known at the time of start. Specifying filters on [service fields](#system-metadata) speeds up reading, since reading occurs only over the specified ranges.
 
 
 ```yql
@@ -80,7 +80,7 @@ When reading from a topic, the message body can be obtained in two ways: [raw da
 
 #### Raw data {#raw-read}
 
-Use when the message content does not need to be parsed — it is enough to read the body as is.
+Use this when the message content does not need to be parsed — it is enough to read the body as is.
 
 
 ```yql
@@ -104,7 +104,7 @@ The same result can be obtained without the `WITH` block — see [table reading]
 
 #### Formatted data {#formatted-read}
 
-Use when messages are serialized in a known format (JSON, CSV, etc.). The `FORMAT` parameter specifies the parsing method, and `SCHEMA` specifies the names and types of fields that will appear in the `SELECT` result:
+Use this when messages are serialized in a known format (JSON, CSV, etc.). The `FORMAT` parameter specifies the parsing method, and `SCHEMA` specifies the names and types of fields that will appear in the `SELECT` result:
 
 
 ```yql
@@ -148,19 +148,7 @@ FROM
 
 ### Service fields {#system-metadata}
 
-When reading, you can request service fields and [user message attributes](../datamodel/topic.md#message):
-
-| Field | [Type](../../yql/reference/types/index.md) | Description |
-| --- | --- | --- |
-| `__ydb_create_time` | `Timestamp` | Message creation time |
-| `__ydb_write_time` | `Timestamp` | Message write time to topic |
-| `__ydb_offset` | `Uint64` | Message offset in partition |
-| `__ydb_partition_id` | `Uint64` | Partition number |
-| `__ydb_message_group_id` | `String` | Message group ID |
-| `__ydb_seq_no` | `Uint64` | Message sequence number within group |
-| `__ydb_user_attributes` | `Dict<String,String>` | [User message attributes](../datamodel/topic.md#message) |
-
-Example of using service fields:
+When reading, you can request service fields:
 
 
 ```yql
@@ -178,7 +166,7 @@ LIMIT 10;
 ```
 
 
-Filters on service fields are evaluated before reading data from the topic and significantly reduce the volume of messages read. Comparison operators (`=`, `<>`, `<`, `<=`, `>`, `>=`, `IN`), logical conditions (`AND`, `OR`), and fields `partition_id`, `write_time`, `offset` are supported. Predicates on other service fields do not limit the read volume.
+Filters on service fields are evaluated before reading data from the topic and significantly reduce the volume of messages read. The following comparison operators are supported: `=`, `<>`, `<`, `<=`, `>`, `>=`, `IN`, logical conditions `AND`, `OR`, and fields `partition_id`, `write_time`, `offset`. Predicates on other service fields do not limit the read volume.
 
 
 ```yql
@@ -191,20 +179,6 @@ WHERE
         AND __ydb_offset >= 1000
         AND __ydb_offset <= 1100
         AND __ydb_write_time > CurrentUtcTimestamp() - Interval("PT2H");
-```
-
-
-Example of using custom attributes:
-
-
-```yql
-SELECT
-    COUNT(*) AS ErrorCount
-FROM
-    input_topic  -- local topic; for external: ext_source.input_topic
-WHERE
-    __ydb_user_attributes["type"] = "log"
-        AND __ydb_user_attributes["level"] = "error";
 ```
 
 
@@ -240,13 +214,13 @@ FROM
 
 {% note warning %}
 
-Writing [custom attributes](../datamodel/topic.md#message) via YQL is not supported.
+Reading and writing [user attributes](../datamodel/topic.md#message) are not supported.
 
 {% endnote %}
 
 {% note warning %}
 
-Transactional writing via YQL/`INSERT INTO` is not supported — partial query results may appear in the topic.
+Transactional writes via YQL/`INSERT INTO` are not supported — partial query results may appear in the topic.
 
 {% endnote %}
 

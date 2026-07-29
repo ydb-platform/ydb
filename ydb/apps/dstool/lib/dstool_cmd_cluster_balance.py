@@ -95,7 +95,7 @@ class ClusterInfo:
 
         info.vdisks_groups_count_map = defaultdict(int)
         for group in info.base_config.Group:
-            num = sum(vslot.Status == 'READY' for vslot in common.vslots_of_group(group, info.vslot_map)) - len(group.VSlotId)
+            num = sum(common.vslot_is_bsc_ready(vslot) for vslot in common.vslots_of_group(group, info.vslot_map)) - len(group.VSlotId)
             info.vdisks_groups_count_map[num] += 1
         return info
 
@@ -214,9 +214,9 @@ class BalancingStrategy(IBalancingStrategy):
 
     def check_waiting_conditions(self):
         if any(k < -1 for k in self.cluster_info.vdisks_groups_count_map.keys()):
-            common.print_if_not_quiet(self.args, 'There are groups with more than one non READY vslot, waiting...', sys.stdout)
+            common.print_if_not_quiet(self.args, 'There are groups with more than one non-ready (BSC) vslot, waiting...', sys.stdout)
             groups_count_str = ', '.join(f'{k}: {v}' for k, v in sorted(self.cluster_info.vdisks_groups_count_map.items()))
-            common.print_if_verbose(self.args, f'Number of non READY vdisks -> number of groups: {groups_count_str}', file=sys.stdout)
+            common.print_if_verbose(self.args, f'Number of non-ready (BSC) vdisks -> number of groups: {groups_count_str}', file=sys.stdout)
             return True
 
         if self.args.max_replicating_pdisks is not None:
@@ -340,17 +340,17 @@ class BalancingStrategy(IBalancingStrategy):
         request.Rollback = self.args.dry_run
         response = common.invoke_bsc_request(request)
 
-        if response.Status[index].Success:
+        if not common.is_successful_bsc_response(response):
+            common.print_request_result(self.args, request, response)
+            sys.exit(1)
+
+        if response.Status[index].Success and response.Status[index].ReassignedItem:
             from_pdisk_id = common.get_pdisk_id(response.Status[index].ReassignedItem[0].From)
             to_pdisk_id = common.get_pdisk_id(response.Status[index].ReassignedItem[0].To)
             common.print_if_not_quiet(
                 self.args,
                 'Relocated vdisk from pdisk [%d:%d] to pdisk [%d:%d] with slot usages (%d -> %d)' % (*from_pdisk_id, *to_pdisk_id, pdisk_usage[from_pdisk_id], pdisk_usage[to_pdisk_id]),
                 file=sys.stdout)
-
-        if not common.is_successful_bsc_response(response):
-            common.print_request_result(self.args, request, response)
-            sys.exit(1)
 
         return True
 

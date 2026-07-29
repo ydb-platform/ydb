@@ -82,6 +82,7 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
         }
         bool local = config.GetLocalDC();
         settings->set_client_write_disabled(!local);
+        settings->set_content_based_deduplication(config.GetContentBasedDeduplication());
         const auto &partConfig = config.GetPartitionConfig();
         i64 msip = partConfig.GetMaxSizeInPartition();
         if (msip != Max<i64>())

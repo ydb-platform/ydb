@@ -446,6 +446,25 @@ class TNeumannHashTable {
         return Buffer_.empty();
     }
 
+    Y_FORCE_INLINE void PrefetchApplyDirectory(const ui8 *row) const {
+        if (Y_UNLIKELY(Directories_.empty())) return;
+        const THash thash = ReadUnaligned<THash>(row);
+        const Hash dirSlot = getDirectorySlot(thash);
+        NYql::PrefetchForRead(&Directories_[dirSlot]);
+    }
+
+    Y_FORCE_INLINE void PrefetchApplyBuffer(const ui8 *row) const {
+        if (Y_UNLIKELY(Directories_.empty())) return;
+        const THash thash = ReadUnaligned<THash>(row);
+        const TBloom hashBloomTag = kBloomTags[thash.BloomTagSlot];
+        const Hash dirSlot = getDirectorySlot(thash);
+        const TDirectory dir = Directories_[dirSlot];
+        if (hashBloomTag & dir.BloomFilter) return;
+        const ui8 *bufBegin =
+            Buffer_.data() + BufferSlotSize_ * dir.BufferSlot;
+        NYql::PrefetchForRead(bufBegin);
+    }
+
     void Apply(const ui8 *const row, const ui8 *const overflow,
                std::invocable<const ui8*> auto onMatch) const {
         MKQL_ENSURE(Layout_ != nullptr, "sanity check");

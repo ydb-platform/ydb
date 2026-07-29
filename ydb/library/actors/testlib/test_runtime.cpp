@@ -1720,8 +1720,23 @@ namespace NActors {
                 TCallstack::GetTlsCallstack() = ev->Callstack;
                 TCallstack::GetTlsCallstack().SetLinesToSkip();
 #endif
+                const ui64 activationStart = GetCycleCountFast();
                 recipientActor->Receive(ev);
                 node->ExecutorThread->DropUnregistered();
+
+                recipientActor = mailbox->FindActor(actorId.LocalId());
+                if (recipientActor && NDetail::TActorSystemFlagAccessor::HasSystemFlag(
+                        *recipientActor, IActor::ESystemFlag::MailboxProcessingFinished)) {
+                    TAutoPtr<IEventHandle> finishedEv = new IEventHandle(
+                        recipientActor->SelfId(),
+                        TActorId(),
+                        new TEvents::TEvMailboxProcessingFinished(
+                            TEvents::TEvMailboxProcessingFinished::EReason::QueueEmpty,
+                            1,
+                            GetCycleCountFast() - activationStart));
+                    recipientActor->Receive(finishedEv);
+                    node->ExecutorThread->DropUnregistered();
+                }
             }
         } else {
             if (VERBOSE) {

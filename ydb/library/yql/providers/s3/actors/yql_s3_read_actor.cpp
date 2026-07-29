@@ -427,8 +427,10 @@ public:
         // lz4 decompressor reads signature in ctor, w/o actual data it will be deadlocked
         IHttpRequestContext::TPtr context;
         if (Work) {
+            const auto poolId = Work->GetPoolId();
+            LOG_CORO_D("S3 Download: poolId=" << poolId);
             context = MakeIntrusive<TDefaultHttpRequestContext>(
-                Work->GetPoolId(),
+                poolId,
                 [w = std::weak_ptr(Work)](TDuration elapsed) {
                     if (auto work = w.lock()) work->RecordUsage(elapsed);
                 });

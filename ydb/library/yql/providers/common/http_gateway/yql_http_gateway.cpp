@@ -281,7 +281,9 @@ public:
 
     void NotifyRequestFinished() {
         if (Context) {
-            Context->OnRequestFinished(TDuration::Seconds(RequestTimer.Passed()));
+            const auto elapsed = TDuration::Seconds(RequestTimer.Passed());
+            YQL_LOG(DEBUG) << "HTTPGateway RequestFinished pool=" << Context->GetPoolId() << " elapsed=" << elapsed;
+            Context->OnRequestFinished(elapsed);
         }
     }
 protected:
@@ -974,6 +976,12 @@ private:
     }
 
     void UpdatePoolCaps(THashMap<TString, size_t> caps) final {
+        TStringBuilder log;
+        log << "HTTPGateway UpdatePoolCaps:";
+        for (const auto& [poolId, cap] : caps) {
+            log << " [" << poolId << "]=" << cap;
+        }
+        YQL_LOG(DEBUG) << log;
         const std::unique_lock lock(SyncRef());
         PoolCaps = std::move(caps);
         PoolCaps.emplace(DefaultPoolId, MaxHandlers);

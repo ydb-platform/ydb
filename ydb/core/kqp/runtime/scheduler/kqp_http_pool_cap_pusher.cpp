@@ -1,5 +1,6 @@
 #include "kqp_http_pool_cap_pusher.h"
 
+#include "log.h"
 #include "tree/snapshot.h"
 
 #include <ydb/core/base/appdata.h>
@@ -55,7 +56,17 @@ private:
             const size_t defaultFloor = static_cast<size_t>(MaxHandlers * MinDefaultFraction);
             const size_t defaultCap = std::max(defaultFloor, MaxHandlers > s3Sum ? MaxHandlers - s3Sum : 0);
             caps[NYql::IHTTPGateway::DefaultPoolId] = defaultCap;
+
+            TStringBuilder log;
+            log << "HttpPoolCapPusher tick: totalCpu=" << totalCpu << " maxHandlers=" << MaxHandlers << " caps:";
+            for (const auto& [poolId, cap] : caps) {
+                log << " [" << poolId << "]=" << cap;
+            }
+            LOG_D(log);
+
             gw->UpdatePoolCaps(std::move(caps));
+        } else {
+            LOG_D("HttpPoolCapPusher tick: gateway is gone");
         }
         Schedule(Period, new NActors::TEvents::TEvWakeup());
     }
@@ -94,6 +105,7 @@ void RegisterHttpPoolCapPusherIfNeeded(NActors::TActorSystem* actorSystem, NYql:
         TDuration::MilliSeconds(500),
         1024,
         0.1));
+    LOG_I("HttpPoolCapPusher registered");
 }
 
 } // namespace NKikimr::NKqp::NScheduler

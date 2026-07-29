@@ -327,18 +327,19 @@ public:
     std::shared_ptr<TJoinOptimizerNode> JoinSearch(
         const std::shared_ptr<TJoinOptimizerNode>& joinTree,
         const TOptimizerHints& hints = {},
-        TCBOOptimizerStats* stats = nullptr
+        TCBOOptimizerStats* stats = nullptr,
+        TOptimizerTrueCardinalitiesHints* costBasedHints = nullptr
     ) override {
         auto relsCount = joinTree->Labels().size();
 
         if (EnableShuffleElimination && relsCount <= OptimizerSettings_.ShuffleEliminationJoinNumCutoff) {
-            return JoinSearchImpl<TNodeSet64, TDPHypSolverShuffleElimination<TNodeSet64>>(joinTree, false, hints, stats);
+            return JoinSearchImpl<TNodeSet64, TDPHypSolverShuffleElimination<TNodeSet64>>(joinTree, false, hints, stats, costBasedHints);
         } else if (relsCount <= 64) { // The algorithm is more efficient.
-            return JoinSearchImpl<TNodeSet64, TDPHypSolverClassic<TNodeSet64>>(joinTree, EnableShuffleElimination, hints, stats);
+            return JoinSearchImpl<TNodeSet64, TDPHypSolverClassic<TNodeSet64>>(joinTree, EnableShuffleElimination, hints, stats, costBasedHints);
         } else if (64 < relsCount && relsCount <= 128) {
-            return JoinSearchImpl<TNodeSet128, TDPHypSolverClassic<TNodeSet128>>(joinTree, EnableShuffleElimination, hints, stats);
+            return JoinSearchImpl<TNodeSet128, TDPHypSolverClassic<TNodeSet128>>(joinTree, EnableShuffleElimination, hints, stats, costBasedHints);
         } else if (128 < relsCount && relsCount <= 192) {
-            return JoinSearchImpl<TNodeSet192, TDPHypSolverClassic<TNodeSet192>>(joinTree, EnableShuffleElimination, hints, stats);
+            return JoinSearchImpl<TNodeSet192, TDPHypSolverClassic<TNodeSet192>>(joinTree, EnableShuffleElimination, hints, stats, costBasedHints);
         }
 
         ComputeStatistics(joinTree, this->Pctx);
@@ -376,7 +377,8 @@ private:
         const std::shared_ptr<TJoinOptimizerNode>& joinTree,
         bool postEnumerationShuffleElimination /* we eliminate shuffles during enum algo only in case of TDPHypSolverShuffleElimination */,
         const TOptimizerHints& hints = {},
-        TCBOOptimizerStats* stats = nullptr
+        TCBOOptimizerStats* stats = nullptr,
+        TOptimizerTrueCardinalitiesHints* costBasedHints = nullptr
     ) {
         TJoinHypergraph<TNodeSet> hypergraph = MakeJoinHypergraph<TNodeSet>(joinTree, hints);
         TDPHypImpl solver = GetDPHypImpl<TNodeSet, TDPHypImpl>(hypergraph);
@@ -418,7 +420,7 @@ private:
 
         std::shared_ptr<TJoinOptimizerNodeInternal> bestJoinOrder;
         try {
-            bestJoinOrder = solver.Solve(hints);
+            bestJoinOrder = solver.Solve(hints, costBasedHints);
         } catch (const std::exception& e) {
             YQL_CLOG(WARN, CoreDq) << "CBO hard timeout exceeded, falling back to default join order: " << e.what();
             ExprCtx.AddWarning(YqlIssue(
@@ -633,7 +635,8 @@ TExprBase KqpOptimizeEquiJoinWithCosts(
     const TOptimizerHints& hints,
     bool enableShuffleElimination,
     TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels,
-    TCBOOptimizerStats* cboStats
+    TCBOOptimizerStats* cboStats,
+    TOptimizerTrueCardinalitiesHints* costBasedHints
 ) {
     int dummyEquiJoinCounter = 0;
     return KqpOptimizeEquiJoinWithCosts(
@@ -648,7 +651,8 @@ TExprBase KqpOptimizeEquiJoinWithCosts(
         hints,
         enableShuffleElimination,
         shufflingOrderingsByJoinLabels,
-        cboStats
+        cboStats,
+        costBasedHints
     );
 }
 
@@ -664,7 +668,8 @@ TExprBase KqpOptimizeEquiJoinWithCosts(
     const TOptimizerHints& hints,
     bool /* enableShuffleElimination */,
     TShufflingOrderingsByJoinLabels* shufflingOrderingsByJoinLabels,
-    TCBOOptimizerStats* cboStats
+    TCBOOptimizerStats* cboStats,
+    TOptimizerTrueCardinalitiesHints* costBasedHints
 ) {
     if (optLevel <= 1) {
         return node;
@@ -737,7 +742,7 @@ TExprBase KqpOptimizeEquiJoinWithCosts(
 
     {
         YQL_PROFILE_SCOPE(TRACE, "CBO");
-        joinTree = opt.JoinSearch(joinTree, hints, cboStats);
+        joinTree = opt.JoinSearch(joinTree, hints, cboStats, costBasedHints);
     }
 
     if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {

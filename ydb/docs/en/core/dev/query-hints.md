@@ -52,7 +52,7 @@ SELECT * FROM
 
 {% note info %}
 
-All hints (`Rows`, `Bytes`, `JoinOrder`) work only with **enabled** [cost based optimizer](../concepts/optimizer.md), except `JoinType` - it can be specified even if CBO is disabled.
+All hints (`Rows`, `Bytes`, `JoinOrder`) work only with **enabled** [cost based optimizer](../concepts/query_execution/optimizer.md), except `JoinType` - it can be specified even if CBO is disabled.
 
 {% endnote %}
 

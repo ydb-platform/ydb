@@ -14,6 +14,19 @@ The following values are supported:
 * `COLUMNS` type: Hints that the specified types should be used for columns whose names match the table's column names in the metadata, as well as which columns are additionally present in the table.
 * `IGNORETYPEV3`, `IGNORE_TYPE_V3`: Sets the flag to ignore type_v3 types in the table. The behavior is similar to the [yt.IgnoreTypeV3 pragma](../pragma.md#ignoretypev3), but for a specific data source.
 
+{% if feature_federated_queries %}
+
+When working with [external file data sources](../../../../concepts/datamodel/external_data_source.md), you can specify additional parameters:
+
+* `FORMAT` — stored data format in file storage for [federated queries](../../../../concepts/query_execution/federated_query/s3/formats.md). Allowed values: `csv_with_names`, `tsv_with_names`, `json_list`, `json_each_row`, `json_as_string`, `parquet`, `raw`.
+* `COMPRESSION` — file compression in file storage for [federated queries](../../../../concepts/query_execution/federated_query/s3/formats.md#compression). Allowed values: [gzip](https://en.wikipedia.org/wiki/Gzip), [zstd](https://en.wikipedia.org/wiki/Zstd), [lz4](https://en.wikipedia.org/wiki/LZ4), [brotli](https://en.wikipedia.org/wiki/Brotli), [bzip2](https://en.wikipedia.org/wiki/Bzip2), [xz](https://en.wikipedia.org/wiki/XZ_(compression_algorithm)).
+* `PARTITIONED_BY` — list of [partition columns](../../../../concepts/query_execution/federated_query/s3/partitioning.md) for data in file storage in federated queries. Lists columns in the order they appear in the file layout.
+* `projection.enabled` — flag to enable [extended data partitioning](../../../../concepts/query_execution/federated_query/s3/partition_projection.md). Allowed values: `true`, `false`.
+* `projection.<field_name>.type` — field type for [extended data partitioning](../../../../concepts/query_execution/federated_query/s3/partition_projection.md). Allowed values: `integer`, `enum`, `date`.
+* `projection.<field_name>.<options>` — extended properties of a field for [extended data partitioning](../../../../concepts/query_execution/federated_query/s3/partition_projection.md).
+
+{% endif %}
+
 When setting the `SCHEMA` and `COLUMNS` hints, the type must be a [structure](../../types/containers.md).
 
 {% if feature_bulk_tables %}

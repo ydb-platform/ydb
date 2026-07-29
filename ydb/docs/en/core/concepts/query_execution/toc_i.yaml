@@ -1,0 +1,17 @@
+items:
+  - name: Overview
+    href: index.md
+  - name: Query optimizer
+    href: optimizer.md
+  - name: Multi-Version Concurrency Control (MVCC)
+    href: mvcc.md
+  - name: Secondary indexes
+    href: secondary_indexes.md
+  - name: Vector search
+    href: vector_search.md
+  - name: Federated query
+    include:
+      path: federated_query/toc_p.yaml
+      mode: link
+  - name: Spilling
+    href: spilling.md

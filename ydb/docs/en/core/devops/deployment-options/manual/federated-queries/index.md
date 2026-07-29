@@ -8,11 +8,11 @@ This functionality is in the "Experimental" mode.
 
 ## General Installation Scheme {#general-scheme}
 
-{{ ydb-full-name }} can perform [federated queries](../../../../concepts/federated_query/index.md) to external sources, for example, object storages or relational DBMS, without the need to move the data from external sources directly into {{ ydb-short-name }}. This section describes the changes that are required in the configuration of {{ ydb-short-name }} and the surrounding infrastructure to enable federated queries.
+{{ ydb-full-name }} can perform [federated queries](../../../../concepts/query_execution/federated_query/index.md) to external sources, for example, object storages or relational DBMS, without the need to move the data from external sources directly into {{ ydb-short-name }}. This section describes the changes that are required in the configuration of {{ ydb-short-name }} and the surrounding infrastructure to enable federated queries.
 
 {% note info %}
 
-A special microservice called [connector](../../../../concepts/federated_query/architecture.md#connectors) must be deployed to access some of data sources. Check the [list of supported sources](../../../../concepts/federated_query/architecture.md#supported-datasources) to determine if you need to install a connector.
+A special microservice called [connector](../../../../concepts/query_execution/federated_query/architecture.md#connectors) must be deployed to access some of data sources. Check the [list of supported sources](../../../../concepts/query_execution/federated_query/architecture.md#supported-datasources) to determine if you need to install a connector.
 
 {% endnote %}
 

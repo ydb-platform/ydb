@@ -5,6 +5,7 @@ import subprocess
 import unittest
 from collections import Counter
 from contextlib import redirect_stderr, redirect_stdout
+from dataclasses import replace
 from itertools import product
 from unittest import mock
 
@@ -14,8 +15,11 @@ except ImportError:
     yatest_common = None
 
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
+    Column,
+    Expr,
     OPAQUE_DOUBLE_FINGERPRINT_PREFIX,
     SnapshotError,
+    SortOrder,
     parse_snapshot,
     stage_task_counts,
 )
@@ -31,6 +35,8 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import (
 )
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.scalar import (
     Encoder as ScalarEncoder,
+    IntegralAverageCertificate,
+    IntegralAverageState,
     Value,
 )
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.stages import (
@@ -4529,6 +4535,174 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
                 aggregate = ((total + (1 << 63)) % (1 << 64)) - (1 << 63)
             result.append((key, aggregate))
         return result
+
+
+class IntegralAverageCertificateLifecycleTest(unittest.TestCase):
+    @staticmethod
+    def _metadata(family):
+        return tuple(
+            value.average_metadata
+            for outcome in family.outcomes
+            for row in outcome.relation.rows
+            for value in row.values.values()
+            if value.average_metadata is not None
+        )
+
+    def _evaluator(self, snapshot, observer=None):
+        script = smt.Script()
+        return RelationEvaluator(
+            snapshot,
+            Database(snapshot, 2, script),
+            ScalarEncoder(script),
+            node_observer=observer,
+        )
+
+    def assert_metadata(self, family, expected):
+        metadata = self._metadata(family)
+        if expected is None:
+            self.assertEqual(metadata, ())
+        else:
+            self.assertTrue(metadata)
+            self.assertTrue(all(isinstance(item, expected) for item in metadata))
+
+    def test_certificate_is_observed_once_then_stripped_with_or_without_observer(self):
+        snapshot = aggregate_stage_snapshot(
+            "avg", False, False, nullable_input=True, input_type="Int64"
+        )
+        observed = []
+        evaluator = self._evaluator(
+            snapshot,
+            lambda _scope, node, family: observed.append((node, family)),
+        )
+        aggregate = evaluator.node("aggregate")
+        evaluator.node("aggregate")
+        aggregate_events = [
+            family for node, family in observed if node == "aggregate"
+        ]
+        self.assertEqual(len(aggregate_events), 1)
+        self.assert_metadata(
+            aggregate_events[0],
+            IntegralAverageCertificate,
+        )
+        for family in (aggregate, evaluator.root()):
+            self.assert_metadata(family, None)
+        self.assert_metadata(self._evaluator(snapshot).node("aggregate"), None)
+
+        projected = aggregate_stage_snapshot(
+            "avg",
+            True,
+            False,
+            nullable_input=True,
+            input_type="Int64",
+            project_average_away=True,
+        )
+        project_events = {}
+        result = self._evaluator(
+            projected,
+            lambda _scope, node, family: project_events.setdefault(node, family),
+        ).root()
+        self.assert_metadata(
+            project_events["aggregate"],
+            IntegralAverageCertificate,
+        )
+        self.assert_metadata(project_events["project"], None)
+        self.assert_metadata(result, None)
+
+    def test_all_sort_shapes_and_ordered_limit_receive_plain_values(self):
+        snapshot = aggregate_stage_snapshot(
+            "avg", False, False, nullable_input=True, input_type="Int64"
+        )
+        source = self._evaluator(snapshot).node("aggregate")
+        key = Column("key", "Int64", False)
+
+        def candidates(count):
+            return relation_model.map_family(
+                source,
+                lambda relation: replace(
+                    relation,
+                    columns=(key,) + relation.columns,
+                    rows=tuple(
+                        replace(
+                            relation.rows[0],
+                            values={
+                                "key": Value(
+                                    "Int64", smt.FALSE, smt.int_value(index)
+                                ),
+                                **relation.rows[0].values,
+                            },
+                        )
+                        for index in range(count)
+                    ),
+                ),
+            )
+
+        script = smt.Script()
+        order = (SortOrder("key", True, False),)
+        tiny = relation_model.sort_family(candidates(2), order, script, "tiny")
+        self.assertEqual(len(tiny.outcomes), 2)
+        self.assert_metadata(tiny, None)
+        limited = relation_model.limit_family(
+            tiny,
+            Expr(
+                kind="literal",
+                value=1,
+                result_type="Uint64",
+                nullable=False,
+            ),
+            None,
+            script,
+            "limit",
+        )
+        self.assert_metadata(limited, None)
+
+        ordinal = relation_model.sort_family(
+            candidates(4), order, script, "ordinal"
+        )
+        self.assert_metadata(ordinal, None)
+        self.assertTrue(all(
+            outcome.relation.ordinals is not None
+            for outcome in ordinal.outcomes
+        ))
+        network = relation_model._sorting_network_family(
+            candidates(4), order, script, "network"
+        )
+        self.assert_metadata(network, None)
+        self.assertTrue(all(
+            outcome.relation.present_prefix
+            for outcome in network.outcomes
+        ))
+
+    def test_split_state_survives_stage_edge_and_finalization(self):
+        snapshot = aggregate_stage_snapshot(
+            "avg",
+            False,
+            True,
+            nullable_input=True,
+            input_type="Int64",
+        )
+        script = smt.Script()
+        observed = {}
+        edges = []
+        result = StageEvaluator(
+            snapshot,
+            Database(snapshot, 2, script),
+            ScalarEncoder(script),
+            Router(script),
+            node_observer=lambda _scope, node, family: observed.setdefault(
+                node, []
+            ).append(family),
+            edge_observer=lambda _edge, _task, family: edges.append(family),
+        ).root()
+
+        for family in observed["partial"]:
+            self.assert_metadata(family, IntegralAverageState)
+        for family in edges:
+            self.assert_metadata(family, IntegralAverageState)
+        self.assert_metadata(
+            observed["final"][0],
+            IntegralAverageCertificate,
+        )
+        self.assert_metadata(result, None)
 
 
 class RestrictedModelSmokeTest(unittest.TestCase):

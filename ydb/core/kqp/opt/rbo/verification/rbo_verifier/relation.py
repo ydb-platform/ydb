@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from itertools import combinations, permutations
 from math import factorial
 from typing import Callable, Iterator, Mapping, TypeAlias
@@ -555,6 +555,8 @@ class Evaluator:
         if self.node_observer is not None and node_id not in self.observed_nodes:
             self.node_observer(self.choice_scope, node_id, family)
             self.observed_nodes.add(node_id)
+        family = _strip_integral_average_certificates(family)
+        self.cache[node_id] = family
         return family
 
     def _evaluate(self, node: PlanNode) -> RelationFamily:
@@ -2213,6 +2215,41 @@ def map_family(
     )
 
 
+def _strip_integral_average_certificates(
+    family: RelationFamily,
+) -> RelationFamily:
+    if not any(
+        isinstance(value.average_metadata, IntegralAverageCertificate)
+        for outcome in family.outcomes
+        for row in outcome.relation.rows
+        for value in row.values.values()
+    ):
+        return family
+    return map_family(
+        family,
+        lambda relation: replace(
+            relation,
+            rows=tuple(
+                replace(
+                    row,
+                    values={
+                        name: (
+                            replace(value, average_metadata=None)
+                            if isinstance(
+                                value.average_metadata,
+                                IntegralAverageCertificate,
+                            )
+                            else value
+                        )
+                        for name, value in row.values.items()
+                    },
+                )
+                for row in relation.rows
+            ),
+        ),
+    )
+
+
 def combine_families(
     families: tuple[RelationFamily, ...],
     combine: Callable[[tuple[Relation, ...]], Relation],
@@ -2684,25 +2721,6 @@ def _sorting_network_layout(relation: Relation) -> _SortingNetworkLayout:
         )
 
         states = tuple(value.average_metadata for value in values)
-        result_states = tuple(
-            state
-            for state in states
-            if isinstance(state, IntegralAverageCertificate)
-        )
-        if result_states:
-            if any(
-                state is not None
-                and not isinstance(state, IntegralAverageCertificate)
-                for state in states
-            ):
-                raise RelationError("sorting network mixed AVG state layouts")
-            if any(state.count.sort != smt.INT for state in result_states):
-                raise RelationError(
-                    "sorting network integral avg result state is invalid"
-                )
-            # A completed AVG certificate is node-local: its aggregate was
-            # observed before this downstream sort.
-            states = (None,) * len(states)
         present_states = tuple(state for state in states if state is not None)
         if present_states and len(present_states) != len(states):
             raise RelationError(
@@ -2756,8 +2774,7 @@ def _sorting_network_layout(relation: Relation) -> _SortingNetworkLayout:
                     max(state.finite_abs_bound for state in decimal_states),
                     max(state.count_bound for state in decimal_states),
                 )
-            else:
-                assert isinstance(first_state, IntegralAverageState)
+            elif isinstance(first_state, IntegralAverageState):
                 integral_states = tuple(
                     state
                     for state in present_states
@@ -2785,6 +2802,10 @@ def _sorting_network_layout(relation: Relation) -> _SortingNetworkLayout:
                     minimum_lane,
                     maximum_lane,
                     max(state.count_bound for state in integral_states),
+                )
+            else:
+                raise RelationError(
+                    "sorting network received unsupported AVG metadata"
                 )
 
         columns.append(
@@ -3951,7 +3972,7 @@ def _select_limit_value(
     choice: smt.Term,
     alternatives: tuple[Value, ...],
 ) -> Value:
-    """Conditionally select one typed value and all hidden AVG metadata."""
+    """Conditionally select one typed scalar value."""
 
     if not alternatives:
         raise RelationError("singleton limit has no value alternatives")
@@ -3980,22 +4001,10 @@ def _select_limit_value(
         alternative.average_metadata
         for alternative in alternatives
     )
-    if any(
-        isinstance(item, (DecimalAverageState, IntegralAverageState))
-        for item in metadata
-    ):
+    if any(item is not None for item in metadata):
         raise RelationError(
-            "singleton limit cannot select hidden intermediate AVG state"
+            "singleton limit cannot select hidden AVG metadata"
         )
-    if any(
-        item is not None
-        and (
-            not isinstance(item, IntegralAverageCertificate)
-            or item.count.sort != smt.INT
-        )
-        for item in metadata
-    ):
-        raise RelationError("singleton limit integral AVG certificate is invalid")
 
     return Value(
         first.type,

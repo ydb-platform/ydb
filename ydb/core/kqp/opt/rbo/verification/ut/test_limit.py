@@ -1539,7 +1539,7 @@ class LimitOutcomeTest(unittest.TestCase):
             }
             self.assertFalse(_ground(outcome.enabled, constants))
 
-    def test_symbolic_singleton_drops_integral_average_certificate(self):
+    def test_symbolic_singleton_rejects_leaked_integral_average_certificate(self):
         columns = (
             Column("k", "Int64", False),
             Column("result", "Double", True),
@@ -1565,36 +1565,18 @@ class LimitOutcomeTest(unittest.TestCase):
             )
             for carrier, result, proof_count in payloads
         )
-        script = smt.Script()
-        family = limit_family(
-            single(Relation(columns, rows)),
-            Expr(
-                kind="literal",
-                value=1,
-                result_type="Uint64",
-                nullable=False,
-            ),
-            None,
-            script,
-            "take",
-        )
-        outcome = family.outcomes[0]
-        self.assertEqual(len(outcome.choices), 1)
-        selector = outcome.choices[0]
-        selected = outcome.relation.rows[0]
-        key_value = selected.values["k"]
-        result_value = selected.values["result"]
-        self.assertIsNone(result_value.average_metadata)
-
-        for index, payload in enumerate(payloads):
-            constants = {selector.term.atom: index}
-            self.assertTrue(_ground(outcome.enabled, constants))
-            self.assertEqual(
-                (
-                    _ground(key_value.value, constants),
-                    _ground(result_value.value, constants),
+        with self.assertRaisesRegex(RelationError, "hidden AVG metadata"):
+            limit_family(
+                single(Relation(columns, rows)),
+                Expr(
+                    kind="literal",
+                    value=1,
+                    result_type="Uint64",
+                    nullable=False,
                 ),
-                payload[:2],
+                None,
+                smt.Script(),
+                "take",
             )
 
     def test_symbolic_singleton_rejects_hidden_intermediate_average_state(self):
@@ -1633,7 +1615,7 @@ class LimitOutcomeTest(unittest.TestCase):
         )
         with self.assertRaisesRegex(
             RelationError,
-            "cannot select hidden intermediate AVG state",
+            "cannot select hidden AVG metadata",
         ):
             limit_family(
                 single(

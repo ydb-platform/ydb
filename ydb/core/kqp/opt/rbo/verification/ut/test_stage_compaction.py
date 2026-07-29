@@ -10,7 +10,6 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import (
     single,
 )
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.scalar import (
-    IntegralAverageCertificate,
     IntegralAverageState,
     Value,
 )
@@ -74,16 +73,15 @@ class StageCompactionTest(unittest.TestCase):
         )
         self.assertEqual(explicit, rows)
 
-    def test_exclusive_compaction_keeps_integral_state_and_drops_result_certificate(self):
+    def test_exclusive_compaction_keeps_integral_state(self):
         columns = (
             Column("k", "Int64", False),
             Column("state", "Double", True),
-            Column("result", "Double", True),
         )
         route = smt.symbol("route", smt.BOOL)
         payloads = (
-            (10, 1, -4, 8, 100, 1),
-            (20, 2, -7, 9, 200, 3),
+            (10, 1, -4, 8),
+            (20, 2, -7, 9),
         )
         rows = tuple(
             Row(
@@ -101,14 +99,6 @@ class StageCompactionTest(unittest.TestCase):
                             count,
                         ),
                     ),
-                    "result": Value(
-                        "Double",
-                        smt.FALSE,
-                        smt.int_value(result),
-                        average_metadata=IntegralAverageCertificate(
-                            smt.int_value(proof_count)
-                        ),
-                    ),
                 },
                 self.OCCURRENCE,
                 frozenset((PartitionFact(route, task),)),
@@ -118,8 +108,6 @@ class StageCompactionTest(unittest.TestCase):
                 count,
                 minimum,
                 maximum,
-                result,
-                proof_count,
             ) in enumerate(payloads)
         )
 
@@ -132,8 +120,6 @@ class StageCompactionTest(unittest.TestCase):
         self.assertIsInstance(state, IntegralAverageState)
         assert isinstance(state, IntegralAverageState)
         self.assertEqual(state.count_bound, 2)
-        result_value = selected.values["result"]
-        self.assertIsNone(result_value.average_metadata)
         left_present = smt.not_(route)
         self.assertEqual(
             (
@@ -141,7 +127,6 @@ class StageCompactionTest(unittest.TestCase):
                 state.count,
                 state.minimum,
                 state.maximum,
-                result_value.value,
             ),
             tuple(
                 smt.ite(
@@ -149,7 +134,7 @@ class StageCompactionTest(unittest.TestCase):
                     smt.int_value(left),
                     smt.int_value(right),
                 )
-                for left, right in zip(payloads[0][:5], payloads[1][:5])
+                for left, right in zip(payloads[0], payloads[1])
             ),
         )
 

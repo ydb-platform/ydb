@@ -609,6 +609,49 @@ TEST_P(RdmaSendReceiveTestCqMode, RecoversAfterOversizedMainChannelEvent) {
     UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
 }
 
+// Verifies that Send/Receive is not enabled unless both peers advertise it:
+// the main channel stays on TCP while an RDMA-capable payload still uses RDMA READ.
+TEST_P(RdmaSendReceiveTestCqMode, FallsBackToTcpMainWhenPeerDoesNotSupportSendReceive) {
+    auto settingsCustomizer = [](ui32 nodeId, TInterconnectSettings& settings) {
+        if (nodeId == 2) {
+            EnableRdmaSendReceive(nodeId, settings);
+        }
+    };
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(GetParam()),
+        TTestICCluster::TCheckerFactory(), TDuration::Seconds(30), TNode::DefaultInflight(), settingsCustomizer);
+
+    constexpr size_t payloadSize = 5000;
+    auto receiverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBlobID(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBuffer(), "asymmetric send receive support");
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload().size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload()[0].ConvertToString(), TString(payloadSize, 'X'));
+    });
+    const TActorId receiver = cluster.RegisterActor(receiverPtr, 1);
+
+    WaitForInterconnectConnection(cluster, 2, 1);
+    TString lastRdmaStatus;
+    UNIT_ASSERT_C(WaitForRdmaChecksumStatus(cluster, 2, 1, "On | SoftwareChecksum", 20, lastRdmaStatus),
+        "last RDMA status: " << FormatLastRdmaStatus(lastRdmaStatus));
+
+    const ui64 bytesWrittenToSocketBefore = WaitForSessionCounter(cluster, 2, 1, "BytesWrittenToSocket");
+    const ui64 rdmaBytesReadScheduledBefore = WaitForSessionCounter(cluster, 1, 2, "RdmaBytesReadScheduled");
+
+    auto payload = cluster.GetNode(2)->GetRdmaMemPool()->AllocRcBuf(payloadSize, 0).value();
+    memset(payload.GetDataMut(), 'X', payloadSize);
+
+    auto ev = std::make_unique<TEvTestSerialization>();
+    ev->Record.SetBlobID(1);
+    ev->Record.SetBuffer("asymmetric send receive support");
+    ev->AddPayload(TRope(std::move(payload)));
+    UNIT_ASSERT(ev->AllowExternalDataChannel());
+    cluster.RegisterActor(new TSendActor(receiver, std::move(ev)), 2);
+
+    UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
+    UNIT_ASSERT(GetSessionCounter(cluster, 2, 1, "BytesWrittenToSocket") > bytesWrittenToSocketBefore);
+    UNIT_ASSERT(GetSessionCounter(cluster, 1, 2, "RdmaBytesReadScheduled") > rdmaBytesReadScheduledBefore);
+}
+
 INSTANTIATE_TEST_SUITE_P(
     RdmaSendReceive,
     RdmaSendReceiveTestCqMode,

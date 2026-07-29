@@ -1,13 +1,24 @@
 items:
+<<<<<<< HEAD
 - name: Common patterns
+=======
+- name: Local and External Topics
+  href: local-and-external-topics.md
+- name: Typical Patterns
+>>>>>>> 6c2f08c6922 (Auto-translate docs from PR #30237 (#48223))
   href: patterns.md
-- name: Writing to tables
+- name: Writing to Tables
   href: table-writing.md
-- name: Data enrichment
+- name: Data Enrichment
   href: enrichment.md
 - name: Topic read and write formats
   href: streaming-query-formats.md
-- name: Delivery guarantees
+- name: Data Delivery Guarantees
   href: guarantees.md
 - name: Checkpoints
   href: checkpoints.md
+<<<<<<< HEAD
+=======
+- name: Watermarks
+  href: watermarks.md
+>>>>>>> 6c2f08c6922 (Auto-translate docs from PR #30237 (#48223))

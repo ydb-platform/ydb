@@ -3004,6 +3004,38 @@ Y_UNIT_TEST(ExternalTable) {
     UNIT_ASSERT_C(minimalRecreated.find("`Key` Utf8 NOT NULL") != std::string::npos, minimalRecreated);
     UNIT_ASSERT_C(minimalRecreated.find("FORMAT = 'json_each_row'") != std::string::npos, minimalRecreated);
 
+    // Several partition columns: the list keeps its declared order and stays a
+    // JSON list. `ext_table` above covers the one-column case, where the array
+    // must not collapse into a scalar.
+    ExecuteQuery(session, R"(
+        CREATE EXTERNAL TABLE `ext_table_multi_partition` (
+            Key Uint64 NOT NULL,
+            Year Int32 NOT NULL,
+            Month Int32 NOT NULL
+        ) WITH (
+            DATA_SOURCE = "tier1",
+            LOCATION = "/folder2/",
+            FORMAT = "csv_with_names",
+            PARTITIONED_BY = "['Year', 'Month']"
+        );
+    )");
+    auto multiQuery = checker.ShowCreateExternalTable(session, "ext_table_multi_partition");
+    UNIT_ASSERT_C(multiQuery.find("PARTITIONED_BY = '[\"Year\", \"Month\"]'") != std::string::npos, multiQuery);
+
+    ExecuteQuery(session, "DROP EXTERNAL TABLE `ext_table_multi_partition`;");
+    ExecuteQuery(session, multiQuery);
+    auto multiRecreated = checker.ShowCreateExternalTable(session, "ext_table_multi_partition");
+    for (const auto& expected : {
+             "`Key` Uint64 NOT NULL",
+             "`Year` Int32 NOT NULL",
+             "`Month` Int32 NOT NULL",
+             "LOCATION = '/folder2/'",
+             "PARTITIONED_BY = '[\"Year\", \"Month\"]'",
+         }) {
+        UNIT_ASSERT_C(multiRecreated.find(expected) != std::string::npos,
+            "recreated ext_table_multi_partition is missing '" << expected << "': " << multiRecreated);
+    }
+
     // A path type mismatch must be reported instead of silently formatting the
     // wrong kind of object: `tier1` is an external data source, not an
     // external table.

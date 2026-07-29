@@ -27,6 +27,9 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
+#include <library/cpp/threading/future/async.h>
+
+#include <util/thread/pool.h>
 
 #include <grpcpp/server.h>
 #include <grpcpp/server_builder.h>
@@ -68,6 +71,19 @@ Y_UNIT_TEST_SUITE(ExternalDataSourceIamToken) {
 
         // ---- server with the real ticket parser + external data sources enabled ----
         auto settings = TServerSettings(port, authConfig);
+        // TAccessServiceMock implements the *v1* servicecontrol interface, but
+        // EnableAccessServiceV2Interface defaults to true -- which would make the
+        // ticket parser call accessservice.v2/Authenticate, get UNIMPLEMENTED, treat
+        // it as a *retryable* error, and retry forever (request hangs, never fails).
+        // ticket_parser_ut.cpp couples the two the same way via
+        // SetEnableAccessServiceV2Interface(IsAccessServiceV2Interface<TMock>()).
+        settings.SetEnableAccessServiceV2Interface(false);
+        // A runtime observer is only consulted by the test runtime's own mailbox
+        // dispatch loop; with real executor threads it is never invoked. Observers
+        // therefore require the simulated runtime, which in turn means every
+        // blocking client call must run off-thread while this thread pumps the
+        // runtime -- see runCall below (same pattern as TKikimrRunner::RunCall).
+        settings.SetUseRealThreads(false);
         settings.SetDomainName("Root");
         settings.CreateTicketParser = NKikimr::CreateTicketParser;
         settings.AppConfig->MutableFeatureFlags()->SetEnableExternalDataSources(true);
@@ -81,8 +97,32 @@ Y_UNIT_TEST_SUITE(ExternalDataSourceIamToken) {
             runtime->GetAppData(i).FeatureFlags.SetEnableExternalDataSources(true);
         }
 
+        // Run a blocking call on a worker thread while this thread advances the
+        // simulated runtime, so the actor system keeps making progress.
+        TAdaptiveThreadPool threadPool;
+        threadPool.Start();
+        auto runCall = [&](auto&& func) {
+            return runtime->WaitFuture(NThreading::Async(std::move(func), threadPool));
+        };
+
         TClient client(settings);
-        client.InitRootScheme();
+        runCall([&] { client.InitRootScheme(); return true; });
+
+        // ---- authorize the IAM user on /Root ----
+        // Authentication alone is not enough: TxProxy checks the ACL *before*
+        // forwarding to schemeshard (schemereq.cpp: "Access denied for user1@as on
+        // path /Root, with access CreateTable"), so without this the CREATE never
+        // produces a TEvModifySchemeTransaction and there is no token to capture.
+        {
+            NACLib::TDiffACL acl;
+            acl.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericFull, "user1@as");
+            const TString serializedAcl = acl.SerializeAsString();
+            runCall([&] { return client.ModifyACL("/", "Root", serializedAcl); });
+        }
+
+        // ---- diagnostics: surface auth + grpc activity so a hang is explainable ----
+        runtime->SetLogPriority(NKikimrServices::TICKET_PARSER, NActors::NLog::PRI_DEBUG);
+        runtime->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_DEBUG);
 
         // ---- observer: capture the serialized user token off the CREATE EDS
         //      modify-scheme event as it reaches schemeshard ----
@@ -105,16 +145,49 @@ Y_UNIT_TEST_SUITE(ExternalDataSourceIamToken) {
         auto driver = NYdb::TDriver(NYdb::TDriverConfig()
             .SetEndpoint("localhost:" + ToString(grpcPort))
             .SetDatabase("/Root")
+            // Async discovery is required under the simulated runtime: the default
+            // Sync mode blocks on ListEndpoints with a ~10s *real* deadline, which
+            // the simulated clock fast-forwards past while the actor system idles
+            // (the server then sees the deadline already expired). TKikimrRunner
+            // sets this for the same reason.
+            .SetDiscoveryMode(NYdb::EDiscoveryMode::Async)
             .SetAuthToken(iamToken));            // <- the raw IAM token the user presents
 
         NYdb::NQuery::TQueryClient queryClient(driver);
+
+        // Bound every request: ClientTimeout defaults to TDuration::Max(), so a
+        // stuck request would otherwise hang until the suite timeout with no info.
+        auto execSettings = NYdb::NQuery::TExecuteQuerySettings()
+            .ClientTimeout(TDuration::Seconds(30));
+
+        // Probe first: does *any* query work? Distinguishes "query service never
+        // became ready / auth never happened" from "the EDS DDL was rejected".
+        {
+            auto probe = runCall([&] {
+                return queryClient.ExecuteQuery(
+                    "SELECT 1;", NYdb::NQuery::TTxControl::NoTx(), execSettings).GetValueSync();
+            });
+            Cerr << "PROBE(SELECT 1) status=" << probe.GetStatus()
+                 << " issues=" << probe.GetIssues().ToString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL_C(probe.GetStatus(), NYdb::EStatus::SUCCESS,
+                "trivial query failed -- server/auth wiring is broken, not the EDS DDL: "
+                    + probe.GetIssues().ToString());
+        }
+
         const TString ddl = R"(
             CREATE EXTERNAL DATA SOURCE `/Root/MyExternalDataSource` WITH (
                 SOURCE_TYPE = "ObjectStorage",
                 LOCATION    = "my-bucket",
                 AUTH_METHOD = "NONE"
             );)";
-        auto res = queryClient.ExecuteQuery(ddl, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        auto res = runCall([&] {
+            return queryClient.ExecuteQuery(
+                ddl, NYdb::NQuery::TTxControl::NoTx(), execSettings).GetValueSync();
+        });
+        Cerr << "DDL(CREATE EDS) status=" << res.GetStatus()
+             << " issues=" << res.GetIssues().ToString() << Endl;
+        Cerr << "observer: sawCreateEds=" << sawCreateEds
+             << " capturedTokenBytes=" << capturedSerializedToken.size() << Endl;
         UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), NYdb::EStatus::SUCCESS, res.GetIssues().ToString());
 
         // ---- assertions: the token reached schemeshard, intact ----
@@ -127,7 +200,8 @@ Y_UNIT_TEST_SUITE(ExternalDataSourceIamToken) {
         UNIT_ASSERT_VALUES_EQUAL_C(parsed.GetOriginalUserToken(), iamToken,
             "the raw IAM token must be present in the TUserToken at the schemeshard operation");
 
-        driver.Stop(true);
+        runCall([&] { driver.Stop(true); return true; });
+        threadPool.Stop();
         accessServer->Shutdown();
     }
 }

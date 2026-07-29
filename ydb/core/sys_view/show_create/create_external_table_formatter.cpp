@@ -8,6 +8,7 @@
 
 #include <util/string/join.h>
 
+#include <algorithm>
 #include <format>
 #include <ranges>
 

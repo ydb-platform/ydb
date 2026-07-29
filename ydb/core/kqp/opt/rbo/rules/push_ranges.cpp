@@ -220,6 +220,24 @@ TIndexScore ScoreKeyOrder(const IPredicateRangeExtractor::TBuildResult& result, 
     return score;
 }
 
+// Ties are broken deterministically, independently of the order indexes are declared
+bool IsBetterCandidate(const TIndexScore& score, bool covering, const TString& name, const TIndexScore& bestScore, bool bestCovering,
+                       const TString& bestName) {
+    if (bestScore < score) {
+        return true;
+    }
+    // Index never wins a tie against the main table
+    if (score < bestScore || bestName.empty()) {
+        return false;
+    }
+    // Covering index beats non-covering one
+    if (covering != bestCovering) {
+        return covering;
+    }
+    // Lexicographically smallest index name wins
+    return name < bestName;
+}
+
 bool IsSelectableIndex(const TIndexDescription& index) {
     return index.Type != TIndexDescription::EType::GlobalAsync
         && index.Type != TIndexDescription::EType::GlobalJson
@@ -376,6 +394,8 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
     TVector<TString> lookupReadColumns;
 
     auto bestScore = ScoreKeyOrder(mainResult, mainKeyColumns.size());
+    TString bestIndexName;
+    bool bestCovering = false;
 
     if (!kqpCtx.Config->IsAutoIndexSelectionDisabled() && !bestScore.PointCoversKey) {
         const auto filterPhysical = FilterPhysicalColumns(*filter, *read, props);
@@ -412,12 +432,13 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
             }
 
             const auto score = ScoreKeyOrder(indexResult, indexKeyColumns.size());
-            const bool tieToCovering = covering && lookupIndexMeta && !(score < bestScore) && !(bestScore < score);
-            if (!(bestScore < score) && !tieToCovering) {
+            if (!IsBetterCandidate(score, covering, index.Name, bestScore, bestCovering, bestIndexName)) {
                 continue;
             }
 
             bestScore = score;
+            bestIndexName = index.Name;
+            bestCovering = covering;
             if (covering) {
                 chosenIndexMeta = indexMeta;
                 winnerResult = std::move(indexResult);

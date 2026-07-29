@@ -9,6 +9,7 @@ ydb/core/blobstorage/vdisk/synclog/ut_real_pdisk TBlobStorageSyncLogRealPDisk.Lo
 ydb/core/kqp/ut/federated_query/datastreams HasPathDatastreams.FederatedEdsPathMatches
 ydb/core/kqp/ut/federated_query/datastreams HasPathDatastreams.FederatedTopicRemoteNameMatches
 ydb/core/kqp/ut/federated_query/datastreams unittest.[*/*] chunk
+ydb/core/kqp/ut/olap KqpOlapOptimizer.SpecialSliceToOneLayer
 ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.IndexesActualization-QueryService
 ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.MinMaxIndexAppliedToDataAfterCompaction-QueryService-SchemeObjectDisabled
 ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.MinMaxIndexAppliedToDataAfterCompaction-QueryService-SchemeObjectEnabled
@@ -21,10 +22,14 @@ ydb/core/kqp/ut/olap/types KqpDyNumberColumnShard.TestGroupBy-SCAN_QUERY-COLUMNS
 ydb/core/kqp/ut/olap/types KqpDyNumberColumnShard.TestSimpleQueries-EXECUTE_QUERY-COLUMNSHARD-ARROW
 ydb/core/kqp/ut/olap/types KqpIntervalColumnShard.TestSimpleQueries-EXECUTE_QUERY-COLUMNSHARD-ARROW
 ydb/core/kqp/ut/olap/types KqpIntervalColumnShard.TestSimpleQueries-EXECUTE_QUERY-COLUMNSHARD-CSV
+ydb/core/kqp/ut/olap/types KqpOlapJson.CompactionVariants[1,true,1024,1000,0,0.5]
 ydb/core/kqp/ut/olap/types KqpUuidColumnShard.TestFilterNulls-EXECUTE_QUERY-COLUMNSHARD-YDB_VALUE
 ydb/core/kqp/ut/olap/types KqpUuidColumnShard.TestGroupBy-EXECUTE_QUERY-COLUMNSHARD-ARROW
+ydb/core/kqp/ut/olap/types KqpUuidColumnShard.TestSimpleQueries-EXECUTE_QUERY-COLUMNSHARD-ARROW
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable-ColumnStore
 ydb/core/kqp/ut/query KqpAnalyzeOperations.AnalyzeOperationsLifecycle
+ydb/core/kqp/ut/scheme KqpOlapScheme.AddColumnSimpleReader
+ydb/core/kqp/ut/scheme KqpOlapTypes.PgFloat8Column
 ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableMultipleTime
 ydb/core/kqp/ut/tli KqpTli.BasicWithWilsonTracing
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
@@ -66,20 +71,32 @@ ydb/tests/functional/sqs/migration/topic_creation/multinode ydb.tests.functional
 ydb/tests/functional/sqs/migration/topic_creation/multinode ydb.tests.functional.sqs.multinode.test_multinode_cluster.py.TestSqsMultinodeCluster.test_has_messages_counters[stop_node-std]
 ydb/tests/functional/tpc/medium py3test.[test_workload_manager.py */*] chunk
 ydb/tests/functional/tpc/medium test_workload_manager.py.TestClickbenchWMComputeSchedulerP1T1.test
+ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[10]
+ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[11]
 ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[12]
+ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[13]
+ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[14]
 ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[15]
+ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[16]
+ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[17]
 ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[18]
 ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[19]
 ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[20]
 ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[22]
+ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[6]
 ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[7]
+ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[8]
+ydb/tests/functional/tpc/medium/tpch test_duplicates.py.TestTpchDuplicatesZeroLevel.test_tpch[9]
+ydb/tests/functional/tpc/medium/tpch test_s_float.py.TestTpchS0_1.test_tpch[18]
 ydb/tests/olap order_by_with_limit.py.TestOrderBy.test_random
 ydb/tests/olap tablets_movement.py.TestTabletsMovement.test[COLUMN]
+ydb/tests/olap test_cs_many_updates.py.TestCSManyUpdates.test_many_updates[bulk_upsert_update_upsert]
 ydb/tests/olap test_cs_many_updates.py.TestCSManyUpdates.test_many_updates[update]
 ydb/tests/olap/column_compression/create py3test.[*/*] chunk
 ydb/tests/olap/column_compression/create set_compression.py.TestCreateWithColumnCompression.test_add_with_compression[zstd_18_compression-algorithm=zstd,level=18-2]
 ydb/tests/olap/column_compression/create set_compression.py.TestCreateWithColumnCompression.test_add_with_compression[zstd_19_compression-algorithm=zstd,level=19-2]
 ydb/tests/olap/column_compression/create set_compression.py.TestCreateWithColumnCompression.test_add_with_compression[zstd_5_compression-algorithm=zstd,level=5-2]
+ydb/tests/olap/column_compression/create set_compression.py.TestCreateWithColumnCompression.test_add_with_compression[zstd_9_compression-algorithm=zstd,level=9-2]
 ydb/tests/olap/delete test_delete_by_explicit_row_id.py.TestDeleteByExplicitRowId.test_delete_row_by_explicit_row_id
 ydb/tests/olap/ttl_tiering tier_delete.py.TestTierDelete.test_delete_s3_ttl
 ydb/tests/olap/ttl_tiering ttl_delete_s3.py.TestDeleteS3Ttl.test_delete_s3_tiering

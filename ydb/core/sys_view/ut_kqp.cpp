@@ -2024,7 +2024,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 32);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 33);
 
             THashSet<TString> names;
             for (const auto& child : children) {
@@ -2032,6 +2032,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::SysView);
             }
             UNIT_ASSERT(names.contains("partition_stats"));
+            UNIT_ASSERT(names.contains("udf_modules"));
         }
         {
             TSchemeClient schemeClient(driver, TCommonClientSettings().Database("/Root/Tenant1"));
@@ -2044,7 +2045,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
 
             auto children = result.GetChildren();
 
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 26);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 27);
 
             THashSet<TString> names;
             for (const auto& child : children) {
@@ -2052,6 +2053,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 UNIT_ASSERT_VALUES_EQUAL(child.Type, ESchemeEntryType::SysView);
             }
             UNIT_ASSERT(names.contains("partition_stats"));
+            UNIT_ASSERT(names.contains("udf_modules"));
         }
         {
             TSchemeClient schemeClient(driver, TCommonClientSettings().Database("/Root/Tenant1"));

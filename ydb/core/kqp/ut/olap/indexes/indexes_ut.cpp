@@ -167,9 +167,9 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 )");
         ExecQuery(kikimr, UseQueryService,
             TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
+        csController->WaitActualization(TDuration::Seconds(30), /*waitWrites=*/true);
         // Make the just-actualized portions (with index data) visible to the following scan.
         AdvancePlanStep(kikimr);
-        csController->WaitActualization(TDuration::Seconds(10));
         {
             auto it = tableClient
                           .StreamExecuteScanQuery(R"(

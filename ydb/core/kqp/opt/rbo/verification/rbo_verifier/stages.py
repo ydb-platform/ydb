@@ -34,7 +34,6 @@ from .relation import (
 from .scalar import (
     DecimalAverageState,
     Encoder as ScalarEncoder,
-    IntegralAverageCertificate,
     IntegralAverageState,
     Value,
 )
@@ -534,27 +533,6 @@ def _merge_exclusive_rows(rows: list[Row], columns: tuple[Column, ...]) -> Row:
             alternative.average_metadata
             for alternative in alternatives
         ]
-        result_states = [
-            state
-            for state in average_states
-            if isinstance(state, IntegralAverageCertificate)
-        ]
-        if result_states:
-            if any(
-                state is not None
-                and not isinstance(state, IntegralAverageCertificate)
-                for state in average_states
-            ):
-                raise StageError(
-                    "exclusive row compaction received different AVG state types"
-                )
-            if any(state.count.sort != smt.INT for state in result_states):
-                raise StageError(
-                    "exclusive row compaction received invalid integral AVG "
-                    "result state"
-                )
-            # Completed certificates are consumed before stage routing.
-            average_states = [None] * len(average_states)
         average_state = None
         if any(state is not None for state in average_states):
             if any(state is None for state in average_states):
@@ -598,8 +576,7 @@ def _merge_exclusive_rows(rows: list[Row], columns: tuple[Column, ...]) -> Row:
                     ),
                     count_bound=max(state.count_bound for state in decimal_states),
                 )
-            else:
-                assert isinstance(first_state, IntegralAverageState)
+            elif isinstance(first_state, IntegralAverageState):
                 integral_states = [
                     state
                     for state in states
@@ -627,6 +604,10 @@ def _merge_exclusive_rows(rows: list[Row], columns: tuple[Column, ...]) -> Row:
                     minimum=state_minimum,
                     maximum=state_maximum,
                     count_bound=max(state.count_bound for state in integral_states),
+                )
+            else:
+                raise StageError(
+                    "exclusive row compaction received unsupported AVG metadata"
                 )
         values[column.name] = Value(
             alternatives[0].type,

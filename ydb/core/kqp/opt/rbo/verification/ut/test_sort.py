@@ -33,7 +33,6 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import (
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.scalar import (
     DecimalAverageState,
     Encoder as ScalarEncoder,
-    IntegralAverageCertificate,
     IntegralAverageState,
     Value,
 )
@@ -1904,15 +1903,14 @@ class SortingNetworkEncodingTest(unittest.TestCase):
             },
         )
 
-    def test_network_keeps_integral_state_and_drops_result_certificate(self):
+    def test_network_keeps_integral_state(self):
         columns = (
             Column("k", "Int64", False),
             Column("state", "Double", True),
-            Column("result", "Double", True),
         )
         payloads = (
-            (10, 1, -4, 8, 100, 1),
-            (20, 2, -7, 9, 200, 3),
+            (10, 1, -4, 8),
+            (20, 2, -7, 9),
         )
         rows = tuple(
             Row(
@@ -1930,17 +1928,9 @@ class SortingNetworkEncodingTest(unittest.TestCase):
                             count,
                         ),
                     ),
-                    "result": Value(
-                        "Double",
-                        smt.FALSE,
-                        smt.int_value(result),
-                        average_metadata=IntegralAverageCertificate(
-                            smt.int_value(proof_count)
-                        ),
-                    ),
                 },
             )
-            for carrier, count, minimum, maximum, result, proof_count in payloads
+            for carrier, count, minimum, maximum in payloads
         )
         script = smt.Script()
         family = relation._sorting_network_family(
@@ -1967,21 +1957,18 @@ class SortingNetworkEncodingTest(unittest.TestCase):
                 self.assertIsInstance(state, IntegralAverageState)
                 assert isinstance(state, IntegralAverageState)
                 self.assertEqual(state.count_bound, 2)
-                result_value = row.values["result"]
-                self.assertIsNone(result_value.average_metadata)
                 sequence.append((
                     _ground(state_value.value, constants, script),
                     _ground(state.count, constants, script),
                     _ground(state.minimum, constants, script),
                     _ground(state.maximum, constants, script),
-                    _ground(result_value.value, constants, script),
                 ))
             observed.add(tuple(sequence))
         self.assertEqual(
             observed,
             {
-                tuple(payload[:5] for payload in payloads),
-                tuple(payload[:5] for payload in reversed(payloads)),
+                payloads,
+                tuple(reversed(payloads)),
             },
         )
 

@@ -199,8 +199,11 @@ public:
 
         AFL_ENSURE(state.LocksInflight == 0);
 
-        for (const auto& row : rows) {
-            worker->AddInputRow(row);
+        {
+            const auto guard = Settings.TypeEnv.BindAllocator();
+            for (const auto& row : rows) {
+                worker->AddInputRow(row);
+            }
         }
 
         StartLockTask(cookie, state);
@@ -208,7 +211,10 @@ public:
 
     void StartLockTask(ui64 cookie, TLockState& state) {
         auto& worker = state.Worker;
-        worker->BuildLockRequests(Partitioning, LockRequestId);
+        {
+            const auto guard = Settings.TypeEnv.BindAllocator();
+            worker->BuildLockRequests(Partitioning, LockRequestId);
+        }
 
         while (true) {
             auto [shardId, lockRequest] = worker->PopNextLockRequest();
@@ -234,12 +240,15 @@ public:
         AFL_ENSURE(HasResult(cookie) || IsEmpty(cookie));
         auto& state = CookieToLockState.at(cookie);
 
-        for (const auto& [row, modified] : state.CollectedRows) {
-            callback(row, modified);
-        }
+        {
+            const auto guard = Settings.TypeEnv.BindAllocator();
+            for (const auto& [row, modified] : state.CollectedRows) {
+                callback(row, modified);
+            }
 
-        LockRowsCount += state.CollectedRows.size();
-        state.CollectedRows.clear();
+            LockRowsCount += state.CollectedRows.size();
+            state.CollectedRows.clear();
+        }
     }
 
     TTableId GetTableId() const override {
@@ -420,15 +429,18 @@ public:
 
         lockState.Worker->AddLockResult(record.GetRequestId(), ev->Get());
 
-        lockState.Worker->ProcessRowsByLockResult(record.GetRequestId(),
-            [&](const TOwnedCellVec& row, bool locked, bool modified) {
-                if (locked) {
-                    lockState.CollectedRows.emplace_back(row, modified);
-                } else {
-                    // skipped absent row
-                    AFL_ENSURE(!modified);
-                }
-            });
+        {
+            const auto guard = Settings.TypeEnv.BindAllocator();
+            lockState.Worker->ProcessRowsByLockResult(record.GetRequestId(),
+                [&](const TOwnedCellVec& row, bool locked, bool modified) {
+                    if (locked) {
+                        lockState.CollectedRows.emplace_back(row, modified);
+                    } else {
+                        // skipped absent row
+                        AFL_ENSURE(!modified);
+                    }
+                });
+        }
 
         --lockState.LocksInflight;
         LockIdToState.erase(requestIt);

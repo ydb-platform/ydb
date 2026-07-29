@@ -1027,6 +1027,70 @@ void TestIsDroppedAtExactDropSnapshot() {
     }
 }
 
+// Verifies the MVCC / time-travel guarantee of DropTable: a read at a snapshot that predates the
+void TestDropPreservesPreDropSnapshot() {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+    auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
+
+    ui64 writeId = 0;
+    ui64 tableId = 1;
+    ui64 txId = 100;
+
+    auto planStep = SetupSchema(runtime, sender, tableId, TestTableDescription(), "none", ++txId);
+
+    // Write and commit 100 rows.
+    TString data = MakeTestBlob({ 0, 100 }, testYdbSchema);
+    std::vector<ui64> writeIds;
+    UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, data, testYdbSchema, true, &writeIds));
+    planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+    PlanCommit(runtime, sender, planStep, txId);
+
+    // Snapshot taken while the table is still alive and fully populated.
+    const auto snapshotBeforeDrop = NOlap::TSnapshot(planStep, txId);
+
+    // Sanity: data is visible before the drop.
+    {
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, snapshotBeforeDrop);
+        reader.SetReplyColumnIds(TTestSchema::GetColumnIds(TTestSchema::YdbSchema(), { TTestSchema::DefaultTtlColumn }));
+        auto rb = reader.ReadAll();
+        UNIT_ASSERT(reader.IsCorrectlyFinished());
+        UNIT_ASSERT(rb);
+        UNIT_ASSERT_VALUES_EQUAL(rb->num_rows(), 100);
+    }
+
+    // Drop the table at a strictly later version than snapshotBeforeDrop.
+    planStep = ProposeSchemaTx(runtime, sender, TTestSchema::DropTableTxBody(tableId, 2), ++txId);
+    PlanSchemaTx(runtime, sender, { planStep, txId });
+
+    // a read at the pre-drop snapshot must STILL see all 100 rows,
+    // because the drop version is greater than the read snapshot.
+    {
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, snapshotBeforeDrop);
+        reader.SetReplyColumnIds(TTestSchema::GetColumnIds(TTestSchema::YdbSchema(), { TTestSchema::DefaultTtlColumn }));
+        auto rb = reader.ReadAll();
+        UNIT_ASSERT(reader.IsCorrectlyFinished());
+        UNIT_ASSERT(rb);
+        UNIT_ASSERT_VALUES_EQUAL(rb->num_rows(), 100);
+    }
+
+    // A read at the drop snapshot (>= drop version) must see an empty table.
+    {
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
+        reader.SetReplyColumnIds(TTestSchema::GetColumnIds(TTestSchema::YdbSchema(), { TTestSchema::DefaultTtlColumn }));
+        auto rb = reader.ReadAll();
+        UNIT_ASSERT(reader.IsCorrectlyFinished());
+        UNIT_ASSERT(!rb || !rb->num_rows());
+    }
+}
+
 void TestCompaction(std::optional<ui32> numWrites = {}) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
@@ -1351,6 +1415,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
     }
     Y_UNIT_TEST(IsDroppedAtExactDropSnapshot) {
         TestIsDroppedAtExactDropSnapshot();
+    }
+    Y_UNIT_TEST(DropPreservesPreDropSnapshot) {
+        TestDropPreservesPreDropSnapshot();
     }
 }
 

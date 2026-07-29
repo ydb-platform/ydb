@@ -3,6 +3,7 @@
 #include <ydb/library/actors/interconnect/interconnect_counters.h>
 #include <ydb/library/actors/interconnect/outgoing_stream.h>
 #include <ydb/library/actors/interconnect/ut/protos/interconnect_test.pb.h>
+#include <ydb/library/actors/testlib/test_runtime.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -265,6 +266,51 @@ void AssertChecksumsWhenDisablingIsNotNegotiated(bool useXxhash) {
     UNIT_ASSERT_VALUES_EQUAL(*pushData.Checksum, CalculateExpectedChecksum(event.XdcPayloadData, useXxhash));
 }
 
+class TAbortActiveSerializerActor : public TActorBootstrapped<TAbortActiveSerializerActor> {
+public:
+    explicit TAbortActiveSerializerActor(TActorId replyTo)
+        : ReplyTo(replyTo)
+    {}
+
+    void Bootstrap() {
+        auto common = MakeIntrusive<TInterconnectProxyCommon>();
+        common->MonCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+        std::shared_ptr<IInterconnectMetrics> metrics = CreateInterconnectCounters(common);
+        metrics->SetPeerInfo("peer", "1", "peer");
+
+        auto releaseCallback = [](THolder<IEventBase>) {};
+        TEventHolderPool pool(common, releaseCallback);
+
+        TSessionParams params;
+        params.AllowRdmaSendReceive = true;
+
+        auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+        TEventOutputChannel channel(1, 1, 64 << 20, metrics, params, memPool);
+
+        auto* ev = new TEvTestSerialization;
+        ev->Record.SetBuffer(TString(2 * TTcpPacketBuf::PacketDataLen, 'X'));
+        auto evHandle = MakeHolder<IEventHandle>(
+            SelfId(), ReplyTo, ev, IEventHandle::FlagTrackDelivery);
+        channel.Push(*evHandle, pool, TInstant::Zero());
+
+        NInterconnect::TOutgoingStream mainStream(memPool);
+        NInterconnect::TOutgoingStream xdcStream;
+        Y_ABORT_UNLESS(mainStream.PreallocateForWriting(
+            sizeof(TTcpPacketHeader_v2) + TTcpPacketBuf::PacketDataLen));
+        TTcpPacketOutTask task(params, mainStream, xdcStream, true);
+
+        Y_ABORT_UNLESS(!channel.FeedBuf(task, 1));
+        Y_ABORT_UNLESS(channel.State == TEventOutputChannel::EState::BODY);
+        channel.ProcessUndelivered(pool, nullptr);
+
+        PassAway();
+    }
+
+private:
+    const TActorId ReplyTo;
+};
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(EventOutputChannel) {
@@ -291,6 +337,19 @@ Y_UNIT_TEST_SUITE(EventOutputChannel) {
         TTcpPacketOutTask task(params, mainStream, xdcStream);
 
         UNIT_ASSERT_EXCEPTION(channel.FeedBuf(task, 1), TExSerializedEventTooLarge);
+    }
+
+    Y_UNIT_TEST(AbortsActiveCoroutineSerializerOnUndelivered) {
+        TTestActorRuntimeBase runtime;
+        runtime.Initialize();
+
+        const TActorId edge = runtime.AllocateEdgeActor();
+        runtime.Register(new TAbortActiveSerializerActor(edge));
+
+        TAutoPtr<IEventHandle> handle;
+        const auto* event = runtime.GrabEdgeEvent<TEvents::TEvUndelivered>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(event->SourceType, TEvTestSerialization::EventType);
+        UNIT_ASSERT_VALUES_EQUAL(event->Reason, TEvents::TEvUndelivered::Disconnected);
     }
 
     Y_UNIT_TEST(DisabledPayloadChecksums) {

@@ -50,6 +50,11 @@ jobs:
           YDBDOC_MODEL_TRANSLATE: ${{ vars.YDBDOC_MODEL_TRANSLATE }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           YDBDOC_REPO_PATH: ${{ github.workspace }}
+          GITHUB_ACTOR: ${{ github.event.sender.login }}
+          YDBDOC_ALLOWED_ACTORS: ${{ vars.YDBDOC_ALLOWED_ACTORS }}
+          YDBDOC_DAILY_BUDGET_RUB: ${{ vars.YDBDOC_DAILY_BUDGET_RUB }}
+          YDBDOC_TRANSCRIPT_BACKEND: ydb
+          YDB_SA_KEY: ${{ secrets.YDB_SA_KEY }}
 
   trigger-translation-ci:
     needs: ydbdoc-review
@@ -100,9 +105,9 @@ jobs:
               owner,
               repo,
               issue_number: translationPr.number,
-              labels: ['ok-to-test'],
+              labels: ['rebuild_docs', 'ok-to-test'],
             });
 
             core.info(
-              `Added ok-to-test to translation PR #${translationPr.number}`
+              `Added rebuild_docs and ok-to-test to translation PR #${translationPr.number}`
             );

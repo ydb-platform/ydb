@@ -99,8 +99,11 @@ private:
                     return TCell();
                 }});
                 insert({TSchema::ResourcePool::ColumnId, [] (const NWorkloadManager::TResourcePoolClassifierConfig& config) {
-                    const auto& resourcePool = config.GetConfigJson()["resource_pool"].GetString();
-                    return TCell(resourcePool.data(), resourcePool.size());
+                    if (config.GetConfigJson().Has("resource_pool")) {
+                        const auto& resourcePool = config.GetConfigJson()["resource_pool"].GetString();
+                        return TCell(resourcePool.data(), resourcePool.size());
+                    }
+                    return TCell();
                 }});
                 insert({TSchema::HasAppName::ColumnId, [] (const NWorkloadManager::TResourcePoolClassifierConfig& config) {
                     if (config.GetConfigJson().Has("has_app_name")) {

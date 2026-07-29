@@ -27,6 +27,8 @@
 /ydb/tests/stress/olap_workload @ydb-platform/cs
 /ydb/tests/functional/tpc @ydb-platform/cs
 /ydb/tests/compatibility/olap @ydb-platform/cs
+/ydb/core/keyvalue @ydb-platform/cs
+/ydb/services/keyvalue @ydb-platform/cs
 
 #Distributed System Infrastructure Team @ijon TEAM:@ydb-platform/system-infra
 /ydb/core/mind/hive @ydb-platform/system-infra

@@ -93,6 +93,16 @@ namespace NActors {
         return TActivationContext::Send(ev);
     }
 
+    bool IActor::SendActorLivenessCheck(const TActorId& target, ui64 cookie) const noexcept {
+        return Send(new IEventHandle(
+            TEvents::TSystem::CheckActorLiveness,
+            TEvents::TEvCheckActorLiveness::RequestFlags,
+            target,
+            SelfId(),
+            nullptr,
+            cookie));
+    }
+
     bool IActor::Send(const TActorId& recipient, IEventBase* ev, ui32 flags, ui64 cookie, NWilson::TTraceId traceId) const noexcept {
         return SelfActorId.Send(recipient, ev, flags, cookie, std::move(traceId));
     }

@@ -19,6 +19,7 @@ SRCS(
     inline_generic_in_exists_subplan.cpp
     kqp_cbo_trees.cpp
     peephole_predicate.cpp
+    merge_union_all.cpp
     map/prune_dead_outputs.cpp
     map/push_map_elements_into_map.cpp
     map/push_map_elements_through_aggregate.cpp

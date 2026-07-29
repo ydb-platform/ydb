@@ -16,6 +16,8 @@
 // liburing may define macros that clash with project headers.
 #include <ydb/library/uring/liburing_linux.h>
 
+#include <library/cpp/monlib/service/pages/templates.h>
+
 #include <util/system/env.h>
 #include <util/system/hp_timer.h>
 
@@ -39,15 +41,23 @@ namespace NActors {
         constexpr unsigned CqeBatchSize = 64;
         constexpr size_t ReadBufferSize = 262144;
         constexpr size_t MinReadBufferSize = 65536;
-        constexpr size_t WriteBufferSize = 262144;
-        constexpr size_t MinWriteBufferSize = 65536;
+        constexpr size_t MinWriteBufferSize = 4096;
+        constexpr size_t MaxWriteBufferSize = 262144;
         constexpr size_t MaxSpansPerWrite = 64;
-        constexpr size_t SerializeWindowSize = 65536;
         constexpr size_t MinSerializeWindowSize = 4096;
+        constexpr size_t MaxSerializeWindowSize = 262144;
         constexpr ui32 RebalanceTimerMs = 500; // drives MaybeOffload and also issues ping packet
         constexpr ui32 OffloadBusyThreshold = 700000; // ppm
         constexpr ui32 StealBusyThreshold = 300000; // ppm
     }
+
+    struct TEvUringMonRequest : TEventLocal<TEvUringMonRequest, static_cast<ui32>(ENetwork::EvUringMonRequest)> {
+        NMon::TEvHttpInfoRes::TPtr Ev;
+
+        TEvUringMonRequest(NMon::TEvHttpInfoRes::TPtr ev)
+            : Ev(std::move(ev))
+        {}
+    };
 
     class TUringEngine final : public IUringEngine {
         TActorSystem *ActorSystem = nullptr; // bound after construction via SetActorSystem()
@@ -77,12 +87,16 @@ namespace NActors {
             bool UnregisterRequested = false;
             const bool SendPings;
             TRcBuf WriteBuffer;
+            size_t WriteBufferSize = MinWriteBufferSize;
             std::deque<TContiguousSpan> OutgoingSpans;
             iovec Iov[MaxSpansPerWrite];
             size_t IovLen = 0;
             size_t UnsentBytes = 0;
+            size_t BytesToWriteLastTime = 0;
             int ReadPendingRingIdx = -1;
             ui32 PreferredRingIdx = 0;
+            std::atomic_uint64_t IncomingSeqNo{1};
+            ui64 ExpectedSeqNo = 1;
 
             EMigrateState MigrateState = EMigrateState::None;
             ui32 MigrateTargetShard = 0;
@@ -93,6 +107,10 @@ namespace NActors {
 
             THashMap<TActorId, TIntrusivePtr<IReceiveCallback>> ReceiveCallbacks;
             NMonitoring::TDynamicCounters::TCounterPtr EventsReceived;
+
+            std::vector<TIncomingEventQueue::TRecord> PendingRecordsHeap;
+
+            size_t SerializeWindowSize = MinSerializeWindowSize;
 
             TRegisteredSession(ui32 shardIdx, TIntrusivePtr<NInterconnect::TStreamSocket> socket,
                     TActorId sessionId, bool checksumming, TScopeId peerScopeId,
@@ -147,17 +165,11 @@ namespace NActors {
             // serialization/sending
 
             bool Serialize() {
-                if (UnsentBytes >= MinSerializeWindowSize && !Serializer.HasOutOfBandTraffic()) {
-                    return false;
-                }
-
                 Serializer.ResetCounters();
 
                 while (UnsentBytes < SerializeWindowSize && OutgoingSpans.size() < MaxSpansPerWrite) {
                     if (WriteBuffer.size() < MinWriteBufferSize) { // (re)allocate write buffer
                         WriteBuffer = TRcBuf::Uninitialized(WriteBufferSize);
-                    } else { // align write buffer to 64-byte boundary
-                        WriteBuffer.TrimFront(WriteBuffer.size() - WriteBuffer.size() % 64);
                     }
                     const size_t numBytesProduced = Serializer.ProduceOutputStream(WriteBuffer, &OutgoingSpans,
                         SerializeWindowSize - UnsentBytes);
@@ -168,6 +180,13 @@ namespace NActors {
                     UnsentBytes += numBytesProduced;
                 }
 
+                const size_t numb = Serializer.GetNumBytesInScratchBuffers();
+                if (numb >= WriteBufferSize * 2 && WriteBufferSize < MaxWriteBufferSize) {
+                    WriteBufferSize *= 2;
+                } else if (numb < WriteBufferSize / 2 && WriteBufferSize > MinWriteBufferSize) {
+                    WriteBufferSize /= 2;
+                }
+
                 return true;
             }
 
@@ -175,6 +194,7 @@ namespace NActors {
                 // Build the iovec WITHOUT consuming spans: writev may complete partially, so a span is only
                 // dropped once the bytes it covers have actually been confirmed sent (see ApplyBytesWritten).
                 IovLen = 0;
+                BytesToWriteLastTime = 0;
                 for (const TContiguousSpan& span : OutgoingSpans) {
                     if (IovLen >= MaxSpansPerWrite) {
                         break;
@@ -183,11 +203,21 @@ namespace NActors {
                         .iov_base = const_cast<char*>(span.data()),
                         .iov_len = span.size(),
                     };
+                    BytesToWriteLastTime += span.size();
                 }
                 return IovLen != 0;
             }
 
             void ApplyBytesWritten(size_t num, std::vector<ui64> *eventToWireTime) {
+                // Check if we need to resize serialization window. If we have issued some data and all of it has been
+                // successfully written, and it was limited by serialization window, we can increase it. If we have
+                // serialized less than the window, we can decrease the window.
+                if (num == BytesToWriteLastTime && BytesToWriteLastTime == SerializeWindowSize) {
+                    SerializeWindowSize = Min(SerializeWindowSize + MinSerializeWindowSize, MaxSerializeWindowSize);
+                }  else if (UnsentBytes < SerializeWindowSize) {
+                    SerializeWindowSize = Max(SerializeWindowSize - MinSerializeWindowSize, MinSerializeWindowSize);
+                }
+
                 // Advance past exactly the bytes the kernel accepted. A writev can be short (e.g. under
                 // backpressure or on a real network), so drop only fully-sent spans and trim the span that
                 // straddles the boundary; the rest stay queued and are retried by the next writev.
@@ -295,6 +325,56 @@ namespace NActors {
                     && !UnregisterRequested
                     && !Terminated;
             }
+
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+            void RenderHtml(IOutputStream& str) const {
+                HTML(str) {
+                    DIV_CLASS("panel panel-info") {
+                        DIV_CLASS("panel-heading") {
+                            str << "Uring engine details";
+                        }
+                        DIV_CLASS("panel-body") {
+                            TABLE_CLASS("table") {
+                                TABLEHEAD() {
+                                    TABLER() {
+                                        TABLEH() { str << "Parameter"; }
+                                        TABLEH() { str << "Value"; }
+                                    }
+                                }
+                                TABLEBODY() {
+#define PARAM2(K, V) TABLER() { TABLED() { str << (K); } TABLED() { str << (V); } }
+#define PARAM(P) PARAM2(#P, P)
+                                    PARAM2("OwnerShard", OwnerShard.load())
+                                    PARAM2("Socket", (int)*Socket)
+                                    PARAM(Terminated)
+                                    PARAM(ReadPending)
+                                    PARAM(WritePending)
+                                    PARAM(UnregisterRequested)
+                                    PARAM(SendPings)
+                                    PARAM2("WriteBuffer size", WriteBuffer.size())
+                                    PARAM(WriteBufferSize)
+                                    PARAM2("OutgoingSpans size", OutgoingSpans.size())
+                                    PARAM(UnsentBytes)
+                                    PARAM(ReadPendingRingIdx)
+                                    PARAM(PreferredRingIdx)
+                                    PARAM2("IncomingSeqNo", IncomingSeqNo.load())
+                                    PARAM(ExpectedSeqNo)
+                                    PARAM2("MigrateState", (int)MigrateState)
+                                    PARAM(MigrateTargetShard)
+                                    PARAM(MigrateSourceShard)
+                                    PARAM2("ClockSkew", ClockSkew->load())
+                                    PARAM2("PingRTT", PingRTT->load())
+                                    PARAM2("ReceiveCallbacks size", ReceiveCallbacks.size())
+                                    PARAM2("PendingRecordsHeap size", PendingRecordsHeap.size())
+                                    PARAM(SerializeWindowSize)
+                                    PARAM2("NumBytesInScratchBuffers", Serializer.GetNumBytesInScratchBuffers())
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         };
 
         // In-process load signal consumed by rebalancing (not the 15s monitoring scrape path).
@@ -378,6 +458,8 @@ namespace NActors {
             NMonitoring::TDynamicCounters::TCounterPtr WriteUnavail;
             NMonitoring::TDynamicCounters::TCounterPtr SessionsMigratedOut;
             NMonitoring::TDynamicCounters::TCounterPtr SessionsMigratedIn;
+            NMonitoring::TDynamicCounters::TCounterPtr OutOfOrderCameIn;
+            NMonitoring::TDynamicCounters::TCounterPtr OutOfOrderProcessed;
 
             NMonitoring::TDynamicCounters::TCounterPtr OtherTotalTime;
             NMonitoring::TDynamicCounters::TCounterPtr CompleteWaitTotalTime;
@@ -494,6 +576,8 @@ namespace NActors {
                 , COUNTER(WriteUnavail, true)
                 , COUNTER(SessionsMigratedOut, true)
                 , COUNTER(SessionsMigratedIn, true)
+                , COUNTER(OutOfOrderCameIn, true)
+                , COUNTER(OutOfOrderProcessed, true)
 #define TOTAL_TIME(NAME) NAME(shardCounters->GetCounter("TotalTime/" #NAME, true))
                 , TOTAL_TIME(OtherTotalTime)
                 , TOTAL_TIME(CompleteWaitTotalTime)
@@ -561,78 +645,28 @@ namespace NActors {
 
             void Register(std::unique_ptr<TRegisteredSession> session) {
                 ++*SessionsRegistered;
+
+                // this would be the session's first event, so its sequencing is not the problem
                 SendInternal(reinterpret_cast<ui64>(session.release()), static_cast<ui32>(ENetwork::EvRegisterSession),
-                    {}, nullptr);
+                    {}, nullptr, false);
             }
 
             void AcceptMigrated(std::unique_ptr<TRegisteredSession> session) {
                 ++*SessionsMigratedIn;
+
+                // this event isn't the first one, but its sequence doesn't matter, because all further events are kept
+                // in order and forwarded to the new processor
                 SendInternal(reinterpret_cast<ui64>(session.release()), static_cast<ui32>(ENetwork::EvRegisterSession),
-                    {}, nullptr);
+                    {}, nullptr, false);
             }
 
-            void Enqueue(ui64 conn, std::unique_ptr<IEventHandle> ev, TIntrusivePtr<IReceiveCallback> replyCallback) {
-                SendImpl(conn, std::move(ev), std::move(replyCallback));
-            }
-
-            void Send(ui64 conn, std::unique_ptr<IEventHandle> ev, TIntrusivePtr<IReceiveCallback> replyCallback) {
-                ++*EventsSent;
-                SendImpl(conn, std::move(ev), std::move(replyCallback));
-            }
-
-            void Unregister(ui64 conn) {
-                ++*SessionsUnregistered;
-                SendInternal(conn, static_cast<ui32>(ENetwork::EvUnregisterSession), {}, nullptr);
-            }
-
-            void RegisterReceiveCallback(ui64 conn, TActorId localActorId, TIntrusivePtr<IReceiveCallback> callback) {
-                ++*(callback ? DirectReceiveCallbacksRegistered : DirectReceiveCallbacksUnregistered);
-                SendInternal(conn, static_cast<ui32>(ENetwork::EvRegisterCallback), localActorId, std::move(callback));
-            }
-
-            void NotifyMigrateDone(ui64 conn) {
-                SendInternal(conn, static_cast<ui32>(ENetwork::EvMigrateDone), {}, nullptr);
-            }
-
-            void Stop() {
-                if (Worker.joinable()) {
-                    SendInternal(0, static_cast<ui32>(ENetwork::EvStop), {}, nullptr);
-                    Worker.join();
-                    // The worker is stopped, so it is now safe to touch the sessions directly. Shut every
-                    // socket down so the peer observes the disconnect promptly instead of only when this shard
-                    // (and thus the sockets it still references) is finally destroyed. The session objects
-                    // themselves stay alive until the shard is destroyed.
-                    for (const auto& session : Sessions) {
-                        if (session->Socket) {
-                            session->Socket->Shutdown(SHUT_RDWR);
-                        }
-                    }
-                }
-            }
-
-        private:
-            // Pops and frees any commands still sitting in the queue after the worker has stopped. Mirrors
-            // the ownership handling of the worker loop: destroys the embedded TEventPayload and reclaims a
-            // TRegisteredSession handed off via an unprocessed EvRegisterSession.
-            void DrainQueue() {
-                for (;;) {
-                    if (auto&& [ev, conn, callback, timestamp] = IncomingEventQueue.Pop(); ev) {
-                        if (ev->Type == static_cast<ui32>(ENetwork::EvRegisterSession)) {
-                            delete reinterpret_cast<TRegisteredSession*>(conn);
-                        }
-                    } else {
-                        break;
-                    }
-                }
-            }
-
-            void SendImpl(ui64 conn, std::unique_ptr<IEventHandle> ev, TIntrusivePtr<IReceiveCallback> replyCallback) {
-                const bool first = IncomingEventQueue.Push(std::move(ev), conn, std::move(replyCallback));
+            void Enqueue(TIncomingEventQueue::TRecord&& record) {
+                const bool first = IncomingEventQueue.Push(std::move(record));
                 if (first) {
                     ++*PushedAsFirst;
                 }
                 ++*PushedTotal;
-                if (first && WaitingForCQ.load(std::memory_order_relaxed)) {
+                if (first && WaitingForCQ.load(std::memory_order_acquire)) {
                     // first command while waiting on CQ: kick the worker via the pipe on ring 0
                     const ui64 value = 1; // this commands adds 1 to the counter stored in eventfd
                     ssize_t res;
@@ -647,13 +681,94 @@ namespace NActors {
                 }
             }
 
-            void SendInternal(ui64 conn, ui32 type, TActorId sender, TIntrusivePtr<IReceiveCallback> callback) {
-                SendImpl(conn, std::make_unique<IEventHandle>(type, 0, TActorId(), sender, nullptr, 0), std::move(callback));
+            void Send(ui64 conn, std::unique_ptr<IEventHandle> ev, TIntrusivePtr<IReceiveCallback> replyCallback) {
+                ++*EventsSent;
+
+                // this event is strictly sequenced
+                SendImpl(conn, std::move(ev), std::move(replyCallback), true);
             }
 
-            bool ForwardIfMigratingOut(ui64 conn, std::unique_ptr<IEventHandle>& ev, TIntrusivePtr<IReceiveCallback>& callback) {
-                if (const auto it = MigratingOut.find(conn); it != MigratingOut.end()) {
-                    Engine.Shards[it->second]->Enqueue(conn, std::move(ev), std::move(callback));
+            void Unregister(ui64 conn) {
+                ++*SessionsUnregistered;
+
+                // this event is sequenced too
+                SendInternal(conn, static_cast<ui32>(ENetwork::EvUnregisterSession), {}, nullptr, true);
+            }
+
+            void RegisterReceiveCallback(ui64 conn, TActorId localActorId, TIntrusivePtr<IReceiveCallback> callback) {
+                ++*(callback ? DirectReceiveCallbacksRegistered : DirectReceiveCallbacksUnregistered);
+
+                // this event's ordering is important
+                SendInternal(conn, static_cast<ui32>(ENetwork::EvRegisterCallback), localActorId, std::move(callback),
+                    true);
+            }
+
+            void NotifyMigrateDone(ui64 conn) {
+                SendInternal(conn, static_cast<ui32>(ENetwork::EvMigrateDone), {}, nullptr, false);
+            }
+
+            void Stop() {
+                if (Worker.joinable()) {
+                    SendInternal(0, static_cast<ui32>(ENetwork::EvStop), {}, nullptr, false);
+                    Worker.join();
+                    // The worker is stopped, so it is now safe to touch the sessions directly. Shut every
+                    // socket down so the peer observes the disconnect promptly instead of only when this shard
+                    // (and thus the sockets it still references) is finally destroyed. The session objects
+                    // themselves stay alive until the shard is destroyed.
+                    for (const auto& session : Sessions) {
+                        if (session->Socket) {
+                            session->Socket->Shutdown(SHUT_RDWR);
+                        }
+                    }
+                }
+            }
+
+            void IssueMonRequest(ui64 conn, NMon::TEvHttpInfoRes::TPtr ev) {
+                SendImpl(conn, std::make_unique<IEventHandle>(TActorId(), TActorId(), new TEvUringMonRequest(std::move(ev))),
+                    nullptr, false);
+            }
+
+        private:
+            // Pops and frees any commands still sitting in the queue after the worker has stopped. Mirrors
+            // the ownership handling of the worker loop: destroys the embedded TEventPayload and reclaims a
+            // TRegisteredSession handed off via an unprocessed EvRegisterSession.
+            void DrainQueue() {
+                while (auto record = IncomingEventQueue.Pop()) {
+                    if (record->Ev->Type == static_cast<ui32>(ENetwork::EvRegisterSession)) {
+                        delete reinterpret_cast<TRegisteredSession*>(record->Conn);
+                    }
+                }
+            }
+
+            void SendImpl(ui64 conn, std::unique_ptr<IEventHandle> ev, TIntrusivePtr<IReceiveCallback> replyCallback,
+                    bool ensureSequence) {
+                ui64 seqNo = 0;
+                if (Y_LIKELY(ensureSequence)) {
+                    Y_DEBUG_ABORT_UNLESS(conn);
+                    auto& session = *reinterpret_cast<TRegisteredSession*>(conn);
+                    seqNo = session.IncomingSeqNo.fetch_add(1);
+                }
+                Enqueue(TIncomingEventQueue::TRecord{
+                    std::move(ev),
+                    conn,
+                    std::move(replyCallback),
+                    GetCycleCountFast(),
+                    seqNo,
+                });
+            }
+
+            void SendInternal(ui64 conn, ui32 type, TActorId sender, TIntrusivePtr<IReceiveCallback> callback,
+                    bool ensureSequence) {
+                SendImpl(conn, std::make_unique<IEventHandle>(type, 0, TActorId(), sender, nullptr, 0),
+                    std::move(callback), ensureSequence);
+            }
+
+            bool ForwardIfMigratingOut(TIncomingEventQueue::TRecord *record) {
+                if (Y_LIKELY(MigratingOut.empty())) {
+                    return false;
+                }
+                if (const auto it = MigratingOut.find(record->Conn); it != MigratingOut.end()) {
+                    Engine.Shards[it->second]->Enqueue(std::move(*record));
                     return true;
                 }
                 return false;
@@ -772,7 +887,7 @@ namespace NActors {
 
                     ui64 waitStartTimestamp = 0;
                     if (!progress) { // wait for something to happen -- no progress were made in this loop
-                        WaitingForCQ.store(true, std::memory_order_relaxed);
+                        WaitingForCQ.store(true, std::memory_order_release);
 
                         // it is critical we first set WaitingForCQ, and then rechecking the queue
                         if (IncomingEventQueue.IsEmpty()) {
@@ -807,99 +922,141 @@ namespace NActors {
                 bool progress = false;
                 ui64 cycleCountOnEnter = 0;
 
-                for (;;) {
-                    auto&& [ev, conn, callback, cycleCountOnSend] = IncomingEventQueue.Pop();
-                    if (!ev) {
+                while (auto record = IncomingEventQueue.Pop()) {
+                    progress = true;
+                    if (record->Ev->Type == static_cast<ui32>(ENetwork::EvStop)) {
+                        *stopping = true;
                         break;
                     }
-                    progress = true;
 
                     if (!cycleCountOnEnter) {
                         cycleCountOnEnter = GetCycleCountFast();
                     }
 
-                    switch (ev->Type) {
-                        case static_cast<ui32>(ENetwork::EvRegisterCallback):
-                            if (ForwardIfMigratingOut(conn, ev, callback)) {
-                                break;
-                            }
-                            if (TRegisteredSession& session = GetSession(conn); callback) {
-                                session.ReceiveCallbacks[ev->Sender] = std::move(callback);
-                            } else {
-                                session.ReceiveCallbacks.erase(ev->Sender);
-                            }
-                            break;
+                    if (Y_LIKELY(record->SeqNo)) {
+                        if (ForwardIfMigratingOut(&record.value())) {
+                            // this record is just sent to the other thread
+                        } else if (auto& session = GetSession(record->Conn); record->SeqNo != session.ExpectedSeqNo) {
+                            Y_DEBUG_ABORT_UNLESS(session.ExpectedSeqNo < record->SeqNo);
+                            session.PendingRecordsHeap.push_back(std::move(*record));
+                            std::ranges::push_heap(session.PendingRecordsHeap, std::greater<ui64>{},
+                                &TIncomingEventQueue::TRecord::SeqNo);
+                            ++*OutOfOrderCameIn;
+                        } else {
+                            // process this event
+                            const bool isUnregister = record->Ev->Type == static_cast<ui32>(ENetwork::EvUnregisterSession);
+                            ProcessIncomingEvent(&record.value());
+                            if (!isUnregister) {
+                                ++session.ExpectedSeqNo;
 
-                        case static_cast<ui32>(ENetwork::EvRegisterSession): {
-                            std::unique_ptr<TRegisteredSession> session(reinterpret_cast<TRegisteredSession*>(conn));
-                            const bool migrated = session->MigrateState == EMigrateState::HandedOff;
-                            const ui32 sourceShard = session->MigrateSourceShard;
-                            session->OwnerShard.store(ShardIdx, std::memory_order_release);
-                            session->MigrateState = EMigrateState::None;
-                            session->MigrateSourceShard = ShardIdx;
-                            session->PreferredRingIdx = OpShift++ % Rings.size();
-                            const auto [it, inserted] = Sessions.emplace(std::move(session));
-                            Y_ABORT_UNLESS(inserted);
-                            (*it)->EventsReceived = EventsReceived;
-                            IssueReadForSession(**it);
-                            if (migrated && sourceShard != ShardIdx) {
-                                Engine.Shards[sourceShard]->NotifyMigrateDone(conn);
+                                // check if there are other events in the process queue
+                                if (auto& heap = session.PendingRecordsHeap; Y_UNLIKELY(!heap.empty())) {
+                                    while (!heap.empty() && heap.front().SeqNo == session.ExpectedSeqNo) {
+                                        std::ranges::pop_heap(heap, std::greater<ui64>{}, &TIncomingEventQueue::TRecord::SeqNo);
+                                        ProcessIncomingEvent(&heap.back());
+                                        ++session.ExpectedSeqNo;
+                                        heap.pop_back();
+                                        ++*OutOfOrderProcessed;
+                                    }
+                                    if (heap.empty()) {
+                                        heap.shrink_to_fit();
+                                    }
+                                }
                             }
-                            break;
                         }
-
-                        case static_cast<ui32>(ENetwork::EvUnregisterSession): {
-                            if (ForwardIfMigratingOut(conn, ev, callback)) {
-                                break;
-                            }
-                            TRegisteredSession& session = GetSession(conn);
-                            // Do NOT free the session while it still has an armed recv or an in-flight
-                            // writev: their io_uring completions carry a raw pointer to this object and
-                            // would dereference freed memory. Mark it terminated (so no new ops are armed)
-                            // and erase only once both are drained. The session actor has already shut the
-                            // socket down before requesting unregistration, so the pending ops complete
-                            // promptly (EOF/EPIPE).
-                            if (session.MigrateState != EMigrateState::None) {
-                                session.MigrateState = EMigrateState::None; // unregister wins over migrate
-                            }
-                            session.Terminated = true;
-                            session.UnregisterRequested = true;
-                            if (session.ReadPending) { // cancel pending read in order to unregister the session
-                                CancelOp(session, kOpRead, session.ReadPendingRingIdx);
-                            }
-                            MaybeEraseSession(session);
-                            break;
-                        }
-
-                        case static_cast<ui32>(ENetwork::EvMigrateDone):
-                            MigratingOut.erase(conn);
-                            break;
-
-                        case static_cast<ui32>(ENetwork::EvStop):
-                            *stopping = true;
-                            return true;
-
-                        default: {
-                            if (ForwardIfMigratingOut(conn, ev, callback)) {
-                                break;
-                            }
-                            TRegisteredSession& session = GetSession(conn);
-                            if (callback) { // register callback coming along with the message
-                                session.ReceiveCallbacks[ev->Sender] = std::move(callback);
-                            }
-                            session.Serializer.Push(std::move(ev));
-                            IssueWritesForSession(session);
-                            break;
-                        }
+                    } else {
+                        // process unsequenced event
+                        ProcessIncomingEvent(&record.value());
                     }
 
                     const ui64 cycleCountOnExit = GetCycleCountFast();
-                    CommandDeliveryTime->Collect(NHPTimer::GetSeconds(cycleCountOnEnter - cycleCountOnSend) * 1e9);
-                    CommandExecTime->Collect(NHPTimer::GetSeconds(cycleCountOnExit - cycleCountOnEnter) * 1e9);
+                    CommandDeliveryTime->Collect((cycleCountOnEnter - record->ReceivedTimestamp) * Freq);
+                    CommandExecTime->Collect((cycleCountOnExit - cycleCountOnEnter) * Freq);
                     cycleCountOnEnter = cycleCountOnExit;
                 }
 
                 return progress;
+            }
+
+            void ProcessIncomingEvent(TIncomingEventQueue::TRecord *record) {
+                switch (record->Ev->Type) {
+                    case static_cast<ui32>(ENetwork::EvRegisterCallback):
+                        if (TRegisteredSession& session = GetSession(record->Conn); record->Callback) {
+                            session.ReceiveCallbacks[record->Ev->Sender] = std::move(record->Callback);
+                        } else {
+                            session.ReceiveCallbacks.erase(record->Ev->Sender);
+                        }
+                        break;
+
+                    case static_cast<ui32>(ENetwork::EvRegisterSession): {
+                        std::unique_ptr<TRegisteredSession> session(reinterpret_cast<TRegisteredSession*>(record->Conn));
+                        if (session->MigrateState == EMigrateState::HandedOff) {
+                            session->OwnerShard.store(ShardIdx, std::memory_order_release); // all new events will arrive here from now on
+                            Engine.Shards[session->MigrateSourceShard]->NotifyMigrateDone(record->Conn);
+                            session->MigrateState = EMigrateState::None;
+                        } else {
+                            Y_DEBUG_ABORT_UNLESS(session->MigrateState == EMigrateState::None);
+                        }
+                        session->PreferredRingIdx = OpShift++ % Rings.size();
+                        const auto [it, inserted] = Sessions.emplace(std::move(session));
+                        Y_ABORT_UNLESS(inserted);
+                        (*it)->EventsReceived = EventsReceived;
+                        IssueReadForSession(**it);
+                        break;
+                    }
+
+                    case static_cast<ui32>(ENetwork::EvUnregisterSession): {
+                        TRegisteredSession& session = GetSession(record->Conn);
+                        // Do NOT free the session while it still has an armed recv or an in-flight
+                        // writev: their io_uring completions carry a raw pointer to this object and
+                        // would dereference freed memory. Mark it terminated (so no new ops are armed)
+                        // and erase only once both are drained. The session actor has already shut the
+                        // socket down before requesting unregistration, so the pending ops complete
+                        // promptly (EOF/EPIPE).
+                        if (session.MigrateState != EMigrateState::None) {
+                            session.MigrateState = EMigrateState::None; // unregister wins over migrate
+                        }
+                        session.Terminated = true;
+                        session.UnregisterRequested = true;
+                        if (session.ReadPending) { // cancel pending read in order to unregister the session
+                            CancelOp(session, kOpRead, session.ReadPendingRingIdx);
+                        }
+                        MaybeEraseSession(session);
+                        break;
+                    }
+
+                    case static_cast<ui32>(ENetwork::EvMigrateDone): {
+                        const size_t num = MigratingOut.erase(record->Conn);
+                        Y_DEBUG_ABORT_UNLESS(num == 1);
+                        break;
+                    }
+
+                    case static_cast<ui32>(ENetwork::EvStop):
+                        Y_ABORT();
+
+                    case static_cast<ui32>(ENetwork::EvUringMonRequest):
+                        ProcessMonRequest(GetSession(record->Conn), std::move(record->Ev->Get<TEvUringMonRequest>()->Ev));
+                        break;
+
+                    default: {
+                        TRegisteredSession& session = GetSession(record->Conn);
+                        if (record->Callback) { // register callback coming along with the message
+                            session.ReceiveCallbacks[record->Ev->Sender] = std::move(record->Callback);
+                        }
+                        session.Serializer.Push(std::move(record->Ev));
+                        IssueWritesForSession(session);
+                        break;
+                    }
+                }
+            }
+
+            ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // monitoring
+
+            void ProcessMonRequest(TRegisteredSession& session, NMon::TEvHttpInfoRes::TPtr ev) {
+                TStringOutput str(const_cast<TString&>(static_cast<NMon::TEvHttpInfoRes*>(ev->Get())->Answer));
+                session.RenderHtml(str);
+                Engine.ActorSystem->Send(ev.Release());
             }
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -982,8 +1139,6 @@ namespace NActors {
                     return;
                 }
 
-                return; // TODO(alexvru): check for out-of-order when processing old shard queue when new shard is registered
-
                 ui32 bestTarget = ShardIdx;
                 ui32 bestBusy = Max<ui32>();
                 for (ui32 i = 0; i < Engine.Shards.size(); ++i) {
@@ -1013,6 +1168,7 @@ namespace NActors {
                 candidate->MigrateState = EMigrateState::Draining;
                 candidate->MigrateTargetShard = bestTarget;
                 candidate->MigrateSourceShard = ShardIdx;
+                Y_DEBUG_ABORT_UNLESS(candidate->MigrateTargetShard != candidate->MigrateSourceShard);
 
                 if (candidate->ReadPending) {
                     CancelOp(*candidate, kOpRead, candidate->ReadPendingRingIdx);
@@ -1285,6 +1441,10 @@ namespace NActors {
                     shard->Stop();
                 }
             }
+        }
+
+        void IssueMonRequest(ui64 conn, NMon::TEvHttpInfoRes::TPtr ev) override {
+            GetShard(conn).IssueMonRequest(conn, std::move(ev));
         }
     };
 

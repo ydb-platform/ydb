@@ -22,6 +22,7 @@ public:
         THostMask enabledHosts,
         TVector<std::optional<ui64>> watermarks);
 
+    [[nodiscard]] bool Empty() const;
     [[nodiscard]] size_t GetHostCount() const;
     [[nodiscard]] ui32 GetVChunkIndex() const;
 
@@ -81,6 +82,8 @@ public:
     [[nodiscard]] THostMask GetDisabledHosts() const;
 
     [[nodiscard]] bool IsValid() const;
+
+    bool operator==(const TVChunkConfig& other) const;
 
     [[nodiscard]] TString DebugPrint() const;
 

@@ -699,7 +699,7 @@ void TReadSessionActor<Protocol>::Handle(TEvPQProxy::TEvCommitDone::TPtr& ev, co
                 partition.ReadIdCommitted = i;
             }
         } else { // commit on cookies not supported in this case
-            AFL_ENSURE(false);
+            AFL_ENSURE(false)("reason", "cookie commits not supported")("protocol", static_cast<int>(Protocol));
         }
     } else {
         if constexpr (Protocol == EProtocol::PQv1) {

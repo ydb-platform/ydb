@@ -4,6 +4,7 @@ SRCS(
     actors/kafka_api_versions_actor.cpp
     actors/kafka_init_producer_id_actor.cpp
     actors/kafka_metadata_actor.cpp
+    actors/kafka_metadata_service.cpp
     actors/kafka_produce_actor.cpp
     actors/kafka_sasl_auth_actor.cpp
     actors/kafka_sasl_handshake_actor.cpp

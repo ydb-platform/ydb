@@ -137,9 +137,7 @@ TDBGFixture::MakeDirectBlockGroup(
         Runtime->GetActorSystem(0),
         std::make_shared<TStorageConfig>(NProto::TStorageServiceConfig()),
         executor,
-        "disk-1",
-        1,
-        1,
+        DiskDescription,
         0,
         ddisksIds,
         pbufferIds,
@@ -219,6 +217,15 @@ void TDBGFixture::WaitReady(
         [&]() { return future.HasValue() || future.HasException(); },
         timeout);
     UNIT_ASSERT(future.HasValue());
+}
+
+size_t TDBGFixture::ReplyUpdateRequests()
+{
+    auto requests = std::move(Service->UpdateConfigRequests);
+    for (auto& r: requests) {
+        r.Promise.SetValue();
+    }
+    return requests.size();
 }
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

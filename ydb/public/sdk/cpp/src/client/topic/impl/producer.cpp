@@ -92,6 +92,7 @@ TProducer::TMessageInfo::TMessageInfo(const std::string& key, const std::string&
     , SeqNo(message.SeqNo_)
     , CreateTimestamp(message.CreateTimestamp_)
     , Tx(message.Tx_)
+    , DeferredPublication(std::move(message.DeferredPublication_))
     , Partition(partition)
 {
     for (const auto& [key, value] : message.MessageMeta_) {
@@ -113,6 +114,7 @@ TWriteMessage TProducer::TMessageInfo::BuildMessage() const {
         message.MessageMeta_.emplace_back(key, value);
     }
     message.Tx(Tx);
+    message.DeferredPublication(DeferredPublication);
     return message;
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

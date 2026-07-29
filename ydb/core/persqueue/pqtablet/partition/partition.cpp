@@ -29,6 +29,7 @@
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
 #include <util/generic/overloaded.h>
+#include <ydb/library/actors/core/log.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_TX
 
@@ -575,7 +576,7 @@ bool TPartition::CleanUpBlobsInEncoder(TPartitionBlobEncoder& encoder, bool isCo
                 return false;
             }
         } else {
-            Y_ABORT_UNLESS(nextKey);
+            PQ_ENSURE(nextKey)("topic", TopicName());
             if (ImportantConsumersNeedToKeepCurrentKey(firstKey, *nextKey, now)) {
                 return false;
             }
@@ -2571,7 +2572,7 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
         SET_METRIC(PartitionCountersLabeled, METRIC_READ_QUOTA_PARTITION_TOTAL_USAGE, quotaUsage);
     }
     if (PartitionKeyCompactionCounters) {
-        Y_ENSURE(Compacter);
+        PQ_ENSURE(Compacter)("topic", TopicName());
         auto counters = Compacter->GetCounters();
         SET_METRIC(PartitionKeyCompactionCounters, METRIC_UNCOMPACTED_SIZE_MAX, counters.UncompactedSize);
         SET_METRIC(PartitionKeyCompactionCounters, METRIC_UNCOMPACTED_SIZE_SUM, counters.UncompactedSize);
@@ -3407,7 +3408,7 @@ TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimple
         t->State = ECommitState::Committed;
         return EProcessResult::Break;
     }
-    Y_ABORT();
+    AFL_ENSURE(false)("reason", "unreachable transaction kind")("tablet_id", TabletId)("partition_id", Partition)("topic", TopicName());
     return result;
 }
 
@@ -5176,17 +5177,17 @@ void TPartition::AddCmdDeleteRangeForAllKeys(TEvKeyValue::TEvRequest& request)
 
 void TPartition::ScheduleNegativeReply(const TEvPQ::TEvSetClientInfo&)
 {
-    Y_ABORT("The supportive partition does not accept read operations");
+    PQ_ENSURE(false)("reason", "The supportive partition does not accept read operations")("topic", TopicName());
 }
 
 void TPartition::ScheduleNegativeReply(const TEvPersQueue::TEvProposeTransaction&)
 {
-    Y_ABORT("The supportive partition does not accept immediate transactions");
+    PQ_ENSURE(false)("reason", "The supportive partition does not accept immediate transactions")("topic", TopicName());
 }
 
 void TPartition::ScheduleNegativeReply(const TTransaction&)
 {
-    Y_ABORT("The supportive partition does not accept distribute transactions");
+    PQ_ENSURE(false)("reason", "The supportive partition does not accept distribute transactions")("topic", TopicName());
 }
 
 void TPartition::ScheduleNegativeReply(const TMessage& msg)
@@ -5252,8 +5253,10 @@ void TPartition::AttachPersistRequestSpan(NWilson::TSpan& span)
 }
 
 void TPartition::SendCompacterWriteRequest(THolder<TEvKeyValue::TEvRequest>&& request) {
-    Y_ENSURE(!CompacterKvRequestInflight);
-    Y_ENSURE(!CompacterKvRequest);
+    AFL_ENSURE(!CompacterKvRequestInflight)
+        ("tablet_id", TabletId)("partition_id", Partition)("topic", TopicName());
+    AFL_ENSURE(!CompacterKvRequest)
+        ("tablet_id", TabletId)("partition_id", Partition)("topic", TopicName());
     YDB_LOG_DEBUG_COMP(Service, "Topic partition Acquire RW Lock",
         {"logPrefix", NPQ_LOG_PREFIX},
         {"clientSideName", TopicConverter->GetClientsideName()},

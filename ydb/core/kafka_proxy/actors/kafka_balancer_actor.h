@@ -1,6 +1,7 @@
 #pragma once
 
 #include "actors.h"
+#include <ydb/core/kafka_proxy/kafka_constants.h>
 #include <ydb/core/kafka_proxy/kafka_consumer_groups_metadata_initializers.h>
 #include <ydb/core/kafka_proxy/kafka_consumer_members_metadata_initializers.h>
 #include <ydb/core/kafka_proxy/kqp_helper.h>
@@ -27,7 +28,6 @@ constexpr ui32 MAX_REBALANCE_TIMEOUT_MS = 300000;
 
 constexpr ui32 DEFAULT_SESSION_TIMEOUT_MS = 45000;
 constexpr ui32 MIN_SESSION_TIMEOUT_MS = 5000;
-constexpr ui32 MAX_SESSION_TIMEOUT_MS = 300000;
 
 constexpr ui32 MAX_GROUPS_COUNT = 1000;
 constexpr ui32 LIMIT_MEMBERS_PER_REQUEST = 999;
@@ -311,6 +311,7 @@ private:
                                     EKafkaErrors error, TString message = "");
 
     NActors::NStructuredLog::TStructuredMessage LogPrefix();
+    TString GetMetadataDatabasePath() const;
     void SendResponseFail(const TActorContext& ctx, EKafkaErrors error, const TString& message);
 
     std::optional<TGroupStatus> ParseGroupState(NKqp::TEvKqp::TEvQueryResponse::TPtr ev);

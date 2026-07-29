@@ -405,11 +405,14 @@ void TFastPathService::ScheduleAfterDelay(
         std::move(callback));
 }
 
-void TFastPathService::UpdateVChunkConfig(const TVChunkConfig& cfg)
+NThreading::TFuture<void> TFastPathService::UpdateVChunkConfig(
+    const TVChunkConfig& cfg)
 {
     auto event =
         std::make_unique<TEvPartitionDirectPrivate::TEvUpdateVChunkConfig>(cfg);
+    auto result = event->UpdateCompleted.GetFuture();
     ActorSystem->Send(PartitionActorId, event.release());
+    return result;
 }
 
 void TFastPathService::QueryAddHost(

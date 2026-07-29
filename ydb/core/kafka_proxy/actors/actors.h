@@ -99,6 +99,7 @@ struct TContext {
     TString CloudId;
     TString DatabaseId;
     TString ResourceDatabasePath;
+    std::optional<bool> InitialServerlessTransactionsFlagValue;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TString ClientDC;
     bool IsServerless = false;
@@ -110,6 +111,11 @@ struct TContext {
 
     bool Authenticated() {
         return !RequireAuthentication || AuthenticationStep == SUCCESS;
+    }
+
+    bool KafkaTableFeatureFlagChanged(bool serverlessTransactionsEnabledNow) const {
+        return InitialServerlessTransactionsFlagValue.has_value() &&
+               *InitialServerlessTransactionsFlagValue != serverlessTransactionsEnabledNow;
     }
 };
 

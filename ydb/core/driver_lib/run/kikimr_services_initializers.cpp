@@ -261,7 +261,6 @@
 #include <ydb/library/actors/interconnect/load.h>
 #include <ydb/library/actors/interconnect/poller/poller_actor.h>
 #include <ydb/library/actors/interconnect/poller/poller_tcp.h>
-#include <ydb/library/actors/interconnect/poller/uring_poller_actor.h>
 #include <ydb/library/actors/interconnect/rdma/cq_actor/cq_actor.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/library/actors/interconnect/rdma/rdma.h>
@@ -594,14 +593,6 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
         result.CollectSubscriptionStackTrace = config.GetCollectSubscriptionStackTrace();
     }
 
-    if (config.HasUseUring()) {
-        result.UseUring = config.GetUseUring();
-    }
-
-    if (config.HasEnableUringSQPOLL()) {
-        result.EnableUringSQPOLL = config.GetEnableUringSQPOLL();
-    }
-
     if (config.HasV2Config()) {
         const auto& v2 = config.GetV2Config();
         result.V2.Enable = v2.GetEnable();
@@ -729,11 +720,6 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             // create poller actor (whether platform supports it)
             setup->LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(
                 CreatePollerActor(schedulerConfig.MonCounters), TMailboxType::ReadAsFilled, systemPoolId));
-
-            if (settings.UseUring && TUringContext::IsSupported()) {
-                setup->LocalServices.emplace_back(MakeUringPollerActorId(), TActorSetupCmd(
-                    CreateUringPollerActor(settings.EnableUringSQPOLL), TMailboxType::ReadAsFilled, systemPoolId));
-            }
 
             auto destructorQueueSize = std::make_shared<std::atomic<TAtomicBase>>(0);
 

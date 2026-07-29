@@ -547,8 +547,7 @@ message TInterconnectConfig {
     optional bool CollectSubscriptionStackTrace = 59 [default = false];
     optional uint32 RdmaPayloadCopySizeThreshold = 60 [default = 65536]; // 0 disables copying RDMA payload to regular memory
     optional uint32 MaxRdmaRetryBackoffLevel = 61 [default = 8]; // 5s * 2^8 = 1280s, about 21 minutes by default
-    optional bool UseUring = 62 [default = false];
-    optional bool EnableUringSQPOLL = 63 [default = false]; // only effective when UseUring is set
+    reserved 62, 63; // were UseUring / EnableUringSQPOLL of the reverted io_uring v1 transport
     optional bool EnableRdmaSendReceive = 69 [default = false];
 
     message TV2Config {

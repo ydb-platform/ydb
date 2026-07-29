@@ -64,6 +64,7 @@ namespace NActors {
     // the bottleneck, raise numShards / lower ringsPerShard.
     // sqThreadIdleMs is the SQPOLL kernel-thread idle timeout in milliseconds (ignored when sqpoll is false).
     TUringEnginePtr CreateUringEngine(ui32 numShards, NMonitoring::TDynamicCounterPtr counters, bool sqpoll,
-        ui32 ringsPerShard = 1, ui32 sqThreadIdleMs = 2000, bool shareRingsAmongThreads = false);
+        ui32 ringsPerShard = 1, ui32 sqThreadIdleMs = 2000, bool shareRingsAmongThreads = false,
+        TActorId destructorActorId = {});
 
 }

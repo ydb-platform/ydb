@@ -14,6 +14,7 @@
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_base.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/buffer.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
@@ -1381,6 +1382,44 @@ IBlockSplitter::TPtr CreateBlockSplitter(const TType* type, ui64 chunkSizeLimit)
     items.push_back(lengthBlockType);
 
     return MakeIntrusive<TBlockSplitter>(items, chunkSizeLimit);
+}
+
+bool TryGatherArrayByRowIndices(
+    const arrow::Datum& column,
+    const ui64* indexes,
+    ui64 count,
+    arrow::MemoryPool* pool,
+    arrow::Datum* out)
+{
+    Y_DEBUG_ABORT_UNLESS(pool);
+    Y_DEBUG_ABORT_UNLESS(out);
+    Y_DEBUG_ABORT_UNLESS(indexes);
+    if (count == 0) {
+        return false;
+    }
+    if (column.is_scalar()) {
+        return false;
+    }
+    arrow::UInt64Builder builder;
+    if (!builder.Reserve(static_cast<int64_t>(count)).ok()) {
+        return false;
+    }
+    for (ui64 i = 0; i < count; ++i) {
+        if (!builder.Append(indexes[i]).ok()) {
+            return false;
+        }
+    }
+    std::shared_ptr<arrow::UInt64Array> indexArray;
+    if (!builder.Finish(&indexArray).ok()) {
+        return false;
+    }
+    arrow::compute::ExecContext ctx(pool);
+    auto taken = arrow::compute::Take(column, indexArray, arrow::compute::TakeOptions::Defaults(), &ctx);
+    if (!taken.ok()) {
+        return false;
+    }
+    *out = *taken;
+    return true;
 }
 
 } // namespace NArrow

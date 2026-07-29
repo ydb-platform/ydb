@@ -52,6 +52,7 @@ ydb/core/fq/libs/ydb/ut unittest.[*/*] chunk
 ydb/core/http_proxy/ut TestMalformedRequest.CompressedDeflateContentLengthHigher
 ydb/core/http_proxy/ut TestMalformedRequest.CompressedGzipContentLengthLower
 ydb/core/http_proxy/ut TestMalformedRequest.CompressedGzipContentLengthNone
+ydb/core/http_proxy/ut TestMalformedRequest.ContentLengthLower
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.BadRequestUnknownMethod
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.CreateDeleteStreamWithConsumer
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.CreateDeleteStreamWithConsumerWithFlag
@@ -134,6 +135,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestAuthPriority
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestChangeMessageVisibilityBasic
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestChangeMessageVisibilityBatch
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestChangeMessageVisibilityBatchInvalid
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestChangeMessageVisibilityBatchMixedTimeouts
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestChangeMessageVisibilityBatchNonExistentConsumerInFederation
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestChangeMessageVisibilityBatchWithAtSignInConsumerNameInFederation
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestChangeMessageVisibilityBatchWithLeadingSlashInConsumerNameInFederation
@@ -306,6 +308,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestSendMessageBadQ
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestSendMessageBatch
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestSetQueueAttributesBasic
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestSetQueueAttributesFifoImmutable
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestSetQueueAttributesInvalidValues
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestSetQueueAttributesMultiple
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestSetQueueAttributesNonExistentConsumer
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestSetQueueAttributesUnknownAttribute
@@ -324,6 +327,7 @@ ydb/core/kqp/ut/indexes KqpMultishardIndex.DataColumnWrite
 ydb/core/kqp/ut/olap KqpOlapOptimizer.SpecialSliceToOneLayer
 ydb/core/kqp/ut/olap KqpOlapOptimizer.TilingPlusPlusTtlDeletion
 ydb/core/kqp/ut/rbo KqpRboOlap.BlockChannelAuto
+ydb/core/kqp/ut/rbo KqpRboOlap.BlockChannelForce
 ydb/core/kqp/ut/rbo KqpRboOlap.BlockChannelScalar
 ydb/core/kqp/ut/rbo KqpRboOlap.OlapFilterPeephole
 ydb/core/kqp/ut/rbo KqpRboOlap.PredicatePushdownCastErrors
@@ -470,6 +474,7 @@ ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_idle_watermarks[2-shared
 ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_watermarks[no_shared]
 ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_watermarks[shared]
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
+ydb/tests/functional/blobstorage test_node_warden_cache.py.TestNodeWardenCacheFile.test_cache_file_lifecycle_and_restart
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_add
 ydb/tests/functional/kqp/kqp_indexes ConsistentIndexRead.InteractiveTx
 ydb/tests/functional/kqp/kqp_indexes unittest.sole chunk

@@ -717,10 +717,17 @@ def _order_json(order: tuple[ir.SortOrder, ...] | None) -> list[dict[str, Any]] 
     if order is None:
         return None
     return [
-        {
-            "column": item.column,
-            "ascending": item.ascending,
-            "nulls_first": item.nulls_first,
-        }
+        (
+            {
+                "column": item.column,
+                "ascending": item.ascending,
+                "nulls_first": item.nulls_first,
+            }
+            | (
+                {}
+                if item.comparison is None
+                else {"comparison": item.comparison}
+            )
+        )
         for item in order
     ]

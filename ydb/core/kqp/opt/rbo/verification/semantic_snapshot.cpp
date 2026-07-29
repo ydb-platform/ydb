@@ -4363,6 +4363,9 @@ struct TStoredStringProvenance {
 };
 
 using TStoredStringColumns = THashMap<TString, TStoredStringProvenance>;
+using TIntegralAverageOrderingColumns = THashSet<TString>;
+constexpr TStringBuf IntegralAverageOrderingComparisonV1 =
+    "integral_avg_rank_v1";
 
 // MiniKQL grows Concat's ui32 allocation capacity by 50 percent in
 // yql/essentials/minikql/mkql_string_util.cpp.  This is the largest result for
@@ -6709,6 +6712,12 @@ public:
         return NodeOrder;
     }
 
+    const THashMap<const IOperator*, TIntegralAverageOrderingColumns>&
+    GetIntegralAverageOrderingOutputs() const
+    {
+        return IntegralAverageOrderingOutputMap;
+    }
+
     void ValidateStageProperties() const {
         if (!StageGraphPresent) {
             Unsupported("Stage properties require a StageGraph");
@@ -8356,6 +8365,7 @@ private:
         const TString id = TStringBuilder() << "n" << Ids.size();
         auto node = ExportOperator(*op, id, children);
         TrackStoredStringOutputs(*op);
+        TrackIntegralAverageOrderingOutputs(*op);
         Ids.emplace(op.Get(), id);
         NodeOrder.push_back(op.Get());
         Nodes.AppendValue(std::move(node));
@@ -8529,6 +8539,220 @@ private:
 
         if (!StoredStringOutputMap.emplace(&base, std::move(result)).second) {
             Unsupported("Stored String provenance was recorded twice");
+        }
+    }
+
+    const TIntegralAverageOrderingColumns&
+    IntegralAverageOrderingOutputs(const IOperator& op) const
+    {
+        const auto* result = IntegralAverageOrderingOutputMap.FindPtr(&op);
+        if (!result) {
+            Unsupported(
+                "Integral avg ordering provenance is unavailable for an operator input");
+        }
+        return *result;
+    }
+
+    void TrackIntegralAverageOrderingOutputs(IOperator& base) {
+        TIntegralAverageOrderingColumns result;
+
+        const auto certifyDirectCarrier = [&](
+            IOperator& input,
+            TStringBuf inputName,
+            TStringBuf outputName)
+        {
+            const TString inputColumn(inputName);
+            const TString outputColumn(outputName);
+            if (!IntegralAverageOrderingOutputs(input).contains(
+                    inputColumn))
+            {
+                return;
+            }
+            if (!IsExactDataAnnotation(
+                    OutputType(input, inputColumn),
+                    NUdf::EDataSlot::Double,
+                    true) ||
+                !IsExactDataAnnotation(
+                    OutputType(base, outputColumn),
+                    NUdf::EDataSlot::Double,
+                    true))
+            {
+                Unsupported(TStringBuilder()
+                    << base.GetExplainName()
+                    << " integral avg ordering carrier " << outputColumn
+                    << " must remain exact Optional<Double>");
+            }
+            result.insert(outputColumn);
+        };
+
+        switch (base.GetKind()) {
+            case EOperator::EmptySource:
+            case EOperator::Source:
+                break;
+
+            case EOperator::Map: {
+                auto& map = static_cast<TOpMap&>(base);
+                THashSet<TString> renameSources;
+                for (const auto& element : map.MapElements) {
+                    if (element.IsRename()) {
+                        renameSources.insert(
+                            element.GetRename().GetFullName());
+                    }
+                }
+                for (const auto& iu : map.GetInput()->GetOutputIUs()) {
+                    const TString name = iu.GetFullName();
+                    if (!renameSources.contains(name)) {
+                        certifyDirectCarrier(
+                            *map.GetInput(),
+                            name,
+                            name);
+                    }
+                }
+                for (const auto& element : map.MapElements) {
+                    if (!element.IsRename() &&
+                        !element.IsColumnAccess())
+                    {
+                        continue;
+                    }
+                    const TString source = element.IsRename()
+                        ? element.GetRename().GetFullName()
+                        : element.GetColumnAccess().GetFullName();
+                    certifyDirectCarrier(
+                        *map.GetInput(),
+                        source,
+                        element.GetElementName().GetFullName());
+                }
+                break;
+            }
+
+            case EOperator::Filter:
+            case EOperator::Limit:
+            case EOperator::Sort:
+            case EOperator::AddDependencies: {
+                auto& input = *base.GetChildren().front();
+                const auto outputs = OutputNames(base);
+                for (const auto& name :
+                     IntegralAverageOrderingOutputs(input))
+                {
+                    if (outputs.contains(name)) {
+                        certifyDirectCarrier(input, name, name);
+                    }
+                }
+                break;
+            }
+
+            case EOperator::Aggregate: {
+                auto& aggregate = static_cast<TOpAggregate&>(base);
+                if (aggregate.GetAggregationPhase() ==
+                    EOpPhase::Intermediate)
+                {
+                    break;
+                }
+                for (const auto& trait :
+                     aggregate.GetAggregationTraits())
+                {
+                    const TString output =
+                        trait.ResultColName.GetFullName();
+                    if (IsIntegralAverageOutput(
+                            trait,
+                            OutputType(aggregate, output)))
+                    {
+                        ValidateIntegralAverageContract(
+                            aggregate,
+                            trait);
+                        result.insert(output);
+                    }
+                }
+                break;
+            }
+
+            case EOperator::Join: {
+                auto& join = static_cast<TOpJoin&>(base);
+                const TString kind = JoinKind(join.JoinKind);
+                const bool keepLeft =
+                    kind != "right_semi" && kind != "right_anti";
+                const bool keepRight =
+                    kind != "left_semi" && kind != "left_anti";
+                const auto outputs = OutputNames(join);
+                const auto propagate = [&](
+                    IOperator& input,
+                    bool keep)
+                {
+                    if (!keep) {
+                        return;
+                    }
+                    for (const auto& name :
+                         IntegralAverageOrderingOutputs(input))
+                    {
+                        if (outputs.contains(name)) {
+                            certifyDirectCarrier(
+                                input,
+                                name,
+                                name);
+                        }
+                    }
+                };
+                propagate(*join.GetLeftInput(), keepLeft);
+                propagate(*join.GetRightInput(), keepRight);
+                break;
+            }
+
+            case EOperator::UnionAll: {
+                auto& unionAll = static_cast<TOpUnionAll&>(base);
+                const auto& left =
+                    IntegralAverageOrderingOutputs(
+                        *unionAll.GetLeftInput());
+                const auto& right =
+                    IntegralAverageOrderingOutputs(
+                        *unionAll.GetRightInput());
+                for (const auto& iu : unionAll.Columns) {
+                    const TString output = iu.GetFullName();
+                    if (!left.contains(output) ||
+                        !right.contains(output))
+                    {
+                        continue;
+                    }
+                    if (!IsExactDataAnnotation(
+                            OutputType(
+                                *unionAll.GetLeftInput(),
+                                output),
+                            NUdf::EDataSlot::Double,
+                            true) ||
+                        !IsExactDataAnnotation(
+                            OutputType(
+                                *unionAll.GetRightInput(),
+                                output),
+                            NUdf::EDataSlot::Double,
+                            true) ||
+                        !IsExactDataAnnotation(
+                            OutputType(unionAll, output),
+                            NUdf::EDataSlot::Double,
+                            true))
+                    {
+                        Unsupported(TStringBuilder()
+                            << "UnionAll integral avg ordering carrier "
+                            << output
+                            << " must remain exact Optional<Double> "
+                               "in every positional branch");
+                    }
+                    result.insert(output);
+                }
+                break;
+            }
+
+            case EOperator::CBOTree:
+            case EOperator::Root:
+                Unsupported(
+                    "Integral avg ordering provenance reached a "
+                    "non-logical-plan operator");
+        }
+
+        if (!IntegralAverageOrderingOutputMap.emplace(
+                &base,
+                std::move(result)).second)
+        {
+            Unsupported(
+                "Integral avg ordering provenance was recorded twice");
         }
     }
 
@@ -8885,19 +9109,40 @@ private:
                     {
                         Unsupported(TStringBuilder() << "Invalid Sort key " << column);
                     }
-                    const TString type = TypeName(
-                        OutputType(*sort.GetInput(), column));
-                    if (!IsModeledOrderingType(type)) {
+                    const auto* orderingType =
+                        OutputType(*sort.GetInput(), column);
+                    const bool integralAverageOrdering =
+                        IsExactDataAnnotation(
+                            orderingType,
+                            NUdf::EDataSlot::Double,
+                            true);
+                    if (integralAverageOrdering &&
+                        !IntegralAverageOrderingOutputs(
+                            *sort.GetInput()).contains(column))
+                    {
                         Unsupported(TStringBuilder()
                             << "Sort ordering column " << column
-                            << " has unsupported type " << type
-                            << "; modeled types are integers, Date, String, Utf8, and Decimal");
+                            << " is Optional<Double> without completed "
+                               "integral avg provenance");
+                    }
+                    if (!integralAverageOrdering) {
+                        const TString type = TypeName(orderingType);
+                        if (!IsModeledOrderingType(type)) {
+                            Unsupported(TStringBuilder()
+                                << "Sort ordering column " << column
+                                << " has unsupported type " << type
+                                << "; modeled types are integers, Date, String, Utf8, and Decimal");
+                        }
                     }
 
                     auto item = JsonMap();
                     item["column"] = column;
                     item["ascending"] = element.Ascending;
                     item["nulls_first"] = element.NullsFirst;
+                    if (integralAverageOrdering) {
+                        item["comparison"] =
+                            TString(IntegralAverageOrderingComparisonV1);
+                    }
                     order.AppendValue(std::move(item));
                 }
 
@@ -9322,6 +9567,8 @@ private:
     bool StageGraphPresent = false;
     THashMap<TString, const TSemanticSnapshotCatalogTableV1*> Catalog;
     THashMap<const IOperator*, TStoredStringColumns> StoredStringOutputMap;
+    THashMap<const IOperator*, TIntegralAverageOrderingColumns>
+        IntegralAverageOrderingOutputMap;
     THashMap<const IOperator*, TString> Ids;
     THashSet<const IOperator*> Visiting;
     THashSet<const TOpAddDependencies*> AuthorizedOuterBinds;
@@ -9349,11 +9596,17 @@ public:
         TOpRoot& root,
         const THashMap<const IOperator*, TString>& nodeIds,
         const TVector<IOperator*>& nodeOrder,
+        const THashMap<
+            const IOperator*,
+            TIntegralAverageOrderingColumns>&
+            integralAverageOrderingOutputs,
         TString rootNodeId)
         : Root(root)
         , Graph(root.PlanProps.StageGraph)
         , NodeIds(nodeIds)
         , NodeOrder(nodeOrder)
+        , IntegralAverageOrderingOutputs(
+            integralAverageOrderingOutputs)
         , RootNodeId(std::move(rootNodeId))
     {
     }
@@ -9837,23 +10090,53 @@ private:
             edge["kind"] = "merge";
             auto order = JsonArray();
             const auto producerOutputs = OutputNames(*boundary.ProducerNode);
+            const auto* certifiedIntegralAverages =
+                IntegralAverageOrderingOutputs.FindPtr(
+                    boundary.ProducerNode);
+            if (!certifiedIntegralAverages) {
+                Unsupported(
+                    "StageGraph Merge producer has no integral avg "
+                    "ordering provenance");
+            }
             for (const auto& sort : merge->Order) {
                 const TString column = sort.SortColumn.GetFullName();
                 if (column.empty() || !producerOutputs.contains(column)) {
                     Unsupported("StageGraph Merge column is absent from its producer output");
                 }
-                const TString type = TypeName(
-                    OutputType(*boundary.ProducerNode, column));
-                if (!IsModeledOrderingType(type)) {
+                const auto* orderingType =
+                    OutputType(*boundary.ProducerNode, column);
+                const bool integralAverageOrdering =
+                    IsExactDataAnnotation(
+                        orderingType,
+                        NUdf::EDataSlot::Double,
+                        true);
+                if (integralAverageOrdering &&
+                    !certifiedIntegralAverages->contains(column))
+                {
                     Unsupported(TStringBuilder()
                         << "StageGraph Merge ordering column " << column
-                        << " has unsupported type " << type
-                        << "; modeled types are integers, Date, String, Utf8, and Decimal");
+                        << " is Optional<Double> without completed "
+                           "integral avg provenance");
+                }
+                if (!integralAverageOrdering) {
+                    const TString type = TypeName(orderingType);
+                    if (!IsModeledOrderingType(type)) {
+                        Unsupported(TStringBuilder()
+                            << "StageGraph Merge ordering column "
+                            << column << " has unsupported type "
+                            << type
+                            << "; modeled types are integers, Date, "
+                               "String, Utf8, and Decimal");
+                    }
                 }
                 auto item = JsonMap();
                 item["column"] = column;
                 item["ascending"] = sort.Ascending;
                 item["nulls_first"] = sort.NullsFirst;
+                if (integralAverageOrdering) {
+                    item["comparison"] =
+                        TString(IntegralAverageOrderingComparisonV1);
+                }
                 order.AppendValue(std::move(item));
             }
             edge["order"] = std::move(order);
@@ -10030,6 +10313,8 @@ private:
     const TStageGraph& Graph;
     const THashMap<const IOperator*, TString>& NodeIds;
     const TVector<IOperator*>& NodeOrder;
+    const THashMap<const IOperator*, TIntegralAverageOrderingColumns>&
+        IntegralAverageOrderingOutputs;
     TString RootNodeId;
     size_t StageCount = 0;
     ui32 RootStageId = 0;
@@ -10113,6 +10398,7 @@ TString SerializeSnapshot(
             root,
             planExporter.GetNodeIds(),
             planExporter.GetNodeOrder(),
+            planExporter.GetIntegralAverageOrderingOutputs(),
             planExporter.GetRootId());
         snapshot["stage_graph"] = stageGraphExporter.Export();
         planExporter.ValidateStageProperties();

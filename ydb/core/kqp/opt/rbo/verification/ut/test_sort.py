@@ -12,6 +12,7 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier import (
 )
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
     Column,
+    INTEGRAL_AVG_RANK_COMPARISON,
     SnapshotError,
     SortOrder,
     parse_snapshot,
@@ -96,12 +97,20 @@ def uint64(value):
     return {"kind": "literal", "type": "Uint64", "value": value}
 
 
-def order_item(column, ascending=True, nulls_first=False):
-    return {
+def order_item(
+    column,
+    ascending=True,
+    nulls_first=False,
+    comparison=None,
+):
+    result = {
         "column": column,
         "ascending": ascending,
         "nulls_first": nulls_first,
     }
+    if comparison is not None:
+        result["comparison"] = comparison
+    return result
 
 
 def scan():
@@ -366,6 +375,86 @@ def staged_parallel_sort_merge(order):
         "assumptions": [],
     }
     return parse_snapshot(snapshot(nodes, "root_project", graph))
+
+
+def integral_average_sort_merge():
+    comparison = INTEGRAL_AVG_RANK_COMPARISON
+    order = [
+        order_item(
+            "average",
+            ascending=True,
+            nulls_first=True,
+            comparison=comparison,
+        )
+    ]
+    aggregate = {
+        "id": "average",
+        "op": "aggregate",
+        "input": "scan",
+        "keys": [],
+        "aggregates": [
+            {
+                "input": "a.k1",
+                "function": "avg",
+                "output": "average",
+                "type": "Double",
+                "nullable": True,
+                "distinct": False,
+                "unwrap": False,
+                "state": {
+                    "kind": "integral_double_v1",
+                    "source_type": "Int64",
+                    "sum_type": "Double",
+                    "count_type": "Uint64",
+                    "nullable": True,
+                    "exact_when_count_at_most": 2,
+                },
+            }
+        ],
+        "phase": "undefined",
+        "distinct_all": False,
+    }
+    nodes = [
+        scan(),
+        aggregate,
+        sort_node("partial", "average", order),
+        limit_node("final", "partial", 2),
+    ]
+    graph = {
+        "root_stage": "root",
+        "stages": [
+            {
+                "id": "source",
+                "nodes": ["scan", "average", "partial"],
+                "inputs": [],
+                "outputs": [{"index": 0, "node": "partial"}],
+                "source_storage": "column",
+            },
+            {
+                "id": "root",
+                "nodes": ["final"],
+                "inputs": ["partial"],
+                "outputs": [{"index": 0, "node": "final"}],
+                "source_storage": None,
+            },
+        ],
+        "edges": [
+            {
+                "id": "average_merge",
+                "producer": "source",
+                "consumer": "root",
+                "occurrence": 0,
+                "producer_output": 0,
+                "consumer_input": 0,
+                "kind": "merge",
+                "order": copy.deepcopy(order),
+            }
+        ],
+        "assumptions": [],
+    }
+    value = snapshot(nodes, "final", graph)
+    value["plan"]["output"] = ["average"]
+    return parse_snapshot(value)
 
 
 class _ExactTestReducer:
@@ -1169,6 +1258,126 @@ class SortConcreteDifferentialTest(unittest.TestCase):
                     _sequences(family, constants),
                     _reference_sequences(rows, order),
                 )
+
+
+class IntegralAverageRankSortTest(unittest.TestCase):
+    TAG = INTEGRAL_AVG_RANK_COMPARISON
+
+    @staticmethod
+    def _family(*cells):
+        column = Column(
+            "average",
+            "Double",
+            True,
+            integral_avg_rank=True,
+        )
+        return single(
+            Relation(
+                (column,),
+                tuple(
+                    Row(
+                        smt.TRUE,
+                        {
+                            "average": Value(
+                                "Double",
+                                smt.bool_value(value is None),
+                                smt.int_value(0 if value is None else value),
+                            )
+                        },
+                    )
+                    for value in cells
+                ),
+            )
+        )
+
+    def test_nullable_rank_orders_in_both_directions(self):
+        source = self._family(None, 2, -1)
+        cases = (
+            (SortOrder("average", True, True, self.TAG), ((None,), (-1,), (2,))),
+            (SortOrder("average", False, False, self.TAG), ((2,), (-1,), (None,))),
+        )
+        for order, expected in cases:
+            with self.subTest(order=order):
+                result = relation.sort_family(
+                    source,
+                    (order,),
+                    smt.Script(),
+                    "integral-avg",
+                )
+                self.assertEqual(_sequences(result, {}), {expected})
+
+    def test_equality_and_order_use_the_same_shared_average_carriers(self):
+        script = smt.Script()
+        scalar = ScalarEncoder(script)
+        left_rank = scalar.integral_int64_average(
+            smt.ONE,
+            smt.int_value(-3),
+            smt.int_value(-3),
+        )
+        right_rank = scalar.integral_int64_average(
+            smt.int_value(2),
+            smt.int_value(-2),
+            smt.int_value(4),
+        )
+        left = Value("Double", smt.FALSE, left_rank)
+        right = Value("Double", smt.FALSE, right_rank)
+        order = SortOrder("average", True, False, self.TAG)
+
+        self.assertEqual(
+            ScalarEncoder.not_distinct(left, right),
+            smt.eq(left_rank, right_rank),
+        )
+        self.assertEqual(
+            relation._ordered_value_less(left, right, order),
+            smt.lt(left_rank, right_rank),
+        )
+
+    def test_rank_tag_and_schema_provenance_are_both_required(self):
+        marked = self._family(0, 1)
+        unmarked = relation.map_family(
+            marked,
+            lambda current: Relation(
+                (Column("average", "Double", True),),
+                current.rows,
+            ),
+        )
+        integer = single(
+            Relation(
+                (Column("average", "Int64", False),),
+                (
+                    Row(
+                        smt.TRUE,
+                        {"average": Value("Int64", smt.FALSE, smt.ZERO)},
+                    ),
+                ),
+            )
+        )
+        cases = (
+            (
+                marked,
+                SortOrder("average", True, False),
+                "Double ordering requires comparison",
+            ),
+            (
+                unmarked,
+                SortOrder("average", True, False, self.TAG),
+                "completed integral AVG output",
+            ),
+            (
+                integer,
+                SortOrder("average", True, False, self.TAG),
+                "tags may only be used with Double",
+            ),
+        )
+        for source, order, reason in cases:
+            with self.subTest(reason=reason):
+                with self.assertRaisesRegex(RelationError, reason):
+                    relation.sort_family(
+                        source,
+                        (order,),
+                        smt.Script(),
+                        "invalid",
+                    )
 
 
 class SortingNetworkEncodingTest(unittest.TestCase):
@@ -2869,6 +3078,31 @@ class StageTopSortMergeTest(unittest.TestCase):
         ).root()
         staged_family = StageEvaluator(staged, database, scalar, router).root()
         return database, router, logical_family, staged_family
+
+    def test_completed_integral_average_rank_flows_through_sort_and_merge(self):
+        staged = integral_average_sort_merge()
+        script = smt.Script()
+        family = StageEvaluator(
+            staged,
+            Database(staged, 2, script),
+            ScalarEncoder(script),
+            Router(script),
+        ).root()
+
+        self.assertTrue(family.sequence)
+        self.assertTrue(family.columns[0].integral_avg_rank)
+        expected = (
+            SortOrder(
+                "average",
+                True,
+                True,
+                INTEGRAL_AVG_RANK_COMPARISON,
+            ),
+        )
+        self.assertTrue(all(
+            outcome.relation.order == expected
+            for outcome in family.outcomes
+        ))
 
     def test_two_task_local_top_sort_merge_and_final_limit_are_equivalent(self):
         staged = staged_top_sort_merge(self.ORDER)

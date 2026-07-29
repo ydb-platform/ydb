@@ -8,6 +8,7 @@ from typing import Callable, TypeAlias
 from . import smt
 from .ir import (
     Column,
+    INTEGRAL_AVG_RANK_COMPARISON,
     Scan,
     Snapshot,
     Stage,
@@ -37,7 +38,7 @@ from .scalar import (
     IntegralAverageState,
     Value,
 )
-from .types import family
+from .types import DOUBLE, family
 
 
 TASKS = 2
@@ -641,10 +642,29 @@ def _require_merge_order(relation: Relation, edge: StageEdge) -> None:
         raise StageError(f"merge edge {edge.id!r} input is not ordered")
     if len(relation.order) != len(edge.order):
         raise StageError(f"merge edge {edge.id!r} input order arity differs")
+    columns = {column.name: column for column in relation.columns}
+    for item in relation.order + edge.order:
+        column = columns.get(item.column)
+        if column is None:
+            raise StageError(f"merge edge {edge.id!r} input order columns differ")
+        if column.type == DOUBLE:
+            if (
+                item.comparison != INTEGRAL_AVG_RANK_COMPARISON
+                or not column.integral_avg_rank
+            ):
+                raise StageError(
+                    f"merge edge {edge.id!r} Double order requires a "
+                    "certified completed integral AVG comparison"
+                )
+        elif item.comparison is not None:
+            raise StageError(
+                f"merge edge {edge.id!r} comparison tag requires Double"
+            )
     for actual, expected in zip(relation.order, edge.order):
         if (
             actual.ascending != expected.ascending
             or actual.nulls_first != expected.nulls_first
+            or actual.comparison != expected.comparison
         ):
             raise StageError(f"merge edge {edge.id!r} input order differs")
         if actual.column == expected.column:

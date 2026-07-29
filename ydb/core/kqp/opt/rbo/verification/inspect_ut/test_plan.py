@@ -397,6 +397,20 @@ class OperatorRendererTest(unittest.TestCase):
             with self.subTest(node=node.id):
                 self.assertEqual(render_node(node), expected)
 
+    def test_integral_average_rank_comparison_is_visible_only_when_present(self):
+        tagged = ir.SortOrder(
+            "average",
+            ascending=True,
+            nulls_first=False,
+            comparison=ir.INTEGRAL_AVG_RANK_COMPARISON,
+        )
+        self.assertEqual(
+            render_node(ir.Sort("sort", "average", (tagged,), None, "final")),
+            'node "sort" sort input="average" '
+            'order=[{column="average", direction=asc, nulls=last, '
+            'comparison="integral_avg_rank_v1"}] limit=none phase=final',
+        )
+
         @dataclass(frozen=True)
         class FutureNode:
             id: str
@@ -453,6 +467,29 @@ class StageEdgeRendererTest(unittest.TestCase):
 
         with self.assertRaisesRegex(InspectionError, "unknown StageGraph connection kind"):
             render_edge(ir.StageEdge(**common, kind="future"))
+
+    def test_merge_renders_integral_average_rank_comparison(self):
+        edge = ir.StageEdge(
+            id="merge",
+            producer="source",
+            consumer="root",
+            occurrence=0,
+            producer_output=0,
+            consumer_input=0,
+            kind="merge",
+            order=(
+                ir.SortOrder(
+                    "average",
+                    True,
+                    True,
+                    ir.INTEGRAL_AVG_RANK_COMPARISON,
+                ),
+            ),
+        )
+        self.assertIn(
+            'comparison="integral_avg_rank_v1"',
+            render_edge(edge),
+        )
 
 
 def _stage_snapshot():

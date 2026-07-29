@@ -52,6 +52,7 @@ JOIN_KINDS = frozenset(
 STAGE_CONNECTION_KINDS = frozenset({"map", "broadcast", "hash_shuffle", "union_all", "merge"})
 HASH_FUNCTIONS = frozenset({"HashV1", "HashV2"})
 OPERATOR_PHASES = frozenset({"undefined", "intermediate", "final"})
+INTEGRAL_AVG_RANK_COMPARISON = "integral_avg_rank_v1"
 
 
 class SnapshotError(ValueError):
@@ -69,6 +70,7 @@ class Column:
     name: str
     type: str
     nullable: bool
+    integral_avg_rank: bool = False
 
     @property
     def value_type(self) -> ValueType:
@@ -172,6 +174,7 @@ class SortOrder:
     column: str
     ascending: bool
     nulls_first: bool
+    comparison: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -792,12 +795,31 @@ def _parse_sort_order(value: Any, path: str) -> tuple[SortOrder, ...]:
     for index, raw_item in enumerate(_array(value, path)):
         item_path = f"{path}[{index}]"
         item = _object(raw_item, item_path)
-        _keys(item, {"column", "ascending", "nulls_first"}, item_path)
+        _keys(
+            item,
+            {"column", "ascending", "nulls_first"},
+            item_path,
+            optional={"comparison"},
+        )
+        comparison = (
+            None
+            if "comparison" not in item
+            else _string(item["comparison"], f"{item_path}.comparison")
+        )
+        if (
+            comparison is not None
+            and comparison != INTEGRAL_AVG_RANK_COMPARISON
+        ):
+            _fail(
+                f"{item_path}.comparison",
+                f"unsupported ordering comparison {comparison!r}",
+            )
         order.append(
             SortOrder(
                 _string(item["column"], f"{item_path}.column"),
                 _bool(item["ascending"], f"{item_path}.ascending"),
                 _bool(item["nulls_first"], f"{item_path}.nulls_first"),
+                comparison,
             )
         )
     if not order:
@@ -1748,6 +1770,38 @@ def _nullable_columns(columns: Mapping[str, Column]) -> dict[str, Column]:
     return {name: replace(column, nullable=True) for name, column in columns.items()}
 
 
+def _validate_order_column(
+    column: Column,
+    item: SortOrder,
+    path: str,
+) -> None:
+    """Admit Double ordering only for one independently derived AVG lineage."""
+
+    if column.type == DOUBLE:
+        if item.comparison != INTEGRAL_AVG_RANK_COMPARISON:
+            _fail(
+                path,
+                "completed integral AVG Double ordering requires comparison "
+                f"{INTEGRAL_AVG_RANK_COMPARISON!r}",
+            )
+        if not column.integral_avg_rank:
+            _fail(
+                path,
+                "integral AVG rank comparison requires a completed integral "
+                "AVG output",
+            )
+        return
+    if item.comparison is not None:
+        _fail(path, "ordering comparison tags may only be used with Double")
+    if not is_ordered_type(column.type):
+        _fail(
+            path,
+            f"ordering type {column.type!r} is unsupported; "
+            "modeled types are integers, String/Utf8, Date, Decimal, "
+            "and certified completed integral AVG Double",
+        )
+
+
 def _sum_type(input_type: str) -> str | None:
     if input_type in {"Int8", "Int16", "Int32", "Int64"}:
         return "Int64"
@@ -2222,12 +2276,11 @@ def _validate_stage_graph(
         for item in edge.order:
             if item.column not in columns:
                 _fail(f"{edge_path}.order", f"column {item.column!r} is not produced")
-            if not is_ordered_type(columns[item.column].type):
-                _fail(
-                    f"{edge_path}.order",
-                    f"ordering type {columns[item.column].type!r} is unsupported; "
-                    "modeled types are integers, String/Utf8, Date, and Decimal",
-                )
+            _validate_order_column(
+                columns[item.column],
+                item,
+                f"{edge_path}.order",
+            )
 
     for stage in graph.stages:
         declared_outputs = {(stage.id, output.index) for output in stage.outputs}
@@ -2770,7 +2823,24 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                         expression_schema,
                         expression_path,
                     )
-                result[column.output] = Column(column.output, value_type.name, value_type.nullable)
+                direct_input = (
+                    expression_schema.get(column.expression.column)
+                    if (
+                        column.expression.kind == "column"
+                        and column.expression.column is not None
+                    )
+                    else None
+                )
+                result[column.output] = Column(
+                    column.output,
+                    value_type.name,
+                    value_type.nullable,
+                    integral_avg_rank=(
+                        direct_input.integral_avg_rank
+                        if direct_input is not None
+                        else False
+                    ),
+                )
 
         elif isinstance(node, Filter):
             result = dict(schema_for(node.input))
@@ -2817,12 +2887,11 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                         f"node {node.id!r}.order[{index}]",
                         f"column {item.column!r} is not available",
                     )
-                if not is_ordered_type(result[item.column].type):
-                    _fail(
-                        f"node {node.id!r}.order[{index}]",
-                        f"ordering type {result[item.column].type!r} is unsupported; "
-                        "modeled types are integers, String/Utf8, Date, and Decimal",
-                    )
+                _validate_order_column(
+                    result[item.column],
+                    item,
+                    f"node {node.id!r}.order[{index}]",
+                )
 
         elif isinstance(node, Aggregate):
             input_schema = schema_for(node.input)
@@ -3028,6 +3097,9 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                     False
                     if exact_scalar_uint64_unwrap
                     else trait.output_nullable,
+                    integral_avg_rank=(
+                        integral_average and node.phase != "intermediate"
+                    ),
                 )
 
         elif isinstance(node, Join):
@@ -3121,6 +3193,9 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                     output_name,
                     inputs[0].type,
                     any(column.nullable for column in inputs),
+                    integral_avg_rank=all(
+                        column.integral_avg_rank for column in inputs
+                    ),
                 )
 
         else:

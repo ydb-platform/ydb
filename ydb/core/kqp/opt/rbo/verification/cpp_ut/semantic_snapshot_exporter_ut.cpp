@@ -468,6 +468,29 @@ TIntrusivePtr<TOpMap> MakeCopyMap(
         &ctx.ExpressionProps)});
 }
 
+TIntrusivePtr<TOpAggregate> MakeKeylessIntegralAverage(
+    TExportTestContext& ctx,
+    TIntrusivePtr<IOperator> input,
+    const TString& source,
+    const TString& output,
+    EOpPhase phase)
+{
+    auto aggregate = MakeIntrusive<TOpAggregate>(
+        input,
+        TVector<TOpAggregationTraits>{TOpAggregationTraits(
+            TInfoUnit(source),
+            "avg",
+            TInfoUnit(output))},
+        TVector<TInfoUnit>{},
+        phase,
+        false,
+        TPositionHandle());
+    SetOutputType(ctx, *aggregate, {
+        {output, NUdf::EDataSlot::Double, true},
+    });
+    return aggregate;
+}
+
 TSemanticSnapshotExportResult ExportSharedInputJoin(
     TStringBuf joinKind,
     bool withFilter = false)
@@ -14619,6 +14642,442 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         AssertIntegralAverageState(finalTrait);
     }
 
+    Y_UNIT_TEST(IntegralAvgOrderingTracksOnlyCompletedDirectCarriers) {
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/A", {
+                {"quantity", "Int64", false},
+            });
+            auto read = MakeRead(ctx, table, "a", {"quantity"});
+            SetOutputType(ctx, *read, {
+                {"a.quantity", NUdf::EDataSlot::Int64, true},
+            });
+            auto average = MakeKeylessIntegralAverage(
+                ctx,
+                read,
+                "a.quantity",
+                "average",
+                EOpPhase::Undefined);
+            auto renamed =
+                MakeCopyMap(ctx, average, "renamed_average", "average");
+            SetOutputType(ctx, *renamed, {
+                {"renamed_average", NUdf::EDataSlot::Double, true},
+            });
+            auto columnAccess = MakeColumnAccess(
+                TInfoUnit("renamed_average"),
+                TPositionHandle(),
+                &ctx.ExprCtx,
+                &ctx.ExpressionProps);
+            AnnotateExpression(
+                columnAccess,
+                ScalarType(ctx, NUdf::EDataSlot::Double, true));
+            auto copied = MakeIntrusive<TOpMap>(
+                renamed,
+                TPositionHandle(),
+                TVector<TMapElement>{TMapElement(
+                    TInfoUnit("column_access_average"),
+                    columnAccess)});
+            SetOutputType(ctx, *copied, {
+                {"renamed_average", NUdf::EDataSlot::Double, true},
+                {"column_access_average", NUdf::EDataSlot::Double, true},
+            });
+            auto passthrough = MakeIntrusive<TOpMap>(
+                copied,
+                TPositionHandle(),
+                TVector<TMapElement>{});
+            SetOutputType(ctx, *passthrough, {
+                {"renamed_average", NUdf::EDataSlot::Double, true},
+                {"column_access_average", NUdf::EDataSlot::Double, true},
+            });
+            auto sort = MakeIntrusive<TOpSort>(
+                passthrough,
+                TPositionHandle(),
+                TVector<TSortElement>{
+                    TSortElement(
+                        TInfoUnit("column_access_average"),
+                        true,
+                        false),
+                });
+            SetOutputType(ctx, *sort, {
+                {"renamed_average", NUdf::EDataSlot::Double, true},
+                {"column_access_average", NUdf::EDataSlot::Double, true},
+            });
+            TOpRoot root(
+                sort,
+                TPositionHandle(),
+                {"column_access_average"});
+
+            const auto snapshot = ParseSupported(
+                ExportSemanticSnapshotV1(root, ctx.RboCtx));
+            const auto& order = FindNode(snapshot, "sort")["order"][0];
+            UNIT_ASSERT_VALUES_EQUAL(order.GetMapSafe().size(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(
+                order["comparison"].GetStringSafe(),
+                "integral_avg_rank_v1");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/Final", {
+                {"quantity", "Int64", false},
+            });
+            auto read = MakeRead(ctx, table, "a", {"quantity"});
+            SetOutputType(ctx, *read, {
+                {"a.quantity", NUdf::EDataSlot::Int64, true},
+            });
+            auto intermediate = MakeKeylessIntegralAverage(
+                ctx,
+                read,
+                "a.quantity",
+                "_state",
+                EOpPhase::Intermediate);
+            auto final = MakeKeylessIntegralAverage(
+                ctx,
+                intermediate,
+                "_state",
+                "average",
+                EOpPhase::Final);
+            auto sort = MakeIntrusive<TOpSort>(
+                final,
+                TPositionHandle(),
+                TVector<TSortElement>{
+                    TSortElement(TInfoUnit("average"), false, true),
+                });
+            SetOutputType(ctx, *sort, {
+                {"average", NUdf::EDataSlot::Double, true},
+            });
+            TOpRoot root(sort, TPositionHandle(), {"average"});
+
+            const auto snapshot = ParseSupported(
+                ExportSemanticSnapshotV1(root, ctx.RboCtx));
+            UNIT_ASSERT_VALUES_EQUAL(
+                FindNode(snapshot, "sort")["order"][0]["comparison"]
+                    .GetStringSafe(),
+                "integral_avg_rank_v1");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/Intermediate", {
+                {"quantity", "Int64", false},
+            });
+            auto read = MakeRead(ctx, table, "a", {"quantity"});
+            SetOutputType(ctx, *read, {
+                {"a.quantity", NUdf::EDataSlot::Int64, true},
+            });
+            auto intermediate = MakeKeylessIntegralAverage(
+                ctx,
+                read,
+                "a.quantity",
+                "_state",
+                EOpPhase::Intermediate);
+            auto sort = MakeIntrusive<TOpSort>(
+                intermediate,
+                TPositionHandle(),
+                TVector<TSortElement>{
+                    TSortElement(TInfoUnit("_state"), true, false),
+                });
+            SetOutputType(ctx, *sort, {
+                {"_state", NUdf::EDataSlot::Double, true},
+            });
+            TOpRoot root(sort, TPositionHandle(), {"_state"});
+
+            const auto result =
+                ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "without completed integral avg provenance");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/Mutation", {
+                {"quantity", "Int64", false},
+            });
+            auto read = MakeRead(ctx, table, "a", {"quantity"});
+            SetOutputType(ctx, *read, {
+                {"a.quantity", NUdf::EDataSlot::Int64, true},
+            });
+            auto average = MakeKeylessIntegralAverage(
+                ctx,
+                read,
+                "a.quantity",
+                "average",
+                EOpPhase::Undefined);
+            auto malformed =
+                MakeCopyMap(ctx, average, "renamed_average", "average");
+            SetOutputType(ctx, *malformed, {
+                {"renamed_average", NUdf::EDataSlot::Int64, true},
+            });
+            TOpRoot root(
+                malformed,
+                TPositionHandle(),
+                {"renamed_average"});
+
+            const auto result =
+                ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "must remain exact Optional<Double>");
+        }
+    }
+
+    Y_UNIT_TEST(IntegralAvgOrderingRequiresEveryUnionBranch) {
+        const auto exportUnion = [](
+            EOpPhase leftPhase,
+            EOpPhase rightPhase)
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/A", {
+                {"quantity", "Int64", false},
+            });
+            auto leftRead =
+                MakeRead(ctx, table, "left", {"quantity"});
+            auto rightRead =
+                MakeRead(ctx, table, "right", {"quantity"});
+            SetOutputType(ctx, *leftRead, {
+                {"left.quantity", NUdf::EDataSlot::Int64, true},
+            });
+            SetOutputType(ctx, *rightRead, {
+                {"right.quantity", NUdf::EDataSlot::Int64, true},
+            });
+            auto leftAverage = MakeKeylessIntegralAverage(
+                ctx,
+                leftRead,
+                "left.quantity",
+                "left_average",
+                leftPhase);
+            auto rightAverage = MakeKeylessIntegralAverage(
+                ctx,
+                rightRead,
+                "right.quantity",
+                "right_average",
+                rightPhase);
+            auto left =
+                MakeCopyMap(ctx, leftAverage, "average", "left_average");
+            auto right =
+                MakeCopyMap(ctx, rightAverage, "average", "right_average");
+            SetOutputType(ctx, *left, {
+                {"average", NUdf::EDataSlot::Double, true},
+            });
+            SetOutputType(ctx, *right, {
+                {"average", NUdf::EDataSlot::Double, true},
+            });
+
+            auto unionAll = MakeIntrusive<TOpUnionAll>(
+                left,
+                right,
+                TPositionHandle(),
+                TVector<TInfoUnit>{TInfoUnit("average")});
+            SetOutputType(ctx, *unionAll, {
+                {"average", NUdf::EDataSlot::Double, true},
+            });
+            auto sort = MakeIntrusive<TOpSort>(
+                unionAll,
+                TPositionHandle(),
+                TVector<TSortElement>{
+                    TSortElement(TInfoUnit("average"), true, true),
+                });
+            SetOutputType(ctx, *sort, {
+                {"average", NUdf::EDataSlot::Double, true},
+            });
+            TOpRoot root(sort, TPositionHandle(), {"average"});
+            return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        };
+
+        const auto allCompleted = exportUnion(
+            EOpPhase::Undefined,
+            EOpPhase::Undefined);
+        const auto snapshot = ParseSupported(allCompleted);
+        UNIT_ASSERT_VALUES_EQUAL(
+            FindNode(snapshot, "sort")["order"][0]["comparison"]
+                .GetStringSafe(),
+            "integral_avg_rank_v1");
+
+        const auto mixed = exportUnion(
+            EOpPhase::Undefined,
+            EOpPhase::Intermediate);
+        UNIT_ASSERT(!mixed.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            mixed.UnsupportedReason,
+            "without completed integral avg provenance");
+    }
+
+    Y_UNIT_TEST(IntegralAvgOrderingTracksOnlyRetainedJoinPayloads) {
+        {
+            TExportTestContext ctx;
+            AddTable(ctx, "/Root/Left", {
+                {"quantity", "Int64", false},
+            });
+            AddTable(ctx, "/Root/Right", {
+                {"k", "Int32", true},
+            });
+            auto leftRead = MakeRead(
+                ctx,
+                ctx.Tables->ExistingTable("ut", "/Root/Left"),
+                "left",
+                {"quantity"});
+            auto rightRead = MakeRead(
+                ctx,
+                ctx.Tables->ExistingTable("ut", "/Root/Right"),
+                "right",
+                {"k"});
+            SetOutputType(ctx, *leftRead, {
+                {"left.quantity", NUdf::EDataSlot::Int64, true},
+            });
+            SetOutputType(ctx, *rightRead, {
+                {"right.k", NUdf::EDataSlot::Int32},
+            });
+            auto average = MakeKeylessIntegralAverage(
+                ctx,
+                leftRead,
+                "left.quantity",
+                "average",
+                EOpPhase::Undefined);
+            auto join = MakeIntrusive<TOpJoin>(
+                average,
+                rightRead,
+                TPositionHandle(),
+                "LeftSemi",
+                TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+            SetOutputType(ctx, *join, {
+                {"average", NUdf::EDataSlot::Double, true},
+            });
+            auto sort = MakeIntrusive<TOpSort>(
+                join,
+                TPositionHandle(),
+                TVector<TSortElement>{
+                    TSortElement(TInfoUnit("average"), true, false),
+                });
+            SetOutputType(ctx, *sort, {
+                {"average", NUdf::EDataSlot::Double, true},
+            });
+            TOpRoot root(sort, TPositionHandle(), {"average"});
+
+            const auto snapshot = ParseSupported(
+                ExportSemanticSnapshotV1(root, ctx.RboCtx));
+            UNIT_ASSERT_VALUES_EQUAL(
+                FindNode(snapshot, "sort")["order"][0]["comparison"]
+                    .GetStringSafe(),
+                "integral_avg_rank_v1");
+        }
+
+        {
+            TExportTestContext ctx;
+            AddTable(ctx, "/Root/Left", {
+                {"quantity", "Int64", false},
+            });
+            AddTable(ctx, "/Root/Right", {
+                {"k", "Int32", true},
+            });
+            auto leftRead = MakeRead(
+                ctx,
+                ctx.Tables->ExistingTable("ut", "/Root/Left"),
+                "left",
+                {"quantity"});
+            auto rightRead = MakeRead(
+                ctx,
+                ctx.Tables->ExistingTable("ut", "/Root/Right"),
+                "right",
+                {"k"});
+            SetOutputType(ctx, *leftRead, {
+                {"left.quantity", NUdf::EDataSlot::Int64, true},
+            });
+            SetOutputType(ctx, *rightRead, {
+                {"right.k", NUdf::EDataSlot::Int32},
+            });
+            auto average = MakeKeylessIntegralAverage(
+                ctx,
+                leftRead,
+                "left.quantity",
+                "average",
+                EOpPhase::Undefined);
+            auto join = MakeIntrusive<TOpJoin>(
+                average,
+                rightRead,
+                TPositionHandle(),
+                "RightSemi",
+                TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+            join->Props.OutputIUs = {
+                TInfoUnit("right.k"),
+                TInfoUnit("average"),
+            };
+            SetOutputType(ctx, *join, {
+                {"right.k", NUdf::EDataSlot::Int32},
+                {"average", NUdf::EDataSlot::Double, true},
+            });
+            auto sort = MakeIntrusive<TOpSort>(
+                join,
+                TPositionHandle(),
+                TVector<TSortElement>{
+                    TSortElement(TInfoUnit("average"), true, false),
+                });
+            SetOutputType(ctx, *sort, {
+                {"right.k", NUdf::EDataSlot::Int32},
+                {"average", NUdf::EDataSlot::Double, true},
+            });
+            TOpRoot root(sort, TPositionHandle(), {"average"});
+
+            const auto result =
+                ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "without completed integral avg provenance");
+        }
+    }
+
+    Y_UNIT_TEST(PassiveDoubleIsNotIntegralAvgOrderingProvenance) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/Passive", {
+            {"x", "Int64", false},
+            {"y", "Int64", false},
+            {"z", "Int64", false},
+        });
+        auto read = MakeRead(ctx, table, "a", {"x", "y", "z"});
+        const auto* optionalInt64 =
+            ScalarType(ctx, NUdf::EDataSlot::Int64, true);
+        const auto* optionalDouble =
+            ScalarType(ctx, NUdf::EDataSlot::Double, true);
+        auto passive = MakeIntrusive<TOpMap>(
+            read,
+            TPositionHandle(),
+            TVector<TMapElement>{TMapElement(
+                TInfoUnit("average"),
+                TExpression(
+                    TypedPassiveDoubleAverage(ctx, "a"),
+                    &ctx.ExprCtx,
+                    &ctx.ExpressionProps))});
+        SetExactOutputType(ctx, *passive, {
+            {"a.x", optionalInt64},
+            {"a.y", optionalInt64},
+            {"a.z", optionalInt64},
+            {"average", optionalDouble},
+        });
+        auto sort = MakeIntrusive<TOpSort>(
+            passive,
+            TPositionHandle(),
+            TVector<TSortElement>{
+                TSortElement(TInfoUnit("average"), true, false),
+            });
+        SetExactOutputType(ctx, *sort, {
+            {"a.x", optionalInt64},
+            {"a.y", optionalInt64},
+            {"a.z", optionalInt64},
+            {"average", optionalDouble},
+        });
+        TOpRoot root(sort, TPositionHandle(), {"average"});
+
+        const auto result =
+            ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.UnsupportedReason,
+            "without completed integral avg provenance");
+    }
+
     Y_UNIT_TEST(IntegralAvgTypeContractFailsClosed) {
         const auto exportCase = [](
             NUdf::EDataSlot inputSlot,
@@ -21006,6 +21465,143 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT_VALUES_EQUAL(order[0]["column"].GetStringSafe(), "a.value");
         UNIT_ASSERT(!order[0]["ascending"].GetBooleanSafe());
         UNIT_ASSERT(order[0]["nulls_first"].GetBooleanSafe());
+    }
+
+    Y_UNIT_TEST(IntegralAvgMergeOrderingUsesProducerProvenance) {
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/IntegralAvgMerge", {
+                {"quantity", "Int64", false},
+            });
+            auto read = MakeRead(ctx, table, "a", {"quantity"});
+            SetOutputType(ctx, *read, {
+                {"a.quantity", NUdf::EDataSlot::Int64, true},
+            });
+            auto average = MakeKeylessIntegralAverage(
+                ctx,
+                read,
+                "a.quantity",
+                "average",
+                EOpPhase::Undefined);
+            auto project =
+                MakeCopyMap(ctx, average, "result", "average");
+            SetOutputType(ctx, *project, {
+                {"result", NUdf::EDataSlot::Double, true},
+            });
+            TOpRoot root(project, TPositionHandle(), {"result"});
+
+            auto& graph = root.PlanProps.StageGraph;
+            const ui32 source =
+                graph.AddSourceStage(NYql::EStorageType::RowStorage);
+            const ui32 producer = graph.AddStage();
+            const ui32 consumer = graph.AddStage();
+            read->Props.StageId = source;
+            average->Props.StageId = producer;
+            project->Props.StageId = consumer;
+            graph.Connect(
+                source,
+                producer,
+                MakeIntrusive<TMapConnection>(
+                    graph.GetOutputIndex(source)));
+            graph.Connect(
+                producer,
+                consumer,
+                MakeIntrusive<TMergeConnection>(
+                    TVector<TSortElement>{
+                        TSortElement(
+                            TInfoUnit("average"),
+                            false,
+                            true),
+                    },
+                    graph.GetOutputIndex(producer)));
+
+            const auto snapshot = ParseSupported(
+                ExportSemanticSnapshotV1(root, ctx.RboCtx));
+            const NJson::TJsonValue* merge = nullptr;
+            for (const auto& edge :
+                 snapshot["stage_graph"]["edges"].GetArraySafe())
+            {
+                if (edge["kind"].GetStringSafe() == "merge") {
+                    merge = &edge;
+                }
+            }
+            UNIT_ASSERT(merge);
+            const auto& order = (*merge)["order"][0];
+            UNIT_ASSERT_VALUES_EQUAL(order.GetMapSafe().size(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(
+                order["comparison"].GetStringSafe(),
+                "integral_avg_rank_v1");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/PassiveMerge", {
+                {"x", "Int64", false},
+                {"y", "Int64", false},
+                {"z", "Int64", false},
+            });
+            auto read = MakeRead(ctx, table, "a", {"x", "y", "z"});
+            const auto* optionalInt64 =
+                ScalarType(ctx, NUdf::EDataSlot::Int64, true);
+            const auto* optionalDouble =
+                ScalarType(ctx, NUdf::EDataSlot::Double, true);
+            auto passive = MakeIntrusive<TOpMap>(
+                read,
+                TPositionHandle(),
+                TVector<TMapElement>{TMapElement(
+                    TInfoUnit("average"),
+                    TExpression(
+                        TypedPassiveDoubleAverage(ctx, "a"),
+                        &ctx.ExprCtx,
+                        &ctx.ExpressionProps))});
+            SetExactOutputType(ctx, *passive, {
+                {"a.x", optionalInt64},
+                {"a.y", optionalInt64},
+                {"a.z", optionalInt64},
+                {"average", optionalDouble},
+            });
+            auto project =
+                MakeCopyMap(ctx, passive, "result", "average");
+            SetExactOutputType(ctx, *project, {
+                {"a.x", optionalInt64},
+                {"a.y", optionalInt64},
+                {"a.z", optionalInt64},
+                {"result", optionalDouble},
+            });
+            TOpRoot root(project, TPositionHandle(), {"result"});
+
+            auto& graph = root.PlanProps.StageGraph;
+            const ui32 source =
+                graph.AddSourceStage(NYql::EStorageType::RowStorage);
+            const ui32 producer = graph.AddStage();
+            const ui32 consumer = graph.AddStage();
+            read->Props.StageId = source;
+            passive->Props.StageId = producer;
+            project->Props.StageId = consumer;
+            graph.Connect(
+                source,
+                producer,
+                MakeIntrusive<TMapConnection>(
+                    graph.GetOutputIndex(source)));
+            graph.Connect(
+                producer,
+                consumer,
+                MakeIntrusive<TMergeConnection>(
+                    TVector<TSortElement>{
+                        TSortElement(
+                            TInfoUnit("average"),
+                            true,
+                            false),
+                    },
+                    graph.GetOutputIndex(producer)));
+
+            const auto result =
+                ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "without completed integral avg provenance");
+        }
     }
 
     Y_UNIT_TEST(UnsupportedSourceConnectionAndStorageFailClosed) {

@@ -268,6 +268,31 @@ void AssertChecksumsWhenDisablingIsNotNegotiated(bool useXxhash) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(EventOutputChannel) {
+    Y_UNIT_TEST(PropagatesSerializedEventTooLargeFromCoroutineConsumer) {
+        auto common = MakeIntrusive<TInterconnectProxyCommon>();
+        common->MonCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+        std::shared_ptr<IInterconnectMetrics> metrics = CreateInterconnectCounters(common);
+        metrics->SetPeerInfo("peer", "1", "peer");
+
+        auto releaseCallback = [](THolder<IEventBase>) {};
+        TEventHolderPool pool(common, releaseCallback);
+
+        TSessionParams params;
+        TEventOutputChannel channel(1, 1, 1, metrics, params, nullptr);
+
+        auto* ev = new TEvTestSerialization;
+        ev->Record.SetBuffer("serialized event larger than configured limit");
+        auto evHandle = MakeHolder<IEventHandle>(TActorId(), TActorId(), ev);
+        channel.Push(*evHandle, pool, TInstant::Zero());
+
+        NInterconnect::TOutgoingStream mainStream;
+        NInterconnect::TOutgoingStream xdcStream;
+        TTcpPacketOutTask task(params, mainStream, xdcStream);
+
+        UNIT_ASSERT_EXCEPTION(channel.FeedBuf(task, 1), TExSerializedEventTooLarge);
+    }
+
     Y_UNIT_TEST(DisabledPayloadChecksums) {
         AssertDisabledPayloadChecksums(false);
         AssertDisabledPayloadChecksums(true);

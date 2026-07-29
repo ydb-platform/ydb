@@ -124,6 +124,8 @@ namespace NActors {
             , Qp(qp)
         {}
         std::atomic<size_t> SizeLeft;
+        std::atomic<ui64> WrScheduled = 0;
+        std::atomic<ui64> WrCompleted = 0;
         std::shared_ptr<NInterconnect::NRdma::TQueuePair> Qp;
     };
 
@@ -164,7 +166,7 @@ namespace NActors {
                 std::deque<NInterconnect::NRdma::TMemRegionSlice> RdmaBuffers;
                 TRdmaReadContext::TPtr RdmaReadContext = nullptr;
                 size_t RdmaSize = 0;
-                std::optional<ui32> RdmaCumulativeCheckSum;
+                std::optional<ui32> RdmaReadCumulativeCheckSum;
             };
 
             std::deque<TPendingEvent> PendingEvents;
@@ -641,8 +643,8 @@ namespace NActors {
         void Handle(TEvUringWriteComplete::TPtr& ev);
         void Handle(TEvUringSendZcNotif::TPtr& ev);
         void Handle(NInterconnect::NRdma::TEvRdmaIoDone::TPtr& ev);
-        void WriteData();
-        void WriteDataUring();
+        void WriteData(bool writeMainChannel);
+        void WriteDataUring(bool writeMainChannel);
         void WriteDataRdma();
         ssize_t HandleWriteResult(ssize_t r, const TString& err);
         ssize_t Write(NInterconnect::TOutgoingStream& stream, NInterconnect::TStreamSocket& socket, size_t maxBytes);
@@ -669,6 +671,10 @@ namespace NActors {
         bool UseKernelLivenessMode() const {
             // Effective liveness mode for the currently attached transport connection.
             return KernelLivenessMode;
+        }
+
+        bool UseRdmaSendReceiveTransport() const {
+            return Params.AllowRdmaSendReceive && RdmaQp && RdmaCq;
         }
 
 
@@ -794,6 +800,11 @@ namespace NActors {
             bool IsOutOfBand = false;
         };
         std::optional<TRdmaWriteInFlight> RdmaWriteInFlight;
+        ui64 RdmaSendWrSubmitted = 0;
+        ui64 RdmaSendWrCompleted = 0;
+        bool RdmaInitialTrafficStateReported = false;
+        bool RdmaEmptySgReported = false;
+        bool RdmaSendBufferAllocationFailureReported = false;
 
         ui64 InflightDataAmount = 0;
         ui64 RdmaInflightDataAmount = 0;

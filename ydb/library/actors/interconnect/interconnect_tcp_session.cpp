@@ -503,7 +503,7 @@ namespace NActors {
         OutgoingIndex = SendQueue.size();
         DropConfirmed(nextPacket);
         OutgoingStream.Rewind();
-        OutOfBandStream = Params.AllowRdmaSendReceive
+        OutOfBandStream = UseRdmaSendReceiveTransport()
             ? NInterconnect::TOutgoingStream(Proxy->Common->RdmaMemPool)
             : NInterconnect::TOutgoingStream();
         XdcStream.Rewind();
@@ -616,12 +616,29 @@ namespace NActors {
                 return;
             }
 
-            if (Params.AllowRdmaSendReceive) {
+            const bool useRdmaMain = UseRdmaSendReceiveTransport();
+            if (useRdmaMain && !RdmaInitialTrafficStateReported &&
+                    (NumEventsInQueue || OutgoingStream || OutOfBandStream)) {
+                RdmaInitialTrafficStateReported = true;
+                LOG_NOTICE_IC_SESSION("ICRDMA", "rdma main initial traffic state"
+                    " queuedEvents# %zu canProduceMore# %d"
+                    " outgoingSize# %zu outgoingUnsent# %zu oobSize# %zu"
+                    " inflightData# %" PRIu64 " inflightRdma# %" PRIu64,
+                    NumEventsInQueue, canProduceMorePackets,
+                    OutgoingStream.CalculateOutgoingSize(), OutgoingStream.CalculateUnsentSize(),
+                    OutOfBandStream.CalculateOutgoingSize(), InflightDataAmount, RdmaInflightDataAmount);
+            }
+            if (useRdmaMain) {
                 WriteDataRdma();
-            } else if (UringContext) {
-                WriteDataUring();
+                if (!Socket) {
+                    return;
+                }
+            }
+
+            if (UringContext) {
+                WriteDataUring(!useRdmaMain);
             } else {
-                WriteData();
+                WriteData(!useRdmaMain);
             }
             if (!Socket) {
                 return;
@@ -636,15 +653,15 @@ namespace NActors {
             canProducePackets = NumEventsInQueue && (InflightDataAmount + RdmaInflightDataAmount) < GetTotalInflightAmountOfData() &&
                 GetUnsentSize() < GetUnsentLimit();
 
-            if (Params.AllowRdmaSendReceive) {
-                canWriteData = (OutgoingStream || OutOfBandStream) && !RdmaWriteInFlight;
-            } else if (UringContext) {
-                canWriteData = ((OutgoingStream || OutOfBandStream) && !UringMainWriteInFlight) ||
-                    (XdcStream && !UringXdcWriteInFlight);
-            } else {
-                canWriteData = ((OutgoingStream || OutOfBandStream) && !ReceiveContext->MainWriteBlocked) ||
-                    (XdcStream && !ReceiveContext->XdcWriteBlocked);
-            }
+            const bool canWriteMain = useRdmaMain
+                ? (OutgoingStream || OutOfBandStream) && !RdmaWriteInFlight
+                : UringContext
+                    ? (OutgoingStream || OutOfBandStream) && !UringMainWriteInFlight
+                    : (OutgoingStream || OutOfBandStream) && !ReceiveContext->MainWriteBlocked;
+            const bool canWriteXdc = UringContext
+                ? XdcStream && !UringXdcWriteInFlight
+                : XdcStream && !ReceiveContext->XdcWriteBlocked;
+            canWriteData = canWriteMain || canWriteXdc;
 
             if (!canProducePackets && !canWriteData) {
                 SetEnoughCpu(true); // we do not starve
@@ -861,7 +878,7 @@ namespace NActors {
         }
     }
 
-    void TInterconnectSessionTCP::WriteData() {
+    void TInterconnectSessionTCP::WriteData(bool writeMainChannel) {
         // total bytes written during this call
         ui64 written = 0;
 
@@ -892,51 +909,53 @@ namespace NActors {
             return totalWritten;
         };
 
-        auto sendQueueIt = SendQueue.begin() + OutgoingIndex;
         static constexpr size_t maxBytesAtOnce = 256 * 1024;
-        size_t bytesToSendInMain = maxBytesAtOnce;
+        if (writeMainChannel) {
+            auto sendQueueIt = SendQueue.begin() + OutgoingIndex;
+            size_t bytesToSendInMain = maxBytesAtOnce;
 
-        Y_DEBUG_ABORT_UNLESS(OutgoingIndex < SendQueue.size() || (OutgoingIndex == SendQueue.size() && !OutgoingOffset && !OutgoingStream));
-
-        if (OutOfBandStream) {
-            bytesToSendInMain = 0;
-
-            if (!ForcedWriteLength && OutgoingOffset) {
-                ForcedWriteLength = 1; // send at least one byte from current packet
-            }
-
-            // align send up to packet boundary
-            size_t offset = OutgoingOffset;
-            for (auto it = sendQueueIt; ForcedWriteLength; ++it, offset = 0) {
-                Y_DEBUG_ABORT_UNLESS(it != SendQueue.end());
-                bytesToSendInMain += it->PacketSize - offset; // send remainder of current packet
-                ForcedWriteLength -= Min(it->PacketSize - offset, ForcedWriteLength);
-            }
-        }
-
-        if (bytesToSendInMain) {
-            const size_t w = process(OutgoingStream, Socket, PollerToken, &ReceiveContext->MainWriteBlocked, bytesToSendInMain);
-
-            // adjust sending queue iterator
-            for (OutgoingOffset += w; OutgoingOffset && sendQueueIt->PacketSize <= OutgoingOffset; ++sendQueueIt, ++OutgoingIndex) {
-                OutgoingOffset -= sendQueueIt->PacketSize;
-            }
-
-            BytesWrittenToSocket += w;
+            Y_DEBUG_ABORT_UNLESS(OutgoingIndex < SendQueue.size() || (OutgoingIndex == SendQueue.size() && !OutgoingOffset && !OutgoingStream));
 
             if (OutOfBandStream) {
-                BytesAlignedForOutOfBand += w;
-                bytesToSendInMain -= w;
+                bytesToSendInMain = 0;
+
+                if (!ForcedWriteLength && OutgoingOffset) {
+                    ForcedWriteLength = 1; // send at least one byte from current packet
+                }
+
+                // align send up to packet boundary
+                size_t offset = OutgoingOffset;
+                for (auto it = sendQueueIt; ForcedWriteLength; ++it, offset = 0) {
+                    Y_DEBUG_ABORT_UNLESS(it != SendQueue.end());
+                    bytesToSendInMain += it->PacketSize - offset; // send remainder of current packet
+                    ForcedWriteLength -= Min(it->PacketSize - offset, ForcedWriteLength);
+                }
             }
 
-            ForcedWriteLength = Socket ? Socket->ExpectedWriteLength() : 0;
-        }
+            if (bytesToSendInMain) {
+                const size_t w = process(OutgoingStream, Socket, PollerToken, &ReceiveContext->MainWriteBlocked, bytesToSendInMain);
 
-        if (!bytesToSendInMain && !ForcedWriteLength) {
-            if (const size_t w = process(OutOfBandStream, Socket, PollerToken, &ReceiveContext->MainWriteBlocked, maxBytesAtOnce)) {
-                OutOfBandStream.DropFront(w);
+                // adjust sending queue iterator
+                for (OutgoingOffset += w; OutgoingOffset && sendQueueIt->PacketSize <= OutgoingOffset; ++sendQueueIt, ++OutgoingIndex) {
+                    OutgoingOffset -= sendQueueIt->PacketSize;
+                }
+
                 BytesWrittenToSocket += w;
-                OutOfBandBytesSent += w;
+
+                if (OutOfBandStream) {
+                    BytesAlignedForOutOfBand += w;
+                    bytesToSendInMain -= w;
+                }
+
+                ForcedWriteLength = Socket ? Socket->ExpectedWriteLength() : 0;
+            }
+
+            if (!bytesToSendInMain && !ForcedWriteLength) {
+                if (const size_t w = process(OutOfBandStream, Socket, PollerToken, &ReceiveContext->MainWriteBlocked, maxBytesAtOnce)) {
+                    OutOfBandStream.DropFront(w);
+                    BytesWrittenToSocket += w;
+                    OutOfBandBytesSent += w;
+                }
             }
         }
 
@@ -964,7 +983,8 @@ namespace NActors {
 
         DropConfirmed(LastConfirmed);
 
-        const bool writeBlockedByFullSendBuffer = ReceiveContext->MainWriteBlocked || ReceiveContext->XdcWriteBlocked;
+        const bool writeBlockedByFullSendBuffer =
+            (writeMainChannel && ReceiveContext->MainWriteBlocked) || ReceiveContext->XdcWriteBlocked;
         if (WriteBlockedByFullSendBuffer < writeBlockedByFullSendBuffer) { // became blocked
             WriteBlockedCycles = GetCycleCountFast();
             LOG_DEBUG_IC_SESSION("ICS18", "hit send buffer limit");
@@ -990,6 +1010,14 @@ namespace NActors {
             TStackVec<NInterconnect::NRdma::TSendSge, MaxRdmaSendSge> sgList;
             const size_t totalBytes = stream.ProduceRdmaSendVec(sgList, sgeLimit, maxBytesAtOnce);
             if (sgList.empty()) {
+                if (!RdmaEmptySgReported) {
+                    RdmaEmptySgReported = true;
+                    LOG_NOTICE_IC_SESSION("ICRDMA", "rdma main produced empty SG list"
+                        " isOutOfBand# %d streamSize# %zu streamUnsent# %zu"
+                        " sendQueueSize# %zu",
+                        isOutOfBand, stream.CalculateOutgoingSize(), stream.CalculateUnsentSize(),
+                        stream.GetSendQueueSize());
+                }
                 return false;
             }
 
@@ -1010,6 +1038,15 @@ namespace NActors {
                 .Bytes = totalBytes,
                 .IsOutOfBand = isOutOfBand,
             };
+            ++RdmaSendWrSubmitted;
+            if (!(RdmaSendWrSubmitted & (RdmaSendWrSubmitted - 1))) {
+                LOG_NOTICE_IC_SESSION("ICRDMA", "rdma main send submitted"
+                    " submitted# %" PRIu64 " completed# %" PRIu64 " bytes# %zu"
+                    " outgoingSize# %zu outgoingUnsent# %zu oobSize# %zu",
+                    RdmaSendWrSubmitted, RdmaSendWrCompleted, totalBytes,
+                    OutgoingStream.CalculateOutgoingSize(), OutgoingStream.CalculateUnsentSize(),
+                    OutOfBandStream.CalculateOutgoingSize());
+            }
             return true;
         };
 
@@ -1028,6 +1065,15 @@ namespace NActors {
         }
 
         const TRdmaWriteInFlight flight = std::exchange(RdmaWriteInFlight, std::nullopt).value();
+        ++RdmaSendWrCompleted;
+        if (!(RdmaSendWrCompleted & (RdmaSendWrCompleted - 1))) {
+            LOG_NOTICE_IC_SESSION("ICRDMA", "rdma main send completed"
+                " submitted# %" PRIu64 " completed# %" PRIu64 " bytes# %zu"
+                " outgoingSize# %zu outgoingUnsent# %zu oobSize# %zu",
+                RdmaSendWrSubmitted, RdmaSendWrCompleted, flight.Bytes,
+                OutgoingStream.CalculateOutgoingSize(), OutgoingStream.CalculateUnsentSize(),
+                OutOfBandStream.CalculateOutgoingSize());
+        }
         if (!ev->Get()->IsSuccess()) {
             LOG_NOTICE_IC_SESSION("ICRDMA", "rdma send failed, err source: %s, code: %d",
                 ev->Get()->GetErrSource().data(), ev->Get()->GetErrCode());
@@ -1055,7 +1101,7 @@ namespace NActors {
         GenerateTraffic();
     }
 
-    void TInterconnectSessionTCP::WriteDataUring() {
+    void TInterconnectSessionTCP::WriteDataUring(bool writeMainChannel) {
         static constexpr size_t maxBytesAtOnce = 256 * 1024;
 
         auto submitStream = [&](NInterconnect::TOutgoingStream& stream, int socketFd, EUringOpTag tag,
@@ -1163,7 +1209,7 @@ namespace NActors {
             }
         };
 
-        if (OutgoingStream || OutOfBandStream) {
+        if (writeMainChannel && (OutgoingStream || OutOfBandStream)) {
             submitMain();
         }
 
@@ -1479,10 +1525,16 @@ namespace NActors {
         stream.Align();
         XdcStream.Align();
 
-        const bool usePreallocatedInternalStream = Params.AllowRdmaSendReceive;
+        const bool usePreallocatedInternalStream = UseRdmaSendReceiveTransport();
         if (usePreallocatedInternalStream &&
                 !stream.PreallocateForWriting(sizeof(TTcpPacketHeader_v2) + TTcpPacketBuf::PacketDataLen)) {
             Proxy->Metrics->IncRdmaSendBufferAllocationFails();
+            if (!RdmaSendBufferAllocationFailureReported) {
+                RdmaSendBufferAllocationFailureReported = true;
+                LOG_NOTICE_IC_SESSION("ICRDMA", "rdma send buffer preallocation failed"
+                    " data# %d queuedEvents# %zu streamSize# %zu streamUnsent# %zu",
+                    data, NumEventsInQueue, stream.CalculateOutgoingSize(), stream.CalculateUnsentSize());
+            }
             IssueRam(false);
             return std::nullopt;
         }
@@ -2052,6 +2104,9 @@ namespace NActors {
                             MON_VAR(XdcStream.CalculateUnsentSize())
                             MON_VAR(XdcStream.GetSendQueueSize())
                             MON_VAR(XdcOffset)
+
+                            MON_VAR(RdmaSendWrSubmitted)
+                            MON_VAR(RdmaSendWrCompleted)
 
                             MON_VAR(CpuStarvationEvents)
                             MON_VAR(CpuStarvationEventsOnWriteData)

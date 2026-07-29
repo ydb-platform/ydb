@@ -119,6 +119,7 @@ namespace NActors {
                 // We need to capture qp to guarantee it will be alive until we have rdma reads inflight
                 // QP is part of TRdmaReadContext which is captured here
                 auto cb = [readCtx = pendingEvent.RdmaReadContext, size=credCopy.GetSize(), reply, curMemReg](NActors::TActorSystem* as, TEvRdmaIoDone* ioDone) {
+                    readCtx->WrCompleted.fetch_add(1, std::memory_order_relaxed);
                     if (!ioDone->IsSuccess()) {
                         reply(as, ioDone);
                         return;
@@ -142,6 +143,7 @@ namespace NActors {
                     credCopy.GetSize(),
                     std::move(cb)
                 );
+                pendingEvent.RdmaReadContext->WrScheduled.fetch_add(1, std::memory_order_relaxed);
 
                 mrOffset += credCopy.GetSize();
                 credOffset += credCopy.GetSize();
@@ -622,6 +624,11 @@ namespace NActors {
                 ev->Get()->Event->GetErrSource().data(), ev->Get()->Event->GetErrCode());
             throw TExDestroySession({TDisconnectReason::RdmaError()});
         }
+        if (RdmaBytesReadScheduled >= 8_MBs) {
+            LOG_NOTICE_IC_SESSION("ICRDMA", "rdma read done notification"
+                " scheduledWr# %" PRIu64 " scheduledBytes# %" PRIu64 " channel# %" PRIu16,
+                RdmaWrReadScheduled, RdmaBytesReadScheduled, ev->Get()->Channel);
+        }
         TMonotonic cur = TMonotonic::Now();
         TDuration passed = cur - ev->Get()->ReadScheduledTs;
         Metrics->UpdateRdmaReadTimeHistogram(passed.MicroSeconds());
@@ -1027,13 +1034,13 @@ namespace NActors {
                     if (!IgnorePayload) { // process command if packet is being applied
                         auto& pendingEvent = context.PendingEvents.back();
                         const bool isInline = cmd == EXdcCommand::DECLARE_SECTION_INLINE;
+                        const bool isRdma = cmd == EXdcCommand::DECLARE_SECTION_RDMA;
                         pendingEvent.SerializationInfo.Sections.push_back(TEventSectionInfo{headroom, size, tailroom,
-                            alignment, isInline});
+                            alignment, isInline, isRdma});
 
                         Y_ABORT_UNLESS(!isInline || Params.UseXdcShuffle);
                         if (!isInline) {
                             // allocate buffer and push it into the payload
-                            const bool isRdma = cmd == EXdcCommand::DECLARE_SECTION_RDMA;
                             auto buffer = AllocateRcBuf(size, headroom, tailroom, alignment, isRdma);
                             if (!buffer) {
                                 LOG_CRIT_IC_SESSION("ICRDMA", "Unable to allocate rcbuf for section, sz: %d, use_rdma: %d", size, isRdma);
@@ -1049,6 +1056,11 @@ namespace NActors {
                                 }
                                 pendingEvent.RdmaReadContext->SizeLeft += size;
                                 pendingEvent.RdmaSize += size;
+                                if (!(pendingEvent.SerializationInfo.Sections.size() % 4096)) {
+                                    LOG_NOTICE_IC_SESSION("ICRDMA", "rdma sections declared"
+                                        " sections# %zu rdmaSize# %zu",
+                                        pendingEvent.SerializationInfo.Sections.size(), pendingEvent.RdmaSize);
+                                }
                             } else {
                                 if (size) {
                                     context.XdcBuffers.push_back(buffer.GetContiguousSpanMut());
@@ -1158,9 +1170,9 @@ namespace NActors {
                     ptr += credsSerializedSize;
 
                     if (cmd == EXdcCommand::RDMA_READ && Params.ChecksumRdmaEvent) {
-                        context.PendingEvents.back().RdmaCumulativeCheckSum = ReadUnaligned<ui32>(ptr);
+                        context.PendingEvents.back().RdmaReadCumulativeCheckSum = ReadUnaligned<ui32>(ptr);
                     } else {
-                        context.PendingEvents.back().RdmaCumulativeCheckSum = std::nullopt;
+                        context.PendingEvents.back().RdmaReadCumulativeCheckSum = std::nullopt;
                     }
 
                     ptr += sizeof(ui32);
@@ -1178,6 +1190,18 @@ namespace NActors {
                         RdmaWrReadScheduled++;
                         packet.RdmaUnreadBytes += cred.GetSize();
                     }
+                    if (context.PendingEvents.back().RdmaSize >= 8_MBs) {
+                        const auto wrStats = RdmaCq->GetWrStats();
+                        LOG_NOTICE_IC_SESSION("ICRDMA", "rdma reads scheduled"
+                            " batchWr# %d scheduledWr# %" PRIu64 " scheduledBytes# %" PRIu64
+                            " eventScheduledWr# %" PRIu64 " eventCompletedWr# %" PRIu64
+                            " sizeLeft# %zu cqReadyWr# %" PRIu32 " cqTotalWr# %" PRIu32,
+                            creds.CredsSize(), RdmaWrReadScheduled, RdmaBytesReadScheduled,
+                            context.PendingEvents.back().RdmaReadContext->WrScheduled.load(std::memory_order_relaxed),
+                            context.PendingEvents.back().RdmaReadContext->WrCompleted.load(std::memory_order_relaxed),
+                            context.PendingEvents.back().RdmaReadContext->SizeLeft.load(std::memory_order_relaxed),
+                            wrStats.Ready, wrStats.Total);
+                    }
                     continue;
                 }
             }
@@ -1194,12 +1218,48 @@ namespace NActors {
             if (!pendingEvent.EventData || pendingEvent.XdcSizeLeft || rdmaSizeLeft) {
                 break; // event is not ready yet
             }
+            if (pendingEvent.RdmaSize >= 8_MBs) {
+                LOG_NOTICE_IC_SESSION("ICRDMA", "rdma event is ready"
+                    " rdmaSize# %zu scheduledWr# %" PRIu64 " completedWr# %" PRIu64
+                    " scheduledBytes# %" PRIu64,
+                    pendingEvent.RdmaSize,
+                    pendingEvent.RdmaReadContext->WrScheduled.load(std::memory_order_relaxed),
+                    pendingEvent.RdmaReadContext->WrCompleted.load(std::memory_order_relaxed),
+                    RdmaBytesReadScheduled);
+            }
             auto& descr = *pendingEvent.EventData;
             ui64 z = 0;
 
             UpdateInboundPacketQ(z, pendingEvent.RdmaSize);
             if (processPacketQueue) {
                 ProcessInboundPacketQ(0,0);
+            }
+
+            std::optional<ui32> rdmaReadChecksum;
+            if (pendingEvent.RdmaReadCumulativeCheckSum) {
+                XXH3_state_t state;
+                XXH3_64bits_reset(&state);
+
+                auto externalIt = pendingEvent.ExternalPayload.Begin();
+                auto consumeExternal = [&externalIt](size_t size, XXH3_state_t* checksumState) {
+                    while (size) {
+                        Y_ABORT_UNLESS(externalIt.Valid());
+                        const size_t len = Min(size, externalIt.ContiguousSize());
+                        if (checksumState) {
+                            XXH3_64bits_update(checksumState, externalIt.ContiguousData(), len);
+                        }
+                        externalIt += len;
+                        size -= len;
+                    }
+                };
+
+                for (const auto& section : pendingEvent.SerializationInfo.Sections) {
+                    if (!section.IsInline) {
+                        consumeExternal(section.Size, section.IsRdmaCapable ? &state : nullptr);
+                    }
+                }
+
+                rdmaReadChecksum = XXH3_64bits_digest(&state);
             }
 
             // create aggregated payload
@@ -1280,17 +1340,8 @@ namespace NActors {
                     throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
                 }
             }
-            if (pendingEvent.RdmaCumulativeCheckSum) {
-                XXH3_state_t state;
-                XXH3_64bits_reset(&state);
-                for (auto iter = payload.Begin(); iter.Valid(); ++iter) {
-                    auto memRegion = NInterconnect::NRdma::TryExtractFromRcBuf(iter.GetChunk());
-                    if (!memRegion.Empty()) {
-                        XXH3_64bits_update(&state, memRegion.GetAddr(), memRegion.GetSize());
-                    }
-                }
-                checksum = XXH3_64bits_digest(&state);
-                if (checksum != *pendingEvent.RdmaCumulativeCheckSum) {
+            if (rdmaReadChecksum) {
+                if (*rdmaReadChecksum != *pendingEvent.RdmaReadCumulativeCheckSum) {
                     LOG_CRIT_IC_SESSION("ICIS05", "event rdma checksum error Type# 0x%08" PRIx32, descr.Type);
                     throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
                 }

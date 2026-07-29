@@ -59,10 +59,12 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
         chunker.SetSerializingEvent(&msg, true);
         while (!chunker.IsComplete()) {
             char buffer[4096];
-            auto range = chunker.FeedBuf(buffer, sizeof(buffer));
-            for (auto [data, size] : range) {
-                chunkerRes += TString(data, size);
-            }
+            auto consumeChunk = [&](const TCoroutineChunkSerializer::TChunk& chunk) {
+                chunkerRes += TString(chunk.Buf, chunk.Size);
+                return true;
+            };
+            TCoroutineChunkSerializer::TGenericChunkConsumer consumer(consumeChunk);
+            UNIT_ASSERT(chunker.FeedBuf(buffer, sizeof(buffer), consumer));
         }
         UNIT_ASSERT_VALUES_EQUAL(chunkerRes, ser);
 
@@ -99,13 +101,46 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
             chunker.SetSerializingEvent(&msg, true);
             while (!chunker.IsComplete()) {
                 TString buffer(chunkSize, '\0');
-                for (const auto& [data, size] : chunker.FeedBuf(buffer.begin(), buffer.size())) {
-                    actual.append(data, size);
-                }
+                auto consumeChunk = [&](const TCoroutineChunkSerializer::TChunk& chunk) {
+                    actual.append(chunk.Buf, chunk.Size);
+                    return true;
+                };
+                TCoroutineChunkSerializer::TGenericChunkConsumer consumer(consumeChunk);
+                UNIT_ASSERT(chunker.FeedBuf(buffer.begin(), buffer.size(), consumer));
             }
             UNIT_ASSERT(chunker.IsSuccessfull());
             UNIT_ASSERT_VALUES_EQUAL_C(actual, expected, "chunkSize# " << chunkSize);
         }
+    }
+
+    Y_UNIT_TEST(CoroutineSerializerCopiesAliasedDataToBuffer) {
+        TEvMessageWithPayload msg;
+        msg.Record.SetMeta("hello, world!");
+        msg.Record.AddPayloadId(msg.AddPayload(MakeStringRope(TString(1024, 'x'))));
+
+        auto serializer = MakeHolder<TAllocChunkSerializer>();
+        UNIT_ASSERT(msg.SerializeToArcadiaStream(serializer.Get()));
+        const TString expected = serializer->Release(msg.CreateSerializationInfo(false))->GetString();
+
+        TCoroutineChunkSerializer chunker;
+        chunker.SetSerializingEvent(&msg, true);
+
+        TString actual;
+        char buffer[4096];
+        while (!chunker.IsComplete()) {
+            auto consumeChunk = [&](const TCoroutineChunkSerializer::TChunk& chunk) {
+                UNIT_ASSERT(!chunk.MemRegion);
+                UNIT_ASSERT(buffer <= chunk.Buf);
+                UNIT_ASSERT(chunk.Buf + chunk.Size <= std::end(buffer));
+                actual.append(chunk.Buf, chunk.Size);
+                return true;
+            };
+            TCoroutineChunkSerializer::TRdmaAwareChunkConsumer consumer(true, consumeChunk);
+            UNIT_ASSERT(chunker.FeedBuf(buffer, sizeof(buffer), consumer));
+        }
+
+        UNIT_ASSERT(chunker.IsSuccessfull());
+        UNIT_ASSERT_VALUES_EQUAL(actual, expected);
     }
 
 #if (!defined(_tsan_enabled_))

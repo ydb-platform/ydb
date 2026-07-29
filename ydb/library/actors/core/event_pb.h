@@ -15,11 +15,16 @@
 #include <util/string/hex.h>
 #include <util/thread/lfstack.h>
 #include <array>
-#include <span>
+#include <exception>
+#include <optional>
 
 namespace NActorsProto {
     class TActorId;
 } // NActorsProto
+
+namespace NInterconnect::NRdma {
+    class TMemRegion;
+}
 
 namespace NActors {
     TString EventPBBaseToString(const TString& header, const TString& dbgStr);
@@ -84,7 +89,67 @@ namespace NActors {
 
     class TCoroutineChunkSerializer final : public TChunkSerializer, protected ITrampoLine {
     public:
-        using TChunk = std::pair<const char*, size_t>;
+        struct TChunk {
+            const char* Buf;
+            size_t Size;
+            const NInterconnect::NRdma::TMemRegion* MemRegion;
+        };
+
+        class IChunkConsumer {
+        public:
+            enum class EAliasedMode {
+                PassThrough,
+                CopyToBuffer,
+            };
+
+            virtual EAliasedMode GetAliasedMode() const noexcept = 0;
+            virtual bool AddChunk(const TChunk& chunk) = 0;
+
+        protected:
+            ~IChunkConsumer() = default;
+        };
+
+        template <typename TAddChunk>
+        class TGenericChunkConsumer final : public IChunkConsumer {
+        public:
+            explicit TGenericChunkConsumer(TAddChunk addChunk)
+                : AddChunkCallback(std::move(addChunk))
+            {}
+
+            EAliasedMode GetAliasedMode() const noexcept override {
+                return EAliasedMode::PassThrough;
+            }
+
+            bool AddChunk(const TChunk& chunk) override {
+                return AddChunkCallback(chunk);
+            }
+
+        private:
+            TAddChunk AddChunkCallback;
+        };
+
+        template <typename TAddChunk>
+        class TRdmaAwareChunkConsumer final : public IChunkConsumer {
+        public:
+            TRdmaAwareChunkConsumer(bool usePreallocatedInternalStream, TAddChunk addChunk)
+                : AliasedMode(usePreallocatedInternalStream
+                    ? EAliasedMode::CopyToBuffer
+                    : EAliasedMode::PassThrough)
+                , AddChunkCallback(std::move(addChunk))
+            {}
+
+            EAliasedMode GetAliasedMode() const noexcept override {
+                return AliasedMode;
+            }
+
+            bool AddChunk(const TChunk& chunk) override {
+                return AddChunkCallback(chunk);
+            }
+
+        private:
+            const EAliasedMode AliasedMode;
+            TAddChunk AddChunkCallback;
+        };
 
         TCoroutineChunkSerializer();
         ~TCoroutineChunkSerializer();
@@ -92,8 +157,8 @@ namespace NActors {
         void SetSerializingEvent(const IEventBase *event, bool withCachedSizes);
         void DiscardEvent() { Event = nullptr; };
         void Abort();
-        std::span<TChunk> FeedBuf(void* data, size_t size);
-        std::span<TChunk> FeedBuf(TMutableContiguousSpan *buffer, size_t totalSize);
+        bool FeedBuf(void* data, size_t size, IChunkConsumer& consumer);
+        bool FeedBuf(TMutableContiguousSpan *buffer, size_t totalSize, IChunkConsumer& consumer);
         bool IsComplete() const {
             return !Event;
         }
@@ -128,7 +193,11 @@ namespace NActors {
     protected:
         void DoRun() override;
         void Resume();
-        void Produce(const void *data, size_t size);
+        bool Produce(const void* data, size_t size,
+            const NInterconnect::NRdma::TMemRegion* memRegion);
+        bool FlushPendingChunk();
+        bool WriteAliasedRaw(const void* data, int size,
+            const NInterconnect::NRdma::TMemRegion* memRegion);
 
         i64 TotalSerializedDataSize;
         TMappedAllocation Stack;
@@ -137,7 +206,10 @@ namespace NActors {
         TContMachineContext *BufFeedContext = nullptr;
         TMutableContiguousSpan Buffer;
         size_t TotalSizeRemain;
-        std::vector<TChunk> Chunks;
+        std::optional<TChunk> PendingChunk;
+        IChunkConsumer* Consumer = nullptr;
+        std::exception_ptr ConsumerException;
+        bool ConsumerFailed = false;
         const IEventBase *Event = nullptr;
         bool CancelFlag = false;
         bool AbortFlag;

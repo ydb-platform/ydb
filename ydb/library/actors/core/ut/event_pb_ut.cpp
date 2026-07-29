@@ -60,10 +60,12 @@ Y_UNIT_TEST_SUITE(TEventSerialization) {
             char buf1[87];
             TString bmChunkedSerialized;
             while (!chunker.IsComplete()) {
-                auto range = chunker.FeedBuf(&buf1[0], sizeof(buf1));
-                for (auto [data, size] : range) {
-                    bmChunkedSerialized.append(data, size);
-                }
+                auto consumeChunk = [&](const NActors::TCoroutineChunkSerializer::TChunk& chunk) {
+                    bmChunkedSerialized.append(chunk.Buf, chunk.Size);
+                    return true;
+                };
+                NActors::TCoroutineChunkSerializer::TGenericChunkConsumer consumer(consumeChunk);
+                UNIT_ASSERT(chunker.FeedBuf(&buf1[0], sizeof(buf1), consumer));
             }
             UNIT_ASSERT_EQUAL(bmSerialized, bmChunkedSerialized);
         }

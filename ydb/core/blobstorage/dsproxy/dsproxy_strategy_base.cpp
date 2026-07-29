@@ -361,6 +361,7 @@ void TStrategyBase::PreparePutsForPartPlacement(TLogContext &logCtx, TBlobState 
         }
     }
 
+    groupDiskRequests.PutsPending.reserve(info.Type.TotalPartCount());
     for (auto& record : partPlacement.Records) {
         // send record.PartIdx to record.VDiskIdx if needed
         TBlobState::TDisk &disk = state.Disks[record.VDiskIdx];

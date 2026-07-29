@@ -1,6 +1,6 @@
 # CREATE STREAMING QUERY
 
-`CREATE STREAMING QUERY` creates a streaming query.
+`CREATE STREAMING QUERY` creates a [streaming query](../../../concepts/streaming-query/streaming-query.md).
 
 ## Syntax
 
@@ -25,9 +25,9 @@ END DO
 * `IF NOT EXISTS` — do not output an error if a streaming query with this name already exists; in this case, the existing query will remain unchanged.
 * `query_name` — the name of the streaming query to create.
 * `WITH (<key> = <value>)` — a list of settings for the new streaming query, optional.
-* `AS DO BEGIN ... END DO` — the full text of the new streaming query, including all required SQL statements. Restrictions on the query text are given in {#T}, see [below](#examples) for query text examples.
+* `AS DO BEGIN ... END DO` — the full text of the new streaming query, including all necessary SQL statements. Restrictions for the query text are given in [{#T}](../../../concepts/streaming-query/streaming-query.md#limitations), see [below](#examples) for query text examples.
 
-The `OR REPLACE` and `IF NOT EXISTS` settings cannot be used simultaneously.
+Settings `OR REPLACE` and `IF NOT EXISTS` cannot be used simultaneously.
 
 Available parameters of the `WITH` block:
 
@@ -36,15 +36,23 @@ Available parameters of the `WITH` block:
 
 See [below](#examples) for examples of creating a streaming query.
 
-## Using a reader {#consumer-usage}
+## Using a Consumer {#consumer-usage}
 
-{% include [consumer-usage](../../../_includes/consumer-usage.md) %}
+A [consumer](../../../concepts/datamodel/topic.md#consumer) is a named subscription to a [topic](../../../concepts/datamodel/topic.md) that stores the current read position.
 
-Regardless of whether a reader exists, the read position of the streaming query is saved in a [checkpoint](../../../dev/streaming-query/checkpoints.md).
+A consumer is created via the [CLI](../../../reference/ydb-cli/topic-consumer-add.md) or when creating a topic using [CREATE TOPIC](create-topic.md). The consumer name is specified in the query text using a pragma:
+
+
+```sql
+PRAGMA pq.Consumer="my_consumer";
+```
+
+
+If no consumer is specified, reading from the topic is performed without a consumer. In both cases, the read position is saved in a [checkpoint](../../../dev/streaming-query/checkpoints.md). Specifying a consumer allows tracking the read position and lag from the topic side, for example, via the [CLI](../../../reference/ydb-cli/topic-read.md).
 
 ## Examples {#examples}
 
-### Writing to a topic (JSON) {#example-topic-json}
+### Writing to a Topic (JSON) {#example-topic-json}
 
 The query reads events from an input topic, forms a JSON object from individual fields, and writes the result to an output topic.
 
@@ -52,7 +60,7 @@ The `AsStruct` function creates a structure from the specified fields, `Yson::Fr
 
 {% note info %}
 
-Streaming queries can work with [local and external topics](../../../concepts/query_execution/topics.md#local-external-topics).
+Streaming queries can work with [local and external topics](../../../dev/streaming-query/local-and-external-topics.md).
 
 In the example:
 
@@ -68,7 +76,7 @@ DO BEGIN
 
     INSERT INTO output_topic -- or external topic ext_source.output_topic
     SELECT
-        -- Formation of JSON from individual fields
+        -- Forming JSON from individual fields
         ToBytes(Unwrap(Yson::SerializeJson(Yson::From(
             AsStruct(Id AS id, Name AS name)
         ))))
@@ -86,13 +94,13 @@ END DO
 ```
 
 
-### Writing to a table {#example-table}
+### Writing to a Table {#example-table}
 
-The query reads events from the topic and writes them to the `output_table` table. The table must be created in advance with a schema matching the selected columns.
+The query reads events from a topic and writes them to the `output_table` table. The table must be created in advance with a schema matching the selected columns.
 
 {% note warning %}
 
-Writing to tables in streaming queries is supported **only in UPSERT mode**. The `INSERT INTO` operation is not supported, because during reprocessing of events (the at-least-once guarantee) it would lead to duplicate rows. With `UPSERT`, if a row with such a primary key already exists, it will be updated; otherwise, a new row will be inserted, and `INSERT INTO` will fail with an error.
+Writing to tables in streaming queries is supported **only in UPSERT mode**. The `INSERT INTO` operation is not supported because, during reprocessing of events (at-least-once guarantee [at-least-once](../../../concepts/streaming-query/streaming-query.md#guarantees)), it would lead to duplicate rows. With `UPSERT`, if a row with the same primary key already exists, it will be updated; otherwise, a new row will be inserted, and `INSERT INTO` will fail with an error.
 
 {% endnote %}
 
@@ -101,7 +109,7 @@ Writing to tables in streaming queries is supported **only in UPSERT mode**. The
 CREATE STREAMING QUERY my_streaming_query AS
 DO BEGIN
 
-    -- Write to table (only UPSERT, INSERT is not supported)
+    -- Writing to table (only UPSERT, INSERT not supported)
     UPSERT INTO output_table
     SELECT
         Id,
@@ -120,7 +128,7 @@ END DO
 ```
 
 
-### Running in a resource pool {#example-resource-pool}
+### Running in a Resource Pool {#example-resource-pool}
 
 The query is created in the specified [resource pool](../../../concepts/glossary.md#resource-pool) but is not started automatically (`RUN = FALSE`). This allows you to check the configuration before starting or start the query later via [ALTER STREAMING QUERY](alter-streaming-query.md).
 
@@ -156,6 +164,6 @@ Other examples: [{#T}](../../../dev/streaming-query/patterns.md).
 ## See also
 
 * [{#T}](../../../dev/streaming-query/patterns.md)
-* {#T}
+* [{#T}](../../../concepts/streaming-query/streaming-query.md)
 * [{#T}](alter-streaming-query.md)
 * [{#T}](drop-streaming-query.md)

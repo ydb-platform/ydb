@@ -4,6 +4,9 @@ Functional smoke tests for deferred topic publish via experimental CLI.
 
 Scenarios mirror the demo happy path / cancel / list-describe flows:
   begin → write --deferred-int-id → publish|cancel → topic read
+
+Also covers serverless DB: registry tables under the tenant .metadata and
+Publish/Cancel finalize transactions.
 """
 
 import logging
@@ -13,13 +16,20 @@ import uuid
 
 import yatest
 
-from ydb.tests.functional.ydb_cli.ydb_cli_helpers import BaseCliTestWithDatabase, ydb_bin
+from ydb.tests.functional.ydb_cli.ydb_cli_helpers import (
+    BaseCliTestWithDatabase,
+    set_ydb_cli_test_canondata_root,
+    ydb_bin,
+)
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+from ydb.tests.oss.ydb_sdk_import import ydb
 
 logger = logging.getLogger(__name__)
 
 AUTH_TOKEN = "root@builtin"
 CONSUMER = "dp-consumer"
+PUBLICATIONS_TABLE = "topic_deferred_publications"
+DESTINATIONS_TABLE = "topic_deferred_publication_destinations"
 
 
 class TestTopicDeferredPublishCli(BaseCliTestWithDatabase):
@@ -30,6 +40,11 @@ class TestTopicDeferredPublishCli(BaseCliTestWithDatabase):
         return KikimrConfigGenerator(
             extra_feature_flags=["enable_topic_deferred_publish"],
         )
+
+    @classmethod
+    def setup_class(cls):
+        super().setup_class()
+        cls.cli_database = cls.root_dir
 
     @classmethod
     def _auth_env(cls, extra=None):
@@ -45,7 +60,7 @@ class TestTopicDeferredPublishCli(BaseCliTestWithDatabase):
             [
                 ydb_bin(cls.CLI_BINARY_ENV),
                 "--endpoint", cls.grpc_endpoint(),
-                "--database", cls.root_dir,
+                "--database", cls.cli_database,
             ] + args,
             stdin=stdin,
             check_exit_code=check_exit_code,
@@ -64,7 +79,24 @@ class TestTopicDeferredPublishCli(BaseCliTestWithDatabase):
 
     @classmethod
     def _unique_topic(cls, prefix):
-        return f"{cls.root_dir}/{prefix}-{uuid.uuid4().hex[:8]}"
+        return f"{cls.cli_database}/{prefix}-{uuid.uuid4().hex[:8]}"
+
+    @classmethod
+    def _scheme_path_exists(cls, path, scheme_driver=None):
+        driver = scheme_driver if scheme_driver is not None else cls.driver
+        try:
+            driver.scheme_client.describe_path(path)
+            return True
+        except ydb.SchemeError:
+            return False
+        except ydb.Unauthorized:
+            # System .metadata tables often deny Describe to ordinary SIDs; that still
+            # proves the path exists (missing paths come back as SchemeError).
+            return True
+
+    @classmethod
+    def _metadata_table_path(cls, database, table_name):
+        return f"{database}/.metadata/{table_name}"
 
     @classmethod
     def _prepare_topic(cls, topic_path):
@@ -236,3 +268,131 @@ class TestTopicDeferredPublishCli(BaseCliTestWithDatabase):
 
         self._cancel(int_a)
         self._cancel(int_b)
+
+
+class TestTopicDeferredPublishCliServerless(TestTopicDeferredPublishCli):
+    """Same CLI flows on a serverless tenant; assert registry tables land in the tenant .metadata."""
+
+    HOSTEL_DB = "/Root/hostel"
+    SERVERLESS_DB = "/Root/serverless"
+
+    @classmethod
+    def setup_class(cls):
+        set_ydb_cli_test_canondata_root()
+        cls.cluster = cls._start_cluster(configurator=cls.get_cluster_configurator())
+        cls.root_dir = "/Root"
+
+        cls.cluster.create_hostel_database(
+            cls.HOSTEL_DB,
+            storage_pool_units_count={"hdd": 1},
+        )
+        cls.cluster.register_and_start_slots(cls.HOSTEL_DB, count=1)
+        cls.cluster.wait_tenant_up(cls.HOSTEL_DB)
+        cls.cluster.create_serverless_database(cls.SERVERLESS_DB, hostel_db=cls.HOSTEL_DB)
+
+        credentials = ydb.AuthTokenCredentials(AUTH_TOKEN)
+        cls.root_driver = cls._start_driver(cls.root_dir, credentials=credentials)
+        cls.hostel_driver = cls._start_driver(cls.HOSTEL_DB, credentials=credentials)
+        cls.driver = cls._start_driver(cls.SERVERLESS_DB, credentials=credentials)
+        cls.cli_database = cls.SERVERLESS_DB
+
+    @classmethod
+    def teardown_class(cls):
+        for attr in ("root_driver", "hostel_driver"):
+            driver = getattr(cls, attr, None)
+            if driver is not None:
+                driver.stop()
+        super().teardown_class()
+
+    @classmethod
+    def _assert_registry_tables_only_under(cls, database):
+        # Tenant paths must be described with a driver bound to that database;
+        # /Root DescribePath cannot see inside a serverless/hostel subdomain.
+        tenant_driver = cls.driver if database == cls.cli_database else cls.root_driver
+        pubs = cls._metadata_table_path(database, PUBLICATIONS_TABLE)
+        dests = cls._metadata_table_path(database, DESTINATIONS_TABLE)
+        assert cls._scheme_path_exists(pubs, tenant_driver), f"missing {pubs}"
+        assert cls._scheme_path_exists(dests, tenant_driver), f"missing {dests}"
+
+        for foreign_db, foreign_driver in (
+            (cls.root_dir, cls.root_driver),
+            (cls.HOSTEL_DB, cls.hostel_driver),
+        ):
+            if foreign_db == database:
+                continue
+            foreign_pubs = cls._metadata_table_path(foreign_db, PUBLICATIONS_TABLE)
+            foreign_dests = cls._metadata_table_path(foreign_db, DESTINATIONS_TABLE)
+            assert not cls._scheme_path_exists(foreign_pubs, foreign_driver), (
+                f"registry leaked to {foreign_pubs}"
+            )
+            assert not cls._scheme_path_exists(foreign_dests, foreign_driver), (
+                f"registry leaked to {foreign_dests}"
+            )
+
+    def test_metadata_tables_created_under_serverless_db(self):
+        assert not self._scheme_path_exists(
+            self._metadata_table_path(self.SERVERLESS_DB, PUBLICATIONS_TABLE),
+            self.driver,
+        )
+
+        ext_id = f"sls-meta-{uuid.uuid4().hex[:8]}"
+        int_id = self._begin(ext_id)
+        self._assert_registry_tables_only_under(self.SERVERLESS_DB)
+
+        describe = self._describe(int_id)
+        assert ext_id in describe.stdout
+
+        self._cancel(int_id)
+        # Tables remain after Cancel; only the publication row is removed.
+        self._assert_registry_tables_only_under(self.SERVERLESS_DB)
+        gone = self._describe(int_id, check_exit_code=False)
+        assert gone.exit_code != 0
+
+    def test_happy_path_publish(self):
+        topic = self._unique_topic("sls-happy")
+        self._prepare_topic(topic)
+        ext_id = f"sls-order-{uuid.uuid4().hex[:8]}"
+        payload = "serverless-deferred-publish"
+
+        int_id = self._begin(ext_id)
+        self._assert_registry_tables_only_under(self.SERVERLESS_DB)
+
+        self._write_deferred(topic, int_id, payload, ext_id=ext_id)
+        describe = self._describe(int_id)
+        assert topic in describe.stdout or topic.rsplit("/", 1)[-1] in describe.stdout
+
+        before = self._read(topic)
+        assert payload not in before.stdout
+
+        publish = self._publish(int_id)
+        assert publish.exit_code == 0
+
+        after = self._read(topic)
+        assert payload in after.stdout
+
+        # Publish deleted the registry row; tables stay in the serverless tenant.
+        self._assert_registry_tables_only_under(self.SERVERLESS_DB)
+        gone = self._describe(int_id, check_exit_code=False)
+        assert gone.exit_code != 0
+
+        repeat = self._publish(int_id, check_exit_code=False)
+        assert repeat.exit_code != 0
+
+    def test_cancel_discards_staged_data(self):
+        topic = self._unique_topic("sls-cancel")
+        self._prepare_topic(topic)
+        ext_id = f"sls-cancel-{uuid.uuid4().hex[:8]}"
+        payload = "serverless-to-be-cancelled"
+
+        int_id = self._begin(ext_id)
+        self._write_deferred(topic, int_id, payload, ext_id=ext_id)
+
+        cancel = self._cancel(int_id)
+        assert cancel.exit_code == 0
+
+        read = self._read(topic)
+        assert payload not in read.stdout
+
+        self._assert_registry_tables_only_under(self.SERVERLESS_DB)
+        describe = self._describe(int_id, check_exit_code=False)
+        assert describe.exit_code != 0

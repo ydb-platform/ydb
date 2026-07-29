@@ -148,6 +148,7 @@ affected:
 
 - `keys` — стабильные токены ошибки (**без** обязательного suite); сюда же то, что раньше клали в Search keys.
 - `affected` — `suite` / `db` / `queries`; при `update_known` **дописывай** (`dutyctl annotate-issue`), не плоди issue.
+- Если suite оборвался и в Now **nodata** на последующих query (следствие abort, не лаг mart) — **все** эти query тоже в `queries` того же `affected` / того же issue. Иначе dashboard покажет их как uncovered.
 - Generate ищет open issues с `perf-duty-match`, матчит inbox по `affected`, показывает `#N · title`.
 
 ---

@@ -11,6 +11,8 @@ Outputs: `analysis.md` (plain language) + `result.json` (`perf-duty-result/v1`).
 Read these fields **before** digging covered tickets:
 
 1. **`ticket_coverage`** / `queries[].ticket_coverage` — `uncovered` and `wrong_branch` = проблемы **без** открытого issue на label ветки. Их разбирать **первыми**. `covered` → обычно `update_known` (расширить `affected`), не плодить дубликат.  
+   Если fail уже `covered`, а **последующие** query в том же suite/db — `uncovered` **nodata** после abort/cut-off suite — это **тот же** issue: допиши nodata-query в `affected` (`annotate-issue`), не заводи new issues и не оставляй дыры uncovered.  
+
 2. **`hints.investigate_uncovered_first`** / React `new` — человек явно смотрел «new issues».  
 3. **`compare.active`** — в heatmap выбран cmp. Это **обязательный** второй прогон, не сноска:
    - `prepare` пишет `compare_focus.json` (Allure `compare.run.report` + fail/slow query из `compare.queries`);
@@ -218,10 +220,16 @@ Put a clear line in the report: **Давность:** …
 2. **Открыть Allure/report** того же прогона (`focus_run.report`) и проверить **именно эти** query:
    - **В отчёте они ok / passed** → вывод: **в базу (mart / daily) данные ещё не доехали** (лаг выгрузки/агрегации). Не копать stderr/кластер как продуктовую аварию. Решение обычно `wait_next_wave` / `no_action` + перепроверить mart на следующем refresh.  
    - **В отчёте тоже нет / skipped / failed / нет кейса** → это уже реальный gap прогона: копать `kikimr__stderr` + `kikimr__logs`, при необходимости журналы на кластере (хосты из логов). Дальше — как `olap_fail` / инфраструктура.  
-3. **dig-runs** — сверить Now vs mart `SuccessCount` / `YdbSumMeans` на том же Version/Report (подтверждает lag или устойчивую дыру).  
-4. В `analysis.md` явно написать ветку: «отчёт ok → не доехали» **или** «в отчёте тоже нет → логи/кластер».
+3. **Следствие abort (обязательно при `update_known` / `open_ticket`):** если suite оборвался на fail/crash (SIGSEGV, VERIFY, abort) и nodata — **хвост того же прогона** (кейсы после cut-off / SuccessCount не дописан), это **не** отдельный баг и **не** `no_action` «забыть в Now».  
+   - В `problems.json` / P\* nodata можно пометить как следствие P1.  
+   - **Обязательно** те же nodata-query (все из pack `queries` kind=nodata на этом suite/db) попадут в `perf-duty-match` → `affected` **того же** issue:  
+     `dutyctl annotate-issue --issue N --suite … --db … --queries Query17 Query18 … --no-comment`  
+   - И в Materials Body `queries: […]` тоже перечисли fail **и** nodata-хвост.  
+   Иначе generate/Now покажет nodata как uncovered / new issues, хотя корень уже в тикете.  
+4. **dig-runs** — сверить Now vs mart `SuccessCount` / `YdbSumMeans` на том же Version/Report (подтверждает lag или устойчивую дыру).  
+5. В `analysis.md` явно написать ветку: «отчёт ok → не доехали» **или** «в отчёте тоже нет → логи/кластер» (+ при abort: «nodata = следствие, в affected #N»).
 
-`validate` fails if nodata is seeded but report-check branch is missing from the write-up.
+`validate` fails if nodata is seeded but report-check branch is missing, **or** if fail+nodata (report gap) + ticket resolution but Materials `affected` omits the nodata queries.
 
 ### OLAP slow / duration growth (mandatory when seeded)
 
@@ -317,6 +325,8 @@ For each problem, you can answer yes:
 - [ ] TPC-C / OLAP fail|slow: `dig_prs.json` on mart `pr_window` / jump (suite-stable streak→focus or ydb|lat step), not nearest FailCount=0 / not pack prev-green alone  
 - [ ] Если `compare.active`: `compare_focus.json` + в отчёте прогон сравнения (label/sha) + gaps; fail на cmp → stderr/coredump; дельта cmp→now  
 - [ ] OLAP nodata: checked Allure/report for those queries; wrote branch «не доехали» **or** «в отчёте тоже нет → логи/кластер»  
+- [ ] OLAP nodata после abort/cut-off: **все** nodata-query этого suite/db в `affected` того же issue (`annotate-issue` + Materials match), не left uncovered  
+
 - [ ] OLAP slow: plans × iterations + `baseline_focus` / plan_compare + dig-prs on ydb jump + H-loop (≤3) + culprit only with evidence  
 - [ ] OLAP slow: if plan_same — server logs focus+baseline; if plan_regressed — code/bisect on planner/CS path  
 - [ ] Correlations checked: other run_type/suite and peer cluster on same branch  
@@ -396,7 +406,12 @@ Label **не нужен**. Шаблон: [`REPORT_TEMPLATE.md`](REPORT_TEMPLATE.
 2. `dutyctl known-issues --keys 'read.cpp:59' 'range.Offset'` (или `gh` + parse блоков).  
 3. Если hit → `update_known`: `dutyctl annotate-issue --issue N --suite … --db … --queries …` (расширяет `affected` в body; **по умолчанию без коммента**). Хватает match-блока + `upload-report` (Duty report в Фактуре). Если нужен timeline-коммент — **после** dig стека/coredump и `upload-report`:
    `dutyctl annotate-issue … --sighting-from $OUT` («Повтор»: branch / commit / Allure / Duty report / coredump + **полный** backtrace `#0…#N` из `host_dig/*crash_stack*` или `stderr/`).  
-   **Запрещены** голый `also seen` и таблица без стека при segfault/VERIFY. 
+   **Запрещены** голый `also seen` и таблица без стека при segfault/VERIFY.  
+   **Чеклист `annotate-issue` (один вызов или два):**  
+   1) fail/crash query(и) с доказательством;  
+   2) **все** pack-nodata query того же suite/db, если они — хвост после abort (не лаг mart).  
+   Пример: `--queries Query03 Query17 Query18 Query19 Query20 Query21 Query22 --no-comment`.  
+   Не закрывай разбор, пока `ticket_coverage` nodata-хвоста не станет `covered` тем же `#N`.
 4. Context `known_tickets` + `ticket_coverage` из Save — стартовые кандидаты; **uncovered** в pack = кандидат на новый issue (после search).  
 5. Если `compare.active` — сверь симптом на `compare.run` и на `focus_run` (появилось на now / уже было на cmp).
 
@@ -487,11 +502,11 @@ keys:
 affected:
   - suite: {suite}
     db: {db}
-    queries: [Query…]
+    queries: [QueryFail, QueryNodataTail…]  # fail + хвост nodata после abort
 -->
 ```
 
-Also update `$OUT/problems.json`. При `update_known` — расширь `affected` в GitHub issue (`annotate-issue`), не только analysis.md.
+Also update `$OUT/problems.json`. При `update_known` — расширь `affected` в GitHub issue (`annotate-issue`), не только analysis.md. Nodata-хвост после abort — в том же `queries` списке.
 
 ## Ход разбора (дерево под кат)
 

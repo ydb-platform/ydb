@@ -725,17 +725,19 @@ def _attach_coverage_to_item(
     suite = str(item.get("suite") or "")
     db = item.get("db")
     branch = item.get("branch")
-    tickets = tickets_for_suite(
+    suite_tickets = tickets_for_suite(
         known, suite=suite, db=db, branch=branch, kind=kind
     )
-    item["tickets"] = tickets
+    # Full suite×db hits (any affected query) — for tooling; inbox pills use gap tickets.
+    item["suite_tickets"] = suite_tickets
 
     gap_names = _gap_query_names(item)
     new_issues = 0
     wrong_branch = 0
     counted: set[str] = set()
+    gap_tickets_by_num: dict[Any, dict[str, Any]] = {}
 
-    def _annotate_gap_query(q: dict[str, Any]) -> None:
+    def _annotate_query(q: dict[str, Any], *, count_new: bool) -> None:
         nonlocal new_issues, wrong_branch
         qname = norm_query_name(q.get("test") or q.get("name"))
         if not qname:
@@ -743,18 +745,28 @@ def _attach_coverage_to_item(
         cov = classify_fail_coverage(
             known, suite=suite, db=db, branch=branch, query=qname, kind=kind
         )
-        q["ticket_coverage"] = cov["status"]
-        q["tickets"] = cov["tickets"]
-        if qname in counted:
+        if count_new:
+            q["ticket_coverage"] = cov["status"]
+            q["tickets"] = cov["tickets"]
+            for t in cov["tickets"] or []:
+                num = t.get("number")
+                if num is not None:
+                    gap_tickets_by_num[num] = t
+            if qname in counted:
+                return
+            counted.add(qname)
+            # wrong_branch = ticket exists but lacks this branch label → still a
+            # "new issue" for the branch (add label / treat as not covered here).
+            if cov["status"] == "uncovered":
+                new_issues += 1
+            elif cov["status"] == "wrong_branch":
+                wrong_branch += 1
+                new_issues += 1
             return
-        counted.add(qname)
-        # wrong_branch = ticket exists but lacks this branch label → still a
-        # "new issue" for the branch (add label / treat as not covered here).
-        if cov["status"] == "uncovered":
-            new_issues += 1
-        elif cov["status"] == "wrong_branch":
-            wrong_branch += 1
-            new_issues += 1
+        # ok/soft catalog: pin issue only when affected lists this query
+        if cov["tickets"]:
+            q["ticket_coverage"] = cov["status"]
+            q["tickets"] = cov["tickets"]
 
     # annotate bad_queries: fail / both / nodata / legacy empty kind
     for q in item.get("bad_queries") or []:
@@ -764,15 +776,25 @@ def _attach_coverage_to_item(
             continue
         if not _is_gap_query_kind(q.get("kind")):
             continue
-        _annotate_gap_query(q)
+        _annotate_query(q, count_new=True)
 
-    # also annotate queries catalog entries (nodata often lives there)
+    # queries catalog: gaps → suite pills; any query in issue.affected → q.tickets for UI
     for q in item.get("queries") or []:
         if not isinstance(q, dict):
             continue
-        if str(q.get("kind") or "") not in ("fail", "both", "nodata"):
-            continue
-        _annotate_gap_query(q)
+        kind_q = str(q.get("kind") or "")
+        is_gap = kind_q in ("fail", "both", "nodata")
+        if is_gap or q.get("test") or q.get("name"):
+            _annotate_query(q, count_new=is_gap)
+
+    # Suite inbox pills = tickets covering *current* fail/nodata queries only.
+    # (Avoid showing AppendSlice #48261 next to a CountersForStep Query01 fail.)
+    if gap_tickets_by_num:
+        item["tickets"] = list(gap_tickets_by_num.values())
+    elif not gap_names:
+        item["tickets"] = suite_tickets
+    else:
+        item["tickets"] = []
 
     # suite-level fallback when failing/nodata but no named queries
     if not gap_names:

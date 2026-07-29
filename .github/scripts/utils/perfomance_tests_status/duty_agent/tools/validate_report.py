@@ -47,6 +47,76 @@ def _fenced_blocks(text: str) -> list[str]:
     return re.findall(r"```(?:[^\n]*)\n(.*?)```", text or "", flags=re.S)
 
 
+def _nodata_query_names(out_dir: Path | None) -> set[str]:
+    """Query names marked nodata/missing in pack / detect / problems."""
+    if out_dir is None:
+        return set()
+    names: set[str] = set()
+
+    def _add(q: Any) -> None:
+        if isinstance(q, str) and q.strip():
+            names.add(q.strip())
+        elif isinstance(q, dict):
+            for k in ("test", "query", "name"):
+                v = q.get(k)
+                if isinstance(v, str) and v.strip():
+                    names.add(v.strip())
+                    return
+
+    ctx_path = out_dir / "context.json"
+    if ctx_path.is_file():
+        ctx = read_json(ctx_path)
+        for q in ctx.get("queries") or []:
+            if not isinstance(q, dict):
+                continue
+            kind = str(q.get("kind") or "").lower()
+            if kind in ("nodata", "missing", "no_data"):
+                _add(q)
+
+    det_path = out_dir / "detect_type.json"
+    if det_path.is_file():
+        det = read_json(det_path)
+        for seed in det.get("problems_seed") or []:
+            if not isinstance(seed, dict):
+                continue
+            at = str(seed.get("analysis_type") or "").lower()
+            title = str(seed.get("title") or "").lower()
+            if "nodata" in at or "nodata" in title or "no data" in title:
+                _add(seed)
+                for q in seed.get("queries") or seed.get("tests") or []:
+                    _add(q)
+        for q in det.get("nodata_queries") or []:
+            _add(q)
+
+    probs_path = out_dir / "problems.json"
+    if probs_path.is_file():
+        probs = read_json(probs_path)
+        items = probs if isinstance(probs, list) else list((probs or {}).get("items") or [])
+        for it in items:
+            if not isinstance(it, dict):
+                continue
+            at = str(it.get("analysis_type") or "").lower()
+            title = str(it.get("title") or "").lower()
+            if "nodata" in at or "nodata" in title or "no data" in title:
+                _add(it)
+                for q in it.get("queries") or it.get("tests") or []:
+                    _add(q)
+    return names
+
+
+def _match_affected_queries(match: dict[str, Any] | None) -> set[str]:
+    out: set[str] = set()
+    if not match:
+        return out
+    for a in match.get("affected") or []:
+        if not isinstance(a, dict):
+            continue
+        for q in a.get("queries") or []:
+            if isinstance(q, str) and q.strip():
+                out.add(q.strip())
+    return out
+
+
 def _check_issue_crash_paste(details: str, *, resolution: str) -> list[str]:
     """Quality gate for #### Детали ошибки in Materials (open_ticket / update_known).
 
@@ -486,6 +556,8 @@ def validate_analysis_md(
                 )
 
     # Nodata: must discuss gap + report-first branch (lag vs real missing).
+    lag_branch = False
+    report_gap_branch = False
     if olap_nodata:
         if not re.search(
             r"no\s*data|nodata|successcount|success\s*count|покрыт|выгрузк|query_counts|n_nodata",
@@ -873,6 +945,24 @@ def validate_analysis_md(
                             errors.append(
                                 f"{resolution}: perf-duty-match affected entries need suite:"
                             )
+                        # Fail + real report-gap nodata: nodata tail must be in affected
+                        # (abort/cut-off consequence → same issue, else Now stays uncovered).
+                        if olap_fail and olap_nodata and report_gap_branch:
+                            nd_qs = _nodata_query_names(out_dir)
+                            aff_qs = _match_affected_queries(match)
+                            missing = sorted(nd_qs - aff_qs)
+                            if nd_qs and missing:
+                                errors.append(
+                                    f"{resolution}: nodata after abort/cut-off must be in "
+                                    "perf-duty-match affected (same issue) — missing "
+                                    + ", ".join(missing[:12])
+                                    + (
+                                        f" (+{len(missing) - 12} more)"
+                                        if len(missing) > 12
+                                        else ""
+                                    )
+                                    + "; run annotate-issue --queries … --no-comment"
+                                )
 
     # After the human created/pointed an issue: require S3 publish + Duty report in Фактура.
     if needs_paste and out_dir is not None:

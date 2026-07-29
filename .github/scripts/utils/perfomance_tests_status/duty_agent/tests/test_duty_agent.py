@@ -628,6 +628,151 @@ https://proxy.sandbox.yandex-team.ru/12927819679/index.html
             r = validate_analysis_md(md, out_dir=d)
             self.assertTrue(r["ok"], r["errors"])
 
+    def test_nodata_tail_must_be_in_match_affected(self):
+        """Abort cut-off nodata must land in same issue affected (Materials match)."""
+        with tempfile.TemporaryDirectory() as td:
+            d = Path(td)
+            write_json(
+                d / "detect_type.json",
+                {
+                    "analysis_types": ["olap_fail", "olap_nodata"],
+                    "query_counts": {"fail": 1, "nodata": 2, "ok": 0},
+                    "problems_seed": [
+                        {
+                            "id": "p_fail",
+                            "analysis_type": "olap_fail",
+                            "title": "Query03 SIGSEGV",
+                            "test": "Query03",
+                        },
+                        {
+                            "id": "p_nd",
+                            "analysis_type": "olap_nodata",
+                            "title": "no data ×2",
+                        },
+                    ],
+                },
+            )
+            write_json(
+                d / "context.json",
+                {
+                    "queries": [
+                        {"test": "Query03", "kind": "fail"},
+                        {"test": "Query17", "kind": "nodata"},
+                        {"test": "Query18", "kind": "nodata"},
+                    ]
+                },
+            )
+            write_json(
+                d / "problems.json",
+                {
+                    "items": [
+                        {
+                            "id": "p1",
+                            "analysis_type": "olap_fail",
+                            "title": "Query03 crash",
+                        },
+                        {
+                            "id": "p2",
+                            "analysis_type": "olap_nodata",
+                            "title": "Query17+ nodata следствие abort",
+                            "queries": ["Query17", "Query18"],
+                        },
+                    ]
+                },
+            )
+            write_json(d / "focus.json", {"fetched": True, "fatal": {"signals": ["verify"]}})
+            write_json(
+                d / "code_bisect.json",
+                {"introduced_in_window": False, "conclusion": "unchanged"},
+            )
+            write_json(d / "priors.json", {"prior_scans": []})
+            write_json(d / "dig_runs.json", {"kind": "olap", "summary": {"slice_count": 2}})
+            base = """# Perf duty — x
+
+## Заключение
+- **Итог:** VERIFY на Query03; Query17/18 nodata — в отчёте тоже нет (следствие abort)
+- **Решение:** update_known
+- **Виновник:** unknown
+- **Уверенность:** высокая
+- **Давность:** на разбираемом прогоне
+- **Механика:** abort → suite cut-off → хвост nodata
+
+## Проблемы
+### P1 — crash
+- Тип: olap_fail
+- Что сломалось: VERIFY Query03
+- Почему / механика: abort
+- Логи: kikimr__stderr VERIFY; kikimr__logs disconnect
+- Код ([`f88e100`](https://github.com/ydb-platform/ydb/commit/f88e100)): AppendSlice
+- Кто (если есть): unknown
+- Давность: этот прогон
+- Гипотеза проверена: yes
+- Связанный issue: [#48261](https://github.com/ydb-platform/ydb/issues/48261)
+- Тикет: [#48261](https://github.com/ydb-platform/ydb/issues/48261)
+### P2 — nodata хвост
+- Тип: olap_nodata
+- Что сломалось: Query17 Query18 nodata
+- Почему / механика: в отчёте тоже нет → следствие abort P1
+- Логи: suite cut-off
+- Код ([`f88e100`](https://github.com/ydb-platform/ydb/commit/f88e100)): n/a
+- Кто (если есть): unknown
+- Давность: этот прогон
+- Гипотеза проверена: yes
+- Связанный issue: [#48261](https://github.com/ydb-platform/ydb/issues/48261)
+- Тикет: [#48261](https://github.com/ydb-platform/ydb/issues/48261)
+
+## Что дальше
+1. annotate-issue
+
+## Материалы для issue
+### Title
+```
+Comment: AppendSlice matches #48261
+```
+### Body
+#### Фактура
+| | |
+|--|--|
+| Suite / DB | `UploadTpch1000` / `sas_small_column` |
+| Branch · Version | `main` · [`f88e100`](https://github.com/ydb-platform/ydb/commit/f88e100) |
+| Run | `2026-07-29_f88e100` · `2026-07-29T12:00:00` UTC |
+| Allure | https://proxy.sandbox.yandex-team.ru/12923171727/index.html |
+| Failed | Query03
+#### Что сломалось
+VERIFY; nodata хвост — следствие.
+#### К чему приводит
+- Abort; cut-off suite.
+#### Детали ошибки
+```
+VERIFY AppendSlice
+```
+#### Код
+| Место падения | AppendSlice |
+
+<!-- perf-duty-match
+kind: olap
+fingerprint: AppendSlice
+keys:
+  - AppendSlice
+affected:
+  - suite: UploadTpch1000
+    db: sas_small_column
+    queries: [Query03]
+-->
+"""
+            r = validate_analysis_md(base, out_dir=d)
+            self.assertFalse(r["ok"], r)
+            self.assertTrue(
+                any("nodata after abort" in e for e in r["errors"]),
+                r["errors"],
+            )
+            fixed = base.replace(
+                "queries: [Query03]",
+                "queries: [Query03, Query17, Query18]",
+            )
+            r2 = validate_analysis_md(fixed, out_dir=d)
+            self.assertTrue(r2["ok"], r2["errors"])
+
     def test_ok_minimal_olap_fail(self):
         with tempfile.TemporaryDirectory() as td:
             d = Path(td)

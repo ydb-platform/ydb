@@ -320,6 +320,18 @@
     display: flex; flex-direction: column; flex-wrap: nowrap; align-items: stretch;
     gap: 4px; margin-top: 0; overflow-y: auto; max-height: 560px; flex: 1;
   }
+  .q-split-list .qlist .q-row {
+    display: flex; flex-direction: column; align-items: stretch; gap: 2px;
+    min-width: 0;
+  }
+  .q-split-list .qlist .q-row-tickets {
+    display: flex; flex-wrap: wrap; gap: 3px; padding: 0 2px 2px 8px;
+    min-height: 0;
+  }
+  .q-split-list .qlist .q-row-tickets .pill.ticket {
+    font-size: 10px; padding: 1px 6px; margin: 0;
+    max-width: 100%;
+  }
   .q-split-list .qlist .pill,
   .q-split-list button.pill {
     width: 100%; border-radius: 6px; text-align: left; justify-content: flex-start;
@@ -2895,8 +2907,12 @@ function mountQueryHistory(item, diveId, testName) {
   const errPill = q.error_class
     ? ` <span class="pill fail" title="mart Color / diff_response">${esc(q.error_class)}</span>`
     : '';
+  const qTickets = ticketsForQuery(item, testName, q);
+  const qTicketsHtml = qTickets.length
+    ? ` <span style="margin-left:4px">${ticketPillsHtml(qTickets, { compact: true, maxTitle: 40 })}</span>`
+    : '';
   box.innerHTML = `<div class="qdetail">
-    <div class="ttl">${esc(testName)} <span class="pill ${kindCls}">${esc(kindLabel)}</span>${errPill}</div>
+    <div class="ttl">${esc(testName)} <span class="pill ${kindCls}">${esc(kindLabel)}</span>${errPill}${qTicketsHtml}</div>
     <div style="margin-bottom:4px">${
       q.kind === 'nodata'
         ? 'в последнем suite-run <b>нет данных</b> по этому query (mart placeholder, не fail)'
@@ -3305,6 +3321,32 @@ function querySideTitle(m, baseHint) {
   const pctBit = m.ydb_pct != null ? ` ${pct(m.ydb_pct)}` : '';
   return `${kind}${pctBit} · ${fmt(m.ydb_now)} vs median(prev7 ${baseHint}): ${base}`;
 }
+/** Issues whose affected lists this query (suite×db×query). Prefer live known_issues. */
+function ticketsForQuery(item, queryName, qObj) {
+  const nq = normQueryNameJS(queryName);
+  if (!nq) return [];
+  const issues = (typeof DATA !== 'undefined' && DATA.known_issues) || [];
+  if (issues.length) {
+    const cov = classifyFailCoverageJS(issues, {
+      suite: item.suite || '',
+      db: item.db || null,
+      branch: item.branch || null,
+      query: nq,
+      kind: 'olap',
+    });
+    if ((cov.tickets || []).length) return cov.tickets;
+  }
+  return (qObj && qObj.tickets) || [];
+}
+function queryTicketRowHtml(item, q) {
+  const tickets = ticketsForQuery(item, q.test || q.name, q);
+  if (!tickets.length) return '';
+  return `<div class="q-row-tickets">${ticketPillsHtml(tickets, { compact: true, maxTitle: 28 })}</div>`;
+}
+function wrapQueryRow(pillHtml, ticketsHtml) {
+  if (!ticketsHtml) return pillHtml;
+  return `<div class="q-row">${pillHtml}${ticketsHtml}</div>`;
+}
 function queryPillHtml(q, diveId, item, data) {
   const runs = data.now_runs || [];
   const cmpId = getCompareId(item.branch, item.db);
@@ -3363,7 +3405,7 @@ function queryPillHtml(q, diveId, item, data) {
       `now: ${querySideTitle(nowM, wave && !cmpIsFocus ? 'до cmp (compare-ось)' : 'до now')}`,
       'alert в графике справа = другая ось: last vs median prev7 до now',
     ].join('\n');
-    return `<button type="button" class="pill q-pill-cmp ${cls}"${styleAttr} data-qpick="${diveId}" data-test="${esc(q.test)}" title="${esc(tip)}">
+    const pill = `<button type="button" class="pill q-pill-cmp ${cls}"${styleAttr} data-qpick="${diveId}" data-test="${esc(q.test)}" title="${esc(tip)}">
       <span class="q-name">${esc(q.test)}</span>
       <span class="q-cmp-mid">
         <span class="q-was">${esc(was)}</span>
@@ -3372,6 +3414,7 @@ function queryPillHtml(q, diveId, item, data) {
       </span>
       ${extraHtml}
     </button>`;
+    return wrapQueryRow(pill, queryTicketRowHtml(item, q));
   }
   const nowBit = nowM.kind === 'nodata' ? 'no data'
     : (nowM.ydb_pct != null ? pct(nowM.ydb_pct)
@@ -3379,11 +3422,12 @@ function queryPillHtml(q, diveId, item, data) {
   const nowHtml = nowBit
     ? `<span class="q-cmp-mid"><span class="q-now">${esc(nowBit)}</span></span>`
     : `<span class="q-cmp-mid"></span>`;
-  return `<button type="button" class="pill q-pill-cmp ${cls}" data-qpick="${diveId}" data-test="${esc(q.test)}">
+  const pill = `<button type="button" class="pill q-pill-cmp ${cls}" data-qpick="${diveId}" data-test="${esc(q.test)}">
     <span class="q-name">${esc(q.test)}</span>
     ${nowHtml}
     ${extraHtml}
   </button>`;
+  return wrapQueryRow(pill, queryTicketRowHtml(item, q));
 }
 function buildQueryBlockHtml(item, diveId) {
   const data = diveData(item);
@@ -3409,6 +3453,7 @@ function buildQueryBlockHtml(item, diveId) {
         </div>`;
     return `<div>
         <div class="muted"><b>Queries</b> (${catalog.length}) · клик = история${focusNote}${cmpNote} ·
+          issue-пилюля под query = match по <code>affected</code> ·
           <span class="pill qok">ok</span>
           <span class="pill watch">soft</span>
           <span class="pill slow">hard slow</span>
@@ -3428,10 +3473,11 @@ function buildQueryBlockHtml(item, diveId) {
   const qPill = (q, cls) => {
     const err = (cls === 'fail' || q.kind === 'fail' || q.kind === 'both') && q.error_class
       ? ` · ${q.error_class}` : '';
-    return `<button type="button" class="pill ${cls}" data-qpick="${diveId}" data-test="${esc(q.test)}">${esc(q.test)}${
+    const pill = `<button type="button" class="pill ${cls}" data-qpick="${diveId}" data-test="${esc(q.test)}">${esc(q.test)}${
       cls === 'nodata' ? ' · no data'
         : (q.ydb_pct != null ? ' ' + pct(q.ydb_pct) : (q.ydb_now != null ? ' ' + fmt(q.ydb_now) : ''))
     }${err}${q.history ? '' : ' · no hist'}</button>`;
+    return wrapQueryRow(pill, queryTicketRowHtml(item, q));
   };
   return `<div>
         <div class="muted"><b>Slow queries</b> (клик = история · last run vs prev 7)</div>

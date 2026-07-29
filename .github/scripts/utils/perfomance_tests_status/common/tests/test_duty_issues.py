@@ -422,6 +422,63 @@ class CoverageTests(unittest.TestCase):
         self.assertEqual(agg["uncovered_queries"], ["Query02"])
         self.assertEqual(agg["tickets"][0]["number"], 1)
 
+    def test_suite_tickets_scoped_to_gap_queries(self):
+        """Inbox suite pills = tickets for current fail/nodata only, not all suite history."""
+        data = {
+            "inbox": [
+                {
+                    "suite": "UploadTpch1000",
+                    "db": "sas_small_column",
+                    "branch": "stable-26-3-1",
+                    "issue": "failing",
+                    "bad_queries": [{"test": "Query01", "kind": "fail"}],
+                    "queries": [
+                        {"test": "Query01", "kind": "fail"},
+                        {"test": "Query05", "kind": "ok"},
+                    ],
+                }
+            ],
+            "ok": [],
+            "summary": {},
+        }
+        issues = [
+            self._issue(
+                number=47284,
+                labels=["main", "stable-26-3-1"],
+                affected=[
+                    {
+                        "suite": "UploadTpch1000",
+                        "db": "sas_small_column",
+                        "queries": ["Query01"],
+                    }
+                ],
+            ),
+            self._issue(
+                number=48261,
+                labels=["main"],
+                fingerprint="AppendSlice",
+                keys=["AppendSlice"],
+                affected=[
+                    {
+                        "suite": "UploadTpch1000",
+                        "db": "sas_small_column",
+                        "queries": ["Query05", "Query03"],
+                    }
+                ],
+            ),
+        ]
+        attach_tickets_to_report(data, issues, kind="olap")
+        item = data["inbox"][0]
+        self.assertEqual([t["number"] for t in item["tickets"]], [47284])
+        self.assertEqual(
+            sorted(t["number"] for t in item["suite_tickets"]),
+            [47284, 48261],
+        )
+        qmap = {q["test"]: q for q in item["queries"]}
+        self.assertEqual(qmap["Query01"]["tickets"][0]["number"], 47284)
+        self.assertEqual(qmap["Query05"]["tickets"][0]["number"], 48261)
+        self.assertEqual(qmap["Query05"]["tickets"][0]["needs_branch"], "stable-26-3-1")
+
     def test_attach_now_runs_and_new_fail(self):
         data = {
             "inbox": [

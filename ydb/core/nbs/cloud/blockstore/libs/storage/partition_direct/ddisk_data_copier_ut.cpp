@@ -36,7 +36,9 @@ struct TFixture: public TBaseFixture
 
         Copier = std::make_shared<TDDiskDataCopier>(
             Runtime->GetActorSystem(0),
+            TraceService.get(),
             PartitionDirectService.get(),
+            DiskDescription,
             VChunkConfig,
             DirectBlockGroup,
             &DirtyMap,

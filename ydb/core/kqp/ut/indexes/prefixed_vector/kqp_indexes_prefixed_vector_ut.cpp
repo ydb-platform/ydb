@@ -1179,7 +1179,6 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
 
     Y_UNIT_TEST_QUAD(PrefixedVectorIndexTruncateTable, Covered, Overlap) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableTruncateTable(true);
         auto serverSettings = TKikimrSettings().SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);

@@ -7,10 +7,12 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_stat.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_state.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ddisk_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
@@ -47,9 +49,7 @@ public:
         NActors::TActorSystem* actorSystem,
         TStorageConfigPtr storageConfig,
         TExecutorPtr executor,
-        const TString& diskId,
-        ui64 tabletId,
-        ui32 generation,
+        const TDiskDescription& diskDescription,
         size_t directBlockGroupIndex,
         const TVector<NKikimr::NBsController::TDDiskId>& ddisksIds,
         const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds,
@@ -71,7 +71,9 @@ public:
         const NWilson::TTraceId& traceId,
         TStringBuf name) override;
 
-    NThreading::TFuture<void> Run(IPartitionDirectService* service) override;
+    NThreading::TFuture<void> Run(
+        ITraceService* traceService,
+        IPartitionDirectService* service) override;
 
     NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
         ui32 vChunkIndex,
@@ -137,13 +139,15 @@ public:
     NThreading::TFuture<TListPBufferResponse> ListPBuffers(
         THostIndex hostIndex) override;
 
-    NThreading::TFuture<TDBGDumpResponse> Dump() override;
-
     void OnAddHostResult(
         const NProto::TError& error,
         THostIndex newHostIndex,
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
         NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) override;
+
+    ui32 GetNodeId(THostIndex host) const override;
+
+    NThreading::TFuture<TDBGDumpResponse> Dump() override;
 
     NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() const override;
 
@@ -194,9 +198,9 @@ private:
         THostIndex hostIndex,
         ui64 seqNo,
         const NKikimrBlobStorage::NDDisk::TEvConnectResult& result);
-    void ReEstablishDDiskConnection(
-        THostIndex hostIndex,
-        TDuration reconnectDelay);
+    void ReEstablishConnection(
+        EConnectionType connectionType,
+        THostIndex hostIndex);
     void OnNodeDisconnected(THostIndex hostIndex, ui32 nodeId);
 
     [[nodiscard]] bool HasPBufferQuorum() const;
@@ -259,6 +263,8 @@ private:
     [[nodiscard]] TConnectionSnapshot MakeConnectionSnapshot(
         size_t hostIndex) const;
 
+    [[nodiscard]] TString PrintHostAndNode(THostIndex host) const;
+
     NActors::TActorSystem* const ActorSystem = nullptr;
     const TStorageConfigPtr StorageConfig;
     const TExecutorPtr Executor;
@@ -269,6 +275,7 @@ private:
     const std::unique_ptr<NTransport::IStorageTransport> StorageTransport;
 
     TLogTitle LogTitle;
+    ITraceService* TraceService = nullptr;
     IPartitionDirectService* Service = nullptr;
     TVector<TDDiskConnection> DDiskConnections;
     TVector<TDDiskConnection> PBufferConnections;

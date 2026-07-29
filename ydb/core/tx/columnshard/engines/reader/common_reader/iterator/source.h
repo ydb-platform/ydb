@@ -21,6 +21,7 @@
 
 #include <library/cpp/lwtrace/shuttle.h>
 #include <util/string/join.h>
+#include <util/system/thread.h>
 
 namespace NKikimr::NOlap {
 class IDataReader;
@@ -89,6 +90,9 @@ public:
 
 private:
     TAtomic SyncSectionFlag = 1;
+    TAtomic StepExecutionDepth = 0;
+    TAtomic StepExecutionThreadId = 0;
+    TString ExecutingStepName;
     YDB_READONLY(EType, Type, EType::Undefined);
     YDB_READONLY(ui32, SourceIdx, 0);
     YDB_READONLY_DEF(ui64, DeprecatedPortionId);
@@ -277,6 +281,9 @@ public:
     virtual void InitRecordsCount(const ui32 recordsCount);
 
     ui32 GetRecordsCount() const;
+
+    void StartStepExecution(const TString& stepName);
+    void FinishStepExecution();
 
     void StartAsyncSection();
 

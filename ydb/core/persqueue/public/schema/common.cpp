@@ -10,6 +10,7 @@
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 #include <library/cpp/digest/md5/md5.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NPQ::NSchema {
 
@@ -384,9 +385,11 @@ TResult AddConsumer(
         return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "service type cannot be empty for consumer '" << consumerConfig.name() << "'"};
     }
 
-    Y_ABORT_UNLESS(supportedClientServiceTypes.find(serviceType) != supportedClientServiceTypes.end());
+    auto serviceTypeIt = supportedClientServiceTypes.find(serviceType);
+    AFL_ENSURE(serviceTypeIt != supportedClientServiceTypes.end())
+        ("service_type", serviceType)("consumer", consumerConfig.name());
 
-    const TClientServiceType& clientServiceType = supportedClientServiceTypes.find(serviceType)->second;
+    const TClientServiceType& clientServiceType = serviceTypeIt->second;
 
     if (checkServiceType) {
         bool found = clientServiceType.PasswordHashes.empty() && !hasPassword;

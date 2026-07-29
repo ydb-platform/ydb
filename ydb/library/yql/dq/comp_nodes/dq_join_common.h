@@ -1,6 +1,8 @@
 #pragma once
 #include "dq_hash_join_table.h"
 #include "dq_block_hash_join_settings.h"
+#include <algorithm>
+#include <numeric>
 #include <vector>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/alloc.h>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/layout_converter_common.h>
@@ -9,6 +11,7 @@
 #include <yql/essentials/minikql/computation/mkql_block_reader.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 
 namespace NKikimr::NMiniKQL {
@@ -257,6 +260,8 @@ template <typename Source> class TInMemoryHashJoin {
   public:
     using TTable = NJoinTable::TNeumannJoinTable;
 
+    static constexpr bool FlushOnYield = false;
+
     TInMemoryHashJoin(TSides<Source> sources, TComputationContext& ctx, TString componentName,
                     TSides<const NPackedTuple::TTupleLayout*> layouts)
         : Logger_(ctx.MakeLogger())
@@ -368,6 +373,8 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
 
   public:
     using TTable = NJoinTable::TNeumannJoinTable;
+
+    static constexpr bool FlushOnYield = false;
 
     struct Init {};
 
@@ -830,5 +837,236 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
         State_ = Init{};
 };
 } // namespace NJoinPackedTuples
+
+struct TParsedHashJoinArgs {
+    EJoinKind Kind;
+    TSides<TVector<ui32>> KeyColumns;
+    TDqUserRenames UserRenames;
+};
+
+inline TParsedHashJoinArgs ParseCommonHashJoinArgs(TCallable& callable) {
+    TParsedHashJoinArgs res;
+    res.Kind = GetJoinKind(AS_VALUE(TDataLiteral, callable.GetInput(2))->AsValue().Get<ui32>());
+
+    const auto parseKeys = [](TRuntimeNode node) {
+        TVector<ui32> keys;
+        const auto tuple = AS_VALUE(TTupleLiteral, node);
+        for (ui32 i = 0; i < tuple->GetValuesCount(); ++i) {
+            keys.push_back(AS_VALUE(TDataLiteral, tuple->GetValue(i))->AsValue().Get<ui32>());
+        }
+        return keys;
+    };
+    res.KeyColumns.Probe = parseKeys(callable.GetInput(3));
+    res.KeyColumns.Build = parseKeys(callable.GetInput(4));
+    MKQL_ENSURE(res.KeyColumns.Build.size() == res.KeyColumns.Probe.size(), "Key columns mismatch");
+
+    res.UserRenames = FromGraceFormat(TGraceJoinRenames::FromRuntimeNodes(callable.GetInput(5), callable.GetInput(6)));
+    return res;
+}
+
+inline TDqRenames<ESide> BuildImplRenames(const TDqUserRenames& userRenames) {
+    TDqRenames<ESide> renames;
+    for (auto rename : userRenames) {
+        const ESide side = rename.Side == EJoinSide::kLeft ? ESide::Probe : ESide::Build;
+        renames.push_back({.Index = rename.Index, .Side = side});
+    }
+    return renames;
+}
+
+template <typename TKeyColumns>
+TVector<NPackedTuple::EColumnRole> MakeColumnRoles(size_t width, const TKeyColumns& keyColumns) {
+    TVector<NPackedTuple::EColumnRole> roles(width, NPackedTuple::EColumnRole::Payload);
+    for (auto column : keyColumns) {
+        roles[column] = NPackedTuple::EColumnRole::Key;
+    }
+    return roles;
+}
+
+template <template <EJoinKind> class Wrapper, typename TResult, typename... Args>
+TResult* DispatchHashJoinByKind(EJoinKind kind, TStringBuf unsupportedMessage, Args&&... args) {
+    using enum EJoinKind;
+    switch (kind) {
+    case Inner:
+        return new Wrapper<Inner>(std::forward<Args>(args)...);
+    case LeftOnly:
+        return new Wrapper<LeftOnly>(std::forward<Args>(args)...);
+    case LeftSemi:
+        return new Wrapper<LeftSemi>(std::forward<Args>(args)...);
+    case Left:
+        return new Wrapper<Left>(std::forward<Args>(args)...);
+    default:
+        break;
+    }
+    MKQL_ENSURE(false, unsupportedMessage);
+    Y_UNREACHABLE();
+}
+
+template <typename TKeyCols, typename TInputTypes>
+void ApplyKeyColumnPermutation(TSides<TKeyCols>& keyColumns, TSides<TInputTypes>& inputTypes, int trailingColumns,
+                               TDqRenames<ESide>& renames, TSides<TVector<int>>& outColumnPermutation) {
+    for (ESide side : EachSide) {
+        auto& keyCols = keyColumns.SelectSide(side);
+        auto& types = inputTypes.SelectSide(side);
+        const int numDataCols = std::ssize(types) - trailingColumns;
+        const int numKeys = std::ssize(keyCols);
+
+        bool needsReorder = false;
+        for (int i = 0; i < numKeys; ++i) {
+            if (static_cast<int>(keyCols[i]) != i) {
+                needsReorder = true;
+                break;
+            }
+        }
+        if (!needsReorder) {
+            continue;
+        }
+
+        TVector<int> perm(numDataCols);
+        std::iota(perm.begin(), perm.end(), 0);
+        for (int i = 0; i < numKeys; ++i) {
+            const int keyColumn = static_cast<int>(keyCols[i]);
+            MKQL_ENSURE(keyColumn >= 0 && keyColumn < numDataCols,
+                        Sprintf("key column index %i on %s side is out of range [0, %i)", keyColumn, AsString(side),
+                                numDataCols));
+            auto it = std::find(perm.begin() + i, perm.end(), keyColumn);
+            MKQL_ENSURE(it != perm.end(),
+                        Sprintf("key column index %i on %s side is duplicated or could not be placed", keyColumn,
+                                AsString(side)));
+            std::swap(perm[i], *it);
+        }
+
+        outColumnPermutation.SelectSide(side) = perm;
+
+        using TElem = std::decay_t<decltype(types[0])>;
+        const TVector<TElem> orig(types.begin(), types.begin() + numDataCols);
+        for (int i = 0; i < numDataCols; ++i) {
+            types[i] = orig[perm[i]];
+        }
+
+        TVector<int> inv(numDataCols);
+        for (int i = 0; i < numDataCols; ++i) {
+            inv[perm[i]] = i;
+        }
+        for (auto& rename : renames) {
+            if (rename.Side == side) {
+                rename.Index = inv[rename.Index];
+            }
+        }
+
+        for (int i = 0; i < numKeys; ++i) {
+            keyCols[i] = i;
+        }
+    }
+}
+
+inline TSides<TVector<TType*>> ForceOptionalOnNullableSide(const TSides<TVector<TType*>>& itemTypes, EJoinKind kind,
+                                                           ESide nullableSide, const TTypeEnvironment& env) {
+    TSides<TVector<TType*>> userTypes;
+    for (ESide side : EachSide) {
+        for (TType* thisType : itemTypes.SelectSide(side)) {
+            if (kind == EJoinKind::Left && side == nullableSide && !thisType->IsOptional()) {
+                userTypes.SelectSide(side).push_back(TOptionalType::Create(thisType, env));
+            } else {
+                userTypes.SelectSide(side).push_back(thisType);
+            }
+        }
+    }
+    return userTypes;
+}
+
+template <EJoinKind Kind, typename Converter>
+struct TPackedTupleOutputBase : NNonCopyable::TMoveOnly {
+    struct Empty {};
+    using BuildNullIfNeeded = std::conditional_t<Kind == EJoinKind::Left, TPackResult, Empty>;
+
+    TPackedTupleOutputBase(const TDqRenames<ESide>* renames, TSides<Converter*> converters, bool leftIsBuild)
+        : Renames_(renames)
+        , Converters_(converters)
+        , LeftIsBuild_(leftIsBuild)
+    {}
+
+    int Columns() const {
+        return Renames_->size();
+    }
+
+    i64 SizeTuples() const {
+        AssertSizeIsSane();
+        return Output_.Probe.NTuples;
+    }
+
+    auto MakeConsumeFn() {
+        struct ConsumeFn {
+            TPackedTupleOutputBase& Self;
+
+            void operator()(TSides<TSingleTuple> tuples) {
+                for (ESide side : EachSide) {
+                    Self.Output_.SelectSide(side).AppendTuple(tuples.SelectSide(side),
+                                                              Self.Converters_.SelectSide(side)->GetTupleLayout());
+                }
+            }
+
+            void operator()(TSingleTuple tuple) {
+                if constexpr (Kind == EJoinKind::Left) {
+                    const TSingleTuple null{.PackedData = Self.Nulls_.PackedTuples.data(),
+                                            .OverflowBegin = Self.Nulls_.Overflow.data()};
+                    if (Self.LeftIsBuild_) {
+                        (*this)(TSides<TSingleTuple>{.Build = tuple, .Probe = null});
+                    } else {
+                        (*this)(TSides<TSingleTuple>{.Build = null, .Probe = tuple});
+                    }
+                } else if constexpr (SemiOrOnlyJoin(Kind)) {
+                    Self.Output_.Probe.AppendTuple(tuple, Self.Converters_.Probe->GetTupleLayout());
+                }
+            }
+        };
+        return ConsumeFn{*this};
+    }
+
+protected:
+    void AssertSizeIsSane() const {
+        if constexpr (LeftSemiOrOnly(Kind)) {
+            MKQL_ENSURE(Output_.Build.NTuples == 0,
+                        "Left Only and Left Semi join types shouldn't collect any Build(right) tuples");
+        } else if constexpr (Kind == EJoinKind::Left || Kind == EJoinKind::Inner) {
+            MKQL_ENSURE(Output_.Build.NTuples == Output_.Probe.NTuples,
+                        "Inner and Left join types must collect same amount of tuples from build and probe");
+        }
+    }
+
+    const TDqRenames<ESide>* Renames_;
+    TSides<Converter*> Converters_;
+    TSides<TPackResult> Output_;
+    BuildNullIfNeeded Nulls_;
+    bool LeftIsBuild_;
+};
+
+template <i64 MaxOutputRows, typename JoinType, typename OutputType, typename FlushSink>
+EFetchResult RunPackedHashJoinBatch(TComputationContext& ctx, JoinType& join, OutputType& output, FlushSink&& onFlush) {
+    auto outputIsFull = [&]() { return output.SizeTuples() >= MaxOutputRows; };
+    while (!outputIsFull()) {
+        switch (join.MatchRows(ctx, output.MakeConsumeFn(), outputIsFull)) {
+        case EFetchResult::Finish:
+            if (output.SizeTuples() == 0) {
+                return EFetchResult::Finish;
+            }
+            onFlush(output.Flush());
+            return EFetchResult::One;
+        case EFetchResult::Yield:
+            if constexpr (JoinType::FlushOnYield) {
+                if (output.SizeTuples() > 0) {
+                    onFlush(output.Flush());
+                    return EFetchResult::One;
+                }
+            }
+            return EFetchResult::Yield;
+        case EFetchResult::One:
+            break;
+        default:
+            MKQL_ENSURE(false, "unexpected fetch result");
+        }
+    }
+    onFlush(output.Flush());
+    return EFetchResult::One;
+}
 
 } // namespace NKikimr::NMiniKQL

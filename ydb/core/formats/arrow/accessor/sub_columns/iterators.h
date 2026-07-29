@@ -16,9 +16,9 @@ private:
     bool HasValueFlag = false;
     bool IsColumnKeyFlag = false;
     EValueType ValueType = EValueType::BinaryJson;
-    // Current value as (array, local index); the reader interprets it per ValueType.
+    // Current physical position as (array, local index)
     const arrow::Array* CurrentArray = nullptr;
-    i64 LocalIndex = 0;
+    ui32 LocalIndex = 0;
 
     void InitFromIterator(const TColumnsData::TIterator& iterator) {
         RecordIndex = iterator.GetCurrentRecordIndex();
@@ -75,9 +75,11 @@ public:
         , ValueType(valueType) {
         Initialize();
     }
+
     TGeneralIterator(TOthersData::TIterator&& iterator, const std::vector<ui32>& remapKeys = {})
         : Iterator(iterator)
-        , RemapKeys(remapKeys) {
+        , RemapKeys(remapKeys)
+        , ValueType(EValueType::BinaryJson) {
         Initialize();
     }
     bool IsColumnKey() const {
@@ -169,18 +171,13 @@ public:
         AFL_VERIFY(IsValidFlag);
         return *CurrentArray;
     }
-    i64 GetLocalIndex() const {
+    ui32 GetLocalIndex() const {
+        AFL_VERIFY(IsValidFlag);
         return LocalIndex;
     }
     ui32 GetValueSize() const {
         AFL_VERIFY(IsValidFlag);
         return ArrayElementSize(*CurrentArray, LocalIndex, ValueType);
-    }
-    TStringBuf GetStorageView() const {
-        AFL_VERIFY(IsValidFlag);
-        AFL_VERIFY(ValueType == EValueType::String || ValueType == EValueType::BinaryJson)("value_type", (ui32)ValueType);
-        const auto view = static_cast<const arrow::BinaryArray&>(*CurrentArray).GetView(LocalIndex);
-        return TStringBuf(view.data(), view.size());
     }
 
     NJson::TJsonValue GetValue() const;

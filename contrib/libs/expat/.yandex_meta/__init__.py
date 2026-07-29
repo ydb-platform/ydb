@@ -42,7 +42,10 @@ def post_build(self):
                 ),
             ),
         )
-        expat.PEERDIR.add("contrib/libs/libc_compat")
+        expat.PEERDIR |= {
+            "contrib/libs/libc_compat",
+            "library/cpp/sanitizer/include",
+        }
 
 
 expat = GNUMakeNixProject(

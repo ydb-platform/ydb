@@ -190,6 +190,21 @@ TExprNode::TPtr TSourceConnection::BuildConnection(TExprNode::TPtr inputStage, T
     return inputStage;
 }
 
+TExprNode::TPtr TStreamLookupConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprContext& ctx) {
+    // clang-format off
+    return Build<TKqpCnStreamLookup>(ctx, pos)
+        .Output()
+            .Stage(inputStage)
+            .Index().Build(ToString(OutputIndex))
+        .Build()
+        .Table(Table)
+        .Columns(Columns)
+        .InputType(InputType)
+        .Settings(Settings)
+    .Done().Ptr();
+    // clang-format on
+}
+
 ui32 TStageGraph::AddStage() {
     ui32 newStageId = StageIds.size();
     StageIds.push_back(newStageId);

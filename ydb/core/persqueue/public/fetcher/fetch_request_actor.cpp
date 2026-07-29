@@ -360,6 +360,12 @@ public:
             return;
         }
 
+        if (record.GetSessionInvalidated()) {
+            AddResult(partitionIndex, EPartitionStatus::DataReceived, NPersQueue::NErrorCode::READ_ERROR_NO_SESSION);
+            ProceedFetchRequest(ctx);
+            return;
+        }
+
         status = EPartitionStatus::HasDataReceived;
 
         auto& partition = Settings.Partitions[partitionIndex];

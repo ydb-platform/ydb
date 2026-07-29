@@ -1101,6 +1101,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                     BoxId,
                     DecommitStatus,
                     ExpectedSlotCount,
+                    ExpectedSlotSize,
                     Guid,
                     Kind,
                     MaintenanceStatus,
@@ -1132,12 +1133,13 @@ Y_UNIT_TEST_SUITE(SystemView) {
             }
         }
 
-        TYsonFieldChecker check(ysonString, 19);
+        TYsonFieldChecker check(ysonString, 20);
 
         check.Uint64(0u); // AvailableSize
         check.Uint64(999u); // BoxId
         check.String("DECOMMIT_NONE"); // DecommitStatus
         check.Uint64(16); // ExpectedSlotCount
+        check.Uint64(0); // ExpectedSlotSize
         check.Uint64(123u); // Guid
         check.Uint64(0u); // Kind
         check.String("NO_REQUEST"); // MaintenanceStatus

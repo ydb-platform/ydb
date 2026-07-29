@@ -1,6 +1,7 @@
 #include "kqp_operator.h"
 #include "kqp_expression.h"
 #include "kqp_rbo_utils.h"
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/opt/rbo/kqp_olap_expr_inspection.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 
@@ -175,6 +176,15 @@ NJson::TJsonValue TOpRead::ToJson(ui32 explainFlags) {
     auto path = TKqpTable(TableCallable).Path().StringValue();
     auto slash = path.rfind('/');
     res["Table"] = (slash == TString::npos) ? path : path.substr(slash + 1);
+
+    if (slash != TString::npos && TStringBuf(path).SubStr(slash + 1) == NTableIndex::ImplTable) {
+        const auto indexSlash = path.rfind('/', slash - 1);
+        if (indexSlash != TString::npos) {
+            const auto tableSlash = path.rfind('/', indexSlash - 1);
+            res["Table"] = path.substr(tableSlash == TString::npos ? 0 : tableSlash + 1);
+            res["Index"] = path.substr(indexSlash + 1, slash - indexSlash - 1);
+        }
+    }
 
     res["Storage"] = StorageType == NYql::EStorageType::RowStorage ? "Row" : "Column";
 
@@ -554,7 +564,7 @@ TOpAddDependencies::TOpAddDependencies(TIntrusivePtr<IOperator> input, TPosition
 
 TVector<std::pair<TInfoUnit, const TTypeAnnotationNode*>> TOpAddDependencies::GetDependencyPairs() {
     TVector<std::pair<TInfoUnit, const TTypeAnnotationNode*>> result;
-    for (size_t i=0; i<Dependencies.size(); i++) {
+    for (size_t i = 0; i < Dependencies.size(); i++) {
         result.push_back(std::make_pair(Dependencies[i], Types[i]));
     }
     return result;
@@ -578,12 +588,12 @@ void TOpAddDependencies::ComputeOutputIUs() {
 
 TString TOpAddDependencies::ToString(TExprContext& ctx) {
     Y_UNUSED(ctx);
-    
+
     auto res = TStringBuilder();
     res << "Correlated [";
-    for (size_t i=0; i<Dependencies.size(); i++) {
+    for (size_t i = 0; i < Dependencies.size(); i++) {
         res << Dependencies[i].GetFullName();
-        if (i!=Dependencies.size()-1) {
+        if (i != Dependencies.size() - 1) {
             res << ",";
         }
     }
@@ -833,12 +843,17 @@ NJson::TJsonValue TOpJoin::ToJson(ui32 explainFlags) {
  * OpUnionAll operator methods
  */
 
-TOpUnionAll::TOpUnionAll(TIntrusivePtr<IOperator> leftInput, TIntrusivePtr<IOperator> rightInput, TPositionHandle pos,
-                         TVector<TInfoUnit> columns, bool ordered)
-    : IBinaryOperator(EOperator::UnionAll, pos, leftInput, rightInput)
+TOpUnionAll::TOpUnionAll(TVector<TIntrusivePtr<IOperator>> inputs, TPositionHandle pos, TVector<TInfoUnit> columns, bool ordered)
+    : IVariadicOperator(EOperator::UnionAll, pos, std::move(inputs))
     , Columns(std::move(columns))
     , Ordered(ordered) {
     Y_ENSURE(!Columns.empty(), "UnionAll must have columns");
+    Y_ENSURE(Children.size() >= 2, "UnionAll must have at least two inputs");
+}
+
+TOpUnionAll::TOpUnionAll(TIntrusivePtr<IOperator> leftInput, TIntrusivePtr<IOperator> rightInput, TPositionHandle pos,
+                         TVector<TInfoUnit> columns, bool ordered)
+    : TOpUnionAll(TVector<TIntrusivePtr<IOperator>>{leftInput, rightInput}, pos, std::move(columns), ordered) {
 }
 
 // Recompute ius for now
@@ -999,7 +1014,47 @@ TString TOpSort::ToString(TExprContext& ctx) {
     }
 
     res << " Phase: " << ToStringPhase(SortPhase);
-    
+
+    return res;
+}
+
+TOpTableLookup::TOpTableLookup(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExprNode::TPtr& table,
+                               const TVector<TString>& fetchColumns, const TVector<TInfoUnit>& outputIUs,
+                               const TVector<TInfoUnit>& lookupKeys)
+    : IUnaryOperator(EOperator::TableLookup, pos, input)
+    , Table(table)
+    , FetchColumns(fetchColumns)
+    , OutputIUs(outputIUs)
+    , LookupKeys(lookupKeys) {
+}
+
+void TOpTableLookup::ComputeOutputIUs() {
+    Props.OutputIUs = OutputIUs;
+}
+
+TVector<TInfoUnit> TOpTableLookup::GetUsedIUs(TPlanProps& props) {
+    Y_UNUSED(props);
+    return LookupKeys;
+}
+
+TString TOpTableLookup::ToString(TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    TStringBuilder res;
+    res << "TableLookup: " << TKqpTable(Table).Path().StringValue() << ", keys: [";
+    for (size_t i = 0; i < LookupKeys.size(); i++) {
+        res << LookupKeys[i].GetFullName();
+        if (i + 1 < LookupKeys.size()) {
+            res << ", ";
+        }
+    }
+    res << "], columns: [";
+    for (size_t i = 0; i < FetchColumns.size(); i++) {
+        res << FetchColumns[i];
+        if (i + 1 < FetchColumns.size()) {
+            res << ", ";
+        }
+    }
+    res << "]";
     return res;
 }
 

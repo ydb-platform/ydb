@@ -33,6 +33,8 @@
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
 
+#include <library/cpp/string_utils/parse_size/parse_size.h>
+
 #include <util/generic/serialized_enum.h>
 #include <util/generic/singleton.h>
 #include <util/generic/strbuf.h>
@@ -9596,6 +9598,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         // (7) settings
         bool isStrict = false;
+        bool settingsWasChanged = false;
         TExprNode::TPtr settings;
         if (input->ChildrenSize() > 7) {
             settings = input->ChildPtr(7);
@@ -9636,6 +9639,30 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
                     if (!EnsureAtom(child->Tail(), ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
+                    }
+
+                    ui64 extraMemValue = 0;
+                    if (settingName == "cpu") {
+                        double cpuValue = 0.0;
+                        if (!TryFromString(child->Tail().Content(), cpuValue) || cpuValue <= 0.0) {
+                            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Tail().Pos()), TStringBuilder()
+                                << "Bad cpu setting value: " << child->Tail().Content()
+                                << ". Expected a positive number (e.g., '2')"));
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                    } else if (settingName == "extraMem" && !TryFromString(child->Tail().Content(), extraMemValue)) {
+                        try {
+                            extraMemValue = NSize::ParseSize(child->Tail().Content());
+                        } catch (const std::exception& e) {
+                            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Tail().Pos()), TStringBuilder()
+                                << "Bad extraMem setting value: " << child->Tail().Content()
+                                << ". Expected a number (bytes) or a human-readable size like '2048M', '1G', '512K'"));
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                        auto normalizedValue = ctx.Expr.NewAtom(child->Tail().Pos(), ToString(extraMemValue));
+                        auto normalizedSetting = ctx.Expr.NewList(child->Pos(), {ctx.Expr.NewAtom(child->Head().Pos(), "extraMem"), normalizedValue});
+                        settings = ReplaceSetting(*settings, normalizedSetting, ctx.Expr);
+                        settingsWasChanged = true;
                     }
 
                     if (ctx.Types.LangVer != UnknownLangVersion) {
@@ -9699,6 +9726,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     return IGraphTransformer::TStatus::Error;
                 }
             }
+        }
+
+        if (settingsWasChanged) {
+            output = ctx.Expr.ChangeChild(*input, 7, std::move(settings));
+            return IGraphTransformer::TStatus::Repeat;
         }
 
         if (input->ChildrenSize() != 8 || !cachedType) {

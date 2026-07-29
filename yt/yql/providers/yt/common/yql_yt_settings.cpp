@@ -345,6 +345,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, CommonJoinCoreLimit);
     REGISTER_SETTING(*this, CombineCoreLimit).Lower(1_MB); // Min 1Mb
     REGISTER_SETTING(*this, SwitchLimit).Lower(1_MB); // Min 1Mb
+    REGISTER_SETTING(*this, JoinCommonAnySideFirst);
     REGISTER_SETTING(*this, JoinMergeTablesLimit);
     REGISTER_SETTING(*this, JoinMergeUseSmallAsPrimary);
     REGISTER_SETTING(*this, JoinMergeReduceJobMaxSize).Lower(1); // YT requires max_data_size_per_job to be > 0, YT default is 200GB
@@ -642,6 +643,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, TmpSecurity).Parser([](const TString& v) { return FromString<ETmpSecurityMode>(v); });
     REGISTER_SETTING(*this, _ParseExpressionColumns);
     REGISTER_SETTING(*this, _SecureTmpTokenUsersAccessPeriod);
+    REGISTER_SETTING(*this, _FixEndlessLoopInDropIfExists);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

@@ -94,10 +94,16 @@ TTabletInfo TPartitionActor::MakeMonTabletInfo() const
     };
 }
 
-void TPartitionActor::HandleHttpInfo(
-    NMon::TEvRemoteHttpInfo::TPtr& ev,
+bool TPartitionActor::OnRenderAppHtmlPage(
+    NMon::TEvRemoteHttpInfo::TPtr ev,
     const TActorContext& ctx)
 {
+    if (!ev) {
+        // Probe from the standard tablet page: report that the App page exists
+        // so its link is shown.
+        return true;
+    }
+
     const auto& cgi = ev->Get()->Cgi();
     const EMonPage page = ParsePage(cgi);
 
@@ -115,14 +121,14 @@ void TPartitionActor::HandleHttpInfo(
         ctx.Send(
             ev->Sender,
             new NMon::TEvRemoteHttpInfoRes(RenderMonPage(data)));
-        return;
+        return true;
     }
 
     // Local DB page: read the persisted state in a transaction;
     // CompleteMonitoring renders and replies.
     if (page == EMonPage::LocalDb) {
         ExecuteTx(ctx, CreateTx<TMonitoring>(ev->Sender));
-        return;
+        return true;
     }
 
     // VChunk page: no index - just the input form (synchronous); with an
@@ -137,7 +143,7 @@ void TPartitionActor::HandleHttpInfo(
             ctx.Send(
                 ev->Sender,
                 new NMon::TEvRemoteHttpInfoRes(RenderMonPage(data)));
-            return;
+            return true;
         }
 
         auto* actorSystem = TActivationContext::ActorSystem();
@@ -160,7 +166,7 @@ void TPartitionActor::HandleHttpInfo(
                         requester,
                         new NMon::TEvRemoteHttpInfoRes(RenderMonPage(data)));
                 });
-        return;
+        return true;
     }
 
     const std::optional<size_t> selectedDbg = ParseSelectedDbg(cgi);
@@ -198,7 +204,7 @@ void TPartitionActor::HandleHttpInfo(
         reply << "<meta http-equiv='refresh' content='0; ?TabletID="
               << TabletID() << "&page=dbg&dbg=" << *selectedDbg << "'/>";
         ctx.Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(reply));
-        return;
+        return true;
     }
 
     // DBG page: gather snapshots, then render + reply in the callback. Safe
@@ -230,6 +236,7 @@ void TPartitionActor::HandleHttpInfo(
                     requester,
                     new NMon::TEvRemoteHttpInfoRes(RenderMonPage(data)));
             });
+    return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -2401,4 +2401,23 @@ Y_UNIT_TEST(CachedSchema) {
     }
 }
 
+Y_UNIT_TEST(NoStackOverflowOnDeeplyNestedSubquery) {
+    constexpr size_t Depth = 4 * 1024;
+
+    auto engine = MakeSqlCompletionEngineUT();
+
+    TStringBuilder query;
+    query << '#';
+    for (size_t i = 0; i < Depth; ++i) {
+        query << "SELECT * FROM (";
+    }
+    query << "SELECT 1";
+    for (size_t i = 0; i < Depth; ++i) {
+        query << ")";
+    }
+
+    UNIT_ASSERT_EXCEPTION_CONTAINS(
+        Complete(engine, query), std::exception, "Maximum parse tree depth exceeded");
+}
+
 } // Y_UNIT_TEST_SUITE(SqlCompleteTests)

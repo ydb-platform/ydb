@@ -199,8 +199,7 @@ END DO
 
         time.sleep(5)
         second_node = list(kikimr_udfs.cluster.nodes.values())[1]
-        kikimr_udfs.ydb_client = YdbClient(database=kikimr_udfs.endpoint.database, endpoint=f"grpc://{second_node.host}:{second_node.port}", enable_discovery=False)
-        kikimr_udfs.ydb_client.wait_connection()
+        kikimr_udfs.ydb_client = YdbClient.from_driver_config(database=kikimr_udfs.endpoint.database, endpoint=f"grpc://{second_node.host}:{second_node.port}", enable_discovery=False)
         logger.info("Checking query state after restart")
 
         validate_query(precompute_sql, tests_count, status=["SUSPENDED", "FAILED", "STARTING", "RUNNING"], check_issues=False, retry_count=[0, 1])

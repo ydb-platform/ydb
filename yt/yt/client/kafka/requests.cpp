@@ -284,7 +284,7 @@ void TRecordBatch::Deserialize(IKafkaProtocolReader* reader)
             }
         }
         if (reader->GetReadBytesCount() != Length) {
-            THROW_ERROR_EXCEPTION("Unexpected record batch length (Expected: %v, Actual: %v)", Length, reader->GetReadBytesCount());
+            THROW_ERROR_EXCEPTION("Unexpected record batch length: expected %v, actual %v", Length, reader->GetReadBytesCount());
         }
     } else {
         THROW_ERROR_EXCEPTION("Unsupported MagicByte %v in RecordBatch deserialization", static_cast<int>(MagicByte));

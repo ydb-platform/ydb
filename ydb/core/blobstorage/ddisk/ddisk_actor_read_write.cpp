@@ -89,13 +89,14 @@ namespace NKikimr::NDDisk {
             }
         }
 
+        // Unlike TEvWritePersistentBuffer, TEvWrite's checksums (if any) are validated here but never
+        // persisted: TEvWrite goes straight to the final DDisk chunk, which has no per-record metadata
+        // slot to carry them (see RFC 006). Note this validation intentionally runs again for events
+        // that get parked in PendingEventsForChunk below and re-dispatched to this same handler once
+        // their chunk allocation completes -- harmless (checksums don't change), just redundant.
         if (record.ChecksumsSize() > 0) {
-            // Checksum validation is opt-in (see TEvWritePersistentBuffer for details); checked here,
-            // before any chunk allocation queueing or disk I/O, and the checksums are not persisted.
-            // Note: an event parked in PendingEventsForChunk below re-enters this handler in full once
-            // the chunk is allocated, so its checksums get validated twice. This is harmless (validation
-            // stays right next to the actual write) and intentional, not an oversight.
             Y_ABORT_UNLESS(instr.PayloadId, "TEvWrite without a payload, but with checksums");
+
             const TRope& payload = ev->Get()->GetPayload(*instr.PayloadId);
             if (const auto result = ValidatePayloadChecksums(record, payload)) {
                 const bool isCorrupted = result->Status == NKikimrBlobStorage::NDDisk::TReplyStatus::CORRUPTED;

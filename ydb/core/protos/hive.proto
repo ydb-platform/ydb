@@ -119,6 +119,7 @@ message TEvCreateTablet {
     optional TDataCentersPreference DataCentersPreference = 24;
     repeated string AllowedDataCenters = 25;
     optional EBalancerPolicy BalancerPolicy = 26;
+    optional bool IsBackup = 27 [default = false];
 
     optional uint32 ChannelsProfile = 5 [deprecated = true]; // DEPRECATED
     optional uint32 Flags = 6 [deprecated = true]; // DEPRECATED
@@ -518,6 +519,7 @@ message TTabletInfo {
     optional uint64 LastAliveTimestamp = 23;
     optional EBalancerPolicy BalancerPolicy = 24;
     optional bool InWaitQueue = 25;
+    optional bool IsBackup = 26 [default = false];
 }
 
 message TEvSeizeTabletsReply {

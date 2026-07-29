@@ -15,6 +15,7 @@
 import ast
 import collections
 import io
+import re
 import sys
 import token
 import tokenize
@@ -38,27 +39,18 @@ from typing import (
 
 if TYPE_CHECKING:  # pragma: no cover
   from .astroid_compat import NodeNG
-
-  # Type class used to expand out the definition of AST to include fields added by this library
-  # It's not actually used for anything other than type checking though!
-  class EnhancedAST(AST):
-    # Additional attributes set by mark_tokens
-    first_token = None  # type: Token
-    last_token = None  # type: Token
-    lineno = 0  # type: int
-    end_lineno = 0 # type : int
-    end_col_offset = 0 # type : int
-
-  AstNode = Union[EnhancedAST, NodeNG]
-
-  TokenInfo = tokenize.TokenInfo
+else:
+  NodeNG = Any
 
 
-def token_repr(tok_type, string):
-  # type: (int, Optional[str]) -> str
+TokenInfo = tokenize.TokenInfo
+_lone_cr_re = re.compile(r'\r(?!\n)')
+
+
+def token_repr(tok_type: int, string: Optional[str]) -> str:
   """Returns a human-friendly representation of a token with the given type and string."""
   # repr() prefixes unicode with 'u' on Python2 but not Python3; strip it out for consistency.
-  return '%s:%s' % (token.tok_name[tok_type], repr(string).lstrip('u'))
+  return f"{token.tok_name[tok_type]}:{repr(string).lstrip('u')}"
 
 
 class Token(collections.namedtuple('Token', 'type string start end line index startpos endpos')):
@@ -75,50 +67,64 @@ class Token(collections.namedtuple('Token', 'type string start end line index st
   - [6] .startpos Starting character offset into the input text.
   - [7] .endpos   Ending character offset into the input text.
   """
-  def __str__(self):
-    # type: () -> str
+  def __str__(self) -> str:
     return token_repr(self.type, self.string)
 
 
-def match_token(token, tok_type, tok_str=None):
-  # type: (Token, int, Optional[str]) -> bool
+# Type class used to expand out the definition of AST to include fields added by this library
+# It's not actually used for anything other than type checking though!
+class EnhancedAST(AST):
+  # Additional attributes set by mark_tokens
+  first_token: Token = None  # type: ignore
+  last_token: Token = None  # type: ignore
+  lineno: int = 0
+  end_lineno: int = 0
+  end_col_offset: int = 0
+
+
+AstNode = Union[EnhancedAST, NodeNG]
+
+
+def match_token(token: Token, tok_type: int, tok_str: Optional[str] = None) -> bool:
   """Returns true if token is of the given type and, if a string is given, has that string."""
   return token.type == tok_type and (tok_str is None or token.string == tok_str)
 
 
-def expect_token(token, tok_type, tok_str=None):
-  # type: (Token, int, Optional[str]) -> None
+def expect_token(token: Token, tok_type: int, tok_str: Optional[str] = None) -> None:
   """
   Verifies that the given token is of the expected type. If tok_str is given, the token string
   is verified too. If the token doesn't match, raises an informative ValueError.
   """
   if not match_token(token, tok_type, tok_str):
-    raise ValueError("Expected token %s, got %s on line %s col %s" % (
-      token_repr(tok_type, tok_str), str(token),
-      token.start[0], token.start[1] + 1))
+    raise ValueError(
+      f"Expected token {token_repr(tok_type, tok_str)}, "
+      f"got {str(token)} on line {token.start[0]} col {token.start[1] + 1}"
+    )
 
 
-def is_non_coding_token(token_type):
-  # type: (int) -> bool
+def is_non_coding_token(token_type: int) -> bool:
   """
   These are considered non-coding tokens, as they don't affect the syntax tree.
   """
   return token_type in (token.NL, token.COMMENT, token.ENCODING)
 
 
-def generate_tokens(text):
-  # type: (str) -> Iterator[TokenInfo]
+def generate_tokens(text: str) -> Iterator[TokenInfo]:
   """
   Generates standard library tokens for the given code.
   """
+  # Before Python 3.12, tokenize treats an entire line containing a lone carriage return as a
+  # non-coding NL token, even though ast.parse treats the carriage return as a line boundary.
+  # Replacing lone carriage returns is length-preserving, so token offsets still map to the
+  # original source. Keep CRLF intact because changing its length would shift later offsets.
+  text = _lone_cr_re.sub('\n', text)
   # tokenize.generate_tokens is technically an undocumented API for Python3, but allows us to use the same API as for
   # Python2. See https://stackoverflow.com/a/4952291/328565.
   # FIXME: Remove cast once https://github.com/python/typeshed/issues/7003 gets fixed
   return tokenize.generate_tokens(cast(Callable[[], str], io.StringIO(text).readline))
 
 
-def iter_children_func(node):
-  # type: (AST) -> Callable
+def iter_children_func(node: AST) -> Callable:
   """
   Returns a function which yields all direct children of a AST node,
   skipping children that are singleton nodes.
@@ -127,8 +133,7 @@ def iter_children_func(node):
   return iter_children_astroid if hasattr(node, 'get_children') else iter_children_ast
 
 
-def iter_children_astroid(node, include_joined_str=False):
-  # type: (NodeNG, bool) -> Union[Iterator, List]
+def iter_children_astroid(node: NodeNG, include_joined_str: bool = False) -> Union[Iterator, list]:
   if not include_joined_str and is_joined_str(node):
     return []
 
@@ -139,8 +144,7 @@ SINGLETONS = {c for n, c in ast.__dict__.items() if isinstance(c, type) and
               issubclass(c, (ast.expr_context, ast.boolop, ast.operator, ast.unaryop, ast.cmpop))}
 
 
-def iter_children_ast(node, include_joined_str=False):
-  # type: (AST, bool) -> Iterator[Union[AST, expr]]
+def iter_children_ast(node: AST, include_joined_str: bool = False) -> Iterator[Union[AST, expr]]:
   if not include_joined_str and is_joined_str(node):
     return
 
@@ -169,31 +173,26 @@ expr_class_names = ({n for n, c in ast.__dict__.items()
 
 # These feel hacky compared to isinstance() but allow us to work with both ast and astroid nodes
 # in the same way, and without even importing astroid.
-def is_expr(node):
-  # type: (AstNode) -> bool
+def is_expr(node: AstNode) -> bool:
   """Returns whether node is an expression node."""
   return node.__class__.__name__ in expr_class_names
 
-def is_stmt(node):
-  # type: (AstNode) -> bool
+def is_stmt(node: AstNode) -> bool:
   """Returns whether node is a statement node."""
   return node.__class__.__name__ in stmt_class_names
 
-def is_module(node):
-  # type: (AstNode) -> bool
+def is_module(node: AstNode) -> bool:
   """Returns whether node is a module node."""
   return node.__class__.__name__ == 'Module'
 
-def is_joined_str(node):
-  # type: (AstNode) -> bool
+def is_joined_str(node: AstNode) -> bool:
   """Returns whether node is a JoinedStr node, used to represent f-strings."""
   # At the moment, nodes below JoinedStr have wrong line/col info, and trying to process them only
   # leads to errors.
   return node.__class__.__name__ == 'JoinedStr'
 
 
-def is_expr_stmt(node):
-  # type: (AstNode) -> bool
+def is_expr_stmt(node: AstNode) -> bool:
   """Returns whether node is an `Expr` node, which is a statement that is an expression."""
   return node.__class__.__name__ == 'Expr'
 
@@ -207,26 +206,22 @@ except ImportError:  # pragma: no cover
   # astroid is not available
   pass
 
-def is_constant(node):
-  # type: (AstNode) -> bool
+def is_constant(node: AstNode) -> bool:
   """Returns whether node is a Constant node."""
   return isinstance(node, CONSTANT_CLASSES)
 
 
-def is_ellipsis(node):
-  # type: (AstNode) -> bool
+def is_ellipsis(node: AstNode) -> bool:
   """Returns whether node is an Ellipsis node."""
   return is_constant(node) and node.value is Ellipsis  # type: ignore
 
 
-def is_starred(node):
-  # type: (AstNode) -> bool
+def is_starred(node: AstNode) -> bool:
   """Returns whether node is a starred expression node."""
   return node.__class__.__name__ == 'Starred'
 
 
-def is_slice(node):
-  # type: (AstNode) -> bool
+def is_slice(node: AstNode) -> bool:
   """Returns whether node represents a slice, e.g. `1:2` in `x[1:2]`"""
   # Before 3.9, a tuple containing a slice is an ExtSlice,
   # but this was removed in https://bugs.python.org/issue34822
@@ -239,8 +234,7 @@ def is_slice(node):
   )
 
 
-def is_empty_astroid_slice(node):
-  # type: (AstNode) -> bool
+def is_empty_astroid_slice(node: AstNode) -> bool:
   return (
       node.__class__.__name__ == "Slice"
       and not isinstance(node, ast.AST)
@@ -251,8 +245,11 @@ def is_empty_astroid_slice(node):
 # Sentinel value used by visit_tree().
 _PREVISIT = object()
 
-def visit_tree(node, previsit, postvisit):
-  # type: (Module, Callable[[AstNode, Optional[Token]], Tuple[Optional[Token], Optional[Token]]], Optional[Callable[[AstNode, Optional[Token], Optional[Token]], None]])   -> None
+def visit_tree(
+  node: Module,
+  previsit: Callable[[AstNode, Optional[Token]], Tuple[Optional[Token], Optional[Token]]],
+  postvisit: Optional[Callable[[AstNode, Optional[Token], Optional[Token]], None]]
+) -> None:
   """
   Scans the tree under the node depth-first using an explicit stack. It avoids implicit recursion
   via the function call stack to avoid hitting 'maximum recursion depth exceeded' error.
@@ -275,7 +272,7 @@ def visit_tree(node, previsit, postvisit):
   iter_children = iter_children_func(node)
   done = set()
   ret = None
-  stack = [(node, None, _PREVISIT)] # type: List[Tuple[AstNode, Optional[Token], Union[Optional[Token], object]]]
+  stack: List[Tuple[AstNode, Optional[Token], object]] = [(node, None, _PREVISIT)]
   while stack:
     current, par_value, value = stack.pop()
     if value is _PREVISIT:
@@ -294,8 +291,7 @@ def visit_tree(node, previsit, postvisit):
   return ret
 
 
-def walk(node, include_joined_str=False):
-  # type: (AST, bool) -> Iterator[Union[Module, AstNode]]
+def walk(node: AST, include_joined_str: bool = False) -> Iterator[Union[Module, AstNode]]:
   """
   Recursively yield all descendant nodes in the tree starting at ``node`` (including ``node``
   itself), using depth-first pre-order traversal (yieling parents before their children).
@@ -323,8 +319,7 @@ def walk(node, include_joined_str=False):
       stack.insert(ins, c)
 
 
-def replace(text, replacements):
-  # type: (str, List[Tuple[int, int, str]]) -> str
+def replace(text: str, replacements: List[Tuple[int, int, str]]) -> str:
   """
   Replaces multiple slices of text with new values. This is a convenience method for making code
   modifications of ranges e.g. as identified by ``ASTTokens.get_text_range(node)``. Replacements is
@@ -347,12 +342,10 @@ class NodeMethods:
   """
   Helper to get `visit_{node_type}` methods given a node's class and cache the results.
   """
-  def __init__(self):
-    # type: () -> None
-    self._cache = {} # type: Dict[Union[ABCMeta, type], Callable[[AstNode, Token, Token], Tuple[Token, Token]]]
+  def __init__(self) -> None:
+    self._cache: Dict[Union[ABCMeta, type], Callable[[AstNode, Token, Token], Tuple[Token, Token]]] = {}
 
-  def get(self, obj, cls):
-    # type: (Any, Union[ABCMeta, type]) -> Callable
+  def get(self, obj: Any, cls: Union[ABCMeta, type]) -> Callable:
     """
     Using the lowercase name of the class as node_type, returns `obj.visit_{node_type}`,
     or `obj.visit_default` if the type-specific method is not found.
@@ -365,8 +358,7 @@ class NodeMethods:
     return method
 
 
-def patched_generate_tokens(original_tokens):
-    # type: (Iterable[TokenInfo]) -> Iterator[TokenInfo]
+def patched_generate_tokens(original_tokens: Iterable[TokenInfo]) -> Iterator[TokenInfo]:
     """
     Fixes tokens yielded by `tokenize.generate_tokens` to handle more non-ASCII characters in identifiers.
     Workaround for https://github.com/python/cpython/issues/68382.
@@ -374,7 +366,7 @@ def patched_generate_tokens(original_tokens):
     because it assumes that error tokens are not actually errors.
     Combines groups of consecutive NAME, NUMBER, and/or ERRORTOKEN tokens into a single NAME token.
     """
-    group = []  # type: List[tokenize.TokenInfo]
+    group: List[tokenize.TokenInfo] = []
     for tok in original_tokens:
       if (
           tok.type in (tokenize.NAME, tokenize.ERRORTOKEN, tokenize.NUMBER)
@@ -390,8 +382,7 @@ def patched_generate_tokens(original_tokens):
     for combined_token in combine_tokens(group):
       yield combined_token
 
-def combine_tokens(group):
-    # type: (List[tokenize.TokenInfo]) -> List[tokenize.TokenInfo]
+def combine_tokens(group: List[tokenize.TokenInfo]) -> List[tokenize.TokenInfo]:
     if not any(tok.type == tokenize.ERRORTOKEN for tok in group) or len({tok.line for tok in group}) != 1:
       return group
     return [
@@ -405,8 +396,7 @@ def combine_tokens(group):
     ]
 
 
-def last_stmt(node):
-  # type: (AstNode) -> AstNode  
+def last_stmt(node: AstNode) -> AstNode:
   """
   If the given AST node contains multiple statements, return the last one.
   Otherwise, just return the node.
@@ -429,8 +419,7 @@ def last_stmt(node):
 
 
 @lru_cache(maxsize=None)
-def fstring_positions_work():
-  # type: () -> bool
+def fstring_positions_work() -> bool:
   """
   The positions attached to nodes inside f-string FormattedValues have some bugs
   that were fixed in Python 3.9.7 in https://github.com/python/cpython/pull/27729.
@@ -460,8 +449,7 @@ def fstring_positions_work():
   )
   return positions_are_unique and correct_source_segments
 
-def annotate_fstring_nodes(tree):
-  # type: (ast.AST) -> None
+def annotate_fstring_nodes(tree: ast.AST) -> None:
   """
   Add a special attribute `_broken_positions` to nodes inside f-strings
   if the lineno/col_offset cannot be trusted.

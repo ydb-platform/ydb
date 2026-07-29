@@ -15,6 +15,7 @@ PEERDIR(
     ydb/services/metadata/abstract
     ydb/services/metadata/initializer
     ydb/services/metadata/secret
+    ydb/services/scheme_secret
 )
 
 YQL_LAST_ABI_VERSION()

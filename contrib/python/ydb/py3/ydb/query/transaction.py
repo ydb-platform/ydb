@@ -17,7 +17,7 @@ from .. import (
     _apis,
     issues,
 )
-from ..opentelemetry.tracing import SpanName, create_ydb_span, span_finish_callback
+from ..observability.tracing import SpanName, create_ydb_span, span_finish_callback
 from .._grpc.grpcwrapper import ydb_topic as _ydb_topic
 from .._grpc.grpcwrapper import ydb_query as _ydb_query
 from ..connection import _RpcState as RpcState

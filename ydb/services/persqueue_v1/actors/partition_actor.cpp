@@ -29,7 +29,7 @@ TPartitionActor::TPartitionActor(
         const TString& session, const TPartitionId& partition, const ui32 generation, const ui32 step,
         const ui64 tabletID, const TTopicCounters& counters,
         const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic, const TString& database,
-        bool directRead, bool useMigrationProtocol, ui32 maxTimeLagMs, ui64 readTimestampMs, const TTopicHolder::TPtr& topicHolder,
+        bool directRead, EProtocol protocol, ui32 maxTimeLagMs, ui64 readTimestampMs, const TTopicHolder::TPtr& topicHolder,
         const std::unordered_set<ui64>& notCommitedToFinishParents, ui64 partitionMaxInFlightBytes, bool canReadBatches
 )
     : ParentId(parentId)
@@ -76,7 +76,7 @@ TPartitionActor::TPartitionActor(
     , DirectRead(directRead)
     , CanReadBatches(canReadBatches)
     , PartitionInFlightMemoryController(partitionMaxInFlightBytes)
-    , UseMigrationProtocol(useMigrationProtocol)
+    , Protocol(protocol)
     , FirstRead(true)
     , ReadingFinishedSent(false)
     , NotCommitedToFinishParents(notCommitedToFinishParents)
@@ -518,10 +518,10 @@ bool FillBatchedData(
         TReadResponse* data, const NKikimrClient::TCmdReadResult& res,
         const TPartitionId& Partition, ui64 ReadIdToResponse, ui64& ReadOffset, ui64& WTime, ui64 EndOffset,
         const NPersQueue::TTopicConverterPtr& topic, const TActorContext& ctx) {
-    constexpr bool UseMigrationProtocol = std::is_same_v<TReadResponse, PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch>;
+    constexpr EProtocol Protocol = std::is_same_v<TReadResponse, PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch> ? EProtocol::PQv1 : EProtocol::Topic;
     auto* partitionData = data->add_partition_data();
 
-    if constexpr (UseMigrationProtocol) {
+    if constexpr (Protocol == EProtocol::PQv1) {
         partitionData->mutable_topic()->set_path(topic->GetFederationPath());
         partitionData->set_cluster(topic->GetCluster());
         partitionData->set_partition(Partition.Partition);
@@ -573,7 +573,7 @@ bool FillBatchedData(
 
         if (!currentBatch || GetBatchWriteTimestampMS(currentBatch) != static_cast<i64>(r.GetWriteTimestampMS()) ||
             GetBatchSourceId(currentBatch) != sourceId ||
-            (!UseMigrationProtocol && GetDataChunkCodec(proto) != batchCodec)) {
+            (Protocol == EProtocol::Topic && GetDataChunkCodec(proto) != batchCodec)) {
             // If write time and source id are the same, the rest fields will be the same too.
             currentBatch = partitionData->add_batches();
             i64 write_ts = static_cast<i64>(r.GetWriteTimestampMS());
@@ -581,7 +581,7 @@ bool FillBatchedData(
             SetBatchWriteTimestampMS(currentBatch, write_ts);
             SetBatchSourceId(currentBatch, std::move(sourceId));
             batchCodec = GetDataChunkCodec(proto);
-            if constexpr (!UseMigrationProtocol) {
+            if constexpr (Protocol == EProtocol::Topic) {
                 currentBatch->set_codec(batchCodec);
             }
 
@@ -608,7 +608,7 @@ bool FillBatchedData(
             }
 
             if (proto.HasIp() && IsUtf(proto.GetIp())) {
-                if constexpr (UseMigrationProtocol) {
+                if constexpr (Protocol == EProtocol::PQv1) {
                     currentBatch->set_ip(proto.GetIp());
                 } else {
                     SetBatchExtraField(currentBatch, "_ip", proto.GetIp());
@@ -622,7 +622,7 @@ bool FillBatchedData(
         message->set_offset(r.GetOffset());
         message->set_data(proto.GetData());
         message->set_uncompressed_size(r.GetUncompressedSize());
-        if constexpr (UseMigrationProtocol) {
+        if constexpr (Protocol == EProtocol::PQv1) {
             message->set_create_timestamp_ms(r.GetCreateTimestampMS());
 
             message->set_explicit_hash(r.GetExplicitHash());
@@ -859,7 +859,7 @@ void TPartitionActor::Handle(const NKikimrClient::TCmdReadResult& res, const TAc
     migrationResponse.set_status(Ydb::StatusIds::SUCCESS);
 
     bool hasData = false;
-    if (UseMigrationProtocol) {
+    if (Protocol == EProtocol::PQv1) {
         typename MigrationStreamingReadServerMessage::DataBatch* data = migrationResponse.mutable_data_batch();
         hasData = FillBatchedData<MigrationStreamingReadServerMessage::DataBatch>(
             data, res, Partition, ReadIdToResponse, ReadOffset, WTime, EndOffset, Topic, ctx);
@@ -921,7 +921,7 @@ void TPartitionActor::Handle(const NKikimrClient::TCmdReadResult& res, const TAc
 
     ReadGuid = TString();
 
-    if (UseMigrationProtocol) {
+    if (Protocol == EProtocol::PQv1) {
         auto readResponse = MakeHolder<TEvPQProxy::TEvMigrationReadResponse>(
             std::move(migrationResponse),
             ReadOffset,
@@ -1482,6 +1482,7 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
     ui64 deadline = (ctx.Now() + WAIT_DATA - WAIT_DELTA).MilliSeconds();
     event->Record.SetDeadline(deadline);
     event->Record.SetClientId(ClientId);
+    event->Record.SetSessionId(Session);
     if (MaxTimeLagMs) {
         event->Record.SetMaxTimeLagMs(MaxTimeLagMs);
     }
@@ -1519,6 +1520,20 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
     WaitDataInfly.erase(it);
     if (!WaitForData)
         return;
+
+    if (record.GetSessionInvalidated()) {
+        YDB_LOG_DEBUG_CTX(ctx, "Session invalidated while waiting for data, close read session",
+            {"PQLOGPREFIX", PQ_LOG_PREFIX},
+            {"partition", Partition},
+            {"session", Session});
+        WaitForData = false;
+        WaitDataInfly.clear();
+        Counters.Errors.Inc();
+        ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession(
+            TStringBuilder() << "status is not ok: no such session '" << Session << "'",
+            ConvertOldCode(NPersQueue::NErrorCode::READ_ERROR_NO_SESSION)));
+        return;
+    }
 
     if (Counters.WaitsForData) {
         Counters.WaitsForData.Inc();

@@ -6,6 +6,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NPQ::NDeferredPublish {
 
@@ -225,7 +226,7 @@ private:
         const TString& createdBy,
         const NActors::TActorId& replyTo)
     {
-        Y_ABORT_UNLESS(!ShuttingDown);
+        AFL_ENSURE(!ShuttingDown)("reason", "registry is shutting down");
         ++InFlightInserts;
         Register(CreateInsertPublicationQueryActor(replyTo, database, extPublicationId, writerIdentity, createdBy));
     }

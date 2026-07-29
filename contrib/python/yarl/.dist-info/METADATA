@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: yarl
-Version: 1.12.1
+Version: 1.14.0
 Summary: Yet another URL library
 Home-page: https://github.com/aio-libs/yarl
 Author: Andrew Svetlov
@@ -38,6 +38,7 @@ License-File: LICENSE
 License-File: NOTICE
 Requires-Dist: idna >=2.0
 Requires-Dist: multidict >=4.0
+Requires-Dist: propcache >=0.2.0
 
 yarl
 ====
@@ -150,9 +151,8 @@ Installation
 The library is Python 3 only!
 
 PyPI contains binary wheels for Linux, Windows and MacOS.  If you want to install
-``yarl`` on another operating system (like *Alpine Linux*, which is not
-manylinux-compliant because of the missing glibc and therefore, cannot be
-used with our wheels) the the tarball will be used to compile the library from
+``yarl`` on another operating system where wheels are not provided,
+the the tarball will be used to compile the library from
 the source code. It requires a C compiler and and Python headers installed.
 
 To skip the compilation you must explicitly opt-in by using a PEP 517
@@ -170,7 +170,7 @@ by this variable.
 Dependencies
 ------------
 
-YARL requires multidict_ library.
+YARL requires multidict_ and propcache_ libraries.
 
 
 API documentation
@@ -246,6 +246,8 @@ It's *Apache 2* licensed and freely available.
 
 .. _multidict: https://github.com/aio-libs/multidict
 
+.. _propcache: https://github.com/aio-libs/propcache
+
 =========
 Changelog
 =========
@@ -261,6 +263,118 @@ Changelog
     WARNING: Don't drop the next directive!
 
 .. towncrier release notes start
+
+1.14.0
+======
+
+*(2024-10-08)*
+
+
+Packaging updates and notes for downstreams
+-------------------------------------------
+
+- Switched to using the ``propcache`` package for property caching
+  -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  The ``propcache`` package is derived from the property caching
+  code in ``yarl`` and has been broken out to avoid maintaining it for multiple
+  projects.
+
+  *Related issues and pull requests on GitHub:*
+  `#1169 <https://github.com/aio-libs/yarl/issues/1169>`__.
+
+
+Contributor-facing changes
+--------------------------
+
+- Started testing with Hypothesis -- by `@webknjaz <https://github.com/sponsors/webknjaz>`__ and `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  Special thanks to `@Zac-HD <https://github.com/sponsors/Zac-HD>`__ for helping us get started with this framework.
+
+  *Related issues and pull requests on GitHub:*
+  `#860 <https://github.com/aio-libs/yarl/issues/860>`__.
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved performance of ``yarl.URL.is_default_port()`` when no explicit port is set -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1168 <https://github.com/aio-libs/yarl/issues/1168>`__.
+
+- Improved performance of converting ``~yarl.URL`` to a string when no explicit port is set -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1170 <https://github.com/aio-libs/yarl/issues/1170>`__.
+
+- Improved performance of the ``yarl.URL.origin()`` method -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1175 <https://github.com/aio-libs/yarl/issues/1175>`__.
+
+- Improved performance of encoding hosts -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1176 <https://github.com/aio-libs/yarl/issues/1176>`__.
+
+
+----
+
+
+1.13.1
+======
+
+*(2024-09-27)*
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved performance of calling ``yarl.URL.build()`` with ``authority`` -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1163 <https://github.com/aio-libs/yarl/issues/1163>`__.
+
+
+----
+
+
+1.13.0
+======
+
+*(2024-09-26)*
+
+
+Bug fixes
+---------
+
+- Started rejecting ASCII hostnames with invalid characters. For host strings that
+  look like authority strings, the exception message includes advice on what to do
+  instead -- by `@mjpieters <https://github.com/sponsors/mjpieters>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#880 <https://github.com/aio-libs/yarl/issues/880>`__, `#954 <https://github.com/aio-libs/yarl/issues/954>`__.
+
+- Fixed IPv6 addresses missing brackets when the ``~yarl.URL`` was converted to a string -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1157 <https://github.com/aio-libs/yarl/issues/1157>`__, `#1158 <https://github.com/aio-libs/yarl/issues/1158>`__.
+
+
+Features
+--------
+
+- Added ``~yarl.URL.host_subcomponent`` which returns the ``3986#section-3.2.2`` host subcomponent -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  The only current practical difference between ``~yarl.URL.raw_host`` and ``~yarl.URL.host_subcomponent`` is that IPv6 addresses are returned bracketed.
+
+  *Related issues and pull requests on GitHub:*
+  `#1159 <https://github.com/aio-libs/yarl/issues/1159>`__.
+
+
+----
+
 
 1.12.1
 ======

@@ -189,6 +189,7 @@ public:
     NCommon::TConfSetting<ETmpSecurityMode, Static> TmpSecurity;
     NCommon::TConfSetting<bool, Static> _ParseExpressionColumns;
     NCommon::TConfSetting<TDuration, Static> _SecureTmpTokenUsersAccessPeriod;
+    NCommon::TConfSetting<bool, Static> _FixEndlessLoopInDropIfExists;
 
     // Job runtime
     NCommon::TConfSetting<TString, Dynamic> Pool;
@@ -384,6 +385,7 @@ public:
     NCommon::TConfSetting<bool, Static> DontForceTransformForInputTables;
     NCommon::TConfSetting<bool, Static> _RequestOnlyRequiredAttrs;
     NCommon::TConfSetting<bool, Static> _CacheSchemaBySchemaId;
+    NCommon::TConfSetting<bool, Static> JoinCommonAnySideFirst;
 };
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings);

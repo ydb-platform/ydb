@@ -180,7 +180,7 @@ public:
         if (!TerminationError_.IsOK()) {
             auto error = TerminationError_;
             guard.Release();
-            responseHandler->HandleError(std::move(error));
+            responseHandler->HandleError(std::move(error), EndpointAddress_);
             return nullptr;
         }
         auto callHandler = New<TCallHandler>(
@@ -725,7 +725,7 @@ private:
                 reason,
                 Request_->GetRequestId());
 
-            responseHandler->HandleError(std::move(detailedError));
+            responseHandler->HandleError(std::move(detailedError), Owner_->GetEndpointAddress());
         }
 
         void NotifyResponse(TSharedRefArray message)

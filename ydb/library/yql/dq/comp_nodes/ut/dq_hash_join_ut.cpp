@@ -1038,24 +1038,24 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         Test(EmptyRightInnerTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestLeftKind) {
-        Test(LeftJoinTestData(), true);
+    Y_UNIT_TEST_TWIN(TestLeftKind, BlockJoin) {
+        Test(LeftJoinTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestLeftJoinWithMatches) {
-        Test(LeftJoinWithMatchesTestData(), true);
+    Y_UNIT_TEST_TWIN(TestLeftJoinWithMatches, BlockJoin) {
+        Test(LeftJoinWithMatchesTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestLeftJoinSpilling) {
-        Test(LeftJoinSpillingTestData(), true);
+    Y_UNIT_TEST_TWIN(TestLeftJoinSpilling, BlockJoin) {
+        Test(LeftJoinSpillingTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestLeftJoinSpillingTwoKeys) {
-        Test(LeftJoinSpillingTwoKeysTestData(), true);
+    Y_UNIT_TEST_TWIN(TestLeftJoinSpillingTwoKeys, BlockJoin) {
+        Test(LeftJoinSpillingTwoKeysTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestLeftJoinSpillingMultiKey) {
-        Test(LeftJoinSpillingMultiKeyTestData(), true);
+    Y_UNIT_TEST_TWIN(TestLeftJoinSpillingMultiKey, BlockJoin) {
+        Test(LeftJoinSpillingMultiKeyTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST(TestLeftKindLeftIsBuild) {
@@ -1090,8 +1090,8 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         Test(LargeBothSidesInnerSpillingTestData(), true);
     }
 
-    Y_UNIT_TEST(TestLargeBothSidesLeftSpilling) {
-        Test(LargeBothSidesLeftSpillingTestData(), true);
+    Y_UNIT_TEST_TWIN(TestLargeBothSidesLeftSpilling, BlockJoin) {
+        Test(LargeBothSidesLeftSpillingTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST(TestSlicedBlocksInnerSpilling) {
@@ -1122,16 +1122,16 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
     //     Test(ExclusionTestData(), BlockJoin);
     // }
 
-    Y_UNIT_TEST(TestLeftSemiKind) {
-        Test(LeftSemiTestData(),true);
+    Y_UNIT_TEST_TWIN(TestLeftSemiKind, BlockJoin) {
+        Test(LeftSemiTestData(), BlockJoin);
     }
 
     // Y_UNIT_TEST_TWIN(TestRightSemiKind, BlockJoin) {
     //     Test(RightSemiTestData(), BlockJoin);
     // }
 
-    Y_UNIT_TEST(TestLeftOnlyKind) {
-        Test(LeftOnlyTestData(), true);
+    Y_UNIT_TEST_TWIN(TestLeftOnlyKind, BlockJoin) {
+        Test(LeftOnlyTestData(), BlockJoin);
     }
 
     // Y_UNIT_TEST_TWIN(TestRightOnlyKind, BlockJoin) {
@@ -1141,12 +1141,12 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         Test(InnerJoinRenamesTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestSwappedKeyColumnsInner) {
-        Test(SwappedKeyColumnsInnerTestData(), true);
+    Y_UNIT_TEST_TWIN(TestSwappedKeyColumnsInner, BlockJoin) {
+        Test(SwappedKeyColumnsInnerTestData(), BlockJoin);
     }
 
-    Y_UNIT_TEST(TestSwappedKeyColumnsLeftSemi) {
-        Test(SwappedKeyColumnsLeftSemiTestData(), true);
+    Y_UNIT_TEST_TWIN(TestSwappedKeyColumnsLeftSemi, BlockJoin) {
+        Test(SwappedKeyColumnsLeftSemiTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST(TestBlockJoinScalarColumn) {

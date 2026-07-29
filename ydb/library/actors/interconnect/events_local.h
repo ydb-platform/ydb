@@ -10,7 +10,19 @@
 #include "interconnect_stream.h"
 #include "types.h"
 
+#include <expected>
+#include <optional>
+#include <functional>
+
 namespace NActors {
+    class TInterconnectProxyTCP;
+    struct IInterconnectSession;
+    class TInterconnectSessionRdma;
+    // Must not outlive the actor system. Its deleter may send a cleanup request through
+    // the captured TActorSystem; during actor system shutdown losing this request is
+    // acceptable because registered actors are cleaned up by the actor system itself.
+    using TRdmaPreinitedSessionPtr = std::unique_ptr<TInterconnectSessionRdma, std::function<void(TInterconnectSessionRdma*)>>;
+
     struct TEvSocketReadyRead: public TEventLocal<TEvSocketReadyRead, ui32(ENetwork::SocketReadyRead)> {
     };
 
@@ -121,6 +133,7 @@ namespace NActors {
         struct TOk {
             NInterconnect::NRdma::TQueuePair::TPtr RdmaQp;
             NInterconnect::NRdma::ICq::TPtr RdmaCq;
+            TRdmaPreinitedSessionPtr PreinitedSession;
         };
 
         struct TDisabled {
@@ -128,9 +141,10 @@ namespace NActors {
         };
 
         TRdmaHandshakeResult(NInterconnect::NRdma::TQueuePair::TPtr qp,
-            NInterconnect::NRdma::ICq::TPtr cq)
+            NInterconnect::NRdma::ICq::TPtr cq,
+            TRdmaPreinitedSessionPtr session)
         {
-            Result.emplace<TOk>(qp, cq);
+            Result.emplace<TOk>(std::move(qp), std::move(cq), std::move(session));
         }
 
         explicit TRdmaHandshakeResult(TDisabled disabled) {
@@ -148,6 +162,15 @@ namespace NActors {
         TDisabled* GetDisabled() noexcept {
             return std::get_if<TDisabled>(&Result);
         }
+
+        bool HasPreinitedSession() const noexcept {
+            if (auto ok = std::get_if<TOk>(&Result)) {
+                return bool(ok->PreinitedSession);
+            }
+            return false;
+        }
+
+        TInterconnectSessionRdma* ReleasePreinitedSession() noexcept;
     private:
         std::variant<TOk, TDisabled> Result;
     };
@@ -170,7 +193,7 @@ namespace NActors {
             , ProgramInfo(std::move(programInfo))
             , Params(std::move(params))
             , XdcSocket(std::move(xdcSocket))
-            , RdmaHanshakeResult(rdmaHandshakeResult)
+            , RdmaHanshakeResult(std::move(rdmaHandshakeResult))
         {
         }
 
@@ -407,5 +430,31 @@ namespace NActors {
             : HandshakeId(std::move(handshakeId))
             , Socket(std::move(socket))
         {}
+    };
+
+    class IProxyCall {
+    // Only proxy can call session methods directly
+    friend class TInterconnectProxyTCP;
+    private:
+        void virtual Call(TInterconnectProxyTCP* const proxy) = 0;
+        void virtual ReportError(TString Error) = 0;
+    public:
+        virtual ~IProxyCall() = default;
+    };
+
+    struct TEvProxyCall
+        : TEventLocal<TEvProxyCall, (ui32)ENetwork::EvProxyCall>
+        , public IProxyCall
+    {
+    };
+
+    struct TEvRdmaSyncResult : TEventLocal<TEvRdmaSyncResult, (ui32)ENetwork::EvRdmaSyncResult> {
+        std::expected<TRdmaPreinitedSessionPtr, TString> Session;
+
+        TEvRdmaSyncResult() = default;
+        TEvRdmaSyncResult(TRdmaPreinitedSessionPtr session);
+        TEvRdmaSyncResult(TString error);
+        std::optional<TString> Error() const;
+        TRdmaPreinitedSessionPtr ExtractSession();
     };
 }

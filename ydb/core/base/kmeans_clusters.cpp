@@ -17,7 +17,7 @@ namespace NKikimr::NKMeans {
 
 namespace {
     constexpr ui64 MinVectorDimension = 1;
-    constexpr ui64 MaxVectorDimension = 16384;
+    constexpr ui64 MaxVectorDimension = 65536;
     constexpr ui64 MinLevels = 1;
     constexpr ui64 MaxLevels = 16;
     constexpr ui64 MinClusters = 2;

@@ -21,6 +21,11 @@ bool GetEnforceUserToken(const NKikimrConfig::TAppConfig& config) {
     return securityConfig.GetEnforceUserTokenRequirement();
 }
 
+bool HasMonitoringTlsCertificate(const NKikimrConfig::TMonitoringConfig& monitoringConfig) {
+    return !monitoringConfig.GetMonitoringCertificateFile().empty() ||
+        !monitoringConfig.GetMonitoringCertificate().empty();
+}
+
 } // namespace
 
 EValidationResult ValidateMonitoringConfig(const NKikimrConfig::TAppConfig& config, std::vector<TString>& msg) {
@@ -36,6 +41,18 @@ EValidationResult ValidateMonitoringConfig(const NKikimrConfig::TAppConfig& conf
 
         if (!enforceUserToken && monitoringConfig.GetRequireHealthcheckAuthentication()) {
             msg.push_back("Setting EnforceUserTokenRequirement is disabled, but RequireHealthcheckAuthentication is enabled");
+            return EValidationResult::Error;
+        }
+    }
+
+    if (monitoringConfig.GetClientCertificateRequired()) {
+        if (!HasMonitoringTlsCertificate(monitoringConfig)) {
+            msg.push_back("Monitoring server certificate is not set, but ClientCertificateRequired is enabled");
+            return EValidationResult::Error;
+        }
+
+        if (monitoringConfig.GetMonitoringCaFile().empty()) {
+            msg.push_back("MonitoringCaFile is not set, but ClientCertificateRequired is enabled");
             return EValidationResult::Error;
         }
     }

@@ -28,6 +28,8 @@
 #include <util/system/type_name.h>
 #include <util/system/datetime.h>
 
+#include <algorithm>
+
 LWTRACE_USING(ACTORLIB_PROVIDER)
 
 
@@ -184,10 +186,6 @@ namespace NActors {
         ThreadCtx.SetOverwrittenTimePerMailboxTs(Max(value, ThreadCtx.TimePerMailboxTs()));
     }
 
-    void TExecutorThread::SubscribeToPreemption(TActorId actorId) {
-        ThreadCtx.ExecutionContext.PreemptionSubscribed.push_back(actorId);
-    }
-
     TExecutorThread::TProcessingResult TExecutorThread::Execute(TMailbox* mailbox, bool isTailExecution,
             NHPTimer::STime mailboxScheduledTimestampTs) {
         EXECUTOR_THREAD_DEBUG(EDebugLevel::Activation, "Execute mailbox");
@@ -206,15 +204,57 @@ namespace NActors {
         ui32 prevActivityType = std::numeric_limits<ui32>::max();
         TActorId recipient;
         bool firstEvent = true;
-        bool preemptedByEventCount = false;
-        bool preemptedByCycles = false;
-        bool preemptedByTailSend = false;
+        using EFinishReason = TEvents::TEvMailboxProcessingFinished::EReason;
+        EFinishReason finishReason = EFinishReason::EventCountLimitReached;
+        ui32 finishedExecutedEvents = execCtx.ExecutedEvents;
+        bool isPreempted = false;
         bool wasWorking = false;
+        TStackVec<TActorId, 1> mailboxProcessingFinishedActors;
         NHPTimer::STime hpnow = execCtx.HPStart;
         NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
         ExecutionStats.AddElapsedCycles(ActorSystemIndex, hpnow - hpprev);
         NHPTimer::STime eventStart = execCtx.HPStart;
         TlsThreadContext->ActivityContext.ActivationStartTS.store(execCtx.HPStart, std::memory_order_release);
+
+        auto finishActorEvent = [&](IActor*& currentActor, IEventHandle* ev, ui32 eventType,
+                const std::type_info* currentActorType, ui32 activityType) {
+            hpnow = GetCycleCountFast();
+            hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
+
+            const size_t dyingActorsCnt = DyingActors.size();
+            EXECUTOR_THREAD_DEBUG(EDebugLevel::Event, "dyingActorsCnt ", dyingActorsCnt);
+            ExecutionStats.UpdateActorsStats(dyingActorsCnt, ThreadCtx.Pool());
+            if (dyingActorsCnt) {
+                DropUnregistered();
+                currentActor = nullptr;
+            }
+
+            if (mailbox->IsEmpty()) {
+                // had actors and became empty, prepare to reclaim mailbox
+                mailbox->LockToFree();
+            }
+
+            ExecutionStats.AddElapsedCycles(activityType, hpnow - hpprev);
+            const NHPTimer::STime elapsed = ExecutionStats.AddEventProcessingStats(
+                eventStart, hpnow, activityType, CurrentActorScheduledEventsCounter);
+            mailbox->AddElapsedCycles(elapsed);
+            if (elapsed > 1000000) {
+                LwTraceSlowEvent(
+                    ev,
+                    eventType,
+                    currentActorType,
+                    ThreadCtx.PoolId(),
+                    CurrentRecipient,
+                    NHPTimer::GetSeconds(elapsed) * 1000.0);
+            }
+
+            // The actor might have been destroyed
+            if (currentActor) {
+                currentActor->AddElapsedTicks(elapsed);
+            }
+
+            CurrentRecipient = TActorId();
+        };
 
         ThreadCtx.ResetOverwrittenEventsPerMailbox();
         ThreadCtx.ResetOverwrittenTimePerMailboxTs();
@@ -278,34 +318,21 @@ namespace NActors {
 
                     actor->Receive(ev);
 
-                    hpnow = GetCycleCountFast();
-                    hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
-
-                    size_t dyingActorsCnt = DyingActors.size();
-                    EXECUTOR_THREAD_DEBUG(EDebugLevel::Event, "dyingActorsCnt ", dyingActorsCnt);
-                    ExecutionStats.UpdateActorsStats(dyingActorsCnt, ThreadCtx.Pool());
-                    if (dyingActorsCnt) {
-                        DropUnregistered();
-                        actor = nullptr;
+                    const ui64 systemFlags = actor->GetSystemFlags();
+                    if (Y_UNLIKELY(systemFlags != 0)) {
+                        if (systemFlags & static_cast<ui64>(
+                                IActor::ESystemFlag::MailboxProcessingFinished)) {
+                            const TActorId actorId = actor->SelfId();
+                            if (std::find(
+                                    mailboxProcessingFinishedActors.begin(),
+                                    mailboxProcessingFinishedActors.end(),
+                                    actorId) == mailboxProcessingFinishedActors.end()) {
+                                mailboxProcessingFinishedActors.push_back(actorId);
+                            }
+                        }
                     }
 
-                    if (mailbox->IsEmpty()) {
-                        // had actors and became empty, prepare to reclaim mailbox
-                        mailbox->LockToFree();
-                    }
-
-                    ExecutionStats.AddElapsedCycles(activityType, hpnow - hpprev);
-                    NHPTimer::STime elapsed = ExecutionStats.AddEventProcessingStats(eventStart, hpnow, activityType, CurrentActorScheduledEventsCounter);
-                    mailbox->AddElapsedCycles(elapsed);
-                    if (elapsed > 1000000) {
-                        LwTraceSlowEvent(ev.Get(), evTypeForTracing, actorType, ThreadCtx.PoolId(), CurrentRecipient, NHPTimer::GetSeconds(elapsed) * 1000.0);
-                    }
-
-                    // The actor might have been destroyed
-                    if (actor)
-                        actor->AddElapsedTicks(elapsed);
-
-                    CurrentRecipient = TActorId();
+                    finishActorEvent(actor, ev.Get(), evTypeForTracing, actorType, activityType);
                 } else {
                     EXECUTOR_THREAD_DEBUG(EDebugLevel::Event, "actor is null");
                     actorType = nullptr;
@@ -321,6 +348,7 @@ namespace NActors {
                     ExecutionStats.AddElapsedCycles(ActorSystemIndex, hpnow - hpprev);
                 }
                 eventStart = hpnow;
+                finishedExecutedEvents = execCtx.ExecutedEvents + 1;
 
                 if (TlsThreadContext->CheckCapturedSendingType(ESendingType::Tail)) {
                     ExecutionStats.IncrementMailboxPushedOutByTailSending();
@@ -333,7 +361,7 @@ namespace NActors {
                             ThreadCtx.WorkerId(),
                             recipient.ToString(),
                             SafeTypeName(actorType));
-                    preemptedByTailSend = true;
+                    finishReason = EFinishReason::TailSend;
                     break;
                 }
 
@@ -349,7 +377,8 @@ namespace NActors {
                             ThreadCtx.WorkerId(),
                             recipient.ToString(),
                             SafeTypeName(actorType));
-                    preemptedByCycles = true;
+                    finishReason = EFinishReason::SoftDeadlineReached;
+                    isPreempted = true;
                     break;
                 }
 
@@ -365,7 +394,8 @@ namespace NActors {
                             ThreadCtx.WorkerId(),
                             recipient.ToString(),
                             SafeTypeName(actorType));
-                    preemptedByCycles = true;
+                    finishReason = EFinishReason::TimeLimitReached;
+                    isPreempted = true;
                     break;
                 }
 
@@ -380,7 +410,8 @@ namespace NActors {
                             ThreadCtx.WorkerId(),
                             recipient.ToString(),
                             SafeTypeName(actorType));
-                    preemptedByEventCount = true;
+                    finishReason = EFinishReason::EventCountLimitReached;
+                    isPreempted = true;
                     break;
                 }
             } else {
@@ -395,24 +426,45 @@ namespace NActors {
                         ThreadCtx.WorkerId(),
                         recipient.ToString(),
                         SafeTypeName(actor));
+                finishReason = EFinishReason::QueueEmpty;
                 break; // empty queue, leave
             }
         }
-        if (execCtx.PreemptionSubscribed.size()) {
-            std::unique_ptr<TEvents::TEvPreemption> event = std::make_unique<TEvents::TEvPreemption>();
-            event->ByEventCount = preemptedByEventCount;
-            event->ByCycles = preemptedByCycles;
-            event->ByTailSend = preemptedByTailSend;
-            event->EventCount = execCtx.ExecutedEvents;
-            event->Cycles = hpnow - execCtx.HPStart;
-            TAutoPtr<IEventHandle> ev = new IEventHandle(TActorId(), TActorId(), event.release());
-            for (const auto& actorId : execCtx.PreemptionSubscribed) {
-                IActor *actor = mailbox->FindActor(actorId.LocalId());
-                if (actor) {
-                    actor->Receive(ev);
-                }
+        const ui64 finishedElapsedCycles = hpnow - execCtx.HPStart;
+        // Deliver notifications directly so they do not enter the mailbox
+        // queue or consume its event processing budget.
+        for (const TActorId& actorId : mailboxProcessingFinishedActors) {
+            if (IActor* actor = mailbox->FindActor(actorId.LocalId());
+                    actor && (actor->GetSystemFlags() & static_cast<ui64>(
+                        IActor::ESystemFlag::MailboxProcessingFinished))) {
+                const TActorId recipient = actor->SelfId();
+                TActorContext ctx(*mailbox, *this, eventStart, recipient);
+                TlsActivationContext = &ctx;
+                TAutoPtr<IEventHandle> ev = new IEventHandle(
+                    actor->SelfId(),
+                    TActorId(),
+                    new TEvents::TEvMailboxProcessingFinished(
+                        finishReason,
+                        finishedExecutedEvents,
+                        finishedElapsedCycles));
+
+                const std::type_info* notificationActorType = &typeid(*actor);
+                const ui32 activityType = actor->GetActivityType().GetIndex();
+                NProfiling::TMemoryTagScope::Reset(activityType);
+                TlsThreadContext->ActivityContext.ElapsingActorActivity.store(activityType, std::memory_order_release);
+                CurrentRecipient = recipient;
+                CurrentActorScheduledEventsCounter = 0;
+
+                actor->Receive(ev);
+
+                finishActorEvent(
+                    actor,
+                    ev.Get(),
+                    TEvents::TSystem::MailboxProcessingFinished,
+                    notificationActorType,
+                    activityType);
+                eventStart = hpnow;
             }
-            execCtx.PreemptionSubscribed.clear();
         }
         TlsThreadContext->ActivityContext.ActivationStartTS.store(hpnow, std::memory_order_release);
         TlsThreadContext->ActivityContext.ElapsingActorActivity.store(ActorSystemIndex, std::memory_order_release);
@@ -425,7 +477,7 @@ namespace NActors {
         } else {
             mailbox->Unlock(ThreadCtx.Pool(), hpnow, RevolvingWriteCounter);
         }
-        return {preemptedByEventCount || preemptedByCycles, wasWorking};
+        return {isPreempted, wasWorking};
     }
 
     TThreadId TExecutorThread::GetThreadId() const {

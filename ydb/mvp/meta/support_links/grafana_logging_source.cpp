@@ -91,25 +91,15 @@ bool TryBuildGrafanaLoggingUrl(
     }
 
     const TCgiParameters forwardedParameters = BuildForwardedParameters(input.Identity, input.AdditionalRequestParams);
-    TVector<std::pair<TString, TString>> bindings = BuildNonIdentityRequestParamValues(forwardedParameters);
-    for (auto& binding : BuildRequestParamValues(forwardedParameters, paramBindings.RequestMappings)) {
-        bindings.push_back(std::move(binding));
-    }
-    for (auto& binding : BuildClusterInfoParamValues(input.ClusterInfo, paramBindings.ClusterInfoMappings)) {
-        bindings.push_back(std::move(binding));
-    }
-    for (auto& binding : BuildStaticParamValues(paramBindings.StaticMappings)) {
-        bindings.push_back(std::move(binding));
-    }
-
-    TVector<std::pair<TString, TString>> resolvedBindings;
-    resolvedBindings.reserve(bindings.size());
-    for (auto& binding : bindings) {
-        if (binding.first == "datasource") {
-            datasource = std::move(binding.second);
+    auto parametersToAdd = BuildParametersToAdd(forwardedParameters, input.ClusterInfo, paramBindings);
+    TVector<std::pair<TString, TString>> bindings;
+    bindings.reserve(parametersToAdd.size());
+    for (auto& paramValue : parametersToAdd) {
+        if (paramValue.first == "datasource") {
+            datasource = std::move(paramValue.second);
             continue;
         }
-        resolvedBindings.push_back(std::move(binding));
+        bindings.push_back(std::move(paramValue));
     }
 
     if (datasource.empty()) {
@@ -120,7 +110,7 @@ bool TryBuildGrafanaLoggingUrl(
     TCgiParameters queryParameters;
     queryParameters.InsertUnescaped("schemaVersion", "1");
     queryParameters.InsertUnescaped("panes", NJson::WriteJson(
-        BuildGrafanaLoggingPanesJson(datasource, resolvedBindings),
+        BuildGrafanaLoggingPanesJson(datasource, bindings),
         false));
     queryParameters.InsertUnescaped("orgId", "1");
 

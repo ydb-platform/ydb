@@ -200,24 +200,29 @@ namespace NActors {
         }
     }
 
-    TInputSessionTCP::TInputSessionTCP(const TActorId& sessionId, TIntrusivePtr<NInterconnect::TStreamSocket> socket,
-            TIntrusivePtr<NInterconnect::TStreamSocket> xdcSocket, TIntrusivePtr<TReceiveContext> context,
-            TInterconnectProxyCommon::TPtr common, std::shared_ptr<IInterconnectMetrics> metrics, ui32 nodeId,
-            ui64 lastConfirmed, TDuration deadPeerTimeout, TSessionParams params,
+    TInputSessionTCP::TInputSessionTCP(TInterconnectProxyCommon::TPtr common,
             NInterconnect::NRdma::TQueuePair::TPtr qp, NInterconnect::NRdma::ICq::TPtr cq)
-        : SessionId(sessionId)
-        , Socket(std::move(socket))
-        , XdcSocket(std::move(xdcSocket))
-        , Context(std::move(context))
+        : TActor<TInputSessionTCP>(&TInputSessionTCP::WorkingState)
         , Common(std::move(common))
-        , NodeId(nodeId)
-        , Params(std::move(params))
         , RdmaQp(std::move(qp))
         , RdmaCq(std::move(cq))
-        , ConfirmedByInput(lastConfirmed)
-        , Metrics(std::move(metrics))
-        , DeadPeerTimeout(deadPeerTimeout)
     {
+    }
+
+    void TInputSessionTCP::StartRecieve(const TActorId& sessionId, TIntrusivePtr<NInterconnect::TStreamSocket> socket,
+            TIntrusivePtr<NInterconnect::TStreamSocket> xdcSocket, TIntrusivePtr<TReceiveContext> context,
+            std::shared_ptr<IInterconnectMetrics> metrics, ui32 nodeId, ui64 lastConfirmed,
+            TDuration deadPeerTimeout, TSessionParams params) {
+        SessionId = sessionId;
+        Socket = std::move(socket);
+        XdcSocket = std::move(xdcSocket);
+        Context = std::move(context);
+        NodeId = nodeId;
+        Params = std::move(params);
+        ConfirmedByInput = lastConfirmed;
+        Metrics = std::move(metrics);
+        DeadPeerTimeout = deadPeerTimeout;
+
         Y_ABORT_UNLESS(Context);
         Y_ABORT_UNLESS(Socket);
         Y_ABORT_UNLESS(SessionId);
@@ -244,9 +249,7 @@ namespace NActors {
         InputTrafficArray.fill(0);
 
         XXH3_64bits_reset(&XxhashXdcState);
-    }
 
-    void TInputSessionTCP::Bootstrap() {
         SetPrefix(Sprintf("InputSession %s [node %" PRIu32 "]", SelfId().ToString().data(), NodeId));
 
         // Dead-peer watchdog and session-side periodic ping are a single logical user-space liveness mechanism.
@@ -254,10 +257,8 @@ namespace NActors {
         // other already relies on kernel keepalive/user-timeout.
         //
         // UseKernelLivenessMode() intentionally mirrors the condition in TInterconnectSessionTCP.
-        if (UseKernelLivenessMode()) {
-            Become(&TThis::WorkingState);
-        } else {
-            Become(&TThis::WorkingState, DeadPeerTimeout, new TEvCheckDeadPeer);
+        if (!UseKernelLivenessMode()) {
+            Schedule(DeadPeerTimeout, new TEvCheckDeadPeer);
         }
         if (RdmaQp) {
             LOG_DEBUG_IC_SESSION("ICRDMA", "InputSession created, rdma qp num: %d", RdmaQp->GetQpNum());
@@ -265,7 +266,72 @@ namespace NActors {
             LOG_DEBUG_IC_SESSION("ICIS01", "InputSession created");
         }
         LastReceiveTimestamp = TActivationContext::Monotonic();
+        OnStartRecieveReady();
         TActivationContext::Send(new IEventHandle(EvResumeReceiveData, 0, SelfId(), {}, nullptr, 0));
+    }
+
+    void TInputSessionTCP::OnStartRecieveReady() {
+    }
+
+
+
+    TInterconnectSessionRdma::TInterconnectSessionRdma(
+        TInterconnectProxyTCP* const proxy,
+        NInterconnect::NRdma::TQueuePair::TPtr rdmaQp,
+        NInterconnect::NRdma::ICq::TPtr rdmaCq)
+        : TInputSessionTCP(proxy->Common, std::move(rdmaQp), std::move(rdmaCq))
+    {
+        UnsafeBecome(&TInterconnectSessionRdma::SyncStateFunc);
+    };
+
+    bool TInterconnectSessionRdma::ToSyncMode(TActorId syncActor, NInterconnect::NRdma::ICq::TPtr& cq) noexcept {
+        ui32 qpNum = RdmaQp->GetQpNum();
+        if (!cq->RegisterQpAsync(qpNum, SelfId())) {
+            return false;
+        }
+        SyncActor = syncActor;
+        DeregisterCb = [cq, qpNum]() {
+            cq->DeregisterQpAsync(qpNum);
+        };
+        return true;
+    }
+
+    void TInterconnectSessionRdma::ToTransitionMode() noexcept {
+        Become(&TInterconnectSessionRdma::TransitionStateFunc);
+    }
+
+    void TInterconnectSessionRdma::PassAway() {
+        if (auto deregister = std::exchange(DeregisterCb, {})) {
+            deregister();
+        }
+        TInputSessionTCP::PassAway();
+    }
+
+    void TInterconnectSessionRdma::AbortPreInit() noexcept {
+        RdmaQp->ToErrorState();
+        PassAway();
+    }
+
+    void TInterconnectSessionRdma::HandleSrqSyncState(NInterconnect::NRdma::TEvRdmaIoReceiveDone::TPtr& ev) {
+        TlsActivationContext->Send(ev->Forward(SyncActor));
+    }
+
+    void TInterconnectSessionRdma::OnStartRecieveReady() {
+        Become(&TInterconnectSessionRdma::TransitionStateFunc);
+        TActivationContext::Send(new IEventHandle(EvProcessEarlyRdmaRecvs, 0, SelfId(), {}, nullptr, 0));
+    }
+
+    void TInterconnectSessionRdma::ProcessEarlyRdmaRecvs() {
+        while (!EarlyRdmaRecvs.empty()) {
+            auto pending = std::move(EarlyRdmaRecvs.front());
+            EarlyRdmaRecvs.pop_front();
+            TInputSessionTCP::WorkingState(pending);
+        }
+        Become(&TInterconnectSessionRdma::WorkingState);
+    }
+
+    void TInterconnectSessionRdma::HandleSrqTransitionState(NInterconnect::NRdma::TEvRdmaIoReceiveDone::TPtr& ev) {
+        EarlyRdmaRecvs.emplace_back(ev.Release());
     }
 
     STATEFN(TInputSessionTCP::WorkingState) {
@@ -560,6 +626,9 @@ namespace NActors {
         TDuration passed = cur - ev->Get()->ReadScheduledTs;
         Metrics->UpdateRdmaReadTimeHistogram(passed.MicroSeconds());
         ProcessEvents(GetPerChannelContext(ev->Get()->Channel));
+    }
+
+    void TInputSessionTCP::Handle(NInterconnect::NRdma::TEvRdmaIoReceiveDone::TPtr&) {
     }
 
     void TInputSessionTCP::ReceiveData() {
@@ -1570,8 +1639,10 @@ namespace NActors {
     }
 
     void TInputSessionTCP::PassAway() {
-        Metrics->SetClockSkewMicrosec(0);
-        TActorBootstrapped::PassAway();
+        if (Metrics) {
+            Metrics->SetClockSkewMicrosec(0);
+        }
+        TActor<TInputSessionTCP>::PassAway();
     }
 
     void TInputSessionTCP::HandleCheckDeadPeer() {

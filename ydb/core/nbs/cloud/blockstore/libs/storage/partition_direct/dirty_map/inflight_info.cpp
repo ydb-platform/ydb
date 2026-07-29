@@ -295,7 +295,9 @@ void TInflightInfo::RemoveHosts(THostMask removed)
     EraseConfirmed = EraseConfirmed.Exclude(removed);
 
     // Check if flush became complete after removing hosts.
-    if (State == EState::PBufferFlushing && FlushDesired == FlushConfirmed) {
+    const bool flushDone =
+        !FlushConfirmed.Empty() && FlushDesired == FlushConfirmed;
+    if (State == EState::PBufferFlushing && flushDone) {
         SetState(EState::PBufferFlushed);
     }
 

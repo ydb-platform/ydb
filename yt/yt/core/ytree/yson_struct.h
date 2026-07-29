@@ -6,7 +6,6 @@
 
 #include <yt/yt/core/misc/error.h>
 #include <yt/yt/core/misc/mpl.h>
-#include <yt/yt/core/misc/property.h>
 
 #include <yt/yt/core/yson/public.h>
 
@@ -15,6 +14,7 @@
 #include <yt/yt/library/syncmap/map.h>
 
 #include <library/cpp/yt/misc/enum.h>
+#include <library/cpp/yt/misc/property.h>
 #include <library/cpp/yt/misc/tls.h>
 
 #include <util/generic/algorithm.h>

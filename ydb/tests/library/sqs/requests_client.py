@@ -371,8 +371,9 @@ class SqsHttpApi(object):
             delay_seconds=None, attributes=None, deduplication_id=None, group_id=None
     ):
         if not to_bytes(queue_url).endswith(to_bytes('.fifo')):
-            if deduplication_id is not None or group_id is not None:
-                raise ValueError("Deduplication id and Group id parameters may be set for FIFO queues only")
+            if group_id is not None:
+                raise ValueError("Group id parameter may be set for FIFO queues only")
+            # MessageDeduplicationId is accepted for standard queues but ignored by the server.
         params = {
             'QueueUrl': queue_url,
             'MessageBody': message_body,

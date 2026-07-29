@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: pyOpenSSL
-Version: 23.0.0
+Version: 23.3.0
 Summary: Python wrapper module around the OpenSSL library
 Home-page: https://pyopenssl.org/
 Author: The pyOpenSSL developers
@@ -14,27 +14,27 @@ Classifier: Operating System :: MacOS :: MacOS X
 Classifier: Operating System :: Microsoft :: Windows
 Classifier: Operating System :: POSIX
 Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.6
 Classifier: Programming Language :: Python :: 3.7
 Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Programming Language :: Python :: Implementation :: PyPy
 Classifier: Topic :: Security :: Cryptography
 Classifier: Topic :: Software Development :: Libraries :: Python Modules
 Classifier: Topic :: System :: Networking
-Requires-Python: >=3.6
+Requires-Python: >=3.7
 License-File: LICENSE
-Requires-Dist: cryptography (<40,>=38.0.0)
+Requires-Dist: cryptography <42,>=41.0.5
 Provides-Extra: docs
-Requires-Dist: sphinx (!=5.2.0,!=5.2.0.post0) ; extra == 'docs'
+Requires-Dist: sphinx !=5.2.0,!=5.2.0.post0,!=7.2.5 ; extra == 'docs'
 Requires-Dist: sphinx-rtd-theme ; extra == 'docs'
 Provides-Extra: test
 Requires-Dist: flaky ; extra == 'test'
 Requires-Dist: pretend ; extra == 'test'
-Requires-Dist: pytest (>=3.0.1) ; extra == 'test'
+Requires-Dist: pytest >=3.0.1 ; extra == 'test'
 
 ========================================================
 pyOpenSSL -- A Python wrapper around the OpenSSL library
@@ -87,6 +87,89 @@ You can also join ``#pyca`` on ``irc.libera.chat`` to ask questions or get invol
 Release Information
 ===================
 
+23.3.0 (2023-10-25)
+-------------------
+
+Backward-incompatible changes:
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+- Dropped support for Python 3.6.
+- The minimum ``cryptography`` version is now 41.0.5.
+- Removed ``OpenSSL.crypto.loads_pkcs7`` and ``OpenSSL.crypto.loads_pkcs12`` which had been deprecated for 3 years.
+- Added ``OpenSSL.SSL.OP_LEGACY_SERVER_CONNECT`` to allow legacy insecure renegotiation between OpenSSL and unpatched servers.
+  `#1234 <https://github.com/pyca/pyopenssl/pull/1234>`_.
+
+Deprecations:
+^^^^^^^^^^^^^
+
+- Deprecated ``OpenSSL.crypto.PKCS12`` (which was intended to have been deprecated at the same time as ``OpenSSL.crypto.load_pkcs12``).
+- Deprecated ``OpenSSL.crypto.NetscapeSPKI``.
+- Deprecated ``OpenSSL.crypto.CRL``
+- Deprecated ``OpenSSL.crypto.Revoked``
+- Deprecated ``OpenSSL.crypto.load_crl`` and ``OpenSSL.crypto.dump_crl``
+- Deprecated ``OpenSSL.crypto.sign`` and ``OpenSSL.crypto.verify``
+- Deprecated ``OpenSSL.crypto.X509Extension``
+
+Changes:
+^^^^^^^^
+
+- Changed ``OpenSSL.crypto.X509Store.add_crl`` to also accept
+  ``cryptography``'s ``x509.CertificateRevocationList`` arguments in addition
+  to the now deprecated ``OpenSSL.crypto.CRL`` arguments.
+- Fixed ``test_set_default_verify_paths`` test so that it is skipped if no
+  network connection is available.
+
+23.2.0 (2023-05-30)
+-------------------
+
+Backward-incompatible changes:
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+- Removed ``X509StoreFlags.NOTIFY_POLICY``.
+  `#1213 <https://github.com/pyca/pyopenssl/pull/1213>`_.
+
+Deprecations:
+^^^^^^^^^^^^^
+
+Changes:
+^^^^^^^^
+
+- ``cryptography`` maximum version has been increased to 41.0.x.
+- Invalid versions are now rejected in ``OpenSSL.crypto.X509Req.set_version``.
+- Added ``X509VerificationCodes`` to ``OpenSSL.SSL``.
+  `#1202 <https://github.com/pyca/pyopenssl/pull/1202>`_.
+
+23.1.1 (2023-03-28)
+-------------------
+
+Backward-incompatible changes:
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Deprecations:
+^^^^^^^^^^^^^
+
+Changes:
+^^^^^^^^
+
+- Worked around an issue in OpenSSL 3.1.0 which caused `X509Extension.get_short_name` to raise an exception when no short name was known to OpenSSL.
+  `#1204 <https://github.com/pyca/pyopenssl/pull/1204>`_.
+
+23.1.0 (2023-03-24)
+-------------------
+
+Backward-incompatible changes:
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Deprecations:
+^^^^^^^^^^^^^
+
+Changes:
+^^^^^^^^
+
+- ``cryptography`` maximum version has been increased to 40.0.x.
+- Add ``OpenSSL.SSL.Connection.DTLSv1_get_timeout`` and ``OpenSSL.SSL.Connection.DTLSv1_handle_timeout``
+  to support DTLS timeouts `#1180 <https://github.com/pyca/pyopenssl/pull/1180>`_.
+
 23.0.0 (2023-01-01)
 -------------------
 
@@ -111,7 +194,7 @@ Backward-incompatible changes:
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 - Remove support for SSLv2 and SSLv3.
-- The minimum ``cryptography`` version is now 38.0.x (and we now pin releases 
+- The minimum ``cryptography`` version is now 38.0.x (and we now pin releases
   against ``cryptography`` major versions to prevent future breakage)
 - The ``OpenSSL.crypto.X509StoreContextError`` exception has been refactored,
   changing its internal attributes.

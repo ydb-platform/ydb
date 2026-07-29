@@ -47,6 +47,8 @@ public:
     }
 
     void Handle(TEvBlobStorage::TEvGetResult::TPtr& ev) {
+        // TODO: handle situation when blob was deleted before we started copying it
+
         auto groupId = TabletInfo->GroupFor(BlobId.Channel(), BlobId.Generation());
 
         if (ev->Get()->GroupId != groupId) {

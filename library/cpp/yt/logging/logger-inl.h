@@ -5,6 +5,7 @@
 #endif
 
 #include "tagged_payload.h"
+#include "tag.h"
 
 #include <library/cpp/yt/yson_string/convert.h>
 #include <library/cpp/yt/yson_string/string.h>
@@ -343,35 +344,6 @@ struct TStaticAnchorRef
     std::atomic<bool>* Registered;
 };
 
-//! Wraps the format spec passed to |TTaggedLoggingGuard::With| and validates at compile
-//! time that it is a |%|-prefixed string literal (e.g. |"%v"|, |"%08x"|). The stored
-//! spec has the leading |%| stripped, as expected by |FormatValue|.
-class TLoggingTagSpec
-{
-public:
-    template <size_t N>
-    consteval TLoggingTagSpec(const char (&spec)[N])
-        : Spec_(spec + 1, N - 2)
-    {
-        static_assert(N >= 2, "Logging tag format spec must be a non-empty string literal");
-        if (spec[0] != '%') {
-            TheLoggingTagFormatSpecMustStartWithPercentSign();
-        }
-    }
-
-    TStringBuf Get() const
-    {
-        return Spec_;
-    }
-
-private:
-    const TStringBuf Spec_;
-
-    // Undefined on purpose: calling it from the |consteval| ctor turns a missing
-    // leading |%| into a compile error that names the violated rule.
-    static void TheLoggingTagFormatSpecMustStartWithPercentSign();
-};
-
 class TWellKnownTaggedLoggingGuard;
 
 //! Accumulates a tagged log message via a fluent |.With| chain and emits the event in
@@ -408,6 +380,15 @@ public:
         return Enabled_;
     }
 
+    //! The fluent macros end their expansion in a call to this instead of naming the guard
+    //! directly. A tag-less |YT_TLOG_INFO("Message");| would otherwise expand to a discarded
+    //! id-expression, and -Wunused-value fires on those whenever the call is spelled inside
+    //! a macro argument (e.g. within |BIND(...)|) rather than a macro body.
+    TTaggedLoggingGuard& Self() &
+    {
+        return *this;
+    }
+
     template <class TValue>
     TTaggedLoggingGuard& With(TStringBuf tag, const TValue& value) &
     {
@@ -418,6 +399,23 @@ public:
     TTaggedLoggingGuard& With(TStringBuf tag, const TValue& value, TLoggingTagSpec spec) &
     {
         return DoWith(tag, value, spec.Get());
+    }
+
+    //! Attaches a keyed tag composed from several values, e.g. |.WithFormat("Method", "%v.%v", service, method)|.
+    template <class... TArgs>
+    TTaggedLoggingGuard& WithFormat(TStringBuf tag, TFormatString<TArgs...> format, TArgs&&... args) &
+    {
+        Format(Writer_.BeginTag(tag), format, std::forward<TArgs>(args)...);
+        Writer_.EndTag();
+        return *this;
+    }
+
+    //! Splices a pre-built list of keyed tags, preserving them as individual tags. Chosen
+    //! over the well-known single-argument |With| below by exact match.
+    TTaggedLoggingGuard& With(const TLoggingTagList& tags) &
+    {
+        Writer_.AppendTags(tags.GetPayload());
+        return *this;
     }
 
     //! Attaches a well-known tag whose key is resolved from #value's type via the
@@ -615,6 +613,12 @@ class TNullTaggedLoggingGuard
 public:
     template <class... TArgs>
     TNullTaggedLoggingGuard& With(TArgs&&...)
+    {
+        return *this;
+    }
+
+    template <class... TArgs>
+    TNullTaggedLoggingGuard& WithFormat(TArgs&&...)
     {
         return *this;
     }

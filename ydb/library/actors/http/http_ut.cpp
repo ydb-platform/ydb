@@ -1619,7 +1619,8 @@ Y_UNIT_TEST_SUITE(THttpProxyWithMTls) {
         TMtlsTestSetup(
             const bool useRealThreads = false,
             const bool secureConnection = true,
-            TAutoPtr<TLogBackend> customLogBackend = nullptr
+            TAutoPtr<TLogBackend> customLogBackend = nullptr,
+            const bool clientCertificateRequired = false
         )
             : ActorSystem(1, useRealThreads)
         {
@@ -1664,6 +1665,7 @@ Y_UNIT_TEST_SUITE(THttpProxyWithMTls) {
                 add->CertificateFile = ServerCertFile.Name();
                 add->PrivateKeyFile = ServerKeyFile.Name();
                 add->CaFile = CaCertFile.Name(); // enables mTLS
+                add->ClientCertificateRequired = clientCertificateRequired;
             }
             ActorSystem.Send(new NActors::IEventHandle(ProxyId, ActorSystem.AllocateEdgeActor(), add.Release()), 0, true);
             TAutoPtr<NActors::IEventHandle> handle;
@@ -1686,9 +1688,9 @@ Y_UNIT_TEST_SUITE(THttpProxyWithMTls) {
         });
 
         TAutoPtr<NActors::IEventHandle> handle;
-        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request1 = setup.ActorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
-        UNIT_ASSERT_EQUAL(request1->Request->URL, "/test");
-        UNIT_ASSERT(!request1->Request->MTlsClientCertificate.empty());
+        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request = setup.ActorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
+        UNIT_ASSERT_EQUAL(request->Request->URL, "/test");
+        UNIT_ASSERT(!request->Request->MTlsClientCertificate.empty());
 
         clientThread.join();
     }
@@ -1730,6 +1732,43 @@ Y_UNIT_TEST_SUITE(THttpProxyWithMTls) {
         NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request = setup.ActorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
         UNIT_ASSERT_EQUAL(request->Request->URL, "/test");
         UNIT_ASSERT(request->Request->MTlsClientCertificate.empty());
+
+        clientThread.join();
+    }
+
+    Y_UNIT_TEST(RequiredNoClientCertificate) {
+        TAutoPtr<TLogBackend> backend(new TSignalingLogBackend("connection closed - error in Accept"));
+        auto* signalingBackend = dynamic_cast<TSignalingLogBackend*>(backend.Get());
+        bool expectedMessageLogged = false;
+
+        {
+            TMtlsTestSetup setup(/* useRealThreads */ true, /* secureConnection */ true, std::move(backend), /* clientCertificateRequired */ true);
+
+            const TString httpRequest = "GET /test HTTP/1.1\r\nHost: 127.0.0.1:" + ToString(setup.Port) + "\r\nConnection: close\r\n\r\n";
+            std::thread clientThread([&setup, httpRequest]() {
+                NHttp::NTest::SendTlsRequest(setup.Port, "", "", setup.CaCertFile.Name(), httpRequest);
+            });
+            clientThread.join();
+
+            signalingBackend->WaitFor(TDuration::Seconds(2));
+            expectedMessageLogged = signalingBackend->Seen();
+        }
+
+        UNIT_ASSERT_C(expectedMessageLogged, "No connection error happened without client certificate");
+    }
+
+    Y_UNIT_TEST(RequiredValidClientCertificate) {
+        TMtlsTestSetup setup(/* useRealThreads */ false, /* secureConnection */ true, nullptr, /* clientCertificateRequired */ true);
+
+        const TString httpRequest = "GET /test HTTP/1.1\r\nHost: 127.0.0.1:" + ToString(setup.Port) + "\r\nConnection: close\r\n\r\n";
+        std::thread clientThread([&setup, httpRequest]() {
+            NHttp::NTest::SendTlsRequest(setup.Port, setup.ClientCertFile.Name(), setup.ClientKeyFile.Name(), setup.CaCertFile.Name(), httpRequest);
+        });
+
+        TAutoPtr<NActors::IEventHandle> handle;
+        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request = setup.ActorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
+        UNIT_ASSERT_EQUAL(request->Request->URL, "/test");
+        UNIT_ASSERT(!request->Request->MTlsClientCertificate.empty());
 
         clientThread.join();
     }

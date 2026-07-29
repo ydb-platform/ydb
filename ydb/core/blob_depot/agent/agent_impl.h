@@ -207,8 +207,6 @@ namespace NKikimr::NBlobDepot {
         TActorId PipeServerId;
         bool IsConnected = false;
         ui64 ConnectionInstance = 0;
-        bool Recommissioning;
-        ui32 GroupGeneration;
 
         NMonitoring::TDynamicCounterPtr AgentCounters;
 
@@ -353,9 +351,6 @@ namespace NKikimr::NBlobDepot {
                     TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, ProxyId, {}, nullptr, 0));
                     ProxyId = {};
                 }
-                Y_ABORT_UNLESS(info->Group);
-                Recommissioning = info->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::RECOMMISSIONING;
-                GroupGeneration = info->GroupGeneration;
             }
             if (ProxyId) {
                 TActivationContext::Send(ev->Forward(ProxyId));

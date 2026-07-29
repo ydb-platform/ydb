@@ -44,6 +44,7 @@ namespace TEvKeyValue {
 
         EvAdvanceMoveDataResult = EvResponse + 512,
         EvBlobCopied,
+        EvCheckTrash,
 
         EvEnd
     };
@@ -295,6 +296,8 @@ namespace TEvKeyValue {
             COPY_BLOB,
             YIELD,
             REPEAT,
+            CHECK_TRASH,
+            WAIT_FOR_GC,
             FINISH,
         };
         EResult Result;
@@ -321,6 +324,14 @@ namespace TEvKeyValue {
             return std::make_unique<TEvAdvanceMoveDataResult>(EResult::REPEAT);
         }
 
+        static std::unique_ptr<TEvAdvanceMoveDataResult> CheckTrash() {
+            return std::make_unique<TEvAdvanceMoveDataResult>(EResult::CHECK_TRASH);
+        }
+
+        static std::unique_ptr<TEvAdvanceMoveDataResult> WaitForGC() {
+            return std::make_unique<TEvAdvanceMoveDataResult>(EResult::WAIT_FOR_GC);
+        }
+
         static std::unique_ptr<TEvAdvanceMoveDataResult> Finish() {
             return std::make_unique<TEvAdvanceMoveDataResult>(EResult::FINISH);
         }
@@ -335,6 +346,8 @@ namespace TEvKeyValue {
             , NewBlobId(newBlobId)
         {}
     };
+
+    struct TEvCheckTrash : public TEventLocal<TEvCheckTrash, EvCheckTrash> {};
 }
 
 } // NKikimr

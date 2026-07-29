@@ -496,6 +496,103 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
             UNIT_ASSERT_C(err.Contains("No such file or directory"), err);
             UNIT_ASSERT_C(err.Contains(expected), err);
         }
+
+        // The read error must trigger a proper cleanup: the file has to be closed and its
+        // descriptor released. If the close operation is not dispatched (e.g. because the
+        // active-op flag was left set), EvCloseFileResponse never arrives and the file stays
+        // stuck in the active list, keeping the file descriptor counter above zero.
+        {
+            std::atomic<bool> closed = false;
+            runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+                if (event->GetRecipientRewrite() == spillingSvc) {
+                    if (event->GetTypeRewrite() == 2146435074 /* EvCloseFileResponse */) {
+                        closed = true;
+                    }
+                }
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            });
+
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&]() {
+                return (bool) closed;
+            };
+            runtime.DispatchEvents(options, TDuration::Seconds(1));
+            UNIT_ASSERT_C(closed, "file was not closed after read error");
+        }
+
+        {
+            THttpRequest httpReq(HTTP_METHOD_GET);
+            NMonitoring::TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, nullptr, "", nullptr);
+
+            runtime.Send(new IEventHandle(spillingSvc, tester, new NMon::TEvHttpInfo(monReq)));
+            auto resp = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(tester, TDuration::Seconds(1));
+            UNIT_ASSERT(((NMon::TEvHttpInfoRes*) resp->Get())->Answer.Contains("Used file descriptors (compute): 0"));
+        }
+    }
+
+    Y_UNIT_TEST(WriteError) {
+        TTestActorRuntime runtime;
+        runtime.Initialize();
+
+        auto spillingSvc = runtime.StartSpillingService(1000, 100, 25);
+        auto tester = runtime.AllocateEdgeActor();
+        auto spillingActor = runtime.StartSpillingActor(tester);
+
+        runtime.WaitBootstrap();
+
+        auto nodePath = TFsPath("node_" + std::to_string(spillingSvc.NodeId()) + "_" + runtime.GetSpillingSessionId());
+        const TFsPath spillingDir = runtime.GetSpillingRoot() / nodePath;
+        const TFsPath firstFile = spillingDir / "1_test_0";
+        const TFsPath secondFile = spillingDir / "1_test_1";
+
+        // Write the first blob. Because MaxFilePartSize is small and RemoveBlobsAfterRead is on,
+        // this blob lands in its own file part "1_test_0".
+        {
+            auto ev = new TEvDqSpilling::TEvWrite(0, CreateRope(20, 'a'));
+            runtime.Send(new IEventHandle(spillingActor, tester, ev));
+
+            auto resp = runtime.GrabEdgeEvent<TEvDqSpilling::TEvWriteResult>(tester);
+            UNIT_ASSERT_VALUES_EQUAL(0, resp->Get()->BlobId);
+        }
+        UNIT_ASSERT(NFs::Exists(firstFile.GetPath()));
+
+        // File part names are predictable, so occupy the name of the would-be next file part
+        // ("1_test_1") with a directory. Opening it for writing will fail and produce an IO error.
+        secondFile.MkDirs();
+
+        // Write the second blob. It requires a fresh file part ("1_test_1"), whose creation now
+        // fails with an IO error.
+        {
+            auto ev = new TEvDqSpilling::TEvWrite(1, CreateRope(20, 'b'));
+            runtime.Send(new IEventHandle(spillingActor, tester, ev));
+
+            auto resp = runtime.GrabEdgeEvent<TEvDqSpilling::TEvError>(tester);
+            UNIT_ASSERT_C(resp->Get()->Message.Contains("1_test_1"), resp->Get()->Message);
+        }
+
+        // The write error must trigger cleanup of the whole file, including the already-written
+        // "1_test_0" part. Wait for the close operation to complete.
+        {
+            std::atomic<bool> closed = false;
+            runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+                if (event->GetRecipientRewrite() == spillingSvc) {
+                    if (event->GetTypeRewrite() == 2146435074 /* EvCloseFileResponse */) {
+                        closed = true;
+                    }
+                }
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            });
+
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&]() {
+                return (bool) closed;
+            };
+            runtime.DispatchEvents(options, TDuration::Seconds(1));
+            UNIT_ASSERT_C(closed, "file was not closed after write error");
+        }
+
+        // The successfully written part must have been removed from disk during cleanup.
+        UNIT_ASSERT_C(!NFs::Exists(firstFile.GetPath()), "partially written file was not cleaned up");
     }
 
     Y_UNIT_TEST(ThreadPoolQueueOverflow) {

@@ -2,11 +2,13 @@
 
 #include "parse_tree.h"
 
+#include <yql/essentials/parser/common/antlr4/depth_limiting_listener.h>
 #include <yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
 #include <yql/essentials/parser/antlr_ast/gen/v1_ansi_antlr4/SQLv1Antlr4Lexer.h>
 
 #include <util/system/yassert.h>
 #include <util/charset/utf8.h>
+#include <util/generic/maybe.h>
 #include <util/string/builder.h>
 
 namespace NSQLPureAST {
@@ -22,6 +24,8 @@ public:
 
 template <bool IsAnsiLexer>
 class TParser: public IParser {
+    static constexpr size_t MaxParseTreeDepth = 4096;
+
 public:
     using TLexer = std::conditional_t<
         IsAnsiLexer,
@@ -32,11 +36,13 @@ public:
         : Chars_()
         , Lexer_(&Chars_)
         , Tokens_(&Lexer_)
+        , DepthLimiter_(/*maxDepth=*/MaxParseTreeDepth)
         , Parser_(&Tokens_)
     {
         Lexer_.removeErrorListeners();
         Parser_.removeErrorListeners();
         Parser_.setErrorHandler(std::make_shared<TErrorStrategy>());
+        Parser_.addParseListener(&DepthLimiter_);
     }
 
     TParseTree Parse(TStringBuf text) override {
@@ -61,6 +67,7 @@ private:
         Chars_.load(text.Data(), text.Size(), /* lenient = */ false);
         Lexer_.reset();
         Tokens_.setTokenSource(&Lexer_);
+        DepthLimiter_.Reset();
         Parser_.reset();
         return Parser_.sql_query();
     }
@@ -89,6 +96,7 @@ private:
     antlr4::ANTLRInputStream Chars_;
     TLexer Lexer_;
     antlr4::CommonTokenStream Tokens_;
+    NAntlrAST::TDepthLimitingListener DepthLimiter_;
     SQLv1 Parser_;
 };
 

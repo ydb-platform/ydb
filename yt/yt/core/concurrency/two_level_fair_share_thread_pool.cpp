@@ -10,11 +10,11 @@
 #include <yt/yt/core/misc/finally.h>
 #include <yt/yt/core/misc/heap.h>
 #include <yt/yt/core/misc/mpsc_stack.h>
-#include <yt/yt/core/misc/ring_queue.h>
 
 #include <yt/yt/library/profiling/sensor.h>
 
 #include <library/cpp/yt/containers/intrusive_linked_list.h>
+#include <library/cpp/yt/containers/ring_queue.h>
 
 #include <library/cpp/yt/memory/public.h>
 

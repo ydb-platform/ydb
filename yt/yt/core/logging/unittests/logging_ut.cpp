@@ -1,5 +1,3 @@
-#include "yt/yt/core/misc/string_builder.h"
-
 #include <yt/yt/core/concurrency/async_semaphore.h>
 
 #include <yt/yt/core/json/json_parser.h>
@@ -40,6 +38,8 @@
 
 #include <library/cpp/yt/misc/global.h>
 #include <library/cpp/yt/misc/range_formatters.h>
+
+#include <library/cpp/yt/string/string_builder.h>
 
 #include <util/stream/zlib.h>
 

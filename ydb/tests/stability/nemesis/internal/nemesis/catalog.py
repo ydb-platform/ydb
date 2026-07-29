@@ -21,6 +21,12 @@ from typing import Any, Type
 from ydb.tests.stability.nemesis.internal.nemesis.cluster_entries import all_nemesis_type_entries
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.default_planner import DefaultRandomHostPlanner
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.nemesis_planner_base import NemesisPlannerBase
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_target import TargetKind
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import (
+    DEFAULT_RECOVERY_SEC,
+    GuardMode,
+    ImpactScope,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -105,8 +111,106 @@ def build_all_planners() -> dict[str, NemesisPlannerBase]:
 # ---------------------------------------------------------------------------
 
 
-def get_all_nemesis_types() -> list[str]:
-    return list(NEMESIS_TYPES.keys())
+def impact_scope_for(nemesis_type: str) -> ImpactScope:
+    """ImpactScope for ``nemesis_type`` (defaults to NODE when unannotated)."""
+    spec = NEMESIS_TYPES.get(nemesis_type)
+    if spec is None:
+        return ImpactScope.UNKNOWN
+    scope = spec.get("impact_scope")
+    return scope if isinstance(scope, ImpactScope) else ImpactScope.NODE
+
+
+def target_kind_for(nemesis_type: str) -> TargetKind:
+    """TargetKind for ``nemesis_type`` (defaults to HOST when unannotated)."""
+    spec = NEMESIS_TYPES.get(nemesis_type)
+    if spec is None:
+        return TargetKind.HOST
+    kind = spec.get("target_kind")
+    return kind if isinstance(kind, TargetKind) else TargetKind.HOST
+
+
+def guard_mode_for(nemesis_type: str) -> GuardMode:
+    """GuardMode of the type; unannotated defaults to FULL, or BYPASS for custom-planner types."""
+    spec = NEMESIS_TYPES.get(nemesis_type)
+    if spec is None:
+        return GuardMode.BYPASS
+    mode = spec.get("guard_mode")
+    if isinstance(mode, GuardMode):
+        return mode
+    has_custom_planner = spec.get("planner_cls") is not None or spec.get("planner_factory") is not None
+    return GuardMode.BYPASS if has_custom_planner else GuardMode.FULL
+
+
+def recovery_sec_for(nemesis_type: str) -> float | None:
+    """``auto_recovery_sec`` of the type: how long the fault is expected to last."""
+    spec = NEMESIS_TYPES.get(nemesis_type)
+    if spec is None:
+        return DEFAULT_RECOVERY_SEC
+    if "auto_recovery_sec" not in spec:
+        return DEFAULT_RECOVERY_SEC
+    val = spec.get("auto_recovery_sec")
+    if val is None:
+        return None
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return DEFAULT_RECOVERY_SEC
+
+
+def recovery_mode_for(nemesis_type: str) -> str:
+    """``"self"`` — heals on its own (SIGKILL + systemd restart); ``"extract"`` — stays applied
+    until the probe dispatches an extract (clock skew, broken disk, stopped node)."""
+    spec = NEMESIS_TYPES.get(nemesis_type)
+    if spec is None:
+        return "self"
+    return "extract" if spec.get("recovery") == "extract" else "self"
+
+
+def impairment_hold_sec_for(nemesis_type: str, *, paired_extract: bool) -> float | None:
+    """``recovery_sec`` for ``record_inject``.
+
+    ``paired_extract=True`` (manual inject, followed by a manual extract): a toggle fault holds its
+    budget until that extract. ``False`` (legacy loop, where the *next inject* toggles the fault
+    back): held for the length of the pulse, i.e. until the type's next tick.
+    """
+    if recovery_mode_for(nemesis_type) != "extract":
+        return recovery_sec_for(nemesis_type)
+    if paired_extract:
+        return None
+    spec = NEMESIS_TYPES.get(nemesis_type) or {}
+    interval = float(spec.get("schedule") or 60)
+    window = recovery_sec_for(nemesis_type)
+    return max(interval, window) if window is not None else interval
+
+
+def supports_boundary_scheduler(nemesis_type: str) -> bool:
+    """Whether the boundary scheduler may inject this type on the target it reserved.
+
+    Safe: a DATACENTER target (fanned out over exactly that DC), a toggle fault (dispatched directly,
+    bypassing planners), or the default planner (injects the candidate it is handed). A custom planner
+    must opt in with ``boundary_safe``: one that keeps its own targets would inject something the
+    guard never reserved. Never builds the planner to ask — constructors may talk to the cluster.
+    """
+    spec = NEMESIS_TYPES.get(nemesis_type)
+    if spec is None:
+        return False
+    if "boundary_safe" in spec:
+        return bool(spec["boundary_safe"])
+    if target_kind_for(nemesis_type) is TargetKind.DATACENTER:
+        return True
+    if recovery_mode_for(nemesis_type) == "extract":
+        return True
+    return spec.get("planner_cls") is None and spec.get("planner_factory") is None
+
+
+def supports_manual_for(nemesis_type: str) -> bool:
+    """Whether UI/API manual inject works: planners with cross-tick state return None instead."""
+    spec = NEMESIS_TYPES.get(nemesis_type)
+    if spec is None:
+        return False
+    if "supports_manual" in spec:
+        return bool(spec["supports_manual"])
+    return True
 
 
 def nemesis_types_flat_for_api() -> list[dict[str, Any]]:
@@ -117,12 +221,15 @@ def nemesis_types_flat_for_api() -> list[dict[str, Any]]:
         description = (
             runner.nemesis_description if runner and hasattr(runner, "nemesis_description") else ""
         )
+        kind = definition.get("target_kind")
         result.append(
             {
                 "name": name,
                 "description": description,
                 "schedule": int(definition.get("schedule") or 60),
                 "params": list(definition.get("params") or []),
+                "target_kind": kind.value if hasattr(kind, "value") else "host",
+                "supports_manual": supports_manual_for(name),
             }
         )
     return result
@@ -143,12 +250,15 @@ def nemesis_types_grouped_for_api() -> dict[str, Any]:
         gid = definition.get("ui_group", "Other")
         if gid not in groups:
             groups[gid] = {"description": "", "nemesis": []}
+        kind = definition.get("target_kind")
         groups[gid]["nemesis"].append(
             {
                 "name": name,
                 "description": description,
                 "schedule": int(definition.get("schedule") or 60),
                 "params": list(definition.get("params") or []),
+                "target_kind": kind.value if hasattr(kind, "value") else "host",
+                "supports_manual": supports_manual_for(name),
             }
         )
 

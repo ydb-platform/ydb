@@ -3752,7 +3752,7 @@ SIMPLE_MODULE(TDateTime2Module,
               TIntervalFromMinutes,
 
               TLangVerForked<
-                  NYql::MakeLangVersion(2025, 03), // TODO(YQL-21408)
+                  NYql::NFeature::Interval64Seconds.MinLangVer,
                   NLegacy::TIntervalFromSeconds,
                   NActual::TIntervalFromSeconds>,
 
@@ -3802,7 +3802,7 @@ SIMPLE_MODULE(TDateTime2Module,
                                   SimpleDatetimeToIntervalUdf<TM64ResourceName, EndOf<TTM64Storage>>>,
 
               TLangVerForked<
-                  NYql::MakeLangVersion(2025, 03), // TODO(YQL-21408)
+                  NYql::NFeature::Interval64Seconds.MinLangVer,
                   TToUnits<ToSecondsUDF, /* TResult = */ ui32, /* TSignedResult = */ i32, /* TWResult = */ i64, 1>,
                   TToUnits<ToSecondsUDF, /* TResult = */ ui32, /* TSignedResult = */ i64, /* TWResult = */ i64, 1>>,
 

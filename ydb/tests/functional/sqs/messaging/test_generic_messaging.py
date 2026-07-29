@@ -250,6 +250,32 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
         self._wait_for_counter_value(receive_counter_labels, 1, default_value=0)
 
     @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_standard_queue_ignores_message_deduplication_id(self, tables_format):
+        self._init_with_params(is_fifo=False, tables_format=tables_format)
+        created_queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=False)
+
+        body = 'standard body with ignored deduplication id'
+        message_id = self._send_message_and_assert(
+            created_queue_url, body, seq_no='deduplication-id-1'
+        )
+        read_message_result = self._read_while_not_empty(created_queue_url, 1)
+
+        assert_that(
+            read_message_result, ReadResponseMatcher().with_message_ids([message_id])
+        )
+
+        # MessageDeduplicationId is FIFO-only: ignored for standard queues and not returned on receive.
+        attributes = read_message_result[0].get('Attribute')
+        if attributes is not None:
+            attributes_by_name = {}
+            for a in attributes if isinstance(attributes, list) else [attributes]:
+                attributes_by_name[a['Name']] = a
+            assert_that(
+                attributes_by_name,
+                not_(has_item('MessageDeduplicationId'))
+            )
+
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
     def test_validates_message_attributes(self, tables_format):
         self._init_with_params(tables_format=tables_format)
         created_queue_url = self._create_queue_and_assert(self.queue_name)

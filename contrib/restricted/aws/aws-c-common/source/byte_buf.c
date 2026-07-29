@@ -760,6 +760,21 @@ int aws_byte_buf_append_dynamic(struct aws_byte_buf *to, const struct aws_byte_c
     return s_aws_byte_buf_append_dynamic(to, from, false);
 }
 
+int aws_byte_buf_append_auto(struct aws_byte_buf *to, const struct aws_byte_cursor *from) {
+    AWS_PRECONDITION(aws_byte_buf_is_valid(to));
+    AWS_PRECONDITION(aws_byte_cursor_is_valid(from));
+
+    /*
+     * Buffers without an allocator are externally-owned (e.g. by a
+     * buffer pool); they cannot grow, so use the static append path.
+     * Buffers with an allocator can grow, so use the dynamic path.
+     */
+    if (to->allocator != NULL) {
+        return aws_byte_buf_append_dynamic(to, from);
+    }
+    return aws_byte_buf_append(to, from);
+}
+
 int aws_byte_buf_append_dynamic_secure(struct aws_byte_buf *to, const struct aws_byte_cursor *from) {
     return s_aws_byte_buf_append_dynamic(to, from, true);
 }

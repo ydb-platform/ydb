@@ -1,6 +1,5 @@
 #include "ydb/core/testlib/basics/appdata.h"
 
-#include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/ydb/util.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
 

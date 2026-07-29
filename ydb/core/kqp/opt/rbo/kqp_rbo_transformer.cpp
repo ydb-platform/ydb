@@ -473,6 +473,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
 
     // Logical state I
     TVector<std::unique_ptr<IRule>> logicalStage_I_Rules;
+    logicalStage_I_Rules.emplace_back(std::make_unique<TMergeUnionAllRule>());
     logicalStage_I_Rules.emplace_back(std::make_unique<TExtractJoinExpressionsRule>());
     logicalStage_I_Rules.emplace_back(std::make_unique<TExtractCommonConjunctsRule>());
     logicalStage_I_Rules.emplace_back(std::make_unique<TPushFilterIntoJoinRule>());
@@ -502,7 +503,8 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
 
     // Physical stage.
     TVector<std::unique_ptr<IRule>> physicalStageRules;
-    physicalStageRules.emplace_back(std::make_unique<TPushRangesRule>());
+    // For columnstore we push ranges before CBO.
+    physicalStageRules.emplace_back(std::make_unique<TPushRangesRule>(NYql::EStorageType::ColumnStorage));
     physicalStageRules.emplace_back(std::make_unique<TPushOlapFilterRule>());
     physicalStageRules.emplace_back(std::make_unique<TPushOlapProjectionRule>());
     physicalStageRules.emplace_back(std::make_unique<TDisableBlocksOnColumnsLimitRule>());
@@ -523,6 +525,11 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     cleanUpCBOStageRules.emplace_back(std::make_unique<TPushFilterIntoJoinRule>());
     cleanUpCBOStageRules.emplace_back(std::make_unique<TPruneDeadMapElementsRule>(pruneKeyColumnsEarly));
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Clean up after CBO", std::move(cleanUpCBOStageRules)));
+
+    // For row storage, we push range after CBO.
+    TVector<std::unique_ptr<IRule>> indexSelectionRules;
+    indexSelectionRules.emplace_back(std::make_unique<TPushRangesRule>(NYql::EStorageType::RowStorage));
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Index selection rules", std::move(indexSelectionRules)));
 
     if (inlineJoinFiltersAfterCBO) {
         TVector<std::unique_ptr<IRule>> inlineJoinFiltersAfterCBORules;

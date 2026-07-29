@@ -114,6 +114,16 @@ public:
     //! Ends the current tag, filling in the value's reserved length prefix.
     TTaggedPayloadWriter& EndTag() &;
 
+    //! Splices an already-serialized tag section (see #TLoggingTagList::GetPayload)
+    //! verbatim. Must follow #EndMessage, must not interrupt a tag, and must precede
+    //! any well-known tag, which the layout requires to come last.
+    TTaggedPayloadWriter& AppendTags(TStringBuf tags) &;
+
+    //! Appends a single framed keyed tag to #payload, for producers that hold an
+    //! already-formatted value and accumulate a tag section of their own (see
+    //! #TLoggingTagList).
+    static void AppendTag(std::string* payload, TStringBuf key, TStringBuf value);
+
     //! Returns the serialized payload. Must follow #EndMessage.
     TTaggedLogEventPayload Finish() &;
 

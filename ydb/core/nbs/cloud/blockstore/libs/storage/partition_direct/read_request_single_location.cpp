@@ -165,6 +165,10 @@ void TReadSingleLocationRequestExecutor::OnReadResponse(
     }
     Failed.Set(host);
 
+    if (Promise.IsReady()) {
+        return;
+    }
+
     LOG_WARN(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,

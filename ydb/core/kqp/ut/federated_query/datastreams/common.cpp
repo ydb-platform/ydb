@@ -1,5 +1,7 @@
 #include "common.h"
 
+#include <ydb/services/workload_manager/ut/common/workload_service_ut_common.h>
+
 #include <ydb/core/base/counters.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
@@ -1032,6 +1034,10 @@ void TTabletKiller::Bootstrap() {
 void TTabletKiller::KillTablet() const {
     RestartTablet(*ActorContext().ActorSystem(), TabletId);
     Schedule(KillerInterval, new TEvents::TEvWakeup());
+}
+
+void TStreamingTestFixture::WaitForClassifierPropagation() {
+    NWorkloadManager::WaitForClassifierPropagation(GetRuntime());
 }
 
 } // namespace NKikimr::NKqp

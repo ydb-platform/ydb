@@ -1,4 +1,8 @@
+from typing import Type
+
 import pytest
+from hypothesis import assume, example, given, note
+from hypothesis import strategies as st
 
 from yarl._quoting import NO_EXTENSIONS
 from yarl._quoting_py import _Quoter as _PyQuoter
@@ -16,6 +20,10 @@ if not NO_EXTENSIONS:
     def unquoter(request):
         return request.param
 
+    quoters = [_PyQuoter, _CQuoter]
+    quoter_ids = ["PyQuoter", "CQuoter"]
+    unquoters = [_PyUnquoter, _CUnquoter]
+    unquoter_ids = ["PyUnquoter", "CUnquoter"]
 else:
 
     @pytest.fixture(params=[_PyQuoter], ids=["py_quoter"])
@@ -25,6 +33,11 @@ else:
     @pytest.fixture(params=[_PyUnquoter], ids=["py_unquoter"])
     def unquoter(request):
         return request.param
+
+    quoters = [_PyQuoter]
+    quoter_ids = ["PyQuoter"]
+    unquoters = [_PyUnquoter]
+    unquoter_ids = ["PyUnquoter"]
 
 
 def hexescape(char):
@@ -455,3 +468,79 @@ def test_quoter_path_with_plus(quoter):
 def test_unquoter_path_with_plus(unquoter):
     s = "/test/x+y%2Bz/:+%2B/"
     assert "/test/x+y+z/:++/" == unquoter(unsafe="+")(s)
+
+
+@given(safe=st.text(), protected=st.text(), qs=st.booleans(), requote=st.booleans())
+def test_fuzz__PyQuoter(safe, protected, qs, requote):
+    """Verify that _PyQuoter can be instantiated with any valid arguments."""
+    assert _PyQuoter(safe=safe, protected=protected, qs=qs, requote=requote)
+
+
+@given(ignore=st.text(), unsafe=st.text(), qs=st.booleans())
+def test_fuzz__PyUnquoter(ignore, unsafe, qs):
+    """Verify that _PyUnquoter can be instantiated with any valid arguments."""
+    assert _PyUnquoter(ignore=ignore, unsafe=unsafe, qs=qs)
+
+
+@example(text_input="0")
+@given(
+    text_input=st.text(
+        alphabet=st.characters(max_codepoint=127, blacklist_characters="%")
+    ),
+)
+@pytest.mark.parametrize("quoter", quoters, ids=quoter_ids)
+@pytest.mark.parametrize("unquoter", unquoters, ids=unquoter_ids)
+def test_quote_unquote_parameter(
+    quoter: Type[_PyQuoter],
+    unquoter: Type[_PyUnquoter],
+    text_input: str,
+) -> None:
+    quote = quoter()
+    unquote = unquoter()
+    text_quoted = quote(text_input)
+    note(f"text_quoted={text_quoted!r}")
+    text_output = unquote(text_quoted)
+    assert text_input == text_output
+
+
+@example(text_input="0")
+@given(
+    text_input=st.text(
+        alphabet=st.characters(max_codepoint=127, blacklist_characters="%")
+    ),
+)
+@pytest.mark.parametrize("quoter", quoters, ids=quoter_ids)
+@pytest.mark.parametrize("unquoter", unquoters, ids=unquoter_ids)
+def test_quote_unquote_parameter_requote(
+    quoter: Type[_PyQuoter],
+    unquoter: Type[_PyUnquoter],
+    text_input: str,
+) -> None:
+    quote = quoter(requote=True)
+    unquote = unquoter()
+    text_quoted = quote(text_input)
+    note(f"text_quoted={text_quoted!r}")
+    text_output = unquote(text_quoted)
+    assert text_input == text_output
+
+
+@example(text_input="0")
+@given(
+    text_input=st.text(
+        alphabet=st.characters(max_codepoint=127, blacklist_characters="%")
+    ),
+)
+@pytest.mark.parametrize("quoter", quoters, ids=quoter_ids)
+@pytest.mark.parametrize("unquoter", unquoters, ids=unquoter_ids)
+def test_quote_unquote_parameter_path_safe(
+    quoter: Type[_PyQuoter],
+    unquoter: Type[_PyUnquoter],
+    text_input: str,
+) -> None:
+    quote = quoter()
+    unquote = unquoter(ignore="/%", unsafe="+")
+    assume("+" not in text_input and "/" not in text_input)
+    text_quoted = quote(text_input)
+    note(f"text_quoted={text_quoted!r}")
+    text_output = unquote(text_quoted)
+    assert text_input == text_output

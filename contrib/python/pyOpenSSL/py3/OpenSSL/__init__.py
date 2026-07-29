@@ -17,7 +17,6 @@ from OpenSSL.version import (
     __version__,
 )
 
-
 __all__ = [
     "SSL",
     "crypto",

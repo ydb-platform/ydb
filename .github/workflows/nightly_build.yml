@@ -1,7 +1,7 @@
 name: Nightly-Build  # workflow used to upload built binaries to s3
 on:
   schedule:
-    - cron: "0 3 * * *"  # At 03:00 every day
+    - cron: "45 22 * * *"  # At 22:45 every day
   workflow_dispatch:
     inputs:
       use_default_branches:

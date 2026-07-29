@@ -101,6 +101,8 @@ class Workload:
             '--percentile', '99',
             '--message-groups-amount', '0',
             '--max-unique-messages', '0',
+            # CLI timeouts are in milliseconds.
+            '--request-timeout', '5000',
         ]
         return self.cmd_run(self.get_command(subcmds=subcmds))
 
@@ -115,8 +117,10 @@ class Workload:
             '--consumer', 'shared_consumer',
             '--percentile', '99',
             '--handle-message-time', '2',
-            '--visibility-timeout', '5',
-            '--keep-error-every', '0'
+            # CLI takes visibility-timeout in milliseconds; reader truncates to whole seconds.
+            '--visibility-timeout', '5000',
+            '--keep-error-every', '0',
+            '--request-timeout', '5000',
         ]
         return self.cmd_run(self.get_command(subcmds=subcmds))
 

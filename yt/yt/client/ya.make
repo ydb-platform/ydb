@@ -20,6 +20,7 @@ SRCS(
     api/distributed_file_client.cpp
     api/etc_client.cpp
     api/journal_client.cpp
+    api/not_implemented_client.cpp
     api/operation_client.cpp
     api/security_client.cpp
     api/table_client.cpp

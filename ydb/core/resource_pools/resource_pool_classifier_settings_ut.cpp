@@ -31,10 +31,56 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifierTest) {
         auto propertiesMap = settings.GetPropertiesMap();
 
         std::visit(TClassifierSettings::TParser{"test_pool"}, propertiesMap["resource_pool"]);
-        UNIT_ASSERT_VALUES_EQUAL(settings.ResourcePool, "test_pool");
+        UNIT_ASSERT(settings.ResourcePool.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(*settings.ResourcePool, "test_pool");
 
         std::visit(TClassifierSettings::TParser{"test@user"}, propertiesMap["member_name"]);
         UNIT_ASSERT_VALUES_EQUAL(settings.MemberName, "test@user");
+    }
+
+    Y_UNIT_TEST(ResourcePoolOptionalEmptyResets) {
+        TClassifierSettings settings;
+        auto propertiesMap = settings.GetPropertiesMap();
+
+        // Initially nullopt
+        UNIT_ASSERT(!settings.ResourcePool.has_value());
+
+        // Set a value
+        std::visit(TClassifierSettings::TParser{"my_pool"}, propertiesMap["resource_pool"]);
+        UNIT_ASSERT(settings.ResourcePool.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(*settings.ResourcePool, "my_pool");
+
+        // Empty string resets to nullopt
+        std::visit(TClassifierSettings::TParser{""}, propertiesMap["resource_pool"]);
+        UNIT_ASSERT(!settings.ResourcePool.has_value());
+    }
+
+    Y_UNIT_TEST(ResourcePoolExtracting) {
+        TClassifierSettings settings;
+        auto propertiesMap = settings.GetPropertiesMap();
+
+        TClassifierSettings::TExtractor extractor;
+
+        // Not set — should extract as empty string
+        UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["resource_pool"]), "");
+
+        // Set and extract
+        settings.ResourcePool = "test_pool";
+        UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["resource_pool"]), "test_pool");
+
+        // Reset and extract again
+        settings.ResourcePool.reset();
+        UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["resource_pool"]), "");
+    }
+
+    Y_UNIT_TEST(ResourcePoolRoundTrip) {
+        TClassifierSettings settings;
+        auto propertiesMap = settings.GetPropertiesMap();
+
+        std::visit(TClassifierSettings::TParser{"my_pool"}, propertiesMap["resource_pool"]);
+
+        TClassifierSettings::TExtractor extractor;
+        UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["resource_pool"]), "my_pool");
     }
 
     Y_UNIT_TEST(PredicateParsing) {
@@ -46,6 +92,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifierTest) {
         std::visit(TClassifierSettings::TParser{"my_app"}, propertiesMap["has_app_name"]);
         std::visit(TClassifierSettings::TParser{"/Root/db/orders_*"}, propertiesMap["has_full_scan"]);
         std::visit(TClassifierSettings::TParser{"/Root/db/archive/*"}, propertiesMap["has_path"]);
+        std::visit(TClassifierSettings::TParser{"true"}, propertiesMap["has_stream"]);
 
         UNIT_ASSERT(settings.HasAppName.has_value());
         UNIT_ASSERT_VALUES_EQUAL(*settings.HasAppName, "my_app");
@@ -55,6 +102,9 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifierTest) {
 
         UNIT_ASSERT(settings.HasPath.has_value());
         UNIT_ASSERT_VALUES_EQUAL(settings.HasPath->Pattern, "/Root/db/archive/*");
+
+        UNIT_ASSERT(settings.HasStream.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(settings.HasStream.value(), true);
     }
 
     Y_UNIT_TEST(SettingsExtracting) {
@@ -78,11 +128,13 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifierTest) {
         std::visit(TClassifierSettings::TParser{"ydb-cli"}, propertiesMap["has_app_name"]);
         std::visit(TClassifierSettings::TParser{"/Root/db/orders_*"}, propertiesMap["has_full_scan"]);
         std::visit(TClassifierSettings::TParser{"/Root/db/archive/*"}, propertiesMap["has_path"]);
+        std::visit(TClassifierSettings::TParser{"false"}, propertiesMap["has_stream"]);
 
         TClassifierSettings::TExtractor extractor;
         UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["has_app_name"]), "ydb-cli");
         UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["has_full_scan"]), "/Root/db/orders_*");
         UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["has_path"]), "/Root/db/archive/*");
+        UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["has_stream"]), "false");
     }
 
     Y_UNIT_TEST(OptionalStringEmptyResets) {
@@ -111,6 +163,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifierTest) {
         UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["has_app_name"]), "");
         UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["has_full_scan"]), "");
         UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["has_path"]), "");
+        UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["has_stream"]), "");
     }
 
     Y_UNIT_TEST(ActionParsing) {
@@ -150,10 +203,40 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifierTest) {
         UNIT_ASSERT_VALUES_EQUAL(std::visit(extractor, propertiesMap["action"]), "reject");
     }
 
-    Y_UNIT_TEST(SettingsValidation) {
+    Y_UNIT_TEST(SettingsValidationMissingPoolAndAction) {
         TClassifierSettings settings;
+        // Neither ResourcePool nor Action set — should fail
+        UNIT_ASSERT(settings.Validate().has_value());
+        UNIT_ASSERT_STRING_CONTAINS(*settings.Validate(), "either resource pool or action must be specified");
+    }
+
+    Y_UNIT_TEST(SettingsValidationBothPoolAndAction) {
+        TClassifierSettings settings;
+        settings.ResourcePool = "some_pool";
+        settings.Action = EClassifierAction::Reject;
+        // Both ResourcePool and Action set — should fail
+        UNIT_ASSERT(settings.Validate().has_value());
+        UNIT_ASSERT_STRING_CONTAINS(*settings.Validate(), "resource pool must not be used for Reject action");
+    }
+
+    Y_UNIT_TEST(SettingsValidationSystemUser) {
+        TClassifierSettings settings;
+        settings.ResourcePool = "some_pool";
         settings.MemberName = BUILTIN_ACL_METADATA;
-        UNIT_ASSERT_STRING_CONTAINS(*settings.Validate(), TStringBuilder() << "Invalid resource pool classifier configuration, cannot create classifier for system user " << settings.MemberName);
+        UNIT_ASSERT(settings.Validate().has_value());
+        UNIT_ASSERT_STRING_CONTAINS(*settings.Validate(), TStringBuilder() << "cannot create classifier for system user " << settings.MemberName);
+    }
+
+    Y_UNIT_TEST(SettingsValidationOkWithPool) {
+        TClassifierSettings settings;
+        settings.ResourcePool = "some_pool";
+        UNIT_ASSERT(!settings.Validate().has_value());
+    }
+
+    Y_UNIT_TEST(SettingsValidationOkWithAction) {
+        TClassifierSettings settings;
+        settings.Action = EClassifierAction::Reject;
+        UNIT_ASSERT(!settings.Validate().has_value());
     }
 }
 

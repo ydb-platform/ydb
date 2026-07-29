@@ -5,7 +5,6 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/fq/libs/actors/logging
     ydb/core/fq/libs/config/protos
     ydb/core/fq/libs/row_dispatcher/common
     ydb/core/fq/libs/row_dispatcher/events

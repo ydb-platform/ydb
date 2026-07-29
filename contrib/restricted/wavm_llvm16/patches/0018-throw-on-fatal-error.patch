@@ -1,0 +1,58 @@
+diff --git a/contrib/restricted/wavm_llvm16/Lib/Platform/POSIX/ErrorPOSIX.cpp b/contrib/restricted/wavm_llvm16/Lib/Platform/POSIX/ErrorPOSIX.cpp
+--- a/contrib/restricted/wavm_llvm16/Lib/Platform/POSIX/ErrorPOSIX.cpp
++++ b/contrib/restricted/wavm_llvm16/Lib/Platform/POSIX/ErrorPOSIX.cpp
+@@ -5,6 +5,7 @@
+ #include "WAVM/Platform/Diagnostics.h"
+ #include "WAVM/Platform/Error.h"
+ #include "WAVM/Platform/Mutex.h"
++#include "WAVM/Runtime/Runtime.h"
+ 
+ using namespace WAVM;
+ using namespace WAVM::Platform;
+@@ -36,12 +37,40 @@ void Platform::dumpErrorCallStack(Uptr numOmittedFramesFromTop)
+ 
+ void Platform::handleFatalError(const char* messageFormat, bool printCallStack, va_list varArgs)
+ {
+-	Platform::Mutex::Lock lock(getErrorReportingMutex());
+-	std::vfprintf(stderr, messageFormat, varArgs);
+-	std::fprintf(stderr, "\n");
+-	if(printCallStack) { dumpErrorCallStack(2); }
+-	std::fflush(stderr);
+-	std::abort();
++	auto toString = [] (const char* format, va_list varArgs) -> std::string {
++		int length = 0;
++		{
++			va_list varArgsCopy;
++			va_copy(varArgsCopy, varArgs);
++			length = vsnprintf(nullptr, 0, format, varArgsCopy);
++			va_end(varArgsCopy);
++			if (length < 0) {
++				return "";
++			}
++		}
++
++		auto result = std::string();
++		result.resize(length + 1);
++		vsnprintf(result.data(), result.size(), format, varArgs);
++		return result;
++	};
++
++	auto result = toString(messageFormat, varArgs);
++
++	if (printCallStack) {
++		result.back() = '\n';
++
++		auto callStack = WAVM::Platform::captureCallStack(1);
++        auto description = WAVM::Runtime::describeCallStack(callStack);
++        int i = 0;
++        for (auto& item : description) {
++            result += std::to_string(i++) + ". ";
++            result += item;
++            result += '\n';
++        }
++	}
++
++	throw std::runtime_error(result.c_str());
+ }
+ 
+ void Platform::handleAssertionFailure(const AssertMetadata& metadata)

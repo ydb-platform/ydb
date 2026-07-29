@@ -335,8 +335,7 @@ bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, cons
                     modifiedTables.insert(getTable(index.GetTable()));
                 }
 
-                // For plans compatibility with old indexes. Don't need it for new.
-                if (!settings.GetLookupColumns().empty() && tableModifiedBefore) {
+                if (settings.GetNeedLookup() && tableModifiedBefore) {
                     AFL_ENSURE(settings.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
                     return true;
                 }

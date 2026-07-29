@@ -1516,6 +1516,10 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
             auto alterColumn = alterColumnTable->MutableAlterSchema()->AddAlterColumns();
             alterColumn->SetName(alter.Getname());
 
+            if (alter.has_not_null()) {
+                alterColumn->SetNotNull(alter.not_null());
+            }
+
             if (!alter.family().empty()) {
                 alterColumn->SetColumnFamilyName(alter.family());
             }

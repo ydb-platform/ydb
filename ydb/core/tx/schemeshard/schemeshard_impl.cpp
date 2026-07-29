@@ -227,7 +227,7 @@ void TSchemeShard::CollectLocalIndexMigrations(const TActorContext& ctx) {
                     continue;
                 }
             }
-            
+
             if (indexProto.GetImplementationCase() == NKikimrSchemeOp::TOlapIndexDescription::kMaxIndex) {
                 continue;
             }
@@ -2351,6 +2351,19 @@ void TSchemeShard::PersistUserAttributes(NIceDb::TNiceDb& db, TPathId pathId,
     }
 }
 
+void TSchemeShard::PersistRemoveUserAttributesAlter(NIceDb::TNiceDb& db, TPathElement::TPtr pathElement) {
+    if (pathElement->UserAttrs->AlterData) {
+        const TPathId& pathId = pathElement->PathId;
+        for (const auto& name : pathElement->UserAttrs->AlterData->Attrs | std::views::keys) {
+            if (IsLocalId(pathId)) {
+                db.Table<Schema::UserAttributesAlterData>().Key(pathId.LocalPathId, name).Delete();
+            } else {
+                db.Table<Schema::MigratedUserAttributesAlterData>().Key(pathId.OwnerId, pathId.LocalPathId, name).Delete();
+            }
+        }
+        pathElement->UserAttrs->AlterData.Reset();
+    }
+}
 
 void TSchemeShard::PersistLastTxId(NIceDb::TNiceDb& db, const TPathElement::TPtr path) {
     if (path->PathId.OwnerId == TabletID()) {
@@ -2416,6 +2429,12 @@ void TSchemeShard::PersistRemovePath(NIceDb::TNiceDb& db, const TPathElement::TP
             db.Table<Schema::MigratedUserAttributes>().Key(path->PathId.OwnerId, path->PathId.LocalPathId, name).Delete();
         }
     }
+
+    // Defensively clean up any pending UserAttributesAlterData rows that may have been left
+    // orphaned if the path was dropped while AlterUserAttributes was still in progress.
+    // Normally DropNode() takes care of this, but PersistRemovePath is the final removal
+    // point and must guarantee no dangling rows survive path deletion.
+    PersistRemoveUserAttributesAlter(db, path);
 
     if (IsLocalId(path->PathId)) {
         db.Table<Schema::Paths>().Key(path->PathId.LocalPathId).Delete();
@@ -4651,7 +4670,14 @@ void TSchemeShard::UpdateDiskSpaceUsage(NIceDb::TNiceDb& db, TPathId pathId, con
     auto subDomainId = ResolvePathIdForDomain(pathId);
     auto subDomainInfo = ResolveDomainInfo(pathId);
     subDomainInfo->AggrDiskSpaceUsage(this, newPartitionStats, oldPartitionStats);
-    if (subDomainInfo->CheckDiskSpaceQuotas(this)) {
+
+    const i64 smallBlobsBytesDelta = static_cast<i64>(newPartitionStats.SmallBlobsVolumeBytes)
+        - static_cast<i64>(oldPartitionStats.SmallBlobsVolumeBytes);
+    const i64 smallBlobsCountDelta = static_cast<i64>(newPartitionStats.SmallBlobsCount)
+        - static_cast<i64>(oldPartitionStats.SmallBlobsCount);
+    subDomainInfo->AggrSmallBlobsUsage(this, smallBlobsBytesDelta, smallBlobsCountDelta);
+
+    if (subDomainInfo->CheckQuotas(this)) {
         PersistSubDomainState(db, subDomainId, *subDomainInfo);
         // Publish is done in a separate transaction, so we may call this directly
         TDeque<TPathId> toPublish;
@@ -6550,6 +6576,13 @@ void TSchemeShard::DropNode(TPathElement::TPtr node, TStepId step, TTxId txId, N
             break;
     }
 
+    // If there was a pending AlterUserAttributes in progress when the path was dropped,
+    // the UserAttributesAlterData rows in the local DB must be cleaned up explicitly.
+    // PersistUserAttributes(..., nullptr) only removes UserAttributes rows and returns early
+    // without touching UserAttributesAlterData, which would leave them orphaned and cause
+    // a Y_VERIFY_S crash in ReadEverything on restart.
+    PersistRemoveUserAttributesAlter(db, node);
+
     PersistUserAttributes(db, node->PathId, node->UserAttrs, nullptr);
 }
 
@@ -8010,7 +8043,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev,
         // Control op completed; finalize the tracked record.
         Execute(CreateTxFullBackupProgress(ui64(txId)), ctx);
     }
-    if (TxIdToSetColumnConstraintOperations.contains(txId)) {
+    if (TxIdToSetColumnConstraintOperations.contains(txId) || TxIdToDependentSetColumnConstraint.contains(txId)) {
         Execute(CreateTxReplyCompletedSetColumnConstraint(txId), ctx);
         executed = true;
     }

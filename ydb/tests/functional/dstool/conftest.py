@@ -44,7 +44,7 @@ class BaseConfigBuilder:
 
     def add_vslot(self, node_id, pdisk_id, vslot_id, group_id,
                   group_generation=0, fail_realm_idx=0, fail_domain_idx=0, vdisk_idx=0,
-                  status='READY', allocated_size=0, available_size=0):
+                  status='READY', ready=None, allocated_size=0, available_size=0):
         vslot = self._base_config.VSlot.add()
         vslot.VSlotId.NodeId = node_id
         vslot.VSlotId.PDiskId = pdisk_id
@@ -58,8 +58,12 @@ class BaseConfigBuilder:
         vslot.VDiskMetrics.AllocatedSize = allocated_size
         vslot.VDiskMetrics.AvailableSize = available_size
         if status == 'READY':
+            # Default Ready=True for Status=READY; pass ready=False to model ReadyStablePeriod.
+            vslot.Ready = True if ready is None else ready
             vslot.VDiskMetrics.Replicated = True
             vslot.VDiskMetrics.State = EVDiskState.OK
+        elif ready is not None:
+            vslot.Ready = ready
         return self
 
     def add_group(self, group_id, erasure_species='none',

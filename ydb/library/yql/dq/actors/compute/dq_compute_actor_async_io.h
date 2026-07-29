@@ -179,6 +179,11 @@ struct IDqComputeActorAsyncOutput {
 
     virtual void PassAway() = 0; // The same signature as IActor::PassAway()
 
+    // Called by compute actor when the output consumer (TransformOutput) has been
+    // drained and can accept more data. Only meaningful for output transforms that
+    // push data into an IDqOutputConsumer.
+    virtual void OnOutputConsumerReady() {}
+
     // You must also destroy all internal UnboxedValues inside destructor (same as in PassAway)
     // But you should explicitly bind MKQL allocator here, because it is called from actor system thread.
     virtual ~IDqComputeActorAsyncOutput() = default;

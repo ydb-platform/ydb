@@ -76,6 +76,7 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
+#include <ydb/services/workload_manager/service/service.h>
 #include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/replication.pb.h>
@@ -134,6 +135,7 @@
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/conveyor_composite/service/service.h>
+#include <ydb/core/tx/priorities/service/service.h>
 #include <ydb/core/tx/priorities/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 #include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
@@ -1267,7 +1269,7 @@ namespace Tests {
             Runtime->RegisterService(NOlap::NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         {
-            auto* actor = NPrioritiesQueue::TCompServiceOperator::CreateService(NPrioritiesQueue::TConfig(), appData.Counters);
+            auto* actor = NPrioritiesQueue::CreateService<NPrioritiesQueue::TCompConveyorPolicy>(NPrioritiesQueue::TConfig(), appData.Counters);
             const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NPrioritiesQueue::TCompServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
@@ -1352,6 +1354,14 @@ namespace Tests {
             TActorId describeSchemaSecretsServiceId = Runtime->Register(describeSchemaSecretsService, nodeIdx, userPoolId);
             Runtime->RegisterService(NSecret::MakeDescribeSchemaSecretServiceId(Runtime->GetNodeId(nodeIdx)), describeSchemaSecretsServiceId, nodeIdx);
         }
+
+        {
+            const auto& appData = Runtime->GetAppData(nodeIdx);
+            IActor* workloadManager = NWorkloadManager::CreateService(NWorkloadManager::GetWorkloadManagerCounters(appData.Counters));
+            TActorId workloadManagerId = Runtime->Register(workloadManager, nodeIdx, userPoolId, TMailboxType::HTSwap, 0);
+            Runtime->RegisterService(NWorkloadManager::MakeServiceId(Runtime->GetNodeId(nodeIdx)), workloadManagerId, nodeIdx);
+        }
+
         {
             auto kqpProxySharedResources = std::make_shared<NKqp::TKqpProxySharedResources>();
 
@@ -1622,6 +1632,7 @@ namespace Tests {
 
             NKafka::TListenerSettings settings;
             settings.Port = Settings->AppConfig->GetKafkaProxyConfig().GetListeningPort();
+            settings.Address = Settings->AppConfig->GetKafkaProxyConfig().GetListeningAddress();
             bool ssl = false;
             if (Settings->AppConfig->GetKafkaProxyConfig().HasSslCertificate()) {
                 ssl = true;

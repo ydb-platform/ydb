@@ -27,7 +27,6 @@
 #include <yt/yt/core/misc/mpsc_stack.h>
 #include <yt/yt/core/misc/pattern_formatter.h>
 #include <yt/yt/core/misc/proc.h>
-#include <yt/yt/core/misc/property.h>
 #include <yt/yt/core/misc/shutdown.h>
 #include <yt/yt/core/misc/ref_counted_tracker.h>
 #include <yt/yt/core/misc/shutdown.h>
@@ -46,6 +45,7 @@
 #include <yt/yt/library/signals/signal_registry.h>
 
 #include <library/cpp/yt/misc/hash.h>
+#include <library/cpp/yt/misc/property.h>
 #include <library/cpp/yt/misc/variant.h>
 #include <library/cpp/yt/misc/tls.h>
 

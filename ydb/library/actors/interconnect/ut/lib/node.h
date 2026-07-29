@@ -11,11 +11,15 @@
 #include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect_proxy_wrapper.h>
+#include <ydb/library/actors/interconnect/interconnect_uring_engine.h>
 #include <ydb/library/actors/interconnect/poller/uring_poller_actor.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/library/actors/interconnect/rdma/cq_actor/cq_actor.h>
 
 #include <library/cpp/logger/backend.h>
+
+#include <util/string/cast.h>
+#include <util/system/env.h>
 
 #include "tls/tls.h"
 
@@ -70,6 +74,31 @@ public:
             settingsCustomizer(nodeId, common->Settings);
         }
         setup.InterconnectCollectSubscriptionStackTrace = common->Settings.CollectSubscriptionStackTrace;
+
+        if (common->Settings.V2.Enable) {
+            // Mirror production: create the shared v2 io_uring engine up front and publish it in Common; the
+            // proxy binds it to the actor system on start (SetActorSystem). Shard count is overridable via
+            // YDB_IC_V2_SHARDS so tests can force many connections onto a single ring.
+            ui32 uringShards = common->Settings.V2.UringEngineThreads;
+            if (const TString s = GetEnv("YDB_IC_V2_SHARDS"); !s.empty()) {
+                uringShards = FromString<ui32>(s);
+            }
+            ui32 ringsPerShard = common->Settings.V2.UringEngineRingsPerShard;
+            if (const TString s = GetEnv("YDB_IC_V2_RINGS_PER_SHARD"); !s.empty()) {
+                ringsPerShard = FromString<ui32>(s);
+            }
+            common->UringEngineV2 = CreateUringEngine(uringShards,
+                common->MonCounters->GetSubgroup("subsystem", "uring"),
+                common->Settings.V2.EnableSQPOLL,
+                ringsPerShard,
+                common->Settings.V2.UringEngineSqThreadIdleMs,
+                common->Settings.V2.ShareRingsAmongThreads);
+            setup.OnActorSystemCreated.push_back([engine = common->UringEngineV2](TActorSystem *actorSystem) {
+                if (engine) {
+                    engine->SetActorSystem(actorSystem);
+                }
+            });
+        }
 
         #if !defined(_msan_enabled_)
         if (withRdma) {
@@ -174,6 +203,9 @@ public:
         auto sp = MakeHolder<TActorSystemSetup>(std::move(setup));
         ActorSystem.Reset(new TActorSystem(sp, nullptr, loggerSettings));
         ActorSystem->Start();
+        // The v2 io_uring engine (shared, off-actor, with its own reaper threads) was created above and
+        // published in Common; the interconnect proxy binds it to the actor system on start and it is
+        // stopped via the actor system's DeferPreStop hook.
     }
 
     ~TNode() {
@@ -183,6 +215,8 @@ public:
 
     void Stop() {
         if (ActorSystem) {
+            // The v2 engine (if created) is stopped via the actor system's DeferPreStop hook during
+            // Stop(), so its reaper threads are joined before the executors shut down.
             ActorSystem->Stop();
             ActorSystem.Reset();
         }

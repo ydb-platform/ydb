@@ -10,6 +10,8 @@ from .constants import (
     PNPM_WS_FILENAME,
 )
 
+PNPM_WORKSPACE_STATE_FILENAME = ".pnpm-workspace-state-v1.json"
+
 
 # Base utility functions
 def home_dir():
@@ -119,3 +121,32 @@ def build_lockfile_path(p):
 
 def build_ws_config_path(p):
     return os.path.join(p, PNPM_WS_FILENAME)
+
+
+def _remove_yaml_fields(path, fields):
+    if not os.path.exists(path):
+        return
+
+    try:
+        import ymakeyaml as yaml
+    except ImportError:
+        import yaml
+
+    with open(path) as f:
+        data = yaml.load(f, Loader=yaml.CSafeLoader) or {}
+
+    for field in fields:
+        data.pop(field, None)
+    with open(path, "w") as f:
+        yaml.dump(data, f, Dumper=yaml.CSafeDumper)
+
+
+def remove_node_modules_volatile_metadata(node_modules_path):
+    workspace_state_path = os.path.join(node_modules_path, PNPM_WORKSPACE_STATE_FILENAME)
+    if os.path.exists(workspace_state_path):
+        os.remove(workspace_state_path)
+
+    _remove_yaml_fields(
+        os.path.join(node_modules_path, ".modules.yaml"),
+        ("prunedAt", "storeDir"),
+    )

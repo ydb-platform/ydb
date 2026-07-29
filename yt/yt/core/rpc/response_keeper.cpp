@@ -7,11 +7,11 @@
 #include <yt/yt/core/concurrency/thread_affinity.h>
 #include <yt/yt/core/concurrency/periodic_executor.h>
 
-#include <yt/yt/core/misc/ring_queue.h>
-
 #include <yt/yt/core/profiling/timing.h>
 
 #include <yt/yt/library/profiling/sensor.h>
+
+#include <library/cpp/yt/containers/ring_queue.h>
 
 namespace NYT::NRpc {
 

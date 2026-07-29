@@ -46,6 +46,7 @@ EHostState HealthToState(EHostHealth health)
         case EHostHealth::TemporaryOffline:
             return EHostState::TemporaryOffline;
         case EHostHealth::Offline:
+        case EHostHealth::Broken:
             return EHostState::Offline;
     }
 }
@@ -199,6 +200,11 @@ void TOracle::Think(TInstant now)
 
         auto errorsInfo = HostStatistics[i].GetErrorsInfo(now);
 
+        if (newHostsHealths[i] == EHostHealth::Broken) {
+            // Host with broken ddisk can not be restored.
+            continue;
+        }
+
         const bool hasSufferingSymptom =
             (errorsInfo.ConsecutiveErrorCount != 0);
         const bool hasTemporaryOfflineSymptom =
@@ -239,12 +245,7 @@ void TOracle::Think(TInstant now)
         }
     }
 
-    if (GetAliveHostCount(HostStates) < DirectBlockGroupHostCount &&
-        GetHostCount() < MaxHostCount)
-    {
-        const THostIndex newHostIndex = GetHostCount();
-        HostStateController->QueryAddHost(newHostIndex);
-    }
+    MaybeQueryAddHost();
 }
 
 void TOracle::OnRequestStarted(
@@ -285,7 +286,22 @@ void TOracle::OnDDiskConnected(THostIndex hostIndex, TInstant now)
     HostsReconnectDelays[hostIndex].Reset();
 }
 
-TDuration TOracle::GetDDiskReconnectDelay(THostIndex hostIndex)
+void TOracle::OnDDiskBroken(THostIndex hostIndex)
+{
+    const auto oldState = HostStates[hostIndex].State;
+    HostsHealths[hostIndex] = EHostHealth::Broken;
+    if (oldState != EHostState::Offline) {
+        HostStates[hostIndex].State = EHostState::Offline;
+        HostStateController->SetHostState(
+            hostIndex,
+            oldState,
+            EHostState::Offline);
+
+        MaybeQueryAddHost();
+    }
+}
+
+TDuration TOracle::GetHostReconnectDelay(THostIndex hostIndex)
 {
     return HostsReconnectDelays[hostIndex].GetDelayAndIncrease();
 }
@@ -453,6 +469,16 @@ void TOracle::AddHostIfNeeded(THostIndex hostIndex)
         HostsReconnectDelays.emplace_back(MinReconnectDelay, MaxReconnectDelay);
 
         currentHostCount = HostStatistics.size();
+    }
+}
+
+void TOracle::MaybeQueryAddHost()
+{
+    if (GetAliveHostCount(HostStates) < DirectBlockGroupHostCount &&
+        GetHostCount() < MaxHostCount)
+    {
+        const THostIndex newHostIndex = GetHostCount();
+        HostStateController->QueryAddHost(newHostIndex);
     }
 }
 

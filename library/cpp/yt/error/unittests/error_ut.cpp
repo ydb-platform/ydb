@@ -395,6 +395,19 @@ TEST(TErrorTest, ThrowErrorExceptionIfFailedMacroExpression)
     }
 }
 
+TEST(TErrorTest, ThrowErrorExceptionIfMacroAttributes)
+{
+    try {
+        THROW_ERROR_EXCEPTION_IF(true, "Condition holds")
+            << TErrorAttribute("attr", "attr_value");
+        ADD_FAILURE() << "Expected the macro to throw.";
+    } catch (const std::exception& ex) {
+        TError error(ex);
+        EXPECT_EQ(error.GetMessage(), "Condition holds");
+        EXPECT_EQ(error.Attributes().Get<std::string>("attr"), "attr_value");
+    }
+}
+
 TEST(TErrorTest, ThrowErrorExceptionIfFailedMacroDontStealValue)
 {
     TErrorOr<TWidget> widget = TWidget();

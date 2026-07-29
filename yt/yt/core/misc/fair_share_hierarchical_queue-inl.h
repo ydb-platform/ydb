@@ -365,7 +365,7 @@ bool TFairShareHierarchicalScheduler<TTag>::CompareSlots(
             }
 
             {
-                auto rhsGuard = ReaderGuard(lhsBucket->BucketLock);
+                auto rhsGuard = ReaderGuard(rhsBucket->BucketLock);
                 auto rhsBucketChildIt = rhsBucket->Buckets.find(rhsLevel.GetTag());
                 newRhsBucket = rhsBucketChildIt == rhsBucket->Buckets.end()
                     ? nullptr

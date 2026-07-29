@@ -1,5 +1,7 @@
 #include "common.h"
 
+#include <ydb/core/kqp/ut/federated_query/common/common.h>
+
 #include <fmt/format.h>
 
 namespace NKikimr::NKqp {

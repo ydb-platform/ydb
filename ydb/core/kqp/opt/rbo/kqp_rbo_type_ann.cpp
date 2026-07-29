@@ -298,24 +298,31 @@ TStatus ComputeTypes(TIntrusivePtr<TOpAddDependencies> addDeps, TRBOContext& ctx
 }
 
 TStatus ComputeTypes(TIntrusivePtr<TOpUnionAll> unionAll, TRBOContext& ctx) {
-    auto leftInputType = unionAll->GetLeftInput()->Type;
-    auto rightInputType = unionAll->GetRightInput()->Type;
-    const auto leftStructType = leftInputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-    const auto rightStructType = rightInputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    TVector<const TStructExprType*> inputStructTypes;
+    inputStructTypes.reserve(unionAll->Children.size());
+    for (const auto& input : unionAll->Children) {
+        inputStructTypes.push_back(input->Type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>());
+    }
 
+    // The output type of every column is taken from the first input.
     TVector<const TItemExprType*> resultItems;
     resultItems.reserve(unionAll->Columns.size());
     for (const auto& column : unionAll->Columns) {
-        const auto* leftType = leftStructType->FindItemType(column.GetFullName());
-        const auto* rightType = rightStructType->FindItemType(column.GetFullName());
-        Y_ENSURE(leftType, "Missing UnionAll left source type: " << column.GetFullName());
-        Y_ENSURE(rightType, "Missing UnionAll right source type: " << column.GetFullName());
+        const TTypeAnnotationNode* resultType = nullptr;
+        for (size_t i = 0; i < inputStructTypes.size(); ++i) {
+            const auto* inputType = inputStructTypes[i]->FindItemType(column.GetFullName());
+            Y_ENSURE(inputType, "Missing UnionAll source type for input " << i << ": " << column.GetFullName());
 
-        // FIXME: This currently does not pass after UnionAll semantic update
-        // Y_ENSURE(IsSameAnnotation(*leftType, *rightType),
-        //     "UnionAll source type mismatch for " << column.GetFullName());
+            // FIXME: This currently does not pass after UnionAll semantic update
+            // Y_ENSURE(!resultType || IsSameAnnotation(*resultType, *inputType),
+            //     "UnionAll source type mismatch for " << column.GetFullName());
 
-        resultItems.push_back(ctx.ExprCtx.MakeType<TItemExprType>(column.GetFullName(), leftType));
+            if (!resultType) {
+                resultType = inputType;
+            }
+        }
+
+        resultItems.push_back(ctx.ExprCtx.MakeType<TItemExprType>(column.GetFullName(), resultType));
     }
 
     auto resultItemType = ctx.ExprCtx.MakeType<TStructExprType>(resultItems);
@@ -501,6 +508,37 @@ TStatus ComputeTypes(TIntrusivePtr<TOpSort> sort, TRBOContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus ComputeTypes(TIntrusivePtr<TOpTableLookup> lookup, TRBOContext& ctx) {
+    const auto table = ResolveTable(lookup->Table.Get(), ctx.ExprCtx, ctx.KqpCtx.Cluster, *ctx.KqpCtx.Tables);
+    if (!table.second) {
+        return TStatus::Error;
+    }
+
+    TVector<TCoAtom> columns;
+    for (const auto& column : lookup->FetchColumns) {
+        columns.push_back(Build<TCoAtom>(ctx.ExprCtx, lookup->Pos).Value(column).Done());
+    }
+    const auto columnsList = Build<TCoAtomList>(ctx.ExprCtx, lookup->Pos).Add(columns).Done();
+
+    const TTypeAnnotationNode* rowType = GetReadTableRowType(ctx.ExprCtx, *ctx.KqpCtx.Tables, ctx.KqpCtx.Cluster,
+        table.first, columnsList, ctx.KqpCtx.Config->SystemColumnsEnabled());
+    if (!rowType) {
+        return TStatus::Error;
+    }
+
+    TVector<const TItemExprType*> newItemTypes;
+    for (const auto itemType : rowType->Cast<TStructExprType>()->GetItems()) {
+        const TString columnName = TString(itemType->GetName());
+        const auto it = std::find(lookup->FetchColumns.begin(), lookup->FetchColumns.end(), columnName);
+        const auto columnIndex = std::distance(lookup->FetchColumns.begin(), it);
+        const auto fullName = lookup->OutputIUs[columnIndex].GetFullName();
+        newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(fullName, itemType->GetItemType()));
+    }
+    auto newStructType = ctx.ExprCtx.MakeType<TStructExprType>(newItemTypes);
+    lookup->Type = ctx.ExprCtx.MakeType<TListExprType>(newStructType);
+    return TStatus::Ok;
+}
+
 TStatus ComputeTypes(TIntrusivePtr<IOperator> op, TRBOContext& ctx, TPlanProps& props);
 
 TStatus ComputeTypes(TIntrusivePtr<TOpCBOTree> cboTree, TRBOContext& ctx, TPlanProps& props) {
@@ -540,6 +578,9 @@ TStatus ComputeTypes(TIntrusivePtr<IOperator> op, TRBOContext& ctx, TPlanProps& 
     }
     else if (MatchOperator<TOpSort>(op)) {
         return ComputeTypes(CastOperator<TOpSort>(op), ctx);
+    }
+    else if (MatchOperator<TOpTableLookup>(op)) {
+        return ComputeTypes(CastOperator<TOpTableLookup>(op), ctx);
     }
     else if(MatchOperator<TOpAggregate>(op)) {
         return ComputeTypes(CastOperator<TOpAggregate>(op), ctx);

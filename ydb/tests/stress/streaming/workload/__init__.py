@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 class Workload():
-    def __init__(self, endpoint, database, duration, partitions_count, prefix):
+    def __init__(self, endpoint: str, database: str, duration: int, partitions_count: int, prefix: str):
         self.database = database
         self.endpoint = endpoint
         self.driver = ydb.Driver(ydb.DriverConfig(endpoint, database))

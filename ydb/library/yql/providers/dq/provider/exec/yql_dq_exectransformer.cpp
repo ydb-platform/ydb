@@ -979,7 +979,8 @@ private:
                 return true;
             });
             IDqGateway::TDqProgressWriter progressWriter = MakeDqProgressWriter(publicIds);
-            bool enableFullResultWrite = settings->EnableFullResultWrite.Get().GetOrElse(false);
+            const bool initialFullResultWrite = settings->EnableFullResultWrite.Get().GetOrElse(false);
+            bool enableFullResultWrite = initialFullResultWrite;
             if (enableFullResultWrite) {
                 const auto type = result.Input().Ref().GetTypeAnn();
                 const auto integration = GetDqIntegrationForFullResTable(State);
@@ -991,6 +992,11 @@ private:
                     && integration->PrepareFullResultTableParams(result.Ref(), ctx, graphParams, secureParams, TColumnOrder(columns));
                 settings->EnableFullResultWrite = enableFullResultWrite;
             }
+            YQL_CLOG(INFO, ProviderDq) << "FullResultWrite decision: initial=" << initialFullResultWrite
+                << " effective=" << enableFullResultWrite
+                << " discard=" << fillSettings.Discard
+                << " hasDqGateway=" << (bool)State->DqGateway
+                << " hasYtFullResultParam=" << graphParams.contains("yt.full_result_table");
 
             TString lambda;
             bool untrustedUdfFlag;
@@ -1086,10 +1092,13 @@ private:
             }
 
             return WrapFutureCallback<false>(future, [localRun, startTime, type, rowSpec, skiffType, fillSettings, level, settings, enableFullResultWrite, columns, graphParams, state = State, skiffConverter = SkiffConverter](const IDqGateway::TResult& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-                YQL_CLOG(DEBUG, ProviderDq) << state->SessionId <<  " WrapFutureCallback";
-
                 auto duration = TInstant::Now() - startTime;
-                YQL_CLOG(INFO, ProviderDq) << "Execution Result complete, duration: " << duration;
+                YQL_CLOG(INFO, ProviderDq) << state->SessionId << " Execution Result complete, duration: " << duration
+                    << " localRun=" << localRun
+                    << " enableFullResultWrite=" << enableFullResultWrite
+                    << " truncated=" << res.Truncated
+                    << " rowsCount=" << res.RowsCount
+                    << " dataBytes=" << res.Data.size();
                 if (state->Metrics) {
                     state->Metrics->SetCounter("dq", "TotalExecutionTime", duration.MilliSeconds());
                     state->Metrics->SetCounter(

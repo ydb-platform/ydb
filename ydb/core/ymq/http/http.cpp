@@ -77,7 +77,7 @@ public:
         response.FolderId = resp.GetFolderId();
         response.IsFifo = resp.GetIsFifo();
         response.ResourceId = resp.GetResourceId();
-        response.SkipMetering = IamAuthFailed_;
+        response.SkipMetering = !IamAuthSuccess_;
         for (const auto& tag : resp.GetQueueTags()) {
             response.QueueTags[tag.GetKey()] = tag.GetValue();
         }
@@ -85,8 +85,8 @@ public:
         Request_->SendResponse(response);
     }
 
-    void OnIamAuthError() override {
-        IamAuthFailed_ = true;
+    void OnIamAuthSuccess() override {
+        IamAuthSuccess_ = true;
     }
 
 private:
@@ -107,7 +107,7 @@ private:
 private:
     THttpRequest* const Request_;
     const TSqsRequest RequestParams_;
-    bool IamAuthFailed_ = false;
+    bool IamAuthSuccess_ = false;
 };
 
 class TPingHttpCallback : public IPingReplyCallback {

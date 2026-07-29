@@ -7,6 +7,7 @@
 #include <ydb/core/nbs/cloud/blockstore/config/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/tablet.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
@@ -48,13 +49,14 @@ class TPartitionActor
 
 private:
     TLogTitle LogTitle;
+    TDiskDescription DiskDescription;
     TStorageConfigPtr StorageConfig;
     NKikimrBlockStore::TVolumeConfig VolumeConfig;
     NActors::TActorId BSControllerPipeClient;
 
     NActors::TActorId LoadActorAdapter;
     bool DDiskBlockGroupAllocated = false;
-    std::shared_ptr<TFastPathService> FastPathService;
+    TFastPathServicePtr FastPathService;
 
     TDirectBlockGroupsConnections DirectBlockGroupsConnections;
 
@@ -82,9 +84,12 @@ private:
     void StateInit(TAutoPtr<NActors::IEventHandle>& ev);
     STFUNC(StateWork);
 
-    void HandleHttpInfo(
-        NActors::NMon::TEvRemoteHttpInfo::TPtr& ev,
-        const NActors::TActorContext& ctx);
+    // The tablet's own monitoring page, reached via the standard tablet page's
+    // "App" link. The base class passes a null event to ask whether that link
+    // should appear - it always should.
+    bool OnRenderAppHtmlPage(
+        NActors::NMon::TEvRemoteHttpInfo::TPtr ev,
+        const NActors::TActorContext& ctx) override;
 
     void OnDetach(const NActors::TActorContext& ctx) override;
     void OnTabletDead(

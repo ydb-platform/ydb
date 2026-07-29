@@ -211,6 +211,7 @@ IGraphTransformer::TStatus TWalkFoldersImpl::AfterListFolderOp(TExprContext& ctx
             ProcessingState_ = PreHandling;
         } else {
             folderListVal.ReportIssues(ctx.IssueManager);
+            return IGraphTransformer::TStatus::Error;
         }
 
         BatchFolderListFuture_ = Nothing();

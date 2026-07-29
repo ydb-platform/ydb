@@ -62,29 +62,24 @@ TDbDriverState::TDbDriverState(
 void TDbDriverState::InitCredentials(
     std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory
 ) {
-    Credentials = credentialsProviderFactory->CreateProviderAsync(weak_from_this()).Apply(
-        [](const NThreading::TFuture<TCredentialsProviderPtr>& future) {
-            TCredentials result{future.GetValue()};
+    Credentials.Provider = credentialsProviderFactory->CreateProvider(weak_from_this());
 #ifndef YDB_GRPC_UNSECURE_AUTH
-            result.CallCredentials = grpc::MetadataCredentialsFromPlugin(
-                std::unique_ptr<grpc::MetadataCredentialsPlugin>(new TYdbAuthenticator(result.Provider)));
+    Credentials.CallCredentials = grpc::MetadataCredentialsFromPlugin(
+        std::unique_ptr<grpc::MetadataCredentialsPlugin>(new TYdbAuthenticator(Credentials.Provider)));
 #endif
-            return result;
-        });
-    CredentialsReady = Credentials.IgnoreResult();
 }
 
 NThreading::TFuture<void> TDbDriverState::GetCredentialsReady() const {
-    return CredentialsReady;
+    return Credentials.Provider->GetAuthInfoAsync().IgnoreResult();
 }
 
 std::shared_ptr<ICredentialsProvider> TDbDriverState::GetCredentialsProvider() const {
-    return Credentials.HasValue() ? Credentials.GetValue().Provider : nullptr;
+    return Credentials.Provider;
 }
 
 #ifndef YDB_GRPC_UNSECURE_AUTH
 std::shared_ptr<grpc::CallCredentials> TDbDriverState::GetCallCredentials() const {
-    return Credentials.HasValue() ? Credentials.GetValue().CallCredentials : nullptr;
+    return Credentials.CallCredentials;
 }
 #endif
 
@@ -336,7 +331,12 @@ NThreading::TFuture<void> TDbDriverStateTracker::SendNotification(
         }
     }
     if (results.empty()) {
-        return NThreading::MakeFuture();
+        // MakeFuture<void>() uses a process-wide singleton that may already be
+        // destroyed when driver shutdown is triggered by another singleton.
+        auto promise = NThreading::NewPromise<void>();
+        auto future = promise.GetFuture();
+        promise.SetValue();
+        return future;
     }
     return NThreading::WaitExceptionOrAll(results);
 }

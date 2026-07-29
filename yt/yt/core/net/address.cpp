@@ -1222,7 +1222,7 @@ TIP6Address TMtnAddress::ToIP6Address() const
 ui64 TMtnAddress::GetBytesRangeValue(int leftIndex, int rightIndex) const
 {
     if (leftIndex > rightIndex) {
-        THROW_ERROR_EXCEPTION("Left index is greater than right index (LeftIndex: %v, RightIndex: %v)",
+        THROW_ERROR_EXCEPTION("Left index %v is greater than right index %v",
             leftIndex,
             rightIndex);
     }
@@ -1239,17 +1239,17 @@ ui64 TMtnAddress::GetBytesRangeValue(int leftIndex, int rightIndex) const
 void TMtnAddress::SetBytesRangeValue(int leftIndex, int rightIndex, ui64 value)
 {
     if (leftIndex > rightIndex) {
-        THROW_ERROR_EXCEPTION("Left index is greater than right index (LeftIndex: %v, RightIndex: %v)",
+        THROW_ERROR_EXCEPTION("Left index %v is greater than right index %v",
             leftIndex,
             rightIndex);
     }
 
     auto bytesInRange = rightIndex - leftIndex;
     if (value >= (1ull << (8 * bytesInRange))) {
-        THROW_ERROR_EXCEPTION("Value is too large to be set in [leftIndex; rightIndex) interval (LeftIndex: %v, RightIndex: %v, Value %v)",
+        THROW_ERROR_EXCEPTION("Value %v is too large to be set in interval [%v, %v)",
+            value,
             leftIndex,
-            rightIndex,
-            value);
+            rightIndex);
     }
 
     auto* addressBytes = Address_.GetRawBytes();

@@ -1,20 +1,14 @@
 # YDB Tests
 
-Follow the testing style of the module you are modifying. For new C++ unit tests,
-prefer **UNITTEST** over **GTEST**.
+Follow the testing style of the module you are modifying.
 
 ## C++ unit tests
 
 - Place tests in a `ut/` subdirectory next to the code under test.
-- Declare the test module in `ya.make` with `UNITTEST_FOR(...)` (or `UNITTEST()`
-  for standalone test targets).
+- Name test source files `*_ut.cpp`.
+- Declare the test module in `ya.make` with `GTEST()`, or
+  `UNITTEST()` / `UNITTEST_FOR(...)` when matching existing tests in that `ut/`.
 - Register C++ test sources in `SRCS()`.
-- Write tests with `Y_UNIT_TEST_SUITE` / `Y_UNIT_TEST` from
-  `library/cpp/testing/unittest/registar.h`.
-
-Use `GTEST()` only when the surrounding code already does (e.g. some
-`ydb/public/sdk/cpp/tests/` targets). Do not introduce new GTest-based tests
-where UNITTEST is used in the same area.
 
 ## Python tests
 

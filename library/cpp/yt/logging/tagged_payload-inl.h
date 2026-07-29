@@ -85,6 +85,36 @@ inline TTaggedPayloadWriter& TTaggedPayloadWriter::EndTag() &
     return *this;
 }
 
+inline TTaggedPayloadWriter& TTaggedPayloadWriter::AppendTags(TStringBuf tags) &
+{
+    YT_ASSERT(MessageEnded_ && !InTag_);
+    Builder_.AppendString(tags);
+    return *this;
+}
+
+inline void TTaggedPayloadWriter::AppendTag(std::string* payload, TStringBuf key, TStringBuf value)
+{
+    // High bit reserved for the well-known flag.
+    YT_ASSERT(key.size() < WellKnownTagFlag);
+
+    auto keySize = static_cast<ui32>(key.size());
+    auto valueSize = static_cast<ui32>(value.size());
+
+    // Every appended byte is overwritten below, so skip zero-filling them.
+    auto offset = payload->size();
+    ResizeUninitialized(*payload, offset + 2 * sizeof(ui32) + key.size() + value.size());
+
+    char* ptr = payload->data() + offset;
+    auto write = [&] (const void* data, size_t size) {
+        ::memcpy(ptr, data, size);
+        ptr += size;
+    };
+    write(&keySize, sizeof(keySize));
+    write(key.data(), key.size());
+    write(&valueSize, sizeof(valueSize));
+    write(value.data(), value.size());
+}
+
 inline TTaggedLogEventPayload TTaggedPayloadWriter::Finish() &
 {
     YT_ASSERT(MessageEnded_ && !InTag_);

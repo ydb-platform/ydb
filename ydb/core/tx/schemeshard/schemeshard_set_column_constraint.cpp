@@ -80,7 +80,12 @@ void FillSetColumnConstraint(
     // Map internal state to proto state
     proto.SetProgress(CalcProgress(operationInfo));
 
-    if (operationInfo.IsCancelled) {
+    if (operationInfo.ValidationFailed) {
+        // Validation found NULL values (or hit an internal error) in the column(s)
+        // being altered. This is distinct from an explicit user cancellation.
+        proto.SetState(ProtoState::STATE_REJECTED);
+    } else if (operationInfo.IsCancelled) {
+        // Operation was cancelled by an explicit user request.
         proto.SetState(ProtoState::STATE_CANCELLED);
     } else {
         switch (operationInfo.OperationState) {
@@ -96,9 +101,6 @@ void FillSetColumnConstraint(
             proto.SetState(ProtoState::STATE_APPLYING);
             break;
         case EState::Done:
-            // There is no way when IsValidationFailed equals `true`,
-            // because IsValidationFailed is true exactly when IsCancelled is true.
-            // Therefore, there cannot be STATE_CANCELLED.
             proto.SetState(ProtoState::STATE_DONE);
             break;
         case EState::Invalid:

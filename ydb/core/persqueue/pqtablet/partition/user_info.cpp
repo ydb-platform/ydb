@@ -6,6 +6,7 @@
 
 #include <library/cpp/containers/absl/flat_hash_map.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -169,7 +170,7 @@ void TUserInfo::ReadDone(const TActorContext& ctx, const TInstant& now, ui64 rea
 }
 
 static TUserInfo::TPerPartitionCounters CreateDetailedMetricsForSubgroup(const TActorContext& ctx, const TString& user, NMonitoring::TDynamicCounterPtr subgroup) {
-    Y_ABORT_UNLESS(subgroup);
+    AFL_ENSURE(subgroup);
 
     bool fcc = AppData()->PQConfig.GetTopicsAreFirstClassCitizen();
 

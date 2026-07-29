@@ -36,6 +36,7 @@ void TCompactColumnEngineChanges::DoStart(NColumnShard::TColumnShard& self) {
     self.BackgroundController.StartCompaction(GranuleMeta->GetPathId(), GetTaskIdentifier());
     NeedGranuleStatusProvide = true;
     GranuleMeta->OnCompactionStarted();
+    PortionsIndexSnapshot = GranuleMeta->GetPortionsIndex().GetPortionsSnapshot();
 }
 
 void TCompactColumnEngineChanges::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self, TWriteIndexCompleteContext& context) {

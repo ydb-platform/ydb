@@ -300,7 +300,7 @@ namespace NKikimr::NSqsTopic::V1 {
             if (ShouldBeCharged_ && IsQuotaRequired()) {
                 const ui64 ru = NBilling::CalcRu(
                     CalcRuConsumption(payloadSize), NBilling::READ_BASE_COST, NBilling::READ_COST_PER_BLOCK, Fifo_, false);
-                Y_ABORT_UNLESS(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, ctx));
+                AFL_ENSURE(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, ctx))("ru", ru)("path", FullTopicPath_);
                 return;
             }
 
@@ -331,7 +331,7 @@ namespace NKikimr::NSqsTopic::V1 {
             }
 
             const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-            Y_ABORT_UNLESS(result->ResultSet.size() == 1);
+            AFL_ENSURE(result->ResultSet.size() == 1)("result_set_size", result->ResultSet.size())("path", FullTopicPath_);
             const auto& response = result->ResultSet.front();
             if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
                 if (response.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {

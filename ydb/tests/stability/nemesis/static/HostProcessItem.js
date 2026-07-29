@@ -2,7 +2,15 @@ export default {
   props: {
     host: String,
     processes: Array,
-    isScheduled: Boolean
+    isScheduled: Boolean,
+    targetKind: {
+      type: String,
+      default: 'host'
+    },
+    entities: {
+      type: Array,
+      default: () => []
+    }
   },
   setup(props) {
     const { computed } = Vue
@@ -17,18 +25,34 @@ export default {
       return props.processes.slice(1)
     })
 
+    const showEntityButtons = computed(() => {
+      return ['node', 'slot', 'disk'].includes(props.targetKind) && props.entities.length > 0
+    })
+
+    function entityLabel(entity) {
+      if (props.targetKind === 'slot') {
+        const port = entity.ic_port != null ? ` ic=${entity.ic_port}` : ''
+        return `slot ${entity.slot_idx}${port}`
+      }
+      const port = entity.ic_port != null ? ` ic=${entity.ic_port}` : ''
+      return `node ${entity.node_id}${port}`
+    }
+
     return {
       latestProcess,
-      previousProcesses
+      previousProcesses,
+      showEntityButtons,
+      entityLabel
     }
   },
-  emits: ['run-process'],
+  emits: ['run-process', 'run-target'],
   template: `
     <details class="collapse collapse-arrow bg-base-200 mb-2">
       <summary class="collapse-title font-medium flex justify-between items-center pr-12">
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 flex-wrap">
           <span class="font-mono font-bold">{{ host }}</span>
-          <div class="tooltip tooltip-right" :data-tip="isScheduled ? 'Disable scheduling to run manually' : 'Run nemesis on this host'">
+          <span class="badge badge-ghost badge-xs">{{ targetKind }}</span>
+          <div v-if="!showEntityButtons" class="tooltip tooltip-right" :data-tip="isScheduled ? 'Disable scheduling to run manually' : 'Run nemesis on this host'">
             <button
               class="btn btn-xs z-10"
               :class="isScheduled ? 'btn-disabled' : 'btn-primary'"
@@ -38,6 +62,18 @@ export default {
               Run
             </button>
           </div>
+          <template v-else>
+            <button
+              v-for="entity in entities"
+              :key="entityLabel(entity)"
+              class="btn btn-xs z-10"
+              :class="isScheduled ? 'btn-disabled' : 'btn-primary'"
+              :disabled="isScheduled"
+              @click.stop="$emit('run-target', entity)"
+            >
+              Run {{ entityLabel(entity) }}
+            </button>
+          </template>
         </div>
         
         <div v-if="latestProcess" class="flex items-center gap-4">
@@ -58,7 +94,6 @@ export default {
       
       <div class="collapse-content">
         <div v-if="latestProcess" class="pt-4">
-          <!-- Latest Run Details -->
           <div class="mb-4">
             <h3 class="font-bold text-sm mb-2">Latest Run (#{{ latestProcess.id }})</h3>
             <div class="font-mono bg-base-300 p-2 rounded text-xs mb-2 break-all">
@@ -70,7 +105,6 @@ export default {
             </div>
           </div>
 
-          <!-- Previous Runs -->
           <div v-if="previousProcesses.length > 0">
             <div class="divider text-xs">Previous Runs</div>
             <div class="overflow-x-auto">

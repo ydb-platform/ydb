@@ -4,6 +4,7 @@ items:
 - { name: FROM,                 href: from.md                                                 }
 - { name: FROM AS_TABLE,        href: from_as_table.md                                        }
 - { name: FROM SELECT,          href: from_select.md                                          }
+- { name: FROM Topic,           href: topics.md                                               }
 - { name: FOLDER,               href: folder.md,                when: yt                      }
 - { name: FLATTEN,              href: flatten.md                                             }
 - { name: GROUP BY,             href: group-by.md                                            }
@@ -31,4 +32,3 @@ items:
 - { name: SAMPLE,               href: sample.md,                when: feature_tablesample     }
 - { name: TABLESAMPLE,          href: sample.md,                when: feature_tablesample     }
 - { name: MATCH_RECOGNIZE,      href: match_recognize.md,       when: feature_match_recogznize }
-- { name: STREAMING,            href: streaming.md                                            }

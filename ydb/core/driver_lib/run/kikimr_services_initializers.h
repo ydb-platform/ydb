@@ -408,6 +408,13 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
+class TWorkloadManagerServiceInitializer : public IKikimrServicesInitializer {
+public:
+    TWorkloadManagerServiceInitializer(const TKikimrRunConfig& runConfig);
+
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
 class TKqpServiceInitializer : public IKikimrServicesInitializer {
 public:
     TKqpServiceInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories,

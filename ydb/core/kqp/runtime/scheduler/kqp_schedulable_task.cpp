@@ -92,6 +92,22 @@ void TSchedulableTask::DecreaseUsage(const TDuration& burstUsage, EUsageType usa
     }
 }
 
+void TSchedulableTask::IncreaseBurstUsage(const TDuration& burstUsage, EUsageType usageType) {
+    for (TTreeElement* parent = Query.get(); parent; parent = parent->GetParent()) {
+        switch(usageType) {
+            case CPU_DEFAULT:
+                parent->CpuBurstUsage += burstUsage.MicroSeconds();
+                break;
+            case CPU_RESUMED:
+                parent->CpuBurstUsageResume += burstUsage.MicroSeconds();
+                break;
+            case READ_DEFAULT:
+                parent->ReadBurstUsage += burstUsage.MicroSeconds();
+                break;
+        }
+    }
+}
+
 size_t TSchedulableTask::GetSpareUsage() const {
     if (const auto snapshot = Query->GetSnapshot()) {
         auto usage = Query->GetParent()->CpuUsage.load(std::memory_order_relaxed);

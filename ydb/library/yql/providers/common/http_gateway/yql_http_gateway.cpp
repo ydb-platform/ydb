@@ -7,6 +7,7 @@
 #include <util/stream/str.h>
 #include <util/string/builder.h>
 #include <util/datetime/base.h>
+#include <util/system/hp_timer.h>
 #include <yql/essentials/utils/log/log.h>
 
 #include <thread>
@@ -272,6 +273,17 @@ public:
 
     size_t GetSizeLimit() const { return SizeLimit; }
     TString GetDetailedErrorText() const { return ErrorBuffer.data(); }
+
+    void SetContext(IHttpRequestContext::TPtr context) {
+        Context = std::move(context);
+        RequestTimer.Reset();
+    }
+
+    void NotifyRequestFinished() {
+        if (Context) {
+            Context->OnRequestFinished(TDuration::Seconds(RequestTimer.Passed()));
+        }
+    }
 protected:
     void SkipTo(size_t offset) const {
         if (offset || Offset || SizeLimit) {
@@ -320,6 +332,8 @@ private:
     const TCurlInitConfig Config;
     std::vector<char> ErrorBuffer;
     TDNSGateway<>::TDNSConstCurlListPtr DnsCache;
+    IHttpRequestContext::TPtr Context;
+    THPTimer RequestTimer;
 public:
     TString Url;
     const TString Data;
@@ -857,6 +871,7 @@ private:
             }
         }
         if (easy) {
+            easy->NotifyRequestFinished();
             easy->Done(result, httpResponseCode);
         }
     }
@@ -877,24 +892,27 @@ private:
         const TIssue error(curl_multi_strerror(result));
         while (!works.empty()) {
             curl_multi_remove_handle(Handle.get(), works.top()->GetHandle());
+            works.top()->NotifyRequestFinished();
             works.top()->Fail(CURLE_OK, error);
             works.pop();
         }
     }
 
-    void Upload(TString url, THeaders headers, TString body, TOnResult callback, bool put, TRetryPolicy::TPtr retryPolicy) final {
+    void Upload(TString url, THeaders headers, TString body, TOnResult callback, bool put, TRetryPolicy::TPtr retryPolicy, IHttpRequestContext::TPtr context) final {
         Rps->Inc();
 
         auto easy = TEasyCurlBuffer::Make(InFlight, DownloadedBytes, UploadedBytes, std::move(url), put ? TEasyCurl::EMethod::PUT : TEasyCurl::EMethod::POST, std::move(body), std::move(headers), 0U, 0U, std::move(callback), retryPolicy ? retryPolicy->CreateRetryState() : nullptr, InitConfig, DnsGateway.GetDNSCurlList());
+        easy->SetContext(std::move(context));
         const std::unique_lock lock(SyncRef());
         Await.emplace(std::move(easy));
         Wakeup(0U);
     }
 
-    void Delete(TString url, THeaders headers, TOnResult callback, TRetryPolicy::TPtr retryPolicy) final {
+    void Delete(TString url, THeaders headers, TOnResult callback, TRetryPolicy::TPtr retryPolicy, IHttpRequestContext::TPtr context) final {
         Rps->Inc();
 
         auto easy = TEasyCurlBuffer::Make(InFlight, DownloadedBytes, UploadedBytes, std::move(url), TEasyCurl::EMethod::DELETE, "", std::move(headers), 0U, 0U, std::move(callback), retryPolicy ? retryPolicy->CreateRetryState() : nullptr, InitConfig, DnsGateway.GetDNSCurlList());
+        easy->SetContext(std::move(context));
         const std::unique_lock lock(SyncRef());
         Await.emplace(std::move(easy));
         Wakeup(0U);
@@ -907,7 +925,8 @@ private:
         size_t sizeLimit,
         TOnResult callback,
         TString data,
-        TRetryPolicy::TPtr retryPolicy) final
+        TRetryPolicy::TPtr retryPolicy,
+        IHttpRequestContext::TPtr context) final
     {
         Rps->Inc();
         if (sizeLimit > MaxSimulatenousDownloadsSize) {
@@ -916,6 +935,7 @@ private:
             return;
         }
         auto easy = TEasyCurlBuffer::Make(InFlight, DownloadedBytes, UploadedBytes, std::move(url), TEasyCurl::EMethod::GET, std::move(data), std::move(headers), offset, sizeLimit, std::move(callback), retryPolicy ? retryPolicy->CreateRetryState() : nullptr, InitConfig, DnsGateway.GetDNSCurlList());
+        easy->SetContext(std::move(context));
         const std::unique_lock lock(SyncRef());
         Await.emplace(std::move(easy));
         Wakeup(sizeLimit);
@@ -929,9 +949,11 @@ private:
         TOnDownloadStart onStart,
         TOnNewDataPart onNewData,
         TOnDownloadFinish onFinish,
-        const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter) final
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter,
+        IHttpRequestContext::TPtr context) final
     {
         auto stream = TEasyCurlStream::Make(InFlightStreams, DownloadedBytes, UploadedBytes, std::move(url), std::move(headers), offset, sizeLimit, std::move(onStart), std::move(onNewData), std::move(onFinish), inflightCounter, Handle, BuffersSizePerStream, InitConfig, DnsGateway.GetDNSCurlList());
+        stream->SetContext(std::move(context));
         const std::unique_lock lock(SyncRef());
         const auto handle = stream->GetHandle();
         TEasyCurlStream::TWeakPtr weak = stream;

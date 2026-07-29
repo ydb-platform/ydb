@@ -253,7 +253,7 @@ void OnDownloadFinished(TActorSystem* actorSystem, const TActorId& self, const T
     actorSystem->Send(new IEventHandle(self, parent, new TEvS3Provider::TEvDownloadFinish(pathIndex, curlResponseCode, std::move(issues))));
 }
 
-void DownloadStart(const TRetryStuff::TPtr& retryStuff, TActorSystem* actorSystem, const TActorId& self, const TActorId& parent, size_t pathIndex, const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter) {
+void DownloadStart(const TRetryStuff::TPtr& retryStuff, TActorSystem* actorSystem, const TActorId& self, const TActorId& parent, size_t pathIndex, const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter, IHttpRequestContext::TPtr context = nullptr) {
     retryStuff->CancelHook = retryStuff->Gateway->Download(
         retryStuff->Url,
         retryStuff->Headers,
@@ -262,7 +262,8 @@ void DownloadStart(const TRetryStuff::TPtr& retryStuff, TActorSystem* actorSyste
         std::bind(&OnDownloadStart, actorSystem, self, parent, std::placeholders::_1, std::placeholders::_2),
         std::bind(&OnNewData, actorSystem, self, parent, std::placeholders::_1),
         std::bind(&OnDownloadFinished, actorSystem, self, parent, pathIndex, std::placeholders::_1, std::placeholders::_2),
-        inflightCounter);
+        inflightCounter,
+        std::move(context));
 }
 
 struct TParquetFileInfo {
@@ -424,7 +425,15 @@ public:
         NDB::ReadBuffer* buffer = coroBuffer.get();
 
         // lz4 decompressor reads signature in ctor, w/o actual data it will be deadlocked
-        DownloadStart(RetryStuff, GetActorSystem(), SelfActorId, ParentActorId, PathIndex, HttpInflightSize);
+        IHttpRequestContext::TPtr context;
+        if (Work) {
+            context = MakeIntrusive<TDefaultHttpRequestContext>(
+                TString{},
+                [w = std::weak_ptr(Work)](TDuration elapsed) {
+                    if (auto work = w.lock()) work->RecordUsage(elapsed);
+                });
+        }
+        DownloadStart(RetryStuff, GetActorSystem(), SelfActorId, ParentActorId, PathIndex, HttpInflightSize, std::move(context));
 
         if (ReadSpec->Compression && !AsyncDecompressing) {
             decompressorBuffer = MakeDecompressor(*buffer, ReadSpec->Compression);
@@ -554,12 +563,21 @@ public:
         if (it != RangeCache.end()) {
             return it->second;
         }
+        IHttpRequestContext::TPtr context;
+        if (Work) {
+            context = MakeIntrusive<TDefaultHttpRequestContext>(
+                TString{},
+                [w = std::weak_ptr(Work)](TDuration elapsed) {
+                    if (auto work = w.lock()) work->RecordUsage(elapsed);
+                });
+        }
         RetryStuff->Gateway->Download(RetryStuff->Url, RetryStuff->Headers,
                             range.Offset,
                             range.Length,
                             std::bind(&OnResult, GetActorSystem(), SelfActorId, range, ++RangeCookie, std::placeholders::_1),
                             {},
-                            RetryStuff->RetryPolicy);
+                            RetryStuff->RetryPolicy,
+                            std::move(context));
         LOG_CORO_D("Download STARTED [" << range.Offset << "-" << range.Length << "], cookie: " << RangeCookie);
         auto& result = RangeCache[range];
         if (result.Cookie) {

@@ -30,6 +30,8 @@ struct IDqSchedulableWork {
     // Subscribe on wake-up when quota frees up. The actor will receive
     // TEvWakeup from the scheduler.
     virtual void RegisterForResume(const NActors::TActorId& actorId) = 0;
+
+    virtual void RecordUsage(TDuration elapsed) = 0;
 };
 
 ///

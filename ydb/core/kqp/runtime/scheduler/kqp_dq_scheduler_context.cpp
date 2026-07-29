@@ -27,6 +27,10 @@ public:
     void RegisterForResume(const NActors::TActorId& actorId) override {
         TSchedulableActorBase::RegisterForResume(actorId);
     }
+
+    void RecordUsage(TDuration elapsed) override {
+        TSchedulableActorBase::IncreaseBurstUsage(elapsed);
+    }
 };
 
 } // namespace

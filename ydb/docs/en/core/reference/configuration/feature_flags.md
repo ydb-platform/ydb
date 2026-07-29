@@ -6,6 +6,7 @@ The `feature_flags` section enables or disables specific {{ ydb-short-name }} fe
 feature_flags:
   enable_topic_autopartitioning_for_cdc: true
 ```
+
 ## Feature flags
 
 | Flag | Feature |

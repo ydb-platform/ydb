@@ -11,12 +11,18 @@ from ydb.core.kqp.opt.rbo.verification.inspector.trace import (
     Probes,
     _add_family,
     _family_json,
+    _order_json,
     _scope_json,
     prepare,
 )
 from ydb.core.kqp.opt.rbo.verification.inspector.plan import InspectionError
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import smt
-from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import Column, parse_snapshot
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
+    INTEGRAL_AVG_RANK_COMPARISON,
+    Column,
+    SortOrder,
+    parse_snapshot,
+)
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import (
     BoundedChoice,
     Outcome,
@@ -291,6 +297,31 @@ def _average_family(
 
 
 class ObserverTest(unittest.TestCase):
+    def test_trace_order_json_shows_only_present_comparison_tags(self):
+        ordinary = SortOrder("k", True, False)
+        tagged = SortOrder(
+            "average",
+            False,
+            True,
+            INTEGRAL_AVG_RANK_COMPARISON,
+        )
+        self.assertEqual(
+            _order_json((ordinary, tagged)),
+            [
+                {
+                    "column": "k",
+                    "ascending": True,
+                    "nulls_first": False,
+                },
+                {
+                    "column": "average",
+                    "ascending": False,
+                    "nulls_first": True,
+                    "comparison": INTEGRAL_AVG_RANK_COMPARISON,
+                },
+            ],
+        )
+
     def test_correlated_scalar_scope_names_the_outer_outcome_and_row(self):
         self.assertEqual(
             _scope_json(

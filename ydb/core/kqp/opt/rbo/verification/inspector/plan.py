@@ -170,7 +170,15 @@ def render_expression(expression: ir.Expr) -> str:
 def _order(item: ir.SortOrder) -> str:
     direction = "asc" if item.ascending else "desc"
     nulls = "first" if item.nulls_first else "last"
-    return f"{{column={_quote(item.column)}, direction={direction}, nulls={nulls}}}"
+    comparison = (
+        ""
+        if item.comparison is None
+        else f", comparison={_quote(item.comparison)}"
+    )
+    return (
+        f"{{column={_quote(item.column)}, direction={direction}, "
+        f"nulls={nulls}{comparison}}}"
+    )
 
 
 def _average_state(state: ir.AverageStateType | None) -> str:

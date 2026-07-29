@@ -6,6 +6,7 @@ from itertools import product
 from pathlib import Path
 
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
+    INTEGRAL_AVG_RANK_COMPARISON,
     INTEGRAL_DOUBLE_AVERAGE_STATE,
     MAX_BOUND_DEPTH,
     MAX_EXPR_DEPTH,
@@ -715,6 +716,10 @@ class SnapshotTest(unittest.TestCase):
             "phase": "undefined",
         }
         sort["plan"]["output"] = ["d"]
+        forged_sort = copy.deepcopy(sort)
+        forged_sort["plan"]["nodes"][2]["order"][0][
+            "comparison"
+        ] = INTEGRAL_AVG_RANK_COMPARISON
 
         def staged_connection(connection):
             value = passive_double_snapshot()
@@ -767,13 +772,19 @@ class SnapshotTest(unittest.TestCase):
                 ],
             }
         )
+        forged_merge = copy.deepcopy(merged)
+        forged_merge["stage_graph"]["edges"][0]["order"][0][
+            "comparison"
+        ] = INTEGRAL_AVG_RANK_COMPARISON
 
         for mutation, message in (
             (comparison, "eq may not consume Double"),
             (static_in, "in may not consume Double"),
-            (sort, "ordering type 'Double' is unsupported"),
+            (sort, "completed integral AVG Double ordering requires comparison"),
+            (forged_sort, "requires a completed integral AVG output"),
             (hashed, "hash routing may not consume Double"),
-            (merged, "ordering type 'Double' is unsupported"),
+            (merged, "completed integral AVG Double ordering requires comparison"),
+            (forged_merge, "requires a completed integral AVG output"),
         ):
             with self.subTest(message=message):
                 with self.assertRaisesRegex(SnapshotError, message):
@@ -2802,6 +2813,7 @@ class SnapshotTest(unittest.TestCase):
             parsed.plan.nodes[-1].aggregates[0].state,
             INTEGRAL_DOUBLE_AVERAGE_STATE,
         )
+        self.assertTrue(validate_snapshot(parsed)["aggregate"]["result"].integral_avg_rank)
 
         partial = copy.deepcopy(aggregate)
         partial.update(id="partial", phase="intermediate")
@@ -2815,7 +2827,10 @@ class SnapshotTest(unittest.TestCase):
             root="final",
             output=["result"],
         )
-        parse_snapshot(split)
+        parsed_split = parse_snapshot(split)
+        split_schemas = validate_snapshot(parsed_split)
+        self.assertFalse(split_schemas["partial"]["_state"].integral_avg_rank)
+        self.assertTrue(split_schemas["final"]["result"].integral_avg_rank)
 
         indirect = copy.deepcopy(split)
         indirect["plan"]["nodes"].insert(2, {
@@ -2912,9 +2927,167 @@ class SnapshotTest(unittest.TestCase):
         sorted_average["plan"]["root"] = "sort"
         with self.assertRaisesRegex(
             SnapshotError,
-            "ordering type 'Double' is unsupported",
+            "completed integral AVG Double ordering requires comparison",
         ):
             parse_snapshot(sorted_average)
+
+        ordered_average = copy.deepcopy(sorted_average)
+        ordered_average["plan"]["nodes"][-1]["order"][0][
+            "comparison"
+        ] = INTEGRAL_AVG_RANK_COMPARISON
+        parsed_ordered = parse_snapshot(ordered_average)
+        self.assertEqual(
+            parsed_ordered.plan.nodes[-1].order[0].comparison,
+            INTEGRAL_AVG_RANK_COMPARISON,
+        )
+
+        renamed_average = copy.deepcopy(ordered_average)
+        renamed_average["plan"]["nodes"].insert(
+            -1,
+            {
+                "id": "rename",
+                "op": "project",
+                "input": "aggregate",
+                "columns": [
+                    {
+                        "output": "renamed",
+                        "expression": {"kind": "column", "column": "result"},
+                    }
+                ],
+                "ordered": False,
+            },
+        )
+        renamed_average["plan"]["nodes"][-1]["input"] = "rename"
+        renamed_average["plan"]["nodes"][-1]["order"][0]["column"] = "renamed"
+        renamed_average["plan"]["output"] = ["renamed"]
+        parsed_renamed = parse_snapshot(renamed_average)
+        self.assertTrue(
+            validate_snapshot(parsed_renamed)["rename"]["renamed"].integral_avg_rank
+        )
+
+        all_certified_union = copy.deepcopy(logical)
+        left_average = copy.deepcopy(aggregate)
+        left_average.update(id="left_average")
+        left_average["aggregates"][0]["output"] = "left_result"
+        right_average = copy.deepcopy(aggregate)
+        right_average.update(id="right_average")
+        right_average["aggregates"][0]["output"] = "right_result"
+        all_certified_union["plan"].update(
+            nodes=[
+                all_certified_union["plan"]["nodes"][0],
+                left_average,
+                right_average,
+                {
+                    "id": "union",
+                    "op": "union_all",
+                    "inputs": [
+                        {"node": "left_average", "columns": ["left_result"]},
+                        {"node": "right_average", "columns": ["right_result"]},
+                    ],
+                    "output": ["union_result"],
+                    "ordered": False,
+                },
+                {
+                    "id": "sort",
+                    "op": "sort",
+                    "input": "union",
+                    "order": [
+                        {
+                            "column": "union_result",
+                            "ascending": True,
+                            "nulls_first": False,
+                            "comparison": INTEGRAL_AVG_RANK_COMPARISON,
+                        }
+                    ],
+                    "limit": None,
+                    "phase": "undefined",
+                },
+            ],
+            root="sort",
+            output=["union_result"],
+        )
+        parsed_union = parse_snapshot(all_certified_union)
+        self.assertTrue(
+            validate_snapshot(parsed_union)["union"]["union_result"].integral_avg_rank
+        )
+
+        mixed_union = copy.deepcopy(all_certified_union)
+        mixed_union["schema"]["tables"][0]["columns"].extend(
+            [
+                {"name": "x", "type": "Int64", "nullable": True},
+                {"name": "y", "type": "Int64", "nullable": True},
+            ]
+        )
+        mixed_union["plan"]["nodes"][0]["columns"].extend(
+            [
+                {"source": "x", "output": "a.x"},
+                {"source": "y", "output": "a.y"},
+            ]
+        )
+        mixed_union["plan"]["nodes"][2] = {
+            "id": "right_average",
+            "op": "project",
+            "input": "scan",
+            "columns": [
+                {
+                    "output": "right_result",
+                    "expression": {
+                        "kind": "opaque_double",
+                        "fingerprint": (
+                            OPAQUE_DOUBLE_FINGERPRINT_PREFIX + "mixed-union"
+                        ),
+                        "type": "Double",
+                        "nullable": True,
+                        "args": [
+                            {"kind": "column", "column": "a.k"},
+                            {"kind": "column", "column": "a.x"},
+                            {"kind": "column", "column": "a.y"},
+                        ],
+                    },
+                }
+            ],
+            "ordered": False,
+        }
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "requires a completed integral AVG output",
+        ):
+            parse_snapshot(mixed_union)
+
+        unknown_comparison = copy.deepcopy(ordered_average)
+        unknown_comparison["plan"]["nodes"][-1]["order"][0][
+            "comparison"
+        ] = "integral_avg_rank_v2"
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "unsupported ordering comparison 'integral_avg_rank_v2'",
+        ):
+            parse_snapshot(unknown_comparison)
+
+        tagged_integer = minimal_snapshot()
+        tagged_integer["plan"]["nodes"].append(
+            {
+                "id": "sort",
+                "op": "sort",
+                "input": "filter",
+                "order": [
+                    {
+                        "column": "a.k",
+                        "ascending": True,
+                        "nulls_first": False,
+                        "comparison": INTEGRAL_AVG_RANK_COMPARISON,
+                    }
+                ],
+                "limit": None,
+                "phase": "undefined",
+            }
+        )
+        tagged_integer["plan"]["root"] = "sort"
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "comparison tags may only be used with Double",
+        ):
+            parse_snapshot(tagged_integer)
 
         tagged_decimal = copy.deepcopy(logical)
         tagged_decimal["schema"]["tables"][0]["columns"][0]["type"] = "Decimal(7,2)"

@@ -17,6 +17,7 @@ from .ir import (
     ExistsSubplan,
     Filter,
     InSubplan,
+    INTEGRAL_AVG_RANK_COMPARISON,
     Join,
     Limit,
     OuterBind,
@@ -40,7 +41,7 @@ from .scalar import (
     average_metadata_terms,
 )
 from .scalar import Value, date_domain, integer_domain, smt_sort
-from .types import DATE, family, is_decimal_type, is_ordered_type
+from .types import DATE, DOUBLE, family, is_decimal_type, is_ordered_type
 
 
 @dataclass(frozen=True, slots=True)
@@ -2126,8 +2127,50 @@ def _projected_order(
         if not outputs:
             return None
         column = item.column if item.column in outputs else outputs[0]
-        result.append(SortOrder(column, item.ascending, item.nulls_first))
+        result.append(
+            SortOrder(
+                column,
+                item.ascending,
+                item.nulls_first,
+                item.comparison,
+            )
+        )
     return tuple(result)
+
+
+def _require_order_columns(
+    columns: tuple[Column, ...],
+    order: tuple[SortOrder, ...],
+    operation: str,
+) -> None:
+    """Check the narrow provenance contract at the semantic-use boundary."""
+
+    by_name = {column.name: column for column in columns}
+    for item in order:
+        column = by_name.get(item.column)
+        if column is None:
+            raise RelationError(
+                f"{operation} column {item.column!r} is absent"
+            )
+        if column.type == DOUBLE:
+            if (
+                item.comparison != INTEGRAL_AVG_RANK_COMPARISON
+                or not column.integral_avg_rank
+            ):
+                raise RelationError(
+                    f"{operation} Double ordering requires comparison "
+                    f"{INTEGRAL_AVG_RANK_COMPARISON!r} on a completed "
+                    "integral AVG output"
+                )
+            continue
+        if item.comparison is not None:
+            raise RelationError(
+                f"{operation} comparison tags may only be used with Double"
+            )
+        if not is_ordered_type(column.type):
+            raise RelationError(
+                f"{operation} comparison type {column.type!r} is unsupported"
+            )
 
 
 def single(relation: Relation) -> RelationFamily:
@@ -2342,6 +2385,7 @@ def sort_family(
 
     if not order:
         raise RelationError("sort order must not be empty")
+    _require_order_columns(source.columns, order, "sort")
     if all(_live_row_count(outcome.relation) <= 1 for outcome in source.outcomes):
         outcomes: list[Outcome] = []
         for source_outcome in source.outcomes:
@@ -2852,6 +2896,7 @@ def _sorting_network_family(
     cross-producer interleavings.
     """
 
+    _require_order_columns(source.columns, order, "sort")
     outcomes: list[Outcome] = []
     for outcome_index, source_outcome in enumerate(source.outcomes):
         relation = source_outcome.relation
@@ -3166,6 +3211,7 @@ def merge_family(
 ) -> RelationFamily:
     """Represent every sorted, producer-order-preserving interleaving."""
 
+    _require_order_columns(source.columns, order, "merge")
     indices = tuple(index for group in groups for index in group)
     row_count = len(source.outcomes[0].relation.rows) if source.outcomes else 0
     if sorted(indices) != list(range(row_count)):
@@ -3490,9 +3536,17 @@ def _row_less(left: Row, right: Row, order: tuple[SortOrder, ...]) -> smt.Term:
 def _ordered_value_less(left: Value, right: Value, order: SortOrder) -> smt.Term:
     if left.type != right.type:
         raise RelationError("sort comparison type mismatch")
-    if not is_ordered_type(left.type):
+    if left.type == DOUBLE:
+        if order.comparison != INTEGRAL_AVG_RANK_COMPARISON:
+            raise RelationError(
+                "Double sort comparison requires the integral AVG rank tag"
+            )
+    elif order.comparison is not None:
+        raise RelationError("sort comparison tags may only be used with Double")
+    elif not is_ordered_type(left.type):
         raise RelationError(
-            "sort comparison requires integer, String/Utf8, Date, or Decimal values"
+            "sort comparison requires integer, String/Utf8, Date, Decimal, "
+            "or certified completed integral AVG Double values"
         )
     null_before = (
         smt.and_(left.is_null, smt.not_(right.is_null))

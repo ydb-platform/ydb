@@ -543,7 +543,8 @@ void TFlowControlManager::Handle(const NFlowControl::TEvTryAdmit::TPtr& ev, cons
 
         // Enqueue for delayed reject: drop Arrow batch, send OVERLOADED after delay
         const ui64 rejectId = NextRejectId++;
-        const TInstant rejectAt = now + (ev->Get()->GetOperationTimeout() * TFlowControlManagerServiceOperator::GetWaitTimeoutPercent() / 100);
+        const TInstant rejectAt =
+            now + (ev->Get()->GetOperationTimeout() * TFlowControlManagerServiceOperator::GetDelayedRejectTimeoutPercent() / 100);
 
         TDelayedReject reject;
         reject.RejectId = rejectId;

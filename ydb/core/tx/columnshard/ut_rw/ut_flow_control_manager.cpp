@@ -134,6 +134,9 @@ public:
         // Pin the wait-timeout percent to the historical UT default (50%) so tests are deterministic
         // regardless of the process-wide default (which now matches production tuning at 10%).
         TFlowControlManagerServiceOperator::SetWaitTimeoutPercent(50);
+        // Delayed-reject percent controls the delay before OVERLOADED is sent from the delayed-reject
+        // queue; pin it to 10% so delayed-reject tests are deterministic.
+        TFlowControlManagerServiceOperator::SetDelayedRejectTimeoutPercent(10);
         TTester::Setup(Runtime);
         RegisterServices();
         ReplyTo = Runtime.AllocateEdgeActor();
@@ -143,6 +146,7 @@ public:
         Runtime.GetAppData(0).ColumnShardConfig.ClearFlowControl();
         TFlowControlManagerServiceOperator::SetWaitQueueParams(TDuration::MilliSeconds(50), TDuration::MilliSeconds(250), 1024);
         TFlowControlManagerServiceOperator::SetWaitTimeoutPercent(50);
+        TFlowControlManagerServiceOperator::SetDelayedRejectTimeoutPercent(10);
         TFlowControlManagerServiceOperator::ResetDrainRateParamsToDefaults();
     }
 
@@ -1253,11 +1257,11 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         TFlowControlManagerTestEnv env(runtime);
         env.EnableSchedulesForAllActors();
         // Set wait queue size to 1, delayed-reject queue size to 2.
-        // Delayed reject fires at WaitTimeoutPercent of the operation timeout; pin it to 10% so
-        // the reject lands at 6s (10% of 60s), which the 7s advance below crosses.
+        // Delayed reject fires at DelayedRejectTimeoutPercent of the operation timeout; pin it to 10%
+        // so the reject lands at 6s (10% of 60s), which the 7s advance below crosses.
         TFlowControlManagerServiceOperator::SetWaitQueueParams(
             TDuration::Zero(), TDuration::Zero(), /*maxWaitQueueSize=*/1, /*maxDelayedRejectQueueSize=*/2);
-        TFlowControlManagerServiceOperator::SetWaitTimeoutPercent(10);
+        TFlowControlManagerServiceOperator::SetDelayedRejectTimeoutPercent(10);
         env.SeedTabletLocation(shardTabletId, hotNodeId);
         env.SeedNodeOverloadStatus(hotNodeId, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED);
 
@@ -1354,10 +1358,10 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
 
         TFlowControlManagerTestEnv env(runtime);
         env.EnableSchedulesForAllActors();
-        // Set wait timeout percent to 10% (so delayed reject fires at 10% of operation timeout)
+        // Set delayed-reject percent to 10% (so delayed reject fires at 10% of operation timeout)
         TFlowControlManagerServiceOperator::SetWaitQueueParams(
             TDuration::Zero(), TDuration::Zero(), /*maxWaitQueueSize=*/1, /*maxDelayedRejectQueueSize=*/10);
-        TFlowControlManagerServiceOperator::SetWaitTimeoutPercent(10);
+        TFlowControlManagerServiceOperator::SetDelayedRejectTimeoutPercent(10);
         env.SeedTabletLocation(shardTabletId, hotNodeId);
         env.SeedNodeOverloadStatus(hotNodeId, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED);
 
@@ -1401,7 +1405,7 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         // Pin the reject delay to 10% so it fires at 6s (10% of 60s), crossed by the 7s advance below.
         TFlowControlManagerServiceOperator::SetWaitQueueParams(
             TDuration::Zero(), TDuration::Zero(), /*maxWaitQueueSize=*/1, /*maxDelayedRejectQueueSize=*/10);
-        TFlowControlManagerServiceOperator::SetWaitTimeoutPercent(10);
+        TFlowControlManagerServiceOperator::SetDelayedRejectTimeoutPercent(10);
         env.SeedTabletLocation(shardTabletId, hotNodeId);
         env.SeedNodeOverloadStatus(hotNodeId, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED);
 
@@ -1450,7 +1454,7 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         env.EnableSchedulesForAllActors();
         TFlowControlManagerServiceOperator::SetWaitQueueParams(
             TDuration::Zero(), TDuration::Zero(), /*maxWaitQueueSize=*/1, /*maxDelayedRejectQueueSize=*/10);
-        TFlowControlManagerServiceOperator::SetWaitTimeoutPercent(10);
+        TFlowControlManagerServiceOperator::SetDelayedRejectTimeoutPercent(10);
         env.SeedTabletLocation(shardTabletId, hotNodeId);
         env.SeedNodeOverloadStatus(hotNodeId, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED);
 

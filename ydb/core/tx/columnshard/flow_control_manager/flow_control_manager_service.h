@@ -37,6 +37,9 @@ public:
     static TDuration GetDrainJitterMax();
     // Max wait = OperationTimeout * WaitTimeoutPercent / 100 (clamped to 1..100, default 50).
     static ui32 GetWaitTimeoutPercent();
+    // Delay before OVERLOADED reply for delayed-reject queue = OperationTimeout *
+    // DelayedRejectTimeoutPercent / 100 (clamped to 1..100).
+    static ui32 GetDelayedRejectTimeoutPercent();
     static TDuration GetMaxWaitDuration(TDuration operationTimeout);
     static TInstant ComputeWaitDeadline(TInstant deadline, TDuration operationTimeout);
     static TDrainRateParams GetDrainRateParams();
@@ -49,6 +52,7 @@ public:
     static void SetWaitQueueParams(
         TDuration drainJitterMin, TDuration drainJitterMax, ui64 maxWaitQueueSize, ui64 maxDelayedRejectQueueSize = 512);
     static void SetWaitTimeoutPercent(ui32 percent);
+    static void SetDelayedRejectTimeoutPercent(ui32 percent);
     static void SetDrainRateParams(const TDrainRateParams& params);
     static void ResetDrainRateParamsToDefaults();
 };

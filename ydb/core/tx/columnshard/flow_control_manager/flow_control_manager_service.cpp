@@ -20,6 +20,7 @@ std::atomic<ui64> DrainJitterMaxMs{ 250 };
 std::atomic<ui64> MaxWaitQueueSize{ 500 };
 std::atomic<ui64> MaxDelayedRejectQueueSize{ 5000 };
 std::atomic<ui32> WaitTimeoutPercent{ 10 };
+std::atomic<ui32> DelayedRejectTimeoutPercent{ 10 };
 
 std::atomic<ui64> DrainRMinMilli{ 20'000 };
 std::atomic<ui64> DrainRMaxMilli{ 500'000 };
@@ -101,6 +102,13 @@ ui32 TFlowControlManagerServiceOperator::GetWaitTimeoutPercent() {
     return ClampPercent(WaitTimeoutPercent.load());
 }
 
+ui32 TFlowControlManagerServiceOperator::GetDelayedRejectTimeoutPercent() {
+    if (const auto* cfg = FlowControlConfigOrNull()) {
+        return ClampPercent(cfg->GetDelayedRejectTimeoutPercent());
+    }
+    return ClampPercent(DelayedRejectTimeoutPercent.load());
+}
+
 TDuration TFlowControlManagerServiceOperator::GetMaxWaitDuration(TDuration operationTimeout) {
     return operationTimeout * GetWaitTimeoutPercent() / 100;
 }
@@ -155,6 +163,10 @@ void TFlowControlManagerServiceOperator::SetWaitTimeoutPercent(ui32 percent) {
     WaitTimeoutPercent.store(ClampPercent(percent));
 }
 
+void TFlowControlManagerServiceOperator::SetDelayedRejectTimeoutPercent(ui32 percent) {
+    DelayedRejectTimeoutPercent.store(ClampPercent(percent));
+}
+
 void TFlowControlManagerServiceOperator::SetDrainRateParams(const TDrainRateParams& params) {
     const double rMin = Max(0.001, params.RMin);
     const double rMax = Max(rMin, params.RMax);
@@ -177,6 +189,7 @@ void TFlowControlManagerServiceOperator::SetDrainRateParams(const TDrainRatePara
 void TFlowControlManagerServiceOperator::ResetDrainRateParamsToDefaults() {
     SetDrainRateParams(TDrainRateParams{});
     WaitTimeoutPercent.store(50);
+    DelayedRejectTimeoutPercent.store(10);
 }
 
 TDuration TFlowControlManagerServiceOperator::PickDrainJitter() {

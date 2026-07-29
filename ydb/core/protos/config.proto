@@ -2843,7 +2843,7 @@ message TColumnShardConfig {
         optional uint64 MaxWaitQueueSize = 1 [default = 500];
         optional uint32 DrainJitterMinMs = 2 [default = 50];
         optional uint32 DrainJitterMaxMs = 3 [default = 250];
-        // Max time a request may stay in the FCM wait queue, as percent of BulkUpsert
+        // Max time a request may stay in the FCM wait-for-READY queue, as percent of BulkUpsert
         // operation_timeout (default 10 ⇒ wait at most 10% of timeout).
         optional uint32 WaitTimeoutPercent = 4 [default = 10];
         optional double DrainRateMin = 5 [default = 20];      // admits/s
@@ -2856,6 +2856,9 @@ message TColumnShardConfig {
         optional uint32 DrainAimdFeedbackMs = 12 [default = 5000];
         optional double DrainAimdBeta = 13 [default = 0.5];    // multiplicative decrease factor
         optional uint64 MaxDelayedRejectQueueSize = 14 [default = 5000];
+        // Delay before an OVERLOADED reply is sent for a request placed in the delayed-reject
+        // queue, as percent of BulkUpsert operation_timeout (default 10 ⇒ reply after 10% of timeout).
+        optional uint32 DelayedRejectTimeoutPercent = 15 [default = 10];
     }
 
     optional TFlowControlConfig FlowControl = 73;

@@ -56,7 +56,7 @@ ISnapshotSchema::TPtr TPortionInfoConstructor::GetSchema(const TVersionedIndex& 
 std::shared_ptr<TPortionInfo> TWrittenPortionInfoConstructor::BuildPortionImpl(TPortionMeta&& meta) {
     auto result = std::make_shared<TWrittenPortionInfo>(std::move(meta));
     if (CommitSnapshot) {
-        result->CommitSnapshot = *CommitSnapshot;
+        result->CommitSnapshot.Set(*CommitSnapshot);
     }
     AFL_VERIFY(InsertWriteId);
     result->InsertWriteId = *InsertWriteId;

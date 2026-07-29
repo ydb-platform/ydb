@@ -88,6 +88,50 @@ TEST_P(RdmaSendReceiveTestCqMode, MainChannelAliasedProtobuf) {
     UNIT_ASSERT_VALUES_EQUAL(GetSessionCounter(cluster, 2, 1, "BytesWrittenToSocket"), bytesWrittenToSocketBefore);
 }
 
+// Verifies that a pre-serialized event backed by ordinary memory is copied into
+// RDMA memory and delivered through the RDMA main channel.
+TEST_P(RdmaSendReceiveTestCqMode, MainChannelPreSerializedBuffer) {
+    TTestICCluster cluster(2, NActors::TChannelsConfig(), nullptr, nullptr, GetRdmaCqModeFlags(GetParam()),
+        TTestICCluster::TCheckerFactory(), TDuration::Seconds(30), TNode::DefaultInflight(), EnableRdmaSendReceive);
+
+    constexpr size_t bufferSize = 1024;
+    auto receiverPtr = new TReceiveActor([](TEvTestSerialization::TPtr ev) {
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBlobID(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetBuffer(), TString(bufferSize, 'X'));
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->GetPayload().size(), 0u);
+    });
+    const TActorId receiver = cluster.RegisterActor(receiverPtr, 1);
+
+    WaitForInterconnectConnection(cluster, 2, 1);
+    TString lastRdmaStatus;
+    UNIT_ASSERT_C(WaitForRdmaChecksumStatus(cluster, 2, 1, "On | SoftwareChecksum | SendReceive", 20, lastRdmaStatus),
+        "last RDMA status: " << FormatLastRdmaStatus(lastRdmaStatus));
+    const ui64 bytesWrittenToSocketBefore = WaitForSessionCounter(cluster, 2, 1, "BytesWrittenToSocket");
+
+    auto ev = std::make_unique<TEvTestSerialization>();
+    ev->Record.SetBlobID(1);
+    ev->Record.SetBuffer(TString(bufferSize, 'X'));
+    auto serializedRope = ev->SerializeToRope(GetDefaultRcBufAllocator());
+    UNIT_ASSERT(serializedRope);
+
+    auto serialized = MakeIntrusive<TEventSerializedData>(
+        std::move(*serializedRope), ev->CreateSerializationInfo(false));
+    for (auto iter = serialized->GetBeginIter(); iter.Valid(); iter += iter.ContiguousSize()) {
+        UNIT_ASSERT(NInterconnect::NRdma::TryExtractFromRcBuf(iter.GetChunk()).Empty());
+    }
+
+    UNIT_ASSERT(cluster.GetNode(2)->GetActorSystem()->Send(new IEventHandle(
+        TEvTestSerialization::EventType,
+        0,
+        receiver,
+        TActorId(),
+        std::move(serialized),
+        0)));
+
+    UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
+    UNIT_ASSERT_VALUES_EQUAL(GetSessionCounter(cluster, 2, 1, "BytesWrittenToSocket"), bytesWrittenToSocketBefore);
+}
+
 namespace {
 
 void RunOversizedMainChannelEventTest(NInterconnect::NRdma::ECqMode cqMode,

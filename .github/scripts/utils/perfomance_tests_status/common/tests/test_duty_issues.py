@@ -11,6 +11,7 @@ PTS = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PTS))
 
 from common.duty_issues import (  # noqa: E402
+    affected_would_expand,
     aggregate_run_coverage,
     attach_tickets_to_report,
     branch_label_match,
@@ -107,6 +108,45 @@ class MergeMatchTests(unittest.TestCase):
         self.assertIn("Query12", aff["queries"])
         self.assertIn("Query07", aff["queries"])
 
+    def test_affected_would_expand_skips_same_coverage(self):
+        b = parse_match_block(SAMPLE)
+        # Same suite@db@query already in block (open_ticket re-annotate).
+        self.assertFalse(
+            affected_would_expand(
+                b,
+                suite="UploadTpch1000",
+                db="sas_big_column",
+                queries=["Query12"],
+            )
+        )
+        # New query on same suite → expand.
+        self.assertTrue(
+            affected_would_expand(
+                b,
+                suite="UploadTpch1000",
+                db="sas_big_column",
+                queries=["Query99"],
+            )
+        )
+        # New suite → expand.
+        self.assertTrue(
+            affected_would_expand(
+                b,
+                suite="UploadTpch100",
+                db="sas_small_column",
+                queries=["Query05"],
+            )
+        )
+        # Empty block → expand.
+        self.assertTrue(
+            affected_would_expand(
+                {"affected": []},
+                suite="UploadTpch1000",
+                db="sas_small_column",
+                queries=["Query05"],
+            )
+        )
+
     def test_keys_overlap(self):
         self.assertTrue(keys_overlap(["read.cpp:59"], ["Read.cpp:59", "other"]))
         self.assertFalse(keys_overlap(["a"], ["b"]))
@@ -139,6 +179,54 @@ class JoinTests(unittest.TestCase):
             issues, suite="UploadTpch1000", db="sas_small_column", kind="olap"
         )
         self.assertEqual(len(miss), 0)
+
+    def test_closed_ticket_shown_and_covers(self):
+        from common.duty_issues import classify_fail_coverage
+
+        issues = [
+            {
+                "number": 99,
+                "title": "old crash",
+                "url": "https://example/99",
+                "kind": "olap",
+                "state": "closed",
+                "fingerprint": "x",
+                "keys": ["x"],
+                "labels": ["main"],
+                "affected": [
+                    {
+                        "suite": "UploadTpch100",
+                        "db": "sas_small_column",
+                        "queries": ["Query06"],
+                    }
+                ],
+            }
+        ]
+        cov = classify_fail_coverage(
+            issues,
+            suite="UploadTpch100",
+            db="sas_small_column",
+            branch="main",
+            query="Query06",
+            kind="olap",
+        )
+        self.assertEqual(cov["status"], "covered")
+        self.assertEqual(cov["tickets"][0]["state"], "closed")
+        data = {
+            "inbox": [
+                {
+                    "suite": "UploadTpch100",
+                    "db": "sas_small_column",
+                    "branch": "main",
+                    "issue": "failing",
+                    "queries": [{"test": "Query06", "kind": "fail"}],
+                }
+            ],
+            "ok": [],
+        }
+        attach_tickets_to_report(data, issues, kind="olap")
+        self.assertEqual(data["known_issues"][0]["state"], "closed")
+        self.assertEqual(data["inbox"][0]["tickets"][0]["state"], "closed")
 
     def test_attach_to_report(self):
         data = {

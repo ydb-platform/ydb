@@ -14,7 +14,9 @@ affected:
     queries: [Query12, Query04]
 -->
 
-Dashboard joins open issues to suite rows via ``affected`` (not Title/suite alone).
+Dashboard joins open **and closed** issues to suite rows via ``affected``
+(not Title/suite alone). Closed tickets render as grey pills. Duty-agent
+duplicate search still uses open-only (``fetch_open_duty_issues``).
 Agent expands ``affected`` when the same fingerprint appears on another suite/query.
 """
 
@@ -195,6 +197,38 @@ def upsert_match_block(body: str, block: dict[str, Any]) -> str:
     return base + sep + rendered
 
 
+def affected_would_expand(
+    block: dict[str, Any] | None,
+    *,
+    suite: str,
+    db: str | None,
+    queries: list[str] | None = None,
+) -> bool:
+    """True if merge_affected would add a new suite/db row or a new query.
+
+    Used to suppress noisy «also seen» comments when annotate-issue is re-run
+    for the same suite@db@query already listed in the match block (e.g. right
+    after open_ticket that already pasted affected).
+    """
+    queries = [q for q in (queries or []) if q]
+    for a in (block or {}).get("affected") or []:
+        if str(a.get("suite") or "") != suite:
+            continue
+        aff_db = a.get("db")
+        if aff_db and db and str(aff_db) != str(db):
+            continue
+        # Matched suite (+ compatible db).
+        if db and not aff_db:
+            return True  # would fill db
+        existing = {str(q) for q in (a.get("queries") or []) if q}
+        if not queries:
+            # Suite-level ping with no new queries — already covered.
+            return False
+        return any(q not in existing for q in queries)
+    # No matching suite/db row yet → new affected entry.
+    return True
+
+
 def merge_affected(
     block: dict[str, Any],
     *,
@@ -313,11 +347,11 @@ def classify_fail_coverage(
     query: str | None = None,
     kind: str | None = None,
 ) -> dict[str, Any]:
-    """Classify a fail against open duty issues.
+    """Classify a fail against duty issues (open or closed).
 
     Returns:
       status: covered | wrong_branch | uncovered
-      tickets: list of matching issue stubs (with branch_match / needs_branch)
+      tickets: list of matching issue stubs (state / branch_match / needs_branch)
       missing_branch: branch label to add when status=wrong_branch
     """
     covered: list[dict[str, Any]] = []
@@ -346,6 +380,7 @@ def classify_fail_coverage(
             "fingerprint": iss.get("fingerprint"),
             "queries": matched_q,
             "labels": labels,
+            "state": _norm_issue_state(iss.get("state")),
             "branch_match": br_ok,
             "needs_branch": None if br_ok else (norm_branch_label(branch) or None),
         }
@@ -566,6 +601,7 @@ def tickets_for_suite(
                 "fingerprint": iss.get("fingerprint"),
                 "queries": matched_q,
                 "labels": labels,
+                "state": _norm_issue_state(iss.get("state")),
                 "branch_match": br_ok,
                 "needs_branch": None if br_ok else (norm_branch_label(branch) or None),
             }
@@ -592,6 +628,7 @@ def attach_tickets_to_report(
             "affected": i.get("affected") or [],
             "kind": i.get("kind"),
             "labels": list(i.get("labels") or []),
+            "state": _norm_issue_state(i.get("state")),
         }
         for i in issues
         if not kind or not i.get("kind") or str(i.get("kind")).lower() == kind.lower()
@@ -832,9 +869,20 @@ def _github_api_json(path: str, *, timeout: float = 60.0) -> Any:
         raise RuntimeError(f"HTTP {e.code}: {body}") from e
 
 
-def _search_open_issues_via_api(repo: str, *, limit: int) -> list[dict[str, Any]]:
+def _norm_issue_state(raw: Any) -> str:
+    s = str(raw or "open").strip().lower()
+    return "closed" if s == "closed" else "open"
+
+
+def _search_issues_via_api(
+    repo: str,
+    *,
+    limit: int,
+    state: str = "open",
+) -> list[dict[str, Any]]:
     """Search + re-fetch each issue so match-block at end of body is not truncated."""
-    q = f"repo:{repo} is:issue is:open {MATCH_SEARCH_QUERY}"
+    state_q = "is:closed" if _norm_issue_state(state) == "closed" else "is:open"
+    q = f"repo:{repo} is:issue {state_q} {MATCH_SEARCH_QUERY}"
     qs = urllib.parse.urlencode({"q": q, "per_page": min(limit, 100)})
     data = _github_api_json(f"/search/issues?{qs}")
     items = data.get("items") if isinstance(data, dict) else None
@@ -859,9 +907,15 @@ def _search_open_issues_via_api(repo: str, *, limit: int) -> list[dict[str, Any]
                 "url": full.get("html_url") or it.get("html_url") or it.get("url"),
                 "body": full.get("body") or "",
                 "labels": labels,
+                "state": _norm_issue_state(full.get("state") or it.get("state") or state),
             }
         )
     return out
+
+
+def _search_open_issues_via_api(repo: str, *, limit: int) -> list[dict[str, Any]]:
+    """Backward-compatible alias — open issues only."""
+    return _search_issues_via_api(repo, limit=limit, state="open")
 
 
 def _label_names(raw: Any) -> list[str]:
@@ -899,21 +953,19 @@ def _issue_from_gh(raw: dict[str, Any]) -> dict[str, Any] | None:
         "keys": block.get("keys") or [],
         "affected": block.get("affected") or [],
         "labels": _label_names(raw.get("labels")),
+        "state": _norm_issue_state(raw.get("state")),
     }
 
 
-def fetch_open_duty_issues(
+def _fetch_duty_issues_state(
     *,
-    kind: str | None = None,
-    repo: str = DEFAULT_REPO,
-    limit: int = 100,
+    state: str,
+    kind: str | None,
+    repo: str,
+    limit: int,
 ) -> tuple[list[dict[str, Any]], str | None]:
-    """Fetch open issues that contain ``<!-- perf-duty-match`` in the body.
-
-    Prefers ``gh search issues``; falls back to GitHub REST (``GITHUB_TOKEN`` /
-    ``GH_TOKEN``) when ``gh`` is missing — typical on Actions runners.
-    Returns (issues, warning).
-    """
+    """Fetch duty issues in one GitHub state (open|closed)."""
+    state = _norm_issue_state(state)
     warning: str | None = None
     raw_list: list[dict[str, Any]] = []
     try:
@@ -925,22 +977,22 @@ def fetch_open_duty_issues(
                 repo,
                 MATCH_SEARCH_QUERY,
                 "--state",
-                "open",
+                state,
                 "--limit",
                 str(min(limit, 100)),
                 "--json",
-                "number,title,url,body,labels",
+                "number,title,url,body,labels,state",
             ]
         )
         if isinstance(found, list):
             raw_list = found
     except Exception as e_gh:  # noqa: BLE001
         try:
-            raw_list = _search_open_issues_via_api(repo, limit=min(limit, 100))
-            warning = f"gh unavailable ({e_gh}); used GitHub REST API"
+            raw_list = _search_issues_via_api(repo, limit=min(limit, 100), state=state)
+            warning = f"gh unavailable ({e_gh}); used GitHub REST API ({state})"
         except Exception as e_api:  # noqa: BLE001
             warning = (
-                f"gh search issues {MATCH_SEARCH_QUERY}: {e_gh}; "
+                f"gh search issues {MATCH_SEARCH_QUERY} state={state}: {e_gh}; "
                 f"REST fallback: {e_api}"
             )
             return [], warning
@@ -949,6 +1001,9 @@ def fetch_open_duty_issues(
     for raw in raw_list:
         if not isinstance(raw, dict):
             continue
+        # gh --json state may be missing on older gh — default from request.
+        raw = dict(raw)
+        raw.setdefault("state", state)
         iss = _issue_from_gh(raw)
         if not iss:
             continue
@@ -956,3 +1011,52 @@ def fetch_open_duty_issues(
             continue
         out.append(iss)
     return out, warning
+
+
+def fetch_duty_issues(
+    *,
+    kind: str | None = None,
+    repo: str = DEFAULT_REPO,
+    limit: int = 100,
+    include_closed: bool = True,
+) -> tuple[list[dict[str, Any]], str | None]:
+    """Fetch issues with ``<!-- perf-duty-match`` (open, and closed if requested).
+
+    Closed issues are included for report pills (different color). Duty-agent
+    duplicate search should use ``fetch_open_duty_issues`` (open only).
+    """
+    open_list, warn_open = _fetch_duty_issues_state(
+        state="open", kind=kind, repo=repo, limit=limit
+    )
+    by_num: dict[Any, dict[str, Any]] = {i.get("number"): i for i in open_list if i.get("number")}
+    warns = [w for w in (warn_open,) if w]
+    if include_closed:
+        closed_list, warn_closed = _fetch_duty_issues_state(
+            state="closed", kind=kind, repo=repo, limit=limit
+        )
+        if warn_closed:
+            warns.append(warn_closed)
+        for iss in closed_list:
+            num = iss.get("number")
+            if num is None or num in by_num:
+                continue
+            by_num[num] = iss
+    # open first, then closed (stable UI)
+    out = sorted(
+        by_num.values(),
+        key=lambda i: (0 if i.get("state") == "open" else 1, -(int(i.get("number") or 0))),
+    )
+    warning = "; ".join(warns) if warns else None
+    return out, warning
+
+
+def fetch_open_duty_issues(
+    *,
+    kind: str | None = None,
+    repo: str = DEFAULT_REPO,
+    limit: int = 100,
+) -> tuple[list[dict[str, Any]], str | None]:
+    """Open issues only (duty-agent known-issues / update_known search)."""
+    return fetch_duty_issues(
+        kind=kind, repo=repo, limit=limit, include_closed=False
+    )

@@ -34,13 +34,15 @@ For each problem, answer **all** of:
 
 ```bash
 cd .github/scripts/utils/perfomance_tests_status/duty_agent
-eval "$(python3 dutyctl.py init-token --shell)"   # SANDBOX_TOKEN + YDB SA key path (YAV)
+eval "$(python3 dutyctl.py init-token --shell)"   # SANDBOX + YDB SA + AWS S3 keys (YAV)
 OUT=./runs/my-case
 ```
 
-`init-token` loads from [`token_config.json`](token_config.json): sandbox OAuth + SA JSON
-(`CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS` → path under `.cache/`). Mart access goes through
-[`../common/ydb_client.py`](../common/ydb_client.py) (YDBWrapper) — **do not use MCP for YDB**.
+`init-token` loads from [`token_config.json`](token_config.json): sandbox OAuth, SA JSON
+(`CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS` → path under `.cache/`), and
+`AWS_KEY_ID` / `AWS_KEY_VALUE` for duty-report upload to bucket **`workload-log`**.
+Mart access goes through [`../common/ydb_client.py`](../common/ydb_client.py) (YDBWrapper) —
+**do not use MCP for YDB**.
 
 ## CLI
 
@@ -55,6 +57,7 @@ OUT=./runs/my-case
 | `trace-note -o $OUT "…"` | append hypothesis/dig/decision node to the action tree |
 | `validate -o $OUT` | **quality gate** (+ refreshes action tree under the cut) |
 | `write-result -c CONTEXT -o $OUT` | final `result.json` only after validate OK |
+| `upload-report -o $OUT [--issue N]` | put report to S3 (immutable stamp dir) + upsert **[полный отчёт]** into issue body; issue# from `--issue` or `Тикет: #N` in analysis |
 
 Extra digs: `gh search` / browse code at tested sha. Offline mart: `dig-runs --from-json`. SQL only: `--sql-only`.
 
@@ -320,6 +323,7 @@ For each problem, you can answer yes:
 - [ ] Read cluster logs **and** execution stderr (OLAP fail), or documented empty  
 - [ ] On segfault/abort/VERIFY: coredump URL or `/place/coredumps` dig (or explicit skip why)  
 - [ ] При `open_ticket` + signal/Backtrace: в Materials полный стек `#0…#N` из stderr **и** кликабельный `coredumps.yandex-team.ru` (не «filter URL в descriptionHtml»)
+- [ ] После заведения тикета: `Тикет: [#N](url)` в analysis → `upload-report -o $OUT` → **[полный отчёт]** в body
 - [ ] Mechanism stated (not only fingerprint)  
 - [ ] Tied to code at **tested sha**  
 - [ ] Давность stated with dates/labels  
@@ -390,9 +394,22 @@ Label **не нужен**. Шаблон: [`REPORT_TEMPLATE.md`](REPORT_TEMPLATE.
 **Перед `open_ticket`:**  
 1. Ключи из fingerprint (`file.cpp:NN`, `AFL_VERIFY(…)`, symbol) — **не** suite alone.  
 2. `dutyctl known-issues --keys 'read.cpp:59' 'range.Offset'` (или `gh` + parse блоков).  
-3. Если hit → `update_known`: `dutyctl annotate-issue --issue N --suite … --db … --queries …` (расширяет `affected` + comment), не плодить дубликат.  
+3. Если hit → `update_known`: `dutyctl annotate-issue --issue N --suite … --db … --queries …` (расширяет `affected`; auto-коммент «also seen» **только** если suite/db/query новые — не после open_ticket на тот же кейс).  
 4. Context `known_tickets` + `ticket_coverage` из Save — стартовые кандидаты; **uncovered** в pack = кандидат на новый issue (после search).  
 5. Если `compare.active` — сверь симптом на `compare.run` и на `focus_run` (появилось на now / уже было на cmp).
+
+**После `open_ticket` / `update_known` — полный отчёт в S3 (обязательно):**  
+1. Заведи / обнови issue вручную (Materials Title+Body) — отдельный шаг по команде человека.  
+2. В analysis напиши `Тикет: [#N](https://github.com/ydb-platform/ydb/issues/N)`.  
+3. `dutyctl upload-report -o $OUT` — один шаг:
+   - заливает в `s3://workload-log/perfomance_tests_status/duty_artifacts/{run_id}/{utc_stamp}/`  
+     (новый stamp каждый раз → без перезаписи);
+   - нужен `boto3` (`pip install boto3` или `.cache/venv-s3`);
+   - сам находит `#N` и пишет в body Фактуры:  
+     `| Duty report | [полный отчёт](…) · [result](…) · [problems](…) |`.  
+   Явный override: `--issue N`. Только upload: `--no-issue`.  
+4. `dutyctl validate` после upload — если тикет уже указан, без `s3_report.json` / без «полный отчёт» будет error.  
+Не клади весь `analysis.md` в body.
 
 **Как следующий агент ищет:** overlap `keys` в open issues с блоком `perf-duty-match`. Suite/query только в `affected` (растёт при новых проявлениях).
 
@@ -432,6 +449,7 @@ Label **не нужен**. Шаблон: [`REPORT_TEMPLATE.md`](REPORT_TEMPLATE.
 | Branch · Version | main · [`sha`](…) |
 | Run | label · ts UTC |
 | Allure | https://proxy.sandbox… |
+| Duty report | [полный отчёт](https://storage.yandexcloud.net/workload-log/…/analysis.md) · [result](…) · [problems](…) |
 | Failed | Query… |
 
 #### Что сломалось

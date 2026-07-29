@@ -10,6 +10,7 @@ CLI:
   bisect         crash-path window + focus PR files
   known-issues   search open perf-duty issues by match keys
   annotate-issue expand affected / upsert perf-duty-match on a GitHub issue
+  upload-report  put analysis.md (+ result/problems) to S3 (workload-log)
   validate       lint analysis.md
   inject-trace   rebuild action tree + inject <details> into analysis.md
   trace-note     append a manual node to the action tree (hypothesis / dig)
@@ -65,6 +66,16 @@ from tools.metrics_delta import metrics_delta  # noqa: E402
 from tools.result_json import merge_result  # noqa: E402
 from tools.run_dir import ensure_run_dir, write_json  # noqa: E402
 from tools.sandbox import inspect_sandbox  # noqa: E402
+from tools.known_issues import fetch_issue, patch_issue_body  # noqa: E402
+from tools.s3_upload import (  # noqa: E402
+    S3UploadError,
+    content_type_for,
+    detect_issue_number,
+    format_duty_report_links,
+    put_object,
+    upload_duty_report,
+    upsert_duty_report_in_body,
+)
 from tools.validate_report import validate_analysis_md  # noqa: E402
 from tools.yav import cmd_init_token, sandbox_oauth_token  # noqa: E402
 
@@ -1229,15 +1240,24 @@ def cmd_annotate_issue(args: argparse.Namespace) -> int:
         for part in args.queries:
             queries.extend([q.strip() for q in part.split(",") if q.strip()])
     keys = list(args.keys or [])
-    comment = args.comment
-    if comment is None and args.suite:
-        qbit = ",".join(queries) if queries else "—"
-        comment = (
-            f"also seen on `{args.suite}`"
-            + (f".{queries[0]}" if len(queries) == 1 else f" ({qbit})" if queries else "")
-            + (f" @ `{args.db}`" if args.db else "")
-            + (f", label=`{args.label}`" if args.label else "")
-        )
+    # Explicit --comment always posts; auto «also seen» only if affected grows.
+    explicit_comment = args.comment is not None
+    comment: str | None = None
+    if not args.no_comment:
+        if explicit_comment:
+            comment = args.comment
+        elif args.suite:
+            qbit = ",".join(queries) if queries else "—"
+            comment = (
+                f"also seen on `{args.suite}`"
+                + (
+                    f".{queries[0]}"
+                    if len(queries) == 1
+                    else f" ({qbit})" if queries else ""
+                )
+                + (f" @ `{args.db}`" if args.db else "")
+                + (f", label=`{args.label}`" if args.label else "")
+            )
     try:
         block = expand_affected_on_issue(
             int(args.issue),
@@ -1247,7 +1267,8 @@ def cmd_annotate_issue(args: argparse.Namespace) -> int:
             kind=args.kind,
             fingerprint=args.fingerprint,
             keys=keys or None,
-            comment=comment if not args.no_comment else None,
+            comment=comment,
+            comment_only_if_expanded=not explicit_comment,
         )
     except Exception as e:  # noqa: BLE001
         print(f"annotate-issue: {e}", file=sys.stderr)
@@ -1259,6 +1280,101 @@ def cmd_annotate_issue(args: argparse.Namespace) -> int:
         keys=list(block.get("keys") or []),
         affected=list(block.get("affected") or []),
     ))
+    return 0
+
+
+def cmd_upload_report(args: argparse.Namespace) -> int:
+    """Upload analysis.md (+ companions) to workload-log; write s3_report.json.
+
+    After upload, patches Materials in local analysis.md. Then attaches links to a
+    GitHub issue **body** (Фактура): ``--issue N`` or auto-detect from analysis
+    («Тикет: #N» / github issues URL). Open/create issue stays a separate step.
+    """
+    out_dir = ensure_run_dir(args.out_dir, None)
+    if not (out_dir / "analysis.md").is_file():
+        print(f"upload-report: missing {out_dir / 'analysis.md'}", file=sys.stderr)
+        return 2
+    try:
+        meta = upload_duty_report(
+            out_dir,
+            bucket=args.bucket,
+            prefix_root=args.prefix_root,
+            run_id=args.run_id,
+        )
+    except S3UploadError as e:
+        print(f"upload-report: {e}", file=sys.stderr)
+        return 1
+    files = list(meta.get("files") or [])
+    links = meta.get("links_md") or format_duty_report_links(files)
+    print(f"uploaded {len(files)} file(s) → s3://{meta.get('bucket')}/{meta.get('prefix')}/")
+    print(f"stamp={meta.get('stamp')}")
+    print(f"links={links}")
+    print(f"meta={out_dir / 's3_report.json'}")
+
+    # Keep Materials / local analysis.md Фактура in sync, then re-put analysis.md
+    # so the S3 object includes the Duty report row for this stamp.
+    analysis_path = out_dir / "analysis.md"
+    try:
+        analysis_path.write_text(
+            upsert_duty_report_in_body(analysis_path.read_text(encoding="utf-8"), files),
+            encoding="utf-8",
+        )
+        analysis_meta = next((f for f in files if f.get("file") == "analysis.md"), None)
+        if analysis_meta and analysis_meta.get("key"):
+            analysis_meta["url"] = put_object(
+                bucket=str(meta.get("bucket") or args.bucket),
+                key=str(analysis_meta["key"]),
+                body=analysis_path.read_bytes(),
+                content_type=content_type_for(analysis_path),
+            )
+            print("re-uploaded analysis.md with Duty report row")
+    except (OSError, S3UploadError) as e:
+        print(f"upload-report: warn — could not patch/re-upload analysis.md: {e}", file=sys.stderr)
+
+    issue_n = args.issue
+    if issue_n is None and not args.no_issue:
+        issue_n = detect_issue_number(out_dir)
+        if issue_n:
+            print(f"issue: auto-detected #{issue_n} from analysis/problems")
+
+    if issue_n is None:
+        if args.no_issue:
+            print("issue: skipped (--no-issue)")
+        else:
+            print(
+                "issue: not linked — pass --issue N after creating the ticket "
+                "(or put «Тикет: #N» in analysis.md and re-run)",
+                file=sys.stderr,
+            )
+        return 0
+
+    try:
+        iss = fetch_issue(int(issue_n))
+        new_body = upsert_duty_report_in_body(str(iss.get("body") or ""), files)
+        if new_body != iss.get("body"):
+            patch_issue_body(int(issue_n), new_body)
+            print(f"issue #{issue_n}: Duty report row updated in body")
+        else:
+            print(f"issue #{issue_n}: Duty report row already up to date")
+        if args.comment:
+            comment = f"Duty report: {links}\n"
+            subprocess.run(
+                [
+                    "gh",
+                    "issue",
+                    "comment",
+                    str(issue_n),
+                    "--repo",
+                    "ydb-platform/ydb",
+                    "--body",
+                    comment,
+                ],
+                check=True,
+            )
+            print(f"commented on issue #{issue_n}")
+    except (RuntimeError, subprocess.CalledProcessError, FileNotFoundError) as e:
+        print(f"upload-report: issue update failed: {e}", file=sys.stderr)
+        return 1
     return 0
 
 
@@ -1376,7 +1492,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(
         description=(
             "Perf duty toolbox — prepare | dig-runs | dig-baseline | dig-prs | bisect | "
-            "known-issues | annotate-issue | inject-trace | validate | write-result"
+            "known-issues | annotate-issue | upload-report | inject-trace | validate | write-result"
         ),
     )
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -1558,9 +1674,48 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--fingerprint", default=None)
     p.add_argument("--keys", nargs="*", default=None, help="required if issue has no block yet")
     p.add_argument("--label", default=None, help="run label for comment")
-    p.add_argument("--comment", default=None, help="override issue comment body")
-    p.add_argument("--no-comment", action="store_true")
+    p.add_argument(
+        "--comment",
+        default=None,
+        help="override issue comment body (always posted; auto «also seen» "
+        "only when affected grows)",
+    )
+    p.add_argument(
+        "--no-comment",
+        action="store_true",
+        help="never post a GitHub comment (still upserts match block)",
+    )
     p.set_defaults(func=cmd_annotate_issue)
+
+    p = sub.add_parser(
+        "upload-report",
+        help="upload analysis.md (+ result/problems) to S3 workload-log",
+    )
+    add_out(p)
+    p.add_argument("--bucket", default="workload-log")
+    p.add_argument(
+        "--prefix-root",
+        default="perfomance_tests_status/duty_artifacts",
+        help="S3 key prefix root (run_id appended)",
+    )
+    p.add_argument("--run-id", default=None, help="default: out-dir name")
+    p.add_argument(
+        "--issue",
+        type=int,
+        default=None,
+        help="upsert Duty report into issue body (default: auto-detect # from analysis.md)",
+    )
+    p.add_argument(
+        "--no-issue",
+        action="store_true",
+        help="upload only — do not patch a GitHub issue",
+    )
+    p.add_argument(
+        "--comment",
+        action="store_true",
+        help="also post a short issue comment (body patch is default)",
+    )
+    p.set_defaults(func=cmd_upload_report)
 
     p = sub.add_parser("write-result", help="merge problems.json → result.json")
     p.add_argument("--context", "-c", type=Path, default=None)

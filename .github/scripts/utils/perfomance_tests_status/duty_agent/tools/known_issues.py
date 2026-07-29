@@ -17,6 +17,7 @@ if str(_PTS) not in sys.path:
 from common.duty_issues import (  # noqa: E402
     DEFAULT_REPO,
     MATCH_SEARCH_QUERY,
+    affected_would_expand,
     fetch_open_duty_issues,
     keys_overlap,
     merge_affected,
@@ -32,6 +33,7 @@ __all__ = [
     "render_match_block",
     "upsert_match_block",
     "merge_affected",
+    "affected_would_expand",
     "keys_overlap",
     "fetch_open_duty_issues",
     "search_open_by_keys",
@@ -145,16 +147,28 @@ def expand_affected_on_issue(
     fingerprint: str | None = None,
     keys: list[str] | None = None,
     comment: str | None = None,
+    comment_only_if_expanded: bool = True,
     repo: str = DEFAULT_REPO,
 ) -> dict[str, Any]:
-    """Merge affected into issue match block; optional comment. Returns new block."""
+    """Merge affected into issue match block; optional comment. Returns new block.
+
+    Auto «also seen» comments (``comment_only_if_expanded=True``, the default for
+    generated comments) are posted only when ``affected`` actually grows — a new
+    suite/db row or a new query. Re-annotating the original open_ticket
+    suite@db@query does not spam. Explicit ``--comment`` should pass
+    ``comment_only_if_expanded=False``.
+    """
     iss = fetch_issue(number, repo=repo)
-    block = iss.get("match") or {}
-    if not block.get("keys"):
+    prev = iss.get("match") or {}
+    had_block = bool(prev.get("keys"))
+    block = dict(prev)
+    expanded = False
+    if not had_block:
         if not keys:
             raise RuntimeError(
                 f"issue #{number} has no perf-duty-match block and no keys provided"
             )
+        # First upsert of the match block = original manifestation, not «also».
         block = build_match_block(
             kind=kind or "olap",
             fingerprint=fingerprint or keys[0],
@@ -163,6 +177,7 @@ def expand_affected_on_issue(
             db=db,
             queries=queries,
         )
+        expanded = False
     else:
         if kind and not block.get("kind"):
             block["kind"] = kind
@@ -172,10 +187,16 @@ def expand_affected_on_issue(
             for k in keys:
                 if k not in block["keys"]:
                     block["keys"].append(k)
+        expanded = affected_would_expand(
+            block, suite=suite, db=db, queries=queries
+        )
         block = merge_affected(block, suite=suite, db=db, queries=queries)
     new_body = upsert_match_block(iss.get("body") or "", block)
     patch_issue_body(number, new_body, repo=repo)
-    if comment:
+    post_comment = bool(comment) and (
+        not comment_only_if_expanded or expanded
+    )
+    if post_comment:
         _gh(
             [
                 "issue",
@@ -186,5 +207,15 @@ def expand_affected_on_issue(
                 "--body",
                 comment,
             ]
+        )
+    elif comment and comment_only_if_expanded and not expanded:
+        # Soft signal for CLI / agents — not an error.
+        print(
+            f"annotate-issue: skip comment on #{number} "
+            f"(affected already has {suite}"
+            + (f"@{db}" if db else "")
+            + (f"/{','.join(queries or [])}" if queries else "")
+            + ")",
+            file=sys.stderr,
         )
     return block

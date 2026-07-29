@@ -51,13 +51,3 @@ items:
   include:
     mode: link
     path: streaming_queries/toc_p.yaml
-- name: JSON search
-  href: json-search/index.md
-  include:
-    mode: link
-    path: json-search/toc_p.yaml
-- name: JSON search
-  href: json-search/index.md
-  include:
-    mode: link
-    path: json-search/toc_p.yaml

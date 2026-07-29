@@ -34,7 +34,7 @@ Y_UNIT_TEST_SUITE(ChunkedArraySerialized) {
         NSerialization::TNativeSerializer serializer;
         auto chunks = SplitBySizes(*arr, predSaver, serialized, { 1, 1, 1 });
         UNIT_ASSERT(!chunks.empty());
-        auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector({ std::make_shared<arrow::Field>("val", arrow::utf8()) }));
+        auto schema = std::make_shared<arrow::Schema>(arrow::FieldVector({ std::make_shared<arrow::Field>("val", arr->GetDataType()) }));
         ui32 totalRecords = 0;
         for (const auto& chunk : chunks) {
             totalRecords += chunk.GetArray()->GetRecordsCount();

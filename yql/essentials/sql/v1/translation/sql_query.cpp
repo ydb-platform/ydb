@@ -2110,23 +2110,18 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
             const auto& block = rule.GetBlock3();
             TString type;
-            switch (block.Alt_case()) {
-                case TRule_show_create_table_stmt_TBlock3::kAlt1:
-                    type = "showCreateTable"; // TABLE
-                    break;
-                case TRule_show_create_table_stmt_TBlock3::kAlt2:
-                    type = "showCreateView"; // VIEW
-                    break;
-                case TRule_show_create_table_stmt_TBlock3::kAlt3:
-                    type = "showCreateExternalDataSource"; // EXTERNAL DATA SOURCE
-                    break;
-                case TRule_show_create_table_stmt_TBlock3::kAlt4:
-                    type = "showCreateExternalTable"; // EXTERNAL TABLE
-                    break;
-                case TRule_show_create_table_stmt_TBlock3::ALT_NOT_SET:
-                    YQL_ENSURE(false, "Unreachable");
+            if (block.HasAlt1()) {
+                type = "showCreateTable"; // TABLE
+            } else if (block.HasAlt2()) {
+                type = "showCreateView"; // VIEW
+            } else if (block.HasAlt3()) {
+                type = "showCreateExternalDataSource"; // EXTERNAL DATA SOURCE
+            } else if (block.HasAlt4()) {
+                type = "showCreateExternalTable"; // EXTERNAL TABLE
             }
-            YQL_ENSURE(!type.empty());
+            YQL_ENSURE(!type.empty(),
+                       "Unsupported SHOW CREATE statement type, expected one of TABLE, VIEW, EXTERNAL DATA SOURCE, EXTERNAL TABLE; got: "
+                           << block.DebugString());
 
             AddStatementToBlocks(blocks, BuildShowCreate(Ctx_.Pos(), tr, type, Ctx_.Scoped));
             break;

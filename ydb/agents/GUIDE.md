@@ -39,6 +39,7 @@ Test types and frameworks: [`TESTS.md`](TESTS.md).
 ## Languages
 
 C++20 or earlier. Style: [`CODESTYLE.md`](CODESTYLE.md). Tests: [`TESTS.md`](TESTS.md).
+Do not use `Y_ABORT` / `Y_VERIFY`: [`NO_ABORT.md`](NO_ABORT.md).
 Python via `ya`, packages from `contrib/python`.
 
 ## Agent workflow

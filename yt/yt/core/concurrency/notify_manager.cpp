@@ -219,15 +219,14 @@ void TNotifyManager::NotifyOne(TCpuInstant cpuInstant)
             CpuInstantToInstant(GetMinEnqueuedAt()));
         EventCount_->NotifyOne();
     } else {
-        static const auto WaitTimeWarningThresholdCpu = DurationToCpuDuration(WaitTimeWarningThreshold);
-
-        auto minEnqueuedAt = GetMinEnqueuedAt();
-        if (minEnqueuedAt != SentinelMinEnqueuedAt &&
-            cpuInstant - minEnqueuedAt > WaitTimeWarningThresholdCpu)
-        {
-            YT_LOG_WARNING("Action is probably stuck (MinEnqueuedAt: %v, WaitTime: %v)",
-                CpuInstantToInstant(minEnqueuedAt),
-                CpuDurationToDuration(cpuInstant - minEnqueuedAt));
+        auto lockedInstant = LockedInstant_.load();
+        auto waitTime = CpuDurationToDuration(cpuInstant - lockedInstant);
+        if (waitTime > WaitTimeWarningThreshold) {
+            // Notifications are locked during more than 30 seconds.
+            YT_LOG_WARNING("Action is probably stuck (MinEnqueuedAt: %v, LockedInstant: %v, WaitTime: %v)",
+                CpuInstantToInstant(GetMinEnqueuedAt()),
+                lockedInstant,
+                waitTime);
         }
     }
 }

@@ -26,12 +26,12 @@ Queries to [topics](../datamodel/topic.md) allow processing unlimited data strea
 
 ### Streaming queries
 
-[Streaming queries](../streaming-query.md) are the primary method for streaming data processing in production. They are created as persistent schema objects (`STREAMING QUERY`), read messages from topics as they arrive, write results to output topics or tables, and automatically recover from failures using [checkpoints](../../dev/streaming-query/checkpoints.md).
+Streaming queries are the primary method for streaming data processing in production. They are created as persistent schema objects (`STREAMING QUERY`), read messages from topics as they arrive, write results to output topics or tables, and automatically recover from failures using [checkpoints](../../dev/streaming-query/checkpoints.md).
 
-For more details, see the [{#T}](../streaming-query.md) section and the [{#T}](../../yql/reference/syntax/create-streaming-query.md) description.
+For more details, see the streaming-query section and the [{#T}](../../yql/reference/syntax/create-streaming-query.md) description.
 
 ### Queries to topics in table mode
 
-You can also read data from a topic using a regular `SELECT` by specifying `STREAMING = "TRUE"` in the `WITH` clause. Without the `LIMIT` limit, such a query runs indefinitely, returning results to the client as messages arrive. Unlike streaming queries, it does not create a persistent schema object and does not recover from failures, so it is primarily intended for debugging and checking data in a topic.
+You can also read data from a topic using a regular `SELECT` by specifying ⟦C2⟧ in the ⟦C3⟧ clause. Without the ⟦C4⟧ limit, such a query runs indefinitely, returning results to the client as messages arrive. Unlike streaming queries, it does not create a persistent schema object and does not recover from failures, so it is primarily intended for debugging and checking data in a topic.
 
-For more details, see the [{#T}](../../yql/reference/syntax/select/streaming.md) section.
+For more details, see the [{#T}](topics.md) section.

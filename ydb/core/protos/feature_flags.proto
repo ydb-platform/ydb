@@ -357,6 +357,7 @@ message TFeatureFlags {
     optional bool EnableRejectActionInResourcePoolClassifiers = 304 [default = true];
     optional bool EnableMoveWithColumnTableReplace = 305 [default = false];
     optional bool DisableOldSecrets = 306 [default = false];
-    optional bool EnableGeneratedStored = 307 [default = false];
-    optional bool EnableGeneratedVirtual = 308 [default = false];
+    optional bool EnableKafkaServerlessTransactions = 307 [default = false];
+    optional bool EnableGeneratedStored = 308 [default = false];
+    optional bool EnableGeneratedVirtual = 309 [default = false];
 }

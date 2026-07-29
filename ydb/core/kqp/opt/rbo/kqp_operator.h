@@ -22,7 +22,7 @@ namespace NKqp {
 
 using namespace NYql;
 
-enum EOperator : ui32 { EmptySource, Source, Map, AddDependencies, Filter, Join, Aggregate, Limit, Sort, UnionAll, CBOTree, Root };
+enum EOperator : ui32 { EmptySource, Source, Map, AddDependencies, Filter, Join, Aggregate, Limit, Sort, UnionAll, TableLookup, CBOTree, Root };
 
 // clang-format off
 #define PHASE_ENUM(X) \
@@ -353,6 +353,33 @@ public:
     }
 };
 
+/**
+ * Operator with an arbitrary number of inputs. The inputs are the children, in order.
+ */
+class IVariadicOperator: public IOperator {
+public:
+    IVariadicOperator(EOperator kind, TPositionHandle pos)
+        : IOperator(kind, pos) {
+    }
+
+    IVariadicOperator(EOperator kind, TPositionHandle pos, TVector<TIntrusivePtr<IOperator>> inputs)
+        : IOperator(kind, pos) {
+        Children = std::move(inputs);
+    }
+
+    TVector<TIntrusivePtr<IOperator>>& GetInputs() {
+        return Children;
+    }
+
+    TIntrusivePtr<IOperator>& GetInput(size_t index) {
+        return Children[index];
+    }
+
+    void SetInputs(TVector<TIntrusivePtr<IOperator>> newInputs) {
+        Children = std::move(newInputs);
+    }
+};
+
 class TOpEmptySource: public IOperator {
 public:
     TOpEmptySource(TPositionHandle pos)
@@ -635,8 +662,9 @@ protected:
     void ComputeOutputIUs() override;
 };
 
-class TOpUnionAll: public IBinaryOperator {
+class TOpUnionAll: public IVariadicOperator {
 public:
+    TOpUnionAll(TVector<TIntrusivePtr<IOperator>> inputs, TPositionHandle pos, TVector<TInfoUnit> columns, bool ordered = false);
     TOpUnionAll(TIntrusivePtr<IOperator> leftArg, TIntrusivePtr<IOperator> rightArg, TPositionHandle pos,
                 TVector<TInfoUnit> columns, bool ordered = false);
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
@@ -730,6 +758,27 @@ protected:
 
 private:
     EOpPhase SortPhase{EOpPhase::Undefined};
+};
+
+class TOpTableLookup: public IUnaryOperator {
+public:
+    TOpTableLookup(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExprNode::TPtr& table,
+                   const TVector<TString>& fetchColumns, const TVector<TInfoUnit>& outputIUs, const TVector<TInfoUnit>& lookupKeys);
+
+    virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
+    virtual void PropagateLiveness(ILivenessContext& ctx) override;
+    virtual TString ToString(TExprContext& ctx) override;
+    virtual TString GetExplainName() const override { return "TableLookup"; }
+
+    virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
+
+    TExprNode::TPtr Table;
+    TVector<TString> FetchColumns;
+    TVector<TInfoUnit> OutputIUs;
+    TVector<TInfoUnit> LookupKeys;
+
+protected:
+    void ComputeOutputIUs() override;
 };
 
 

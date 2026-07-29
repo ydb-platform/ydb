@@ -1,3 +1,5 @@
+## v3.21.0
+
 * Fixed Query SDK `CreateSession` metrics being recorded when reusing a session from the pool.
 
 * Added `TQueryClient::DeleteSession` to explicitly delete a query session by session id.
@@ -8,7 +10,7 @@
 
 * Added a distributed lock primitive based on the coordination service, which implements basic_lockable concept.
 
-# v3.20.0
+## v3.20.0
 
 * Added automatic retries for unary methods of table and query clients(ExecuteQuery, ExecuteScript, BulkUpsert, ReadRows).
 

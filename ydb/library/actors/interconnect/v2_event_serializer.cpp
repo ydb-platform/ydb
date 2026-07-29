@@ -47,6 +47,7 @@ namespace NActors {
         Y_ABORT_UNLESS(buffer.size() >= TEventSerializer::MinUsefulQuota);
 
         const ui64 bytesProducedOnEntry = CumulativeProduced;
+        const size_t bufferSizeOnEntry = buffer.size();
 
         // we can't emit anything useful once the output buffer can't hold at least a chunk header along with a whole
         // some useful data, so we stop here to avoid spinning without making any progress
@@ -90,12 +91,22 @@ namespace NActors {
 
         Y_DEBUG_ABORT_UNLESS(bytesProducedOnEntry + totalBytesProduced == CumulativeProduced);
 
+        buffer.TrimFront(buffer.size() - buffer.size() % 64); // align buffer on 64-byte boundary
+        const size_t bufferSizeOnExit = buffer.size();
+        Y_DEBUG_ABORT_UNLESS(bufferSizeOnExit <= bufferSizeOnEntry);
+
+        const size_t scratchBytesUsed = bufferSizeOnEntry - bufferSizeOnExit;
+
         if (bufferProduced) {
             RefcountItems.push_back({
                 .EndOffset = bufferProduced,
                 .Scratch = buffer,
+                .ScratchBytesUsed = scratchBytesUsed,
                 .EventReceivedTimestamp = 0,
             });
+            NumBytesInScratchBuffers += scratchBytesUsed;
+        } else {
+            Y_DEBUG_ABORT_UNLESS(scratchBytesUsed == 0);
         }
 
         return totalBytesProduced;
@@ -110,6 +121,7 @@ namespace NActors {
             if (Y_LIKELY(eventToWireTime) && front.EventReceivedTimestamp) {
                 eventToWireTime->push_back(timestamp - front.EventReceivedTimestamp);
             }
+            NumBytesInScratchBuffers -= front.ScratchBytesUsed;
             RefcountItems.pop_front();
         }
     }

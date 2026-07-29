@@ -38,6 +38,7 @@ struct TFixture: public TBaseFixture
             Runtime->GetActorSystem(0),
             TraceService.get(),
             PartitionDirectService.get(),
+            DiskDescription,
             VChunkConfig,
             DirectBlockGroup,
             &DirtyMap,

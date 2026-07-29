@@ -57,6 +57,8 @@ SRCS(
     profiler.h
     rdma_sync_actor.cpp
     slowpoke_actor.h
+    subscriber_liveness_checker.cpp
+    subscriber_liveness_checker.h
     subscription_manager.cpp
     subscription_manager.h
     types.cpp

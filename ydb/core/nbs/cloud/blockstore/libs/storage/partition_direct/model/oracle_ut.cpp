@@ -861,6 +861,73 @@ Y_UNIT_TEST_SUITE(TOracle)
             DirectBlockGroupHostCount,
             oracle.BuildHostStats(now).size());
     }
+
+    Y_UNIT_TEST(OnDDiskBrokenForcesHostOfflineAndRequestsReplacement)
+    {
+        auto config = MakeStorageConfig();
+
+        THostStateControllerMock hostStateController;
+        TOracle oracle(config, &hostStateController);
+        auto now = TInstant::Now();
+
+        // A broken device forces the host offline and requests a replacement.
+        oracle.OnDDiskBroken(0);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, hostStateController.States.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostState::Offline,
+            hostStateController.States[0]);
+        UNIT_ASSERT_VALUES_EQUAL(1, hostStateController.AddHostQueries.size());
+
+        // The broken health is reported through the host stats.
+        {
+            const auto stats = oracle.BuildHostStats(now);
+            UNIT_ASSERT_EQUAL(EHostHealth::Broken, stats[0].Health);
+            UNIT_ASSERT_EQUAL(EHostState::Offline, stats[0].State);
+        }
+
+        // Repeated notifications are idempotent: the replacement is requested
+        // only once, on the first transition.
+        oracle.OnDDiskBroken(0);
+        UNIT_ASSERT_VALUES_EQUAL(1, hostStateController.AddHostQueries.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostState::Offline,
+            hostStateController.States[0]);
+    }
+
+    Y_UNIT_TEST(ThinkNeverBringsBrokenHostBackOnline)
+    {
+        auto config = MakeStorageConfig();
+
+        THostStateControllerMock hostStateController;
+        TOracle oracle(config, &hostStateController);
+        auto now = TInstant::Now();
+
+        oracle.OnDDiskBroken(0);
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostState::Offline,
+            hostStateController.States[0]);
+
+        // Even a stream of successful requests must not resurrect a broken
+        // host: the Broken health is sticky and ignored by Think().
+        for (size_t i = 0; i < 10; ++i) {
+            now += TDuration::Seconds(1);
+            oracle.OnRequestStarted(0, EOperation::WriteToPBuffer, now);
+            oracle.OnRequestSucceeded(
+                0,
+                EOperation::WriteToPBuffer,
+                now,
+                TDuration());
+            oracle.Think(now);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            EHostState::Offline,
+            hostStateController.States[0]);
+
+        const auto stats = oracle.BuildHostStats(now);
+        UNIT_ASSERT_EQUAL(EHostHealth::Broken, stats[0].Health);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -466,10 +466,13 @@ namespace NActors {
             EvRam,
             EvTerminate,
             EvFreeItems,
+            EvCheckSubscriberLiveness,
         };
 
         struct TEvCheckCloseOnIdle : TEventLocal<TEvCheckCloseOnIdle, EvCheckCloseOnIdle> {};
         struct TEvCheckLostConnection : TEventLocal<TEvCheckLostConnection, EvCheckLostConnection> {};
+        struct TEvCheckSubscriberLiveness
+            : TEventLocal<TEvCheckSubscriberLiveness, EvCheckSubscriberLiveness> {};
 
         struct TEvRam : TEventLocal<TEvRam, EvRam> {
             const bool Batching;
@@ -563,6 +566,7 @@ namespace NActors {
         void ForwardDelayed();
         void Subscribe(STATEFN_SIG);
         void Unsubscribe(STATEFN_SIG);
+        void CheckSubscriberLiveness();
         void EnqueueForward(TAutoPtr<IEventHandle> ev);
         void UpdateSubscriber(const TActorId& actorId, ui64 cookie, ui32 activityIndex = Max<ui32>(),
             TString eventTypeName = {},
@@ -581,6 +585,7 @@ namespace NActors {
                 fFunc(TEvInterconnect::TEvConnectNode::EventType, Subscribe)
                 fFunc(TEvents::TEvSubscribe::EventType, Subscribe)
                 fFunc(TEvents::TEvUnsubscribe::EventType, Unsubscribe)
+                cFunc(TEvCheckSubscriberLiveness::EventType, CheckSubscriberLiveness)
                 cFunc(TEvFlush::EventType, HandleFlush)
                 hFunc(TEvPollerReady, Handle)
                 hFunc(TEvPollerRegisterResult, Handle)

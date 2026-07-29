@@ -35,4 +35,5 @@ RECURSE(
     vector_workload
     viewer
     streaming
+    tpcc
 )

@@ -19,6 +19,7 @@ class TSimplePortionsGroupInfo {
 private:
     using TCountByChannel = THashMap<ui16, i64>;
     TPositiveControlInteger BlobBytes;
+    TPositiveControlInteger IndexBlobBytes;
     TPositiveControlInteger RawBytes;
     TPositiveControlInteger Count;
     TPositiveControlInteger RecordsCount;
@@ -26,6 +27,7 @@ private:
 protected:
     void Add(const TSimplePortionsGroupInfo& item) {
         BlobBytes.Add(item.BlobBytes);
+        IndexBlobBytes.Add(item.IndexBlobBytes);
         RawBytes.Add(item.RawBytes);
         Count.Add(item.Count);
         RecordsCount.Add(item.RecordsCount);
@@ -44,6 +46,17 @@ public:
         return BlobBytes.Val();
     }
 
+    ui64 GetIndexBlobBytes() const {
+        return IndexBlobBytes.Val();
+    }
+
+    ui64 GetDataBlobBytes() const {
+        const ui64 blob = BlobBytes.Val();
+        const ui64 index = IndexBlobBytes.Val();
+        AFL_VERIFY(blob >= index)("blob", blob)("index", index);
+        return blob - index;
+    }
+
     ui64 GetRawBytes() const {
         return RawBytes.Val();
     }
@@ -51,6 +64,7 @@ public:
     NJson::TJsonValue SerializeToJson() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("blob_bytes", BlobBytes.Val());
+        result.InsertValue("index_blob_bytes", IndexBlobBytes.Val());
         result.InsertValue("raw_bytes", RawBytes.Val());
         result.InsertValue("count", Count.Val());
         result.InsertValue("records_count", RecordsCount.Val());
@@ -66,8 +80,8 @@ public:
     }
 
     TString DebugString() const {
-        return TStringBuilder() << "{blob_bytes=" << BlobBytes.Val() << ";raw_bytes=" << RawBytes.Val() << ";count=" << Count.Val()
-                                << ";records=" << RecordsCount.Val() << "}";
+        return TStringBuilder() << "{blob_bytes=" << BlobBytes.Val() << ";index_blob_bytes=" << IndexBlobBytes.Val()
+                                << ";raw_bytes=" << RawBytes.Val() << ";count=" << Count.Val() << ";records=" << RecordsCount.Val() << "}";
     }
 
     TSimplePortionsGroupInfo& operator+=(const TSimplePortionsGroupInfo& item) {
@@ -98,6 +112,7 @@ public:
     bool IsEmpty() const {
         if (!Count.Val()) {
             AFL_VERIFY(!BlobBytes.Val())("this", DebugString());
+            AFL_VERIFY(!IndexBlobBytes.Val())("this", DebugString());
             AFL_VERIFY(!RawBytes.Val())("this", DebugString());
             AFL_VERIFY(!RecordsCount.Val())("this", DebugString());
             return true;

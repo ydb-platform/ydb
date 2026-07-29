@@ -32,4 +32,18 @@ TString PrintHostIndex(THostIndex hostIndex)
     return result;
 }
 
+TString PrintNodeId(ui32 nodeId)
+{
+    TStringBuilder result;
+    result << "Node#" << nodeId;
+    return result;
+}
+
+TString PrintHostAndNode(THostIndex hostIndex, ui32 nodeId)
+{
+    TStringBuilder result;
+    result << PrintHostIndex(hostIndex) << "#" << nodeId;
+    return result;
+}
+
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

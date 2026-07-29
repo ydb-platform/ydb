@@ -15,6 +15,7 @@
 
 #include "actors.h"
 #include "kafka_describe_groups_actor.h"
+#include "kafka_metadata_service.h"
 #include "kafka_state_name_to_int.h"
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
@@ -28,8 +29,20 @@ NActors::IActor* CreateKafkaDescribeGroupsActor(const TContext::TPtr context, co
 
 void TKafkaDescribeGroupsActor::Bootstrap(const NActors::TActorContext& ctx) {
     if (NKikimr::AppData()->FeatureFlags.GetEnableKafkaNativeBalancing()) {
-        Kqp = std::make_unique<TKqpTxHelper>(Context->ResourceDatabasePath);
-        if (Context->ResourceDatabasePath == AppData(ctx)->TenantName) {
+        if (Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions())) {
+            YDB_LOG_DEBUG("EnableKafkaServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.",
+                {LogPrefix()});
+            SendFailResponse(EKafkaErrors::COORDINATOR_NOT_AVAILABLE,
+                "EnableKafkaServerlessTransactions feature flag changed; reconnect to rebind Kafka metadata tables.");
+            Die(ctx);
+            return;
+        }
+        if (!NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions()) {
+            Kqp = std::make_unique<TKqpTxHelper>(Context->ResourceDatabasePath);
+        } else {
+            Kqp = std::make_unique<TKqpTxHelper>(Context->DatabasePath);
+        }
+        if (!NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions() && Context->ResourceDatabasePath == AppData(ctx)->TenantName) {
             Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant());
             Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerMembersMetaInitManager::GetInstant());
         } else {
@@ -76,6 +89,12 @@ void TKafkaDescribeGroupsActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::T
 void TKafkaDescribeGroupsActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_DEBUG("Received query response from KQP DescribeGroups request",
         {LogPrefix()});
+    if (TryRequestConsumerMetadataTablesCreation(ev->Get()->Record.GetYdbStatus(), GetMetadataDatabasePath(), Context->ResourceDatabasePath, ctx)) {
+        SendFailResponse(EKafkaErrors::COORDINATOR_NOT_AVAILABLE, "Kafka metadata tables are not initialized yet. Please retry.");
+        Die(ctx);
+        return;
+    }
+
     if (auto error = GetErrorFromYdbResponse(ev)) {
         YDB_LOG_WARN(error,
             {LogPrefix()});
@@ -102,6 +121,10 @@ void TKafkaDescribeGroupsActor::Die(const TActorContext &ctx) {
         Kqp->CloseKqpSession(ctx);
     }
     TBase::Die(ctx);
+}
+
+TString TKafkaDescribeGroupsActor::GetMetadataDatabasePath() const {
+    return NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions() ? Context->DatabasePath : Context->ResourceDatabasePath;
 }
 
 void TKafkaDescribeGroupsActor::StartKqpSession(const TActorContext& ctx) {
@@ -214,13 +237,13 @@ TString TKafkaDescribeGroupsActor::GetYqlWithTableNames(const TString& templateS
     TString templateWithCorrectTableNames = std::regex_replace(
         templateStr.c_str(),
         std::regex("<consumer_members_table_name>"),
-        NKikimr::NGRpcProxy::V1::TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()
+        NKikimr::NGRpcProxy::V1::TKafkaConsumerMembersMetaInitManager::GetInstant()->FormPathToResourceTable(GetMetadataDatabasePath()).c_str()
     );
 
     templateWithCorrectTableNames = std::regex_replace(
         templateWithCorrectTableNames.c_str(),
         std::regex("<consumer_groups_table_name>"),
-        NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(Context->ResourceDatabasePath).c_str()
+        NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(GetMetadataDatabasePath()).c_str()
     );
 
     return templateWithCorrectTableNames;

@@ -29,7 +29,7 @@ def set_test_env(request):
     os.environ["YDB_TEST_ROW_DISPATCHER_REBALANCING_TIMEOUT_MS"] = rebalancing_timeout_ms
 
 
-def get_ydb_config(request):
+def get_ydb_config(request, enable_fq_connector=None):
     param = getattr(request, "param", {})
     enable_watermarks = param.get("enable_watermarks", True)
     enable_watermarks_advanced = param.get("enable_watermarks_advanced", True)
@@ -37,6 +37,8 @@ def get_ydb_config(request):
     enable_streaming_queries = param.get("enable_streaming_queries", True)
     enable_streaming_partition_balancing = param.get("use_partition_balancing", True)
     enable_user_attributes_in_topic_query = param.get("enable_user_attributes_in_topic_query", True)
+    enable_dq_source_stream_lookup_join = param.get("enable_dq_source_stream_lookup_join", True)
+    enable_kqp_constraints_transformer = param.get("kqp_constraints_transformer", True)
 
     extra_feature_flags = {
         "enable_external_data_sources",
@@ -55,6 +57,8 @@ def get_ydb_config(request):
         extra_feature_flags.add("enable_user_attributes_in_topic_query")
     else:
         disabled_feature_flags.append("enable_user_attributes_in_topic_query")
+    if not enable_kqp_constraints_transformer:
+        disabled_feature_flags.append("enable_kqp_constraints_transformer")
 
     config = KikimrConfigGenerator(
         erasure=Erasure.MIRROR_3_DC,
@@ -72,6 +76,7 @@ def get_ydb_config(request):
             "enable_streaming_partition_balancing": enable_streaming_partition_balancing,
             "enable_compile_cache_warmup": False,
             "enable_channel_memory_tracking": False,  # Remove after fix https://github.com/ydb-platform/ydb/issues/46891
+            "enable_dq_source_stream_lookup_join": enable_dq_source_stream_lookup_join,
         },
         replication_config={
             "iam_service_control": {
@@ -85,6 +90,17 @@ def get_ydb_config(request):
         default_clusteradmin="root@builtin",
         use_in_memory_pdisks=False,
     )
+
+    if enable_fq_connector:
+        config.yaml_config["query_service_config"]["generic"] = {
+            "connector": {
+                "use_ssl": False,
+                "endpoint": {
+                    "host": enable_fq_connector.connector.grpc_host,
+                    "port": enable_fq_connector.connector.grpc_port,
+                },
+            },
+        }
 
     config.yaml_config["log_config"]["default_level"] = 8
     if "auth_config" not in config.yaml_config:

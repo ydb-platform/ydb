@@ -1015,7 +1015,8 @@ TReadRangeHint TBlocksDirtyMap::MakeReadRangeHint(
         lsn,
         TBlockRange64::WithLength(offsetBlocks, range.Size()),
         range,
-        lsn == 0 ? TRangeLock(this, range, mask) : TRangeLock(this, lsn));
+        lsn == 0 ? TRangeLock(weak_from_this(), range, mask)
+                 : TRangeLock(weak_from_this(), lsn));
 }
 
 bool TBlocksDirtyMap::TInfoEraseBelated::operator<(

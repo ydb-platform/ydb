@@ -376,7 +376,7 @@ TVolumeConfigPtr TFastPathService::GetVolumeConfig() const
     return VolumeConfig;
 }
 
-NWilson::TSpan TFastPathService::CreteRootSpan(TStringBuf name)
+NWilson::TSpan TFastPathService::CreateRootSpan(TStringBuf name)
 {
     auto traceId = NWilson::TTraceId::NewTraceIdThrottled(
         NKikimr::TWilsonNbs::NbsBasic,   // verbosity

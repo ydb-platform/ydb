@@ -14,7 +14,7 @@ The first three components form the base version of the release, for example `25
 
 Thus, major releases are usually identified by two components, for example `25.1`. Minor releases are identified by three components, for example `25.1.4`. The full version includes the patch number and, if necessary, the release type.
 
-The list of available versions can be obtained on the [download page](../../downloads/index.md). The release policy of {{ ydb-short-name }} is described in more detail in the article [Release Management](../../contributor/manage-releases.md) in the developer documentation section {{ ydb-short-name }}. The release branch scheme is in the [{#T}](../../contributor/manage-releases.md#cli) section.
+The list of available versions can be obtained on the [download page](../../downloads/index.md). The release policy of {{ ydb-short-name }} is described in more detail in the article [Release Management](../../contributor/manage-releases.md) in the developer documentation section {{ ydb-short-name }}. The release branch scheme is in the [{#T}](../../contributor/manage-releases.md#release_branch_scheme) section.
 
 ## Version compatibility {#version-compatability}
 

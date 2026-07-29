@@ -4,6 +4,7 @@
 #include "client.h"
 #include "config.h"
 #include "private.h"
+#include "peer_discovery.h"
 #include "peer_priority_provider.h"
 #include "viable_peer_registry.h"
 

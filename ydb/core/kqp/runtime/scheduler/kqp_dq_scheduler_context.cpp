@@ -1,5 +1,7 @@
 #include "kqp_dq_scheduler_context.h"
 
+#include "tree/dynamic.h"
+
 namespace NKikimr::NKqp::NScheduler {
 
 namespace {

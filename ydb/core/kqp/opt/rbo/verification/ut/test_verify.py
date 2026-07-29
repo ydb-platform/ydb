@@ -1328,6 +1328,158 @@ def right_join(predicate):
     )
 
 
+def direct_unique_rhs_join_snapshot(
+    kind,
+    *,
+    unique_key=("k",),
+    left_key_type="Int64",
+    right_key_type="Int64",
+    right_key_nullable=False,
+    right_value_nullable=True,
+    extra_equality=False,
+    right_project=False,
+    residual=None,
+    scan_predicate=False,
+    pushed_limit=False,
+    staged=False,
+):
+    right_scan_id = "b_scan" if right_project else "b"
+    right_scan = {
+        "id": right_scan_id,
+        "op": "scan",
+        "table": "B",
+        "columns": [
+            {"source": "k", "output": f"{right_scan_id}.k"},
+            {"source": "x", "output": f"{right_scan_id}.x"},
+        ],
+        "predicate": (
+            {"kind": "literal", "type": "Bool", "value": True}
+            if scan_predicate
+            else None
+        ),
+        "pushed_limit": (
+            {"kind": "literal", "type": "Uint64", "value": 1}
+            if pushed_limit
+            else None
+        ),
+    }
+    nodes = [
+        {
+            "id": "a",
+            "op": "scan",
+            "table": "A",
+            "columns": [
+                {"source": "k", "output": "a.k"},
+                {"source": "x", "output": "a.x"},
+            ],
+            "pushed_limit": None,
+        },
+        right_scan,
+    ]
+    if right_project:
+        nodes.append(
+            {
+                "id": "b",
+                "op": "project",
+                "input": "b_scan",
+                "ordered": False,
+                "columns": [
+                    {
+                        "output": "b.k",
+                        "expression": {
+                            "kind": "column",
+                            "column": "b_scan.k",
+                        },
+                    },
+                    {
+                        "output": "b.x",
+                        "expression": {
+                            "kind": "column",
+                            "column": "b_scan.x",
+                        },
+                    },
+                ],
+            }
+        )
+    keys = [{"left": "a.k", "right": "b.k"}]
+    if extra_equality:
+        keys.append({"left": "a.x", "right": "b.x"})
+    nodes.append(
+        {
+            "id": "join",
+            "op": "join",
+            "left": "a",
+            "right": "b",
+            "kind": kind,
+            "keys": keys,
+            "predicate": (
+                {"kind": "literal", "type": "Bool", "value": True}
+                if residual is None
+                else residual
+            ),
+        }
+    )
+    schema_value = {
+        "tables": [
+            {
+                "name": "A",
+                "columns": [
+                    {"name": "k", "type": left_key_type, "nullable": True},
+                    {"name": "x", "type": "Int64", "nullable": False},
+                ],
+                "unique_keys": [],
+            },
+            {
+                "name": "B",
+                "columns": [
+                    {
+                        "name": "k",
+                        "type": right_key_type,
+                        "nullable": right_key_nullable,
+                    },
+                    {
+                        "name": "x",
+                        "type": "Int64",
+                        "nullable": right_value_nullable,
+                    },
+                ],
+                "unique_keys": (
+                    [
+                        {
+                            "columns": list(unique_key),
+                            "nulls_distinct": False,
+                        }
+                    ]
+                    if unique_key
+                    else []
+                ),
+            },
+        ]
+    }
+    stages = None
+    edges = None
+    if staged or scan_predicate or pushed_limit:
+        stages = [
+            _stage("left", ["a"], [], ["a"], "column"),
+            _stage("right", [right_scan_id], [], [right_scan_id], "column"),
+            _stage("join_stage", ["join"], ["a", "b"], ["join"]),
+        ]
+        edges = [
+            _edge("left_edge", "left", "join_stage", 0, 0, "map"),
+            _edge("right_edge", "right", "join_stage", 0, 1, "broadcast"),
+        ]
+    return parse_snapshot(
+        _snapshot_with_stage_graph(
+            schema_value,
+            nodes,
+            "join",
+            ["a.k", "a.x", "b.k", "b.x"],
+            stages,
+            edges,
+        )
+    )
+
+
 def union_snapshot(duplicate):
     if duplicate:
         nodes = [
@@ -2832,6 +2984,484 @@ def _evaluate_ground_term(term, constants, function_value=None):
             ),
         )
     raise AssertionError(f"non-ground SMT operation {term.operation!r}")
+
+
+class DirectUniqueRhsJoinTest(unittest.TestCase):
+    def test_runtime_presence_implication_language_is_explicit(self):
+        required = smt.symbol("base_present", smt.BOOL)
+        left_route = smt.symbol("left_route", smt.BOOL)
+        right_route = smt.symbol("right_route", smt.BOOL)
+        self.assertTrue(
+            relation_model._syntactically_implies(required, required)
+        )
+        self.assertTrue(
+            relation_model._syntactically_implies(
+                smt.and_(required, left_route),
+                required,
+            )
+        )
+        self.assertTrue(
+            relation_model._syntactically_implies(
+                smt.or_(
+                    smt.and_(required, left_route),
+                    smt.and_(right_route, required),
+                ),
+                required,
+            )
+        )
+        self.assertTrue(
+            relation_model._syntactically_implies(smt.FALSE, required)
+        )
+        self.assertFalse(
+            relation_model._syntactically_implies(
+                smt.or_(required, left_route),
+                required,
+            )
+        )
+
+    def test_compact_inner_and_left_match_independent_exhaustive_reference(self):
+        left_states = (
+            None,
+            (None, -1),
+            (0, -1),
+            (1, 2),
+        )
+        right_states = (
+            None,
+            (0, None),
+            (0, -1),
+            (1, 2),
+        )
+        for kind, extra_equality in product(
+            ("inner", "left"),
+            (False, True),
+        ):
+            snapshot = direct_unique_rhs_join_snapshot(
+                kind,
+                extra_equality=extra_equality,
+            )
+            script = smt.Script()
+            database = Database(snapshot, 2, script)
+            relation = RelationEvaluator(
+                snapshot,
+                database,
+                ScalarEncoder(script),
+            ).root().certain()
+            self.assertEqual(len(relation.rows), 2)
+
+            for left_rows in product(left_states, repeat=2):
+                for right_rows in product(right_states, repeat=2):
+                    present_right_keys = [
+                        row[0] for row in right_rows if row is not None
+                    ]
+                    if len(present_right_keys) != len(set(present_right_keys)):
+                        continue
+                    expected = self._reference_bag(
+                        kind,
+                        left_rows,
+                        right_rows,
+                        extra_equality,
+                    )
+                    with self.subTest(
+                        kind=kind,
+                        extra_equality=extra_equality,
+                        left=left_rows,
+                        right=right_rows,
+                    ):
+                        self.assertEqual(
+                            self._symbolic_bag(
+                                relation,
+                                self._constants(
+                                    database,
+                                    left_rows,
+                                    right_rows,
+                                ),
+                            ),
+                            expected,
+                        )
+
+    def test_cross_type_coercion_can_collapse_distinct_unique_keys(self):
+        snapshot = direct_unique_rhs_join_snapshot(
+            "inner",
+            left_key_type="Decimal(35,34)",
+        )
+        script = smt.Script()
+        database = Database(snapshot, 2, script)
+        relation = RelationEvaluator(
+            snapshot,
+            database,
+            ScalarEncoder(script),
+        ).root().certain()
+        left_rows = ((decimal.INF, -1), None)
+        right_rows = ((10, -1), (11, -1))
+        self.assertEqual(len(relation.rows), 4)
+        self.assertEqual(
+            self._symbolic_bag(
+                relation,
+                self._constants(database, left_rows, right_rows),
+            ),
+            Counter(
+                {
+                    (decimal.INF, -1, 10, -1): 1,
+                    (decimal.INF, -1, 11, -1): 1,
+                }
+            ),
+        )
+
+    def test_gate_accepts_extra_key_and_falls_back_for_near_misses(self):
+        eligible = direct_unique_rhs_join_snapshot(
+            "inner",
+            extra_equality=True,
+        )
+        self.assertEqual(len(self._evaluate(eligible).rows), 2)
+        composite = direct_unique_rhs_join_snapshot(
+            "inner",
+            unique_key=("k", "x"),
+            right_value_nullable=False,
+            extra_equality=True,
+        )
+        self.assertEqual(len(self._evaluate(composite).rows), 2)
+
+        near_misses = {
+            "nonunique": direct_unique_rhs_join_snapshot(
+                "inner",
+                unique_key=(),
+            ),
+            "subset_key": direct_unique_rhs_join_snapshot(
+                "inner",
+                unique_key=("k", "x"),
+                right_value_nullable=False,
+            ),
+            "right_project": direct_unique_rhs_join_snapshot(
+                "inner",
+                right_project=True,
+            ),
+            "residual_predicate": direct_unique_rhs_join_snapshot(
+                "inner",
+                residual={"kind": "literal", "type": "Bool", "value": False},
+            ),
+            "scan_predicate": direct_unique_rhs_join_snapshot(
+                "inner",
+                scan_predicate=True,
+            ),
+            "scan_limit": direct_unique_rhs_join_snapshot(
+                "inner",
+                pushed_limit=True,
+            ),
+            "nullable_unique_key": direct_unique_rhs_join_snapshot(
+                "inner",
+                right_key_nullable=True,
+            ),
+            "coerced_unique_key": direct_unique_rhs_join_snapshot(
+                "inner",
+                left_key_type="Decimal(35,34)",
+            ),
+        }
+        for name, snapshot in near_misses.items():
+            with self.subTest(name=name):
+                self.assertEqual(
+                    len(
+                        self._evaluate(
+                            snapshot,
+                            defer_pushed_limits=name == "scan_limit",
+                        ).rows
+                    ),
+                    4,
+                )
+
+    def test_runtime_provenance_near_misses_fall_back(self):
+        snapshot = direct_unique_rhs_join_snapshot("inner")
+        mutations = {
+            "corrupt_occurrence": lambda rows: (
+                replace(
+                    rows[0],
+                    occurrence=relation_model.Occurrence("table", "A", 0),
+                ),
+                rows[1],
+            ),
+            "duplicate_occurrence": lambda rows: (
+                rows[0],
+                replace(rows[1], occurrence=rows[0].occurrence),
+            ),
+            "out_of_range_occurrence": lambda rows: (
+                replace(
+                    rows[0],
+                    occurrence=relation_model.Occurrence("table", "B", 2),
+                ),
+                rows[1],
+            ),
+            "corrupt_payload": lambda rows: (
+                replace(
+                    rows[0],
+                    values=dict(rows[0].values)
+                    | {
+                        "b.x": replace(
+                            rows[0].values["b.x"],
+                            value=smt.int_value(99),
+                        )
+                    },
+                ),
+                rows[1],
+            ),
+            "payload_metadata": lambda rows: (
+                replace(
+                    rows[0],
+                    values=dict(rows[0].values)
+                    | {
+                        "b.x": replace(
+                            rows[0].values["b.x"],
+                            average_metadata=IntegralAverageState(
+                                smt.ONE,
+                                smt.ZERO,
+                                smt.ZERO,
+                                1,
+                            ),
+                        )
+                    },
+                ),
+                rows[1],
+            ),
+            "unguarded_presence": lambda rows: (
+                replace(
+                    rows[0],
+                    present=smt.symbol("unrelated_presence", smt.BOOL),
+                ),
+                rows[1],
+            ),
+        }
+        for name, mutate in mutations.items():
+            with self.subTest(name=name):
+                script = smt.Script()
+                database = Database(snapshot, 2, script)
+                scalar = ScalarEncoder(script)
+                original = RelationEvaluator(
+                    snapshot,
+                    database,
+                    scalar,
+                ).node("b").certain()
+                overridden = replace(
+                    original,
+                    rows=tuple(mutate(original.rows)),
+                )
+                relation = RelationEvaluator(
+                    snapshot,
+                    database,
+                    scalar,
+                    node_overrides={"b": relation_model.single(overridden)},
+                ).root().certain()
+                self.assertEqual(len(relation.rows), 4)
+
+    def test_syntactically_absent_rhs_row_payload_is_not_inspected(self):
+        snapshot = direct_unique_rhs_join_snapshot("inner")
+        script = smt.Script()
+        database = Database(snapshot, 2, script)
+        scalar = ScalarEncoder(script)
+        original = RelationEvaluator(
+            snapshot,
+            database,
+            scalar,
+        ).node("b").certain()
+        right = replace(
+            original,
+            rows=(
+                replace(original.rows[0], present=smt.FALSE, values={}),
+                original.rows[1],
+            ),
+        )
+        relation = RelationEvaluator(
+            snapshot,
+            database,
+            scalar,
+            node_overrides={"b": relation_model.single(right)},
+        ).root().certain()
+        self.assertEqual(len(relation.rows), 2)
+
+    def test_runtime_schema_near_misses_fall_back(self):
+        snapshot = direct_unique_rhs_join_snapshot("inner")
+        script = smt.Script()
+        database = Database(snapshot, 2, script)
+        scalar = ScalarEncoder(script)
+        original = RelationEvaluator(
+            snapshot,
+            database,
+            scalar,
+        ).node("b").certain()
+        schemas = {
+            "reordered": tuple(reversed(original.columns)),
+            "missing": original.columns[:-1],
+            "extra": original.columns + (Column("b.extra", "Int64", False),),
+        }
+        for name, columns in schemas.items():
+            with self.subTest(name=name):
+                relation = RelationEvaluator(
+                    snapshot,
+                    database,
+                    scalar,
+                    node_overrides={
+                        "b": relation_model.single(
+                            replace(original, columns=columns)
+                        )
+                    },
+                ).root().certain()
+                self.assertEqual(len(relation.rows), 4)
+
+    def test_compact_provenance_and_partition_facts_are_left_local(self):
+        snapshot = direct_unique_rhs_join_snapshot("left")
+        script = smt.Script()
+        database = Database(snapshot, 2, script)
+        scalar = ScalarEncoder(script)
+        evaluator = RelationEvaluator(snapshot, database, scalar)
+        left = evaluator.node("a").certain()
+        right = evaluator.node("b").certain()
+        left_route = script.fresh_constant("left_route", smt.BOOL)
+        right_route = script.fresh_constant("right_route", smt.BOOL)
+        left_fact = relation_model.PartitionFact(left_route, True)
+        right_fact = relation_model.PartitionFact(right_route, True)
+        left = replace(
+            left,
+            rows=tuple(
+                replace(
+                    row,
+                    present=smt.and_(row.present, left_route),
+                    partition_facts=frozenset({left_fact}),
+                )
+                for row in left.rows
+            ),
+        )
+        right = replace(
+            right,
+            rows=tuple(
+                replace(
+                    row,
+                    present=smt.and_(row.present, right_route),
+                    partition_facts=frozenset({right_fact}),
+                )
+                for row in right.rows
+            ),
+        )
+        relation = RelationEvaluator(
+            snapshot,
+            database,
+            scalar,
+            node_overrides={
+                "a": relation_model.single(left),
+                "b": relation_model.single(right),
+            },
+        ).root().certain()
+        self.assertEqual(len(relation.rows), 2)
+        for index, row in enumerate(relation.rows):
+            self.assertEqual(row.partition_facts, frozenset({left_fact}))
+            self.assertEqual(
+                row.occurrence,
+                relation_model.Occurrence(
+                    "join_left_unique_rhs",
+                    "join",
+                    inputs=(left.rows[index].occurrence,),
+                ),
+            )
+
+    def test_matching_pair_audit_remains_and_compaction_avoids_row_cap(self):
+        compact = direct_unique_rhs_join_snapshot("left")
+        generic = direct_unique_rhs_join_snapshot("left", unique_key=())
+
+        with mock.patch.object(relation_model, "MAX_RELATION_ROWS", 2):
+            self.assertEqual(len(self._evaluate(compact).rows), 2)
+            with self.assertRaisesRegex(
+                RelationError,
+                "join output requires 6 candidate rows.*2 row construction",
+            ):
+                self._evaluate(generic)
+
+        with mock.patch.object(relation_model, "MAX_RELATION_ROW_PAIRS", 3):
+            with self.assertRaisesRegex(
+                RelationError,
+                "join matching requires 4 candidate-row pairs.*3 pair construction",
+            ):
+                self._evaluate(compact)
+
+    def test_stage_broadcast_preserves_compact_unique_rhs_equivalence(self):
+        logical = direct_unique_rhs_join_snapshot("left")
+        staged = direct_unique_rhs_join_snapshot("left", staged=True)
+        self.assertEqual(
+            stage_task_counts(staged),
+            {"left": 2, "right": 2, "join_stage": 2},
+        )
+        with mock.patch.object(relation_model, "MAX_RELATION_ROWS", 1):
+            self.assertFalse(
+                _restricted_domain_has_model(
+                    build_problem(logical, staged, 1).script
+                )
+            )
+
+    @staticmethod
+    def _evaluate(snapshot, *, defer_pushed_limits=False):
+        script = smt.Script()
+        return RelationEvaluator(
+            snapshot,
+            Database(snapshot, 2, script),
+            ScalarEncoder(script),
+            defer_pushed_limits=defer_pushed_limits,
+        ).root().certain()
+
+    @staticmethod
+    def _constants(database, left_rows, right_rows):
+        result = {}
+        for table, rows in (("A", left_rows), ("B", right_rows)):
+            for witness, state in zip(database.witness[table], rows):
+                result[witness.present.atom] = state is not None
+                key, value = (0, 0) if state is None else state
+                for name, concrete in (("k", key), ("x", value)):
+                    cell = witness.cells[name]
+                    if cell.is_null.operation == "symbol":
+                        result[cell.is_null.atom] = concrete is None
+                    result[cell.value.atom] = 0 if concrete is None else concrete
+        return result
+
+    @staticmethod
+    def _symbolic_bag(relation, constants):
+        result = Counter()
+        for row in relation.rows:
+            if not _evaluate_ground_term(row.present, constants):
+                continue
+            values = []
+            for column in relation.columns:
+                value = row.values[column.name]
+                values.append(
+                    None
+                    if _evaluate_ground_term(value.is_null, constants)
+                    else _evaluate_ground_term(value.value, constants)
+                )
+            result[tuple(values)] += 1
+        return result
+
+    @staticmethod
+    def _reference_bag(kind, left_rows, right_rows, extra_equality):
+        result = Counter()
+        for left in left_rows:
+            if left is None:
+                continue
+            matches = [
+                right
+                for right in right_rows
+                if (
+                    right is not None
+                    and left[0] is not None
+                    and left[0] == right[0]
+                    and (
+                        not extra_equality
+                        or (
+                            right[1] is not None
+                            and left[1] == right[1]
+                        )
+                    )
+                )
+            ]
+            if matches:
+                right = matches[0]
+                result[(left[0], left[1], right[0], right[1])] += 1
+            elif kind == "left":
+                result[(left[0], left[1], None, None)] += 1
+        return result
 
 
 class ConstructionAuditBoundTest(unittest.TestCase):

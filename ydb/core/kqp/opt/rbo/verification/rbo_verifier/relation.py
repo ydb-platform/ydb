@@ -41,7 +41,7 @@ from .scalar import (
     average_metadata_terms,
 )
 from .scalar import Value, date_domain, integer_domain, smt_sort
-from .types import DATE, DOUBLE, family, is_decimal_type, is_ordered_type
+from .types import BOOL, DATE, DOUBLE, family, is_decimal_type, is_ordered_type
 
 
 @dataclass(frozen=True, slots=True)
@@ -354,6 +354,24 @@ def _live_row_indices(rows: tuple[Row, ...]) -> tuple[int, ...]:
 
 def _live_row_count(relation: Relation) -> int:
     return len(_live_row_indices(relation.rows))
+
+
+def _syntactically_implies(term: smt.Term, required: smt.Term) -> bool:
+    """Recognize the small guard language used by scan/task routing."""
+
+    if term == smt.FALSE or term == required:
+        return True
+    if term.operation == "and":
+        return any(
+            _syntactically_implies(argument, required)
+            for argument in term.arguments
+        )
+    if term.operation == "or":
+        return all(
+            _syntactically_implies(argument, required)
+            for argument in term.arguments
+        )
+    return False
 
 
 class Database:
@@ -1821,6 +1839,24 @@ class Evaluator:
     def _join(self, node: Join, left: Relation, right: Relation) -> Relation:
         matching_rows = len(left.rows) * len(right.rows)
         _require_relation_row_pairs(matching_rows, "join matching")
+        if self._has_direct_unique_rhs(node, right):
+            _require_relation_rows(len(left.rows), "join output")
+            # Select the unique RHS independently of the task-local left-row
+            # presence guard. Values of an absent output row are unobservable,
+            # and this keeps routed copies of one logical occurrence identical
+            # so StageGraph gather can coalesce them.
+            return self._compact_direct_unique_rhs_join(
+                node,
+                left,
+                right,
+                self._join_matches(
+                    node,
+                    left,
+                    right,
+                    include_left_presence=False,
+                ),
+            )
+
         emit_matches = node.kind not in {
             "left_semi",
             "right_semi",
@@ -1847,29 +1883,7 @@ class Evaluator:
         output_rows += len(right.rows) if emit_right else 0
         _require_relation_rows(output_rows, "join output")
 
-        matches: list[list[smt.Term]] = []
-        for left_row in left.rows:
-            match_row: list[smt.Term] = []
-            for right_row in right.rows:
-                values = dict(left_row.values) | dict(right_row.values)
-                key_matches = tuple(
-                    self.scalar.is_true(
-                        self.scalar.equal(
-                            left_row.values[key.left],
-                            right_row.values[key.right],
-                        )
-                    )
-                    for key in node.keys
-                )
-                match_row.append(
-                    smt.and_(
-                        left_row.present,
-                        right_row.present,
-                        *key_matches,
-                        self.scalar.is_true(self.scalar.evaluate(node.predicate, values)),
-                    )
-                )
-            matches.append(match_row)
+        matches = self._join_matches(node, left, right)
 
         rows: list[Row] = []
         if emit_matches:
@@ -1948,6 +1962,159 @@ class Evaluator:
                 )
 
         # Inner/cross joins with an empty side simply have no candidate rows.
+        return Relation(self._columns(node.id), tuple(rows))
+
+    def _join_matches(
+        self,
+        node: Join,
+        left: Relation,
+        right: Relation,
+        *,
+        include_left_presence: bool = True,
+    ) -> list[list[smt.Term]]:
+        matches: list[list[smt.Term]] = []
+        for left_row in left.rows:
+            match_row: list[smt.Term] = []
+            for right_row in right.rows:
+                if right_row.present == smt.FALSE:
+                    match_row.append(smt.FALSE)
+                    continue
+                values = dict(left_row.values) | dict(right_row.values)
+                key_matches = tuple(
+                    self.scalar.is_true(
+                        self.scalar.equal(
+                            left_row.values[key.left],
+                            right_row.values[key.right],
+                        )
+                    )
+                    for key in node.keys
+                )
+                match_row.append(
+                    smt.and_(
+                        *(
+                            (left_row.present,)
+                            if include_left_presence
+                            else ()
+                        ),
+                        right_row.present,
+                        *key_matches,
+                        self.scalar.is_true(self.scalar.evaluate(node.predicate, values)),
+                    )
+                )
+            matches.append(match_row)
+        return matches
+
+    def _has_direct_unique_rhs(self, node: Join, right: Relation) -> bool:
+        if node.kind not in {"inner", "left"}:
+            return False
+        right_node = self.nodes[node.right]
+        if not isinstance(right_node, Scan):
+            return False
+        if right_node.predicate is not None or right_node.pushed_limit is not None:
+            return False
+        if not (
+            node.predicate.kind == "literal"
+            and node.predicate.result_type == BOOL
+            and node.predicate.nullable is False
+            and node.predicate.value is True
+        ):
+            return False
+        expected_columns = tuple(self.schemas[right_node.id].values())
+        if right.columns != expected_columns:
+            return False
+
+        table = self.snapshot.table_map()[right_node.table]
+        table_columns = table.column_map()
+        left_schema = self.schemas[node.left]
+        right_schema = self.schemas[node.right]
+        # Catalog uniqueness is stated on source values. Requiring the same
+        # scalar type keeps comparison coercions from collapsing distinct keys.
+        identity_compared_sources = {
+            mapping.source
+            for mapping in right_node.columns
+            for join_key in node.keys
+            if (
+                mapping.output == join_key.right
+                and left_schema[join_key.left].type
+                == right_schema[join_key.right].type
+            )
+        }
+        if not any(
+            set(key.columns) <= identity_compared_sources
+            and all(not table_columns[column].nullable for column in key.columns)
+            for key in table.unique_keys
+        ):
+            return False
+
+        source = self.database.relations[right_node.table]
+        expected_outputs = {column.name for column in expected_columns}
+        seen_slots: set[int] = set()
+        for row in right.rows:
+            if row.present == smt.FALSE:
+                continue
+            if set(row.values) != expected_outputs:
+                return False
+            occurrence = row.occurrence
+            if not (
+                occurrence is not None
+                and occurrence.operation == "table"
+                and occurrence.node == right_node.table
+                and occurrence.ordinal is not None
+                and not occurrence.inputs
+            ):
+                return False
+            slot = occurrence.ordinal
+            if slot in seen_slots or not 0 <= slot < len(source.rows):
+                return False
+            seen_slots.add(slot)
+            source_row = source.rows[slot]
+            if not _syntactically_implies(row.present, source_row.present):
+                return False
+            for mapping in right_node.columns:
+                if (
+                    row.values.get(mapping.output)
+                    != source_row.values[mapping.source]
+                ):
+                    return False
+        return True
+
+    def _compact_direct_unique_rhs_join(
+        self,
+        node: Join,
+        left: Relation,
+        right: Relation,
+        matches: list[list[smt.Term]],
+    ) -> Relation:
+        rows: list[Row] = []
+        for left_index, left_row in enumerate(left.rows):
+            matched = smt.and_(
+                left_row.present,
+                smt.or_(*matches[left_index]),
+            )
+            selected: dict[str, Value] = {}
+            for column in right.columns:
+                value = self.scalar.null(column.type)
+                for right_index, right_row in enumerate(right.rows):
+                    if matches[left_index][right_index] == smt.FALSE:
+                        continue
+                    value = self._select_value(
+                        matches[left_index][right_index],
+                        right_row.values[column.name],
+                        value,
+                    )
+                selected[column.name] = value
+            rows.append(
+                Row(
+                    matched if node.kind == "inner" else left_row.present,
+                    dict(left_row.values) | selected,
+                    _derived_occurrence(
+                        f"join_{node.kind}_unique_rhs",
+                        node.id,
+                        left_row.occurrence,
+                    ),
+                    left_row.partition_facts,
+                )
+            )
         return Relation(self._columns(node.id), tuple(rows))
 
     def _columns(self, node_id: str) -> tuple[Column, ...]:

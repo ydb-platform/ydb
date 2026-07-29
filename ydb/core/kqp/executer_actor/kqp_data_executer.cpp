@@ -1428,7 +1428,7 @@ private:
             SelfId(),
             TxId,
             std::move(PendingPqTopicResolveSources),
-            THashMap<TString, TString>(TasksGraph.GetMeta().SecureParams),
+            THashMap<TString, TString>(TasksGraph.GetMeta().SecureParams.begin(), TasksGraph.GetMeta().SecureParams.end()),
             FederatedQuerySetup->PqGatewayFactory,
             std::move(mutableGraph));
 

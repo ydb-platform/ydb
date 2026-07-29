@@ -445,15 +445,6 @@ namespace NKikimr {
             SendReply(ctx, std::move(res), ev, BS_VDISK_PUT);
         }
 
-        void ReplyError(NKikimrProto::EReplyStatus status, const TString& errorReason, TEvBlobStorage::TEvVMultiPut::TPtr &ev,
-                        const TActorContext &ctx, TInstant now, const TBatchedVec<NKikimrProto::EReplyStatus> &statuses,
-                        const TBatchedVec<TString> &errorReasons) {
-            using namespace NErrBuilder;
-            std::unique_ptr<IEventBase> res(ErroneousResult(VCtx, status, errorReason, ev, now, SkeletonFrontIDPtr,
-                    SelfVDiskId, statuses, errorReasons, Db->GetVDiskIncarnationGuid(), GInfo));
-            SendReply(ctx, std::move(res), ev, BS_VDISK_PUT);
-        }
-
         void Handle(TEvBlobStorage::TEvVMultiPut::TPtr &ev, const TActorContext &ctx) {
             if (!CheckIfWriteAllowed(ev, ctx)) {
                 return;
@@ -754,21 +745,18 @@ namespace NKikimr {
             }
 
             TBatchedVec<NKikimrProto::EReplyStatus> statuses;
-            TBatchedVec<TString> errorReasons;
             for (auto &info : putsInfo) {
                 if (info.HullStatus.Postponed) {
                     statuses.push_back(NKikimrProto::OK);
-                    errorReasons.push_back(TString());
                 } else {
                     statuses.push_back(info.HullStatus.Status);
-                    errorReasons.push_back(info.HullStatus.ErrorReason);
                 }
             }
             if (!lsnCount && !hasPostponed) {
                 YDB_LOG_INFO_CTX_COMP(ctx, BS_VDISK_PUT, "TEvVMultiPut: all items have errors",
                     {"VDiskLogPrefix", Db->VCtx->VDiskLogPrefix},
                     {"marker", "BSVS09"});
-                ReplyError(NKikimrProto::OK, TString(), ev, ctx, now, statuses, errorReasons);
+                ReplyError(NKikimrProto::OK, TString(), ev, ctx, now, statuses);
                 return;
             }
 
@@ -778,7 +766,7 @@ namespace NKikimr {
             std::unique_ptr<NPDisk::TEvMultiLog> evLogs = std::make_unique<NPDisk::TEvMultiLog>();
             ui64 cookie = ev->Cookie;
 
-            IActor* vMultiPutActor = CreateSkeletonVMultiPutActor(SelfId(), statuses, errorReasons, oosStatus, ev,
+            IActor* vMultiPutActor = CreateSkeletonVMultiPutActor(SelfId(), statuses, oosStatus, ev,
                     SkeletonFrontIDPtr, IFaceMonGroup->MultiPutResMsgsPtr(), Db->GetVDiskIncarnationGuid(), VCtx);
             NActors::TActorId vMultiPutActorId = ctx.Register(vMultiPutActor);
             ActiveActors.Insert(vMultiPutActorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);

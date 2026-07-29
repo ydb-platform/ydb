@@ -492,24 +492,23 @@ Y_UNIT_TEST(VDiskAcceptsAndRejectsVMultiPutChecksums) {
         bool HasChecksumType;
         NKikimrBlobStorage::TChecksumType ChecksumType;
         NKikimrProto::EReplyStatus ExpectedStatus;
-        const char *ExpectedErrorReason;
     };
 
     const TVector<TChecksumCase> cases = {
         {"NoChecksumFields", false, 0, false, NKikimrBlobStorage::TChecksumType::NoChecksum,
-            NKikimrProto::OK, ""},
+            NKikimrProto::OK},
         {"NoChecksumTypeOnly", false, 0, true, NKikimrBlobStorage::TChecksumType::NoChecksum,
-            NKikimrProto::OK, ""},
+            NKikimrProto::OK},
         {"ValidXxh3Checksum", true, 0, true, NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob,
-            NKikimrProto::OK, ""},
+            NKikimrProto::OK},
         {"LegacyValidXxh3ChecksumWithoutType", true, 0, false, NKikimrBlobStorage::TChecksumType::NoChecksum,
-            NKikimrProto::OK, ""},
+            NKikimrProto::OK},
         {"InvalidXxh3Checksum", true, 1, true, NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob,
-            NKikimrProto::ERROR, "buffer checksum mismatch"},
+            NKikimrProto::ERROR},
         {"ChecksumTypeWithoutChecksum", false, 0, true, NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob,
-            NKikimrProto::ERROR, "buffer checksum mismatch"},
+            NKikimrProto::ERROR},
         {"ChecksumWithNoChecksumType", true, 0, true, NKikimrBlobStorage::TChecksumType::NoChecksum,
-            NKikimrProto::ERROR, "buffer checksum mismatch"},
+            NKikimrProto::ERROR},
     };
 
     ui32 step = 1;
@@ -533,9 +532,6 @@ Y_UNIT_TEST(VDiskAcceptsAndRejectsVMultiPutChecksums) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.ItemsSize(), 1, testCase.Name);
         const auto& resultItem = result.GetItems(0);
         UNIT_ASSERT_VALUES_EQUAL_C(resultItem.GetStatus(), testCase.ExpectedStatus, testCase.Name);
-        if (testCase.ExpectedStatus != NKikimrProto::OK) {
-            UNIT_ASSERT_VALUES_EQUAL_C(resultItem.GetErrorReason(), testCase.ExpectedErrorReason, testCase.Name);
-        }
 
         ++step;
     }

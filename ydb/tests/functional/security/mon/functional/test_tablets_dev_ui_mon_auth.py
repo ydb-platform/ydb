@@ -610,60 +610,40 @@ def _bscontroller_get_status(cluster, endpoint_path, token=None):
     return response.status_code
 
 
-_BSCONTROLLER_READONLY_PAGES = (
+_BSCONTROLLER_PAGES = (
     '',  # main page
+    'page=GetDown',
     'page=OperationLog',
     'page=OperationLogEntry',
     'page=HealthEvents',
+    'page=SelfHeal',
     'page=Groups',
     'page=GroupDetail',
     'page=Scrub',
+    'page=Shred',
     'page=InternalTables',
     'page=Bridge',
     'page=VirtualGroups',
-    'page=GetDown',
-    'page=SelfHeal',
-    'page=Shred',
-)
-
-_BSCONTROLLER_MUTATING_PAGES = (
     'page=SetDown&group=0&down=1',
     'page=SelfHeal&disable=1&action=disableSelfHeal',
     'page=Shred&startshred=1&generation=0',
     'page=StopGivingGroups',
-    'page=StartGivingGroups',
+    'page=StartGivingGroups',  # must follow StopGivingGroups: restores group allocation
     'page=NewAction',
 )
 
 
-def _bscontroller_non_admin_expectations():
-    _, _, admin_allowed = tablet_devui_sid_matrix()
-    return {token: status for token, status in admin_allowed.items() if token != 'root@builtin'}
-
-
-def _bscontroller_all_pages_cases(tablet_id, secure_path_mode):
+def _bscontroller_devui_cases(tablet_id, secure_path_mode):
     q_base = f'TabletID={tablet_id}'
-    all_forbidden, monitoring_allowed, _ = tablet_devui_sid_matrix()
-    non_admins = _bscontroller_non_admin_expectations()
+    all_forbidden, monitoring_allowed, admin_allowed = tablet_devui_sid_matrix()
+    expected_on_app = tablet_devui_expected_on_app(secure_path_mode, monitoring_allowed, all_forbidden)
     cases = []
-    for query_suffix in _BSCONTROLLER_READONLY_PAGES + _BSCONTROLLER_MUTATING_PAGES:
+    for query_suffix in _BSCONTROLLER_PAGES:
         q = q_base if not query_suffix else f'{q_base}&{query_suffix}'
-        if secure_path_mode:
-            # With the flag on nothing is reachable on the legacy path, root included.
-            cases.extend(_bscontroller_endpoint_cases([f'/tablets/app?{q}'], all_forbidden))
-        cases.extend(_bscontroller_endpoint_cases([f'/tablets/app/secure?{q}'], non_admins))
-    # Tablets summary page keeps monitoring-level access (different handler).
+        cases.extend(_bscontroller_endpoint_cases([f'/tablets/app?{q}'], expected_on_app))
+        cases.extend(_bscontroller_endpoint_cases([f'/tablets/app/secure?{q}'], admin_allowed))
+    # Tablets summary page is a different handler and keeps monitoring-level access.
     cases.extend(_bscontroller_endpoint_cases([f'/tablets?{q_base}'], monitoring_allowed))
-    return cases
-
-
-def _bscontroller_legacy_readonly_cases(tablet_id):
-    q_base = f'TabletID={tablet_id}'
-    _, monitoring_allowed, _ = tablet_devui_sid_matrix()
-    cases = []
-    for query_suffix in _BSCONTROLLER_READONLY_PAGES:
-        q = q_base if not query_suffix else f'{q_base}&{query_suffix}'
-        cases.extend(_bscontroller_endpoint_cases([f'/tablets/app?{q}'], monitoring_allowed))
     return cases
 
 
@@ -676,30 +656,9 @@ def _bscontroller_post_exec_paths(tablet_id):
     }
 
 
-def test_bscontroller_tablet_devui_mon_paths_with_enforce_user_token(
-    ydb_cluster_with_enforce_user_token,
-):
-    cluster = ydb_cluster_with_enforce_user_token
-    cases = (
-        _bscontroller_legacy_readonly_cases(BSC_TABLET_ID)
-        + _bscontroller_all_pages_cases(BSC_TABLET_ID, secure_path_mode=False)
-    )
-
-    for endpoint_path, token, expected_status in cases:
-        status = _bscontroller_get_status(cluster, endpoint_path, token)
-        assert status == expected_status, (
-            f'Expected GET {endpoint_path} with token={_bscontroller_token_desc(token)} '
-            f'to return {expected_status}, got {status}'
-        )
-
-
-def test_bscontroller_tablet_devui_mon_paths_with_enforce_user_token_and_secure_path_mode(
-    ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag,
-):
-    cluster = ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag
-
-    for endpoint_path, token, expected_status in _bscontroller_all_pages_cases(
-        BSC_TABLET_ID, secure_path_mode=True
+def _bscontroller_tablet_devui_mon_paths(cluster, secure_path_mode):
+    for endpoint_path, token, expected_status in _bscontroller_devui_cases(
+        BSC_TABLET_ID, secure_path_mode=secure_path_mode
     ):
         status = _bscontroller_get_status(cluster, endpoint_path, token)
         assert status == expected_status, (
@@ -708,20 +667,18 @@ def test_bscontroller_tablet_devui_mon_paths_with_enforce_user_token_and_secure_
         )
 
 
-def test_bscontroller_secure_path_lets_administrator_through(
+def test_bscontroller_tablet_devui_mon_paths_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token,
+):
+    cluster = ydb_cluster_with_enforce_user_token
+    _bscontroller_tablet_devui_mon_paths(cluster, False)
+
+
+def test_bscontroller_tablet_devui_mon_paths_with_enforce_user_token_and_secure_path_mode(
     ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag,
 ):
     cluster = ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag
-
-    for query_suffix in _BSCONTROLLER_READONLY_PAGES:
-        q = f'TabletID={BSC_TABLET_ID}'
-        if query_suffix:
-            q = f'{q}&{query_suffix}'
-        endpoint_path = f'/tablets/app/secure?{q}'
-        status = _bscontroller_get_status(cluster, endpoint_path, 'root@builtin')
-        assert status not in (401, 403), (
-            f'Expected GET {endpoint_path} with token=root@builtin to pass the access check, got {status}'
-        )
+    _bscontroller_tablet_devui_mon_paths(cluster, True)
 
 
 def test_bscontroller_post_exec_with_enforce_user_token_and_secure_path_mode(
@@ -790,22 +747,9 @@ def test_bscontroller_links_and_forms_stay_on_current_app_path(
     self_heal = get('&page=SelfHeal')
     assert not _bscontroller_has_hardcoded_app_path(self_heal)
 
-
-def test_bscontroller_self_heal_disable_redirect_keeps_current_app_path(
-    ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag,
-):
-    cluster = ydb_cluster_with_enforce_user_token_and_tablet_devui_secure_path_flag
-    host = cluster.nodes[1].host
-    mon_port = cluster.nodes[1].mon_port
-    response = requests.get(
-        f'https://{host}:{mon_port}/tablets/app/secure'
-        f'?TabletID={BSC_TABLET_ID}&page=SelfHeal&disable=1&action=disableSelfHeal',
-        headers={'Authorization': 'root@builtin'},
-        verify=False,
-    )
-    assert response.status_code == 200, response.text
-    assert f'content="0; ?TabletID={BSC_TABLET_ID}&page=SelfHeal"' in response.text
-    assert 'content="0; app' not in response.text
+    disable_self_heal = get('&page=SelfHeal&disable=1&action=disableSelfHeal')
+    assert f'content="0; ?TabletID={BSC_TABLET_ID}&page=SelfHeal"' in disable_self_heal
+    assert 'content="0; app' not in disable_self_heal
 
 
 def test_bscontroller_new_action_with_enforce_user_token(

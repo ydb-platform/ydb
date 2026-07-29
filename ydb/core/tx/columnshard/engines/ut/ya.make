@@ -45,11 +45,7 @@ SRCS(
     ut_scan_snapshot_guard.cpp
     ut_script.cpp
     ut_minmax_index.cpp
-<<<<<<< HEAD
-=======
-    ut_sync_portion_index_reuse.cpp
     ut_portion_blob_validation.cpp
->>>>>>> 8e8cf4070b3 (Fix #47860 too big border (#47952))
     ut_predicate_ranges_builder.cpp
     ut_index_info_schema_diff.cpp
     helper.cpp

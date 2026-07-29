@@ -836,7 +836,7 @@ Technically, DS-proxy is implemented as an [actor service](#actor-service) launc
 
 **Node warden** or `BS_NODE` is an [actor service](#actor-service) on each cluster node that launches [PDisks](#pdisk), [VDisks](#vdisk), and [DS proxies](#ds-proxy) of [static storage groups](#static-group) when the node starts. It also interacts with the [DS controller](#ds-controller) to launch PDisk, VDisk, and DS proxies of [dynamic groups](#dynamic-group). The DS proxy of dynamic groups is launched on demand: node warden processes "undelivered" messages to DS proxies, launches the corresponding DS proxies, and receives group configuration from the DS controller.
 
-#### Fail realm {#fail-realm}
+#### Failure realm {#fail-realm}
 
 A **fail realm** is a set of [failure domains](#fail-domain) that can fail simultaneously due to a common cause. A correlated failure of two [VDisks](#vdisk) in the same fail realm is more likely than a failure of two VDisks from different fail realms.
 
@@ -844,7 +844,7 @@ An example of a fail realm is a set of equipment located in a single [data cente
 
 #### Failure domain {#fail-domain}
 
-A **fail domain** is a set of equipment that can fail simultaneously. A correlated failure of two [VDisks](#vdisk) within the same fail domain is more likely than a failure of two VDisks from different fail domains. In the case of different fail domains, the probability of simultaneous failure also depends on whether the domains in question belong to the same fail realm or different ones.
+A **fail domain** is a set of equipment that can fail simultaneously. A correlated failure of two [VDisks](#vdisk) in the same fail domain is more likely than a failure of two VDisks from different fail domains. In the case of different fail domains, the probability of simultaneous failure also depends on whether the domains in question belong to the same fail realm or different ones.
 
 An example of a fail domain is a set of disks connected to a single server, since all disks of a particular server may become unavailable if the server's power supply or network controller fails. Typically, all servers located in a single [server rack](#rack) are considered to belong to a common fail domain, because power or network issues at the rack level cause all equipment in it to become unavailable. Thus, a typical fail domain corresponds to a server rack (if the [cluster](#cluster) is configured with rack-aware topology) or a single server.
 
@@ -863,7 +863,7 @@ Below are explained terms related to the implementation of [distributed transact
 
 #### Deterministic transactions {#deterministic-transactions}
 
-Distributed transactions in {{ ydb-short-name }} are inspired by the research paper [Building Deterministic Transaction Processing Systems without Deterministic Thread Scheduling](http://cs-www.cs.yale.edu/homes/dna/papers/transactions-wodet11.pdf) by Alexander Thomson and Daniel J. Abadi from Yale University. The paper introduced the concept of **deterministic transaction processing**, which allows efficient processing of distributed transactions. The original paper imposed restrictions on the types of operations that could be performed in this way. Since these restrictions hindered real user scenarios, {{ ydb-short-name }} evolved its algorithms to execute them, using deterministic transactions as stages of user transaction execution with additional orchestration and locking.
+Distributed transactions in {{ ydb-short-name }} are inspired by the research paper [Building Deterministic Transaction Processing Systems without Deterministic Thread Scheduling](http://cs-www.cs.yale.edu/homes/dna/papers/transactions-wodet11.pdf) by Alexander Thomson and Daniel J. Abadi from Yale University. The paper introduced the concept of **deterministic transaction processing**, which allows efficient processing of distributed transactions. The original paper imposed restrictions on the types of operations that could be performed in this way. Since these restrictions hindered real user scenarios, {{ ydb-short-name }} evolved its algorithms to handle these restrictions, using deterministic transactions as stages of user transaction execution with additional orchestration and locking.
 
 #### Optimistic locking {#optimistic-locking}
 

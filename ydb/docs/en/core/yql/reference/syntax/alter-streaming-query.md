@@ -87,7 +87,7 @@ END DO
 
 Where:
 
-* `<query_statement>` — new streaming query text. Limitations are in [{#T}](../../../concepts/streaming-query.md#limitations); examples are [below](#text-changing-examples).
+* `<query_statement>` — new streaming query text. Limitations are in [{#T}](../../../concepts/streaming-query/streaming-query.md#limitations); examples are [below](#text-changing-examples).
 
 {% note warning %}
 

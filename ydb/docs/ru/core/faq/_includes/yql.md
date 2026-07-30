@@ -110,10 +110,10 @@ ON t.Key1 = d.Key1 AND t.Key2 = d.Key2;
 Для выборки по набору ключей (в том числе составных) используется синтаксис `WHERE ... IN`:
 
 ```yql
-DECLARE $key_pairs AS List<Tuple<Uint64,Uint64>>;
+DECLARE $key_pairs AS List<Tuple<Uint64, Uint64>>;
 
 SELECT * FROM some_table
-WHERE (Key1, Key2) in $key_pairs;
+WHERE (Key1, Key2) IN $key_pairs;
 ```
 
 ## Транзакции {#transactions}

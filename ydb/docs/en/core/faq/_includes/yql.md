@@ -110,10 +110,10 @@ There is no explicit limit on the number of entries in the constant table, but m
 You can use the `WHERE ... IN` syntax to query by a set of keys (including composite keys):
 
 ```yql
-DECLARE $key_pairs AS List<Tuple<Uint64,Uint64>>;
+DECLARE $key_pairs AS List<Tuple<Uint64, Uint64>>;
 
 SELECT * FROM some_table
-WHERE (Key1, Key2) in $key_pairs;
+WHERE (Key1, Key2) IN $key_pairs;
 ```
 
 ## Transactions {#transactions}

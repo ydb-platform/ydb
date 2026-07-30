@@ -93,7 +93,10 @@ void TCommandExperimentalTopicWrite::Parse(TConfig& config) {
     if (Delimiter_.Defined() && MessagingFormat != EMessagingFormat::SingleMessage) {
         throw TMisuseException() << "Both mutually exclusive options \"delimiter\" and \"input-format\" were provided.";
     }
-    if (DeferredExtPublicationId_.Defined() && DeferredIntPublicationId_ == 0) {
+    if (DeferredIntPublicationId_.Defined() && *DeferredIntPublicationId_ == 0) {
+        throw TMisuseException() << "--deferred-int-id must be a positive integer";
+    }
+    if (DeferredExtPublicationId_.Defined() && !DeferredIntPublicationId_.Defined()) {
         throw TMisuseException() << "--deferred-ext-id requires --deferred-int-id";
     }
 }
@@ -142,10 +145,10 @@ int TCommandExperimentalTopicWrite::Run(TConfig& config) {
         GetTransform(),
         MessagesWaitTimeout_);
 
-    if (DeferredIntPublicationId_ != 0) {
+    if (DeferredIntPublicationId_.Defined()) {
         NTopic::TDeferredPublication deferred = DeferredExtPublicationId_.Defined()
-            ? NTopic::TDeferredPublication(DeferredIntPublicationId_, std::string(*DeferredExtPublicationId_))
-            : NTopic::TDeferredPublication(DeferredIntPublicationId_);
+            ? NTopic::TDeferredPublication(*DeferredIntPublicationId_, std::string(*DeferredExtPublicationId_))
+            : NTopic::TDeferredPublication(*DeferredIntPublicationId_);
         writerParams.SetDeferredPublication(std::move(deferred));
     }
 

@@ -232,6 +232,22 @@ class TestTopicDeferredPublishCli(BaseCliTestWithDatabase):
         again = self._begin(ext_id)
         assert again.isdigit()
 
+    def test_write_rejects_zero_deferred_int_id(self):
+        topic = self._unique_topic("dp-zero-int")
+        self._prepare_topic(topic)
+        result = self.execute_exp(
+            [
+                "experimental", "topic", "write", topic,
+                "--deferred-int-id", "0",
+                "--format", "single-message",
+            ],
+            check_exit_code=False,
+        )
+        assert result.exit_code != 0
+        combined = (result.stdout + result.stderr).lower()
+        assert "deferred-int-id" in combined
+        assert "positive" in combined
+
     def test_list_filter_by_writer_identity(self):
         writer = f"writer-{uuid.uuid4().hex[:8]}"
         other = f"other-{uuid.uuid4().hex[:8]}"

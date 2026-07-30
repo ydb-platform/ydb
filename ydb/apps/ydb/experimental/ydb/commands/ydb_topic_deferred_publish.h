@@ -35,7 +35,7 @@ private:
     TMaybe<TDuration> MessagesWaitTimeout_;
     ui64 MessageSizeLimit_ = 0;
 
-    ui64 DeferredIntPublicationId_ = 0;
+    TMaybe<ui64> DeferredIntPublicationId_;
     TMaybe<TString> DeferredExtPublicationId_;
 };
 

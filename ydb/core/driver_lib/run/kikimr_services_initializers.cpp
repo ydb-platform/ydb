@@ -259,6 +259,7 @@
 #include <ydb/library/actors/interconnect/interconnect_uring_engine.h>
 #include <ydb/library/actors/interconnect/handshake_broker.h>
 #include <ydb/library/actors/interconnect/load.h>
+#include <ydb/library/actors/interconnect/packet.h>
 #include <ydb/library/actors/interconnect/poller/poller_actor.h>
 #include <ydb/library/actors/interconnect/poller/poller_tcp.h>
 #include <ydb/library/actors/interconnect/poller/uring_poller_actor.h>
@@ -754,9 +755,16 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                             break;
                     }
                 }
+                const int rdmaMaxWr = static_cast<int>(icConfig.GetRdmaMaxWr());
+                const int rdmaReceiveBufSize = sizeof(TTcpPacketHeader_v2) + TTcpPacketBuf::PacketDataLen;
                 setup->LocalServices.emplace_back(NInterconnect::NRdma::MakeCqActorId(),
                     TActorSetupCmd(NInterconnect::NRdma::CreateCqActor(
-                        NInterconnect::NRdma::TRdmaRuntimeParams{-1, static_cast<int>(icConfig.GetRdmaMaxWr()), 0, 0},
+                        NInterconnect::NRdma::TRdmaRuntimeParams{
+                            -1,
+                            rdmaMaxWr,
+                            icConfig.GetEnableRdmaSendReceive() ? rdmaMaxWr : 0,
+                            icConfig.GetEnableRdmaSendReceive() ? rdmaReceiveBufSize : 0,
+                        },
                         rdmaCqMode,
                         interconectCounters.Get()),
                         TMailboxType::ReadAsFilled, interconnectPoolId));

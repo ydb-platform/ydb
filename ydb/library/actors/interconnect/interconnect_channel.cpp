@@ -290,12 +290,22 @@ namespace NActors {
 
     template<bool External>
     bool TEventOutputChannel::SerializeEvent(TTcpPacketOutTask& task, TEventHolder& event, bool disableChecksums, size_t *bytesSerialized) {
-        auto addChunk = [&](const void *data, size_t len, bool allowCopy) {
+        auto addChunk = [&](const void *data, size_t len, bool allowCopy, const NInterconnect::NRdma::TMemRegion* memRegion = nullptr) {
             event.UpdateChecksum(data, len);
-            if (allowCopy && (reinterpret_cast<uintptr_t>(data) & 63) + len <= 64) {
-                task.Write<External>(data, len);
+            if (!External && task.UsePreallocatedInternalStream) {
+                if (memRegion) {
+                    task.AppendRdma(data, len, memRegion, disableChecksums);
+                } else if (allowCopy) {
+                    task.Write<false>(data, len);
+                } else {
+                    task.Append<External>(data, len, &event.ZcTransferId, disableChecksums);
+                }
             } else {
-                task.Append<External>(data, len, &event.ZcTransferId, disableChecksums);
+                if (allowCopy && (reinterpret_cast<uintptr_t>(data) & 63) + len <= 64) {
+                    task.Write<External>(data, len);
+                } else {
+                    task.Append<External>(data, len, &event.ZcTransferId, disableChecksums);
+                }
             }
             *bytesSerialized += len;
             Y_DEBUG_ABORT_UNLESS(len <= PartLenRemain);
@@ -314,8 +324,17 @@ namespace NActors {
                 if (!out.size()) {
                     break;
                 }
-                for (const auto& [buffer, size] : Chunker.FeedBuf(out.data(), out.size())) {
-                    addChunk(buffer, size, false);
+                auto consumeChunk = [&](const TCoroutineChunkSerializer::TChunk& chunk) {
+                    addChunk(chunk.Buf, chunk.Size, false, chunk.MemRegion);
+                    return true;
+                };
+                if constexpr (External) {
+                    TCoroutineChunkSerializer::TGenericChunkConsumer consumer(consumeChunk);
+                    Y_ABORT_UNLESS(Chunker.FeedBuf(out.data(), out.size(), consumer));
+                } else {
+                    TCoroutineChunkSerializer::TRdmaAwareChunkConsumer consumer(
+                        task.UsePreallocatedInternalStream, consumeChunk);
+                    Y_ABORT_UNLESS(Chunker.FeedBuf(out.data(), out.size(), consumer));
                 }
                 complete = Chunker.IsComplete();
                 if (complete) {
@@ -326,7 +345,13 @@ namespace NActors {
             while (const size_t numb = Min<size_t>(External ? task.GetExternalFreeAmount() : task.GetInternalFreeAmount(),
                     Iter.ContiguousSize(), PartLenRemain)) {
                 const char *obuf = Iter.ContiguousData();
-                addChunk(obuf, numb, true);
+                NInterconnect::NRdma::TMemRegionSlice memRegion;
+                if constexpr (!External) {
+                    if (task.UsePreallocatedInternalStream) {
+                        memRegion = NInterconnect::NRdma::TryExtractFromRcBuf(Iter.GetChunk());
+                    }
+                }
+                addChunk(obuf, numb, true, memRegion.Empty() ? nullptr : memRegion.GetMemRegion());
                 Iter += numb;
             }
             complete = !Iter.Valid();
@@ -361,10 +386,10 @@ namespace NActors {
                 } else {
                     Y_ABORT_UNLESS(SectionIndex < sections.size());
                     IsPartInline = sections[SectionIndex].IsInline;
-                    IsPartRdma = sections[SectionIndex].IsRdmaCapable;
+                    IsPartRdma = UseRdmaForCurrentEvent && sections[SectionIndex].IsRdmaCapable;
                     while (SectionIndex < sections.size()
                             && IsPartInline == sections[SectionIndex].IsInline
-                            && IsPartRdma == sections[SectionIndex].IsRdmaCapable) {
+                            && IsPartRdma == (UseRdmaForCurrentEvent && sections[SectionIndex].IsRdmaCapable)) {
                         PartLenRemain += sections[SectionIndex].Size;
                         ++SectionIndex;
                     }
@@ -638,12 +663,16 @@ namespace NActors {
     void TEventOutputChannel::ProcessUndelivered(TEventHolderPool& pool, NInterconnect::IZcGuard* zg) {
         LOG_DEBUG_IC_SESSION("ICOCH89", "Notyfying about Undelivered messages! NotYetConfirmed size: %zu, Queue size: %zu", NotYetConfirmed.size(), Queue.size());
         if (State == EState::BODY && Queue.front().Event) {
-            Y_ABORT_UNLESS(!Chunker.IsComplete()); // chunk must have an event being serialized
-            Y_ABORT_UNLESS(!Queue.empty()); // this event must be the first event in queue
-            TEventHolder& event = Queue.front();
-            Y_ABORT_UNLESS(Chunker.GetCurrentEvent() == event.Event.Get()); // ensure the event is valid
-            Chunker.Abort(); // stop serializing current event
-            Y_ABORT_UNLESS(Chunker.IsComplete());
+            if (!Chunker.IsComplete()) {
+                Y_ABORT_UNLESS(!Queue.empty()); // this event must be the first event in queue
+                TEventHolder& event = Queue.front();
+                Y_ABORT_UNLESS(Chunker.GetCurrentEvent() == event.Event.Get()); // ensure the event is valid
+                Chunker.Abort(); // stop serializing current event
+                Y_ABORT_UNLESS(Chunker.IsComplete());
+            } else {
+                // A consumer exception completes Chunker before it is propagated to the session.
+                Y_ABORT_UNLESS(!Chunker.IsSuccessfull());
+            }
         }
         for (auto& item : NotYetConfirmed) {
             if (item.Descr.Flags & IEventHandle::FlagGenerateUnsureUndelivered) { // notify only when unsure flag is set

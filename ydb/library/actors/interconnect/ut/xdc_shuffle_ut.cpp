@@ -33,25 +33,24 @@ Y_UNIT_TEST_SUITE(InterconnectXdcShuffle) {
         UNIT_ASSERT(info.Sections[2].IsInline);
         UNIT_ASSERT_VALUES_EQUAL(info.Sections[2].Size, 0u);
 
-        auto getSerializedSize = [](std::span<TCoroutineChunkSerializer::TChunk> chunks) {
-            size_t result = 0;
-            for (const auto& [_, size] : chunks) {
-                result += size;
-            }
-            return result;
-        };
-
         TCoroutineChunkSerializer chunker;
         chunker.SetSerializingEvent(&event, true);
 
         TString headerBuffer(info.Sections[0].Size, '\0');
-        auto chunks = chunker.FeedBuf(headerBuffer.begin(), headerBuffer.size());
-        UNIT_ASSERT_VALUES_EQUAL(getSerializedSize(chunks), info.Sections[0].Size);
+        size_t serializedSize = 0;
+        auto consumeChunk = [&](const TCoroutineChunkSerializer::TChunk& chunk) {
+            serializedSize += chunk.Size;
+            return true;
+        };
+        TCoroutineChunkSerializer::TGenericChunkConsumer consumer(consumeChunk);
+        UNIT_ASSERT(chunker.FeedBuf(headerBuffer.begin(), headerBuffer.size(), consumer));
+        UNIT_ASSERT_VALUES_EQUAL(serializedSize, info.Sections[0].Size);
         UNIT_ASSERT(!chunker.IsComplete());
 
         TString payloadBuffer(payload.size(), '\0');
-        chunks = chunker.FeedBuf(payloadBuffer.begin(), payloadBuffer.size());
-        UNIT_ASSERT_VALUES_EQUAL(getSerializedSize(chunks), payload.size());
+        serializedSize = 0;
+        UNIT_ASSERT(chunker.FeedBuf(payloadBuffer.begin(), payloadBuffer.size(), consumer));
+        UNIT_ASSERT_VALUES_EQUAL(serializedSize, payload.size());
         UNIT_ASSERT(chunker.IsComplete());
         UNIT_ASSERT(chunker.IsSuccessfull());
     }

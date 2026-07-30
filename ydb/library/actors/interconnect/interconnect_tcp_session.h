@@ -44,6 +44,7 @@
 #include <unordered_map>
 #include <tuple>
 #include <functional>
+#include <optional>
 
 namespace NInterconnect {
     class TInterconnectZcProcessor;
@@ -123,6 +124,8 @@ namespace NActors {
             , Qp(qp)
         {}
         std::atomic<size_t> SizeLeft;
+        std::atomic<ui64> WrScheduled = 0;
+        std::atomic<ui64> WrCompleted = 0;
         std::shared_ptr<NInterconnect::NRdma::TQueuePair> Qp;
     };
 
@@ -163,7 +166,7 @@ namespace NActors {
                 std::deque<NInterconnect::NRdma::TMemRegionSlice> RdmaBuffers;
                 TRdmaReadContext::TPtr RdmaReadContext = nullptr;
                 size_t RdmaSize = 0;
-                std::optional<ui32> RdmaCumulativeCheckSum;
+                std::optional<ui32> RdmaReadCumulativeCheckSum;
             };
 
             std::deque<TPendingEvent> PendingEvents;
@@ -601,6 +604,7 @@ namespace NActors {
                 hFunc(TEvUringRegisterFailed, Handle)
                 hFunc(TEvUringWriteComplete, Handle)
                 hFunc(TEvUringSendZcNotif, Handle)
+                hFunc(NInterconnect::NRdma::TEvRdmaIoDone, Handle)
                 cFunc(static_cast<ui32>(ENetwork::EvProcessDirectSessionQueue), HandleProcessDirectSessionQueue)
             )
             UpdateUtilization();
@@ -618,7 +622,7 @@ namespace NActors {
         void IssueRam(bool batching);
         void HandleRam(TEvRam::TPtr& ev);
         void GenerateTraffic();
-        void ProducePackets();
+        bool ProducePackets();
 
         size_t GetUnsentSize() const {
             return OutgoingStream.CalculateUnsentSize() + OutOfBandStream.CalculateUnsentSize() +
@@ -638,12 +642,14 @@ namespace NActors {
         void Handle(TEvUringRegisterFailed::TPtr& ev);
         void Handle(TEvUringWriteComplete::TPtr& ev);
         void Handle(TEvUringSendZcNotif::TPtr& ev);
-        void WriteData();
-        void WriteDataUring();
+        void Handle(NInterconnect::NRdma::TEvRdmaIoDone::TPtr& ev);
+        void WriteData(bool writeMainChannel);
+        void WriteDataUring(bool writeMainChannel);
+        void WriteDataRdma();
         ssize_t HandleWriteResult(ssize_t r, const TString& err);
         ssize_t Write(NInterconnect::TOutgoingStream& stream, NInterconnect::TStreamSocket& socket, size_t maxBytes);
 
-        ui32 MakePacket(bool data, TMaybe<ui64> pingMask = {});
+        std::optional<ui32> MakePacket(bool data, TMaybe<ui64> pingMask = {});
         void FillSendingBuffer(TTcpPacketOutTask& packet, ui64 serial);
         void DropConfirmed(ui64 confirm);
         void ShutdownSocket(TDisconnectReason reason);
@@ -665,6 +671,10 @@ namespace NActors {
         bool UseKernelLivenessMode() const {
             // Effective liveness mode for the currently attached transport connection.
             return KernelLivenessMode;
+        }
+
+        bool UseRdmaSendReceiveTransport() const {
+            return Params.AllowRdmaSendReceive && RdmaQp && RdmaCq;
         }
 
 
@@ -784,6 +794,18 @@ namespace NActors {
         std::deque<ui64> XdcZcNotifQueue; // FIFO of in-flight zc send sizes awaiting NOTIF
         void DropFrontXdc(size_t bytes);
         void FlushXdcZcDrop();
+
+        struct TRdmaWriteInFlight {
+            size_t Bytes = 0;
+            bool IsOutOfBand = false;
+        };
+        std::optional<TRdmaWriteInFlight> RdmaWriteInFlight;
+        ui64 RdmaSendWrSubmitted = 0;
+        ui64 RdmaSendWrCompleted = 0;
+        bool RdmaInitialTrafficStateReported = false;
+        bool RdmaEmptySgReported = false;
+        bool RdmaSendBufferAllocationFailureReported = false;
+
         ui64 InflightDataAmount = 0;
         ui64 RdmaInflightDataAmount = 0;
 
@@ -858,6 +880,7 @@ namespace NActors {
             TInterconnectProxyTCP* const proxy,
             NInterconnect::NRdma::TQueuePair::TPtr rdmaQp);
         NInterconnect::NRdma::TQueuePair::TPtr RdmaQp;
+        NInterconnect::NRdma::ICq::TPtr RdmaCq;
 
     private:
 

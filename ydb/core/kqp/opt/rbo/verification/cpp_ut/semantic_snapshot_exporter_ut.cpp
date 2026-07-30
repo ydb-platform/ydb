@@ -18612,6 +18612,58 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             false);
     }
 
+    Y_UNIT_TEST(ExportsExactNullableDecimalCountDistinctContract) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/DecimalCountDistinct", {
+            {"x", "Decimal(7,2)", true},
+        });
+        auto read = MakeRead(ctx, table, "a", {"x"});
+        SetExactOutputType(ctx, *read, {
+            {"a.x", DecimalType(ctx, "7", "2", true)},
+        });
+        const auto pos = TPositionHandle();
+        auto aggregate = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                TInfoUnit("a.x"),
+                "count",
+                TInfoUnit("distinct_count"),
+                true,
+                false)},
+            TVector<TInfoUnit>{},
+            EOpPhase::Undefined,
+            false,
+            pos);
+        SetOutputType(ctx, *aggregate, {
+            {"distinct_count", NUdf::EDataSlot::Uint64},
+        });
+        TOpRoot root(aggregate, pos, {"distinct_count"});
+
+        const auto snapshot = ParseSupported(
+            ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        const auto& node = FindNode(snapshot, "aggregate");
+        const auto& traits = node["aggregates"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(traits.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            traits[0]["input"].GetStringSafe(),
+            "a.x");
+        UNIT_ASSERT_VALUES_EQUAL(
+            traits[0]["function"].GetStringSafe(),
+            "count");
+        UNIT_ASSERT_VALUES_EQUAL(
+            traits[0]["type"].GetStringSafe(),
+            "Uint64");
+        UNIT_ASSERT_VALUES_EQUAL(
+            traits[0]["nullable"].GetBooleanSafe(),
+            false);
+        UNIT_ASSERT_VALUES_EQUAL(
+            traits[0]["distinct"].GetBooleanSafe(),
+            true);
+        UNIT_ASSERT_VALUES_EQUAL(
+            traits[0]["unwrap"].GetBooleanSafe(),
+            false);
+    }
+
     Y_UNIT_TEST(ExportsGroupedQ16LikeCountDistinctContract) {
         TExportTestContext ctx;
         const auto& table = AddTable(ctx, "/Root/Q16LikeCountDistinct", {
@@ -18836,11 +18888,25 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         SetOutputType(ctx, *read, {
             {"a.x", NUdf::EDataSlot::Int64, true},
         });
-        reject("requires an exact non-null fixed-width integer input");
+        reject(
+            "requires an exact non-null fixed-width integer or nullable "
+            "canonical Decimal input");
         SetOutputType(ctx, *read, {
             {"a.x", NUdf::EDataSlot::String},
         });
-        reject("requires an exact non-null fixed-width integer input");
+        reject(
+            "requires an exact non-null fixed-width integer or nullable "
+            "canonical Decimal input");
+        SetExactOutputType(ctx, *read, {
+            {"a.x", DecimalType(ctx, "7", "2")},
+        });
+        reject(
+            "requires an exact non-null fixed-width integer or nullable "
+            "canonical Decimal input");
+        SetExactOutputType(ctx, *read, {
+            {"a.x", DecimalType(ctx, "7", "2", true)},
+        });
+        ParseSupported(ExportSemanticSnapshotV1(root, ctx.RboCtx));
         SetOutputType(ctx, *read, {
             {"a.x", NUdf::EDataSlot::Int64},
         });

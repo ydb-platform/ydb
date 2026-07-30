@@ -1195,10 +1195,10 @@ class Evaluator:
                 earlier_equal = tuple(
                     smt.and_(
                         non_null[earlier_index],
-                        self.scalar.is_true(self.scalar.equal(
+                        self.scalar.aggregate_equal(
                             row.values[trait.input],
                             source.rows[earlier_index].values[trait.input],
-                        )),
+                        ),
                     )
                     for earlier_index in range(index)
                 )

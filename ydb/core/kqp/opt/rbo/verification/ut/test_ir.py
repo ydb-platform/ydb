@@ -266,6 +266,12 @@ def count_distinct_integer_snapshot(
     return value
 
 
+def count_distinct_decimal_snapshot(grouped=False):
+    value = count_distinct_integer_snapshot("Decimal(7,2)", grouped)
+    value["schema"]["tables"][0]["columns"][0]["nullable"] = True
+    return value
+
+
 def unwrapped_uint64_sum_snapshot():
     value = minimal_snapshot()
     value["schema"]["tables"][0]["columns"][0].update(
@@ -2222,6 +2228,25 @@ class SnapshotTest(unittest.TestCase):
                     expected,
                 )
 
+        for grouped in (False, True):
+            with self.subTest(input_type="Optional<Decimal(7,2)>", grouped=grouped):
+                value = count_distinct_decimal_snapshot(grouped)
+                expected = (
+                    [
+                        ("a.flag", "Bool", True),
+                        ("result", "Uint64", False),
+                    ]
+                    if grouped
+                    else [("result", "Uint64", False)]
+                )
+                self.assertEqual(
+                    [
+                        (column.name, column.type, column.nullable)
+                        for column in parse_snapshot(value).output_schema()
+                    ],
+                    expected,
+                )
+
         value = count_distinct_integer_snapshot(grouped=True)
 
         ordinary = copy.deepcopy(value)
@@ -2266,10 +2291,19 @@ class SnapshotTest(unittest.TestCase):
                         "unwrap is modeled only for a keyless final"
                         if label == "unwrap"
                         else "direct distinct is modeled only for a "
-                        "phase-undefined count of a non-null fixed-width integer"
+                        "phase-undefined count of a non-null fixed-width "
+                        "integer or nullable canonical Decimal"
                     ),
                 ):
                     parse_snapshot(malformed)
+
+        non_null_decimal = count_distinct_decimal_snapshot()
+        non_null_decimal["schema"]["tables"][0]["columns"][0]["nullable"] = False
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "non-null fixed-width integer or nullable canonical Decimal",
+        ):
+            parse_snapshot(non_null_decimal)
 
         distinct_all = copy.deepcopy(value)
         distinct_all["plan"]["nodes"][-1]["distinct_all"] = True

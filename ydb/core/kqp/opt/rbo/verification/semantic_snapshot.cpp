@@ -10909,10 +10909,15 @@ private:
                         const TString inputType = TypeName(
                             OutputType(*aggregate.GetInput(), input),
                             &inputNullable);
-                        if (inputNullable || !IsIntegerType(inputType)) {
+                        const bool exactInteger =
+                            !inputNullable && IsIntegerType(inputType);
+                        const bool exactNullableDecimal =
+                            inputNullable &&
+                            ParseCanonicalDecimalType(inputType).has_value();
+                        if (!exactInteger && !exactNullableDecimal) {
                             Unsupported(
                                 "Ordinary count-distinct requires an exact non-null "
-                                "fixed-width integer input");
+                                "fixed-width integer or nullable canonical Decimal input");
                         }
                         if (!IsExactDataAnnotation(
                                 OutputType(aggregate, output),

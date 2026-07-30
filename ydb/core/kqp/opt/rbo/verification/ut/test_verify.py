@@ -30,6 +30,7 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
     SubplanOutput,
     UnionAll,
     UnionInput,
+    UniqueKey,
     parse_snapshot,
     stage_task_counts,
 )
@@ -1855,6 +1856,93 @@ def delayed_unique_rhs_filter_sorted_seed_snapshot(*, unique_key=("k",)):
         + (sort,),
     )
     return replace(snapshot, plan=plan)
+
+
+def rebased_unique_seed_filter_snapshot(
+    *,
+    unique_key=("k",),
+    seed_key_nullable=False,
+    fact_key_type="Int64",
+    null_safe=False,
+    staged=False,
+):
+    snapshot = delayed_unique_rhs_filter_snapshot(
+        unique_key=(),
+        right_key_type=fact_key_type,
+        right_key_nullable=True,
+        null_safe=null_safe,
+        staged=staged,
+    )
+    tables = tuple(
+        replace(
+            table,
+            columns=tuple(
+                replace(column, nullable=seed_key_nullable)
+                if table.name == "A" and column.name == "k"
+                else column
+                for column in table.columns
+            ),
+            unique_keys=(
+                (UniqueKey(tuple(unique_key), False),)
+                if table.name == "A" and unique_key
+                else ()
+            ),
+        )
+        for table in snapshot.tables
+    )
+    return replace(snapshot, tables=tables)
+
+
+def rebased_unique_seed_filter_chain_snapshot():
+    snapshot = delayed_unique_rhs_filter_chain_snapshot()
+    tables = tuple(
+        replace(
+            table,
+            columns=tuple(
+                replace(column, nullable=False)
+                if table.name == "A" and column.name == "k"
+                else column
+                for column in table.columns
+            ),
+            unique_keys=(
+                (UniqueKey(("k",), False),)
+                if table.name == "A"
+                else ()
+                if table.name == "B"
+                else table.unique_keys
+            ),
+        )
+        for table in snapshot.tables
+    )
+    return replace(snapshot, tables=tables)
+
+
+def explicit_rebased_unique_seed_snapshot(*, mutate=False):
+    snapshot = rebased_unique_seed_filter_snapshot()
+    nodes = snapshot.plan.node_map()
+    assert isinstance(nodes["join"], Join)
+    rebased = replace(
+        nodes["join"],
+        left="b",
+        right="a",
+        kind="inner",
+        keys=(
+            JoinKey(
+                "b.x" if mutate else "b.k",
+                "a.k",
+            ),
+        ),
+    )
+    return replace(
+        snapshot,
+        plan=replace(
+            snapshot.plan,
+            nodes=tuple(
+                rebased if node.id == "join" else node
+                for node in snapshot.plan.nodes
+            ),
+        ),
+    )
 
 
 def delayed_literal_factor_filter_snapshot(*, explicit_right=None):
@@ -4330,6 +4418,97 @@ class DirectUniqueRhsJoinTest(unittest.TestCase):
                 ).script
             )
         )
+
+    def test_delayed_filter_rebases_a_certified_unique_seed(self):
+        snapshot = rebased_unique_seed_filter_snapshot()
+        relation = self._evaluate(snapshot)
+        self.assertEqual(len(relation.rows), 2)
+        self.assertEqual(
+            tuple(column.name for column in relation.columns),
+            ("a.k", "a.x", "b.k", "b.x"),
+        )
+        for row in relation.rows:
+            assert row.occurrence is not None
+            self.assertEqual(row.occurrence.operation, "join_inner_unique_rhs")
+            self.assertEqual(row.occurrence.node, "join")
+            self.assertEqual(len(row.occurrence.inputs), 1)
+            self.assertEqual(row.occurrence.inputs[0].node, "B")
+
+        with mock.patch.object(relation_model, "MAX_RELATION_ROWS", 2):
+            self.assertEqual(len(self._evaluate(snapshot).rows), 2)
+            with self.assertRaisesRegex(
+                RelationError,
+                "join output requires 4 candidate rows.*2 row construction",
+            ):
+                self._evaluate(
+                    rebased_unique_seed_filter_snapshot(unique_key=())
+                )
+
+        self.assertFalse(
+            _restricted_domain_has_model(
+                build_logical_kernel_problem_for_tests(
+                    snapshot,
+                    explicit_rebased_unique_seed_snapshot(),
+                    2,
+                ).script
+            )
+        )
+        self.assertTrue(
+            _restricted_domain_has_model(
+                build_logical_kernel_problem_for_tests(
+                    snapshot,
+                    explicit_rebased_unique_seed_snapshot(mutate=True),
+                    2,
+                ).script
+            )
+        )
+
+    def test_delayed_unique_seed_rebase_continues_factor_schedule(self):
+        snapshot = rebased_unique_seed_filter_chain_snapshot()
+        with mock.patch.object(relation_model, "MAX_RELATION_ROWS", 2):
+            relation = self._evaluate(snapshot)
+        self.assertEqual(len(relation.rows), 2)
+        self.assertEqual(
+            tuple(column.name for column in relation.columns),
+            ("a.k", "a.x", "b.k", "b.x", "c.k", "c.x"),
+        )
+        for row in relation.rows:
+            assert row.occurrence is not None
+            self.assertEqual(row.occurrence.operation, "join_inner_unique_rhs")
+            self.assertEqual(row.occurrence.node, "join2")
+            self.assertEqual(len(row.occurrence.inputs), 1)
+            inner = row.occurrence.inputs[0]
+            self.assertEqual(inner.operation, "join_inner_unique_rhs")
+            self.assertEqual(inner.node, "join")
+            self.assertEqual(len(inner.inputs), 1)
+            self.assertEqual(inner.inputs[0].node, "B")
+
+    def test_delayed_unique_seed_rebase_near_misses_stay_generic(self):
+        near_misses = {
+            "nonunique": rebased_unique_seed_filter_snapshot(unique_key=()),
+            "subset_key": rebased_unique_seed_filter_snapshot(
+                unique_key=("k", "x"),
+            ),
+            "nullable_key": rebased_unique_seed_filter_snapshot(
+                seed_key_nullable=True,
+            ),
+            "coerced_key": rebased_unique_seed_filter_snapshot(
+                fact_key_type="Decimal(35,34)",
+            ),
+            "null_safe": rebased_unique_seed_filter_snapshot(null_safe=True),
+            "stage_graph": rebased_unique_seed_filter_snapshot(staged=True),
+        }
+        for name, snapshot in near_misses.items():
+            with (
+                self.subTest(name=name),
+                mock.patch.object(relation_model, "MAX_RELATION_ROWS", 2),
+                self.assertRaisesRegex(
+                    RelationError,
+                    "join output requires 4 candidate rows.*"
+                    "2 row construction",
+                ),
+            ):
+                self._evaluate(snapshot)
 
     def test_delayed_filter_prunes_only_statically_rejected_factor_rows(self):
         delayed = delayed_literal_factor_filter_snapshot()

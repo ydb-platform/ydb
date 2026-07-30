@@ -2511,14 +2511,16 @@ def stage_task_counts(snapshot: Snapshot) -> dict[str, int]:
     return _infer_stage_task_counts(snapshot.stage_graph, "snapshot.stage_graph")
 
 
-def _expression_columns(expression: Expr) -> frozenset[str]:
+def expression_columns(expression: Expr) -> frozenset[str]:
+    """Return every direct column reference in an accepted scalar tree."""
+
     columns = (
         frozenset((expression.column,))
         if expression.kind == "column" and expression.column is not None
         else frozenset()
     )
     for argument in expression.args:
-        columns |= _expression_columns(argument)
+        columns |= expression_columns(argument)
     return columns
 
 
@@ -2541,7 +2543,7 @@ def _validate_positive_nullable_in_binding(
 
     found = False
     for conjunct in _conjuncts(expression):
-        if binding not in _expression_columns(conjunct):
+        if binding not in expression_columns(conjunct):
             continue
         if conjunct.kind != "column" or conjunct.column != binding:
             _fail(
@@ -2573,7 +2575,7 @@ def _direct_correlation(
     dependent_conjuncts = tuple(
         conjunct
         for conjunct in _conjuncts(predicate)
-        if dependency in _expression_columns(conjunct)
+        if dependency in expression_columns(conjunct)
     )
     if len(dependent_conjuncts) != 1:
         _fail(
@@ -2671,7 +2673,7 @@ def _node_expression_columns(node: PlanNode) -> frozenset[str]:
         expressions = ()
     result = frozenset()
     for expression in expressions:
-        result |= _expression_columns(expression)
+        result |= expression_columns(expression)
     return result
 
 
@@ -3600,7 +3602,7 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                             )
                     if isinstance(candidate, Project):
                         invalid_use = any(
-                            dependency in _expression_columns(column.expression)
+                            dependency in expression_columns(column.expression)
                             and not (
                                 column.output == dependency
                                 and column.expression.kind == "column"
@@ -3632,7 +3634,7 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                 two_dependencies = len(subplan.dependencies) == 2
                 if two_dependencies:
                     for conjunct in _conjuncts(predicate):
-                        columns = _expression_columns(conjunct)
+                        columns = expression_columns(conjunct)
                         if sum(
                             dependency in columns
                             for dependency in subplan.dependencies
@@ -3772,7 +3774,7 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
         if (
             isinstance(subplan, ExistsSubplan)
             and subplan.predicate is not None
-            and _expression_columns(subplan.predicate) & all_bindings
+            and expression_columns(subplan.predicate) & all_bindings
         ):
             _fail(
                 f"{path}.predicate",

@@ -1857,6 +1857,165 @@ def delayed_unique_rhs_filter_sorted_seed_snapshot(*, unique_key=("k",)):
     return replace(snapshot, plan=plan)
 
 
+def delayed_literal_factor_filter_snapshot(*, explicit_right=None):
+    schema_value = {
+        "tables": [
+            {
+                "name": "A",
+                "columns": [
+                    {"name": "k", "type": "Int64", "nullable": False},
+                ],
+                "unique_keys": [],
+            },
+        ],
+    }
+    scan = {
+        "id": "a",
+        "op": "scan",
+        "table": "A",
+        "columns": [{"source": "k", "output": "source.k"}],
+        "pushed_limit": None,
+    }
+
+    def tagged(tag):
+        return {
+            "id": tag,
+            "op": "project",
+            "input": "a",
+            "ordered": False,
+            "columns": [
+                {
+                    "output": "key",
+                    "expression": {
+                        "kind": "column",
+                        "column": "source.k",
+                    },
+                },
+                {
+                    "output": "tag",
+                    "expression": {
+                        "kind": "literal",
+                        "type": "String",
+                        "value": tag,
+                    },
+                },
+            ],
+        }
+
+    branches = [tagged(tag) for tag in ("s", "c", "w")]
+    first_union = {
+        "id": "union_sc",
+        "op": "union_all",
+        "ordered": False,
+        "inputs": [
+            {"node": tag, "columns": ["key", "tag"]}
+            for tag in ("s", "c")
+        ],
+        "output": ["key", "tag"],
+    }
+    union = {
+        "id": "union",
+        "op": "union_all",
+        "ordered": False,
+        "inputs": [
+            {"node": "union_sc", "columns": ["key", "tag"]},
+            {"node": "w", "columns": ["key", "tag"]},
+        ],
+        "output": ["key", "tag"],
+    }
+
+    def alias(name, source):
+        return {
+            "id": name,
+            "op": "project",
+            "input": source,
+            "ordered": True,
+            "columns": [
+                {
+                    "output": f"{name}.key",
+                    "expression": {"kind": "column", "column": "key"},
+                },
+                {
+                    "output": f"{name}.tag",
+                    "expression": {"kind": "column", "column": "tag"},
+                },
+            ],
+        }
+
+    left = alias("left", "union" if explicit_right is None else "s")
+    right = alias(
+        "right",
+        "union" if explicit_right is None else explicit_right,
+    )
+    true = {
+        "kind": "literal",
+        "type": "Bool",
+        "value": True,
+    }
+    join = {
+        "id": "join",
+        "op": "join",
+        "left": "left",
+        "right": "right",
+        "kind": "cross",
+        "keys": [],
+        "predicate": true,
+    }
+    predicate = {
+        "kind": "and",
+        "args": [
+            {
+                "kind": "eq",
+                "left": {"kind": "column", "column": "left.tag"},
+                "right": {
+                    "kind": "literal",
+                    "type": "String",
+                    "value": "s",
+                },
+            },
+            {
+                "kind": "eq",
+                "left": {"kind": "column", "column": "right.tag"},
+                "right": {
+                    "kind": "literal",
+                    "type": "String",
+                    "value": "w",
+                },
+            },
+            {
+                "kind": "eq",
+                "left": {"kind": "column", "column": "left.key"},
+                "right": {"kind": "column", "column": "right.key"},
+            },
+        ],
+    }
+    filtered = {
+        "id": "filter",
+        "op": "filter",
+        "input": "join",
+        "predicate": predicate,
+    }
+    nodes = [scan]
+    if explicit_right is None:
+        nodes.extend(branches)
+        nodes.extend((first_union, union))
+    else:
+        nodes.extend(
+            branch
+            for branch in branches
+            if branch["id"] in {"s", explicit_right}
+        )
+    nodes.extend((left, right, join, filtered))
+    return parse_snapshot(
+        _snapshot_with_stage_graph(
+            schema_value,
+            nodes,
+            "filter",
+            ["left.key", "left.tag", "right.key", "right.tag"],
+        )
+    )
+
+
 def union_snapshot(duplicate):
     if duplicate:
         nodes = [
@@ -3990,6 +4149,191 @@ class DirectUniqueRhsJoinTest(unittest.TestCase):
                 ).script
             )
         )
+
+    def test_delayed_filter_prunes_only_statically_rejected_factor_rows(self):
+        delayed = delayed_literal_factor_filter_snapshot()
+        explicit = delayed_literal_factor_filter_snapshot(explicit_right="w")
+        relation = self._evaluate(delayed)
+        self.assertEqual(len(relation.rows), 4)
+        self.assertEqual(
+            tuple(column.name for column in relation.columns),
+            ("left.key", "left.tag", "right.key", "right.tag"),
+        )
+        self.assertTrue(any(row.present != smt.TRUE for row in relation.rows))
+
+        with mock.patch.object(relation_model, "MAX_RELATION_ROW_PAIRS", 12):
+            self.assertEqual(len(self._evaluate(delayed).rows), 4)
+            with (
+                mock.patch.object(
+                    RelationEvaluator,
+                    "_factor_delayed_cross_filter",
+                    return_value=None,
+                ),
+                self.assertRaisesRegex(
+                    RelationError,
+                    "join matching requires 36 candidate-row pairs.*"
+                    "12 pair construction",
+                ),
+            ):
+                self._evaluate(delayed)
+
+        self.assertFalse(
+            _restricted_domain_has_model(
+                build_logical_kernel_problem_for_tests(
+                    delayed,
+                    explicit,
+                    2,
+                ).script
+            )
+        )
+        self.assertTrue(
+            _restricted_domain_has_model(
+                build_logical_kernel_problem_for_tests(
+                    delayed,
+                    delayed_literal_factor_filter_snapshot(
+                        explicit_right="c",
+                    ),
+                    2,
+                ).script
+            )
+        )
+
+    def test_delayed_factor_pruning_requires_a_drop_and_respects_work_cap(self):
+        snapshot = delayed_literal_factor_filter_snapshot()
+        nodes = snapshot.plan.node_map()
+        assert isinstance(nodes["filter"], Filter)
+        symbolic_local = Expr(
+            kind="eq",
+            args=(
+                Expr(kind="column", column="left.key"),
+                Expr(
+                    kind="literal",
+                    value=0,
+                    result_type="Int64",
+                    nullable=False,
+                ),
+            ),
+        )
+        spanning = nodes["filter"].predicate.args[-1]
+        no_drop = replace(
+            snapshot,
+            plan=replace(
+                snapshot.plan,
+                nodes=tuple(
+                    replace(
+                        node,
+                        predicate=Expr(
+                            kind="and",
+                            args=(symbolic_local, spanning),
+                        ),
+                    )
+                    if node.id == "filter"
+                    else node
+                    for node in snapshot.plan.nodes
+                ),
+            ),
+        )
+        with mock.patch.object(relation_model, "MAX_RELATION_ROW_PAIRS", 12):
+            with self.assertRaisesRegex(
+                RelationError,
+                "join matching requires 36 candidate-row pairs.*"
+                "12 pair construction",
+            ):
+                self._evaluate(no_drop)
+
+        with mock.patch.object(relation_model, "MAX_RELATION_ROW_PAIRS", 5):
+            with self.assertRaisesRegex(
+                RelationError,
+                "join matching requires 36 candidate-row pairs.*"
+                "5 pair construction",
+            ):
+                self._evaluate(snapshot)
+
+    def test_delayed_factor_pruning_preserves_metadata_and_rejects_null(self):
+        snapshot = delayed_literal_factor_filter_snapshot()
+        script = smt.Script()
+        evaluator = RelationEvaluator(
+            snapshot,
+            Database(snapshot, 2, script),
+            ScalarEncoder(script),
+        )
+        source = evaluator.node("right")
+        relation = source.certain()
+        order = (SortOrder("right.key", True, False),)
+        choice = relation_model.BoundedChoice(
+            script.fresh_constant("choice", smt.INT),
+            len(relation.rows),
+        )
+        decorated = relation_model.RelationFamily(
+            (
+                relation_model.Outcome(
+                    smt.TRUE,
+                    replace(
+                        relation,
+                        sequence=True,
+                        order=order,
+                        ordinals=tuple(
+                            smt.int_value(index)
+                            for index in range(len(relation.rows))
+                        ),
+                    ),
+                    smt.FALSE,
+                    (("decision", 1),),
+                    (choice,),
+                ),
+            )
+        )
+        filter_node = snapshot.plan.node_map()["filter"]
+        assert isinstance(filter_node, Filter)
+        pruned, changed = evaluator._prune_statically_rejected_factor_rows(
+            decorated,
+            (filter_node.predicate.args[1],),
+        )
+        self.assertTrue(changed)
+        outcome = pruned.outcomes[0]
+        self.assertEqual(outcome.enabled, smt.TRUE)
+        self.assertEqual(outcome.error, smt.FALSE)
+        self.assertEqual(outcome.decisions, (("decision", 1),))
+        self.assertEqual(outcome.choices, (choice,))
+        self.assertTrue(outcome.relation.sequence)
+        self.assertEqual(outcome.relation.order, order)
+        self.assertEqual(
+            outcome.relation.ordinals,
+            (smt.int_value(4), smt.int_value(5)),
+        )
+
+        null_relation = relation_model.Relation(
+            (Column("tag", "String", True),),
+            (
+                relation_model.Row(
+                    smt.TRUE,
+                    {"tag": evaluator.scalar.null("String")},
+                ),
+            ),
+            sequence=True,
+            present_prefix=True,
+        )
+        null_predicate = Expr(
+            kind="eq",
+            args=(
+                Expr(kind="column", column="tag"),
+                Expr(
+                    kind="literal",
+                    value="w",
+                    result_type="String",
+                    nullable=False,
+                ),
+            ),
+        )
+        null_pruned, null_changed = (
+            evaluator._prune_statically_rejected_factor_rows(
+                relation_model.single(null_relation),
+                (null_predicate,),
+            )
+        )
+        self.assertTrue(null_changed)
+        self.assertEqual(null_pruned.certain().rows, ())
+        self.assertTrue(null_pruned.certain().present_prefix)
 
     def test_delayed_filter_near_misses_keep_the_generic_cross(self):
         near_misses = {

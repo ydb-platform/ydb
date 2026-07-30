@@ -31,6 +31,7 @@ from .ir import (
     SortOrder,
     Subplan,
     UnionAll,
+    expression_columns,
     plan_node_inputs,
     validate_snapshot,
 )
@@ -755,7 +756,7 @@ class Evaluator:
             )
 
         if isinstance(node, Filter):
-            source = self._factor_delayed_unique_rhs_filter(node)
+            source = self._factor_delayed_cross_filter(node)
             if source is None:
                 source = self._input(node.id, 0, node.input)
             return self._with_consumer_subplans(
@@ -1484,16 +1485,17 @@ class Evaluator:
         key = (parent, ordinal)
         return self.edge_inputs[key] if key in self.edge_inputs else self.node(child)
 
-    def _factor_delayed_unique_rhs_filter(
+    def _factor_delayed_cross_filter(
         self,
         node: Filter,
     ) -> RelationFamily | None:
-        """Push necessary key equalities into a private left-deep Cross spine.
+        """Reduce a private left-deep Cross spine under its retained Filter.
 
-        The original Filter remains intact.  This branch-local representation
-        only avoids materializing Cross pairs that its conjunctive equality
-        would necessarily reject, and only when the existing direct unique-RHS
-        proof seam can compact the promoted inner join.
+        A factor row is discarded only when its guard combined with a
+        factor-local conjunct's SQL truth test is syntactically false.
+        Necessary column equalities may also promote direct unique-RHS scans.
+        The original Filter remains intact, so neither reduction assumes that
+        any unresolved predicate is true.
         """
 
         if (
@@ -1525,9 +1527,6 @@ class Evaluator:
             left, right = conjunct.args
             assert left.column is not None and right.column is not None
             equalities.append((left.column, right.column))
-        if not equalities:
-            return None
-
         spine: list[Join] = []
         current = node.input
         while True:
@@ -1582,12 +1581,41 @@ class Evaluator:
             current,
             equalities,
         )
-        if not any(keys for _join, keys in schedule):
+        factors = (current,) + tuple(join.right for join in spine)
+        local_conjuncts = self._factor_local_conjuncts(
+            factors,
+            conjuncts,
+        )
+        has_keys = any(keys for _join, keys in schedule)
+        if not has_keys and not any(local_conjuncts.values()):
             return None
 
-        source = self.node(current)
+        factor_sources = {
+            factor: self.node(factor)
+            for factor in factors
+        }
+        pruning_work = sum(
+            len(outcome.relation.rows) * len(local_conjuncts[factor])
+            for factor, family in factor_sources.items()
+            for outcome in family.outcomes
+        )
+        pruned = False
+        if pruning_work <= MAX_RELATION_ROW_PAIRS:
+            for factor in factors:
+                filtered, factor_pruned = (
+                    self._prune_statically_rejected_factor_rows(
+                        factor_sources[factor],
+                        local_conjuncts[factor],
+                    )
+                )
+                factor_sources[factor] = filtered
+                pruned |= factor_pruned
+        if not has_keys and not pruned:
+            return None
+
+        source = factor_sources[current]
         for original, keys in schedule:
-            right = self.node(original.right)
+            right = factor_sources[original.right]
 
             def join_relations(
                 relations: tuple[Relation, ...],
@@ -1623,6 +1651,78 @@ class Evaluator:
                 ),
             ),
         )
+
+    def _factor_local_conjuncts(
+        self,
+        factors: tuple[str, ...],
+        conjuncts: tuple[Expr, ...],
+    ) -> dict[str, tuple[Expr, ...]]:
+        result: dict[str, list[Expr]] = {
+            factor: []
+            for factor in factors
+        }
+        factor_columns = {
+            factor: frozenset(self.schemas[factor])
+            for factor in factors
+        }
+        for conjunct in conjuncts:
+            columns = expression_columns(conjunct)
+            if not columns:
+                continue
+            owners = tuple(
+                factor
+                for factor in factors
+                if columns <= factor_columns[factor]
+            )
+            if len(owners) == 1:
+                result[owners[0]].append(conjunct)
+        return {
+            factor: tuple(expressions)
+            for factor, expressions in result.items()
+        }
+
+    def _prune_statically_rejected_factor_rows(
+        self,
+        source: RelationFamily,
+        conjuncts: tuple[Expr, ...],
+    ) -> tuple[RelationFamily, bool]:
+        if not conjuncts:
+            return source, False
+
+        changed = False
+
+        def prune(relation: Relation) -> Relation:
+            nonlocal changed
+            indices = tuple(
+                index
+                for index, row in enumerate(relation.rows)
+                if not any(
+                    smt.and_(
+                        row.present,
+                        self.scalar.is_true(
+                            self.scalar.evaluate(conjunct, row.values)
+                        ),
+                    )
+                    == smt.FALSE
+                    for conjunct in conjuncts
+                )
+            )
+            if len(indices) == len(relation.rows):
+                return relation
+            changed = True
+            # Filtering out impossible positions preserves sequence and order;
+            # ordinal metadata remains aligned by taking the same indices.
+            return replace(
+                relation,
+                rows=tuple(relation.rows[index] for index in indices),
+                ordinals=(
+                    None
+                    if relation.ordinals is None
+                    else tuple(relation.ordinals[index] for index in indices)
+                ),
+            )
+
+        return map_family(source, prune), changed
 
     def _schedule_delayed_unique_rhs(
         self,

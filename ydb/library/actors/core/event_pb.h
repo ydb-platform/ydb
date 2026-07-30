@@ -18,6 +18,10 @@ namespace NActorsProto {
     class TActorId;
 } // NActorsProto
 
+namespace NInterconnect::NRdma {
+    class TMemRegion;
+}
+
 namespace NActors {
     TString EventPBBaseToString(const TString& header, const TString& dbgStr);
 
@@ -76,7 +80,16 @@ namespace NActors {
 
     class TCoroutineChunkSerializer final : public TChunkSerializer, protected ITrampoLine {
     public:
-        using TChunk = std::pair<const char*, size_t>;
+        struct TChunk {
+            const char* Buf;
+            size_t Size;
+            const NInterconnect::NRdma::TMemRegion* MemRegion;
+        };
+
+        enum class EAliasedMode {
+            PassThrough,
+            CopyToBuffer,
+        };
 
         TCoroutineChunkSerializer();
         ~TCoroutineChunkSerializer();
@@ -84,7 +97,8 @@ namespace NActors {
         void SetSerializingEvent(const IEventBase *event);
         void DiscardEvent() { Event = nullptr; };
         void Abort();
-        std::span<TChunk> FeedBuf(void* data, size_t size);
+        std::span<TChunk> FeedBuf(void* data, size_t size,
+            EAliasedMode aliasedMode = EAliasedMode::PassThrough);
         bool IsComplete() const {
             return !Event;
         }
@@ -109,7 +123,10 @@ namespace NActors {
     protected:
         void DoRun() override;
         void Resume();
-        void Produce(const void *data, size_t size);
+        void Produce(const void* data, size_t size,
+            const NInterconnect::NRdma::TMemRegion* memRegion);
+        bool WriteAliasedRawImpl(const void* data, int size,
+            const NInterconnect::NRdma::TMemRegion* memRegion);
 
         i64 TotalSerializedDataSize;
         TMappedAllocation Stack;
@@ -119,6 +136,7 @@ namespace NActors {
         char *BufferPtr;
         size_t SizeRemain;
         std::vector<TChunk> Chunks;
+        EAliasedMode AliasedMode = EAliasedMode::PassThrough;
         const IEventBase *Event = nullptr;
         bool CancelFlag = false;
         bool AbortFlag;

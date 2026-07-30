@@ -340,9 +340,10 @@ namespace NActors {
                         recipient = evExt->GetRecipientRewrite();
                     }
                 }
-                TAutoPtr<IEventHandle> ev = evExt.release();
                 bool eventDelivered = false;
                 bool actorRemovedBeforeEvent = false;
+                const ui32 evTypeForTracing = evExt->Type;
+                ui32 activityType = ActorSystemIndex;
                 if (actor) {
                     EXECUTOR_THREAD_DEBUG(EDebugLevel::Event, "actor is not null");
                     wasWorking = true;
@@ -350,7 +351,7 @@ namespace NActors {
                     actorType = &typeid(*actor);
 
 #ifdef USE_ACTOR_CALLSTACK
-                    TCallstack::GetTlsCallstack() = ev->Callstack;
+                    TCallstack::GetTlsCallstack() = evExt->Callstack;
                     TCallstack::GetTlsCallstack().SetLinesToSkip();
 #endif
                     CurrentRecipient = recipient;
@@ -363,28 +364,23 @@ namespace NActors {
                         firstEvent = false;
                     }
 
-                    i64 usecDeliv = ExecutionStats.AddEventDeliveryStats(ev->SendTime, hpprev);
+                    i64 usecDeliv = ExecutionStats.AddEventDeliveryStats(evExt->SendTime, hpprev);
                     if (usecDeliv > 5000) {
                         double sinceActivationMs = NHPTimer::GetSeconds(hpprev - execCtx.HPStart) * 1000.0;
-                        LwTraceSlowDelivery(ev.Get(), actorType, ThreadCtx.PoolId(), CurrentRecipient, NHPTimer::GetSeconds(hpprev - ev->SendTime) * 1000.0, sinceActivationMs, execCtx.ExecutedEvents);
+                        LwTraceSlowDelivery(evExt.get(), actorType, ThreadCtx.PoolId(), CurrentRecipient, NHPTimer::GetSeconds(hpprev - evExt->SendTime) * 1000.0, sinceActivationMs, execCtx.ExecutedEvents);
                     }
 
-                    ui32 evTypeForTracing = ev->Type;
-
-                    ui32 activityType = actor->GetActivityType().GetIndex();
+                    activityType = actor->GetActivityType().GetIndex();
                     if (activityType != prevActivityType) {
                         prevActivityType = activityType;
                         NProfiling::TMemoryTagScope::Reset(activityType);
                         TlsThreadContext->ActivityContext.ElapsingActorActivity.store(activityType, std::memory_order_release);
                     }
 
-                    const bool isBootstrapEvent =
-                        ev->GetTypeRewrite() == TEvents::TSystem::Bootstrap;
                     const TActorId actorId = actor->SelfId();
                     const ui64 systemFlagsBefore = actor->GetSystemFlags();
                     if (Y_UNLIKELY(systemFlagsBefore != 0)) {
-                        if (!isBootstrapEvent &&
-                                (systemFlagsBefore & static_cast<ui64>(
+                        if ((systemFlagsBefore & static_cast<ui64>(
                                     IActor::ESystemFlag::NotifyOnMailboxProcessingStarted)) &&
                                 !(systemFlagsBefore & static_cast<ui64>(
                                     IActor::ESystemFlag::ProcessedEventInCurrentMailboxActivation))) {
@@ -412,10 +408,14 @@ namespace NActors {
                             eventStart = hpnow;
                         }
                     }
+                }
 
+                TActorContext ctx(*mailbox, *this, eventStart, recipient);
+                TlsActivationContext = &ctx; // ensure dtor (if any) is called within actor system
+                // move for destruct before ctx;
+                {
+                    TAutoPtr<IEventHandle> ev = evExt.release();
                     if (actor) {
-                        TActorContext ctx(*mailbox, *this, eventStart, recipient);
-                        TlsActivationContext = &ctx; // ensure dtor (if any) is called within actor system
                         CurrentRecipient = recipient;
                         CurrentActorScheduledEventsCounter = 0;
                         eventDelivered = true;
@@ -424,16 +424,16 @@ namespace NActors {
 
                         const ui64 systemFlags = actor->GetSystemFlags();
                         if (Y_UNLIKELY(systemFlags != 0)) {
-                            if (!isBootstrapEvent &&
-                                    (systemFlags & mailboxProcessingNotificationFlags) &&
+                            if ((systemFlags & mailboxProcessingNotificationFlags) &&
                                     !(systemFlags & static_cast<ui64>(
                                         IActor::ESystemFlag::ProcessedEventInCurrentMailboxActivation))) {
                                 actor->SetSystemFlag(
                                     IActor::ESystemFlag::ProcessedEventInCurrentMailboxActivation);
-                                actorsWithProcessedEventInCurrentMailboxActivation.push_back(actorId);
+                                actorsWithProcessedEventInCurrentMailboxActivation.push_back(actor->SelfId());
                             }
                             if (systemFlags & static_cast<ui64>(
                                     IActor::ESystemFlag::NotifyOnMailboxProcessingFinished)) {
+                                const TActorId actorId = actor->SelfId();
                                 if (std::find(
                                         mailboxProcessingFinishedActors.begin(),
                                         mailboxProcessingFinishedActors.end(),
@@ -446,26 +446,25 @@ namespace NActors {
                         finishActorEvent(actor, ev.Get(), evTypeForTracing, actorType, activityType);
                         dropUnregistered(actor, execCtx.ExecutedEvents + 1);
                     }
-                    TlsActivationContext = nullptr;
-                }
-                if (!eventDelivered) {
-                    EXECUTOR_THREAD_DEBUG(EDebugLevel::Event, "actor is null");
-                    actorType = nullptr;
-                    TlsActivationContext = nullptr;
+                    if (!eventDelivered) {
+                        EXECUTOR_THREAD_DEBUG(EDebugLevel::Event, "actor is null");
+                        actorType = nullptr;
 
-                    TAutoPtr<IEventHandle> nonDelivered = IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::ReasonActorUnknown);
-                    if (nonDelivered.Get()) {
-                        ActorSystem->Send(nonDelivered);
-                    } else {
-                        ExecutionStats.IncrementNonDeliveredEvents();
+                        TAutoPtr<IEventHandle> nonDelivered = IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::ReasonActorUnknown);
+                        if (nonDelivered.Get()) {
+                            ActorSystem->Send(nonDelivered);
+                        } else {
+                            ExecutionStats.IncrementNonDeliveredEvents();
+                        }
+                        if (actorRemovedBeforeEvent && mailbox->IsEmpty()) {
+                            mailbox->LockToFree();
+                        }
+                        hpnow = GetCycleCountFast();
+                        hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
+                        ExecutionStats.AddElapsedCycles(ActorSystemIndex, hpnow - hpprev);
                     }
-                    if (actorRemovedBeforeEvent && mailbox->IsEmpty()) {
-                        mailbox->LockToFree();
-                    }
-                    hpnow = GetCycleCountFast();
-                    hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
-                    ExecutionStats.AddElapsedCycles(ActorSystemIndex, hpnow - hpprev);
                 }
+                TlsActivationContext = nullptr;
                 eventStart = hpnow;
                 finishedExecutedEvents = execCtx.ExecutedEvents + 1;
 

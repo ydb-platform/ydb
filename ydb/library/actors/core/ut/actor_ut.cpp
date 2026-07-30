@@ -1125,9 +1125,7 @@ Y_UNIT_TEST_SUITE(MailboxProcessingStarted) {
         void Bootstrap() {
             Steps.push_back(EStep::Bootstrap);
             SetSystemFlag(ESystemFlag::NotifyOnMailboxProcessingStarted);
-            SetSystemFlag(ESystemFlag::NotifyOnMailboxProcessingFinished);
-            Send(SelfId(), new TEvents::TEvWakeup(1));
-            Send(SelfId(), new TEvents::TEvWakeup(2));
+            Schedule(TDuration::MilliSeconds(1), new TEvents::TEvWakeup(1));
             Become(&TThis::StateWork);
         }
 
@@ -1141,6 +1139,7 @@ Y_UNIT_TEST_SUITE(MailboxProcessingStarted) {
 
         void Handle(TEvents::TEvMailboxProcessingStarted::TPtr&) {
             Steps.push_back(EStep::Started);
+            SetSystemFlag(ESystemFlag::NotifyOnMailboxProcessingFinished);
         }
 
         void Handle(TEvents::TEvMailboxProcessingFinished::TPtr&) {
@@ -1159,6 +1158,7 @@ Y_UNIT_TEST_SUITE(MailboxProcessingStarted) {
             switch (ev->Get()->Tag) {
                 case 1:
                     Steps.push_back(EStep::Event1);
+                    Send(SelfId(), new TEvents::TEvWakeup(2));
                     break;
                 case 2:
                     Steps.push_back(EStep::Event2);
@@ -1246,11 +1246,13 @@ Y_UNIT_TEST_SUITE(MailboxProcessingStarted) {
 
         void Bootstrap() {
             Steps.push_back(EStep::Bootstrap);
-            SetSystemFlag(ESystemFlag::NotifyOnMailboxProcessingFinished);
             if (PassAwayOnStarted) {
                 SetSystemFlag(ESystemFlag::NotifyOnMailboxProcessingStarted);
+                Schedule(TDuration::MilliSeconds(1), new TEvents::TEvWakeup());
+            } else {
+                SetSystemFlag(ESystemFlag::NotifyOnMailboxProcessingFinished);
+                Send(SelfId(), new TEvents::TEvWakeup());
             }
-            Send(SelfId(), new TEvents::TEvWakeup());
             Become(&TThis::StateWork);
         }
 
@@ -1264,6 +1266,7 @@ Y_UNIT_TEST_SUITE(MailboxProcessingStarted) {
 
         void Handle(TEvents::TEvMailboxProcessingStarted::TPtr&) {
             Steps.push_back(EStep::Started);
+            SetSystemFlag(ESystemFlag::NotifyOnMailboxProcessingFinished);
             PassAway();
         }
 
@@ -1306,7 +1309,7 @@ Y_UNIT_TEST_SUITE(MailboxProcessingStarted) {
 
         void Bootstrap() {
             SetSystemFlag(ESystemFlag::NotifyOnMailboxProcessingStarted);
-            Send(SelfId(), new TEvents::TEvWakeup());
+            Schedule(TDuration::MilliSeconds(1), new TEvents::TEvWakeup());
             Become(&TThis::StateWork);
         }
 
@@ -1353,6 +1356,63 @@ Y_UNIT_TEST_SUITE(MailboxProcessingStarted) {
 
     private:
         TSharedMailboxResult& Result;
+        TThreadParkPad& Done;
+    };
+
+    class TContextCheckingWakeup : public TEvents::TEvWakeup {
+    public:
+        TContextCheckingWakeup(
+                std::atomic<bool>& hadActivationContext,
+                TThreadParkPad& done)
+            : HadActivationContext(hadActivationContext)
+            , Done(done)
+        {}
+
+        ~TContextCheckingWakeup() override {
+            HadActivationContext.store(!!TlsActivationContext, std::memory_order_release);
+            Done.Unpark();
+        }
+
+    private:
+        std::atomic<bool>& HadActivationContext;
+        TThreadParkPad& Done;
+    };
+
+    class TEventDestructorContextActor
+        : public TActorBootstrapped<TEventDestructorContextActor> {
+    public:
+        TEventDestructorContextActor(
+                std::atomic<bool>& hadActivationContext,
+                TThreadParkPad& done)
+            : HadActivationContext(hadActivationContext)
+            , Done(done)
+        {}
+
+        void Bootstrap() {
+            SetSystemFlag(ESystemFlag::NotifyOnMailboxProcessingStarted);
+            Schedule(
+                TDuration::MilliSeconds(1),
+                new TContextCheckingWakeup(HadActivationContext, Done));
+            Become(&TThis::StateWork);
+        }
+
+        STFUNC(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvents::TEvMailboxProcessingStarted, Handle);
+                hFunc(TEvents::TEvWakeup, Handle);
+            }
+        }
+
+        void Handle(TEvents::TEvMailboxProcessingStarted::TPtr&) {
+        }
+
+        void Handle(TEvents::TEvWakeup::TPtr&) {
+            ClearSystemFlag(ESystemFlag::NotifyOnMailboxProcessingStarted);
+            PassAway();
+        }
+
+    private:
+        std::atomic<bool>& HadActivationContext;
         TThreadParkPad& Done;
     };
 
@@ -1473,6 +1533,24 @@ Y_UNIT_TEST_SUITE(MailboxProcessingStarted) {
         const auto event1 = std::find(result.Order.begin(), result.Order.end(), 21);
         UNIT_ASSERT(started0 < event0);
         UNIT_ASSERT(started1 < event1);
+    }
+
+    Y_UNIT_TEST(DestroysEventWithinActivationContext) {
+        auto setup = MakeSetup();
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+
+        std::atomic<bool> hadActivationContext = false;
+        TThreadParkPad done;
+        actorSystem.Register(
+            new TEventDestructorContextActor(hadActivationContext, done),
+            TMailboxType::HTSwap,
+            0);
+
+        done.Park();
+        actorSystem.Stop();
+
+        UNIT_ASSERT(hadActivationContext.load(std::memory_order_acquire));
     }
 
     Y_UNIT_TEST(DoesNotDeliverOriginalEventAfterActorDiesInStartedNotification) {

@@ -576,12 +576,14 @@ namespace NActors {
             // passes away during processing.
             NotifyOnMailboxProcessingFinished = 1ull << 0,
             // Request a notification before this actor's first non-bootstrap
-            // event in a mailbox activation. Enabling this flag while handling
-            // an event takes effect starting with the next activation.
+            // event in a mailbox activation. Do not set this flag before
+            // Bootstrap() is called. Enabling it while handling an event,
+            // including Bootstrap(), takes effect starting with the next
+            // activation.
             NotifyOnMailboxProcessingStarted = 1ull << 1,
             // Executor-owned marker indicating that an actor requesting
             // mailbox processing notifications has processed at least one
-            // non-bootstrap event in the current mailbox activation.
+            // event in the current mailbox activation.
             ProcessedEventInCurrentMailboxActivation = 1ull << 2,
         };
 

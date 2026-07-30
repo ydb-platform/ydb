@@ -2,7 +2,7 @@
 
 **Data enrichment** means attaching additional information from a lookup to events in the stream. For example, an event may only contain an ID, while a lookup provides a name or other attributes. Lookups can come from a [local table](#enrichment-local-table) or from [S3 object storage](#enrichment-s3).
 
-In [streaming queries](../../concepts/streaming-query.md), you attach a lookup with `JOIN`. The stream must be on the left, the lookup on the right.
+In [streaming queries](../../concepts/streaming-query/streaming-query.md), you attach a lookup with `JOIN`. The stream must be on the left, the lookup on the right.
 
 {% note warning %}
 
@@ -49,7 +49,7 @@ Functions used in the queries:
 
 Here the lookup is stored in table `services_dict` in the current database ([table](../../concepts/datamodel/table.md)).
 
-Create a [streaming query](../../concepts/streaming-query.md) that performs the enrichment:
+Create a [streaming query](../../concepts/streaming-query/streaming-query.md) that performs the enrichment:
 
 ```yql
 CREATE STREAMING QUERY query_with_table_join AS
@@ -80,7 +80,7 @@ LEFT JOIN
 ON
     t.ServiceId = s.ServiceId;
 
--- Write to output topic (JSON)
+-- Writing to the output topic (JSON)
 INSERT INTO
     ydb_source.output_topic
 SELECT
@@ -110,7 +110,7 @@ Where:
 
 - `<s3_endpoint>` — S3 URL, for example `https://storage.yandexcloud.net/<bucket>/` in Yandex Cloud.
 
-Create a [streaming query](../../concepts/streaming-query.md) that performs the enrichment:
+Create a [streaming query](../../concepts/streaming-query/streaming-query.md) that performs the enrichment:
 
 ```yql
 CREATE STREAMING QUERY query_with_join AS

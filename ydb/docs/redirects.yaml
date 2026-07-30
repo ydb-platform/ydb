@@ -488,6 +488,11 @@ common:
   - from: /olap/datasets/(.*)$
     to: /analyst/datasets/$1
 
+  # Redirects for streaming-query concepts IA
+
+  - from: /concepts/streaming-query.md
+    to: /concepts/streaming-query/streaming-query.md
+
   # Redirects for query_execution
 
   - from: /concepts/query_execution.md

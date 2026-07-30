@@ -1,6 +1,6 @@
 # CREATE STREAMING QUERY
 
-`CREATE STREAMING QUERY` creates a [streaming query](../../../concepts/streaming-query.md).
+`CREATE STREAMING QUERY` creates a [streaming query](../../../concepts/streaming-query/streaming-query.md).
 
 ## Syntax
 
@@ -23,7 +23,7 @@ END DO
 * `IF NOT EXISTS` — do not fail if a streaming query with this name already exists; leave the existing query unchanged.
 * `query_name` — name of the streaming query to create.
 * `WITH (<key> = <value>)` — optional list of settings for the new streaming query.
-* `AS DO BEGIN ... END DO` — full query text including all SQL statements. Limitations are described in [{#T}](../../../concepts/streaming-query.md#limitations); examples are [below](#examples).
+* `AS DO BEGIN ... END DO` — full query text including all SQL statements. Limitations are described in [{#T}](../../../concepts/streaming-query/streaming-query.md#limitations); examples are [below](#examples).
 
 You cannot use `OR REPLACE` and `IF NOT EXISTS` together.
 
@@ -91,7 +91,7 @@ The query reads events from a topic and writes them to `output_table`. Create th
 
 {% note warning %}
 
-Table writes in streaming queries support **UPSERT only**. `INSERT INTO` is not supported: with [at-least-once](../../../concepts/streaming-query.md#guarantees) retries, it would duplicate rows. With `UPSERT`, an existing row with the same primary key is updated; otherwise a row is inserted, while `INSERT INTO` fails.
+Table writes in streaming queries support **UPSERT only**. `INSERT INTO` is not supported: with [at-least-once](../../../concepts/streaming-query/streaming-query.md#guarantees) retries, it would duplicate rows. With `UPSERT`, an existing row with the same primary key is updated; otherwise a row is inserted, while `INSERT INTO` fails.
 
 {% endnote %}
 
@@ -153,6 +153,6 @@ More examples: [{#T}](../../../dev/streaming-query/patterns.md).
 ## See also
 
 * [{#T}](../../../dev/streaming-query/patterns.md)
-* [{#T}](../../../concepts/streaming-query.md)
+* [{#T}](../../../concepts/streaming-query/streaming-query.md)
 * [{#T}](alter-streaming-query.md)
 * [{#T}](drop-streaming-query.md)

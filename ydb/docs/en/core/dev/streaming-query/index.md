@@ -8,8 +8,9 @@ Practical guidance for working with [streaming queries](../../concepts/glossary.
 - [Topic read/write formats](streaming-query-formats.md) — supported formats when working with topics and usage examples
 - [Delivery guarantees](guarantees.md) — guarantee levels, windowing anomalies, and recommendations
 - [Checkpoints](checkpoints.md) — persisting processing state for fault tolerance and recovery
+- [Watermarks](watermarks.md) — tracking event-time progress in a stream
 
 ## See also
 
 - [Recipes for streaming queries](../../recipes/streaming_queries/index.md)
-- [Streaming queries overview](../../concepts/streaming-query.md)
+- [Streaming queries overview](../../concepts/streaming-query/streaming-query.md)

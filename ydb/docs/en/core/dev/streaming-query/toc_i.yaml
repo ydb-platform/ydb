@@ -1,13 +1,15 @@
 items:
 - name: Common patterns
   href: patterns.md
-- name: Writing to tables
+- name: Writing to Tables
   href: table-writing.md
-- name: Data enrichment
+- name: Data Enrichment
   href: enrichment.md
 - name: Topic read and write formats
   href: streaming-query-formats.md
-- name: Delivery guarantees
+- name: Data Delivery Guarantees
   href: guarantees.md
 - name: Checkpoints
   href: checkpoints.md
+- name: Watermarks
+  href: watermarks.md

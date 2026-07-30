@@ -125,13 +125,17 @@ Logical "connections" to the database that maintains the context needed to execu
 
 ### Streaming queries {#streaming-query}
 
-A query type designed for [stream processing](https://en.wikipedia.org/wiki/Stream_processing) of unbounded data. Unlike regular queries, streaming queries have no execution time limit, restart automatically on failures, and periodically persist their state as [checkpoints](#streaming-queries-checkpoints) for fault tolerance.
+A query type designed for [stream processing](https://en.wikipedia.org/wiki/Stream_processing) of unbounded data. Unlike regular queries, streaming queries have no execution time limit, restart automatically on failures, and periodically persist their state as [checkpoints](#streaming-queries-checkpoints) for fault tolerance. [Watermarks](#streaming-queries-watermarks) are used to track processing progress based on event time.
 
-Streaming queries are described in more detail in [{#T}](streaming-query.md).
+Streaming queries are described in more detail in [{#T}](./streaming-query/streaming-query.md).
 
 ### Streaming query checkpoints {#streaming-queries-checkpoints}
 
 Periodically persisted state of a [streaming query](#streaming-query), required to automatically recover execution after failures in a distributed system. For more information about checkpoints, see [{#T}](../dev/streaming-query/checkpoints.md).
+
+### Streaming query watermarks {#streaming-queries-watermarks}
+
+A monotonically increasing lower bound on the event times in a [streaming query](#streaming-query) that may still arrive in the stream. When the watermark reaches value X, the system declares that all events with time less than X have been received with high probability. For more details on watermarks, see [{#T}](./streaming-query/watermarks.md).
 
 ### Topology {#topology}
 
@@ -197,7 +201,7 @@ The capabilities of {{ ydb-short-name }} regarding **ANN search** (approximate n
 
 A **column family** or **column group** is a feature that allows storing a subset of [row-oriented table](#row-oriented-table) columns separately in a distinct family or group. The primary use case is to store some columns on different kinds of disk drives (offload less important columns to HDD) or with various compression settings. If the workload requires many column families, consider using [column-oriented tables](#column-oriented-table) instead.
 
-#### Time to live {#ttl}
+#### Time to Live {#ttl}
 
 **Time to live** or **TTL** is a mechanism for automatically removing old rows from a table asynchronously in the background. It is explained in a separate article [{#T}](ttl.md).
 
@@ -318,7 +322,7 @@ An **external table** is a piece of metadata that describes a particular dataset
 
 A **secret** is a sensitive piece of metadata that requires special handling. For example, secrets can be used in [external data source](#external-data-source) definitions and represent things like passwords and tokens.
 
-### Authentication token {#auth-token}
+### Auth token {#auth-token}
 
 An **authentication token** or **auth token** is a token that {{ ydb-short-name }} uses for [authentication](../security/authentication.md).
 
@@ -720,7 +724,7 @@ A **fail realm** is a set of [fail domains](#fail-domain) that are likely to fai
 
 An example of a fail realm is a set of hardware located in the same [data center or availability zone](#regions-az) that can all fail together due to a natural disaster, major power outage, or similar event.
 
-#### Fail domain {#fail-domain}
+#### Failure domain {#fail-domain}
 
 A **fail domain** is a set of hardware that may fail simultaneously. The correlated failure of two [VDisks](#vdisk) within the same fail domain is more probable than the failure of two VDisks from different fail domains. In the case of different fail domains, this probability is also affected by whether these domains belong to the same [fail realm](#fail-realm) or not.
 

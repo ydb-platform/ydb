@@ -2,7 +2,6 @@
 
 #include <util/generic/typetraits.h>
 
-#include <tuple>
 #include <type_traits>
 
 // See the following references for an inspiration:
@@ -18,7 +17,7 @@ namespace NDetail {
 
 template <class T, bool isPrimitive>
 struct TCallTraitsHelper
-{  };
+{ };
 
 template <class T>
 struct TCallTraitsHelper<T, true>
@@ -32,10 +31,18 @@ struct TCallTraitsHelper<T, false>
     using TType = const T&;
 };
 
-template <template <class...> class TTemplate, class... TArgs>
-void DerivedFromSpecializationImpl(const TTemplate<TArgs...>&);
+template <class T>
+struct TIsEmpty
+    : public T
+{
+    int Dummy;
+
+    static constexpr bool Value = (sizeof(TIsEmpty) == sizeof(int));
+};
 
 } // namespace NDetail
+
+////////////////////////////////////////////////////////////////////////////////
 
 //! A trait for choosing appropriate argument and return types for functions.
 /*!
@@ -56,52 +63,20 @@ struct TIsPod
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class TDerived, template <class...> class TTemplatedBase>
-concept DerivedFromSpecializationOf = requires(const TDerived& instance)
-{
-    NDetail::DerivedFromSpecializationImpl<TTemplatedBase>(instance);
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
 // Inspired by https://stackoverflow.com/questions/51032671/idiomatic-way-to-write-concept-that-says-that-type-is-a-stdvector
 template <class, template <class...> class>
 inline constexpr bool IsSpecialization = false;
+
 template <template <class...> class T, class... Args>
 inline constexpr bool IsSpecialization<T<Args...>, T> = true;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class TNeedle, class... THayStack>
-concept COneOf = (std::same_as<TNeedle, THayStack> || ...);
-
-////////////////////////////////////////////////////////////////////////////////
-
-namespace NDetail {
-
-template <typename... Ts>
-inline constexpr bool DistinctImpl = true;
-
-template <typename T, typename... Ts>
-inline constexpr bool DistinctImpl<T, Ts...> = DistinctImpl<Ts...> && !COneOf<T, Ts...>;
-
-} // namespace NDetail
-
-template <typename... Ts>
-concept CDistinct = NDetail::DistinctImpl<Ts...>;
-
-////////////////////////////////////////////////////////////////////////////////
-
 template <class T>
-concept CAssociative = requires(T) {
-    typename T::key_type;
-};
-
-template <class T>
-concept CMapping = requires(T) {
-    CAssociative<T>;
-    typename T::mapped_type;
-};
+constexpr bool IsEmptyClass()
+{
+    return NDetail::TIsEmpty<T>::Value;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

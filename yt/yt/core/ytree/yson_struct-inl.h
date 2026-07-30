@@ -264,10 +264,10 @@ TYsonStructParameter<TValue>& TYsonStructRegistrar<TStruct>::ExternalClassParame
 
 template <class TStruct>
 template <class TExternalPreprocessor>
-    // requires (CInvocable<TExternalPreprocessor, void(typename TStruct::TExternal*)>)
+    // requires (NMpl::CInvocable<TExternalPreprocessor, void(typename TStruct::TExternal*)>)
 void TYsonStructRegistrar<TStruct>::ExternalPreprocessor(TExternalPreprocessor preprocessor)
 {
-    static_assert(CInvocable<TExternalPreprocessor, void(typename TStruct::TExternal*)>);
+    static_assert(NMpl::CInvocable<TExternalPreprocessor, void(typename TStruct::TExternal*)>);
     Meta_->RegisterPreprocessor([preprocessor = std::move(preprocessor)] (TYsonStructBase* target) {
         preprocessor(TYsonStructRegistry::Get()->template CachedDynamicCast<TStruct>(target)->That_);
     });
@@ -275,10 +275,10 @@ void TYsonStructRegistrar<TStruct>::ExternalPreprocessor(TExternalPreprocessor p
 
 template <class TStruct>
 template <class TExternalPostprocessor>
-    // requires (CInvocable<TExternalPostprocessor, void(typename TStruct::TExternal*)>)
+    // requires (NMpl::CInvocable<TExternalPostprocessor, void(typename TStruct::TExternal*)>)
 void TYsonStructRegistrar<TStruct>::ExternalPostprocessor(TExternalPostprocessor postprocessor)
 {
-    static_assert(CInvocable<TExternalPostprocessor, void(typename TStruct::TExternal*)>);
+    static_assert(NMpl::CInvocable<TExternalPostprocessor, void(typename TStruct::TExternal*)>);
     Meta_->RegisterPostprocessor([postprocessor = std::move(postprocessor)] (TYsonStructBase* target) {
         postprocessor(TYsonStructRegistry::Get()->template CachedDynamicCast<TStruct>(target)->That_);
     });

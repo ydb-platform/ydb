@@ -95,7 +95,7 @@ using TAfterSwitch = TFunctionView<void()>;
 // We do that because callback can resume fiber which will destroy the
 // closure on its stack creating the risk of stack-use-after-scope.
 // The only safe place at that moment is caller's stack frame.
-template <CInvocable<void()> T>
+template <NMpl::CInvocable<void()> T>
 auto MakeAfterSwitch(T&& lambda)
 {
     class TMoveOnCall
@@ -768,7 +768,7 @@ class TTlsAddressStorage
 public:
     TTlsAddressStorage() = default;
 
-    template <CInvocable<T*()> TTlsReader>
+    template <NMpl::CInvocable<T*()> TTlsReader>
     Y_FORCE_INLINE explicit TTlsAddressStorage(TTlsReader reader)
     {
 #ifdef YT_ENABLE_TLS_ADDRESS_TRACKING
@@ -783,7 +783,7 @@ public:
         return *Address_;
     }
 
-    template <CInvocable<T*()> TTlsReader>
+    template <NMpl::CInvocable<T*()> TTlsReader>
     Y_FORCE_INLINE void ReReadAddress(TTlsReader reader)
     {
         auto* address = reader();

@@ -3,14 +3,10 @@ LIBRARY()
 INCLUDE(${ARCADIA_ROOT}/library/cpp/yt/ya_cpp.make.inc)
 
 SRCS(
-    guid.cpp
-    source_location.cpp
 )
 
 PEERDIR(
-    library/cpp/yt/exception
     library/cpp/yt/assert
-    library/cpp/yt/mpl
 )
 
 CHECK_DEPENDENT_DIRS(
@@ -19,7 +15,6 @@ CHECK_DEPENDENT_DIRS(
     contrib
     library
     util
-    yt/yt/library/small_containers
 )
 
 END()

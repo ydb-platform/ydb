@@ -16,6 +16,7 @@ from .types import (
     BOOL,
     DATE,
     DOUBLE,
+    INTEGER_TYPES,
     MAX_DATE,
     VOID,
     equality_comparison_compatible,
@@ -1849,21 +1850,20 @@ def _is_exact_scalar_uint64_unwrap(
     )
 
 
-def _is_exact_scalar_int64_count_distinct(
+def _is_exact_integer_count_distinct(
     node: Aggregate,
     trait: AggregateTrait,
     input_column: Column,
 ) -> bool:
-    """Recognize the direct logical COUNT(DISTINCT Int64) boundary."""
+    """Recognize the reviewed ordinary COUNT(DISTINCT integer) boundary."""
 
     return (
-        not node.keys
-        and node.phase == "undefined"
+        node.phase == "undefined"
         and not node.distinct_all
         and trait.function == "count"
         and trait.distinct
         and not trait.unwrap
-        and input_column.type == "Int64"
+        and input_column.type in INTEGER_TYPES
         and not input_column.nullable
         and trait.output_type == "Uint64"
         and not trait.output_nullable
@@ -2957,8 +2957,8 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                         "unwrap is modeled only for a keyless final "
                         "sum(Optional<Uint64>) with a raw Optional<Uint64> output",
                     )
-                exact_scalar_int64_count_distinct = (
-                    _is_exact_scalar_int64_count_distinct(
+                exact_integer_count_distinct = (
+                    _is_exact_integer_count_distinct(
                         node,
                         trait,
                         input_column,
@@ -2967,12 +2967,13 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                 if (
                     trait.distinct
                     and not node.distinct_all
-                    and not exact_scalar_int64_count_distinct
+                    and not exact_integer_count_distinct
                 ):
                     _fail(
                         trait_path,
-                        "direct distinct is modeled only for a keyless, "
-                        "phase-undefined count of non-null Int64",
+                        "direct distinct is modeled only for a "
+                        "phase-undefined count of a non-null fixed-width "
+                        "integer with non-null Uint64 output",
                     )
 
                 if node.distinct_all:

@@ -231,15 +231,19 @@ def shared_void_one_sided_count_snapshot(kind="left_semi"):
     return value
 
 
-def count_distinct_int64_snapshot():
+def count_distinct_integer_snapshot(
+    input_type="Int64",
+    grouped=False,
+):
     value = minimal_snapshot()
+    value["schema"]["tables"][0]["columns"][0]["type"] = input_type
     value["plan"]["nodes"] = [
         value["plan"]["nodes"][0],
         {
             "id": "aggregate",
             "op": "aggregate",
             "input": "scan",
-            "keys": [],
+            "keys": ["a.flag"] if grouped else [],
             "aggregates": [
                 {
                     "input": "a.k",
@@ -256,7 +260,9 @@ def count_distinct_int64_snapshot():
         },
     ]
     value["plan"]["root"] = "aggregate"
-    value["plan"]["output"] = ["result"]
+    value["plan"]["output"] = (
+        ["a.flag", "result"] if grouped else ["result"]
+    )
     return value
 
 
@@ -2191,25 +2197,38 @@ class SnapshotTest(unittest.TestCase):
             parse_snapshot(bad_phase)
 
     def test_direct_count_distinct_has_one_exact_logical_contract(self):
-        value = count_distinct_int64_snapshot()
-        self.assertEqual(
-            [
-                (column.name, column.type, column.nullable)
-                for column in parse_snapshot(value).output_schema()
-            ],
-            [("result", "Uint64", False)],
-        )
+        for input_type, grouped in product(
+            sorted(INTEGER_TYPES),
+            (False, True),
+        ):
+            with self.subTest(input_type=input_type, grouped=grouped):
+                value = count_distinct_integer_snapshot(
+                    input_type,
+                    grouped,
+                )
+                expected = (
+                    [
+                        ("a.flag", "Bool", True),
+                        ("result", "Uint64", False),
+                    ]
+                    if grouped
+                    else [("result", "Uint64", False)]
+                )
+                self.assertEqual(
+                    [
+                        (column.name, column.type, column.nullable)
+                        for column in parse_snapshot(value).output_schema()
+                    ],
+                    expected,
+                )
+
+        value = count_distinct_integer_snapshot(grouped=True)
 
         ordinary = copy.deepcopy(value)
         ordinary["plan"]["nodes"][-1]["aggregates"][0]["distinct"] = False
         parse_snapshot(ordinary)
 
         mutations = []
-        grouped = copy.deepcopy(value)
-        grouped["plan"]["nodes"][-1]["keys"] = ["a.flag"]
-        grouped["plan"]["output"] = ["a.flag", "result"]
-        mutations.append(("grouped", grouped))
-
         final = copy.deepcopy(value)
         final["plan"]["nodes"][-1]["phase"] = "final"
         mutations.append(("phase", final))
@@ -2228,12 +2247,16 @@ class SnapshotTest(unittest.TestCase):
         mutations.append(("input nullability", nullable_input))
 
         wrong_input_type = copy.deepcopy(value)
-        wrong_input_type["schema"]["tables"][0]["columns"][0]["type"] = "Uint64"
+        wrong_input_type["schema"]["tables"][0]["columns"][0]["type"] = "Date"
         mutations.append(("input type", wrong_input_type))
 
         nullable_output = copy.deepcopy(value)
         nullable_output["plan"]["nodes"][-1]["aggregates"][0]["nullable"] = True
         mutations.append(("output nullability", nullable_output))
+
+        wrong_output_type = copy.deepcopy(value)
+        wrong_output_type["plan"]["nodes"][-1]["aggregates"][0]["type"] = "Int64"
+        mutations.append(("output type", wrong_output_type))
 
         for label, malformed in mutations:
             with self.subTest(label=label):
@@ -2242,10 +2265,19 @@ class SnapshotTest(unittest.TestCase):
                     (
                         "unwrap is modeled only for a keyless final"
                         if label == "unwrap"
-                        else "direct distinct is modeled only for a keyless"
+                        else "direct distinct is modeled only for a "
+                        "phase-undefined count of a non-null fixed-width integer"
                     ),
                 ):
                     parse_snapshot(malformed)
+
+        distinct_all = copy.deepcopy(value)
+        distinct_all["plan"]["nodes"][-1]["distinct_all"] = True
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "DistinctAll traits must use distinct",
+        ):
+            parse_snapshot(distinct_all)
 
         repeated = copy.deepcopy(value)
         repeated_trait = copy.deepcopy(

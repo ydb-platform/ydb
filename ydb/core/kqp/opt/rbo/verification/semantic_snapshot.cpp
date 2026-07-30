@@ -10475,10 +10475,6 @@ private:
                             "Aggregate unwrap requires distinct=false");
                     }
                     if (trait.Distinct && !aggregate.IsDistinctAll()) {
-                        if (!keyColumns.empty()) {
-                            Unsupported(
-                                "Ordinary count-distinct requires a keyless Aggregate");
-                        }
                         if (aggregate.GetAggregationPhase() != EOpPhase::Undefined) {
                             Unsupported(
                                 "Ordinary count-distinct requires undefined phase");
@@ -10487,13 +10483,14 @@ private:
                             Unsupported(
                                 "Ordinary distinct requires the count function");
                         }
-                        if (!IsExactDataAnnotation(
-                                OutputType(*aggregate.GetInput(), input),
-                                NUdf::EDataSlot::Int64,
-                                false))
-                        {
+                        bool inputNullable = false;
+                        const TString inputType = TypeName(
+                            OutputType(*aggregate.GetInput(), input),
+                            &inputNullable);
+                        if (inputNullable || !IsIntegerType(inputType)) {
                             Unsupported(
-                                "Ordinary count-distinct requires an exact non-null Int64 input");
+                                "Ordinary count-distinct requires an exact non-null "
+                                "fixed-width integer input");
                         }
                         if (!IsExactDataAnnotation(
                                 OutputType(aggregate, output),

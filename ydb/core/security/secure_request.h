@@ -1,5 +1,6 @@
 #pragma once
 #include "ticket_parser.h"
+#include "secure_request_iface.h"
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/auth.h>
@@ -7,7 +8,9 @@
 namespace NKikimr {
 
 template <typename TBase, typename TDerived, typename TBootstrap = TDerived>
-class TSecureRequestActor : public TBase {
+class TSecureRequestActor
+    : public TBase
+    , public ISecureRequestIface {
 private:
     TString Database;
     TString SecurityToken;
@@ -145,7 +148,7 @@ public:
         return SecurityToken;
     }
 
-    TIntrusiveConstPtr<NACLib::TUserToken> GetParsedToken() const {
+    TIntrusiveConstPtr<NACLib::TUserToken> GetParsedToken() const override {
         if (AuthorizeTicketResult) {
             return AuthorizeTicketResult->Token;
         }
@@ -161,7 +164,7 @@ public:
         return TString();
     }
 
-    TString GetUserSID() const {
+    TString GetUserSID() const override {
         if (AuthorizeTicketResult) {
             if (AuthorizeTicketResult->Token) {
                 return AuthorizeTicketResult->Token->GetUserSID();
@@ -174,7 +177,7 @@ public:
         return BUILTIN_ACL_ROOT;
     }
 
-    TString GetSanitizedToken() const {
+    TString GetSanitizedToken() const override {
         if (AuthorizeTicketResult) {
             if (AuthorizeTicketResult->Token) {
                 return AuthorizeTicketResult->Token->GetSanitizedToken();

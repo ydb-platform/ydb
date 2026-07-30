@@ -8,6 +8,7 @@ TEST_SRCS(
     test_limit.py
     test_logical_reference.py
     test_olap_filter.py
+    test_project_error.py
     test_sort.py
     test_scalar.py
     test_sql_in.py

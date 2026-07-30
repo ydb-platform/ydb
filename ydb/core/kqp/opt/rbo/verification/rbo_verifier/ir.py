@@ -132,6 +132,7 @@ class EmptySource:
 class Projection:
     output: str
     expression: Expr
+    error_on_null: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -923,11 +924,20 @@ def _parse_node(value: Any, path: str) -> PlanNode:
         for index, raw_column in enumerate(_array(obj["columns"], f"{path}.columns")):
             column_path = f"{path}.columns[{index}]"
             column = _object(raw_column, column_path)
-            _keys(column, {"output", "expression"}, column_path)
+            _keys(
+                column,
+                {"output", "expression"},
+                column_path,
+                {"error_on_null"},
+            )
             columns.append(
                 Projection(
                     output=_string(column["output"], f"{column_path}.output"),
                     expression=_parse_expr(column["expression"], f"{column_path}.expression"),
+                    error_on_null=_bool(
+                        column.get("error_on_null", False),
+                        f"{column_path}.error_on_null",
+                    ),
                 )
             )
         if not columns:
@@ -2038,6 +2048,69 @@ def _validate_average_state_dataflow(snapshot: Snapshot) -> None:
                     )
 
 
+def _validate_error_projection_dataflow(snapshot: Snapshot) -> None:
+    """Keep eager Project failures on one of two demand-safe boundaries."""
+
+    nodes = snapshot.plan.node_map()
+    subplan_nodes: set[str] = set()
+    pending = [
+        subplan.root
+        for subplan in snapshot.plan.subplans
+    ]
+    while pending:
+        node_id = pending.pop()
+        if node_id in subplan_nodes:
+            continue
+        subplan_nodes.add(node_id)
+        pending.extend(plan_node_inputs(nodes[node_id]))
+
+    consumers: dict[str, list[PlanNode]] = {
+        node.id: [] for node in snapshot.plan.nodes
+    }
+    for consumer in snapshot.plan.nodes:
+        for producer in plan_node_inputs(consumer):
+            consumers[producer].append(consumer)
+
+    for node in snapshot.plan.nodes:
+        if not isinstance(node, Project):
+            continue
+        marked = tuple(
+            column.output
+            for column in node.columns
+            if column.error_on_null
+        )
+        if not marked:
+            continue
+
+        if (
+            node.id not in subplan_nodes
+            and node.id == snapshot.plan.root
+            and set(marked).issubset(snapshot.plan.output)
+        ):
+            continue
+
+        node_consumers = consumers[node.id]
+        if node.id not in subplan_nodes and len(node_consumers) == 1:
+            consumer = node_consumers[0]
+            if (
+                isinstance(consumer, Join)
+                and consumer.kind == "left_semi"
+                and consumer.right == node.id
+                and set(marked).issubset(
+                    key.right for key in consumer.keys
+                )
+            ):
+                continue
+
+        _fail(
+            f"node {node.id!r}.columns",
+            "error_on_null Project must be the result root with every "
+            "marked output observed, or the private direct right input "
+            "of one keyed left_semi Join with every marked output used "
+            "as an exact right key",
+        )
+
+
 def _validate_void_dataflow(
     snapshot: Snapshot,
     schemas: Mapping[str, Mapping[str, Column]],
@@ -2809,6 +2882,25 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
             result = {}
             for index, column in enumerate(node.columns):
                 expression_path = f"node {node.id!r}.columns[{index}]"
+                if column.error_on_null:
+                    source = (
+                        input_schema.get(column.expression.column)
+                        if (
+                            column.expression.kind == "column"
+                            and column.expression.column is not None
+                        )
+                        else None
+                    )
+                    if (
+                        source is None
+                        or source.type != "String"
+                        or not source.nullable
+                    ):
+                        _fail(
+                            expression_path,
+                            "error_on_null requires one direct nullable "
+                            "String input column",
+                        )
                 if column.expression.kind == "void":
                     value_type = ValueType(VOID, False)
                 elif (
@@ -2823,6 +2915,8 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                         expression_schema,
                         expression_path,
                     )
+                if column.error_on_null:
+                    value_type = ValueType("String", False)
                 direct_input = (
                     expression_schema.get(column.expression.column)
                     if (
@@ -3259,6 +3353,23 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
         for node in snapshot.plan.nodes
         if isinstance(node, OuterBind)
     }
+
+    def has_observable_error(node_ids: frozenset[str]) -> bool:
+        return any(
+            (
+                isinstance(nodes[node_id], Limit)
+                and nodes[node_id].ensure_at_most_one
+            )
+            or (
+                isinstance(nodes[node_id], Project)
+                and any(
+                    column.error_on_null
+                    for column in nodes[node_id].columns
+                )
+            )
+            for node_id in node_ids
+        )
+
     for node in snapshot.plan.nodes:
         leaked_bindings = all_bindings & schemas[node.id].keys()
         if leaked_bindings:
@@ -3271,19 +3382,17 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
     for index, subplan in enumerate(snapshot.plan.subplans):
         path = f"snapshot.plan.subplans[{index}]"
         schema = subplan_schemas[subplan.binding]
-        if isinstance(subplan, ExistsSubplan) and any(
-            isinstance(nodes[node_id], Limit)
-            and nodes[node_id].ensure_at_most_one
-            for node_id in subplan_nodes[subplan.binding]
+        if (
+            isinstance(subplan, ExistsSubplan)
+            and has_observable_error(subplan_nodes[subplan.binding])
         ):
             _fail(
                 f"{path}.root",
                 "EXISTS roots with observable error outcomes are not modeled",
             )
-        if isinstance(subplan, InSubplan) and any(
-            isinstance(nodes[node_id], Limit)
-            and nodes[node_id].ensure_at_most_one
-            for node_id in subplan_nodes[subplan.binding]
+        if (
+            isinstance(subplan, InSubplan)
+            and has_observable_error(subplan_nodes[subplan.binding])
         ):
             _fail(
                 f"{path}.root",
@@ -3698,6 +3807,7 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                 "outer_bind must belong to exactly one correlated scalar root",
             )
     _validate_average_state_dataflow(snapshot)
+    _validate_error_projection_dataflow(snapshot)
     _validate_void_dataflow(snapshot, schemas)
     _validate_stage_graph(snapshot, schemas)
     return schemas

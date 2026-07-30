@@ -3655,6 +3655,82 @@ class InSubplanSolverTest(unittest.TestCase):
 
 
 class ScalarSubplanValidationTest(unittest.TestCase):
+    def test_error_on_null_is_rejected_even_on_left_semi_rhs(self):
+        raw = _scan_scalar_snapshot()
+        raw["schema"]["tables"][0]["columns"][0].update(
+            type="String",
+            nullable=True,
+        )
+        raw["schema"]["tables"].append(
+            {
+                "name": "B",
+                "columns": [
+                    {
+                        "name": "key",
+                        "type": "String",
+                        "nullable": False,
+                    }
+                ],
+                "unique_keys": [],
+            }
+        )
+        raw["plan"]["nodes"].extend(
+            (
+                {
+                    "id": "sub_left",
+                    "op": "scan",
+                    "table": "B",
+                    "columns": [
+                        {"source": "key", "output": "sub.key"},
+                    ],
+                },
+                {
+                    "id": "sub_unwrap",
+                    "op": "project",
+                    "input": "sub_scan",
+                    "ordered": False,
+                    "columns": [
+                        {
+                            "output": "sub.value",
+                            "expression": {
+                                "kind": "column",
+                                "column": "sub.value",
+                            },
+                            "error_on_null": True,
+                        }
+                    ],
+                },
+                {
+                    "id": "sub_join",
+                    "op": "join",
+                    "left": "sub_left",
+                    "right": "sub_unwrap",
+                    "kind": "left_semi",
+                    "keys": [
+                        {
+                            "left": "sub.key",
+                            "right": "sub.value",
+                        },
+                    ],
+                    "predicate": _literal("Bool", True),
+                },
+            )
+        )
+        descriptor = raw["plan"]["subplans"][0]
+        descriptor["root"] = "sub_join"
+        descriptor["type"] = "String"
+        descriptor["output"].update(
+            column="sub.key",
+            type="String",
+            nullable=False,
+        )
+
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "private direct right input of one keyed left_semi Join",
+        ):
+            parse_snapshot(raw)
+
     def test_legacy_plan_without_subplans_defaults_to_empty(self):
         raw = _base_snapshot()
         raw["plan"]["nodes"][1]["columns"][0]["expression"] = _literal(
@@ -4088,6 +4164,45 @@ class ScalarSubplanValidationTest(unittest.TestCase):
 
 
 class ExistsSubplanValidationTest(unittest.TestCase):
+    def test_error_on_null_project_root_fails_closed(self):
+        raw = _exists_snapshot(correlated=False)
+        raw["schema"]["tables"][0]["columns"][1]["type"] = "String"
+        raw["plan"]["nodes"].insert(
+            2,
+            {
+                "id": "inner_unwrap",
+                "op": "project",
+                "input": "inner_scan",
+                "ordered": False,
+                "columns": [
+                    {
+                        "output": "inner.value",
+                        "expression": {
+                            "kind": "column",
+                            "column": "inner.x",
+                        },
+                        "error_on_null": True,
+                    }
+                ],
+            },
+        )
+        raw["plan"]["nodes"].insert(
+            3,
+            {
+                "id": "inner_wrapper",
+                "op": "filter",
+                "input": "inner_unwrap",
+                "predicate": _literal("Bool", True),
+            },
+        )
+        raw["plan"]["subplans"][0]["root"] = "inner_wrapper"
+
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "EXISTS roots with observable error outcomes",
+        ):
+            parse_snapshot(raw)
+
     def test_only_bool_nonnullable_descriptors_are_admitted(self):
         for field, value, message in (
             ("type", "Int64", "must have type 'Bool'"),
@@ -4415,6 +4530,38 @@ class ExistsSubplanValidationTest(unittest.TestCase):
 
 
 class InSubplanValidationTest(unittest.TestCase):
+    def test_error_on_null_project_root_fails_closed(self):
+        raw = _in_snapshot(scalar_type="String")
+        raw["schema"]["tables"][1]["columns"][0]["nullable"] = True
+        raw["plan"]["nodes"].insert(
+            2,
+            {
+                "id": "inner_unwrap",
+                "op": "project",
+                "input": "inner_scan",
+                "ordered": False,
+                "columns": [
+                    {
+                        "output": "inner.value",
+                        "expression": {
+                            "kind": "column",
+                            "column": "inner.k",
+                        },
+                        "error_on_null": True,
+                    }
+                ],
+            },
+        )
+        descriptor = raw["plan"]["subplans"][0]
+        descriptor["root"] = "inner_unwrap"
+        descriptor["output"]["column"] = "inner.value"
+
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "IN roots with observable error outcomes",
+        ):
+            parse_snapshot(raw)
+
     def test_descriptor_and_column_objects_are_strict_and_single_column(self):
         for target in ("descriptor", "lookup", "output"):
             with self.subTest(target=target):

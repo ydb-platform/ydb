@@ -692,30 +692,65 @@ class Evaluator:
         if isinstance(node, Project):
             source = self._input(node.id, 0, node.input)
             columns = self._columns(node.id)
-            return self._with_consumer_subplans(
-                node.id,
-                source,
-                lambda relation, bindings: Relation(
-                    columns,
-                    tuple(
+
+            def project(
+                relation: Relation,
+                bindings: Callable[[int, Row], Mapping[str, Value]],
+            ) -> Relation:
+                rows = []
+                for row_index, row in enumerate(relation.rows):
+                    values = dict(row.values) | bindings(row_index, row)
+                    projected = {}
+                    for projection in node.columns:
+                        value = self.scalar.evaluate(
+                            projection.expression,
+                            values,
+                        )
+                        projected[projection.output] = (
+                            replace(value, is_null=smt.FALSE)
+                            if projection.error_on_null
+                            else value
+                        )
+                    rows.append(
                         Row(
                             row.present,
-                            {
-                                projection.output: self.scalar.evaluate(
-                                    projection.expression,
-                                    dict(row.values) | bindings(row_index, row),
-                                )
-                                for projection in node.columns
-                            },
+                            projected,
                             row.occurrence,
                             row.partition_facts,
                         )
-                        for row_index, row in enumerate(relation.rows)
-                    ),
+                    )
+                return Relation(
+                    columns,
+                    tuple(rows),
                     sequence=relation.sequence,
                     order=_projected_order(relation.order, node),
                     ordinals=relation.ordinals,
                     present_prefix=relation.present_prefix,
+                )
+
+            marked_sources = tuple(
+                projection.expression.column
+                for projection in node.columns
+                if projection.error_on_null
+            )
+
+            return self._with_consumer_subplans(
+                node.id,
+                source,
+                project,
+                local_error=(
+                    None
+                    if not marked_sources
+                    else lambda relation: smt.or_(
+                        *(
+                            smt.and_(
+                                row.present,
+                                row.values[source].is_null,
+                            )
+                            for row in relation.rows
+                            for source in marked_sources
+                        )
+                    )
                 ),
             )
 
@@ -1690,9 +1725,29 @@ class Evaluator:
             [Relation, Callable[[int, Row], Mapping[str, Value]]],
             Relation,
         ],
+        local_error: Callable[[Relation], smt.Term] | None = None,
     ) -> RelationFamily:
         subplans = self.subplans_by_consumer.get(node_id, ())
         if not subplans:
+            if local_error is not None:
+                return RelationFamily(
+                    tuple(
+                        Outcome(
+                            outcome.enabled,
+                            transform(
+                                outcome.relation,
+                                lambda _index, _row: {},
+                            ),
+                            smt.or_(
+                                outcome.error,
+                                local_error(outcome.relation),
+                            ),
+                            outcome.decisions,
+                            outcome.choices,
+                        )
+                        for outcome in source.outcomes
+                    )
+                )
             return map_family(
                 source,
                 lambda relation: transform(
@@ -1841,6 +1896,11 @@ class Evaluator:
                         *(
                             smt.and_(demanded, error)
                             for error in partial.cardinality_errors
+                        ),
+                        *(
+                            (local_error(partial.relations[0]),)
+                            if local_error is not None
+                            else ()
                         ),
                     ),
                     partial.decisions,

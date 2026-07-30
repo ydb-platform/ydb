@@ -4,7 +4,7 @@ Watermark — a monotonically increasing lower bound on event times in the strea
 
 ## Event time {#event-time}
 
-In stream processing, each event has a timestamp that the system uses to track the progress of time in the stream. In the current implementation, the only source of event time is the write time of the event to the [topic](../../concepts/datamodel/topic.md), available via the system column `__ydb_write_time`.
+In stream processing, each event has a timestamp that the system uses to track the progress of time in the stream. In the current implementation, the only source of event time is the write time of the event to the [topic](../../concepts/datamodel/topic.md), available via the system column [`__ydb_write_time`](../../concepts/query_execution/topics.md#system-metadata).
 
 {% note info %}
 
@@ -19,19 +19,19 @@ Watermark is used by operations that depend on the progress of event time in the
 
 ```mermaid
 sequenceDiagram
-    participant Топик
-    participant Запрос as Потоковый запрос
-    participant Приёмник
+    participant Topic
+    participant Query as Streaming query
+    participant Sink
 
-    Топик->>Запрос: событие, ts = 10с
-    Note over Запрос: watermark = 5с
-    Топик->>Запрос: событие, ts = 12с
-    Note over Запрос: watermark = 7с
-    Топик->>Запрос: событие, ts = 18с
-    Note over Запрос: watermark = 13с<br/>Окно [0, 10) закрыто
-    Запрос->>Приёмник: результат окна [0, 10)
-    Топик->>Запрос: событие, ts = 8с
-    Note over Запрос: ts=8 меньше watermark=13<br/>Событие будет отброшено
+    Topic->>Query: event, ts = 10s
+    Note over Query: watermark = 5s
+    Topic->>Query: event, ts = 12s
+    Note over Query: watermark = 7s
+    Topic->>Query: event, ts = 18s
+    Note over Query: watermark = 13s<br/>Window [0, 10) is closed
+    Query->>Sink: result for window [0, 10)
+    Topic->>Query: event, ts = 8s
+    Note over Query: ts=8 is less than watermark=13<br/>Event is discarded
 ```
 
 
@@ -63,7 +63,7 @@ Configuration parameters:
 
 {% note warning %}
 
-When using [HoppingWindow](../../yql/reference/syntax/select/group-by.md#group-by-hopping_window), the first parameter (time extractor) and the time source in the WATERMARK expression must match. In the current implementation, both must use `__ydb_write_time`.
+When using [HoppingWindow](../../yql/reference/syntax/select/group-by.md#group-by-hopping_window), the first parameter (time extractor) and the time source in the WATERMARK expression must match. In the current implementation, both must use [`__ydb_write_time`](../../concepts/query_execution/topics.md#system-metadata).
 
 {% endnote %}
 
@@ -126,7 +126,7 @@ END DO;
 Where:
 
 - [`CREATE STREAMING QUERY`](../../yql/reference/syntax/create-streaming-query.md) — creates a named streaming query.
-- `__ydb_write_time` is a system column containing the time the event was written to the [topic](../../concepts/datamodel/topic.md).
+- [`__ydb_write_time`](../../concepts/query_execution/topics.md#system-metadata) is a system column containing the time the event was written to the [topic](../../concepts/datamodel/topic.md).
 - `FORMAT = json_each_row` — [data format](streaming-query-formats.md) in a topic, each line contains a separate JSON object.
 - `WATERMARK = __ydb_write_time - Interval("PT5S")` is a watermark with a 5-second lag. `Interval("PT5S")` sets the interval in [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601#Durations) format.
 - [`AGGREGATE_LIST`](../../yql/reference/builtins/aggregation.md#agg-list) — aggregate function that collects values into a list.

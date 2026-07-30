@@ -1,10 +1,6 @@
 # Quickstart: reading and writing topics
 
-<<<<<<< HEAD
-This tutorial walks you through your first [streaming query](../../concepts/streaming-query.md).
-=======
-In this guide, you will create your first [streaming query](../../concepts/streaming-query/streaming-query.md).
->>>>>>> 6c2f08c6922 (Auto-translate docs from PR #30237 (#48223))
+This tutorial walks you through your first [streaming query](../../concepts/streaming-query/streaming-query.md).
 
 The query will:
 
@@ -75,7 +71,6 @@ Verify:
 ./ydb --profile quickstart scheme ls
 ```
 
-<<<<<<< HEAD
 ## Step 2. Create an external data source {#step2}
 
 Create an [external data source](../../concepts/datamodel/external_data_source.md) with CREATE EXTERNAL DATA SOURCE:
@@ -96,10 +91,6 @@ Set `LOCATION` and `DATABASE_NAME` to match your {{ ydb-short-name }} deployment
 {% endnote %}
 
 ## Step 3. Create the streaming query {#step3}
-=======
-
-## Step 2. Create the streaming query {#step2}
->>>>>>> 6c2f08c6922 (Auto-translate docs from PR #30237 (#48223))
 
 Create a [streaming query](../../concepts/streaming-query/streaming-query.md) with [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md):
 
@@ -111,11 +102,7 @@ DO BEGIN
 $number_errors = SELECT
     Host,
     COUNT(*) AS ErrorCount,
-<<<<<<< HEAD
     CAST(HOP_START() AS String) AS Ts  -- Window start time for the aggregate row
-=======
-    CAST(HOP_START() AS String) AS Ts  -- Start time of the window corresponding to the aggregation result
->>>>>>> 6c2f08c6922 (Auto-translate docs from PR #30237 (#48223))
 FROM
     ydb_source.input_topic
 WITH (
@@ -129,33 +116,20 @@ WITH (
 WHERE
     Level = "error"
 GROUP BY
-<<<<<<< HEAD
     HOP(CAST(Time AS Timestamp), "PT600S", "PT600S", "PT0S"),  -- Non-overlapping 10-minute windows
-=======
-    HOP(CAST(Time AS Timestamp), "PT600S", "PT600S", "PT0S"),  -- Number of errors on non-overlapping windows of 10 minutes length
->>>>>>> 6c2f08c6922 (Auto-translate docs from PR #30237 (#48223))
     Host;
 
 INSERT INTO
     ydb_source.output_topic
 SELECT
-<<<<<<< HEAD
     ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))  -- Serialize columns to JSON
-=======
-    ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))  -- Serialization of all columns into JSON
->>>>>>> 6c2f08c6922 (Auto-translate docs from PR #30237 (#48223))
 FROM
     $number_errors;
 
 END DO
 ```
 
-<<<<<<< HEAD
 More detail:
-=======
-
-More details:
->>>>>>> 6c2f08c6922 (Auto-translate docs from PR #30237 (#48223))
 
 - `GROUP BY HOP` and `HOP_START` — [{#T}](../../yql/reference/syntax/select/group-by.md#group-by-hop).
 - Writing to topics — [{#T}](../../dev/streaming-query/streaming-query-formats.md#write_formats).
@@ -210,14 +184,7 @@ Expected output:
 {"ErrorCount":2,"Host":"host-1","Ts":"2025-01-01T00:00:00Z"}
 ```
 
-<<<<<<< HEAD
 ## Step 7. Delete the query {#step7}
-=======
-
-## Step 6. Delete the query {#step6}
-
-Delete the query with [DROP STREAMING QUERY](../../yql/reference/syntax/drop-streaming-query.md):
->>>>>>> 6c2f08c6922 (Auto-translate docs from PR #30237 (#48223))
 
 
 ```sql
@@ -232,9 +199,5 @@ DROP STREAMING QUERY query_example;
 
 ## See also
 
-<<<<<<< HEAD
-* [{#T}](../../concepts/streaming-query.md);
-=======
-* [{#T}](../../concepts/streaming-query/streaming-query.md)
->>>>>>> 6c2f08c6922 (Auto-translate docs from PR #30237 (#48223))
+* [{#T}](../../concepts/streaming-query/streaming-query.md);
 * [{#T}](../../dev/streaming-query/streaming-query-formats.md).

@@ -10,16 +10,7 @@ This method is intended only for debugging and checking data in a topic. For pro
 
 {% note info %}
 
-<<<<<<< HEAD
 In the examples, `ydb_source` is a pre-created [external data source](../../../../concepts/datamodel/external_data_source.md), and `topic_name` is a topic available through it.
-=======
-In the examples:
-
-- `ext_source` is a pre-created [external data source](../../../../concepts/datamodel/external_data_source.md)
-- `input_topic` is a local or external topic.
-
-For more information, see [local and external topics in streaming queries](../../../../dev/streaming-query/local-and-external-topics.md).
->>>>>>> 6c2f08c6922 (Auto-translate docs from PR #30237 (#48223))
 
 {% endnote %}
 

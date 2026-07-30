@@ -5,15 +5,10 @@ This documentation section covers the fundamental concepts and architectural pri
 The following topics provide comprehensive coverage of the core functionality of {{ ydb-short-name }}, from high-level architecture and data model to advanced capabilities such as transactions, indexing, and federated queries.
 
 - [Glossary](glossary.md)
-<<<<<<< HEAD
-- [Architecture](architecture.md)
-- [Connecting to a database](connect.md)
-=======
 - [Analytical capabilities](./analytics/index.md)
 - [Stream processing](./streaming-query/index.md)
-- [Architecture](architecture/index.md)
-- [Database connection](connect.md)
->>>>>>> 6c2f08c6922 (Auto-translate docs from PR #30237 (#48223))
+- [Architecture](architecture.md)
+- [Connecting to a database](connect.md)
 - [Schema objects](datamodel/index.md)
 - [Cluster topology](topology.md)
 - [Query execution](query_execution/index.md)

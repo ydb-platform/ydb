@@ -1,9 +1,8 @@
 # Data enrichment
 
-<<<<<<< HEAD
 **Data enrichment** means attaching additional information from a lookup to events in the stream. For example, an event may only contain an ID, while a lookup provides a name or other attributes. Lookups can come from a [local table](#enrichment-local-table) or from [S3 object storage](#enrichment-s3).
 
-In [streaming queries](../../concepts/streaming-query.md), you attach a lookup with `JOIN`. The stream must be on the left, the lookup on the right.
+In [streaming queries](../../concepts/streaming-query/streaming-query.md), you attach a lookup with `JOIN`. The stream must be on the left, the lookup on the right.
 
 {% note warning %}
 
@@ -12,30 +11,12 @@ The entire lookup is loaded into memory when the query starts. If the lookup dat
 {% endnote %}
 
 ## Prepare a data source for topics
-=======
-Data enrichment means augmenting stream events with extra fields from a lookup dataset. For example, an event may contain only an identifier, and the lookup adds a human-readable name or other attributes. The lookup can be a [local table](#enrichment-local-table) or [object storage (S3)](#enrichment-s3).
-
-In [streaming queries](../../concepts/streaming-query/streaming-query.md), the lookup is attached with a `JOIN`. The stream must be on the left side of the join, the lookup on the right.
-
-{% note warning %}
-
-The lookup is fully loaded into memory when the query starts. If the lookup data changes, restart the query to pick up the new version: drop it with [DROP STREAMING QUERY](../../yql/reference/syntax/drop-streaming-query.md) and create it again with [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md).
-
-{% endnote %}
-
-You can enrich data from [local and external topics](./local-and-external-topics.md).
->>>>>>> 6c2f08c6922 (Auto-translate docs from PR #30237 (#48223))
 
 Create an external data source for topics. Store tokens in a secret and create the source with CREATE EXTERNAL DATA SOURCE.
 
-<<<<<<< HEAD
 ```yql
 -- Secret with token for YDB
 CREATE SECRET `secrets/ydb_token` WITH (value = "<ydb_token>");
-=======
-- `ext_source` — a pre-created [external data source](../../concepts/datamodel/external_data_source.md) for topics in another {{ ydb-short-name }} database;
-- `input_topic` and `output_topic` — topics in the current or external {{ ydb-short-name }} database
->>>>>>> 6c2f08c6922 (Auto-translate docs from PR #30237 (#48223))
 
 -- YDB data source for reading/writing topics
 CREATE EXTERNAL DATA SOURCE ydb_source WITH (
@@ -47,7 +28,6 @@ CREATE EXTERNAL DATA SOURCE ydb_source WITH (
 );
 ```
 
-<<<<<<< HEAD
 Where:
 
 - `<ydb_endpoint>` — {{ ydb-short-name }} endpoint, for example `grpcs://<ydb_host>:2135`.
@@ -57,10 +37,6 @@ Where:
 
 The examples below read events from an input topic, join each event with a service name from the lookup on `ServiceId`, and write the result to an output topic.
 
-=======
-The examples below read events from an input topic, join each event with a service name from the lookup on `ServiceId`, and write the result to an output topic.
-
->>>>>>> 6c2f08c6922 (Auto-translate docs from PR #30237 (#48223))
 Functions used in the queries:
 
 - [TableRow](../../yql/reference/builtins/basic.md#tablerow)
@@ -71,25 +47,15 @@ Functions used in the queries:
 
 ### Enrichment from a local table {#enrichment-local-table}
 
-<<<<<<< HEAD
 Here the lookup is stored in table `services_dict` in the current database ([table](../../concepts/datamodel/table.md)).
-=======
-In this example the lookup is stored in a [table](../../concepts/datamodel/table.md) `services_dict` in the current database.
 
-Create a [streaming query](../../concepts/streaming-query/streaming-query.md) that performs enrichment:
->>>>>>> 6c2f08c6922 (Auto-translate docs from PR #30237 (#48223))
-
-Create a [streaming query](../../concepts/streaming-query.md) that performs the enrichment:
+Create a [streaming query](../../concepts/streaming-query/streaming-query.md) that performs the enrichment:
 
 ```yql
 CREATE STREAMING QUERY query_with_table_join AS
 DO BEGIN
 
-<<<<<<< HEAD
 -- Read events from input topic
-=======
--- Reading events from the input topic
->>>>>>> 6c2f08c6922 (Auto-translate docs from PR #30237 (#48223))
 $topic_data = SELECT
     *
 FROM
@@ -103,11 +69,7 @@ WITH (
     )
 );
 
-<<<<<<< HEAD
 -- Join lookup to stream on ServiceId
-=======
--- Joining reference data to the stream by ServiceId
->>>>>>> 6c2f08c6922 (Auto-translate docs from PR #30237 (#48223))
 $joined_data = SELECT
     s.Name AS Name,
     t.*
@@ -131,22 +93,12 @@ END DO
 
 ### Enrichment from S3 {#enrichment-s3}
 
-<<<<<<< HEAD
 The lookup is stored in S3 and connected through an [external data source](../../concepts/query_execution/federated_query/s3/external_data_source.md).
-=======
-The lookup is stored in S3 and connected via an [external data source](../../concepts/query_execution/federated_query/s3/external_data_source.md).
-
-Create an additional [external data source](../../yql/reference/syntax/create-external-data-source.md) to read the lookup from S3:
->>>>>>> 6c2f08c6922 (Auto-translate docs from PR #30237 (#48223))
 
 Create another external data source to read the lookup from S3:
 
 ```yql
-<<<<<<< HEAD
 -- S3 data source for lookup data
-=======
--- S3 data source for reading reference data
->>>>>>> 6c2f08c6922 (Auto-translate docs from PR #30237 (#48223))
 CREATE EXTERNAL DATA SOURCE s3_source WITH (
     SOURCE_TYPE = "ObjectStorage",
     LOCATION = "<s3_endpoint>",
@@ -156,25 +108,15 @@ CREATE EXTERNAL DATA SOURCE s3_source WITH (
 
 Where:
 
-<<<<<<< HEAD
 - `<s3_endpoint>` — S3 URL, for example `https://storage.yandexcloud.net/<bucket>/` in Yandex Cloud.
-=======
-- `<s3_endpoint>` is the S3 endpoint URL, for example `https://storage.yandexcloud.net/<bucket>/` in Yandex Cloud.
 
-Create a [streaming query](../../concepts/streaming-query/streaming-query.md) that performs enrichment:
->>>>>>> 6c2f08c6922 (Auto-translate docs from PR #30237 (#48223))
-
-Create a [streaming query](../../concepts/streaming-query.md) that performs the enrichment:
+Create a [streaming query](../../concepts/streaming-query/streaming-query.md) that performs the enrichment:
 
 ```yql
 CREATE STREAMING QUERY query_with_join AS
 DO BEGIN
 
-<<<<<<< HEAD
 -- Read events from input topic
-=======
--- Reading events from the input topic
->>>>>>> 6c2f08c6922 (Auto-translate docs from PR #30237 (#48223))
 $topic_data = SELECT
     *
 FROM
@@ -188,11 +130,7 @@ WITH (
     )
 );
 
-<<<<<<< HEAD
 -- Read service lookup from S3
-=======
--- Reading service reference data from S3
->>>>>>> 6c2f08c6922 (Auto-translate docs from PR #30237 (#48223))
 $s3_data = SELECT
     *
 FROM
@@ -205,11 +143,7 @@ WITH (
     )
 );
 
-<<<<<<< HEAD
 -- Join lookup to stream on ServiceId
-=======
--- Joining reference data to the stream by ServiceId
->>>>>>> 6c2f08c6922 (Auto-translate docs from PR #30237 (#48223))
 $joined_data = SELECT
     s.Name AS Name,
     t.*
@@ -220,11 +154,7 @@ LEFT JOIN
 ON
     t.ServiceId = s.ServiceId;
 
-<<<<<<< HEAD
 -- Write JSON to output topic
-=======
--- Writing the result to the output topic in JSON format
->>>>>>> 6c2f08c6922 (Auto-translate docs from PR #30237 (#48223))
 INSERT INTO
     ydb_source.output_topic
 SELECT
@@ -235,9 +165,4 @@ FROM
 END DO
 ```
 
-<<<<<<< HEAD
 For supported data formats (`json_each_row`, `csv_with_names`, etc.), see [{#T}](streaming-query-formats.md).
-=======
-
-For supported data formats (`json_each_row`, `csv_with_names`, and others), see [{#T}](streaming-query-formats.md).
->>>>>>> 6c2f08c6922 (Auto-translate docs from PR #30237 (#48223))

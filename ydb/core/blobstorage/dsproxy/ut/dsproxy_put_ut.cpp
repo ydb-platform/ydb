@@ -389,6 +389,13 @@ struct TTestPutAllOk {
                         NKikimrBlobStorage::TabletLog, TEvBlobStorage::TEvPut::TacticDefault, false, TAccelerationParams{}, false);
             }
 
+            if (i == 0) {
+                for (ui64 blobIdx = 0; blobIdx < BlobCount; ++blobIdx) {
+                    // VDisk replies carry part ids, while TPutImpl indexes full blob ids.
+                    UNIT_ASSERT_VALUES_EQUAL(putImpl->GetBlobIdx(TLogoBlobID(BlobIds[blobIdx], 1)), blobIdx);
+                }
+            }
+
             putImpl->GenerateInitialRequests(LogCtx, PartSets);
             putImpl->Step(LogCtx, putResults, &Group.GetInfo()->GetTopology(), false);
             auto vPuts = putImpl->GeneratePutRequests();

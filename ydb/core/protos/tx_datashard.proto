@@ -2243,6 +2243,7 @@ message TEvKqpScan {
     optional NKikimrDataEvents.ELockMode LockMode = 28;
     optional double CpuGroupThreadsLimit = 29;
     optional string CpuGroupName = 30;
+    optional bool UseBatchPool = 31 [default = false];
 }
 
 message TEvCompactTable {

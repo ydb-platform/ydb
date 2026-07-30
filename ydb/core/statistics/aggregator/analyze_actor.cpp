@@ -1,6 +1,7 @@
 #include "analyze_actor.h"
 
 #include <ydb/library/query_actor/query_actor.h>
+#include <ydb/core/base/request_types.h>
 #include <ydb/core/statistics/events.h>
 #include <util/generic/size_literals.h>
 #include <util/string/vector.h>
@@ -33,7 +34,9 @@ public:
         , Parent(parent)
         , Query(std::move(query))
         , ColumnCount(columnCount)
-    {}
+    {
+        RequestType = TString(NRequestTypes::Analyze);
+    }
 
     void OnRunQuery() override {
         RunStreamQuery(Query);

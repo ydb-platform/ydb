@@ -207,6 +207,7 @@ protected:
     const ui64 LogComponent;
     TString Database;
     TString SessionId;
+    TMaybe<TString> RequestType;
     bool IsSystemUser = false;
     bool IsStreamingMode = false;
     TString TxId;

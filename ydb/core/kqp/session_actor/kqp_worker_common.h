@@ -2,6 +2,7 @@
 
 #include "kqp_session_actor.h"
 
+#include <ydb/core/base/request_types.h>
 #include <ydb/core/docapi/traits.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
@@ -122,6 +123,10 @@ NYql::TKikimrQueryLimits GetQueryLimits(const TKqpWorkerSettings& settings);
 
 inline bool IsDocumentApiRestricted(const TString& requestType) {
     return requestType != NDocApi::RequestType;
+}
+
+inline bool IsAnalyzeRequest(const TString& requestType) {
+    return requestType == NRequestTypes::Analyze;
 }
 
 TMaybe<Ydb::StatusIds::StatusCode> GetYdbStatus(const NYql::TIssue& issue);

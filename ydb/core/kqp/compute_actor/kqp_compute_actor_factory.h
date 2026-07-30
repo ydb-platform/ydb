@@ -133,6 +133,8 @@ public:
         TString Database;
 
         NScheduler::NHdrf::NDynamic::TQueryPtr Query;
+
+        bool UseBatchPool = false;
     };
 
     virtual TActorId CreateKqpComputeActor(TCreateArgs&& args) = 0;

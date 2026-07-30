@@ -299,6 +299,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     request.SetDatabase(Database);
     request.SetDatabaseId(UserRequestContext->DatabaseId);
     request.SetPoolId(UserRequestContext->PoolId);
+    request.SetUseBatchPool(UserRequestContext->UseBatchPool);
 
     if (UserRequestContext->PoolConfig.has_value()) {
         request.SetMemoryPoolPercent(UserRequestContext->PoolConfig->TotalMemoryLimitPercentPerNode);
@@ -597,6 +598,7 @@ TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) 
         .UserToken = UserToken,
         .Database = Database,
         .Query = Query,
+        .UseBatchPool = UserRequestContext->UseBatchPool,
     });
 
     Y_ABORT_UNLESS(AcknowledgeCA(taskId, actorId, nullptr));

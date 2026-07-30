@@ -387,6 +387,7 @@ public:
                 .State = State_, // pass state to later inform when task is finished
                 .Database = msg.GetDatabase(),
                 .Query = query,
+                .UseBatchPool = msg.GetUseBatchPool(),
                 // TODO: block tracking mode is not set!
             };
             if (msg.HasUserToken() && msg.GetUserToken()) {
@@ -426,7 +427,8 @@ public:
             for (auto&& m : i.second.MutableMetaInfo()) {
                 Register(CreateKqpScanFetcher(msg.GetSnapshot(), std::move(m.MutableActorIds()),
                     m.GetMeta(), NYql::NDq::TComputeRuntimeSettings(), msg.GetDatabase(), txId, lockTxId, lockNodeId, lockMode,
-                    CaFactory_->GetShardsScanningPolicy(), Counters_, NWilson::TTraceId(ev->TraceId), cpuLimits));
+                    CaFactory_->GetShardsScanningPolicy(), Counters_, NWilson::TTraceId(ev->TraceId), cpuLimits,
+                    msg.GetUseBatchPool()));
             }
         }
 

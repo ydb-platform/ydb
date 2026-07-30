@@ -1,6 +1,7 @@
 #include "kqp_compute_actor_factory.h"
 #include "kqp_compute_actor.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/node_service/kqp_node_state.h>
 #include <ydb/core/kqp/rm_service/kqp_resource_estimation.h>
@@ -176,7 +177,9 @@ public:
                 args.ExecuterId, args.TxId, args.Task, AsyncIoFactory, runtimeSettings, memoryLimits,
                 std::move(args.TraceId), std::move(args.Arena),
                 std::move(schedulableOptions), args.BlockTrackingMode);
-            TActorId result = TlsActivationContext->Register(computeActor);
+            TActorId result = args.UseBatchPool
+                ? TlsActivationContext->Register(computeActor, TActorId(), TMailboxType::HTSwap, AppData()->BatchPoolId)
+                : TlsActivationContext->Register(computeActor);
             info.MutableActorIds().emplace_back(result);
             return result;
         } else {

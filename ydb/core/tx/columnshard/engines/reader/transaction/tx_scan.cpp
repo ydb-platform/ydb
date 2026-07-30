@@ -235,10 +235,11 @@ void TTxScan::Complete(const TActorContext& ctx) {
         scanDiagnosticsEvent->RequestId = requestCookie;
         ctx.Send(Self->ScanDiagnosticsActorId, std::move(scanDiagnosticsEvent));
     }
+    const ui32 scanPoolId = request.GetUseBatchPool() ? AppDataVerified().BatchPoolId : Max<ui32>();
     auto scanActorId = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->ScanDiagnosticsActorId,
         Self->GetStoragesManager(), Self->DataAccessorsManager.GetObjectPtrVerified(), Self->ColumnDataManager.GetObjectPtrVerified(),
         shardingPolicy, scanId, txId, scanGen, requestCookie, Self->TabletID(), timeout, readMetadataRange, dataFormat,
-        Self->Counters.GetScanCounters(), cpuLimits, std::move(orbit), rawPathId));
+        Self->Counters.GetScanCounters(), cpuLimits, std::move(orbit), rawPathId), TMailboxType::HTSwap, scanPoolId);
     Self->InFlightReadsTracker.AddScanActorId(requestCookie, scanActorId);
 
     YDB_LOG_DEBUG("",

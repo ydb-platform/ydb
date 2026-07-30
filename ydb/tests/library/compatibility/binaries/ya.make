@@ -4,19 +4,37 @@ UNION()
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/library/compatibility/versions.inc)
 
+IF(SANITIZER_TYPE == 'address')
+    SET(YDB_SAN_TYPE '-asan')
+ELSEIF(SANITIZER_TYPE == 'memory')
+    SET(YDB_SAN_TYPE '-msan')
+ELSEIF(SANITIZER_TYPE == 'thread')
+    SET(YDB_SAN_TYPE '-tsan')
+ENDIF()
+
+IF(BUILD_TYPE == 'RELEASE')
+    SET(YDB_BUILD_TYPE 'release')
+ELSEIF(BUILD_TYPE == 'DEBUG')
+    SET(YDB_BUILD_TYPE 'debug')
+ELSEIF(BUILD_TYPE == 'RELWITHDEBINFO')
+    SET(YDB_BUILD_TYPE 'relwithdebinfo')
+ENDIF()
+
+SET(YDB_BUILD_CONFIG ${YDB_BUILD_TYPE}${YDB_SAN_TYPE})
+
 RUN_PROGRAM(
-    ydb/tests/library/compatibility/binaries/downloader download $YDB_COMPAT_INTER_REF/release/ydbd ydbd-inter $YDB_COMPAT_INTER_REF
+    ydb/tests/library/compatibility/binaries/downloader download $YDB_COMPAT_INTER_REF/${YDB_BUILD_CONFIG}/ydbd ydbd-inter $YDB_COMPAT_INTER_REF
     OUT_NOAUTO ydbd-inter ydbd-inter-name
 )
 
 RUN_PROGRAM(
-    ydb/tests/library/compatibility/binaries/downloader download $YDB_COMPAT_INIT_REF/release/ydbd ydbd-init $YDB_COMPAT_INIT_REF
+    ydb/tests/library/compatibility/binaries/downloader download $YDB_COMPAT_INIT_REF/${YDB_BUILD_CONFIG}/ydbd ydbd-init $YDB_COMPAT_INIT_REF
     OUT_NOAUTO ydbd-init ydbd-init-name
 )
 
 IF(${YDB_COMPAT_TARGET_REF} != "current")
     RUN_PROGRAM(
-        ydb/tests/library/compatibility/binaries/downloader download $YDB_COMPAT_TARGET_REF/release/ydbd ydbd-target $YDB_COMPAT_TARGET_REF
+        ydb/tests/library/compatibility/binaries/downloader download $YDB_COMPAT_TARGET_REF/${YDB_BUILD_CONFIG}/ydbd ydbd-target $YDB_COMPAT_TARGET_REF
         OUT_NOAUTO ydbd-target ydbd-target-name
     )
 ELSE()

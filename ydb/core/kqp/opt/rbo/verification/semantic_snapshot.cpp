@@ -5421,6 +5421,7 @@ struct TStoredStringProvenance {
 
 using TStoredStringColumns = THashMap<TString, TStoredStringProvenance>;
 using TIntegralAverageOrderingColumns = THashSet<TString>;
+using TDecimalAverageCarrierTypes = THashSet<TString>;
 constexpr TStringBuf IntegralAverageOrderingComparisonV1 =
     "integral_avg_rank_v1";
 
@@ -8120,6 +8121,7 @@ public:
         if (Root.ColumnOrder.empty()) {
             Unsupported("Root output order must not be empty");
         }
+        PrepareDecimalAverageCarriers();
 
         // Subplan roots precede the main root so descriptors and consumer IDs
         // share one deterministic post-order node namespace.
@@ -8160,6 +8162,12 @@ public:
         return IntegralAverageOrderingOutputMap;
     }
 
+    const THashMap<const IOperator*, TDecimalAverageCarrierTypes>&
+    GetDecimalAverageCarrierOutputs() const
+    {
+        return DecimalAverageCarrierOutputMap;
+    }
+
     void ValidateStageProperties() const {
         if (!StageGraphPresent) {
             Unsupported("Stage properties require a StageGraph");
@@ -8177,6 +8185,11 @@ private:
     struct TExactType {
         TString Name;
         bool Nullable = false;
+    };
+
+    struct TDecimalAverageCarrierContract {
+        TString LogicalType;
+        TString SumType;
     };
 
     static ESubplanKind SubplanKind(const TSubplanDescriptor& subplan) {
@@ -8303,6 +8316,456 @@ private:
         }
         const TString name(node.Child(1)->Content());
         return name.empty() ? std::nullopt : std::optional<TString>(name);
+    }
+
+    static bool IsExactDecimalAverageStateType(
+        const TTypeAnnotationNode* annotation,
+        const TDecimalAverageCarrierContract& contract)
+    {
+        if (!annotation ||
+            annotation->GetKind() != ETypeAnnotationKind::Optional)
+        {
+            return false;
+        }
+        const auto* item =
+            annotation->Cast<TOptionalExprType>()->GetItemType();
+        if (!item || item->GetKind() != ETypeAnnotationKind::Tuple) {
+            return false;
+        }
+        const auto* tuple = item->Cast<TTupleExprType>();
+        if (tuple->GetSize() != 2) {
+            return false;
+        }
+        const auto sum = ExactType(tuple->GetItems()[0]);
+        return !sum.Nullable &&
+            sum.Name == contract.SumType &&
+            IsExactDataAnnotation(
+                tuple->GetItems()[1],
+                NUdf::EDataSlot::Uint64,
+                false);
+    }
+
+    static bool IsExactLogicalDecimalCarrierType(
+        const TTypeAnnotationNode* annotation,
+        const TDecimalAverageCarrierContract& contract)
+    {
+        if (!annotation ||
+            annotation->GetKind() !=
+                ETypeAnnotationKind::Optional)
+        {
+            return false;
+        }
+        const auto* item =
+            annotation->Cast<TOptionalExprType>()->GetItemType();
+        return item &&
+            item->GetKind() == ETypeAnnotationKind::Data &&
+            ExactType(annotation).Name == contract.LogicalType;
+    }
+
+    static void ValidateDecimalAverageStateNothing(
+        const TExpression& expression,
+        const TDecimalAverageCarrierContract& contract)
+    {
+        if (!expression.Node ||
+            !expression.Node->IsLambda() ||
+            expression.Node->ChildrenSize() != 2)
+        {
+            Unsupported(
+                "Decimal avg carrier padding is not a one-body lambda");
+        }
+        CheckScalarSafetyMetadata(*expression.Node);
+        const auto* arguments = expression.Node->Child(0);
+        if (!arguments->IsArguments() ||
+            arguments->ChildrenSize() != 1 ||
+            !arguments->Child(0)->IsArgument())
+        {
+            Unsupported(
+                "Decimal avg carrier padding must have one row argument");
+        }
+        CheckScalarSafetyMetadata(*arguments);
+        CheckScalarSafetyMetadata(*arguments->Child(0));
+
+        const auto body = expression.GetExpressionBody();
+        CheckScalarSafetyMetadata(*body);
+        if (!body->IsCallable("Nothing") ||
+            body->ChildrenSize() != 1 ||
+            !IsExactDecimalAverageStateType(
+                body->GetTypeAnn(),
+                contract))
+        {
+            Unsupported(TStringBuilder()
+                << "Decimal avg carrier padding must be exact "
+                << "Nothing(Optional<Tuple<" << contract.SumType
+                << ",Uint64>>)");
+        }
+
+        const auto* optional = body->Child(0);
+        CheckScalarSafetyMetadata(*optional);
+        if (!optional->IsCallable("OptionalType") ||
+            optional->ChildrenSize() != 1 ||
+            !IsSameAnnotation(
+                DescribedType(
+                    *optional,
+                    "Decimal avg carrier OptionalType"),
+                *body->GetTypeAnn()))
+        {
+            Unsupported(
+                "Decimal avg carrier padding OptionalType disagrees "
+                "with its result");
+        }
+
+        const auto* tuple = optional->Child(0);
+        CheckTupleDescriptor(
+            *tuple,
+            2,
+            "Decimal avg carrier TupleType");
+        const auto* state =
+            body->GetTypeAnn()
+                ->Cast<TOptionalExprType>()
+                ->GetItemType();
+        if (!IsSameAnnotation(
+                DescribedType(
+                    *tuple,
+                    "Decimal avg carrier TupleType"),
+                *state))
+        {
+            Unsupported(
+                "Decimal avg carrier padding TupleType disagrees "
+                "with its result");
+        }
+
+        const auto* sum = tuple->Child(0);
+        CheckScalarSafetyMetadata(*sum);
+        bool nullable = false;
+        if (DataTypeDescriptorName(*sum, &nullable) !=
+                contract.SumType ||
+            nullable)
+        {
+            Unsupported(
+                "Decimal avg carrier padding has a mismatched Decimal "
+                "sum descriptor");
+        }
+
+        const auto* count = tuple->Child(1);
+        CheckDataDescriptor(
+            *count,
+            NUdf::EDataSlot::Uint64,
+            false,
+            "Decimal avg carrier count DataType");
+    }
+
+    void RequireOnlyDecimalAverageConsumer(
+        IOperator& op,
+        IOperator& expectedConsumer) const
+    {
+        const auto* consumers = MainConsumers.FindPtr(&op);
+        if (!consumers ||
+            consumers->size() != 1 ||
+            consumers->front() != &expectedConsumer)
+        {
+            Unsupported(
+                "Decimal avg carrier operator must have exactly one "
+                "audited consumer");
+        }
+    }
+
+    void RegisterDecimalAverageCarrier(
+        IOperator& op,
+        TStringBuf name,
+        IOperator& expectedConsumer,
+        const TDecimalAverageCarrierContract& contract)
+    {
+        const TString column(name);
+        RequireOnlyDecimalAverageConsumer(op, expectedConsumer);
+        if (!OutputNames(op).contains(column)) {
+            Unsupported(TStringBuilder()
+                << "Decimal avg carrier output is missing " << column);
+        }
+        const auto* annotation = OutputType(op, column);
+        if (!IsExactLogicalDecimalCarrierType(annotation, contract) &&
+            !IsExactDecimalAverageStateType(annotation, contract))
+        {
+            Unsupported(TStringBuilder()
+                << "Decimal avg carrier " << column
+                << " must remain exact Optional<" << contract.LogicalType
+                << "> or Optional<Tuple<" << contract.SumType
+                << ",Uint64>>");
+        }
+        auto [outputTypes, inserted] =
+            DecimalAverageCarrierOutputMap.emplace(
+                &op,
+                TDecimalAverageCarrierTypes{});
+        Y_UNUSED(inserted);
+        if (!outputTypes->second.insert(column).second) {
+            Unsupported(
+                "Decimal avg carrier was certified twice");
+        }
+    }
+
+    size_t CertifyDecimalAverageUnionTree(
+        IOperator& op,
+        TStringBuf name,
+        IOperator& expectedConsumer,
+        const TDecimalAverageCarrierContract& contract)
+    {
+        RegisterDecimalAverageCarrier(
+            op,
+            name,
+            expectedConsumer,
+            contract);
+
+        switch (op.GetKind()) {
+            case EOperator::UnionAll: {
+                auto& unionAll = static_cast<TOpUnionAll&>(op);
+                if (unionAll.Ordered) {
+                    Unsupported(
+                        "Decimal avg carrier requires unordered UnionAll");
+                }
+                return CertifyDecimalAverageUnionTree(
+                           *unionAll.GetLeftInput(),
+                           name,
+                           unionAll,
+                           contract) +
+                    CertifyDecimalAverageUnionTree(
+                           *unionAll.GetRightInput(),
+                           name,
+                           unionAll,
+                           contract);
+            }
+
+            case EOperator::Map: {
+                auto& map = static_cast<TOpMap&>(op);
+                if (map.IsOrdered()) {
+                    Unsupported(
+                        "Decimal avg carrier Project leaf must be "
+                        "unordered");
+                }
+                if (map.GetInput()->GetKind() !=
+                    EOperator::Aggregate)
+                {
+                    Unsupported(
+                        "Decimal avg carrier UnionAll leaf must be "
+                        "exactly one Project over one Aggregate");
+                }
+                auto& aggregate =
+                    static_cast<TOpAggregate&>(*map.GetInput());
+                const auto traits =
+                    aggregate.GetAggregationTraits();
+                if (aggregate.GetAggregationPhase() !=
+                        EOpPhase::Intermediate ||
+                    aggregate.IsDistinctAll() ||
+                    !aggregate.GetKeyColumns().empty() ||
+                    traits.size() != 1)
+                {
+                    Unsupported(
+                        "Decimal avg carrier UnionAll leaf must contain "
+                        "one keyless Intermediate Aggregate");
+                }
+                const auto inputNames = OutputNames(*map.GetInput());
+                const auto* carrierElement = map.FindOutputElement(
+                    TInfoUnit(TString(name)));
+                for (const auto& element : map.MapElements) {
+                    if (&element == carrierElement) {
+                        continue;
+                    }
+                    if (ExpressionColumns(
+                            element.GetExpression()).contains(name))
+                    {
+                        Unsupported(
+                            "Decimal avg carrier must not have another "
+                            "Project scalar consumer");
+                    }
+                }
+
+                if (carrierElement &&
+                    carrierElement->GetExpression().Node &&
+                    carrierElement->GetExpression().Node->IsLambda() &&
+                    carrierElement->GetExpression().Node
+                            ->ChildrenSize() == 2 &&
+                    carrierElement->GetExpression()
+                        .GetExpressionBody()
+                        ->IsCallable("Nothing"))
+                {
+                    if (inputNames.contains(name)) {
+                        Unsupported(
+                            "Decimal avg carrier padding must not replace "
+                            "a live same-name input");
+                    }
+                    RequireOnlyDecimalAverageConsumer(
+                        aggregate,
+                        map);
+                    if (traits.front().AggFunction == "avg") {
+                        Unsupported(
+                            "Decimal avg carrier padding source must "
+                            "not be another Intermediate avg");
+                    }
+                    ValidateDecimalAverageStateNothing(
+                        carrierElement->GetExpression(),
+                        contract);
+                    if (!CertifiedDecimalAveragePads.emplace(
+                            carrierElement,
+                            contract.LogicalType).second)
+                    {
+                        Unsupported(
+                            "Decimal avg carrier padding was certified twice");
+                    }
+                    return 0;
+                }
+
+                if (carrierElement) {
+                    const TString source = carrierElement->IsRename()
+                        ? carrierElement->GetRename().GetFullName()
+                        : carrierElement->IsColumnAccess()
+                            ? carrierElement
+                                ->GetColumnAccess()
+                                .GetFullName()
+                            : TString();
+                    if (source != name) {
+                        Unsupported(
+                            "Decimal avg carrier Project must use a direct "
+                            "same-name column");
+                    }
+                }
+                if (!inputNames.contains(name)) {
+                    Unsupported(
+                        "Decimal avg carrier Project has no live "
+                        "same-name input");
+                }
+                const auto& trait = traits.front();
+                if (trait.ResultColName.GetFullName() != name ||
+                    trait.AggFunction != "avg" ||
+                    trait.Distinct ||
+                    trait.Unwrap)
+                {
+                    Unsupported(
+                        "Decimal avg carrier live producer must be one "
+                        "plain matching avg trait");
+                }
+                if (!IsExactLogicalDecimalCarrierType(
+                        OutputType(
+                            *aggregate.GetInput(),
+                            trait.OriginalColName.GetFullName()),
+                        contract))
+                {
+                    Unsupported(
+                        "Decimal avg carrier live producer input must "
+                        "match the final Optional<Decimal>");
+                }
+                RegisterDecimalAverageCarrier(
+                    aggregate,
+                    name,
+                    map,
+                    contract);
+                return 1;
+            }
+
+            default:
+                Unsupported(TStringBuilder()
+                    << "Decimal avg carrier UnionAll tree reached "
+                    << op.GetExplainName()
+                    << " instead of a direct Project leaf");
+        }
+    }
+
+    void CertifyDecimalAverageFinal(
+        TOpAggregate& aggregate,
+        const TOpAggregationTraits& trait)
+    {
+        const TString input =
+            trait.OriginalColName.GetFullName();
+        const TString output =
+            trait.ResultColName.GetFullName();
+        if (aggregate.IsDistinctAll() ||
+            !aggregate.GetKeyColumns().empty() ||
+            trait.Distinct ||
+            trait.Unwrap)
+        {
+            Unsupported(
+                "Decimal avg carrier consumer must be one keyless plain "
+                "Final avg trait");
+        }
+        const size_t inputUses = std::count_if(
+            aggregate.AggregationTraitsList.begin(),
+            aggregate.AggregationTraitsList.end(),
+            [&](const TOpAggregationTraits& candidate) {
+                return candidate.OriginalColName.GetFullName() == input;
+            });
+        if (inputUses != 1) {
+            Unsupported(
+                "Decimal avg carrier must have exactly one final "
+                "aggregate use");
+        }
+
+        const auto logicalType =
+            ExactType(OutputType(aggregate, output));
+        const auto parameters =
+            ParseCanonicalDecimalType(logicalType.Name);
+        if (!logicalType.Nullable || !parameters) {
+            Unsupported(
+                "Decimal avg carrier final output must be exact "
+                "Optional<Decimal>");
+        }
+        const TDecimalAverageCarrierContract contract{
+            logicalType.Name,
+            TStringBuilder()
+                << "Decimal("
+                << static_cast<ui32>(
+                    NYql::NDecimal::MaxPrecision)
+                << "," << static_cast<ui32>(parameters->Scale)
+                << ")",
+        };
+        const size_t producers = CertifyDecimalAverageUnionTree(
+            *aggregate.GetInput(),
+            input,
+            aggregate,
+            contract);
+        if (producers != 1) {
+            Unsupported(TStringBuilder()
+                << "Decimal avg carrier requires exactly one matching "
+                << "Intermediate avg producer, got " << producers);
+        }
+    }
+
+    void PrepareDecimalAverageCarriers() {
+        if (!StageGraphPresent) {
+            return;
+        }
+
+        THashSet<const IOperator*> nodes;
+        TVector<IOperator*> orderedNodes;
+        VisitOperators(
+            Root.GetInput(),
+            nodes,
+            [&](IOperator& op) {
+                orderedNodes.push_back(&op);
+                for (const auto& child : op.GetChildren()) {
+                    MainConsumers[child.Get()].push_back(&op);
+                }
+            });
+
+        for (auto* op : orderedNodes) {
+            if (op->GetKind() != EOperator::Aggregate) {
+                continue;
+            }
+            auto& aggregate =
+                static_cast<TOpAggregate&>(*op);
+            if (aggregate.GetAggregationPhase() !=
+                    EOpPhase::Final ||
+                aggregate.GetInput()->GetKind() !=
+                    EOperator::UnionAll)
+            {
+                continue;
+            }
+            for (const auto& trait :
+                aggregate.AggregationTraitsList)
+            {
+                if (trait.AggFunction == "avg") {
+                    CertifyDecimalAverageFinal(
+                        aggregate,
+                        trait);
+                }
+            }
+        }
     }
 
     struct TDirectCorrelation {
@@ -10621,7 +11084,17 @@ private:
                     }
                     auto column = JsonMap();
                     column["output"] = output;
-                    if (element.IsRename()) {
+                    if (const auto* pad =
+                            CertifiedDecimalAveragePads.FindPtr(
+                                &element))
+                    {
+                        auto expression = JsonMap();
+                        expression["kind"] = "null";
+                        expression["type"] = *pad;
+                        AuditExactScalarExpression(expression);
+                        column["expression"] =
+                            std::move(expression);
+                    } else if (element.IsRename()) {
                         column["expression"] =
                             ColumnExpr(element.GetRename().GetFullName());
                     } else if (auto exactUnwrap =
@@ -11224,6 +11697,12 @@ private:
     THashMap<const IOperator*, TStoredStringColumns> StoredStringOutputMap;
     THashMap<const IOperator*, TIntegralAverageOrderingColumns>
         IntegralAverageOrderingOutputMap;
+    THashMap<const IOperator*, TDecimalAverageCarrierTypes>
+        DecimalAverageCarrierOutputMap;
+    THashMap<const TMapElement*, TString>
+        CertifiedDecimalAveragePads;
+    THashMap<const IOperator*, TVector<IOperator*>>
+        MainConsumers;
     THashMap<const IOperator*, TString> Ids;
     THashSet<const IOperator*> Visiting;
     THashSet<const TOpAddDependencies*> AuthorizedOuterBinds;
@@ -11255,6 +11734,10 @@ public:
             const IOperator*,
             TIntegralAverageOrderingColumns>&
             integralAverageOrderingOutputs,
+        const THashMap<
+            const IOperator*,
+            TDecimalAverageCarrierTypes>&
+            decimalAverageCarrierOutputs,
         TString rootNodeId)
         : Root(root)
         , Graph(root.PlanProps.StageGraph)
@@ -11262,6 +11745,8 @@ public:
         , NodeOrder(nodeOrder)
         , IntegralAverageOrderingOutputs(
             integralAverageOrderingOutputs)
+        , DecimalAverageCarrierOutputs(
+            decimalAverageCarrierOutputs)
         , RootNodeId(std::move(rootNodeId))
     {
     }
@@ -11701,6 +12186,10 @@ private:
         edge["producer_output"] = static_cast<ui64>(outputIndex);
         edge["consumer_input"] = static_cast<ui64>(consumerInput);
 
+        const auto* decimalAverageCarriers =
+            DecimalAverageCarrierOutputs.FindPtr(
+                boundary.ProducerNode);
+
         if (dynamic_cast<const TMapConnection*>(&connection)) {
             CheckConnectionType(connection, "Map");
             edge["kind"] = "map";
@@ -11723,6 +12212,13 @@ private:
                 const TString name = key.GetFullName();
                 if (name.empty() || !producerOutputs.contains(name)) {
                     Unsupported("StageGraph HashShuffle key is absent from its producer output");
+                }
+                if (decimalAverageCarriers &&
+                    decimalAverageCarriers->contains(name))
+                {
+                    Unsupported(
+                        "StageGraph Decimal avg carrier must not be a "
+                        "HashShuffle key");
                 }
                 keys.AppendValue(name);
             }
@@ -11757,6 +12253,13 @@ private:
                 const TString column = sort.SortColumn.GetFullName();
                 if (column.empty() || !producerOutputs.contains(column)) {
                     Unsupported("StageGraph Merge column is absent from its producer output");
+                }
+                if (decimalAverageCarriers &&
+                    decimalAverageCarriers->contains(column))
+                {
+                    Unsupported(
+                        "StageGraph Decimal avg carrier must not be a "
+                        "Merge ordering column");
                 }
                 const auto* orderingType =
                     OutputType(*boundary.ProducerNode, column);
@@ -11970,6 +12473,8 @@ private:
     const TVector<IOperator*>& NodeOrder;
     const THashMap<const IOperator*, TIntegralAverageOrderingColumns>&
         IntegralAverageOrderingOutputs;
+    const THashMap<const IOperator*, TDecimalAverageCarrierTypes>&
+        DecimalAverageCarrierOutputs;
     TString RootNodeId;
     size_t StageCount = 0;
     ui32 RootStageId = 0;
@@ -12054,6 +12559,7 @@ TString SerializeSnapshot(
             planExporter.GetNodeIds(),
             planExporter.GetNodeOrder(),
             planExporter.GetIntegralAverageOrderingOutputs(),
+            planExporter.GetDecimalAverageCarrierOutputs(),
             planExporter.GetRootId());
         snapshot["stage_graph"] = stageGraphExporter.Export();
         planExporter.ValidateStageProperties();

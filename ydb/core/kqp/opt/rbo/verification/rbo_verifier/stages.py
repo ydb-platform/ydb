@@ -43,6 +43,7 @@ from .types import DOUBLE, family
 
 TASKS = 2
 MAX_EXPLICIT_TASK_COPY_ROWS = 8
+MAX_EXPLICIT_HASH_SHUFFLE_COPY_CELLS = 8
 
 
 class StageError(ValueError):
@@ -302,10 +303,18 @@ class Evaluator:
                 raise StageError("map connection cannot change task count")
             return source
         if edge.kind == "broadcast":
-            family = _gather(source.relations)
+            family = _gather(
+                source.relations,
+                compact_exclusive_task_copies=True,
+            )
             return Partitions(tuple(family for _ in range(tasks)))
         if edge.kind == "hash_shuffle":
-            family = _gather(source.relations)
+            family = _gather(
+                source.relations,
+                compact_exclusive_task_copy_cell_limit=(
+                    MAX_EXPLICIT_HASH_SHUFFLE_COPY_CELLS
+                ),
+            )
             if tasks == 1:
                 return Partitions((family,))
             if tasks != TASKS:
@@ -405,7 +414,20 @@ def _canonical(value: Value) -> smt.Term:
     return smt.ite(value.is_null, default, value.value)
 
 
-def _gather(families: tuple[RelationFamily, ...]) -> RelationFamily:
+def _gather(
+    families: tuple[RelationFamily, ...],
+    *,
+    compact_exclusive_task_copies: bool = False,
+    compact_exclusive_task_copy_cell_limit: int | None = None,
+) -> RelationFamily:
+    """Gather task bags with an exact task-copy representation choice.
+
+    Broadcast compacts every exclusive occurrence before fan-out.  HashShuffle
+    compacts only when the explicit transported payload exceeds its audited
+    cell limit.  Other gathers keep small differing states explicit because
+    that is usually the simpler SMT shape.  All choices denote the same bag.
+    """
+
     if not families:
         raise StageError("connection has no producer tasks")
     columns = families[0].columns
@@ -430,7 +452,13 @@ def _gather(families: tuple[RelationFamily, ...]) -> RelationFamily:
                 rows,
                 columns,
                 merge_conditional_values=(
-                    len(rows) > MAX_EXPLICIT_TASK_COPY_ROWS
+                    compact_exclusive_task_copies
+                    or len(rows) > MAX_EXPLICIT_TASK_COPY_ROWS
+                    or (
+                        compact_exclusive_task_copy_cell_limit is not None
+                        and len(rows) * len(columns)
+                        > compact_exclusive_task_copy_cell_limit
+                    )
                 ),
             ),
         )

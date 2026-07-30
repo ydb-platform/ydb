@@ -1,7 +1,7 @@
 import unittest
 
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier import smt, stages
-from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import Column
+from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import Column, StageEdge
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.relation import (
     Occurrence,
     PartitionFact,
@@ -246,7 +246,7 @@ class StageCompactionTest(unittest.TestCase):
         self.assertEqual(compacted[0].partition_facts, frozenset((common,)))
 
     def test_gather_uses_the_audited_conditional_value_threshold(self):
-        def gathered(origin_count):
+        def gathered(origin_count, *, compact_exclusive_task_copies=False):
             left = []
             right = []
             for index in range(origin_count):
@@ -266,13 +266,152 @@ class StageCompactionTest(unittest.TestCase):
                     occurrence,
                     PartitionFact(route, True),
                 ))
-            return stages._gather((
-                single(Relation(self.COLUMNS, tuple(left))),
-                single(Relation(self.COLUMNS, tuple(right))),
-            )).certain()
+            return stages._gather(
+                (
+                    single(Relation(self.COLUMNS, tuple(left))),
+                    single(Relation(self.COLUMNS, tuple(right))),
+                ),
+                compact_exclusive_task_copies=compact_exclusive_task_copies,
+            ).certain()
 
         self.assertEqual(len(gathered(4).rows), 8)
         self.assertEqual(len(gathered(5).rows), 5)
+        self.assertEqual(
+            len(gathered(1, compact_exclusive_task_copies=True).rows),
+            1,
+        )
+
+    def test_routing_connections_merge_small_exclusive_task_values(self):
+        route = smt.symbol("source_route", smt.BOOL)
+        columns = tuple(
+            Column(name, "Int64", True)
+            for name in ("x", "y", "z", "w", "v")
+        )
+
+        def row(source_columns, present, offset, fact):
+            return Row(
+                present,
+                {
+                    column.name: Value(
+                        "Int64",
+                        smt.FALSE,
+                        smt.int_value(offset + index),
+                    )
+                    for index, column in enumerate(source_columns)
+                },
+                self.OCCURRENCE,
+                frozenset((fact,)),
+            )
+
+        def source_for(source_columns):
+            return stages.Partitions((
+                single(Relation(source_columns, (
+                    row(
+                        source_columns,
+                        smt.not_(route),
+                        10,
+                        PartitionFact(route, False),
+                    ),
+                ))),
+                single(Relation(source_columns, (
+                    row(
+                        source_columns,
+                        route,
+                        20,
+                        PartitionFact(route, True),
+                    ),
+                ))),
+            ))
+
+        source = source_for(columns)
+        evaluator = object.__new__(stages.Evaluator)
+        evaluator.router = stages.Router(smt.Script())
+
+        self.assertEqual(
+            len(stages._gather(source.relations).certain().rows),
+            2,
+        )
+
+        def edge(kind, **kwargs):
+            return StageEdge(
+                id=f"{kind}_edge",
+                producer="producer",
+                consumer="consumer",
+                occurrence=0,
+                producer_output=0,
+                consumer_input=0,
+                kind=kind,
+                **kwargs,
+            )
+
+        broadcast = evaluator._connect(
+            edge("broadcast"),
+            source,
+            stages.TASKS,
+            0,
+        )
+        self.assertEqual(
+            tuple(len(family.certain().rows) for family in broadcast.relations),
+            (1, 1),
+        )
+        self.assertEqual(
+            broadcast.relations[0].certain().rows[0].values,
+            broadcast.relations[1].certain().rows[0].values,
+        )
+
+        hash_edge = edge(
+            "hash_shuffle",
+            keys=("x",),
+            hash_function="HashV1",
+            use_spilling=False,
+        )
+        boundary = evaluator._connect(
+            hash_edge,
+            source_for(columns[:4]),
+            stages.TASKS,
+            0,
+        )
+        self.assertEqual(
+            tuple(len(family.certain().rows) for family in boundary.relations),
+            (2, 2),
+        )
+
+        shuffled = evaluator._connect(
+            hash_edge,
+            source,
+            stages.TASKS,
+            0,
+        )
+        self.assertEqual(
+            tuple(len(family.certain().rows) for family in shuffled.relations),
+            (1, 1),
+        )
+        left = shuffled.relations[0].certain().rows[0]
+        right = shuffled.relations[1].certain().rows[0]
+        self.assertEqual(
+            left.values["x"].value,
+            smt.ite(
+                smt.not_(route),
+                smt.int_value(10),
+                smt.int_value(20),
+            ),
+        )
+        self.assertEqual(len(left.partition_facts), 1)
+        self.assertEqual(len(right.partition_facts), 1)
+        left_fact = next(iter(left.partition_facts))
+        right_fact = next(iter(right.partition_facts))
+        self.assertEqual(left_fact.term, right_fact.term)
+        self.assertFalse(left_fact.value)
+        self.assertTrue(right_fact.value)
+        gathered_present = smt.or_(smt.not_(route), route)
+        self.assertEqual(
+            left.present,
+            smt.and_(gathered_present, smt.not_(left_fact.term)),
+        )
+        self.assertEqual(
+            right.present,
+            smt.and_(gathered_present, right_fact.term),
+        )
 
     def test_decimal_bounds_merge_conservatively(self):
         column = Column("d", "Decimal(3,0)", False)

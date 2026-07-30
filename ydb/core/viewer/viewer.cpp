@@ -265,7 +265,7 @@ public:
                     // Monitoring-level endpoints.
                     // restart pdisk and evict vdisk endpoints below have some query-parameters,
                     // which require Administration-level access. This is checked in the handler.
-                    // So the Monitoring-level access is not always enough for a successull call.
+                    // So the Monitoring-level access is not always enough for a successful call.
                     {"/pdisk/restart", {EViewerEndpointAccessType::Monitoring}},
                     {"/vdisk/evict", {EViewerEndpointAccessType::Monitoring}},
 
@@ -340,13 +340,12 @@ public:
                     // it requires the Monitoring level, except for the prometheus format,
                     // which is checked separately (see RequireHealthcheckAuthentication).
                     {"/viewer/healthcheck", {EViewerEndpointAccessType::Database, false}},
-
-                    // Endpoints which are intentionally available to anyone.
-                    // This handler is used to discover capabilities, including auth requirements,
-                    // so it must be always available without authentication.
-                    {"/viewer/capabilities", {EViewerEndpointAccessType::Any, false}},
                 });
             }
+            // Endpoints which are intentionally available to anyone.
+            // The capabilities handler is used to discover capabilities, including auth requirements,
+            // so it must be always available without authentication, regardless of any feature flags.
+            applyAccessRule({"/viewer/capabilities", {EViewerEndpointAccessType::Any, false}});
 
             auto addV2JsonAlias = [&](TStringBuf aliasPath, TStringBuf canonicalPath) {
                 JsonHandlers.JsonHandlersIndex[TString(aliasPath)] = JsonHandlers.JsonHandlersIndex[TString(canonicalPath)];

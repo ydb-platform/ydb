@@ -12,11 +12,10 @@ namespace NPageCollection {
     public:
         TPageCollection() = delete;
 
-        /* `skippedInMeta` is the extra page count beyond MetaPages() contributed by EPage::Skip entries (see TRecord::PushSkip) */
-        TPageCollection(TLargeGlobId largeGlobId, TSharedData raw, ui32 skippedInMeta = Max<ui32>())
+        TPageCollection(TLargeGlobId largeGlobId, TSharedData raw)
             : LargeGlobId(largeGlobId)
             , Meta(std::move(raw), LargeGlobId.Group)
-            , SkippedInMeta(skippedInMeta == Max<ui32>() ? Meta.SkippedPages() : skippedInMeta)
+            , SkippedInMeta(Meta.SkippedPages())
         {
             if (!Meta.Raw || LargeGlobId.Bytes != Meta.Raw.size() || LargeGlobId.Group == TLargeGlobId::InvalidGroup) {
                 Y_TABLET_ERROR("Invalid TLargeGlobId of page collection meta blob");
@@ -106,18 +105,15 @@ namespace NPageCollection {
 
         const TLargeGlobId LargeGlobId;
         const TMeta Meta;
-        mutable ui32 SkippedInMeta;
+        const ui32 SkippedInMeta;
         mutable bool SkipBTreeIndexV1Shadow_ = false;
-
-        /// Update SkippedInMeta after construction .
-        void SetSkippedPagesInMeta(ui32 value) const noexcept override { SkippedInMeta = value; }
     };
 
     /// Page-index TPageOffset to satisfy forward cache
     class TOuterPageCollection : public TPageCollection {
     public:
         TOuterPageCollection(TLargeGlobId largeGlobId, TSharedData raw)
-            : TPageCollection(std::move(largeGlobId), std::move(raw), 0)
+            : TPageCollection(std::move(largeGlobId), std::move(raw))
         {}
 
         NTable::NPage::TPageLocation GetLocation(ui32 pageId) const override

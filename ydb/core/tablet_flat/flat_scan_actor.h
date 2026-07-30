@@ -143,8 +143,12 @@ namespace NOps {
                         Send(Owner, new TEvPrivate::TEvLoadBlob(blobId, group), 0, slot);
                     }
                 }
-                PageCollections.resize(PageCollectionLoaders.size());
-                PageCollectionsLeft = PageCollectionLoaders.size();
+                Components.resize(PageCollectionLoaders.size());
+                // Copy LargeGlobId into each component now (filled in Handle when blob is loaded)
+                for (ui64 slot = 0; slot < Part->LargeGlobIds.size(); ++slot) {
+                    Components[slot].LargeGlobId = Part->LargeGlobIds[slot];
+                }
+                ComponentsLeft = Components.size();
                 Become(&TThis::StateLoadPageCollections);
             }
 
@@ -157,16 +161,14 @@ namespace NOps {
             void Handle(TEvPrivate::TEvBlobLoaded::TPtr& ev) {
                 auto* msg = ev->Get();
                 ui64 slot = ev->Cookie;
-                Y_ENSURE(slot < PageCollections.size());
+                Y_ENSURE(slot < Components.size());
                 Y_ENSURE(slot < PageCollectionLoaders.size());
-                Y_ENSURE(!PageCollections[slot]);
+                Y_ENSURE(!Components[slot].RawMeta);
                 auto& loader = PageCollectionLoaders[slot];
                 if (loader.Apply(msg->BlobId, std::move(msg->Body))) {
-                    TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection =
-                        new NPageCollection::TPageCollection(Part->LargeGlobIds[slot], loader.ExtractSharedData());
-                    PageCollections[slot] = new TPrivatePageCache::TPageCollection(std::move(pageCollection));
-                    Y_ENSURE(PageCollectionsLeft > 0);
-                    if (0 == --PageCollectionsLeft) {
+                    Components[slot].RawMeta = loader.ExtractSharedData();
+                    Y_ENSURE(ComponentsLeft > 0);
+                    if (0 == --ComponentsLeft) {
                         PageCollectionLoaders.clear();
                         StartLoader();
                     }
@@ -176,12 +178,13 @@ namespace NOps {
         private:
             void StartLoader() {
                 Y_ENSURE(!Loader);
-                Loader.emplace(
-                    std::move(PageCollections),
-                    Part->Legacy,
-                    Part->Opaque,
-                    TVector<TString>{ },
-                    Part->Epoch);
+                NTable::TPartComponents parts{
+                    .PageCollectionComponents = std::move(Components),
+                    .Legacy = Part->Legacy,
+                    .Opaque = Part->Opaque,
+                    .Epoch = Part->Epoch,
+                };
+                Loader.emplace(std::move(parts));
                 Become(&TThis::StateLoadPart);
 
                 RunLoader();
@@ -239,9 +242,9 @@ namespace NOps {
             TActorId Owner;
             TIntrusiveConstPtr<TColdPartStore> Part;
             EPriority ReadPriority;
-            TVector<TIntrusivePtr<TPrivatePageCache::TPageCollection>> PageCollections;
+            TVector<NTable::TPageCollectionComponents> Components;
             TVector<NPageCollection::TLargeGlobIdRestoreState> PageCollectionLoaders;
-            size_t PageCollectionsLeft = 0;
+            size_t ComponentsLeft = 0;
             std::optional<NTable::TLoader> Loader;
             size_t ReadsLeft = 0;
         };

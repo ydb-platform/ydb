@@ -169,17 +169,6 @@ public:
         return pages;
     }
 
-    static TVector<TIntrusivePtr<TPageCollection>> Construct(TVector<TPageCollectionComponents> components)
-    {
-        TVector<TIntrusivePtr<TPageCollection>> pageCollections;
-
-        for (auto &one: components) {
-            pageCollections.emplace_back(new TPageCollection(std::move(one.PageCollection)));
-        }
-
-        return pageCollections;
-    }
-
     static TArrayRef<const TIntrusivePtr<TPageCollection>> Storages(const TPartView &partView)
     {
         auto *part = partView.As<TPartStore>();

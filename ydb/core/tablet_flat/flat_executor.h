@@ -98,7 +98,7 @@ struct TPendingPartSwitch {
             : PartComponents(std::move(pc))
         {
             for (size_t idx = 0; idx < PartComponents.PageCollectionComponents.size(); ++idx) {
-                if (!PartComponents.PageCollectionComponents[idx].PageCollection) {
+                if (!PartComponents.PageCollectionComponents[idx].RawMeta) {
                     Loaders.emplace_back(idx, PartComponents.PageCollectionComponents[idx].LargeGlobId);
                 }
             }
@@ -110,7 +110,7 @@ struct TPendingPartSwitch {
 
         bool Accept(TLargeGlobLoaders::iterator it, const TLogoBlobID& id, TString body) {
             if (it->Accept(id, std::move(body))) {
-                PartComponents.PageCollectionComponents[it->Index].ParsePageCollection(it->Finish());
+                PartComponents.PageCollectionComponents[it->Index].RawMeta = it->Finish();
                 Loaders.erase(it);
                 return !Loaders;
             }
@@ -124,7 +124,7 @@ struct TPendingPartSwitch {
         const NPageCollection::IPageCollection* Fetching = nullptr;
 
         explicit TLoaderStage(NTable::TPartComponents&& pc)
-            : Loader(std::move(pc))
+            : Loader(std::move(pc))  // constructs PageCollections in StageParseMeta from components
         { }
     };
 

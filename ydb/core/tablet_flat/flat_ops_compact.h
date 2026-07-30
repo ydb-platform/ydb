@@ -384,10 +384,17 @@ namespace NTabletFlatExecutor {
                     resultingPageCollections.push_back(std::move(resultingPageCollection));
                 }
 
+                TVector<NTable::TPageCollectionComponents> comps(result.PageCollections.size());
+                NTable::TPartComponents parts{
+                    .PageCollectionComponents = std::move(comps),
+                    .Opaque = std::move(result.Overlay),
+                    .Epoch = NTable::TEpoch::Max(),
+                };
+
+                // Pass pre-built collections with MakeUsed refs so shared cache sees active refs
                 NTable::TLoader loader(
-                    std::move(resultingPageCollections),
-                    { },
-                    std::move(result.Overlay));
+                    std::move(parts),
+                    std::move(resultingPageCollections));
 
                 // do not preload index as it may be already offloaded
                 auto fetch = loader.Run({.PreloadIndex = false, .PreloadData = false});

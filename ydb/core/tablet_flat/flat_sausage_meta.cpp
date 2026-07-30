@@ -29,6 +29,10 @@ TMeta::TMeta(TSharedData raw, ui32 group)
         for (auto &one: blobs)
             Steps.push_back(offset += one.BlobSize());
     }
+
+    /* Crc32 stores pages - 1 per skip entry (not the raw count, see TRecord::PushSkip);
+       Total = MetaPages + SkippedPages gives the correct full page count. */
+    SkippedPages_ = (Extra[0].Type == ui32(NTable::NPage::EPage::Skip) ? Extra[0].Crc32 : 0);
 }
 
 TMeta::~TMeta()
@@ -111,26 +115,6 @@ TStringBuf TMeta::GetPageInplaceData(ui32 pageId) const
     const ui64 begin = (pageId == 0) ? 0 : Index[pageId - 1].Inplace;
 
     return TStringBuf(InboundData + begin, InboundData + end);
-}
-
-ui32 TMeta::SkippedPages() const noexcept
-{
-    if (SkippedPages_ != Max<ui32>()) {
-        return SkippedPages_;
-    }
-
-    SkippedPages_ = 0;
-    /* Crc32 stores pages - 1 per skip entry (not the raw count, see TRecord::PushSkip); the off-by-one
-       is deliberate — each skip entry itself is counted in MetaPages(), so
-       Total = MetaPages + SkippedPages gives the correct full page count. */
-    if (Extra && Header->Pages) {
-        for (ui32 i = 0; i < Header->Pages; i++) {
-            if (Extra[i].Type == ui32(NTable::NPage::EPage::Skip)) {
-                SkippedPages_ += Extra[i].Crc32;
-            }
-        }
-    }
-    return SkippedPages_;
 }
 
 ui32 Checksum(TArrayRef<const char> body) noexcept

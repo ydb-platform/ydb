@@ -29,7 +29,6 @@ namespace NPageCollection {
         /// Returns true when the collection carries both BTreeIndex and BTreeIndexV2 pages
         virtual bool SkipBTreeIndexV1Shadow() const noexcept { return false; }
         virtual void SetSkipBTreeIndexV1Shadow(bool) const noexcept { }
-        virtual void SetSkippedPagesInMeta(ui32) const noexcept { };
     };
 
 }

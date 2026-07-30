@@ -144,18 +144,7 @@ namespace NTable {
             bool PreloadData = false;
         };
 
-        TLoader(TPartComponents ou)
-            : TLoader(TPartStore::Construct(std::move(ou.PageCollectionComponents)),
-                    std::move(ou.Legacy),
-                    std::move(ou.Opaque),
-                    {},
-                    ou.Epoch)
-        {
-        }
-
-        TLoader(TVector<TIntrusivePtr<TPageCollection>> pageCollections, TString legacy, TString opaque,
-                TVector<TString> deltas = { },
-                TEpoch epoch = NTable::TEpoch::Max());
+        TLoader(TPartComponents components, TVector<TIntrusivePtr<TPageCollection>> prebuiltPageCollections = {});
         ~TLoader();
 
         TFetch Run(TRunOptions options)
@@ -219,9 +208,10 @@ namespace NTable {
         static TEpoch GrabEpoch(const TPartComponents &pc)
         {
             Y_ENSURE(pc.PageCollectionComponents, "PartComponents should have at least one pageCollectionComponent");
-            Y_ENSURE(pc.PageCollectionComponents[0].PageCollection, "PartComponents should have a parsed meta pageCollectionComponent");
+            Y_ENSURE(pc.PageCollectionComponents[0].RawMeta, "PartComponents should have raw meta data");
 
-            const auto &meta = pc.PageCollectionComponents[0].PageCollection->Meta;
+            const auto &comp = pc.PageCollectionComponents[0];
+            NPageCollection::TMeta meta(TSharedData(comp.RawMeta), comp.LargeGlobId.Group);
 
             for (ui32 page = meta.TotalPages(); page--;) {
                 if (meta.GetPageType(page) == ui32(EPage::Schem2)
@@ -275,6 +265,7 @@ namespace NTable {
 
     private:
         TVector<TIntrusivePtr<TPageCollection>> PageCollections;
+        TPartComponents Components;
         const TString Legacy;
         const TString Opaque;
         const TVector<TString> Deltas;

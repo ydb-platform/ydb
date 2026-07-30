@@ -585,16 +585,20 @@ void TPartitionActor::HandleUpdateVChunkConfig(
     const TEvPartitionDirectPrivate::TEvUpdateVChunkConfig::TPtr& ev,
     const NActors::TActorContext& ctx)
 {
-    auto& cfg = ev->Get()->VChunkConfig;
+    auto* msg = ev->Get();
 
     LOG_INFO(
         ctx,
         NKikimrServices::NBS_PARTITION,
         "%s Handle UpdateVChunkConfig %s",
         LogTitle.GetWithTime().c_str(),
-        cfg.DebugPrint().c_str());
+        msg->VChunkConfig.DebugPrint().c_str());
 
-    ExecuteTx(ctx, CreateTx<TUpdateVChunkConfig>(std::move(cfg)));
+    ExecuteTx(
+        ctx,
+        CreateTx<TUpdateVChunkConfig>(
+            std::move(msg->VChunkConfig),
+            std::move(msg->UpdateCompleted)));
 }
 
 ///////////////////////////////////////////////////////////////////////////////

@@ -40,8 +40,9 @@
 
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 
-#include <ydb/library/actors/core/log.h>
 #include <ydb/services/sqs_topic/statuses.h>
+
+#include <ydb/library/actors/core/log.h>
 
 #include <library/cpp/json/json_writer.h>
 
@@ -116,7 +117,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
         void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
             const auto* result = ev->Get();
-            Y_ABORT_UNLESS(result->Topics.size() == 1);
+            AFL_ENSURE(result->Topics.size() == 1)("topics_size", result->Topics.size())("path", TopicPath);
             const auto& topicInfo = result->Topics.begin()->second;
 
             switch(topicInfo.Status) {

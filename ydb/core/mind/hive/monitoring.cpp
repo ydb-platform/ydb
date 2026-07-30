@@ -4138,6 +4138,7 @@ public:
         result["TabletRole"] = TTabletInfo::ETabletRoleName(tablet.TabletRole);
         result["LastBalancerDecisionTime"] = tablet.LastBalancerDecisionTime.ToString();
         result["BalancerPolicy"] = NKikimrHive::EBalancerPolicy_Name(tablet.BalancerPolicy);
+        result["IsBackup"] = tablet.IsBackup;
         result["NodeId"] = tablet.NodeId;
         result["LastNodeId"] = tablet.LastNodeId;
         result["PreferredNodeId"] = tablet.PreferredNodeId;

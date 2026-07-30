@@ -1998,13 +1998,28 @@ void SkipSkiffComplexValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlag
     YQL_ENSURE(false, "Unsupported type for skip: " << type->GetKindAsStr());
 }
 
+bool IsOptionalSingular(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags) {
+    if (nativeYtTypeFlags & NTCF_COMPLEX) {
+        return false;
+    }
+
+    if (!type->IsOptional()) {
+        return false;
+    }
+
+    auto itemType = AS_TYPE(TOptionalType, type)->GetItemType();
+    return itemType->IsVoid() || itemType->IsNull();
+}
+
 void SkipSkiffValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, NCommon::TInputBuf& buf) {
     TType* unwrappedType = type;
     if (type->IsOptional()) {
         unwrappedType = AS_TYPE(TOptionalType, type)->GetItemType();
-        auto marker = buf.Read();
-        if (!marker) {
-            return;
+        if (!IsOptionalSingular(type, nativeYtTypeFlags)) {
+            auto marker = buf.Read();
+            if (!marker) {
+                return;
+            }
         }
     }
 
@@ -2034,7 +2049,7 @@ NKikimr::NUdf::TUnboxedValue ReadSkiffValue(NKikimr::NMiniKQL::TType* type, ui64
         uwrappedType = static_cast<TOptionalType*>(type)->GetItemType();
     }
 
-    if (isOptional) {
+    if (isOptional && !IsOptionalSingular(type, nativeYtTypeFlags)) {
         auto marker = buf.Read();
         if (!marker) {
             return NUdf::TUnboxedValue();

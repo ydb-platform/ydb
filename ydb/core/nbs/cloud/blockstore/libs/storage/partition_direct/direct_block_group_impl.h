@@ -139,15 +139,15 @@ public:
     NThreading::TFuture<TListPBufferResponse> ListPBuffers(
         THostIndex hostIndex) override;
 
-    ui32 GetNodeId(THostIndex host) override;
-
-    NThreading::TFuture<TDBGDumpResponse> Dump() override;
-
     void OnAddHostResult(
         const NProto::TError& error,
         THostIndex newHostIndex,
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
         NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) override;
+
+    ui32 GetNodeId(THostIndex host) const override;
+
+    NThreading::TFuture<TDBGDumpResponse> Dump() override;
 
     NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() const override;
 
@@ -262,6 +262,8 @@ private:
 
     [[nodiscard]] TConnectionSnapshot MakeConnectionSnapshot(
         size_t hostIndex) const;
+
+    [[nodiscard]] TString PrintHostAndNode(THostIndex host) const;
 
     NActors::TActorSystem* const ActorSystem = nullptr;
     const TStorageConfigPtr StorageConfig;

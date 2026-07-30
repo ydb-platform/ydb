@@ -155,12 +155,9 @@ namespace NActors {
         ui64 CumulativeCommitted = 0; // total bytes ever reported as sent via CommitProducedBytes
 
         ui64 Timestamp;
-        ui64 SerializeBufferTime = 0;
         ui64 SerializeEventTime = 0;
         ui64 BytesCopied = 0;
         ui64 BytesAliased = 0;
-
-        const double Freq = 1e9 * NHPTimer::GetSeconds(1);
 
     public:
         TEventSerializer(bool checksumming);
@@ -176,16 +173,16 @@ namespace NActors {
         size_t ProduceOutputStream(TRcBuf& buffer, std::deque<TContiguousSpan> *out, size_t maxBytesToProduce = Max<size_t>());
 
         // notification issued when N produced bytes have been sent to the other party
-        void CommitProducedBytes(size_t numBytes, std::vector<ui64> *eventToWireTime = nullptr);
+        void CommitProducedBytes(size_t numBytes, std::vector<ui64> *eventToWireTime = nullptr,
+            std::vector<std::unique_ptr<IEventBase>> *events = nullptr,
+            std::vector<TIntrusivePtr<TEventSerializedData>> *buffers = nullptr);
 
         void ResetCounters() {
-            SerializeBufferTime = 0;
             SerializeEventTime = 0;
             BytesCopied = 0;
             BytesAliased = 0;
         }
 
-        ui64 GetSerializeBufferTime() const { return SerializeBufferTime; }
         ui64 GetSerializeEventTime() const { return SerializeEventTime; }
         ui64 GetBytesCopied() const { return BytesCopied; }
         ui64 GetBytesAliased() const { return BytesAliased; }

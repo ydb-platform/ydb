@@ -4,6 +4,7 @@
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include "partition_util.h"
 #include <util/string/escape.h>
+#include <ydb/library/actors/core/log.h>
 
 #define LOG_PREFIX_INT TStringBuilder() << "[" << TabletId << "]" << GetLogPrefix()
 
@@ -582,7 +583,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
                 YDB_LOG_DEBUG_COMP(Service, "Can't append blob for key",
                     {"logPrefix", NPQ_LOG_PREFIX},
                     {"key", k.Key});
-                Y_FAIL("Something went wrong");
+                PQ_ENSURE(false)("reason", "Something went wrong")("topic", TopicName())("key", k.Key.ToString());
                 return;
             }
 

@@ -124,6 +124,7 @@ class Workload:
             '--percentile', '99',
             '--message-groups-amount', '0',
             '--max-unique-messages', '0',
+            # CLI timeouts are in milliseconds.
             '--request-timeout', '20000',
         ])
 

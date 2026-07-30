@@ -106,7 +106,7 @@ TExprNode::TPtr GetLambdaForRangeExtractor(TExprNode::TPtr node, const TTypeAnno
     return TExprBase(afterPeephole).Cast<TKqpPredicateClosure>().Lambda().Ptr();
 }
 
-bool IsSuitableToExtractAndPushRanges(const TIntrusivePtr<IOperator>& input) {
+bool IsSuitableToExtractAndPushRanges(const TIntrusivePtr<IOperator>& input, const NYql::EStorageType applicableTableType) {
     if (input->Kind != EOperator::Filter) {
         return false;
     }
@@ -117,14 +117,9 @@ bool IsSuitableToExtractAndPushRanges(const TIntrusivePtr<IOperator>& input) {
         return false;
     }
 
-    const auto type = filter->FilterExpr.Node->GetTypeAnn();
-    if (!type || type->GetKind() == ETypeAnnotationKind::Pg) {
-        return false;
-    }
-
     const auto read = CastOperator<TOpRead>(maybeRead);
     const auto tableType = read->GetTableStorageType();
-    return !read->GetRanges() && (tableType == NYql::EStorageType::ColumnStorage || tableType == NYql::EStorageType::RowStorage);
+    return !read->GetRanges() && (tableType == applicableTableType);
 }
 
 TPredicateExtractorSettings PrepareExtractorSettings(TKqpOptimizeContext& kqpCtx) {
@@ -223,6 +218,24 @@ TIndexScore ScoreKeyOrder(const IPredicateRangeExtractor::TBuildResult& result, 
     score.UsedCoversKey = keyLen != 0 && result.UsedPrefixLen == keyLen;
     score.UsedPrefixLen = score.UsedCoversKey ? 0 : result.UsedPrefixLen;
     return score;
+}
+
+// Ties are broken deterministically, independently of the order indexes are declared
+bool IsBetterCandidate(const TIndexScore& score, bool covering, const TString& name, const TIndexScore& bestScore, bool bestCovering,
+                       const TString& bestName) {
+    if (bestScore < score) {
+        return true;
+    }
+    // Index never wins a tie against the main table
+    if (score < bestScore || bestName.empty()) {
+        return false;
+    }
+    // Covering index beats non-covering one
+    if (covering != bestCovering) {
+        return covering;
+    }
+    // Lexicographically smallest index name wins
+    return name < bestName;
 }
 
 bool IsSelectableIndex(const TIndexDescription& index) {
@@ -335,7 +348,7 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
         return input;
     }
 
-    if (!IsSuitableToExtractAndPushRanges(input)) {
+    if (!IsSuitableToExtractAndPushRanges(input, ApplicableTableType)) {
         return input;
     }
 
@@ -381,6 +394,8 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
     TVector<TString> lookupReadColumns;
 
     auto bestScore = ScoreKeyOrder(mainResult, mainKeyColumns.size());
+    TString bestIndexName;
+    bool bestCovering = false;
 
     if (!kqpCtx.Config->IsAutoIndexSelectionDisabled() && !bestScore.PointCoversKey) {
         const auto filterPhysical = FilterPhysicalColumns(*filter, *read, props);
@@ -417,12 +432,13 @@ TIntrusivePtr<IOperator> TPushRangesRule::SimpleMatchAndApply(const TIntrusivePt
             }
 
             const auto score = ScoreKeyOrder(indexResult, indexKeyColumns.size());
-            const bool tieToCovering = covering && lookupIndexMeta && !(score < bestScore) && !(bestScore < score);
-            if (!(bestScore < score) && !tieToCovering) {
+            if (!IsBetterCandidate(score, covering, index.Name, bestScore, bestCovering, bestIndexName)) {
                 continue;
             }
 
             bestScore = score;
+            bestIndexName = index.Name;
+            bestCovering = covering;
             if (covering) {
                 chosenIndexMeta = indexMeta;
                 winnerResult = std::move(indexResult);

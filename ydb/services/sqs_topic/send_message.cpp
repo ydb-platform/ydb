@@ -41,8 +41,9 @@
 
 #include <ydb/services/sqs_topic/billing.h>
 
-#include <ydb/library/actors/core/log.h>
 #include <ydb/services/sqs_topic/statuses.h>
+
+#include <ydb/library/actors/core/log.h>
 
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/openssl/crypto/sha.h>
@@ -326,7 +327,8 @@ namespace NKikimr::NSqsTopic::V1 {
                             NBilling::WRITE_COST_PER_BLOCK,
                             Fifo_,
                             ContentBasedDeduplication_);
-                        Y_ABORT_UNLESS(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, TlsActivationContext->AsActorContext()));
+                        AFL_ENSURE(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, TlsActivationContext->AsActorContext()))
+                            ("ru", ru)("path", FullTopicPath_);
                         return;
                     }
                 }
@@ -335,7 +337,7 @@ namespace NKikimr::NSqsTopic::V1 {
             }
 
             const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
-            Y_ABORT_UNLESS(result->ResultSet.size() == 1);
+            AFL_ENSURE(result->ResultSet.size() == 1)("result_set_size", result->ResultSet.size())("path", FullTopicPath_);
             const auto& response = result->ResultSet.front();
             if (response.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
                 if (response.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
@@ -352,7 +354,7 @@ namespace NKikimr::NSqsTopic::V1 {
                                                 TStringBuilder() << "Failed to describe topic: " << response.Status));
             }
 
-            Y_ABORT_UNLESS(response.PQGroupInfo);
+            AFL_ENSURE(response.PQGroupInfo)("path", FullTopicPath_);
             Fifo_ = QueueUrl_->Fifo;
             ApplyContentBasedDeduplication(
                 Fifo_ && response.PQGroupInfo->Description.GetPQTabletConfig().GetContentBasedDeduplication());

@@ -1907,6 +1907,89 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TestMultiConsumer(ColumnStore);
     }
 
+    Y_UNIT_TEST(MultiConsumerRowStorageSourceProducesDqPhyStage) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto dbSession = db.CreateSession().GetValueSync().GetSession();
+
+        auto schemaResult = dbSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/sales` (
+                region_id Int64 NOT NULL,
+                amount Int64 NOT NULL,
+                primary key(region_id)
+            );
+            CREATE TABLE `/Root/quotas` (
+                region_id Int64 NOT NULL,
+                threshold Int64 NOT NULL,
+                primary key(region_id)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemaResult.IsSuccess(), schemaResult.GetIssues().ToString());
+
+        // Insert test data.
+        {
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("region_id").Int64(1)
+                .AddMember("amount").Int64(100)
+                .EndStruct();
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("region_id").Int64(2)
+                .AddMember("amount").Int64(200)
+                .EndStruct();
+            rows.EndList();
+            auto resultUpsert = db.BulkUpsert("/Root/sales", rows.Build()).GetValueSync();
+            UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+        }
+        {
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("region_id").Int64(10)
+                .AddMember("threshold").Int64(50)
+                .EndStruct();
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("region_id").Int64(11)
+                .AddMember("threshold").Int64(150)
+                .EndStruct();
+            rows.EndList();
+            auto resultUpsert = db.BulkUpsert("/Root/quotas", rows.Build()).GetValueSync();
+            UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+        }
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto session = queryClient.GetSession().GetValueSync().GetSession();
+
+        // Find sales whose amount exceeds their region's quota. The equi key
+        // (s.region_id = q.region_id) keeps the join keys non-empty, while the
+        // residual comparison (s.amount > q.threshold) combined with LEFT-join
+        // semantics forces the shared multi-consumer row-storage read.
+        auto result = session.ExecuteQuery(
+            R"(
+                SELECT s.region_id, s.amount, q.threshold, q.region_id AS quota_region
+                FROM `/Root/sales` AS s
+                LEFT JOIN `/Root/quotas` AS q
+                  ON s.region_id = q.region_id AND s.amount > q.threshold
+                ORDER BY s.region_id;
+            )",
+            NYdb::NQuery::TTxControl::NoTx(),
+            NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute)
+        ).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatResultSetYson(result.GetResultSet(0)),
+            R"([[1;100;#;#];[2;200;#;#]])");
+    }
+
     void TestRangePushdown(bool columnTables) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
@@ -2949,15 +3032,15 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 ORDER BY Key, SubKey1, SubKey2;
             )",
             R"(
-                -- используется Index21 (not Index212), since Index21 is declared first, thus re-sort is expected
-                SELECT * 
-                FROM Table 
+                -- используется Index21 (not Index212), both tie on score, Index21 is lexicographically first, thus re-sort is expected
+                SELECT *
+                FROM Table
                 WHERE SubKey2 = "1"
                 ORDER BY Key, SubKey1, SubKey2;
             )",
             R"(
                 -- используется Index212, still re-order is expected
-                SELECT Value2 
+                SELECT Value2
                 FROM Table
                 WHERE SubKey2 = "0"
                 ORDER BY Value2;

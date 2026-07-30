@@ -16,6 +16,22 @@ void SetTestMaxHeaderSize(bool enableExtendedBatchHeader) {
     InitMaxHeaderSize(featureFlags);
 }
 
+class TTestMaxHeaderSizeGuard {
+public:
+    explicit TTestMaxHeaderSizeGuard(bool enableExtendedBatchHeader)
+        : PreviousMaxHeaderSize(GetMaxHeaderSize())
+    {
+        SetTestMaxHeaderSize(enableExtendedBatchHeader);
+    }
+
+    ~TTestMaxHeaderSizeGuard() {
+        SetTestMaxHeaderSize(PreviousMaxHeaderSize == 64);
+    }
+
+private:
+    const ui32 PreviousMaxHeaderSize;
+};
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(BlobTest) {
@@ -85,7 +101,7 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
     }
 
     Y_UNIT_TEST(LegacyMaxHeaderSizePackInvariant) {
-        SetTestMaxHeaderSize(false);
+        TTestMaxHeaderSizeGuard maxHeaderSizeGuard(false);
 
         TBatch batch(Max<ui64>(), 0);
         auto ts = TInstant::Seconds(100);
@@ -102,12 +118,10 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
         UNIT_ASSERT_VALUES_EQUAL(batch.GetCount(), 1u);
         UNIT_ASSERT(!batch.Header.HasClientBlobCount());
         UNIT_ASSERT(!batch.Header.HasOffsetDelta());
-
-        SetTestMaxHeaderSize(true);
     }
 
     Y_UNIT_TEST(LegacyMaxHeaderSizePackInvariantWithKinesis) {
-        SetTestMaxHeaderSize(false);
+        TTestMaxHeaderSizeGuard maxHeaderSizeGuard(false);
 
         TBatch batch(Max<ui64>(), 0);
         auto ts = TInstant::Seconds(100);
@@ -128,8 +142,6 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
         UNIT_ASSERT_VALUES_EQUAL(batch.Blobs[0].ExplicitHashKey, "explicit-hash-key");
         UNIT_ASSERT(!batch.Header.HasClientBlobCount());
         UNIT_ASSERT(!batch.Header.HasOffsetDelta());
-
-        SetTestMaxHeaderSize(true);
     }
 
     Y_UNIT_TEST(BatchSizePackUnpack) {

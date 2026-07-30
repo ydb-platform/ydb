@@ -678,6 +678,14 @@ class KikimrConfigGenerator(object):
         if self.system_tablets:
             self.yaml_config["system_tablets"] = self.system_tablets
 
+        if enable_nbs:
+            # Enable DbsController tablet
+            self.yaml_config.setdefault("system_tablets", {})["dbs_controller"] = [
+                {
+                    "info": {"tablet_id": 72057594037936132}
+                }
+            ]
+
         if system_tablet_backup_config:
             self.yaml_config["system_tablet_backup_config"] = system_tablet_backup_config
 

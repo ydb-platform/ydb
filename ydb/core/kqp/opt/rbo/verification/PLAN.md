@@ -2596,9 +2596,15 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   269,969,712-byte, 2,032-line formula has SHA-256
   `d4740aeb93d18e9b2e1338bcb9db58d98eedd1e93d3d5f91cf02a38bc7f0a92d`
   and took 70.16 seconds to construct from the captured snapshots. No solver
-  result, counterexample, replay, or optimizer bug is inferred from that
-  formula-only result; the cumulative historical optimizer-defect count
-  remains nine.
+  result is inferred from construction alone. A separate two-row/two-task run
+  with a 60-second global Z3 deadline is `UNKNOWN` after 1,689/200,603 ms:
+  the deadline expires before branch 1/4 (`left_language_empty`). Its report
+  has SHA-256
+  `c2280dd7284f7ae7593c4a0fb8121d7830646c8d0db83c3f681973faf461dc38`.
+  Normalizing the harness cluster identity and timeout makes its formula
+  byte-identical to the canonical obligation. It produced no model, witness,
+  candidate, counterexample, replay, proof, or optimizer bug; the cumulative
+  historical optimizer-defect count remains nine.
 
   The post-M73 semantic partition is TPCH 20 formula / 0 unsupported /
   2 no-pair and TPC-DS 71 / 10 / 18. Across both suites, 91/121 queries

@@ -853,8 +853,14 @@ With a fresh corrected capture, q4 reaches `FORMULA_EMITTED`. The retained
 canonical SMT is 269,969,712 bytes and 2,032 lines, with SHA-256
 `d4740aeb93d18e9b2e1338bcb9db58d98eedd1e93d3d5f91cf02a38bc7f0a92d`;
 standalone construction takes approximately 70.16 seconds and peaks at
-1,582,448 KiB (about 1.51 GiB) RSS. It was not solved and therefore adds no
-bounded proof, counterexample, or replay obligation.
+1,582,448 KiB (about 1.51 GiB) RSS. A separate two-row/two-task run with a
+60-second global Z3 deadline is `UNKNOWN` after 1,689/200,603 ms because the
+deadline expires before branch 1/4 (`left_language_empty`). Its report has
+SHA-256
+`c2280dd7284f7ae7593c4a0fb8121d7830646c8d0db83c3f681973faf461dc38`.
+Normalizing its harness cluster name and timeout makes its formula byte-for-byte
+identical to the retained canonical obligation. It adds no model, witness,
+candidate, bounded proof, counterexample, replay, or optimizer finding.
 
 The post-M73 semantic partition is TPCH 20 formula / 0 unsupported / 2
 no-pair and TPC-DS 71 / 10 / 18. Formula construction reaches 91/121 workload
@@ -1809,11 +1815,11 @@ subtree and changes none of the rows below.
 | **Proof-producing code total** | **27,799** |
 | Tests, outside the TCB | 69,271 |
 | Diagnostic/orchestration tools, outside the TCB | 5,320 |
-| Documentation, outside the TCB | 11,771 |
+| Documentation, outside the TCB | 11,799 |
 
 Relative to the completed post-M72 audit, Milestone 73 adds 144 net trusted
 Python and proof-producing lines and 704 test lines. The C++ exporter and
-diagnostic tooling are unchanged. Documentation adds 327 lines. The
+diagnostic tooling are unchanged. Documentation adds 355 lines. The
 proof-producing increase is approximately 0.52% of the complete
 trusted code. Of those net lines, two expose the existing IR column walk and
 142 are localized in `relation.py`; the review units are one factor-local

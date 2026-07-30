@@ -847,9 +847,16 @@ Implementation sequence:
 70. M4: exact checked nullable-String `Unwrap` projection outcomes at the
     result root or a private keyed `left_semi` RHS, moving TPC-DS q8 through
     formula construction and into the bounded proof floor;
-71. M4 (next): audit the documented q31 Sort/Merge construction blocker using
-    the completed mixed-prefix sequence-equality prerequisite, and extend only
-    the exact compact construction that survives that audit.
+71. M4: exact topology-aware representation selection for mutually exclusive
+    routed task copies: Broadcast always attempts eligible compaction before
+    fan-out, HashShuffle adds a more-than-eight transported-cell trigger, and
+    root/Union gathers retain the existing row heuristic. This moves TPC-DS
+    q31 through formula construction without raising a cap; its focused solver
+    result remains `UNKNOWN`;
+72. M4 (next): exact early equality for registered concrete String atoms,
+    eliminating impossible sale-type Cross branches and moving TPC-DS q11/q74
+    through formula construction. q4's different predicate-aware Cross
+    factorization remains separate.
     More than two
     dependencies, broader correlations, coercing and nullable-String dynamic
     `IN`, broader range grammars, and other OLAP pushdowns remain.
@@ -1154,12 +1161,19 @@ because its inputs happened to be ordered.
 
 Source placement and HashShuffle create guarded task copies of one logical row
 occurrence. At a non-Merge multi-task gather, opposite facts for the same routing
-choice prove those copies mutually exclusive, so the evaluator can coalesce them into
-one guarded occurrence and use exact conditional values when task-local state
-differs. Broadcast copies have no contradictory routing fact and retain their
-bag multiplicity. Unknown provenance also remains uncompacted. This
-occurrence/routing normalization removes task-copy blow-up without identifying
-rows that can coexist.
+choice prove those copies mutually exclusive, so the evaluator may coalesce
+them into one guarded occurrence and use exact conditional values when
+task-local state differs. Equal-valued eligible copies always coalesce. A
+pre-Broadcast gather requests conditional-value compaction for every eligible
+producer occurrence before replication. HashShuffle requests it when the
+ordinary more-than-eight-row trigger fires or the explicit transported payload
+exceeds eight candidate cells; exactly eight cells remain explicit. Root and
+serial/parallel Union gathers keep only the ordinary row trigger. Replicated
+Broadcast copies have no contradictory routing fact and retain their bag
+multiplicity. Unknown occurrences, distinct occurrences, and copies without
+pairwise contradictory facts also remain uncompacted. This topology-aware
+normalization removes task-copy blow-up without identifying rows that can
+coexist or changing a construction cap.
 
 Logical `TOpUnionAll` and a `TUnionAllConnection` are different IR nodes and
 receive different semantics.
@@ -1365,9 +1379,11 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Exact bounded Merge execution with input-order validation, tie-preserving
   explicit or symbolic producer-order-preserving interleavings, and wrong-order
   mutation tests.
-- Occurrence- and routing-aware gather compaction for mutually exclusive source
-  and shuffle task copies, while broadcast multiplicity and distinct occurrences
-  remain explicit.
+- Occurrence- and routing-aware gather compaction only for one logical
+  occurrence with pairwise contradictory task facts. Broadcast requests it
+  before fan-out, HashShuffle adds the audited transported-cell trigger, and
+  root/Union gathers retain the ordinary row heuristic; replicated Broadcast
+  multiplicity and distinct or unknown occurrences remain explicit.
 - Independent exhaustive concrete routing references for every admitted
   non-Merge connection and representative local-join combinations.
 
@@ -1986,7 +2002,7 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Its strict version-four input policy and independently versioned
   version-three evaluation enforce one orthogonal preparation-success floor
   and three monotonic semantic depths: TPCH q1, q13, and q16 plus TPC-DS q5,
-  q8, q9, q59, q65, q72, q78, and q80 must reach the verifier, the 87-query
+  q8, q9, q59, q65, q72, q78, and q80 must reach the verifier, the 88-query
   formula floor must keep constructing SMT, and the 31-query hermetic
   proof floor must remain
   `VERIFIED_BOUNDED`. A verifier-side `UNSUPPORTED` result satisfies only the
@@ -2431,8 +2447,8 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   `9c83253534089d26e0c17a3a049e3411e5e4720707cdadf57fb9bc3db09a2d01`)
   and TPC-DS 67 / 14 / 18 after 64,964/698,120 ms (report SHA-256
   `350b349fa618e016f3a485a7c614566694b6d947c202a0bc762d0dbfcaddf47b`);
-  both policy evaluations are valid with no violation. The fresh proof-floor
-  reports are 13/13 TPCH after 1,540/61,083 ms (SHA-256
+  both policy evaluations are valid with no violation. At that checkpoint,
+  the proof-floor reports were 13/13 TPCH after 1,540/61,083 ms (SHA-256
   `dfefd2bfd26a5013bc42d7d22a3f60620ece8aec8cbeaa271686a249aa0afca7`)
   and 18/18 TPC-DS after 13,313/103,833 ms (SHA-256
   `ea06c1e3e9072c5a9f9241233647e9c05696ec730cb1879e2ae291e891c4d214`),
@@ -2443,25 +2459,62 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   optimizer bug was found in M70; nine production optimizer bugs remain the
   cumulative historical total.
 
-  Milestone 71 returns to the remaining construction inventory. Its first
-  documented audit target is q31: the packed payload already fits, while its
-  current Sort construction and comparator count exceed their independent
-  caps. The completed mixed-prefix equality work is the prerequisite; the
-  audit must identify an exact compact construction rather than raise those
-  limits.
+  Milestone 71 is implemented by `d2979a0e459`, with the preparation/formula
+  floor recorded by `a754b499484`. The audit first reproduced q31's exact
+  construction failure: each final local Sort received 2,048 candidates and
+  rejected 2,096,128 unordered pairs above the 16,384-pair cap; the network
+  alternative required 67,584 comparators. Bypassing only that check would
+  have exposed a 4,096-candidate, 8,386,560-pair Merge.
 
-  The first post-M69 sequence-scaling prerequisite keeps the exact
-  present-prefix proof carrier but removes the general quadratic comparison
-  when only one result has that carrier. It computes compressed ranks once for
-  syntactically live sparse candidates, equates each candidate at rank `r`
-  with fixed prefix slot `r`, equates cardinalities, and explicitly requires
-  every prefix slot beyond the sparse candidate capacity to be absent. Both
-  operand orientations preserve positional column mapping. Exhaustive
-  differentials cover valid prefix masks, zero and unequal physical
-  capacities, sparse holes, NULL values, concrete and symbolic ordinals,
-  ordinal ties, and both orientations against the preceding general formula.
-  This changes no captured-plan support or coverage floor by itself; it is the
-  exact root-comparison prerequisite for the wider q31 Sort/Merge work.
+  The surviving construction adds no Sort primitive, uniqueness certificate,
+  or cap. It reuses the existing exact quotient for one non-NULL logical
+  occurrence whose task copies carry pairwise contradictory routing facts.
+  Presence is ORed; values, NULL lanes, and hidden Decimal/integral-AVG state
+  are ITE-selected; Decimal bounds join conservatively; and only common facts
+  survive. Broadcast requests this representation for every eligible
+  producer-task group before fan-out. HashShuffle requests it when either the
+  existing more-than-eight-row trigger fires or the explicit transported
+  payload exceeds eight candidate cells. Root and serial/parallel Union
+  gathers retain the existing row heuristic. Replicated Broadcast copies,
+  unknown occurrences, and non-contradictory copies remain explicit.
+
+  q31 consequently has 64 candidates and 2,016 pairs in each local Sort, then
+  128 candidates at Merge. The exact ordinal Merge costs 8,128 global pairs
+  plus 8,064 producer-order constraints, or 16,192 below the unchanged 16,384
+  cap. Focused formula-only evidence is `FORMULA_EMITTED` after 626/74,700 ms
+  (SHA-256
+  `3ee9274960c93c0bb42c014bd722e7ac9e194aefdf3150567a09ebd7b3b51a4e`).
+  The pinned 60-second solver experiment is `UNKNOWN` after 771/140,345 ms:
+  the deadline expires before branch 1/4 `left_language_empty` (SHA-256
+  `77142a4284c5ddc51ce5a7fbe6180ace15b511da608aeeb0588255436c2a1059`).
+  It adds no proof, counterexample, replay, or optimizer bug.
+
+  The post-M71 semantic partition is TPCH 20 formula / 0 unsupported /
+  2 no-pair and TPC-DS 68 / 13 / 18. Across both suites, 88/121 queries
+  construct formulas (72.7%), as do 88/101 exact captured pairs (87.1%),
+  88/93 preparation successes (94.6%), and 88/91 verifier entrants (96.7%).
+  Primary unsupported outcomes split ten initial / zero final / three
+  verifier. The proof floor remains 31/121 (25.6%), 31/88 formula-covered
+  queries (35.2%), and 31/31 curated obligations.
+
+  The complete post-M71 formula dashboards are TPCH 20 / 0 / 2 after
+  3,020/93,251 ms (report SHA-256
+  `ac7f146bdfc39359254ad062cb310bb2d142cc8b1cd5ad4b0cca055870f4360c`)
+  and TPC-DS 68 / 13 / 18 after 65,438/699,067 ms (report SHA-256
+  `66b0de30b4b4a4681b0411d1019d58f96865cc16e5b0e37eeeb23dded429cc73`);
+  both formula policies are valid. Fresh proof-floor reports verify 13/13
+  TPCH after 1,564/59,731 ms (SHA-256
+  `06f8d4a617c9550582902e59d793f2925158bf843fda277f47b1748ff374b78f`)
+  and 18/18 TPC-DS after 13,041/102,884 ms (SHA-256
+  `ccf48e76c6dd648db23ebf31572654dc4056d5be793ef3c935dc7706db4d3c22`),
+  all `VERIFIED_BOUNDED`; the proof-floor target is policy-valid and passes
+  5/5.
+
+  Mixed-prefix equality commit `02b067a8d27` remains an independently exact
+  sequence-scaling improvement, with exhaustive sparse/prefix, NULL, ordinal,
+  capacity, and operand-orientation differentials. The q31 audit showed that
+  it is not exercised here: both compacted roots retain sparse ordinals. It was
+  therefore not the actual prerequisite for this construction.
 
   A focused version-five audit of TPC-DS q12, q20, q49, q51, q53, q63, q89,
   and q98 preserves exact pairs despite failed preparation. All eight are
@@ -2480,12 +2533,13 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   removes q24's exact nullable `Unicode.ToUpper` exporter blocker. Milestone 68
   removes TPCH q13/q16's compiled-LIKE, grouped count-distinct, and pushed
   coalesce blockers. Milestone 69 removes q64's delayed Cross-spine
-  construction blocker with private unique-RHS factor scheduling.
+  construction blocker with private unique-RHS factor scheduling. Milestone 71
+  removes q31's routed Sort/Merge construction blocker.
   Including exact
   window semantics
   for the failed-preparation pairs, the full captured-pair gap is roughly
   6--8 feature families or 8--16 milestones. Those workload-targeted
-  estimates now start from 87 formulas and can change as later blockers become
+  estimates now start from 88 formulas and can change as later blockers become
   visible. The 20 no-pair entries require
   frontend/optimizer progress; the present captured-pair ceiling is 101/121,
   and formula construction is not solver proof.
@@ -2711,14 +2765,13 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Construction preflights cap every materialized relation at 4096 candidate
   rows and each unshared quadratic construction or shared symmetric comparison
   triangle at 16384 candidate-row pairs. Remaining verifier-side construction
-  blockers include TPC-DS q4's 20,736-pair join match, q11/q74's
-  8,126,496-pair Sort constructions, and q31's current 2,096,128-pair Sort
-  construction. q31's packed payload already fits at 124,928 cells, but its
-  67,584 comparators exceed the independent 32,768 cap. Other shapes remain
-  outside the comparator, logical payload, or key-width network gates. q1, q5,
-  q25, q29, q46, q59, q64, q65, q68, q77, q78, q80, and q91 now construct
-  complete formulas instead of stopping at their historical aggregate, join,
-  Sort, or Merge gates.
+  blockers are TPC-DS q4's 20,736-pair join match and q11/q74's
+  8,126,496-pair Sort constructions. Other shapes remain outside the
+  comparator, logical payload, or key-width network gates. q1, q5, q25, q29,
+  q31, q46, q59, q64, q65, q68, q77, q78, q80, and q91 now construct complete
+  formulas instead of stopping at their historical aggregate, join, Sort, or
+  Merge gates. q31 does so through the exact routed-copy representation above,
+  not by raising its former pair or comparator cap.
 - A shared expanded-node/depth budget now caps every complete exact scalar tree
   at 1,024 normalized occurrences and depth 128. Independent C++ and Python
   checks cover exact 1,024/1,025-node and 128/129-depth boundaries, expanded DAG

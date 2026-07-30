@@ -10,7 +10,9 @@ procedure, together with the latest audited size baseline, are indexed in
 [TRUSTED_CORE.md](TRUSTED_CORE.md).
 
 The current implementation contains the M1 logical kernel, the M2 C++ boundary
-hooks, the supported M3 StageGraph routing slice, and the aggregate, Limit,
+hooks, the supported M3 StageGraph routing slice, topology-aware exact
+representation selection for mutually exclusive routed task copies, and the
+aggregate, Limit,
 ordered Sort/TopSort/Merge including bounded exact bitonic-network
 representations with fixed or symbolic producer-order preservation, pushed
 OLAP-filter including exact presence tests, value-preserving typed Boolean
@@ -183,11 +185,11 @@ target under `contrib/tools/z3`; it is not linked into `ydbd`.
 The checked-in policy currently requires formula construction for
 TPCH q1, q2, q3, q4, q5, q6, q7, q8, q9, q10, q11, q12, q13, q14,
 q15, q16, q18, q19, q21, and q22 plus TPC-DS q2, q3, q5, q6, q7, q8, q9, q10, q13, q15,
-q16, q18, q19, q21, q22, q24, q25, q26, q29, q33, q34,
+q16, q18, q19, q21, q22, q24, q25, q26, q29, q31, q33, q34,
 q35, q37, q38, q40, q42, q43, q45, q46, q48, q50, q52, q54, q55, q56, q58, q59,
 q60, q61, q62, q64, q65, q66, q68, q69, q71, q72, q73, q75, q76, q77, q78, q79,
 q80, q82, q83, q85, q87, q88, q90, q91, q93, q94, q95, q96, q97, and q99:
-87/121 workload queries (71.9%).
+88/121 workload queries (72.7%).
 TPC-DS q8 is pinned at successful preparation, verifier entry, formula
 construction, and bounded proof. TPC-DS q72 is pinned at successful
 preparation plus formula construction; it is not in the proof floor. TPC-DS q9
@@ -195,15 +197,18 @@ is pinned at successful preparation,
 verifier entry, formula construction, and bounded proof. TPC-DS q24 is pinned
 at successful preparation plus formula construction. TPC-DS q64 is likewise
 pinned at preparation and formula construction, but is not in the proof floor.
+TPC-DS q31 is pinned at successful preparation and formula construction; it
+has no separate verifier-entry requirement and is not in the proof floor.
 TPCH q13/q16 are pinned
 at successful preparation, verifier entry, formula construction, and bounded
 proof. Together with TPC-DS q8, the checked-in proof floor is thirty-one
 obligations. The current complete
 dashboards leave TPCH at
 twenty formulas, no unsupported semantic outcomes, and two no-pair
-optimizer failures; TPC-DS has sixty-seven formulas, fourteen unsupported
-semantic outcomes, and eighteen no-pair optimizer failures. Across both suites
-the semantic partition is 87 formulas, 14 `UNSUPPORTED`, and 20
+optimizer failures; TPC-DS has sixty-eight formulas, thirteen unsupported
+semantic outcomes, and eighteen no-pair optimizer failures.
+Across both suites the current semantic partition is 88 formulas, 13
+`UNSUPPORTED`, and 20
 `OPTIMIZER_FAILURE`.
 Preparation is a separate partition: twenty TPCH and seventy-three TPC-DS
 queries succeed, while two TPCH and twenty-six TPC-DS queries fail. Eight
@@ -225,18 +230,20 @@ Boolean coalesce then move TPCH q13/q16 through formula construction and
 bounded proof. Exact delayed unique-right filtering and scheduling then move
 TPC-DS q64 through formula construction without adding a proof. Checked
 nullable-String `Unwrap` Project outcomes finally move TPC-DS q8 through
-formula construction and bounded proof. The resulting measured formula
-coverage is 87/121 (71.9%) over
-the corpus, 87/101 (86.1%) over exact Initial/Final boundary-result pairs,
-87/93 (93.5%) within the preparation-successful subset, and 87/91 (95.6%)
+formula construction and bounded proof.
+Topology-aware routed-copy compaction then moves q31 through formula
+construction without adding a proof. The resulting measured formula
+coverage is 88/121 (72.7%) over
+the corpus, 88/101 (87.1%) over exact Initial/Final boundary-result pairs,
+88/93 (94.6%) within the preparation-successful subset, and 88/91 (96.7%)
 among verifier entrants. The
 preparation-success ratio uses
 the intersection of formula rows with preparation-success rows; version five
 permits a formula to coexist with failed later preparation. Twenty TPCH and
 eighty-one TPC-DS queries have exact boundary-result pairs. Twenty TPCH and
-seventy-one TPC-DS pairs enter the verifier. The 14 unsupported outcomes
+seventy-one TPC-DS pairs enter the verifier. The 13 unsupported outcomes
 consequently split by primary terminal layer into 10 initial-export, zero
-final-export, and four verifier results. Secondary boundary diagnostics remain
+final-export, and three verifier results. Secondary boundary diagnostics remain
 recorded independently.
 
 Milestone 64 accepts only a direct visible `Optional<Date>` member under exact
@@ -470,12 +477,60 @@ The complete post-M70 dashboards are TPCH 20 formulas / 0 unsupported /
 `9c83253534089d26e0c17a3a049e3411e5e4720707cdadf57fb9bc3db09a2d01`)
 and TPC-DS 67 / 14 / 18 after 64,964/698,120 ms (report SHA-256
 `350b349fa618e016f3a485a7c614566694b6d947c202a0bc762d0dbfcaddf47b`);
-both formula-policy evaluations are valid with no violation. The fresh
-proof-floor reports are 13/13 TPCH after 1,540/61,083 ms (SHA-256
+both formula-policy evaluations are valid with no violation. At that
+checkpoint, the proof-floor reports were 13/13 TPCH after 1,540/61,083 ms (SHA-256
 `dfefd2bfd26a5013bc42d7d22a3f60620ece8aec8cbeaa271686a249aa0afca7`)
 and 18/18 TPC-DS after 13,313/103,833 ms (SHA-256
 `ea06c1e3e9072c5a9f9241233647e9c05696ec730cb1879e2ae291e891c4d214`),
 all `VERIFIED_BOUNDED`; the complete proof-floor target passes 5/5.
+
+Milestone 71 makes the exact representation choice at a routed gather
+topology-aware. Eligible rows still require the same non-NULL logical
+occurrence and pairwise contradictory routing facts, so at most one alternative
+can be present. The merged row ORs those guards, ITE-selects every value, NULL
+flag, and hidden Decimal/integral-AVG lane, joins Decimal bounds
+conservatively, and retains only common facts. Broadcast requests this
+representation for every eligible producer-task group before fan-out.
+HashShuffle requests it when the ordinary more-than-eight-row trigger fires or
+when the explicit transported payload exceeds eight candidate cells. Root and
+Union gathers retain the ordinary row trigger. Overlapping Broadcast replicas,
+unknown occurrences, and non-contradictory copies remain explicit.
+
+Before this change, each final q31 local Sort received 2,048 candidates and
+failed its 16,384-pair audit at 2,096,128 pairs; the network alternative needed
+67,584 comparators. Merely admitting that Sort would have exposed a
+4,096-candidate Merge. Exact routed-copy compaction instead leaves 64
+candidates per local Sort, 2,016 local pairs, and 128 candidates at Merge. The
+Merge ordinal construction costs 16,192, just below the unchanged 16,384
+audit. No row, pair, comparator, or payload cap changed. The earlier
+mixed-prefix sequence comparison remains valid, but the surviving q31
+construction uses sparse ordinals on both roots and does not exercise it.
+
+Focused row-bound-two/task-bound-two q31 reaches `FORMULA_EMITTED` after
+626/74,700 ms (report SHA-256
+`3ee9274960c93c0bb42c014bd722e7ac9e194aefdf3150567a09ebd7b3b51a4e`).
+The separate pinned-Z3 run emits a 246,865,820-byte formula and returns
+`UNKNOWN` after 771/140,345 ms because the global 60-second deadline expires
+before branch 1/4 (`left_language_empty`; report SHA-256
+`77142a4284c5ddc51ce5a7fbe6180ace15b511da608aeeb0588255436c2a1059`).
+This is formula coverage, not a proof or counterexample, and requires no
+replay. Implementation commit `d2979a0e459` and policy commit `a754b499484`
+record the slice. The full Python verifier passes 674/674 tests and the policy
+target passes 14/14. No optimizer bug was found; the historical total remains
+nine.
+
+The complete post-M71 formula dashboards are TPCH 20 formulas / 0 unsupported /
+2 no-pair after 3,020/93,251 ms (report SHA-256
+`ac7f146bdfc39359254ad062cb310bb2d142cc8b1cd5ad4b0cca055870f4360c`)
+and TPC-DS 68 / 13 / 18 after 65,438/699,067 ms (report SHA-256
+`66b0de30b4b4a4681b0411d1019d58f96865cc16e5b0e37eeeb23dded429cc73`);
+both formula-policy evaluations are valid with no violation. The fresh
+proof-floor reports are 13/13 TPCH after 1,564/59,731 ms (SHA-256
+`06f8d4a617c9550582902e59d793f2925158bf843fda277f47b1748ff374b78f`)
+and 18/18 TPC-DS after 13,041/102,884 ms (SHA-256
+`ccf48e76c6dd648db23ebf31572654dc4056d5be793ef3c935dc7706db4d3c22`),
+all `VERIFIED_BOUNDED`; the complete proof-floor target is policy-valid and
+passes 5/5.
 
 A focused version-five run selected TPC-DS q12, q20, q49, q51, q53, q63, q89,
 and q98. Every query produced an exact Initial/Final boundary-result pair and
@@ -987,7 +1042,7 @@ constructed; it is not a solver proof. The checked-in solver policy now
 requires `VERIFIED_BOUNDED` for TPCH q3, q4, q6, q11, q12, q13, q14, q15,
 q16, q18, q19, q21, and q22 plus TPC-DS q3, q8, q9, q16, q34, q38, q42, q48,
 q52, q55, q69, q73, q87, q90, q93, q94, q95, and q96: thirty-one obligations
-(25.6% of the workload and 35.6% of formula-covered queries).
+(25.6% of the workload and 35.2% of formula-covered queries).
 
 The current proof-floor gate is green and policy-valid: 13/13 TPCH
 and 18/18 TPC-DS obligations are `VERIFIED_BOUNDED`, for 31/31 or 31/121
@@ -1238,11 +1293,22 @@ Rows carry structural occurrence provenance and facts about symbolic source or
 hash routing. Separate StageGraph child occurrences remain separate even when
 their schemas contain the same IU name. When a non-Merge gather sees task
 copies of the same occurrence with contradictory routing facts, those guards
-are mutually exclusive and the copies can be coalesced exactly, including
-conditional task-local values. Broadcast copies have no such proof and retain
-their bag multiplicity; distinct or unknown occurrences also remain separate.
-This keeps routed StageGraphs compact without silently aliasing input streams
-or deduplicating SQL rows.
+are mutually exclusive and the copies may be coalesced exactly. Presence is
+ORed, every value, NULL flag, and hidden AVG-state lane is selected by the
+active guard, Decimal bounds are joined conservatively, and only facts common
+to every alternative survive. Equal-valued copies always coalesce. For
+differing task-local values, a gather immediately before Broadcast coalesces
+every eligible producer occurrence before fan-out; a gather before HashShuffle
+does so when either the existing row threshold is exceeded or the explicit
+payload is more than eight candidate cells. The exact eight-cell boundary
+stays explicit. Root and serial/parallel Union gathers retain the existing
+more-than-eight-row heuristic.
+
+Replicated Broadcast copies have no contradictory routing fact and therefore
+retain their bag multiplicity. Distinct or unknown occurrences and copies
+without pairwise contradictory facts also remain separate. Thus the topology
+controls only an exact representation choice; it does not alias input streams,
+deduplicate SQL rows, or change a construction cap.
 
 The exporter and decoder both validate the StageGraph independently: plan nodes
 partition into stages, each stage has one logical sink, every cross-stage child
@@ -2073,6 +2139,10 @@ its 279 MB obligation remains a separate solver-scaling slice.
 Milestone 70's checked nullable-String `Unwrap` Project outcome moves TPC-DS
 q8 through formula construction and bounded proof under the two admitted
 demand topologies.
+Milestone 71's topology-aware exclusive task-copy representation moves
+TPC-DS q31 through formula construction without changing a construction cap;
+its focused 60-second solver result is `UNKNOWN`, so the proof floor remains
+13 TPCH plus 18 TPC-DS obligations.
 The auditability consolidation is complete in commits `7a3639d1c16`,
 `ebcfdbb1263`, and `4b7f27d492e`. The checked-in proof policy added TPC-DS q95
 after the earlier TPCH q18 addition, then q38 and q87 through the exact

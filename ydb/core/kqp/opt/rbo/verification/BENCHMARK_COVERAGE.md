@@ -144,7 +144,7 @@ failed-preparation pair can enter a semantic floor without automatically
 entering the preparation floor. The
 formula-construction floor requires TPCH q1, q2, q3, q4, q5, q6, q7, q8, q9, q10,
 q11, q12, q13, q14, q15, q16, q18, q19, q21, and q22 plus TPC-DS q2, q3, q5, q6, q7,
-q8, q9, q10, q13, q15, q16, q18, q19, q21, q22, q24, q25, q26, q29, q33, q34,
+q8, q9, q10, q13, q15, q16, q18, q19, q21, q22, q24, q25, q26, q29, q31, q33, q34,
 q35, q37, q38, q40, q42, q43, q45, q46, q48, q50, q52, q54, q55, q56,
 q58, q59, q60, q61,
 q62, q64, q65, q66, q68, q69, q71, q72, q73, q75, q76, q77, q78, q79, q80, q82, q83, q85, q87,
@@ -164,6 +164,9 @@ Boolean coalesce pin TPCH q13/q16 at successful preparation, verifier entry,
 formula construction, and bounded proof.
 Checked nullable-String `Unwrap` Project outcomes pin TPC-DS q8 at successful
 preparation, verifier entry, formula construction, and bounded proof.
+Topology-aware routed-copy compaction pins TPC-DS q31 at successful
+preparation and formula construction. Its focused solver result is `UNKNOWN`,
+so it has no verifier-entry or proof requirement.
 The preparation-success, verifier-entry, and formula floors are enforced only
 for a complete formula-only suite. The proof floor requires TPCH q3, q4, q6,
 q11, q12, q13, q14, q15, q16, q18, q19, q21, and q22 plus TPC-DS q3, q8, q9,
@@ -320,6 +323,28 @@ real runtime boundary target. Implementation commit `3d74b1eadcf` records the
 slice. It found no new optimizer bug or counterexample; the historical
 production-defect count remains nine.
 
+Milestone 71 reuses the exact same-occurrence, pairwise-contradictory-routing
+quotient for a topology-aware representation choice. A pre-Broadcast gather
+attempts eligible compaction before fan-out. HashShuffle adds a
+more-than-eight transported-candidate-cell trigger to the existing
+more-than-eight-row trigger. Root and serial/parallel Union gathers retain the
+row trigger. The merged occurrence ORs presence, ITE-selects value, NULL, and
+hidden AVG lanes, joins Decimal bounds conservatively, and keeps only common
+facts. Post-fan-out Broadcast replicas lack contradictory facts and retain
+their bag multiplicity.
+
+This reduces q31's final local Sorts from 2,048 to 64 candidates per task and
+the diagnostically exposed would-be Merge from 4,096 to 128 candidates. Local
+Sort costs 2,016 pairs; Merge costs 16,192 global-plus-producer ordinal
+constraints, under the unchanged 16,384 audit. No global cap changes. Focused q31 is
+`FORMULA_EMITTED` after 626/74,700 ms (SHA-256
+`3ee9274960c93c0bb42c014bd722e7ac9e194aefdf3150567a09ebd7b3b51a4e`).
+The separate pinned-Z3 run is `UNKNOWN` after 771/140,345 ms because the
+60-second deadline expires before branch 1/4 `left_language_empty` (SHA-256
+`77142a4284c5ddc51ce5a7fbe6180ace15b511da608aeeb0588255436c2a1059`).
+It adds no proof, counterexample, replay, or optimizer bug. Implementation
+commit `d2979a0e459` and policy commit `a754b499484` record the slice.
+
 The current proof-floor gate confirms all thirty-one checked-in obligations as
 `VERIFIED_BOUNDED`: 13/13 TPCH and 18/18 TPC-DS at two rows per table and two
 tasks. The verifier-entry floor is TPCH q1, q13, and q16 plus TPC-DS q5, q8,
@@ -341,7 +366,7 @@ The current policy-pinned semantic-outcome partition is:
 | Suite | Formula emitted | Unsupported | No-pair `OPTIMIZER_FAILURE` | Total |
 |---|---:|---:|---:|---:|
 | TPCH_YQL | 20 (q1, q2, q3, q4, q5, q6, q7, q8, q9, q10, q11, q12, q13, q14, q15, q16, q18, q19, q21, q22) | 0 | 2 | 22 |
-| TPCDS_YQL | 67 (q2, q3, q5, q6, q7, q8, q9, q10, q13, q15, q16, q18, q19, q21, q22, q24, q25, q26, q29, q33, q34, q35, q37, q38, q40, q42, q43, q45, q46, q48, q50, q52, q54, q55, q56, q58, q59, q60, q61, q62, q64, q65, q66, q68, q69, q71, q72, q73, q75, q76, q77, q78, q79, q80, q82, q83, q85, q87, q88, q90, q91, q93, q94, q95, q96, q97, q99) | 14 | 18 | 99 |
+| TPCDS_YQL | 68 (q2, q3, q5, q6, q7, q8, q9, q10, q13, q15, q16, q18, q19, q21, q22, q24, q25, q26, q29, q31, q33, q34, q35, q37, q38, q40, q42, q43, q45, q46, q48, q50, q52, q54, q55, q56, q58, q59, q60, q61, q62, q64, q65, q66, q68, q69, q71, q72, q73, q75, q76, q77, q78, q79, q80, q82, q83, q85, q87, q88, q90, q91, q93, q94, q95, q96, q97, q99) | 13 | 18 | 99 |
 
 Preparation is an independent partition:
 
@@ -352,7 +377,7 @@ Preparation is an independent partition:
 
 Twenty TPCH and seventy-one TPC-DS queries pass both exporters and enter the
 verifier. TPCH has twenty exact Initial/Final boundary-result pairs; TPC-DS has
-eighty-one. The current policy-pinned classification is 87 formulas, 14
+eighty-one. The current policy-pinned classification is 88 formulas, 13
 unsupported outcomes, and 20 no-pair optimizer failures.
 
 The historical milestone-69 complete TPCH dashboard retains 20 formulas, zero unsupported
@@ -864,7 +889,7 @@ counts were unchanged. Across both suites the semantic partition was 86
 formulas, 15 unsupported outcomes, and 20 no-pair optimizer failures.
 
 Milestone 70 moves TPC-DS q8 from exporter rejection through verifier entry,
-formula construction, and bounded proof. Current policy-pinned coverage is
+formula construction, and bounded proof. At that checkpoint coverage was
 87/121 (71.9%) of the corpus, 87/101 (86.1%) of exact pairs, 87/93 (93.5%) of
 the preparation-successful subset, and 87/91 (95.6%) of verifier entrants.
 TPCH remains 20 / 0 / 2, and TPC-DS becomes 67 / 14 / 18; the preparation
@@ -873,22 +898,42 @@ is 87 formulas, 14 unsupported outcomes, and 20 no-pair optimizer failures.
 The 31 bounded proofs cover 31/121 (25.6%) of the workload and 31/87 (35.6%)
 of formula-covered queries; the curated floor is green at 31/31.
 
+Milestone 71 moves TPC-DS q31 from verifier construction rejection through
+formula construction. Current policy-pinned coverage is 88/121 (72.7%) of the
+corpus, 88/101 (87.1%) of exact pairs, 88/93 (94.6%) of the
+preparation-successful subset, and 88/91 (96.7%) of verifier entrants. TPCH
+remains 20 / 0 / 2, and TPC-DS becomes 68 / 13 / 18; preparation, exact-pair,
+and entrant counts are unchanged. The 31 bounded proofs remain 31/121 (25.6%)
+of the workload and 31/88 (35.2%) of formula-covered queries.
+
+The complete post-M71 formula dashboards are TPCH 20 / 0 / 2 after
+3,020/93,251 ms (report SHA-256
+`ac7f146bdfc39359254ad062cb310bb2d142cc8b1cd5ad4b0cca055870f4360c`)
+and TPC-DS 68 / 13 / 18 after 65,438/699,067 ms (report SHA-256
+`66b0de30b4b4a4681b0411d1019d58f96865cc16e5b0e37eeeb23dded429cc73`).
+Both formula policies are valid with no violation. Fresh proof-floor reports
+verify 13/13 TPCH after 1,564/59,731 ms (SHA-256
+`06f8d4a617c9550582902e59d793f2925158bf843fda277f47b1748ff374b78f`)
+and 18/18 TPC-DS after 13,041/102,884 ms (SHA-256
+`ccf48e76c6dd648db23ebf31572654dc4056d5be793ef3c935dc7706db4d3c22`),
+all `VERIFIED_BOUNDED`; the proof-floor target is policy-valid and passes 5/5.
+
 The complete post-M70 formula dashboards are TPCH 20 / 0 / 2 after
 3,068/91,127 ms (report SHA-256
 `9c83253534089d26e0c17a3a049e3411e5e4720707cdadf57fb9bc3db09a2d01`)
 and TPC-DS 67 / 14 / 18 after 64,964/698,120 ms (report SHA-256
 `350b349fa618e016f3a485a7c614566694b6d947c202a0bc762d0dbfcaddf47b`).
-Both preparation/formula policies are valid with no violation. The fresh
-proof-floor reports are 13/13 TPCH after 1,540/61,083 ms (SHA-256
+Both preparation/formula policies are valid with no violation. At that
+checkpoint, the proof-floor reports were 13/13 TPCH after 1,540/61,083 ms (SHA-256
 `dfefd2bfd26a5013bc42d7d22a3f60620ece8aec8cbeaa271686a249aa0afca7`)
 and 18/18 TPC-DS after 13,313/103,833 ms (SHA-256
 `ea06c1e3e9072c5a9f9241233647e9c05696ec730cb1879e2ae291e891c4d214`),
 all `VERIFIED_BOUNDED`; the complete proof-floor target passes 5/5.
 
-The 14 current semantic unsupported rows split by primary terminal layer into
-10 initial-export, zero final-export, and four verifier results. The strict C++
-boundary therefore accounts for 10 primary outcomes; q4, q11, q31, and q74
-are the four TPC-DS exact pairs that fail closed in the verifier itself.
+The 13 current semantic unsupported rows split by primary terminal layer into
+10 initial-export, zero final-export, and three verifier results. The strict C++
+boundary therefore accounts for 10 primary outcomes; q4, q11, and q74 are the
+three TPC-DS exact pairs that fail closed in the verifier itself.
 Secondary final-export diagnostics remain recorded independently. At the
 milestone-68 checkpoint the corresponding split was 11/0/5 and additionally
 included q64.
@@ -1023,7 +1068,7 @@ intermediate-state, and all other binary64 ordering remain unsupported.
 These counts also expose the approximate work needed to make formulas for most
 of the captured workload. The remaining primary blockers include
 seven `YqlAggWin` window rows; factorized Sort/join construction for q4, q11,
-q31, and q74; Decimal scale-changing cast plus final window semantics for q49;
+and q74; Decimal scale-changing cast plus final window semantics for q49;
 q28's non-integer
 multi-distinct/AVG physical state; and allocation-bounded `Concat` for q84.
 q51 also exposes a secondary broader read-range boundary after its initial
@@ -1040,18 +1085,20 @@ and lowering as the main captured-pair family, Decimal scale-changing casts
 for q49, and a secondary range-read boundary for q51. Including that overlap,
 the milestone-66 captured-pair gap was approximately 6--8 families or 8--16
 milestones. Milestone 67 removes q24's scalar Map family and Milestone 68
-removes both TPCH compiled-LIKE/coalesce rows from that inventory.
+removes both TPCH compiled-LIKE/coalesce rows from that inventory. Milestone
+69 removes q64's delayed-Cross construction and Milestone 71 removes q31's
+routed Sort/Merge construction.
 
 These are planning estimates, not coverage floors. The new checkpoint starts
-the next planning pass from 87 formulas; later blockers can invalidate any
+the next planning pass from 88 formulas; later blockers can invalidate any
 query-count projection. The remaining 20 workload entries have no exact
 captured pair and require frontend/optimizer work before verifier semantics
 can help; consequently the present captured-pair ceiling is 101/121.
 Even reaching that ceiling would establish formula construction, not solver
 proof.
-The four remaining verifier-side construction blockers are q4, q11, q31, and
-q74; raising a global audit bound is not their first response.
-That four-query construction cluster is the next current verifier-only
+The three remaining verifier-side construction blockers are q4, q11, and q74;
+raising a global audit bound is not their first response.
+That three-query construction cluster is the next current verifier-only
 blocker. Across exporter work, the seven `YqlAggWin` rows are the largest
 shared family, while q84's allocation-bounded `Concat` is the narrowest
 isolated candidate; a fresh boundary audit should choose between them rather
@@ -1485,8 +1532,9 @@ preparation/verification. q64 rejects an 8,192-row join output above the
 8,126,496-pair Sort construction preflight after 777/13,045 and 578/13,670 ms;
 q31 reaches an 8,386,560-pair Sort preflight after 603/34,566 ms.
 Milestone 69 removes q64 from that inventory through delayed private
-Cross-spine unique-key scheduling. The current verifier-bound rows are q4,
-q11, q31, and q74.
+Cross-spine unique-key scheduling. Milestone 71 removes q31 through
+topology-aware routed-copy compaction. The current verifier-bound rows are q4,
+q11, and q74.
 At the output-IU milestone q59 moved through both exporters before rejecting a
 32,640-pair Sort construction above the same 16,384-pair cap. Exact integral
 division likewise moved q78 through both exporters before rejecting a
@@ -1804,6 +1852,9 @@ the entrant count and thirty-query proof floor unchanged.
 Checked nullable-String `Unwrap` Project outcomes then move TPC-DS q8 through
 verifier entry, formula construction, and bounded proof: 67/99 TPC-DS and
 87/121 total formulas, 91 entrants, and a thirty-one-query proof floor.
+Topology-aware routed-copy compaction then moves q31 through formula
+construction: 68/99 TPC-DS and 88/121 total formulas, with 91 entrants and the
+thirty-one-query proof floor unchanged.
 
 Focused q1 emits a formula after 111/998 ms and returns `UNKNOWN`, not
 a proof or counterexample, in a non-gating 60-second solver run after
@@ -2227,9 +2278,10 @@ contains thirty-one confirmed `VERIFIED_BOUNDED` obligations.
 
 - At that milestone TPC-DS q31 failed closed before a large join allocation:
   32,768 candidate-row pairs exceeded the 16,384 pair construction audit
-  bound. It rejected that intermediate before exhausting memory. The current
-  exact representation selector carries q31 farther to the deeper Sort
-  construction blocker listed above.
+  bound. It rejected that intermediate before exhausting memory. Later
+  representation work carried q31 to a 2,096,128-pair local Sort blocker;
+  Milestone 71's routed-copy compaction now carries it through complete formula
+  construction.
 
 - At that milestone TPC-DS q71 constructed a 118,276,852-byte SMT formula and
   recorded 83,339 ms in its verifier/formula-emission phase. A focused solver
@@ -2522,6 +2574,9 @@ formula floor to 85, verifier-entry floor to 90, and proof floor to thirty.
 Checked nullable-String `Unwrap` Project outcomes then move TPC-DS q8 through
 all four policy depths, raising the formula floor to 87 after q64,
 verifier-entry floor to 91, and proof floor to thirty-one.
+Topology-aware routed-copy compaction then moves q31 through formula
+construction, raising the formula floor to 88 while leaving entrant and proof
+floors unchanged; its focused solver result is `UNKNOWN`.
 More than two dependencies,
 other correlation shapes, coercing dynamic `IN`, nullable String and
 non-positive nullable contexts, broader range grammars, and other OLAP

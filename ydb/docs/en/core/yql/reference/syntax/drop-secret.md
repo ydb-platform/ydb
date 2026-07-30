@@ -8,7 +8,7 @@ The `DROP SECRET` statement deletes an existing [secret](../../../concepts/datam
 DROP SECRET [IF EXISTS] secret_name
 ```
 
-* `IF EXISTS` — do not output an error if the secret does not exist; in this case, the statement is a no-op.
+* `IF EXISTS` — the statement does not return an error if the secret does not exist; in this case, it is a no-op.
 * `secret_name` — the name of the secret to delete.
 
 ## Permissions {#permissions}

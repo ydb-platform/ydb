@@ -10,13 +10,17 @@ WITH (option = value[, ...])
 ```
 
 * `OR REPLACE` — if a secret with this name already exists, it will be replaced with a new definition.
-* `IF NOT EXISTS` — do not output an error if a secret with this name already exists; in this case, the existing secret will remain unchanged.
+* `IF NOT EXISTS` — the statement does not return an error if a secret with this name already exists; in this case, the existing secret remains unchanged.
 * `secret_name` — the name of the secret to create.
 * `option` — command option:
   * `value` — string with the secret value.
   * `inherit_permissions` — when enabled, [rights](grant.md) on the secret are inherited from the directory where the secret is created. When disabled, only the [right](grant.md#permissions-list) `DESCRIBE SCHEMA` is inherited from the directory. The secret owner gets all possible rights on it in any case. Default is `False`.
 
-Settings `OR REPLACE` and `IF NOT EXISTS` cannot be used simultaneously.
+{% note warning %}
+
+The `OR REPLACE` and `IF NOT EXISTS` clauses cannot be used simultaneously.
+
+{% endnote %}
 
 ## Permissions {#permissions}
 

@@ -9,7 +9,7 @@ ALTER SECRET [IF EXISTS] secret_name
 WITH (option = value[, ...])
 ```
 
-* `IF EXISTS` — do not output an error if the secret does not exist; in this case, the statement is a no-op.
+* `IF EXISTS` — the statement does not return an error if the secret does not exist; in this case, it is a no-op.
 * `secret_name` — the name of the secret to modify.
 * `option` — command option:
   * `value` — string with the secret value.

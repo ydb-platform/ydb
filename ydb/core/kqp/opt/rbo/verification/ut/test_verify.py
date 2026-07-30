@@ -856,7 +856,11 @@ def composite_distinct_all_snapshot():
     )
 
 
-def duplicated_grouped_aggregate_snapshot(function, nullable_key=False):
+def duplicated_grouped_aggregate_snapshot(
+    function,
+    nullable_key=False,
+    distinct=False,
+):
     def project(node_id, prefix):
         return {
             "id": node_id,
@@ -907,7 +911,7 @@ def duplicated_grouped_aggregate_snapshot(function, nullable_key=False):
                 "output": "result",
                 "type": "Uint64" if function == "count" else "Int64",
                 "nullable": False,
-                "distinct": False,
+                "distinct": distinct,
                 "unwrap": False,
             }
         ],
@@ -1147,6 +1151,99 @@ def count_distinct_int64_snapshot():
             [copy.deepcopy(SCAN_A), aggregate],
             "aggregate",
             ["result"],
+        )
+    )
+
+
+def grouped_count_distinct_snapshot(
+    via_distinct_all=False,
+    input_type="Int32",
+):
+    schema_value = _stage_schema("A")
+    schema_value["tables"][0]["columns"][0]["nullable"] = True
+    schema_value["tables"][0]["columns"][1]["type"] = input_type
+
+    if not via_distinct_all:
+        aggregate = {
+            "id": "aggregate",
+            "op": "aggregate",
+            "input": "a",
+            "keys": ["a.k"],
+            "aggregates": [
+                {
+                    "input": "a.x",
+                    "function": "count",
+                    "output": "result",
+                    "type": "Uint64",
+                    "nullable": False,
+                    "distinct": True,
+                    "unwrap": False,
+                }
+            ],
+            "phase": "undefined",
+            "distinct_all": False,
+        }
+        nodes = [copy.deepcopy(SCAN_A), aggregate]
+        root = "aggregate"
+        output = ["a.k", "result"]
+    else:
+        distinct = {
+            "id": "distinct",
+            "op": "aggregate",
+            "input": "a",
+            "keys": ["a.k", "a.x"],
+            "aggregates": [
+                {
+                    "input": "a.k",
+                    "function": "distinct",
+                    "output": "d.k",
+                    "type": "Int64",
+                    "nullable": True,
+                    "distinct": False,
+                    "unwrap": False,
+                },
+                {
+                    "input": "a.x",
+                    "function": "distinct",
+                    "output": "d.x",
+                    "type": input_type,
+                    "nullable": False,
+                    "distinct": False,
+                    "unwrap": False,
+                },
+            ],
+            "phase": "undefined",
+            "distinct_all": True,
+        }
+        aggregate = {
+            "id": "aggregate",
+            "op": "aggregate",
+            "input": "distinct",
+            "keys": ["d.k"],
+            "aggregates": [
+                {
+                    "input": "d.x",
+                    "function": "count",
+                    "output": "result",
+                    "type": "Uint64",
+                    "nullable": False,
+                    "distinct": False,
+                    "unwrap": False,
+                }
+            ],
+            "phase": "undefined",
+            "distinct_all": False,
+        }
+        nodes = [copy.deepcopy(SCAN_A), distinct, aggregate]
+        root = "aggregate"
+        output = ["d.k", "result"]
+
+    return parse_snapshot(
+        _snapshot_with_stage_graph(
+            schema_value,
+            nodes,
+            root,
+            output,
         )
     )
 
@@ -3640,23 +3737,137 @@ class ConstructionAuditBoundTest(unittest.TestCase):
         snapshot = count_distinct_int64_snapshot()
         script = smt.Script()
         database = Database(snapshot, 3, script)
-        with mock.patch.object(relation_model, "MAX_RELATION_ROW_PAIRS", 2):
+        evaluator = RelationEvaluator(
+            snapshot,
+            database,
+            ScalarEncoder(script),
+        )
+        with (
+            mock.patch.object(relation_model, "MAX_RELATION_ROW_PAIRS", 2),
+            mock.patch.object(
+                evaluator.scalar,
+                "equal",
+                wraps=evaluator.scalar.equal,
+            ) as equal,
+        ):
             with self.assertRaisesRegex(
                 RelationError,
                 "distinct aggregate requires 3 candidate-row pairs.*"
                 "2 pair construction",
             ):
-                RelationEvaluator(
-                    snapshot,
-                    database,
-                    ScalarEncoder(script),
-                ).root()
+                evaluator.root()
+            self.assertEqual(equal.call_count, 0)
 
         with mock.patch.object(relation_model, "MAX_RELATION_ROW_PAIRS", 3):
             RelationEvaluator(
                 snapshot,
                 database,
                 ScalarEncoder(script),
+            ).root()
+
+    def test_grouped_distinct_cap_tracks_the_chosen_group_representation(self):
+        directional = grouped_count_distinct_snapshot()
+        directional_script = smt.Script()
+        directional_database = Database(
+            directional,
+            3,
+            directional_script,
+        )
+        directional_evaluator = RelationEvaluator(
+            directional,
+            directional_database,
+            ScalarEncoder(directional_script),
+        )
+        with (
+            mock.patch.object(relation_model, "MAX_RELATION_ROW_PAIRS", 8),
+            mock.patch.object(
+                directional_evaluator.scalar,
+                "equal",
+                wraps=directional_evaluator.scalar.equal,
+            ) as equal,
+        ):
+            with self.assertRaisesRegex(
+                RelationError,
+                "grouped distinct aggregate requires 9 "
+                "distinct-equality terms.*8 pair construction",
+            ):
+                directional_evaluator.root()
+            self.assertEqual(equal.call_count, 0)
+
+        with mock.patch.object(relation_model, "MAX_RELATION_ROW_PAIRS", 9):
+            RelationEvaluator(
+                directional,
+                directional_database,
+                ScalarEncoder(directional_script),
+            ).root()
+
+        directional_four = grouped_count_distinct_snapshot()
+        directional_four_script = smt.Script()
+        directional_four_database = Database(
+            directional_four,
+            4,
+            directional_four_script,
+        )
+        directional_four_evaluator = RelationEvaluator(
+            directional_four,
+            directional_four_database,
+            ScalarEncoder(directional_four_script),
+        )
+        with (
+            mock.patch.object(relation_model, "MAX_RELATION_ROW_PAIRS", 23),
+            mock.patch.object(
+                directional_four_evaluator.scalar,
+                "equal",
+                wraps=directional_four_evaluator.scalar.equal,
+            ) as equal,
+        ):
+            with self.assertRaisesRegex(
+                RelationError,
+                "grouped distinct aggregate requires 24 "
+                "distinct-equality terms.*23 pair construction",
+            ):
+                directional_four_evaluator.root()
+            self.assertEqual(equal.call_count, 0)
+
+        with mock.patch.object(relation_model, "MAX_RELATION_ROW_PAIRS", 24):
+            RelationEvaluator(
+                directional_four,
+                directional_four_database,
+                ScalarEncoder(directional_four_script),
+            ).root()
+
+        compacted = duplicated_grouped_aggregate_snapshot(
+            "count",
+            distinct=True,
+        )
+        compacted_script = smt.Script()
+        compacted_database = Database(compacted, 2, compacted_script)
+        compacted_evaluator = RelationEvaluator(
+            compacted,
+            compacted_database,
+            ScalarEncoder(compacted_script),
+        )
+        with (
+            mock.patch.object(relation_model, "MAX_RELATION_ROW_PAIRS", 11),
+            mock.patch.object(
+                compacted_evaluator.scalar,
+                "equal",
+                wraps=compacted_evaluator.scalar.equal,
+            ) as equal,
+        ):
+            with self.assertRaisesRegex(
+                RelationError,
+                "grouped distinct aggregate requires 12 "
+                "distinct-equality terms.*11 pair construction",
+            ):
+                compacted_evaluator.root()
+            self.assertEqual(equal.call_count, 0)
+
+        with mock.patch.object(relation_model, "MAX_RELATION_ROW_PAIRS", 12):
+            RelationEvaluator(
+                compacted,
+                compacted_database,
+                ScalarEncoder(compacted_script),
             ).root()
 
 
@@ -3786,6 +3997,57 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
                     ),
                     expected,
                 )
+
+    def test_grouped_count_distinct_matches_distinct_all_then_count(self):
+        # The reviewed q16 boundary groups on a nullable key and counts
+        # distinct values from a direct non-null Int32 column.
+        direct = grouped_count_distinct_snapshot()
+        decomposed = grouped_count_distinct_snapshot(
+            via_distinct_all=True,
+        )
+        direct_script = smt.Script()
+        decomposed_script = smt.Script()
+        direct_database = Database(direct, 3, direct_script)
+        decomposed_database = Database(
+            decomposed,
+            3,
+            decomposed_script,
+        )
+        direct_relation = RelationEvaluator(
+            direct,
+            direct_database,
+            ScalarEncoder(direct_script),
+        ).root().certain()
+        decomposed_relation = RelationEvaluator(
+            decomposed,
+            decomposed_database,
+            ScalarEncoder(decomposed_script),
+        ).root().certain()
+
+        states = (None,) + tuple(
+            product((None, 0), (0, 1))
+        )
+        for rows in product(states, repeat=3):
+            groups = {}
+            for row in rows:
+                if row is not None:
+                    groups.setdefault(row[0], set()).add(row[1])
+            expected = Counter(
+                (key, len(values))
+                for key, values in groups.items()
+            )
+            with self.subTest(rows=rows):
+                direct_bag = self._symbolic_bag(
+                    direct_relation,
+                    self._constants(direct_database, rows),
+                )
+                decomposed_bag = self._symbolic_bag(
+                    decomposed_relation,
+                    self._constants(decomposed_database, rows),
+                )
+                self.assertEqual(direct_bag, expected)
+                self.assertEqual(decomposed_bag, expected)
+                self.assertEqual(direct_bag, decomposed_bag)
 
     def test_composite_distinct_all_matches_nullable_tuple_set_reference(self):
         snapshot = composite_distinct_all_snapshot()

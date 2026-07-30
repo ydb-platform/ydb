@@ -319,6 +319,24 @@ def _require_relation_row_pairs(count: int, operation: str) -> None:
         )
 
 
+def _require_grouped_distinct_capacity(
+    node: Aggregate,
+    row_count: int,
+    group_candidate_count: int,
+) -> None:
+    if not any(trait.distinct for trait in node.aggregates):
+        return
+    equality_terms = (
+        group_candidate_count * row_count * (row_count - 1) // 2
+    )
+    if equality_terms > MAX_RELATION_ROW_PAIRS:
+        raise RelationError(
+            "grouped distinct aggregate requires "
+            f"{equality_terms} distinct-equality terms, exceeding "
+            f"the {MAX_RELATION_ROW_PAIRS} pair construction audit bound"
+        )
+
+
 def _require_sort_construction_capacity(
     pair_count: int,
     network_count: int,
@@ -908,6 +926,11 @@ class Evaluator:
             )
         )
         if use_classes:
+            _require_grouped_distinct_capacity(
+                node,
+                row_count,
+                class_count,
+            )
             _require_relation_row_pairs(
                 class_memberships,
                 "grouped aggregate class membership",
@@ -919,6 +942,11 @@ class Evaluator:
             return self._shared_grouped_aggregate_rows(node, source, classes)
 
         if directional_pair_count <= MAX_RELATION_ROW_PAIRS:
+            _require_grouped_distinct_capacity(
+                node,
+                row_count,
+                row_count,
+            )
             _require_relation_row_pairs(
                 directional_pair_count,
                 "grouped aggregate",
@@ -953,6 +981,11 @@ class Evaluator:
         _require_relation_row_pairs(
             row_count * (row_count + 1) // 2,
             "grouped aggregate",
+        )
+        _require_grouped_distinct_capacity(
+            node,
+            row_count,
+            row_count,
         )
         return self._shared_grouped_aggregate_rows(
             node,

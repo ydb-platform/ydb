@@ -17856,6 +17856,160 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             false);
     }
 
+    Y_UNIT_TEST(ExportsGroupedQ16LikeCountDistinctContract) {
+        TExportTestContext ctx;
+        const auto& table = AddTable(ctx, "/Root/Q16LikeCountDistinct", {
+            {"p_brand", "String", false},
+            {"p_type", "String", false},
+            {"p_size", "Int32", false},
+            {"ps_suppkey", "Int32", true},
+        });
+        auto read = MakeRead(
+            ctx,
+            table,
+            "q16",
+            {"p_brand", "p_type", "p_size", "ps_suppkey"});
+        SetOutputType(ctx, *read, {
+            {"q16.p_brand", NUdf::EDataSlot::String, true},
+            {"q16.p_type", NUdf::EDataSlot::String, true},
+            {"q16.p_size", NUdf::EDataSlot::Int32, true},
+            {"q16.ps_suppkey", NUdf::EDataSlot::Int32},
+        });
+        const auto pos = TPositionHandle();
+        auto aggregate = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                TInfoUnit("q16.ps_suppkey"),
+                "count",
+                TInfoUnit("supplier_count"),
+                true,
+                false)},
+            TVector<TInfoUnit>{
+                TInfoUnit("q16.p_brand"),
+                TInfoUnit("q16.p_type"),
+                TInfoUnit("q16.p_size"),
+            },
+            EOpPhase::Undefined,
+            false,
+            pos);
+        SetOutputType(ctx, *aggregate, {
+            {"q16.p_brand", NUdf::EDataSlot::String, true},
+            {"q16.p_type", NUdf::EDataSlot::String, true},
+            {"q16.p_size", NUdf::EDataSlot::Int32, true},
+            {"supplier_count", NUdf::EDataSlot::Uint64},
+        });
+        TOpRoot root(
+            aggregate,
+            pos,
+            {
+                "q16.p_brand",
+                "q16.p_type",
+                "q16.p_size",
+                "supplier_count",
+            });
+
+        const auto snapshot = ParseSupported(
+            ExportSemanticSnapshotV1(root, ctx.RboCtx));
+        const auto& node = FindNode(snapshot, "aggregate");
+        UNIT_ASSERT_VALUES_EQUAL(
+            node["phase"].GetStringSafe(),
+            "undefined");
+        UNIT_ASSERT_VALUES_EQUAL(
+            node["distinct_all"].GetBooleanSafe(),
+            false);
+        const auto& keys = node["keys"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(keys.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(
+            keys[0].GetStringSafe(),
+            "q16.p_brand");
+        UNIT_ASSERT_VALUES_EQUAL(
+            keys[1].GetStringSafe(),
+            "q16.p_type");
+        UNIT_ASSERT_VALUES_EQUAL(
+            keys[2].GetStringSafe(),
+            "q16.p_size");
+        const auto& traits = node["aggregates"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(traits.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            traits[0]["input"].GetStringSafe(),
+            "q16.ps_suppkey");
+        UNIT_ASSERT_VALUES_EQUAL(
+            traits[0]["function"].GetStringSafe(),
+            "count");
+        UNIT_ASSERT_VALUES_EQUAL(
+            traits[0]["output"].GetStringSafe(),
+            "supplier_count");
+        UNIT_ASSERT_VALUES_EQUAL(
+            traits[0]["type"].GetStringSafe(),
+            "Uint64");
+        UNIT_ASSERT_VALUES_EQUAL(
+            traits[0]["nullable"].GetBooleanSafe(),
+            false);
+        UNIT_ASSERT_VALUES_EQUAL(
+            traits[0]["distinct"].GetBooleanSafe(),
+            true);
+        UNIT_ASSERT_VALUES_EQUAL(
+            traits[0]["unwrap"].GetBooleanSafe(),
+            false);
+    }
+
+    Y_UNIT_TEST(ExportsCountDistinctForEveryFixedWidthIntegerInput) {
+        const TVector<std::pair<TString, NUdf::EDataSlot>> integerTypes = {
+            {"Int8", NUdf::EDataSlot::Int8},
+            {"Int16", NUdf::EDataSlot::Int16},
+            {"Int32", NUdf::EDataSlot::Int32},
+            {"Int64", NUdf::EDataSlot::Int64},
+            {"Uint8", NUdf::EDataSlot::Uint8},
+            {"Uint16", NUdf::EDataSlot::Uint16},
+            {"Uint32", NUdf::EDataSlot::Uint32},
+            {"Uint64", NUdf::EDataSlot::Uint64},
+        };
+
+        for (const auto& [typeName, slot] : integerTypes) {
+            TExportTestContext ctx;
+            const auto& table = AddTable(
+                ctx,
+                TStringBuilder() << "/Root/CountDistinct" << typeName,
+                {{"x", typeName, true}});
+            auto read = MakeRead(ctx, table, "a", {"x"});
+            SetOutputType(ctx, *read, {
+                {"a.x", slot},
+            });
+            const auto pos = TPositionHandle();
+            auto aggregate = MakeIntrusive<TOpAggregate>(
+                read,
+                TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                    TInfoUnit("a.x"),
+                    "count",
+                    TInfoUnit("result"),
+                    true,
+                    false)},
+                TVector<TInfoUnit>{},
+                EOpPhase::Undefined,
+                false,
+                pos);
+            SetOutputType(ctx, *aggregate, {
+                {"result", NUdf::EDataSlot::Uint64},
+            });
+            TOpRoot root(aggregate, pos, {"result"});
+
+            const auto snapshot = ParseSupported(
+                ExportSemanticSnapshotV1(root, ctx.RboCtx));
+            const auto& traits =
+                FindNode(snapshot, "aggregate")["aggregates"].GetArraySafe();
+            UNIT_ASSERT_VALUES_EQUAL(traits.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(
+                traits[0]["input"].GetStringSafe(),
+                "a.x");
+            UNIT_ASSERT_VALUES_EQUAL(
+                traits[0]["type"].GetStringSafe(),
+                "Uint64");
+            UNIT_ASSERT_VALUES_EQUAL(
+                traits[0]["distinct"].GetBooleanSafe(),
+                true);
+        }
+    }
+
     Y_UNIT_TEST(DirectCountDistinctContractFailsClosedForEveryLocalMutation) {
         TExportTestContext ctx;
         const auto& table = AddTable(ctx, "/Root/DirectCountDistinct", {
@@ -17903,17 +18057,6 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         reject("at most one ordinary distinct trait");
         aggregate->AggregationTraitsList.pop_back();
 
-        aggregate->KeyColumns.push_back(TInfoUnit("a.x"));
-        SetOutputType(ctx, *aggregate, {
-            {"a.x", NUdf::EDataSlot::Int64},
-            {"result", NUdf::EDataSlot::Uint64},
-        });
-        reject("requires a keyless Aggregate");
-        aggregate->KeyColumns.clear();
-        SetOutputType(ctx, *aggregate, {
-            {"result", NUdf::EDataSlot::Uint64},
-        });
-
         aggregate->AggregationPhase = EOpPhase::Intermediate;
         reject("requires undefined phase");
         aggregate->AggregationPhase = EOpPhase::Final;
@@ -17937,11 +18080,11 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         SetOutputType(ctx, *read, {
             {"a.x", NUdf::EDataSlot::Int64, true},
         });
-        reject("requires an exact non-null Int64 input");
+        reject("requires an exact non-null fixed-width integer input");
         SetOutputType(ctx, *read, {
-            {"a.x", NUdf::EDataSlot::Uint64},
+            {"a.x", NUdf::EDataSlot::String},
         });
-        reject("requires an exact non-null Int64 input");
+        reject("requires an exact non-null fixed-width integer input");
         SetOutputType(ctx, *read, {
             {"a.x", NUdf::EDataSlot::Int64},
         });

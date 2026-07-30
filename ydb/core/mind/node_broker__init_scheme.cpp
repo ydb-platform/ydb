@@ -3,6 +3,8 @@
 
 #include <ydb/core/protos/counters_node_broker.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NODE_BROKER
+
 namespace NKikimr {
 namespace NNodeBroker {
 
@@ -17,7 +19,7 @@ public:
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxInitScheme Execute");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxInitScheme Execute");
 
         NIceDb::TNiceDb(txc.DB).Materialize<Schema>();
 
@@ -26,7 +28,7 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxInitScheme Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxInitScheme Complete");
 
         Self->Execute(Self->CreateTxLoadState(), ctx);
     }

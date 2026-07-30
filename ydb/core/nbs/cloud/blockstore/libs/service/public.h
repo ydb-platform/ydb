@@ -23,8 +23,8 @@ using IDeviceHandlerPtr = std::shared_ptr<IDeviceHandler>;
 struct IDeviceHandlerFactory;
 using IDeviceHandlerFactoryPtr = std::shared_ptr<IDeviceHandlerFactory>;
 
-struct IPartitionDirectService;
-using IPartitionDirectServicePtr = std::shared_ptr<IPartitionDirectService>;
+struct ITraceService;
+using ITraceServicePtr = std::shared_ptr<ITraceService>;
 
 struct TVolumeConfig;
 using TVolumeConfigPtr = std::shared_ptr<TVolumeConfig>;

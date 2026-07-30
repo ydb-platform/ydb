@@ -215,7 +215,7 @@ def query_param_matcher(
 
     """
 
-    params_dict = params or {}
+    params_dict = dict(params) if params else {}
 
     for k, v in params_dict.items():
         if isinstance(v, (int, float)):

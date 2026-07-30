@@ -7,14 +7,17 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_stat.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_state.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ddisk_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
 
+#include <ydb/core/nbs/cloud/storage/core/libs/common/error_utils.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/public.h>
 
@@ -46,9 +49,7 @@ public:
         NActors::TActorSystem* actorSystem,
         TStorageConfigPtr storageConfig,
         TExecutorPtr executor,
-        const TString& diskId,
-        ui64 tabletId,
-        ui32 generation,
+        const TDiskDescription& diskDescription,
         size_t directBlockGroupIndex,
         const TVector<NKikimr::NBsController::TDDiskId>& ddisksIds,
         const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds,
@@ -70,7 +71,9 @@ public:
         const NWilson::TTraceId& traceId,
         TStringBuf name) override;
 
-    NThreading::TFuture<void> Run(IPartitionDirectService* service) override;
+    NThreading::TFuture<void> Run(
+        ITraceService* traceService,
+        IPartitionDirectService* service) override;
 
     NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
         ui32 vChunkIndex,
@@ -136,15 +139,17 @@ public:
     NThreading::TFuture<TListPBufferResponse> ListPBuffers(
         THostIndex hostIndex) override;
 
-    NThreading::TFuture<TDBGDumpResponse> Dump() override;
-
     void OnAddHostResult(
         const NProto::TError& error,
         THostIndex newHostIndex,
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
         NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) override;
 
-    NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() override;
+    ui32 GetNodeId(THostIndex host) const override;
+
+    NThreading::TFuture<TDBGDumpResponse> Dump() override;
+
+    NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() const override;
 
     // IHostStateController implementation
     void SetHostState(
@@ -152,12 +157,10 @@ public:
         EHostState oldState,
         EHostState newState) override;
     ui64 GetHostPBufferUsedSize(THostIndex hostIndex) const override;
-    void QueryAddHost() override;
-
-    // Own methods (not part of any interface).
-    ui64 GetDDiskSessionSeqNo(size_t index) const;
+    void QueryAddHost(THostIndex newHostIndex) override;
 
 private:
+    friend struct TDBGFixture;
     using TEvSyncResult = NKikimrBlobStorage::NDDisk::TEvSyncResult;
     using EConnectionType = NTransport::THostConnection::EConnectionType;
     using TDDiskIdToHostIndex =
@@ -181,22 +184,23 @@ private:
         [[nodiscard]] TString DebugPrint() const;
     };
 
+    [[nodiscard]] size_t GetHostCount() const;
+    void AddDDiskAndPBufferConnection(
+        THostIndex host,
+        const NKikimr::NBsController::TDDiskId& ddiskId,
+        const NKikimr::NBsController::TDDiskId& pbufferId);
     void DoEstablishConnections();
-    void DoEstablishConnection(size_t index, EConnectionType connectionType);
-
-    // Live AddHost: grow all vchunks and the Oracle to the new connection.
-    void SyncHostsWithConnections();
-
-    // Catch one vchunk / the Oracle up to the current connection count.
-    void GrowVChunkToConnections(TVChunk& vChunk);
-    void GrowOracleToConnections();
-
+    void DoEstablishConnection(
+        THostIndex hostIndex,
+        EConnectionType connectionType);
     void OnConnectionEstablished(
         EConnectionType connectionType,
-        size_t index,
+        THostIndex hostIndex,
         ui64 seqNo,
         const NKikimrBlobStorage::NDDisk::TEvConnectResult& result);
-    void ReEstablishDDiskConnection(size_t index, TDuration reconnectDelay);
+    void ReEstablishConnection(
+        EConnectionType connectionType,
+        THostIndex hostIndex);
     void OnNodeDisconnected(THostIndex hostIndex, ui32 nodeId);
 
     [[nodiscard]] bool HasPBufferQuorum() const;
@@ -218,6 +222,7 @@ private:
         TDuration executionTime);
 
     TDBGFlushResponse HandleSyncWithPBufferResponse(
+        THostIndex ddiskHostIndex,
         const TEvSyncResult& response,
         size_t segmentCount);
 
@@ -249,11 +254,16 @@ private:
     void Thinking();
     void ScheduleOracleThinking();
 
-    [[nodiscard]] bool WaitForSessionLock(THostIndex hostIndex);
+    void HandleBlockedGeneration(THostIndex hostIndex, TStringBuf context);
 
-    TDBGDumpResponse DoDebugPrintDirtyMap();
+    [[nodiscard]] TDBGDumpResponse DoDebugPrintDirtyMap() const;
 
-    TDbgSnapshot DoBuildMonSnapshot();
+    [[nodiscard]] TDbgSnapshot DoBuildMonSnapshot() const;
+
+    [[nodiscard]] TConnectionSnapshot MakeConnectionSnapshot(
+        size_t hostIndex) const;
+
+    [[nodiscard]] TString PrintHostAndNode(THostIndex host) const;
 
     NActors::TActorSystem* const ActorSystem = nullptr;
     const TStorageConfigPtr StorageConfig;
@@ -265,12 +275,15 @@ private:
     const std::unique_ptr<NTransport::IStorageTransport> StorageTransport;
 
     TLogTitle LogTitle;
+    ITraceService* TraceService = nullptr;
     IPartitionDirectService* Service = nullptr;
     TVector<TDDiskConnection> DDiskConnections;
     TVector<TDDiskConnection> PBufferConnections;
     TDDiskIdToHostIndex PBufferIdToHostIndex;
     TVector<TVChunkWeakPtr> VChunks;
     TOracle Oracle;
+
+    bool BlockedGenerationDetected = false;
 
     // One-shot signal of the FIRST time the locked quorum was reached. Used
     // ONLY to gate the synchronous tablet start (wait for readiness before

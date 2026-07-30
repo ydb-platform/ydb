@@ -1,6 +1,5 @@
 #include "schemeshard_impl.h"
 #include "schemeshard__local_index_migration.h"
-#include "schemeshard_login_helper.h"
 #include "schemeshard_svp_migration.h"
 
 #include "olap/bg_tasks/adapter/adapter.h"
@@ -229,6 +228,10 @@ void TSchemeShard::CollectLocalIndexMigrations(const TActorContext& ctx) {
                 }
             }
 
+            if (indexProto.GetImplementationCase() == NKikimrSchemeOp::TOlapIndexDescription::kMaxIndex) {
+                continue;
+            }
+
             NKikimrSchemeOp::TIndexCreationConfig indexConfig;
             if (!NOlap::ConvertOlapIndexToCreationConfig(indexProto, columnIdToName, indexConfig)) {
                 LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -376,10 +379,6 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActiva
 
     if (IsDomainSchemeShard) {
         InitializeTabletMigrations();
-    }
-
-    if (!IsOldArgonHashFormatMigrationCompleted) {
-        Execute(CreateTxUserHashesMigration(), ctx);
     }
 
     ResumeExports(opts.ExportIds, ctx);
@@ -707,6 +706,8 @@ TMessageSeqNo TSchemeShard::NextRound() {
 }
 
 void TSchemeShard::Clear() {
+    HasOrphanPlaceholders = false;
+
     PathsById.clear();
 
     Tables.clear();
@@ -2350,6 +2351,19 @@ void TSchemeShard::PersistUserAttributes(NIceDb::TNiceDb& db, TPathId pathId,
     }
 }
 
+void TSchemeShard::PersistRemoveUserAttributesAlter(NIceDb::TNiceDb& db, TPathElement::TPtr pathElement) {
+    if (pathElement->UserAttrs->AlterData) {
+        const TPathId& pathId = pathElement->PathId;
+        for (const auto& name : pathElement->UserAttrs->AlterData->Attrs | std::views::keys) {
+            if (IsLocalId(pathId)) {
+                db.Table<Schema::UserAttributesAlterData>().Key(pathId.LocalPathId, name).Delete();
+            } else {
+                db.Table<Schema::MigratedUserAttributesAlterData>().Key(pathId.OwnerId, pathId.LocalPathId, name).Delete();
+            }
+        }
+        pathElement->UserAttrs->AlterData.Reset();
+    }
+}
 
 void TSchemeShard::PersistLastTxId(NIceDb::TNiceDb& db, const TPathElement::TPtr path) {
     if (path->PathId.OwnerId == TabletID()) {
@@ -2416,6 +2430,12 @@ void TSchemeShard::PersistRemovePath(NIceDb::TNiceDb& db, const TPathElement::TP
         }
     }
 
+    // Defensively clean up any pending UserAttributesAlterData rows that may have been left
+    // orphaned if the path was dropped while AlterUserAttributes was still in progress.
+    // Normally DropNode() takes care of this, but PersistRemovePath is the final removal
+    // point and must guarantee no dangling rows survive path deletion.
+    PersistRemoveUserAttributesAlter(db, path);
+
     if (IsLocalId(path->PathId)) {
         db.Table<Schema::Paths>().Key(path->PathId.LocalPathId).Delete();
     } else {
@@ -2427,9 +2447,12 @@ void TSchemeShard::PersistRemovePath(NIceDb::TNiceDb& db, const TPathElement::TP
     Y_DEBUG_ABORT_UNLESS(itParent != PathsById.end());
     if (itParent != PathsById.end()) {
         itParent->second->RemoveChild(path->Name, path->PathId);
-        Y_ABORT_UNLESS(itParent->second->AllChildrenCount > 0);
-        --itParent->second->AllChildrenCount;
-        DecrementPathDbRefCount(path->ParentPathId, "remove path");
+        // placeholders are never attached to their parent and never counted
+        if (!path->IsOrphanPlaceholder) {
+            Y_ABORT_UNLESS(itParent->second->AllChildrenCount > 0);
+            --itParent->second->AllChildrenCount;
+            DecrementPathDbRefCount(path->ParentPathId, "remove path");
+        }
     }
 }
 
@@ -4647,7 +4670,14 @@ void TSchemeShard::UpdateDiskSpaceUsage(NIceDb::TNiceDb& db, TPathId pathId, con
     auto subDomainId = ResolvePathIdForDomain(pathId);
     auto subDomainInfo = ResolveDomainInfo(pathId);
     subDomainInfo->AggrDiskSpaceUsage(this, newPartitionStats, oldPartitionStats);
-    if (subDomainInfo->CheckDiskSpaceQuotas(this)) {
+
+    const i64 smallBlobsBytesDelta = static_cast<i64>(newPartitionStats.SmallBlobsVolumeBytes)
+        - static_cast<i64>(oldPartitionStats.SmallBlobsVolumeBytes);
+    const i64 smallBlobsCountDelta = static_cast<i64>(newPartitionStats.SmallBlobsCount)
+        - static_cast<i64>(oldPartitionStats.SmallBlobsCount);
+    subDomainInfo->AggrSmallBlobsUsage(this, smallBlobsBytesDelta, smallBlobsCountDelta);
+
+    if (subDomainInfo->CheckQuotas(this)) {
         PersistSubDomainState(db, subDomainId, *subDomainInfo);
         // Publish is done in a separate transaction, so we may call this directly
         TDeque<TPathId> toPublish;
@@ -5535,6 +5565,7 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
     , AllowServerlessStorageBilling(0, 0, 1)
     , DisablePublicationsOfDropping(0, 0, 1)
     , FillAllocatePQ(0, 0, 1)
+    , TolerateOrphanedPaths(0, 0, 1)
     , SplitSettings()
     , IsReadOnlyMode(false)
     , ParentDomainLink(this)
@@ -5569,8 +5600,7 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
         }), {
             .AttemptThreshold = AppData()->AuthConfig.GetAccountLockout().GetAttemptThreshold(),
             .AttemptResetDuration = AppData()->AuthConfig.GetAccountLockout().GetAttemptResetDuration()
-        },
-        IsLoginCacheEnabled, {})
+        })
 {
     TabletCountersPtr.Reset(new TProtobufTabletCounters<
                             ESimpleCounters_descriptor,
@@ -5609,9 +5639,6 @@ NTabletPipe::TClientConfig TSchemeShard::GetPipeClientConfig() {
     return config;
 }
 
-bool TSchemeShard::IsLoginCacheEnabled() {
-    return AppData()->FeatureFlags.GetEnableLoginCache();
-}
 
 void TSchemeShard::FillTableSchemaVersion(ui64 tableSchemaVersion, NKikimrSchemeOp::TTableDescription* tableDescr) const {
     tableDescr->SetTableSchemaVersion(tableSchemaVersion);
@@ -5631,7 +5658,6 @@ void TSchemeShard::Die(const TActorContext &ctx) {
     ctx.Send(SchemeBoardPopulator, new TEvents::TEvPoisonPill());
     ctx.Send(TxAllocatorClient, new TEvents::TEvPoisonPill());
     ctx.Send(SysPartitionStatsCollector, new TEvents::TEvPoisonPill());
-    ctx.Send(LoginHelper, new TEvents::TEvPoisonPill());
 
     if (TabletMigrator) {
         ctx.Send(TabletMigrator, new TEvents::TEvPoisonPill());
@@ -5748,6 +5774,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     TControlBoard::RegisterSharedControl(AllowConditionalEraseOperations, icb.SchemeShardControls.AllowConditionalEraseOperations);
     TControlBoard::RegisterSharedControl(DisablePublicationsOfDropping, icb.SchemeShardControls.DisablePublicationsOfDropping);
     TControlBoard::RegisterSharedControl(FillAllocatePQ, icb.SchemeShardControls.FillAllocatePQ);
+    TControlBoard::RegisterSharedControl(TolerateOrphanedPaths, icb.SchemeShardControls.TolerateOrphanedPaths);
 
     TControlBoard::RegisterSharedControl(MaxCommitRedoMB, icb.TabletControls.MaxCommitRedoMB);
 
@@ -5775,8 +5802,6 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     Execute(CreateTxInitSchema(), ctx);
 
     SubscribeConsoleConfigs(ctx);
-
-    LoginHelper = Register(CreateLoginHelper(this->LoginProvider).Release());
 }
 
 // This is overriden as noop in order to activate the table only at the end of Init transaction
@@ -6016,6 +6041,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvSetColumnConstraint::TEvGetRequest, Handle);
         HFuncTraced(TEvSetColumnConstraint::TEvListRequest, Handle);
         HFuncTraced(TEvSetColumnConstraint::TEvForgetRequest, Handle);
+        HFuncTraced(TEvSetColumnConstraint::TEvCancelRequest, Handle);
         HFuncTraced(TEvDataShard::TEvValidateRowConditionResponse, Handle);
         HFuncTraced(TEvIndexBuilder::TEvCreateRequest, Handle);
         HFuncTraced(TEvIndexBuilder::TEvGetRequest, Handle);
@@ -6087,7 +6113,6 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvPrivate::TEvPersistTopicStats, Handle);
 
         HFuncTraced(TEvSchemeShard::TEvLogin, Handle);
-        HFuncTraced(TEvPrivate::TEvLoginFinalize, Handle);
         HFuncTraced(TEvSchemeShard::TEvListUsers, Handle);
 
         HFuncTraced(TEvDataShard::TEvProposeTransactionAttachResult, Handle);
@@ -6550,6 +6575,13 @@ void TSchemeShard::DropNode(TPathElement::TPtr node, TStepId step, TTxId txId, N
             // not all path types support removal
             break;
     }
+
+    // If there was a pending AlterUserAttributes in progress when the path was dropped,
+    // the UserAttributesAlterData rows in the local DB must be cleaned up explicitly.
+    // PersistUserAttributes(..., nullptr) only removes UserAttributes rows and returns early
+    // without touching UserAttributesAlterData, which would leave them orphaned and cause
+    // a Y_VERIFY_S crash in ReadEverything on restart.
+    PersistRemoveUserAttributesAlter(db, node);
 
     PersistUserAttributes(db, node->PathId, node->UserAttrs, nullptr);
 }
@@ -8011,7 +8043,7 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev,
         // Control op completed; finalize the tracked record.
         Execute(CreateTxFullBackupProgress(ui64(txId)), ctx);
     }
-    if (TxIdToSetColumnConstraintOperations.contains(txId)) {
+    if (TxIdToSetColumnConstraintOperations.contains(txId) || TxIdToDependentSetColumnConstraint.contains(txId)) {
         Execute(CreateTxReplyCompletedSetColumnConstraint(txId), ctx);
         executed = true;
     }
@@ -9162,10 +9194,6 @@ void TSchemeShard::SetShardsQuota(ui64 value) {
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvLogin::TPtr &ev, const TActorContext &ctx) {
     Execute(CreateTxLogin(ev), ctx);
-}
-
-void TSchemeShard::Handle(TEvPrivate::TEvLoginFinalize::TPtr &ev, const TActorContext &ctx) {
-    Execute(CreateTxLoginFinalize(ev), ctx);
 }
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvListUsers::TPtr &ev, const TActorContext &ctx) {

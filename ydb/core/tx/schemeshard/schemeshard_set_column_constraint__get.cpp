@@ -55,7 +55,15 @@ public:
         auto* proto = respRecord.MutableSetColumnConstraint();
         FillSetColumnConstraint(*proto, operationInfo, Self);
 
-        if (operationInfo.ValidationFailed && operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::Done) {
+        // Add issue for cancelled operations
+        if (operationInfo.IsCancelled) {
+            auto* issue = respRecord.AddIssues();
+            issue->set_message(operationInfo.CancellationReason);
+            issue->set_issue_code(0);
+            issue->set_severity(NYql::TSeverityIds::S_ERROR);
+        }
+
+        if (operationInfo.ValidationFailed) {
             TPath tablePath = TPath::Init(operationInfo.TablePathId, Self);
             auto* issue = respRecord.AddIssues();
             issue->set_message(TStringBuilder()

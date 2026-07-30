@@ -61,6 +61,29 @@ void CheckToken(const TString& token, const NKikimrScheme::TEvDescribeSchemeResu
     UNIT_ASSERT_VALUES_EQUAL(validateResult.User, expectedUsername);
 }
 
+void TestIsAdmin(const TVector<TString>& admins, const TString& testUser, bool isAdmin) {
+    TTestBasicRuntime runtime;
+    if (!admins.empty()) {
+        runtime.AddAppDataInit([&admins](ui32, NKikimr::TAppData& appData){
+            for (const auto& admin : admins) {
+                appData.AdministrationAllowedSIDs.emplace_back(admin);
+            }
+        });
+    }
+    TTestEnv env(runtime);
+    ui64 txId = 100;
+
+    const auto userHashes = MakeTestPasswordHashes("password1");
+    CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", testUser, userHashes.HashedPassword);
+
+    const auto resultLogin = Login(runtime, testUser, NLoginProto::ESaslAuthMech::Plain,
+        NLoginProto::EHashType::ScramSha256, userHashes.ScramServerKey);
+    UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
+    auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
+    CheckToken(resultLogin.token(), describe, testUser);
+    UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetIsAdmin(), isAdmin);
+}
+
 }  // namespace NSchemeShardUT_Private
 
 Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
@@ -1036,77 +1059,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         reboot();
         loginUser("");
     }
-}
 
-Y_UNIT_TEST_SUITE(TSchemeShardLoginFinalize) {
-
-    void TestSuccess(const TVector<TString>& admins, const TString& testUser, bool isAdmin) {
-        TTestBasicRuntime runtime;
-        if (!admins.empty()) {
-            runtime.AddAppDataInit([&admins](ui32, NKikimr::TAppData& appData){
-                for (const auto& admin : admins) {
-                    appData.AdministrationAllowedSIDs.emplace_back(admin);
-                }
-            });
-        }
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
-        const auto userHashes = MakeTestPasswordHashes("password1");
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", testUser, userHashes.HashedPassword);
-
-        const auto check = NLogin::TLoginProvider::TPasswordCheckResult{.Status =
-            NLogin::TLoginProvider::TPasswordCheckResult::EStatus::SUCCESS};
-        const auto request = NLogin::TLoginProvider::TLoginUserRequest({.User = testUser});
-        // public keys are filled after the first login
-        UNIT_ASSERT_VALUES_EQUAL(Login(runtime, testUser, NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
-            MakeTestPasswordHashes("wrong-password1").ScramServerKey).error(), "Invalid password");
-        const auto resultLogin = LoginFinalize(runtime, request, check, "", false);
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
-        auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
-        CheckToken(resultLogin.token(), describe, testUser);
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.GetIsAdmin(), isAdmin);
-    }
-
-    Y_UNIT_TEST(NoPublicKeys) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
-        const auto user1Hashes = MakeTestPasswordHashes("password1");
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", user1Hashes.HashedPassword);
-
-        NLogin::TLoginProvider::TPasswordCheckResult check;
-        check.FillInvalidPassword();
-        const auto request = NLogin::TLoginProvider::TLoginUserRequest({.User = "user1"});
-        const auto resultLogin = LoginFinalize(runtime, request, check, "", false);
-        // public keys are filled after the first login
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "No key to generate token");
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.token(), "");
-    }
-
-    Y_UNIT_TEST(InvalidPassword) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-        ui64 txId = 100;
-
-        const auto user1Hashes = MakeTestPasswordHashes("password1");
-        CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", user1Hashes.HashedPassword);
-
-        NLogin::TLoginProvider::TPasswordCheckResult check;
-        check.FillInvalidPassword();
-        const auto request = NLogin::TLoginProvider::TLoginUserRequest({.User = "user1"});
-        // public keys are filled after the first login
-        UNIT_ASSERT_VALUES_EQUAL(Login(runtime, "user1", NLoginProto::ESaslAuthMech::Plain, NLoginProto::EHashType::ScramSha256,
-            user1Hashes.ScramServerKey).error(), "");
-        const auto resultLogin = LoginFinalize(runtime, request, check, "", false);
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "Invalid password");
-        UNIT_ASSERT_VALUES_EQUAL(resultLogin.token(), "");
-    }
-
-    Y_UNIT_TEST(Success) {
-        TestSuccess({}, "user1", true);
-        TestSuccess({"user-admin"}, "user1", false);
-        TestSuccess({"user1"}, "user1", true);
+    Y_UNIT_TEST(AdminLogin) {
+        TestIsAdmin( /* admins */ {}, /* testUser */ "user1", /* isAdmin */ true);
+        TestIsAdmin( /* admins */ {"user-admin"}, /* testUser */ "user1", /* isAdmin */ false);
+        TestIsAdmin( /* admins */ {"user1"}, /* testUser */ "user1", /* isAdmin */ true);
     }
 }

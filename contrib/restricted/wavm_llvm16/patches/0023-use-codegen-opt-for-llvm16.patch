@@ -1,0 +1,21 @@
+diff --git a/contrib/restricted/wavm_llvm16/Lib/LLVMJIT/LLVMCompile.cpp b/contrib/restricted/wavm_llvm16/Lib/LLVMJIT/LLVMCompile.cpp
+--- a/contrib/restricted/wavm_llvm16/Lib/LLVMJIT/LLVMCompile.cpp
++++ b/contrib/restricted/wavm_llvm16/Lib/LLVMJIT/LLVMCompile.cpp
+@@ -212,7 +212,7 @@ std::vector<U8> LLVMJIT::compileModule(const IR::Module& irModule, const TargetS
+ 		= getAndValidateTargetMachine(irModule.featureSpec, targetSpec);
+ 
+ 	targetMachine->setFastISel(true);
+-	targetMachine->setOptLevel(llvm::CodeGenOptLevel::None);
++	targetMachine->setOptLevel(llvm::CodeGenOpt::None);
+ 
+ 	// Emit LLVM IR for the module.
+ 	LLVMContext llvmContext;
+@@ -231,7 +231,7 @@ std::string LLVMJIT::emitLLVMIR(const IR::Module& irModule,
+ 		= getAndValidateTargetMachine(irModule.featureSpec, targetSpec);
+ 
+ 	targetMachine->setFastISel(true);
+-	targetMachine->setOptLevel(llvm::CodeGenOptLevel::None);
++	targetMachine->setOptLevel(llvm::CodeGenOpt::None);
+ 
+ 	// Emit LLVM IR for the module.
+ 	LLVMContext llvmContext;

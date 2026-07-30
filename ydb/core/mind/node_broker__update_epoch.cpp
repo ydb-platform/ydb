@@ -3,6 +3,8 @@
 
 #include <ydb/core/protos/counters_node_broker.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NODE_BROKER
+
 namespace NKikimr {
 namespace NNodeBroker {
 
@@ -17,7 +19,7 @@ public:
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
-        LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER, "TTxUpdateEpoch Execute");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateEpoch Execute");
 
         Self->Dirty.ComputeNextEpochDiff(Diff);
         Self->Dirty.ApplyStateDiff(Diff);
@@ -28,7 +30,7 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxUpdateEpoch Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateEpoch Complete");
 
         Self->Committed.ApplyStateDiff(Diff);
         Self->ScheduleEpochUpdate(ctx);

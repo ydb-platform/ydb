@@ -248,6 +248,9 @@ jobs:
       with:
         ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
         fetch-depth: 2
+        # Fork code is checked out only after the check-running-allowed gate
+        # (collaborator/owner or a maintainer-applied `ok-to-test` label)
+        allow-unsafe-pr-checkout: true
     - name: Setup ydb access
       uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
       with:

@@ -12,6 +12,7 @@
 #include <yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/pull/yql_yt_pull_stage_operation_manager.h>
 #include <yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/fill/yql_yt_fill_stage_operation_manager.h>
 #include <yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/map_reduce/yql_yt_map_reduce_stage_operation_manager.h>
+#include <yt/yql/providers/yt/fmr/coordinator/operation_manager/impl/touch/yql_yt_touch_stage_operation_manager.h>
 
 #include <yql/essentials/utils/yql_panic.h>
 
@@ -41,6 +42,8 @@ IFmrStageOperationManager::TPtr MakeStageOperationManager(EOperationType operati
             return MakeFillStageOperationManager(randomProvider);
         case EOperationType::MapReduce:
             return MakeMapReduceStageOperationManager(randomProvider);
+        case EOperationType::Touch:
+            return MakeTouchStageOperationManager(randomProvider);
         default:
             ythrow yexception() << "Unknown operation type for stage operation manager";
     }

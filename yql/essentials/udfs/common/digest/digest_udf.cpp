@@ -1,5 +1,6 @@
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/public/langver/yql_langver.h>
 
 #include <util/digest/murmur.h>
@@ -394,7 +395,7 @@ SIMPLE_STRICT_UDF(TSha256, char*(TAutoMap<char*>)) {
     return valueBuilder->NewString(TStringRef(reinterpret_cast<char*>(hash.data()), sizeof(hash)));
 }
 
-SIMPLE_STRICT_UDF_OPTIONS(TSha512, char*(TAutoMap<char*>), builder.SetMinLangVer(NYql::MakeLangVersion(2025, 3));) {
+SIMPLE_STRICT_UDF_OPTIONS(TSha512, char*(TAutoMap<char*>), builder.SetMinLangVer(NYql::NFeature::Sha512.MinLangVer);) {
     const auto& inputRef = args[0].AsStringRef();
     SHA512_CTX sha;
     SHA512_Init(&sha);

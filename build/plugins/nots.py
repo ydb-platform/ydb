@@ -45,6 +45,7 @@ TS_LINT_DART_FIELDS = (
     df.TsResources.value,
     df.TsCheckType.value,
     df.TsCheckHasCoverage.value,
+    df.Requirements.from_unit_with_cpu,  # from macro REQUIREMENTS()
 )
 
 TS_TEST_DART_FIELDS = TS_LINT_DART_FIELDS + (
@@ -52,7 +53,6 @@ TS_TEST_DART_FIELDS = TS_LINT_DART_FIELDS + (
     df.TestData.from_unit,  # from macro DATA()
     df.TestTimeout.from_unit,  # from macro TIMEOUT()
     df.Tag.from_unit,  # from macro TAG()
-    df.Requirements.from_unit,  # from macro REQUIREMENTS()
     df.TsTestForPath.value,
 )
 
@@ -177,6 +177,11 @@ class NotsUnitType(UnitType):
     def on_setup_extract_node_modules_recipe(self, args: UnitType.PluginArgs) -> None:
         """
         Setup test recipe to extract workspace-node_modules.tar before running tests
+        """
+
+    def on_setup_extract_node_modules_layer_recipe(self, args: UnitType.PluginArgs) -> None:
+        """
+        Setup test recipe to extract the internal node_modules layer before running tests
         """
 
     def on_setup_extract_output_tars_recipe(self, args: UnitType.PluginArgs) -> None:
@@ -447,6 +452,48 @@ def _create_pm(unit: NotsUnitType) -> 'PackageManager':
         script_path=None,
         module_path=module_path,
         inject_peers=unit.get("_INJECT_PEERS_ARG") is not None,
+    )
+
+
+def _use_hermetic_node_modules(unit: NotsUnitType) -> bool:
+    # Only supported TS module and check macros set the capability flag.
+    # Deprecated builders keep their legacy node_modules installation flow.
+    local_cli = unit.get("TS_LOCAL_CLI") == "yes"
+    injects_peers = unit.get("_INJECT_PEERS") == "yes"
+    module_supports_hermetic_node_modules = unit.get("_SUPPORTS_HERMETIC_NODE_MODULES") == "yes"
+    hermetic_node_modules_disabled = unit.get("TS_DISABLE_HERMETIC_NODE_MODULES") == "yes"
+
+    return (
+        not local_cli and injects_peers and module_supports_hermetic_node_modules and not hermetic_node_modules_disabled
+    )
+
+
+def _configure_hermetic_node_modules(unit: NotsUnitType) -> None:
+    unit.set(["_HERMETIC_NODE_MODULES_ARG", "--hermetic-node-modules yes"])
+    unit.set(["NOTS_TOOL_REQUIREMENTS__NO_UID__", '${hide;requirements:"cpu:4 ram_disk:4"}'])
+    if unit.get("OS_LINUX") == "yes" and unit.get("ARCH_X86_64") == "yes":
+        unit.onpeerdir(["devtools/frontend_build_platform/nots/squashfs"])
+        unit.set(
+            [
+                "_SQUASHFS_TOOLS_ARG",
+                "--squashfs-tools-path $SQUASHFS_TOOLS_RESOURCE_GLOBAL",
+            ]
+        )
+        unit.set(
+            [
+                "_SQUASHFS_TOOLS_RECIPE_ARG",
+                "--squashfs-tools-path $SQUASHFS_TOOLS_RESOURCE_GLOBAL",
+            ]
+        )
+
+
+def _setup_prebuilder_resource(unit: NotsUnitType) -> None:
+    unit.on_peerdir_ts_resource("@yatool/prebuilder")
+    unit.set(
+        [
+            "_YATOOL_PREBUILDER_ARG",
+            "--yatool-prebuilder-path $YATOOL_PREBUILDER_ROOT/node_modules/@yatool/prebuilder",
+        ]
     )
 
 
@@ -935,8 +982,7 @@ def _TS_PROTO_CONFIGURE(unit: NotsUnitType) -> None:
         return
 
     in_pj = _build_directives(["hide", "input"], ["package.json"])
-    out_pj = _build_directives(["hide", "output"], ["package.json"])
-    __set_append(unit, "_TS_PROTO_IMPL_INOUTS", [in_pj, out_pj])
+    __set_append(unit, "_TS_PROTO_IMPL_INOUTS", [in_pj])
 
     unit.set(["_TS_PROTO_AUTO_ARGS", ""])
 
@@ -968,8 +1014,9 @@ def _TS_PROTO_CONFIGURE(unit: NotsUnitType) -> None:
 @ymake.macro
 @_with_report_configure_error
 def _TS_PROTO_AUTO_CONFIGURE(unit: NotsUnitType) -> None:
-    out_files = _build_directives(["hide", "output"], ["package.json", "pnpm-lock.yaml"])
-    __set_append(unit, "_TS_PROTO_IMPL_INOUTS", out_files)
+    in_package_json = _build_directives(["hide", "input"], ["package.json"])
+    out_lockfile = _build_directives(["hide", "output"], ["pnpm-lock.yaml"])
+    __set_append(unit, "_TS_PROTO_IMPL_INOUTS", [in_package_json, out_lockfile])
 
     deps_path = unit.get("_TS_PROTO_AUTO_DEPS")
     unit.onpeerdir([deps_path])
@@ -1009,18 +1056,36 @@ def _PREPARE_DEPS_CONFIGURE(unit: NotsUnitType) -> None:
     pj = pm.load_package_json_from_dir(pm.sources_path)
     has_deps = pj.has_dependencies()
     local_cli = unit.get("TS_LOCAL_CLI") == "yes"
+    use_hermetic_node_modules = _use_hermetic_node_modules(unit)
     ins, outs, resources = pm.calc_prepare_deps_inouts_and_resources(unit.get("_TARBALLS_STORE"), has_deps, local_cli)
+    if use_hermetic_node_modules:
+        from lib.nots.package_manager import constants
+        from lib.nots.package_manager.utils import b_rooted, s_rooted
+
+        _configure_hermetic_node_modules(unit)
+        if pj.get_use_prebuilder():
+            _setup_prebuilder_resource(unit)
+        __set_append(unit, "_PREPARE_DEPS_INOUTS", "${hide:PEERS}")
+        ins.extend(
+            s_rooted(os.path.normpath(os.path.join(pm.module_path, patch_path)))
+            for patch_path in pj.get_pnpm_patched_dependencies().values()
+        )
+        outs.append(b_rooted(os.path.join(pm.module_path, constants.NODE_MODULES_LAYER_FILENAME)))
 
     if has_deps:
-        unit.onpeerdir(pm.get_local_peers_from_package_json())
-        __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives(["hide", "input"], sorted(ins)))
-        __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives(["hide", "output"], sorted(outs)))
+        local_peers = pm.get_local_peers_from_package_json()
+        unit.onpeerdir(local_peers)
+        if use_hermetic_node_modules:
+            # The cached injected snapshot must contain built workspace peers,
+            # not their source/pre-build state.
+            unit.ondepends(local_peers)
         unit.set(["_PREPARE_DEPS_RESOURCES", " ".join([f'${{resource:"{uri}"}}' for uri in sorted(resources)])])
         unit.set(["_PREPARE_DEPS_USE_RESOURCES_FLAG", "--resource-root $(RESOURCE_ROOT)"])
 
-    else:
-        __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives(["output"], sorted(outs)))
-        unit.set(["_PREPARE_DEPS_CMD", "$_PREPARE_NO_DEPS_CMD"])
+    tarballs_prefix = os.path.join("$B", pm.module_path, unit.get("_TARBALLS_STORE"), "")
+    ordered_outs = sorted(outs, key=lambda path: (path.startswith(tarballs_prefix), path))
+    __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives(["hide", "input"], sorted(ins)))
+    __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives(["hide", "output"], ordered_outs))
 
 
 @ymake.macro
@@ -1033,7 +1098,13 @@ def _TS_PROTO_AUTO_PREPARE_DEPS_CONFIGURE(unit: NotsUnitType) -> None:
     local_cli = unit.get("TS_LOCAL_CLI") == "yes"
     _, outs, _ = pm.calc_prepare_deps_inouts_and_resources(store_path="", has_deps=False, local_cli=local_cli)
     __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives(["hide", "output"], sorted(outs)))
-    unit.set(["_PREPARE_DEPS_TS_PROTO_AUTO_FLAG", f"--ts-proto-auto-deps-path {deps_path}"])
+    package_name = unit.get("_TS_PROTO_AUTO_PACKAGE_NAME")
+    unit.set(
+        [
+            "_PREPARE_DEPS_TS_PROTO_AUTO_FLAG",
+            f"--ts-proto-auto-deps-path {deps_path} --ts-proto-auto-package-name {package_name}",
+        ]
+    )
 
 
 def _node_modules_bundle_needed(unit: NotsUnitType, arc_path: str) -> bool:
@@ -1139,7 +1210,10 @@ def _TS_CHECK_CONFIGURE(unit: NotsUnitType, validation_mode: str) -> None:
         return
 
     pm = _create_pm(unit)
-    unit.on_setup_install_node_modules_recipe(pm.module_path)
+    if _use_hermetic_node_modules(unit):
+        unit.on_setup_extract_node_modules_layer_recipe(pm.module_path)
+    else:
+        unit.on_setup_install_node_modules_recipe(pm.module_path)
     unit.on_setup_extract_output_tars_recipe(pm.module_path)
 
     peers = pm.get_local_peers_from_package_json()
@@ -1187,6 +1261,8 @@ def _NODE_MODULES_CONFIGURE(unit: NotsUnitType) -> None:
     pm = _create_pm(unit)
     pj = pm.load_package_json_from_dir(pm.sources_path)
     has_deps = pj.has_dependencies()
+    if _use_hermetic_node_modules(unit):
+        _configure_hermetic_node_modules(unit)
 
     if has_deps:
         unit.onpeerdir(pm.get_local_peers_from_package_json())
@@ -1195,6 +1271,17 @@ def _NODE_MODULES_CONFIGURE(unit: NotsUnitType) -> None:
             unit.set(["_NODE_MODULES_BUNDLE_ARG", "--nm-bundle yes"])
 
         ins, outs = pm.calc_node_modules_inouts(nm_bundle_needed)
+
+        if not _use_hermetic_node_modules(unit):
+            from lib.nots.package_manager.utils import s_rooted
+
+            # Legacy builders materialize node_modules in the build action and
+            # copy pnpm patches from the source tree there. Declare those files
+            # explicitly so they are available in a distbuild sandbox.
+            ins.extend(
+                s_rooted(os.path.normpath(os.path.join(pm.module_path, patch_path)))
+                for patch_path in pj.get_pnpm_patched_dependencies().values()
+            )
 
         __set_append(unit, "_NODE_MODULES_INOUTS", _build_directives(["hide", "input"], sorted(ins)))
         if not unit.get("TS_TEST_FOR"):
@@ -1206,13 +1293,7 @@ def _NODE_MODULES_CONFIGURE(unit: NotsUnitType) -> None:
             lf.validate_importers()
 
         if pj.get_use_prebuilder():
-            unit.on_peerdir_ts_resource("@yatool/prebuilder")
-            unit.set(
-                [
-                    "_YATOOL_PREBUILDER_ARG",
-                    "--yatool-prebuilder-path $YATOOL_PREBUILDER_ROOT/node_modules/@yatool/prebuilder",
-                ]
-            )
+            _setup_prebuilder_resource(unit)
 
             # YATOOL_PREBUILDER_0_7_0_RESOURCE_GLOBAL
             prebuilder_major = unit.get("YATOOL_PREBUILDER-ROOT-VAR-NAME").split("_")[2]

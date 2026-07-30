@@ -3103,6 +3103,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
             case NKikimrSchemeOp::EIndexTypeLocalMinMax:
+            case NKikimrSchemeOp::EIndexTypeLocalCountMinSketch:
                 // no specialized index description
                 Y_ASSERT(description.empty());
                 break;
@@ -3171,6 +3172,10 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
         return std::visit([]<typename T>(const T& v) {
             if constexpr (std::is_same_v<std::monostate, T>) {
                 return TString{};
+            } else if constexpr (std::is_same_v<NKikimrSchemeOp::TBloomNGrammFilter, T>) {
+                TString str;
+                Y_ENSURE(v.SerializeToString(&str));
+                return str;
             } else {
                 TString str{v.SerializeAsString()};
                 Y_ENSURE(!str.empty());
@@ -3186,7 +3191,8 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
     static bool IsLocalIndex(EType type) {
         return type == NKikimrSchemeOp::EIndexTypeLocalBloomFilter
             || type == NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter
-            || type == NKikimrSchemeOp::EIndexTypeLocalMinMax;
+            || type == NKikimrSchemeOp::EIndexTypeLocalMinMax
+            || type == NKikimrSchemeOp::EIndexTypeLocalCountMinSketch;
     }
 
     static TPtr Create(const NKikimrSchemeOp::TIndexCreationConfig& config, TString& errMsg) {
@@ -3211,6 +3217,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             case NKikimrSchemeOp::EIndexTypeGlobalUnique:
             case NKikimrSchemeOp::EIndexTypeLocalMinMax:
+            case NKikimrSchemeOp::EIndexTypeLocalCountMinSketch:
                 // no specialized index description
                 break;
             case NKikimrSchemeOp::EIndexTypeGlobalJson:
@@ -3273,6 +3280,7 @@ struct TTableIndexInfo : public TSimpleRefCount<TTableIndexInfo> {
                 alterData->SpecializedIndexDescription = config.GetBloomNGrammFilterDescription();
                 break;
             case NKikimrSchemeOp::EIndexTypeLocalMinMax:
+            case NKikimrSchemeOp::EIndexTypeLocalCountMinSketch:
                 alterData->SpecializedIndexDescription = std::monostate{};
                 break;
             default:

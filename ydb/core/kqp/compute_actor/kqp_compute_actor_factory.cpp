@@ -5,6 +5,8 @@
 #include <ydb/core/kqp/node_service/kqp_node_state.h>
 #include <ydb/core/kqp/rm_service/kqp_resource_estimation.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE
+
 namespace NKikimr::NKqp::NComputeActor {
 
 class TKqpCaFactory : public IKqpNodeComputeActorFactory {
@@ -102,12 +104,13 @@ public:
             memoryLimits.ChannelBufferSize = std::max<ui32>(estimation.ChannelBufferMemoryLimit / std::max<ui32>(1, inputChannelsCount), MinChannelBufferSize.load());
             memoryLimits.OutputChunkMaxSize = args.OutputChunkMaxSize;
             memoryLimits.ChunkSizeLimit = ChannelChunkSizeLimit.load();
-            AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "channel_info")
-                ("ch_size", estimation.ChannelBufferMemoryLimit)
-                ("ch_count", estimation.ChannelBuffersCount)
-                ("ch_limit", memoryLimits.ChannelBufferSize)
-                ("inputs", args.Task->InputsSize())
-                ("input_channels_count", inputChannelsCount);
+            YDB_LOG_DEBUG("Computed compute actor channel memory limits",
+                {"event", "channel_info"},
+                {"chSize", estimation.ChannelBufferMemoryLimit},
+                {"chCount", estimation.ChannelBuffersCount},
+                {"chLimit", memoryLimits.ChannelBufferSize},
+                {"inputs", args.Task->InputsSize()},
+                {"inputChannelsCount", inputChannelsCount});
         }
 
         memoryLimits.MemoryQuotaManager = std::move(args.TaskQuotaManager);
@@ -134,9 +137,12 @@ public:
 
         runtimeSettings.TerminateHandler = [state=args.State, txId=args.TxId, executerId=args.ExecuterId, taskId=args.Task->GetId()]
             (bool success, const NYql::TIssues& issues) {
-                AFL_DEBUG(NKikimrServices::KQP_COMPUTE)
-                    ("problem", "finish_compute_actor")
-                    ("tx_id", txId)("task_id", taskId)("success", success)("message", issues.ToOneLineString());
+                YDB_LOG_DEBUG("Compute actor terminated",
+                    {"problem", "finish_compute_actor"},
+                    {"txId", txId},
+                    {"taskId", taskId},
+                    {"success", success},
+                    {"message", issues.ToOneLineString()});
                 if (state) {
                     state->OnTaskFinished(txId, executerId, taskId, success);
                 }

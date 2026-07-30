@@ -16,22 +16,6 @@
 
 #include <util/generic/bitmap.h>
 
-#if defined LOG_T || \
-    defined LOG_D || \
-    defined LOG_I || \
-    defined LOG_N || \
-    defined LOG_W || \
-    defined LOG_W
-#error log macro redefinition
-#endif
-
-#define LOG_T(stream) LOG_TRACE_S((TlsActivationContext->AsActorContext()), NKikimrServices::NAMESERVICE, stream)
-#define LOG_D(stream) LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::NAMESERVICE, stream)
-#define LOG_I(stream) LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::NAMESERVICE, stream)
-#define LOG_N(stream) LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::NAMESERVICE, stream)
-#define LOG_W(stream) LOG_WARN_S((TlsActivationContext->AsActorContext()), NKikimrServices::NAMESERVICE, stream)
-#define LOG_E(stream) LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::NAMESERVICE, stream)
-
 namespace NKikimr {
 namespace NNodeBroker {
 
@@ -263,7 +247,7 @@ private:
                             const TActorContext &ctx);
     void ResolveStaticNode(ui32 nodeId, TActorId sender, TMonotonic deadline, const TActorContext &ctx);
     void ResolveDynamicNode(ui32 nodeId, TAutoPtr<IEventHandle> ev, TMonotonic deadline, const TActorContext &ctx);
-    void SendNodesList(TActorId recipient, bool onlyAliveNodes, const TActorContext &ctx);
+    void SendNodesList(TActorId recipient, bool onlyAliveDynamicNodes, const TActorContext &ctx);
     void SendNodesList(const TActorContext &ctx);
     void InvalidateListNodesCache();
     void PendingRequestAnswered(ui32 domain, const TActorContext &ctx);
@@ -312,7 +296,9 @@ private:
     // Domain -> Epoch ID.
     THashMap<ui32, ui64> EpochUpdates;
     ui32 ResolvePoolId;
-    THashSet<TActorId> StaticNodeChangeSubscribers;
+    // Subscriber -> its OnlyAliveDynamicNodes preference, so re-notifications
+    // respect the filter the subscriber originally requested.
+    THashMap<TActorId, bool> StaticNodeChangeSubscribers;
     bool SubscribedToConsoleNSConfig = false;
 
     bool EnableLongLease = false;

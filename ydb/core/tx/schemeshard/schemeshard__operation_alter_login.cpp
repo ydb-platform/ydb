@@ -37,11 +37,6 @@ public:
                 case NKikimrSchemeOp::TAlterLogin::kCreateUser: {
                     const auto& createUser = alterLogin.GetCreateUser();
 
-                    if (!createUser.HasHashedPassword() || createUser.HasPassword()) {
-                        result->SetStatus(NKikimrScheme::StatusPreconditionFailed, "Plain password is no longer supported, use hashed password instead");
-                        break;
-                    }
-
                     NLogin::TLoginProvider::TCreateUserRequest request;
                     request.User = createUser.GetUser();
                     request.HashedPassword = createUser.GetHashedPassword();
@@ -77,11 +72,6 @@ public:
                 case NKikimrSchemeOp::TAlterLogin::kModifyUser: {
                     const auto& modifyUser = alterLogin.GetModifyUser();
 
-                    if (modifyUser.HasPassword()) {
-                        result->SetStatus(NKikimrScheme::StatusPreconditionFailed, "Plain password is no longer supported, use hashed password instead");
-                        break;
-                    }
-
                     NLogin::TLoginProvider::TModifyUserRequest request;
 
                     request.User = modifyUser.GetUser();
@@ -99,10 +89,11 @@ public:
                     } else {
                         auto& sid = context.SS->LoginProvider.Sids[modifyUser.GetUser()];
                         db.Table<Schema::LoginSids>().Key(sid.Name).Update<Schema::LoginSids::SidType,
+                                                                           Schema::LoginSids::SidHash,  // explicitly erase deprecated field
                                                                            Schema::LoginSids::PasswordHashes,
                                                                            Schema::LoginSids::IsEnabled,
                                                                            Schema::LoginSids::FailedAttemptCount>(
-                                                                            sid.Type, sid.PasswordHashes, sid.IsEnabled, sid.FailedLoginAttemptCount);
+                                                                            sid.Type, "", sid.PasswordHashes, sid.IsEnabled, sid.FailedLoginAttemptCount);
                         result->SetStatus(NKikimrScheme::StatusSuccess);
 
                         AddIsUserAdmin(modifyUser.GetUser(), context.SS->LoginProvider, additionalParts);

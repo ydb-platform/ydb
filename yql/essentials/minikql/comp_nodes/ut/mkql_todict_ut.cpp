@@ -74,7 +74,7 @@ Y_UNIT_TEST_LLVM(TestCompactUtf8Set) {
 
     TVector<TRuntimeNode> items;
     for (auto s : data) {
-        items.push_back(NTest::ConvertValueToLiteralNode(pb, NTest::TUtf8{s}));
+        items.push_back(NTest::ConvertValueToLiteralNode(pb, NTest::TUtf8{TString(s)}));
     }
     Shuffle(items.begin(), items.end());
     auto dataType = NTest::ConvertToMinikqlType<NTest::TUtf8>(pb);
@@ -92,7 +92,7 @@ Y_UNIT_TEST_LLVM(TestUtf8Set) {
 
     TVector<TRuntimeNode> items;
     for (auto s : data) {
-        items.push_back(NTest::ConvertValueToLiteralNode(pb, NTest::TUtf8{s}));
+        items.push_back(NTest::ConvertValueToLiteralNode(pb, NTest::TUtf8{TString(s)}));
     }
     Shuffle(items.begin(), items.end());
     auto dataType = NTest::ConvertToMinikqlType<NTest::TUtf8>(pb);
@@ -115,7 +115,7 @@ Y_UNIT_TEST_LLVM(TestSqueezeToDict) {
 
         TVector<TRuntimeNode> items;
         for (auto s : data) {
-            items.push_back(NTest::ConvertValueToLiteralNode(pb, NTest::TUtf8{s}));
+            items.push_back(NTest::ConvertValueToLiteralNode(pb, NTest::TUtf8{TString(s)}));
         }
         Shuffle(items.begin(), items.end());
 
@@ -175,7 +175,7 @@ Y_UNIT_TEST_LLVM(TestNarrowSqueezeToDict) {
 
         TVector<TRuntimeNode> items;
         for (auto s : data) {
-            items.push_back(NTest::ConvertValueToLiteralNode(pb, NTest::TUtf8{s}));
+            items.push_back(NTest::ConvertValueToLiteralNode(pb, NTest::TUtf8{TString(s)}));
         }
         Shuffle(items.begin(), items.end());
 

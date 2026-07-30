@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 import os
 import sys
 import warnings
-from typing import Any, Callable, NoReturn, Type, Union
+from typing import Any, Callable, NoReturn, Union
 
 from cryptography.hazmat.bindings.openssl.binding import Binding
 
@@ -31,7 +33,7 @@ def text(charp: Any) -> str:
     return ffi.string(charp).decode("utf-8")
 
 
-def exception_from_error_queue(exception_type: Type[Exception]) -> NoReturn:
+def exception_from_error_queue(exception_type: type[Exception]) -> NoReturn:
     """
     Convert an OpenSSL library failure into a Python exception.
 
@@ -57,7 +59,7 @@ def exception_from_error_queue(exception_type: Type[Exception]) -> NoReturn:
     raise exception_type(errors)
 
 
-def make_assert(error: Type[Exception]) -> Callable[[bool], Any]:
+def make_assert(error: type[Exception]) -> Callable[[bool], Any]:
     """
     Create an assert function that uses :func:`exception_from_error_queue` to
     raise an exception wrapped by *error*.

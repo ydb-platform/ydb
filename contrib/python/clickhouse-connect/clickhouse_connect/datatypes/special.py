@@ -1,4 +1,4 @@
-from collections.abc import MutableSequence, Sequence
+from collections.abc import Collection, MutableSequence, Sequence
 from typing import Any
 from uuid import UUID as PYUUID
 
@@ -30,7 +30,7 @@ class UUID(ClickHouseType):
     @staticmethod
     def _read_binary_str(source: ByteSource, num_rows: int):
         v = source.read_array("Q", num_rows * 2)
-        column = []
+        column: list[str] = []
         app = column.append
         for i in range(num_rows):
             ix = i << 1
@@ -94,7 +94,7 @@ class SimpleAggregateFunction(ClickHouseType):
         self.python_type = self.element_type.python_type
         self.nano_divisor = self.element_type.nano_divisor
 
-    def _data_size(self, sample: Sequence) -> int:
+    def _data_size(self, sample: Collection[Any]) -> int:
         return self.element_type.data_size(sample)
 
     def read_column_prefix(self, source: ByteSource, ctx: QueryContext):

@@ -721,9 +721,9 @@ WHERE Sid = "user3"
 
 ### Просмотр информации о потоковых запросах {#streaming_queries}
 
-Системное представление `streaming_queries` содержит информацию о всех созданных [потоковых запросах](../concepts/streaming-query.md).
+Системное представление `streaming_queries` содержит информацию о всех созданных [потоковых запросах](../concepts/streaming-query/streaming-query.md).
 
-Пользователю в данном представлении отображаются только те [потоковые запросы](../concepts/streaming-query.md), на которые ему предоставлено право `ydb.granular.describe_schema`.
+Пользователю в данном представлении отображаются только те [потоковые запросы](../concepts/streaming-query/streaming-query.md), на которые ему предоставлено право `ydb.granular.describe_schema`.
 
 Структура таблицы:
 

@@ -1126,6 +1126,13 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(DropSecret, NKikimrSchemeOp::EOperationType::ESchemeOpDropSecret, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
     DROP_BY_PATH_ID_HELPERS(DropSecret, NKikimrSchemeOp::EOperationType::ESchemeOpDropSecret)
 
+    void TestCreateSecretOrReplace(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& scheme, const TVector<TExpectedResult>& expectedResults) {
+        auto* ev = CreateSecretRequest(TTestTxConfig::SchemeShard, txId, parentPath, scheme);
+        ev->Record.MutableTransaction()->Mutable(0)->SetReplaceIfExists(true);
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, ev);
+        TestModificationResults(runtime, txId, expectedResults);
+    }
+
     // streaming query
     GENERIC_HELPERS(CreateStreamingQuery, NKikimrSchemeOp::EOperationType::ESchemeOpCreateStreamingQuery, &NKikimrSchemeOp::TModifyScheme::MutableCreateStreamingQuery)
     GENERIC_HELPERS(AlterStreamingQuery, NKikimrSchemeOp::EOperationType::ESchemeOpAlterStreamingQuery, &NKikimrSchemeOp::TModifyScheme::MutableCreateStreamingQuery)
@@ -2715,23 +2722,6 @@ namespace NSchemeShardUT_Private {
         return event->Record;
     }
 
-    NKikimrScheme::TEvLoginResult LoginFinalize(
-        TTestActorRuntime& runtime,
-        const NLogin::TLoginProvider::TLoginUserRequest& request,
-        const NLogin::TLoginProvider::TPasswordCheckResult& checkResult,
-        const TString& passwordHash,
-        const bool needUpdateCache
-    ) {
-        const auto evLoginFinalize = new NSchemeShard::TEvPrivate::TEvLoginFinalize(
-            request, checkResult, runtime.AllocateEdgeActor(), passwordHash, needUpdateCache
-        );
-        AsyncSend(runtime, TTestTxConfig::SchemeShard, evLoginFinalize);
-        TAutoPtr<IEventHandle> handle;
-        const auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvLoginResult>(handle);
-        UNIT_ASSERT(event);
-        return event->Record;
-    }
-
     void ModifyUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, std::function<void(::NKikimrSchemeOp::TLoginModifyUser*)>&& initiator) {
         auto modifyTx = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
         auto transaction = modifyTx->Record.AddTransaction();
@@ -3637,6 +3627,24 @@ namespace NSchemeShardUT_Private {
         Ydb::StatusIds::StatusCode expectedStatus)
     {
         return TestForgetSetColumnConstraint(runtime, TTestTxConfig::SchemeShard, txId, dbName, operationId, expectedStatus);
+    }
+
+    NKikimrSetColumnConstraint::TEvCancelResponse TestCancelSetColumnConstraint(
+        TTestActorRuntime& runtime,
+        ui64 schemeShard,
+        ui64 txId,
+        const TString& dbName,
+        ui64 operationId)
+    {
+        auto request = MakeHolder<TEvSetColumnConstraint::TEvCancelRequest>(txId, dbName, operationId);
+
+        auto sender = runtime.AllocateEdgeActor();
+        ForwardToTablet(runtime, schemeShard, sender, request.Release());
+
+        TAutoPtr<IEventHandle> handle;
+        auto* event = runtime.GrabEdgeEvent<TEvSetColumnConstraint::TEvCancelResponse>(handle);
+        UNIT_ASSERT(event);
+        return event->Record;
     }
 
     void TestCheckColumnsNotNull(

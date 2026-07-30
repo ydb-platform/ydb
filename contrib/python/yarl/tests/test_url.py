@@ -63,6 +63,11 @@ def test_origin():
     assert URL("http://example.com:8888") == url.origin()
 
 
+def test_origin_with_no_auth():
+    url = URL("http://example.com:8888/path/to?a=1&b=2")
+    assert URL("http://example.com:8888") == url.origin()
+
+
 def test_origin_nonascii():
     url = URL("http://user:password@оун-упа.укр:8888/path/to?a=1&b=2")
     assert str(url.origin()) == "http://xn----8sb1bdhvc.xn--j1amh:8888"
@@ -176,6 +181,24 @@ def test_raw_host():
     assert url.raw_host == url._val.hostname
 
 
+@pytest.mark.parametrize(
+    ("host"),
+    [
+        ("example.com"),
+        ("[::1]"),
+        ("xn--gnter-4ya.com"),
+    ],
+)
+def test_host_subcomponent(host: str):
+    url = URL(f"http://{host}")
+    assert url.host_subcomponent == host
+
+
+def test_host_subcomponent_return_idna_encoded_host():
+    url = URL("http://оун-упа.укр")
+    assert url.host_subcomponent == "xn----8sb1bdhvc.xn--j1amh"
+
+
 def test_raw_host_non_ascii():
     url = URL("http://оун-упа.укр")
     assert "xn----8sb1bdhvc.xn--j1amh" == url.raw_host
@@ -286,35 +309,43 @@ def test_port_for_implicit_port():
 def test_port_for_relative_url():
     url = URL("/path/to")
     assert url.port is None
+    assert url._port_not_default is None
+    assert url.explicit_port is None
 
 
 def test_port_for_unknown_scheme():
     url = URL("unknown://example.com")
     assert url.port is None
+    assert url._port_not_default is None
+    assert url.explicit_port is None
 
 
 def test_explicit_port_for_explicit_port():
     url = URL("http://example.com:8888")
     assert 8888 == url.explicit_port
     assert url.explicit_port == url._val.port
+    assert url._port_not_default == 8888
 
 
 def test_explicit_port_for_implicit_port():
     url = URL("http://example.com")
     assert url.explicit_port is None
     assert url.explicit_port == url._val.port
+    assert url._port_not_default is None
 
 
 def test_explicit_port_for_relative_url():
     url = URL("/path/to")
     assert url.explicit_port is None
     assert url.explicit_port == url._val.port
+    assert url._port_not_default is None
 
 
 def test_explicit_port_for_unknown_scheme():
     url = URL("unknown://example.com")
     assert url.explicit_port is None
     assert url.explicit_port == url._val.port
+    assert url._port_not_default is None
 
 
 def test_raw_path_string_empty():
@@ -1439,7 +1470,6 @@ def test_is_default_port_for_absolute_url_without_port():
     assert url.is_default_port()
 
 
-@pytest.mark.skip
 def test_is_default_port_for_absolute_url_with_default_port():
     url = URL("http://example.com:80")
     assert url.is_default_port()
@@ -2041,3 +2071,14 @@ def test_parsing_populates_cache():
     assert url._cache["raw_query_string"] == "a=b"
     assert url._cache["raw_fragment"] == "frag"
     assert url._cache["scheme"] == "http"
+
+
+@pytest.mark.parametrize(
+    ("host", "is_authority"),
+    [
+        *(("other_gen_delim_" + c, False) for c in "[]"),
+    ],
+)
+def test_build_with_invalid_ipv6_host(host: str, is_authority: bool):
+    with pytest.raises(ValueError, match="Invalid IPv6 URL"):
+        URL(f"http://{host}/")

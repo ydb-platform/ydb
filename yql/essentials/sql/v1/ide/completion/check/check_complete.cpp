@@ -12,6 +12,8 @@
 #include <yql/essentials/sql/v1/lexer/antlr4_pure/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_pure_ansi/lexer.h>
 
+#include <contrib/libs/antlr4_cpp_runtime/src/Exceptions.h>
+
 #include <util/charset/utf8.h>
 #include <util/random/random.h>
 
@@ -93,15 +95,21 @@ bool CheckComplete(TStringBuf query, TYqlContext ctx) {
 
 bool CheckComplete(TStringBuf query, NYql::TExprNode::TPtr root, NYql::TExprContext& ctx, NYql::TIssues& issues) try {
     return CheckComplete(query, MakeYqlAnalysis()->Analyze(root, ctx));
+} catch (const antlr4::ParseCancellationException& e) {
+    Y_UNUSED(e);
+    return true;
 } catch (...) {
-    issues.AddIssue(FormatCurrentException());
+    issues.AddIssue(CurrentExceptionMessage());
     return false;
 }
 
 bool CheckComplete(TStringBuf query, NYql::TAstNode& root, NYql::TIssues& issues) try {
     return CheckComplete(query, MakeYqlAnalysis()->Analyze(root, issues).GetOrElse({}));
+} catch (const antlr4::ParseCancellationException& e) {
+    Y_UNUSED(e);
+    return true;
 } catch (...) {
-    issues.AddIssue(FormatCurrentException());
+    issues.AddIssue(CurrentExceptionMessage());
     return false;
 }
 

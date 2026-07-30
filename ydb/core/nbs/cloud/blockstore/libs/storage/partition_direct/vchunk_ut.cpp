@@ -53,7 +53,9 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         auto vchunk = std::make_shared<TVChunk>(
             Runtime->GetActorSystem(0),
+            TraceService.get(),
             PartitionDirectService.get(),
+            DiskDescription,
             VChunkConfig,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
@@ -138,7 +140,9 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         auto vchunk = std::make_shared<TVChunk>(
             Runtime->GetActorSystem(0),
+            TraceService.get(),
             PartitionDirectService.get(),
+            DiskDescription,
             VChunkConfig,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
@@ -191,13 +195,80 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         vchunk->Stop().GetValue(TDuration::Seconds(10));
     }
 
+    // Until the vchunk finishes restoring its dirty map from the PBuffers,
+    // its pre-flush records exist only in the PBuffers and are not inflight.
+    // Reporting "no constraint" (nullopt) in that window is indistinguishable
+    // from an idle vchunk, so FinishPBufferCleanup would skip it and a
+    // tablet-wide barrier erase could wipe the very records the restore is
+    // about to return. An un-restored vchunk must report the blocking bound
+    // (0) instead; cleanup skips its tick on it.
+    Y_UNIT_TEST_F(
+        ShouldConstrainCleanupBarrierUntilRestoreCompletes,
+        TBaseFixture)
+    {
+        Init();
+
+        // Keep the restore pending: the vchunk stays not-ready.
+        auto neverResolvePromise =
+            NThreading::NewPromise<TDBGRestoreResponse>();
+        DirectBlockGroup->RestoreDBGPBuffersHandler =
+            [neverResolvePromise](const auto& vChunkIndex) mutable
+        {
+            Y_UNUSED(vChunkIndex);
+            return neverResolvePromise.GetFuture();
+        };
+
+        auto vchunk = std::make_shared<TVChunk>(
+            Runtime->GetActorSystem(0),
+            TraceService.get(),
+            PartitionDirectService.get(),
+            DiskDescription,
+            VChunkConfig,
+            DirectBlockGroup,
+            3,   // syncRequestsBatchSize
+            DefaultVChunkSize,
+            Counters);
+        vchunk->Start();
+
+        DrainExecutor(DirectBlockGroup->GetExecutor());
+        UNIT_ASSERT_EQUAL(false, IsDirtyMapReady(*vchunk));
+
+        const auto barrierWhileRestoring =
+            GetSafeBarrierOnExecutor(DirectBlockGroup->GetExecutor(), *vchunk);
+
+        // Resolve the restore; with an empty dirty map and restore complete
+        // the vchunk stops constraining the cleanup.
+        RunOnExecutor(
+            DirectBlockGroup->GetExecutor(),
+            [&]() -> bool
+            {
+                InvokeUpdateDirtyMap(
+                    *vchunk,
+                    TDBGRestoreResponse{.Error = MakeError(S_OK)});
+                return true;
+            });
+        const auto barrierAfterRestore =
+            GetSafeBarrierOnExecutor(DirectBlockGroup->GetExecutor(), *vchunk);
+
+        vchunk->Stop().GetValue(TDuration::Seconds(10));
+
+        UNIT_ASSERT_C(
+            barrierWhileRestoring.has_value(),
+            "vchunk with a pending restore reported 'no constraint' to the "
+            "cleanup barrier gather");
+        UNIT_ASSERT_VALUES_EQUAL(0, *barrierWhileRestoring);
+        UNIT_ASSERT(!barrierAfterRestore.has_value());
+    }
+
     Y_UNIT_TEST_F(ShouldSwitchHostToTemporaryOfflineAndBack, TBaseFixture)
     {
         Init();
 
         auto vchunk = std::make_shared<TVChunk>(
             Runtime->GetActorSystem(0),
+            TraceService.get(),
             PartitionDirectService.get(),
+            DiskDescription,
             VChunkConfig,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
@@ -210,7 +281,9 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             TPromise<void> ready = NewPromise();
             auto wait = ready.GetFuture();
             DirectBlockGroup->GetExecutor()->ExecuteSimple(
-                [&]()
+                [vchunk,
+                 ready = std::move(ready)]   //
+                () mutable
                 {
                     vchunk->SetHostState(0, EHostState::TemporaryOffline);
                     ready.SetValue();
@@ -235,12 +308,10 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             "H4+{Disabled,0,0};",
             AccessBlocksDirtyMap(*vchunk).DebugPrintDDiskState());
 
-        // Scheduled DBResponse.
-        // TODO replace with real DB response.
+        // Reply UpdateConfig request.
         {
-            UNIT_ASSERT_VALUES_EQUAL(1, ScheduledTasks.size());
-            auto task = RunScheduledTasks();
-            task.Wait(TDuration::Seconds(10));
+            UNIT_ASSERT_VALUES_EQUAL(1, ReplyUpdateRequests());
+            DrainExecutor(DirectBlockGroup->GetExecutor());
         }
 
         // Config should be updated.
@@ -265,7 +336,9 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             TPromise<void> ready = NewPromise();
             auto wait = ready.GetFuture();
             DirectBlockGroup->GetExecutor()->ExecuteSimple(
-                [&]()
+                [vchunk,
+                 ready = std::move(ready)]   //
+                () mutable
                 {
                     vchunk->SetHostState(0, EHostState::Online);
                     ready.SetValue();
@@ -273,12 +346,10 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             wait.GetValue(TDuration::Seconds(10));
         }
 
-        // Scheduled DBResponse.
-        // TODO replace with real DB response.
+        // Reply UpdateConfig request.
         {
-            UNIT_ASSERT_VALUES_EQUAL(1, ScheduledTasks.size());
-            auto task = RunScheduledTasks();
-            task.Wait(TDuration::Seconds(10));
+            UNIT_ASSERT_VALUES_EQUAL(1, ReplyUpdateRequests());
+            DrainExecutor(DirectBlockGroup->GetExecutor());
         }
 
         // Config should be updated.
@@ -302,13 +373,15 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         onStop.GetValue(TDuration::Seconds(10));
     }
 
-    Y_UNIT_TEST_F(ShouldAppendHostAndGrowDirtyMap, TBaseFixture)
+    Y_UNIT_TEST_F(ShouldAppendHost, TBaseFixture)
     {
         Init();
 
         auto vchunk = std::make_shared<TVChunk>(
             Runtime->GetActorSystem(0),
+            TraceService.get(),
             PartitionDirectService.get(),
+            DiskDescription,
             VChunkConfig,
             DirectBlockGroup,
             3,
@@ -324,9 +397,11 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             TPromise<void> ready = NewPromise();
             auto wait = ready.GetFuture();
             DirectBlockGroup->GetExecutor()->ExecuteSimple(
-                [&]()
+                [vchunk,
+                 ready = std::move(ready)]   //
+                () mutable
                 {
-                    vchunk->OnHostAppended(DirectBlockGroupHostCount + 1);
+                    vchunk->UpdateHostCount(DirectBlockGroupHostCount + 1);
                     ready.SetValue();
                 });
             wait.GetValue(TDuration::Seconds(10));
@@ -336,32 +411,28 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             DirectBlockGroupHostCount,
             AccessConfig(*vchunk).GetHostCount());
 
-        UNIT_ASSERT_STRING_CONTAINS(
-            AccessBlocksDirtyMap(*vchunk).DebugPrintDDiskState(),
-            "H5-{Disabled,0,0}");
-
+        // Reply UpdateConfig request.
         {
-            UNIT_ASSERT_VALUES_EQUAL(1, ScheduledTasks.size());
-            auto task = RunScheduledTasks();
-            task.Wait(TDuration::Seconds(10));
+            UNIT_ASSERT_VALUES_EQUAL(1, ReplyUpdateRequests());
+            DrainExecutor(DirectBlockGroup->GetExecutor());
         }
 
         UNIT_ASSERT_VALUES_EQUAL(
             DirectBlockGroupHostCount + 1,
             AccessConfig(*vchunk).GetHostCount());
-        UNIT_ASSERT_STRING_CONTAINS(
-            AccessConfig(*vchunk).DebugPrint(),
-            "PBuffer{Primary;Primary;Primary;HandOff;HandOff;None}");
-        UNIT_ASSERT_STRING_CONTAINS(
-            AccessConfig(*vchunk).DebugPrint(),
-            "DDisk{Primary;Primary;Primary;None;None;None}");
-        UNIT_ASSERT_STRING_CONTAINS(
-            AccessConfig(*vchunk).DebugPrint(),
-            "Enabled{+++++-}");
-
-        UNIT_ASSERT_STRING_CONTAINS(
-            AccessBlocksDirtyMap(*vchunk).DebugPrintDDiskState(),
-            "H5-{Disabled,0,0}");
+        UNIT_ASSERT_VALUES_EQUAL(
+            "[0/100] "
+            "PBuffer{Primary;Primary;Primary;HandOff;HandOff;HandOff} "
+            "DDisk{Primary;Primary;Primary;None;None;None} Enabled{++++++}",
+            AccessConfig(*vchunk).DebugPrint());
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0*{Operational,32768,32768};"
+            "H1*{Operational,32768,32768};"
+            "H2*{Operational,32768,32768};"
+            "H3+{Disabled,0,0};"
+            "H4+{Disabled,0,0};"
+            "H5+{Disabled,0,0};",
+            AccessBlocksDirtyMap(*vchunk).DebugPrintDDiskState());
 
         auto onStop = vchunk->Stop();
         onStop.GetValue(TDuration::Seconds(10));
@@ -419,7 +490,9 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         auto vchunk = std::make_shared<TVChunk>(
             Runtime->GetActorSystem(0),
+            TraceService.get(),
             PartitionDirectService.get(),
+            DiskDescription,
             VChunkConfig,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
@@ -432,7 +505,9 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             TPromise<void> ready = NewPromise();
             auto wait = ready.GetFuture();
             DirectBlockGroup->GetExecutor()->ExecuteSimple(
-                [&]()
+                [vchunk,
+                 ready = std::move(ready)]   //
+                () mutable
                 {
                     vchunk->SetHostState(0, EHostState::Offline);
                     ready.SetValue();
@@ -457,13 +532,10 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             "H4+{Disabled,0,0};",
             AccessBlocksDirtyMap(*vchunk).DebugPrintDDiskState());
 
-        // Scheduled DBResponse.
-        // TODO replace with real DB response.
+        // Reply UpdateConfig request.
         {
-            WaitScheduledTasks(1, TDuration::Seconds(10));
-            UNIT_ASSERT_VALUES_EQUAL(1, ScheduledTasks.size());
-            auto task = RunScheduledTasks();
-            task.Wait(TDuration::Seconds(10));
+            UNIT_ASSERT_VALUES_EQUAL(1, ReplyUpdateRequests());
+            DrainExecutor(DirectBlockGroup->GetExecutor());
         }
 
         // Config should be updated.
@@ -488,7 +560,9 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             TPromise<void> ready = NewPromise();
             auto wait = ready.GetFuture();
             DirectBlockGroup->GetExecutor()->ExecuteSimple(
-                [&]()
+                [vchunk,
+                 ready = std::move(ready)]   //
+                () mutable
                 {
                     vchunk->SetHostState(0, EHostState::Online);
                     ready.SetValue();
@@ -496,13 +570,10 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
             wait.GetValue(TDuration::Seconds(10));
         }
 
-        // Scheduled DBResponse.
-        // TODO replace with real DB response.
+        // Reply UpdateConfig request.
         {
-            WaitScheduledTasks(1, TDuration::Seconds(10));
-            UNIT_ASSERT_VALUES_EQUAL(1, ScheduledTasks.size());
-            auto task = RunScheduledTasks();
-            task.Wait(TDuration::Seconds(10));
+            UNIT_ASSERT_VALUES_EQUAL(1, ReplyUpdateRequests());
+            DrainExecutor(DirectBlockGroup->GetExecutor());
         }
 
         // Config should be updated.
@@ -533,10 +604,9 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         // Waiting for the coping to be completed.
         {
-            WaitScheduledTasks(1, TDuration::Seconds(10));
-            UNIT_ASSERT_VALUES_EQUAL(1, ScheduledTasks.size());
-            auto task = RunScheduledTasks();
-            task.Wait(TDuration::Seconds(10));
+            DrainExecutor(DirectBlockGroup->GetExecutor());
+            UNIT_ASSERT_VALUES_EQUAL(1, ReplyUpdateRequests());
+            DrainExecutor(DirectBlockGroup->GetExecutor());
         }
 
         // Config should be updated.
@@ -584,7 +654,9 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         auto vchunk = std::make_shared<TVChunk>(
             Runtime->GetActorSystem(0),
+            TraceService.get(),
             PartitionDirectService.get(),
+            DiskDescription,
             VChunkConfig,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize
@@ -686,7 +758,9 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
 
         auto vchunk = std::make_shared<TVChunk>(
             Runtime->GetActorSystem(0),
+            TraceService.get(),
             PartitionDirectService.get(),
+            DiskDescription,
             VChunkConfig,
             DirectBlockGroup,
             3,   // syncRequestsBatchSize

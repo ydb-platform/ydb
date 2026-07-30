@@ -54,8 +54,8 @@ void DoNestedTuplesCompressTest() {
         const auto finalTuple = NTest::ConvertValueToLiteralNode(pb,
                                                                  std::tuple<ui64, std::tuple<ui64, std::tuple<ui64, bool, NTest::TUtf8>, NTest::TUtf8>, bool>{
                                                                      i,
-                                                                     {i, {i, bool(i % 2), NTest::TUtf8{TStringBuf((i % 2) ? str : std::string())}},
-                                                                      NTest::TUtf8{TStringBuf((i % 2) ? std::string() : str)}},
+                                                                     {i, {i, bool(i % 2), NTest::TUtf8{TString((i % 2) ? str : std::string())}},
+                                                                      NTest::TUtf8{TString((i % 2) ? std::string() : str)}},
                                                                      filterValue});
         items.push_back(finalTuple);
     }

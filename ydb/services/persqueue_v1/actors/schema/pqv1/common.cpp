@@ -383,6 +383,7 @@ TResult ApplyChangesInt( // create and alter
         return {Ydb::StatusIds::BAD_REQUEST, std::move(error)};
     }
     pqTabletConfig->SetFormatVersion(settings.supported_format() - 1);
+    pqTabletConfig->SetContentBasedDeduplication(settings.content_based_deduplication());
 
     auto ct = pqTabletConfig->MutableCodecs();
     if (settings.supported_codecs().size() > NPQ::MAX_SUPPORTED_CODECS_COUNT) {

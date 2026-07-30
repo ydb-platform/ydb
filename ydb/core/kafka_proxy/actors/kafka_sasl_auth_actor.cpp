@@ -11,6 +11,9 @@
 #include <ydb/core/security/sasl/scram_auth_actor.h>
 #include <ydb/library/login/sasl/scram.h>
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
+#include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
 
 
 namespace NKafka {
@@ -244,8 +247,9 @@ void TKafkaSaslAuthActor::SendResponse() {
     responseToClient->AuthBytes = ToRawBytes(responseToClient->AuthBytesStr);
     responseToClient->ErrorMessage = "";
 
-    KAFKA_LOG_D("Authentication first step finished."
-                    << " FirstServerMessage='" << AuthResponse << "'");
+    YDB_LOG_DEBUG("Authentication first step finished. FirstServerMessage='",
+        {LogPrefix()},
+        {"authResponse", AuthResponse});
 
     auto evResponse = std::make_unique<TEvKafka::TEvResponse>(CorrelationId, responseToClient, EKafkaErrors::NONE_ERROR);
     Send(Context->ConnectionId, evResponse.release());
@@ -265,7 +269,9 @@ void TKafkaSaslAuthActor::SendResponseAndDie(EKafkaErrors errorCode, Ydb::Status
         TStringBuilder authenticationFailureReason;
         authenticationFailureReason << (errorMessage ? " " + errorMessage : "")
             << (details ? " " + details : "");
-        KAFKA_LOG_ERROR("Authentication failure." << authenticationFailureReason);
+        YDB_LOG_ERROR("Authentication failure",
+            {LogPrefix()},
+            {"authenticationFailureReason", authenticationFailureReason});
         const auto& securityConfig = AppData()->DomainsConfig.GetSecurityConfig();
         TStringBuilder responseErrorMessage;
         responseErrorMessage << "Authentication failure.";
@@ -278,12 +284,14 @@ void TKafkaSaslAuthActor::SendResponseAndDie(EKafkaErrors errorCode, Ydb::Status
         auto authResult = new TEvKafka::TEvAuthResult(EAuthSteps::FAILED, evResponse, errorMessage);
         Send(Context->ConnectionId, authResult);
     } else {
-        KAFKA_LOG_D("Authentication success. Database='" << DatabasePath << "', "
-                                      << "FolderId='" << FolderId << "', "
-                                      << "ServiceAccountId='" << ServiceAccountId << "', "
-                                      << "DatabaseId='" << DatabaseId << "', "
-                                      << "Coordinator='" << Coordinator << "', "
-                                      << "ResourcePath='" << ResourcePath << "'");
+        YDB_LOG_DEBUG("Authentication success. Database=' FolderId=' ServiceAccountId=' DatabaseId=' Coordinator=' ResourcePath='",
+            {LogPrefix()},
+            {"databasePath", DatabasePath},
+            {"folderId", FolderId},
+            {"serviceAccountId", ServiceAccountId},
+            {"databaseId", DatabaseId},
+            {"coordinator", Coordinator},
+            {"resourcePath", ResourcePath});
         responseToClient->ErrorMessage = "";
 
         auto evResponse = std::make_shared<TEvKafka::TEvResponse>(CorrelationId, responseToClient, errorCode);
@@ -408,7 +416,7 @@ void TKafkaSaslAuthActor::HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySe
     }
 
     if (CurrentStateFunc() == &TThis::StateResolveDatabase) {
-        Y_ABORT_UNLESS(navigate->ResultSet.size() == 1);
+        AFL_ENSURE(navigate->ResultSet.size() == 1)("result_set_size", navigate->ResultSet.size())("database", DatabasePath);
         IsServerless = navigate->ResultSet.front().DomainInfo->IsServerless();
 
         for (const auto& attr : navigate->ResultSet.front().Attributes) {

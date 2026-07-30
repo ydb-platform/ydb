@@ -11,6 +11,9 @@
 
 # Run specific test
 ./ya make --build relwithdebinfo -tA <folder> -F *test-filter*
+
+# Run tests repeatedly (e.g. to catch flakes)
+./ya make --build relwithdebinfo -tA <folder> -F *test-filter* --test-retries N
 ```
 
 - Tests include build
@@ -21,5 +24,3 @@
 ## C++
 
 - Use C++20 or earlier
-
-

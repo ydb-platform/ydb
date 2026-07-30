@@ -12,7 +12,7 @@ from ...query.transaction import (
     BaseQueryTxContext,
     QueryTxStateEnum,
 )
-from ...opentelemetry.tracing import SpanName, create_ydb_span, span_finish_callback
+from ...observability.tracing import SpanName, create_ydb_span, span_finish_callback
 
 if TYPE_CHECKING:
     from .session import QuerySession

@@ -6,6 +6,8 @@ SRCS(
     resource_pool_settings.cpp
 )
 
+GENERATE_ENUM_SERIALIZATION(resource_pool_classifier_settings.h)
+
 PEERDIR(
     contrib/libs/protobuf
     library/cpp/regex/pcre

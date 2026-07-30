@@ -503,6 +503,7 @@ message TOlapColumnDiff {
     optional string DefaultValue = 7;
     optional NKikimrArrowAccessorProto.TRequestedConstructor DataAccessorConstructor = 8;
     optional string ColumnFamilyName = 9 [deprecated = true];
+    optional bool NotNull = 10;
 }
 
 message TOlapColumnDescription {
@@ -1383,6 +1384,7 @@ enum EIndexType {
     EIndexTypeGlobalFulltextCompact = 11;
     EIndexTypeGlobalFulltextCompactRelevance = 12;
     EIndexTypeGlobalJsonCompact = 13;
+    EIndexTypeLocalCountMinSketch = 14;
 }
 
 enum EIndexState {
@@ -2268,6 +2270,7 @@ enum EPathSubType {
     EPathSubTypeLocalBloomFilterIndex = 7;
     EPathSubTypeLocalBloomNgramFilterIndex = 8;
     EPathSubTypeLocalMinMaxIndex = 9;
+    EPathSubTypeLocalCountMinSketchIndex = 10;
 }
 
 enum EPathState {

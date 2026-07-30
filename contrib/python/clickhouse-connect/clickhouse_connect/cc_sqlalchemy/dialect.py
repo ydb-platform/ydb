@@ -31,7 +31,7 @@ class ClickHouseDialect(DefaultDialect):
     postfetch_lastrowid = False
     ddl_compiler = ChDDLCompiler
     statement_compiler = ChStatementCompiler
-    preparer = ChIdentifierPreparer
+    preparer = ChIdentifierPreparer  # type: ignore[assignment]
     description_encoding = None
     max_identifier_length = 127
     ischema_names = ischema_names

@@ -2,7 +2,15 @@
 PRNG management routines, thin wrappers.
 """
 
+import warnings
+
 from OpenSSL._util import lib as _lib
+
+warnings.warn(
+    "OpenSSL.rand is deprecated - you should use os.urandom instead",
+    DeprecationWarning,
+    stacklevel=3,
+)
 
 
 def add(buffer: bytes, entropy: int) -> None:

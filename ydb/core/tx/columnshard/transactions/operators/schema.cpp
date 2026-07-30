@@ -91,7 +91,11 @@ public:
     virtual void DoOnEvent(const std::shared_ptr<NSubscriber::ISubscriptionEvent>& ev) override {
         AFL_VERIFY(ev->GetType() == NSubscriber::EEventType::TxCompleted);
         const auto* evCompleted = static_cast<const NSubscriber::TEventTxCompleted*>(ev.get());
-        AFL_VERIFY(TxIdsToWait.erase(evCompleted->GetTxId()));
+        // Subscribers receive every TxCompleted on the shard. Wait set is a snapshot from propose
+        // time (GetTxs), so later/unrelated completions must be ignored — otherwise VERIFY fails
+        if (!TxIdsToWait.erase(evCompleted->GetTxId())) {
+            return;
+        }
         YDB_LOG_DEBUG("",
             {"completed", evCompleted->GetTxId()},
             {"remained", JoinSeq(",", TxIdsToWait)});
@@ -230,12 +234,11 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
 NKikimr::TConclusionStatus TSchemaTransactionOperator::ValidateTableSchema(const NKikimrSchemeOp::TColumnTableSchema& schema) const {
     namespace NTypeIds = NScheme::NTypeIds;
     static const THashSet<NScheme::TTypeId> pkSupportedTypes = { NTypeIds::Bool, NTypeIds::Timestamp, NTypeIds::Date32, NTypeIds::Datetime64,
-        NTypeIds::Timestamp64, NTypeIds::Interval64, NTypeIds::Int8, NTypeIds::Int16, NTypeIds::Int32, NTypeIds::Int64, NTypeIds::Uint8,
-        NTypeIds::Uint16, NTypeIds::Uint32, NTypeIds::Uint64, NTypeIds::Date, NTypeIds::Datetime,
-        //NTypeIds::Interval,
+        NTypeIds::Timestamp64, NTypeIds::Interval64, NTypeIds::Interval, NTypeIds::Int8, NTypeIds::Int16, NTypeIds::Int32, NTypeIds::Int64,
+        NTypeIds::Uint8, NTypeIds::Uint16, NTypeIds::Uint32, NTypeIds::Uint64, NTypeIds::Date, NTypeIds::Datetime,
         //NTypeIds::Float,
         //NTypeIds::Double,
-        NTypeIds::String, NTypeIds::Utf8, NTypeIds::Decimal };
+        NTypeIds::String, NTypeIds::Utf8, NTypeIds::Decimal, NTypeIds::DyNumber, NTypeIds::Uuid };
 
     if (!schema.KeyColumnNamesSize()) {
         return TConclusionStatus::Fail("There is no key columns");

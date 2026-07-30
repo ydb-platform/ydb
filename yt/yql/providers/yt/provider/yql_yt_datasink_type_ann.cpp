@@ -2023,13 +2023,44 @@ private:
             const TYtTableInfo tableInfo(drop.Table());
             YQL_ENSURE(tableInfo.Meta);
 
+            const bool fixLoop =  State_->Configuration->_FixEndlessLoopInDropIfExists.Get().GetOrElse(DEFAULT_FIX_ENDLESS_LOOP_IN_DROP_IF_EXISTS);
+            if (fixLoop) {
+                // Make sure we register the table state for the next epoch
+                if (const auto commitEpoch = tableInfo.CommitEpoch) {
+                    auto& nextDescription = State_->TablesData->GetOrAddTable(drop.DataSink().Cluster().StringValue(), tableInfo.Name, commitEpoch);
+
+                    auto& nextMetadata = nextDescription.Meta;
+                    if (!nextMetadata) {
+                        nextDescription.RowType = nullptr;
+                        nextDescription.RawRowType = nullptr;
+
+                        nextMetadata = MakeIntrusive<TYtTableMetaInfo>();
+                        nextMetadata->DoesExist = false;
+                    }
+                    else if (nextMetadata->DoesExist) {
+                        ctx.AddError(TIssue(ctx.GetPosition(drop.Table().Pos()), TStringBuilder() <<
+                            (isDropTable ? "Table" : "View") << ' ' << tableInfo.Name << " is modified and dropped in the same transaction"));
+                        return TStatus::Error;
+                    }
+                }
+            }
+
             if (!tableInfo.Meta->DoesExist && ifExists) {
                 YQL_CLOG(INFO, ProviderYt) <<
                     (isDropTable ? "Table" : "View") << ' ' << tableInfo.Name <<
                     " does not exist. 'DROP " << (isDropTable ? "TABLE" : "VIEW") << " IF EXISTS' statement will do nothing.";
 
-                output = drop.World().Ptr();
-                return TStatus::Repeat;
+                if (fixLoop) {
+                    // TODO: the object we are dropping is missing, but we cannot remove DropTable from graph
+                    // (via output = drop.World().Ptr(); return TStatus::Repeat; )
+                    // this will break epoch assigmnent and fail RunOnOpt test.
+                    // Bot we can actually detect this situation later in exec transformer and don't even issue YT call
+                    input->SetTypeAnn(drop.World().Ref().GetTypeAnn());
+                    return TStatus::Ok;
+                } else {
+                    output = drop.World().Ptr();
+                    return TStatus::Repeat;
+                }
             }
 
             if (isDropTable) {
@@ -2053,21 +2084,23 @@ private:
                 return TStatus::Error;
             }
 
-            if (const auto commitEpoch = tableInfo.CommitEpoch) {
-                auto& nextDescription = State_->TablesData->GetOrAddTable(drop.DataSink().Cluster().StringValue(), tableInfo.Name, commitEpoch);
+            if (!fixLoop) {
+                if (const auto commitEpoch = tableInfo.CommitEpoch) {
+                    auto& nextDescription = State_->TablesData->GetOrAddTable(drop.DataSink().Cluster().StringValue(), tableInfo.Name, commitEpoch);
 
-                auto& nextMetadata = nextDescription.Meta;
-                if (!nextMetadata) {
-                    nextDescription.RowType = nullptr;
-                    nextDescription.RawRowType = nullptr;
+                    auto& nextMetadata = nextDescription.Meta;
+                    if (!nextMetadata) {
+                        nextDescription.RowType = nullptr;
+                        nextDescription.RawRowType = nullptr;
 
-                    nextMetadata = MakeIntrusive<TYtTableMetaInfo>();
-                    nextMetadata->DoesExist = false;
-                }
-                else if (nextMetadata->DoesExist) {
-                    ctx.AddError(TIssue(ctx.GetPosition(drop.Table().Pos()), TStringBuilder() <<
-                        (isDropTable ? "Table" : "View") << ' ' << tableInfo.Name << " is modified and dropped in the same transaction"));
-                    return TStatus::Error;
+                        nextMetadata = MakeIntrusive<TYtTableMetaInfo>();
+                        nextMetadata->DoesExist = false;
+                    }
+                    else if (nextMetadata->DoesExist) {
+                        ctx.AddError(TIssue(ctx.GetPosition(drop.Table().Pos()), TStringBuilder() <<
+                            (isDropTable ? "Table" : "View") << ' ' << tableInfo.Name << " is modified and dropped in the same transaction"));
+                        return TStatus::Error;
+                    }
                 }
             }
         }
@@ -2390,7 +2423,7 @@ private:
 
         const TStructExprType* resultType = nullptr;
         status = EquiJoinAnnotation(input->Pos(), resultType, labels,
-            *input->Child(TYtEquiJoin::idx_Joins), joinOptions, ctx);
+            *input->Child(TYtEquiJoin::idx_Joins), joinOptions, ctx, *State_->Types);
         if (status != TStatus::Ok) {
             return status;
         }

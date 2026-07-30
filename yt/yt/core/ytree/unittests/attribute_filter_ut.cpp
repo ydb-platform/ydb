@@ -1,10 +1,38 @@
 #include <yt/yt/core/test_framework/framework.h>
 
 #include <yt/yt/core/ytree/attribute_filter.h>
+#include <yt/yt/core/ytree/convert.h>
+#include <yt/yt/core/ytree/helpers.h>
+
+#include <yt/yt/core/concurrency/scheduler_api.h>
+
+#include <yt/yt/core/yson/async_writer.h>
 
 namespace NYT::NYTree {
 
 using namespace NYPath;
+using namespace NYson;
+using namespace NConcurrency;
+
+////////////////////////////////////////////////////////////////////////////////
+
+TYsonString WriteAttributesToYson(
+    const IAttributeDictionary& attributes,
+    const TAttributeFilter& attributeFilter)
+{
+    TAsyncYsonWriter writer;
+    writer.OnBeginMap();
+    WriteAttributeDictionaryFragment(&writer, attributes, attributeFilter, /*stable*/ true);
+    writer.OnEndMap();
+    return WaitForFast(writer.Finish())
+        .ValueOrThrow();
+}
+
+std::string NormalizeYson(TYsonString yson)
+{
+    return ConvertToYsonString(ConvertToNode(yson), EYsonFormat::Text)
+        .ToString();
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -85,6 +113,28 @@ TEST(TAttributeFilterTest, TestNormalization)
     EXPECT_EQ(
         (TKeyToFilter{{"yp", TPathFilter({"/foo"})}, {"yt", TPathFilter({"/bar"})}}),
         TAttributeFilter({}, {"/yp/foo", "/y\\x70/foo/qux", "/yt/bar"}).Normalize());
+}
+
+TEST(TAttributeFilterTest, WriteAttributeDictionaryFragment)
+{
+    auto attributes = CreateEphemeralAttributes();
+    attributes->Set("z", 1);
+    attributes->Set("a", "value");
+    attributes->SetYson("nested", TYsonString(TStringBuf("{foo={bar=42; baz=24}; qux=3}")));
+
+    auto wholeResult = WriteAttributesToYson(
+        *attributes,
+        TAttributeFilter({"z", "a"}));
+    EXPECT_EQ(
+        NormalizeYson(TYsonString(TStringBuf("{a=value; z=1}"))),
+        NormalizeYson(wholeResult));
+
+    auto filteredResult = WriteAttributesToYson(
+        *attributes,
+        TAttributeFilter({}, {"/nested/foo/bar"}));
+    EXPECT_EQ(
+        NormalizeYson(TYsonString(TStringBuf("{nested={foo={bar=42}}}"))),
+        NormalizeYson(filteredResult));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

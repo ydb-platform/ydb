@@ -113,6 +113,7 @@ void TFmrUserJob::Save(IOutputStream& s) const {
         ReduceOperationSpec_,
         IsMapReduceReducer_,
         IsMapReduceMap_,
+        SortByHasKeyHashPrefix_,
         ForceTableIndexMarking_
     );
 }
@@ -132,6 +133,7 @@ void TFmrUserJob::Load(IInputStream& s) {
         ReduceOperationSpec_,
         IsMapReduceReducer_,
         IsMapReduceMap_,
+        SortByHasKeyHashPrefix_,
         ForceTableIndexMarking_
     );
 }
@@ -283,6 +285,15 @@ void TFmrUserJob::FillQueueFromReduceInput() {
     YQL_ENSURE(ReduceOperationSpec_.Defined());
     auto reduceBy = ReduceOperationSpec_->ReduceBy;
     auto sortBy = ReduceOperationSpec_->SortBy;
+    // sortBy is [...reduceBy, ...tiebreaker] (e.g. a join's "_yql_sort"), with a leading
+    // _yql_key_hash only for MapReduce's hash-shuffled intermediate tables (SortByHasKeyHashPrefix_,
+    // set by the coordinator - see TReduceTaskParams::SortByHasKeyHashPrefix) - a plain Reduce
+    // reads its input pre-sorted by the real reduceBy columns, with no hash involved. Either
+    // way, task boundaries must only constrain on the reduce-key prefix (hash-if-present +
+    // reduceBy) - see the comment on CompareRowToBoundaryPrefix for why comparing the tiebreaker
+    // too would silently split a reduce group across tasks whenever a task cut lands between
+    // rows that share a reduce key but differ in tiebreaker.
+    const size_t numBoundaryKeyColumns = (SortByHasKeyHashPrefix_ ? 1 : 0) + reduceBy.Columns.size();
     for (const auto& inputTableRef : InputTables_.Inputs) {
         if (auto fmrInput = std::get_if<TFmrTableInputRef>(&inputTableRef)) {
             blockIterators.push_back(MakeIntrusive<TTableDataServiceBlockIterator>(
@@ -296,7 +307,9 @@ void TFmrUserJob::FillQueueFromReduceInput() {
                 fmrInput->IsFirstRowInclusive,
                 fmrInput->IsLastRowInclusive,
                 fmrInput->FirstRowKeys,
-                fmrInput->LastRowKeys
+                fmrInput->LastRowKeys,
+                /*readAheadChunks*/ ui64{4},
+                numBoundaryKeyColumns
             ));
         } else {
             ythrow TFmrNonRetryableJobException() << "YtTables unsupported inside Reduce task for now";
@@ -486,7 +499,8 @@ TStatistics TFmrUserJob::DoFmrJob(const TFmrUserJobOptions& options) {
             sortedWriter->NotifyRowEnd();
         }
         sortedWriter->Flush();
-        TStatistics result({{OutputTables_[0], sortedWriter->GetStats()}});
+        auto sortedWriterStats = sortedWriter->GetStats();
+        TStatistics result({{OutputTables_[0], sortedWriterStats}});
 
         // Direct (map-bypass) outputs at indices 1..K were already written to the real TDS via
         // their normal writers (see InitializeFmrUserJob) and flushed generically by

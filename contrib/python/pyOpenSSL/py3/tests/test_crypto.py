@@ -4,36 +4,34 @@
 """
 Unit tests for :py:mod:`OpenSSL.crypto`.
 """
+
 import base64
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from subprocess import PIPE, Popen
-from warnings import simplefilter
-
-from cryptography import x509
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import ec, ed25519, ed448, rsa
-
-import flaky
 
 import pytest
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import (
+    dsa,
+    ec,
+    ed448,
+    ed25519,
+    rsa,
+)
 
-from OpenSSL._util import ffi as _ffi, lib as _lib
+from OpenSSL._util import ffi as _ffi
+from OpenSSL._util import lib as _lib
 from OpenSSL.crypto import (
-    CRL,
-    Error,
     FILETYPE_ASN1,
     FILETYPE_PEM,
     FILETYPE_TEXT,
-    NetscapeSPKI,
-    PKCS12,
-    PKCS7,
-    PKey,
-    Revoked,
     TYPE_DSA,
     TYPE_RSA,
     X509,
-    X509Extension,
+    Error,
+    PKey,
     X509Name,
     X509Req,
     X509Store,
@@ -42,32 +40,34 @@ from OpenSSL.crypto import (
     X509StoreFlags,
     dump_certificate,
     dump_certificate_request,
-    dump_crl,
     dump_privatekey,
     dump_publickey,
     get_elliptic_curve,
     get_elliptic_curves,
     load_certificate,
     load_certificate_request,
-    load_crl,
-    load_pkcs12,
-    load_pkcs7_data,
     load_privatekey,
     load_publickey,
-    sign,
-    verify,
 )
 
+with pytest.warns(DeprecationWarning):
+    from OpenSSL.crypto import (
+        X509Extension,
+    )
+
 from .util import (
-    EqualityTestsMixin,
     NON_ASCII,
-    WARNING_TYPE_EXPECTED,
+    EqualityTestsMixin,
     is_consistent_type,
 )
 
 
 def normalize_privatekey_pem(pem):
     return dump_privatekey(FILETYPE_PEM, load_privatekey(FILETYPE_PEM, pem))
+
+
+def utcnow():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 GOOD_CIPHER = "blowfish"
@@ -554,57 +554,6 @@ ywIDAQAB
 -----END PUBLIC KEY-----
 """
 
-# Some PKCS#7 stuff.  Generated with the openssl command line:
-#
-#    openssl crl2pkcs7 -inform pem -outform pem -certfile s.pem -nocrl
-#
-# with a certificate and key (but the key should be irrelevant) in s.pem
-pkcs7Data = b"""\
------BEGIN PKCS7-----
-MIIDNwYJKoZIhvcNAQcCoIIDKDCCAyQCAQExADALBgkqhkiG9w0BBwGgggMKMIID
-BjCCAm+gAwIBAgIBATANBgkqhkiG9w0BAQQFADB7MQswCQYDVQQGEwJTRzERMA8G
-A1UEChMITTJDcnlwdG8xFDASBgNVBAsTC00yQ3J5cHRvIENBMSQwIgYDVQQDExtN
-MkNyeXB0byBDZXJ0aWZpY2F0ZSBNYXN0ZXIxHTAbBgkqhkiG9w0BCQEWDm5ncHNA
-cG9zdDEuY29tMB4XDTAwMDkxMDA5NTEzMFoXDTAyMDkxMDA5NTEzMFowUzELMAkG
-A1UEBhMCU0cxETAPBgNVBAoTCE0yQ3J5cHRvMRIwEAYDVQQDEwlsb2NhbGhvc3Qx
-HTAbBgkqhkiG9w0BCQEWDm5ncHNAcG9zdDEuY29tMFwwDQYJKoZIhvcNAQEBBQAD
-SwAwSAJBAKy+e3dulvXzV7zoTZWc5TzgApr8DmeQHTYC8ydfzH7EECe4R1Xh5kwI
-zOuuFfn178FBiS84gngaNcrFi0Z5fAkCAwEAAaOCAQQwggEAMAkGA1UdEwQCMAAw
-LAYJYIZIAYb4QgENBB8WHU9wZW5TU0wgR2VuZXJhdGVkIENlcnRpZmljYXRlMB0G
-A1UdDgQWBBTPhIKSvnsmYsBVNWjj0m3M2z0qVTCBpQYDVR0jBIGdMIGagBT7hyNp
-65w6kxXlxb8pUU/+7Sg4AaF/pH0wezELMAkGA1UEBhMCU0cxETAPBgNVBAoTCE0y
-Q3J5cHRvMRQwEgYDVQQLEwtNMkNyeXB0byBDQTEkMCIGA1UEAxMbTTJDcnlwdG8g
-Q2VydGlmaWNhdGUgTWFzdGVyMR0wGwYJKoZIhvcNAQkBFg5uZ3BzQHBvc3QxLmNv
-bYIBADANBgkqhkiG9w0BAQQFAAOBgQA7/CqT6PoHycTdhEStWNZde7M/2Yc6BoJu
-VwnW8YxGO8Sn6UJ4FeffZNcYZddSDKosw8LtPOeWoK3JINjAk5jiPQ2cww++7QGG
-/g5NDjxFZNDJP1dGiLAxPW6JXwov4v0FmdzfLOZ01jDcgQQZqEpYlgpuI5JEWUQ9
-Ho4EzbYCOaEAMQA=
------END PKCS7-----
-"""
-
-pkcs7DataASN1 = base64.b64decode(
-    b"""
-MIIDNwYJKoZIhvcNAQcCoIIDKDCCAyQCAQExADALBgkqhkiG9w0BBwGgggMKMIID
-BjCCAm+gAwIBAgIBATANBgkqhkiG9w0BAQQFADB7MQswCQYDVQQGEwJTRzERMA8G
-A1UEChMITTJDcnlwdG8xFDASBgNVBAsTC00yQ3J5cHRvIENBMSQwIgYDVQQDExtN
-MkNyeXB0byBDZXJ0aWZpY2F0ZSBNYXN0ZXIxHTAbBgkqhkiG9w0BCQEWDm5ncHNA
-cG9zdDEuY29tMB4XDTAwMDkxMDA5NTEzMFoXDTAyMDkxMDA5NTEzMFowUzELMAkG
-A1UEBhMCU0cxETAPBgNVBAoTCE0yQ3J5cHRvMRIwEAYDVQQDEwlsb2NhbGhvc3Qx
-HTAbBgkqhkiG9w0BCQEWDm5ncHNAcG9zdDEuY29tMFwwDQYJKoZIhvcNAQEBBQAD
-SwAwSAJBAKy+e3dulvXzV7zoTZWc5TzgApr8DmeQHTYC8ydfzH7EECe4R1Xh5kwI
-zOuuFfn178FBiS84gngaNcrFi0Z5fAkCAwEAAaOCAQQwggEAMAkGA1UdEwQCMAAw
-LAYJYIZIAYb4QgENBB8WHU9wZW5TU0wgR2VuZXJhdGVkIENlcnRpZmljYXRlMB0G
-A1UdDgQWBBTPhIKSvnsmYsBVNWjj0m3M2z0qVTCBpQYDVR0jBIGdMIGagBT7hyNp
-65w6kxXlxb8pUU/+7Sg4AaF/pH0wezELMAkGA1UEBhMCU0cxETAPBgNVBAoTCE0y
-Q3J5cHRvMRQwEgYDVQQLEwtNMkNyeXB0byBDQTEkMCIGA1UEAxMbTTJDcnlwdG8g
-Q2VydGlmaWNhdGUgTWFzdGVyMR0wGwYJKoZIhvcNAQkBFg5uZ3BzQHBvc3QxLmNv
-bYIBADANBgkqhkiG9w0BAQQFAAOBgQA7/CqT6PoHycTdhEStWNZde7M/2Yc6BoJu
-VwnW8YxGO8Sn6UJ4FeffZNcYZddSDKosw8LtPOeWoK3JINjAk5jiPQ2cww++7QGG
-/g5NDjxFZNDJP1dGiLAxPW6JXwov4v0FmdzfLOZ01jDcgQQZqEpYlgpuI5JEWUQ9
-Ho4EzbYCOaEAMQA=
-"""
-)
-
 crlData = b"""\
 -----BEGIN X509 CRL-----
 MIIBWzCBxTANBgkqhkiG9w0BAQQFADBYMQswCQYDVQQGEwJVUzELMAkGA1UECBMC
@@ -763,6 +712,11 @@ cka6W6btJiocdrdolfcukSoTEk+hRANCAAQkvPNu7Pa1GcsWU4v7ptNfqCJVq8Cx
 zo0MUVPQgwJ3aJtNM1QMOQUayCrRwfklg+D/rFSUwEUqtZh7fJDiFqz3
 -----END PRIVATE KEY-----
 """
+ec_public_key_pem = b"""-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEJLzzbuz2tRnLFlOL+6bTX6giVavA
+sc6NDFFT0IMCd2ibTTNUDDkFGsgq0cH5JYPg/6xUlMBFKrWYe3yQ4has9w==
+-----END PUBLIC KEY-----
+"""
 
 ec_root_key_pem = b"""-----BEGIN EC PRIVATE KEY-----
 MIGlAgEBBDEAz/HOBFPYLB0jLWeTpJn4Yc4m/C4mdWymVHBjOmnwiPHKT326iYN/
@@ -793,14 +747,100 @@ MBsCAQACAS0CAQcCAQACAQ8CAQMCAQACAQACAQA=
 -----END RSA PRIVATE KEY-----
 """
 
+dsa_private_key_pem = b"""-----BEGIN PRIVATE KEY-----
+MIICZAIBADCCAjkGByqGSM44BAEwggIsAoIBAQD7UzdlshSCIIuntch43VmfCX1+
+WQDTvGw83sRZcN+B7nwFn4dm2PU8cby17oCjX7buBvalVqofnUokrSIDA6Rozm/f
+2wpGR9oVpd0xh9cI50pw1G3RZ4lcNWTP8C8O20eIzJoCH1KElcWLCHLAa3XoGOMv
+p4XnbVgMdc9/ydt4qttzIVPV4cZoVObzixoKCgwHyVPDxe0JaCe2cIwxyQY0IwAI
+PfaUWEAo+bf7pOosdnatJYm9MkKe8bEgKGQcUl9S8FXLhRejMo+oobcRjuBHTAmY
+fuV1iGlLrkFNrc2O6M1CRZhOoddoy53IeHcSjfzKET1biE3tCOUdHjUnABqfAiEA
+1llvauVKMLvFCDatVKRY+zNGJaa5dwff4qDtodz6sa8CggEAd+btod0di21mqFaf
+vc1ddmLK74PddMseT8DmoN/YduJaGLAOOVJ61rdG+KPXIar+8X5yqXfzP0MiYGkE
+A+xpNIImC3rzHElYNa8imA7ud8f+oC5jQijp0GhzVIS4UW83rZwakX7LITNE9Oj9
+FkETH1ZskHpp5BNlNoaSIW2+T7n/a+lq+tN60gP3f6FPBv5obB0pjqh+OAzEil/4
+Ys0dtCB0022cCUCqThMhWewlE2W2JioDLV5QkD91NMQNQwljDONNcs94AaWeVONK
+RaBQXlFsJPHzS8uKpsFeusFTrHIeEJW/8GQp/tfXP1ajEdg5EGxOhXFkem4ZMIus
+YFTbWwQiAiBFtgi8aNV0Jz2o8T+cxjVqVEgGdYNQqmpzqqBsM5AEOw==
+-----END PRIVATE KEY-----
+"""
+dsa_public_key_pem = b"""-----BEGIN PUBLIC KEY-----
+MIIDRjCCAjkGByqGSM44BAEwggIsAoIBAQD7UzdlshSCIIuntch43VmfCX1+WQDT
+vGw83sRZcN+B7nwFn4dm2PU8cby17oCjX7buBvalVqofnUokrSIDA6Rozm/f2wpG
+R9oVpd0xh9cI50pw1G3RZ4lcNWTP8C8O20eIzJoCH1KElcWLCHLAa3XoGOMvp4Xn
+bVgMdc9/ydt4qttzIVPV4cZoVObzixoKCgwHyVPDxe0JaCe2cIwxyQY0IwAIPfaU
+WEAo+bf7pOosdnatJYm9MkKe8bEgKGQcUl9S8FXLhRejMo+oobcRjuBHTAmYfuV1
+iGlLrkFNrc2O6M1CRZhOoddoy53IeHcSjfzKET1biE3tCOUdHjUnABqfAiEA1llv
+auVKMLvFCDatVKRY+zNGJaa5dwff4qDtodz6sa8CggEAd+btod0di21mqFafvc1d
+dmLK74PddMseT8DmoN/YduJaGLAOOVJ61rdG+KPXIar+8X5yqXfzP0MiYGkEA+xp
+NIImC3rzHElYNa8imA7ud8f+oC5jQijp0GhzVIS4UW83rZwakX7LITNE9Oj9FkET
+H1ZskHpp5BNlNoaSIW2+T7n/a+lq+tN60gP3f6FPBv5obB0pjqh+OAzEil/4Ys0d
+tCB0022cCUCqThMhWewlE2W2JioDLV5QkD91NMQNQwljDONNcs94AaWeVONKRaBQ
+XlFsJPHzS8uKpsFeusFTrHIeEJW/8GQp/tfXP1ajEdg5EGxOhXFkem4ZMIusYFTb
+WwOCAQUAAoIBAEe6z5ud1k4EDD9mLP7UYALWrgc1NXUlDynoYkjr+T/NVf1eaMdq
+0vFbGcEmz05UPUNXOhDH0szUDxQam3IE9C27ZO4SOquc0/rIhPY6i75SJW13P+cg
+gdXhDMTW5JOlyV6CPUoCWKOtn1ds3pTDuuWlZ89UzOWQUbC1si6vvz43zDyhfu6U
+owgIusPxowErm2sH66+MPa8fYxVX7ZJL0mEfubejrloAbo5unYI/bUYIhx4mtpP/
+h/isFRifEAwG3yX6F9X/ZOYL53Z93EFPLJGRGMmQbkmXRA6lyvHdsC+OC/OCvPjW
+WfTXW9NHtUqpEks+OXBkyV971Hk5NvdLLr8=
+-----END PUBLIC KEY-----
+"""
+
 ed25519_private_key_pem = b"""-----BEGIN PRIVATE KEY-----
 MC4CAQAwBQYDK2VwBCIEIKlxBbhVsSURoLTmsu9uTqYH6oF7zpxmp1ZQCAPhDmI2
 -----END PRIVATE KEY-----
+"""
+ed25519_public_key_pem = b"""-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEAq+FrpdwI1oTPytx8kGzuLVc+78zJE7hjYG4E9hwXoKI=
+-----END PUBLIC KEY-----
 """
 
 ed448_private_key_pem = b"""-----BEGIN PRIVATE KEY-----
 MEcCAQAwBQYDK2VxBDsEOcqZ7a3k6JwrJbYO8CNTPT/d7dlWCo5vCf0EYDj79ZvA\nhD8u9EPHlYJw5Y8ZQdH4WmVEfpKA23xkdQ==
 -----END PRIVATE KEY-----
+"""
+ed448_public_key_pem = b"""-----BEGIN PUBLIC KEY-----
+MEMwBQYDK2VxAzoAKFfWGCuqIaxgR9GmEXLRciYDyEjTnF56kr0sOVfwHEj+bHSU\neMJTZJR8qFSg8hNsHY1iZh9PIXcA
+-----END PUBLIC KEY-----
+"""
+
+rsa_private_key_pem = b"""-----BEGIN PRIVATE KEY-----
+MIIEuwIBADANBgkqhkiG9w0BAQEFAASCBKUwggShAgEAAoIBAQDZ5FaSaXKn/RTF
+xyNr+GRvYnMvLz5XxSDD4JzVRKXxKGFzKKXMJAeXJkvPlho7Ta/HgMNXhMPAe8TT
+wcIRnHJqAfmSOnka1ks3Kl6EGQBTevKzyJy8MaUhzZsL4FUUgWUETFQQT8Dwcghf
+JobV0k+bWT4mrKHzIquw5y+NTsaZl4jSB1labhImsU16Vj66fHp7w9+c501tOxQO
+M4CQNWioGm8tgPT/43QUs9e+L2HFBI+cDQbEC68l+7VM8YY8NZ/fGypoML2QMVnU
+Y6zneoOLJTMUulOubrL+J6DkuuhxBsIOcyxMnqwgKm4pUGlPxfPSS7+Mo3JC969k
+wgUHerXZAgMBAAECgf9qAzz/VMCQwnV1UxkhxH/8zgYgYL+fERFuPC/ZWv7wOicv
+xAjm9KC8zVb44fLE586CCc7IN+zNK9y0gB9eAGr/04RhEvWgbmoqF6wdtdNyynuE
+Ut4oQKn7AUc1uPAeCfM4slw0Pie98YSS/9ZhwH/eh3C10iwWA1aiLWeDrnryPuJN
+mNB0d/ZsaL+arhR/nU2sJixx5LDI6AG0GJrw3DBHEKb4vZPIUM3wZNs7qnuG5W17
+JbZDQYnkApByZu2UMWI2YUkpJC246mFPWSWMa6sAl7sTWTkUIR21lJiqyTGG3ljY
+C2QjHoHrrzs+pwtlLBa1a4FgbaJmnL+VzWD/FQECgYEA8r3Y2oGcY5cQPb00TE0t
+ekXAXiHz9sX76nzE6BMZ8cwP/cVoWtIABpdaimKUoFML8CdjOi9Ti9OoNVGWm4Pk
+fT/GOUdysXWIw2Z/VOLM47nDwJb3fWwxsxph+x3gWJG/Vct/1NxmCCEendM63dy7
+/uR8RgX+0nxvn6Y6auQfpnkCgYEA5csHboa14Favx8aHTlITWOm46ugzdbARdfWz
+13Ewb7m4mm/3gKtA/m+yGdQFwmtBVkmwtdCeDj0aKH3Sfvg9WCQK1x/dUkPMr//r
+oGUGeJU9r3ZKVJTeSJ0lKX4h3u3+1TdpnAgtuWGI4AK9fEdulfHKArxyIdbsdwRr
+ljaBMmECgYATpEcCz1APQu7+f+vWbLxMU46QT2EFS9npjHUGbl1AEooMt8eM6cc0
+wVSDNBzgqDekFBvUXnX9L4BB6DsulEqN0/Y/NkfSkjch0I5nGP8JQkPTtqOKE5Il
+8vGQt0crA4ge8huC5t6es8ddb/UodK8FnglsRRnsgEMsAPBjK9hfyQKBgDHD23Mr
+R14zR9Q7AXiLu9bonvx4lxRosg9ay7zfrX60uO7xSqeZ7vRrWiXPzgOB2N+IC/YE
+HQa2YuDcBucqeZaKD7LxGqxDNKP1B6Fv34vjvj0uoABbURxms/Kdd1ZhMmwYmQ2K
+k+Ru5AancUPl8GQWvgoDp6/+bK2Fzor0eNxhAoGBANcJ6mGvgw3px/H2MPBjRBsf
+tUbZ39UH3c4siLa2Rry/Pm0Fgly8CUmu1IcFQDITKbyhaGPuHGtXglBOZqXid0VL
+01ReWISyKwWyuRjUuscdq2m684hXHYZCq2eJroqon1nMq4C0aqr696ra0cgCfbK3
+5yscAByxKd+64JZziDkZ
+-----END PRIVATE KEY-----
+"""
+rsa_public_key_pem = b"""-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2eRWkmlyp/0Uxccja/hk
+b2JzLy8+V8Ugw+Cc1USl8ShhcyilzCQHlyZLz5YaO02vx4DDV4TDwHvE08HCEZxy
+agH5kjp5GtZLNypehBkAU3rys8icvDGlIc2bC+BVFIFlBExUEE/A8HIIXyaG1dJP
+m1k+Jqyh8yKrsOcvjU7GmZeI0gdZWm4SJrFNelY+unx6e8PfnOdNbTsUDjOAkDVo
+qBpvLYD0/+N0FLPXvi9hxQSPnA0GxAuvJfu1TPGGPDWf3xsqaDC9kDFZ1GOs53qD
+iyUzFLpTrm6y/ieg5LrocQbCDnMsTJ6sICpuKVBpT8Xz0ku/jKNyQvevZMIFB3q1
+2QIDAQAB
+-----END PUBLIC KEY-----
 """
 
 x25519_private_key_pem = b"""-----BEGIN PRIVATE KEY-----
@@ -817,7 +857,7 @@ def x509_data():
     """
     # Basic setup stuff to generate a certificate
     pkey = PKey()
-    pkey.generate_key(TYPE_RSA, 512)
+    pkey.generate_key(TYPE_RSA, 2048)
     req = X509Req()
     req.set_pubkey(pkey)
     # Authority good you have.
@@ -1041,10 +1081,11 @@ class TestPKey:
     @pytest.mark.parametrize(
         ("key_string", "key_type"),
         [
-            (intermediate_key_pem, rsa.RSAPrivateKey),
+            (dsa_private_key_pem, dsa.DSAPrivateKey),
             (ec_private_key_pem, ec.EllipticCurvePrivateKey),
             (ed25519_private_key_pem, ed25519.Ed25519PrivateKey),
             (ed448_private_key_pem, ed448.Ed448PrivateKey),
+            (rsa_private_key_pem, rsa.RSAPrivateKey),
         ],
     )
     def test_convert_roundtrip_cryptography_private_key(
@@ -1055,6 +1096,7 @@ class TestPKey:
         PKey.to_cryptography_key creates a proper cryptography private key.
         """
         key = serialization.load_pem_private_key(key_string, None)
+        assert isinstance(key, key_type)
         pkey = PKey.from_cryptography_key(key)
 
         assert isinstance(pkey, PKey)
@@ -1068,6 +1110,40 @@ class TestPKey:
             serialization.PublicFormat.SubjectPublicKeyInfo,
         )
         assert pkey._only_public is False
+        assert pkey._initialized is True
+
+    @pytest.mark.parametrize(
+        ("key_string", "key_type"),
+        [
+            (dsa_public_key_pem, dsa.DSAPublicKey),
+            (ec_public_key_pem, ec.EllipticCurvePublicKey),
+            (ed25519_public_key_pem, ed25519.Ed25519PublicKey),
+            (ed448_public_key_pem, ed448.Ed448PublicKey),
+            (rsa_public_key_pem, rsa.RSAPublicKey),
+        ],
+    )
+    def test_convert_roundtrip_cryptography_public_key(
+        self, key_string, key_type
+    ):
+        """
+        PKey.from_cryptography_key creates a proper public PKey.
+        PKey.to_cryptography_key creates a proper cryptography public key.
+        """
+        key = serialization.load_pem_public_key(key_string, None)
+        assert isinstance(key, key_type)
+        pkey = PKey.from_cryptography_key(key)
+
+        assert isinstance(pkey, PKey)
+        parsed_key = pkey.to_cryptography_key()
+        assert isinstance(parsed_key, key_type)
+        assert parsed_key.public_bytes(
+            serialization.Encoding.PEM,
+            serialization.PublicFormat.SubjectPublicKeyInfo,
+        ) == key.public_bytes(
+            serialization.Encoding.PEM,
+            serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        assert pkey._only_public is True
         assert pkey._initialized is True
 
     def test_convert_from_cryptography_public_key(self):
@@ -1170,7 +1246,7 @@ class TestPKey:
         `PKey.generate_key` generates an RSA key when passed `TYPE_RSA` as a
         type and a reasonable number of bits.
         """
-        bits = 512
+        bits = 2048
         key = PKey()
         key.generate_key(TYPE_RSA, bits)
         assert key.type() == TYPE_RSA
@@ -1199,7 +1275,7 @@ class TestPKey:
         generate new keys.
         """
         key = PKey()
-        for type, bits in [(TYPE_RSA, 512), (TYPE_DSA, 576)]:
+        for type, bits in [(TYPE_RSA, 2048), (TYPE_DSA, 576)]:
             key.generate_key(type, bits)
             assert key.type() == type
             assert key.bits() == bits
@@ -1220,7 +1296,7 @@ class TestPKey:
         """
         # A trick to get a public-only key
         key = PKey()
-        key.generate_key(TYPE_RSA, 512)
+        key.generate_key(TYPE_RSA, 2048)
         cert = X509()
         cert.set_pubkey(key)
         pub = cert.get_pubkey()
@@ -1534,7 +1610,7 @@ class _PKeyInteractionTestsMixin:
         """
         request = self.signable()
         key = PKey()
-        key.generate_key(TYPE_RSA, 512)
+        key.generate_key(TYPE_RSA, 2048)
         request.set_pubkey(key)
         pub = request.get_pubkey()
         with pytest.raises(ValueError):
@@ -1547,7 +1623,7 @@ class _PKeyInteractionTestsMixin:
         """
         request = self.signable()
         key = PKey()
-        key.generate_key(TYPE_RSA, 512)
+        key.generate_key(TYPE_RSA, 2048)
         with pytest.raises(ValueError):
             request.sign(key, BAD_DIGEST)
 
@@ -1559,7 +1635,7 @@ class _PKeyInteractionTestsMixin:
         """
         request = self.signable()
         key = PKey()
-        key.generate_key(TYPE_RSA, 512)
+        key.generate_key(TYPE_RSA, 2048)
         request.set_pubkey(key)
         request.sign(key, GOOD_DIGEST)
         # If the type has a verify method, cover that too.
@@ -1568,7 +1644,7 @@ class _PKeyInteractionTestsMixin:
             assert request.verify(pub)
             # Make another key that won't verify.
             key = PKey()
-            key.generate_key(TYPE_RSA, 512)
+            key.generate_key(TYPE_RSA, 2048)
             with pytest.raises(Error):
                 request.verify(key)
 
@@ -1601,20 +1677,12 @@ class TestX509Req(_PKeyInteractionTestsMixin):
         """
         `X509Req.set_version` sets the X.509 version of the certificate
         request. `X509Req.get_version` returns the X.509 version of the
-        certificate request. The only defined version is 0. Others may or
-        may not be supported depending on backend.
+        certificate request. The only defined version is 0.
         """
         request = X509Req()
         assert request.get_version() == 0
         request.set_version(0)
         assert request.get_version() == 0
-        try:
-            request.set_version(1)
-            assert request.get_version() == 1
-            request.set_version(3)
-            assert request.get_version() == 3
-        except Error:
-            pass
 
     def test_version_wrong_args(self):
         """
@@ -1624,6 +1692,8 @@ class TestX509Req(_PKeyInteractionTestsMixin):
         request = X509Req()
         with pytest.raises(TypeError):
             request.set_version("foo")
+        with pytest.raises(ValueError):
+            request.set_version(2)
 
     def test_get_subject(self):
         """
@@ -1680,6 +1750,14 @@ class TestX509Req(_PKeyInteractionTestsMixin):
         # Requesting it a second time should return the same list
         exts = request.get_extensions()
         assert len(exts) == 2
+
+    def test_undef_oid(self):
+        assert (
+            X509Extension(
+                b"1.2.3.4.5.6.7", False, b"DER:05:00"
+            ).get_short_name()
+            == b"UNDEF"
+        )
 
     def test_add_extensions_wrong_args(self):
         """
@@ -1785,7 +1863,7 @@ class TestX509(_PKeyInteractionTestsMixin):
         certificate = X509()
         assert isinstance(certificate, X509)
         assert type(certificate).__name__ == "X509"
-        assert type(certificate) == X509
+        assert type(certificate) is X509
 
     def test_set_version_wrong_args(self):
         """
@@ -1909,21 +1987,21 @@ class TestX509(_PKeyInteractionTestsMixin):
         with pytest.raises(TypeError):
             cert.gmtime_adj_notBefore(None)
 
-    @flaky.flaky
+    @pytest.mark.flaky(reruns=2)
     def test_gmtime_adj_notBefore(self):
         """
         `X509.gmtime_adj_notBefore` changes the not-before timestamp to be the
         current time plus the number of seconds passed in.
         """
         cert = load_certificate(FILETYPE_PEM, self.pemData)
-        not_before_min = datetime.utcnow().replace(microsecond=0) + timedelta(
+        not_before_min = utcnow().replace(microsecond=0) + timedelta(
             seconds=100
         )
         cert.gmtime_adj_notBefore(100)
         not_before = datetime.strptime(
             cert.get_notBefore().decode(), "%Y%m%d%H%M%SZ"
         )
-        not_before_max = datetime.utcnow() + timedelta(seconds=100)
+        not_before_max = utcnow() + timedelta(seconds=100)
         assert not_before_min <= not_before <= not_before_max
 
     def test_gmtime_adj_notAfter_wrong_args(self):
@@ -1935,21 +2013,21 @@ class TestX509(_PKeyInteractionTestsMixin):
         with pytest.raises(TypeError):
             cert.gmtime_adj_notAfter(None)
 
-    @flaky.flaky
+    @pytest.mark.flaky(reruns=2)
     def test_gmtime_adj_notAfter(self):
         """
         `X509.gmtime_adj_notAfter` changes the not-after timestamp
         to be the current time plus the number of seconds passed in.
         """
         cert = load_certificate(FILETYPE_PEM, self.pemData)
-        not_after_min = datetime.utcnow().replace(microsecond=0) + timedelta(
+        not_after_min = utcnow().replace(microsecond=0) + timedelta(
             seconds=100
         )
         cert.gmtime_adj_notAfter(100)
         not_after = datetime.strptime(
             cert.get_notAfter().decode(), "%Y%m%d%H%M%SZ"
         )
-        not_after_max = datetime.utcnow() + timedelta(seconds=100)
+        not_after_max = utcnow() + timedelta(seconds=100)
         assert not_after_min <= not_after <= not_after_max
 
     def test_has_expired(self):
@@ -2002,35 +2080,46 @@ class TestX509(_PKeyInteractionTestsMixin):
             )
         )
 
-    def _extcert(self, pkey, extensions):
-        cert = X509()
-        # Certificates with extensions must be X.509v3, which is encoded with a
-        # version of two.
-        cert.set_version(2)
-        cert.set_pubkey(pkey)
-        cert.get_subject().commonName = "Unit Tests"
-        cert.get_issuer().commonName = "Unit Tests"
-        when = datetime.now().strftime("%Y%m%d%H%M%SZ").encode("ascii")
-        cert.set_notBefore(when)
-        cert.set_notAfter(when)
-
-        cert.add_extensions(extensions)
-        cert.sign(pkey, "sha256")
-        return load_certificate(
-            FILETYPE_PEM, dump_certificate(FILETYPE_PEM, cert)
+    def _extcert(self, key, extensions):
+        subject = x509.Name(
+            [x509.NameAttribute(x509.NameOID.COMMON_NAME, "Unit Tests")]
         )
+        when = datetime.now()
+        builder = (
+            x509.CertificateBuilder()
+            .public_key(key.public_key())
+            .subject_name(subject)
+            .issuer_name(subject)
+            .not_valid_before(when)
+            .not_valid_after(when)
+            .serial_number(1)
+        )
+        for i, ext in enumerate(extensions):
+            builder = builder.add_extension(ext, critical=i % 2 == 0)
+
+        return X509.from_cryptography(builder.sign(key, hashes.SHA256()))
 
     def test_extension_count(self):
         """
         `X509.get_extension_count` returns the number of extensions
         that are present in the certificate.
         """
-        pkey = load_privatekey(FILETYPE_PEM, client_key_pem)
-        ca = X509Extension(b"basicConstraints", True, b"CA:FALSE")
-        key = X509Extension(b"keyUsage", True, b"digitalSignature")
-        subjectAltName = X509Extension(
-            b"subjectAltName", True, b"DNS:example.com"
+        pkey = load_privatekey(
+            FILETYPE_PEM, client_key_pem
+        ).to_cryptography_key()
+        ca = x509.BasicConstraints(ca=False, path_length=None)
+        key = x509.KeyUsage(
+            digital_signature=True,
+            content_commitment=False,
+            key_encipherment=False,
+            data_encipherment=False,
+            key_agreement=False,
+            key_cert_sign=False,
+            crl_sign=False,
+            encipher_only=False,
+            decipher_only=False,
         )
+        san = x509.SubjectAlternativeName([x509.DNSName("example.com")])
 
         # Try a certificate with no extensions at all.
         c = self._extcert(pkey, [])
@@ -2041,7 +2130,7 @@ class TestX509(_PKeyInteractionTestsMixin):
         assert c.get_extension_count() == 1
 
         # And a certificate with several
-        c = self._extcert(pkey, [ca, key, subjectAltName])
+        c = self._extcert(pkey, [ca, key, san])
         assert c.get_extension_count() == 3
 
     def test_get_extension(self):
@@ -2049,14 +2138,24 @@ class TestX509(_PKeyInteractionTestsMixin):
         `X509.get_extension` takes an integer and returns an
         `X509Extension` corresponding to the extension at that index.
         """
-        pkey = load_privatekey(FILETYPE_PEM, client_key_pem)
-        ca = X509Extension(b"basicConstraints", True, b"CA:FALSE")
-        key = X509Extension(b"keyUsage", True, b"digitalSignature")
-        subjectAltName = X509Extension(
-            b"subjectAltName", False, b"DNS:example.com"
+        pkey = load_privatekey(
+            FILETYPE_PEM, client_key_pem
+        ).to_cryptography_key()
+        ca = x509.BasicConstraints(ca=False, path_length=None)
+        key = x509.KeyUsage(
+            digital_signature=True,
+            content_commitment=False,
+            key_encipherment=False,
+            data_encipherment=False,
+            key_agreement=False,
+            key_cert_sign=False,
+            crl_sign=False,
+            encipher_only=False,
+            decipher_only=False,
         )
+        san = x509.SubjectAlternativeName([x509.DNSName("example.com")])
 
-        cert = self._extcert(pkey, [ca, key, subjectAltName])
+        cert = self._extcert(pkey, [ca, key, san])
 
         ext = cert.get_extension(0)
         assert isinstance(ext, X509Extension)
@@ -2065,12 +2164,12 @@ class TestX509(_PKeyInteractionTestsMixin):
 
         ext = cert.get_extension(1)
         assert isinstance(ext, X509Extension)
-        assert ext.get_critical()
+        assert not ext.get_critical()
         assert ext.get_short_name() == b"keyUsage"
 
         ext = cert.get_extension(2)
         assert isinstance(ext, X509Extension)
-        assert not ext.get_critical()
+        assert ext.get_critical()
         assert ext.get_short_name() == b"subjectAltName"
 
         with pytest.raises(IndexError):
@@ -2382,474 +2481,12 @@ class TestX509Store:
             store.load_locations(cafile=str(invalid_ca_file))
 
 
-class TestPKCS12:
-    """
-    Test for `OpenSSL.crypto.PKCS12` and `OpenSSL.crypto.load_pkcs12`.
-    """
-
-    def test_type(self):
-        """
-        `PKCS12` is a type object.
-        """
-        assert is_consistent_type(PKCS12, "PKCS12")
-
-    def test_empty_construction(self):
-        """
-        `PKCS12` returns a new instance of `PKCS12` with no certificate,
-        private key, CA certificates, or friendly name.
-        """
-        p12 = PKCS12()
-        assert None is p12.get_certificate()
-        assert None is p12.get_privatekey()
-        assert None is p12.get_ca_certificates()
-        assert None is p12.get_friendlyname()
-
-    def test_type_errors(self):
-        """
-        The `PKCS12` setter functions (`set_certificate`, `set_privatekey`,
-        `set_ca_certificates`, and `set_friendlyname`) raise `TypeError`
-        when passed objects of types other than those expected.
-        """
-        p12 = PKCS12()
-        for bad_arg in [3, PKey(), X509]:
-            with pytest.raises(TypeError):
-                p12.set_certificate(bad_arg)
-        for bad_arg in [3, "legbone", X509()]:
-            with pytest.raises(TypeError):
-                p12.set_privatekey(bad_arg)
-        for bad_arg in [3, X509(), (3, 4), (PKey(),)]:
-            with pytest.raises(TypeError):
-                p12.set_ca_certificates(bad_arg)
-        for bad_arg in [6, ("foo", "bar")]:
-            with pytest.raises(TypeError):
-                p12.set_friendlyname(bad_arg)
-
-    def test_key_only(self):
-        """
-        A `PKCS12` with only a private key can be exported using
-        `PKCS12.export` and loaded again using `load_pkcs12`.
-        """
-        passwd = b"blah"
-        p12 = PKCS12()
-        pkey = load_privatekey(FILETYPE_PEM, root_key_pem)
-        p12.set_privatekey(pkey)
-        assert None is p12.get_certificate()
-        assert pkey == p12.get_privatekey()
-        try:
-            dumped_p12 = p12.export(passphrase=passwd, iter=2, maciter=3)
-        except Error:
-            # Some versions of OpenSSL will throw an exception
-            # for this nearly useless PKCS12 we tried to generate:
-            # [('PKCS12 routines', 'PKCS12_create', 'invalid null argument')]
-            return
-        p12 = load_pkcs12(dumped_p12, passwd)
-        assert None is p12.get_ca_certificates()
-        assert None is p12.get_certificate()
-
-        # OpenSSL fails to bring the key back to us.  So sad.  Perhaps in the
-        # future this will be improved.
-        assert isinstance(p12.get_privatekey(), (PKey, type(None)))
-
-    def test_cert_only(self):
-        """
-        A `PKCS12` with only a certificate can be exported using
-        `PKCS12.export` and loaded again using `load_pkcs12`.
-        """
-        passwd = b"blah"
-        p12 = PKCS12()
-        cert = load_certificate(FILETYPE_PEM, root_cert_pem)
-        p12.set_certificate(cert)
-        assert cert == p12.get_certificate()
-        assert None is p12.get_privatekey()
-        try:
-            dumped_p12 = p12.export(passphrase=passwd, iter=2, maciter=3)
-        except Error:
-            # Some versions of OpenSSL will throw an exception
-            # for this nearly useless PKCS12 we tried to generate:
-            # [('PKCS12 routines', 'PKCS12_create', 'invalid null argument')]
-            return
-        p12 = load_pkcs12(dumped_p12, passwd)
-        assert None is p12.get_privatekey()
-
-        # OpenSSL fails to bring the cert back to us.  Groany mcgroan.
-        assert isinstance(p12.get_certificate(), (X509, type(None)))
-
-        # Oh ho.  It puts the certificate into the ca certificates list, in
-        # fact.  Totally bogus, I would think.  Nevertheless, let's exploit
-        # that to check to see if it reconstructed the certificate we expected
-        # it to.  At some point, hopefully this will change so that
-        # p12.get_certificate() is actually what returns the loaded
-        # certificate.
-        assert root_cert_pem == dump_certificate(
-            FILETYPE_PEM, p12.get_ca_certificates()[0]
-        )
-
-    def gen_pkcs12(
-        self, cert_pem=None, key_pem=None, ca_pem=None, friendly_name=None
-    ):
-        """
-        Generate a PKCS12 object with components from PEM.  Verify that the set
-        functions return None.
-        """
-        p12 = PKCS12()
-        if cert_pem:
-            ret = p12.set_certificate(load_certificate(FILETYPE_PEM, cert_pem))
-            assert ret is None
-        if key_pem:
-            ret = p12.set_privatekey(load_privatekey(FILETYPE_PEM, key_pem))
-            assert ret is None
-        if ca_pem:
-            ret = p12.set_ca_certificates(
-                (load_certificate(FILETYPE_PEM, ca_pem),)
-            )
-            assert ret is None
-        if friendly_name:
-            ret = p12.set_friendlyname(friendly_name)
-            assert ret is None
-        return p12
-
-    def check_recovery(
-        self, p12_str, key=None, cert=None, ca=None, passwd=b"", extra=()
-    ):
-        """
-        Use openssl program to confirm three components are recoverable from a
-        PKCS12 string.
-        """
-        if key:
-            recovered_key = _runopenssl(
-                p12_str,
-                b"pkcs12",
-                b"-nocerts",
-                b"-nodes",
-                b"-passin",
-                b"pass:" + passwd,
-                *extra,
-            )
-            assert recovered_key[-len(key) :] == key
-        if cert:
-            recovered_cert = _runopenssl(
-                p12_str,
-                b"pkcs12",
-                b"-clcerts",
-                b"-nodes",
-                b"-passin",
-                b"pass:" + passwd,
-                b"-nokeys",
-                *extra,
-            )
-            assert recovered_cert[-len(cert) :] == cert
-        if ca:
-            recovered_cert = _runopenssl(
-                p12_str,
-                b"pkcs12",
-                b"-cacerts",
-                b"-nodes",
-                b"-passin",
-                b"pass:" + passwd,
-                b"-nokeys",
-                *extra,
-            )
-            assert recovered_cert[-len(ca) :] == ca
-
-    def verify_pkcs12_container(self, p12):
-        """
-        Verify that the PKCS#12 container contains the correct client
-        certificate and private key.
-
-        :param p12: The PKCS12 instance to verify.
-        :type p12: `PKCS12`
-        """
-        cert_pem = dump_certificate(FILETYPE_PEM, p12.get_certificate())
-        key_pem = dump_privatekey(FILETYPE_PEM, p12.get_privatekey())
-        assert (client_cert_pem, client_key_pem, None) == (
-            cert_pem,
-            key_pem,
-            p12.get_ca_certificates(),
-        )
-
-    def test_load_pkcs12(self):
-        """
-        A PKCS12 string generated using the openssl command line can be loaded
-        with `load_pkcs12` and its components extracted and examined.
-        """
-        passwd = b"whatever"
-        pem = client_key_pem + client_cert_pem
-        p12_str = _runopenssl(
-            pem,
-            b"pkcs12",
-            b"-export",
-            b"-clcerts",
-            b"-passout",
-            b"pass:" + passwd,
-        )
-        p12 = load_pkcs12(p12_str, passphrase=passwd)
-        self.verify_pkcs12_container(p12)
-
-    def test_load_pkcs12_text_passphrase(self):
-        """
-        A PKCS12 string generated using the openssl command line can be loaded
-        with `load_pkcs12` and its components extracted and examined.
-        Using text as passphrase instead of bytes. DeprecationWarning expected.
-        """
-        pem = client_key_pem + client_cert_pem
-        passwd = b"whatever"
-        p12_str = _runopenssl(
-            pem,
-            b"pkcs12",
-            b"-export",
-            b"-clcerts",
-            b"-passout",
-            b"pass:" + passwd,
-        )
-        with pytest.warns(DeprecationWarning) as w:
-            simplefilter("always")
-            p12 = load_pkcs12(p12_str, passphrase=b"whatever".decode("ascii"))
-            msg = "{0} for passphrase is no longer accepted, use bytes".format(
-                WARNING_TYPE_EXPECTED
-            )
-            assert msg == str(w[-1].message)
-
-        self.verify_pkcs12_container(p12)
-
-    def test_load_pkcs12_no_passphrase(self):
-        """
-        A PKCS12 string generated using openssl command line can be loaded with
-        `load_pkcs12` without a passphrase and its components extracted
-        and examined.
-        """
-        pem = client_key_pem + client_cert_pem
-        p12_str = _runopenssl(
-            pem, b"pkcs12", b"-export", b"-clcerts", b"-passout", b"pass:"
-        )
-        p12 = load_pkcs12(p12_str)
-        self.verify_pkcs12_container(p12)
-
-    def _dump_and_load(self, dump_passphrase, load_passphrase):
-        """
-        A helper method to dump and load a PKCS12 object.
-        """
-        p12 = self.gen_pkcs12(client_cert_pem, client_key_pem)
-        dumped_p12 = p12.export(passphrase=dump_passphrase, iter=2, maciter=3)
-        return load_pkcs12(dumped_p12, passphrase=load_passphrase)
-
-    def test_load_pkcs12_null_passphrase_load_empty(self):
-        """
-        A PKCS12 string can be dumped with a null passphrase, loaded with an
-        empty passphrase with `load_pkcs12`, and its components
-        extracted and examined.
-        """
-        self.verify_pkcs12_container(
-            self._dump_and_load(dump_passphrase=None, load_passphrase=b"")
-        )
-
-    def test_load_pkcs12_null_passphrase_load_null(self):
-        """
-        A PKCS12 string can be dumped with a null passphrase, loaded with a
-        null passphrase with `load_pkcs12`, and its components
-        extracted and examined.
-        """
-        self.verify_pkcs12_container(
-            self._dump_and_load(dump_passphrase=None, load_passphrase=None)
-        )
-
-    def test_load_pkcs12_empty_passphrase_load_empty(self):
-        """
-        A PKCS12 string can be dumped with an empty passphrase, loaded with an
-        empty passphrase with `load_pkcs12`, and its components
-        extracted and examined.
-        """
-        self.verify_pkcs12_container(
-            self._dump_and_load(dump_passphrase=b"", load_passphrase=b"")
-        )
-
-    def test_load_pkcs12_empty_passphrase_load_null(self):
-        """
-        A PKCS12 string can be dumped with an empty passphrase, loaded with a
-        null passphrase with `load_pkcs12`, and its components
-        extracted and examined.
-        """
-        self.verify_pkcs12_container(
-            self._dump_and_load(dump_passphrase=b"", load_passphrase=None)
-        )
-
-    def test_load_pkcs12_garbage(self):
-        """
-        `load_pkcs12` raises `OpenSSL.crypto.Error` when passed
-        a string which is not a PKCS12 dump.
-        """
-        passwd = b"whatever"
-        with pytest.raises(Error) as err:
-            load_pkcs12(b"fruit loops", passwd)
-        assert err.value.args[0][0][0] == "asn1 encoding routines"
-        assert len(err.value.args[0][0]) == 3
-
-    def test_replace(self):
-        """
-        `PKCS12.set_certificate` replaces the certificate in a PKCS12
-        cluster. `PKCS12.set_privatekey` replaces the private key.
-        `PKCS12.set_ca_certificates` replaces the CA certificates.
-        """
-        p12 = self.gen_pkcs12(client_cert_pem, client_key_pem, root_cert_pem)
-        p12.set_certificate(load_certificate(FILETYPE_PEM, server_cert_pem))
-        p12.set_privatekey(load_privatekey(FILETYPE_PEM, server_key_pem))
-        root_cert = load_certificate(FILETYPE_PEM, root_cert_pem)
-        client_cert = load_certificate(FILETYPE_PEM, client_cert_pem)
-        p12.set_ca_certificates([root_cert])  # not a tuple
-        assert 1 == len(p12.get_ca_certificates())
-        assert root_cert == p12.get_ca_certificates()[0]
-        p12.set_ca_certificates([client_cert, root_cert])
-        assert 2 == len(p12.get_ca_certificates())
-        assert client_cert == p12.get_ca_certificates()[0]
-        assert root_cert == p12.get_ca_certificates()[1]
-
-    def test_friendly_name(self):
-        """
-        The *friendlyName* of a PKCS12 can be set and retrieved via
-        `PKCS12.get_friendlyname` and `PKCS12_set_friendlyname`, and a
-        `PKCS12` with a friendly name set can be dumped with `PKCS12.export`.
-        """
-        passwd = b'Dogmeat[]{}!@#$%^&*()~`?/.,<>-_+=";:'
-        p12 = self.gen_pkcs12(server_cert_pem, server_key_pem, root_cert_pem)
-        for friendly_name in [b"Serverlicious", None, b"###"]:
-            p12.set_friendlyname(friendly_name)
-            assert p12.get_friendlyname() == friendly_name
-            dumped_p12 = p12.export(passphrase=passwd, iter=2, maciter=3)
-            reloaded_p12 = load_pkcs12(dumped_p12, passwd)
-            assert p12.get_friendlyname() == reloaded_p12.get_friendlyname()
-            # We would use the openssl program to confirm the friendly
-            # name, but it is not possible.  The pkcs12 command
-            # does not store the friendly name in the cert's
-            # alias, which we could then extract.
-            self.check_recovery(
-                dumped_p12,
-                key=server_key_pem,
-                cert=server_cert_pem,
-                ca=root_cert_pem,
-                passwd=passwd,
-            )
-
-    def test_various_empty_passphrases(self):
-        """
-        Test that missing, None, and '' passphrases are identical for PKCS12
-        export.
-        """
-        p12 = self.gen_pkcs12(client_cert_pem, client_key_pem, root_cert_pem)
-        passwd = b""
-        dumped_p12_empty = p12.export(iter=2, maciter=0, passphrase=passwd)
-        dumped_p12_none = p12.export(iter=3, maciter=2, passphrase=None)
-        dumped_p12_nopw = p12.export(iter=9, maciter=4)
-        for dumped_p12 in [dumped_p12_empty, dumped_p12_none, dumped_p12_nopw]:
-            self.check_recovery(
-                dumped_p12,
-                key=client_key_pem,
-                cert=client_cert_pem,
-                ca=root_cert_pem,
-                passwd=passwd,
-            )
-
-    def test_removing_ca_cert(self):
-        """
-        Passing `None` to `PKCS12.set_ca_certificates` removes all CA
-        certificates.
-        """
-        p12 = self.gen_pkcs12(server_cert_pem, server_key_pem, root_cert_pem)
-        p12.set_ca_certificates(None)
-        assert None is p12.get_ca_certificates()
-
-    def test_export_without_mac(self):
-        """
-        Exporting a PKCS12 with a `maciter` of `-1` excludes the MAC entirely.
-        """
-        passwd = b"Lake Michigan"
-        p12 = self.gen_pkcs12(server_cert_pem, server_key_pem, root_cert_pem)
-        dumped_p12 = p12.export(maciter=-1, passphrase=passwd, iter=2)
-        self.check_recovery(
-            dumped_p12,
-            key=server_key_pem,
-            cert=server_cert_pem,
-            passwd=passwd,
-            extra=(b"-nomacver",),
-        )
-
-    def test_load_without_mac(self):
-        """
-        Loading a PKCS12 without a MAC does something other than crash.
-        """
-        passwd = b"Lake Michigan"
-        p12 = self.gen_pkcs12(server_cert_pem, server_key_pem, root_cert_pem)
-        dumped_p12 = p12.export(maciter=-1, passphrase=passwd, iter=2)
-        try:
-            recovered_p12 = load_pkcs12(dumped_p12, passwd)
-            # The person who generated this PCKS12 should be flogged,
-            # or better yet we should have a means to determine
-            # whether a PCKS12 had a MAC that was verified.
-            # Anyway, libopenssl chooses to allow it, so the
-            # pyopenssl binding does as well.
-            assert isinstance(recovered_p12, PKCS12)
-        except Error:
-            # Failing here with an exception is preferred as some openssl
-            # versions do.
-            pass
-
-    def test_zero_len_list_for_ca(self):
-        """
-        A PKCS12 with an empty CA certificates list can be exported.
-        """
-        passwd = b"Hobie 18"
-        p12 = self.gen_pkcs12(server_cert_pem, server_key_pem)
-        p12.set_ca_certificates([])
-        assert () == p12.get_ca_certificates()
-        dumped_p12 = p12.export(passphrase=passwd, iter=3)
-        self.check_recovery(
-            dumped_p12, key=server_key_pem, cert=server_cert_pem, passwd=passwd
-        )
-
-    def test_export_without_args(self):
-        """
-        All the arguments to `PKCS12.export` are optional.
-        """
-        p12 = self.gen_pkcs12(server_cert_pem, server_key_pem, root_cert_pem)
-        dumped_p12 = p12.export()  # no args
-        self.check_recovery(
-            dumped_p12, key=server_key_pem, cert=server_cert_pem, passwd=b""
-        )
-
-    def test_export_without_bytes(self):
-        """
-        Test `PKCS12.export` with text not bytes as passphrase
-        """
-        p12 = self.gen_pkcs12(server_cert_pem, server_key_pem, root_cert_pem)
-
-        with pytest.warns(DeprecationWarning) as w:
-            simplefilter("always")
-            dumped_p12 = p12.export(passphrase=b"randomtext".decode("ascii"))
-            msg = "{0} for passphrase is no longer accepted, use bytes".format(
-                WARNING_TYPE_EXPECTED
-            )
-            assert msg == str(w[-1].message)
-        self.check_recovery(
-            dumped_p12,
-            key=server_key_pem,
-            cert=server_cert_pem,
-            passwd=b"randomtext",
-        )
-
-    def test_key_cert_mismatch(self):
-        """
-        `PKCS12.export` raises an exception when a key and certificate
-        mismatch.
-        """
-        p12 = self.gen_pkcs12(server_cert_pem, client_key_pem, root_cert_pem)
-        with pytest.raises(Error):
-            p12.export()
-
-
 def _runopenssl(pem, *args):
     """
     Run the command line openssl tool with the given arguments and write
     the given PEM to its stdin.  Not safe for quotes.
     """
-    proc = Popen([b"openssl"] + list(args), stdin=PIPE, stdout=PIPE)
+    proc = Popen([b"openssl", *list(args)], stdin=PIPE, stdout=PIPE)
     proc.stdin.write(pem)
     proc.stdin.close()
     output = proc.stdout.read()
@@ -3013,7 +2650,7 @@ class TestFunction:
         argument but no `passphrase` argument.
         """
         key = PKey()
-        key.generate_key(TYPE_RSA, 512)
+        key.generate_key(TYPE_RSA, 2048)
         with pytest.raises(TypeError):
             dump_privatekey(FILETYPE_PEM, key, cipher=GOOD_CIPHER)
 
@@ -3037,7 +2674,7 @@ class TestFunction:
         cipher name.
         """
         key = PKey()
-        key.generate_key(TYPE_RSA, 512)
+        key.generate_key(TYPE_RSA, 2048)
         with pytest.raises(ValueError):
             dump_privatekey(FILETYPE_PEM, key, BAD_CIPHER, "passphrase")
 
@@ -3047,7 +2684,7 @@ class TestFunction:
         is neither a `str` nor a callable.
         """
         key = PKey()
-        key.generate_key(TYPE_RSA, 512)
+        key.generate_key(TYPE_RSA, 2048)
         with pytest.raises(TypeError):
             dump_privatekey(FILETYPE_PEM, key, GOOD_CIPHER, object())
 
@@ -3057,7 +2694,7 @@ class TestFunction:
         filetype.
         """
         key = PKey()
-        key.generate_key(TYPE_RSA, 512)
+        key.generate_key(TYPE_RSA, 2048)
         with pytest.raises(ValueError):
             dump_privatekey(100, key)
 
@@ -3288,36 +2925,6 @@ class TestFunction:
         with pytest.raises(Error):
             load_privatekey(FILETYPE_PEM, encrypted_key_pem, passphrase)
 
-    def test_load_pkcs7_data_pem(self):
-        """
-        `load_pkcs7_data` accepts a PKCS#7 string and returns an instance of
-        `PKCS`.
-        """
-        pkcs7 = load_pkcs7_data(FILETYPE_PEM, pkcs7Data)
-        assert isinstance(pkcs7, PKCS7)
-
-    def test_load_pkcs7_data_asn1(self):
-        """
-        `load_pkcs7_data` accepts a bytes containing ASN1 data representing
-        PKCS#7 and returns an instance of `PKCS7`.
-        """
-        pkcs7 = load_pkcs7_data(FILETYPE_ASN1, pkcs7DataASN1)
-        assert isinstance(pkcs7, PKCS7)
-
-    def test_load_pkcs7_data_invalid(self):
-        """
-        If the data passed to `load_pkcs7_data` is invalid, `Error` is raised.
-        """
-        with pytest.raises(Error):
-            load_pkcs7_data(FILETYPE_PEM, b"foo")
-
-    def test_load_pkcs7_type_invalid(self):
-        """
-        If the type passed to `load_pkcs7_data`, `ValueError` is raised.
-        """
-        with pytest.raises(ValueError):
-            load_pkcs7_data(object(), b"foo")
-
 
 class TestLoadCertificate:
     """
@@ -3343,216 +2950,6 @@ class TestLoadCertificate:
             load_certificate(FILETYPE_ASN1, b"lol")
 
 
-class TestPKCS7:
-    """
-    Tests for `PKCS7`.
-    """
-
-    def test_type_is_signed(self):
-        """
-        `PKCS7.type_is_signed` returns `True` if the PKCS7 object is of
-        the type *signed*.
-        """
-        pkcs7 = load_pkcs7_data(FILETYPE_PEM, pkcs7Data)
-        assert pkcs7.type_is_signed()
-
-    def test_type_is_enveloped(self):
-        """
-        `PKCS7.type_is_enveloped` returns `False` if the PKCS7 object is not
-        of the type *enveloped*.
-        """
-        pkcs7 = load_pkcs7_data(FILETYPE_PEM, pkcs7Data)
-        assert not pkcs7.type_is_enveloped()
-
-    def test_type_is_signed_and_enveloped(self):
-        """
-        `PKCS7.type_is_signedAndEnveloped` returns `False`
-        if the PKCS7 object is not of the type *signed and enveloped*.
-        """
-        pkcs7 = load_pkcs7_data(FILETYPE_PEM, pkcs7Data)
-        assert not pkcs7.type_is_signedAndEnveloped()
-
-    def test_type_is_data(self):
-        """
-        `PKCS7.type_is_data` returns `False` if the PKCS7 object is not of
-        the type data.
-        """
-        pkcs7 = load_pkcs7_data(FILETYPE_PEM, pkcs7Data)
-        assert not pkcs7.type_is_data()
-
-    def test_get_type_name(self):
-        """
-        `PKCS7.get_type_name` returns a `str` giving the
-        type name.
-        """
-        pkcs7 = load_pkcs7_data(FILETYPE_PEM, pkcs7Data)
-        assert pkcs7.get_type_name() == b"pkcs7-signedData"
-
-    def test_attribute(self):
-        """
-        If an attribute other than one of the methods tested here is accessed
-        on an instance of `PKCS7`, `AttributeError` is raised.
-        """
-        pkcs7 = load_pkcs7_data(FILETYPE_PEM, pkcs7Data)
-        with pytest.raises(AttributeError):
-            pkcs7.foo
-
-
-class TestNetscapeSPKI(_PKeyInteractionTestsMixin):
-    """
-    Tests for `OpenSSL.crypto.NetscapeSPKI`.
-    """
-
-    def signable(self):
-        """
-        Return a new `NetscapeSPKI` for use with signing tests.
-        """
-        return NetscapeSPKI()
-
-    def test_type(self):
-        """
-        `NetscapeSPKI` can be used to create instances of that type.
-        """
-        assert is_consistent_type(NetscapeSPKI, "NetscapeSPKI")
-
-    def test_construction(self):
-        """
-        `NetscapeSPKI` returns an instance of `NetscapeSPKI`.
-        """
-        nspki = NetscapeSPKI()
-        assert isinstance(nspki, NetscapeSPKI)
-
-    def test_invalid_attribute(self):
-        """
-        Accessing a non-existent attribute of a `NetscapeSPKI` instance
-        causes an `AttributeError` to be raised.
-        """
-        nspki = NetscapeSPKI()
-        with pytest.raises(AttributeError):
-            nspki.foo
-
-    def test_b64_encode(self):
-        """
-        `NetscapeSPKI.b64_encode` encodes the certificate to a base64 blob.
-        """
-        nspki = NetscapeSPKI()
-        pkey = load_privatekey(FILETYPE_PEM, root_key_pem)
-        nspki.set_pubkey(pkey)
-        nspki.sign(pkey, GOOD_DIGEST)
-        blob = nspki.b64_encode()
-        assert isinstance(blob, bytes)
-
-
-class TestRevoked:
-    """
-    Tests for `OpenSSL.crypto.Revoked`.
-    """
-
-    def test_ignores_unsupported_revoked_cert_extension_get_reason(self):
-        """
-        The get_reason method on the Revoked class checks to see if the
-        extension is NID_crl_reason and should skip it otherwise. This test
-        loads a CRL with extensions it should ignore.
-        """
-        crl = load_crl(FILETYPE_PEM, crlDataUnsupportedExtension)
-        revoked = crl.get_revoked()
-        reason = revoked[1].get_reason()
-        assert reason == b"Unspecified"
-
-    def test_ignores_unsupported_revoked_cert_extension_set_new_reason(self):
-        crl = load_crl(FILETYPE_PEM, crlDataUnsupportedExtension)
-        revoked = crl.get_revoked()
-        revoked[1].set_reason(None)
-        reason = revoked[1].get_reason()
-        assert reason is None
-
-    def test_construction(self):
-        """
-        Confirm we can create `OpenSSL.crypto.Revoked`.  Check that it is
-        empty.
-        """
-        revoked = Revoked()
-        assert isinstance(revoked, Revoked)
-        assert type(revoked) == Revoked
-        assert revoked.get_serial() == b"00"
-        assert revoked.get_rev_date() is None
-        assert revoked.get_reason() is None
-
-    def test_serial(self):
-        """
-        Confirm we can set and get serial numbers from
-        `OpenSSL.crypto.Revoked`.  Confirm errors are handled with grace.
-        """
-        revoked = Revoked()
-        ret = revoked.set_serial(b"10b")
-        assert ret is None
-        ser = revoked.get_serial()
-        assert ser == b"010B"
-
-        revoked.set_serial(b"31ppp")  # a type error would be nice
-        ser = revoked.get_serial()
-        assert ser == b"31"
-
-        with pytest.raises(ValueError):
-            revoked.set_serial(b"pqrst")
-        with pytest.raises(TypeError):
-            revoked.set_serial(100)
-
-    def test_date(self):
-        """
-        Confirm we can set and get revocation dates from
-        `OpenSSL.crypto.Revoked`.  Confirm errors are handled with grace.
-        """
-        revoked = Revoked()
-        date = revoked.get_rev_date()
-        assert date is None
-
-        now = datetime.now().strftime("%Y%m%d%H%M%SZ").encode("ascii")
-        ret = revoked.set_rev_date(now)
-        assert ret is None
-        date = revoked.get_rev_date()
-        assert date == now
-
-    def test_reason(self):
-        """
-        Confirm we can set and get revocation reasons from
-        `OpenSSL.crypto.Revoked`.  The "get" need to work as "set".
-        Likewise, each reason of all_reasons() must work.
-        """
-        revoked = Revoked()
-        for r in revoked.all_reasons():
-            for x in range(2):
-                ret = revoked.set_reason(r)
-                assert ret is None
-                reason = revoked.get_reason()
-                assert reason.lower().replace(b" ", b"") == r.lower().replace(
-                    b" ", b""
-                )
-                r = reason  # again with the resp of get
-
-        revoked.set_reason(None)
-        assert revoked.get_reason() is None
-
-    @pytest.mark.parametrize("reason", [object(), 1.0, "foo"])
-    def test_set_reason_wrong_args(self, reason):
-        """
-        `Revoked.set_reason` raises `TypeError` if called with an argument
-        which is neither `None` nor a byte string.
-        """
-        revoked = Revoked()
-        with pytest.raises(TypeError):
-            revoked.set_reason(reason)
-
-    def test_set_reason_invalid_reason(self):
-        """
-        Calling `OpenSSL.crypto.Revoked.set_reason` with an argument which
-        isn't a valid reason results in `ValueError` being raised.
-        """
-        revoked = Revoked()
-        with pytest.raises(ValueError):
-            revoked.set_reason(b"blue")
-
-
 class TestCRL:
     """
     Tests for `OpenSSL.crypto.CRL`.
@@ -3572,288 +2969,39 @@ class TestCRL:
         FILETYPE_PEM, intermediate_server_key_pem
     )
 
-    def test_construction(self):
+    @staticmethod
+    def _make_test_crl_cryptography(issuer_cert, issuer_key, certs=()):
         """
-        Confirm we can create `OpenSSL.crypto.CRL`.  Check
-        that it is empty
-        """
-        crl = CRL()
-        assert isinstance(crl, CRL)
-        assert crl.get_revoked() is None
-
-    def _get_crl(self):
-        """
-        Get a new ``CRL`` with a revocation.
-        """
-        crl = CRL()
-        revoked = Revoked()
-        now = datetime.now().strftime("%Y%m%d%H%M%SZ").encode("ascii")
-        revoked.set_rev_date(now)
-        revoked.set_serial(b"3ab")
-        revoked.set_reason(b"sUpErSeDEd")
-        crl.add_revoked(revoked)
-        return crl
-
-    def test_export_pem(self):
-        """
-        If not passed a format, ``CRL.export`` returns a "PEM" format string
-        representing a serial number, a revoked reason, and certificate issuer
-        information.
-        """
-        # PEM format
-        dumped_crl = self._get_crl().export(
-            self.cert, self.pkey, days=20, digest=b"sha256"
-        )
-        crl = x509.load_pem_x509_crl(dumped_crl)
-        revoked = crl.get_revoked_certificate_by_serial_number(0x03AB)
-        assert revoked is not None
-        assert crl.issuer == x509.Name(
-            [
-                x509.NameAttribute(x509.NameOID.COUNTRY_NAME, "US"),
-                x509.NameAttribute(x509.NameOID.STATE_OR_PROVINCE_NAME, "IL"),
-                x509.NameAttribute(x509.NameOID.LOCALITY_NAME, "Chicago"),
-                x509.NameAttribute(x509.NameOID.ORGANIZATION_NAME, "Testing"),
-                x509.NameAttribute(
-                    x509.NameOID.COMMON_NAME, "Testing Root CA"
-                ),
-            ]
-        )
-
-    def test_export_der(self):
-        """
-        If passed ``FILETYPE_ASN1`` for the format, ``CRL.export`` returns a
-        "DER" format string representing a serial number, a revoked reason, and
-        certificate issuer information.
-        """
-        crl = self._get_crl()
-
-        # DER format
-        dumped_crl = self._get_crl().export(
-            self.cert, self.pkey, FILETYPE_ASN1, digest=b"sha256"
-        )
-        crl = x509.load_der_x509_crl(dumped_crl)
-        revoked = crl.get_revoked_certificate_by_serial_number(0x03AB)
-        assert revoked is not None
-        assert crl.issuer == x509.Name(
-            [
-                x509.NameAttribute(x509.NameOID.COUNTRY_NAME, "US"),
-                x509.NameAttribute(x509.NameOID.STATE_OR_PROVINCE_NAME, "IL"),
-                x509.NameAttribute(x509.NameOID.LOCALITY_NAME, "Chicago"),
-                x509.NameAttribute(x509.NameOID.ORGANIZATION_NAME, "Testing"),
-                x509.NameAttribute(
-                    x509.NameOID.COMMON_NAME, "Testing Root CA"
-                ),
-            ]
-        )
-
-    def test_export_text(self):
-        """
-        If passed ``FILETYPE_TEXT`` for the format, ``CRL.export`` returns a
-        text format string like the one produced by the openssl command line
-        tool.
-        """
-        crl = self._get_crl()
-
-        # text format
-        dumped_text = crl.export(
-            self.cert, self.pkey, type=FILETYPE_TEXT, digest=b"sha256"
-        )
-        assert len(dumped_text) > 500
-
-    def test_export_custom_digest(self):
-        """
-        If passed the name of a digest function, ``CRL.export`` uses a
-        signature algorithm based on that digest function.
-        """
-        crl = self._get_crl()
-        dumped_crl = crl.export(self.cert, self.pkey, digest=b"sha384")
-        text = _runopenssl(dumped_crl, b"crl", b"-noout", b"-text")
-        text.index(b"Signature Algorithm: sha384")
-
-    def test_export_md5_digest(self):
-        """
-        If passed md5 as the digest function, ``CRL.export`` uses md5 and does
-        not emit a deprecation warning.
-        """
-        crl = self._get_crl()
-        with pytest.warns(None) as catcher:
-            simplefilter("always")
-        assert 0 == len(catcher)
-        dumped_crl = crl.export(self.cert, self.pkey, digest=b"md5")
-        text = _runopenssl(dumped_crl, b"crl", b"-noout", b"-text")
-        text.index(b"Signature Algorithm: md5")
-
-    def test_export_default_digest(self):
-        """
-        If not passed the name of a digest function, ``CRL.export`` raises a
-        ``TypeError``.
-        """
-        crl = self._get_crl()
-        with pytest.raises(TypeError):
-            crl.export(self.cert, self.pkey)
-
-    def test_export_invalid(self):
-        """
-        If `CRL.export` is used with an uninitialized `X509` instance,
-        `OpenSSL.crypto.Error` is raised.
-        """
-        crl = CRL()
-        with pytest.raises(Error):
-            crl.export(X509(), PKey(), digest=b"sha256")
-
-    def test_add_revoked_keyword(self):
-        """
-        `OpenSSL.CRL.add_revoked` accepts its single argument as the
-        ``revoked`` keyword argument.
-        """
-        crl = CRL()
-        revoked = Revoked()
-        revoked.set_serial(b"01")
-        revoked.set_rev_date(b"20160310020145Z")
-        crl.add_revoked(revoked=revoked)
-        assert isinstance(crl.get_revoked()[0], Revoked)
-
-    def test_export_wrong_args(self):
-        """
-        Calling `OpenSSL.CRL.export` with arguments other than the certificate,
-        private key, integer file type, and integer number of days it
-        expects, results in a `TypeError` being raised.
-        """
-        crl = CRL()
-        with pytest.raises(TypeError):
-            crl.export(None, self.pkey, FILETYPE_PEM, 10)
-        with pytest.raises(TypeError):
-            crl.export(self.cert, None, FILETYPE_PEM, 10)
-        with pytest.raises(TypeError):
-            crl.export(self.cert, self.pkey, None, 10)
-        with pytest.raises(TypeError):
-            crl.export(self.cert, FILETYPE_PEM, None)
-
-    def test_export_unknown_filetype(self):
-        """
-        Calling `OpenSSL.CRL.export` with a file type other than
-        `FILETYPE_PEM`, `FILETYPE_ASN1`, or
-        `FILETYPE_TEXT` results in a `ValueError` being raised.
-        """
-        crl = CRL()
-        with pytest.raises(ValueError):
-            crl.export(self.cert, self.pkey, 100, 10, digest=b"sha256")
-
-    def test_export_unknown_digest(self):
-        """
-        Calling `OpenSSL.CRL.export` with an unsupported digest results
-        in a `ValueError` being raised.
-        """
-        crl = CRL()
-        with pytest.raises(ValueError):
-            crl.export(
-                self.cert, self.pkey, FILETYPE_PEM, 10, b"strange-digest"
-            )
-
-    def test_get_revoked(self):
-        """
-        Use python to create a simple CRL with two revocations. Get back the
-        `Revoked` using `OpenSSL.CRL.get_revoked` and verify them.
-        """
-        crl = CRL()
-
-        revoked = Revoked()
-        now = datetime.now().strftime("%Y%m%d%H%M%SZ").encode("ascii")
-        revoked.set_rev_date(now)
-        revoked.set_serial(b"3ab")
-        crl.add_revoked(revoked)
-        revoked.set_serial(b"100")
-        revoked.set_reason(b"sUpErSeDEd")
-        crl.add_revoked(revoked)
-
-        revs = crl.get_revoked()
-        assert len(revs) == 2
-        assert type(revs[0]) == Revoked
-        assert type(revs[1]) == Revoked
-        assert revs[0].get_serial() == b"03AB"
-        assert revs[1].get_serial() == b"0100"
-        assert revs[0].get_rev_date() == now
-        assert revs[1].get_rev_date() == now
-
-    def test_load_crl(self):
-        """
-        Load a known CRL and inspect its revocations.  Both EM and DER formats
-        are loaded.
-        """
-        crl = load_crl(FILETYPE_PEM, crlData)
-        revs = crl.get_revoked()
-        assert len(revs) == 2
-        assert revs[0].get_serial() == b"03AB"
-        assert revs[0].get_reason() is None
-        assert revs[1].get_serial() == b"0100"
-        assert revs[1].get_reason() == b"Superseded"
-
-        der = _runopenssl(crlData, b"crl", b"-outform", b"DER")
-        crl = load_crl(FILETYPE_ASN1, der)
-        revs = crl.get_revoked()
-        assert len(revs) == 2
-        assert revs[0].get_serial() == b"03AB"
-        assert revs[0].get_reason() is None
-        assert revs[1].get_serial() == b"0100"
-        assert revs[1].get_reason() == b"Superseded"
-
-    def test_load_crl_bad_filetype(self):
-        """
-        Calling `OpenSSL.crypto.load_crl` with an unknown file type raises a
-        `ValueError`.
-        """
-        with pytest.raises(ValueError):
-            load_crl(100, crlData)
-
-    def test_load_crl_bad_data(self):
-        """
-        Calling `OpenSSL.crypto.load_crl` with file data which can't be loaded
-        raises a `OpenSSL.crypto.Error`.
-        """
-        with pytest.raises(Error):
-            load_crl(FILETYPE_PEM, b"hello, world")
-
-    def test_get_issuer(self):
-        """
-        Load a known CRL and assert its issuer's common name is what we expect
-        from the encoded crlData string.
-        """
-        crl = load_crl(FILETYPE_PEM, crlData)
-        assert isinstance(crl.get_issuer(), X509Name)
-        assert crl.get_issuer().CN == "Testing Root CA"
-
-    def test_dump_crl(self):
-        """
-        The dumped CRL matches the original input.
-        """
-        crl = load_crl(FILETYPE_PEM, crlData)
-        buf = dump_crl(FILETYPE_PEM, crl)
-        assert buf == crlData
-
-    def _make_test_crl(self, issuer_cert, issuer_key, certs=()):
-        """
-        Create a CRL.
+        Create a CRL using cryptography's API.
 
         :param list[X509] certs: A list of certificates to revoke.
-        :rtype: CRL
+        :rtype: ``cryptography.x509.CertificateRevocationList``
         """
-        crl = CRL()
+        from cryptography.x509.extensions import CRLReason, ReasonFlags
+
+        builder = x509.CertificateRevocationListBuilder()
+        builder = builder.issuer_name(
+            X509.to_cryptography(issuer_cert).subject
+        )
         for cert in certs:
-            revoked = Revoked()
-            # FIXME: This string splicing is an unfortunate implementation
-            # detail that has been reported in
-            # https://github.com/pyca/pyopenssl/issues/258
-            serial = hex(cert.get_serial_number())[2:].encode("utf-8")
-            revoked.set_serial(serial)
-            revoked.set_reason(b"unspecified")
-            revoked.set_rev_date(b"20140601000000Z")
-            crl.add_revoked(revoked)
-        crl.set_version(1)
-        crl.set_lastUpdate(b"20140601000000Z")
+            revoked = (
+                x509.RevokedCertificateBuilder()
+                .serial_number(cert.get_serial_number())
+                .revocation_date(datetime(2014, 6, 1, 0, 0, 0))
+                .add_extension(CRLReason(ReasonFlags.unspecified), False)
+                .build()
+            )
+            builder = builder.add_revoked_certificate(revoked)
+
+        builder = builder.last_update(datetime(2014, 6, 1, 0, 0, 0))
         # The year 5000 is far into the future so that this CRL isn't
         # considered to have expired.
-        crl.set_nextUpdate(b"50000601000000Z")
-        crl.sign(issuer_cert, issuer_key, digest=b"sha512")
+        builder = builder.next_update(datetime(5000, 6, 1, 0, 0, 0))
+
+        crl = builder.sign(
+            private_key=PKey.to_cryptography_key(issuer_key),
+            algorithm=hashes.SHA512(),
+        )
         return crl
 
     def test_verify_with_revoked(self):
@@ -3864,10 +3012,10 @@ class TestCRL:
         store = X509Store()
         store.add_cert(self.root_cert)
         store.add_cert(self.intermediate_cert)
-        root_crl = self._make_test_crl(
+        root_crl = self._make_test_crl_cryptography(
             self.root_cert, self.root_key, certs=[self.intermediate_cert]
         )
-        intermediate_crl = self._make_test_crl(
+        intermediate_crl = self._make_test_crl_cryptography(
             self.intermediate_cert, self.intermediate_key, certs=[]
         )
         store.add_crl(root_crl)
@@ -3888,7 +3036,7 @@ class TestCRL:
         store = X509Store()
         store.add_cert(self.root_cert)
         store.add_cert(self.intermediate_cert)
-        root_crl = self._make_test_crl(
+        root_crl = self._make_test_crl_cryptography(
             self.root_cert, self.root_key, certs=[self.intermediate_cert]
         )
         store.add_crl(root_crl)
@@ -3900,20 +3048,6 @@ class TestCRL:
             store_ctx.verify_certificate()
         assert str(err.value) == "unable to get certificate CRL"
         assert err.value.certificate.get_subject().CN == "intermediate-service"
-
-    def test_convert_from_cryptography(self):
-        crypto_crl = x509.load_pem_x509_crl(crlData)
-        crl = CRL.from_cryptography(crypto_crl)
-        assert isinstance(crl, CRL)
-
-    def test_convert_from_cryptography_unsupported_type(self):
-        with pytest.raises(TypeError):
-            CRL.from_cryptography(object())
-
-    def test_convert_to_cryptography_key(self):
-        crl = load_crl(FILETYPE_PEM, crlData)
-        crypto_crl = crl.to_cryptography()
-        assert isinstance(crypto_crl, x509.CertificateRevocationList)
 
 
 class TestX509StoreContext:
@@ -4235,7 +3369,7 @@ class TestX509StoreContext:
 
     @staticmethod
     def _create_ca_file(base_path, hash_directory, cacert):
-        ca_hash = "{:08x}.0".format(cacert.subject_name_hash())
+        ca_hash = f"{cacert.subject_name_hash():08x}.0"
         cafile = base_path.join(hash_directory, ca_hash)
         cafile.write_binary(
             dump_certificate(FILETYPE_PEM, cacert), ensure=True
@@ -4301,128 +3435,6 @@ class TestX509StoreContext:
         assert store_ctx.verify_certificate() is None
 
 
-class TestSignVerify:
-    """
-    Tests for `OpenSSL.crypto.sign` and `OpenSSL.crypto.verify`.
-    """
-
-    def test_sign_verify(self):
-        """
-        `sign` generates a cryptographic signature which `verify` can check.
-        """
-        content = (
-            b"It was a bright cold day in April, and the clocks were striking "
-            b"thirteen. Winston Smith, his chin nuzzled into his breast in an "
-            b"effort to escape the vile wind, slipped quickly through the "
-            b"glass doors of Victory Mansions, though not quickly enough to "
-            b"prevent a swirl of gritty dust from entering along with him."
-        )
-
-        # sign the content with this private key
-        priv_key = load_privatekey(FILETYPE_PEM, root_key_pem)
-        # verify the content with this cert
-        good_cert = load_certificate(FILETYPE_PEM, root_cert_pem)
-        # certificate unrelated to priv_key, used to trigger an error
-        bad_cert = load_certificate(FILETYPE_PEM, server_cert_pem)
-
-        for digest in ["md5", "sha1", "sha256"]:
-            sig = sign(priv_key, content, digest)
-
-            # Verify the signature of content, will throw an exception if
-            # error.
-            verify(good_cert, sig, content, digest)
-
-            # This should fail because the certificate doesn't match the
-            # private key that was used to sign the content.
-            with pytest.raises(Error):
-                verify(bad_cert, sig, content, digest)
-
-            # This should fail because we've "tainted" the content after
-            # signing it.
-            with pytest.raises(Error):
-                verify(good_cert, sig, content + b"tainted", digest)
-
-        # test that unknown digest types fail
-        with pytest.raises(ValueError):
-            sign(priv_key, content, "strange-digest")
-        with pytest.raises(ValueError):
-            verify(good_cert, sig, content, "strange-digest")
-
-    def test_sign_verify_with_text(self):
-        """
-        `sign` generates a cryptographic signature which
-        `verify` can check. Deprecation warnings raised because using
-        text instead of bytes as content
-        """
-        content = (
-            b"It was a bright cold day in April, and the clocks were striking "
-            b"thirteen. Winston Smith, his chin nuzzled into his breast in an "
-            b"effort to escape the vile wind, slipped quickly through the "
-            b"glass doors of Victory Mansions, though not quickly enough to "
-            b"prevent a swirl of gritty dust from entering along with him."
-        ).decode("ascii")
-
-        priv_key = load_privatekey(FILETYPE_PEM, root_key_pem)
-        cert = load_certificate(FILETYPE_PEM, root_cert_pem)
-        for digest in ["md5", "sha1", "sha256"]:
-            with pytest.warns(DeprecationWarning) as w:
-                simplefilter("always")
-                sig = sign(priv_key, content, digest)
-            assert "{0} for data is no longer accepted, use bytes".format(
-                WARNING_TYPE_EXPECTED
-            ) == str(w[-1].message)
-
-            with pytest.warns(DeprecationWarning) as w:
-                simplefilter("always")
-                verify(cert, sig, content, digest)
-            assert "{0} for data is no longer accepted, use bytes".format(
-                WARNING_TYPE_EXPECTED
-            ) == str(w[-1].message)
-
-    def test_sign_verify_ecdsa(self):
-        """
-        `sign` generates a cryptographic signature which `verify` can check.
-        ECDSA Signatures in the X9.62 format may have variable length,
-        different from the length of the private key.
-        """
-        content = (
-            b"It was a bright cold day in April, and the clocks were striking "
-            b"thirteen. Winston Smith, his chin nuzzled into his breast in an "
-            b"effort to escape the vile wind, slipped quickly through the "
-            b"glass doors of Victory Mansions, though not quickly enough to "
-            b"prevent a swirl of gritty dust from entering along with him."
-        )
-        priv_key = load_privatekey(FILETYPE_PEM, ec_root_key_pem)
-        cert = load_certificate(FILETYPE_PEM, ec_root_cert_pem)
-        sig = sign(priv_key, content, "sha256")
-        verify(cert, sig, content, "sha256")
-
-    def test_sign_nulls(self):
-        """
-        `sign` produces a signature for a string with embedded nulls.
-        """
-        content = b"Watch out!  \0  Did you see it?"
-        priv_key = load_privatekey(FILETYPE_PEM, root_key_pem)
-        good_cert = load_certificate(FILETYPE_PEM, root_cert_pem)
-        sig = sign(priv_key, content, "sha256")
-        verify(good_cert, sig, content, "sha256")
-
-    def test_sign_with_large_key(self):
-        """
-        `sign` produces a signature for a string when using a long key.
-        """
-        content = (
-            b"It was a bright cold day in April, and the clocks were striking "
-            b"thirteen. Winston Smith, his chin nuzzled into his breast in an "
-            b"effort to escape the vile wind, slipped quickly through the "
-            b"glass doors of Victory Mansions, though not quickly enough to "
-            b"prevent a swirl of gritty dust from entering along with him."
-        )
-
-        priv_key = load_privatekey(FILETYPE_PEM, large_key_pem)
-        sign(priv_key, content, "sha256")
-
-
 class TestEllipticCurve:
     """
     Tests for `_EllipticCurve`, `get_elliptic_curve`, and
@@ -4459,7 +3471,7 @@ class TestEllipticCurve:
         """
         curves = get_elliptic_curves()
         curve = next(iter(curves))
-        assert "<Curve %r>" % (curve.name,) == repr(curve)
+        assert f"<Curve {curve.name!r}>" == repr(curve)
 
     def test_to_EC_KEY(self):
         """
@@ -4492,9 +3504,6 @@ class TestEllipticCurveEquality(EqualityTestsMixin):
 
     curve_factory = EllipticCurveFactory()
 
-    if curve_factory.curve_name is None:
-        skip = "There are no curves available there can be no curve objects."
-
     def anInstance(self):
         """
         Get the curve object for an arbitrary curve supported by the system.
@@ -4516,9 +3525,6 @@ class TestEllipticCurveHash:
     """
 
     curve_factory = EllipticCurveFactory()
-
-    if curve_factory.curve_name is None:
-        skip = "There are no curves available there can be no curve objects."
 
     def test_contains(self):
         """

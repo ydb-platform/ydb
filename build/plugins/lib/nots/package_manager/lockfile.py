@@ -45,15 +45,12 @@ class LockfilePackageMeta(object):
                 "tarball can only point to npm.yandex-team.ru, got {}".format(tarball_url)
             )
 
-        # http://npm.yandex-team.ru/@scope%2fname/-/name-0.0.1.tgz
-        parts = tarball_url.split("/")
-
         self.key = key
         self.tarball_url = tarball_url
         self.sky_id = sky_id
         self.integrity = integrity
         self.integrity_algorithm = integrity_algorithm
-        self.tarball_path = "/".join(parts[-3:]).replace("%2f", "/")  # @scope%2fname/-/name-0.0.1.tgz
+        self.tarball_path = _tarball_path_from_url(tarball_url)
 
     def to_str(self):
         return " ".join([self.tarball_url, self.sky_id, self.integrity, self.integrity_algorithm])
@@ -64,6 +61,21 @@ class LockfilePackageMeta(object):
             tarball_url = "https://npm.yandex-team.ru/" + tarball_url
         pkg_uri = f"{tarball_url}#integrity={self.integrity_algorithm}-{self.integrity}"
         return pkg_uri
+
+
+def _tarball_path_from_url(tarball_url):
+    path = urlparse.unquote(urlparse.urlparse(tarball_url).path)
+    package_path, separator, filename = path.rpartition("/-/")
+
+    if separator:
+        package_parts = package_path.rstrip("/").split("/")
+        package_name = package_parts[-1]
+        if len(package_parts) > 1 and package_parts[-2].startswith("@"):
+            package_name = "/".join(package_parts[-2:])
+        return "{}/-/{}".format(package_name, filename)
+
+    # Keep supporting non-standard tarball values that do not use the npm /-/ layout.
+    return "/".join(path.split("/")[-3:])
 
 
 class PnpmLockfileHelper:

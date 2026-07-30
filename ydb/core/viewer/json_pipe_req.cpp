@@ -4,6 +4,8 @@
 #include <library/cpp/json/json_writer.h>
 #include <util/generic/overloaded.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::VIEWER
+
 namespace NKikimr::NViewer {
 
 template<typename T>
@@ -460,6 +462,9 @@ TViewerPipeClient::TRequestResponse<TEvViewer::TEvViewerResponse> TViewerPipeCli
         }
     }
     SendRequest(viewerServiceId, ev, flags, nodeId, response.Span.GetTraceId());
+    if (flags & IEventHandle::FlagSubscribeOnSession) {
+        SubscriptionNodeIds.push_back(nodeId);
+    }
     return response;
 }
 
@@ -1159,7 +1164,10 @@ void TViewerPipeClient::RequestDone(i32 requests) {
         return;
     }
     if (requests > DataRequests) {
-        BLOG_ERROR("Requests count mismatch: " << requests << " > " << DataRequests);
+        YDB_LOG_ERROR("Request count mismatch",
+            {"logPrefix", GetLogPrefix()},
+            {"request", requests},
+            {"dataRequests", DataRequests});
         if (Span) {
             Span.Event("Requests count mismatch");
         }
@@ -1200,7 +1208,8 @@ void TViewerPipeClient::Cancelled() {
     if (PassedAway) {
         return;
     }
-    BLOG_D("Request cancelled");
+    YDB_LOG_DEBUG("Request cancelled",
+        {"logPrefix", GetLogPrefix()});
     AddEvent("Cancelled");
     PassAway();
 }

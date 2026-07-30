@@ -246,7 +246,7 @@ THolder<TAccountQuoterHolder> TReadQuoter::CreateAccountQuotaTracker(const TStri
     const auto& quotingConfig = AppData()->PQConfig.GetQuotingConfig();
     TActorId actorId;
     if (GetTabletActor() && quotingConfig.GetEnableQuoting()) {
-        Y_ENSURE(TopicConverter);
+        AFL_ENSURE(TopicConverter)("tablet_id", TabletId)("partition_id", Partition);
         if (quotingConfig.GetEnableReadQuoting()) {
             actorId = TActivationContext::RegisterWithSameMailbox(
                 new TAccountReadQuoter(

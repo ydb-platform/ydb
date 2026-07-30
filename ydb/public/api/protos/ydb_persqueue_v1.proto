@@ -1251,21 +1251,24 @@ message TopicSettings {
     // Max partition write messages burst in messages. Must be less than database limit. Default burst size - 1 Mi messages.
     int64 max_partition_write_messages_burst = 18 [(value) = ">= 0"];
 
+    // Enable content-based deduplication for the topic.
+    bool content_based_deduplication = 19;
+    
     // Total read speed for a single partition (across all consumers), in bytes per second.
     // Zero value means no limit (default).
-    int64 partition_total_read_speed_bytes_per_second = 19 [(Ydb.value) = ">= 0"];
+    int64 partition_total_read_speed_bytes_per_second = 20 [(Ydb.value) = ">= 0"];
 
     // Total read speed for a single partition (across all consumers), in messages per second.
     // Zero value means no limit (default).
-    int64 partition_total_read_speed_messages_per_second = 20 [(Ydb.value) = ">= 0"];
+    int64 partition_total_read_speed_messages_per_second = 21 [(Ydb.value) = ">= 0"];
 
     // Read speed for reading a single partition without a consumer, in bytes per second.
     // Zero value means no limit (default).
-    int64 partition_read_without_consumer_speed_bytes_per_second = 21 [(Ydb.value) = ">= 0"];
+    int64 partition_read_without_consumer_speed_bytes_per_second = 22 [(Ydb.value) = ">= 0"];
 
     // Read speed for reading a single partition without a consumer, in messages per second.
     // Zero value means no limit (default).
-    int64 partition_read_without_consumer_speed_messages_per_second = 22 [(Ydb.value) = ">= 0"];
+    int64 partition_read_without_consumer_speed_messages_per_second = 23 [(Ydb.value) = ">= 0"];
 }
 
 message AutoPartitioningSettings {

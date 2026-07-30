@@ -54,39 +54,6 @@ TArgonSecret ParseArgonHash(const TStringBuf argonHash) {
     return { std::move(salt), std::move(hash) };
 }
 
-TMaybe<TString> ArgonHashToNewFormat(const TStringBuf oldArgonHash) {
-    NJson::TJsonValue json;
-    if (!NJson::ReadJsonTree(oldArgonHash, &json)) {
-        return Nothing();
-    }
-
-    if (!json.Has("type") || !json.Has("salt") || !json.Has("hash") || json["type"] != "argon2id") {
-        return Nothing();
-    }
-
-    return json["salt"].GetString() + "$" + json["hash"].GetString();
-}
-
-TString HashedPasswordFromNewArgonHashFormat(const TString& argonHash) {
-    NJson::TJsonValue hashes;
-    hashes["argon2id"] = argonHash;
-    hashes["version"] = HASHES_JSON_SCHEMA_VERSION;
-    return Base64Encode(NJson::WriteJson(hashes, false));
-}
-
-TMaybe<TString> ArgonHashToOldFormat(const TStringBuf newArgonHash) {
-    auto argonSecret = ParseArgonHash(newArgonHash);
-    if (argonSecret.Salt.empty() || argonSecret.Hash.empty()) {
-        return Nothing();
-    }
-
-    NJson::TJsonValue json;
-    json["type"] = "argon2id";
-    json["salt"] = std::move(argonSecret.Salt);
-    json["hash"] = std::move(argonSecret.Hash);
-    return NJson::WriteJson(json, false);
-}
-
 bool IsOldFormatHash(const TString& hash) {
     return THashesChecker::OldFormatCheck(hash).Success;
 }

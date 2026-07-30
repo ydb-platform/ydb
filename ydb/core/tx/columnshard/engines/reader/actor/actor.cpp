@@ -483,7 +483,7 @@ NKikimr::TOwnedCellVec TColumnShardScan::ConvertLastKey(const std::shared_ptr<ar
         }
     } singleRowWriter;
 
-    NArrow::TArrowToYdbConverter converter(KeyYqlSchema, singleRowWriter);
+    NArrow::TArrowToYdbConverter converter(KeyYqlSchema, singleRowWriter, false, false);
     TString errStr;
     bool ok = converter.Process(*lastReadKey, errStr);
     Y_ABORT_UNLESS(ok, "%s", errStr.c_str());

@@ -1516,6 +1516,10 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
             auto alterColumn = alterColumnTable->MutableAlterSchema()->AddAlterColumns();
             alterColumn->SetName(alter.Getname());
 
+            if (alter.has_not_null()) {
+                alterColumn->SetNotNull(alter.not_null());
+            }
+
             if (!alter.family().empty()) {
                 alterColumn->SetColumnFamilyName(alter.family());
             }
@@ -2047,6 +2051,11 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
             break;
         case NKikimrSchemeOp::EIndexTypeLocalMinMax:
             index->mutable_local_min_max_index();
+            break;
+        case NKikimrSchemeOp::EIndexTypeLocalCountMinSketch:
+            // count_min_sketch is a scheme object visible in the scheme tree, but is
+            // intentionally not exposed through the public table index API, so no
+            // specialized oneof is set here.
             break;
         case NKikimrSchemeOp::EIndexTypeInvalid:
             break;

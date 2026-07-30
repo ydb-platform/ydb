@@ -195,6 +195,7 @@ public:
         ui64 EnforcedDynamicSlotSize = 0;
         ui32 SlotCount = 0;
         ui32 SlotSizeInUnits = 0;
+        ui64 ExpectedSlotSize = 0;
         ui32 NumActiveSlots = 0;
         ui64 Category = 0;
         TString DecommitStatus;
@@ -219,13 +220,19 @@ public:
         }
 
         ui64 GetSlotTotalSize() const {
-            if (EnforcedDynamicSlotSize) {
+            if (ExpectedSlotSize) {
+                return ExpectedSlotSize;
+            } else if (EnforcedDynamicSlotSize) {
                 return EnforcedDynamicSlotSize;
             } else if (SlotCount) {
                 return TotalSize / SlotCount;
             } else {
                 return TotalSize / 16;
             }
+        }
+
+        ui32 GetOwnerWeight(ui32 groupSizeInUnits) const {
+            return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, SlotSizeInUnits, ExpectedSlotSize);
         }
 
         float GetDiskSpaceUsage() const {
@@ -483,7 +490,7 @@ public:
                     DiskSpace = std::max(DiskSpace, vdisk.DiskSpace);
                     DiskSpaceUsage = std::max(DiskSpaceUsage, itPDisk->second.GetDiskSpaceUsage());
                     MaxPDiskUsage = std::max(MaxPDiskUsage, itPDisk->second.PDiskUsage);
-                    ui64 slotSize = itPDisk->second.GetSlotTotalSize() * TPDiskConfig::GetOwnerWeight(GroupSizeInUnits, itPDisk->second.SlotSizeInUnits);
+                    ui64 slotSize = itPDisk->second.GetSlotTotalSize() * itPDisk->second.GetOwnerWeight(GroupSizeInUnits);
                     // when a vdisk overgrows its nominal slot, keep its real AvailableSize
                     if (slotSize > vdisk.AllocatedSize) {
                         ui64 slotAvailable = slotSize - vdisk.AllocatedSize;
@@ -1542,7 +1549,11 @@ public:
                             }
                             group->EncryptionMode = pool->GetEncryptionMode();
                         } else {
-                            BLOG_W("Storage pool not found for group " << group->GroupId << " box " << group->BoxId << " pool " << group->PoolId);
+                            YDB_LOG_WARN_COMP(NKikimrServices::VIEWER, "Storage pool not found",
+                                {"logPrefix", GetLogPrefix()},
+                                {"groupId", group->GroupId},
+                                {"boxId", group->BoxId},
+                                {"poolId", group->PoolId});
                         }
                     }
                 }
@@ -1604,6 +1615,7 @@ public:
                     pDisk.EnforcedDynamicSlotSize = info.GetEnforcedDynamicSlotSize();
                     pDisk.SlotCount = info.GetExpectedSlotCount();
                     pDisk.SlotSizeInUnits = info.GetSlotSizeInUnits();
+                    pDisk.ExpectedSlotSize = info.GetExpectedSlotSize();
                     pDisk.NumActiveSlots = info.GetNumActiveSlots();
                     pDisk.Category = info.GetCategory();
                     pDisk.DecommitStatus = info.GetDecommitStatus();
@@ -1703,7 +1715,10 @@ public:
         }
         auto itNavigateKeySetResult = NavigateKeySetResult.find(pathId);
         if (itNavigateKeySetResult == NavigateKeySetResult.end()) {
-            BLOG_W("Invalid NavigateKeySetResult PathId: " << pathId << " Path: " << CanonizePath(ev->Get()->Request->ResultSet.begin()->Path));
+            YDB_LOG_WARN_COMP(NKikimrServices::VIEWER, "Invalid NavigateKeySetResult",
+                {"logPrefix", GetLogPrefix()},
+                {"pathId", pathId},
+                {"path", CanonizePath(ev->Get()->Request->ResultSet.begin()->Path)});
             return RequestDone();
         }
         auto& navigateResult(itNavigateKeySetResult->second);
@@ -1981,6 +1996,9 @@ public:
                     }
                     if (pDisk.SlotCount < info.GetExpectedSlotCount()) {
                         pDisk.SlotCount = info.GetExpectedSlotCount();
+                    }
+                    if (info.GetExpectedSlotSize()) {
+                        pDisk.ExpectedSlotSize = info.GetExpectedSlotSize();
                     }
                     if (pDisk.NumActiveSlots < info.GetNumActiveSlots()) {
                         pDisk.NumActiveSlots = info.GetNumActiveSlots();

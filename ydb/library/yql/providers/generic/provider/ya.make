@@ -13,7 +13,6 @@ SRCS(
     yql_generic_io_discovery.cpp
     yql_generic_list_splits.cpp
     yql_generic_list_splits.h
-    yql_generic_load_meta.cpp
     yql_generic_logical_opt.cpp
     yql_generic_mkql_compiler.cpp
     yql_generic_physical_opt.cpp

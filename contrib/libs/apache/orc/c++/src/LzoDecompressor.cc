@@ -365,7 +365,10 @@ namespace orc {
         lastLiteralLength = literalLength;
       }
 
-      if (input + SIZE_OF_SHORT > inputLimit && *reinterpret_cast<const int16_t*>(input) != 0) {
+      if (input + SIZE_OF_SHORT > inputLimit) {
+        throw MalformedInputException(input - inputAddress);
+      }
+      if (input[0] != 0 || input[1] != 0) {
         throw MalformedInputException(input - inputAddress);
       }
       input += SIZE_OF_SHORT;

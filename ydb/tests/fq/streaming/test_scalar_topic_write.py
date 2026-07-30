@@ -336,10 +336,8 @@ class TestScalarTopicWriteInYdb(StreamingTestBase):
             )
 
         try:
-            external_client = YdbClient(endpoint.endpoint, endpoint.database)
-            test_client = YdbClient(kikimr.endpoint.endpoint, kikimr.endpoint.database, "test@builtin")
-            external_client.wait_connection()
-            test_client.wait_connection()
+            external_client = YdbClient.from_driver_config(endpoint.endpoint, endpoint.database)
+            test_client = YdbClient.from_driver_config(kikimr.endpoint.endpoint, kikimr.endpoint.database, "test@builtin")
 
             test_secret_name = entity_name("test_secret")
             test_source_name = entity_name("test_target_source")

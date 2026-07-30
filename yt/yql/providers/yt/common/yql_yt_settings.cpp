@@ -125,6 +125,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, QueryCacheUseForCalc);
     REGISTER_SETTING(*this, QueryCacheUseExpirationTimeout);
     REGISTER_SETTING(*this, QueryCacheCombineChunksReplace);
+    REGISTER_SETTING(*this, QueryCacheReportProgress);
 
     REGISTER_SETTING(*this, DefaultMemoryLimit);
     REGISTER_SETTING(*this, DefaultMemoryReserveFactor).Lower(0.0).Upper(1.0);
@@ -345,6 +346,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, CommonJoinCoreLimit);
     REGISTER_SETTING(*this, CombineCoreLimit).Lower(1_MB); // Min 1Mb
     REGISTER_SETTING(*this, SwitchLimit).Lower(1_MB); // Min 1Mb
+    REGISTER_SETTING(*this, JoinCommonAnySideFirst);
     REGISTER_SETTING(*this, JoinMergeTablesLimit);
     REGISTER_SETTING(*this, JoinMergeUseSmallAsPrimary);
     REGISTER_SETTING(*this, JoinMergeReduceJobMaxSize).Lower(1); // YT requires max_data_size_per_job to be > 0, YT default is 200GB
@@ -642,6 +644,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, TmpSecurity).Parser([](const TString& v) { return FromString<ETmpSecurityMode>(v); });
     REGISTER_SETTING(*this, _ParseExpressionColumns);
     REGISTER_SETTING(*this, _SecureTmpTokenUsersAccessPeriod);
+    REGISTER_SETTING(*this, _FixEndlessLoopInDropIfExists);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

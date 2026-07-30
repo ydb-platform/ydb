@@ -25,6 +25,7 @@ enum class EHostHealth
     Sufferer,
     TemporaryOffline,
     Offline,
+    Broken,   // changes strictly outside of Oracle
 };
 
 struct TOracleHostStat
@@ -71,7 +72,9 @@ public:
 
     virtual void OnDDiskDisconnected(THostIndex hostIndex, TInstant now) = 0;
     virtual void OnDDiskConnected(THostIndex hostIndex, TInstant now) = 0;
-    virtual TDuration GetDDiskReconnectDelay(THostIndex hostIndex) = 0;
+    virtual void OnDDiskBroken(THostIndex hostIndex) = 0;
+
+    virtual TDuration GetHostReconnectDelay(THostIndex hostIndex) = 0;
 
     // Picks the best host (by lowest inflight count) out of the provided set
     // of hosts. Ties are broken uniformly at random.
@@ -135,12 +138,10 @@ public:
 
     void OnDDiskDisconnected(THostIndex hostIndex, TInstant now) override;
     void OnDDiskConnected(THostIndex hostIndex, TInstant now) override;
-    [[nodiscard]] TDuration GetDDiskReconnectDelay(
+    [[nodiscard]] TDuration GetHostReconnectDelay(
         THostIndex hostIndex) override;
-
-    void OnHostAdded();
-
-    [[nodiscard]] size_t GetHostCount() const;
+    // Device is permanently broken, so force the host offline.
+    void OnDDiskBroken(THostIndex hostIndex) override;
 
     [[nodiscard]] THostIndex SelectBestPBufferHost(
         THostMask hosts,
@@ -168,12 +169,19 @@ public:
         THostIndex hostIndex) const override;
     [[nodiscard]] TString Dump() const override;
 
+    // If necessary, adds hosts to make the hostIndex valid.
+    void AddHostIfNeeded(THostIndex hostIndex);
+
+    // Check if it's valid to QueryAddHost from HostStateController and do it.
+    void MaybeQueryAddHost();
+
     [[nodiscard]] TVector<TOracleHostStat> BuildHostStats(TInstant now) const;
 
 private:
     [[nodiscard]] TTimePredictor& AccessTimePredictor(EOperation operation);
     [[nodiscard]] const TTimePredictor& GetTimePredictor(
         EOperation operation) const;
+    [[nodiscard]] size_t GetHostCount() const;
 
     const TStorageConfigPtr StorageConfig;
     const TOracleConfigPtr OracleConfig;

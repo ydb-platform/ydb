@@ -3,6 +3,8 @@
 
 #include <ydb/core/tx/schemeshard/schemeshard_user_attr_limits.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS_TENANTS
+
 namespace NKikimr::NConsole {
 
 class TTenantsManager::TTxAlterTenant : public TTransactionBase<TTenantsManager> {
@@ -18,7 +20,8 @@ public:
     bool Error(Ydb::StatusIds::StatusCode code, const TString &error,
                const TActorContext &ctx)
     {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS, "Cannot alter tenant: " << error);
+        YDB_LOG_DEBUG_CTX(ctx, "Cannot alter tenant",
+            {"error", error});
 
         auto &operation = *Response->Record.MutableResponse()->mutable_operation();
         operation.set_ready(true);
@@ -40,8 +43,8 @@ public:
 
         auto &rec = Request->Get()->Record.GetRequest();
         auto &token = Request->Get()->Record.GetUserToken();
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS, "TTxAlterTenant: "
-                    << Request->Get()->Record.ShortDebugString());
+        YDB_LOG_DEBUG_CTX(ctx, "TTxAlterTenant execute",
+            {"ev", Request->Get()->Record.ShortDebugString()});
 
         Response = new TEvConsole::TEvAlterTenantResponse;
 
@@ -60,7 +63,7 @@ public:
 
         // Check idempotency key
         if (rec.idempotency_key() && Tenant->AlterIdempotencyKey == rec.idempotency_key()) {
-            LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS, "Returning success due to idempotency key match");
+            YDB_LOG_DEBUG_CTX(ctx, "Returning success due to idempotency key match");
             auto &operation = *Response->Record.MutableResponse()->mutable_operation();
             operation.set_ready(true);
             operation.set_status(Ydb::StatusIds::SUCCESS);
@@ -286,14 +289,14 @@ public:
 
             if (key.size() > NSchemeShard::TUserAttributesLimits::MaxNameLen) {
                 return Error(Ydb::StatusIds::BAD_REQUEST,
-                    Sprintf("Key '%s' is too long, max: " PRIu32 ", actual: " PRIu32,
+                    Sprintf("Key '%s' is too long, max: " PRIu32 ", actual: %zu",
                         key.data(), NSchemeShard::TUserAttributesLimits::MaxNameLen, key.size()),
                     ctx);
             }
 
             if (value.size() > NSchemeShard::TUserAttributesLimits::MaxValueLen) {
                 return Error(Ydb::StatusIds::BAD_REQUEST,
-                    Sprintf("Value for key '%s' is too long, max: " PRIu32 ", actual: " PRIu32,
+                    Sprintf("Value for key '%s' is too long, max: " PRIu32 ", actual: %zu",
                         key.data(), NSchemeShard::TUserAttributesLimits::MaxValueLen, value.size()),
                     ctx);
             }
@@ -305,12 +308,34 @@ public:
             attrNames.insert(key);
         }
 
-        THashMap<TString, ui64> attributeMap;
+        THashMap<TString, ui64> existingAttributesIndexes;
+        THashMap<TString, TString> allAttributes;
         for (ui64 i = 0 ; i < Tenant->Attributes.UserAttributesSize(); i++) {
-            bool res = attributeMap.emplace(Tenant->Attributes.GetUserAttributes(i).GetKey(), i).second;
+            const auto& attr = Tenant->Attributes.GetUserAttributes(i);
+            bool res = existingAttributesIndexes.emplace(attr.GetKey(), i).second;
             if (!res)
                 return Error(Ydb::StatusIds::INTERNAL_ERROR,
                              "Unexpected duplicate attribute found in CMS local db", ctx);
+            allAttributes[attr.GetKey()] = attr.GetValue();
+        }
+
+        // Check new total attributes size
+        for (const auto& [key, value] : rec.alter_attributes()) {
+            allAttributes[key] = value;
+        }
+        ui64 totalBytes = 0;
+        for (const auto& [key, value] : allAttributes) {
+            if (value.empty()) {
+                continue;
+            }
+            totalBytes += key.size();
+            totalBytes += value.size();
+        }
+        if (totalBytes > NSchemeShard::TUserAttributesLimits::MaxBytes) {
+            return Error(Ydb::StatusIds::BAD_REQUEST,
+                Sprintf("Total attributes size is too big: %" PRIu64 " bytes (maximum allowed is %" PRIu32 " bytes)",
+                    totalBytes, NSchemeShard::TUserAttributesLimits::MaxBytes),
+                ctx);
         }
 
         // Apply computational units changes.
@@ -375,6 +400,8 @@ public:
             Self->DbUpdateTenantAlterIdempotencyKey(Tenant, Tenant->AlterIdempotencyKey, txc, ctx);
         }
 
+        // Apply attributes changes.
+
         // Attributes with empty values are kept forever as tombstones
         // to self-heal divergence with subdomain if subdomain AlterUserAttributes
         // request didn't reach SchemeShard (due to Console restart
@@ -382,8 +409,8 @@ public:
         // but before sending request into subdomain, etc)
         if (!rec.alter_attributes().empty()) {
             for (const auto& [key, value] : rec.alter_attributes()) {
-                const auto it = attributeMap.find(key);
-                if (it != attributeMap.end()) {
+                const auto it = existingAttributesIndexes.find(key);
+                if (it != existingAttributesIndexes.end()) {
                     if (value) {
                         Tenant->Attributes.MutableUserAttributes(it->second)->SetValue(value);
                     } else {
@@ -418,13 +445,14 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        LOG_DEBUG(ctx, NKikimrServices::CMS_TENANTS, "TTxAlterTenant Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxAlterTenant Complete");
 
         Y_ABORT_UNLESS(Response);
         Self->Counters.Inc(Response->Record.GetResponse().operation().status(),
                            COUNTER_ALTER_RESPONSES);
 
-        LOG_TRACE_S(ctx, NKikimrServices::CMS_TENANTS, "Send: " << Response->ToString());
+        YDB_LOG_TRACE_CTX(ctx, "Send",
+            {"ev", Response->ToString()});
         ctx.Send(Request->Sender, Response.Release(), 0, Request->Cookie);
 
         if (Tenant) {

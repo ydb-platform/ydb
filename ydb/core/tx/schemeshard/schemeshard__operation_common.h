@@ -326,6 +326,9 @@ void AbortRelatedOperations(TOperationId operationId, const THashSet<TTxId>& rel
 
 } // namespace NForceDrop
 
+// Creates an ACL that interrupts inheritance from the parent, keeping only the DescribeSchema grant.
+TString InterruptInheritanceExceptDescribe(const TString& initialAcl);
+
 } // namespace NKikimr::NSchemeShard
 
 namespace NKikimr::NSchemeShard::NTableIndexVersion {

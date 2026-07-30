@@ -1,6 +1,6 @@
 import argparse
 import logging
-import random
+# import random
 import time
 from concurrent import futures
 
@@ -41,6 +41,8 @@ class IamTokenServicer(iam_token_service_pb2_grpc.IamTokenServiceServicer):
     def __init__(self, token, expires_in):
         self.token = token
         self.expires_in = expires_in
+        self.calls = 0
+        self.token_calls = 0
 
     def _pick_token(self):
         # if random.random() < 0.1:
@@ -57,12 +59,45 @@ class IamTokenServicer(iam_token_service_pb2_grpc.IamTokenServiceServicer):
         return make_response(self._pick_token(), self.expires_in)
 
     def CreateForService(self, request, context):
-        token =self._pick_token()
+        token = self._pick_token()
         logger.debug(
             "IamTokenService.CreateForService called, service_id=%s microservice_id=%s resource_id=%s target_sa=%s token=%s",
             request.service_id, request.microservice_id, request.resource_id, request.target_service_account_id, token
         )
-        return make_response(token, self.expires_in)
+
+        target_sa = request.target_service_account_id
+        expires_in = self.expires_in
+
+        if target_sa == 'bad':
+            context.set_code(grpc.StatusCode.PERMISSION_DENIED)
+            context.set_details("Reject bad SA")
+            return iam_token_service_pb2.CreateIamTokenResponse()
+
+        if target_sa == 'bad-token':
+            return make_response("badtoken@builtin", expires_in)
+
+        if target_sa.startswith('bad-skip-'):
+            skips = int(target_sa.split('-')[-1])
+            self.calls += 1
+            self.calls %= skips + 1
+            expires_in = 0
+            if self.calls == 0:
+                context.set_code(grpc.StatusCode.PERMISSION_DENIED)
+                context.set_details("Reject bad SA")
+                return iam_token_service_pb2.CreateIamTokenResponse()
+
+        if target_sa.startswith('bad-token-skip-'):
+            skips = int(target_sa.split('-')[-1])
+            self.token_calls += 1
+            self.token_calls %= skips + 1
+            expires_in = 0
+            if self.token_calls == 0:
+                return make_response("badtoken@builtin", expires_in)
+
+        if target_sa == 'bad-token':
+            return make_response("badtoken@builtin", expires_in)
+
+        return make_response(token, expires_in)
 
 
 def main():

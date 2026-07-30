@@ -425,10 +425,10 @@ public:
             case EType::GlobalFulltextPlain:
             case EType::GlobalFulltextRelevance:
             case EType::GlobalJson:
-                return true;
             case EType::GlobalFulltextCompact:
             case EType::GlobalFulltextCompactRelevance:
             case EType::GlobalJsonCompact:
+                return true;
             case EType::LocalBloomFilter:
             case EType::LocalBloomNgramFilter:
             case EType::LocalMinMax:
@@ -1409,7 +1409,10 @@ struct TSecretSettings {
     TString Name;
     TString Value;
     TString ValueParamName; // when set, the value is taken from parameter at execution
-    bool InheritPermissions = false;
+    std::optional<bool> InheritPermissions; // Not set means the option is not specified explicitly
+    bool ReplaceIfExists = false; // CREATE OR REPLACE
+    bool ExistingOk = false; // CREATE IF NOT EXISTS
+    bool MissingOk = false; // ALTER/DROP IF EXISTS
 };
 
 struct TKikimrListPathItem {

@@ -16,7 +16,7 @@ namespace NKqp {
 
  class TRemoveIdenityMapRule : public ISimplifiedRule {
   public:
-    TRemoveIdenityMapRule() : ISimplifiedRule("Remove identity map", ERuleProperties::RequireParents) {}
+    TRemoveIdenityMapRule() : ISimplifiedRule("Remove identity map", ERuleProperties::RequireParents | ERuleProperties::RequireOutputIUs) {}
 
     virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
@@ -43,7 +43,7 @@ class TExtractJoinExpressionsRule : public IRule {
 
  class TPullUpCorrelatedFilterRule : public IRule {
   public:
-    TPullUpCorrelatedFilterRule() : IRule("Pull up correlated filter", ERuleProperties::RequireParents) {}
+    TPullUpCorrelatedFilterRule() : IRule("Pull up correlated filter", ERuleProperties::RequireParents | ERuleProperties::RequireOutputIUs) {}
 
     virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
     virtual bool MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
@@ -141,7 +141,7 @@ class TFuseFiltersRule : public ISimplifiedRule {
 class TPushMapElementsIntoMapRule : public ISimplifiedRule {
   public:
     TPushMapElementsIntoMapRule()
-        : ISimplifiedRule("Push map elements into map", ERuleProperties::RequireParents) {}
+        : ISimplifiedRule("Push map elements into map", ERuleProperties::RequireParents | ERuleProperties::RequireOutputIUs) {}
 
     virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
@@ -150,7 +150,7 @@ class TPushMapElementsIntoMapRule : public ISimplifiedRule {
 class TPushMapElementsThroughInputRule : public ISimplifiedRule {
   public:
     explicit TPushMapElementsThroughInputRule(bool pushExpressions = false)
-        : ISimplifiedRule("Push map elements through input operator", ERuleProperties::RequireParents)
+        : ISimplifiedRule("Push map elements through input operator", ERuleProperties::RequireParents | ERuleProperties::RequireOutputIUs)
         , PushExpressions(pushExpressions) {}
 
     virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
@@ -274,12 +274,16 @@ class TPeepholePredicate : public ISimplifiedRule {
 /**
  * Push ranges to read.
  */
-class TPushRangesRule : public ISimplifiedRule {
-  public:
-      TPushRangesRule() : ISimplifiedRule("Push ranges", ERuleProperties::RequireParents | ERuleProperties::RequireTypes) {}
+class TPushRangesRule: public ISimplifiedRule {
+public:
+    TPushRangesRule(NYql::EStorageType applicableTableType)
+        : ISimplifiedRule("Push ranges", ERuleProperties::RequireParents | ERuleProperties::RequireTypes)
+        , ApplicableTableType(applicableTableType) {
+    }
 
-      virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
-      virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+    NYql::EStorageType ApplicableTableType;
 };
 
 /**
@@ -309,7 +313,7 @@ class TPushOlapProjectionRule : public ISimplifiedRule {
  */
 class TDisableBlocksOnColumnsLimitRule : public ISimplifiedRule {
   public:
-      TDisableBlocksOnColumnsLimitRule() : ISimplifiedRule("Disable blocks on columns limit", ERuleProperties::RequireParents) {}
+      TDisableBlocksOnColumnsLimitRule() : ISimplifiedRule("Disable blocks on columns limit", ERuleProperties::RequireParents | ERuleProperties::RequireOutputIUs) {}
 
       virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
       virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
@@ -429,6 +433,19 @@ class TPruneDeadUnionAllColumnsRule : public IRule {
   public:
     TPruneDeadUnionAllColumnsRule()
         : IRule("Prune dead UnionAll columns", ERuleProperties::RequireLiveness) {}
+
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+/**
+ * Merge a nested UnionAll into its parent, turning a chain of binary unions into a single
+ * own branches and merging it would hand that guarantee over to the parent.
+ */
+class TMergeUnionAllRule : public IRule {
+  public:
+    TMergeUnionAllRule()
+        : IRule("Merge nested UnionAll", ERuleProperties::RequireParents | ERuleProperties::RequireOutputIUs) {}
 
     virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
     virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;

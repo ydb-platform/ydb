@@ -130,8 +130,8 @@ public:
 
         bool isOptional;
         auto unwrappedType = UnpackOptional(type, isOptional);
-        if (!isOptional) {
-            GenerateRequired(elemPtr, buf, type, nativeYtTypeFlags, false);
+        if (!isOptional || IsOptionalSingular(type, nativeYtTypeFlags)) {
+            GenerateRequired(elemPtr, buf, unwrappedType, nativeYtTypeFlags, false);
         } else {
             const auto just = BasicBlock::Create(context, "just", Func_);
             const auto nothing = BasicBlock::Create(context, "nothing", Func_);
@@ -532,7 +532,7 @@ public:
 
         bool isOptional;
         auto unwrappedType = UnpackOptional(type, isOptional);
-        if (isOptional || defValue) {
+        if ((isOptional || defValue) && !IsOptionalSingular(type, nativeYtTypeFlags)) {
             const auto just = BasicBlock::Create(context, "just", Func_);
             const auto nothing = BasicBlock::Create(context, "nothing", Func_);
             const auto done = BasicBlock::Create(context, "done", Func_);
@@ -617,7 +617,7 @@ public:
 
         bool isOptional;
         auto unwrappedType = UnpackOptional(type, isOptional);
-        if (isOptional) {
+        if (isOptional && !IsOptionalSingular(type, nativeYtTypeFlags)) {
             auto& module = Codegen_->GetModule();
             const auto just = BasicBlock::Create(context, "just", Func_);
             const auto nothing = BasicBlock::Create(context, "nothing", Func_);

@@ -1,4 +1,5 @@
 import math
+import re
 import sys
 import warnings
 from collections.abc import Mapping, Sequence
@@ -31,8 +32,8 @@ from urllib.parse import (
 
 import idna
 from multidict import MultiDict, MultiDictProxy, istr
+from propcache.api import under_cached_property as cached_property
 
-from ._helpers import cached_property
 from ._quoting import _Quoter, _Unquoter
 
 DEFAULT_PORTS = {"http": 80, "https": 443, "ws": 80, "wss": 443, "ftp": 21}
@@ -44,6 +45,22 @@ USES_RELATIVE = frozenset(uses_relative)
 SCHEME_REQUIRES_HOST = frozenset(("http", "https", "ws", "wss", "ftp"))
 
 sentinel = object()
+
+# reg-name: unreserved / pct-encoded / sub-delims
+# this pattern matches anything that is *not* in those classes. and is only used
+# on lower-cased ASCII values.
+_not_reg_name = re.compile(
+    r"""
+        # any character not in the unreserved or sub-delims sets, plus %
+        # (validated with the additional check for pct-encoded sequences below)
+        [^a-z0-9\-._~!$&'()*+,;=%]
+    |
+        # % only allowed if it is part of a pct-encoded
+        # sequence of 2 hex digits.
+        %(?![0-9a-f]{2})
+    """,
+    re.VERBOSE,
+)
 
 SimpleQuery = Union[str, int, float]
 QueryVariable = Union[SimpleQuery, "Sequence[SimpleQuery]"]
@@ -64,6 +81,7 @@ class CacheInfo(TypedDict):
     idna_encode: _CacheInfo
     idna_decode: _CacheInfo
     ip_address: _CacheInfo
+    host_validate: _CacheInfo
 
 
 class _SplitResultDict(TypedDict, total=False):
@@ -77,6 +95,7 @@ class _SplitResultDict(TypedDict, total=False):
 
 class _InternalURLCache(TypedDict, total=False):
 
+    _origin: "URL"
     absolute: bool
     scheme: str
     raw_authority: str
@@ -269,7 +288,7 @@ class URL:
                         raise ValueError(msg)
                     else:
                         host = ""
-                host = cls._encode_host(host)
+                host = cls._encode_host(host, validate_host=False)
                 raw_user = None if username is None else cls._REQUOTER(username)
                 raw_password = None if password is None else cls._REQUOTER(password)
                 netloc = cls._make_netloc(
@@ -350,10 +369,15 @@ class URL:
             if encoded:
                 netloc = authority
             else:
-                tmp = SplitResult("", authority, "", "", "")
-                port = None if tmp.port == DEFAULT_PORTS.get(scheme) else tmp.port
+                _user, _password, _host, _port = cls._split_netloc(authority)
+                port = None if _port == DEFAULT_PORTS.get(scheme) else _port
+                _host = (
+                    ""
+                    if _host is None
+                    else cls._encode_host(_host, validate_host=False)
+                )
                 netloc = cls._make_netloc(
-                    tmp.username, tmp.password, tmp.hostname, port, encode=True
+                    _user, _password, _host, port, encode=True, encode_host=False
                 )
         elif not user and not password and not host and not port:
             netloc = ""
@@ -388,14 +412,14 @@ class URL:
         val = self._val
         if not val.path and self.absolute and (val.query or val.fragment):
             val = val._replace(path="/")
-        if False and (port := self._port_not_default) is None:
+        if (port := self._port_not_default) is None:
             # port normalization - using None for default ports to remove from rendering
             # https://datatracker.ietf.org/doc/html/rfc3986.html#section-6.2.3
             val = val._replace(
                 netloc=self._make_netloc(
                     self.raw_user,
                     self.raw_password,
-                    self.raw_host,
+                    self.host_subcomponent,
                     port,
                     encode_host=False,
                 )
@@ -506,12 +530,12 @@ class URL:
         Return False for relative URLs.
 
         """
-        default = self._default_port
-        explicit = self.explicit_port
-        if explicit is None:
-            # A relative URL does not have an implicit port / default port
-            return default is not None
-        return explicit == default
+        if (explicit := self.explicit_port) is None:
+            # If the explicit port is None, then the URL must be
+            # using the default port unless its a relative URL
+            # which does not have an implicit port / default port
+            return self.absolute
+        return explicit == self._default_port
 
     def origin(self) -> "URL":
         """Return an URL with scheme, host and port parts only.
@@ -520,13 +544,24 @@ class URL:
 
         """
         # TODO: add a keyword-only option for keeping user/pass maybe?
-        if not self.absolute:
-            raise ValueError("URL should be absolute")
-        if not self._val.scheme:
-            raise ValueError("URL should have scheme")
+        return self._origin
+
+    @cached_property
+    def _origin(self) -> "URL":
+        """Return an URL with scheme, host and port parts only.
+
+        user, password, path, query and fragment are removed.
+        """
         v = self._val
-        netloc = self._make_netloc(None, None, v.hostname, v.port)
-        val = v._replace(netloc=netloc, path="", query="", fragment="")
+        if not v.netloc:
+            raise ValueError("URL should be absolute")
+        if not v.scheme:
+            raise ValueError("URL should have scheme")
+        if "@" not in v.netloc:
+            val = v._replace(path="", query="", fragment="")
+        else:
+            netloc = self._make_netloc(None, None, v.hostname, v.port)
+            val = v._replace(netloc=netloc, path="", query="", fragment="")
         return URL(val, encoded=True)
 
     def relative(self) -> "URL":
@@ -575,15 +610,15 @@ class URL:
     @cached_property
     def _default_port(self) -> Union[int, None]:
         """Default port for the scheme or None if not known."""
-        return DEFAULT_PORTS.get(self.scheme)
+        return DEFAULT_PORTS.get(self._val.scheme)
 
     @cached_property
     def _port_not_default(self) -> Union[int, None]:
         """The port part of URL normalized to None if its the default port."""
-        port = self.port
-        if self._default_port == port:
+        explicit_port = self.explicit_port
+        if explicit_port is None or explicit_port == self._default_port:
             return None
-        return port
+        return explicit_port
 
     @cached_property
     def authority(self) -> str:
@@ -647,6 +682,8 @@ class URL:
 
         None for relative URLs.
 
+        When working with IPv6 addresses, use the `host_subcomponent` property instead
+        as it will return the host subcomponent with brackets.
         """
         # Use host instead of hostname for sake of shortness
         # May add .hostname prop later
@@ -660,15 +697,34 @@ class URL:
         None for relative URLs.
 
         """
-        raw = self.raw_host
-        if raw is None:
+        if (raw := self.raw_host) is None:
             return None
-        if "%" in raw:
-            # Hack for scoped IPv6 addresses like
-            # fe80::2%Перевірка
-            # presence of '%' sign means only IPv6 address, so idna is useless.
+        if raw and raw[-1].isdigit() or ":" in raw:
+            # IP addresses are never IDNA encoded
             return raw
         return _idna_decode(raw)
+
+    @cached_property
+    def host_subcomponent(self) -> Union[str, None]:
+        """Return the host subcomponent part of URL.
+
+        None for relative URLs.
+
+        https://datatracker.ietf.org/doc/html/rfc3986#section-3.2.2
+
+        `IP-literal = "[" ( IPv6address / IPvFuture  ) "]"`
+
+        Examples:
+        - `http://example.com:8080` -> `example.com`
+        - `http://example.com:80` -> `example.com`
+        - `https://127.0.0.1:8443` -> `127.0.0.1`
+        - `https://[::1]:8443` -> `[::1]`
+        - `http://[::1]` -> `[::1]`
+
+        """
+        if (raw := self.raw_host) is None:
+            return None
+        return f"[{raw}]" if ":" in raw else raw
 
     @cached_property
     def port(self) -> Union[int, None]:
@@ -725,7 +781,7 @@ class URL:
     @cached_property
     def _parsed_query(self) -> List[Tuple[str, str]]:
         """Parse query part of URL."""
-        return parse_qsl(self.raw_query_string, keep_blank_values=True)
+        return parse_qsl(self._val.query, keep_blank_values=True)
 
     @cached_property
     def query(self) -> "MultiDictProxy[str]":
@@ -753,7 +809,7 @@ class URL:
         Empty string if query is missing.
 
         """
-        return self._QS_UNQUOTER(self.raw_query_string)
+        return self._QS_UNQUOTER(self._val.query)
 
     @cached_property
     def path_qs(self) -> str:
@@ -765,9 +821,9 @@ class URL:
     @cached_property
     def raw_path_qs(self) -> str:
         """Encoded path of URL with query."""
-        if not self.raw_query_string:
+        if not self._val.query:
             return self.raw_path
-        return f"{self.raw_path}?{self.raw_query_string}"
+        return f"{self.raw_path}?{self._val.query}"
 
     @cached_property
     def raw_fragment(self) -> str:
@@ -785,7 +841,7 @@ class URL:
         Empty string if fragment is missing.
 
         """
-        return self._UNQUOTER(self.raw_fragment)
+        return self._UNQUOTER(self._val.fragment)
 
     @cached_property
     def raw_parts(self) -> Tuple[str, ...]:
@@ -824,7 +880,7 @@ class URL:
         """
         path = self.raw_path
         if not path or path == "/":
-            if self.raw_fragment or self.raw_query_string:
+            if self._val.fragment or self._val.query:
                 return URL(self._val._replace(query="", fragment=""), encoded=True)
             return self
         parts = path.split("/")
@@ -938,14 +994,21 @@ class URL:
         return prefix + "/".join(_normalize_path_segments(segments))
 
     @classmethod
-    def _encode_host(cls, host: str, human: bool = False) -> str:
-        if "%" in host:
-            raw_ip, sep, zone = host.partition("%")
-        else:
-            raw_ip = host
-            sep = zone = ""
-
-        if raw_ip and raw_ip[-1].isdigit() or ":" in raw_ip:
+    def _encode_host(
+        cls, host: str, human: bool = False, validate_host: bool = True
+    ) -> str:
+        if host and host[-1].isdigit() or ":" in host:
+            # If the host ends with a digit or contains a colon, its likely
+            # an IP address. So we check with _ip_compressed_version
+            # and fall-through if its not an IP address. This is a performance
+            # optimization to avoid parsing IP addresses as much as possible
+            # because it is orders of magnitude slower than almost any other
+            # operation this library does.
+            if "%" in host:
+                raw_ip, sep, zone = host.partition("%")
+            else:
+                raw_ip = host
+                sep = zone = ""
             # Might be an IP address, check it
             #
             # IP Addresses can look like:
@@ -953,13 +1016,10 @@ class URL:
             # - 127.0.0.1 (last character is a digit)
             # - 2001:db8::ff00:42:8329 (contains a colon)
             # - 2001:db8::ff00:42:8329%eth0 (contains a colon)
-            # - [2001:db8::ff00:42:8329] (contains a colon)
+            # - [2001:db8::ff00:42:8329] (contains a colon -- brackets should
+            #                             have been removed before it gets here)
             # Rare IP Address formats are not supported per:
             # https://datatracker.ietf.org/doc/html/rfc3986#section-7.4
-            #
-            # We try to avoid parsing IP addresses as much as possible
-            # since its orders of magnitude slower than almost any other operation
-            # this library does.
             #
             # IP parsing is slow, so its wrapped in an LRU
             try:
@@ -970,18 +1030,23 @@ class URL:
                 # These checks should not happen in the
                 # LRU to keep the cache size small
                 host, version = ip_compressed_version
-                if sep:
-                    host += "%" + zone
                 if version == 6:
-                    return f"[{host}]"
-                return host
+                    return f"[{host}%{zone}]" if sep else f"[{host}]"
+                return f"{host}%{zone}" if sep else host
 
         host = host.lower()
+        if human:
+            return host
+
         # IDNA encoding is slow,
         # skip it for ASCII-only strings
         # Don't move the check into _idna_encode() helper
         # to reduce the cache size
-        if human or host.isascii():
+        if host.isascii():
+            # Check for invalid characters explicitly; _idna_encode() does this
+            # for non-ascii host names.
+            if validate_host:
+                _host_validate(host)
             return host
         return _idna_encode(host)
 
@@ -998,26 +1063,24 @@ class URL:
     ) -> str:
         if host is None:
             return ""
-        quoter = cls._REQUOTER if requote else cls._QUOTER
-        if encode_host:
-            ret = cls._encode_host(host)
-        else:
-            ret = host
+        ret = cls._encode_host(host) if encode_host else host
         if port is not None:
             ret = f"{ret}:{port}"
+        if user is None and password is None:
+            return ret
+        quoter = cls._REQUOTER if requote else cls._QUOTER
         if password is not None:
             if not user:
                 user = ""
-            else:
-                if encode:
-                    user = quoter(user)
+            elif encode:
+                user = quoter(user)
             if encode:
                 password = quoter(password)
-            user = user + ":" + password
+            user = f"{user}:{password}"
         elif user and encode:
             user = quoter(user)
         if user:
-            ret = user + "@" + ret
+            ret = f"{user}@{ret}"
         return ret
 
     @classmethod
@@ -1298,7 +1361,7 @@ class URL:
         new_query_string = self._get_str_query(*args, **kwargs)
         if not new_query_string:
             return self
-        if current_query := self.raw_query_string:
+        if current_query := self._val.query:
             # both strings are already encoded so we can use a simple
             # string join
             if current_query[-1] == "&":
@@ -1362,7 +1425,7 @@ class URL:
             raise TypeError("Invalid fragment type")
         else:
             raw_fragment = self._FRAGMENT_QUOTER(fragment)
-        if self.raw_fragment == raw_fragment:
+        if self._val.fragment == raw_fragment:
             return self
         return URL(self._val._replace(fragment=raw_fragment), encoded=True)
 
@@ -1496,7 +1559,7 @@ class URL:
         netloc = self._make_netloc(
             user, password, host, self.explicit_port, encode_host=False
         )
-        val = SplitResult(self.scheme, netloc, path, query_string, fragment)
+        val = SplitResult(self._val.scheme, netloc, path, query_string, fragment)
         return urlunsplit(val)
 
 
@@ -1537,12 +1600,31 @@ def _ip_compressed_version(raw_ip: str) -> Tuple[str, int]:
     return ip.compressed, ip.version
 
 
+@lru_cache(_MAXCACHE)
+def _host_validate(host: str) -> None:
+    """Validate an ascii host name."""
+    invalid = _not_reg_name.search(host)
+    if invalid is None:
+        return
+    value, pos, extra = invalid.group(), invalid.start(), ""
+    if value == "@" or (value == ":" and "@" in host[pos:]):
+        # this looks like an authority string
+        extra = (
+            ", if the value includes a username or password, "
+            "use 'authority' instead of 'host'"
+        )
+    raise ValueError(
+        f"Host {host!r} cannot contain {value!r} (at position " f"{pos}){extra}"
+    ) from None
+
+
 @rewrite_module
 def cache_clear() -> None:
     """Clear all LRU caches."""
     _idna_decode.cache_clear()
     _idna_encode.cache_clear()
     _ip_compressed_version.cache_clear()
+    _host_validate.cache_clear()
 
 
 @rewrite_module
@@ -1552,6 +1634,7 @@ def cache_info() -> CacheInfo:
         "idna_encode": _idna_encode.cache_info(),
         "idna_decode": _idna_decode.cache_info(),
         "ip_address": _ip_compressed_version.cache_info(),
+        "host_validate": _host_validate.cache_info(),
     }
 
 
@@ -1561,12 +1644,14 @@ def cache_configure(
     idna_encode_size: Union[int, None] = _MAXCACHE,
     idna_decode_size: Union[int, None] = _MAXCACHE,
     ip_address_size: Union[int, None] = _MAXCACHE,
+    host_validate_size: Union[int, None] = _MAXCACHE,
 ) -> None:
     """Configure LRU cache sizes."""
-    global _idna_decode, _idna_encode, _ip_compressed_version
+    global _idna_decode, _idna_encode, _ip_compressed_version, _host_validate
 
     _idna_encode = lru_cache(idna_encode_size)(_idna_encode.__wrapped__)
     _idna_decode = lru_cache(idna_decode_size)(_idna_decode.__wrapped__)
     _ip_compressed_version = lru_cache(ip_address_size)(
         _ip_compressed_version.__wrapped__
     )
+    _host_validate = lru_cache(host_validate_size)(_host_validate.__wrapped__)

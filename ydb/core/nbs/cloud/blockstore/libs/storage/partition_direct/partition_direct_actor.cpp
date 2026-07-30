@@ -46,22 +46,20 @@ TPartitionActor::TPartitionActor(
     LOG_INFO(
         NActors::TActivationContext::AsActorContext(),
         NKikimrServices::NBS_PARTITION,
-        "%s TPartitionActor: initialization started",
+        "%s initialization started",
         LogTitle.GetWithTime().c_str());
 }
 
 TPartitionActor::~TPartitionActor() = default;
 
-void TPartitionActor::PassAway()
+void TPartitionActor::OnDetach(const TActorContext& ctx)
 {
     LOG_INFO(
         NActors::TActivationContext::AsActorContext(),
         NKikimrServices::NBS_PARTITION,
-        "TPartitionActor: before detach");
-}
+        "%s OnDetach",
+        LogTitle.GetWithTime().c_str());
 
-void TPartitionActor::OnDetach(const TActorContext& ctx)
-{
     Die(ctx);
 }
 
@@ -69,7 +67,15 @@ void TPartitionActor::OnTabletDead(
     TEvTablet::TEvTabletDead::TPtr& ev,
     const TActorContext& ctx)
 {
-    Y_UNUSED(ev);
+    const auto* msg = ev->Get();
+
+    LOG_INFO(
+        NActors::TActivationContext::AsActorContext(),
+        NKikimrServices::NBS_PARTITION,
+        "%s OnTabletDead %s",
+        LogTitle.GetWithTime().c_str(),
+        TEvTablet::TEvTabletDead::Str(msg->Reason));
+
     Die(ctx);
 }
 
@@ -194,17 +200,13 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
             TActivationContext::ActorSystem(),
             nbsService->StorageConfig,
             executors[dbgIndex],
-            VolumeConfig.GetDiskId(),
-            TabletID(),
-            Executor()->Generation(),   // generation
+            DiskDescription,
             dbgIndex,
             std::move(ddiskIds),
             std::move(persistentBufferDDiskIds),
             std::make_unique<NTransport::TICStorageTransport>(
                 TActivationContext::ActorSystem(),
-                NTransport::CreateTransportActor(
-                    VolumeConfig.GetDiskId(),
-                    dbgIndex)));
+                NTransport::CreateTransportActor(DiskDescription, dbgIndex)));
 
         directBlockGroups.emplace_back(std::move(directBlockGroup));
     }
@@ -255,6 +257,9 @@ void TPartitionActor::Start(
 {
     LogTitle.SetDiskId(VolumeConfig.GetDiskId());
     LogTitle.SetGeneration(Executor()->Generation());
+    DiskDescription.DiskId = VolumeConfig.GetDiskId();
+    DiskDescription.TabletId = TabletID();
+    DiskDescription.Generation = Executor()->Generation();
 
     LOG_INFO(
         ctx,
@@ -279,8 +284,7 @@ void TPartitionActor::Start(
     FastPathService = std::make_shared<TFastPathService>(
         TActivationContext::ActorSystem(),
         SelfId(),
-        TabletID(),
-        VolumeConfig.GetDiskId(),
+        DiskDescription,
         blockCount,
         VolumeConfig.GetBlockSize(),
         CreateDirectBlockGroups(std::move(directBlockGroupsConnections)),
@@ -434,6 +438,22 @@ void TPartitionActor::HandleFastPathServiceStopped(
         LogTitle.GetWithTime().c_str());
 }
 
+void TPartitionActor::HandlePoisonByBlockedGeneration(
+    const TEvPartitionDirectPrivate::TEvPoison::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    const auto* msg = ev->Get();
+
+    LOG_CRIT(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s SUICIDE by BLOCKED generation. Reason: %s",
+        LogTitle.GetWithTime().c_str(),
+        msg->Reason.c_str());
+
+    ctx.Send(Tablet(), std::make_unique<TEvents::TEvPoisonPill>().release());
+}
+
 void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
     const TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
     const NActors::TActorContext& ctx)
@@ -492,84 +512,6 @@ void TPartitionActor::HandleInitialAllocationResult(
     }
 
     NTabletPipe::CloseClient(ctx, BSControllerPipeClient);
-}
-
-void TPartitionActor::HandleAddHostToDBG(
-    const TEvPartitionDirectPrivate::TEvAddHostToDBG::TPtr& ev,
-    const NActors::TActorContext& ctx)
-{
-    const auto* msg = ev->Get();
-    const auto dbgId = msg->DirectBlockGroupId;
-
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Handle AddHostToDBG dbgId=%lu",
-        LogTitle.GetWithTime().c_str(),
-        dbgId);
-
-    // TEvAddHostToDBG is only sent via a running FastPathService (by a DBG or
-    // by the mon page button), so it (and the allocated DBGs) is alive by the
-    // time we handle the request.
-    Y_ABORT_UNLESS(FastPathService);
-
-    if (!ValidateAddHostToDBGRequest(ctx, dbgId)) {
-        return;
-    }
-
-    const auto& dbgConn =
-        DirectBlockGroupsConnections.GetDirectBlockGroupConnections(dbgId);
-    const auto currentSize = static_cast<ui32>(dbgConn.GetConnections().size());
-
-    // Persist the intent before the BSController request (sent from the tx's
-    // completion). A crash after the DDisk is allocated but before the
-    // connection is persisted then leaves a durable intent, replayed on
-    // restart.
-    AddHostInFlight = TAddHostInFlight{
-        .DirectBlockGroupId = dbgId,
-        .NewHostIndex = static_cast<THostIndex>(currentSize),
-    };
-
-    ExecuteTx(
-        ctx,
-        CreateTx<TStartAddHost>(dbgId, static_cast<THostIndex>(currentSize)));
-}
-
-void TPartitionActor::SendAllocateDDiskForAddHost(
-    const TActorContext& ctx,
-    size_t dbgId,
-    THostIndex newHostIndex)
-{
-    Y_ABORT_UNLESS(AddHostInFlight.has_value());
-
-    const ui64 blockCount = VolumeConfig.GetPartitions(0).GetBlockCount();
-    const ui64 regionsCount =
-        AlignUp(blockCount * VolumeConfig.GetBlockSize(), RegionSize) /
-        RegionSize;
-
-    const auto pipe = ctx.Register(
-        NTabletPipe::CreateClient(ctx.SelfID, MakeBSControllerID()));
-    AddHostInFlight->BSPipeClient = pipe;
-
-    // Idempotent: NumDDisks=N+1 is the desired final state, not "add one"; a
-    // re-sent request returns the same DDisk from BSController's persisted
-    // allocation, so a retry (e.g. after a restart) is safe.
-    const ui32 numDDisks = static_cast<ui32>(newHostIndex) + 1;
-    auto request = std::make_unique<
-        TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
-    request->Record.SetDDiskPoolName(StorageConfig->GetDDiskPoolName());
-    request->Record.SetPersistentBufferDDiskPoolName(
-        StorageConfig->GetPersistentBufferDDiskPoolName());
-    request->Record.SetTabletId(TabletID());
-
-    auto* op = request->Record.AddDirectBlockGroupOperations();
-    op->SetDirectBlockGroupId(dbgId);
-    auto* define = op->MutableDefineDirectBlockGroup();
-    define->SetNumDDisks(numDDisks);
-    define->SetNumChunksPerDDisk(regionsCount);
-    define->SetNumPersistentBuffers(numDDisks);
-
-    NTabletPipe::SendData(ctx, pipe, request.release(), dbgId);
 }
 
 void TPartitionActor::HandleGetLoadActorAdapterActorId(
@@ -643,16 +585,20 @@ void TPartitionActor::HandleUpdateVChunkConfig(
     const TEvPartitionDirectPrivate::TEvUpdateVChunkConfig::TPtr& ev,
     const NActors::TActorContext& ctx)
 {
-    auto& cfg = ev->Get()->VChunkConfig;
+    auto* msg = ev->Get();
 
     LOG_INFO(
         ctx,
         NKikimrServices::NBS_PARTITION,
         "%s Handle UpdateVChunkConfig %s",
         LogTitle.GetWithTime().c_str(),
-        cfg.DebugPrint().c_str());
+        msg->VChunkConfig.DebugPrint().c_str());
 
-    ExecuteTx(ctx, CreateTx<TUpdateVChunkConfig>(std::move(cfg)));
+    ExecuteTx(
+        ctx,
+        CreateTx<TUpdateVChunkConfig>(
+            std::move(msg->VChunkConfig),
+            std::move(msg->UpdateCompleted)));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -694,15 +640,19 @@ STFUNC(TPartitionActor::StateWork)
             TEvPartitionDirectPrivate::TEvFastPathServiceStopped,
             HandleFastPathServiceStopped);
 
-        HFunc(NMon::TEvRemoteHttpInfo, HandleHttpInfo);
+        HFunc(
+            TEvPartitionDirectPrivate::TEvPoison,
+            HandlePoisonByBlockedGeneration);
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
-                LOG_DEBUG_S(
+                LOG_ERROR(
                     TActivationContext::AsActorContext(),
                     NKikimrServices::NBS_PARTITION,
-                    "Unhandled event type: " << ev->GetTypeRewrite()
-                                             << " event: " << ev->ToString());
+                    "%s Unhandled event type: %u event %s ",
+                    LogTitle.GetWithTime().c_str(),
+                    ev->GetTypeRewrite(),
+                    ev->ToString().c_str());
             }
             break;
     }

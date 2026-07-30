@@ -59,6 +59,7 @@ class Workload:
 
         self.successful_inserts = 0
         self.attempted_inserts = 0
+        self._base_ts_sec = int(time.time())
 
         self.driver = None
         self.pool = None
@@ -159,10 +160,11 @@ class Workload:
             f"`{self.SOLOMON_PROJECT}/{self.SOLOMON_CLUSTER}/{self.SOLOMON_SERVICE}`"
         )
         rows = []
-        for _ in range(self.INSERT_BATCH_SIZE):
+        for i in range(self.INSERT_BATCH_SIZE):
             label = random.choice(self.LABEL_VALUES)
             sensor = random.randint(*self.SENSOR_RANGE)
-            ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            ts_sec = self._base_ts_sec + self.attempted_inserts * self.INSERT_BATCH_SIZE + i
+            ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(ts_sec))
             rows.append(
                 f'SELECT Unwrap(CAST("{ts}" AS Timestamp)) AS Ts, '
                 f'"{label}" AS Label, {sensor} AS Sensor'

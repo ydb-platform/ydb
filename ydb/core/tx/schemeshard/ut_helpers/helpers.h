@@ -337,6 +337,7 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(AlterSecret);
     GENERIC_HELPERS(DropSecret);
     DROP_BY_PATH_ID_HELPERS(DropSecret);
+    void TestCreateSecretOrReplace(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& scheme, const TVector<TExpectedResult>& expectedResults = {{NKikimrScheme::StatusAccepted}});
 
     // streaming query
     GENERIC_HELPERS(CreateStreamingQuery);
@@ -686,14 +687,6 @@ namespace NSchemeShardUT_Private {
         const TString& user, NLoginProto::ESaslAuthMech::SaslAuthMech authMech,
         NLoginProto::EHashType::HashType hashType, const TString& hash, const TString& authMessage = "");
 
-    NKikimrScheme::TEvLoginResult LoginFinalize(
-        TTestActorRuntime& runtime,
-        const NLogin::TLoginProvider::TLoginUserRequest& request,
-        const NLogin::TLoginProvider::TPasswordCheckResult& checkResult,
-        const TString& passwordHash,
-        const bool needUpdateCache
-    );
-
     void ModifyUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, std::function<void(::NKikimrSchemeOp::TLoginModifyUser*)>&& initiator);
 
     void ChangeIsEnabledUser(TTestActorRuntime& runtime, ui64 txId, const TString& database,
@@ -813,5 +806,6 @@ namespace NSchemeShardUT_Private {
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
     NKikimrSetColumnConstraint::TEvForgetResponse TestForgetSetColumnConstraint(TTestActorRuntime& runtime, ui64 txId, const TString& dbName, ui64 operationId,
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
+    NKikimrSetColumnConstraint::TEvCancelResponse TestCancelSetColumnConstraint(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& dbName, ui64 operationId);
     void TestCheckColumnsNotNull(TTestActorRuntime& runtime, const TString& tablePath, const std::map<TString, bool>& expectedColumnNotNullStates);
 } //NSchemeShardUT_Private

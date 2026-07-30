@@ -450,6 +450,15 @@ public:
             return result;
         }
 
+        auto guard = context.DbGuard();
+        context.MemChanges.GrabNewTxState(context.SS, OperationId);
+        context.MemChanges.GrabPath(context.SS, path.Base()->PathId);
+        context.MemChanges.GrabPath(context.SS, parent.Base()->PathId);
+
+        context.DbChanges.PersistTxState(OperationId);
+        context.DbChanges.PersistPath(path.Base()->PathId);
+        context.DbChanges.PersistPath(parent.Base()->PathId);
+
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxDropColumnTable, path.Base()->PathId);
         txState.State = TTxState::DropParts;
         // Dirty hack: drop step must not be zero because 0 is treated as "hasn't been dropped"
@@ -459,7 +468,6 @@ public:
         Y_ABORT_UNLESS(context.SS->ColumnTables.contains(path.Base()->PathId));
         auto tableInfo = context.SS->ColumnTables.GetVerified(path.Base()->PathId);
         if (tableInfo->IsStandalone()) {
-            NIceDb::TNiceDb db(context.GetDB());
             for (auto shardIdx : tableInfo->BuildOwnedColumnShardsVerified()) {
                 Y_VERIFY_S(context.SS->ShardInfos.contains(shardIdx), "Unknown shardIdx " << shardIdx);
                 txState.Shards.emplace_back(shardIdx, context.SS->ShardInfos[shardIdx].TabletType, TTxState::DropParts);
@@ -467,8 +475,9 @@ public:
                 auto& shardInfo = context.SS->ShardInfos[shardIdx];
                 if (shardInfo.PathId == path.Base()->PathId) {
                     // We are the owner of this shard - set LastTxId on the shard itself
+                    context.MemChanges.GrabShard(context.SS, shardIdx);
+                    context.DbChanges.PersistShard(shardIdx);
                     shardInfo.CurrentTxId = opTxId;
-                    context.SS->PersistShardTx(db, shardIdx, opTxId);
                 } else {
                     // We are a sharer (not the owner) - set LastTxId on our SharedShards entry
                     auto sharedIt = context.SS->SharedShards.find(shardIdx);
@@ -477,8 +486,9 @@ public:
                     auto pathIt = sharedIt->second.find(path.Base()->PathId);
                     Y_VERIFY_S(pathIt != sharedIt->second.end(),
                         "SharedShards entry not found for pathId " << path.Base()->PathId);
+                    context.MemChanges.GrabSharedShard(context.SS, shardIdx, path.Base()->PathId);
                     pathIt->second = opTxId;
-                    context.SS->PersistSharedShardTx(db, shardIdx, path.Base()->PathId, opTxId);
+                    context.DbChanges.PersistSharedShard(shardIdx, path.Base()->PathId, opTxId);
                 }
             }
         } else {
@@ -510,8 +520,8 @@ public:
             }
             storePath.Base()->LastTxId = opTxId;
 
-            NIceDb::TNiceDb db(context.GetDB());
-            context.SS->PersistLastTxId(db, storePath.Base());
+            context.MemChanges.GrabPath(context.SS, storePathId);
+            context.DbChanges.PersistPath(storePathId);
 
             // TODO: we need to know all shards where this table has ever been created
             for (ui64 columnShardId : tableInfo->GetColumnShards()) {
@@ -519,10 +529,11 @@ public:
                 auto shardIdx = context.SS->TabletIdToShardIdx.at(tabletId);
 
                 Y_VERIFY_S(context.SS->ShardInfos.contains(shardIdx), "Unknown shardIdx " << shardIdx);
+                context.MemChanges.GrabShard(context.SS, shardIdx);
+                context.DbChanges.PersistShard(shardIdx);
                 txState.Shards.emplace_back(shardIdx, context.SS->ShardInfos[shardIdx].TabletType, TTxState::DropParts);
 
                 context.SS->ShardInfos[shardIdx].CurrentTxId = opTxId;
-                context.SS->PersistShardTx(db, shardIdx, opTxId);
             }
         }
 
@@ -532,18 +543,9 @@ public:
         path.Base()->DropTxId = opTxId;
         path.Base()->LastTxId = opTxId;
 
-        NIceDb::TNiceDb db(context.GetDB());
-        context.SS->PersistLastTxId(db, path.Base());
-        context.SS->PersistTxState(db, OperationId);
-
         context.SS->TabletCounters->Simple()[COUNTER_COLUMN_TABLE_COUNT].Sub(1);
 
-        Y_VERIFY_S(context.SS->PathsById.contains(path.Base()->ParentPathId),
-                   "no parent with id: " << path.Base()->ParentPathId << " for node with id: " << path.Base()->PathId);
-        ++parent.Base()->DirAlterVersion;
-        context.SS->PersistPathDirAlterVersion(db, parent.Base());
-        context.SS->ClearDescribePathCaches(parent.Base());
-        context.SS->ClearDescribePathCaches(path.Base());
+        IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, path, context.SS, context.OnComplete);
 
         if (!context.SS->DisablePublicationsOfDropping) {
             context.OnComplete.PublishToSchemeBoard(OperationId, parent.Base()->PathId);
@@ -554,8 +556,11 @@ public:
         return result;
     }
 
-    void AbortPropose(TOperationContext&) override {
-        Y_ABORT("no AbortPropose for TDropColumnTable");
+    void AbortPropose(TOperationContext& context) override {
+        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                     "TDropColumnTable AbortPropose"
+                         << ", opId: " << OperationId
+                         << ", at schemeshard: " << context.SS->TabletID());
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {

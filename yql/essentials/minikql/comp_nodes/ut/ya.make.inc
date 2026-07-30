@@ -43,6 +43,8 @@ SET(ORIG_SOURCES
     mkql_block_variant_ut.cpp
     mkql_block_uuid_ut.cpp
     mkql_block_dynumber_ut.cpp
+    mkql_block_variant_item_ut.cpp
+    mkql_block_variant_node_ut.cpp
     mkql_blocks_ut.cpp
     mkql_callable_ut.cpp
     mkql_combine_ut.cpp
@@ -81,6 +83,7 @@ SET(ORIG_SOURCES
     mkql_switch_ut.cpp
     mkql_time_order_recover_saveload_ut.cpp
     mkql_todict_ut.cpp
+    mkql_udf_profile_ut.cpp
     mkql_udf_ut.cpp
     mkql_variant_ut.cpp
     mkql_wide_chain_map_ut.cpp

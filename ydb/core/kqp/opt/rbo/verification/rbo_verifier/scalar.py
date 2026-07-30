@@ -346,6 +346,29 @@ class Encoder:
         if expression.kind == "if_present":
             assert expression.result_type is not None
             optional = self._evaluate(expression.args[0], row, bindings)
+            present_expression = expression.args[1]
+            missing_expression = expression.args[2]
+            if (
+                expression.result_type == BOOL
+                and expression.nullable is False
+                and present_expression.kind == "bound"
+                and present_expression.depth == 0
+                and missing_expression.kind == "literal"
+                and missing_expression.result_type == BOOL
+                and missing_expression.nullable is False
+                and type(missing_expression.value) is bool
+            ):
+                assert optional.type == BOOL
+                value = (
+                    smt.or_(optional.is_null, optional.value)
+                    if missing_expression.value
+                    else smt.and_(
+                        smt.not_(optional.is_null),
+                        optional.value,
+                    )
+                )
+                return Value(BOOL, smt.FALSE, value)
+
             payload = Value(
                 optional.type,
                 smt.FALSE,
@@ -353,11 +376,11 @@ class Encoder:
                 optional.decimal_finite_abs_bound,
             )
             present = self._evaluate(
-                expression.args[1],
+                present_expression,
                 row,
                 (payload, *bindings),
             )
-            missing = self._evaluate(expression.args[2], row, bindings)
+            missing = self._evaluate(missing_expression, row, bindings)
             assert present.type == missing.type == expression.result_type
             bound = (
                 _selected_decimal_finite_abs_bound(present, missing)

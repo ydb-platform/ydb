@@ -3383,12 +3383,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST(LookupJoins_newRbo) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
-        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
         appConfig.MutableTableServiceConfig()->SetEnableAutoIndexSelectionForIndexLookupJoin(true);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
-        // appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
 
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();
@@ -3484,20 +3482,21 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 WHERE t1.SubKey2 = "1" AND t2.SubKey2 = "1"
                 ORDER BY t1.Value2, t2.Value2;
             )",
-            // R"(
-            //     -- LookupJoin, PK left / PK right (probe t2 by Key)
-            //     SELECT t1.Value1, t2.Value1
-            //     FROM `/Root/Table` AS t1 INNER JOIN `/Root/Table2` AS t2 ON t1.Key = t2.Key
-            //     WHERE t1.Key >= 0
-            //     ORDER BY t1.Value1, t2.Value1;
-            // )",
-            // R"(
-            //     -- LookupJoin, Index12 left / PK right (t1 via Index12 filter, probe t2 PK)
-            //     SELECT t1.Value1, t2.Value1
-            //     FROM `/Root/Table` AS t1 INNER JOIN `/Root/Table2` AS t2 ON t1.Key = t2.Key
-            //     WHERE t1.SubKey1 = 0 AND t1.SubKey2 = "0"
-            //     ORDER BY t1.Value1, t2.Value1;
-            // )",
+            R"(
+                -- LookupJoin, PK left / PK right (probe t2 by Key)
+                SELECT t1.Value1, t2.Value1
+                FROM `/Root/Table` AS t1 INNER JOIN `/Root/Table2` AS t2 ON t1.Key = t2.Key
+                WHERE t1.Key >= 0
+                ORDER BY t1.Value1, t2.Value1;
+            )",
+            R"(
+                -- LookupJoin, Index12 left / PK right (t1 via Index12 filter, probe t2 PK)
+                SELECT t1.Value1, t2.Value1
+                FROM `/Root/Table` AS t1 INNER JOIN `/Root/Table2` AS t2 ON t1.Key = t2.Key
+                WHERE t1.SubKey1 = 0 AND t1.SubKey2 = "0"
+                ORDER BY t1.Value1, t2.Value1;
+            )",
+            // Choosing a right side index based on join keys is not implemented.
             // R"(
             //     -- LookupJoin, PK left / Index21 right (probe t2 by SubKey2 and need t2.Value1)
             //     SELECT t1.Value1, t2.Value1
@@ -3519,8 +3518,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"([[["1"];["1"]]])",
             R"([[["1"];["1"]];[["3"];["3"]]])",
             R"([[["2"];["2"]];[["4"];["4"]]])",
-            // R"([[["1"];["1"]];[["1"];["2"]];[["1"];["3"]];[["1"];["4"]];[["2"];["1"]];[["2"];["2"]];[["2"];["3"]];[["2"];["4"]];[["3"];["1"]];[["3"];["2"]];[["3"];["3"]];[["3"];["4"]];[["4"];["1"]];[["4"];["2"]];[["4"];["3"]];[["4"];["4"]];[["5"];["15"]];[["5"];["16"]];[["5"];["17"]];[["5"];["18"]];[["6"];["15"]];[["6"];["16"]];[["6"];["17"]];[["6"];["18"]];[["7"];["15"]];[["7"];["16"]];[["7"];["17"]];[["7"];["18"]];[["8"];["15"]];[["8"];["16"]];[["8"];["17"]];[["8"];["18"]]])",
-            // R"([[["1"];["1"]];[["1"];["2"]];[["1"];["3"]];[["1"];["4"]];[["5"];["15"]];[["5"];["16"]];[["5"];["17"]];[["5"];["18"]]])",
+            R"([[["1"];["1"]];[["1"];["2"]];[["1"];["3"]];[["1"];["4"]];[["2"];["1"]];[["2"];["2"]];[["2"];["3"]];[["2"];["4"]];[["3"];["1"]];[["3"];["2"]];[["3"];["3"]];[["3"];["4"]];[["4"];["1"]];[["4"];["2"]];[["4"];["3"]];[["4"];["4"]];[["5"];["15"]];[["5"];["16"]];[["5"];["17"]];[["5"];["18"]];[["6"];["15"]];[["6"];["16"]];[["6"];["17"]];[["6"];["18"]];[["7"];["15"]];[["7"];["16"]];[["7"];["17"]];[["7"];["18"]];[["8"];["15"]];[["8"];["16"]];[["8"];["17"]];[["8"];["18"]]])",
+            R"([[["1"];["1"]];[["1"];["2"]];[["1"];["3"]];[["1"];["4"]];[["5"];["15"]];[["5"];["16"]];[["5"];["17"]];[["5"];["18"]]])",
             // R"([[["5"];["1"]];[["5"];["15"]];[["5"];["17"]];[["5"];["3"]];[["6"];["16"]];[["6"];["18"]];[["6"];["2"]];[["6"];["4"]];[["7"];["1"]];[["7"];["15"]];[["7"];["17"]];[["7"];["3"]];[["8"];["16"]];[["8"];["18"]];[["8"];["2"]];[["8"];["4"]]])",
             // R"([[["1"];["1"]];[["1"];["15"]];[["1"];["17"]];[["1"];["3"]];[["2"];["16"]];[["2"];["18"]];[["2"];["2"]];[["2"];["4"]];[["3"];["1"]];[["3"];["15"]];[["3"];["17"]];[["3"];["3"]];[["4"];["16"]];[["4"];["18"]];[["4"];["2"]];[["4"];["4"]];[["5"];["1"]];[["5"];["15"]];[["5"];["17"]];[["5"];["3"]];[["6"];["16"]];[["6"];["18"]];[["6"];["2"]];[["6"];["4"]];[["7"];["1"]];[["7"];["15"]];[["7"];["17"]];[["7"];["3"]];[["8"];["16"]];[["8"];["18"]];[["8"];["2"]];[["8"];["4"]]])",
         };
@@ -3534,8 +3533,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             {false, {"Index1_12/indexImplTable"}},
             {false, {"Index2_21/indexImplTable"}},
             {false, {"Index1_212/indexImplTable", "Index2_212/indexImplTable"}},
-            // {true,  {}},
-            // {true,  {"Index1_12/indexImplTable"}},
+            {true,  {}},
+            {true,  {"Index1_12/indexImplTable"}},
             // {true,  {"Index2_21/indexImplTable"}},
             // {true,  {"Index1_212/indexImplTable", "Index2_212/indexImplTable"}},
         };
@@ -3573,6 +3572,271 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                     UNIT_ASSERT_C(plan.Contains("indexImplTable"), "query #" << i << " expected an index read, plan:\n" << plan);
                 }
             }
+        }
+    }
+
+    Y_UNIT_TEST(IndexLookupJoinChains) {
+        const TString schema = R"(
+            CREATE TABLE `/Root/t1` (
+                a Int32,
+                b Int32,
+                c Int32,
+                d String,
+                e Int32,
+                f Int64,
+                PRIMARY KEY (a)
+            );
+
+            CREATE TABLE `/Root/t2` (
+                a Int32,
+                b String,
+                c String,
+                PRIMARY KEY (a)
+            );
+
+            CREATE TABLE `/Root/t3` (
+                a Int32,
+                b String,
+                c String,
+                d Int32,
+                e Int32,
+                PRIMARY KEY (a, b)
+            );
+
+            CREATE TABLE `/Root/t4` (
+                a Int32,
+                b String,
+                PRIMARY KEY (a)
+            );
+        )";
+
+        struct TCase {
+            const char* Name;
+            TString Query;
+            // How many joins are expected to be executed as a stream lookup join.
+            ui32 LookupJoins;
+        };
+
+        const TVector<TCase> cases = {
+            {"two lookups by primary key", R"(
+                SELECT t1.a AS a, t2.b AS t2b, t3.c AS t3c
+                FROM `/Root/t1` AS t1
+                    INNER JOIN `/Root/t2` AS t2 ON t1.b = t2.a
+                    INNER JOIN `/Root/t3` AS t3 ON t1.c = t3.a AND t1.d = t3.b
+                ORDER BY a;
+            )", 2},
+
+            {"lookup probed by a column of a previous lookup", R"(
+                SELECT t1.a AS a, t3.c AS t3c, t4.b AS t4b
+                FROM `/Root/t1` AS t1
+                    INNER JOIN `/Root/t3` AS t3 ON t1.c = t3.a AND t1.d = t3.b
+                    INNER JOIN `/Root/t4` AS t4 ON t3.e = t4.a
+                ORDER BY a;
+            )", 2},
+
+            {"three lookups, a filter and an aggregation", R"(
+                SELECT t4.b AS t4b, COUNT(*) AS cnt, SUM(t1.e * t3.d) AS total
+                FROM `/Root/t1` AS t1
+                    INNER JOIN `/Root/t2` AS t2 ON t1.b = t2.a
+                    INNER JOIN `/Root/t3` AS t3 ON t1.c = t3.a AND t1.d = t3.b
+                    INNER JOIN `/Root/t4` AS t4 ON t3.e = t4.a
+                WHERE t2.c = "x"
+                GROUP BY t4.b
+                ORDER BY t4b;
+            )", 3},
+
+            {"left join chain keeps unmatched rows", R"(
+                SELECT t1.a AS a, t2.b AS t2b, t3.c AS t3c
+                FROM `/Root/t1` AS t1
+                    LEFT JOIN `/Root/t2` AS t2 ON t1.b = t2.a
+                    LEFT JOIN `/Root/t3` AS t3 ON t1.c = t3.a AND t1.d = t3.b
+                ORDER BY a;
+            )", 2},
+
+            {"aggregation over an unmatched left join", R"(
+                SELECT COUNT(*) AS total, COUNT(t2.b) AS matched, SUM(t1.e) AS e
+                FROM `/Root/t1` AS t1
+                    LEFT JOIN `/Root/t2` AS t2 ON t1.b = t2.a;
+            )", 1},
+
+            {"key prefix lookup with several matches per key", R"(
+                SELECT t1.a AS a, COUNT(*) AS cnt, SUM(t3.d) AS total
+                FROM `/Root/t1` AS t1
+                    INNER JOIN `/Root/t3` AS t3 ON t1.c = t3.a
+                GROUP BY t1.a
+                ORDER BY a;
+            )", 1},
+
+            {"predicate on the probed side", R"(
+                SELECT t1.a AS a, t3.c AS t3c
+                FROM `/Root/t1` AS t1
+                    INNER JOIN `/Root/t3` AS t3 ON t1.c = t3.a
+                WHERE t3.d >= 20
+                ORDER BY a, t3c;
+            )", 1},
+
+            {"self join by primary key", R"(
+                SELECT x.a AS a, y.e AS e
+                FROM `/Root/t1` AS x
+                    INNER JOIN `/Root/t1` AS y ON x.b = y.a
+                ORDER BY a;
+            )", 1},
+
+            // The join key is the second key column of t3, so a lookup would have to scan the whole
+            // table for every left row.
+            {"join key is not a key prefix", R"(
+                SELECT t1.a AS a, t3.c AS t3c
+                FROM `/Root/t1` AS t1
+                    INNER JOIN `/Root/t3` AS t3 ON t1.d = t3.b
+                ORDER BY a, t3c;
+            )", 0},
+
+            // The lookup key would have to be cast to the type of the probed column first.
+            {"join key types differ", R"(
+                SELECT t1.a AS a, t2.b AS t2b
+                FROM `/Root/t1` AS t1
+                    INNER JOIN `/Root/t2` AS t2 ON t1.f = t2.a
+                ORDER BY a;
+            )", 0},
+        };
+
+        struct TQueryResult {
+            TString Yson;
+            TString Ast;
+            TString Plan;
+        };
+
+        auto runQueries = [&](bool newRbo) {
+            NKikimrConfig::TAppConfig appConfig;
+            appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
+            appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+            appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(0);
+            appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+
+            TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
+
+            auto schemeResult = session.ExecuteSchemeQuery(schema).GetValueSync();
+            UNIT_ASSERT_C(schemeResult.IsSuccess(), schemeResult.GetIssues().ToString());
+
+            auto bulkUpsert = [&](const char* table, NYdb::TValueBuilder& rows) {
+                auto result = db.BulkUpsert(table, rows.Build()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            };
+
+            {
+                NYdb::TValueBuilder rows;
+                rows.BeginList();
+                for (const auto& [a, b, c] : TVector<std::tuple<i32, TString, TString>>{
+                         {1, "n1", "x"}, {2, "n2", "y"}, {3, "n3", "x"}}) {
+                    rows.AddListItem().BeginStruct()
+                        .AddMember("a").OptionalInt32(a)
+                        .AddMember("b").OptionalString(b)
+                        .AddMember("c").OptionalString(c)
+                        .EndStruct();
+                }
+                rows.EndList();
+                bulkUpsert("/Root/t2", rows);
+            }
+
+            {
+                NYdb::TValueBuilder rows;
+                rows.BeginList();
+                for (const auto& [a, b] : TVector<std::tuple<i32, TString>>{{10, "s1"}, {20, "s2"}}) {
+                    rows.AddListItem().BeginStruct()
+                        .AddMember("a").OptionalInt32(a)
+                        .AddMember("b").OptionalString(b)
+                        .EndStruct();
+                }
+                rows.EndList();
+                bulkUpsert("/Root/t4", rows);
+            }
+
+            {
+                NYdb::TValueBuilder rows;
+                rows.BeginList();
+                for (const auto& [a, b, c, d, e] : TVector<std::tuple<i32, TString, TString, i32, i32>>{
+                         {1, "a", "p1a", 10, 10}, {1, "b", "p1b", 20, 20}, {2, "a", "p2a", 30, 10},
+                         {3, "a", "p3a", 40, 20}, {4, "a", "p4a", 50, 99}}) {
+                    rows.AddListItem().BeginStruct()
+                        .AddMember("a").OptionalInt32(a)
+                        .AddMember("b").OptionalString(b)
+                        .AddMember("c").OptionalString(c)
+                        .AddMember("d").OptionalInt32(d)
+                        .AddMember("e").OptionalInt32(e)
+                        .EndStruct();
+                }
+                rows.EndList();
+                bulkUpsert("/Root/t3", rows);
+            }
+
+            {
+                NYdb::TValueBuilder rows;
+                rows.BeginList();
+                for (const auto& [a, b, c, d, e] :
+                     TVector<std::tuple<i32, std::optional<i32>, std::optional<i32>, TString, i32>>{
+                         {1, 1, 1, "a", 2},
+                         {2, 1, 1, "b", 3},
+                         {3, 2, 2, "a", 1},
+                         {4, 3, 4, "a", 5},
+                         {5, 9, 3, "a", 7},
+                         {6, std::nullopt, 1, "a", 1},
+                         {7, 2, std::nullopt, "a", 4}}) {
+                    rows.AddListItem().BeginStruct()
+                        .AddMember("a").OptionalInt32(a)
+                        .AddMember("b").OptionalInt32(b)
+                        .AddMember("c").OptionalInt32(c)
+                        .AddMember("d").OptionalString(d)
+                        .AddMember("e").OptionalInt32(e)
+                        .AddMember("f").OptionalInt64(b ? std::optional<i64>(*b) : std::nullopt)
+                        .EndStruct();
+                }
+                rows.EndList();
+                bulkUpsert("/Root/t1", rows);
+            }
+
+            auto explainSession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+
+            TVector<TQueryResult> results;
+            for (const auto& testCase : cases) {
+                auto result = session.ExecuteDataQuery(testCase.Query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), testCase.Name << " (new RBO: " << newRbo << "): " << result.GetIssues().ToString());
+
+                auto explained = explainSession.ExecuteQuery(testCase.Query, NYdb::NQuery::TTxControl::NoTx(),
+                        NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)).ExtractValueSync();
+                UNIT_ASSERT_C(explained.IsSuccess(), testCase.Name << ": " << explained.GetIssues().ToString());
+
+                results.push_back({FormatResultSetYson(result.GetResultSet(0)), TString{*explained.GetStats()->GetAst()},
+                                   TString{*explained.GetStats()->GetPlan()}});
+            }
+            return results;
+        };
+
+        auto countOccurrences = [](const TString& text, TStringBuf needle) {
+            ui32 count = 0;
+            for (size_t pos = text.find(needle); pos != TString::npos; pos = text.find(needle, pos + needle.size())) {
+                ++count;
+            }
+            return count;
+        };
+
+        const auto newRboResults = runQueries(/*newRbo=*/true);
+        const auto yqlResults = runQueries(/*newRbo=*/false);
+        UNIT_ASSERT_VALUES_EQUAL(newRboResults.size(), cases.size());
+        UNIT_ASSERT_VALUES_EQUAL(yqlResults.size(), cases.size());
+
+        for (size_t i = 0; i < cases.size(); ++i) {
+            const auto& testCase = cases[i];
+            const auto& newRbo = newRboResults[i];
+
+            // Check that results are the same.
+            UNIT_ASSERT_VALUES_EQUAL_C(newRbo.Yson, yqlResults[i].Yson, testCase.Name);
+
+            const auto lookupJoins = countOccurrences(newRbo.Ast, "KqpIndexLookupJoin");
+            UNIT_ASSERT_VALUES_EQUAL_C(lookupJoins, testCase.LookupJoins, testCase.Name << ", ast:\n" << newRbo.Ast);
+            UNIT_ASSERT_VALUES_EQUAL_C(newRbo.Plan.Contains("TableLookupJoin"), testCase.LookupJoins != 0,
+                testCase.Name << ", plan:\n" << newRbo.Plan);
         }
     }
 

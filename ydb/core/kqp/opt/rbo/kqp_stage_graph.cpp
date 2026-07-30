@@ -191,6 +191,7 @@ TExprNode::TPtr TSourceConnection::BuildConnection(TExprNode::TPtr inputStage, T
 }
 
 TExprNode::TPtr TStreamLookupConnection::BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprContext& ctx) {
+    Y_ENSURE(InputType, "Stream lookup input type has not been set");
     // clang-format off
     return Build<TKqpCnStreamLookup>(ctx, pos)
         .Output()

@@ -230,23 +230,39 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
         }
         auto columnsNode = NYql::NNodes::Build<NYql::NNodes::TCoAtomList>(exprCtx, lookup->Pos).Add(columnAtoms).Done().Ptr();
 
-        TVector<const NYql::TItemExprType*> keyItems;
-        for (const auto& key : lookup->LookupKeys) {
-            const auto* keyType = lookup->GetInput()->GetIUType(key);
-            Y_ENSURE(keyType, "Lookup key type is not available");
-            keyItems.push_back(exprCtx.MakeType<NYql::TItemExprType>(key.GetFullName(), keyType));
-        }
-        const auto* keyStructType = exprCtx.MakeType<NYql::TStructExprType>(keyItems);
-        const auto* keyListType = exprCtx.MakeType<NYql::TListExprType>(keyStructType);
-        auto inputTypeNode = NYql::ExpandType(lookup->Pos, *keyListType, exprCtx);
-
         TKqpStreamLookupSettings settings;
-        settings.Strategy = EStreamLookupStrategyType::LookupRows;
+        NYql::TExprNode::TPtr inputTypeNode;
+        if (lookup->IsJoin()) {
+            settings.Strategy = EStreamLookupStrategyType::LookupJoinRows;
+            // TODO: move this settings to lookuptable operator. It sets to 0, because it depends on pushed point predicate on the right side. 
+            // Currently we do not push them, we use original predicate to filter after.
+            settings.AllowNullKeysPrefixSize = 0;
+        } else {
+            settings.Strategy = EStreamLookupStrategyType::LookupRows;
+
+            TVector<const NYql::TItemExprType*> keyItems;
+            for (const auto& key : lookup->LookupKeys) {
+                const auto* keyType = lookup->GetInput()->GetIUType(key);
+                Y_ENSURE(keyType, "Lookup key type is not available");
+                keyItems.push_back(exprCtx.MakeType<NYql::TItemExprType>(key.GetFullName(), keyType));
+            }
+            const auto* keyStructType = exprCtx.MakeType<NYql::TStructExprType>(keyItems);
+            const auto* keyListType = exprCtx.MakeType<NYql::TListExprType>(keyStructType);
+            inputTypeNode = NYql::ExpandType(lookup->Pos, *keyListType, exprCtx);
+        }
         auto settingsNode = settings.BuildNode(exprCtx, lookup->Pos).Ptr();
 
         props.StageGraph.Connect(inputStageId, newStageId,
                                  MakeIntrusive<TStreamLookupConnection>(outputIndex, lookup->Table, columnsNode, inputTypeNode, settingsNode));
         YQL_CLOG(TRACE, CoreDq) << "Assign stages table lookup";
+    } else if (input->Kind == EOperator::IndexLookupJoin) {
+        // The lookup join shares the stage of its table lookup: the joined pairs only exist inside
+        // the stage that the stream lookup connection feeds.
+        auto lookupJoin = CastOperator<TOpIndexLookupJoin>(input);
+        auto lookup = lookupJoin->GetTableLookup();
+        Y_ENSURE(lookup->IsSingleConsumer(), "A table lookup in join mode must feed only its lookup join");
+        input->Props.StageId = *lookup->Props.StageId;
+        YQL_CLOG(TRACE, CoreDq) << "Assign stages index lookup join";
     } else {
         Y_ENSURE(false, "Unknown operator encountered");
     }

@@ -25,7 +25,12 @@ jobs:
         with:
           revision: "${{ github.sha }}"
           src-root: ${{ vars.SRC_ROOT }}
+<<<<<<< HEAD
           cli-version: stable
+=======
+          cli-version: "4.59.12"
+          use-ya-opensource: true
+>>>>>>> b0ff6939f5d (fix(docs): remove legacy branches (#47824))
 
   upload:
     needs: build

@@ -54,6 +54,13 @@ message TSubDomainSettings {
     optional bool ExternalStatisticsAggregator = 14 [default = false];
     optional bool GraphShard = 16 [default = false];
     optional bool ExternalBackupController = 17 [default = false];
+
+    // The ID of the Monitoring project used as the `monitoring_project_id`
+    // label on detailed metrics for this database. Plain string, no
+    // validation beyond non-empty (enforced where detailed metrics are
+    // enabled, not here). Mirrors TConsumer.MonitoringProjectId
+    // (pqconfig.proto) / TLocation.MonitoringProjectId (replication.proto).
+    optional string MonitoringProjectId = 19;
 }
 
 message TProcessingParams {
@@ -144,6 +151,19 @@ message TDomainDescription {
     optional NLoginProto.TSecurityState SecurityState = 20;
 
     optional TAuditSettings AuditSettings = 21;
+
+    // Database-wide default detailed metrics level for row/column tables
+    // (spec's TABLES_METRICS_LEVEL). Values match
+    // NKikimrSchemeOp.TTableDetailedMetricsSettings.EMetricsLevel; kept as a
+    // raw int here (rather than that enum type) because flat_scheme_op.proto
+    // (which defines it) already imports this file, and referencing it back
+    // would create a proto import cycle.
+    optional uint32 TablesMetricsLevel = 26;
+
+    // The ID of the Monitoring project used as the `monitoring_project_id`
+    // label on detailed metrics for this database. Rides the same publish
+    // path as TablesMetricsLevel above.
+    optional string MonitoringProjectId = 27;
 }
 
 message TSchemeQuotas {

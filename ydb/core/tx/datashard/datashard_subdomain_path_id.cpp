@@ -167,19 +167,86 @@ private:
     const bool OutOfSpace;
 };
 
+class TDataShard::TTxPersistSubDomainTablesMetricsLevel : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+public:
+    TTxPersistSubDomainTablesMetricsLevel(TDataShard* self, NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel level)
+        : TTransactionBase(self)
+        , Level(level)
+    { }
+
+    TTxType GetTxType() const override { return TXTYPE_PERSIST_SUBDOMAIN_TABLES_METRICS_LEVEL; }
+
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        NIceDb::TNiceDb db(txc.DB);
+
+        if (Self->SubDomainTablesMetricsLevel != Level) {
+            Self->PersistSys(db, Schema::Sys_SubDomainTablesMetricsLevel, ui64(Level));
+            Self->SubDomainTablesMetricsLevel = Level;
+        }
+
+        return true;
+    }
+
+    void Complete(const TActorContext&) override {
+        // nothing
+    }
+
+private:
+    const NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel Level;
+};
+
+class TDataShard::TTxPersistSubDomainMonitoringProjectId : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
+public:
+    TTxPersistSubDomainMonitoringProjectId(TDataShard* self, const TString& monitoringProjectId)
+        : TTransactionBase(self)
+        , MonitoringProjectId(monitoringProjectId)
+    { }
+
+    TTxType GetTxType() const override { return TXTYPE_PERSIST_SUBDOMAIN_MONITORING_PROJECT_ID; }
+
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        NIceDb::TNiceDb db(txc.DB);
+
+        if (Self->SubDomainMonitoringProjectId != MonitoringProjectId) {
+            Self->PersistSys(db, Schema::Sys_SubDomainMonitoringProjectId, MonitoringProjectId);
+            Self->SubDomainMonitoringProjectId = MonitoringProjectId;
+        }
+
+        return true;
+    }
+
+    void Complete(const TActorContext&) override {
+        // nothing
+    }
+
+private:
+    const TString MonitoringProjectId;
+};
+
 void TDataShard::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
     if (SubDomainPathId && msg->PathId == *SubDomainPathId) {
-        const bool outOfSpace = msg->Result->GetPathDescription()
-            .GetDomainDescription()
-            .GetDomainState()
-            .GetDiskQuotaExceeded();
+        const auto& domainDescription = msg->Result->GetPathDescription().GetDomainDescription();
+
+        const bool outOfSpace = domainDescription.GetDomainState().GetDiskQuotaExceeded();
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
             "Discovered subdomain " << msg->PathId << " state, outOfSpace = " << outOfSpace
             << " at datashard " << TabletID());
 
         Execute(new TTxPersistSubDomainOutOfSpace(this, outOfSpace), ctx);
+
+        const auto tablesMetricsLevel = static_cast<NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel>(
+            domainDescription.GetTablesMetricsLevel());
+
+        if (tablesMetricsLevel != SubDomainTablesMetricsLevel) {
+            Execute(new TTxPersistSubDomainTablesMetricsLevel(this, tablesMetricsLevel), ctx);
+        }
+
+        const TString& monitoringProjectId = domainDescription.GetMonitoringProjectId();
+        if (monitoringProjectId != SubDomainMonitoringProjectId) {
+            Execute(new TTxPersistSubDomainMonitoringProjectId(this, monitoringProjectId), ctx);
+        }
     }
 }
 

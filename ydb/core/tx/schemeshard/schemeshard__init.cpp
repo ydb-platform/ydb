@@ -1701,6 +1701,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         domainInfo->SetAuditSettings(value);
                     }
 
+                    if (rowset.HaveValue<Schema::SubDomains::MonitoringProjectId>()) {
+                        domainInfo->SetMonitoringProjectId(rowset.GetValue<Schema::SubDomains::MonitoringProjectId>());
+                    }
+
                     if (rowset.HaveValue<Schema::SubDomains::ServerlessComputeResourcesMode>()) {
                         domainInfo->SetServerlessComputeResourcesMode(
                             rowset.GetValue<Schema::SubDomains::ServerlessComputeResourcesMode>()

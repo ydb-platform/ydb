@@ -953,4 +953,30 @@ Y_UNIT_TEST_SUITE(TTabletLabeledCountersAggregator) {
     }
 }
 
+Y_UNIT_TEST_SUITE(TEvTabletAddCountersDetailedMetricsFields) {
+    Y_UNIT_TEST(DefaultsToLeaderWithNoTableInfo) {
+        TEvTabletCounters::TEvTabletAddCounters ev(
+            new TEvTabletCounters::TInFlightCookie, 1, TTabletTypes::DataShard, TPathId(1113, 1001),
+            new TTabletCountersBase, new TTabletCountersBase);
+
+        UNIT_ASSERT_VALUES_EQUAL(ev.FollowerId, 0u);
+        UNIT_ASSERT(!ev.TableInfo.has_value());
+    }
+
+    Y_UNIT_TEST(StampsFollowerIdAndTableInfoWhenProvided) {
+        TEvTabletCounters::TEvTabletAddCounters::TTableInfo tableInfo{TPathId(1113, 42), "/Root/table", 3};
+
+        TEvTabletCounters::TEvTabletAddCounters ev(
+            new TEvTabletCounters::TInFlightCookie, 1, TTabletTypes::DataShard, TPathId(1113, 1001),
+            new TTabletCountersBase, new TTabletCountersBase,
+            7, tableInfo);
+
+        UNIT_ASSERT_VALUES_EQUAL(ev.FollowerId, 7u);
+        UNIT_ASSERT(ev.TableInfo.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(ev.TableInfo->TableId, tableInfo.TableId);
+        UNIT_ASSERT_VALUES_EQUAL(ev.TableInfo->TablePath, tableInfo.TablePath);
+        UNIT_ASSERT_VALUES_EQUAL(ev.TableInfo->SchemaVersion, tableInfo.SchemaVersion);
+    }
+}
+
 }

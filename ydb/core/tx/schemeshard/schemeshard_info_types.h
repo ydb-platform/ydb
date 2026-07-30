@@ -2754,6 +2754,25 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         ServerlessComputeResourcesMode = serverlessComputeResourcesMode;
     }
 
+    // Database-wide default detailed metrics level for row/column tables
+    // (TABLES_METRICS_LEVEL). No setter yet: storage + ALTER DATABASE wiring
+    // lands with the monitoring_project_id step; this only rides the publish
+    // path to DataShard with its Unspecified default.
+    NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel GetTablesMetricsLevel() const {
+        return TablesMetricsLevel;
+    }
+
+    // The Monitoring project id used as the `monitoring_project_id` label on
+    // this database's detailed metrics. Settable via ALTER DATABASE; rides
+    // the same publish path to DataShard as TablesMetricsLevel.
+    const TString& GetMonitoringProjectId() const {
+        return MonitoringProjectId;
+    }
+
+    void SetMonitoringProjectId(const TString& monitoringProjectId) {
+        MonitoringProjectId = monitoringProjectId;
+    }
+
 private:
     bool InitiatedAsGlobal = false;
     NKikimrSubDomains::TProcessingParams ProcessingParams;
@@ -2765,6 +2784,9 @@ private:
     bool SmallBlobsQuotaExceeded = false;
     // Cached (data_size_hard_quota / 10 TiB) factor used to derive the small-blobs quotas
     double SmallBlobsStorageUnits = 0;
+    NKikimrSchemeOp::TTableDetailedMetricsSettings::EMetricsLevel TablesMetricsLevel =
+        NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelUnspecified;
+    TString MonitoringProjectId;
 
     TVector<TShardIdx> PrivateShards;
     TStoragePools StoragePools;

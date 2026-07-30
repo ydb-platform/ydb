@@ -12,6 +12,8 @@ import stat
 
 
 class Workload:
+    CONSUMER = "shared_consumer"
+
     def __init__(self, endpoint, database, duration, sqs_endpoint):
         self.driver = ydb.Driver(ydb.DriverConfig(endpoint, database))
         self.database = database
@@ -25,7 +27,7 @@ class Workload:
 
     def _unpack_resource(self, name):
         self.tempdir = tempfile.TemporaryDirectory(dir=os.getcwd())
-        self.working_dir = os.path.join(self.tempdir.name, "topic_sqs_ydb_cli")
+        self.working_dir = os.path.join(self.tempdir.name, "sqs_topic_ydb_cli")
         os.makedirs(self.working_dir, exist_ok=True)
         res = resource.find(name)
         path_to_unpack = os.path.join(self.working_dir, name)
@@ -36,30 +38,51 @@ class Workload:
         os.chmod(path_to_unpack, st.st_mode | stat.S_IEXEC)
         self.cli_path = path_to_unpack
 
-    def cmd_run(self, cmd):
+    def cmd_run(self, cmd, check=True):
         logging.debug(f"Running cmd {cmd}")
         print(f"Running cmd {cmd} at {time.time()}")
-        r = subprocess.run(cmd, check=True, text=True)
-        print(f"End at {time.time()}")
+        r = subprocess.run(cmd, check=check, text=True)
+        print(f"End at {time.time()}, returncode={r.returncode}")
         return r
 
-    def create_topics(self):
+    def create_topics(self, *, keep_messages_order=True, max_processing_attempts=1,
+                      default_processing_timeout='PT5S'):
         with ydb.QuerySessionPool(self.driver) as session_pool:
             session_pool.execute_with_retries(f"""
                     CREATE TOPIC `{self.dlq_topic_name}`;
                 """)
             session_pool.execute_with_retries(f"""
                     CREATE TOPIC `{self.topic_name}`
-                      (CONSUMER `shared_consumer`
+                      (CONSUMER `{self.CONSUMER}`
                         WITH (
                           type='shared',
-                          keep_messages_order = true,
-                          default_processing_timeout = Interval('PT5S'),
-                          max_processing_attempts = 1,
+                          keep_messages_order = {'true' if keep_messages_order else 'false'},
+                          default_processing_timeout = Interval('{default_processing_timeout}'),
+                          max_processing_attempts = {max_processing_attempts},
                           dead_letter_policy = 'move',
                           dead_letter_queue = '{self.dlq_topic_name}'
                         )
                 ) """)
+
+    def get_written_messages_count(self, driver=None):
+        """Sum of partition_end across partitions == number of written messages."""
+        driver = driver or self.driver
+        describe = driver.topic_client.describe_topic(self.topic_name, include_stats=True)
+        return sum(p.partition_stats.partition_end for p in describe.partitions)
+
+    def get_committed_messages_count(self, driver=None):
+        """Sum of consumer committed_offset across partitions == number of committed messages."""
+        driver = driver or self.driver
+        describe = driver.topic_client.describe_consumer(
+            self.topic_name,
+            self.CONSUMER,
+            include_stats=True,
+        )
+        return sum(
+            p.partition_consumer_stats.committed_offset
+            for p in describe.partitions
+            if p.partition_consumer_stats is not None
+        )
 
     def drop_topics(self):
         with ydb.QuerySessionPool(self.driver) as session_pool:
@@ -89,40 +112,47 @@ class Workload:
             + subcmds
         )
 
-    def write_to_topic(self):
-        logging.info(f"Writing to topic for {self.duration} seconds. SQS endpoint: {self.sqs_endpoint}")
-        subcmds = [
+    def _write_command(self):
+        return self.get_command(subcmds=[
             'write',
             '-s', str(self.duration),
-            '--workers', '50',
-            '--sqs-endpoint',  self.sqs_endpoint,
+            '--warmup', '0',
+            '--workers', '20',
+            '--sqs-endpoint', self.sqs_endpoint,
             '--topic', self.topic_name,
-            '--consumer', 'shared_consumer',
+            '--consumer', self.CONSUMER,
             '--percentile', '99',
             '--message-groups-amount', '0',
             '--max-unique-messages', '0',
             # CLI timeouts are in milliseconds.
-            '--request-timeout', '5000',
-        ]
-        return self.cmd_run(self.get_command(subcmds=subcmds))
+            '--request-timeout', '20000',
+        ])
 
-    def read_from_topic(self):
-        logging.info(f"Writing to topic for {self.duration} seconds. SQS endpoint: {self.sqs_endpoint}")
-        subcmds = [
+    def _read_command(self):
+        return self.get_command(subcmds=[
             'read',
             '-s', str(self.duration),
-            '--workers', '500',
-            '--sqs-endpoint',  self.sqs_endpoint,
+            '--warmup', '0',
+            '--workers', '50',
+            '--sqs-endpoint', self.sqs_endpoint,
             '--topic', self.topic_name,
-            '--consumer', 'shared_consumer',
+            '--consumer', self.CONSUMER,
             '--percentile', '99',
-            '--handle-message-time', '2',
-            # CLI takes visibility-timeout in milliseconds; reader truncates to whole seconds.
+            # visibility-timeout / handle-message-time are milliseconds in CLI.
+            '--handle-message-time', '0',
             '--visibility-timeout', '5000',
             '--keep-error-every', '0',
-            '--request-timeout', '5000',
-        ]
-        return self.cmd_run(self.get_command(subcmds=subcmds))
+            '--error-policy', 'success-after-retry',
+            '--request-timeout', '20000',
+        ])
+
+    def write_to_topic(self):
+        logging.info(f"Writing to topic for {self.duration} seconds. SQS endpoint: {self.sqs_endpoint}")
+        return self.cmd_run(self._write_command(), check=False)
+
+    def read_from_topic(self):
+        logging.info(f"Reading from topic for {self.duration} seconds. SQS endpoint: {self.sqs_endpoint}")
+        return self.cmd_run(self._read_command(), check=False)
 
     def loop(self):
         self.create_topics()

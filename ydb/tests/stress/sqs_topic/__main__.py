@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import argparse
-from ydb.tests.stress.topic_sqs.workload import Workload
+from ydb.tests.stress.sqs_topic.workload import Workload
 
 if __name__ == '__main__':
     text = """\033[92mTopic SQS workload\x1b[0m"""

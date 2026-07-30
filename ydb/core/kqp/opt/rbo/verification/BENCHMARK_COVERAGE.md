@@ -396,9 +396,19 @@ corrected q4 pair returns `FORMULA_EMITTED`; its canonical
 269,969,712-byte, 2,032-line formula has SHA-256
 `d4740aeb93d18e9b2e1338bcb9db58d98eedd1e93d3d5f91cf02a38bc7f0a92d`
 and took 70.16 seconds to construct from the captured snapshots. No solver
-result, counterexample, replay, or optimizer finding is inferred from this
-formula-only evidence. The cumulative historical optimizer-defect count
-remains nine.
+result is inferred from that construction alone.
+
+A separate two-row/two-task run with a 60-second global Z3 deadline is
+`UNKNOWN` after 1,689/200,603 ms: the deadline expires before branch 1/4
+(`left_language_empty`). The 269,960,396-byte harness formula has SHA-256
+`58c8890a33fdf0b1ae084c3d6db0a63171d8f9d06467ffb829c61ffac167be47`;
+the version-five report has SHA-256
+`c2280dd7284f7ae7593c4a0fb8121d7830646c8d0db83c3f681973faf461dc38`.
+The harness snapshots differ from the canonical focused capture only in the
+cluster identity, and normalizing that identity plus the requested timeout
+makes the formulas byte-identical. There is no model, witness, candidate,
+counterexample, replay, proof, or optimizer finding. The cumulative historical
+optimizer-defect count remains nine.
 
 The current proof-floor gate confirms all thirty-one checked-in obligations as
 `VERIFIED_BOUNDED`: 13/13 TPCH and 18/18 TPC-DS at two rows per table and two

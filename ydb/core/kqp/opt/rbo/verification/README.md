@@ -637,8 +637,14 @@ The corrected q4 formula-only run emits a 269,969,712-byte, 2,032-line
 canonical obligation with SHA-256
 `d4740aeb93d18e9b2e1338bcb9db58d98eedd1e93d3d5f91cf02a38bc7f0a92d`.
 Standalone construction takes approximately 70.16 seconds and peaks at
-1,582,448 KiB (about 1.51 GiB) RSS. No solver was run, so this is formula
-coverage, not a bounded proof, counterexample, or replay candidate.
+1,582,448 KiB (about 1.51 GiB) RSS. A separate two-row/two-task run with a
+60-second global Z3 deadline is `UNKNOWN` after 1,689/200,603 ms because the
+deadline expires before branch 1/4 (`left_language_empty`). Its report has
+SHA-256
+`c2280dd7284f7ae7593c4a0fb8121d7830646c8d0db83c3f681973faf461dc38`.
+Normalizing the harness cluster name and requested timeout makes its formula
+byte-identical to the canonical obligation. It produced no model, witness,
+candidate, counterexample, replay, proof, or optimizer finding.
 
 The post-M73 semantic partition is TPCH 20 formulas / 0 unsupported / 2
 no-pair and TPC-DS 71 / 10 / 18. Formula construction therefore reaches

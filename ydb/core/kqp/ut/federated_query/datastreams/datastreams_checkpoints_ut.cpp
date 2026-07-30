@@ -32,11 +32,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesCheckpoints) {
         constexpr char pqSourceName[] = "pqSource";
         CreatePqSource(pqSourceName);
 
-        // Grant access to checkpoint metadata tables upfront
-        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
-        ExecQuery("GRANT ALL ON `/Root/.metadata` TO `" BUILTIN_ACL_ROOT "`");
-        ExecQuery("GRANT ALL ON `/Root/.metadata/streaming` TO `" BUILTIN_ACL_ROOT "`");
-
         // Helper to count rows in a checkpoint metadata table
         auto countRows = [&](const std::string& tablePath) -> ui64 {
             const auto& result = ExecQuery(fmt::format(
@@ -73,6 +68,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesCheckpoints) {
 
         CheckScriptExecutionsCount(1, 1);
         Sleep(TDuration::Seconds(1));
+
+        // Grant access to checkpoint metadata tables (must be done after streaming query creates the path)
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+        ExecQuery("GRANT ALL ON `/Root/.metadata` TO `" BUILTIN_ACL_ROOT "`");
+        ExecQuery("GRANT ALL ON `/Root/.metadata/streaming` TO `" BUILTIN_ACL_ROOT "`");
 
         // Send a message to trigger checkpoint creation
         WriteTopicMessage(inputTopicName, R"({"key": "k1", "value": "v1"})");

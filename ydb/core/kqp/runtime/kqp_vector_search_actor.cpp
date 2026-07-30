@@ -987,6 +987,11 @@ namespace NKikimr {
             }
 
             void ProcessReadRow(NUdf::TUnboxedValue& value, EReadKind kind) {
+                // The caller's rows.ForEachRow cannot break, so skip the rest of the batch here
+                // instead of sending an error per row.
+                if (Failed) {
+                    return;
+                }
                 switch (kind) {
                     case EReadKind::Level: {
                         TClusterId parent = value.GetElement(0).Get<ui64>();

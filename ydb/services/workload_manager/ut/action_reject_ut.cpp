@@ -24,7 +24,7 @@ Y_UNIT_TEST_SUITE(TQueryClassifierActionReject) {
 
     Y_UNIT_TEST(ShouldRejectWhenActionSet) {
         TClassifyTestCase tc;
-        tc.ClassifierAction = "reject";
+        tc.ClassifierAction = NResourcePool::EClassifierAction::Reject;
 
         auto result = tc.RunPreClassify();
         const auto& reject = AssertReject(result);
@@ -37,14 +37,14 @@ Y_UNIT_TEST_SUITE(TQueryClassifierActionReject) {
         // action wins over resource_pool when both are specified
         TClassifyTestCase tc;
         tc.ResourcePool = "pool_target";
-        tc.ClassifierAction = "reject";
+        tc.ClassifierAction = NResourcePool::EClassifierAction::Reject;
 
         AssertReject(tc.RunPreClassify());
     }
 
     Y_UNIT_TEST(ShouldNotRejectWhenClassifierDoesNotMatch) {
         TClassifyTestCase tc;
-        tc.ClassifierAction = "reject";
+        tc.ClassifierAction = NResourcePool::EClassifierAction::Reject;
         tc.ClassifierMemberName = "bob";
         tc.ContextMemberName = "alice";
 

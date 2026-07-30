@@ -1,5 +1,11 @@
 #include "describer.h"
 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/base/path.h>
+
+#include <library/cpp/containers/absl/flat_hash_map.h>
+#include <library/cpp/containers/absl/flat_hash_set.h>
+
 #include <util/generic/algorithm.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_DESCRIBER
@@ -25,9 +31,30 @@ bool HasAccess(const TDescribeSettings& settings, TIntrusivePtr<TSecurityObject>
     return false;
 }
 
+TString MakeLbUserTopicPath(const TString& lbUserDatabaseRoot, const TString& topicPath) {
+    auto parts = NKikimr::SplitPath(lbUserDatabaseRoot);
+    for (const auto& part : NKikimr::SplitPath(topicPath)) {
+        parts.push_back(part);
+    }
+    return CanonizePath(NKikimr::JoinPath(parts));
+}
+
+// First path component is federation account; requires account/topic shape.
+TMaybe<TString> ExtractFederationAccount(const TString& topicPath) {
+    auto parts = NKikimr::SplitPath(topicPath);
+    if (parts.size() < 2 || parts[0].empty()) {
+        return Nothing();
+    }
+    return parts[0];
+}
+
+TString MakeLbUserAccountDatabase(const TString& lbUserDatabaseRoot, const TString& account) {
+    return CanonizePath(NKikimr::JoinPath({lbUserDatabaseRoot, account}));
+}
+
 class TDescribeActor : public TActorBootstrapped<TDescribeActor> {
 public:
-    TDescribeActor(const NActors::TActorId& parent, const TString& databasePath, const std::unordered_set<TString>&& topicPaths, const TDescribeSettings& settings)
+    TDescribeActor(const NActors::TActorId& parent, const TString& databasePath, absl::flat_hash_set<TString>&& topicPaths, const TDescribeSettings& settings)
         : Parent(parent)
         , DatabasePath(databasePath)
         , TopicPaths(std::move(topicPaths))
@@ -37,19 +64,24 @@ public:
 
     void Bootstrap() {
         Become(&TDescribeActor::StateWork);
+        if (!AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
+            LbUserDatabaseRoot = AppData()->PQConfig.GetPQDiscoveryConfig().GetLbUserDatabaseRoot();
+        }
         RetryWithSyncVersion = Settings.ForceSyncVersion;
         UsedSyncVersion = Settings.ForceSyncVersion;
+        RequestDatabaseName = DatabasePath;
         DoRequest(TopicPaths);
     }
 
-    void DoRequest(const std::unordered_set<TString>& topicPath) {
+    void DoRequest(const absl::flat_hash_set<TString>& topicPath) {
         YDB_LOG_DEBUG("Create request with",
             {"logPrefix", LOG_PREFIX},
             {"topicPaths", JoinRange(", ", topicPath.begin(), topicPath.end())},
-            {"syncVersion", RetryWithSyncVersion});
+            {"syncVersion", RetryWithSyncVersion},
+            {"databaseName", RequestDatabaseName});
 
         auto schemeRequest = std::make_unique<TSchemeCacheNavigate>(1);
-        schemeRequest->DatabaseName = DatabasePath;
+        schemeRequest->DatabaseName = RequestDatabaseName;
 
         auto addEntry = [&](const TString& topic) {
             auto split = NKikimr::SplitPath(topic);
@@ -63,8 +95,9 @@ public:
         };
 
         for (const auto& topic : topicPath) {
-            auto normalizedPath = NKikimr::NormalizePath(DatabasePath, CanonizePath(topic));
-            PathToOriginalPath[normalizedPath] = topic;
+            auto normalizedPath = NKikimr::NormalizePath(RequestDatabaseName, CanonizePath(topic));
+            // Keep the originally requested path across retries (sync / LbRoot / CDC).
+            PathToOriginalPath.try_emplace(normalizedPath, topic);
             addEntry(normalizedPath);
         }
 
@@ -76,7 +109,7 @@ public:
             {"logPrefix", LOG_PREFIX});
         auto& result = ev->Get()->Request;
 
-        std::unordered_set<TString> unknownPaths;
+        absl::flat_hash_set<TString> unknownPaths;
 
         for (size_t i = 0; i < result->ResultSet.size(); ++i) {
             const auto& entry = result->ResultSet[i];
@@ -92,6 +125,8 @@ public:
                 originalPath = it->second.OriginalPath;
                 isCDCStream = true;
                 cdcStreamName = it->second.CdcStreamName;
+            } else if (auto lbIt = LbRootPaths.find(realPath); lbIt != LbRootPaths.end()) {
+                originalPath = lbIt->second.OriginalPath;
             }
 
             switch (entry.Status) {
@@ -104,17 +139,19 @@ public:
                                 {"logPrefix", LOG_PREFIX},
                                 {"realPath", realPath});
 
-                            Result[originalPath] = TTopicInfo{
-                                .Status = EStatus::UNAUTHORIZED
-                            };
+                            SetErrorResult(originalPath, EStatus::UNAUTHORIZED);
+                        } else if (TryScheduleLbRootRetry(originalPath, realPath)) {
+                            YDB_LOG_DEBUG("Path not found, will try LbUserDatabaseRoot",
+                                {"logPrefix", LOG_PREFIX},
+                                {"realPath", realPath},
+                                {"originalPath", originalPath},
+                                {"lbUserDatabaseRoot", LbUserDatabaseRoot});
                         } else {
                             YDB_LOG_DEBUG("Path not found",
                                 {"logPrefix", LOG_PREFIX},
                                 {"realPath", realPath});
 
-                            Result[originalPath] = TTopicInfo{
-                                .Status = EStatus::NOT_FOUND
-                            };
+                            SetErrorResult(originalPath, EStatus::NOT_FOUND);
                         }
                     } else {
                         unknownPaths.insert(realPath);
@@ -138,18 +175,25 @@ public:
 
                         CDCPaths[TStringBuilder() << realPath << "/streamImpl"] = {
                             .OriginalPath = originalPath,
-                            .CdcStreamName = entry.Self->Info.GetName()
+                            .CdcStreamName = entry.Self->Info.GetName(),
+                            .AccountDatabase = RequestDatabaseName
                         };
                         break;
                     } else if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic) {
                         if (!entry.PQGroupInfo || entry.PQGroupInfo->Description.GetBalancerTabletID() == 0) {
                             if (RetryWithSyncVersion) {
-                                YDB_LOG_DEBUG("Path not found",
-                                    {"logPrefix", LOG_PREFIX},
-                                    {"realPath", realPath});
-                                Result[originalPath] = TTopicInfo{
-                                    .Status = EStatus::NOT_FOUND
-                                };
+                                if (TryScheduleLbRootRetry(originalPath, realPath)) {
+                                    YDB_LOG_DEBUG("Path not found, will try LbUserDatabaseRoot",
+                                        {"logPrefix", LOG_PREFIX},
+                                        {"realPath", realPath},
+                                        {"originalPath", originalPath},
+                                        {"lbUserDatabaseRoot", LbUserDatabaseRoot});
+                                } else {
+                                    YDB_LOG_DEBUG("Path not found",
+                                        {"logPrefix", LOG_PREFIX},
+                                        {"realPath", realPath});
+                                    SetErrorResult(originalPath, EStatus::NOT_FOUND);
+                                }
                             } else {
                                 unknownPaths.insert(realPath);
                             }
@@ -219,17 +263,12 @@ public:
             return DoRequest(unknownPaths);
         }
 
-        if (!CDCPaths.empty() && !RetryWithCDC) {
-            RetryWithSyncVersion = false;
-            RetryWithCDC = true;
+        if (TryStartNextLbRootDatabaseRequest()) {
+            return;
+        }
 
-            std::unordered_set<TString> newPath;
-            newPath.reserve(CDCPaths.size());
-            for (auto& [path, _] : CDCPaths) {
-                newPath.insert(path);
-            }
-
-            return DoRequest(newPath);
+        if (TryStartNextCdcDatabaseRequest()) {
+            return;
         }
 
         Send(Parent, new TEvDescribeTopicsResponse(std::move(Result), UsedSyncVersion));
@@ -244,28 +283,149 @@ public:
     }
 
 private:
+    bool TryScheduleLbRootRetry(const TString& originalPath, const TString& realPath) {
+        if (LbUserDatabaseRoot.empty()) {
+            return false;
+        }
+        if (LbRootPaths.contains(realPath)) {
+            // This response is already for an LbUserDatabaseRoot path.
+            return false;
+        }
+        for (const auto& [_, info] : LbRootPaths) {
+            if (info.OriginalPath == originalPath) {
+                // LbUserDatabaseRoot path is already scheduled.
+                return true;
+            }
+        }
+        if (RetryWithLbRoot) {
+            return false;
+        }
+
+        const auto account = ExtractFederationAccount(originalPath);
+        if (!account.Defined()) {
+            return false;
+        }
+
+        const auto accountDatabase = MakeLbUserAccountDatabase(LbUserDatabaseRoot, *account);
+        const auto lbPath = MakeLbUserTopicPath(LbUserDatabaseRoot, originalPath);
+        // Same path string can still need a retry with DatabaseName = account DB
+        // (e.g. DatabasePath == LbUserDatabaseRoot: /Root/account/topic under /Root).
+        if (lbPath == realPath && RequestDatabaseName == accountDatabase) {
+            return false;
+        }
+
+        LbRootPaths[lbPath] = TLbRootTopicInfo{
+            .OriginalPath = originalPath,
+            .AccountDatabase = accountDatabase
+        };
+        return true;
+    }
+
+    // One SchemeCache request per account database (DatabaseName = LbRoot/account).
+    bool TryStartNextLbRootDatabaseRequest() {
+        TString nextDatabase;
+        for (const auto& [_, info] : LbRootPaths) {
+            if (!RequestedLbRootDatabases.contains(info.AccountDatabase)) {
+                nextDatabase = info.AccountDatabase;
+                break;
+            }
+        }
+        if (nextDatabase.empty()) {
+            return false;
+        }
+
+        RetryWithLbRoot = true;
+        RetryWithSyncVersion = false;
+        RequestDatabaseName = nextDatabase;
+        RequestedLbRootDatabases.insert(nextDatabase);
+
+        absl::flat_hash_set<TString> newPath;
+        for (const auto& [path, info] : LbRootPaths) {
+            if (info.AccountDatabase == nextDatabase) {
+                newPath.insert(path);
+            }
+        }
+
+        DoRequest(newPath);
+        return true;
+    }
+
+    // One SchemeCache request per account database for CDC streamImpl paths.
+    bool TryStartNextCdcDatabaseRequest() {
+        TString nextDatabase;
+        for (const auto& [_, info] : CDCPaths) {
+            if (!RequestedCdcDatabases.contains(info.AccountDatabase)) {
+                nextDatabase = info.AccountDatabase;
+                break;
+            }
+        }
+        if (nextDatabase.empty()) {
+            return false;
+        }
+
+        RetryWithCDC = true;
+        RetryWithSyncVersion = false;
+        RequestDatabaseName = nextDatabase;
+        RequestedCdcDatabases.insert(nextDatabase);
+
+        absl::flat_hash_set<TString> newPath;
+        for (const auto& [path, info] : CDCPaths) {
+            if (info.AccountDatabase == nextDatabase) {
+                newPath.insert(path);
+            }
+        }
+
+        DoRequest(newPath);
+        return true;
+    }
+
+    void SetErrorResult(const TString& originalPath, EStatus status, const TString& realPath = {}) {
+        auto it = Result.find(originalPath);
+        if (it != Result.end() && it->second.Status == EStatus::SUCCESS) {
+            return;
+        }
+        Result[originalPath] = TTopicInfo{
+            .Status = status,
+            .RealPath = realPath
+        };
+    }
+
+private:
     const NActors::TActorId Parent;
     const TString DatabasePath;
-    const std::unordered_set<TString> TopicPaths;
+    const absl::flat_hash_set<TString> TopicPaths;
     const TDescribeSettings Settings;
     // normalized path -> original path
-    std::unordered_map<TString, TString> PathToOriginalPath;
+    absl::flat_hash_map<TString, TString> PathToOriginalPath;
 
     bool RetryWithSyncVersion = false;
     bool UsedSyncVersion = false;
     bool RetryWithCDC = false;
-    // CDC topic path -> original topic path
+    bool RetryWithLbRoot = false;
+    TString LbUserDatabaseRoot;
+    // DatabaseName for the current SchemeCache request (account DB on LbRoot retry).
+    TString RequestDatabaseName;
+    absl::flat_hash_set<TString> RequestedLbRootDatabases;
+    absl::flat_hash_set<TString> RequestedCdcDatabases;
+    // CDC streamImpl path -> original changefeed path
     struct TCDCTopicInfo {
         TString OriginalPath;
         TString CdcStreamName;
+        TString AccountDatabase;
     };
-    std::unordered_map<TString, TCDCTopicInfo> CDCPaths;
-    std::unordered_map<TString, TTopicInfo> Result;
+    absl::flat_hash_map<TString, TCDCTopicInfo> CDCPaths;
+    // LbUserDatabaseRoot-prefixed path -> original topic path
+    struct TLbRootTopicInfo {
+        TString OriginalPath;
+        TString AccountDatabase;
+    };
+    absl::flat_hash_map<TString, TLbRootTopicInfo> LbRootPaths;
+    absl::flat_hash_map<TString, TTopicInfo> Result;
 };
 
 } // namespace
 
-NActors::IActor* CreateDescriberActor(const NActors::TActorId& parent, const TString& databasePath, const std::unordered_set<TString>&& topicPaths, const TDescribeSettings& settings) {
+NActors::IActor* CreateDescriberActor(const NActors::TActorId& parent, const TString& databasePath, absl::flat_hash_set<TString>&& topicPaths, const TDescribeSettings& settings) {
     return new TDescribeActor(parent, databasePath, std::move(topicPaths), settings);
 }
 

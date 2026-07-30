@@ -358,4 +358,6 @@ message TFeatureFlags {
     optional bool EnableMoveWithColumnTableReplace = 305 [default = false];
     optional bool DisableOldSecrets = 306 [default = false];
     optional bool EnableKafkaServerlessTransactions = 307 [default = false];
+    optional bool EnableGeneratedStored = 308 [default = false];
+    optional bool EnableGeneratedVirtual = 309 [default = false];
 }

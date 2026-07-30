@@ -1017,6 +1017,8 @@ public:
         bool EnableParameterizedDecimal;
         bool EnableDetailedMetrics;
         bool EnableColumnStatistics = false;
+        bool EnableGeneratedStored = false;
+        bool EnableGeneratedVirtual = false;
     };
 
     static TAlterDataPtr CreateAlterData(
@@ -2404,7 +2406,7 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
     bool CheckSmallBlobsQuotas(IQuotaCounters* counters);
 
     /*
-    Rechecks disk space and small blobs quotas in one go. 
+    Rechecks disk space and small blobs quotas in one go.
     Returns true when any flag changed and needs to be persisted and pushed to scheme board.
     */
     bool CheckQuotas(IQuotaCounters* counters);

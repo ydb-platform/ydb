@@ -2896,6 +2896,175 @@ TExprNode::TPtr MakeOlapFilterChain(
         std::move(input));
 }
 
+struct TOlapCompiledLikeFixture {
+    TCompiledLikeFixture Like;
+    const TStructExprType* RowType = nullptr;
+    TExprNode::TPtr Apply;
+    TExprNode::TPtr Lambda;
+    TExprNode::TPtr LambdaArguments;
+    TExprNode::TPtr LambdaArgument;
+    TExprNode::TPtr Body;
+    TExprNode::TPtr Not;
+    TExprNode::TPtr Args;
+    TExprNode::TPtr ColumnArg;
+    TExprNode::TPtr TableRowType;
+    TExprNode::TPtr RowField;
+    TExprNode::TPtr RowFieldType;
+    TExprNode::TPtr RowFieldDataType;
+    TExprNode::TPtr RowFieldTypeName;
+    TExprNode::TPtr ColumnName;
+    TExprNode::TPtr KernelName;
+};
+
+TOlapCompiledLikeFixture TypedOlapCompiledLike(
+    TExportTestContext& ctx,
+    bool negated = false,
+    TStringBuf pattern = "%special%requests%")
+{
+    const auto pos = TPositionHandle();
+    TOlapCompiledLikeFixture result;
+    result.Like = TypedCompiledLike(ctx, pattern);
+
+    result.LambdaArgument =
+        ctx.ExprCtx.NewArgument(pos, "members_x");
+    result.Like.Member = result.LambdaArgument;
+    result.Like.Root = TypedCallable(
+        ctx,
+        "Apply",
+        {result.Like.AssumeStrict, result.LambdaArgument},
+        nullptr);
+    result.Body = result.Like.Root;
+    if (negated) {
+        result.Not = TypedCallable(
+            ctx,
+            "Not",
+            {result.Body},
+            nullptr);
+        result.Body = result.Not;
+    }
+
+    result.LambdaArguments = ctx.ExprCtx.NewArguments(
+        pos, {result.LambdaArgument});
+    auto lambdaArguments = result.LambdaArguments;
+    auto lambdaBody = result.Body;
+    result.Lambda = ctx.ExprCtx.NewLambda(
+        pos, std::move(lambdaArguments), std::move(lambdaBody));
+
+    result.RowType = ctx.ExprCtx.MakeType<TStructExprType>(
+        TVector<const TItemExprType*>{
+            ctx.ExprCtx.MakeType<TItemExprType>(
+                "x", result.Like.OptionalStringType),
+        });
+    result.RowFieldType = OptionalDataTypeDescriptor(
+        ctx,
+        "String",
+        result.Like.StringType,
+        result.Like.OptionalStringType);
+    result.RowFieldDataType = result.RowFieldType->ChildPtr(0);
+    result.RowFieldTypeName =
+        result.RowFieldDataType->ChildPtr(0);
+    result.RowField = ctx.ExprCtx.NewList(
+        pos,
+        {
+            ctx.ExprCtx.NewAtom(pos, "x"),
+            result.RowFieldType,
+        });
+    result.TableRowType = TypedCallable(
+        ctx,
+        "StructType",
+        {result.RowField},
+        nullptr);
+    result.ColumnName = ctx.ExprCtx.NewAtom(pos, "x");
+    result.ColumnArg = TypedCallable(
+        ctx,
+        "KqpOlapApplyColumnArg",
+        {result.TableRowType, result.ColumnName},
+        nullptr);
+    result.Args =
+        ctx.ExprCtx.NewList(pos, {result.ColumnArg});
+    result.KernelName = ctx.ExprCtx.NewAtom(pos, "");
+    result.Apply = TypedCallable(
+        ctx,
+        "KqpOlapApply",
+        {result.Lambda, result.Args, result.KernelName},
+        nullptr);
+    return result;
+}
+
+using TOlapCompiledLikeMutation =
+    std::function<void(TExportTestContext&, TOlapCompiledLikeFixture&)>;
+
+void RebuildOlapCompiledLikeApply(
+    TExportTestContext& ctx,
+    TOlapCompiledLikeFixture& fixture)
+{
+    fixture.Apply = TypedCallable(
+        ctx,
+        "KqpOlapApply",
+        {fixture.Lambda, fixture.Args, fixture.KernelName},
+        fixture.Apply->GetTypeAnn());
+}
+
+void RebuildOlapCompiledLikeLambda(
+    TExportTestContext& ctx,
+    TOlapCompiledLikeFixture& fixture)
+{
+    auto lambdaArguments = fixture.LambdaArguments;
+    auto lambdaBody = fixture.Body;
+    fixture.Lambda = ctx.ExprCtx.NewLambda(
+        TPositionHandle(),
+        std::move(lambdaArguments),
+        std::move(lambdaBody));
+    RebuildOlapCompiledLikeApply(ctx, fixture);
+}
+
+void RebuildOlapCompiledLikeColumnArg(
+    TExportTestContext& ctx,
+    TOlapCompiledLikeFixture& fixture)
+{
+    fixture.ColumnArg = TypedCallable(
+        ctx,
+        "KqpOlapApplyColumnArg",
+        {fixture.TableRowType, fixture.ColumnName},
+        nullptr);
+    fixture.Args = ctx.ExprCtx.NewList(
+        TPositionHandle(), {fixture.ColumnArg});
+    RebuildOlapCompiledLikeApply(ctx, fixture);
+}
+
+TSemanticSnapshotExportResult ExportOlapCompiledLikeFixture(
+    TExportTestContext& ctx,
+    bool negated = false,
+    const TOlapCompiledLikeMutation& mutate = {},
+    TStringBuf catalogType = "String",
+    bool catalogNullable = true)
+{
+    auto fixture = TypedOlapCompiledLike(ctx, negated);
+    if (mutate) {
+        mutate(ctx, fixture);
+    }
+
+    const auto& table = AddTable(
+        ctx,
+        "/Root/OlapCompiledLike",
+        TVector<TColumnSpec>{{
+            "x", TString(catalogType), !catalogNullable}});
+    auto read = MakeRead(
+        ctx,
+        table,
+        "a",
+        {"x"},
+        NYql::EStorageType::ColumnStorage);
+    SetExactOutputType(
+        ctx, *read, {{"a.x", fixture.Like.OptionalStringType}});
+    read->OlapFilterLambda = MakeOlapFilterProcess(
+        ctx, fixture.Apply);
+    TOpRoot root(read, TPositionHandle(), {"a.x"});
+    read->Props.StageId = root.PlanProps.StageGraph.AddSourceStage(
+        NYql::EStorageType::ColumnStorage);
+    return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+}
+
 TExprNode::TPtr MakeOlapComparisonCondition(
     TExportTestContext& ctx,
     TStringBuf operation,
@@ -7587,6 +7756,325 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                         std::move(fixture.Root));
                 });
             UNIT_ASSERT_C(!result.IsSupported(), name);
+        }
+    }
+
+    Y_UNIT_TEST(ExportsExactCompiledLikeOlapApplyWithValueSemantics) {
+        for (const bool negated : {false, true}) {
+            TExportTestContext ctx;
+            const auto snapshot = ParseSupported(
+                ExportOlapCompiledLikeFixture(ctx, negated));
+            const auto& predicate =
+                FindNode(snapshot, "scan")["predicate"];
+            const auto& like =
+                negated ? predicate["arg"] : predicate;
+
+            UNIT_ASSERT_VALUES_EQUAL(
+                predicate["kind"].GetStringSafe(),
+                negated ? "not" : "if_present");
+            UNIT_ASSERT_VALUES_EQUAL(
+                like["kind"].GetStringSafe(), "if_present");
+            UNIT_ASSERT_VALUES_EQUAL(
+                like["optional"]["kind"].GetStringSafe(), "column");
+            UNIT_ASSERT_VALUES_EQUAL(
+                like["optional"]["column"].GetStringSafe(), "a.x");
+            UNIT_ASSERT_VALUES_EQUAL(
+                like["present"]["kind"].GetStringSafe(), "opaque");
+            UNIT_ASSERT_VALUES_EQUAL(
+                like["present"]["fingerprint"].GetStringSafe(),
+                "format:34:yql-re2-pattern-from-like-match-v1;"
+                "pattern:18:%special%requests%;escape:4:none;"
+                "case_sensitive:4:true;");
+            UNIT_ASSERT_VALUES_EQUAL(
+                like["present"]["args"][0]["kind"].GetStringSafe(),
+                "bound");
+            UNIT_ASSERT_VALUES_EQUAL(
+                like["present"]["args"][0]["depth"].GetUIntegerSafe(),
+                0);
+            UNIT_ASSERT_VALUES_EQUAL(
+                like["missing"]["value"].GetBooleanSafe(), false);
+            UNIT_ASSERT_VALUES_EQUAL(
+                like["type"].GetStringSafe(), "Bool");
+            UNIT_ASSERT(!like["nullable"].GetBooleanSafe());
+        }
+
+        TExportTestContext cachedType;
+        ParseSupported(ExportOlapCompiledLikeFixture(
+            cachedType,
+            false,
+            [](TExportTestContext& ctx, TOlapCompiledLikeFixture& f) {
+                f.RowFieldTypeName->SetTypeAnn(
+                    ctx.ExprCtx.MakeType<TUnitExprType>());
+            }));
+    }
+
+    Y_UNIT_TEST(CompiledLikeOlapApplyEnvelopeMutationsFailClosed) {
+        struct TMutation {
+            TStringBuf Name;
+            TOlapCompiledLikeMutation Apply;
+        };
+        const TVector<TMutation> mutations = {
+            {"root arity", [](
+                TExportTestContext& ctx,
+                TOlapCompiledLikeFixture& f)
+            {
+                f.Apply = TypedCallable(
+                    ctx,
+                    "KqpOlapApply",
+                    {f.Lambda, f.Args},
+                    nullptr);
+            }},
+            {"root result", [](
+                TExportTestContext&,
+                TOlapCompiledLikeFixture& f)
+            {
+                f.Apply->SetTypeAnn(f.Like.OptionalBoolType);
+            }},
+            {"lambda result", [](
+                TExportTestContext&,
+                TOlapCompiledLikeFixture& f)
+            {
+                f.Lambda->SetTypeAnn(f.Like.OptionalBoolType);
+            }},
+            {"lambda argument type", [](
+                TExportTestContext&,
+                TOlapCompiledLikeFixture& f)
+            {
+                f.LambdaArgument->SetTypeAnn(f.Like.StringType);
+            }},
+            {"lambda argument count", [](
+                TExportTestContext& ctx,
+                TOlapCompiledLikeFixture& f)
+            {
+                auto extra =
+                    ctx.ExprCtx.NewArgument(TPositionHandle(), "extra");
+                f.LambdaArguments = ctx.ExprCtx.NewArguments(
+                    TPositionHandle(),
+                    {f.LambdaArgument, extra});
+                RebuildOlapCompiledLikeLambda(ctx, f);
+            }},
+            {"argument count", [](
+                TExportTestContext& ctx,
+                TOlapCompiledLikeFixture& f)
+            {
+                f.Args =
+                    ctx.ExprCtx.NewList(TPositionHandle(), {});
+                RebuildOlapCompiledLikeApply(ctx, f);
+            }},
+            {"column argument callable", [](
+                TExportTestContext& ctx,
+                TOlapCompiledLikeFixture& f)
+            {
+                f.ColumnArg = TypedCallable(
+                    ctx,
+                    "OtherColumnArg",
+                    {f.TableRowType, f.ColumnName},
+                    nullptr);
+                f.Args = ctx.ExprCtx.NewList(
+                    TPositionHandle(), {f.ColumnArg});
+                RebuildOlapCompiledLikeApply(ctx, f);
+            }},
+            {"column argument result", [](
+                TExportTestContext&,
+                TOlapCompiledLikeFixture& f)
+            {
+                f.ColumnArg->SetTypeAnn(f.Like.StringType);
+            }},
+            {"empty column name", [](
+                TExportTestContext& ctx,
+                TOlapCompiledLikeFixture& f)
+            {
+                f.ColumnName =
+                    ctx.ExprCtx.NewAtom(TPositionHandle(), "");
+                RebuildOlapCompiledLikeColumnArg(ctx, f);
+            }},
+            {"unavailable column name", [](
+                TExportTestContext& ctx,
+                TOlapCompiledLikeFixture& f)
+            {
+                f.ColumnName =
+                    ctx.ExprCtx.NewAtom(TPositionHandle(), "missing");
+                RebuildOlapCompiledLikeColumnArg(ctx, f);
+            }},
+            {"row descriptor callable", [](
+                TExportTestContext& ctx,
+                TOlapCompiledLikeFixture& f)
+            {
+                f.TableRowType = TypedCallable(
+                    ctx,
+                    "TupleType",
+                    {f.RowField},
+                    nullptr);
+                RebuildOlapCompiledLikeColumnArg(ctx, f);
+            }},
+            {"row descriptor arity", [](
+                TExportTestContext& ctx,
+                TOlapCompiledLikeFixture& f)
+            {
+                f.TableRowType = TypedCallable(
+                    ctx,
+                    "StructType",
+                    {},
+                    nullptr);
+                RebuildOlapCompiledLikeColumnArg(ctx, f);
+            }},
+            {"row descriptor annotation", [](
+                TExportTestContext& ctx,
+                TOlapCompiledLikeFixture& f)
+            {
+                const auto* empty =
+                    ctx.ExprCtx.MakeType<TStructExprType>(
+                        TVector<const TItemExprType*>{});
+                f.TableRowType->SetTypeAnn(
+                    ctx.ExprCtx.MakeType<TTypeExprType>(empty));
+            }},
+            {"row field type annotation", [](
+                TExportTestContext& ctx,
+                TOlapCompiledLikeFixture& f)
+            {
+                f.RowFieldType->SetTypeAnn(
+                    ctx.ExprCtx.MakeType<TTypeExprType>(
+                        f.Like.StringType));
+            }},
+            {"row field leaf annotation", [](
+                TExportTestContext& ctx,
+                TOlapCompiledLikeFixture& f)
+            {
+                f.RowFieldDataType->SetTypeAnn(
+                    ctx.ExprCtx.MakeType<TTypeExprType>(
+                        f.Like.OptionalStringType));
+            }},
+            {"row field atom annotation", [](
+                TExportTestContext&,
+                TOlapCompiledLikeFixture& f)
+            {
+                f.RowFieldTypeName->SetTypeAnn(f.Like.StringType);
+            }},
+            {"row field descriptor", [](
+                TExportTestContext& ctx,
+                TOlapCompiledLikeFixture& f)
+            {
+                f.RowFieldTypeName = ctx.ExprCtx.NewAtom(
+                    TPositionHandle(), "String");
+                f.RowFieldDataType = TypedCallable(
+                    ctx,
+                    "DataType",
+                    {f.RowFieldTypeName},
+                    nullptr);
+                f.RowFieldType = f.RowFieldDataType;
+                f.RowField = ctx.ExprCtx.NewList(
+                    TPositionHandle(),
+                    {
+                        ctx.ExprCtx.NewAtom(TPositionHandle(), "x"),
+                        f.RowFieldType,
+                    });
+                f.TableRowType = TypedCallable(
+                    ctx, "StructType", {f.RowField}, nullptr);
+                RebuildOlapCompiledLikeColumnArg(ctx, f);
+            }},
+            {"foreign lambda input", [](
+                TExportTestContext& ctx,
+                TOlapCompiledLikeFixture& f)
+            {
+                auto foreign =
+                    ctx.ExprCtx.NewArgument(TPositionHandle(), "foreign");
+                f.Like.Root = TypedCallable(
+                    ctx,
+                    "Apply",
+                    {f.Like.AssumeStrict, foreign},
+                    nullptr);
+                f.Body = f.Like.Root;
+                RebuildOlapCompiledLikeLambda(ctx, f);
+            }},
+            {"kernel name", [](
+                TExportTestContext& ctx,
+                TOlapCompiledLikeFixture& f)
+            {
+                f.KernelName =
+                    ctx.ExprCtx.NewAtom(TPositionHandle(), "kernel");
+                RebuildOlapCompiledLikeApply(ctx, f);
+            }},
+        };
+
+        for (const auto& mutation : mutations) {
+            TExportTestContext ctx;
+            const auto result = ExportOlapCompiledLikeFixture(
+                ctx, false, mutation.Apply);
+            UNIT_ASSERT_C(
+                !result.IsSupported(), mutation.Name);
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto result = ExportOlapCompiledLikeFixture(
+                ctx, false, {}, "Utf8", true);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "nullable String read column");
+        }
+        {
+            TExportTestContext ctx;
+            const auto result = ExportOlapCompiledLikeFixture(
+                ctx, false, {}, "String", false);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "nullable String read column");
+        }
+    }
+
+    Y_UNIT_TEST(CompiledLikeOlapApplyNotAndSafetyMetadataFailClosed) {
+        const TVector<TOlapCompiledLikeMutation> malformedNot = {
+            [](TExportTestContext& ctx, TOlapCompiledLikeFixture& f) {
+                f.Not = TypedCallable(
+                    ctx,
+                    "Not",
+                    {f.Like.Root, f.Like.Root},
+                    nullptr);
+                f.Body = f.Not;
+                RebuildOlapCompiledLikeLambda(ctx, f);
+            },
+            [](TExportTestContext&, TOlapCompiledLikeFixture& f) {
+                f.Not->SetTypeAnn(f.Like.OptionalBoolType);
+            },
+        };
+        for (const auto& mutation : malformedNot) {
+            TExportTestContext ctx;
+            const auto result = ExportOlapCompiledLikeFixture(
+                ctx, true, mutation);
+            UNIT_ASSERT(!result.IsSupported());
+        }
+
+        const TVector<TOlapCompiledLikeMutation> unsafe = {
+            [](TExportTestContext&, TOlapCompiledLikeFixture& f) {
+                f.Apply->SetSideEffects(ESideEffects::General);
+            },
+            [](TExportTestContext&, TOlapCompiledLikeFixture& f) {
+                f.Lambda->SetSideEffects(ESideEffects::General);
+            },
+            [](TExportTestContext&, TOlapCompiledLikeFixture& f) {
+                f.Args->SetUnorderedChildren();
+            },
+            [](TExportTestContext&, TOlapCompiledLikeFixture& f) {
+                f.ColumnArg->SetSideEffects(ESideEffects::General);
+            },
+            [](TExportTestContext&, TOlapCompiledLikeFixture& f) {
+                f.TableRowType->SetUnorderedChildren();
+            },
+            [](TExportTestContext& ctx, TOlapCompiledLikeFixture& f) {
+                f.ColumnName->SetResult(
+                    ctx.ExprCtx.NewAtom(TPositionHandle(), "executed"));
+            },
+            [](TExportTestContext&, TOlapCompiledLikeFixture& f) {
+                f.KernelName->SetPosAware();
+            },
+        };
+        for (const auto& mutation : unsafe) {
+            TExportTestContext ctx;
+            const auto result = ExportOlapCompiledLikeFixture(
+                ctx, false, mutation);
+            UNIT_ASSERT(!result.IsSupported());
         }
     }
 

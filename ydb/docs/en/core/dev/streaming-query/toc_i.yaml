@@ -1,11 +1,11 @@
 items:
-- name: Common patterns
+- name: Typical patterns
   href: patterns.md
 - name: Writing to tables
   href: table-writing.md
 - name: Data enrichment
   href: enrichment.md
-- name: Topic read and write formats
+- name: Data formats for reading/writing topics
   href: streaming-query-formats.md
 - name: Delivery guarantees
   href: guarantees.md

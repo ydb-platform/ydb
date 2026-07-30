@@ -97,6 +97,28 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
         UNIT_ASSERT(!batch.Header.HasOffsetDelta());
     }
 
+    Y_UNIT_TEST(LegacyMaxHeaderSizePackInvariantWithKinesis) {
+        TBatch batch(Max<ui64>(), 0);
+        auto ts = TInstant::Seconds(100);
+        batch.AddBlob(TClientBlob(
+            TString("src"), 1, TString(8_KB, 'a'), TMaybe<TPartData>(),
+            ts, ts, 0, TString("partition-key"), TString("explicit-hash-key")
+        ));
+
+        batch.Pack(TEST_LEGACY_MAX_HEADER_SIZE);
+        UNIT_ASSERT_LE(batch.GetPackedSize(), batch.GetUnpackedSize() + TEST_LEGACY_MAX_HEADER_SIZE);
+        UNIT_ASSERT(batch.Header.HasHasKinesis());
+        UNIT_ASSERT(batch.Header.GetHasKinesis());
+
+        batch.Unpack();
+        UNIT_ASSERT_VALUES_EQUAL(batch.Blobs.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.GetCount(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.Blobs[0].PartitionKey, "partition-key");
+        UNIT_ASSERT_VALUES_EQUAL(batch.Blobs[0].ExplicitHashKey, "explicit-hash-key");
+        UNIT_ASSERT(!batch.Header.HasClientBlobCount());
+        UNIT_ASSERT(!batch.Header.HasOffsetDelta());
+    }
+
     Y_UNIT_TEST(BatchSizePackUnpack) {
         TBatch batch(100, 0);
         auto ts = TInstant::Seconds(100);

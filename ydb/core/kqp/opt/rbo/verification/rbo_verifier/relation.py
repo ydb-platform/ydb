@@ -19,6 +19,7 @@ from .ir import (
     InSubplan,
     INTEGRAL_AVG_RANK_COMPARISON,
     Join,
+    JoinKey,
     Limit,
     OuterBind,
     PlanNode,
@@ -210,6 +211,7 @@ class _EvaluatorContext:
     snapshot: Snapshot
     nodes: Mapping[str, PlanNode]
     schemas: Mapping[str, Mapping[str, Column]]
+    parents: Mapping[str, frozenset[str]]
     subplans_by_consumer: Mapping[str, tuple[Subplan, ...]]
     scalar_outer_binds: Mapping[str, OuterBind]
 
@@ -522,10 +524,21 @@ class Evaluator:
                     and subplan.dependency is not None
                 )
             }
+            parents: dict[str, set[str]] = {
+                node_id: set()
+                for node_id in nodes
+            }
+            for parent in snapshot.plan.nodes:
+                for child in plan_node_inputs(parent):
+                    parents[child].add(parent.id)
             _context = _EvaluatorContext(
                 snapshot,
                 nodes,
                 schemas,
+                {
+                    node_id: frozenset(consumers)
+                    for node_id, consumers in parents.items()
+                },
                 subplans_by_consumer,
                 scalar_outer_binds,
             )
@@ -537,6 +550,7 @@ class Evaluator:
         self.nodes = _context.nodes
         self.schemas = _context.schemas
         self.cache: dict[str, RelationFamily] = dict(node_overrides or {})
+        self.node_overrides = frozenset((node_overrides or {}).keys())
         self.edge_inputs = edge_inputs or {}
         self.choice_scope = choice_scope
         self.defer_pushed_limits = defer_pushed_limits
@@ -706,7 +720,9 @@ class Evaluator:
             )
 
         if isinstance(node, Filter):
-            source = self._input(node.id, 0, node.input)
+            source = self._factor_delayed_unique_rhs_filter(node)
+            if source is None:
+                source = self._input(node.id, 0, node.input)
             return self._with_consumer_subplans(
                 node.id,
                 source,
@@ -1433,6 +1449,172 @@ class Evaluator:
         key = (parent, ordinal)
         return self.edge_inputs[key] if key in self.edge_inputs else self.node(child)
 
+    def _factor_delayed_unique_rhs_filter(
+        self,
+        node: Filter,
+    ) -> RelationFamily | None:
+        """Push necessary key equalities into a private left-deep Cross spine.
+
+        The original Filter remains intact.  This branch-local representation
+        only avoids materializing Cross pairs that its conjunctive equality
+        would necessarily reject, and only when the existing direct unique-RHS
+        proof seam can compact the promoted inner join.
+        """
+
+        if (
+            self.snapshot.stage_graph is not None
+            or node.id in self.subplans_by_consumer
+            or (node.id, 0) in self.edge_inputs
+        ):
+            return None
+
+        conjuncts = (
+            node.predicate.args
+            if node.predicate.kind == "and"
+            else (node.predicate,)
+        )
+        equalities: list[tuple[str, str]] = []
+        for conjunct in conjuncts:
+            if (
+                conjunct.kind != "eq"
+                or conjunct.null_safe
+                or len(conjunct.args) != 2
+                or any(
+                    argument.kind != "column"
+                    or argument.column is None
+                    or argument.depth is not None
+                    for argument in conjunct.args
+                )
+            ):
+                continue
+            left, right = conjunct.args
+            assert left.column is not None and right.column is not None
+            equalities.append((left.column, right.column))
+        if not equalities:
+            return None
+
+        spine: list[Join] = []
+        current = node.input
+        while True:
+            candidate = self.nodes[current]
+            if not (
+                isinstance(candidate, Join)
+                and candidate.kind == "cross"
+                and not candidate.keys
+                and candidate.predicate.kind == "literal"
+                and candidate.predicate.result_type == BOOL
+                and candidate.predicate.nullable is False
+                and candidate.predicate.value is True
+            ):
+                break
+            # A cached node may be an explicit caller override or an already
+            # observed shared producer.  Its original Cross meaning must win.
+            if (
+                candidate.id in self.cache
+                or (candidate.id, 0) in self.edge_inputs
+                or (candidate.id, 1) in self.edge_inputs
+            ):
+                return None
+            spine.append(candidate)
+            current = candidate.left
+        if not spine:
+            return None
+        spine.reverse()
+        for index, join in enumerate(spine):
+            expected_parent = (
+                spine[index + 1].id
+                if index + 1 < len(spine)
+                else node.id
+            )
+            if self._context.parents[join.id] != frozenset({expected_parent}):
+                return None
+        transformed_nodes = {
+            item
+            for join in spine
+            for item in (join.id, join.right)
+        } | {current}
+        if (
+            transformed_nodes & self.node_overrides
+            or any(
+                subplan.root in transformed_nodes
+                for subplan in self.snapshot.plan.subplans
+            )
+        ):
+            return None
+
+        promoted = tuple(
+            self._promote_delayed_unique_rhs(join, equalities)
+            for join in spine
+        )
+        if not any(item is not None for item in promoted):
+            return None
+
+        source = self.node(current)
+        for original, normalized in zip(spine, promoted):
+            right = self.node(original.right)
+
+            def join_relations(
+                relations: tuple[Relation, ...],
+                original: Join = original,
+                normalized: Join | None = normalized,
+            ) -> Relation:
+                return self._join_delayed_unique_rhs(
+                    original,
+                    normalized,
+                    relations[0],
+                    relations[1],
+                )
+
+            source = combine_families(
+                (source, right),
+                join_relations,
+            )
+        return source
+
+    def _join_delayed_unique_rhs(
+        self,
+        original: Join,
+        normalized: Join | None,
+        left: Relation,
+        right: Relation,
+    ) -> Relation:
+        if (
+            normalized is not None
+            and self._can_compact_direct_unique_rhs(normalized, right)
+        ):
+            return self._join(normalized, left, right)
+        return self._join(original, left, right)
+
+    def _promote_delayed_unique_rhs(
+        self,
+        node: Join,
+        equalities: list[tuple[str, str]],
+    ) -> Join | None:
+        left_schema = self.schemas[node.left]
+        right_schema = self.schemas[node.right]
+        keys: list[JoinKey] = []
+        for first, second in equalities:
+            if first in left_schema and second in right_schema:
+                left, right = first, second
+            elif second in left_schema and first in right_schema:
+                left, right = second, first
+            else:
+                continue
+            if left_schema[left].type != right_schema[right].type:
+                continue
+            key = JoinKey(left, right)
+            if key not in keys:
+                keys.append(key)
+        if not keys:
+            return None
+
+        promoted = replace(node, kind="inner", keys=tuple(keys))
+        return (
+            promoted
+            if self._direct_unique_rhs_scan(promoted) is not None
+            else None
+        )
+
     def _with_consumer_subplans(
         self,
         node_id: str,
@@ -2038,45 +2220,11 @@ class Evaluator:
         return matches
 
     def _can_compact_direct_unique_rhs(self, node: Join, right: Relation) -> bool:
-        if node.kind not in {"inner", "left"}:
-            return False
-        right_node = self.nodes[node.right]
-        if not isinstance(right_node, Scan):
-            return False
-        if right_node.predicate is not None or right_node.pushed_limit is not None:
-            return False
-        if not (
-            node.predicate.kind == "literal"
-            and node.predicate.result_type == BOOL
-            and node.predicate.nullable is False
-            and node.predicate.value is True
-        ):
+        right_node = self._direct_unique_rhs_scan(node)
+        if right_node is None:
             return False
         expected_columns = tuple(self.schemas[right_node.id].values())
         if right.columns != expected_columns:
-            return False
-
-        table = self.snapshot.table_map()[right_node.table]
-        table_columns = table.column_map()
-        left_schema = self.schemas[node.left]
-        right_schema = self.schemas[node.right]
-        # Catalog uniqueness is stated on source values. Requiring the same
-        # scalar type keeps comparison coercions from collapsing distinct keys.
-        identity_compared_sources = {
-            mapping.source
-            for mapping in right_node.columns
-            for join_key in node.keys
-            if (
-                mapping.output == join_key.right
-                and left_schema[join_key.left].type
-                == right_schema[join_key.right].type
-            )
-        }
-        if not any(
-            set(key.columns) <= identity_compared_sources
-            and all(not table_columns[column].nullable for column in key.columns)
-            for key in table.unique_keys
-        ):
             return False
 
         source = self.database.relations[right_node.table]
@@ -2110,6 +2258,46 @@ class Evaluator:
                 ):
                     return False
         return True
+
+    def _direct_unique_rhs_scan(self, node: Join) -> Scan | None:
+        if node.kind not in {"inner", "left"}:
+            return None
+        right_node = self.nodes[node.right]
+        if not isinstance(right_node, Scan):
+            return None
+        if right_node.predicate is not None or right_node.pushed_limit is not None:
+            return None
+        if not (
+            node.predicate.kind == "literal"
+            and node.predicate.result_type == BOOL
+            and node.predicate.nullable is False
+            and node.predicate.value is True
+        ):
+            return None
+
+        table = self.snapshot.table_map()[right_node.table]
+        table_columns = table.column_map()
+        left_schema = self.schemas[node.left]
+        right_schema = self.schemas[node.right]
+        # Catalog uniqueness is stated on source values. Requiring the same
+        # scalar type keeps comparison coercions from collapsing distinct keys.
+        identity_compared_sources = {
+            mapping.source
+            for mapping in right_node.columns
+            for join_key in node.keys
+            if (
+                mapping.output == join_key.right
+                and left_schema[join_key.left].type
+                == right_schema[join_key.right].type
+            )
+        }
+        if not any(
+            set(key.columns) <= identity_compared_sources
+            and all(not table_columns[column].nullable for column in key.columns)
+            for key in table.unique_keys
+        ):
+            return None
+        return right_node
 
     def _compact_direct_unique_rhs_join(
         self,

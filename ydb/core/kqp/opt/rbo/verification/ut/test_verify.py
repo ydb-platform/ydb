@@ -17,9 +17,18 @@ except ImportError:
 from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
     Column,
     Expr,
+    Filter,
+    Join,
     OPAQUE_DOUBLE_FINGERPRINT_PREFIX,
+    Scan,
+    ScanColumn,
+    ScalarSubplan,
     SnapshotError,
+    Sort,
     SortOrder,
+    SubplanOutput,
+    UnionAll,
+    UnionInput,
     parse_snapshot,
     stage_task_counts,
 )
@@ -1575,6 +1584,218 @@ def direct_unique_rhs_join_snapshot(
             edges,
         )
     )
+
+
+def delayed_unique_rhs_filter_snapshot(
+    *,
+    unique_key=("k",),
+    left_key_type="Int64",
+    right_key_type="Int64",
+    right_key_nullable=False,
+    right_value_nullable=True,
+    extra_equality=False,
+    right_project=False,
+    scan_predicate=False,
+    pushed_limit=False,
+    staged=False,
+    reverse_equality=False,
+    null_safe=False,
+    predicate_shape="and",
+    residual=None,
+):
+    snapshot = direct_unique_rhs_join_snapshot(
+        "inner",
+        unique_key=unique_key,
+        left_key_type=left_key_type,
+        right_key_type=right_key_type,
+        right_key_nullable=right_key_nullable,
+        right_value_nullable=right_value_nullable,
+        extra_equality=extra_equality,
+        right_project=right_project,
+        scan_predicate=scan_predicate,
+        pushed_limit=pushed_limit,
+        staged=staged,
+    )
+    join = snapshot.plan.node_map()["join"]
+    equalities = []
+    for index, key in enumerate(join.keys):
+        left = Expr(kind="column", column=key.left)
+        right = Expr(kind="column", column=key.right)
+        equalities.append(
+            Expr(
+                kind="eq",
+                args=(
+                    (right, left)
+                    if reverse_equality
+                    else (left, right)
+                ),
+                null_safe=null_safe and index == 0,
+            )
+        )
+    true = Expr(
+        kind="literal",
+        value=True,
+        result_type="Bool",
+        nullable=False,
+    )
+    if predicate_shape == "and":
+        predicate = Expr(
+            kind="and",
+            args=tuple(equalities) + (() if residual is None else (residual,)),
+        )
+    elif predicate_shape == "or":
+        predicate = Expr(kind="or", args=tuple(equalities) + (true,))
+    elif predicate_shape == "nested_and":
+        predicate = Expr(
+            kind="and",
+            args=(Expr(kind="and", args=(equalities[0], true)),),
+        )
+    elif predicate_shape == "single":
+        if len(equalities) != 1 or residual is not None:
+            raise ValueError("single predicate shape requires one equality")
+        predicate = equalities[0]
+    else:
+        raise ValueError(f"unknown predicate shape {predicate_shape!r}")
+
+    nodes = tuple(
+        replace(item, kind="cross", keys=(), predicate=true)
+        if item.id == "join"
+        else item
+        for item in snapshot.plan.nodes
+    ) + (Filter("filter", "join", predicate),)
+    plan = replace(snapshot.plan, nodes=nodes, root="filter")
+    stage_graph = snapshot.stage_graph
+    if stage_graph is not None:
+        stages = tuple(
+            replace(
+                stage,
+                nodes=stage.nodes + ("filter",),
+                outputs=tuple(
+                    replace(output, node="filter")
+                    for output in stage.outputs
+                ),
+            )
+            if stage.id == stage_graph.root_stage
+            else stage
+            for stage in stage_graph.stages
+        )
+        stage_graph = replace(stage_graph, stages=stages)
+    return replace(snapshot, plan=plan, stage_graph=stage_graph)
+
+
+def delayed_unique_rhs_filter_chain_snapshot():
+    snapshot = delayed_unique_rhs_filter_snapshot()
+    nodes = snapshot.plan.node_map()
+    true = nodes["join"].predicate
+    assert isinstance(nodes["filter"], Filter)
+    c_scan = Scan(
+        "c",
+        "C",
+        (
+            ScanColumn("k", "c.k"),
+            ScanColumn("x", "c.x"),
+        ),
+        None,
+        None,
+    )
+    join = Join("join2", "join", "c", "cross", (), true)
+    predicate = replace(
+        nodes["filter"].predicate,
+        args=nodes["filter"].predicate.args
+        + (
+            Expr(
+                kind="eq",
+                args=(
+                    Expr(kind="column", column="b.x"),
+                    Expr(kind="column", column="c.k"),
+                ),
+            ),
+        ),
+    )
+    filtered = Filter("filter", "join2", predicate)
+    plan = replace(
+        snapshot.plan,
+        nodes=tuple(
+            node
+            for node in snapshot.plan.nodes
+            if node.id != "filter"
+        )
+        + (c_scan, join, filtered),
+        output=("a.k", "a.x", "b.k", "b.x", "c.k", "c.x"),
+    )
+    table_b = snapshot.table_map()["B"]
+    return replace(
+        snapshot,
+        tables=snapshot.tables + (replace(table_b, name="C"),),
+        plan=plan,
+    )
+
+
+def delayed_unique_rhs_filter_subplan_snapshot():
+    snapshot = delayed_unique_rhs_filter_snapshot()
+    nodes = snapshot.plan.node_map()
+    assert isinstance(nodes["filter"], Filter)
+    c_scan = Scan(
+        "c",
+        "C",
+        (
+            ScanColumn("k", "c.k"),
+            ScanColumn("x", "c.x"),
+        ),
+        None,
+        None,
+    )
+    binding = Expr(kind="column", column="$scalar")
+    predicate = replace(
+        nodes["filter"].predicate,
+        args=nodes["filter"].predicate.args
+        + (Expr(kind="eq", args=(binding, binding)),),
+    )
+    filtered = replace(nodes["filter"], predicate=predicate)
+    plan = replace(
+        snapshot.plan,
+        nodes=tuple(
+            filtered if node.id == "filter" else node
+            for node in snapshot.plan.nodes
+        )
+        + (c_scan,),
+        subplans=(
+            ScalarSubplan(
+                "$scalar",
+                "c",
+                SubplanOutput("c.x", "Int64", True),
+                ("filter",),
+            ),
+        ),
+    )
+    table_b = snapshot.table_map()["B"]
+    return replace(
+        snapshot,
+        tables=snapshot.tables + (replace(table_b, name="C"),),
+        plan=plan,
+    )
+
+
+def delayed_unique_rhs_filter_sorted_seed_snapshot(*, unique_key=("k",)):
+    snapshot = delayed_unique_rhs_filter_snapshot(unique_key=unique_key)
+    sort = Sort(
+        "a_sort",
+        "a",
+        (SortOrder("a.k", True, False),),
+        None,
+        "undefined",
+    )
+    plan = replace(
+        snapshot.plan,
+        nodes=tuple(
+            replace(node, left="a_sort")
+            if node.id == "join"
+            else node
+            for node in snapshot.plan.nodes
+        )
+        + (sort,),
+    )
+    return replace(snapshot, plan=plan)
 
 
 def union_snapshot(duplicate):
@@ -3590,6 +3811,296 @@ class DirectUniqueRhsJoinTest(unittest.TestCase):
                     build_problem(logical, staged, 1).script
                 )
             )
+
+    def test_delayed_filter_compaction_matches_exhaustive_reference(self):
+        left_states = (
+            None,
+            (None, -1),
+            (0, -1),
+            (1, 2),
+        )
+        right_states = (
+            None,
+            (0, None),
+            (0, -1),
+            (1, 2),
+        )
+        for extra_equality in (False, True):
+            snapshot = delayed_unique_rhs_filter_snapshot(
+                extra_equality=extra_equality,
+            )
+            script = smt.Script()
+            database = Database(snapshot, 2, script)
+            relation = RelationEvaluator(
+                snapshot,
+                database,
+                ScalarEncoder(script),
+            ).root().certain()
+            self.assertEqual(len(relation.rows), 2)
+
+            for left_rows in product(left_states, repeat=2):
+                for right_rows in product(right_states, repeat=2):
+                    present_right_keys = [
+                        row[0] for row in right_rows if row is not None
+                    ]
+                    if len(present_right_keys) != len(set(present_right_keys)):
+                        continue
+                    with self.subTest(
+                        extra_equality=extra_equality,
+                        left=left_rows,
+                        right=right_rows,
+                    ):
+                        self.assertEqual(
+                            self._symbolic_bag(
+                                relation,
+                                self._constants(
+                                    database,
+                                    left_rows,
+                                    right_rows,
+                                ),
+                            ),
+                            self._reference_bag(
+                                "inner",
+                                left_rows,
+                                right_rows,
+                                extra_equality,
+                            ),
+                        )
+
+    def test_delayed_filter_gate_accepts_reversal_and_composite_key(self):
+        accepted = {
+            "ordinary": delayed_unique_rhs_filter_snapshot(),
+            "single": delayed_unique_rhs_filter_snapshot(
+                predicate_shape="single",
+            ),
+            "reversed": delayed_unique_rhs_filter_snapshot(
+                reverse_equality=True,
+            ),
+            "composite": delayed_unique_rhs_filter_snapshot(
+                unique_key=("k", "x"),
+                right_value_nullable=False,
+                extra_equality=True,
+            ),
+        }
+        for name, snapshot in accepted.items():
+            with self.subTest(name=name):
+                relation = self._evaluate(snapshot)
+                self.assertEqual(len(relation.rows), 2)
+                self.assertEqual(
+                    tuple(column.name for column in relation.columns),
+                    ("a.k", "a.x", "b.k", "b.x"),
+                )
+
+    def test_delayed_filter_compacts_each_left_deep_cross_factor(self):
+        snapshot = delayed_unique_rhs_filter_chain_snapshot()
+        relation = self._evaluate(snapshot)
+        self.assertEqual(len(relation.rows), 2)
+        self.assertEqual(
+            tuple(column.name for column in relation.columns),
+            ("a.k", "a.x", "b.k", "b.x", "c.k", "c.x"),
+        )
+        with mock.patch.object(relation_model, "MAX_RELATION_ROWS", 2):
+            self.assertEqual(len(self._evaluate(snapshot).rows), 2)
+
+    def test_delayed_filter_near_misses_keep_the_generic_cross(self):
+        near_misses = {
+            "nonunique": delayed_unique_rhs_filter_snapshot(unique_key=()),
+            "subset_key": delayed_unique_rhs_filter_snapshot(
+                unique_key=("k", "x"),
+                right_value_nullable=False,
+            ),
+            "right_project": delayed_unique_rhs_filter_snapshot(
+                right_project=True,
+            ),
+            "scan_predicate": delayed_unique_rhs_filter_snapshot(
+                scan_predicate=True,
+            ),
+            "scan_limit": delayed_unique_rhs_filter_snapshot(
+                pushed_limit=True,
+            ),
+            "nullable_unique_key": delayed_unique_rhs_filter_snapshot(
+                right_key_nullable=True,
+            ),
+            "coerced_unique_key": delayed_unique_rhs_filter_snapshot(
+                left_key_type="Decimal(35,34)",
+            ),
+            "null_safe": delayed_unique_rhs_filter_snapshot(null_safe=True),
+            "or": delayed_unique_rhs_filter_snapshot(predicate_shape="or"),
+            "nested_and": delayed_unique_rhs_filter_snapshot(
+                predicate_shape="nested_and",
+            ),
+            "stage_graph": delayed_unique_rhs_filter_snapshot(staged=True),
+        }
+        for name, snapshot in near_misses.items():
+            with self.subTest(name=name):
+                self.assertEqual(
+                    len(
+                        self._evaluate(
+                            snapshot,
+                            defer_pushed_limits=name == "scan_limit",
+                        ).rows
+                    ),
+                    4,
+                )
+
+    def test_delayed_filter_overrides_keep_the_generic_cross(self):
+        snapshot = delayed_unique_rhs_filter_snapshot()
+        script = smt.Script()
+        database = Database(snapshot, 2, script)
+        scalar = ScalarEncoder(script)
+        evaluator = RelationEvaluator(snapshot, database, scalar)
+        join = evaluator.node("join")
+        right = evaluator.node("b")
+        for name, overrides in {
+            "join": {"join": join},
+            "right": {"b": right},
+        }.items():
+            with self.subTest(name=name):
+                relation = RelationEvaluator(
+                    snapshot,
+                    database,
+                    scalar,
+                    node_overrides=overrides,
+                ).root().certain()
+                self.assertEqual(len(relation.rows), 4)
+
+        true = Expr(
+            kind="literal",
+            value=True,
+            result_type="Bool",
+            nullable=False,
+        )
+        inputs = ("a.k", "a.x", "b.k", "b.x")
+        outputs = ("u.a_k", "u.a_x", "u.b_k", "u.b_x")
+        nodes = snapshot.plan.nodes + (
+            Filter("shared_consumer", "join", true),
+            UnionAll(
+                "shared_root",
+                (
+                    UnionInput("filter", inputs),
+                    UnionInput("shared_consumer", inputs),
+                ),
+                outputs,
+                False,
+            ),
+        )
+        shared = replace(
+            snapshot,
+            plan=replace(
+                snapshot.plan,
+                nodes=nodes,
+                root="shared_root",
+                output=outputs,
+            ),
+        )
+        self.assertEqual(len(self._evaluate(shared).rows), 8)
+
+    def test_delayed_filter_rejects_consumer_subplan_and_preserves_error(self):
+        snapshot = delayed_unique_rhs_filter_subplan_snapshot()
+        script = smt.Script()
+        family = RelationEvaluator(
+            snapshot,
+            Database(snapshot, 2, script),
+            ScalarEncoder(script),
+        ).root()
+        self.assertTrue(family.outcomes)
+        self.assertTrue(
+            any(outcome.error != smt.FALSE for outcome in family.outcomes)
+        )
+        self.assertEqual(
+            {len(outcome.relation.rows) for outcome in family.outcomes},
+            {4},
+        )
+
+    def test_delayed_filter_preserves_seed_outcome_language(self):
+        compact = delayed_unique_rhs_filter_sorted_seed_snapshot()
+        generic = delayed_unique_rhs_filter_sorted_seed_snapshot(unique_key=())
+
+        def evaluate(snapshot):
+            script = smt.Script()
+            return RelationEvaluator(
+                snapshot,
+                Database(snapshot, 2, script),
+                ScalarEncoder(script),
+            ).root()
+
+        compact_family = evaluate(compact)
+        generic_family = evaluate(generic)
+        self.assertGreater(len(compact_family.outcomes), 1)
+        self.assertEqual(
+            tuple(
+                (
+                    outcome.enabled,
+                    outcome.error,
+                    outcome.decisions,
+                    outcome.choices,
+                )
+                for outcome in compact_family.outcomes
+            ),
+            tuple(
+                (
+                    outcome.enabled,
+                    outcome.error,
+                    outcome.decisions,
+                    outcome.choices,
+                )
+                for outcome in generic_family.outcomes
+            ),
+        )
+        self.assertEqual(
+            {len(outcome.relation.rows) for outcome in compact_family.outcomes},
+            {2},
+        )
+        self.assertEqual(
+            {len(outcome.relation.rows) for outcome in generic_family.outcomes},
+            {4},
+        )
+
+    def test_delayed_filter_retains_residual_and_construction_audits(self):
+        residual = Expr(
+            kind="eq",
+            args=(
+                Expr(kind="column", column="a.x"),
+                Expr(kind="column", column="b.x"),
+            ),
+        )
+        filtered = delayed_unique_rhs_filter_snapshot(residual=residual)
+        unfiltered = delayed_unique_rhs_filter_snapshot()
+        self.assertFalse(
+            _restricted_domain_has_model(
+                build_logical_kernel_problem_for_tests(
+                    filtered,
+                    filtered,
+                    1,
+                ).script
+            )
+        )
+        self.assertTrue(
+            _restricted_domain_has_model(
+                build_logical_kernel_problem_for_tests(
+                    filtered,
+                    unfiltered,
+                    1,
+                ).script
+            )
+        )
+
+        with mock.patch.object(relation_model, "MAX_RELATION_ROWS", 2):
+            self.assertEqual(len(self._evaluate(filtered).rows), 2)
+            with self.assertRaisesRegex(
+                RelationError,
+                "join output requires 4 candidate rows.*2 row construction",
+            ):
+                self._evaluate(
+                    delayed_unique_rhs_filter_snapshot(unique_key=())
+                )
+
+        with mock.patch.object(relation_model, "MAX_RELATION_ROW_PAIRS", 3):
+            with self.assertRaisesRegex(
+                RelationError,
+                "join matching requires 4 candidate-row pairs.*3 pair construction",
+            ):
+                self._evaluate(filtered)
 
     @staticmethod
     def _evaluate(snapshot, *, defer_pushed_limits=False):

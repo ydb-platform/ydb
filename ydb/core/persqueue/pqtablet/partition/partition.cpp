@@ -2224,6 +2224,7 @@ void TPartition::Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& c
     if (!userInfo) {
         ReplyError(ctx, info.Destination,  NPersQueue::NErrorCode::BAD_REQUEST, GetConsumerDeletedMessage(info.User));
         OnReadRequestFinished(info.Destination, 0, 0, info.User, ctx);
+        return;
     }
 
     OnReadComplete(info, userInfo, ev->Get(), ctx);

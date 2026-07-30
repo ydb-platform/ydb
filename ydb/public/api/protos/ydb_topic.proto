@@ -1507,7 +1507,7 @@ message AlterTopicRequest {
     optional int64 set_partition_write_burst_messages = 19 [(Ydb.value) = ">= 0"];
 
     // Set total read speed for a single partition (across all consumers), in bytes per second.
-    // Zero value means no set_partition_count_limit.
+    // Zero value means no limit.
     optional int64 set_partition_total_read_speed_bytes_per_second = 20 [(Ydb.value) = ">= 0"];
 
     // Set total read speed for a single partition (across all consumers), in messages per second.

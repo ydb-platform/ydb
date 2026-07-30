@@ -388,8 +388,8 @@ TResult ApplyChangesInt( // create and alter
             || settings.partition_read_without_consumer_speed_messages_per_second()) {
         auto* readQuota = NPQ::GetOrAddReadQuota(*pqTabletConfig, NPQ::CLIENTID_WITHOUT_CONSUMER);
         if (settings.partition_read_without_consumer_speed_bytes_per_second() == 0) {
-            readQuota->ClearSpeedInBytesPerSecond(settings.partition_read_without_consumer_speed_bytes_per_second());
-            readQuota->ClearBurstSize(settings.partition_read_without_consumer_speed_bytes_per_second());
+            readQuota->ClearSpeedInBytesPerSecond();
+            readQuota->ClearBurstSize();
         } else if (settings.partition_read_without_consumer_speed_bytes_per_second()) {
             readQuota->SetSpeedInBytesPerSecond(settings.partition_read_without_consumer_speed_bytes_per_second());
             readQuota->SetBurstSize(settings.partition_read_without_consumer_speed_bytes_per_second());

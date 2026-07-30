@@ -442,7 +442,7 @@ TResult AddConsumer(
     if (consumerConfig.has_read_speed_bytes_per_second()) {
         if (consumerConfig.read_speed_bytes_per_second() < 0) {
             return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
-                << "partition_read_without_consumer_speed_bytes_per_second can't be negative, provided "
+                << "read_speed_bytes_per_second can't be negative, provided "
                 << consumerConfig.read_speed_bytes_per_second()};
         }
         auto* readQuota = NPQ::GetOrAddReadQuota(*config, consumerName);
@@ -457,7 +457,7 @@ TResult AddConsumer(
     if (consumerConfig.has_read_speed_messages_per_second()) {
         if (consumerConfig.read_speed_messages_per_second() < 0) {
             return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
-                << "partition_read_without_consumer_speed_messages_per_second can't be negative, provided "
+                << "read_speed_messages_per_second can't be negative, provided "
                 << consumerConfig.read_speed_messages_per_second()};
         }
         auto* readQuota = NPQ::GetOrAddReadQuota(*config, consumerName);

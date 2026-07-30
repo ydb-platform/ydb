@@ -618,7 +618,7 @@ TReadAnswer TReadInfo::FormAnswer(
         Error = true;
         return TReadAnswer{
             .Size = blobResponse.Error.ErrorStr.size(),
-            .ConsumedMessages = 1,
+            .ConsumedMessages = 0,
             .Event = MakeHolder<TEvPQ::TEvError>(blobResponse.Error.ErrorCode, blobResponse.Error.ErrorStr, destination),
             .IsInternal = IsInternal,
             .ReplyTo = ReplyTo

@@ -15,12 +15,14 @@ class TestYdbAlterStorageWorkload(StressFixture):
         slots = self.cluster.register_and_start_slots(self.database, 1)
         self.cluster.wait_tenant_up(self.database)
         yield
-        self.cluster.unregister_and_stop_slots(slots)
-        self.cluster.remove_database(self.database)
         try:
-            next(cluster_generator)
-        except StopIteration:
-            pass
+            self.cluster.unregister_and_stop_slots(slots)
+            self.cluster.remove_database(self.database)
+        finally:
+            try:
+                next(cluster_generator)
+            except StopIteration:
+                pass
 
     def test(self):
         cmd = [

@@ -1,3 +1,4 @@
+import logging
 import time
 import random
 
@@ -7,6 +8,9 @@ from ydb.tests.stress.common.common import WorkloadBase
 from ydb.tests.library.clients.kikimr_client import kikimr_client_factory
 from ydb.tests.library.common.protobuf_console import AlterTenantRequest, GetTenantStatusRequest
 import ydb.public.api.protos.ydb_cms_pb2 as cms_tenants_pb
+
+logger = logging.getLogger(__name__)
+
 
 class AlterStorageUnitsWorkload(WorkloadBase):
     def __init__(self, endpoint, database, duration):
@@ -42,14 +46,19 @@ class AlterStorageUnitsWorkload(WorkloadBase):
             request.add_storage_groups_to_remove(self.storage_unit_kind, self.storage_unit_count - new_count)
         try:
             self.kikimr_client.console_request(text_format.MessageToString(request.protobuf))
-        except Exception:
+        except Exception as e:
+            logger.warning(f"error in console request: {e}")
             return
         self.storage_unit_count = new_count
 
     def _execute_incorrect(self):
         request = AlterTenantRequest(self.database)
         request.add_storage_groups_to_remove(self.storage_unit_kind, 8)
-        self.kikimr_client.console_request(text_format.MessageToString(request.protobuf), raise_on_error=False)
+        try:
+            self.kikimr_client.console_request(text_format.MessageToString(request.protobuf), raise_on_error=False)
+        except Exception as e:
+            logger.warning(f"error in console request: {e}")
+            return
 
     def _post_stop(self):
         storage_units = self.get_tenant_status().required_resources.storage_units[0]

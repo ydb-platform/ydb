@@ -5238,6 +5238,569 @@ void SetReadRange(
     };
 }
 
+enum class EDecimalAverageCarrierMutation {
+    None,
+    TupleArity,
+    SumScale,
+    CountType,
+    BadLambdaArguments,
+    UnsafeNothing,
+    UnsafeOptionalType,
+    OrderedUnion,
+    DuplicateProducer,
+    MissingProducer,
+    Fanout,
+    ScalarUse,
+    OrderedProject,
+    PadSourcePhase,
+    PadSourceFanout,
+    PadSourceAverage,
+    DirectAggregateLeaf,
+    ProjectChain,
+    FinalFunction,
+    HashShuffleRoute,
+    MergeRoute,
+};
+
+struct TDecimalAverageStateNull {
+    TExpression Expression;
+    const TTypeAnnotationNode* Type = nullptr;
+};
+
+TDecimalAverageStateNull MakeDecimalAverageStateNull(
+    TExportTestContext& ctx,
+    EDecimalAverageCarrierMutation mutation =
+        EDecimalAverageCarrierMutation::None)
+{
+    const bool wrongArity =
+        mutation == EDecimalAverageCarrierMutation::TupleArity;
+    const bool wrongScale =
+        mutation == EDecimalAverageCarrierMutation::SumScale;
+    const bool wrongCount =
+        mutation == EDecimalAverageCarrierMutation::CountType;
+    const TStringBuf scale = wrongScale ? "3" : "2";
+    const auto* sumType = DecimalType(ctx, "35", scale);
+    const auto* countType = ScalarType(
+        ctx,
+        wrongCount
+            ? NUdf::EDataSlot::Int64
+            : NUdf::EDataSlot::Uint64);
+    TTypeAnnotationNode::TListType itemTypes{sumType};
+    TExprNode::TListType itemDescriptors{
+        DecimalDataTypeDescriptor(ctx, "35", scale, sumType),
+    };
+    if (!wrongArity) {
+        itemTypes.push_back(countType);
+        itemDescriptors.push_back(DataTypeDescriptor(
+            ctx,
+            wrongCount ? "Int64" : "Uint64",
+            countType));
+    }
+    const auto* tupleType =
+        ctx.ExprCtx.MakeType<TTupleExprType>(itemTypes);
+    const auto* optionalTupleType =
+        ctx.ExprCtx.MakeType<TOptionalExprType>(tupleType);
+    auto descriptor = OptionalTypeDescriptor(
+        ctx,
+        TupleTypeDescriptor(
+            ctx,
+            std::move(itemDescriptors),
+            tupleType),
+        optionalTupleType);
+    TExpression expression(
+        TypedCallable(
+            ctx,
+            "Nothing",
+            {std::move(descriptor)},
+            optionalTupleType),
+        &ctx.ExprCtx,
+        &ctx.ExpressionProps);
+    if (mutation ==
+        EDecimalAverageCarrierMutation::BadLambdaArguments)
+    {
+        expression.Node->ChildRef(0) =
+            ctx.ExprCtx.NewArguments(TPositionHandle(), {});
+    } else if (
+        mutation == EDecimalAverageCarrierMutation::UnsafeNothing)
+    {
+        expression.GetExpressionBody()->SetSideEffects(
+            ESideEffects::General);
+    } else if (
+        mutation ==
+            EDecimalAverageCarrierMutation::UnsafeOptionalType)
+    {
+        expression.GetExpressionBody()->Child(0)->SetSideEffects(
+            ESideEffects::General);
+    }
+    return {std::move(expression), optionalTupleType};
+}
+
+TSemanticSnapshotExportResult ExportDecimalAverageCarrier(
+    EDecimalAverageCarrierMutation mutation =
+        EDecimalAverageCarrierMutation::None)
+{
+    TExportTestContext ctx;
+    const auto& table = AddTable(ctx, "/Root/Carrier", {
+        {"x", "Decimal(7,2)", true},
+    });
+    const auto pos = TPositionHandle();
+    const auto* valueType = DecimalType(ctx, "7", "2", true);
+    const auto* uint64Type =
+        ScalarType(ctx, NUdf::EDataSlot::Uint64);
+    const auto* optionalUint64Type =
+        ScalarType(ctx, NUdf::EDataSlot::Uint64, true);
+    const auto makeRead = [&](TStringBuf alias) {
+        const TString ownedAlias(alias);
+        auto read = MakeRead(
+            ctx,
+            table,
+            ownedAlias,
+            {"x"},
+            NYql::EStorageType::ColumnStorage);
+        SetExactOutputType(ctx, *read, {
+            {
+                TStringBuilder() << ownedAlias << ".x",
+                valueType,
+            },
+        });
+        return read;
+    };
+    const auto makeUint64Null = [&]() {
+        return TExpression(
+            TypedNothing(
+                ctx,
+                "Uint64",
+                uint64Type,
+                optionalUint64Type),
+            &ctx.ExprCtx,
+            &ctx.ExpressionProps);
+    };
+    const auto makeWrappedCount = [&](TStringBuf name) {
+        return TExpression(
+            TypedCallable(
+                ctx,
+                "Just",
+                {TypedMember(ctx, name, uint64Type)},
+                optionalUint64Type),
+            &ctx.ExprCtx,
+            &ctx.ExpressionProps);
+    };
+
+    auto averageRead = makeRead("average");
+    TIntrusivePtr<TOpAggregate> averageAggregate;
+    TIntrusivePtr<TOpMap> averageMap;
+    if (mutation == EDecimalAverageCarrierMutation::MissingProducer) {
+        averageAggregate = MakeIntrusive<TOpAggregate>(
+            averageRead,
+            TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                TInfoUnit("average.x"),
+                "count",
+                TInfoUnit("unused"))},
+            TVector<TInfoUnit>{},
+            EOpPhase::Intermediate,
+            false,
+            pos);
+        SetExactOutputType(ctx, *averageAggregate, {
+            {"unused", uint64Type},
+        });
+        auto stateNull = MakeDecimalAverageStateNull(ctx);
+        averageMap = MakeIntrusive<TOpMap>(
+            averageAggregate,
+            pos,
+            TVector<TMapElement>{
+                TMapElement(
+                    TInfoUnit("s0"),
+                    std::move(stateNull.Expression)),
+                TMapElement(
+                    TInfoUnit("s1"),
+                    makeUint64Null()),
+                TMapElement(
+                    TInfoUnit("s2"),
+                    makeUint64Null()),
+            });
+        SetExactOutputType(ctx, *averageMap, {
+            {"unused", uint64Type},
+            {"s0", stateNull.Type},
+            {"s1", optionalUint64Type},
+            {"s2", optionalUint64Type},
+        });
+    } else {
+        averageAggregate = MakeIntrusive<TOpAggregate>(
+            averageRead,
+            TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                TInfoUnit("average.x"),
+                "avg",
+                TInfoUnit("s0"))},
+            TVector<TInfoUnit>{},
+            EOpPhase::Intermediate,
+            false,
+            pos);
+        SetExactOutputType(ctx, *averageAggregate, {
+            {"s0", valueType},
+        });
+        TVector<TMapElement> elements{
+            TMapElement(
+                TInfoUnit("s1"),
+                makeUint64Null()),
+            TMapElement(
+                TInfoUnit("s2"),
+                makeUint64Null()),
+        };
+        if (mutation == EDecimalAverageCarrierMutation::ScalarUse) {
+            elements.emplace_back(
+                TInfoUnit("leak"),
+                TExpression(
+                    TypedMember(ctx, "s0", valueType),
+                    &ctx.ExprCtx,
+                    &ctx.ExpressionProps));
+        }
+        averageMap = MakeIntrusive<TOpMap>(
+            averageAggregate,
+            pos,
+            std::move(elements));
+        TVector<std::pair<
+            TString,
+            const TTypeAnnotationNode*>> outputTypes{
+            {"s0", valueType},
+            {"s1", optionalUint64Type},
+            {"s2", optionalUint64Type},
+        };
+        if (mutation == EDecimalAverageCarrierMutation::ScalarUse) {
+            outputTypes.emplace_back("leak", valueType);
+        }
+        SetExactOutputType(ctx, *averageMap, outputTypes);
+    }
+    TIntrusivePtr<IOperator> averageLeaf = averageMap;
+    TIntrusivePtr<TOpMap> averageWrapper;
+    if (mutation == EDecimalAverageCarrierMutation::DirectAggregateLeaf) {
+        averageLeaf = averageAggregate;
+    } else if (
+        mutation == EDecimalAverageCarrierMutation::ProjectChain)
+    {
+        averageWrapper = MakeIntrusive<TOpMap>(
+            averageMap,
+            pos,
+            TVector<TMapElement>{});
+        SetExactOutputType(ctx, *averageWrapper, {
+            {"s0", valueType},
+            {"s1", optionalUint64Type},
+            {"s2", optionalUint64Type},
+        });
+        averageLeaf = averageWrapper;
+    }
+
+    auto countRead = makeRead("count");
+    TIntrusivePtr<TOpAggregate> countAggregate;
+    TIntrusivePtr<TOpMap> countMap;
+    if (mutation == EDecimalAverageCarrierMutation::DuplicateProducer) {
+        countAggregate = MakeIntrusive<TOpAggregate>(
+            countRead,
+            TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                TInfoUnit("count.x"),
+                "avg",
+                TInfoUnit("s0"))},
+            TVector<TInfoUnit>{},
+            EOpPhase::Intermediate,
+            false,
+            pos);
+        SetExactOutputType(ctx, *countAggregate, {
+            {"s0", valueType},
+        });
+        countMap = MakeIntrusive<TOpMap>(
+            countAggregate,
+            pos,
+            TVector<TMapElement>{
+                TMapElement(
+                    TInfoUnit("s1"),
+                    makeUint64Null()),
+                TMapElement(
+                    TInfoUnit("s2"),
+                    makeUint64Null()),
+            });
+        SetExactOutputType(ctx, *countMap, {
+            {"s0", valueType},
+            {"s1", optionalUint64Type},
+            {"s2", optionalUint64Type},
+        });
+    } else {
+        countAggregate = MakeIntrusive<TOpAggregate>(
+            countRead,
+            TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                TInfoUnit("count.x"),
+                mutation ==
+                        EDecimalAverageCarrierMutation::PadSourceAverage
+                    ? "avg"
+                    : "count",
+                TInfoUnit("s1"))},
+            TVector<TInfoUnit>{},
+            mutation ==
+                    EDecimalAverageCarrierMutation::PadSourcePhase
+                ? EOpPhase::Undefined
+                : EOpPhase::Intermediate,
+            false,
+            pos);
+        SetExactOutputType(ctx, *countAggregate, {
+            {"s1", uint64Type},
+        });
+        auto stateNull = MakeDecimalAverageStateNull(
+            ctx,
+            mutation);
+        countMap = MakeIntrusive<TOpMap>(
+            countAggregate,
+            pos,
+            TVector<TMapElement>{
+                TMapElement(
+                    TInfoUnit("s0"),
+                    std::move(stateNull.Expression)),
+                TMapElement(
+                    TInfoUnit("s1"),
+                    makeWrappedCount("s1")),
+                TMapElement(
+                    TInfoUnit("s2"),
+                    makeUint64Null()),
+                TMapElement(
+                    TInfoUnit("s1_fake"),
+                    TInfoUnit("s1"),
+                    pos,
+                    &ctx.ExprCtx,
+                    &ctx.ExpressionProps,
+                    true),
+            },
+            mutation ==
+                EDecimalAverageCarrierMutation::OrderedProject);
+        SetExactOutputType(ctx, *countMap, {
+            {"s0", stateNull.Type},
+            {"s1", optionalUint64Type},
+            {"s2", optionalUint64Type},
+            {"s1_fake", uint64Type},
+        });
+    }
+
+    TIntrusivePtr<TOpMap> padSourceFanoutMap;
+    if (mutation ==
+        EDecimalAverageCarrierMutation::PadSourceFanout)
+    {
+        auto stateNull = MakeDecimalAverageStateNull(ctx);
+        padSourceFanoutMap = MakeIntrusive<TOpMap>(
+            countAggregate,
+            pos,
+            TVector<TMapElement>{
+                TMapElement(
+                    TInfoUnit("s0"),
+                    std::move(stateNull.Expression)),
+                TMapElement(
+                    TInfoUnit("s2"),
+                    makeUint64Null()),
+            });
+        SetExactOutputType(ctx, *padSourceFanoutMap, {
+            {"s1", uint64Type},
+            {"s0", stateNull.Type},
+            {"s2", optionalUint64Type},
+        });
+    }
+
+    auto distinctRead = makeRead("distinct");
+    auto distinct = MakeIntrusive<TOpAggregate>(
+        distinctRead,
+        TVector<TOpAggregationTraits>{TOpAggregationTraits(
+            TInfoUnit("distinct.x"),
+            "distinct",
+            TInfoUnit("distinct.x"))},
+        TVector<TInfoUnit>{TInfoUnit("distinct.x")},
+        EOpPhase::Undefined,
+        true,
+        pos);
+    SetExactOutputType(ctx, *distinct, {
+        {"distinct.x", valueType},
+    });
+    auto distinctCount = MakeIntrusive<TOpAggregate>(
+        distinct,
+        TVector<TOpAggregationTraits>{TOpAggregationTraits(
+            TInfoUnit("distinct.x"),
+            "count",
+            TInfoUnit("s2"))},
+        TVector<TInfoUnit>{},
+        EOpPhase::Intermediate,
+        false,
+        pos);
+    SetExactOutputType(ctx, *distinctCount, {
+        {"s2", uint64Type},
+    });
+    auto distinctStateNull = MakeDecimalAverageStateNull(ctx);
+    auto distinctMap = MakeIntrusive<TOpMap>(
+        distinctCount,
+        pos,
+        TVector<TMapElement>{
+            TMapElement(
+                TInfoUnit("s0"),
+                std::move(distinctStateNull.Expression)),
+            TMapElement(
+                TInfoUnit("s1"),
+                makeUint64Null()),
+            TMapElement(
+                TInfoUnit("s2"),
+                makeWrappedCount("s2")),
+            TMapElement(
+                TInfoUnit("s2_fake"),
+                TInfoUnit("s2"),
+                pos,
+                &ctx.ExprCtx,
+                &ctx.ExpressionProps,
+                true),
+        });
+    SetExactOutputType(ctx, *distinctMap, {
+        {"s0", distinctStateNull.Type},
+        {"s1", optionalUint64Type},
+        {"s2", optionalUint64Type},
+        {"s2_fake", uint64Type},
+    });
+
+    auto firstUnion = MakeIntrusive<TOpUnionAll>(
+        averageLeaf,
+        mutation == EDecimalAverageCarrierMutation::Fanout
+            ? averageLeaf
+            : TIntrusivePtr<IOperator>(countMap),
+        pos,
+        TVector<TInfoUnit>{
+            TInfoUnit("s0"),
+            TInfoUnit("s1"),
+            TInfoUnit("s2"),
+        },
+        mutation == EDecimalAverageCarrierMutation::OrderedUnion);
+    SetExactOutputType(ctx, *firstUnion, {
+        {"s0", valueType},
+        {"s1", optionalUint64Type},
+        {"s2", optionalUint64Type},
+    });
+    auto secondUnion = MakeIntrusive<TOpUnionAll>(
+        firstUnion,
+        padSourceFanoutMap
+            ? TIntrusivePtr<IOperator>(padSourceFanoutMap)
+            : TIntrusivePtr<IOperator>(distinctMap),
+        pos,
+        TVector<TInfoUnit>{
+            TInfoUnit("s0"),
+            TInfoUnit("s1"),
+            TInfoUnit("s2"),
+        });
+    SetExactOutputType(ctx, *secondUnion, {
+        {"s0", valueType},
+        {"s1", optionalUint64Type},
+        {"s2", optionalUint64Type},
+    });
+    auto final = MakeIntrusive<TOpAggregate>(
+        secondUnion,
+        TVector<TOpAggregationTraits>{
+            TOpAggregationTraits(
+                TInfoUnit("s0"),
+                mutation == EDecimalAverageCarrierMutation::FinalFunction
+                    ? "sum"
+                    : "avg",
+                TInfoUnit("average")),
+            TOpAggregationTraits(
+                TInfoUnit("s1"),
+                "sum",
+                TInfoUnit("count_result"),
+                false,
+                true),
+            TOpAggregationTraits(
+                TInfoUnit("s2"),
+                "sum",
+                TInfoUnit("distinct_result"),
+                false,
+                true),
+        },
+        TVector<TInfoUnit>{},
+        EOpPhase::Final,
+        false,
+        pos);
+    SetExactOutputType(ctx, *final, {
+        {"average", valueType},
+        {"count_result", optionalUint64Type},
+        {"distinct_result", optionalUint64Type},
+    });
+    TOpRoot root(
+        final,
+        pos,
+        {"average", "count_result", "distinct_result"});
+
+    auto& graph = root.PlanProps.StageGraph;
+    const ui32 averageStage =
+        graph.AddSourceStage(NYql::EStorageType::ColumnStorage);
+    const ui32 countStage =
+        graph.AddSourceStage(NYql::EStorageType::ColumnStorage);
+    const ui32 distinctStage =
+        graph.AddSourceStage(NYql::EStorageType::ColumnStorage);
+    const ui32 firstUnionStage = graph.AddStage();
+    const ui32 rootStage = graph.AddStage();
+    averageRead->Props.StageId = averageStage;
+    averageAggregate->Props.StageId = averageStage;
+    averageMap->Props.StageId = averageStage;
+    if (averageWrapper) {
+        averageWrapper->Props.StageId = averageStage;
+    }
+    countRead->Props.StageId = countStage;
+    countAggregate->Props.StageId = countStage;
+    countMap->Props.StageId = countStage;
+    if (padSourceFanoutMap) {
+        padSourceFanoutMap->Props.StageId = countStage;
+    }
+    distinctRead->Props.StageId = distinctStage;
+    distinct->Props.StageId = distinctStage;
+    distinctCount->Props.StageId = distinctStage;
+    distinctMap->Props.StageId = distinctStage;
+    firstUnion->Props.StageId = firstUnionStage;
+    secondUnion->Props.StageId = rootStage;
+    final->Props.StageId = rootStage;
+
+    if (mutation == EDecimalAverageCarrierMutation::HashShuffleRoute) {
+        auto shuffle = MakeIntrusive<TShuffleConnection>(
+            TVector<TInfoUnit>{TInfoUnit("s0")},
+            graph.GetOutputIndex(averageStage));
+        shuffle->HashFuncType =
+            NYql::NDq::EHashShuffleFuncType::HashV1;
+        graph.Connect(averageStage, firstUnionStage, shuffle);
+    } else if (
+        mutation == EDecimalAverageCarrierMutation::MergeRoute)
+    {
+        graph.Connect(
+            averageStage,
+            firstUnionStage,
+            MakeIntrusive<TMergeConnection>(
+                TVector<TSortElement>{
+                    TSortElement(TInfoUnit("s0"), true, true),
+                },
+                graph.GetOutputIndex(averageStage)));
+    } else {
+        graph.Connect(
+            averageStage,
+            firstUnionStage,
+            MakeIntrusive<TUnionAllConnection>(
+                graph.GetOutputIndex(averageStage),
+                false));
+    }
+    graph.Connect(
+        countStage,
+        firstUnionStage,
+        MakeIntrusive<TUnionAllConnection>(
+            graph.GetOutputIndex(countStage),
+            false));
+    graph.Connect(
+        firstUnionStage,
+        rootStage,
+        MakeIntrusive<TUnionAllConnection>(
+            graph.GetOutputIndex(firstUnionStage),
+            false));
+    graph.Connect(
+        distinctStage,
+        rootStage,
+        MakeIntrusive<TUnionAllConnection>(
+            graph.GetOutputIndex(distinctStage),
+            false));
+
+    return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+}
+
 Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
     Y_UNIT_TEST(OutputIsDeterministicAcrossEquivalentAllocations) {
         UNIT_ASSERT_VALUES_EQUAL(ExportDeterministicPlan(), ExportDeterministicPlan());
@@ -17465,6 +18028,136 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT_VALUES_EQUAL(
             finalTrait["state"]["nullable"].GetBooleanSafe(),
             true);
+    }
+
+    Y_UNIT_TEST(ExportsDecimalAverageCarrierThroughMultiDistinctUnion) {
+        const auto snapshot =
+            ParseSupported(ExportDecimalAverageCarrier());
+
+        size_t normalizedPads = 0;
+        for (const auto& node :
+             snapshot["plan"]["nodes"].GetArraySafe())
+        {
+            if (node["op"].GetStringSafe() != "project") {
+                continue;
+            }
+            for (const auto& column :
+                 node["columns"].GetArraySafe())
+            {
+                const auto& expression = column["expression"];
+                if (column["output"].GetStringSafe() == "s0" &&
+                    expression["kind"].GetStringSafe() == "null")
+                {
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        expression["type"].GetStringSafe(),
+                        "Decimal(7,2)");
+                    ++normalizedPads;
+                }
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(normalizedPads, 2);
+    }
+
+    Y_UNIT_TEST(DecimalAverageCarrierMutationsFailClosed) {
+        struct TCase {
+            EDecimalAverageCarrierMutation Mutation;
+            TStringBuf Reason;
+        };
+        const TVector<TCase> cases{
+            {
+                EDecimalAverageCarrierMutation::TupleArity,
+                "must remain exact",
+            },
+            {
+                EDecimalAverageCarrierMutation::SumScale,
+                "must remain exact",
+            },
+            {
+                EDecimalAverageCarrierMutation::CountType,
+                "must remain exact",
+            },
+            {
+                EDecimalAverageCarrierMutation::BadLambdaArguments,
+                "must have one row argument",
+            },
+            {
+                EDecimalAverageCarrierMutation::UnsafeNothing,
+                "side-effecting or CSE-unsafe",
+            },
+            {
+                EDecimalAverageCarrierMutation::UnsafeOptionalType,
+                "side-effecting or CSE-unsafe",
+            },
+            {
+                EDecimalAverageCarrierMutation::OrderedUnion,
+                "requires unordered UnionAll",
+            },
+            {
+                EDecimalAverageCarrierMutation::DuplicateProducer,
+                "requires exactly one matching",
+            },
+            {
+                EDecimalAverageCarrierMutation::MissingProducer,
+                "requires exactly one matching",
+            },
+            {
+                EDecimalAverageCarrierMutation::Fanout,
+                "exactly one audited consumer",
+            },
+            {
+                EDecimalAverageCarrierMutation::ScalarUse,
+                "another Project scalar consumer",
+            },
+            {
+                EDecimalAverageCarrierMutation::OrderedProject,
+                "Project leaf must be unordered",
+            },
+            {
+                EDecimalAverageCarrierMutation::PadSourcePhase,
+                "one keyless Intermediate Aggregate",
+            },
+            {
+                EDecimalAverageCarrierMutation::PadSourceFanout,
+                "exactly one audited consumer",
+            },
+            {
+                EDecimalAverageCarrierMutation::PadSourceAverage,
+                "padding source must not be another Intermediate avg",
+            },
+            {
+                EDecimalAverageCarrierMutation::DirectAggregateLeaf,
+                "instead of a direct Project leaf",
+            },
+            {
+                EDecimalAverageCarrierMutation::ProjectChain,
+                "exactly one Project over one Aggregate",
+            },
+            {
+                EDecimalAverageCarrierMutation::FinalFunction,
+                "Scalar expression is not Data or Optional<Data>",
+            },
+            {
+                EDecimalAverageCarrierMutation::HashShuffleRoute,
+                "must not be a HashShuffle key",
+            },
+            {
+                EDecimalAverageCarrierMutation::MergeRoute,
+                "must not be a Merge ordering column",
+            },
+        };
+
+        for (const auto& test : cases) {
+            const auto result =
+                ExportDecimalAverageCarrier(test.Mutation);
+            UNIT_ASSERT_C(
+                !result.IsSupported(),
+                TStringBuilder()
+                    << "mutation unexpectedly exported: "
+                    << static_cast<ui32>(test.Mutation));
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                test.Reason);
+        }
     }
 
     Y_UNIT_TEST(ExportsIntegralAvgUndefinedStateContract) {

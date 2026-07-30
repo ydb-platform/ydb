@@ -80,10 +80,10 @@ namespace NActors {
     }
 
     bool TCoroutineChunkSerializer::WriteAliasedRaw(const void* data, int size) {
-        return WriteAliasedRaw(data, size, nullptr);
+        return WriteAliasedRawImpl(data, size, nullptr);
     }
 
-    bool TCoroutineChunkSerializer::WriteAliasedRaw(const void* data, int size,
+    bool TCoroutineChunkSerializer::WriteAliasedRawImpl(const void* data, int size,
             const NInterconnect::NRdma::TMemRegion* memRegion) {
         Y_ABORT_UNLESS(!CancelFlag);
         Y_ABORT_UNLESS(!AbortFlag);
@@ -177,7 +177,7 @@ namespace NActors {
     bool TCoroutineChunkSerializer::WriteRope(const TRope *rope) {
         for (auto iter = rope->Begin(); iter.Valid(); iter.AdvanceToNextContiguousBlock()) {
             const auto memRegion = NInterconnect::NRdma::TryExtractFromRcBuf(iter.GetChunk());
-            if (!WriteAliasedRaw(iter.ContiguousData(), iter.ContiguousSize(),
+            if (!WriteAliasedRawImpl(iter.ContiguousData(), iter.ContiguousSize(),
                     memRegion.Empty() ? nullptr : memRegion.GetMemRegion())) {
                 return false;
             }

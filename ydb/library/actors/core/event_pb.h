@@ -145,7 +145,7 @@ namespace NActors {
         void Resume();
         void Produce(const void* data, size_t size,
             const NInterconnect::NRdma::TMemRegion* memRegion);
-        bool WriteAliasedRaw(const void* data, int size,
+        bool WriteAliasedRawImpl(const void* data, int size,
             const NInterconnect::NRdma::TMemRegion* memRegion);
 
         i64 TotalSerializedDataSize;

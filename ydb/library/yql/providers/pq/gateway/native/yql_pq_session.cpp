@@ -231,7 +231,9 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopi
                         futures.emplace_back(NThreading::MakeErrorFuture<TDescribeTopicResult>(std::make_exception_ptr(NThreading::TFutureException() << "Cluster " << clusterInfo.Name << " is unavailable for read")));
                     } else {
                         clusterInfo.AdjustTopicClientSettings(topicSettings);
-                        futures.emplace_back(TTopicClient(ydbDriver, topicSettings).DescribeTopic(clusterTopicPath));
+                        NYdb::NTopic::TDescribeTopicSettings settings;
+                        settings.IncludeStats(true);
+                        futures.emplace_back(TTopicClient(ydbDriver, topicSettings).DescribeTopic(clusterTopicPath, settings));
                     }
                     results.emplace_back(std::move(clusterInfo));
                 }
@@ -267,6 +269,16 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopi
                                 continue;
                             }
                             results[i].PartitionsCount = describeTopicResult.GetTopicDescription().GetTotalPartitionsCount();
+
+                            const auto& partitions = describeTopicResult.GetTopicDescription().GetPartitions();
+                            for (const auto& partitionInfo : partitions) {
+                                if (!partitionInfo.GetPartitionStats()) {
+                                    continue;
+                                }
+                                Cerr << "Partition " << partitionInfo.GetPartitionId() << " has last write time " << partitionInfo.GetPartitionStats()->GetLastWriteTime() << Endl;
+                                results[i].MaxWriteTime[partitionInfo.GetPartitionId()] = partitionInfo.GetPartitionStats()->GetLastWriteTime();
+                            }
+
                             gotAnyTopic = true;
                         } catch (...) {
                             addErrorCluster();

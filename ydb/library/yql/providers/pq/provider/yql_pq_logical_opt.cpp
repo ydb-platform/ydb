@@ -418,14 +418,14 @@ public:
                             .Done();
                     }
                     const auto& federatedTopics = *(topicMeta->FederatedTopic);
-                    TInstant minWriteTime = TInstant::Max();
+                    std::optional<TInstant> minWriteTime;
                     for (const auto& topic : federatedTopics) {
                         for (auto [p, time] : topic.MaxWriteTime) {
-                            minWriteTime = std::min(minWriteTime, time);
+                            minWriteTime = minWriteTime ? std::min(*minWriteTime, time) : time;
                         }
                     }
                     auto [offsetProto, emptyRangeByOffsets] = SerializePredicateForFields({"_yql_sys_offset", "__ydb_offset"}, flatmap.Lambda(), ctx);
-                    auto [writeTimeProto, emptyRangeByWriteTime] = SerializePredicateForFields({"_yql_sys_write_time", "__ydb_write_time"}, flatmap.Lambda(), ctx, minWriteTime.MicroSeconds());
+                    auto [writeTimeProto, emptyRangeByWriteTime] = SerializePredicateForFields({"_yql_sys_write_time", "__ydb_write_time"}, flatmap.Lambda(), ctx, minWriteTime ? std::optional<ui64>(minWriteTime->MicroSeconds()) : std::nullopt);
                     if (emptyRangeByOffsets || emptyRangeByWriteTime) {
                         YQL_CLOG(INFO, ProviderPq) << "Empty range by offsets or write time, replace node to List";
                         return ctx.NewCallable(node.Pos(), "List", { ExpandType(node.Pos(), *node.Ref().GetTypeAnn(), ctx) });

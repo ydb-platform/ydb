@@ -3010,13 +3010,16 @@ const TCompiledLikeUdfSpec& CompiledLikeUdfSpec(
 // cap bounds both regexp compilation work and the exported identity.
 constexpr size_t MaxCompiledLikePatternBytes = 4096;
 
-void CheckCompiledLikeSafetyTree(const TExprNode& root) {
+void CheckCompiledLikeSafetyTree(
+    const TExprNode& root,
+    size_t sourceDepth)
+{
     struct TPending {
         const TExprNode* Node;
         size_t Depth;
     };
 
-    TVector<TPending> pending{{&root, 1}};
+    TVector<TPending> pending{{&root, sourceDepth}};
     size_t nodes = 0;
     while (!pending.empty()) {
         const auto current = pending.back();
@@ -3471,11 +3474,36 @@ struct TCompiledLikeApply {
     TString Pattern;
 };
 
-TCompiledLikeApply CheckCompiledLikeApply(const TExprNode& node) {
-    CheckCompiledLikeSafetyTree(node);
+enum class ECompiledLikeOuterAnnotations : ui8 {
+    Required,
+    Absent,
+};
+
+bool IsCompiledLikeOuterAnnotation(
+    const TTypeAnnotationNode* annotation,
+    ECompiledLikeType type,
+    ECompiledLikeOuterAnnotations mode)
+{
+    return mode == ECompiledLikeOuterAnnotations::Absent
+        ? annotation == nullptr
+        : IsCompiledLikeType(annotation, type);
+}
+
+TCompiledLikeApply CheckCompiledLikeApply(
+    const TExprNode& node,
+    size_t sourceDepth,
+    bool auditTree = true,
+    ECompiledLikeOuterAnnotations outerAnnotations =
+        ECompiledLikeOuterAnnotations::Required)
+{
+    if (auditTree) {
+        CheckCompiledLikeSafetyTree(node, sourceDepth);
+    }
     if (!node.IsCallable("Apply") || node.ChildrenSize() != 2 ||
-        !IsCompiledLikeType(
-            node.GetTypeAnn(), ECompiledLikeType::Bool))
+        !IsCompiledLikeOuterAnnotation(
+            node.GetTypeAnn(),
+            ECompiledLikeType::Bool,
+            outerAnnotations))
     {
         Unsupported(
             "Compiled LIKE requires a two-child non-null Bool Apply");
@@ -3497,18 +3525,22 @@ TCompiledLikeApply CheckCompiledLikeApply(const TExprNode& node) {
             match, ECompiledLikeUdf::Match, &pattern);
     if (!IsSameAnnotation(
             *assumeStrict.GetTypeAnn(), callable) ||
-        !IsSameAnnotation(
-            *node.GetTypeAnn(), *callable.GetReturnType()))
+        (node.GetTypeAnn() &&
+         !IsSameAnnotation(
+             *node.GetTypeAnn(), *callable.GetReturnType())))
     {
         Unsupported(
             "Compiled LIKE Apply annotations disagree with Re2.Match");
     }
 
     const auto& input = *node.Child(1);
-    if (!IsCompiledLikeType(
-            input.GetTypeAnn(), ECompiledLikeType::OptionalString) ||
-        !IsSameAnnotation(
-            *input.GetTypeAnn(), *callable.GetArguments()[0].Type))
+    if (!IsCompiledLikeOuterAnnotation(
+            input.GetTypeAnn(),
+            ECompiledLikeType::OptionalString,
+            outerAnnotations) ||
+        (input.GetTypeAnn() &&
+         !IsSameAnnotation(
+             *input.GetTypeAnn(), *callable.GetArguments()[0].Type)))
     {
         Unsupported(
             "Compiled LIKE requires exactly one Optional<String> input");
@@ -3524,9 +3556,10 @@ struct TScalarCompiledLike {
 TScalarCompiledLike CheckScalarCompiledLike(
     const TExprNode& node,
     const TExprNode* rowArgument,
-    const THashSet<TString>& visibleColumns)
+    const THashSet<TString>& visibleColumns,
+    size_t sourceDepth)
 {
-    auto like = CheckCompiledLikeApply(node);
+    auto like = CheckCompiledLikeApply(node, sourceDepth);
     const auto& member = *like.Input;
     if (!member.IsCallable("Member") || member.ChildrenSize() != 2 ||
         !member.Child(1)->IsAtom() || member.Child(0) != rowArgument)
@@ -3552,30 +3585,16 @@ bool IsCompiledLikeApplyCandidate(const TExprNode& node) {
         node.Child(0)->Child(0)->Child(0)->IsAtom("Re2.Match");
 }
 
-NJson::TJsonValue CompiledLikeExpr(
-    const TExprNode& node,
-    const TExprNode* rowArgument,
-    const THashSet<TString>& visibleColumns,
-    const TVector<const TExprNode*>& boundArguments,
-    TExactScalarBudget& budget,
-    size_t normalizedDepth)
+NJson::TJsonValue CompiledLikeIfPresentExpr(
+    NJson::TJsonValue optional,
+    TStringBuf pattern)
 {
-    const auto like =
-        CheckScalarCompiledLike(node, rowArgument, visibleColumns);
-    if (boundArguments.size() >= MaxIfPresentBindingDepth) {
-        Unsupported(
-            "Compiled LIKE binding depth exceeds the audit limit");
-    }
-
     TStringBuilder fingerprint;
     AppendIdentityField(
         fingerprint, "format", "yql-re2-pattern-from-like-match-v1");
-    AppendIdentityField(fingerprint, "pattern", like.Pattern);
+    AppendIdentityField(fingerprint, "pattern", pattern);
     AppendIdentityField(fingerprint, "escape", "none");
     AppendIdentityField(fingerprint, "case_sensitive", "true");
-
-    budget.Charge(normalizedDepth + 1, 3);
-    budget.Charge(normalizedDepth + 2);
 
     auto arguments = JsonArray();
     arguments.AppendValue(BoundExpr(0));
@@ -3593,12 +3612,35 @@ NJson::TJsonValue CompiledLikeExpr(
 
     auto result = JsonMap();
     result["kind"] = "if_present";
-    result["optional"] = ColumnExpr(like.Column);
+    result["optional"] = std::move(optional);
     result["present"] = std::move(present);
     result["missing"] = std::move(missing);
     result["type"] = "Bool";
     result["nullable"] = false;
     return result;
+}
+
+NJson::TJsonValue CompiledLikeExpr(
+    const TExprNode& node,
+    const TExprNode* rowArgument,
+    const THashSet<TString>& visibleColumns,
+    const TVector<const TExprNode*>& boundArguments,
+    TExactScalarBudget& budget,
+    size_t normalizedDepth,
+    size_t sourceDepth)
+{
+    const auto like =
+        CheckScalarCompiledLike(
+            node, rowArgument, visibleColumns, sourceDepth);
+    if (boundArguments.size() >= MaxIfPresentBindingDepth) {
+        Unsupported(
+            "Compiled LIKE binding depth exceeds the audit limit");
+    }
+
+    budget.Charge(normalizedDepth + 1, 3);
+    budget.Charge(normalizedDepth + 2);
+    return CompiledLikeIfPresentExpr(
+        ColumnExpr(like.Column), like.Pattern);
 }
 
 i32 ParseExactInt32Literal(const TExprNode& node, TStringBuf label) {
@@ -5782,7 +5824,8 @@ NJson::TJsonValue ExportExprNode(
             visibleColumns,
             boundArguments,
             budget,
-            normalizedDepth);
+            normalizedDepth,
+            sourceDepth);
     }
 
     if (IsNullableUnicodeToUpperMap(node)) {
@@ -6989,6 +7032,240 @@ NJson::TJsonValue OlapColumnExpr(
     return ColumnExpr(column->Output);
 }
 
+struct TOlapCompiledLike {
+    TString Output;
+    TString Pattern;
+    bool Negated = false;
+};
+
+TString CheckOlapDataTypeDescriptor(
+    const TExprNode& node,
+    bool* nullable)
+{
+    bool descriptorNullable = false;
+    const TString type =
+        DataTypeDescriptorName(node, &descriptorNullable);
+
+    const auto checkAnnotation = [&](
+        const TExprNode& candidate,
+        bool expectedNullable)
+    {
+        if (!candidate.GetTypeAnn()) {
+            return;
+        }
+        bool annotationNullable = false;
+        const TString annotationType = TypeName(
+            &DescribedType(
+                candidate,
+                "Compiled LIKE OLAP Apply table row field"),
+            &annotationNullable);
+        if (annotationType != type ||
+            annotationNullable != expectedNullable)
+        {
+            Unsupported(
+                "Compiled LIKE OLAP Apply table row field annotation "
+                "disagrees with its descriptor");
+        }
+    };
+
+    checkAnnotation(node, descriptorNullable);
+    const TExprNode* dataType =
+        descriptorNullable ? node.Child(0) : &node;
+    if (descriptorNullable) {
+        checkAnnotation(*dataType, false);
+    }
+    for (const auto& child : dataType->Children()) {
+        if (child->GetTypeAnn() &&
+            child->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Unit)
+        {
+            Unsupported(
+                "Compiled LIKE OLAP Apply table row descriptor atom has "
+                "a non-Unit annotation");
+        }
+    }
+    if (nullable) {
+        *nullable = descriptorNullable;
+    }
+    return type;
+}
+
+TOlapCompiledLike CheckOlapCompiledLike(
+    const TKqpOlapApply& operation,
+    const TOlapColumnMap& columns,
+    size_t sourceDepth)
+{
+    const auto& node = operation.Ref();
+    CheckCompiledLikeSafetyTree(node, sourceDepth);
+    if (node.ChildrenSize() != 3 ||
+        node.GetTypeAnn())
+    {
+        Unsupported(
+            "Compiled LIKE OLAP Apply requires exactly three children "
+            "and no post-pushdown annotation");
+    }
+
+    const auto& lambda = *node.Child(0);
+    if (!lambda.IsLambda() || lambda.ChildrenSize() != 2 ||
+        lambda.GetTypeAnn())
+    {
+        Unsupported(
+            "Compiled LIKE OLAP Apply requires one unannotated lambda");
+    }
+    const auto& lambdaArguments = *lambda.Child(0);
+    if (!lambdaArguments.IsArguments() ||
+        lambdaArguments.ChildrenSize() != 1 ||
+        !lambdaArguments.Child(0)->IsArgument() ||
+        lambdaArguments.GetTypeAnn() ||
+        lambdaArguments.Child(0)->GetTypeAnn())
+    {
+        Unsupported(
+            "Compiled LIKE OLAP Apply lambda requires exactly one "
+            "unannotated argument");
+    }
+    const auto* lambdaArgument = lambdaArguments.Child(0);
+
+    const auto& args = *node.Child(1);
+    if (!args.IsList() || args.ChildrenSize() != 1 ||
+        args.GetTypeAnn())
+    {
+        Unsupported(
+            "Compiled LIKE OLAP Apply requires exactly one argument");
+    }
+    const auto& columnArg = *args.Child(0);
+    if (!columnArg.IsCallable("KqpOlapApplyColumnArg") ||
+        columnArg.ChildrenSize() != 2 ||
+        columnArg.GetTypeAnn())
+    {
+        Unsupported(
+            "Compiled LIKE OLAP Apply requires one Optional<String> "
+            "column argument");
+    }
+    const auto& columnNameNode = *columnArg.Child(1);
+    if (!columnNameNode.IsAtom() || columnNameNode.Content().empty() ||
+        columnNameNode.GetTypeAnn())
+    {
+        Unsupported(
+            "Compiled LIKE OLAP Apply column name must be a nonempty Atom");
+    }
+    const TString columnName(columnNameNode.Content());
+
+    const auto& rowTypeNode = *columnArg.Child(0);
+    if (!rowTypeNode.IsCallable("StructType") ||
+        rowTypeNode.GetTypeAnn() ||
+        rowTypeNode.ChildrenSize() == 0)
+    {
+        Unsupported(
+            "Compiled LIKE OLAP Apply table row type is not StructType");
+    }
+    const TExprNode* selectedDescriptor = nullptr;
+    TString previousName;
+    for (size_t index = 0; index < rowTypeNode.ChildrenSize(); ++index) {
+        const auto& field = *rowTypeNode.Child(index);
+        if (!field.IsList() || field.ChildrenSize() != 2 ||
+            field.GetTypeAnn() ||
+            !field.Child(0)->IsAtom() ||
+            field.Child(0)->GetTypeAnn() ||
+            field.Child(0)->Content().empty())
+        {
+            Unsupported(
+                "Compiled LIKE OLAP Apply table row field is not "
+                "canonical");
+        }
+        const TString fieldName(field.Child(0)->Content());
+        if (index > 0 && fieldName <= previousName) {
+            Unsupported(
+                "Compiled LIKE OLAP Apply table row fields are not "
+                "strictly ordered");
+        }
+        previousName = fieldName;
+
+        bool nullable = false;
+        const TString type =
+            CheckOlapDataTypeDescriptor(*field.Child(1), &nullable);
+        if (fieldName == columnName) {
+            if (type != "String" || !nullable) {
+                Unsupported(
+                    "Compiled LIKE OLAP Apply selected row field is not "
+                    "Optional<String>");
+            }
+            selectedDescriptor = field.Child(1);
+        }
+    }
+    if (!selectedDescriptor) {
+        Unsupported(
+            "Compiled LIKE OLAP Apply table row type omits its column");
+    }
+
+    const auto* column = ResolveOlapColumn(columnName, columns);
+    if (column->Type != "String" || !column->Nullable) {
+        Unsupported(
+            "Compiled LIKE OLAP Apply requires a nullable String read "
+            "column");
+    }
+    const auto& kernelName = *node.Child(2);
+    if (!kernelName.IsAtom() || !kernelName.Content().empty() ||
+        kernelName.GetTypeAnn())
+    {
+        Unsupported(
+            "Compiled LIKE OLAP Apply requires an empty kernel name");
+    }
+
+    const TExprNode* body = lambda.Child(1);
+    bool negated = false;
+    if (body->IsCallable("Not")) {
+        if (body->ChildrenSize() != 1 ||
+            body->GetTypeAnn())
+        {
+            Unsupported(
+                "Compiled LIKE OLAP Apply has a malformed Not");
+        }
+        negated = true;
+        body = body->Child(0);
+    }
+
+    auto like = CheckCompiledLikeApply(
+        *body,
+        sourceDepth,
+        false,
+        ECompiledLikeOuterAnnotations::Absent);
+    if (like.Input != lambdaArgument) {
+        Unsupported(
+            "Compiled LIKE OLAP Apply must apply to its sole lambda "
+            "argument");
+    }
+    return {
+        .Output = column->Output,
+        .Pattern = std::move(like.Pattern),
+        .Negated = negated,
+    };
+}
+
+NJson::TJsonValue ExportOlapCompiledLike(
+    const TKqpOlapApply& operation,
+    const TOlapColumnMap& columns,
+    TExactScalarBudget& budget,
+    size_t normalizedDepth,
+    size_t sourceDepth)
+{
+    const auto like =
+        CheckOlapCompiledLike(operation, columns, sourceDepth);
+    const size_t ifPresentDepth =
+        normalizedDepth + static_cast<size_t>(like.Negated);
+
+    budget.Charge(normalizedDepth);
+    if (like.Negated) {
+        budget.Charge(ifPresentDepth);
+    }
+    budget.Charge(ifPresentDepth + 1, 3);
+    budget.Charge(ifPresentDepth + 2);
+
+    auto result = CompiledLikeIfPresentExpr(
+        ColumnExpr(like.Output), like.Pattern);
+    return like.Negated
+        ? NotExpr(std::move(result))
+        : std::move(result);
+}
+
 std::optional<bool> CheckOlapBoolOpType(const TExprNode& node) {
     if (node.ChildrenSize() != 4) {
         return std::nullopt;
@@ -7218,6 +7495,15 @@ NJson::TJsonValue ExportOlapScalar(
     if (node->IsCallable() && IsSupportedType(node->Content())) {
         budget.Charge(normalizedDepth);
         return LiteralExpr(*node);
+    }
+
+    if (const auto maybeApply = TMaybeNode<TKqpOlapApply>(node)) {
+        return ExportOlapCompiledLike(
+            maybeApply.Cast(),
+            columns,
+            budget,
+            normalizedDepth,
+            sourceDepth);
     }
 
     if (const auto maybeUnary = TMaybeNode<TKqpOlapFilterUnaryOp>(node)) {

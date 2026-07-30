@@ -24,6 +24,12 @@ CFLAGS(
     -DPy_BUILD_CORE
 )
 
+IF (OS_WINDOWS)
+    LDFLAGS(
+        /ENTRY:wmainCRTStartup
+    )
+ENDIF()
+
 SRCS(
     main.c
     get_py_main.cpp

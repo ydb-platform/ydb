@@ -39,6 +39,10 @@ on:
           no space between -D and the flag name (e.g. "-DUSE_SSE4=no -DYDB_CLI_AI_INCLUDE_DOCS=yes").
         type: string
         default: ''
+      version-argument:
+        description: 'Argument used to print the built binary version (e.g. "version" or "--version")'
+        type: string
+        default: 'version'
 defaults:
   run:
     shell: bash
@@ -145,10 +149,12 @@ jobs:
       if: ${{ matrix.os != 'windows-amd' }}
       run: ./ya make ${{ inputs.build-target }} -r ${{ inputs.additional-ya-make-args }} --target-platform ${{ matrix.platform }}
     - name: Check built binary version command
+      env:
+        VERSION_ARGUMENT: ${{ inputs.version-argument }}
       run: |
         BINARY_PATH="${{ inputs.build-target }}/${{ matrix.binary }}"
 
-        echo "Checking binary calling \"$BINARY_PATH version\" command"
+        echo "Checking binary calling \"$BINARY_PATH $VERSION_ARGUMENT\" command"
 
         if [ ! -f "$BINARY_PATH" ]; then
           echo "Binary was not found: $BINARY_PATH"
@@ -157,7 +163,7 @@ jobs:
 
         chmod +x "$BINARY_PATH" 2>/dev/null || true
 
-        "$BINARY_PATH" version
+        "$BINARY_PATH" "$VERSION_ARGUMENT"
     - name: Upload binary to artifact
       uses: actions/upload-artifact@v6
       with:

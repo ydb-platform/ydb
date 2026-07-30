@@ -815,6 +815,7 @@ class Script:
         self._ordinary_assertions: list[Term] = []
         self._global_assertions: list[Term] = []
         self._string_literals: dict[str, Term] = {}
+        self._string_atom_values: dict[int, str] = {}
         self._string_terms: dict[int, Term] = {}
         self._string_universe: StringOrderUniverse | None = None
         self._quantified_choices: dict[SymbolKey, tuple[Term, int]] = {}
@@ -1047,7 +1048,23 @@ class Script:
             INT,
         )
         self._string_literals[value] = result
+        # _string_literals retains the Term, so its identity cannot be reused
+        # while this Script is alive.
+        self._string_atom_values[id(result)] = value
         return result
+
+    def known_string_atom_equality(
+        self,
+        left: Term,
+        right: Term,
+    ) -> Term | None:
+        """Decide equality only for concrete atoms owned by this script."""
+
+        left_value = self._string_atom_values.get(id(left))
+        right_value = self._string_atom_values.get(id(right))
+        if left_value is None or right_value is None:
+            return None
+        return TRUE if left_value == right_value else FALSE
 
     def register_string_term(self, term: Term) -> None:
         """Register one nonliteral string-generating root."""

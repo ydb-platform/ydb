@@ -1567,6 +1567,130 @@ class DateScalarTest(unittest.TestCase):
 
 
 class StringScalarTest(unittest.TestCase):
+    def test_concrete_string_equality_is_decided_before_rank_sealing(self):
+        for left_type, right_type in (
+            ("String", "String"),
+            ("Utf8", "Utf8"),
+            ("String", "Utf8"),
+            ("Utf8", "String"),
+        ):
+            for right, expected in (("same", smt.TRUE), ("different", smt.FALSE)):
+                expression = Expr(
+                    kind="eq",
+                    args=(
+                        _literal(left_type, "same"),
+                        _literal(right_type, right),
+                    ),
+                )
+                with self.subTest(
+                    left_type=left_type,
+                    right_type=right_type,
+                    right=right,
+                ):
+                    result = Encoder(smt.Script()).evaluate(expression, {})
+                    self.assertIs(result.is_null, smt.FALSE)
+                    self.assertIs(result.value, expected)
+
+    def test_concrete_string_equality_preserves_sql_null_envelopes(self):
+        for null_safe in (False, True):
+            for same in (False, True):
+                for left_is_null in (False, True):
+                    for right_is_null in (False, True):
+                        script = smt.Script()
+                        encoder = Encoder(script)
+                        expression = Expr(
+                            kind="eq",
+                            args=(
+                                Expr(kind="column", column="left"),
+                                Expr(kind="column", column="right"),
+                            ),
+                            null_safe=null_safe,
+                        )
+                        left_atom = script.string_atom("left")
+                        right_atom = script.string_atom(
+                            "left" if same else "right"
+                        )
+                        result = encoder.evaluate(
+                            expression,
+                            {
+                                "left": Value(
+                                    "String",
+                                    smt.bool_value(left_is_null),
+                                    left_atom,
+                                ),
+                                "right": Value(
+                                    "Utf8",
+                                    smt.bool_value(right_is_null),
+                                    right_atom,
+                                ),
+                            },
+                        )
+                        with self.subTest(
+                            null_safe=null_safe,
+                            same=same,
+                            left_is_null=left_is_null,
+                            right_is_null=right_is_null,
+                        ):
+                            if same:
+                                self.assertIs(left_atom, right_atom)
+                            if null_safe:
+                                expected = (
+                                    left_is_null and right_is_null
+                                ) or (
+                                    not left_is_null
+                                    and not right_is_null
+                                    and same
+                                )
+                                self.assertIs(result.is_null, smt.FALSE)
+                                self.assertEqual(
+                                    result.value,
+                                    smt.bool_value(expected),
+                                )
+                            else:
+                                self.assertEqual(
+                                    result.is_null,
+                                    smt.bool_value(
+                                        left_is_null or right_is_null
+                                    ),
+                                )
+                                self.assertEqual(
+                                    result.value,
+                                    smt.bool_value(same),
+                                )
+
+    def test_symbolic_string_equality_keeps_symbolic_fallback(self):
+        script = smt.Script()
+        encoder = Encoder(script)
+        source = script.fresh_constant("source_string", smt.INT)
+        literal = script.string_atom("literal")
+
+        result = encoder.equal(
+            Value("String", smt.FALSE, source),
+            Value("Utf8", smt.FALSE, literal),
+        )
+
+        self.assertIs(result.is_null, smt.FALSE)
+        self.assertEqual(result.value, smt.eq(source, literal))
+        self.assertNotIn(result.value, (smt.TRUE, smt.FALSE))
+
+        null_safe = encoder.evaluate(
+            Expr(
+                kind="eq",
+                args=(
+                    Expr(kind="column", column="source"),
+                    Expr(kind="column", column="literal"),
+                ),
+                null_safe=True,
+            ),
+            {
+                "source": Value("String", smt.FALSE, source),
+                "literal": Value("Utf8", smt.FALSE, literal),
+            },
+        )
+        self.assertIs(null_safe.is_null, smt.FALSE)
+        self.assertEqual(null_safe.value, smt.eq(source, literal))
+        self.assertNotIn(null_safe.value, (smt.TRUE, smt.FALSE))
+
     def test_opaque_string_results_are_bounded_to_the_finite_universe(self):
         script = smt.Script()
         result = Encoder(script).evaluate(

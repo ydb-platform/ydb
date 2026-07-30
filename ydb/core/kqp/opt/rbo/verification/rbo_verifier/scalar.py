@@ -415,11 +415,10 @@ class Encoder:
         assert value.type == BOOL
         return smt.and_(smt.not_(value.is_null), value.value)
 
-    @staticmethod
-    def equal(left: Value, right: Value) -> Value:
+    def equal(self, left: Value, right: Value) -> Value:
         """Return ordinary SQL equality for two validated-compatible values."""
 
-        return Encoder._comparison("eq", left, right, null_safe=False)
+        return self._comparison("eq", left, right, null_safe=False)
 
     @staticmethod
     def not_distinct(left: Value, right: Value) -> smt.Term:
@@ -518,16 +517,35 @@ class Encoder:
             return smt.int_value(decimal.literal_code(value, scalar_type))
         return _literal(scalar_type, value)
 
-    @staticmethod
-    def _comparison(kind: str, left: Value, right: Value, null_safe: bool) -> Value:
+    def _comparison(
+        self,
+        kind: str,
+        left: Value,
+        right: Value,
+        null_safe: bool,
+    ) -> Value:
         decimal_operands = decimal.is_type(left.type) or decimal.is_type(right.type)
         left_value, right_value = (
             decimal.align(left.value, left.type, right.value, right.type)
             if decimal_operands
             else (left.value, right.value)
         )
+        known_equality = (
+            self.script.known_string_atom_equality(left_value, right_value)
+            if (
+                kind == "eq"
+                and family(left.type) == "string"
+                and family(right.type) == "string"
+            )
+            else None
+        )
 
         if null_safe:
+            value_equality = (
+                known_equality
+                if known_equality is not None
+                else smt.eq(left_value, right_value)
+            )
             return Value(
                 BOOL,
                 smt.FALSE,
@@ -536,7 +554,7 @@ class Encoder:
                     smt.and_(
                         smt.not_(left.is_null),
                         smt.not_(right.is_null),
-                        smt.eq(left_value, right_value),
+                        value_equality,
                     ),
                 ),
             )
@@ -544,7 +562,11 @@ class Encoder:
         if decimal_operands:
             comparison = decimal.compare(kind, left_value, right_value)
         elif kind == "eq":
-            comparison = smt.eq(left_value, right_value)
+            comparison = (
+                known_equality
+                if known_equality is not None
+                else smt.eq(left_value, right_value)
+            )
         elif kind == "lt":
             comparison = smt.lt(left_value, right_value)
         elif kind == "lte":

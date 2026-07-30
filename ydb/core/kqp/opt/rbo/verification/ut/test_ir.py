@@ -73,6 +73,307 @@ def minimal_snapshot():
     }
 
 
+def decimal_avg_carrier_stage_graph():
+    def stage(stage_id, nodes, inputs, outputs, storage=None):
+        return {
+            "id": stage_id,
+            "nodes": nodes,
+            "inputs": inputs,
+            "outputs": [
+                {"index": index, "node": output}
+                for index, output in enumerate(outputs)
+            ],
+            "source_storage": storage,
+        }
+
+    def edge(
+        edge_id,
+        producer,
+        consumer,
+        producer_output,
+        consumer_input,
+    ):
+        return {
+            "id": edge_id,
+            "producer": producer,
+            "consumer": consumer,
+            "occurrence": 0,
+            "producer_output": producer_output,
+            "consumer_input": consumer_input,
+            "kind": "union_all",
+            "parallel": False,
+        }
+
+    return {
+        "root_stage": "root",
+        "stages": [
+            stage(
+                "source",
+                ["scan"],
+                [],
+                ["scan", "scan", "scan"],
+                "column",
+            ),
+            stage(
+                "average_partial_stage",
+                ["average_partial"],
+                ["scan"],
+                ["average_partial"],
+            ),
+            stage(
+                "average_project_stage",
+                ["average_project"],
+                ["average_partial"],
+                ["average_project"],
+            ),
+            stage(
+                "first_pad_stage",
+                ["first_partial", "first_pad"],
+                ["scan"],
+                ["first_pad"],
+            ),
+            stage(
+                "second_pad_stage",
+                ["second_partial", "second_pad"],
+                ["scan"],
+                ["second_pad"],
+            ),
+            stage(
+                "first_union_stage",
+                ["first_union"],
+                ["average_project", "first_pad"],
+                ["first_union"],
+            ),
+            stage(
+                "second_union_stage",
+                ["second_union"],
+                ["first_union", "second_pad"],
+                ["second_union"],
+            ),
+            stage(
+                "root",
+                ["final"],
+                ["second_union"],
+                ["final"],
+            ),
+        ],
+        "edges": [
+            edge(
+                "average_input",
+                "source",
+                "average_partial_stage",
+                0,
+                0,
+            ),
+            edge(
+                "first_input",
+                "source",
+                "first_pad_stage",
+                1,
+                0,
+            ),
+            edge(
+                "second_input",
+                "source",
+                "second_pad_stage",
+                2,
+                0,
+            ),
+            edge(
+                "average_state",
+                "average_partial_stage",
+                "average_project_stage",
+                0,
+                0,
+            ),
+            edge(
+                "average_project",
+                "average_project_stage",
+                "first_union_stage",
+                0,
+                0,
+            ),
+            edge(
+                "first_pad",
+                "first_pad_stage",
+                "first_union_stage",
+                0,
+                1,
+            ),
+            edge(
+                "first_union",
+                "first_union_stage",
+                "second_union_stage",
+                0,
+                0,
+            ),
+            edge(
+                "second_pad",
+                "second_pad_stage",
+                "second_union_stage",
+                0,
+                1,
+            ),
+            edge(
+                "second_union",
+                "second_union_stage",
+                "root",
+                0,
+                0,
+            ),
+        ],
+        "assumptions": [],
+    }
+
+
+def decimal_avg_union_carrier_snapshot():
+    value = minimal_snapshot()
+    value["schema"]["tables"][0]["columns"][0].update(
+        type="Decimal(7,2)",
+        nullable=True,
+    )
+
+    def average_trait(input_name, output_name):
+        return {
+            "input": input_name,
+            "function": "avg",
+            "output": output_name,
+            "type": "Decimal(7,2)",
+            "nullable": True,
+            "distinct": False,
+            "unwrap": False,
+            "state": {
+                "sum_type": "Decimal(35,2)",
+                "count_type": "Uint64",
+                "nullable": True,
+            },
+        }
+
+    def count_branch(branch):
+        state = f"_{branch}_count"
+        aggregate = {
+            "id": f"{branch}_partial",
+            "op": "aggregate",
+            "input": "scan",
+            "keys": [],
+            "aggregates": [
+                {
+                    "input": "a.k",
+                    "function": "count",
+                    "output": state,
+                    "type": "Uint64",
+                    "nullable": False,
+                    "distinct": False,
+                    "unwrap": False,
+                }
+            ],
+            "phase": "intermediate",
+            "distinct_all": False,
+        }
+        project = {
+            "id": f"{branch}_pad",
+            "op": "project",
+            "input": aggregate["id"],
+            "columns": [
+                {
+                    "output": "_avg_state",
+                    "expression": {
+                        "kind": "null",
+                        "type": "Decimal(7,2)",
+                    },
+                }
+            ],
+            "ordered": False,
+        }
+        return aggregate, project
+
+    average_partial = {
+        "id": "average_partial",
+        "op": "aggregate",
+        "input": "scan",
+        "keys": [],
+        "aggregates": [average_trait("a.k", "_avg_state")],
+        "phase": "intermediate",
+        "distinct_all": False,
+    }
+    average_project = {
+        "id": "average_project",
+        "op": "project",
+        "input": "average_partial",
+        "columns": [
+            {
+                "output": "_avg_state",
+                "expression": {
+                    "kind": "column",
+                    "column": "_avg_state",
+                },
+            }
+        ],
+        "ordered": False,
+    }
+    first_partial, first_pad = count_branch("first")
+    second_partial, second_pad = count_branch("second")
+    first_union = {
+        "id": "first_union",
+        "op": "union_all",
+        "inputs": [
+            {
+                "node": "average_project",
+                "columns": ["_avg_state"],
+            },
+            {
+                "node": "first_pad",
+                "columns": ["_avg_state"],
+            },
+        ],
+        "output": ["_avg_state"],
+        "ordered": False,
+    }
+    second_union = {
+        "id": "second_union",
+        "op": "union_all",
+        "inputs": [
+            {
+                "node": "first_union",
+                "columns": ["_avg_state"],
+            },
+            {
+                "node": "second_pad",
+                "columns": ["_avg_state"],
+            },
+        ],
+        "output": ["_avg_state"],
+        "ordered": False,
+    }
+    final = {
+        "id": "final",
+        "op": "aggregate",
+        "input": "second_union",
+        "keys": [],
+        "aggregates": [average_trait("_avg_state", "result")],
+        "phase": "final",
+        "distinct_all": False,
+    }
+    value["plan"].update(
+        nodes=[
+            value["plan"]["nodes"][0],
+            average_partial,
+            average_project,
+            first_partial,
+            first_pad,
+            second_partial,
+            second_pad,
+            first_union,
+            second_union,
+            final,
+        ],
+        root="final",
+        output=["result"],
+    )
+    value["stage_graph"] = decimal_avg_carrier_stage_graph()
+    return value
+
+
 def shared_join_snapshot(kind="left_semi"):
     return {
         "format": "ydb-rbo-semantic-snapshot",
@@ -2835,6 +3136,293 @@ class SnapshotTest(unittest.TestCase):
         ):
             parse_snapshot(routed_state)
 
+    def test_decimal_avg_accepts_only_the_closed_q28_union_carrier(self):
+        parse_snapshot(decimal_avg_union_carrier_snapshot())
+
+        def node(value, node_id):
+            return next(
+                item
+                for item in value["plan"]["nodes"]
+                if item["id"] == node_id
+            )
+
+        mutations = []
+
+        unstaged = decimal_avg_union_carrier_snapshot()
+        unstaged["stage_graph"] = None
+        mutations.append((
+            "carrier without physical scope",
+            unstaged,
+            "indirect Decimal avg carrier requires a StageGraph",
+        ))
+
+        ordered_union = decimal_avg_union_carrier_snapshot()
+        node(ordered_union, "first_union")["ordered"] = True
+        mutations.append((
+            "ordered union",
+            ordered_union,
+            "unordered identity UnionAll carrier",
+        ))
+
+        ordered_project = decimal_avg_union_carrier_snapshot()
+        node(ordered_project, "average_project")["ordered"] = True
+        mutations.append((
+            "ordered project",
+            ordered_project,
+            "carrier Project must be unordered",
+        ))
+
+        renamed = decimal_avg_union_carrier_snapshot()
+        average_partial = node(renamed, "average_partial")
+        average_partial["aggregates"][0]["output"] = "_renamed_state"
+        average_project = node(renamed, "average_project")
+        average_project["columns"][0]["expression"]["column"] = "_renamed_state"
+        mutations.append((
+            "renamed state",
+            renamed,
+            "direct same-name|exact logical null",
+        ))
+
+        non_identity = decimal_avg_union_carrier_snapshot()
+        first_pad = node(non_identity, "first_pad")
+        first_pad["columns"].append({
+            "output": "_renamed_state",
+            "expression": {
+                "kind": "null",
+                "type": "Decimal(7,2)",
+            },
+        })
+        node(non_identity, "first_union")["inputs"][1][
+            "columns"
+        ] = ["_renamed_state"]
+        mutations.append((
+            "renamed union input",
+            non_identity,
+            "unordered identity UnionAll carrier",
+        ))
+
+        literal_pad = decimal_avg_union_carrier_snapshot()
+        node(literal_pad, "first_pad")["columns"][0]["expression"] = {
+            "kind": "literal",
+            "type": "Decimal(7,2)",
+            "value": {"kind": "finite", "scaled": "0"},
+        }
+        mutations.append((
+            "non-null padding",
+            literal_pad,
+            "type and nullability|exact logical null pad",
+        ))
+
+        two_producers = decimal_avg_union_carrier_snapshot()
+        first_partial = node(two_producers, "first_partial")
+        first_partial["aggregates"] = [
+            copy.deepcopy(
+                node(two_producers, "average_partial")["aggregates"][0]
+            )
+        ]
+        node(two_producers, "first_pad")["columns"][0]["expression"] = {
+            "kind": "column",
+            "column": "_avg_state",
+        }
+        mutations.append((
+            "two average producers",
+            two_producers,
+            "exactly one matching intermediate avg producer",
+        ))
+
+        scalar_reuse = decimal_avg_union_carrier_snapshot()
+        node(scalar_reuse, "average_project")["columns"].append({
+            "output": "state_copy",
+            "expression": {
+                "kind": "column",
+                "column": "_avg_state",
+            },
+        })
+        mutations.append((
+            "another Project expression reads the source",
+            scalar_reuse,
+            "may not have another scalar use",
+        ))
+
+        filtered = decimal_avg_union_carrier_snapshot()
+        filtered["plan"]["nodes"].insert(-3, {
+            "id": "carrier_filter",
+            "op": "filter",
+            "input": "average_project",
+            "predicate": {
+                "kind": "literal",
+                "type": "Bool",
+                "value": True,
+            },
+        })
+        node(filtered, "first_union")["inputs"][0]["node"] = "carrier_filter"
+        mutations.append((
+            "filter in carrier",
+            filtered,
+            "UnionAll leaf must be one exact Project",
+        ))
+
+        direct_leaf = decimal_avg_union_carrier_snapshot()
+        direct_leaf["plan"]["nodes"] = [
+            item
+            for item in direct_leaf["plan"]["nodes"]
+            if item["id"] != "average_project"
+        ]
+        node(direct_leaf, "first_union")["inputs"][0][
+            "node"
+        ] = "average_partial"
+        mutations.append((
+            "aggregate leaf without Project",
+            direct_leaf,
+            "UnionAll leaf must be one exact Project",
+        ))
+
+        project_chain = decimal_avg_union_carrier_snapshot()
+        project_chain["plan"]["nodes"].insert(-3, {
+            "id": "average_bridge",
+            "op": "project",
+            "input": "average_project",
+            "columns": [
+                {
+                    "output": "_avg_state",
+                    "expression": {
+                        "kind": "column",
+                        "column": "_avg_state",
+                    },
+                }
+            ],
+            "ordered": False,
+        })
+        node(project_chain, "first_union")["inputs"][0][
+            "node"
+        ] = "average_bridge"
+        mutations.append((
+            "two Project carrier chain",
+            project_chain,
+            "Project must directly consume.*intermediate aggregate",
+        ))
+
+        final_reuse = decimal_avg_union_carrier_snapshot()
+        node(final_reuse, "final")["aggregates"].append({
+            "input": "_avg_state",
+            "function": "sum",
+            "output": "state_sum",
+            "type": "Decimal(35,2)",
+            "nullable": True,
+            "distinct": False,
+            "unwrap": False,
+        })
+        mutations.append((
+            "another final trait reads the state",
+            final_reuse,
+            "consumed only by its matching final avg trait",
+        ))
+
+        for exposed_root in ("average_project", "first_union"):
+            exposed = decimal_avg_union_carrier_snapshot()
+            exposed["plan"]["nodes"].append({
+                "id": "carrier_guard",
+                "op": "filter",
+                "input": "final",
+                "predicate": {
+                    "kind": "eq",
+                    "left": {
+                        "kind": "column",
+                        "column": "_carrier_binding",
+                    },
+                    "right": {
+                        "kind": "column",
+                        "column": "_carrier_binding",
+                    },
+                },
+            })
+            exposed["plan"].update(
+                root="carrier_guard",
+                subplans=[
+                    {
+                        "binding": "_carrier_binding",
+                        "kind": "scalar",
+                        "root": exposed_root,
+                        "type": "Decimal(7,2)",
+                        "nullable": True,
+                        "dependencies": [],
+                        "consumers": ["carrier_guard"],
+                        "output": {
+                            "column": "_avg_state",
+                            "type": "Decimal(7,2)",
+                            "nullable": True,
+                        },
+                    }
+                ],
+            )
+            mutations.append((
+                f"{exposed_root} exposed as subplan root",
+                exposed,
+                "subplans must be fully eliminated|"
+                "subplan root is nested|carrier may not be .*subplan root",
+            ))
+
+        for name, malformed, message in mutations:
+            with self.subTest(name=name):
+                with self.assertRaisesRegex(SnapshotError, message):
+                    parse_snapshot(malformed)
+
+    def test_decimal_avg_carrier_is_stage_payload_only_at_every_hop(self):
+        value = decimal_avg_union_carrier_snapshot()
+        parse_snapshot(value)
+
+        carrier_edges = (
+            "average_state",
+            "average_project",
+            "first_pad",
+            "first_union",
+            "second_pad",
+            "second_union",
+        )
+        for edge_id in carrier_edges:
+            routed = copy.deepcopy(value)
+            candidate = next(
+                item
+                for item in routed["stage_graph"]["edges"]
+                if item["id"] == edge_id
+            )
+            candidate.pop("parallel")
+            candidate.update(
+                kind="hash_shuffle",
+                keys=["_avg_state"],
+                hash_function="HashV1",
+                use_spilling=False,
+            )
+            with self.subTest(edge=edge_id, routing="hash"):
+                with self.assertRaisesRegex(
+                    SnapshotError,
+                    "intermediate avg state may only be transported as payload",
+                ):
+                    parse_snapshot(routed)
+
+        ordered = copy.deepcopy(value)
+        candidate = next(
+            item
+            for item in ordered["stage_graph"]["edges"]
+            if item["id"] == "second_union"
+        )
+        candidate.pop("parallel")
+        candidate.update(
+            kind="merge",
+            order=[
+                {
+                    "column": "_avg_state",
+                    "ascending": True,
+                    "nulls_first": True,
+                }
+            ],
+        )
+        with self.assertRaisesRegex(
+            SnapshotError,
+            "intermediate avg state may only be transported as payload",
+        ):
+            parse_snapshot(ordered)
+
     def test_integral_avg_requires_exact_tagged_state_and_split_lineage(self):
         def state():
             return {
@@ -2918,7 +3506,7 @@ class SnapshotTest(unittest.TestCase):
         indirect["plan"]["nodes"][-1]["aggregates"][0]["input"] = "_state2"
         with self.assertRaisesRegex(
             SnapshotError,
-            "intermediate avg state must have one direct final",
+            "final avg must directly consume an intermediate aggregate",
         ):
             parse_snapshot(indirect)
 

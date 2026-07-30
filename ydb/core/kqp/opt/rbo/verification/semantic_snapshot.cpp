@@ -6943,7 +6943,6 @@ const TOlapColumn* ResolveOlapColumn(
 NJson::TJsonValue ExportOlapScalar(
     const TExprNode::TPtr& node,
     const TOlapColumnMap& columns,
-    bool positiveFilterContext,
     TExactScalarBudget& budget,
     size_t normalizedDepth,
     size_t sourceDepth);
@@ -7218,7 +7217,6 @@ std::optional<bool> CheckOlapBoolOpType(const TExprNode& node) {
 NJson::TJsonValue ExportOlapBinary(
     const TKqpOlapFilterBinaryOp& operation,
     const TOlapColumnMap& columns,
-    bool positiveFilterContext,
     TExactScalarBudget& budget,
     size_t normalizedDepth,
     size_t sourceDepth)
@@ -7227,27 +7225,71 @@ NJson::TJsonValue ExportOlapBinary(
     if (node.ChildrenSize() != 3 && node.ChildrenSize() != 4) {
         Unsupported("Malformed OLAP binary operation");
     }
+    // The generated tuple wrapper matches every three/four-child expression
+    // list; this explicit tag check is therefore part of the fail-closed
+    // boundary.
+    if (!node.Child(0)->IsAtom()) {
+        Unsupported("OLAP binary operation has a non-Atom operator");
+    }
     const TString op(operation.Operator().StringValue());
     const auto resultNullable = CheckOlapBoolOpType(node);
 
     if (op == "??") {
-        const auto& fallback = operation.Right().Ref();
-        if (!fallback.IsCallable("Bool") || fallback.ChildrenSize() != 1 ||
-            !fallback.Child(0)->IsAtom("false"))
-        {
-            Unsupported("OLAP filter coalesce is supported only with false fallback");
-        }
-        if (!positiveFilterContext) {
+        if (!resultNullable || *resultNullable) {
             Unsupported(
-                "OLAP filter coalesce requires a positive filter context");
+                "OLAP Boolean coalesce requires an exact non-null Bool "
+                "result descriptor");
         }
-        // IsTrue(Coalesce(predicate, false)) is exactly IsTrue(predicate), and
-        // that equivalence remains a congruence through AND/OR.  It is not
-        // valid in value-sensitive positions such as NOT or exists/empty, so
-        // recursive callers carry the positive-filter context explicitly.
-        return ExportOlapScalar(
-            operation.Left().Ptr(), columns, true,
-            budget, normalizedDepth, sourceDepth + 1);
+        const auto left = operation.Left().Ptr();
+        const auto maybeLeftBinary =
+            TMaybeNode<TKqpOlapFilterBinaryOp>(left);
+        if (!maybeLeftBinary) {
+            Unsupported(
+                "OLAP Boolean coalesce requires a typed binary predicate");
+        }
+        const auto leftNullable =
+            CheckOlapBoolOpType(maybeLeftBinary.Ref());
+        if (!leftNullable || !*leftNullable) {
+            Unsupported(
+                "OLAP Boolean coalesce requires an Optional<Bool> "
+                "left predicate");
+        }
+
+        const auto& fallback = operation.Right().Ref();
+        bool fallbackNullable = false;
+        if (!fallback.IsCallable("Bool") || fallback.ChildrenSize() != 1 ||
+            !fallback.Child(0)->IsAtom() ||
+            ScalarTypeName(fallback, &fallbackNullable) != "Bool" ||
+            fallbackNullable)
+        {
+            Unsupported(
+                "OLAP Boolean coalesce requires a direct non-null Bool "
+                "literal fallback");
+        }
+        // LiteralExpr does not recurse into the literal payload Atom; the
+        // outer and fallback nodes are checked by ExportOlapScalar itself.
+        CheckScalarSafetyMetadata(*fallback.Child(0));
+
+        budget.Charge(normalizedDepth);
+        budget.Charge(normalizedDepth + 1); // Present bound value.
+        auto result = JsonMap();
+        result["kind"] = "if_present";
+        result["optional"] = ExportOlapScalar(
+            left,
+            columns,
+            budget,
+            normalizedDepth + 1,
+            sourceDepth + 1);
+        result["present"] = BoundExpr(0);
+        result["missing"] = ExportOlapScalar(
+            operation.Right().Ptr(),
+            columns,
+            budget,
+            normalizedDepth + 1,
+            sourceDepth + 1);
+        result["type"] = "Bool";
+        result["nullable"] = false;
+        return result;
     }
 
     if (op == "ends_with" || op == "string_contains") {
@@ -7288,14 +7330,12 @@ NJson::TJsonValue ExportOlapBinary(
             ExportOlapScalar(
                 operation.Left().Ptr(),
                 columns,
-                false,
                 budget,
                 normalizedDepth + 1,
                 sourceDepth + 1),
             ExportOlapScalar(
                 operation.Right().Ptr(),
                 columns,
-                false,
                 budget,
                 normalizedDepth + 1,
                 sourceDepth + 1));
@@ -7319,10 +7359,10 @@ NJson::TJsonValue ExportOlapBinary(
     auto result = BinaryExpr(
         kind,
         ExportOlapScalar(
-            operation.Left().Ptr(), columns, false,
+            operation.Left().Ptr(), columns,
             budget, childDepth, sourceDepth + 1),
         ExportOlapScalar(
-            operation.Right().Ptr(), columns, false,
+            operation.Right().Ptr(), columns,
             budget, childDepth, sourceDepth + 1));
     return negated ? NotExpr(std::move(result)) : std::move(result);
 }
@@ -7369,7 +7409,7 @@ NJson::TJsonValue ExportOlapUnary(
         budget.Charge(normalizedDepth + 1); // Exists below Not.
     }
     auto result = ExistsExpr(ExportOlapScalar(
-        operation.Arg().Ptr(), columns, false,
+        operation.Arg().Ptr(), columns,
         budget, normalizedDepth + (negated ? 2 : 1), sourceDepth + 1));
     return negated ? NotExpr(std::move(result)) : std::move(result);
 }
@@ -7377,7 +7417,6 @@ NJson::TJsonValue ExportOlapUnary(
 NJson::TJsonValue ExportOlapScalar(
     const TExprNode::TPtr& node,
     const TOlapColumnMap& columns,
-    bool positiveFilterContext,
     TExactScalarBudget& budget,
     size_t normalizedDepth,
     size_t sourceDepth)
@@ -7390,6 +7429,9 @@ NJson::TJsonValue ExportOlapScalar(
     if (!node) {
         Unsupported("OLAP predicate contains a null expression node");
     }
+    CheckScalarSafetyMetadata(
+        *node,
+        node->IsCallable({"KqpOlapAnd", "KqpOlapOr"}));
 
     if (node->IsAtom()) {
         budget.Charge(normalizedDepth);
@@ -7439,7 +7481,6 @@ NJson::TJsonValue ExportOlapScalar(
         return ExportOlapBinary(
             maybeBinary.Cast(),
             columns,
-            positiveFilterContext,
             budget,
             normalizedDepth,
             sourceDepth);
@@ -7457,7 +7498,6 @@ NJson::TJsonValue ExportOlapScalar(
             args.AppendValue(ExportOlapScalar(
                 child,
                 columns,
-                positiveFilterContext,
                 budget,
                 normalizedDepth + 1,
                 sourceDepth + 1));
@@ -7478,7 +7518,6 @@ NJson::TJsonValue ExportOlapScalar(
             args.AppendValue(ExportOlapScalar(
                 child,
                 columns,
-                positiveFilterContext,
                 budget,
                 normalizedDepth + 1,
                 sourceDepth + 1));
@@ -7493,7 +7532,7 @@ NJson::TJsonValue ExportOlapScalar(
         }
         budget.Charge(normalizedDepth);
         return NotExpr(ExportOlapScalar(
-            maybeNot.Cast().Value().Ptr(), columns, false,
+            maybeNot.Cast().Value().Ptr(), columns,
             budget, normalizedDepth + 1, sourceDepth + 1));
     }
 
@@ -7558,7 +7597,6 @@ NJson::TJsonValue ExportOlapPredicate(
         predicates.push_back(ExportOlapScalar(
             condition,
             columns,
-            true,
             budget,
             conditionDepth,
             1));

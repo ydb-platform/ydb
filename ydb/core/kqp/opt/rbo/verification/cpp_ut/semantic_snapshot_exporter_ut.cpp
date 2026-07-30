@@ -3083,20 +3083,46 @@ TExprNode::TPtr MakeOlapComparisonCondition(
         .Done().Ptr();
 }
 
-TExprNode::TPtr MakeOlapCoalesceFalse(
+TExprNode::TPtr MakeOlapBoolCoalesce(
     TExportTestContext& ctx,
-    TExprNode::TPtr condition)
+    TExprNode::TPtr condition,
+    TStringBuf fallback)
 {
     const auto pos = TPositionHandle();
+    const auto* boolType = ScalarType(ctx, NUdf::EDataSlot::Bool);
+    const auto* optionalBool = ScalarType(
+        ctx,
+        NUdf::EDataSlot::Bool,
+        true);
+    if (condition->ChildrenSize() == 3) {
+        auto children = condition->ChildrenList();
+        children.push_back(OptionalDataTypeDescriptor(
+            ctx,
+            "Bool",
+            boolType,
+            optionalBool));
+        condition = ctx.ExprCtx.NewList(pos, std::move(children));
+    }
     return Build<TKqpOlapFilterBinaryOp>(ctx.ExprCtx, pos)
         .Operator().Value("??").Build()
         .Left(TExprBase(std::move(condition)))
         .Right(TypedLiteral(
             ctx,
             "Bool",
-            "false",
-            ScalarType(ctx, NUdf::EDataSlot::Bool)))
+            fallback,
+            boolType))
+        .OpType(TExprBase(DataTypeDescriptor(ctx, "Bool", boolType)))
         .Done().Ptr();
+}
+
+TExprNode::TPtr MakeOlapCoalesceFalse(
+    TExportTestContext& ctx,
+    TExprNode::TPtr condition)
+{
+    return MakeOlapBoolCoalesce(
+        ctx,
+        std::move(condition),
+        "false");
 }
 
 TExprNode::TPtr MakeOlapStringPredicate(
@@ -15428,9 +15454,6 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                 ExportSemanticSnapshotV1(genericRoot, generic.RboCtx));
             const auto& coalesced = FindNode(genericSnapshot, "project")
                 ["columns"].GetArraySafe().back()["expression"];
-            UNIT_ASSERT_VALUES_EQUAL(
-                coalesced["kind"].GetStringSafe(),
-                "if_present");
             const auto& genericOpaque = coalesced["optional"];
 
             TExportTestContext olap;
@@ -15470,8 +15493,33 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                     NYql::EStorageType::ColumnStorage);
             const auto olapSnapshot = ParseSupported(
                 ExportSemanticSnapshotV1(olapRoot, olap.RboCtx));
-            const auto& olapOpaque =
+            const auto& olapCoalesced =
                 FindNode(olapSnapshot, "scan")["predicate"];
+            const auto& olapOpaque = olapCoalesced["optional"];
+
+            for (const auto* expression : {&coalesced, &olapCoalesced}) {
+                UNIT_ASSERT_VALUES_EQUAL(
+                    (*expression)["kind"].GetStringSafe(),
+                    "if_present");
+                UNIT_ASSERT_VALUES_EQUAL(
+                    (*expression)["present"]["kind"].GetStringSafe(),
+                    "bound");
+                UNIT_ASSERT_VALUES_EQUAL(
+                    (*expression)["present"]["depth"].GetUIntegerSafe(),
+                    0);
+                UNIT_ASSERT_VALUES_EQUAL(
+                    (*expression)["missing"]["kind"].GetStringSafe(),
+                    "literal");
+                UNIT_ASSERT_VALUES_EQUAL(
+                    (*expression)["missing"]["type"].GetStringSafe(),
+                    "Bool");
+                UNIT_ASSERT(
+                    !(*expression)["missing"]["value"].GetBooleanSafe());
+                UNIT_ASSERT_VALUES_EQUAL(
+                    (*expression)["type"].GetStringSafe(),
+                    "Bool");
+                UNIT_ASSERT(!(*expression)["nullable"].GetBooleanSafe());
+            }
 
             for (const auto* expression : {&genericOpaque, &olapOpaque}) {
                 UNIT_ASSERT_VALUES_EQUAL(
@@ -19079,14 +19127,14 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
 
     Y_UNIT_TEST(ExportsActualOlapFilterDialectAtAStageBoundary) {
         TExportTestContext ctx;
-        const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", true}});
+        const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", false}});
         auto read = MakeRead(
             ctx,
             table,
             "a",
             {"k"},
             NYql::EStorageType::ColumnStorage);
-        SetOutputType(ctx, *read, {{"a.k", NUdf::EDataSlot::Int32}});
+        SetOutputType(ctx, *read, {{"a.k", NUdf::EDataSlot::Int32, true}});
         read->OlapFilterLambda = MakeOlapComparisonProcess(
             ctx,
             "gte",
@@ -19099,11 +19147,29 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
 
         const auto snapshot = ParseSupported(ExportSemanticSnapshotV1(root, ctx.RboCtx));
         const auto& predicate = FindNode(snapshot, "scan")["predicate"];
-        UNIT_ASSERT_VALUES_EQUAL(predicate["kind"].GetStringSafe(), "gte");
-        UNIT_ASSERT_VALUES_EQUAL(predicate["left"]["column"].GetStringSafe(), "a.k");
-        UNIT_ASSERT_VALUES_EQUAL(predicate["right"]["kind"].GetStringSafe(), "literal");
-        UNIT_ASSERT_VALUES_EQUAL(predicate["right"]["type"].GetStringSafe(), "Int32");
-        UNIT_ASSERT_VALUES_EQUAL(predicate["right"]["value"].GetIntegerSafe(), 30);
+        UNIT_ASSERT_VALUES_EQUAL(
+            predicate["kind"].GetStringSafe(),
+            "if_present");
+        const auto& comparison = predicate["optional"];
+        UNIT_ASSERT_VALUES_EQUAL(
+            comparison["kind"].GetStringSafe(),
+            "gte");
+        UNIT_ASSERT_VALUES_EQUAL(
+            comparison["left"]["column"].GetStringSafe(),
+            "a.k");
+        UNIT_ASSERT_VALUES_EQUAL(
+            comparison["right"]["kind"].GetStringSafe(),
+            "literal");
+        UNIT_ASSERT_VALUES_EQUAL(
+            comparison["right"]["type"].GetStringSafe(),
+            "Int32");
+        UNIT_ASSERT_VALUES_EQUAL(
+            comparison["right"]["value"].GetIntegerSafe(),
+            30);
+        UNIT_ASSERT_VALUES_EQUAL(
+            predicate["present"]["kind"].GetStringSafe(),
+            "bound");
+        UNIT_ASSERT(!predicate["missing"]["value"].GetBooleanSafe());
     }
 
     Y_UNIT_TEST(OlapFilterResolvesExactReadOutputNames) {
@@ -19238,7 +19304,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         check(true);
     }
 
-    Y_UNIT_TEST(OlapCoalesceTracksPositiveFilterContext) {
+    Y_UNIT_TEST(OlapBooleanCoalescePreservesItsValueInEveryPosition) {
         TExportTestContext ctx;
         const auto& table = AddTable(ctx, "/Root/A", {{"k", "Int32", false}});
         const auto pos = TPositionHandle();
@@ -19260,65 +19326,313 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             return ExportSemanticSnapshotV1(root, ctx.RboCtx);
         };
 
-        auto coalescedComparison = [&]() {
-            return MakeOlapCoalesceFalse(
+        const auto coalescedComparison = [&](TStringBuf fallback) {
+            return MakeOlapBoolCoalesce(
                 ctx,
-                MakeOlapComparisonCondition(ctx, "eq", "k", "0"));
+                MakeOlapComparisonCondition(ctx, "eq", "k", "0"),
+                fallback);
         };
 
-        for (const bool useAnd : {false, true}) {
-            TVector<TExprBase> arguments = {
-                TExprBase(coalescedComparison()),
-                TExprBase(MakeOlapComparisonCondition(ctx, "gte", "k", "1")),
-            };
-            TExprNode::TPtr condition;
-            if (useAnd) {
-                condition = Build<TKqpOlapAnd>(ctx.ExprCtx, pos)
-                    .Add(arguments)
-                    .Done().Ptr();
-            } else {
-                condition = Build<TKqpOlapOr>(ctx.ExprCtx, pos)
-                    .Add(arguments)
-                    .Done().Ptr();
-            }
-
-            const auto snapshot = ParseSupported(exportCondition(std::move(condition)));
-            const auto& predicate = FindNode(snapshot, "scan")["predicate"];
+        const auto assertCoalesce = [](
+            const NJson::TJsonValue& expression,
+            bool fallback)
+        {
+            UNIT_ASSERT_VALUES_EQUAL(expression.GetMapSafe().size(), 6);
             UNIT_ASSERT_VALUES_EQUAL(
-                predicate["kind"].GetStringSafe(),
-                useAnd ? "and" : "or");
-            UNIT_ASSERT_VALUES_EQUAL(predicate["args"].GetArraySafe().size(), 2);
+                expression["kind"].GetStringSafe(),
+                "if_present");
             UNIT_ASSERT_VALUES_EQUAL(
-                predicate["args"][0]["kind"].GetStringSafe(),
+                expression["optional"]["kind"].GetStringSafe(),
                 "eq");
             UNIT_ASSERT_VALUES_EQUAL(
-                predicate["args"][1]["kind"].GetStringSafe(),
-                "gte");
-        }
+                expression["optional"]["left"]["column"].GetStringSafe(),
+                "a.k");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["present"]["kind"].GetStringSafe(),
+                "bound");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["present"]["depth"].GetUIntegerSafe(),
+                0);
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["missing"]["kind"].GetStringSafe(),
+                "literal");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["missing"]["type"].GetStringSafe(),
+                "Bool");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["missing"]["value"].GetBooleanSafe(),
+                fallback);
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["type"].GetStringSafe(),
+                "Bool");
+            UNIT_ASSERT(!expression["nullable"].GetBooleanSafe());
+        };
+
+        auto snapshot = ParseSupported(
+            exportCondition(coalescedComparison("false")));
+        assertCoalesce(
+            FindNode(snapshot, "scan")["predicate"],
+            false);
 
         auto beneathNot = Build<TKqpOlapNot>(ctx.ExprCtx, pos)
-            .Value(TExprBase(coalescedComparison()))
+            .Value(TExprBase(coalescedComparison("true")))
             .Done();
-        auto result = exportCondition(beneathNot.Ptr());
-        UNIT_ASSERT(!result.IsSupported());
-        UNIT_ASSERT_STRING_CONTAINS(
-            result.UnsupportedReason,
-            "requires a positive filter context");
+        snapshot = ParseSupported(exportCondition(beneathNot.Ptr()));
+        const auto& negated = FindNode(snapshot, "scan")["predicate"];
+        UNIT_ASSERT_VALUES_EQUAL(
+            negated["kind"].GetStringSafe(),
+            "not");
+        assertCoalesce(negated["arg"], true);
 
-        auto beneathComparison = Build<TKqpOlapFilterBinaryOp>(ctx.ExprCtx, pos)
+        const auto* boolType =
+            ScalarType(ctx, NUdf::EDataSlot::Bool);
+        auto nestedComparison =
+            Build<TKqpOlapFilterBinaryOp>(ctx.ExprCtx, pos)
             .Operator().Value("eq").Build()
-            .Left(TExprBase(coalescedComparison()))
+            .Left(TExprBase(coalescedComparison("false")))
             .Right(TypedLiteral(
                 ctx,
                 "Bool",
                 "true",
-                ScalarType(ctx, NUdf::EDataSlot::Bool)))
+                boolType))
+            .OpType(TExprBase(DataTypeDescriptor(
+                ctx,
+                "Bool",
+                boolType)))
             .Done();
-        result = exportCondition(beneathComparison.Ptr());
-        UNIT_ASSERT(!result.IsSupported());
-        UNIT_ASSERT_STRING_CONTAINS(
-            result.UnsupportedReason,
-            "requires a positive filter context");
+        snapshot = ParseSupported(
+            exportCondition(nestedComparison.Ptr()));
+        const auto& nested = FindNode(snapshot, "scan")["predicate"];
+        UNIT_ASSERT_VALUES_EQUAL(
+            nested["kind"].GetStringSafe(),
+            "eq");
+        assertCoalesce(nested["left"], false);
+        UNIT_ASSERT_VALUES_EQUAL(
+            nested["right"]["kind"].GetStringSafe(),
+            "literal");
+        UNIT_ASSERT(
+            nested["right"]["value"].GetBooleanSafe());
+    }
+
+    Y_UNIT_TEST(OlapBooleanCoalesceContractFailsClosed) {
+        using TMutation = std::function<void(
+            TExportTestContext&,
+            TExprNode::TPtr&)>;
+
+        const auto reject = [](
+            const TMutation& mutate,
+            TStringBuf expectedReason)
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(
+                ctx,
+                "/Root/OlapBooleanCoalesce",
+                {{"k", "Int32", false}});
+            auto coalesce = MakeOlapBoolCoalesce(
+                ctx,
+                MakeOlapComparisonCondition(ctx, "eq", "k", "0"),
+                "false");
+            mutate(ctx, coalesce);
+
+            auto read = MakeRead(
+                ctx,
+                table,
+                "a",
+                {"k"},
+                NYql::EStorageType::ColumnStorage);
+            SetOutputType(ctx, *read, {
+                {"a.k", NUdf::EDataSlot::Int32, true},
+            });
+            read->OlapFilterLambda = MakeOlapFilterProcess(
+                ctx,
+                std::move(coalesce));
+            TOpRoot root(read, TPositionHandle(), {"a.k"});
+            read->Props.StageId =
+                root.PlanProps.StageGraph.AddSourceStage(
+                    NYql::EStorageType::ColumnStorage);
+
+            const auto result =
+                ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                expectedReason);
+        };
+
+        reject(
+            [](TExportTestContext& ctx, TExprNode::TPtr& coalesce) {
+                auto children = coalesce->ChildrenList();
+                children.pop_back();
+                coalesce = ctx.ExprCtx.NewList(
+                    TPositionHandle(),
+                    std::move(children));
+            },
+            "requires an exact non-null Bool result descriptor");
+        reject(
+            [](TExportTestContext& ctx, TExprNode::TPtr& coalesce) {
+                coalesce->ChildRef(3) = DataTypeDescriptor(
+                    ctx,
+                    "Int32",
+                    ScalarType(ctx, NUdf::EDataSlot::Int32));
+            },
+            "invalid result type descriptor");
+        reject(
+            [](TExportTestContext& ctx, TExprNode::TPtr& coalesce) {
+                const auto* boolean =
+                    ScalarType(ctx, NUdf::EDataSlot::Bool);
+                coalesce->ChildRef(3) = OptionalDataTypeDescriptor(
+                    ctx,
+                    "Bool",
+                    boolean,
+                    ScalarType(ctx, NUdf::EDataSlot::Bool, true));
+            },
+            "requires an exact non-null Bool result descriptor");
+        reject(
+            [](TExportTestContext& ctx, TExprNode::TPtr& coalesce) {
+                coalesce->ChildRef(3) = DataTypeDescriptor(
+                    ctx,
+                    "Bool",
+                    ScalarType(ctx, NUdf::EDataSlot::Int32));
+            },
+            "type annotation disagrees with its descriptor");
+
+        reject(
+            [](TExportTestContext& ctx, TExprNode::TPtr& coalesce) {
+                coalesce->ChildRef(1) = TypedLiteral(
+                    ctx,
+                    "Bool",
+                    "false",
+                    ScalarType(ctx, NUdf::EDataSlot::Bool));
+            },
+            "requires a typed binary predicate");
+        reject(
+            [](TExportTestContext& ctx, TExprNode::TPtr& coalesce) {
+                auto* left = coalesce->Child(1);
+                auto children = left->ChildrenList();
+                children.pop_back();
+                coalesce->ChildRef(1) = ctx.ExprCtx.NewList(
+                    TPositionHandle(),
+                    std::move(children));
+            },
+            "requires an Optional<Bool> left predicate");
+        reject(
+            [](TExportTestContext& ctx, TExprNode::TPtr& coalesce) {
+                coalesce->Child(1)->ChildRef(3) =
+                    DataTypeDescriptor(
+                        ctx,
+                        "Int32",
+                        ScalarType(ctx, NUdf::EDataSlot::Int32));
+            },
+            "invalid result type descriptor");
+        reject(
+            [](TExportTestContext& ctx, TExprNode::TPtr& coalesce) {
+                coalesce->Child(1)->ChildRef(3) =
+                    DataTypeDescriptor(
+                        ctx,
+                        "Bool",
+                        ScalarType(ctx, NUdf::EDataSlot::Bool));
+            },
+            "requires an Optional<Bool> left predicate");
+
+        reject(
+            [](TExportTestContext& ctx, TExprNode::TPtr& coalesce) {
+                coalesce->ChildRef(2) = TypedLiteral(
+                    ctx,
+                    "Bool",
+                    "false",
+                    ScalarType(ctx, NUdf::EDataSlot::Bool, true));
+            },
+            "requires a direct non-null Bool literal fallback");
+        reject(
+            [](TExportTestContext& ctx, TExprNode::TPtr& coalesce) {
+                coalesce->ChildRef(2) = TypedLiteral(
+                    ctx,
+                    "Int32",
+                    "0",
+                    ScalarType(ctx, NUdf::EDataSlot::Int32));
+            },
+            "requires a direct non-null Bool literal fallback");
+        reject(
+            [](TExportTestContext& ctx, TExprNode::TPtr& coalesce) {
+                const auto* boolean =
+                    ScalarType(ctx, NUdf::EDataSlot::Bool);
+                coalesce->ChildRef(2) = TypedCallable(
+                    ctx,
+                    "Not",
+                    {TypedLiteral(
+                        ctx,
+                        "Bool",
+                        "false",
+                        boolean)},
+                    boolean);
+            },
+            "requires a direct non-null Bool literal fallback");
+        reject(
+            [](TExportTestContext& ctx, TExprNode::TPtr& coalesce) {
+                const auto* boolean =
+                    ScalarType(ctx, NUdf::EDataSlot::Bool);
+                coalesce->ChildRef(2) = TypedCallable(
+                    ctx,
+                    "Bool",
+                    {TypedLiteral(
+                        ctx,
+                        "Bool",
+                        "false",
+                        boolean)},
+                    boolean);
+            },
+            "requires a direct non-null Bool literal fallback");
+
+        reject(
+            [](TExportTestContext& ctx, TExprNode::TPtr& coalesce) {
+                auto children = coalesce->ChildrenList();
+                children.push_back(DataTypeDescriptor(
+                    ctx,
+                    "Bool",
+                    ScalarType(ctx, NUdf::EDataSlot::Bool)));
+                coalesce = ctx.ExprCtx.NewList(
+                    TPositionHandle(),
+                    std::move(children));
+            },
+            "Unsupported OLAP predicate node");
+        reject(
+            [](TExportTestContext& ctx, TExprNode::TPtr& coalesce) {
+                coalesce->ChildRef(0) = ctx.ExprCtx.NewCallable(
+                    TPositionHandle(),
+                    "??",
+                    {});
+            },
+            "OLAP binary operation has a non-Atom operator");
+        reject(
+            [](TExportTestContext&, TExprNode::TPtr& coalesce) {
+                auto left = coalesce->ChildPtr(1);
+                coalesce->ChildRef(1) =
+                    coalesce->ChildPtr(2);
+                coalesce->ChildRef(2) = std::move(left);
+            },
+            "requires a typed binary predicate");
+        reject(
+            [](TExportTestContext&, TExprNode::TPtr& coalesce) {
+                coalesce->SetSideEffects(ESideEffects::General);
+            },
+            "side-effecting or CSE-unsafe node");
+        reject(
+            [](TExportTestContext&, TExprNode::TPtr& coalesce) {
+                coalesce->Child(1)->SetSideEffects(
+                    ESideEffects::General);
+            },
+            "side-effecting or CSE-unsafe node");
+        reject(
+            [](TExportTestContext&, TExprNode::TPtr& coalesce) {
+                coalesce->Child(1)->Child(2)->SetSideEffects(
+                    ESideEffects::General);
+            },
+            "side-effecting or CSE-unsafe node");
+        reject(
+            [](TExportTestContext&, TExprNode::TPtr& coalesce) {
+                coalesce->Child(2)->SetUnorderedChildren();
+            },
+            "node with unordered children");
     }
 
     Y_UNIT_TEST(ExportsExactOlapPresencePredicatesAtAStageBoundary) {
@@ -19787,7 +20101,9 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             NYql::EStorageType::ColumnStorage);
         result = ExportSemanticSnapshotV1(nestedCoalesceRoot, ctx.RboCtx);
         UNIT_ASSERT(!result.IsSupported());
-        UNIT_ASSERT_STRING_CONTAINS(result.UnsupportedReason, "requires a positive filter context");
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.UnsupportedReason,
+            "requires an exact non-null Bool result descriptor");
     }
 
     Y_UNIT_TEST(ExportsColumnReadPushdownAtAStageBoundary) {

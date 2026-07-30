@@ -2049,7 +2049,11 @@ NKikimr::NUdf::TUnboxedValue ReadSkiffValue(NKikimr::NMiniKQL::TType* type, ui64
         uwrappedType = static_cast<TOptionalType*>(type)->GetItemType();
     }
 
-    if (isOptional && !IsOptionalSingular(type, nativeYtTypeFlags)) {
+    if (IsOptionalSingular(type, nativeYtTypeFlags)) {
+        return NUdf::TUnboxedValue();
+    }
+
+    if (isOptional) {
         auto marker = buf.Read();
         if (!marker) {
             return NUdf::TUnboxedValue();

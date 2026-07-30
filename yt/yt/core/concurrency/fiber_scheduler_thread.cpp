@@ -10,6 +10,7 @@
 #include <yt/yt/core/actions/cancelable_context.h>
 #include <yt/yt/core/actions/invoker_util.h>
 
+#include <yt/yt/core/concurrency/delayed_executor.h>
 #include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <yt/yt/core/misc/finally.h>
@@ -26,9 +27,14 @@
 #include <library/cpp/yt/memory/function_view.h>
 
 #include <library/cpp/yt/threading/fork_aware_spin_lock.h>
+#include <library/cpp/yt/threading/event_count.h>
+
+#include <library/cpp/yt/cpu_clock/clock.h>
 
 #include <util/thread/lfstack.h>
 
+#include <memory>
+#include <optional>
 #include <thread>
 
 #if defined(_linux_) && !defined(NDEBUG)
@@ -1144,20 +1150,36 @@ TFiberCanceler GetCurrentFiberCanceler()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void WaitUntilSet(TFuture<void> future, IInvokerPtr invoker)
-{
-    YT_VERIFY(future);
-    YT_VERIFY(invoker);
+namespace {
 
-    NThreading::VerifyNoSpinLockAffinity();
+void BlockThreadUntilSet(TFuture<void> future, std::optional<TInstant> deadline)
+{
+    auto event = std::make_shared<NThreading::TEvent>();
+    auto cookie = future.Subscribe(BIND_NO_PROPAGATE([event] (const TError&) {
+        event->NotifyOne();
+    }));
+    auto unsubscribeGuard = Finally([&] {
+        future.Unsubscribe(cookie);
+    });
+
+    if (deadline) {
+        event->Wait(*deadline);
+    } else {
+        event->Wait();
+    }
+}
+
+void SuspendFiberUntilSet(TFuture<void> future, IInvokerPtr invoker)
+{
+    YT_VERIFY(invoker);
     YT_VERIFY(!IsContextSwitchForbidden());
 
     auto* currentFiber = NDetail::TryGetCurrentFiber();
     if (!currentFiber) {
-        // When called from a fiber-unfriendly context, we fallback to blocking wait.
+        // Off a fiber the strategy degenerates to a blocking wait on this thread.
         YT_VERIFY(invoker == GetCurrentInvoker());
         YT_VERIFY(invoker == GetSyncInvoker());
-        YT_VERIFY(future.BlockingWait());
+        BlockThreadUntilSet(std::move(future), /*deadline*/ std::nullopt);
         return;
     }
 
@@ -1213,6 +1235,72 @@ void WaitUntilSet(TFuture<void> future, IInvokerPtr invoker)
         YT_LOG_DEBUG("Throwing fiber cancelation exception");
         throw TFiberCanceledException();
     }
+}
+
+void SuspendFiberUntilSet(TFuture<void> future, TWaitOptions options)
+{
+    auto invoker = options.ResumingInvoker
+        ? std::move(options.ResumingInvoker)
+        : GetCurrentInvoker();
+
+    if (!options.Deadline) {
+        SuspendFiberUntilSet(std::move(future), std::move(invoker));
+        return;
+    }
+
+    auto timer = TDelayedExecutor::MakeDelayed(*options.Deadline - GetInstant());
+    // The fiber suspends on |timer|, so its canceler reaches |future| only through this hop.
+    // An elapsed deadline sets |timer| with an OK error and must leave |future| running.
+    // Any other outcome — fiber cancelation or shutdown aborting the timer — cancels
+    // |future| as well, matching #TFuture::WithTimeout.
+    timer.Subscribe(BIND_NO_PROPAGATE([future] (const TError& error) {
+        if (!error.IsOK()) {
+            future.Cancel(error);
+        }
+    }));
+    auto cookie = future.Subscribe(BIND_NO_PROPAGATE([timer] (const TError&) {
+        timer.Cancel(TError(NYT::EErrorCode::Canceled, "Waited future is set"));
+    }));
+    auto unsubscribeGuard = Finally([&] {
+        future.Unsubscribe(cookie);
+    });
+
+    SuspendFiberUntilSet(std::move(timer), std::move(invoker));
+}
+
+} // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
+TWaitOptions TWaitOptions::WithTimeout(TDuration timeout) &&
+{
+    Deadline = GetInstant() + timeout;
+    return std::move(*this);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void WaitUntilSet(TFuture<void> future, TWaitOptions options)
+{
+    YT_VERIFY(future);
+
+    auto mustYield = options.Strategy == EWaitForStrategy::SuspendFiber && options.AlwaysYieldFiber;
+    if (future.IsSet() && !mustYield) {
+        return;
+    }
+
+    NThreading::VerifyNoSpinLockAffinity();
+
+    switch (options.Strategy) {
+        case EWaitForStrategy::SuspendFiber:
+            SuspendFiberUntilSet(std::move(future), std::move(options));
+            return;
+        case EWaitForStrategy::BlockThread:
+            BlockThreadUntilSet(std::move(future), options.Deadline);
+            return;
+    }
+
+    YT_ABORT("Unknown wait strategy");
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -414,6 +414,9 @@
     "name": "yt.NightlyCompress"
   },
   {
+    "name": "yt.OmitInaccessibleRows"
+  },
+  {
     "name": "yt.OperationReaders"
   },
   {
@@ -475,6 +478,9 @@
   },
   {
     "name": "yt.QueryCacheMode"
+  },
+  {
+    "name": "yt.QueryCacheReportProgress"
   },
   {
     "name": "yt.QueryCacheSalt"
@@ -1071,6 +1077,9 @@
     "name": "DisableWindowNewPipeline"
   },
   {
+    "name": "DisableYqlSelectAllowUnnamedGroupByExpr"
+  },
+  {
     "name": "DiscoveryMode"
   },
   {
@@ -1258,6 +1267,9 @@
   },
   {
     "name": "YqlSelect"
+  },
+  {
+    "name": "YqlSelectAllowUnnamedGroupByExpr"
   },
   {
     "name": "yson.AutoConvert"

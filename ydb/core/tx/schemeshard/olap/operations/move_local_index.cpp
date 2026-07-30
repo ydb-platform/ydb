@@ -200,7 +200,11 @@ public:
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
-        TPath mainTablePath = TPath::Resolve(mainTableStr, context.SS);
+        // Prefer the inactive destination table created by an earlier MoveTable part of the same tx
+        // (move-with-replace). Plain Resolve still returns the dropping path that owns the name.
+        const TString dstIndexFullPath = NKikimr::JoinPath({mainTableStr, dstName});
+        TPath dstPath = TPath::ResolveWithInactive(OperationId, dstIndexFullPath, context.SS);
+        TPath mainTablePath = dstPath.Parent();
         {
             TPath::TChecker checks = mainTablePath.Check();
             checks
@@ -285,14 +289,26 @@ public:
             }
         }
 
-        TPath dstPath = mainTablePath.Child(dstName);
         {
             TPath::TChecker checks = dstPath.Check();
+            checks.IsAtLocalSchemeShard();
             if (dstPath.IsResolved()) {
                 checks
-                    .IsResolved()
-                    .NotUnderDeleting()
-                    .FailOnExist(TPathElement::EPathType::EPathTypeTableIndex, false);
+                    .IsResolved();
+
+                if (dstPath.IsUnderDeleting()) {
+                    checks
+                        .IsUnderDeleting()
+                        .IsUnderTheSameOperation(OperationId.GetTxId());
+                } else if (dstPath.IsUnderMoving()) {
+                    checks
+                        .IsUnderMoving()
+                        .IsUnderTheSameOperation(OperationId.GetTxId());
+                } else {
+                    checks
+                        .NotUnderTheSameOperation(OperationId.GetTxId())
+                        .FailOnExist(TPathElement::EPathType::EPathTypeTableIndex, false);
+                }
             } else {
                 checks
                     .NotEmpty()
@@ -337,7 +353,7 @@ public:
         context.DbChanges.PersistAlterIndex(allocatedPathId);
         context.DbChanges.PersistTxState(OperationId);
 
-        dstPath.MaterializeLeaf(owner, allocatedPathId);
+        dstPath.MaterializeLeaf(owner, allocatedPathId, /*allowInactivePath*/ true);
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
         auto newIndexPath = dstPath.Base();

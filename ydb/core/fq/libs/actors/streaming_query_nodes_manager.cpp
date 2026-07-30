@@ -55,7 +55,7 @@ public:
 
     STRICT_STFUNC(StateWork,
         hFunc(TEvStreamingQueryNodesManager::TEvSetTaskNodes, Handle);
-        hFunc(TEvTenantNodeEnumerator::TEvLookupResult, Handle);
+        hFunc(NKikimr::TEvTenantNodeEnumerator::TEvLookupResult, Handle);
         cFunc(TEvents::TEvPoison::EventType, PassAway);
         hFunc(TEvents::TEvWakeup, Handle);
     )
@@ -85,7 +85,7 @@ private:
         ScheduleWakeup();
     }
 
-    void Handle(TEvTenantNodeEnumerator::TEvLookupResult::TPtr& ev) {
+    void Handle(NKikimr::TEvTenantNodeEnumerator::TEvLookupResult::TPtr& ev) {
         LookupInFlight_ = false;
 
         if (!ev->Get()->Success) {

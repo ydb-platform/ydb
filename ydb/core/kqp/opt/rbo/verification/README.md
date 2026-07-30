@@ -51,7 +51,12 @@ exact row-level `DistinctAll` aggregation, side-explicit join keys including
 the narrow shared-IU one-sided join slice, exact direct non-null Uint64
 `Just`, exact scalar-final Uint64 sum unwrap, and exact direct scalar
 or grouped `COUNT(DISTINCT integer)` for every fixed-width signed/unsigned
-integer type, plus the benchmark-dashboard parts of M4. The reviewed
+integer type. Join construction also erases only literally absent input slots,
+and the narrowly gated delayed Filter/Cross path can reject statically
+impossible factor rows and rebase its innermost Cross around a certified
+unique seed before applying the existing unique-RHS compaction. The full
+Filter and original output-column order remain observable. These slices plus
+the benchmark-dashboard parts of M4 are implemented. The reviewed
 exact wrapper forms
 retain their Optional schema through existing `IfPresent`/`If` IR instead of
 being erased. This includes only `Just(Date literal)` and
@@ -185,14 +190,14 @@ transformation-event stream. Solver-backed tests use the pinned, standalone Z3
 target under `contrib/tools/z3`; it is not linked into `ydbd`.
 The checked-in policy currently requires formula construction for
 TPCH q1, q2, q3, q4, q5, q6, q7, q8, q9, q10, q11, q12, q13, q14,
-q15, q16, q18, q19, q21, and q22 plus TPC-DS q2, q3, q5, q6, q7, q8, q9,
-q10, q11,
+q15, q16, q18, q19, q21, and q22 plus TPC-DS q2, q3, q4, q5, q6, q7, q8,
+q9, q10, q11,
 q13, q15, q16, q18, q19, q21, q22, q24, q25, q26, q29, q31, q33, q34,
 q35, q37, q38, q40, q42, q43, q45, q46, q48, q50, q52, q54, q55, q56, q58,
 q59, q60, q61, q62, q64, q65, q66, q68, q69, q71, q72, q73, q74, q75, q76,
 q77, q78, q79,
 q80, q82, q83, q85, q87, q88, q90, q91, q93, q94, q95, q96, q97, and q99:
-90/121 workload queries (74.4%).
+91/121 workload queries (75.2%).
 TPC-DS q8 is pinned at successful preparation, verifier entry, formula
 construction, and bounded proof. TPC-DS q72 is pinned at successful
 preparation plus formula construction; it is not in the proof floor. TPC-DS q9
@@ -204,15 +209,17 @@ TPC-DS q31 is pinned at successful preparation and formula construction; it
 has no separate verifier-entry requirement and is not in the proof floor.
 TPC-DS q11/q74 are likewise pinned at successful preparation and formula
 construction, with no separate verifier-entry or proof requirement.
+TPC-DS q4 is pinned at successful preparation and formula construction after
+repairing its independent workload fixture; it is not in the proof floor.
 TPCH q13/q16 are pinned
 at successful preparation, verifier entry, formula construction, and bounded
 proof. Together with TPC-DS q8, the checked-in proof floor is thirty-one
 obligations. The current complete
 dashboards leave TPCH at
 twenty formulas, no unsupported semantic outcomes, and two no-pair
-optimizer failures; TPC-DS has seventy formulas, eleven unsupported
+optimizer failures; TPC-DS has seventy-one formulas, ten unsupported
 semantic outcomes, and eighteen no-pair optimizer failures.
-Across both suites the current semantic partition is 90 formulas, 11
+Across both suites the current semantic partition is 91 formulas, 10
 `UNSUPPORTED`, and 20
 `OPTIMIZER_FAILURE`.
 Preparation is a separate partition: twenty TPCH and seventy-three TPC-DS
@@ -239,18 +246,20 @@ formula construction and bounded proof.
 Topology-aware routed-copy compaction then moves q31 through formula
 construction without adding a proof. Exact early equality for concrete
 Script-owned String atoms then removes impossible sale-type Cross branches in
-q11/q74. The resulting measured formula coverage is 90/121 (74.4%) over
-the corpus, 90/101 (89.1%) over exact Initial/Final boundary-result pairs,
-90/93 (96.8%) within the preparation-successful subset, and 90/91 (98.9%)
-among verifier entrants. The
+q11/q74. Exact factor-local static rejection, literal-false join-slot erasure,
+and certified innermost unique-seed rebasing then carry corrected TPC-DS q4
+through formula construction. The resulting measured formula coverage is
+91/121 (75.2%) over the corpus, 91/101 (90.1%) over exact Initial/Final
+boundary-result pairs, 91/93 (97.8%) within the preparation-successful subset,
+and 91/91 (100%) among verifier entrants. The
 preparation-success ratio uses
 the intersection of formula rows with preparation-success rows; version five
 permits a formula to coexist with failed later preparation. Twenty TPCH and
 eighty-one TPC-DS queries have exact boundary-result pairs. Twenty TPCH and
-seventy-one TPC-DS pairs enter the verifier. The 11 unsupported outcomes
-consequently split by primary terminal layer into 10 initial-export, zero
-final-export, and one verifier result. Secondary boundary diagnostics remain
-recorded independently.
+seventy-one TPC-DS pairs enter the verifier. The 10 unsupported outcomes
+consequently all terminate at initial export; final export and verifier
+construction have no primary unsupported outcome. Secondary boundary
+diagnostics remain recorded independently.
 
 Milestone 64 accepts only a direct visible `Optional<Date>` member under exact
 binary `+` or `-` with a reviewed literal `IntervalFromDays`. The Initial
@@ -581,6 +590,79 @@ and 18/18 TPC-DS after 13,518/105,096 ms (SHA-256
 all `VERIFIED_BOUNDED`; the complete proof-floor target is policy-valid and
 passes 5/5.
 
+Milestone 73 adds three exact construction reductions inside the existing
+relational semantics; it changes neither the snapshot schema nor the C++
+exporter. First, the private left-deep Cross-under-Filter gate assigns a
+top-level conjunct to a factor only when its nonempty referenced-column set is
+owned wholly and uniquely by that factor. It discards a factor slot only when
+`row.present AND SQL-is-true(local conjunct)` is the canonical `FALSE` term.
+Every possibly live slot and the complete original Filter remain, so this is
+early rejection of an impossible row rather than predicate removal. Relation
+outcomes, order, ordinals, present-prefix evidence, occurrences, values, and
+partition facts are retained for surviving slots. The cumulative local
+evaluation count is bounded by the unchanged 16,384-pair construction audit;
+without a certified unique schedule or an actual rejection, evaluation falls
+back to the ordinary path.
+
+Second, every join kind erases an input slot before matching and cap accounting
+only when its presence guard is literally the canonical `FALSE` term. Payload
+and provenance under such a guard are unobservable. Symbolic guards, including
+ones a solver might later prove contradictory, remain untouched. Rebuilding a
+compacted input clears sequence metadata, which no admitted Join consumes;
+outcome errors and nondeterministic choices remain composed outside the
+per-relation Join. This exact identity applies to generic, outer, semi, anti,
+exclusion, and direct unique-RHS paths.
+
+Third, delayed unique-RHS scheduling may commute only its innermost Cross when
+the fixed orientation has no direct unique-right certificate and the original
+seed does. The seed must satisfy the existing strict gate: a direct,
+unfiltered, unlimited Scan whose complete same-typed catalog key is non-null,
+unique, and covered by ordinary equality conjuncts. Cross is bag-commutative,
+so the reversed pair can use the existing exact unique-RHS join; scheduling
+then continues over later factors. The complete Filter is still evaluated and
+the original Cross output-column order is restored. StageGraph input, node
+override, shared-spine, subplan, nullable-key, partial-key, coerced-key, and
+null-safe-equality near misses retain the generic path.
+
+The TPC-DS q4 workload fixture had independently regressed during its Decimal
+migration: the web-sales branch labeled `sale_type` as `'s'`, while the
+canonical query and its outer predicates require `'w'`. Commit `e55c37f967f`
+restores the web discriminator. That fixture defect is not an optimizer
+correctness bug, and the historical optimizer-defect count remains nine.
+Against a fresh corrected capture, commits `7cf4a049f61`,
+`1e53b1fb9a0`, and `8c5eca71246` move q4 through its complete final StageGraph
+without raising a row, pair, comparator, or payload ceiling.
+
+The corrected q4 formula-only run emits a 269,969,712-byte, 2,032-line
+canonical obligation with SHA-256
+`d4740aeb93d18e9b2e1338bcb9db58d98eedd1e93d3d5f91cf02a38bc7f0a92d`.
+Standalone construction takes approximately 70.16 seconds and peaks at
+1,582,448 KiB (about 1.51 GiB) RSS. No solver was run, so this is formula
+coverage, not a bounded proof, counterexample, or replay candidate.
+
+The post-M73 semantic partition is TPCH 20 formulas / 0 unsupported / 2
+no-pair and TPC-DS 71 / 10 / 18. Formula construction therefore reaches
+91/121 workload queries (75.2%), 91/101 exact pairs (90.1%), 91/93 successful
+preparations (97.8%), and all 91/91 verifier entrants. Primary unsupported
+outcomes split ten initial / zero final / zero verifier.
+The fresh policy-bound complete TPC-DS dashboard spends 67,223/814,378 ms and
+has SHA-256
+`dfb7976c5207a9fdf2fd31d79fc950fedb0d2473b899526c28ab2ff8c2305e41`.
+Its embedded policy requires and observes all 71 formula rows, satisfies all
+71 pinned preparation rows, and reports zero violations.
+The fresh complete TPCH formula dashboard spends 3,001/95,255 ms and has
+SHA-256
+`19d2d5b34053889df31905fe0811a212defdfc0b8abb9bd846f088fdd452d22f`.
+The full Python verifier passes 688/688 tests and policy passes 14/14.
+The bounded proof floor remains 31/121 (25.6%), 31/91 formula-covered queries
+(34.1%), and 31/31 curated obligations: 13 TPCH and 18 TPC-DS. Fresh complete
+proof reports spend 1,569/62,282 ms and 13,463/103,079 ms and have SHA-256
+`28079d5aaf1af70d6badd77f14652d28893f1b149acdcc0d6fda96f1fc590246`
+and
+`1b34081c5e98dcf9b7f6bfb82d59491d7862b40b4c14a1a3a45711bcfadbefa6`,
+respectively. M73 adds no bounded proof, counterexample, replay candidate, or
+optimizer finding.
+
 A focused version-five run selected TPC-DS q12, q20, q49, q51, q53, q63, q89,
 and q98. Every query produced an exact Initial/Final boundary-result pair and
 later failed preparation; every semantic outcome was `UNSUPPORTED`, with no
@@ -795,8 +877,9 @@ q35, and certified derived-AVG ordering removes q22/q85 from the generic
 The restricted whole-predicate bridge moved q21, q34, and q75 through formula
 construction, and the passive-carrier milestone moved q83. q73 emits, and q78
 emits through the packed-row network carrier. The
-factorized-construction cluster has five remaining primary blockers after q2,
-q59, and q78 emit.
+factorized-construction cluster is now closed: M69, M71, M72, and M73
+successively remove q64, q31, q11/q74, and corrected q4, so no verifier-side
+construction rejection remains.
 Including exact window semantics for the newly visible failed-preparation
 pairs gives roughly
 six to eight families and eight to sixteen milestones for the complete
@@ -1091,7 +1174,7 @@ constructed; it is not a solver proof. The checked-in solver policy now
 requires `VERIFIED_BOUNDED` for TPCH q3, q4, q6, q11, q12, q13, q14, q15,
 q16, q18, q19, q21, and q22 plus TPC-DS q3, q8, q9, q16, q34, q38, q42, q48,
 q52, q55, q69, q73, q87, q90, q93, q94, q95, and q96: thirty-one obligations
-(25.6% of the workload and 34.4% of formula-covered queries).
+(25.6% of the workload and 34.1% of formula-covered queries).
 
 The current proof-floor gate is green and policy-valid: 13/13 TPCH
 and 18/18 TPC-DS obligations are `VERIFIED_BOUNDED`, for 31/31 or 31/121
@@ -2195,6 +2278,10 @@ its focused 60-second solver result is `UNKNOWN`, so the proof floor remains
 Milestone 72's exact early equality for concrete Script-owned String atoms
 moves TPC-DS q11/q74 through formula construction without changing a cap; the
 proof floor remains 13 TPCH plus 18 TPC-DS obligations.
+Milestone 73's exact factor-local rejection, literal-false Join-slot erasure,
+and certified innermost unique-seed rebase move corrected TPC-DS q4 through
+formula construction without changing a cap; q4 was not solved, so that proof
+floor remains unchanged.
 The auditability consolidation is complete in commits `7a3639d1c16`,
 `ebcfdbb1263`, and `4b7f27d492e`. The checked-in proof policy added TPC-DS q95
 after the earlier TPCH q18 addition, then q38 and q87 through the exact

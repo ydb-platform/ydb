@@ -856,9 +856,12 @@ Implementation sequence:
 72. M4: exact early equality for registered concrete String atoms,
     eliminating impossible sale-type Cross branches and moving TPC-DS q11/q74
     through formula construction. q4's different predicate-aware Cross
-    factorization remains separate;
-73. M4 (next): exact predicate-aware delayed-Cross factorization for TPC-DS
-    q4's 20,736-pair join-match construction blocker.
+    factorization remains separate and is implemented by item 73;
+73. M4: exact delayed-Cross factor-local static rejection, literal-false join-slot
+    erasure, and certified innermost unique-seed rebasing, moving TPC-DS q4
+    through formula construction without raising a global construction bound.
+    M4 remains current; Milestone 74 is deliberately unselected until a fresh
+    blocker audit.
 
 More than two dependencies, broader correlations, coercing and nullable-String
 dynamic `IN`, broader range grammars, and other OLAP pushdowns remain.
@@ -1440,8 +1443,8 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   gaps, non-normalized Unicode, arbitrary `String` bytes, replayable witnesses,
   resource caps, deferred sealing, and quantified-choice fail-closed behavior.
   A focused run moves TPC-DS q42 and q50 through formula construction and proves
-  q42. The remaining former String blockers now reach deeper construction caps
-  (q4, q11, q25, q29, q46, q68, and q91).
+  q42. At that checkpoint, the remaining former String blockers reached
+  deeper construction caps (q4, q11, q25, q29, q46, q68, and q91).
 - Reviewed deterministic total scalar subtrees are exported as canonical typed
   opaque functions. Unit tests cover IU alpha-renaming, first-use argument order,
   repeated arguments, structural/literal/callable mutations, DAG-sharing
@@ -2547,16 +2550,17 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   `76fffb3c86848126cd8d88473ae069476e2e63940c1b9c1eec0dcfe9fd51f467`).
   They add no proof, counterexample, replay, or optimizer bug.
 
-  The post-M72 semantic partition is TPCH 20 formula / 0 unsupported /
-  2 no-pair and TPC-DS 70 / 11 / 18. Across both suites, 90/121 queries
-  construct formulas (74.4%), as do 90/101 exact captured pairs (89.1%),
-  90/93 preparation successes (96.8%), and 90/91 verifier entrants (98.9%).
+  At the historical post-M72 checkpoint, the semantic partition was TPCH
+  20 formula / 0 unsupported / 2 no-pair and TPC-DS 70 / 11 / 18. Across both
+  suites, 90/121 queries construct formulas (74.4%), as do 90/101 exact
+  captured pairs (89.1%), 90/93 preparation successes (96.8%), and 90/91
+  verifier entrants (98.9%).
   Primary unsupported outcomes split ten initial / zero final / one verifier.
   The proof floor remains 31/121 (25.6%), 31/90 formula-covered queries
   (34.4%), and 31/31 curated obligations. The full verifier passes 680/680
   tests and policy passes 14/14.
 
-  The complete post-M72 formula dashboards are TPCH 20 / 0 / 2 after
+  The historical complete post-M72 formula dashboards are TPCH 20 / 0 / 2 after
   2,856/91,743 ms (report SHA-256
   `355d7d23510c7a239ac8cd25200e3af1572375ec2e3e9e109bb50bbb61c36528`)
   and TPC-DS 70 / 11 / 18 after 65,567/707,008 ms (report SHA-256
@@ -2568,6 +2572,57 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   `68fbd23bac77cf75a00bf83a2bcddf0e6e9877ebdea116e6c7bdf9c83a8917c4`),
   all `VERIFIED_BOUNDED`; the proof-floor target is policy-valid and passes
   5/5.
+
+  Milestone 73 is implemented by `7cf4a049f61`, `1e53b1fb9a0`, and
+  `8c5eca71246`, with the q4 preparation/formula floor recorded by
+  `a96c2a0be8f`. It combines three independently exact reductions. First,
+  within the existing private delayed-Cross gate, a Filter conjunct owned by
+  exactly one factor may reject only rows for which the row-presence guard
+  conjoined with SQL-is-true of that conjunct is the canonical `FALSE` term;
+  every other row and the complete original Filter are retained. Second, the
+  common Join entry erases only slots whose presence guard is canonical
+  `FALSE`, before pair/output audits. Third, the scheduler may commute only
+  its innermost Cross and rebase onto its former right factor when the former
+  seed is an unfiltered, unlimited direct Scan whose same-type equality
+  columns cover a declared non-null unique key. The existing runtime
+  certificate is still rechecked, later factors use the unchanged scheduler,
+  and original output-column order is restored.
+
+  The RBO TPC-DS workload fixture required a separate correction:
+  `e55c37f967f` restores q4's canonical web-sales discriminator from the
+  accidental `'s'` to `'w'`. The erroneous fixture made the captured query
+  statically empty; this was a workload defect, not an optimizer correctness
+  bug. The corrected pair now returns `FORMULA_EMITTED`. Its canonical
+  269,969,712-byte, 2,032-line formula has SHA-256
+  `d4740aeb93d18e9b2e1338bcb9db58d98eedd1e93d3d5f91cf02a38bc7f0a92d`
+  and took 70.16 seconds to construct from the captured snapshots. No solver
+  result, counterexample, replay, or optimizer bug is inferred from that
+  formula-only result; the cumulative historical optimizer-defect count
+  remains nine.
+
+  The post-M73 semantic partition is TPCH 20 formula / 0 unsupported /
+  2 no-pair and TPC-DS 71 / 10 / 18. Across both suites, 91/121 queries
+  construct formulas (75.2%), as do 91/101 exact captured pairs (90.1%),
+  91/93 preparation successes (97.8%), and all 91/91 verifier entrants.
+  Primary unsupported outcomes split ten initial / zero final / zero verifier,
+  so no exact pair currently stops at verifier-side formula construction.
+  The proof floor remains 31/121 (25.6%), 31/91 formula-covered queries
+  (34.1%), and 31/31 curated obligations.
+
+  A fresh complete TPCH formula dashboard remains 20 / 0 / 2 after
+  3,001/95,255 ms (report SHA-256
+  `19d2d5b34053889df31905fe0811a212defdfc0b8abb9bd846f088fdd452d22f`).
+  The fresh policy-bound complete TPC-DS dashboard is 71 / 10 / 18 after
+  67,223/814,378 ms (report SHA-256
+  `dfb7976c5207a9fdf2fd31d79fc950fedb0d2473b899526c28ab2ff8c2305e41`).
+  Its embedded policy requires and observes all 71 formula rows, satisfies all
+  71 pinned preparation rows, and reports zero violations.
+  Fresh proof-floor reports verify 13/13 TPCH after 1,569/62,282 ms
+  (SHA-256
+  `28079d5aaf1af70d6badd77f14652d28893f1b149acdcc0d6fda96f1fc590246`)
+  and 18/18 TPC-DS after 13,463/103,079 ms (SHA-256
+  `1b34081c5e98dcf9b7f6bfb82d59491d7862b40b4c14a1a3a45711bcfadbefa6`),
+  all `VERIFIED_BOUNDED`; the proof floor is unchanged.
 
   A focused version-five audit of TPC-DS q12, q20, q49, q51, q53, q63, q89,
   and q98 preserves exact pairs despite failed preparation. All eight are
@@ -2589,12 +2644,16 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   construction blocker with private unique-RHS factor scheduling. Milestone 71
   removes q31's routed Sort/Merge construction blocker. Milestone 72 removes
   q11/q74's impossible sale-type Cross branches with exact concrete-String
-  equality. Including exact window semantics for the failed-preparation pairs,
+  equality. Milestone 73 removes the last verifier-side construction rejection,
+  q4, through the three exact reductions above. Including exact window
+  semantics for the failed-preparation pairs,
   the full captured-pair gap is roughly 6--8 feature families or 8--16
-  milestones. Those workload-targeted estimates now start from 90 formulas and
-  can change as later blockers become visible. The 20 no-pair entries require
-  frontend/optimizer progress; the present captured-pair ceiling is 101/121,
-  and formula construction is not solver proof.
+  milestones. Those workload-targeted estimates now start from 91 formulas and
+  can change as later blockers become visible. A fresh boundary/blocker audit,
+  rather than a preselected feature, will choose Milestone 74. M4 remains
+  current. The 20 no-pair entries require frontend/optimizer progress; the
+  present captured-pair ceiling is 101/121, and formula construction is not
+  solver proof.
 
   q54's row spends 50,737 ms in verifier/formula-construction work. Its
   separate 60-second solver experiment is `UNKNOWN`: the global deadline
@@ -2816,8 +2875,9 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   recorded above.
 - Construction preflights cap every materialized relation at 4096 candidate
   rows and each unshared quadratic construction or shared symmetric comparison
-  triangle at 16384 candidate-row pairs. The sole remaining verifier-side
-  construction blocker is TPC-DS q4's 20,736-pair join match. Other shapes
+  triangle at 16384 candidate-row pairs. Milestone 73 removes the last
+  verifier-side construction rejection, TPC-DS q4's historical 20,736-pair
+  join match, through exact reductions rather than a higher cap. Other shapes
   remain outside the comparator, logical payload, or key-width network gates.
   q1, q5, q11, q25, q29, q31, q46, q59, q64, q65, q68, q74, q77, q78, q80,
   and q91 now construct complete formulas instead of stopping at their
@@ -3462,7 +3522,7 @@ regression locks the corrected boundary.
 - Explicit diagnostic transformation-prefix verifier boundary, committed-rule
   and atomic-stage snapshot hooks, strict real-host capture command, and
   separate sequential localization driver are implemented.
-- The 87 formula-construction and 31 curated proof obligations have
+- The 91 formula-construction and 31 curated proof obligations have
   separate checked-in regression floors. The current complete gate confirms all
   31 as `VERIFIED_BOUNDED`; focused rows retain independent
   evidence for the newly added obligations. Every future solver witness has a

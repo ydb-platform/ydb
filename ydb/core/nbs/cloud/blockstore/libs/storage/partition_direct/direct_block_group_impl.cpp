@@ -1093,7 +1093,7 @@ void TDirectBlockGroup::BarrierEraseFromPBuffer(ui64 lsn)
                 lsn,
                 self->PBufferConnections.size());
 
-            auto span = self->TraceService->CreteRootSpan(
+            auto span = self->TraceService->CreateRootSpan(
                 "NbsPartition.BarrierEraseFromPBuffer");
 
             for (THostIndex h = 0; h < self->PBufferConnections.size(); ++h) {

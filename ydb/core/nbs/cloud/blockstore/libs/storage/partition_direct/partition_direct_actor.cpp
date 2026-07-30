@@ -60,7 +60,7 @@ void TPartitionActor::OnDetach(const TActorContext& ctx)
         "%s OnDetach",
         LogTitle.GetWithTime().c_str());
 
-    Die(ctx);
+    DetachEndpointAddDie(ctx);
 }
 
 void TPartitionActor::OnTabletDead(
@@ -76,7 +76,7 @@ void TPartitionActor::OnTabletDead(
         LogTitle.GetWithTime().c_str(),
         TEvTablet::TEvTabletDead::Str(msg->Reason));
 
-    Die(ctx);
+    DetachEndpointAddDie(ctx);
 }
 
 void TPartitionActor::OnActivateExecutor(const TActorContext& ctx)
@@ -108,6 +108,23 @@ void TPartitionActor::DefaultSignalTabletActive(const TActorContext& ctx)
     Y_UNUSED(ctx);
 }
 
+void TPartitionActor::DetachEndpointAddDie(const TActorContext& ctx)
+{
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s DetachEndpointAddDie",
+        LogTitle.GetWithTime().c_str());
+
+    GetNbsService()->VhostServer->DetachStorage(GetSocketPath());
+
+    if (FastPathService) {
+        FastPathService->Stop();
+    }
+
+    Die(ctx);
+}
+
 void TPartitionActor::ReportTabletState(const TActorContext& ctx)
 {
     auto service =
@@ -119,6 +136,36 @@ void TPartitionActor::ReportTabletState(const TActorContext& ctx)
         STATE_WORK);
 
     NYdb::NBS::Send(ctx, service, std::move(request));
+}
+
+void TPartitionActor::HandleConnect(
+    TEvTabletPipe::TEvClientConnected::TPtr& ev,
+    const TActorContext& ctx)
+{
+    const auto* msg = ev->Get();
+
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s Client %s %s connected to volume",
+        LogTitle.GetWithTime().c_str(),
+        ToString(msg->ClientId).c_str(),
+        ToString(msg->ServerId).c_str());
+}
+
+void TPartitionActor::HandleDisconnect(
+    TEvTabletPipe::TEvClientDestroyed::TPtr& ev,
+    const TActorContext& ctx)
+{
+    const auto* msg = ev->Get();
+
+    LOG_DEBUG(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s Client %s %s destroyed",
+        LogTitle.GetWithTime().c_str(),
+        ToString(msg->ClientId).c_str(),
+        ToString(msg->ServerId).c_str());
 }
 
 void TPartitionActor::HandleServerConnected(
@@ -250,6 +297,11 @@ void TPartitionActor::AllocateDDiskBlockGroup(const NActors::TActorContext& ctx)
     NTabletPipe::SendData(ctx, BSControllerPipeClient, request.release());
 }
 
+TString TPartitionActor::GetSocketPath() const
+{
+    return "/tmp/" + VolumeConfig.GetDiskId() + ".sock";
+}
+
 void TPartitionActor::Start(
     const NActors::TActorContext& ctx,
     TDirectBlockGroupsConnections directBlockGroupsConnections,
@@ -343,7 +395,6 @@ void TPartitionActor::HandleFastPathServiceReady(
         auto service = GetNbsService();
 
         const ui64 blockCount = VolumeConfig.GetPartitions(0).GetBlockCount();
-        TString socketPath = "/tmp/" + VolumeConfig.GetDiskId() + ".sock";
         NVhost::TStorageOptions options{
             .DiskId = VolumeConfig.GetDiskId(),
             .ClientId = "client-1",
@@ -353,7 +404,7 @@ void TPartitionActor::HandleFastPathServiceReady(
             .VChunkSize = StorageConfig->GetVChunkSize(),
             .VhostQueuesCount = StorageConfig->GetVhostQueuesCount()};
         service->VhostServer->StartEndpoint(
-            std::move(socketPath),
+            GetSocketPath(),
             FastPathService,
             FastPathService,
             options);
@@ -615,6 +666,12 @@ STFUNC(TPartitionActor::StateWork)
 
     switch (ev->GetTypeRewrite()) {
         cFunc(TEvents::TEvPoison::EventType, PassAway);
+        HFunc(TEvTabletPipe::TEvClientConnected, HandleConnect);
+        HFunc(TEvTabletPipe::TEvClientDestroyed, HandleDisconnect);
+        HFunc(TEvTabletPipe::TEvServerConnected, HandleServerConnected);
+        HFunc(TEvTabletPipe::TEvServerDisconnected, HandleServerDisconnected);
+        HFunc(TEvTabletPipe::TEvServerDestroyed, HandleServerDestroyed);
+
         HFunc(
             TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult,
             HandleControllerAllocateDDiskBlockGroupResult);

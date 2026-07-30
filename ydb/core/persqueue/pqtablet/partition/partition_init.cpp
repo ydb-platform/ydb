@@ -1234,7 +1234,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
     ui32 border = LEVEL0;
     MaxSizeCheck = 0;
     MaxBlobSize = AppData(ctx)->PQConfig.GetMaxBlobSize();
-    BlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize, GetMaxHeaderSize(ctx));
+    BlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);
     for (ui32 i = 0; i < TotalLevels; ++i) {
         CompactLevelBorder.push_back(border);
         MaxSizeCheck += border;

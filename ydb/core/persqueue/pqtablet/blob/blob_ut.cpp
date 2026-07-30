@@ -8,8 +8,13 @@ namespace NKikimr::NPQ {
 
 namespace {
 
-constexpr ui32 TEST_MAX_HEADER_SIZE = 64;
 constexpr ui32 TEST_LEGACY_MAX_HEADER_SIZE = 32;
+
+void SetTestMaxHeaderSize(bool enableExtendedBatchHeader) {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableTopicWriteOffsetDeltaInKeys(enableExtendedBatchHeader);
+    InitMaxHeaderSize(featureFlags);
+}
 
 } // namespace
 
@@ -66,7 +71,7 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
         UNIT_ASSERT(!batch.Header.HasClientBlobCount());
         UNIT_ASSERT(batch.GetUnpackedSize() > 0);
 
-        batch.Pack(TEST_MAX_HEADER_SIZE);
+        batch.Pack();
         UNIT_ASSERT(batch.Packed);
         UNIT_ASSERT(!batch.Header.HasClientBlobCount());
         UNIT_ASSERT(batch.PackedData.Size() > 0);
@@ -80,6 +85,8 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
     }
 
     Y_UNIT_TEST(LegacyMaxHeaderSizePackInvariant) {
+        SetTestMaxHeaderSize(false);
+
         TBatch batch(Max<ui64>(), 0);
         auto ts = TInstant::Seconds(100);
         batch.AddBlob(TClientBlob(
@@ -87,7 +94,7 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
             ts, ts, 0, "", ""
         ));
 
-        batch.Pack(TEST_LEGACY_MAX_HEADER_SIZE);
+        batch.Pack();
         UNIT_ASSERT_LE(batch.GetPackedSize(), batch.GetUnpackedSize() + TEST_LEGACY_MAX_HEADER_SIZE);
 
         batch.Unpack();
@@ -95,9 +102,13 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
         UNIT_ASSERT_VALUES_EQUAL(batch.GetCount(), 1u);
         UNIT_ASSERT(!batch.Header.HasClientBlobCount());
         UNIT_ASSERT(!batch.Header.HasOffsetDelta());
+
+        SetTestMaxHeaderSize(true);
     }
 
     Y_UNIT_TEST(LegacyMaxHeaderSizePackInvariantWithKinesis) {
+        SetTestMaxHeaderSize(false);
+
         TBatch batch(Max<ui64>(), 0);
         auto ts = TInstant::Seconds(100);
         batch.AddBlob(TClientBlob(
@@ -105,7 +116,7 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
             ts, ts, 0, TString("partition-key"), TString("explicit-hash-key")
         ));
 
-        batch.Pack(TEST_LEGACY_MAX_HEADER_SIZE);
+        batch.Pack();
         UNIT_ASSERT_LE(batch.GetPackedSize(), batch.GetUnpackedSize() + TEST_LEGACY_MAX_HEADER_SIZE);
         UNIT_ASSERT(batch.Header.HasHasKinesis());
         UNIT_ASSERT(batch.Header.GetHasKinesis());
@@ -117,6 +128,8 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
         UNIT_ASSERT_VALUES_EQUAL(batch.Blobs[0].ExplicitHashKey, "explicit-hash-key");
         UNIT_ASSERT(!batch.Header.HasClientBlobCount());
         UNIT_ASSERT(!batch.Header.HasOffsetDelta());
+
+        SetTestMaxHeaderSize(true);
     }
 
     Y_UNIT_TEST(BatchSizePackUnpack) {
@@ -129,7 +142,7 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
         UNIT_ASSERT_VALUES_EQUAL(batch.GetCount(), 5u);
         UNIT_ASSERT_VALUES_EQUAL(batch.Header.GetClientBlobCount(), 1u);
 
-        batch.Pack(TEST_MAX_HEADER_SIZE);
+        batch.Pack();
         batch.Unpack();
 
         UNIT_ASSERT_VALUES_EQUAL(batch.Blobs.size(), 1u);
@@ -148,7 +161,7 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
 
         UNIT_ASSERT_VALUES_EQUAL(batch.Blobs[0].UncompressedSize, 0u);
 
-        batch.Pack(TEST_MAX_HEADER_SIZE);
+        batch.Pack();
         batch.Unpack();
 
         UNIT_ASSERT_VALUES_EQUAL(batch.Blobs.size(), 1u);
@@ -165,7 +178,7 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
             ts, ts, 0, "", "", 5
         ));
 
-        batch.Pack(TEST_MAX_HEADER_SIZE);
+        batch.Pack();
         batch.Unpack();
 
         UNIT_ASSERT_VALUES_EQUAL(batch.Blobs.size(), 1u);
@@ -184,7 +197,7 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
         UNIT_ASSERT(batch.HasOffsetDelta());
         UNIT_ASSERT_VALUES_EQUAL(batch.GetOffsetDelta(), 42u);
 
-        batch.Pack(TEST_MAX_HEADER_SIZE);
+        batch.Pack();
         TString serialized;
         batch.SerializeTo(serialized);
 
@@ -305,7 +318,7 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
         UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(0, 0).BlobIdx, 0u);
         UNIT_ASSERT_VALUES_EQUAL(batch.FindPos(1, 0).BlobIdx, 0u);
 
-        batch.Pack(TEST_MAX_HEADER_SIZE);
+        batch.Pack();
         batch.Unpack();
 
         UNIT_ASSERT_VALUES_EQUAL(batch.Blobs[0].LogicalMessageCount, 5u);

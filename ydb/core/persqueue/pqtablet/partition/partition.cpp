@@ -3778,8 +3778,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
                                            0,  // TotalSize
                                            Parameters->HeadCleared,  // headCleared
                                            needCompactHead,          // needCompactHead
-                                           MaxBlobSize,
-                                           GetMaxHeaderSize(ctx));
+                                           MaxBlobSize);
 
             for (auto& k : t.WriteInfo->BodyKeys) {
                 LOG_D("add key " << k.Key.ToString());
@@ -3804,7 +3803,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
                                   ctx);
             }
 
-            BlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize, GetMaxHeaderSize(ctx));
+            BlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);
 
             BlobEncoder.NewHead.Clear();
             BlobEncoder.NewHead.Offset = Parameters->CurOffset;

@@ -578,11 +578,12 @@ void TBatch::SerializeTo(TString& res) const{
     res.append(PackedData.data(), PackedData.size());
 }
 
-void TBatch::Pack(ui32 maxHeaderSize) {
+void TBatch::Pack() {
     if (Packed) {
         return;
     }
     Packed = true;
+    const ui32 maxHeaderSize = GetMaxHeaderSize();
 
     TBatchSerializer<NKikimrPQ::TBatchHeader::ECompressed>(*this).Pack();
 

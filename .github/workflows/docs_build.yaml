@@ -40,6 +40,7 @@ jobs:
         id: sha
         run: echo "value=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
+<<<<<<< HEAD
       # Branches listed below keep the old logic (use-ya-opensource: false).
       # All other branches use the new logic (use-ya-opensource: true).
       - name: Determine ya-opensource flag
@@ -73,6 +74,8 @@ jobs:
             }
             core.setOutput('use', legacyBranches.includes(baseRef) ? 'false' : 'true');
 
+=======
+>>>>>>> b0ff6939f5d (fix(docs): remove legacy branches (#47824))
       - name: Disable PDF for PR build
         run: yq -i '.["docs-viewer"].pdf = false | .singlePage = false' ydb/docs/.yfm
 
@@ -82,7 +85,7 @@ jobs:
           revision: "pr-${{ github.event_name == 'workflow_dispatch' && inputs.pull_number || github.event.pull_request.number }}-${{ steps.sha.outputs.value }}"
           src-root: "./ydb/docs"
           cli-version: "4.59.12"
-          use-ya-opensource: ${{ steps.ya.outputs.use }}
+          use-ya-opensource: true
 
       - name: Fail on documentation build issues
         run: |

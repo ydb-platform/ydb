@@ -559,4 +559,8 @@ message TTableServiceConfig {
 
     // Defer join-filter inlining until after cost-based optimization.
     optional bool EnableInlineJoinFiltersAfterCBO = 140 [default = true, (InvalidateCompileCache) = true];
+
+    // Push down REGEXP predicates on column tables into the column shard program.
+    // Opt-in: default OFF, enable per-session via PRAGMA kikimr.OptEnableOlapPushdownRegexp.
+    optional bool EnableOlapPushdownRegexp = 141 [default = false, (InvalidateCompileCache) = true];
 };

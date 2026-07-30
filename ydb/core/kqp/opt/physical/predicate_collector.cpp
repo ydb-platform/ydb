@@ -164,9 +164,12 @@ bool AbstractTreeCanBePushed(const TExprBase& expr, const TPushdownOptions& push
             return false;
         }
 
-        // Pushdonw only SQL LIKE or ILIKE.
+        // By default push down only SQL LIKE or ILIKE (Re2 pattern built from Re2.PatternFromLike).
+        // When OptEnableOlapPushdownRegexp is enabled, also allow plain REGEXP (Re2.Match / Re2.Grep)
+        // with a constant/parameter pattern to be pushed down to the column shard.
         constexpr auto like = "Re2.PatternFromLike"sv;
-        if (udfName.Content().starts_with("Re2.") && !udfName.IsAtom({like, "Re2.Options"}) &&
+        if (!pushdownOptions.PushdownRegexp &&
+            udfName.Content().starts_with("Re2.") && !udfName.IsAtom({like, "Re2.Options"}) &&
             !FindNode(udf.ChildPtr(1U), [like] (const TExprNode::TPtr& node) { return node->IsCallable("Udf") && node->Head().IsAtom(like); })) {
             return false;
         }

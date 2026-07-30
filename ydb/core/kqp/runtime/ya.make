@@ -81,4 +81,5 @@ END()
 
 RECURSE_FOR_TESTS(
     ut
+    ut_vector_search
 )

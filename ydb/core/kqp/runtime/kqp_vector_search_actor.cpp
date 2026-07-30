@@ -73,7 +73,8 @@ namespace NKikimr {
                 std::shared_ptr<NMiniKQL::TScopedAlloc>& alloc,
                 const NWilson::TTraceId& traceId,
                 TIntrusivePtr<TKqpCounters> counters,
-                TIntrusivePtr<TVectorIndexLevelsCache> levelsCache)
+                TIntrusivePtr<TVectorIndexLevelsCache> levelsCache,
+                TKqpVectorInnerReadFactory innerReadFactory)
                 : Settings(std::move(settings))
                 , TopK(Settings.GetTopK())
                 , LevelTop(std::max<ui32>(1, Settings.GetLevelTop()))
@@ -92,6 +93,7 @@ namespace NKikimr {
                 , Counters(counters)
                 , TraceId(traceId)
                 , LevelsCache(std::move(levelsCache))
+                , InnerReadFactory(std::move(innerReadFactory))
                 , MySpan(TWilsonKqp::VectorResolveActor, NWilson::TTraceId(traceId), "VectorSearchActor")
             {
                 IngressStats.Level = statsLevel;
@@ -116,6 +118,16 @@ namespace NKikimr {
 
                 if (PostingCovers) {
                     BuildCoveredPostingColumns();
+                }
+
+                if (!InnerReadFactory) {
+                    InnerReadFactory = [this](const NKikimrTxDataShard::TKqpReadRangesSourceSettings* src,
+                                              TIntrusivePtr<NActors::TProtoArenaHolder> arena,
+                                              const NActors::TActorId& parentId,
+                                              TVector<TSerializedCellVec>&& keyPoints) {
+                        return CreateKqpReadActor(src, std::move(arena), parentId, 0, IngressStats.Level, TxId, TaskId,
+                                                  TypeEnv, HolderFactory, Alloc, TraceId, Counters, std::move(keyPoints));
+                    };
                 }
             }
 
@@ -824,9 +836,7 @@ namespace NKikimr {
                             EReadKind kind,
                             TVector<TSerializedCellVec> keyPoints = {})
             {
-                auto [readActorInput, readActor] = CreateKqpReadActor(src, arena, this->SelfId(),
-                                                                      0, IngressStats.Level, TxId, TaskId, TypeEnv, HolderFactory, Alloc, TraceId, Counters,
-                                                                      std::move(keyPoints));
+                auto [readActorInput, readActor] = InnerReadFactory(src, arena, this->SelfId(), std::move(keyPoints));
                 ActiveReads.push_back({readActorInput, kind});
                 RegisterWithSameMailbox(readActor);
                 // Kick off the freshly launched read: the first GetAsyncInputData poll is what
@@ -1262,6 +1272,8 @@ namespace NKikimr {
 
             // Shared, process-wide cache of immutable level-table rows.
             TIntrusivePtr<TVectorIndexLevelsCache> LevelsCache;
+            // Launches every inner read; defaults to CreateKqpReadActor, substituted by tests.
+            TKqpVectorInnerReadFactory InnerReadFactory;
             TPathId LevelTablePathId;
             bool UseLevelCache = false;
             // Per-parent accumulators for the round's cache-miss parents; their read rows
@@ -1311,10 +1323,12 @@ namespace NKikimr {
             std::shared_ptr<NMiniKQL::TScopedAlloc>& alloc,
             const NWilson::TTraceId& traceId,
             TIntrusivePtr<TKqpCounters> counters,
-            TIntrusivePtr<TVectorIndexLevelsCache> levelsCache)
+            TIntrusivePtr<TVectorIndexLevelsCache> levelsCache,
+            TKqpVectorInnerReadFactory innerReadFactory)
         {
             auto actor = new TKqpVectorSearchActor(std::move(settings), inputIndex, input, statsLevel, txId,
-                                                   taskId, computeActorId, typeEnv, holderFactory, alloc, traceId, counters, std::move(levelsCache));
+                                                   taskId, computeActorId, typeEnv, holderFactory, alloc, traceId, counters, std::move(levelsCache),
+                                                   std::move(innerReadFactory));
             return {actor, actor};
         }
 

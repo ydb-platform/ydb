@@ -15,7 +15,7 @@ In the examples:
 - `ext_source` is a pre-created [external data source](../../../../concepts/datamodel/external_data_source.md)
 - `input_topic` is a local or external topic.
 
-For more information, see [local and external topics in streaming queries](../../../../dev/streaming-query/local-and-external-topics.md).
+For more information, see [local and external topics](../../../../concepts/query_execution/topics.md#local-external-topics).
 
 {% endnote %}
 

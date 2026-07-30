@@ -1,7 +1,5 @@
 items:
-- name: Local and External Topics
-  href: local-and-external-topics.md
-- name: Typical Patterns
+- name: Typical patterns
   href: patterns.md
 - name: Writing to Tables
   href: table-writing.md

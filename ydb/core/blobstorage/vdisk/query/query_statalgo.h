@@ -57,6 +57,8 @@ namespace NKikimr {
     //
     // Execution may be yielded if according policy is passed and later resumed
     // from saved state.
+    // Using yield policy may lead to omission of some records after
+    // database mutations.
     ////////////////////////////////////////////////////////////////////////////
     template <class TAggr, class TKey, class TMemRec>
     std::optional<TDbStatYieldedState<TKey, TMemRec>> TraverseDbWithoutMerge(

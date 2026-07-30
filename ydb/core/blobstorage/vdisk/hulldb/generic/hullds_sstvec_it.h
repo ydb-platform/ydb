@@ -177,7 +177,9 @@ namespace NKikimr {
         void SeekToLast() {
             Y_DEBUG_ABORT_UNLESS(S);
             Cur = S->Segments.end();
-            --Cur;
+            if (!S->Segments.empty()) {
+                --Cur;
+            }
         }
 
         void Seek(const TKey &key) {
@@ -200,7 +202,11 @@ namespace NKikimr {
 
         void Prev() {
             Y_DEBUG_ABORT_UNLESS(Valid());
-            --Cur;
+            if (Cur == S->Segments.begin()) {
+                Cur = S->Segments.end();
+            } else {
+                --Cur;
+            }
         }
 
         TLevelSegmentPtr Get() {

@@ -57,8 +57,13 @@ namespace NKikimr {
 
         void Prev() {
             Y_DEBUG_ABORT_UNLESS(Valid());
-            --CurLevelIt;
-            --CurLevelNum;
+            if (CurLevelIt == Levels->begin()) {
+                CurLevelIt = Levels->end();
+                CurLevelNum = 0;
+            } else {
+                --CurLevelIt;
+                --CurLevelNum;
+            }
         }
 
         TSortedLevelRef Get() const {

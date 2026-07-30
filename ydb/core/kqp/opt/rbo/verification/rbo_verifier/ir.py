@@ -1860,12 +1860,25 @@ def _is_exact_scalar_uint64_unwrap(
     )
 
 
-def _is_exact_integer_count_distinct(
+def _is_exact_count_distinct(
     node: Aggregate,
     trait: AggregateTrait,
     input_column: Column,
 ) -> bool:
-    """Recognize the reviewed ordinary COUNT(DISTINCT integer) boundary."""
+    """Recognize the reviewed direct COUNT(DISTINCT) input boundary.
+
+    The two admitted forms are exact non-null fixed-width integers and
+    nullable canonical Decimal values.  Decimal de-duplication uses MiniKQL's
+    raw aggregate equality in the relational model.
+    """
+
+    exact_input = (
+        input_column.type in INTEGER_TYPES
+        and not input_column.nullable
+    ) or (
+        decimal.is_type(input_column.type)
+        and input_column.nullable
+    )
 
     return (
         node.phase == "undefined"
@@ -1873,8 +1886,7 @@ def _is_exact_integer_count_distinct(
         and trait.function == "count"
         and trait.distinct
         and not trait.unwrap
-        and input_column.type in INTEGER_TYPES
-        and not input_column.nullable
+        and exact_input
         and trait.output_type == "Uint64"
         and not trait.output_nullable
     )
@@ -3053,8 +3065,8 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                         "unwrap is modeled only for a keyless final "
                         "sum(Optional<Uint64>) with a raw Optional<Uint64> output",
                     )
-                exact_integer_count_distinct = (
-                    _is_exact_integer_count_distinct(
+                exact_count_distinct = (
+                    _is_exact_count_distinct(
                         node,
                         trait,
                         input_column,
@@ -3063,13 +3075,14 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                 if (
                     trait.distinct
                     and not node.distinct_all
-                    and not exact_integer_count_distinct
+                    and not exact_count_distinct
                 ):
                     _fail(
                         trait_path,
                         "direct distinct is modeled only for a "
                         "phase-undefined count of a non-null fixed-width "
-                        "integer with non-null Uint64 output",
+                        "integer or nullable canonical Decimal with non-null "
+                        "Uint64 output",
                     )
 
                 if node.distinct_all:

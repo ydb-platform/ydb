@@ -421,6 +421,18 @@ class Encoder:
         return self._comparison("eq", left, right, null_safe=False)
 
     @staticmethod
+    def aggregate_equal(left: Value, right: Value) -> smt.Term:
+        """Return MiniKQL aggregate equality for two non-NULL values.
+
+        Aggregate de-duplication compares the underlying value codes.  This
+        differs from ordinary Decimal equality only for NaN, whose raw code is
+        equal to itself even though SQL equality reports false.
+        """
+
+        assert left.type == right.type
+        return smt.eq(left.value, right.value)
+
+    @staticmethod
     def not_distinct(left: Value, right: Value) -> smt.Term:
         assert left.type == right.type
         return smt.or_(

@@ -1136,7 +1136,15 @@ def count_star_snapshot():
     )
 
 
-def count_distinct_int64_snapshot():
+def count_distinct_snapshot(
+    input_type="Int64",
+    nullable_input=False,
+):
+    schema_value = _stage_schema("A")
+    schema_value["tables"][0]["columns"][1].update(
+        type=input_type,
+        nullable=nullable_input,
+    )
     aggregate = {
         "id": "aggregate",
         "op": "aggregate",
@@ -1158,7 +1166,7 @@ def count_distinct_int64_snapshot():
     }
     return parse_snapshot(
         _snapshot_with_stage_graph(
-            _stage_schema("A"),
+            schema_value,
             [copy.deepcopy(SCAN_A), aggregate],
             "aggregate",
             ["result"],
@@ -5038,7 +5046,7 @@ class ConstructionAuditBoundTest(unittest.TestCase):
                 )
 
     def test_distinct_aggregate_pair_cap_precedes_construction(self):
-        snapshot = count_distinct_int64_snapshot()
+        snapshot = count_distinct_snapshot()
         script = smt.Script()
         database = Database(snapshot, 3, script)
         evaluator = RelationEvaluator(
@@ -5279,7 +5287,7 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
                 )
 
     def test_scalar_count_distinct_matches_a_tiny_set_reference(self):
-        snapshot = count_distinct_int64_snapshot()
+        snapshot = count_distinct_snapshot()
         script = smt.Script()
         database = Database(snapshot, 3, script)
         relation = RelationEvaluator(
@@ -5292,6 +5300,47 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
         for rows in product(states, repeat=3):
             expected = Counter({
                 (len({row[1] for row in rows if row is not None}),): 1,
+            })
+            with self.subTest(rows=rows):
+                self.assertEqual(
+                    self._symbolic_bag(
+                        relation,
+                        self._constants(database, rows),
+                    ),
+                    expected,
+                )
+
+    def test_nullable_decimal_count_distinct_uses_raw_aggregate_equality(self):
+        snapshot = count_distinct_snapshot(
+            "Decimal(7,2)",
+            nullable_input=True,
+        )
+        script = smt.Script()
+        database = Database(snapshot, 2, script)
+        relation = RelationEvaluator(
+            snapshot,
+            database,
+            ScalarEncoder(script),
+        ).root().certain()
+
+        values = (
+            None,
+            -decimal.INF,
+            -1,
+            0,
+            decimal.INF,
+            decimal.NAN,
+        )
+        states = (None,) + tuple((0, value) for value in values)
+        for rows in product(states, repeat=2):
+            expected = Counter({
+                (
+                    len({
+                        row[1]
+                        for row in rows
+                        if row is not None and row[1] is not None
+                    }),
+                ): 1,
             })
             with self.subTest(rows=rows):
                 self.assertEqual(

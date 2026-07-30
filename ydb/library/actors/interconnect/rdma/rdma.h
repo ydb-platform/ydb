@@ -28,6 +28,7 @@ namespace NMonitoring {
 
 class IOutputStream;
 class TRcBuf;
+class TContiguousSpan;
 
 namespace NInterconnect::NRdma {
 

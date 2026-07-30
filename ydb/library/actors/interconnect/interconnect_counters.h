@@ -54,6 +54,7 @@ public:
     virtual void UpdateOutputChannelEvents(ui16 channel) = 0;
     virtual void SetUtilization(ui32 total, ui32 starvation) = 0;
     virtual void IncRdmaMultipartEvents() = 0;
+    virtual void IncRdmaSendBufferAllocationFails() = 0;
     TString GetHumanFriendlyPeerHostName() const {
         return HumanFriendlyPeerHostName.value_or(TString());
     }

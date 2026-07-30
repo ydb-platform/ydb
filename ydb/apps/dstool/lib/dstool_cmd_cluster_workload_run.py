@@ -1,17 +1,28 @@
-import ydb.apps.dstool.lib.common as common
-import time
+from collections import defaultdict
+from datetime import datetime, timedelta, timezone
 import random
 import subprocess
-import ydb.apps.dstool.lib.grouptool as grouptool
-from datetime import datetime, timedelta, timezone
-from collections import defaultdict
 import sys
+import time
+
+import ydb.apps.dstool.lib.cluster_workload_config as workload_config
+import ydb.apps.dstool.lib.common as common
+import ydb.apps.dstool.lib.grouptool as grouptool
 import ydb.public.api.protos.draft.ydb_bridge_pb2 as ydb_bridge
+
 
 description = 'Create workload to stress failure model'
 
 
 def add_options(p):
+    p.add_argument(
+        '--config-file',
+        type=str,
+        help='Path to a YAML workload configuration. If set, legacy options are ignored.',
+    )
+
+    # Legacy options are retained for compatibility and translated to the YAML
+    # configuration proto before the workload starts.
     p.add_argument('--disable-wipes', action='store_true', help='Disable VDisk wipes')
     p.add_argument('--disable-readonly', action='store_true', help='Disable VDisk SetVDiskReadOnly requests')
     p.add_argument('--disable-evicts', action='store_true', help='Disable VDisk evicts')
@@ -33,49 +44,92 @@ def add_options(p):
 
 
 def make_pdisk_key_config(pdisk_keys, node_id):
-    s = ""
+    result = ''
     for key in pdisk_keys[node_id]:
-        s += "Keys {" + "\n"
-        s += "  ContainerPath: " + "\\\"" + key["path"] + "\\\"" + "\n"
-        s += "  Pin: " + "\\\"" + key["pin"] + "\\\"" + "\n"
-        s += "  Id: " + "\\\"" + key["id"] + "\\\"" + "\n"
-        s += "  Version: " + str(key["version"]) + "\n"
-        s += "}" + "\n"
-    return s
+        result += 'Keys {\n'
+        result += '  ContainerPath: \\"' + key['path'] + '\\"\n'
+        result += '  Pin: \\"' + key['pin'] + '\\"\n'
+        result += '  Id: \\"' + key['id'] + '\\"\n'
+        result += '  Version: ' + str(key['version']) + '\n'
+        result += '}\n'
+    return result
 
 
 def remove_old_pdisk_keys(pdisk_keys, pdisk_key_versions, node_id):
-    v = pdisk_key_versions[node_id]
-    for pdisk_key in pdisk_keys[node_id]:
-        if pdisk_key["version"] != v:
-            pdisk_keys[node_id].remove(pdisk_key)
+    version = pdisk_key_versions[node_id]
+    pdisk_keys[node_id] = [
+        key
+        for key in pdisk_keys[node_id]
+        if key['version'] == version
+    ]
 
 
 def update_pdisk_key_config(node_fqdn_map, pdisk_keys, node_id):
     host = node_fqdn_map[node_id]
-    subprocess.run('''ssh {0} "sudo echo '{1}' > /Berkanavt/kikimr/cfg/pdisk_key.txt"'''.format(host, make_pdisk_key_config(pdisk_keys, node_id)), shell=True)
+    subprocess.run(
+        '''ssh {0} "sudo echo '{1}' > /Berkanavt/kikimr/cfg/pdisk_key.txt"'''.format(
+            host,
+            make_pdisk_key_config(pdisk_keys, node_id),
+        ),
+        shell=True,
+        check=True,
+    )
     for key in pdisk_keys[node_id]:
-        if (len(key["path"]) > 0):
-            subprocess.run('''ssh {0} "echo '{1}' | sudo tee {2} >/dev/null"'''.format(host, key["file"], key["path"]), shell=True)
+        if key['path']:
+            subprocess.run(
+                '''ssh {0} "echo '{1}' | sudo tee {2} >/dev/null"'''.format(
+                    host,
+                    key['file'],
+                    key['path'],
+                ),
+                shell=True,
+                check=True,
+            )
+
+
+def _pick_action(rng, choices):
+    action_name, action = rng.choice(choices)
+    print(action_name)
+    action[0](*action[1:])
+
+
+def _add_possible_action(possible_actions, config, name, choices, is_node_restart=False):
+    if choices:
+        possible_actions.append((
+            config.weight,
+            name,
+            (_pick_action, choices),
+            is_node_restart,
+        ))
 
 
 def do(args):
-    recent_restarts = []
+    config = workload_config.parse_workload_config(args)
+    actions = config.actions
+    check_fail_model = config.check_fail_model
+    sleep_between_rounds = config.sleep_between_rounds
+    max_node_restarts_per_minute = config.max_node_restarts_per_minute
+    rng = random.Random(config.random_seed)
 
+    recent_restarts = []
     pdisk_keys = {}
     pdisk_key_versions = {}
-
     config_retries = None
 
-    if args.enable_soft_switch_piles or args.enable_hard_switch_piles or args.enable_disconnect_piles:
+    has_pdisk_key_changes = bool(actions.change_pdisk_key)
+    has_tablet_actions = bool(actions.kill_tablet)
+    has_pile_actions = bool(actions.switch_pile or actions.disconnect_pile)
+    has_socket_actions = bool(actions.disconnect_socket)
+
+    if has_pile_actions:
         base_config = common.fetch_base_config()
         pile_name_to_node_id = common.build_pile_to_node_id_map(base_config)
         piles_count = len(pile_name_to_node_id)
         node_id_to_endpoints = common.fetch_node_to_endpoint_map()
         pile_names = list(sorted(pile_name_to_node_id.keys()))
         pile_id_to_endpoints = {
-            idx: [node_id_to_endpoints[node_id] for node_id in pile_name_to_node_id[pile_name]]
-            for idx, pile_name in enumerate(pile_names)
+            index: [node_id_to_endpoints[node_id] for node_id in pile_name_to_node_id[pile_name]]
+            for index, pile_name in enumerate(pile_names)
         }
 
     while True:
@@ -94,21 +148,55 @@ def do(args):
                 config_retries -= 1
             continue
 
-        if args.enable_kill_tablets or args.enable_kill_blob_depot:
+        if has_tablet_actions:
             tablets = {
-                int(tablet['TabletId']) : tablet
-                for tablet in common.fetch('viewer/json/tabletinfo', dict(enums=1)).get('TabletStateInfo', [])
+                int(tablet['TabletId']): tablet
+                for tablet in common.fetch(
+                    'viewer/json/tabletinfo',
+                    dict(enums=1),
+                    cache=False,
+                ).get('TabletStateInfo', [])
             }
         else:
             tablets = {}
+
         sysinfo = {
             int(node['NodeId']): node
-            for node in common.fetch('viewer/json/sysinfo', dict(fields_required=-1, enums=1), cache=False).get('SystemStateInfo', [])
+            for node in common.fetch(
+                'viewer/json/sysinfo',
+                dict(fields_required=-1, enums=1),
+                cache=False,
+            ).get('SystemStateInfo', [])
         }
         start_time_map = {
-            int(node['NodeId']): int(node['StartTime'])
-            for node in sysinfo.values()
+            node_id: int(node['StartTime'])
+            for node_id, node in sysinfo.items()
+            if 'StartTime' in node
         }
+        node_tenants = {}
+        for node_id, node in sysinfo.items():
+            tenants = node.get('Tenants', ())
+            node_tenants[node_id] = (tenants,) if isinstance(tenants, str) else tenants
+
+        dynamic_node_ids = {
+            node.NodeId
+            for node in base_config.Node
+            if node.Type == common.kikimr_bsconfig.NT_DYNAMIC
+        }
+        node_types = defaultdict(lambda: workload_config.NodeType.DYNAMIC)
+        node_types.update({
+            node_id: (
+                workload_config.NodeType.DYNAMIC
+                if node_id in dynamic_node_ids
+                else workload_config.NodeType.STORAGE
+            )
+            for node_id in sysinfo
+        })
+        pdisk_map = {
+            (pdisk.NodeId, pdisk.PDiskId): pdisk
+            for pdisk in base_config.PDisk
+        }
+        node_id_to_endpoints = common.fetch_node_to_endpoint_map() if has_socket_actions else {}
 
         config_retries = None
 
@@ -120,20 +208,24 @@ def do(args):
             for vslot in base_config.VSlot
             if vslot.ReadOnly
         }
-
         pdisk_readonly = {
             (pdisk.NodeId, pdisk.PDiskId)
             for pdisk in base_config.PDisk
             if pdisk.ReadOnly
         }
 
-        if (len(pdisk_keys) == 0):
-            # initialize pdisk_keys and pdisk_key_versions
+        if not pdisk_keys:
             for node_id in {pdisk.NodeId for pdisk in base_config.PDisk}:
                 pdisk_key_versions[node_id] = 1
-                pdisk_keys[node_id] = [{"path" : "", "pin" : "", "id" : "0", "version" : 0, "file" : ""}]
+                pdisk_keys[node_id] = [{
+                    'path': '',
+                    'pin': '',
+                    'id': '0',
+                    'version': 0,
+                    'file': '',
+                }]
 
-        if not args.no_fail_model_check:
+        if check_fail_model:
             vdisk_status = defaultdict(lambda: False)
             error = False
             for vslot_id, vdisk in common.fetch_json_info('vdiskinfo').items():
@@ -141,26 +233,38 @@ def do(args):
                     key = *vslot_id, *common.get_vdisk_id_json(vdisk['VDiskId'])
                     vdisk_status[key] = vdisk['Replicated'] and vdisk['VDiskState'] == 'OK'
                 except KeyError:
-                    common.print_if_not_quiet(args, 'Failed to fetch VDisk status for VSlotId %s' % (vslot_id,), file=sys.stderr)
+                    common.print_if_not_quiet(
+                        args,
+                        'Failed to fetch VDisk status for VSlotId %s' % (vslot_id,),
+                        file=sys.stderr,
+                    )
                     error = True
             if error:
                 common.print_if_not_quiet(args, 'Waiting for the next round...', file=sys.stdout)
-                time.sleep(1)
+                time.sleep(sleep_between_rounds)
                 continue
 
         def can_act_on_vslot(node_id, pdisk_id=None, vslot_id=None):
-            if args.no_fail_model_check:
+            if not check_fail_model:
                 return True
 
-            def match(x):
-                return node_id == x[0] and pdisk_id in [None, x[1]] and vslot_id in [None, x[2]]
+            def match(value):
+                return (
+                    node_id == value[0]
+                    and pdisk_id in (None, value[1])
+                    and vslot_id in (None, value[2])
+                )
 
             for group in base_config.Group:
                 if any(map(match, map(common.get_vslot_id, group.VSlotId))):
                     content = {
-                        common.get_vdisk_id_short(vslot): not match(vslot_id) and vslot.Ready and vdisk_status[vslot_id + common.get_vdisk_id(vslot)]
-                        for vslot_id in map(common.get_vslot_id, group.VSlotId)
-                        for vslot in [vslot_map[vslot_id]]
+                        common.get_vdisk_id_short(vslot): (
+                            not match(current_vslot_id)
+                            and vslot.Ready
+                            and vdisk_status[current_vslot_id + common.get_vdisk_id(vslot)]
+                        )
+                        for current_vslot_id in map(common.get_vslot_id, group.VSlotId)
+                        for vslot in [vslot_map[current_vslot_id]]
                     }
                     common.print_if_verbose(args, content, file=sys.stderr)
                     if not grouptool.check_fail_model(content, group.ErasureSpecies):
@@ -168,8 +272,11 @@ def do(args):
             return True
 
         def can_act_on_pdisk(node_id, pdisk_id):
-            def match(x):
-                return node_id == x[0] and pdisk_id == x[1]
+            if not check_fail_model:
+                return True
+
+            def match(value):
+                return node_id == value[0] and pdisk_id == value[1]
 
             for group in base_config.Group:
                 if any(map(match, map(common.get_vslot_id, group.VSlotId))):
@@ -177,136 +284,231 @@ def do(args):
                         return False
 
                     content = {
-                        common.get_vdisk_id_short(vslot): not match(vslot_id) and vslot.Ready and vdisk_status[vslot_id + common.get_vdisk_id(vslot)]
-                        for vslot_id in map(common.get_vslot_id, group.VSlotId)
-                        for vslot in [vslot_map[vslot_id]]
+                        common.get_vdisk_id_short(vslot): (
+                            not match(current_vslot_id)
+                            and vslot.Ready
+                            and vdisk_status[current_vslot_id + common.get_vdisk_id(vslot)]
+                        )
+                        for current_vslot_id in map(common.get_vslot_id, group.VSlotId)
+                        for vslot in [vslot_map[current_vslot_id]]
                     }
                     common.print_if_verbose(args, content, file=sys.stderr)
                     if not grouptool.check_fail_model(content, group.ErasureSpecies):
                         return False
             return True
 
-        def do_restart(node_id):
+        def ask_cms(action_config, node_id, pdisk_id=None, duration_seconds=60):
+            if action_config.ask_cms is None:
+                return
+
             node = sysinfo[node_id]
-            if args.enable_pdisk_encryption_keys_changes:
+            if pdisk_id is None:
+                action_type = common.kikimr_cms.TAction.RESTART_SERVICES
+                services = (
+                    'dynnode'
+                    if node_types[node_id] == workload_config.NodeType.DYNAMIC
+                    else 'storage',
+                )
+                devices = ()
+            else:
+                action_type = common.kikimr_cms.TAction.REMOVE_DEVICES
+                services = ()
+                devices = (pdisk_map[(node_id, pdisk_id)].Path,)
+
+            error = common.cms_permission_request(
+                'dstool-workload',
+                node['Host'],
+                'dstool cluster workload action',
+                max(1, round(duration_seconds * 1_000_000)),
+                action_config.ask_cms.availability_mode,
+                action_type,
+                services=services,
+                devices=devices,
+            )
+            if error is not None:
+                raise RuntimeError('CMS permission was not granted: %s' % error)
+
+        def do_restart(node_id, action_config):
+            node = sysinfo[node_id]
+            keep_down_for = action_config.keep_down_for
+            ask_cms(action_config, node_id, duration_seconds=max(60, keep_down_for))
+            if has_pdisk_key_changes and node_id in pdisk_keys:
                 update_pdisk_key_config(node_fqdn_map, pdisk_keys, node_id)
-            subprocess.call(['ssh', node['Host'], 'sudo', 'kill', '-%s' % args.kill_signal, node['PID']])
-            if args.enable_pdisk_encryption_keys_changes:
+
+            pid = str(node['PID'])
+            host = node['Host']
+            if keep_down_for:
+                # Suspend first so the deployment's process supervisor cannot
+                # immediately bring the node back. At the end of the interval,
+                # the configured restart signal is delivered and the process
+                # is resumed as a fallback for non-terminating signals.
+                subprocess.check_call(['ssh', host, 'sudo', 'kill', '-STOP', pid])
+                try:
+                    time.sleep(keep_down_for)
+                    subprocess.check_call([
+                        'ssh',
+                        host,
+                        'sudo',
+                        'kill',
+                        '-' + action_config.signal,
+                        pid,
+                    ])
+                finally:
+                    subprocess.call(['ssh', host, 'sudo', 'kill', '-CONT', pid])
+            else:
+                subprocess.check_call([
+                    'ssh',
+                    host,
+                    'sudo',
+                    'kill',
+                    '-' + action_config.signal,
+                    pid,
+                ])
+
+            if has_pdisk_key_changes and node_id in pdisk_keys:
                 remove_old_pdisk_keys(pdisk_keys, pdisk_key_versions, node_id)
 
-        def do_restart_pdisk(node_id, pdisk_id):
-            assert can_act_on_vslot(node_id, pdisk_id)
+        def do_restart_pdisk(node_id, pdisk_id, action_config):
+            assert can_act_on_pdisk(node_id, pdisk_id)
+            ask_cms(action_config, node_id, pdisk_id)
             request = common.kikimr_bsconfig.TConfigRequest(IgnoreDegradedGroupsChecks=True)
-            cmd = request.Command.add().RestartPDisk
-            cmd.TargetPDiskId.NodeId = node_id
-            cmd.TargetPDiskId.PDiskId = pdisk_id
+            command = request.Command.add().RestartPDisk
+            command.TargetPDiskId.NodeId = node_id
+            command.TargetPDiskId.PDiskId = pdisk_id
             try:
                 response = common.invoke_bsc_request(request)
-            except Exception as e:
-                raise Exception('failed to perform restart request: %s' % e)
+            except Exception as error:
+                raise RuntimeError('failed to perform restart request: %s' % error) from error
             if not response.Success:
-                raise Exception('Unexpected error from BSC: %s' % response.ErrorDescription)
+                raise RuntimeError('Unexpected error from BSC: %s' % response.ErrorDescription)
 
-        def do_readonly_pdisk(node_id, pdisk_id, readonly):
-            assert can_act_on_vslot(node_id, pdisk_id)
+        def do_readonly_pdisk(node_id, pdisk_id, read_only, action_config):
+            assert not read_only or can_act_on_pdisk(node_id, pdisk_id)
+            ask_cms(action_config, node_id, pdisk_id)
             request = common.kikimr_bsconfig.TConfigRequest(IgnoreDegradedGroupsChecks=True)
-            cmd = request.Command.add().SetPDiskReadOnly
-            cmd.TargetPDiskId.NodeId = node_id
-            cmd.TargetPDiskId.PDiskId = pdisk_id
-            cmd.Value = readonly
+            command = request.Command.add().SetPDiskReadOnly
+            command.TargetPDiskId.NodeId = node_id
+            command.TargetPDiskId.PDiskId = pdisk_id
+            command.Value = read_only
             try:
                 response = common.invoke_bsc_request(request)
-            except Exception as e:
-                raise Exception('failed to perform SetPDiskReadOnly request: %s' % e)
+            except Exception as error:
+                raise RuntimeError('failed to perform SetPDiskReadOnly request: %s' % error) from error
             if not response.Success:
-                raise Exception('Unexpected error from BSC: %s' % response.ErrorDescription)
+                raise RuntimeError('Unexpected error from BSC: %s' % response.ErrorDescription)
 
-        def do_evict(vslot_id):
+        def do_evict(vslot_id, action_config):
             assert can_act_on_vslot(*vslot_id)
+            ask_cms(action_config, vslot_id[0], vslot_id[1])
             try:
                 request = common.kikimr_bsconfig.TConfigRequest(IgnoreDegradedGroupsChecks=True)
                 vslot = vslot_map[vslot_id]
-                cmd = request.Command.add().ReassignGroupDisk
-                cmd.GroupId = vslot.GroupId
-                cmd.GroupGeneration = vslot.GroupGeneration
-                cmd.FailRealmIdx = vslot.FailRealmIdx
-                cmd.FailDomainIdx = vslot.FailDomainIdx
-                cmd.VDiskIdx = vslot.VDiskIdx
-                cmd.SuppressDonorMode = random.choice([True, False])
+                command = request.Command.add().ReassignGroupDisk
+                command.GroupId = vslot.GroupId
+                command.GroupGeneration = vslot.GroupGeneration
+                command.FailRealmIdx = vslot.FailRealmIdx
+                command.FailDomainIdx = vslot.FailDomainIdx
+                command.VDiskIdx = vslot.VDiskIdx
+                command.SuppressDonorMode = rng.choice([True, False])
                 response = common.invoke_bsc_request(request)
                 if not response.Success:
                     if 'Error# failed to allocate group: no group options' in response.ErrorDescription:
                         common.print_if_verbose(args, response)
                     else:
-                        raise Exception('Unexpected error from BSC: %s' % response.ErrorDescription)
-            except Exception as e:
-                raise Exception('Failed to perform evict request: %s' % e)
+                        raise RuntimeError('Unexpected error from BSC: %s' % response.ErrorDescription)
+            except Exception as error:
+                raise RuntimeError('Failed to perform evict request: %s' % error) from error
 
-        def do_wipe(vslot):
-            assert can_act_on_vslot(*common.get_vslot_id(vslot.VSlotId))
+        def do_wipe(vslot, action_config):
+            vslot_id = common.get_vslot_id(vslot.VSlotId)
+            assert can_act_on_vslot(*vslot_id)
+            ask_cms(action_config, vslot_id[0], vslot_id[1])
             try:
                 request = common.create_wipe_request(args, vslot)
                 common.invoke_bsc_request(request)
-            except Exception as e:
-                raise Exception('Failed to perform wipe request: %s' % e)
+            except Exception as error:
+                raise RuntimeError('Failed to perform wipe request: %s' % error) from error
 
-        def do_readonly(vslot, value):
-            assert not value or can_act_on_vslot(*common.get_vslot_id(vslot.VSlotId))
+        def do_readonly_vdisk(vslot, action_config):
+            read_only = action_config.read_only
+            vslot_id = common.get_vslot_id(vslot.VSlotId)
+            assert not read_only or can_act_on_vslot(*vslot_id)
+            ask_cms(action_config, vslot_id[0], vslot_id[1])
             try:
-                request = common.create_readonly_request(args, vslot, value)
+                request = common.create_readonly_request(args, vslot, read_only)
                 common.invoke_bsc_request(request)
-            except Exception as e:
-                raise Exception('Failed to perform readonly request: %s' % e)
+            except Exception as error:
+                raise RuntimeError('Failed to perform readonly request: %s' % error) from error
 
-        def do_add_pdisk_key(node_id):
+        def do_add_pdisk_key(node_id, pdisk_id, action_config):
+            assert can_act_on_pdisk(node_id, pdisk_id)
+            ask_cms(action_config, node_id, pdisk_id)
             pdisk_key_versions[node_id] += 1
-            v = pdisk_key_versions[node_id]
-            pdisk_keys[node_id].append({"path" : "/Berkanavt/kikimr/cfg/pdisk_key_" + str(v) + ".txt",
-                                        "pin" : "",
-                                        "id" : "Key" + str(v),
-                                        "version" : v,
-                                        "file" : "keynumber" + str(v)})
+            version = pdisk_key_versions[node_id]
+            pdisk_keys[node_id].append({
+                'path': '/Berkanavt/kikimr/cfg/pdisk_key_%d.txt' % version,
+                'pin': '',
+                'id': 'Key%d' % version,
+                'version': version,
+                'file': 'keynumber%d' % version,
+            })
 
-        def do_kill_tablet():
-            tablet_list = [
-                value
-                for key, value in tablets.items()
-                if value['State'] == 'Active' and value['Leader']
-            ]
-            item = random.choice(tablet_list)
-            tablet_id = int(item['TabletId'])
-            print('Killing tablet %d of type %s' % (tablet_id, item['Type']))
-            common.fetch('tablets', dict(RestartTabletID=tablet_id), fmt='raw', cache=False)
+        def do_obliterate_pdisk(node_id, pdisk_id, action_config):
+            assert can_act_on_pdisk(node_id, pdisk_id)
+            ask_cms(action_config, node_id, pdisk_id)
+            pdisk = pdisk_map[(node_id, pdisk_id)]
+            subprocess.check_call([
+                'ssh',
+                sysinfo[node_id]['Host'],
+                'sudo',
+                '/Berkanavt/kikimr/bin/kikimr',
+                'admin',
+                'bs',
+                'disk',
+                'obliterate',
+                pdisk.Path,
+            ])
 
-        def do_kill_blob_depot():
-            tablet_list = [
-                value
-                for key, value in tablets.items()
-                if value['State'] == 'Active' and value['Leader'] and value['Type'] == 'BlobDepot'
-            ]
-            if tablet_list:
-                item = random.choice(tablet_list)
-                tablet_id = int(item['TabletId'])
-                print('Killing tablet %d of type %s' % (tablet_id, item['Type']))
-                common.fetch('tablets', dict(RestartTabletID=tablet_id), fmt='raw', cache=False)
+        def do_kill_tablet(tablet):
+            tablet_id = int(tablet['TabletId'])
+            print('Killing tablet %d of type %s' % (tablet_id, tablet['Type']))
+            common.fetch(
+                'tablets',
+                dict(RestartTabletID=tablet_id),
+                fmt='raw',
+                cache=False,
+            )
 
         def do_soft_switch_pile(pile_id):
-            print(f"Switching primary pile to {pile_id} with PROMOTED")
+            print('Switching primary pile to %d with PROMOTED' % pile_id)
             common.promote_pile(pile_id)
 
         def do_hard_switch_pile(pile_id, all_piles):
-            print(f"Switching primary pile to {pile_id} with setting PRIMARY")
-            common.set_primary_pile(pile_id, [x for x in all_piles if x != pile_id])
+            print('Switching primary pile to %d with setting PRIMARY' % pile_id)
+            common.set_primary_pile(pile_id, [item for item in all_piles if item != pile_id])
 
-        def do_disconnect_pile(pile_id, pile_id_to_endpoints):
-            print(f"Disconnecting pile {pile_id}")
+        def do_disconnect_pile(pile_id):
+            print('Disconnecting pile %d' % pile_id)
             common.disconnect_pile(pile_id, pile_id_to_endpoints)
 
-        def do_connect_pile(pile_id, pile_id_to_hosts):
-            print(f"Connecting pile {pile_id}")
-            common.connect_pile(pile_id, pile_id_to_hosts)
+        def do_connect_pile(pile_id):
+            print('Connecting pile %d' % pile_id)
+            common.connect_pile(pile_id, pile_id_to_endpoints)
 
-        ################################################################################################################
+        def do_disconnect_socket(source_node_id, target_node_id, action_config):
+            if action_config.symmetrical and rng.choice((False, True)):
+                source_node_id, target_node_id = target_node_id, source_node_id
+            print('Disconnecting socket from node %d to node %d' % (source_node_id, target_node_id))
+            request = common.kikimr_msgbus.TInterconnectDebug(
+                ClosePeerSocketNodeId=target_node_id,
+            )
+            response = common.invoke_grpc(
+                'InterconnectDebug',
+                request,
+                endpoint=node_id_to_endpoints[source_node_id],
+            )
+            if response.Status != common.kikimr_msgbus.MSTATUS_OK:
+                raise RuntimeError('InterconnectDebug failed with status %s' % response.Status)
 
         now = datetime.now(timezone.utc)
         while recent_restarts and recent_restarts[0] + timedelta(minutes=1) < now:
@@ -314,134 +516,281 @@ def do(args):
 
         possible_actions = []
 
-        if args.enable_kill_tablets:
-            possible_actions.append((args.weight_kill_tablets, 'kill tablet', (do_kill_tablet,)))
-        if args.enable_kill_blob_depot:
-            possible_actions.append((1.0, 'kill blob depot', (do_kill_blob_depot,)))
+        active_tablets = [
+            tablet
+            for tablet in tablets.values()
+            if tablet.get('State') == 'Active' and tablet.get('Leader')
+        ]
+        for action_config in actions.kill_tablet:
+            choices = [
+                (
+                    'kill tablet %s of type %s' % (tablet['TabletId'], tablet.get('Type', 'unknown')),
+                    (do_kill_tablet, tablet),
+                )
+                for tablet in active_tablets
+                if action_config.matches(
+                    int(tablet['TabletId']),
+                    workload_config.tablet_type_from_name(tablet.get('Type', '')),
+                )
+            ]
+            _add_possible_action(possible_actions, action_config, 'kill-tablet', choices)
 
-        evicts = []
-        wipes = []
-        readonlies = []
-        unreadonlies = []
-        pdisk_restarts = []
-        make_pdisks_readonly = []
-        make_pdisks_not_readonly = []
+        allow_destructive_vdisk_action = recent_restarts or not actions.restart_node
+        dynamic_vslots = [
+            vslot
+            for vslot in base_config.VSlot
+            if common.is_dynamic_group(vslot.GroupId)
+        ]
 
-        for vslot in base_config.VSlot:
-            if common.is_dynamic_group(vslot.GroupId):
+        for action_config in actions.evict_vdisk:
+            choices = []
+            for vslot in dynamic_vslots:
                 vslot_id = common.get_vslot_id(vslot.VSlotId)
-                node_id, pdisk_id = vslot_id[:2]
-                vdisk_id = '[%08x:%d:%d:%d]' % (vslot.GroupId, vslot.FailRealmIdx, vslot.FailDomainIdx, vslot.VDiskIdx)
-                if vslot_id in vslot_readonly and not args.disable_readonly:
-                    unreadonlies.append(('un-readonly vslot id: %s, vdisk id: %s' % (vslot_id, vdisk_id), (do_readonly, vslot, False)))
-                if can_act_on_vslot(*vslot_id) and (recent_restarts or args.disable_restarts):
-                    if not args.disable_evicts:
-                        evicts.append(('evict vslot id: %s, vdisk id: %s' % (vslot_id, vdisk_id), (do_evict, vslot_id)))
-                    if not args.disable_wipes:
-                        wipes.append(('wipe vslot id: %s, vdisk id: %s' % (vslot_id, vdisk_id), (do_wipe, vslot)))
-                    if not args.disable_readonly:
-                        readonlies.append(('readonly vslot id: %s, vdisk id: %s' % (vslot_id, vdisk_id), (do_readonly, vslot, True)))
+                if allow_destructive_vdisk_action and can_act_on_vslot(*vslot_id):
+                    choices.append((
+                        'evict vslot id: %s' % (vslot_id,),
+                        (do_evict, vslot_id, action_config),
+                    ))
+            _add_possible_action(possible_actions, action_config, 'evict-vdisk', choices)
 
-        for pdisk in base_config.PDisk:
-            node_id, pdisk_id = pdisk.NodeId, pdisk.PDiskId
+        for action_config in actions.wipe_vdisk:
+            choices = []
+            for vslot in dynamic_vslots:
+                vslot_id = common.get_vslot_id(vslot.VSlotId)
+                if allow_destructive_vdisk_action and can_act_on_vslot(*vslot_id):
+                    choices.append((
+                        'wipe vslot id: %s' % (vslot_id,),
+                        (do_wipe, vslot, action_config),
+                    ))
+            _add_possible_action(possible_actions, action_config, 'wipe-vdisk', choices)
 
-            if can_act_on_pdisk(node_id, pdisk_id):
-                if args.enable_restart_pdisks:
-                    pdisk_restarts.append(('restart pdisk node_id: %d, pdisk_id: %d' % (node_id, pdisk_id), (do_restart_pdisk, node_id, pdisk_id)))
-                if args.enable_readonly_pdisks:
-                    make_pdisks_readonly.append(('readonly pdisk node_id: %d, pdisk_id: %d' % (node_id, pdisk_id), (do_readonly_pdisk, node_id, pdisk_id, True)))
+        for action_config in actions.set_read_only:
+            if action_config.component == workload_config.ReadOnlyComponent.VDISK:
+                choices = []
+                for vslot in dynamic_vslots:
+                    vslot_id = common.get_vslot_id(vslot.VSlotId)
+                    is_read_only = vslot_id in vslot_readonly
+                    if is_read_only == action_config.read_only:
+                        continue
+                    if action_config.read_only and (
+                        not allow_destructive_vdisk_action
+                        or not can_act_on_vslot(*vslot_id)
+                    ):
+                        continue
+                    choices.append((
+                        '%s vslot id: %s'
+                        % ('readonly' if action_config.read_only else 'un-readonly', vslot_id),
+                        (do_readonly_vdisk, vslot, action_config),
+                    ))
+                _add_possible_action(possible_actions, action_config, 'set-vdisk-readonly', choices)
+            else:
+                choices = []
+                for pdisk in base_config.PDisk:
+                    pdisk_id = (pdisk.NodeId, pdisk.PDiskId)
+                    is_read_only = pdisk_id in pdisk_readonly
+                    if is_read_only == action_config.read_only:
+                        continue
+                    if action_config.read_only and not can_act_on_pdisk(*pdisk_id):
+                        continue
+                    choices.append((
+                        '%s pdisk node_id: %d, pdisk_id: %d'
+                        % (
+                            'readonly' if action_config.read_only else 'un-readonly',
+                            pdisk.NodeId,
+                            pdisk.PDiskId,
+                        ),
+                        (do_readonly_pdisk, pdisk.NodeId, pdisk.PDiskId, action_config.read_only, action_config),
+                    ))
+                _add_possible_action(possible_actions, action_config, 'set-pdisk-readonly', choices)
 
-            if (node_id, pdisk_id) in pdisk_readonly and args.enable_readonly_pdisks:
-                make_pdisks_not_readonly.append(('un-readonly pdisk node_id: %d, pdisk_id: %d' % (node_id, pdisk_id), (do_readonly_pdisk, node_id, pdisk_id, False)))
+        for action_config in actions.restart_pdisk:
+            choices = [
+                (
+                    'restart pdisk node_id: %d, pdisk_id: %d' % (pdisk.NodeId, pdisk.PDiskId),
+                    (do_restart_pdisk, pdisk.NodeId, pdisk.PDiskId, action_config),
+                )
+                for pdisk in base_config.PDisk
+                if can_act_on_pdisk(pdisk.NodeId, pdisk.PDiskId)
+            ]
+            _add_possible_action(possible_actions, action_config, 'restart-pdisk', choices)
 
-        def pick(v):
-            action_name, action = random.choice(v)
-            print(action_name)
-            action[0](*action[1:])
+        for action_config in actions.change_pdisk_key:
+            choices = [
+                (
+                    'add new pdisk key for node_id: %d, pdisk_id: %d' % (pdisk.NodeId, pdisk.PDiskId),
+                    (do_add_pdisk_key, pdisk.NodeId, pdisk.PDiskId, action_config),
+                )
+                for pdisk in base_config.PDisk
+                if can_act_on_pdisk(pdisk.NodeId, pdisk.PDiskId)
+            ]
+            _add_possible_action(possible_actions, action_config, 'change-pdisk-key', choices)
 
-        if evicts:
-            possible_actions.append((1.0, 'evict', (pick, evicts)))
-        if wipes:
-            possible_actions.append((1.0, 'wipe', (pick, wipes)))
-        if readonlies:
-            possible_actions.append((1.0, 'readonly', (pick, readonlies)))
-        if unreadonlies:
-            possible_actions.append((1.0, 'un-readonly', (pick, unreadonlies)))
-        if pdisk_restarts:
-            possible_actions.append((1.0, 'restart-pdisk', (pick, pdisk_restarts)))
-        if make_pdisks_readonly:
-            possible_actions.append((1.0, 'make-pdisks-readonly', (pick, make_pdisks_readonly)))
-        if make_pdisks_not_readonly:
-            possible_actions.append((1.0, 'make-pdisks-not-readonly', (pick, make_pdisks_not_readonly)))
+        for action_config in actions.obliterate_pdisk:
+            choices = [
+                (
+                    'obliterate pdisk node_id: %d, pdisk_id: %d' % (pdisk.NodeId, pdisk.PDiskId),
+                    (do_obliterate_pdisk, pdisk.NodeId, pdisk.PDiskId, action_config),
+                )
+                for pdisk in base_config.PDisk
+                if can_act_on_pdisk(pdisk.NodeId, pdisk.PDiskId)
+            ]
+            _add_possible_action(possible_actions, action_config, 'obliterate-pdisk', choices)
 
-        restarts = []
+        if start_time_map and len(recent_restarts) < max_node_restarts_per_minute:
+            for action_config in actions.restart_node:
+                eligible_nodes = [
+                    node_id
+                    for node_id in sorted(start_time_map, key=start_time_map.__getitem__)
+                    if can_act_on_vslot(node_id)
+                    and action_config.node_filter.matches(
+                        node_id,
+                        node_types[node_id],
+                        node_tenants.get(node_id, ()),
+                    )
+                ]
+                # Keep the newest half of the eligible nodes untouched. Nodes
+                # that are the sole match are still safe because the failure
+                # model check above covers every VDisk hosted by the node.
+                eligible_nodes = eligible_nodes[:max(1, len(eligible_nodes) // 2)]
+                choices = [
+                    (
+                        'restart node with id: %d' % node_id,
+                        (do_restart, node_id, action_config),
+                    )
+                    for node_id in eligible_nodes
+                ]
+                _add_possible_action(
+                    possible_actions,
+                    action_config,
+                    'restart-node',
+                    choices,
+                    is_node_restart=True,
+                )
 
-        if args.enable_pdisk_encryption_keys_changes or not args.disable_restarts:
-            if start_time_map and len(recent_restarts) < 3:
-                # sort so that the latest restarts come first
-                nodes_to_restart = sorted(start_time_map, key=start_time_map.__getitem__)
-                node_count = len(nodes_to_restart)
-                nodes_to_restart = nodes_to_restart[:node_count//2]
-                for node_id in nodes_to_restart:
-                    if args.enable_pdisk_encryption_keys_changes:
-                        possible_actions.append((1.0, 'add new pdisk key to node with id: %d' % node_id, (do_add_pdisk_key, node_id)))
-                    if not args.disable_restarts:
-                        restarts.append(('restart node with id: %d' % node_id, (do_restart, node_id)))
-
-        if restarts:
-            possible_actions.append((args.weight_restarts, 'restart', (pick, restarts)))
-
-        has_pile_operations = args.enable_soft_switch_piles or args.enable_hard_switch_piles or args.enable_disconnect_piles
-        if has_pile_operations:
+        if has_pile_actions:
             piles_info = common.get_piles_info()
-            print(piles_info)
-
             primary_pile = None
             synchronized_piles = []
             promoted_piles = []
-            non_synchronized_piles = []
             disconnected_piles = []
-            for idx, pile_state in enumerate(piles_info.per_pile_state):
+            for index, pile_state in enumerate(piles_info.per_pile_state):
                 if pile_state.state == ydb_bridge.PileState.PRIMARY:
-                    primary_pile = idx
+                    primary_pile = index
                 elif pile_state.state == ydb_bridge.PileState.SYNCHRONIZED:
-                    synchronized_piles.append(idx)
+                    synchronized_piles.append(index)
                 elif pile_state.state == ydb_bridge.PileState.PROMOTED:
-                    promoted_piles.append(idx)
+                    promoted_piles.append(index)
                 elif pile_state.state == ydb_bridge.PileState.DISCONNECTED:
-                    disconnected_piles.append(idx)
+                    disconnected_piles.append(index)
+
+            can_soft_switch = piles_count == len(synchronized_piles) + int(primary_pile is not None)
+            all_connected_piles = (
+                ([primary_pile] if primary_pile is not None else [])
+                + promoted_piles
+                + synchronized_piles
+            )
+            for action_config in actions.switch_pile:
+                if action_config.mode == workload_config.SwitchPileMode.SOFT:
+                    choices = [
+                        (
+                            'soft-switch to pile %d' % pile_id,
+                            (do_soft_switch_pile, pile_id),
+                        )
+                        for pile_id in synchronized_piles
+                        if can_soft_switch
+                    ]
+                    _add_possible_action(possible_actions, action_config, 'soft-switch-pile', choices)
                 else:
-                    non_synchronized_piles.append(idx)
+                    choices = [
+                        (
+                            'hard-switch to pile %d' % pile_id,
+                            (do_hard_switch_pile, pile_id, all_connected_piles),
+                        )
+                        for pile_id in promoted_piles + synchronized_piles
+                    ]
+                    _add_possible_action(possible_actions, action_config, 'hard-switch-pile', choices)
 
-            can_soft_switch = (piles_count == len(synchronized_piles) + int(primary_pile is not None))
-            can_hard_switch = (len(synchronized_piles) + len(promoted_piles) > 0)
+            for action_config in actions.disconnect_pile:
+                if action_config.operation == workload_config.DisconnectPileOperation.DISCONNECT:
+                    eligible_piles = (
+                        ([primary_pile] if primary_pile is not None else [])
+                        + synchronized_piles
+                    )
+                    operation = do_disconnect_pile
+                    name = 'disconnect-pile'
+                else:
+                    eligible_piles = disconnected_piles
+                    operation = do_connect_pile
+                    name = 'reconnect-pile'
+                if action_config.pile is not None:
+                    eligible_piles = [
+                        pile_id
+                        for pile_id in eligible_piles
+                        if pile_id == action_config.pile
+                    ]
+                choices = [
+                    (
+                        '%s %d' % (name, pile_id),
+                        (operation, pile_id),
+                    )
+                    for pile_id in eligible_piles
+                ]
+                _add_possible_action(possible_actions, action_config, name, choices)
 
-            if args.enable_soft_switch_piles and can_soft_switch:
-                possible_actions.append((1.0, 'soft-switch-pile', (do_soft_switch_pile, random.choice(synchronized_piles))))
-            if args.enable_hard_switch_piles and can_hard_switch:
-                possible_actions.append((1.0, 'hard-switch-pile', (do_hard_switch_pile, random.choice(promoted_piles + synchronized_piles), [primary_pile] + promoted_piles + synchronized_piles)))
-            if len(disconnected_piles) > 0:
-                possible_actions.append((1.0, 'connect-pile', (do_connect_pile, random.choice(disconnected_piles), pile_id_to_endpoints)))
-            if args.enable_disconnect_piles and len(synchronized_piles) > 0:
-                pile_to_disconnect = args.fixed_pile_for_disconnect if args.fixed_pile_for_disconnect is not None else random.choice([primary_pile] + synchronized_piles)
-                possible_actions.append((1.0, 'disconnect-pile', (do_disconnect_pile, pile_to_disconnect, pile_id_to_endpoints)))
+        for action_config in actions.disconnect_socket:
+            source_nodes = [
+                node_id
+                for node_id in node_id_to_endpoints
+                if node_id in sysinfo
+                and action_config.source.matches(
+                    node_id,
+                    node_types[node_id],
+                    node_tenants.get(node_id, ()),
+                )
+            ]
+            target_nodes = [
+                node_id
+                for node_id in node_id_to_endpoints
+                if node_id in sysinfo
+                and action_config.target.matches(
+                    node_id,
+                    node_types[node_id],
+                    node_tenants.get(node_id, ()),
+                )
+            ]
+            choices = [
+                (
+                    'disconnect socket from node %d to node %d' % (source_node_id, target_node_id),
+                    (do_disconnect_socket, source_node_id, target_node_id, action_config),
+                )
+                for source_node_id in source_nodes
+                for target_node_id in target_nodes
+                if source_node_id != target_node_id
+            ]
+            _add_possible_action(possible_actions, action_config, 'disconnect-socket', choices)
 
         if not possible_actions:
             common.print_if_not_quiet(args, 'Waiting for the next round...', file=sys.stdout)
-            time.sleep(1)
+            time.sleep(sleep_between_rounds)
             continue
 
-        ################################################################################################################
-
-        (_, action_name, action), = random.choices(possible_actions, weights=[w for w, _, _ in possible_actions])
+        selected, = rng.choices(
+            possible_actions,
+            weights=[weight for weight, _, _, _ in possible_actions],
+        )
+        _, action_name, action, is_node_restart = selected
         print('%s %s' % (action_name, datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S')))
 
         try:
-            action[0](*action[1:])
-            if action_name.startswith('restart'):
+            action[0](rng, *action[1:])
+            if is_node_restart:
                 recent_restarts.append(now)
-        except Exception as e:
-            common.print_if_not_quiet(args, 'Failed to perform action: %s with error: %s' % (action_name, e), file=sys.stderr)
+        except Exception as error:
+            common.print_if_not_quiet(
+                args,
+                'Failed to perform action: %s with error: %s' % (action_name, error),
+                file=sys.stderr,
+            )
 
         common.print_if_not_quiet(args, 'Waiting for the next round...', file=sys.stdout)
-        time.sleep(args.sleep_before_rounds)
+        time.sleep(sleep_between_rounds)

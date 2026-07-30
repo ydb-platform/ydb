@@ -612,3 +612,36 @@ The above command performs various
 
 operations until user terminates the process (e.g. by entering ```Ctrl + c```). The operations are created so that they don't
 break failure model of any groups.
+
+The workload can also be configured with YAML:
+
+```bash
+user@host:~$ ydb-dstool -e ydbd.endpoint cluster workload run --config-file workload.yaml
+```
+
+For example:
+
+```yaml
+sleep_between_rounds: 2s
+check_fail_model: true
+random_seed: 42
+max_node_restarts_per_minute: 3
+
+actions:
+  wipe_vdisk:
+    - weight: 1
+  evict_vdisk:
+    - weight: 1
+  restart_node:
+    - weight: 2
+      signal: KILL
+      ask_cms:
+        availability_mode: MODE_KEEP_AVAILABLE
+      filter:
+        only_types:
+          types: [STORAGE_NODE]
+```
+
+Action entries are selected by their relative positive `weight` (the default is `1`). The same action may be listed more than
+once with different filters or CMS settings. Field and enum names are case-insensitive and may be written in snake_case. YAML
+configuration takes precedence over legacy workload-specific options.

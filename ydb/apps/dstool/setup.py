@@ -63,7 +63,8 @@ setuptools.setup(
     install_requires=(
         "protobuf>=3.13.0",
         "grpcio>=1.5.0",
-        "packaging"
+        "packaging",
+        "PyYAML>=5.1",
     ),
     python_requires=">=3.7",
     entry_points={

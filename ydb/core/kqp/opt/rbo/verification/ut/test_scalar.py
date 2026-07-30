@@ -1164,6 +1164,61 @@ class ConditionalScalarTest(unittest.TestCase):
 
 
 class IfPresentScalarTest(unittest.TestCase):
+    def test_boolean_identity_coalesce_has_exact_compact_value(self):
+        for fallback in (False, True):
+            expression = _if_present(
+                Expr(kind="column", column="optional"),
+                Expr(kind="bound", depth=0),
+                _literal("Bool", fallback),
+                "Bool",
+            )
+            for optional_is_null in (False, True):
+                for optional_value in (False, True):
+                    with self.subTest(
+                        fallback=fallback,
+                        optional_is_null=optional_is_null,
+                        optional_value=optional_value,
+                    ):
+                        actual = Encoder(smt.Script()).evaluate(
+                            expression,
+                            {
+                                "optional": Value(
+                                    "Bool",
+                                    smt.bool_value(optional_is_null),
+                                    smt.bool_value(optional_value),
+                                )
+                            },
+                        )
+                        self.assertFalse(_ground(actual.is_null))
+                        self.assertEqual(
+                            _ground(actual.value),
+                            fallback
+                            if optional_is_null
+                            else optional_value,
+                        )
+
+            script = smt.Script()
+            symbolic = Encoder(script).evaluate(
+                expression,
+                {
+                    "optional": Value(
+                        "Bool",
+                        script.fresh_constant(
+                            "optional_is_null",
+                            smt.BOOL,
+                        ),
+                        script.fresh_constant(
+                            "optional_value",
+                            smt.BOOL,
+                        ),
+                    )
+                },
+            )
+            self.assertEqual(
+                symbolic.value.operation,
+                "or" if fallback else "and",
+            )
+
     def test_optional_payload_is_bound_non_null_and_selected_exactly(self):
         expression = _if_present(
             Expr(kind="column", column="optional"),

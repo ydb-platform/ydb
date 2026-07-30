@@ -2227,33 +2227,47 @@ class SortingNetworkEncodingTest(unittest.TestCase):
 class PresentPrefixSequenceEqualityTest(unittest.TestCase):
     COLUMNS = (Column("value", "Int64", True),)
 
+    @staticmethod
+    def concrete_relation(
+        columns,
+        cells,
+        presence,
+        *,
+        present_prefix,
+        ordinals=None,
+    ):
+        assert len(cells) == len(presence)
+        assert all(len(row) == len(columns) for row in cells)
+        return Relation(
+            columns,
+            tuple(
+                Row(
+                    present,
+                    {
+                        column.name: Value(
+                            "Int64",
+                            smt.TRUE if cell is None else smt.FALSE,
+                            smt.ZERO if cell is None else smt.int_value(cell),
+                        )
+                        for column, cell in zip(columns, row)
+                    },
+                )
+                for row, present in zip(cells, presence)
+            ),
+            sequence=True,
+            ordinals=ordinals,
+            present_prefix=present_prefix,
+        )
+
     @classmethod
     def relation(cls, values, slots, *, present_prefix):
         assert len(values) <= slots
-        rows = tuple(
-            Row(
-                smt.TRUE,
-                {
-                    "value": Value(
-                        "Int64",
-                        smt.TRUE if value is None else smt.FALSE,
-                        smt.ZERO if value is None else smt.int_value(value),
-                    )
-                },
-            )
-            for value in values
-        )
-        rows += tuple(
-            Row(
-                smt.FALSE,
-                {"value": Value("Int64", smt.FALSE, smt.ZERO)},
-            )
-            for _ in range(slots - len(values))
-        )
-        return Relation(
+        return cls.concrete_relation(
             cls.COLUMNS,
-            rows,
-            sequence=True,
+            tuple((value,) for value in values)
+            + ((0,),) * (slots - len(values)),
+            (smt.TRUE,) * len(values)
+            + (smt.FALSE,) * (slots - len(values)),
             present_prefix=present_prefix,
         )
 
@@ -2300,21 +2314,312 @@ class PresentPrefixSequenceEqualityTest(unittest.TestCase):
                         )
                     self.assertEqual(_ground(predicate, {}), expected)
 
-    def test_non_prefix_input_uses_the_general_sequence_comparison(self):
+    def test_mixed_prefix_equality_only_ranks_live_sparse_slots(self):
+        prefix_presence = tuple(
+            smt.symbol(f"prefix_{index}", smt.BOOL)
+            for index in range(5)
+        )
+        sparse_presence = (
+            smt.symbol("sparse_0", smt.BOOL),
+            smt.FALSE,
+            smt.symbol("sparse_2", smt.BOOL),
+        )
+        prefix = self.concrete_relation(
+            self.COLUMNS,
+            ((1,), (2,), (91,), (92,), (93,)),
+            prefix_presence,
+            present_prefix=True,
+        )
+        sparse = self.concrete_relation(
+            self.COLUMNS,
+            ((1,), (90,), (2,)),
+            sparse_presence,
+            present_prefix=False,
+        )
+        constants = {
+            **{
+                term.atom: index < 2
+                for index, term in enumerate(prefix_presence)
+            },
+            "sparse_0": True,
+            "sparse_2": True,
+        }
         scalar = ScalarEncoder(smt.Script())
-        with patch.object(
-            relation,
-            "_compressed_rank",
-            wraps=relation._compressed_rank,
-        ) as compressed_rank:
-            predicate = relation.sequence_equal(
-                self.relation((1, 2), 3, present_prefix=True),
-                self.relation((1, 2), 3, present_prefix=False),
+
+        for left, right in ((prefix, sparse), (sparse, prefix)):
+            with self.subTest(prefix_on_left=left is prefix):
+                with patch.object(
+                    relation,
+                    "_compressed_rank",
+                    wraps=relation._compressed_rank,
+                ) as compressed_rank:
+                    predicate = relation.sequence_equal(left, right, scalar)
+
+                self.assertEqual(
+                    tuple(
+                        (item.args[0] is sparse, item.args[1])
+                        for item in compressed_rank.call_args_list
+                    ),
+                    ((True, 0), (True, 2)),
+                )
+                for guard in prefix_presence[2:]:
+                    self.assertIn(smt.not_(guard), predicate.arguments)
+                self.assertTrue(_ground(predicate, constants))
+
+    def test_mixed_prefix_empty_side_constructs_no_sparse_ranks(self):
+        empty_prefix = self.relation((), 0, present_prefix=True)
+        nonempty_sparse = self.relation((1,), 1, present_prefix=False)
+        scalar = ScalarEncoder(smt.Script())
+
+        for left, right in (
+            (empty_prefix, nonempty_sparse),
+            (nonempty_sparse, empty_prefix),
+        ):
+            with self.subTest(prefix_on_left=left is empty_prefix):
+                with patch.object(
+                    relation,
+                    "_compressed_rank",
+                    side_effect=AssertionError(
+                        "an empty prefix cannot consume a sparse rank"
+                    ),
+                ):
+                    predicate = relation.sequence_equal(left, right, scalar)
+                self.assertFalse(_ground(predicate, {}))
+
+    def test_mixed_prefix_equality_preserves_column_order_in_both_orientations(self):
+        left_columns = (
+            Column("left_first", "Int64", True),
+            Column("left_second", "Int64", True),
+        )
+        right_columns = (
+            Column("right_first", "Int64", True),
+            Column("right_second", "Int64", True),
+        )
+        prefix_cells = (
+            (1, None),
+            (2, 3),
+            (90, 91),
+            (92, 93),
+        )
+        sparse_cells = (
+            (2, 3),
+            (94, 95),
+            (1, None),
+        )
+        swapped_sparse_cells = (
+            (3, 2),
+            (94, 95),
+            (None, 1),
+        )
+        prefix_presence = (smt.TRUE, smt.TRUE, smt.FALSE, smt.FALSE)
+        sparse_presence = (smt.TRUE, smt.FALSE, smt.TRUE)
+        sparse_ordinals = (smt.ONE, smt.ZERO, smt.ZERO)
+        scalar = ScalarEncoder(smt.Script())
+
+        for prefix_on_left in (True, False):
+            with self.subTest(prefix_on_left=prefix_on_left):
+                prefix_columns = left_columns if prefix_on_left else right_columns
+                sparse_columns = right_columns if prefix_on_left else left_columns
+                prefix = self.concrete_relation(
+                    prefix_columns,
+                    prefix_cells,
+                    prefix_presence,
+                    present_prefix=True,
+                )
+                sparse = self.concrete_relation(
+                    sparse_columns,
+                    sparse_cells,
+                    sparse_presence,
+                    present_prefix=False,
+                    ordinals=sparse_ordinals,
+                )
+                swapped_sparse = self.concrete_relation(
+                    sparse_columns,
+                    swapped_sparse_cells,
+                    sparse_presence,
+                    present_prefix=False,
+                    ordinals=sparse_ordinals,
+                )
+                left, right = (
+                    (prefix, sparse)
+                    if prefix_on_left
+                    else (sparse, prefix)
+                )
+                swapped_left, swapped_right = (
+                    (prefix, swapped_sparse)
+                    if prefix_on_left
+                    else (swapped_sparse, prefix)
+                )
+
+                self.assertTrue(
+                    _ground(relation.sequence_equal(left, right, scalar), {})
+                )
+                self.assertFalse(
+                    _ground(
+                        relation.sequence_equal(
+                            swapped_left,
+                            swapped_right,
+                            scalar,
+                        ),
+                        {},
+                    )
+                )
+
+    def test_mixed_prefix_matches_general_for_unequal_slot_counts(self):
+        scalar = ScalarEncoder(smt.Script())
+
+        for prefix_slots in range(4):
+            for prefix_count in range(prefix_slots + 1):
+                prefix_presence = (
+                    (smt.TRUE,) * prefix_count
+                    + (smt.FALSE,) * (prefix_slots - prefix_count)
+                )
+                for sparse_slots in range(4):
+                    for prefix_values in product((0, 1), repeat=prefix_slots):
+                        prefix = self.concrete_relation(
+                            self.COLUMNS,
+                            tuple((value,) for value in prefix_values),
+                            prefix_presence,
+                            present_prefix=True,
+                        )
+                        ordinary_prefix = Relation(
+                            prefix.columns,
+                            prefix.rows,
+                            sequence=True,
+                        )
+                        for sparse_values in product(
+                            (0, 1),
+                            repeat=sparse_slots,
+                        ):
+                            for sparse_presence_values in product(
+                                (False, True),
+                                repeat=sparse_slots,
+                            ):
+                                sparse = self.concrete_relation(
+                                    self.COLUMNS,
+                                    tuple(
+                                        (value,)
+                                        for value in sparse_values
+                                    ),
+                                    tuple(
+                                        smt.bool_value(value)
+                                        for value in sparse_presence_values
+                                    ),
+                                    present_prefix=False,
+                                )
+                                for prefix_on_left in (True, False):
+                                    with self.subTest(
+                                        prefix_slots=prefix_slots,
+                                        prefix_count=prefix_count,
+                                        sparse_slots=sparse_slots,
+                                        prefix_values=prefix_values,
+                                        sparse_values=sparse_values,
+                                        sparse_presence=sparse_presence_values,
+                                        prefix_on_left=prefix_on_left,
+                                    ):
+                                        optimized = relation.sequence_equal(
+                                            prefix
+                                            if prefix_on_left
+                                            else sparse,
+                                            sparse
+                                            if prefix_on_left
+                                            else prefix,
+                                            scalar,
+                                        )
+                                        general = relation.sequence_equal(
+                                            ordinary_prefix
+                                            if prefix_on_left
+                                            else sparse,
+                                            sparse
+                                            if prefix_on_left
+                                            else ordinary_prefix,
+                                            scalar,
+                                        )
+                                        self.assertEqual(
+                                            _ground(optimized, {}),
+                                            _ground(general, {}),
+                                        )
+
+    def test_mixed_prefix_symbolic_ordinals_match_general_semantics(self):
+        guards = tuple(
+            smt.symbol(f"sparse_guard_{index}", smt.BOOL)
+            for index in range(3)
+        )
+        ordinals = tuple(
+            smt.symbol(f"sparse_ordinal_{index}", smt.INT)
+            for index in range(3)
+        )
+        prefix = self.relation(
+            (None, 1),
+            3,
+            present_prefix=True,
+        )
+        sparse = self.concrete_relation(
+            self.COLUMNS,
+            ((1,), (None,), (7,)),
+            guards,
+            present_prefix=False,
+            ordinals=ordinals,
+        )
+        ordinary_prefix = Relation(
+            prefix.columns,
+            prefix.rows,
+            sequence=True,
+        )
+        scalar = ScalarEncoder(smt.Script())
+
+        for prefix_on_left in (True, False):
+            optimized = relation.sequence_equal(
+                prefix if prefix_on_left else sparse,
+                sparse if prefix_on_left else prefix,
+                scalar,
+            )
+            general = relation.sequence_equal(
+                ordinary_prefix if prefix_on_left else sparse,
+                sparse if prefix_on_left else ordinary_prefix,
                 scalar,
             )
 
-        self.assertTrue(_ground(predicate, {}))
-        self.assertGreater(compressed_rank.call_count, 0)
+            for presence in product((False, True), repeat=3):
+                for ordinal_values in product(range(3), repeat=3):
+                    constants = {
+                        **{
+                            term.atom: value
+                            for term, value in zip(guards, presence)
+                        },
+                        **{
+                            term.atom: value
+                            for term, value in zip(ordinals, ordinal_values)
+                        },
+                    }
+                    with self.subTest(
+                        prefix_on_left=prefix_on_left,
+                        presence=presence,
+                        ordinals=ordinal_values,
+                    ):
+                        actual = _ground(optimized, constants)
+                        self.assertEqual(actual, _ground(general, constants))
+                        present = [
+                            index
+                            for index, enabled in enumerate(presence)
+                            if enabled
+                        ]
+                        present_ordinals = [
+                            ordinal_values[index]
+                            for index in present
+                        ]
+                        if (
+                            len(present) == 2
+                            and len(set(present_ordinals)) == 2
+                        ):
+                            expected = tuple(
+                                (1, None, 7)[index]
+                                for index in sorted(
+                                    present,
+                                    key=ordinal_values.__getitem__,
+                                )
+                            ) == (None, 1)
+                            self.assertEqual(actual, expected)
 
 
 class DecimalSortConcreteDifferentialTest(unittest.TestCase):

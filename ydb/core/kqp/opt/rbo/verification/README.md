@@ -2273,6 +2273,12 @@ encoding is exact within the declared row/task/family bounds: it rejects an
 unordered or differently ordered producer and represents all sorted,
 producer-order-preserving interleavings. Symbolic Merge ordinals preserve the
 relative input ordinals within each producer as well as the output sort order.
+If only one compared sequence is a fixed present prefix, equality ranks only
+the syntactically live sparse candidates, matches each one to its prefix slot,
+checks total cardinality, and forces the unreachable prefix tail absent. This
+is exact compressed-sequence equality in either orientation and keeps a short
+logical result versus a wide physical prefix from creating a full cross-product
+rank matrix.
 
 Every plan choice carries an explicit finite bound. Symbolic ordinal bounds use
 the syntactically live slot count, not the shaped row-vector length. When result

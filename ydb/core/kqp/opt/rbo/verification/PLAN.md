@@ -2380,6 +2380,19 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   formula floor to 86; no solver was run, so it adds no bounded proof,
   counterexample, or optimizer correctness finding.
 
+  The first post-M69 sequence-scaling prerequisite keeps the exact
+  present-prefix proof carrier but removes the general quadratic comparison
+  when only one result has that carrier. It computes compressed ranks once for
+  syntactically live sparse candidates, equates each candidate at rank `r`
+  with fixed prefix slot `r`, equates cardinalities, and explicitly requires
+  every prefix slot beyond the sparse candidate capacity to be absent. Both
+  operand orientations preserve positional column mapping. Exhaustive
+  differentials cover valid prefix masks, zero and unequal physical
+  capacities, sparse holes, NULL values, concrete and symbolic ordinals,
+  ordinal ties, and both orientations against the preceding general formula.
+  This changes no captured-plan support or coverage floor by itself; it is the
+  exact root-comparison prerequisite for the wider q31 Sort/Merge work.
+
   A focused version-five audit of TPC-DS q12, q20, q49, q51, q53, q63, q89,
   and q98 preserves exact pairs despite failed preparation. All eight are
   semantically unsupported: window callables dominate, q49 first exposes a

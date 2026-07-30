@@ -1044,6 +1044,15 @@ sequences have the fixed present-prefix invariant, equality checks aligned
 presence/value slots and requires every unmatched suffix slot to be absent.
 That is exactly compressed-sequence equality and avoids the ordinary quadratic
 compressed-rank matrix.
+When exactly one side has the invariant, equality instead computes ranks only
+for syntactically live slots on the sparse side. Cardinality equality fixes the
+prefix length; a present sparse slot at rank `r` must equal prefix slot `r`,
+and every prefix slot beyond the number of live sparse candidates is required
+absent. Both operand orientations retain the original positional column
+mapping. This is the same compressed-sequence relation as the general
+rank-by-rank matrix, while a 64-candidate sequence compared with a
+4,096-slot physical prefix no longer constructs ranks or value comparisons for
+the unreachable prefix tail.
 
 Selection is fail-closed: ordinary pair construction remains capped at 16,384;
 the network is separately capped at 32,768 comparators, 131,072 logical packed

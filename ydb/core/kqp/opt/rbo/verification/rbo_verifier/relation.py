@@ -4850,6 +4850,62 @@ def sequence_equal(left: Relation, right: Relation, scalar: ScalarEncoder) -> sm
             ),
         )
 
+    if left.present_prefix != right.present_prefix:
+        prefix_on_left = left.present_prefix
+        prefix = left if prefix_on_left else right
+        sparse = right if prefix_on_left else left
+        sparse_indices = _live_row_indices(sparse.rows)
+        aligned = min(len(prefix.rows), len(sparse_indices))
+        sparse_ranks = (
+            tuple(
+                (index, _compressed_rank(sparse, index))
+                for index in sparse_indices
+            )
+            if aligned
+            else ()
+        )
+        prefix_count = smt.add(
+            *(smt.ite(row.present, smt.ONE, smt.ZERO) for row in prefix.rows)
+        )
+        sparse_count = smt.add(
+            *(smt.ite(row.present, smt.ONE, smt.ZERO) for row in sparse.rows)
+        )
+
+        def mixed_values_equal(prefix_row: Row, sparse_row: Row) -> smt.Term:
+            return (
+                values_equal(prefix_row, sparse_row)
+                if prefix_on_left
+                else values_equal(sparse_row, prefix_row)
+            )
+
+        # A present-prefix slot's compressed rank is its slot index.  Sparse
+        # slots that are syntactically absent need no rank, and no prefix slot
+        # beyond the number of live sparse candidates can be present.
+        return smt.and_(
+            smt.eq(prefix_count, sparse_count),
+            *(smt.not_(row.present) for row in prefix.rows[aligned:]),
+            *(
+                smt.or_(
+                    smt.not_(
+                        smt.and_(
+                            sparse.rows[sparse_index].present,
+                            prefix_row.present,
+                            smt.eq(
+                                sparse_rank,
+                                smt.int_value(prefix_index),
+                            ),
+                        )
+                    ),
+                    mixed_values_equal(
+                        prefix_row,
+                        sparse.rows[sparse_index],
+                    ),
+                )
+                for sparse_index, sparse_rank in sparse_ranks
+                for prefix_index, prefix_row in enumerate(prefix.rows[:aligned])
+            ),
+        )
+
     left_ranks = tuple(
         _compressed_rank(left, index) for index in range(len(left.rows))
     )

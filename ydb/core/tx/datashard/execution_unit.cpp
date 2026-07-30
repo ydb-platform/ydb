@@ -172,6 +172,7 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
 bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext& ctx) {
     TWriteOperation* writeOp = TWriteOperation::TryCastWriteOperation(op);
 
+     // COUNTER_WRITE_COMPLETE / COUNTER_PREPARE_COMPLETE are updated in FinishProposeWrite / FinishPropose respectively
     auto incOverloaded = [this, writeOp]() {
         DataShard.IncCounter(writeOp ? COUNTER_WRITE_OVERLOADED : COUNTER_PREPARE_OVERLOADED);
     };
@@ -278,6 +279,7 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
 
         YDB_LOG_NOTICE_CTX(ctx, err);
 
+        // no incOverloaded here as it's treated as BAD_REQUEST, not OVERLOAD
         op->Abort();
         return true;
     }

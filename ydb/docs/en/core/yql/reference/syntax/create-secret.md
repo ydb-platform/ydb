@@ -26,6 +26,8 @@ The `OR REPLACE` and `IF NOT EXISTS` clauses cannot be used simultaneously.
 
 Creating a secret requires the [right](grant.md#permissions-list) `CREATE TABLE`.
 
+When using `CREATE OR REPLACE SECRET` on an existing secret, the [right](grant.md#permissions-list) `ALTER SCHEMA` on the secret is required, since the operation is internally converted to [`ALTER SECRET`](alter-secret.md). When the secret does not exist, `CREATE TABLE` on the parent directory is sufficient.
+
 ## Examples {#examples}
 
 Create a secret in the database root named `secret_name` with value `secret_value`:

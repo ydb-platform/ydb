@@ -26,6 +26,8 @@ WITH (option = value[, ...])
 
 Для создания секрета требуется [право](grant.md#permissions-list) `CREATE TABLE`.
 
+При использовании `CREATE OR REPLACE SECRET` для существующего секрета требуется [право](grant.md#permissions-list) `ALTER SCHEMA` на секрет, так как операция внутренне преобразуется в [`ALTER SECRET`](alter-secret.md). Если секрет не существует, достаточно права `CREATE TABLE` на родительскую директорию.
+
 ## Примеры
 
 Создать секрет в корне базы с именем `secret_name` и значением `secret_value`:

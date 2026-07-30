@@ -157,6 +157,17 @@ public:
         return *dropVersion;
     }
 
+    bool HasSchemeShardLocalPathId(const TSchemeShardLocalPathId& schemeShardLocalPathId) const {
+        return SchemeShardLocalPathIds.contains(schemeShardLocalPathId);
+    }
+
+    // Path-local drop version. Caller must ensure HasSchemeShardLocalPathId; nullopt means the path is live.
+    std::optional<NOlap::TSnapshot> GetPathDropVersionOptional(const TSchemeShardLocalPathId& schemeShardLocalPathId) const {
+        const auto it = SchemeShardLocalPathIds.find(schemeShardLocalPathId);
+        AFL_VERIFY(it != SchemeShardLocalPathIds.end());
+        return it->second.DropVersion;
+    }
+
     void Merge(TTableInfo&& other) {
         AFL_VERIFY(InternalPathId == other.InternalPathId);
         Versions.insert(other.Versions.begin(), other.Versions.end());
@@ -273,6 +284,8 @@ public:
         if (!minReadSnapshot) {
             return true;
         }
+        // Exclusive drop boundary, same as CanBeUsedAt / ResolveInternalPathIdForSnapshot:
+        // a read at exactly the drop/truncate snapshot must not see the dropped generation.
         return *dropVersion <= *minReadSnapshot;
     }
 
@@ -442,9 +455,8 @@ public:   //IPathIdTranslator
     virtual std::vector<NOlap::TSnapshot> GetReadOnlyTablesSnapshots() const override;
 
 public:
-    std::optional<TInternalPathId> ResolveInternalPathIdForSnapshot(
-        const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId, const NOlap::TSnapshot& readSnapshot,
-        const bool withTabletPathId) const;
+    std::optional<TInternalPathId> ResolveInternalPathIdForSnapshot(const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId,
+        const NOlap::TSnapshot& readSnapshot, const bool withTabletPathId) const;
 
     TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,
         const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
@@ -468,8 +480,7 @@ public:
 
         TSchemaAddress(const ui32 presetId, const NOlap::TSnapshot& snapshot)
             : PresetId(presetId)
-            , Snapshot(snapshot)
-        {
+            , Snapshot(snapshot) {
         }
 
         explicit operator size_t() const {
@@ -503,8 +514,7 @@ public:
 
         TSchemasChain(const std::set<TSchemaAddress>& toRemove, const TSchemaAddress& finish)
             : ToRemove(toRemove)
-            , Finish(finish)
-        {
+            , Finish(finish) {
             AFL_VERIFY(toRemove.size());
             AFL_VERIFY(*ToRemove.rbegin() < Finish);
         }

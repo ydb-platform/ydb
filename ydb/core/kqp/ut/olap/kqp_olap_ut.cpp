@@ -5013,7 +5013,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(TruncateTableCleansPortions, Standalone) {
+    // TRUNCATE is supported only for standalone column tables (in-store is rejected).
+    Y_UNIT_TEST(TruncateTableCleansPortions) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         csController->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
@@ -5021,16 +5022,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.FeatureFlags.SetEnableTruncateColumnTable(true);
         TKikimrRunner kikimr(settings);
-        if (Standalone) {
-            TLocalHelper(kikimr).CreateTestOlapStandaloneTable();
-        } else {
-            TLocalHelper(kikimr).CreateTestOlapTable();
-        }
+        TLocalHelper(kikimr).CreateTestOlapStandaloneTable();
         auto client = kikimr.GetQueryClient();
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
-        const TString tablePath = Standalone ? "/Root/olapTable" : "/Root/olapStore/olapTable";
-        const TString truncateTarget = Standalone ? "olapTable" : "olapStore/olapTable";
+        const TString tablePath = "/Root/olapTable";
 
         UNIT_ASSERT_EQUAL(csController->GetPortionsCount(), 0);
 
@@ -5042,8 +5038,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT_GT(csController->GetPortionsCount(), 0);
 
         {
-            auto result = client.ExecuteQuery(Sprintf("TRUNCATE TABLE `%s`", truncateTarget.c_str()), NQuery::TTxControl::NoTx())
-                              .GetValueSync();
+            auto result = client.ExecuteQuery("TRUNCATE TABLE `olapTable`", NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 

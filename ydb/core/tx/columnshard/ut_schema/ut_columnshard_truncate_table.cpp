@@ -343,8 +343,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         // Sanity: TTL is present for the original generation.
         {
-            const auto internalPathId =
-                shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(pathId), false);
+            const auto internalPathId = shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(pathId), false);
             UNIT_ASSERT(internalPathId);
             UNIT_ASSERT(shard->GetTablesManager().GetTableTtl(*internalPathId).has_value());
         }
@@ -357,8 +356,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         // After TRUNCATE the freshly generated InternalPathId must still carry the TTL settings.
         {
-            const auto newInternalPathId =
-                shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(pathId), false);
+            const auto newInternalPathId = shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(pathId), false);
             UNIT_ASSERT(newInternalPathId);
             const auto ttl = shard->GetTablesManager().GetTableTtl(*newInternalPathId);
             UNIT_ASSERT_C(ttl.has_value(), "TTL settings were lost after TRUNCATE");
@@ -367,7 +365,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
     // Pins the MVCC boundary semantics of TRUNCATE: a read exactly at the truncate snapshot sees the
     // post-truncate (empty) generation, while a read strictly before it still sees the old data. This
-    // guards ResolveInternalPathIdForSnapshot's `dropVersion < readSnapshot` boundary condition.
+    // guards ResolveInternalPathIdForSnapshot's `dropVersion <= readSnapshot` boundary condition.
     Y_UNIT_TEST(TruncateSnapshotBoundary) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
@@ -665,9 +663,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         }
 
         // Commit of the pre-fence lock must also fail (CommitWriteLock checks ResolveInternalPathId).
-        {
-            ProposeCommitFail(runtime, sender, TTestTxConfig::TxTablet0, ++txId, writeIdsBefore, lockBefore);
-        }
+        { ProposeCommitFail(runtime, sender, TTestTxConfig::TxTablet0, ++txId, writeIdsBefore, lockBefore); }
 
         auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
         UNIT_ASSERT(ev);

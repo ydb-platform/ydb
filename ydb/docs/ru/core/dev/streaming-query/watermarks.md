@@ -4,7 +4,7 @@ Watermark — монотонно возрастающая нижняя оцен�
 
 ## Время события {#event-time}
 
-В потоковой обработке каждое событие имеет временную метку, по которой система отслеживает прогресс времени в потоке. В текущей реализации источником времени события может быть только время записи события в [топик](../../concepts/datamodel/topic.md), доступное через системную колонку [`__ydb_write_time`](../../concepts/query_execution/topics.md#system-metadata).
+В потоковой обработке каждое событие имеет временную метку, по которой система отслеживает прогресс времени в потоке. В текущей реализации источником времени события может быть только время записи события в [топик](../../concepts/datamodel/topic.md), доступное через системную колонку `__ydb_write_time`.
 
 {% note info %}
 
@@ -35,7 +35,7 @@ sequenceDiagram
 
 ## Вычисление watermark {#watermark-computation}
 
-Когда система получает событие, она обновляет watermark — **продвигает** его вперёд по временной оси. Watermark вычисляется как `максимальное наблюдаемое время события − delay`, где `delay` — величина отставания, заданная в выражении [`WATERMARK`](#configuration) (например, `Interval("PT5S")` в `WATERMARK = __ydb_write_time - Interval("PT5S")`; [`__ydb_write_time`](../../concepts/query_execution/topics.md#system-metadata) — служебная колонка топика).
+Когда система получает событие, она обновляет watermark — **продвигает** его вперёд по временной оси. Watermark вычисляется как `максимальное наблюдаемое время события − delay`, где `delay` — величина отставания, заданная в выражении [`WATERMARK`](#configuration) (например, `Interval("PT5S")` в `WATERMARK = __ydb_write_time - Interval("PT5S")`; `__ydb_write_time` — служебная колонка топика).
 
 События в потоке могут приходить не в хронологическом порядке: событие с временем 10:00:03 может быть обработано после события с временем 10:00:05. Причины: расхождение часов в распределённой системе, сетевые задержки, неравномерная нагрузка на [партиции](../../concepts/datamodel/topic.md#partitioning) топика.
 
@@ -61,7 +61,7 @@ Watermarks включаются и настраиваются в секции [W
 
 {% note warning %}
 
-При использовании [HoppingWindow](../../yql/reference/syntax/select/group-by.md#group-by-hopping_window) первый параметр (time extractor) и источник времени в выражении WATERMARK должны совпадать. В текущей реализации оба должны использовать [`__ydb_write_time`](../../concepts/query_execution/topics.md#system-metadata).
+При использовании [HoppingWindow](../../yql/reference/syntax/select/group-by.md#group-by-hopping_window) первый параметр (time extractor) и источник времени в выражении WATERMARK должны совпадать. В текущей реализации оба должны использовать `__ydb_write_time`.
 
 {% endnote %}
 
@@ -120,7 +120,7 @@ END DO;
 Где:
 
 - [`CREATE STREAMING QUERY`](../../yql/reference/syntax/create-streaming-query.md) — создаёт именованный потоковый запрос.
-- [`__ydb_write_time`](../../concepts/query_execution/topics.md#system-metadata) — системная колонка, содержащая время записи события в [топик](../../concepts/datamodel/topic.md).
+- `__ydb_write_time` — системная колонка, содержащая время записи события в [топик](../../concepts/datamodel/topic.md).
 - `FORMAT = json_each_row` — [формат данных](streaming-query-formats.md) в топике, каждая строка содержит отдельный JSON-объект.
 - `WATERMARK = __ydb_write_time - Interval("PT5S")` — watermark с отставанием 5 секунд. `Interval("PT5S")` задаёт интервал в формате [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601#Durations).
 - [`AGGREGATE_LIST`](../../yql/reference/builtins/aggregation.md#agg-list) — агрегатная функция, собирающая значения в список.

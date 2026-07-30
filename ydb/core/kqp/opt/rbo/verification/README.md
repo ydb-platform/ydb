@@ -13,7 +13,8 @@ The current implementation contains the M1 logical kernel, the M2 C++ boundary
 hooks, the supported M3 StageGraph routing slice, and the aggregate, Limit,
 ordered Sort/TopSort/Merge including bounded exact bitonic-network
 representations with fixed or symbolic producer-order preservation, pushed
-OLAP-filter including exact presence tests, exact audited point and finite
+OLAP-filter including exact presence tests, value-preserving typed Boolean
+coalesce, and reviewed pushed compiled LIKE, exact audited point and finite
 point-set pushed read ranges,
 restricted static `IN`, exact `Exists`/`If`/unary `IfPresent`, exact all-pairs
 ordinary integral comparison, exact String/Utf8 comparison and ordering, exact
@@ -45,7 +46,8 @@ the exact proven-total Date `Unwrap(Coalesce(member, zero))` shape,
 exact row-level `DistinctAll` aggregation, side-explicit join keys including
 the narrow shared-IU one-sided join slice, exact direct non-null Uint64
 `Just`, exact scalar-final Uint64 sum unwrap, and exact direct scalar
-`COUNT(DISTINCT Int64)`, plus the benchmark-dashboard parts of M4. The reviewed
+or grouped `COUNT(DISTINCT integer)` for every fixed-width signed/unsigned
+integer type, plus the benchmark-dashboard parts of M4. The reviewed
 exact wrapper forms
 retain their Optional schema through existing `IfPresent`/`If` IR instead of
 being erased. This includes only `Just(Date literal)` and
@@ -178,22 +180,24 @@ Committed rule applications and mutating non-rule stages share one explicit
 transformation-event stream. Solver-backed tests use the pinned, standalone Z3
 target under `contrib/tools/z3`; it is not linked into `ydbd`.
 The checked-in policy currently requires formula construction for
-TPCH q1, q2, q3, q4, q5, q6, q7, q8, q9, q10, q11, q12, q14,
-q15, q18, q19, q21, and q22 plus TPC-DS q2, q3, q5, q6, q7, q9, q10, q13, q15,
+TPCH q1, q2, q3, q4, q5, q6, q7, q8, q9, q10, q11, q12, q13, q14,
+q15, q16, q18, q19, q21, and q22 plus TPC-DS q2, q3, q5, q6, q7, q9, q10, q13, q15,
 q16, q18, q19, q21, q22, q24, q25, q26, q29, q33, q34,
 q35, q37, q38, q40, q42, q43, q45, q46, q48, q50, q52, q54, q55, q56, q58, q59,
 q60, q61, q62, q65, q66, q68, q69, q71, q72, q73, q75, q76, q77, q78, q79,
 q80, q82, q83, q85, q87, q88, q90, q91, q93, q94, q95, q96, q97, and q99:
-83/121 workload queries (68.6%).
+85/121 workload queries (70.2%).
 TPC-DS q72 is pinned at successful preparation plus formula construction; it
 is not in the proof floor. TPC-DS q9 is pinned at successful preparation,
 verifier entry, formula construction, and bounded proof. TPC-DS q24 is pinned
-at successful preparation plus formula construction. The current complete
+at successful preparation plus formula construction. TPCH q13/q16 are pinned
+at successful preparation, verifier entry, formula construction, and bounded
+proof, raising the checked-in proof floor to thirty obligations. The current complete
 dashboards leave TPCH at
-eighteen formulas, two unsupported semantic outcomes, and two no-pair
+twenty formulas, no unsupported semantic outcomes, and two no-pair
 optimizer failures; TPC-DS has sixty-five formulas, sixteen unsupported
 semantic outcomes, and eighteen no-pair optimizer failures. Across both suites
-the semantic partition is 83 formulas, 18 `UNSUPPORTED`, and 20
+the semantic partition is 85 formulas, 16 `UNSUPPORTED`, and 20
 `OPTIMIZER_FAILURE`.
 Preparation is a separate partition: twenty TPCH and seventy-three TPC-DS
 queries succeed, while two TPCH and twenty-six TPC-DS queries fail. Eight
@@ -210,17 +214,20 @@ followed by direct unique-right join compaction moves q72 through formula
 construction. Exact fixed-sequence singleton-Limit compaction then moves q9
 through formula construction and bounded proof. Exact reviewed nullable
 Unicode-uppercase normalization then moves q24 through formula construction.
-The resulting measured formula coverage is 83/121 (68.6%) over the corpus,
-83/101 (82.2%) over exact Initial/Final boundary-result pairs, 83/93 (89.2%)
-within the preparation-successful subset, and 83/88 (94.3%) among verifier
-entrants. The
+Reviewed compiled LIKE, grouped integer count-distinct, and exact pushed
+Boolean coalesce then move TPCH q13/q16 through formula construction and
+bounded proof. The resulting measured formula coverage is 85/121 (70.2%) over
+the corpus, 85/101 (84.2%) over exact Initial/Final boundary-result pairs,
+85/93 (91.4%) within the preparation-successful subset, and 85/90 (94.4%)
+among verifier entrants. The
 preparation-success ratio uses
 the intersection of formula rows with preparation-success rows; version five
 permits a formula to coexist with failed later preparation. Twenty TPCH and
-eighty-one TPC-DS queries have exact boundary-result pairs. Eighteen TPCH and
-seventy TPC-DS pairs enter the verifier. The 18 unsupported outcomes
-consequently split into 13 initial-export, zero final-export, and five verifier
-results.
+eighty-one TPC-DS queries have exact boundary-result pairs. Twenty TPCH and
+seventy TPC-DS pairs enter the verifier. The 16 unsupported outcomes
+consequently split by primary terminal layer into 11 initial-export, zero
+final-export, and five verifier results. Secondary boundary diagnostics remain
+recorded independently.
 
 Milestone 64 accepts only a direct visible `Optional<Date>` member under exact
 binary `+` or `-` with a reviewed literal `IntervalFromDays`. The Initial
@@ -343,6 +350,38 @@ and 14/14 coverage-policy tests. Commits `bed31799d83`, `0ca4097d444`,
 `a26d42bdba8`, and `f929a36b59c` record the reviewed-UDF refactor, semantics,
 policy, and cast-gate clarification. It found no optimizer bug or
 counterexample, and the proof floor remains twenty-eight.
+
+Milestone 68 closes both remaining TPCH semantic gaps without adding a
+query-specific theorem rule. One closed C++ recognizer maps the generic and
+pushed `KqpOlapApply` spellings of the reviewed compiled-LIKE program to the
+same deterministic-total opaque fingerprint. The pushed spelling retains
+outer NOT explicitly. Exact pushed Boolean `?? true/false` is preserved as
+typed `if_present`; the Python evaluator uses the equivalent compact
+`is-null OR value` / `not-null AND value` terms for this identity shape.
+Ordinary direct `COUNT(DISTINCT integer)` now admits one trait in a scalar or
+grouped phase-undefined Aggregate for every non-null fixed-width
+signed/unsigned integer type. Group membership guards duplicate elimination,
+and the complete triangular equality cost is preflighted before construction.
+
+The complete Milestone 68 dashboards are TPCH 20 formulas / 0 unsupported /
+2 no-pair at 2,859/93,926 ms (SHA-256
+`9bf3c81dbeef81094ed2df0350acad101ebc6613c10cebbe6c44deb8484391a2`)
+and TPC-DS 65 / 16 / 18 at 64,187/669,357 ms (SHA-256
+`d6fd489bc6c24af3d5670eb4054bc5e7feadc5c1e25047d18b8b399773e0b5bb`).
+Focused canonical formulas for TPCH q13 and q16 are respectively 206,870 and
+383,335 bytes, with SHA-256
+`f5b95c739c8d32944249c865bac64a44f4fb70c3f78082c0e9ec3db27cc995b4`
+and
+`6f97871a39cd1d1aaefcefa61bca2018159895e21b200156a9f480ea1218c588`.
+The complete hermetic gate confirms 13/13 TPCH after 1,633/56,327 ms and
+17/17 TPC-DS after 12,286/97,337 ms. Its report SHA-256 values are
+`d641e3445696fce0f0a367a4f586aa20543d73cb6408a7cf0fefe49f42d64b47`
+and
+`b6005eb3ed976d111756976959571916ccafa29072f329f33c2eb6f166f27278`.
+TPCH q13/q16 are `VERIFIED_BOUNDED` there after 106/2,570 and 105/3,626 ms.
+Validation passes 638/638 Python verifier tests, 259/259 C++ exporter tests,
+14/14 policy tests, and the 5/5 proof-floor target. The slice found no new
+optimizer bug or counterexample.
 
 A focused version-five run selected TPC-DS q12, q20, q49, q51, q53, q63, q89,
 and q98. Every query produced an exact Initial/Final boundary-result pair and
@@ -715,7 +754,11 @@ Finally, one direct keyless phase-`undefined`
 are suppressed by first present equal representative, with its
 `N*(N-1)/2` equality checks charged to the normal relation-pair ceiling before
 construction. Every nearby type, phase, grouping, second distinct trait,
-unwrap, or residual shape still fails closed.
+unwrap, or residual shape still fails closed. Milestone 68 later generalizes
+this ordinary direct-distinct contract to scalar or grouped Aggregates over
+every non-null fixed-width signed/unsigned integer type. Nullable group keys
+use null-safe equality, and the equality preflight is
+`candidate_groups * N*(N-1)/2`.
 
 Together these contracts model q95 before and after its multi-distinct rewrite.
 Its focused formula is 288,499 bytes and 1,269 lines. A preceding dedicated
@@ -845,20 +888,25 @@ returned `UNKNOWN` after 327/72,599 ms, with the global deadline exhausted
 before mismatch branch 3/6. q6 is therefore formula-covered, not proved.
 Formula emission means that both snapshots were modeled and SMT was
 constructed; it is not a solver proof. The checked-in solver policy now
-requires `VERIFIED_BOUNDED` for TPCH q3, q4, q6, q11, q12, q14, q15, q18,
-q19, q21, and q22 plus TPC-DS q3, q9, q16, q34, q38, q42, q48, q52, q55, q69,
-q73, q87, q90, q93, q94, q95, and q96: twenty-eight obligations (23.1% of
-the workload and 33.7% of formula-covered queries).
+requires `VERIFIED_BOUNDED` for TPCH q3, q4, q6, q11, q12, q13, q14, q15,
+q16, q18, q19, q21, and q22 plus TPC-DS q3, q9, q16, q34, q38, q42, q48,
+q52, q55, q69, q73, q87, q90, q93, q94, q95, and q96: thirty obligations
+(24.8% of the workload and 35.3% of formula-covered queries).
 
-The current complete proof-floor gate is green and policy-valid: 11/11 TPCH
-and 17/17 TPC-DS obligations are `VERIFIED_BOUNDED`, for 28/28 or 28/121
-(23.1%) of the workload at the declared bounds. TPCH spent 1,351/56,500 ms in
+The current complete proof-floor gate is green and policy-valid: 13/13 TPCH
+and 17/17 TPC-DS obligations are `VERIFIED_BOUNDED`, for 30/30 or 30/121
+(24.8%) of the workload at the declared bounds. TPCH spent 1,633/56,327 ms in
 preparation/verification and produced report SHA-256
-`9fcc4b6967736dd408760b16469380aeb03871518e2dea9ea850ec08c3f1e563`;
-TPC-DS spent 12,900/88,785 ms and produced
-`c59c5e08f836e0a619969fa9afeac984f0c1715bd61a42e0c0f151001a86105c`.
+`d641e3445696fce0f0a367a4f586aa20543d73cb6408a7cf0fefe49f42d64b47`;
+TPC-DS spent 12,286/97,337 ms and produced
+`b6005eb3ed976d111756976959571916ccafa29072f329f33c2eb6f166f27278`.
 The focused proof-floor policy target passes 5/5 with zero policy violations.
-The immediately preceding Milestone 66 gate passed the same 11/11 and 17/17
+The immediately preceding Milestone 67 gate passed 11/11 TPCH and 17/17
+TPC-DS obligations after 1,351/56,500 and 12,900/88,785 ms; its report
+SHA-256 values were
+`9fcc4b6967736dd408760b16469380aeb03871518e2dea9ea850ec08c3f1e563` and
+`c59c5e08f836e0a619969fa9afeac984f0c1715bd61a42e0c0f151001a86105c`.
+The earlier Milestone 66 gate passed the same then-current 11/11 and 17/17
 obligations after 1,390/55,963 and 12,375/88,511 ms; its report SHA-256 values
 were
 `41dc6386612519a277a896d2a9c6f74318ea5a63af4df0d086f74b0470f0dcaf` and
@@ -1277,8 +1325,8 @@ typed uninterpreted function when
 the C++ exporter can positively audit it as deterministic and total. The
 current reviewed opaque families are scalar comparisons; `Just` and
 `Coalesce`; `SafeCast`; non-failing `Convert`; `Substring`; the canonical
-String-predicate bridge described below; and stored-String `Concat` in the exact
-workload shapes described below. The same audit
+String-predicate and compiled-LIKE bridges described below; and stored-String
+`Concat` in the exact workload shapes described below. The same audit
 treats the explicit `DecimalDiv` core node as total, so a supported opaque
 parent may contain it; the same is true of the exact integral `/` core above.
 YQL has no complete generic totality or determinism flag, so all other
@@ -1303,9 +1351,19 @@ retains the ordered column/literal arguments. The verifier treats it as one
 deterministic total uninterpreted function shared across the two dialects; it
 does not reimplement the byte predicate. Generic
 `Coalesce(predicate, false)` retains exact `if_present` NULL handling, while
-the pushed coalesce is erased only in a positive filter context. Operand, type,
-nullability, result-descriptor, catalog-column, and operation near-misses fail
-closed.
+the pushed typed Boolean coalesce is retained as the same exact
+`if_present`. Operand, type, nullability, result-descriptor, catalog-column,
+and operation near-misses fail closed.
+
+The compiled-LIKE bridge accepts the complete canonical
+`Apply(AssumeStrict(Re2.Match), Optional<String>)` program over one direct
+member and the corresponding pushed `KqpOlapApply` over one nullable String
+read column. It audits the cached callable and run-config descriptors for
+`Re2.Match`, `Re2.PatternFromLike`, and `Re2.Options`, exact case-sensitive
+options, and an ASCII pattern of at most 4,096 bytes. Both dialects lower NULL
+to false and share one `yql-re2-pattern-from-like-match-v1` fingerprint for
+the present value; the pushed form may have one exact outer `Not`. This is a
+deterministic-total opaque identity, not a second regex implementation.
 
 The two reviewed `Concat` shapes are confined to the body root of a Map
 expression and return exactly non-null `String`. A literal-only binary tree
@@ -1909,15 +1967,18 @@ join compaction are complete for q72 through formula construction. Milestone
 TPC-DS q9 through formula construction and bounded proof. Milestone 67's
 restricted nullable String-to-Utf8 `Unicode.ToUpper` normalization is complete
 and moves TPC-DS q24 through formula construction; its focused solver result is
-`UNKNOWN`. q64's 8,192-row join output remains a separate construction-heavy
-slice.
+`UNKNOWN`. Milestone 68's reviewed compiled-LIKE, grouped integer
+count-distinct, and exact pushed Boolean-coalesce slice moves TPCH q13/q16
+through formula construction and bounded proof. q64's 8,192-row join output
+remains a separate construction-heavy slice.
 The auditability consolidation is complete in commits `7a3639d1c16`,
 `ebcfdbb1263`, and `4b7f27d492e`. The checked-in proof policy added TPC-DS q95
 after the earlier TPCH q18 addition, then q38 and q87 through the exact
 proven-total Date `Unwrap` gate. The two-dependency `EXISTS` slice then added
 TPCH q21 and TPC-DS q16/q94, producing the historical 11-query TPCH and
 14-query TPC-DS bounded proof floor. TPC-DS q73, q34, and q9 subsequently
-raise the current floor to 11 TPCH plus 17 TPC-DS obligations, 28 total.
+raise that floor to 11 TPCH plus 17 TPC-DS obligations. TPCH q13/q16 then
+raise the current floor to 13 TPCH plus 17 TPC-DS obligations, 30 total.
 
 The audit has found nine production optimizer defects. A stale negation flag could
 turn a later positive `EXISTS` into `NOT EXISTS`; its focused regression and fix
@@ -2194,7 +2255,8 @@ outside the modeled subset below remain unsupported.
 
 The aggregate subset covers grouped and scalar `count`, integer `sum`, Decimal
 `sum`, Decimal-only `min`/`max`, phase-aware same-type Decimal `avg`, row-level
-`DistinctAll`, one exact direct scalar Int64 count-distinct shape, and one
+`DistinctAll`, one exact direct scalar or grouped fixed-width signed/unsigned
+integer count-distinct trait, and one
 exact scalar-final Uint64 sum-unwrap shape, including NULL grouping and inputs
 and optimizer-generated intermediate/final phases.
 Signed inputs widen to `Int64`, unsigned inputs widen to `Uint64`, and both
@@ -2257,14 +2319,17 @@ deduplication followed by HashShuffle on every intermediate key and final
 deduplication is equivalent, while a non-shuffled split can expose duplicate
 rows normally.
 
-Outside `DistinctAll`, `distinct` is exact only for one keyless,
+Outside `DistinctAll`, `distinct` is exact only for at most one
 phase-`undefined`, non-unwrapped
-`count(non-null Int64) -> non-null Uint64` trait per Aggregate. Other ordinary
-traits may coexist. For each present input slot, evaluation counts the value
-only when no earlier present slot is equal, so duplicates collapse and empty
-input returns zero. The exact upper-triangular comparison count
-`N*(N-1)/2` is charged before construction; crossing the relation-pair ceiling
-returns `UNSUPPORTED`.
+`count(non-null integer) -> non-null Uint64` trait per Aggregate, where the
+input is any fixed-width signed or unsigned integer. Scalar and grouped
+Aggregates are admitted, and other ordinary traits may coexist. For each
+candidate group and present input slot, evaluation counts the value only when
+no earlier present slot in the same group is equal, so duplicates collapse and
+empty scalar input returns zero. The exact comparison cost
+`candidate_groups * N*(N-1)/2` is charged before construction in every
+relation representation; crossing the relation-pair ceiling returns
+`UNSUPPORTED`.
 
 `unwrap` is exact only for a keyless, final, non-`DistinctAll`, non-distinct
 `sum(Optional<Uint64>)` whose raw trait output is
@@ -2348,11 +2413,17 @@ physical read name, full output-IU name, and short output-IU name resolves to
 the corresponding logical scan output. A referenced identifier that maps to
 distinct outputs is ambiguous and fails closed; an unused ambiguous spelling
 does not affect the predicate and is accepted.
-`Coalesce(predicate, false)` is erased only in a positive filter context: at
-the filter boundary or beneath AND/OR. The same form beneath NOT, comparison,
-or a unary presence operation fails closed because the erasure is not
-value-preserving there. Projection wrappers, range callables inside an OLAP
-filter, malformed type descriptors, and unknown operations also fail closed.
+An exact four-child pushed Boolean `??` requires a non-null Bool result
+descriptor, an explicitly typed `Optional<Bool>` binary left predicate, and a
+direct non-null Bool literal fallback. It is preserved as
+`if_present(optional, bound(0), fallback)`, including `true` or `false` beneath
+NOT, comparisons, and other value-sensitive positions. The pushed dialect
+also accepts the complete reviewed `KqpOlapApply` spelling of compiled LIKE:
+one nullable String read column, the canonical case-sensitive ASCII
+`Re2.PatternFromLike`/`Re2.Match` program, and optional outer NOT normalize to
+the same fingerprint as the generic expression. Projection wrappers, broader
+regex/options programs, range callables inside an OLAP filter, malformed type
+descriptors, unsafe metadata, and unknown operations fail closed.
 The predicate filters raw
 scan rows before symbolic source partitioning and any per-task pushed limit.
 

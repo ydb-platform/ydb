@@ -39,10 +39,6 @@ void Out<NKikimrPQ::TEvProposeTransactionResult_EStatus>(IOutputStream& out, NKi
 
 namespace NKikimr::NPQ {
 
-namespace {
-
-} // namespace
-
 namespace NHelpers {
 
 struct TConfigParams {

@@ -583,11 +583,10 @@ void TBatch::Pack() {
         return;
     }
     Packed = true;
-    const ui32 maxHeaderSize = GetMaxHeaderSize();
 
     TBatchSerializer<NKikimrPQ::TBatchHeader::ECompressed>(*this).Pack();
 
-    if (GetPackedSize() > GetUnpackedSize() + maxHeaderSize) { //packing is not effective, write as-is
+    if (GetPackedSize() > GetUnpackedSize() + GetMaxHeaderSize()) { //packing is not effective, write as-is
         TBatchSerializer<NKikimrPQ::TBatchHeader::EUncompressed>(*this).Pack();
     }
 
@@ -598,7 +597,7 @@ void TBatch::Pack() {
     TVector<TClientBlob> tmp;
     Blobs.swap(tmp);
     InternalPartsPos.resize(0);
-    AFL_ENSURE(GetPackedSize() <= GetUnpackedSize() + maxHeaderSize); //be sure that PackedSize is not bigger than packed size for packing type 0
+    AFL_ENSURE(GetPackedSize() <= GetUnpackedSize() + GetMaxHeaderSize()); //be sure that PackedSize is not bigger than packed size for packing type 0
 }
 
 void TBatch::Unpack() {

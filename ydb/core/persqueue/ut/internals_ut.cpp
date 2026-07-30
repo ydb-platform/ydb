@@ -11,8 +11,6 @@
 namespace NKikimr::NPQ {
 namespace {
 
-constexpr ui32 TEST_MAX_HEADER_SIZE = 64;
-
 Y_UNIT_TEST_SUITE(TPQTestInternal) {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -63,7 +61,7 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
     batch.Unpack();
 
     head.PackedSize = head.GetLastBatch().GetPackedSize();
-    UNIT_ASSERT(head.GetLastBatch().GetUnpackedSize() + TEST_MAX_HEADER_SIZE >= head.GetLastBatch().GetPackedSize());
+    UNIT_ASSERT(head.GetLastBatch().GetUnpackedSize() + GetMaxHeaderSize() >= head.GetLastBatch().GetPackedSize());
     THead newHead;
     newHead.Offset = head.GetNextOffset();
     newHead.AddBatch(TBatch(newHead.Offset, 0));
@@ -152,7 +150,7 @@ void Test(bool headCompacted, ui32 parts, ui32 partSize, ui32 leftInHead)
     }
 
     UNIT_ASSERT(c == leftInHead);
-    UNIT_ASSERT(s + TEST_MAX_HEADER_SIZE <= maxBlobSize);
+    UNIT_ASSERT(s + GetMaxHeaderSize() <= maxBlobSize);
     UNIT_ASSERT(real.size() == all.size());
     for (ui32 i = 0; i < all.size(); ++i) {
         UNIT_ASSERT_VALUES_EQUAL(all[i].SourceId, real[i].SourceId);

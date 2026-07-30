@@ -1542,25 +1542,26 @@ class Evaluator:
         ):
             return None
 
-        promoted = tuple(
-            self._promote_delayed_unique_rhs(join, equalities)
-            for join in spine
+        schedule = self._schedule_delayed_unique_rhs(
+            spine,
+            current,
+            equalities,
         )
-        if not any(item is not None for item in promoted):
+        if not any(keys for _join, keys in schedule):
             return None
 
         source = self.node(current)
-        for original, normalized in zip(spine, promoted):
+        for original, keys in schedule:
             right = self.node(original.right)
 
             def join_relations(
                 relations: tuple[Relation, ...],
                 original: Join = original,
-                normalized: Join | None = normalized,
+                keys: tuple[JoinKey, ...] = keys,
             ) -> Relation:
-                return self._join_delayed_unique_rhs(
+                return self._join_scheduled_cross(
                     original,
-                    normalized,
+                    keys,
                     relations[0],
                     relations[1],
                 )
@@ -1569,28 +1570,90 @@ class Evaluator:
                 (source, right),
                 join_relations,
             )
-        return source
+        columns = self._columns(node.input)
+        return map_family(
+            source,
+            lambda relation: replace(
+                relation,
+                columns=columns,
+                rows=tuple(
+                    replace(
+                        row,
+                        values={
+                            column.name: row.values[column.name]
+                            for column in columns
+                        },
+                    )
+                    for row in relation.rows
+                ),
+            ),
+        )
 
-    def _join_delayed_unique_rhs(
+    def _schedule_delayed_unique_rhs(
+        self,
+        spine: list[Join],
+        seed: str,
+        equalities: list[tuple[str, str]],
+    ) -> tuple[tuple[Join, tuple[JoinKey, ...]], ...]:
+        available = dict(self.schemas[seed])
+        pending = list(spine)
+        schedule: list[tuple[Join, tuple[JoinKey, ...]]] = []
+        while pending:
+            selected = 0
+            keys: tuple[JoinKey, ...] = ()
+            for index, candidate in enumerate(pending):
+                candidate_keys = self._delayed_unique_rhs_keys(
+                    candidate,
+                    equalities,
+                    available,
+                )
+                if candidate_keys:
+                    selected = index
+                    keys = candidate_keys
+                    break
+            factor = pending.pop(selected)
+            schedule.append((factor, keys))
+            available.update(self.schemas[factor.right])
+        return tuple(schedule)
+
+    def _join_scheduled_cross(
         self,
         original: Join,
-        normalized: Join | None,
+        keys: tuple[JoinKey, ...],
         left: Relation,
         right: Relation,
     ) -> Relation:
-        if (
-            normalized is not None
-            and self._can_compact_direct_unique_rhs(normalized, right)
+        columns = left.columns + right.columns
+        normalized = replace(original, kind="inner", keys=keys)
+        left_schema = {
+            column.name: column
+            for column in left.columns
+        }
+        if keys and self._can_compact_direct_unique_rhs(
+            normalized,
+            right,
+            left_schema=left_schema,
         ):
-            return self._join(normalized, left, right)
-        return self._join(original, left, right)
+            return self._join(
+                normalized,
+                left,
+                right,
+                output_columns=columns,
+                compact_left_schema=left_schema,
+            )
+        return self._join(
+            original,
+            left,
+            right,
+            output_columns=columns,
+        )
 
-    def _promote_delayed_unique_rhs(
+    def _delayed_unique_rhs_keys(
         self,
         node: Join,
         equalities: list[tuple[str, str]],
-    ) -> Join | None:
-        left_schema = self.schemas[node.left]
+        left_schema: Mapping[str, Column],
+    ) -> tuple[JoinKey, ...]:
         right_schema = self.schemas[node.right]
         keys: list[JoinKey] = []
         for first, second in equalities:
@@ -1606,13 +1669,17 @@ class Evaluator:
             if key not in keys:
                 keys.append(key)
         if not keys:
-            return None
+            return ()
 
         promoted = replace(node, kind="inner", keys=tuple(keys))
         return (
-            promoted
-            if self._direct_unique_rhs_scan(promoted) is not None
-            else None
+            tuple(keys)
+            if self._direct_unique_rhs_scan(
+                promoted,
+                left_schema=left_schema,
+            )
+            is not None
+            else ()
         )
 
     def _with_consumer_subplans(
@@ -2051,10 +2118,22 @@ class Evaluator:
             finite_abs_bound,
         )
 
-    def _join(self, node: Join, left: Relation, right: Relation) -> Relation:
+    def _join(
+        self,
+        node: Join,
+        left: Relation,
+        right: Relation,
+        *,
+        output_columns: tuple[Column, ...] | None = None,
+        compact_left_schema: Mapping[str, Column] | None = None,
+    ) -> Relation:
         matching_rows = len(left.rows) * len(right.rows)
         _require_relation_row_pairs(matching_rows, "join matching")
-        if self._can_compact_direct_unique_rhs(node, right):
+        if self._can_compact_direct_unique_rhs(
+            node,
+            right,
+            left_schema=compact_left_schema,
+        ):
             _require_relation_rows(len(left.rows), "join output")
             # Select the unique RHS independently of the task-local left-row
             # presence guard. Values of an absent output row are unobservable,
@@ -2070,6 +2149,7 @@ class Evaluator:
                     right,
                     include_left_presence=False,
                 ),
+                output_columns=output_columns,
             )
 
         emit_matches = node.kind not in {
@@ -2177,7 +2257,14 @@ class Evaluator:
                 )
 
         # Inner/cross joins with an empty side simply have no candidate rows.
-        return Relation(self._columns(node.id), tuple(rows))
+        return Relation(
+            (
+                self._columns(node.id)
+                if output_columns is None
+                else output_columns
+            ),
+            tuple(rows),
+        )
 
     def _join_matches(
         self,
@@ -2219,8 +2306,17 @@ class Evaluator:
             matches.append(match_row)
         return matches
 
-    def _can_compact_direct_unique_rhs(self, node: Join, right: Relation) -> bool:
-        right_node = self._direct_unique_rhs_scan(node)
+    def _can_compact_direct_unique_rhs(
+        self,
+        node: Join,
+        right: Relation,
+        *,
+        left_schema: Mapping[str, Column] | None = None,
+    ) -> bool:
+        right_node = self._direct_unique_rhs_scan(
+            node,
+            left_schema=left_schema,
+        )
         if right_node is None:
             return False
         expected_columns = tuple(self.schemas[right_node.id].values())
@@ -2259,7 +2355,12 @@ class Evaluator:
                     return False
         return True
 
-    def _direct_unique_rhs_scan(self, node: Join) -> Scan | None:
+    def _direct_unique_rhs_scan(
+        self,
+        node: Join,
+        *,
+        left_schema: Mapping[str, Column] | None = None,
+    ) -> Scan | None:
         if node.kind not in {"inner", "left"}:
             return None
         right_node = self.nodes[node.right]
@@ -2277,7 +2378,11 @@ class Evaluator:
 
         table = self.snapshot.table_map()[right_node.table]
         table_columns = table.column_map()
-        left_schema = self.schemas[node.left]
+        left_schema = (
+            self.schemas[node.left]
+            if left_schema is None
+            else left_schema
+        )
         right_schema = self.schemas[node.right]
         # Catalog uniqueness is stated on source values. Requiring the same
         # scalar type keeps comparison coercions from collapsing distinct keys.
@@ -2305,6 +2410,8 @@ class Evaluator:
         left: Relation,
         right: Relation,
         rhs_selectors: list[list[smt.Term]],
+        *,
+        output_columns: tuple[Column, ...] | None = None,
     ) -> Relation:
         rows: list[Row] = []
         for left_index, left_row in enumerate(left.rows):
@@ -2336,7 +2443,14 @@ class Evaluator:
                     left_row.partition_facts,
                 )
             )
-        return Relation(self._columns(node.id), tuple(rows))
+        return Relation(
+            (
+                self._columns(node.id)
+                if output_columns is None
+                else output_columns
+            ),
+            tuple(rows),
+        )
 
     def _columns(self, node_id: str) -> tuple[Column, ...]:
         return tuple(self.schemas[node_id].values())

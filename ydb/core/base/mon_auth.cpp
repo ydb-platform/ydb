@@ -34,6 +34,7 @@ bool HasTabletDevUiSecureSubtree(const TAppData* appData, TTabletTypes::EType ty
         TTabletTypes::Hive,
         TTabletTypes::GraphShard,
         TTabletTypes::BSController,
+        TTabletTypes::PersQueue,
         TTabletTypes::SchemeShard,
     };
 

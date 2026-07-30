@@ -1576,6 +1576,16 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
 
         ydb->ExecuteSchemeQuery(R"(
             CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
+                RESOURCE_POOL=""
+            );)", EStatus::GENERIC_ERROR, "resource pool name must not be empty");
+
+        ydb->ExecuteSchemeQuery(R"(
+            ALTER RESOURCE POOL CLASSIFIER MyResourcePoolClassifier SET (
+                RESOURCE_POOL=""
+            );)", EStatus::GENERIC_ERROR, "resource pool name must not be empty");
+
+        ydb->ExecuteSchemeQuery(R"(
+            CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
                 RANK="0"
             );)", EStatus::GENERIC_ERROR, "Missing required property resource_pool");
 

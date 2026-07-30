@@ -58,38 +58,59 @@ namespace NActors {
         return true;
     }
 
-    void TCoroutineChunkSerializer::Produce(const void *data, size_t size) {
+    void TCoroutineChunkSerializer::Produce(const void* data, size_t size,
+            const NInterconnect::NRdma::TMemRegion* memRegion) {
         Y_ABORT_UNLESS(size <= TotalSizeRemain);
         TotalSizeRemain -= size;
         TotalSerializedDataSize += size;
 
         if (!Chunks.empty()) {
             auto& last = Chunks.back();
-            if (last.first + last.second == data) {
-                last.second += size; // just extend the last buffer
+            if (last.Buf + last.Size == data && last.MemRegion == memRegion) {
+                last.Size += size; // just extend the last buffer
                 return;
             }
         }
 
-        Chunks.emplace_back(static_cast<const char*>(data), size);
+        Chunks.emplace_back(TChunk{
+            .Buf = static_cast<const char*>(data),
+            .Size = size,
+            .MemRegion = memRegion,
+        });
     }
 
     bool TCoroutineChunkSerializer::WriteAliasedRaw(const void* data, int size) {
+        return WriteAliasedRawImpl(data, size, nullptr);
+    }
+
+    bool TCoroutineChunkSerializer::WriteAliasedRawImpl(const void* data, int size,
+            const NInterconnect::NRdma::TMemRegion* memRegion) {
         Y_ABORT_UNLESS(!CancelFlag);
         Y_ABORT_UNLESS(!AbortFlag);
         Y_ABORT_UNLESS(size >= 0);
         NSan::CheckMemIsInitialized(data, size);
         while (size) {
-            if (const size_t bytesToAppend = Min<size_t>(size, TotalSizeRemain)) {
+            const bool copyAliased = !memRegion && AliasedMode == EAliasedMode::CopyToBuffer;
+            const size_t bytesToAppend = copyAliased
+                ? Min<size_t>(size, TotalSizeRemain, Buffer.size())
+                : Min<size_t>(size, TotalSizeRemain);
+            if (bytesToAppend) {
                 const void *produce = data;
-                if ((reinterpret_cast<uintptr_t>(data) & 63) + bytesToAppend <= 64 &&
-                        (Chunks.empty() || data != Chunks.back().first + Chunks.back().second) &&
-                        Buffer.size() >= bytesToAppend) {
+                const NInterconnect::NRdma::TMemRegion* producedMemRegion = memRegion;
+                const bool canGlue = !Chunks.empty() &&
+                    Chunks.back().Buf + Chunks.back().Size == data &&
+                    Chunks.back().MemRegion == memRegion;
+                if (!memRegion && (copyAliased ||
+                        ((reinterpret_cast<uintptr_t>(data) & 63) + bytesToAppend <= 64 &&
+                            !canGlue &&
+                            Buffer.size() >= bytesToAppend))) {
+                    Y_ABORT_UNLESS(Buffer.size() >= bytesToAppend);
                     memcpy(Buffer.data(), data, bytesToAppend);
                     produce = Buffer.data();
                     Buffer = Buffer.SubSpan(bytesToAppend, Max<size_t>());
+                    producedMemRegion = nullptr;
                 }
-                Produce(produce, bytesToAppend);
+                Produce(produce, bytesToAppend, producedMemRegion);
                 data = static_cast<const char*>(data) + bytesToAppend;
                 size -= bytesToAppend;
             } else {
@@ -123,7 +144,7 @@ namespace NActors {
         *data = Buffer.data();
         *size = maxBytes;
         Buffer = Buffer.SubSpan(maxBytes, Max<size_t>());
-        Produce(*data, *size);
+        Produce(*data, *size, nullptr);
         return true;
     }
 
@@ -134,11 +155,11 @@ namespace NActors {
         Y_ABORT_UNLESS(count > 0);
         Y_ABORT_UNLESS(!Chunks.empty());
         TChunk& buf = Chunks.back();
-        Y_ABORT_UNLESS((size_t)count <= buf.second, "count# %d buf.second# %zu", count, buf.second);
-        Y_ABORT_UNLESS(buf.first + buf.second == Buffer.data(), "buf# %p:%zu Buffer.data# %p Buffer.size# %zu"
-            " NumChunks# %zu", buf.first, buf.second, Buffer.data(), Buffer.size(), Chunks.size());
-        buf.second -= count;
-        if (!buf.second) {
+        Y_ABORT_UNLESS((size_t)count <= buf.Size, "count# %d buf.Size# %zu", count, buf.Size);
+        Y_ABORT_UNLESS(buf.Buf + buf.Size == Buffer.data(), "buf# %p:%zu Buffer.data# %p Buffer.size# %zu"
+            " NumChunks# %zu", buf.Buf, buf.Size, Buffer.data(), Buffer.size(), Chunks.size());
+        buf.Size -= count;
+        if (!buf.Size) {
             Chunks.pop_back();
         }
         Buffer = {Buffer.data() - count, Buffer.size() + count};
@@ -155,7 +176,9 @@ namespace NActors {
 
     bool TCoroutineChunkSerializer::WriteRope(const TRope *rope) {
         for (auto iter = rope->Begin(); iter.Valid(); iter.AdvanceToNextContiguousBlock()) {
-            if (!WriteAliasedRaw(iter.ContiguousData(), iter.ContiguousSize())) {
+            const auto memRegion = NInterconnect::NRdma::TryExtractFromRcBuf(iter.GetChunk());
+            if (!WriteAliasedRawImpl(iter.ContiguousData(), iter.ContiguousSize(),
+                    memRegion.Empty() ? nullptr : memRegion.GetMemRegion())) {
                 return false;
             }
         }
@@ -166,13 +189,14 @@ namespace NActors {
         return WriteAliasedRaw(s->data(), s->length());
     }
 
-    std::span<TCoroutineChunkSerializer::TChunk> TCoroutineChunkSerializer::FeedBuf(void* data, size_t size) {
+    std::span<TCoroutineChunkSerializer::TChunk> TCoroutineChunkSerializer::FeedBuf(void* data, size_t size,
+            EAliasedMode aliasedMode) {
         TMutableContiguousSpan buffer(static_cast<char*>(data), size);
-        return FeedBuf(&buffer, size);
+        return FeedBuf(&buffer, size, aliasedMode);
     }
 
     std::span<TCoroutineChunkSerializer::TChunk> TCoroutineChunkSerializer::FeedBuf(TMutableContiguousSpan *buffer,
-            size_t totalSize) {
+            size_t totalSize, EAliasedMode aliasedMode) {
         // fill in base params
         Buffer = *buffer;
         TotalSizeRemain = totalSize;
@@ -181,6 +205,7 @@ namespace NActors {
         // transfer control to the coroutine
         Y_ABORT_UNLESS(Event);
         Chunks.clear();
+        AliasedMode = aliasedMode;
         Resume();
 
         Y_DEBUG_ABORT_UNLESS(Buffer.data() >= buffer->data() &&

@@ -60,8 +60,8 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
         while (!chunker.IsComplete()) {
             char buffer[4096];
             auto range = chunker.FeedBuf(buffer, sizeof(buffer));
-            for (auto [data, size] : range) {
-                chunkerRes += TString(data, size);
+            for (const auto& chunk : range) {
+                chunkerRes += TString(chunk.Buf, chunk.Size);
             }
         }
         UNIT_ASSERT_VALUES_EQUAL(chunkerRes, ser);
@@ -99,8 +99,8 @@ Y_UNIT_TEST_SUITE(TEventProtoWithPayload) {
             chunker.SetSerializingEvent(&msg, true);
             while (!chunker.IsComplete()) {
                 TString buffer(chunkSize, '\0');
-                for (const auto& [data, size] : chunker.FeedBuf(buffer.begin(), buffer.size())) {
-                    actual.append(data, size);
+                for (const auto& chunk : chunker.FeedBuf(buffer.begin(), buffer.size())) {
+                    actual.append(chunk.Buf, chunk.Size);
                 }
             }
             UNIT_ASSERT(chunker.IsSuccessfull());

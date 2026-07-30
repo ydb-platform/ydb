@@ -2,7 +2,7 @@
 #include <google/protobuf/io/coded_stream.h>
 #include <util/generic/buffer.h>
 #include <util/system/unaligned_mem.h>
-#include <ydb/core/persqueue/public/config.h>
+#include <ydb/core/base/appdata.h>
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr {
@@ -13,8 +13,10 @@ const ui32 MAX_HEADER_SIZE = 32; // max TBatchHeader size
 
 
 ui32 GetMaxHeaderSize(const NActors::TActorContext& ctx) {
-    const ui32 MAX_HEADER_SIZE_AFTER_BATCHING_ENABLED = 64;
-    return IsTopicMessagesBatchingEnabled(ctx) ? MAX_HEADER_SIZE_AFTER_BATCHING_ENABLED : MAX_HEADER_SIZE;
+    const ui32 MAX_HEADER_SIZE_AFTER_EXTENDED_BATCH_HEADER = 64;
+    return AppData(ctx)->FeatureFlags.GetEnableTopicWriteOffsetDeltaInKeys()
+        ? MAX_HEADER_SIZE_AFTER_EXTENDED_BATCH_HEADER
+        : MAX_HEADER_SIZE;
 }
 
 NKikimrPQ::TBatchHeader ExtractHeader(const char *data, ui32 size) {

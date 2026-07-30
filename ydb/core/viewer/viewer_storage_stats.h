@@ -406,6 +406,8 @@ public:
                     TabletStorageInfo[MakeTenantSlotBrokerID()].Type = NKikimrTabletBase::TTabletTypes::TenantSlotBroker;
                     pathStorageInfo.Tablets.push_back(MakeCmsID());
                     TabletStorageInfo[MakeCmsID()].Type = NKikimrTabletBase::TTabletTypes::Cms;
+                    pathStorageInfo.Tablets.push_back(MakeDbsControllerID());
+                    TabletStorageInfo[MakeDbsControllerID()].Type = NKikimrTabletBase::TTabletTypes::DbsController;
                     for (TTabletId tabletId : domain->Coordinators) {
                         pathStorageInfo.Tablets.push_back(tabletId);
                         TabletStorageInfo[tabletId].Type = NKikimrTabletBase::TTabletTypes::Coordinator;

@@ -6,7 +6,6 @@ Helpers for the OpenSSL test suite, largely copied from
 U{Twisted<http://twistedmatrix.com/>}.
 """
 
-
 # This is the UTF-8 encoding of the SNOWMAN unicode code point.
 NON_ASCII = b"\xe2\x98\x83".decode("utf-8")
 

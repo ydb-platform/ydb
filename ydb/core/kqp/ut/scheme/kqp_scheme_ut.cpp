@@ -14062,6 +14062,267 @@ END DO)",
         }
     }
 
+    Y_UNIT_TEST_TWIN(CreateSecretIfNotExists, UseQueryService) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableSchemaSecrets(true);
+        const auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        // Create a secret first
+        {
+            static const auto query = R"sql(
+                CREATE SECRET `/Root/secret-name` WITH (value = "secret-value-1");
+            )sql";
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // CREATE SECRET IF NOT EXISTS on existing secret should succeed
+        {
+            static const auto query = R"sql(
+                CREATE SECRET IF NOT EXISTS `/Root/secret-name` WITH (value = "secret-value-2");
+            )sql";
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // The version should not have changed (IF NOT EXISTS is a no-op when the secret exists)
+        {
+            const auto describeResult = kikimr.GetTestClient().Ls("/Root/secret-name");
+            UNIT_ASSERT_C(describeResult->Record.GetPathDescription().HasSecretDescription(), "the secret has been dropped somehow");
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                describeResult->Record.GetPathDescription().GetSecretDescription().GetVersion(),
+                0,
+                "the secret version should not have changed with IF NOT EXISTS");
+        }
+
+        // CREATE SECRET IF NOT EXISTS on non-existing secret should succeed
+        {
+            static const auto query = R"sql(
+                CREATE SECRET IF NOT EXISTS `/Root/secret-name-new` WITH (value = "secret-value-new");
+            )sql";
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            const auto describeResult = kikimr.GetTestClient().Ls("/Root/secret-name-new");
+            UNIT_ASSERT_C(describeResult->Record.GetPathDescription().HasSecretDescription(), "the secret was not created");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(CreateOrReplaceSecret, UseQueryService) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableSchemaSecrets(true);
+        const auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        // Create a secret first
+        {
+            static const auto query = R"sql(
+                CREATE SECRET `/Root/secret-name` WITH (value = "secret-value-1");
+            )sql";
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // CREATE OR REPLACE SECRET on existing secret should succeed and replace the value
+        {
+            static const auto query = R"sql(
+                CREATE OR REPLACE SECRET `/Root/secret-name` WITH (value = "secret-value-2");
+            )sql";
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // The version should have changed (CREATE OR REPLACE converts to ALTER when the secret exists)
+        {
+            const auto describeResult = kikimr.GetTestClient().Ls("/Root/secret-name");
+            UNIT_ASSERT_C(describeResult->Record.GetPathDescription().HasSecretDescription(), "the secret has been dropped somehow");
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                describeResult->Record.GetPathDescription().GetSecretDescription().GetVersion(),
+                1,
+                "the secret version should have changed with CREATE OR REPLACE");
+        }
+
+        // CREATE OR REPLACE SECRET on non-existing secret should succeed and create it
+        {
+            static const auto query = R"sql(
+                CREATE OR REPLACE SECRET `/Root/secret-name-new` WITH (value = "secret-value-new");
+            )sql";
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            const auto describeResult = kikimr.GetTestClient().Ls("/Root/secret-name-new");
+            UNIT_ASSERT_C(describeResult->Record.GetPathDescription().HasSecretDescription(), "the secret was not created");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(CreateOrReplaceSecretInheritPermissions, UseQueryService) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableSchemaSecrets(true);
+        const auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        // Create a secret with inherit_permissions = false (ACL is interrupted)
+        {
+            static const auto query = R"sql(
+                CREATE SECRET `/Root/secret-name` WITH (value = "secret-value-1", inherit_permissions = false);
+            )sql";
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // The ACL should be non-empty (inheritance interrupted)
+        {
+            const auto describeResult = kikimr.GetTestClient().Ls("/Root/secret-name");
+            const auto& self = describeResult->Record.GetPathDescription().GetSelf();
+            UNIT_ASSERT_C(!self.GetACL().empty(), "ACL should be non-empty when inherit_permissions = false");
+        }
+
+        // CREATE OR REPLACE SECRET with inherit_permissions = true should restore inheritance (clear ACL)
+        {
+            static const auto query = R"sql(
+                CREATE OR REPLACE SECRET `/Root/secret-name` WITH (value = "secret-value-2", inherit_permissions = true);
+            )sql";
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // The ACL should now be empty (inheritance restored)
+        {
+            const auto describeResult = kikimr.GetTestClient().Ls("/Root/secret-name");
+            const auto& self = describeResult->Record.GetPathDescription().GetSelf();
+            UNIT_ASSERT_C(self.GetACL().empty(), "ACL should be empty when inherit_permissions = true after CREATE OR REPLACE");
+        }
+
+        // CREATE OR REPLACE SECRET with inherit_permissions = false should interrupt inheritance again
+        {
+            static const auto query = R"sql(
+                CREATE OR REPLACE SECRET `/Root/secret-name` WITH (value = "secret-value-3", inherit_permissions = false);
+            )sql";
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // The ACL should be non-empty again
+        {
+            const auto describeResult = kikimr.GetTestClient().Ls("/Root/secret-name");
+            const auto& self = describeResult->Record.GetPathDescription().GetSelf();
+            UNIT_ASSERT_C(!self.GetACL().empty(), "ACL should be non-empty when inherit_permissions = false after CREATE OR REPLACE");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(AlterSecretIfExists, UseQueryService) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableSchemaSecrets(true);
+        const auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        // Create a secret first
+        {
+            static const auto query = R"sql(
+                CREATE SECRET `/Root/secret-name` WITH (value = "secret-value-1");
+            )sql";
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // ALTER SECRET IF EXISTS on existing secret should succeed
+        {
+            static const auto query = R"sql(
+                ALTER SECRET IF EXISTS `/Root/secret-name` WITH (value = "secret-value-2");
+            )sql";
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // The version should have changed (ALTER was applied)
+        {
+            const auto describeResult = kikimr.GetTestClient().Ls("/Root/secret-name");
+            UNIT_ASSERT_C(describeResult->Record.GetPathDescription().HasSecretDescription(), "the secret has been dropped somehow");
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                describeResult->Record.GetPathDescription().GetSecretDescription().GetVersion(),
+                1,
+                "the secret version should have changed with ALTER");
+        }
+
+        // ALTER SECRET IF EXISTS on non-existing secret should succeed (no-op)
+        {
+            static const auto query = R"sql(
+                ALTER SECRET IF EXISTS `/Root/secret-name-another` WITH (value = "secret-value-3");
+            )sql";
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(DropSecretIfExists, UseQueryService) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableSchemaSecrets(true);
+        const auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        // Create a secret first
+        {
+            static const auto query = R"sql(
+                CREATE SECRET `/Root/secret-name` WITH (value = "secret-value");
+            )sql";
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // DROP SECRET IF EXISTS on non-existing secret should succeed (no-op)
+        {
+            static const auto query = R"sql(
+                DROP SECRET IF EXISTS `/Root/secret-name-another`;
+            )sql";
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // The original secret should still exist
+        {
+            const auto describeResult = kikimr.GetTestClient().Ls("/Root/secret-name");
+            UNIT_ASSERT_C(describeResult->Record.GetPathDescription().HasSecretDescription(), "the secret has been dropped somehow");
+        }
+
+        // DROP SECRET IF EXISTS on existing secret should succeed
+        {
+            static const auto query = R"sql(
+                DROP SECRET IF EXISTS `/Root/secret-name`;
+            )sql";
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            const auto describeResult = kikimr.GetTestClient().Ls("/Root/secret-name");
+            UNIT_ASSERT_C(!describeResult->Record.GetPathDescription().HasSecretDescription(), "the secret somehow exists");
+        }
+    }
+
     Y_UNIT_TEST(SecretsDisabled) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableSchemaSecrets(false);

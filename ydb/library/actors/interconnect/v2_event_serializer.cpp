@@ -112,7 +112,9 @@ namespace NActors {
         return totalBytesProduced;
     }
 
-    void TEventSerializer::CommitProducedBytes(size_t numBytes, std::vector<ui64> *eventToWireTime) {
+    void TEventSerializer::CommitProducedBytes(size_t numBytes, std::vector<ui64> *eventToWireTime,
+            std::vector<std::unique_ptr<IEventBase>> *events,
+            std::vector<TIntrusivePtr<TEventSerializedData>> *buffers) {
         CumulativeCommitted += numBytes;
         Y_ABORT_UNLESS(CumulativeCommitted <= CumulativeProduced);
         const ui64 timestamp = GetCycleCountFast();
@@ -122,6 +124,12 @@ namespace NActors {
                 eventToWireTime->push_back(timestamp - front.EventReceivedTimestamp);
             }
             NumBytesInScratchBuffers -= front.ScratchBytesUsed;
+            if (events && front.Event) {
+                events->push_back(std::move(front.Event));
+            }
+            if (buffers && front.Buffer) {
+                buffers->push_back(std::move(front.Buffer));
+            }
             RefcountItems.pop_front();
         }
     }
@@ -130,14 +138,15 @@ namespace NActors {
             TRcBuf& buffer, std::deque<TContiguousSpan> *out, ui64 *bufferProduced) {
         const TContiguousSpan bufferSpan = buffer.GetContiguousSpan(); // remember original buffer span
         size_t numBytesProduced = 0;
+        const char *lastSpanEnd = out->empty() ? nullptr : [s = out->back()]{ return s.data() + s.size(); }();
 
         // this function is used to generate output span storing reference either to buffer, or to aliased memory range
         auto produceOutputSpan = [&](TContiguousSpan span, bool addToChecksum) {
-            if (addToChecksum) {
+            if (Y_UNLIKELY(addToChecksum)) {
                 XXH3_64bits_update(&queue.ChecksumState, span.data(), span.size());
             }
 
-            if (span.data() + span.size() <= bufferSpan.data() || span.data() >= bufferSpan.data() + bufferSpan.size()) {
+            if (span.size() <= 64 && (span.data() + span.size() <= bufferSpan.data() || span.data() >= bufferSpan.data() + bufferSpan.size())) {
                 // we got span referenced outside original buffer; check if we can copy it into the buffer, if it is
                 // small enough and buffer has the space to do it
                 const uintptr_t spanBegin = reinterpret_cast<uintptr_t>(span.data());
@@ -155,12 +164,14 @@ namespace NActors {
             maxBytesToProduce -= span.size();
             numBytesProduced += span.size();
             CumulativeProduced += span.size();
-            if (out->empty()) {
+            if (lastSpanEnd != span.data()) {
                 out->push_back(span);
-            } else if (TContiguousSpan& last = out->back(); last.data() + last.size() != span.data()) {
-                out->push_back(span);
-            } else { // concatenate last span with the new one
-                last = {last.data(), last.size() + span.size()};
+                lastSpanEnd = span.data() + span.size();
+            } else {
+                Y_DEBUG_ABORT_UNLESS(!out->empty());
+                TContiguousSpan& lastSpan = out->back();
+                lastSpan = {lastSpan.data(), lastSpan.size() + span.size()};
+                lastSpanEnd += span.size();
             }
 
             if (span.data() + span.size() <= bufferSpan.data() || span.data() >= bufferSpan.data() + bufferSpan.size()) {
@@ -254,8 +265,6 @@ namespace NActors {
                     break;
 
                 case ESerializeStage::kBufferSerializer:
-                    UpdateTimestamp();
-
                     while (maxBytesToProduce && queue.Iter.Valid()) {
                         const size_t numBytes = Min(maxBytesToProduce - (header ? 0 : sizeof(TChunkHeader)),
                             queue.Iter.ContiguousSize());
@@ -266,7 +275,6 @@ namespace NActors {
                         queue.SerializeStage = ESerializeStage::kHeader;
                     }
 
-                    SerializeBufferTime += UpdateTimestamp();
                     break;
 
                 case ESerializeStage::kChunkSerializer: {
@@ -336,7 +344,7 @@ namespace NActors {
 
     ui64 TEventSerializer::UpdateTimestamp() {
         const ui64 prev = std::exchange(Timestamp, GetCycleCountFast());
-        return (Timestamp - prev) * Freq;
+        return Timestamp - prev;
     }
 
     TEventDeserializer::TEventDeserializer(TScopeId peerScopeId)

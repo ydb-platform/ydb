@@ -157,6 +157,7 @@ public:
     NCommon::TConfSetting<bool, Static> QueryCacheUseExpirationTimeout;
     NCommon::TConfSetting<bool, Static> QueryCacheUseForCalc;
     NCommon::TConfSetting<bool, Static> QueryCacheCombineChunksReplace;
+    NCommon::TConfSetting<bool, Static> QueryCacheReportProgress;
     NCommon::TConfSetting<ui32, Static> DefaultMaxJobFails;
     NCommon::TConfSetting<TString, Static> DefaultCluster;
     NCommon::TConfSetting<TDuration, Static> BinaryExpirationInterval;

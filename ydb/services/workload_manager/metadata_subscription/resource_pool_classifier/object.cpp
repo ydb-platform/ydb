@@ -27,8 +27,12 @@ public:
             return TConclusionStatus::Fail("Failed to parse patch json config");
         }
 
-        for (const auto& [key, value] : otherConfigJson.GetMap()) {
-            selfConfigJson.InsertValue(key, value);
+        for (const auto& [key, patchValue] : otherConfigJson.GetMap()) {
+            if (patchValue.GetType() == NJson::JSON_NULL) {
+                selfConfigJson.EraseValue(key);
+            } else {
+                selfConfigJson.InsertValue(key, patchValue);
+            }
         }
 
         if (selfConfigJson.Has("action")) {

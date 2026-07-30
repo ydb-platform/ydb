@@ -1470,7 +1470,6 @@ def test_is_default_port_for_absolute_url_without_port():
     assert url.is_default_port()
 
 
-@pytest.mark.skip
 def test_is_default_port_for_absolute_url_with_default_port():
     url = URL("http://example.com:80")
     assert url.is_default_port()

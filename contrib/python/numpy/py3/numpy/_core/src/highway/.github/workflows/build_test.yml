@@ -1,0 +1,349 @@
+# Copyright 2021 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+permissions: read-all
+name: Build / test
+on: [push, pull_request]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cmake:
+    name: Build and test ${{ matrix.name }}
+    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        include:
+          - name: Clang-6.0
+            extra_deps: clang-6.0
+            c_compiler: clang-6.0
+            cxx_compiler: clang++-6.0
+            cxx_standard: 11
+
+          - name: Clang-6.0 (C++14)
+            extra_deps: clang-6.0
+            c_compiler: clang-6.0
+            cxx_compiler: clang++-6.0
+            cxx_standard: 14
+
+          - name: Clang-6.0 (C++17)
+            extra_deps: clang-6.0
+            c_compiler: clang-6.0
+            cxx_compiler: clang++-6.0
+            cxx_standard: 17
+
+          - name: Clang-7
+            extra_deps: clang-7
+            c_compiler: clang-7
+            cxx_compiler: clang++-7
+            cxx_standard: 11
+
+          - name: Clang-7 (C++14)
+            extra_deps: clang-7
+            c_compiler: clang-7
+            cxx_compiler: clang++-7
+            cxx_standard: 14
+
+          - name: Clang-7 (C++17)
+            extra_deps: clang-7
+            c_compiler: clang-7
+            cxx_compiler: clang++-7
+            cxx_standard: 17
+
+          - name: Clang-8
+            extra_deps: clang-8
+            c_compiler: clang-8
+            cxx_compiler: clang++-8
+            cxx_standard: 11
+
+          - name: Clang-9
+            extra_deps: clang-9
+            c_compiler: clang-9
+            cxx_compiler: clang++-9
+            cxx_standard: 11
+
+          - name: Clang-10
+            extra_deps: clang-10
+            c_compiler: clang-10
+            cxx_compiler: clang++-10
+            cxx_standard: 11
+
+          - name: Clang-10 (C++20)
+            extra_deps: clang-10
+            c_compiler: clang-10
+            cxx_compiler: clang++-10
+            cxx_standard: 20
+
+          - name: Clang-11
+            extra_deps: clang-11
+            c_compiler: clang-11
+            cxx_compiler: clang++-11
+            cxx_standard: 11
+
+          - name: Clang-12
+            extra_deps: clang-12
+            c_compiler: clang-12
+            cxx_compiler: clang++-12
+            cxx_standard: 11
+
+          - name: GCC-8
+            extra_deps: g++-8
+            c_compiler: gcc-8
+            cxx_compiler: g++-8
+            cxx_flags: -ftrapv
+            cxx_standard: 11
+
+          - name: GCC-8 (C++14)
+            extra_deps: g++-8
+            c_compiler: gcc-8
+            cxx_compiler: g++-8
+            cxx_flags: -ftrapv
+            cxx_standard: 14
+
+          - name: GCC-8 (C++17)
+            extra_deps: g++-8
+            c_compiler: gcc-8
+            cxx_compiler: g++-8
+            cxx_flags: -ftrapv
+            cxx_standard: 17
+
+          - name: GCC-9
+            extra_deps: g++-9
+            c_compiler: gcc-9
+            cxx_compiler: g++-9
+            cxx_flags: -ftrapv
+            cxx_standard: 11
+
+          - name: GCC-10
+            extra_deps: g++-10
+            c_compiler: gcc-10
+            cxx_compiler: g++-10
+            cxx_flags: -ftrapv
+            cxx_standard: 11
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@17d0e2bd7d51742c71671bd19fa12bdc9d40a3d6 # v2.8.1
+        with:
+          egress-policy: audit  # cannot be block - runner does git checkout
+
+      - uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4.0.0
+
+      - name: Install deps
+        run: sudo apt-get install ${{ matrix.extra_deps }}
+
+      - name: Build and test
+        run: |
+          export CMAKE_BUILD_PARALLEL_LEVEL=2
+          export CTEST_PARALLEL_LEVEL=2
+          CXXFLAGS=${{ matrix.cxx_flags }} CC=${{ matrix.c_compiler }} CXX=${{ matrix.cxx_compiler }} cmake -DHWY_WARNINGS_ARE_ERRORS=ON -DCMAKE_CXX_STANDARD=${{ matrix.cxx_standard }} -B out .
+          cmake --build out
+          ctest --test-dir out
+
+  cmake_ubuntu_2204:
+    name: Build and test ${{ matrix.name }}
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        include:
+          - name: Clang-13
+            extra_deps: clang-13
+            c_compiler: clang-13
+            cxx_compiler: clang++-13
+            cxx_standard: 11
+
+          - name: Clang-14
+            extra_deps: clang-14
+            c_compiler: clang-14
+            cxx_compiler: clang++-14
+            cxx_standard: 11
+
+          - name: Clang-15
+            extra_deps: clang-15
+            c_compiler: clang-15
+            cxx_compiler: clang++-15
+            cxx_standard: 11
+
+          - name: Clang-15 (C++20)
+            extra_deps: clang-15
+            c_compiler: clang-15
+            cxx_compiler: clang++-15
+            cxx_standard: 20
+
+          - name: Clang-15 (x86_32)
+            extra_deps: clang-15 g++-i686-linux-gnu
+            c_compiler: clang-15
+            cxx_compiler: clang++-15
+            # Disable AVX3 targets on x86_32
+            cxx_flags: -m32 -DHWY_DISABLED_TARGETS=0x1FF -DHWY_BROKEN_TARGETS=0x1FF
+            extra_cmake_flags: -DCMAKE_C_COMPILER_TARGET=i686-linux-gnu -DCMAKE_CXX_COMPILER_TARGET=i686-linux-gnu -DHWY_CMAKE_SSE2=ON
+            cxx_standard: 17
+
+          - name: GCC-11
+            extra_deps: g++-11
+            c_compiler: gcc-11
+            cxx_compiler: g++-11
+            cxx_flags: -ftrapv
+            cxx_standard: 11
+
+          - name: GCC-11 (C++20)
+            extra_deps: g++-11
+            c_compiler: gcc-11
+            cxx_compiler: g++-11
+            cxx_flags: -ftrapv
+            cxx_standard: 20
+
+          - name: GCC-12
+            extra_deps: g++-12
+            c_compiler: gcc-12
+            cxx_compiler: g++-12
+            cxx_flags: -ftrapv
+            cxx_standard: 11
+
+          - name: GCC-12 (C++20)
+            extra_deps: g++-12
+            c_compiler: gcc-12
+            cxx_compiler: g++-12
+            cxx_flags: -ftrapv
+            cxx_standard: 20
+
+          - name: GCC-12 (x86_32)
+            extra_deps: g++-12-i686-linux-gnu
+            c_compiler: i686-linux-gnu-gcc-12
+            cxx_compiler: i686-linux-gnu-g++-12
+            # Disable AVX3 targets on x86_32
+            cxx_flags: -m32 -ftrapv -DHWY_DISABLED_TARGETS=0x1FF -DHWY_BROKEN_TARGETS=0x1FF
+            extra_cmake_flags: -DCMAKE_C_COMPILER_TARGET=i686-linux-gnu -DCMAKE_CXX_COMPILER_TARGET=i686-linux-gnu -DHWY_CMAKE_SSE2=ON
+            cxx_standard: 17
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@17d0e2bd7d51742c71671bd19fa12bdc9d40a3d6 # v2.8.1
+        with:
+          egress-policy: audit  # cannot be block - runner does git checkout
+
+      - uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4.0.0
+
+      - name: Install deps
+        run: sudo apt-get install ${{ matrix.extra_deps }}
+
+      - name: Build and test
+        run: |
+          export CMAKE_BUILD_PARALLEL_LEVEL=2
+          export CTEST_PARALLEL_LEVEL=2
+          CXXFLAGS="${{ matrix.cxx_flags }}" CC=${{ matrix.c_compiler }} CXX=${{ matrix.cxx_compiler }} cmake -DHWY_WARNINGS_ARE_ERRORS=ON -DCMAKE_CXX_STANDARD=${{ matrix.cxx_standard }} ${{ matrix.extra_cmake_flags }} -B out .
+          cmake --build out
+          ctest --test-dir out
+
+  cmake_ubuntu_2404:
+    name: Build and test ${{ matrix.name }}
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        include:
+          - name: Clang-16
+            extra_deps: clang-16
+            c_compiler: clang-16
+            cxx_compiler: clang++-16
+            # Disable AVX3_SPR/AVX3_ZEN4 targets in GitHub workflow build with
+            # Clang 16 or later to work around crashes that occur with Clang 16
+            # or later when some of the Google Highway tests are compiled with
+            # all x86 targets enabled
+            cxx_flags: -DHWY_DISABLED_TARGETS=0x50
+            cxx_standard: 17
+
+          - name: Clang-17
+            extra_deps: clang-17
+            c_compiler: clang-17
+            cxx_compiler: clang++-17
+            # Disable AVX3_SPR/AVX3_ZEN4 targets in GitHub workflow build with
+            # Clang 16 or later to work around crashes that occur with Clang 16
+            # or later when some of the Google Highway tests are compiled with
+            # all x86 targets enabled
+            cxx_flags: -DHWY_DISABLED_TARGETS=0x50
+            cxx_standard: 17
+
+          - name: Clang-18
+            extra_deps: clang-18
+            c_compiler: clang-18
+            cxx_compiler: clang++-18
+            # Disable AVX3_SPR/AVX3_ZEN4 targets in GitHub workflow build with
+            # Clang 16 or later to work around crashes that occur with Clang 16
+            # or later when some of the Google Highway tests are compiled with
+            # all x86 targets enabled
+            cxx_flags: -DHWY_DISABLED_TARGETS=0x50
+            cxx_standard: 17
+
+          - name: Clang-18 (C++23)
+            extra_deps: clang-18
+            c_compiler: clang-18
+            cxx_compiler: clang++-18
+            # Disable AVX3_SPR/AVX3_ZEN4 targets in GitHub workflow build with
+            # Clang 16 or later to work around crashes that occur with Clang 16
+            # or later when some of the Google Highway tests are compiled with
+            # all x86 targets enabled
+            cxx_flags: -DHWY_DISABLED_TARGETS=0x50
+            cxx_standard: 23
+
+          - name: GCC-13
+            extra_deps: g++-13
+            c_compiler: gcc-13
+            cxx_compiler: g++-13
+            cxx_flags: -ftrapv
+            cxx_standard: 17
+
+          - name: GCC-13 (C++23)
+            extra_deps: g++-13
+            c_compiler: gcc-13
+            cxx_compiler: g++-13
+            cxx_flags: -ftrapv
+            cxx_standard: 23
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@17d0e2bd7d51742c71671bd19fa12bdc9d40a3d6 # v2.8.1
+        with:
+          egress-policy: audit  # cannot be block - runner does git checkout
+
+      - uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4.0.0
+
+      - name: Install deps
+        run: sudo apt-get install ${{ matrix.extra_deps }}
+
+      - name: Build and test
+        run: |
+          export CMAKE_BUILD_PARALLEL_LEVEL=2
+          export CTEST_PARALLEL_LEVEL=2
+          CXXFLAGS="${{ matrix.cxx_flags }}" CC=${{ matrix.c_compiler }} CXX=${{ matrix.cxx_compiler }} cmake -DHWY_WARNINGS_ARE_ERRORS=ON -DCMAKE_CXX_STANDARD=${{ matrix.cxx_standard }} ${{ matrix.extra_cmake_flags }} -B out .
+          cmake --build out
+          ctest --test-dir out
+
+  bazel:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@17d0e2bd7d51742c71671bd19fa12bdc9d40a3d6 # v2.8.1
+        with:
+          egress-policy: audit  # cannot be block - runner does git checkout
+
+      - uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4.0.0
+
+      - uses: bazelbuild/setup-bazelisk@b39c379c82683a5f25d34f0d062761f62693e0b2 # v3.0.0
+
+      - uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.0.2
+        with:
+          path: ~/.cache/bazel
+          key: bazel-${{ runner.os }}
+      - run: bazel build //...

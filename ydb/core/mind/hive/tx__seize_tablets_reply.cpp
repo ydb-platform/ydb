@@ -35,6 +35,9 @@ public:
             tablet.State = static_cast<ETabletState>(protoTabletInfo.GetState());
             tablet.Owner = owner;
             tablet.BootMode = protoTabletInfo.GetTabletBootMode();
+            if (protoTabletInfo.HasIsBackup()) {
+                tablet.IsBackup = protoTabletInfo.GetIsBackup();
+            }
             tablet.ObjectId = {owner.first, protoTabletInfo.GetObjectId()};
 
             TVector<TSubDomainKey> allowedDomains;
@@ -75,6 +78,7 @@ public:
                         NIceDb::TUpdate<Schema::Tablet::LockedToActor>(tablet.LockedToActor),
                         NIceDb::TUpdate<Schema::Tablet::LockedReconnectTimeout>(protoTabletInfo.GetLockedReconnectTimeout()),
                         NIceDb::TUpdate<Schema::Tablet::ObjectDomain>(protoTabletInfo.GetObjectDomain()),
+                        NIceDb::TUpdate<Schema::Tablet::IsBackup>(tablet.IsBackup),
                         NIceDb::TUpdate<Schema::Tablet::NeedToReleaseFromParent>(true));
 
             TVector<TTabletChannelInfo>& tabletChannels = tablet.TabletStorageInfo->Channels;

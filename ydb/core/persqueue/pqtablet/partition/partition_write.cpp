@@ -1225,6 +1225,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     WriteInflightSize -= p.Msg.Data.size();
 
     const auto& ctx = ActorContext();
+    const ui32 maxHeaderSize = GetMaxHeaderSize(ctx);
 
     ui64& curOffset = parameters.CurOffset;
     auto& sourceIdBatch = parameters.SourceIdBatch;
@@ -1432,7 +1433,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
                                        parameters.HeadCleared,
                                        needCompactHead,
                                        MaxBlobSize,
-                                       GetMaxHeaderSize(ctx));
+                                       maxHeaderSize);
     }
 
     LOG_D("Topic '" << TopicName() << "' partition " << Partition
@@ -1522,7 +1523,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         for (auto& x : BlobEncoder.PartitionedBlob.GetClientBlobs()) {
             if (BlobEncoder.NewHead.GetBatches().empty() || BlobEncoder.NewHead.GetLastBatch().Packed) {
                 BlobEncoder.NewHead.AddBatch(TBatch(curOffset, x.GetPartNo()));
-                BlobEncoder.NewHead.PackedSize += GetMaxHeaderSize(ctx); //upper bound for packed size
+                BlobEncoder.NewHead.PackedSize += maxHeaderSize; //upper bound for packed size
             }
 
             if (x.IsLastPart()) {
@@ -1533,7 +1534,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             BlobEncoder.NewHead.AddBlob(x);
             BlobEncoder.NewHead.PackedSize += x.GetSerializedSize();
             if (BlobEncoder.NewHead.GetLastBatch().GetUnpackedSize() >= BATCH_UNPACK_SIZE_BORDER) {
-                BlobEncoder.PackLastBatch(GetMaxHeaderSize(ctx));
+                BlobEncoder.PackLastBatch(maxHeaderSize);
             }
         }
 
@@ -1552,7 +1553,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             p.Msg.ProducerEpoch);
 
         curOffset += p.Msg.LogicalMessageCount;
-        BlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize, GetMaxHeaderSize(ctx));
+        BlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize, maxHeaderSize);
     }
     return true;
 }
@@ -1835,6 +1836,8 @@ void TPartition::BeginAppendHeadWithNewWrites(const TActorContext& ctx)
 
 void TPartition::EndAppendHeadWithNewWrites(const TActorContext& ctx)
 {
+    const ui32 maxHeaderSize = GetMaxHeaderSize(ctx);
+
     if (const auto heartbeat = SourceIdBatch->CanEmitHeartbeat()) {
         if (heartbeat->Version > LastEmittedHeartbeat) {
             LOG_I("Topic '" << TopicName() << "' partition " << Partition
@@ -1870,7 +1873,7 @@ void TPartition::EndAppendHeadWithNewWrites(const TActorContext& ctx)
     UpdateWriteBufferIsFullState(ctx.Now());
 
     if (!BlobEncoder.IsLastBatchPacked()) {
-        BlobEncoder.PackLastBatch(GetMaxHeaderSize(ctx));
+        BlobEncoder.PackLastBatch(maxHeaderSize);
     }
 
     PQ_ENSURE((Parameters->HeadCleared ? 0 : BlobEncoder.Head.PackedSize) + BlobEncoder.NewHead.PackedSize <= MaxBlobSize); //otherwise last PartitionedBlob.Add must compact all except last cl

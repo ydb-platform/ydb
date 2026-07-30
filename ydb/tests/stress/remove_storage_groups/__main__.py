@@ -7,7 +7,7 @@ if __name__ == '__main__':
     )
     parser.add_argument('--endpoint', default='grpc://localhost:2135', help="YDB endpoint")
     parser.add_argument('--database', default=None, required=True, help='A database to connect')
-    parser.add_argument('--duration', default=120, type=lambda x: int(x), help='A duration of workload in seconds')
+    parser.add_argument('--duration', default=120, type=int, help='A duration of workload in seconds')
 
     args = parser.parse_args()
 

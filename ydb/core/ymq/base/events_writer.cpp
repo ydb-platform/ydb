@@ -20,6 +20,10 @@ public:
         Session = Client->CreateSession(sessionSettings);
     }
 
+    ~TUaEventsWriter() override {
+        Close();
+    }
+
     void Write(const TString& data) override
     {
         Session->Send(NUnifiedAgent::TClientMessage{data, Nothing(), Nothing()});
@@ -43,6 +47,10 @@ public:
         : OutputFile(TFile(outputFileName, OpenAlways | WrOnly))
         , OutStream(OutputFile)
     {}
+
+    ~TFileEventsWriter() override {
+        Close();
+    }
 
     void Write(const TString& data) override
     {
@@ -68,6 +76,10 @@ class TNullEventsWriter : public IEventsWriterWrapper {
 public:
     TNullEventsWriter()
     {}
+
+    ~TNullEventsWriter() override {
+        Close();
+    }
 
     void Write(const TString&) override
     {}

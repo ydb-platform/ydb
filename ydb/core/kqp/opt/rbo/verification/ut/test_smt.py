@@ -289,6 +289,72 @@ class SmtTest(unittest.TestCase):
         self.assertIn("(assert (= v_1 0))", formula)
         self.assertEqual(script.string_literals, {0: "u{e9}", 1: "é"})
 
+    def test_known_string_atom_equality_is_exact_and_partial(self):
+        script = smt.Script()
+        first = script.string_atom("first")
+        same = script.string_atom("first")
+        different = script.string_atom("second")
+        symbolic = script.fresh_constant("source_string", smt.INT)
+
+        self.assertIs(script.known_string_atom_equality(first, same), smt.TRUE)
+        self.assertIs(
+            script.known_string_atom_equality(first, different),
+            smt.FALSE,
+        )
+        self.assertIs(
+            script.known_string_atom_equality(different, first),
+            smt.FALSE,
+        )
+        self.assertIsNone(
+            script.known_string_atom_equality(first, symbolic)
+        )
+        self.assertIsNone(
+            script.known_string_atom_equality(symbolic, first)
+        )
+        self.assertIsNone(
+            script.known_string_atom_equality(symbolic, symbolic)
+        )
+
+    def test_known_string_atom_equality_rejects_cross_script_name_collision(self):
+        local = smt.Script()
+        foreign = smt.Script()
+        local_atom = local.string_atom("same")
+        foreign_atom = foreign.string_atom("different")
+
+        self.assertEqual(local_atom, foreign_atom)
+        self.assertIsNone(
+            local.known_string_atom_equality(local_atom, foreign_atom)
+        )
+        self.assertIsNone(
+            local.known_string_atom_equality(foreign_atom, local_atom)
+        )
+
+    def test_known_string_atom_equality_is_stable_after_registration_and_sealing(self):
+        script = smt.Script()
+        first = script.string_atom("first")
+        second = script.string_atom("second")
+        self.assertIs(
+            script.known_string_atom_equality(first, second),
+            smt.FALSE,
+        )
+
+        script.string_atom("earlier in byte order")
+        symbolic = script.fresh_constant("source_string", smt.INT)
+        script.register_string_term(symbolic)
+        script.render()
+
+        self.assertIs(
+            script.known_string_atom_equality(first, first),
+            smt.TRUE,
+        )
+        self.assertIs(
+            script.known_string_atom_equality(first, second),
+            smt.FALSE,
+        )
+        self.assertIsNone(
+            script.known_string_atom_equality(first, symbolic)
+        )
+
     def test_observed_string_terms_are_bounded_to_replayable_ranks(self):
         script = smt.Script()
         value = script.fresh_constant("source_string", smt.INT)

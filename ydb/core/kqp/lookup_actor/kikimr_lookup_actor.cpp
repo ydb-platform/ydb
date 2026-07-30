@@ -32,16 +32,7 @@
 #include <yql/essentials/public/udf/udf_type_printer.h>
 #include <yql/essentials/utils/yql_panic.h>
 
-#define LOG_T_AS(ctx, s) LOG_TRACE_S(ctx, NKikimrServices::KQP_COMPUTE, s)
-#define LOG_T(s) LOG_T_AS(*NActors::TlsActivationContext, this->LogPrefix << s)
-#define LOG_D_AS(ctx, s) LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPUTE, s)
-#define LOG_D(s) LOG_D_AS(*NActors::TlsActivationContext, this->LogPrefix << s)
-#define LOG_I_AS(ctx, s) LOG_INFO_S(ctx, NKikimrServices::KQP_COMPUTE, s)
-#define LOG_I(s) LOG_I_AS(*NActors::TlsActivationContext, this->LogPrefix << s)
-#define LOG_W_AS(ctx, s) LOG_WARN_S(ctx, NKikimrServices::KQP_COMPUTE, s)
-#define LOG_W(s) LOG_W_AS(*NActors::TlsActivationContext, this->LogPrefix << s)
-#define LOG_E_AS(ctx, s) LOG_ERROR_S(ctx, NKikimrServices::KQP_COMPUTE, s)
-#define LOG_E(s) LOG_E_AS(*NActors::TlsActivationContext, this->LogPrefix << s)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPUTE
 
 using namespace NKikimr;
 
@@ -185,8 +176,6 @@ namespace NYql::NDq {
         using TEvQueryExecuteQueryResponsePart = TEvStreamResponse<Ydb::Query::ExecuteQueryResponsePart, TLookupState::TPtr, EvQueryExecuteQueryResponsePart>;
 
     private:
-        TString LogPrefix;
-
         struct TEvLookupRetry : NActors::TEventLocal<TEvLookupRetry, EvRetry> {
             explicit TEvLookupRetry(TLookupState::TPtr state)
                 : State(std::move(state))
@@ -263,8 +252,12 @@ namespace NYql::NDq {
 
         void Bootstrap() {
             auto path = LookupSource.GetPath();
-            LogPrefix += TStringBuilder() << "ActorId=" << SelfId() << " Path=" << path << " ";
-            LOG_I("New kikimr provider lookup actor, ParentId=" << ParentId);
+#define COMMON_LOG \
+            { "actorId", SelfId() }, \
+            { "path", LookupSource.GetPath() }
+            YDB_LOG_INFO("New kikimr provider lookup actor",
+                    COMMON_LOG,
+                    {"parentId", ParentId});
             Become(&TKikimrLookupActor::StateFunc);
         }
 
@@ -308,7 +301,7 @@ namespace NYql::NDq {
 
         void Handle(TEvLookupRetry::TPtr ev) {
             if (LocalInFlight == 0) { // already passed away
-                LOG_D("Retry after PassAway");
+                YDB_LOG_DEBUG("Retry after PassAway", COMMON_LOG);
                 return;
             }
             auto guard = Guard(*Alloc);
@@ -320,7 +313,7 @@ namespace NYql::NDq {
                     if (state->SessionState) {
                         Sessions.push_back(std::exchange(state->SessionState, {}));
                     }
-                    LOG_D("Retry: parent MIA");
+                    YDB_LOG_DEBUG("Retry: parent MIA", COMMON_LOG);
                     return;
                 }
             } else if (IsMultiMatches) {
@@ -332,7 +325,7 @@ namespace NYql::NDq {
                     if (state->SessionState && state->SessionState) {
                         Sessions.push_back(std::exchange(state->SessionState, {}));
                     }
-                    LOG_D("Retry: parent MIA");
+                    YDB_LOG_DEBUG("Retry: parent MIA", COMMON_LOG);
                     return;
                 }
             }
@@ -369,7 +362,10 @@ namespace NYql::NDq {
         void SendRetryOrError(TLookupState::TPtr state, Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
             if (IsRetryableError(status) && state->Backoff.HasMore()) {
                 auto delay = state->Backoff.Next();
-                LOG_W("Retrievable error " << issues.ToOneLineString() << ", schedule retry in " << delay);
+                YDB_LOG_WARN("Retrievable error",
+                    COMMON_LOG,
+                    {"issues", issues.ToOneLineString()},
+                    {"delay", delay});
                 Schedule(delay, new TEvLookupRetry(std::move(state)));
                 return;
             }
@@ -395,7 +391,9 @@ namespace NYql::NDq {
         }
 
         void SendError(Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
-            LOG_E("Fatal error " << issues.ToOneLineString());
+            YDB_LOG_ERROR("Fatal error",
+                COMMON_LOG,
+                {"issues", issues.ToOneLineString()});
             Send(ParentId, new IDqComputeActorAsyncInput::TEvAsyncInputError(-1, std::move(issues), YdbStatusToDqStatus(status, EStatusCompatibilityLevel::WithUnauthorized)));
         }
 
@@ -406,11 +404,13 @@ namespace NYql::NDq {
 
         void CreateRequest(std::shared_ptr<IDqAsyncLookupSource::TUnboxedValueMap> request, size_t fullscanLimit) {
             if (!request) {
-                LOG_D("CreateRequest: parent MIA");
+                YDB_LOG_DEBUG("CreateRequest: parent MIA", COMMON_LOG);
                 return;
             }
             Y_DEBUG_ABORT_UNLESS(request->empty() == (fullscanLimit > 0));
-            LOG_D("Got LookupRequest for " << request->size() << " keys");
+            YDB_LOG_DEBUG("Got LookupRequest",
+                    COMMON_LOG,
+                    {"keysSize", request->size()});
             Y_ABORT_IF((request->empty() == (fullscanLimit == 0)) || request->size() > MaxKeysInRequest);
             if (InFlight) { // all counters tied
                 Count->Inc();
@@ -456,7 +456,9 @@ namespace NYql::NDq {
             if (CpuTime) {
                 CpuTime->Add(cputime);
             }
-            LOG_T("SendRequest cputime " << cputime);
+            YDB_LOG_TRACE("SendRequest finished",
+                    COMMON_LOG,
+                    {"cpuTime", cputime});
         }
 
         void ReadNextResponsePart(TLookupState::TPtr state) {
@@ -471,7 +473,9 @@ namespace NYql::NDq {
         void Handle(TEvQueryExecuteQueryResponsePart::TPtr ev) {
             auto state = std::move(ev->Get()->State);
             auto& response = ev->Get()->Response;
-            LOG_T("TEvQueryExecuteQueryResponsePart: " << response.DebugString());
+            YDB_LOG_TRACE("TEvQueryExecuteQueryResponsePart",
+                    COMMON_LOG,
+                    {"response", response.DebugString()});
             switch(response.status()) {
                 case Ydb::StatusIds::SUCCESS:
                     break;
@@ -520,7 +524,10 @@ namespace NYql::NDq {
         void Handle(TEvQuerySessionState::TPtr ev) {
             auto session = std::move(ev->Get()->State);
             auto& response = ev->Get()->Response;
-            LOG_D("TEvQuerySessionState (SessionId=" << session->SessionId << "): " << response.DebugString());
+            YDB_LOG_TRACE("TEvQuerySessionState",
+                    COMMON_LOG,
+                    {"sessionId", session->SessionId},
+                    {"response", response.DebugString()});
             auto status = response.status();
             if (response.has_session_shutdown()) {
                 status = Ydb::StatusIds::SESSION_EXPIRED;
@@ -556,7 +563,9 @@ namespace NYql::NDq {
         }
 
         void FinalizeSession(TSessionState::TPtr state) {
-            LOG_D("FinalizeSession " << state->SessionId);
+            YDB_LOG_DEBUG("FinalizeSession",
+                    COMMON_LOG,
+                    {"sessionId", state->SessionId});
             state->SessionId.clear();
         }
 
@@ -599,7 +608,9 @@ namespace NYql::NDq {
             auto state = std::move(ev->Get()->State);
             Y_ENSURE(!state->SessionState);
             auto& response = ev->Get()->Response;
-            LOG_D("TEvQueryCreateSessionResponse: " << response.DebugString());
+            YDB_LOG_DEBUG("TEvQueryCreateSessionResponse",
+                    COMMON_LOG,
+                    {"response", response.DebugString()});
             if (response.status() != Ydb::StatusIds::SUCCESS) {
                 SendRetryOrError(std::move(state), response.status(), IssuesFromProtoMessage(response));
                 return;
@@ -629,8 +640,11 @@ namespace NYql::NDq {
         void ProcessReceivedData(Ydb::Query::ExecuteQueryResponsePart& result, TLookupState::TPtr state) {
             Y_ENSURE(result.result_set_index() == 0);
             ProcessReceivedData(result.result_set(), std::move(state));
-            LOG_T("tx meta: " << result.tx_meta().DebugString());
-            LOG_D("query stats: " << result.exec_stats().DebugString());
+            YDB_LOG_TRACE("tx meta",
+                    {"txMeta", result.tx_meta().DebugString()});
+            YDB_LOG_DEBUG("query stats",
+                    COMMON_LOG,
+                    {"queryStats", result.exec_stats().DebugString()});
         }
 
         // must be called in actor context
@@ -639,7 +653,7 @@ namespace NYql::NDq {
             auto guard = Guard(*Alloc);
             auto request = state->Request.lock();
             if (!request) {
-                LOG_D("ProcessReceivedData: parent MIA");
+                YDB_LOG_DEBUG("ProcessReceivedData: parent MIA", COMMON_LOG);
                 return;
             }
             Y_ENSURE(!resultSet.truncated(), (state->FullscanLimit > 0 ? TStringBuilder() << "Fullscan request for " << state->FullscanLimit << " keys" : TStringBuilder() << "Keyed request for " << request->size() << " keys") << ": truncated result, terminate to avoid data loss");
@@ -705,7 +719,10 @@ namespace NYql::NDq {
                 CpuTime->Add(cputime);
                 ResultRows->Add(height);
             }
-            LOG_T("ProcessReceivedData cputime " << cputime << " for " << height << " rows");
+            YDB_LOG_TRACE("ProcessReceivedData finished",
+                    COMMON_LOG,
+                    {"rows", height},
+                    {"cpuTime", cputime});
         }
 
         void FinalizeRequest(TLookupState::TPtr state) {
@@ -715,16 +732,21 @@ namespace NYql::NDq {
             }
             --LocalInFlight;
             auto guard = Guard(*Alloc);
-            LOG_D("Sending lookup results for " << state->ResultRows << " rows");
+            YDB_LOG_DEBUG("Sending lookup results",
+                    COMMON_LOG,
+                    {"rows", state->ResultRows});
             if (InFlight) { // all counters tied
                 AnswerTime->Add((TInstant::Now() - state->SentTime).MicroSeconds());
                 InFlight->Dec();
             }
-            LOG_T("AnswerTime " << (TInstant::Now() - state->SentTime));
+            YDB_LOG_TRACE("AnswerTime",
+                    {"duration", (TInstant::Now() - state->SentTime)});
             auto* ev = new IDqAsyncLookupSource::TEvLookupResult(std::move(state->Request), state->ResultRows, state->FullscanLimit);
             if (auto& session = state->SessionState) {
                 if (session->SessionId) {
-                    LOG_T("Return session to pool: " << session->SessionId);
+                    YDB_LOG_TRACE("Return session to pool",
+                            COMMON_LOG,
+                            {"sessionId", session->SessionId});
                     Sessions.push_back(std::move(session));
                 } else {
                     CleanupStreamProcessor(session);
@@ -881,9 +903,14 @@ namespace NYql::NDq {
                 tx_control.mutable_begin_tx()->mutable_snapshot_read_only();
                 tx_control.set_commit_tx(true);
             }
-            LOG_D("QueryStatsMode : " << (request.set_stats_mode(Ydb::Query::STATS_MODE_BASIC), "BASIC")); // intentional side effects
-            LOG_T("QueryStatsMode : " << (request.set_stats_mode(Ydb::Query::STATS_MODE_FULL), "FULL")); // intentional side effects
-            LOG_T("Query: " << request.DebugString());
+            YDB_LOG_DEBUG("QueryStatsMode",
+                    COMMON_LOG,
+                    {"mode", (request.set_stats_mode(Ydb::Query::STATS_MODE_BASIC), "BASIC")}); // intentional side effects, order important
+            YDB_LOG_TRACE("QueryStatsMode",
+                    {"mode", (request.set_stats_mode(Ydb::Query::STATS_MODE_FULL), "FULL")}); // intentional side effects, order important
+            YDB_LOG_TRACE("Query",
+                    COMMON_LOG,
+                    {"query", request.DebugString()});
 
             return request;
         }

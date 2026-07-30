@@ -95,6 +95,12 @@ namespace NKikimr {
             PositionItraLevelIt();
         }
 
+        void SeekToLast() {
+            CurLevelIt = Levels->end();
+            CurLevelNum = Levels->size() + 1;
+            PositionIntraLevelItBackward();
+        }
+
         bool Valid() const {
             return Levels && CurLevelIt >= Levels->begin() && CurLevelIt < Levels->end() && IntraLevelIt.Valid();
         }
@@ -106,6 +112,14 @@ namespace NKikimr {
                 ++CurLevelIt;
                 ++CurLevelNum;
                 PositionItraLevelIt();
+            }
+        }
+
+        void Prev() {
+            Y_DEBUG_ABORT_UNLESS(Valid());
+            IntraLevelIt.Prev();
+            if (!IntraLevelIt.Valid()) {
+                PositionIntraLevelItBackward();
             }
         }
 
@@ -132,6 +146,19 @@ namespace NKikimr {
                 }
             }
         }
+
+        void PositionIntraLevelItBackward() {
+            IntraLevelIt = {};
+            while (CurLevelIt != Levels->begin()) {
+                --CurLevelIt;
+                --CurLevelNum;
+                if (!CurLevelIt->Empty()) {
+                    IntraLevelIt = TOrderedLevelSegmentsSstIterator(CurLevelIt->Segs.Get());
+                    IntraLevelIt.SeekToLast();
+                    break;
+                }
+            }
+        }
     };
 
     ////////////////////////////////////////////////////////////////////////////
@@ -143,6 +170,7 @@ namespace NKikimr {
 
         typename ::NKikimr::TUnorderedLevelSegments<TKey, TMemRec>::TSstIterator Level0It;
         typename TLevelSlice::TSortedLevelsSSTIter SortedLevelsIt;
+        bool Reverse = false;
 
     public:
         TSstIterator(const TLevelSlice *slice, ui32 level0NumLimit)
@@ -151,8 +179,15 @@ namespace NKikimr {
         {}
 
         void SeekToFirst() {
+            Reverse = false;
             Level0It.SeekToFirst();
             SortedLevelsIt.SeekToFirst();
+        }
+
+        void SeekToLast() {
+            Reverse = true;
+            Level0It.SeekToLast();
+            SortedLevelsIt.SeekToLast();
         }
 
         bool Valid() const {
@@ -167,9 +202,19 @@ namespace NKikimr {
                 SortedLevelsIt.Next();
         }
 
+        void Prev() {
+            Y_DEBUG_ABORT_UNLESS(Valid());
+            if (SortedLevelsIt.Valid())
+                SortedLevelsIt.Prev();
+            else
+                Level0It.Prev();
+        }
+
         TLevelSstPtr Get() {
             Y_DEBUG_ABORT_UNLESS(Valid());
-            if (Level0It.Valid())
+            if (Reverse && SortedLevelsIt.Valid())
+                return SortedLevelsIt.Get();
+            else if (Level0It.Valid())
                 return TLevelSstPtr(0, Level0It.Get());
             else
                 return SortedLevelsIt.Get();
@@ -440,4 +485,3 @@ namespace NKikimr {
     };
 
 } // NKikimr
-

@@ -243,6 +243,21 @@ namespace NKikimr {
             }
         }
 
+        void SeekToLast() {
+            Y_DEBUG_ABORT_UNLESS(S);
+            if (NumLimit > 0) {
+                Cur = S->Segments.begin();
+                CurNum = 0;
+                while (CurNum + 1 < NumLimit) {
+                    ++Cur;
+                    ++CurNum;
+                }
+            } else {
+                // invalid iterator
+                CurNum = ui32(-1);
+            }
+        }
+
         bool Valid() const {
             return S && CurNum != ui32(-1) && CurNum < NumLimit;
         }
@@ -255,6 +270,16 @@ namespace NKikimr {
                 // otherwise we have a race
                 Y_DEBUG_ABORT_UNLESS(Cur != S->Segments.end());
                 ++Cur;
+            }
+        }
+
+        void Prev() {
+            Y_DEBUG_ABORT_UNLESS(Valid());
+            if (CurNum > 0) {
+                --Cur;
+                --CurNum;
+            } else {
+                CurNum = ui32(-1);
             }
         }
 

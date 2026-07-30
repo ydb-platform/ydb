@@ -147,6 +147,7 @@ namespace NKikimr {
         class TForwardIterator;
         class TBackwardIterator;
         class TIteratorWOMerge;
+        class TBackwardIteratorWOMerge;
         friend class TFreshSegment<TKey, TMemRec>;
 
         // empty snapshot for non-existing fresh segment
@@ -308,4 +309,3 @@ namespace NKikimr {
     extern template class TFreshSegment<TKeyBlock, TMemRecBlock>;
 
  } // NKikimr
-

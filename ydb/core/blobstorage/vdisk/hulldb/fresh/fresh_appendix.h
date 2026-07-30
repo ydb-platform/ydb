@@ -445,6 +445,7 @@ namespace NKikimr {
         using TBase::Prev;
         using TBase::GetCurKey;
         using TBase::Seek;
+        using TBase::SeekToLast;
         using TBase::ToString;
         using TBase::PutToMerger;
         using TBase::PutToHeap;

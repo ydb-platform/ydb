@@ -204,7 +204,7 @@ namespace {
             const auto* freshPosition =
                 std::get_if<typename TYieldedState::TFreshPosition>(&yieldedState.Position);
             ui32 step = NextLateFreshStep++;
-            bool expected = false;
+            bool expected = true;
             if (freshPosition) {
                 const ui32 resumeStep = freshPosition->Key.LogoBlobID().Step();
                 const bool addAfterResumePosition = rng() % 2;
@@ -212,7 +212,8 @@ namespace {
                 while (AllKeys.contains(MakeKey(step))) {
                     step += addAfterResumePosition ? 1 : -1;
                 }
-                expected = !(MakeKey(step) < freshPosition->Key);
+                expected = freshPosition->Segment != TYieldedState::EFreshSegment::Cur ||
+                    !(freshPosition->Key < MakeKey(step));
             }
             PutFresh(MakeKey(step), expected);
             ++FreshKeysAdded;
@@ -229,20 +230,19 @@ namespace {
                 NextSortedStep += 100;
             }
 
-            bool expected = std::holds_alternative<typename TYieldedState::TFreshPosition>(
-                yieldedState.Position);
+            bool expected = false;
             if (const auto* levelPosition =
                     std::get_if<typename TYieldedState::TLevelPosition>(&yieldedState.Position)) {
                 if (addToLevel0) {
-                    expected = levelPosition->Level == 0 &&
-                        spec.Id > std::get<typename TYieldedState::TLevelPosition::
-                            TUnsortedLevelDiscriminator>(levelPosition->Discriminator);
-                } else if (levelPosition->Level == 0) {
-                    expected = true;
+                    expected = levelPosition->Level > 0 ||
+                        (levelPosition->Level == 0 &&
+                            spec.Id < std::get<typename TYieldedState::TLevelPosition::
+                                TUnsortedLevelDiscriminator>(levelPosition->Discriminator));
                 } else {
-                    expected = std::get<typename TYieldedState::TLevelPosition::
-                        TSortedLevelDiscriminator>(levelPosition->Discriminator) <
-                        spec.Keys.front();
+                    expected = levelPosition->Level > 1 ||
+                        (levelPosition->Level == 1 &&
+                            spec.Keys.front() < std::get<typename TYieldedState::TLevelPosition::
+                                TSortedLevelDiscriminator>(levelPosition->Discriminator));
                 }
             }
 
@@ -393,7 +393,194 @@ namespace {
         }
     };
 
+    class TReverseTraversalLogoBlobsBase {
+    public:
+        TReverseTraversalLogoBlobsBase()
+            : Contexts(1)
+            , Settings(
+                Contexts.GetHullCtx(),
+                8,
+                64u << 20u,
+                FreshCompactionThreshold(),
+                TDuration::Minutes(10),
+                10,
+                true,
+                false)
+            , Arena(std::make_shared<TRopeArena>(&TRopeArenaBackend::Allocate))
+            , Index(MakeIntrusive<TLogoBlobsLevelIndex>(Settings, Arena))
+        {
+            for (ui32 level = 1; level <= 3; ++level) {
+                Index->CurSlice->SortedLevels.emplace_back(TKey());
+            }
+            Index->LoadCompleted();
+
+            // The low fresh-compaction threshold moves these first two records to
+            // Dreg. Starting a compaction then moves them to Old and the next two
+            // records to Dreg, leaving a new Cur for the final pair.
+            PutFresh({100, 110});
+            PutFresh({200, 210});
+            Index->FindFreshSegmentForCompaction();
+            PutFresh({300, 310});
+
+            AddSst(0, 1, {1'000, 1'010});
+            AddSst(0, 2, {1'100, 1'110});
+            AddSst(1, 0, {2'000, 2'010});
+            AddSst(1, 0, {2'100, 2'110});
+            AddSst(2, 0, {3'000, 3'010});
+            AddSst(2, 0, {3'100, 3'110});
+            AddSst(3, 0, {4'000, 4'010});
+            AddSst(3, 0, {4'100, 4'110});
+        }
+
+        TIntrusivePtr<THullCtx> GetHullCtx() {
+            return Contexts.GetHullCtx();
+        }
+
+        TLevelIndexSnapshot<TKey, TMemRec> GetSnapshot() {
+            return Index->GetIndexSnapshot();
+        }
+
+        static TVector<ui32> GetExpectedSteps() {
+            return {
+                4'110, 4'100, 4'010, 4'000,
+                3'110, 3'100, 3'010, 3'000,
+                2'110, 2'100, 2'010, 2'000,
+                1'110, 1'100, 1'010, 1'000,
+                110, 100,
+                210, 200,
+                310, 300,
+            };
+        }
+
+    private:
+        static constexpr ui64 FreshCompactionThreshold() {
+            constexpr ui64 recordSize = sizeof(TKey) + sizeof(TMemRec);
+            return sizeof(TIdxDiskPlaceHolder) + recordSize + recordSize / 2;
+        }
+
+        void PutFresh(std::initializer_list<ui32> steps) {
+            for (ui32 step : steps) {
+                Index->PutToFresh(NextLsn++, MakeKey(step), TMemRec());
+            }
+        }
+
+        void AddSst(ui32 level, ui64 id, std::initializer_list<ui32> steps) {
+            TTrackableVector<TLogoBlobsLevelSegment::TRec> records(
+                TMemoryConsumer(Contexts.GetVCtx()->SstIndex));
+            for (ui32 step : steps) {
+                records.emplace_back(MakeKey(step), TMemRec());
+            }
+
+            auto sst = MakeIntrusive<TLogoBlobsLevelSegment>(Contexts.GetVCtx());
+            sst->LoadLinearIndex(records);
+            sst->VolatileOrderId = id;
+            if (level == 0) {
+                Index->CurSlice->Level0.Put(sst);
+            } else {
+                Index->CurSlice->SortedLevels[level - 1].Put(sst);
+            }
+        }
+
+    private:
+        TTestContexts Contexts;
+        TLevelIndexSettings Settings;
+        std::shared_ptr<TRopeArena> Arena;
+        TIntrusivePtr<TLogoBlobsLevelIndex> Index;
+        ui64 NextLsn = 1;
+    };
+
+    struct TOrderedCollectingAggregator {
+        TVector<ui32>& SeenSteps;
+        TSet<TKey>& SeenKeys;
+        TSet<TString>& SeenSources;
+        TManualMonotonicTimeProviderForTraverse& TimeProvider;
+        bool Finished = false;
+
+        void UpdateFresh(const char* segmentName, const TKey& key, const TMemRec&) {
+            SeenSources.insert(segmentName);
+            Update(key);
+        }
+
+        void UpdateLevel(const TLogoBlobsLevelSegment::TLevelSstPtr& levelSstPtr,
+                const TKey& key, const TMemRec&) {
+            SeenSources.insert(TStringBuilder() << "L" << levelSstPtr.Level);
+            Update(key);
+        }
+
+        void Finish() {
+            Finished = true;
+        }
+
+    private:
+        void Update(const TKey& key) {
+            UNIT_ASSERT_C(SeenKeys.insert(key).second,
+                TStringBuilder() << "duplicate key during resumed traversal: " << key.ToString());
+            SeenSteps.push_back(key.LogoBlobID().Step());
+            TimeProvider.Advance(TDuration::MilliSeconds(1));
+        }
+    };
+
     Y_UNIT_TEST_SUITE(TTraverseDbWithoutMergeTest) {
+        Y_UNIT_TEST(ReverseTraversalWithYieldsVisitsEveryKeyOnce) {
+            constexpr ui32 MaxQuanta = 100;
+            TReverseTraversalLogoBlobsBase database;
+            auto timeProvider = MakeIntrusive<TManualMonotonicTimeProviderForTraverse>();
+            TVector<ui32> seenSteps;
+            TSet<TKey> seenKeys;
+            TSet<TString> seenSources;
+            TSet<TString> yieldedSources;
+            TOrderedCollectingAggregator aggregator{
+                seenSteps,
+                seenKeys,
+                seenSources,
+                *timeProvider,
+            };
+            std::optional<TYieldedState> yieldedState;
+            ui32 yields = 0;
+
+            for (ui32 quantum = 0; quantum < MaxQuanta; ++quantum) {
+                auto snapshot = database.GetSnapshot();
+                yieldedState = TraverseDbWithoutMerge(
+                    database.GetHullCtx(),
+                    &aggregator,
+                    snapshot,
+                    std::move(yieldedState),
+                    TDbStatYieldPolicy{
+                        .StepsBeforeMeasures = 1,
+                        .QuantumDuration = TDuration::Zero(),
+                        .DelayBetweenQuanta = TDuration::Zero(),
+                    },
+                    timeProvider);
+                snapshot.Destroy();
+
+                if (!yieldedState) {
+                    break;
+                }
+                if (const auto* freshPosition =
+                        std::get_if<TYieldedState::TFreshPosition>(&yieldedState->Position)) {
+                    const char* freshNames[] = {"FCur", "FDreg", "FOld"};
+                    yieldedSources.insert(freshNames[static_cast<size_t>(freshPosition->Segment)]);
+                } else {
+                    const auto& levelPosition =
+                        std::get<TYieldedState::TLevelPosition>(yieldedState->Position);
+                    yieldedSources.insert(TStringBuilder() << "L" << levelPosition.Level);
+                }
+                ++yields;
+            }
+
+            const TVector<ui32> expectedSteps = database.GetExpectedSteps();
+            const TSet<TString> expectedSources = {
+                "FCur", "FDreg", "FOld", "L0", "L1", "L2", "L3",
+            };
+            UNIT_ASSERT_C(!yieldedState, "traversal did not finish");
+            UNIT_ASSERT_C(aggregator.Finished, "aggregator was not finished");
+            UNIT_ASSERT_C(yields > 0, "traversal did not yield");
+            UNIT_ASSERT_C(seenSteps == expectedSteps, "keys were not visited in reverse order");
+            UNIT_ASSERT_VALUES_EQUAL(seenKeys.size(), expectedSteps.size());
+            UNIT_ASSERT(seenSources == expectedSources);
+            UNIT_ASSERT(yieldedSources == expectedSources);
+        }
+
         Y_UNIT_TEST(RandomizedMutationDuringTraversal) {
             constexpr ui32 Seed = 0x51a7e;
             constexpr ui32 MaxQuanta = 500;

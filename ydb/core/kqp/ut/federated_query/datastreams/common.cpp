@@ -307,9 +307,20 @@ std::vector<std::pair<std::string, TInstant>> TStreamingTestFixture::ReadTopicMe
     auto readSession = GetTopicClient(local)->CreateReadSession(readSettings);
     std::vector<std::pair<std::string, TInstant>> received;
 
+    auto receivedStrings = [&]() {
+        std::vector<std::string> result;
+        result.reserve(received.size());
+        for (const auto& p : received) {
+            result.push_back(p.first);
+        }
+        return result;
+    };
+
     WaitFor(TEST_OPERATION_TIMEOUT, "topic output messages", [&](TString& error) {
         if (!readSession->WaitEvent().HasValue()) {
-            error = TStringBuilder() << "no event set, received #" << received.size() << " / " << expectedMessages.size() << " messages";
+            error = TStringBuilder() << "no event set, received #" << received.size() << " / " << expectedMessages.size() << " messages"
+                << "; received: (" << JoinSeq(", ", receivedStrings()) << ")"
+                << "; expected: (" << JoinSeq(", ", expectedMessages) << ")";
             return false;
         }
 
@@ -327,13 +338,14 @@ std::vector<std::pair<std::string, TInstant>> TStreamingTestFixture::ReadTopicMe
             }
         }
 
-        auto firstsView = received | std::views::transform([](const auto& p) { return p.first; });
         UNIT_ASSERT_C(expectedMessages.size() >= received.size(), TStringBuilder()
             << "expected #" << expectedMessages.size() << " messages ("
             << JoinSeq(", ", expectedMessages) << "), got #" << received.size() << " messages ("
-            << JoinSeq(", ",  std::vector<std::string>(firstsView.begin(), firstsView.end())) << ")");
+            << JoinSeq(", ", receivedStrings()) << ")");
 
-        error = TStringBuilder() << "got new event, received #" << received.size() << " / " << expectedMessages.size() << " messages";
+        error = TStringBuilder() << "got new event, received #" << received.size() << " / " << expectedMessages.size() << " messages"
+            << "; received: (" << JoinSeq(", ", receivedStrings()) << ")"
+            << "; expected: (" << JoinSeq(", ", expectedMessages) << ")";
         return false;
     });
 

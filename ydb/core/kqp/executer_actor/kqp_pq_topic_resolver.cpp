@@ -4,6 +4,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
+#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
 
 #include <ydb/core/kqp/common/simple/kqp_event_ids.h>
@@ -21,6 +22,17 @@ using namespace NActors;
 
 namespace {
 
+// Per-cluster partition counts for one topic.
+struct TTopicClusterPartitions {
+    // Cluster name (TFederatedTopicClient::TClusterInfo::Info.Name) →
+    // partition count for that cluster.
+    // For non-federated topics the map has one entry with an empty-string key.
+    THashMap<TString, ui32> ByClusterName;
+    // Maximum partition count across all clusters in this topic.
+    // Used to set TDqReadTaskParams::TPartitioningParams::TopicPartitionsCount.
+    ui32 MaxPartitionsCount = 0;
+};
+
 // ---------------------------------------------------------------------------
 // Internal event: carries the result of a single DescribeFederatedTopic call.
 // Sent by the async callback to the resolver actor itself.
@@ -32,13 +44,15 @@ enum EPqResolverPrivateEv {
 struct TEvTopicDescribeResult
     : public TEventLocal<TEvTopicDescribeResult, EvTopicDescribeResult>
 {
-    // On success: non-zero total partition count.
-    ui32  PartitionsCount = 0;
-    // On error:   PartitionsCount == 0 and ErrorMessage is set.
+    // On success: topic key (Endpoint + "|" + TopicPath) and per-cluster data.
+    TString TopicKey;
+    TTopicClusterPartitions ClusterPartitions;
+    // On error: ErrorMessage is non-empty.
     TString ErrorMessage;
 
-    explicit TEvTopicDescribeResult(ui32 partitionsCount)
-        : PartitionsCount(partitionsCount) {}
+    TEvTopicDescribeResult(TString topicKey, TTopicClusterPartitions clusterPartitions)
+        : TopicKey(std::move(topicKey))
+        , ClusterPartitions(std::move(clusterPartitions)) {}
     explicit TEvTopicDescribeResult(TString errorMessage)
         : ErrorMessage(std::move(errorMessage)) {}
 };
@@ -104,9 +118,10 @@ private:
             return;
         }
 
-        // Accumulate: for now preserve existing behaviour — the last resolved
-        // partition count wins (single-topic streaming queries are the common case).
-        LastPartitionsCount = ev->Get()->PartitionsCount;
+        // Store per-cluster partition counts for this topic, keyed by the topic's
+        // unique identifier (Endpoint + "|" + TopicPath). When multiple topics are
+        // in the query each gets its own entry in this map.
+        TopicClusterPartitions[ev->Get()->TopicKey] = std::move(ev->Get()->ClusterPartitions);
 
         if (--Pending == 0) {
             PatchAndDie();
@@ -140,20 +155,33 @@ private:
             {"topicPath", src.TopicPath},
             {"sessionId", sessionId});
 
+        // Build a key that uniquely identifies this topic among all topics in
+        // the query. Combining Endpoint and TopicPath is sufficient: topics on
+        // different clusters have different endpoints, and within a single
+        // cluster topic paths are unique (including when the endpoint is empty
+        // for local clusters).
+        TString topicKey = src.Endpoint + "|" + src.TopicPath;
+
         gateway->DescribeFederatedTopic(sessionId, src.Cluster, src.Database, src.TopicPath, token)
             .Subscribe(
                 [actorSystem = TActivationContext::ActorSystem(),
                  selfId = SelfId(),
-                 gateway = gateway](const auto& future)
+                 gateway = gateway,
+                 topicKey = topicKey](const auto& future)
                 {
                     try {
                         const auto& result = future.GetValue();
-                        ui32 totalPartitions = 0;
+                        TTopicClusterPartitions clusterPartitions;
                         for (const auto& clusterInfo : result) {
-                            totalPartitions += clusterInfo.PartitionsCount;
+                            clusterPartitions.ByClusterName[TString(clusterInfo.Info.Name)] =
+                                clusterInfo.PartitionsCount;
+                            clusterPartitions.MaxPartitionsCount =
+                                Max(clusterPartitions.MaxPartitionsCount,
+                                    clusterInfo.PartitionsCount);
                         }
                         actorSystem->Send(selfId,
-                            new TEvTopicDescribeResult(totalPartitions));
+                            new TEvTopicDescribeResult(topicKey,
+                                std::move(clusterPartitions)));
                     } catch (const std::exception& ex) {
                         actorSystem->Send(selfId,
                             new TEvTopicDescribeResult(TString(ex.what())));
@@ -161,16 +189,85 @@ private:
                 });
     }
 
-    // Patch all PQ ReadRanges in the physical graph with the resolved partition count,
-    // then notify the owner that we're done.
+    // Patch all PQ tasks in the physical graph:
+    //   1. Update TDqPqFederatedCluster::PartitionsCount in the source settings
+    //      with the actual per-cluster partition count from the describe result.
+    //   2. Update TDqReadTaskParams::TPartitioningParams::TopicPartitionsCount
+    //      with the maximum partition count across all clusters (the read actor
+    //      uses per-cluster PartitionsCount to limit its range, but rd_read_actor
+    //      uses TopicPartitionsCount from the params directly).
     void PatchAndDie() {
-        if (QueryPhysicalGraph && LastPartitionsCount > 0) {
+        if (QueryPhysicalGraph && !TopicClusterPartitions.empty()) {
             for (int taskIdx = 0;
                  taskIdx < static_cast<int>(QueryPhysicalGraph->TasksSize());
                  ++taskIdx)
             {
                 auto* task = QueryPhysicalGraph->MutableTasks(taskIdx);
                 auto* dqTask = task->MutableDqTask();
+
+                if (dqTask->ReadRangesSize() == 0) {
+                    continue;
+                }
+
+                // Determine which topic this task reads from and compute the
+                // correct per-cluster and max partition counts. All ReadRanges
+                // in a single DqTask come from the same external source.
+                ui32 maxPartitionsCount = 0;
+                for (auto& input : *dqTask->MutableInputs()) {
+                    if (!input.HasSource()) {
+                        continue;
+                    }
+                    if (input.GetSource().GetType() != "PqSource") {
+                        continue;
+                    }
+
+                    NYql::NPq::NProto::TDqPqTopicSource topicSource;
+                    if (!input.GetSource().GetSettings().UnpackTo(&topicSource)) {
+                        continue;
+                    }
+
+                    TString topicKey =
+                        topicSource.GetEndpoint() + "|" + topicSource.GetTopicPath();
+                    auto it = TopicClusterPartitions.find(topicKey);
+                    if (it == TopicClusterPartitions.end()) {
+                        break;
+                    }
+
+                    const TTopicClusterPartitions& clusterPartitions = it->second;
+                    maxPartitionsCount = clusterPartitions.MaxPartitionsCount;
+
+                    // Update per-cluster partition counts in the source settings.
+                    // TDqPqTopicSource::FederatedClusters[i].PartitionsCount is
+                    // used by the read actor (static discovery path) to limit
+                    // which partition IDs belong to each cluster.
+                    bool sourceModified = false;
+                    for (int ci = 0;
+                         ci < static_cast<int>(topicSource.FederatedClustersSize());
+                         ++ci)
+                    {
+                        auto* fc = topicSource.MutableFederatedClusters(ci);
+                        auto cit = clusterPartitions.ByClusterName.find(fc->GetName());
+                        if (cit != clusterPartitions.ByClusterName.end()) {
+                            fc->SetPartitionsCount(cit->second);
+                            sourceModified = true;
+                        }
+                    }
+
+                    if (sourceModified) {
+                        // Repack the modified source settings back into the task input.
+                        input.MutableSource()->MutableSettings()->PackFrom(topicSource);
+                    }
+                    break;
+                }
+
+                if (maxPartitionsCount == 0) {
+                    continue;
+                }
+
+                // Update TopicPartitionsCount in all ReadRanges for this task.
+                // This value is used by dq_pq_rd_read_actor to determine the
+                // full partition range, and serves as a fallback in dq_pq_read_actor
+                // when FederatedClusters.PartitionsCount is zero.
                 for (int rangeIdx = 0;
                      rangeIdx < static_cast<int>(dqTask->ReadRangesSize());
                      ++rangeIdx)
@@ -187,7 +284,7 @@ private:
                          ++ppIdx)
                     {
                         params.MutablePartitioningParams(ppIdx)
-                            ->SetTopicPartitionsCount(LastPartitionsCount);
+                            ->SetTopicPartitionsCount(maxPartitionsCount);
                     }
                     dqTask->SetReadRanges(rangeIdx, params.SerializeAsString());
                 }
@@ -222,7 +319,9 @@ private:
     std::shared_ptr<NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
 
     ui32 Pending = 0;
-    ui32 LastPartitionsCount = 0;
+    // Maps topic key (Endpoint + "|" + TopicPath) to per-cluster partition
+    // counts. Populated as describe responses arrive; consumed in PatchAndDie().
+    THashMap<TString, TTopicClusterPartitions> TopicClusterPartitions;
 };
 
 } // anonymous namespace

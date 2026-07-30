@@ -1590,7 +1590,7 @@ class Evaluator:
         ):
             return None
 
-        schedule = self._schedule_delayed_unique_rhs(
+        scheduled_seed, schedule = self._schedule_delayed_unique_rhs(
             spine,
             current,
             equalities,
@@ -1627,7 +1627,7 @@ class Evaluator:
         if not has_keys and not pruned:
             return None
 
-        source = factor_sources[current]
+        source = factor_sources[scheduled_seed]
         for original, keys in schedule:
             right = factor_sources[original.right]
 
@@ -1743,10 +1743,36 @@ class Evaluator:
         spine: list[Join],
         seed: str,
         equalities: list[tuple[str, str]],
-    ) -> tuple[tuple[Join, tuple[JoinKey, ...]], ...]:
+    ) -> tuple[str, tuple[tuple[Join, tuple[JoinKey, ...]], ...]]:
         available = dict(self.schemas[seed])
         pending = list(spine)
         schedule: list[tuple[Join, tuple[JoinKey, ...]]] = []
+        first = pending[0]
+        assert first.left == seed
+        # Cross is bag-commutative.  Rebase only the innermost factor when
+        # the fixed orientation has no certificate but the original seed is
+        # itself a certified direct unique RHS.
+        if not self._delayed_unique_rhs_keys(
+            first,
+            equalities,
+            available,
+        ):
+            rebased = replace(
+                first,
+                left=first.right,
+                right=seed,
+            )
+            rebased_keys = self._delayed_unique_rhs_keys(
+                rebased,
+                equalities,
+                self.schemas[first.right],
+            )
+            if rebased_keys:
+                seed = first.right
+                available = dict(self.schemas[seed])
+                pending.pop(0)
+                schedule.append((rebased, rebased_keys))
+                available.update(self.schemas[rebased.right])
         while pending:
             selected = 0
             keys: tuple[JoinKey, ...] = ()
@@ -1763,7 +1789,7 @@ class Evaluator:
             factor = pending.pop(selected)
             schedule.append((factor, keys))
             available.update(self.schemas[factor.right])
-        return tuple(schedule)
+        return seed, tuple(schedule)
 
     def _join_scheduled_cross(
         self,

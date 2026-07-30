@@ -35,6 +35,18 @@ constexpr size_t MinLockedDDiskSessionsToStart =
 
 ////////////////////////////////////////////////////////////////////////////////
 
+EDBGConnectionType ToDBGConnectionType(
+    NTransport::THostConnection::EConnectionType connectionType)
+{
+    switch (connectionType) {
+        case NTransport::THostConnection::EConnectionType::DDisk:
+            return EDBGConnectionType::DDisk;
+        case NTransport::THostConnection::EConnectionType::PBuffer:
+            return EDBGConnectionType::PBuffer;
+    }
+    Y_ABORT("Unknown EConnectionType: %d", static_cast<int>(connectionType));
+}
+
 NProto::TError MakeSessionError(ui32 nodeId, THostIndex host)
 {
     TStringBuilder result;
@@ -201,7 +213,8 @@ TDirectBlockGroup::TDirectBlockGroup(
     size_t directBlockGroupIndex,
     const TVector<NBsController::TDDiskId>& ddisksIds,
     const TVector<NBsController::TDDiskId>& pbufferIds,
-    std::unique_ptr<NTransport::IStorageTransport> storageTransport)
+    std::unique_ptr<NTransport::IStorageTransport> storageTransport,
+    NMonitoring::TDynamicCounterPtr counters)
     : ActorSystem(actorSystem)
     , StorageConfig(std::move(storageConfig))
     , Executor(std::move(executor))
@@ -217,6 +230,7 @@ TDirectBlockGroup::TDirectBlockGroup(
               .Generation = diskDescription.Generation,
               .DBGIndex = DirectBlockGroupIndex})
     , Oracle(StorageConfig, this)
+    , Counters(std::move(counters))
 {
     Y_ASSERT(pbufferIds.size() == ddisksIds.size());
     Y_ASSERT(pbufferIds.size() >= DirectBlockGroupHostCount);
@@ -1093,7 +1107,7 @@ void TDirectBlockGroup::BarrierEraseFromPBuffer(ui64 lsn)
                 lsn,
                 self->PBufferConnections.size());
 
-            auto span = self->TraceService->CreteRootSpan(
+            auto span = self->TraceService->CreateRootSpan(
                 "NbsPartition.BarrierEraseFromPBuffer");
 
             for (THostIndex h = 0; h < self->PBufferConnections.size(); ++h) {
@@ -1487,6 +1501,8 @@ void TDirectBlockGroup::DoEstablishConnection(
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
+    Counters.OnConnectAttempt(ToDBGConnectionType(connectionType));
+
     auto& connection = connectionType == EConnectionType::DDisk
                            ? DDiskConnections[hostIndex]
                            : PBufferConnections[hostIndex];
@@ -1563,6 +1579,7 @@ void TDirectBlockGroup::OnConnectionEstablished(
 
     NProto::TError error = TranslateError(result);
     if (!HasError(error)) {
+        Counters.OnConnectOk(ToDBGConnectionType(connectionType));
         connection.HostConnection.Credentials.DDiskInstanceGuid =
             result.GetDDiskInstanceGuid();
         if (connectionType == EConnectionType::DDisk) {
@@ -1584,12 +1601,14 @@ void TDirectBlockGroup::OnConnectionEstablished(
         }
         // INVARIANT: PBuffer does NOT require a session/lock
     } else if (IsSessionBlockedError(error)) {
+        Counters.OnConnectErr(ToDBGConnectionType(connectionType));
         // Terminal: our tablet generation is stale. Suicide, no reconnect.
         HandleBlockedGeneration(hostIndex, "Connect");
         // Unblock waiters on ConnectFuture with the error.
         connection.ConnectPromise.SetValue(error);
         return;
     } else {
+        Counters.OnConnectErr(ToDBGConnectionType(connectionType));
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
@@ -1626,6 +1645,8 @@ void TDirectBlockGroup::ReEstablishConnection(
     Y_ABORT_UNLESS(hostIndex < connections.size());
     TDDiskConnection& connection = connections[hostIndex];
 
+    Counters.OnReconnect(ToDBGConnectionType(connectionType));
+
     if (BlockedGenerationDetected) {
         LOG_WARN(
             *ActorSystem,
@@ -1660,6 +1681,7 @@ void TDirectBlockGroup::OnNodeDisconnected(THostIndex hostIndex, ui32 nodeId)
         LogTitle.GetWithTime().c_str(),
         PrintHostAndNodeId(hostIndex, nodeId).c_str());
 
+    Counters.OnDisconnect(EDBGConnectionType::DDisk);
     Oracle.OnDDiskDisconnected(hostIndex, TInstant::Now());
 
     // OnNodeDisconnected may be called only for DDisk

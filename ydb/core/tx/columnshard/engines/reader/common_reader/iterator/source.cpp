@@ -175,36 +175,6 @@ void IDataSource::OnStartProcessing() {
         maxSnapshot);
 }
 
-void IDataSource::StartStepExecution(const TString& stepName) {
-    const TAtomicBase threadId = static_cast<TAtomicBase>(TThread::CurrentThreadId());
-    const TAtomicBase depth = AtomicIncrement(StepExecutionDepth);
-    if (depth == 1) {
-        AtomicSet(StepExecutionThreadId, threadId);
-    } else {
-        TAtomicBase ownerThreadId = AtomicGet(StepExecutionThreadId);
-        while (!ownerThreadId) {
-            // Outermost StartStepExecution has incremented depth but not published thread id yet.
-            ownerThreadId = AtomicGet(StepExecutionThreadId);
-        }
-        AFL_VERIFY(ownerThreadId == threadId)("executing_step", ExecutingStepName)("new_step", stepName)("source_idx", SourceIdx)("depth", depth);
-    }
-    ExecutingStepName = stepName;
-}
-
-void IDataSource::FinishStepExecution() {
-    const TAtomicBase threadId = static_cast<TAtomicBase>(TThread::CurrentThreadId());
-    AFL_VERIFY(AtomicGet(StepExecutionThreadId) == threadId)("executing_step", ExecutingStepName)("source_idx", SourceIdx)(
-        "depth", AtomicGet(StepExecutionDepth));
-    const TAtomicBase depth = AtomicDecrement(StepExecutionDepth);
-    AFL_VERIFY(depth >= 0)("source_idx", SourceIdx)("executing_step", ExecutingStepName);
-    if (depth == 0) {
-        // Another outermost execution may already have started; clear ownership only if we still own it.
-        if (AtomicCas(&StepExecutionThreadId, 0, threadId)) {
-            ExecutingStepName.clear();
-        }
-    }
-}
-
 void IDataSource::StartAsyncSection() {
     AFL_VERIFY(AtomicCas(&SyncSectionFlag, 0, 1));
 }

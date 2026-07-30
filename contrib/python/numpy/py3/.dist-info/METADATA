@@ -1,11 +1,11 @@
 Metadata-Version: 2.1
 Name: numpy
-Version: 1.26.4
+Version: 2.0.2
 Summary: Fundamental package for array computing in Python
 Home-page: https://numpy.org
 Author: Travis E. Oliphant et al.
 Maintainer-Email: NumPy Developers <numpy-discussion@python.org>
-License: Copyright (c) 2005-2023, NumPy Developers.
+License: Copyright (c) 2005-2024, NumPy Developers.
         All rights reserved.
         
         Redistribution and use in source and binary forms, with or without
@@ -46,20 +46,15 @@ License: Copyright (c) 2005-2023, NumPy Developers.
         License: BSD-3-Clause
           For details, see numpy/linalg/lapack_lite/LICENSE.txt
         
-        Name: tempita
-        Files: tools/npy_tempita/*
-        License: MIT
-          For details, see tools/npy_tempita/license.txt
-        
         Name: dragon4
-        Files: numpy/core/src/multiarray/dragon4.c
+        Files: numpy/_core/src/multiarray/dragon4.c
         License: MIT
-          For license text, see numpy/core/src/multiarray/dragon4.c
+          For license text, see numpy/_core/src/multiarray/dragon4.c
         
         Name: libdivide
-        Files: numpy/core/include/numpy/libdivide/*
+        Files: numpy/_core/include/numpy/libdivide/*
         License: Zlib
-          For license text, see numpy/core/include/numpy/libdivide/LICENSE.txt
+          For license text, see numpy/_core/include/numpy/libdivide/LICENSE.txt
         
         
         Note that the following files are vendored in the repository and sdist but not
@@ -81,7 +76,7 @@ License: Copyright (c) 2005-2023, NumPy Developers.
         
         
         Name: OpenBLAS
-        Files: numpy.libs/libopenblas*.so
+        Files: numpy.libs/libscipy_openblas*.so
         Description: bundled as a dynamically linked library
         Availability: https://github.com/OpenMathLib/OpenBLAS/
         License: BSD-3-Clause
@@ -117,7 +112,7 @@ License: Copyright (c) 2005-2023, NumPy Developers.
         
         
         Name: LAPACK
-        Files: numpy.libs/libopenblas*.so
+        Files: numpy.libs/libscipy_openblas*.so
         Description: bundled in OpenBLAS
         Availability: https://github.com/OpenMathLib/OpenBLAS/
         License: BSD-3-Clause-Attribution
@@ -1018,9 +1013,9 @@ https://pypi.org/project/numpy/)
 https://anaconda.org/conda-forge/numpy)
 [![Stack Overflow](https://img.shields.io/badge/stackoverflow-Ask%20questions-blue.svg)](
 https://stackoverflow.com/questions/tagged/numpy)
-[![Nature Paper](https://img.shields.io/badge/DOI-10.1038%2Fs41592--019--0686--2-blue)](
+[![Nature Paper](https://img.shields.io/badge/DOI-10.1038%2Fs41586--020--2649--2-blue)](
 https://doi.org/10.1038/s41586-020-2649-2)
-[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/numpy/numpy/badge)](https://api.securityscorecards.dev/projects/github.com/numpy/numpy)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/numpy/numpy/badge)](https://securityscorecards.dev/viewer/?uri=github.com/numpy/numpy)
 
 
 NumPy is the fundamental package for scientific computing with Python.

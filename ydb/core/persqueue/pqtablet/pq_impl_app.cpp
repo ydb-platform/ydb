@@ -49,7 +49,9 @@ namespace {
         {
             return false;
         }
-        PQ_LOG_W("PersQueue DevUI request to unknown page, cgi: " << cgi.Print());
+        YDB_LOG_WARN_COMP(NKikimrServices::PERSQUEUE, "PersQueue DevUI request to unknown page",
+            {"logPrefix", LogPrefix()},
+            {"cgi", cgi.Print()});
         return true;
     }
 

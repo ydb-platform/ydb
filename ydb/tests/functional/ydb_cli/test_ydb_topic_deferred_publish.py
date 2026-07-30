@@ -3,7 +3,7 @@
 Functional smoke tests for deferred topic publish via experimental CLI.
 
 Scenarios mirror the demo happy path / cancel / list-describe flows:
-  begin → write --deferred-int-id → publish|cancel → topic read
+  begin → write --deferred-int-publication-id → publish|cancel → topic read
 
 The same suite runs on dedicated (/Root) and serverless databases.
 """
@@ -90,7 +90,7 @@ class TestTopicDeferredPublishCli(BaseCliTestWithDatabase):
 
     @classmethod
     def _begin(cls, ext_id, writer_identity=None):
-        args = ["experimental", "topic", "deferred-publication", "begin", "--ext-id", ext_id]
+        args = ["experimental", "topic", "deferred-publication", "begin", "--ext-publication-id", ext_id]
         if writer_identity is not None:
             args.extend(["--writer-identity", writer_identity])
         result = cls.execute_exp(args)
@@ -102,11 +102,11 @@ class TestTopicDeferredPublishCli(BaseCliTestWithDatabase):
     def _write_deferred(cls, topic_path, int_id, payload, ext_id=None):
         args = [
             "experimental", "topic", "write", topic_path,
-            "--deferred-int-id", int_id,
+            "--deferred-int-publication-id", int_id,
             "--format", "single-message",
         ]
         if ext_id is not None:
-            args.extend(["--deferred-ext-id", ext_id])
+            args.extend(["--deferred-ext-publication-id", ext_id])
         with tempfile.NamedTemporaryFile("w+b") as stdin_file:
             stdin_file.write(payload.encode("utf-8"))
             stdin_file.flush()
@@ -116,14 +116,14 @@ class TestTopicDeferredPublishCli(BaseCliTestWithDatabase):
     @classmethod
     def _publish(cls, int_id, check_exit_code=True):
         return cls.execute_exp(
-            ["experimental", "topic", "deferred-publication", "publish", "--int-id", int_id],
+            ["experimental", "topic", "deferred-publication", "publish", "--int-publication-id", int_id],
             check_exit_code=check_exit_code,
         )
 
     @classmethod
     def _cancel(cls, int_id, check_exit_code=True):
         return cls.execute_exp(
-            ["experimental", "topic", "deferred-publication", "cancel", "--int-id", int_id],
+            ["experimental", "topic", "deferred-publication", "cancel", "--int-publication-id", int_id],
             check_exit_code=check_exit_code,
         )
 
@@ -136,7 +136,7 @@ class TestTopicDeferredPublishCli(BaseCliTestWithDatabase):
 
     @classmethod
     def _describe(cls, int_id, check_exit_code=True, output_format=None):
-        args = ["experimental", "topic", "deferred-publication", "describe", "--int-id", int_id]
+        args = ["experimental", "topic", "deferred-publication", "describe", "--int-publication-id", int_id]
         if output_format is not None:
             args.extend(["--format", output_format])
         return cls.execute_exp(args, check_exit_code=check_exit_code)
@@ -230,7 +230,7 @@ class TestTopicDeferredPublishCli(BaseCliTestWithDatabase):
 
         int_id = self._begin(ext_id)
         duplicate = self.execute_exp(
-            ["experimental", "topic", "deferred-publication", "begin", "--ext-id", ext_id],
+            ["experimental", "topic", "deferred-publication", "begin", "--ext-publication-id", ext_id],
             check_exit_code=False,
         )
         assert duplicate.exit_code != 0
@@ -244,14 +244,14 @@ class TestTopicDeferredPublishCli(BaseCliTestWithDatabase):
         result = self.execute_exp(
             [
                 "experimental", "topic", "write", topic,
-                "--deferred-int-id", "0",
+                "--deferred-int-publication-id", "0",
                 "--format", "single-message",
             ],
             check_exit_code=False,
         )
         assert result.exit_code != 0
         combined = (result.stdout + result.stderr).lower()
-        assert "deferred-int-id" in combined
+        assert "deferred-int-publication-id" in combined
         assert "positive" in combined
 
     def test_list_filter_by_writer_identity(self):

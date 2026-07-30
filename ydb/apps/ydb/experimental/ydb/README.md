@@ -36,13 +36,13 @@ Under `experimental topic`:
 Typical flow:
 
 ```bash
-INT_ID=$(ydb experimental topic deferred-publication begin --ext-id order-42)
-echo "payload" | ydb experimental topic write /Root/my-topic --deferred-int-id "$INT_ID"
-ydb experimental topic deferred-publication publish --int-id "$INT_ID"
+INT_ID=$(ydb experimental topic deferred-publication begin --ext-publication-id order-42)
+echo "payload" | ydb experimental topic write /Root/my-topic --deferred-int-publication-id "$INT_ID"
+ydb experimental topic deferred-publication publish --int-publication-id "$INT_ID"
 ```
 
 Commands: `begin`, `publish`, `cancel`, `list`, `describe`.
-`write` accepts `--deferred-int-id` and optional `--deferred-ext-id`.
+`write` accepts `--deferred-int-publication-id` and optional `--deferred-ext-publication-id`.
 Run `publish` / `cancel` only after `write` exits successfully; they do not wait
 for in-flight writes from another process.
 

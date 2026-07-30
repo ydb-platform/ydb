@@ -71,11 +71,11 @@ void TCommandExperimentalTopicWrite::Config(TConfig& config) {
         .Hidden()
         .StoreMappedResult(&MessagesWaitTimeout_, &ParseDurationSeconds);
 
-    config.Opts->AddLongOption("deferred-int-id", "Deferred publication int_publication_id from begin")
+    config.Opts->AddLongOption("deferred-int-publication-id", "Deferred publication int_publication_id from begin")
         .Optional()
         .RequiredArgument("UINT64")
         .StoreResult(&DeferredIntPublicationId_);
-    config.Opts->AddLongOption("deferred-ext-id", "Optional deferred publication ext_publication_id")
+    config.Opts->AddLongOption("deferred-ext-publication-id", "Optional deferred publication ext_publication_id")
         .Optional()
         .RequiredArgument("STRING")
         .StoreResult(&DeferredExtPublicationId_);
@@ -94,10 +94,10 @@ void TCommandExperimentalTopicWrite::Parse(TConfig& config) {
         throw TMisuseException() << "Both mutually exclusive options \"delimiter\" and \"input-format\" were provided.";
     }
     if (DeferredIntPublicationId_.Defined() && *DeferredIntPublicationId_ == 0) {
-        throw TMisuseException() << "--deferred-int-id must be a positive integer";
+        throw TMisuseException() << "--deferred-int-publication-id must be a positive integer";
     }
     if (DeferredExtPublicationId_.Defined() && !DeferredIntPublicationId_.Defined()) {
-        throw TMisuseException() << "--deferred-ext-id requires --deferred-int-id";
+        throw TMisuseException() << "--deferred-ext-publication-id requires --deferred-int-publication-id";
     }
 }
 
@@ -192,7 +192,7 @@ TCommandTopicDeferredPublicationBegin::TCommandTopicDeferredPublicationBegin()
 void TCommandTopicDeferredPublicationBegin::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.Opts->SetFreeArgsNum(0);
-    config.Opts->AddLongOption("ext-id", "Client-defined publication name (unique among active)")
+    config.Opts->AddLongOption("ext-publication-id", "Client-defined publication name (unique among active)")
         .Required()
         .RequiredArgument("STRING")
         .StoreResult(&ExtPublicationId_);
@@ -246,7 +246,7 @@ TCommandTopicDeferredPublicationPublish::TCommandTopicDeferredPublicationPublish
 void TCommandTopicDeferredPublicationPublish::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.Opts->SetFreeArgsNum(0);
-    config.Opts->AddLongOption("int-id", "Server-assigned publication id from begin")
+    config.Opts->AddLongOption("int-publication-id", "Server-assigned publication id from begin")
         .Required()
         .RequiredArgument("UINT64")
         .StoreResult(&IntPublicationId_);
@@ -273,7 +273,7 @@ TCommandTopicDeferredPublicationCancel::TCommandTopicDeferredPublicationCancel()
 void TCommandTopicDeferredPublicationCancel::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.Opts->SetFreeArgsNum(0);
-    config.Opts->AddLongOption("int-id", "Server-assigned publication id from begin")
+    config.Opts->AddLongOption("int-publication-id", "Server-assigned publication id from begin")
         .Required()
         .RequiredArgument("UINT64")
         .StoreResult(&IntPublicationId_);
@@ -359,7 +359,7 @@ TCommandTopicDeferredPublicationDescribe::TCommandTopicDeferredPublicationDescri
 void TCommandTopicDeferredPublicationDescribe::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.Opts->SetFreeArgsNum(0);
-    config.Opts->AddLongOption("int-id", "Server-assigned publication id from begin")
+    config.Opts->AddLongOption("int-publication-id", "Server-assigned publication id from begin")
         .Required()
         .RequiredArgument("UINT64")
         .StoreResult(&IntPublicationId_);

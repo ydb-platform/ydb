@@ -68,6 +68,18 @@ const T& TThreeLevelStableVector<T, DeepChunkSize, ShallowChunkSize, MaxSize>::o
 }
 
 template <class T, size_t DeepChunkSize, size_t ShallowChunkSize, size_t MaxSize>
+size_t TThreeLevelStableVector<T, DeepChunkSize, ShallowChunkSize, MaxSize>::size() const
+{
+    return Size();
+}
+
+template <class T, size_t DeepChunkSize, size_t ShallowChunkSize, size_t MaxSize>
+bool TThreeLevelStableVector<T, DeepChunkSize, ShallowChunkSize, MaxSize>::empty() const
+{
+    return Empty();
+}
+
+template <class T, size_t DeepChunkSize, size_t ShallowChunkSize, size_t MaxSize>
 size_t TThreeLevelStableVector<T, DeepChunkSize, ShallowChunkSize, MaxSize>::ShallowChunkIndex(size_t index)
 {
     return index / ElementsPerShallowChunk_;

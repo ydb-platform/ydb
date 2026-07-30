@@ -1,6 +1,10 @@
-#include <yt/yt/core/test_framework/framework.h>
+#include <library/cpp/yt/containers/three_level_stable_vector.h>
 
-#include <yt/yt/core/misc/three_level_stable_vector.h>
+#include <library/cpp/testing/gtest/gtest.h>
+
+#include <iterator>
+#include <string>
+#include <vector>
 
 namespace NYT {
 namespace {
@@ -78,7 +82,6 @@ TEST(TThreeLevelStableVectorTest, Simple133)
     }
 }
 
-
 TEST(TThreeLevelStableVectorTest, Simple313)
 {
     constexpr auto deep = 3;
@@ -122,6 +125,48 @@ TEST(TThreeLevelStableVectorTest, Simple111)
     for (int i = 0; i < total; ++i) {
         EXPECT_EQ(vector[i], i);
         EXPECT_EQ(&vector[i], pointers[i]);
+    }
+}
+
+TEST(TThreeLevelStableVectorTest, Empty)
+{
+    auto vector = TThreeLevelStableVector<int, 3, 3, 9>();
+    EXPECT_EQ(0, std::ssize(vector));
+    EXPECT_TRUE(vector.Empty());
+
+    vector.PushBack(42);
+    EXPECT_EQ(1, std::ssize(vector));
+    EXPECT_FALSE(vector.Empty());
+}
+
+TEST(TThreeLevelStableVectorTest, Mutate)
+{
+    constexpr auto total = 9;
+
+    auto vector = TThreeLevelStableVector<int, 3, 3, total>();
+    for (int i = 0; i < total; ++i) {
+        vector.PushBack(0);
+    }
+
+    for (int i = 0; i < total; ++i) {
+        vector[i] = 2 * i;
+    }
+    for (int i = 0; i < total; ++i) {
+        EXPECT_EQ(vector[i], 2 * i);
+    }
+}
+
+TEST(TThreeLevelStableVectorTest, NonPodElements)
+{
+    constexpr auto total = 9;
+
+    auto vector = TThreeLevelStableVector<std::string, 3, 3, total>();
+    for (int i = 0; i < total; ++i) {
+        vector.PushBack(std::to_string(i));
+    }
+
+    for (int i = 0; i < total; ++i) {
+        EXPECT_EQ(vector[i], std::to_string(i));
     }
 }
 

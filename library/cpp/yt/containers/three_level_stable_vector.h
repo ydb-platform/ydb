@@ -21,6 +21,10 @@ public:
     T& operator[](size_t index);
     const T& operator[](size_t index) const;
 
+    // STL interop.
+    size_t size() const;
+    bool empty() const;
+
 private:
     struct TDeepChunk
     {

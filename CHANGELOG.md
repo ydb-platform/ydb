@@ -76,6 +76,9 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 25538:added basic monitoring tests and separate events file [#25538](https://github.com/ydb-platform/ydb/pull/25538) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 25458:Сейчас при автопартициронировании топиков учитывается скорость записи различными producer-ами: партиция делится не пополам, а стараемся разделить партицию таким образом, что бы producer-ы распределились по новым партициям равномерно с учетом скорости записи. [#25458](https://github.com/ydb-platform/ydb/pull/25458) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 25387:Change the audit logging logic from AllowedList checking to DenyList checking [#25387](https://github.com/ydb-platform/ydb/pull/25387) ([Andrei Rykov](https://github.com/StekPerepolnen))
+* 47477:Added a configurable CPU-usage window for actor-system harmonizer decisions via HarmonizerNeedyCpuWindowSeconds for BASIC executor pools. [#47477](https://github.com/ydb-platform/ydb/pull/47477) ([Robert Drynkin](https://github.com/robdrynkin))
+* 47475:Add subsystems which will monitoring cgroup stats and report pre oom [#47475](https://github.com/ydb-platform/ydb/pull/47475) ([kruall](https://github.com/kruall))
+* 46723:Allow failure injection in DSProxy. [#46723](https://github.com/ydb-platform/ydb/pull/46723) ([Anton Dmitrovsky](https://github.com/tdiff))
 
 ### Bug fixes
 
@@ -146,12 +149,11 @@ https://github.com/ydb-platform/ydb/issues/25454 [#25536](https://github.com/ydb
 * 25515:Fixed fault for checkpoint on not drained channels [#25515](https://github.com/ydb-platform/ydb/pull/25515) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 25412:https://github.com/ydb-platform/ydb/issues/23180 [#25412](https://github.com/ydb-platform/ydb/pull/25412) ([Vasily Gerasimov](https://github.com/UgnineSirdis))
 * 25408:Fixed tests:
-
-* TestRetryLimiter 
-* RestoreScriptPhysicalGraphOnRetry 
-* CreateStreamingQueryMatchRecognize 
-
-Also increased default test logs level [#25408](https://github.com/ydb-platform/ydb/pull/25408) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* None:CreateStreamingQueryMatchRecognize
+* 47591:Fixed Kafka API Metadata responses that could return an empty broker list or a `ControllerId` that did not match any advertised broker. This caused Kafka AdminClient `CreateTopics` calls to time out with "Timed out waiting for a node assignment", which broke Kafka Streams when creating internal changelog topics. [#47591](https://github.com/ydb-platform/ydb/pull/47591) ([Nikolay Shestakov](https://github.com/nshestakov))
+* 47348:При работе по кафка протоколу могла приходить ошибка not present in metadata. сейчас сделано более аккуратная обработка metadat запроса и таймаутов случаться не должно [#47348](https://github.com/ydb-platform/ydb/pull/47348) ([Nikolay Shestakov](https://github.com/nshestakov))
+* 47319:[issue](https://github.com/ydb-platform/ydb/issues/47066) Real race detected after incorrect read, but on asan it makes a noise [#47319](https://github.com/ydb-platform/ydb/pull/47319) ([kruall](https://github.com/kruall))
+* 47251:Fixed data race over VChunk's LogTitle by moving LogTitle.SetTitle from Executor thread to AS thread [#47251](https://github.com/ydb-platform/ydb/pull/47251) ([Ivan Efimov](https://github.com/efimov-ivan-yteam))
 
 ### YDB UI
 

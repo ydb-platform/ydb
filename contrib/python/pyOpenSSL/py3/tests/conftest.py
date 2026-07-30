@@ -11,9 +11,9 @@ def pytest_report_header(config):
 
     import OpenSSL.SSL
 
-    return "OpenSSL: {openssl}\ncryptography: {cryptography}".format(
-        openssl=OpenSSL.SSL.SSLeay_version(OpenSSL.SSL.SSLEAY_VERSION),
-        cryptography=cryptography.__version__,
+    return (
+        f"OpenSSL: {OpenSSL.SSL.SSLeay_version(OpenSSL.SSL.SSLEAY_VERSION)}\n"
+        f"cryptography: {cryptography.__version__}"
     )
 
 

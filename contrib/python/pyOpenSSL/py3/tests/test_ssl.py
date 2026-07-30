@@ -34,11 +34,10 @@ from sys import getfilesystemencoding, platform
 from typing import Union
 from weakref import ref
 
-import flaky
 import pytest
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
 from cryptography.x509.oid import NameOID
 from pretend import raiser
 
@@ -57,10 +56,6 @@ from OpenSSL.crypto import (
     load_certificate,
     load_privatekey,
 )
-
-with pytest.warns(DeprecationWarning):
-    from OpenSSL.crypto import X509Extension
-
 from OpenSSL.SSL import (
     DTLS_METHOD,
     MODE_RELEASE_BUFFERS,
@@ -102,7 +97,6 @@ from OpenSSL.SSL import (
     SSLEAY_DIR,
     SSLEAY_PLATFORM,
     SSLEAY_VERSION,
-    TLS1_1_VERSION,
     TLS1_2_VERSION,
     TLS1_3_VERSION,
     TLS_METHOD,
@@ -137,11 +131,6 @@ try:
     )
 except ImportError:
     SSL_ST_INIT = SSL_ST_BEFORE = SSL_ST_OK = SSL_ST_RENEGOTIATE = None
-
-try:
-    from OpenSSL.SSL import OP_NO_TLSv1_3
-except ImportError:
-    OP_NO_TLSv1_3 = None
 
 from .test_crypto import (
     client_cert_pem,
@@ -190,7 +179,7 @@ def join_bytes_or_unicode(prefix, suffix):
     The return type is the same as the type of ``prefix``.
     """
     # If the types are the same, nothing special is necessary.
-    if type(prefix) == type(suffix):
+    if type(prefix) is type(suffix):
         return join(prefix, suffix)
 
     # Otherwise, coerce suffix to the type of prefix.
@@ -255,55 +244,81 @@ def _create_certificate_chain():
         2. A new intermediate certificate signed by cacert (icert)
         3. A new server certificate signed by icert (scert)
     """
-    caext = X509Extension(b"basicConstraints", False, b"CA:true")
-    not_after_date = datetime.date.today() + datetime.timedelta(days=365)
-    not_after = not_after_date.strftime("%Y%m%d%H%M%SZ").encode("ascii")
+    not_before = datetime.datetime(2000, 1, 1, 0, 0, 0)
+    not_after = datetime.datetime.now() + datetime.timedelta(days=365)
 
     # Step 1
-    cakey = PKey()
-    cakey.generate_key(TYPE_RSA, 2048)
-    cacert = X509()
-    cacert.set_version(2)
-    cacert.get_subject().commonName = "Authority Certificate"
-    cacert.set_issuer(cacert.get_subject())
-    cacert.set_pubkey(cakey)
-    cacert.set_notBefore(b"20000101000000Z")
-    cacert.set_notAfter(not_after)
-    cacert.add_extensions([caext])
-    cacert.set_serial_number(0)
-    cacert.sign(cakey, "sha256")
+    cakey = rsa.generate_private_key(key_size=2048, public_exponent=65537)
+    casubject = x509.Name(
+        [x509.NameAttribute(x509.NameOID.COMMON_NAME, "Authority Certificate")]
+    )
+    cacert = (
+        x509.CertificateBuilder()
+        .subject_name(casubject)
+        .issuer_name(casubject)
+        .public_key(cakey.public_key())
+        .not_valid_before(not_before)
+        .not_valid_after(not_after)
+        .add_extension(
+            x509.BasicConstraints(ca=True, path_length=None), critical=False
+        )
+        .serial_number(1)
+        .sign(cakey, hashes.SHA256())
+    )
 
     # Step 2
-    ikey = PKey()
-    ikey.generate_key(TYPE_RSA, 2048)
-    icert = X509()
-    icert.set_version(2)
-    icert.get_subject().commonName = "Intermediate Certificate"
-    icert.set_issuer(cacert.get_subject())
-    icert.set_pubkey(ikey)
-    icert.set_notBefore(b"20000101000000Z")
-    icert.set_notAfter(not_after)
-    icert.add_extensions([caext])
-    icert.set_serial_number(0)
-    icert.sign(cakey, "sha256")
+    ikey = rsa.generate_private_key(key_size=2048, public_exponent=65537)
+    icert = (
+        x509.CertificateBuilder()
+        .subject_name(
+            x509.Name(
+                [
+                    x509.NameAttribute(
+                        x509.NameOID.COMMON_NAME, "Intermediate Certificate"
+                    )
+                ]
+            )
+        )
+        .issuer_name(cacert.subject)
+        .public_key(ikey.public_key())
+        .not_valid_before(not_before)
+        .not_valid_after(not_after)
+        .add_extension(
+            x509.BasicConstraints(ca=True, path_length=None), critical=False
+        )
+        .serial_number(1)
+        .sign(cakey, hashes.SHA256())
+    )
 
     # Step 3
-    skey = PKey()
-    skey.generate_key(TYPE_RSA, 2048)
-    scert = X509()
-    scert.set_version(2)
-    scert.get_subject().commonName = "Server Certificate"
-    scert.set_issuer(icert.get_subject())
-    scert.set_pubkey(skey)
-    scert.set_notBefore(b"20000101000000Z")
-    scert.set_notAfter(not_after)
-    scert.add_extensions(
-        [X509Extension(b"basicConstraints", True, b"CA:false")]
+    skey = rsa.generate_private_key(key_size=2048, public_exponent=65537)
+    scert = (
+        x509.CertificateBuilder()
+        .subject_name(
+            x509.Name(
+                [
+                    x509.NameAttribute(
+                        x509.NameOID.COMMON_NAME, "Server Certificate"
+                    )
+                ]
+            )
+        )
+        .issuer_name(icert.subject)
+        .public_key(skey.public_key())
+        .not_valid_before(not_before)
+        .not_valid_after(not_after)
+        .add_extension(
+            x509.BasicConstraints(ca=False, path_length=None), critical=True
+        )
+        .serial_number(1)
+        .sign(ikey, hashes.SHA256())
     )
-    scert.set_serial_number(0)
-    scert.sign(ikey, "sha256")
 
-    return [(cakey, cacert), (ikey, icert), (skey, scert)]
+    return [
+        (PKey.from_cryptography_key(cakey), X509.from_cryptography(cacert)),
+        (PKey.from_cryptography_key(ikey), X509.from_cryptography(icert)),
+        (PKey.from_cryptography_key(skey), X509.from_cryptography(scert)),
+    ]
 
 
 def loopback_client_factory(socket, version=SSLv23_METHOD):
@@ -510,7 +525,7 @@ class TestContext:
         with pytest.raises(TypeError):
             context.set_cipher_list(object())
 
-    @flaky.flaky
+    @pytest.mark.flaky(reruns=2)
     def test_set_cipher_list_no_cipher_match(self, context):
         """
         `Context.set_cipher_list` raises `OpenSSL.SSL.Error` with a
@@ -599,18 +614,9 @@ class TestContext:
         `SSLv3_METHOD`, `SSLv23_METHOD`, `TLSv1_METHOD`, `TLSv1_1_METHOD`,
         or `TLSv1_2_METHOD`.
         """
-        methods = [SSLv23_METHOD, TLSv1_METHOD]
+        methods = [SSLv23_METHOD, TLSv1_METHOD, TLSv1_1_METHOD, TLSv1_2_METHOD]
         for meth in methods:
             Context(meth)
-
-        maybe = [TLSv1_1_METHOD, TLSv1_2_METHOD]
-        for meth in maybe:
-            try:
-                Context(meth)
-            except (Error, ValueError):
-                # Some versions of OpenSSL have SSLv2 / TLSv1.1 / TLSv1.2, some
-                # don't.  Difficult to say in advance.
-                pass
 
         with pytest.raises(TypeError):
             Context("")
@@ -743,6 +749,11 @@ class TestContext:
         context.use_certificate(cert)
         assert None is context.check_privatekey()
 
+        context = Context(SSLv23_METHOD)
+        context.use_privatekey(key.to_cryptography_key())
+        context.use_certificate(cert)
+        assert None is context.check_privatekey()
+
     def test_check_privatekey_invalid(self):
         """
         `Context.check_privatekey` raises `Error` if the `Context` instance
@@ -753,6 +764,12 @@ class TestContext:
         cert = load_certificate(FILETYPE_PEM, server_cert_pem)
         context = Context(SSLv23_METHOD)
         context.use_privatekey(key)
+        context.use_certificate(cert)
+        with pytest.raises(Error):
+            context.check_privatekey()
+
+        context = Context(SSLv23_METHOD)
+        context.use_privatekey(key.to_cryptography_key())
         context.use_certificate(cert)
         with pytest.raises(Error):
             context.check_privatekey()
@@ -1017,12 +1034,8 @@ class TestContext:
         assert all(b"CLIENT_RANDOM" in line for conn, line in called)
 
     def test_set_proto_version(self):
-        if OP_NO_TLSv1_3 is None:
-            high_version = TLS1_2_VERSION
-            low_version = TLS1_1_VERSION
-        else:
-            high_version = TLS1_3_VERSION
-            low_version = TLS1_2_VERSION
+        high_version = TLS1_3_VERSION
+        low_version = TLS1_2_VERSION
 
         server_context = Context(TLS_METHOD)
         server_context.use_certificate(
@@ -1081,6 +1094,14 @@ class TestContext:
 
         cert = clientSSL.get_peer_certificate()
         assert cert.get_subject().CN == "Testing Root CA"
+
+        cryptography_cert = clientSSL.get_peer_certificate(
+            as_cryptography=True
+        )
+        assert (
+            cryptography_cert.subject.rfc4514_string()
+            == "CN=Testing Root CA,O=Testing,L=Chicago,ST=IL,C=US"
+        )
 
     def _load_verify_cafile(self, cafile):
         """
@@ -1526,8 +1547,7 @@ class TestContext:
         it with a client which trusts cacert and requires verification to
         succeed.
         """
-        chain = _create_certificate_chain()
-        [(cakey, cacert), (ikey, icert), (skey, scert)] = chain
+        [(_, cacert), (_, icert), (skey, scert)] = _create_certificate_chain()
 
         makedirs(certdir)
 
@@ -1686,6 +1706,14 @@ class TestContext:
                 continue
             # The only easily "assertable" thing is that it does not raise an
             # exception.
+            with pytest.deprecated_call():
+                context.set_tmp_ecdh(curve)
+
+        for name in dir(ec.EllipticCurveOID):
+            if name.startswith("_"):
+                continue
+            oid = getattr(ec.EllipticCurveOID, name)
+            curve = ec.get_curve_for_oid(oid)
             context.set_tmp_ecdh(curve)
 
     def test_set_session_cache_mode_wrong_args(self):
@@ -1783,8 +1811,7 @@ class TestServerNameCallback:
         callback = tracker()
         if callback is not None:
             referrers = get_referrers(callback)
-            if len(referrers) > 1:  # pragma: nocover
-                pytest.fail(f"Some references remain: {referrers!r}")
+            assert len(referrers) == 1
 
     def test_no_servername(self):
         """
@@ -2176,6 +2203,8 @@ class TestContextConnection:
         with pytest.raises(TypeError):
             ctx_or_conn.use_privatekey("")
 
+        ctx_or_conn.use_privatekey(key.to_cryptography_key())
+
     def test_use_privatekey_wrong_key(self, ctx_or_conn):
         """
         `use_privatekey` raises `OpenSSL.SSL.Error` when passed a
@@ -2200,6 +2229,9 @@ class TestContextConnection:
         # long as check_privatekey works right we're good...
         ctx_or_conn.use_certificate(
             load_certificate(FILETYPE_PEM, root_cert_pem)
+        )
+        ctx_or_conn.use_certificate(
+            load_certificate(FILETYPE_PEM, root_cert_pem).to_cryptography()
         )
 
     def test_use_certificate_wrong_args(self, ctx_or_conn):
@@ -2459,7 +2491,7 @@ class TestConnection:
         If the underlying socket is closed, `Connection.shutdown` propagates
         the write error from the low level write call.
         """
-        server, client = loopback()
+        server, _ = loopback()
         server.sock_shutdown(2)
         with pytest.raises(SysCallError) as exc:
             server.shutdown()
@@ -2543,8 +2575,7 @@ class TestConnection:
         """
         `Connection.get_certificate` returns the local certificate.
         """
-        chain = _create_certificate_chain()
-        [(cakey, cacert), (ikey, icert), (skey, scert)] = chain
+        [_, _, (_, scert)] = _create_certificate_chain()
 
         context = Context(SSLv23_METHOD)
         context.use_certificate(scert)
@@ -2552,6 +2583,13 @@ class TestConnection:
         cert = client.get_certificate()
         assert cert is not None
         assert "Server Certificate" == cert.get_subject().CN
+
+        cryptography_cert = client.get_certificate(as_cryptography=True)
+        assert cryptography_cert is not None
+        assert (
+            cryptography_cert.subject.rfc4514_string()
+            == "CN=Server Certificate"
+        )
 
     def test_get_certificate_none(self):
         """
@@ -2569,14 +2607,13 @@ class TestConnection:
         `Connection.get_peer_cert_chain` returns a list of certificates
         which the connected server returned for the certification verification.
         """
-        chain = _create_certificate_chain()
-        [(cakey, cacert), (ikey, icert), (skey, scert)] = chain
+        [(_, cacert), (_, icert), (skey, scert)] = _create_certificate_chain()
 
         serverContext = Context(SSLv23_METHOD)
         serverContext.use_privatekey(skey)
         serverContext.use_certificate(scert)
         serverContext.add_extra_chain_cert(icert)
-        serverContext.add_extra_chain_cert(cacert)
+        serverContext.add_extra_chain_cert(cacert.to_cryptography())
         server = Connection(serverContext, None)
         server.set_accept_state()
 
@@ -2593,6 +2630,21 @@ class TestConnection:
         assert "Server Certificate" == chain[0].get_subject().CN
         assert "Intermediate Certificate" == chain[1].get_subject().CN
         assert "Authority Certificate" == chain[2].get_subject().CN
+
+        cryptography_chain = client.get_peer_cert_chain(as_cryptography=True)
+        assert len(cryptography_chain) == 3
+        assert (
+            cryptography_chain[0].subject.rfc4514_string()
+            == "CN=Server Certificate"
+        )
+        assert (
+            cryptography_chain[1].subject.rfc4514_string()
+            == "CN=Intermediate Certificate"
+        )
+        assert (
+            cryptography_chain[2].subject.rfc4514_string()
+            == "CN=Authority Certificate"
+        )
 
     def test_get_peer_cert_chain_none(self):
         """
@@ -2614,13 +2666,12 @@ class TestConnection:
         `Connection.get_verified_chain` returns a list of certificates
         which the connected server returned for the certification verification.
         """
-        chain = _create_certificate_chain()
-        [(cakey, cacert), (ikey, icert), (skey, scert)] = chain
+        [(_, cacert), (_, icert), (skey, scert)] = _create_certificate_chain()
 
         serverContext = Context(SSLv23_METHOD)
         serverContext.use_privatekey(skey)
         serverContext.use_certificate(scert)
-        serverContext.add_extra_chain_cert(icert)
+        serverContext.add_extra_chain_cert(icert.to_cryptography())
         serverContext.add_extra_chain_cert(cacert)
         server = Connection(serverContext, None)
         server.set_accept_state()
@@ -2641,6 +2692,21 @@ class TestConnection:
         assert "Server Certificate" == chain[0].get_subject().CN
         assert "Intermediate Certificate" == chain[1].get_subject().CN
         assert "Authority Certificate" == chain[2].get_subject().CN
+
+        cryptography_chain = client.get_verified_chain(as_cryptography=True)
+        assert len(cryptography_chain) == 3
+        assert (
+            cryptography_chain[0].subject.rfc4514_string()
+            == "CN=Server Certificate"
+        )
+        assert (
+            cryptography_chain[1].subject.rfc4514_string()
+            == "CN=Intermediate Certificate"
+        )
+        assert (
+            cryptography_chain[2].subject.rfc4514_string()
+            == "CN=Authority Certificate"
+        )
 
     def test_get_verified_chain_none(self):
         """
@@ -2709,8 +2775,7 @@ class TestConnection:
         callback = tracker()
         if callback is not None:  # pragma: nocover
             referrers = get_referrers(callback)
-            if len(referrers) > 1:
-                pytest.fail(f"Some references remain: {referrers!r}")
+            assert len(referrers) == 1
 
     def test_get_session_unconnected(self):
         """
@@ -2727,7 +2792,7 @@ class TestConnection:
         On the server side of a connection, `Connection.get_session` returns a
         `Session` instance representing the SSL session for that connection.
         """
-        server, client = loopback()
+        server, _ = loopback()
         session = server.get_session()
         assert isinstance(session, Session)
 
@@ -2737,7 +2802,7 @@ class TestConnection:
         returns a `Session` instance representing the SSL session for
         that connection.
         """
-        server, client = loopback()
+        _, client = loopback()
         session = client.get_session()
         assert isinstance(session, Session)
 
@@ -2781,7 +2846,7 @@ class TestConnection:
             client.set_session(originalSession)
             return client
 
-        resumedServer, resumedClient = loopback(
+        resumedServer, _ = loopback(
             server_factory=makeServer, client_factory=makeClient
         )
 
@@ -2819,7 +2884,7 @@ class TestConnection:
             client.set_connect_state()
             return client
 
-        originalServer, originalClient = loopback(
+        _, originalClient = loopback(
             server_factory=makeServer, client_factory=makeOriginalClient
         )
         originalSession = originalClient.get_session()
@@ -2840,7 +2905,7 @@ class TestConnection:
         `OpenSSL.SSL.WantWriteError` if writing to the connection's BIO
         fail indicating a should-write state.
         """
-        client_socket, server_socket = socket_pair()
+        client_socket, _ = socket_pair()
         # Fill up the client's send buffer so Connection won't be able to write
         # anything. Start by sending larger chunks (Windows Socket I/O is slow)
         # and continue by writing a single byte at a time so we can be sure we
@@ -2894,7 +2959,7 @@ class TestConnection:
         from client, or server. Finished messages are send during
         TLS handshake.
         """
-        server, client = loopback()
+        server, _ = loopback()
 
         assert server.get_finished() is not None
         assert len(server.get_finished()) > 0
@@ -2905,7 +2970,7 @@ class TestConnection:
         message received from client, or server. Finished messages are send
         during TLS handshake.
         """
-        server, client = loopback()
+        server, _ = loopback()
 
         assert server.get_peer_finished() is not None
         assert len(server.get_peer_finished()) > 0
@@ -3123,8 +3188,9 @@ class TestConnectionSend:
         server, client = loopback()
         with pytest.warns(DeprecationWarning) as w:
             count = server.send(b"xy".decode("ascii"))
-            assert "{} for buf is no longer accepted, use bytes".format(
-                WARNING_TYPE_EXPECTED
+            assert (
+                f"{WARNING_TYPE_EXPECTED} for buf is no longer accepted, "
+                f"use bytes"
             ) == str(w[-1].message)
         assert count == 2
         assert client.recv(2) == b"xy"
@@ -3330,8 +3396,9 @@ class TestConnectionSendall:
         server, client = loopback()
         with pytest.warns(DeprecationWarning) as w:
             server.sendall(b"x".decode("ascii"))
-            assert "{} for buf is no longer accepted, use bytes".format(
-                WARNING_TYPE_EXPECTED
+            assert (
+                f"{WARNING_TYPE_EXPECTED} for buf is no longer accepted, "
+                f"use bytes"
             ) == str(w[-1].message)
         assert client.recv(1) == b"x"
 
@@ -3368,7 +3435,7 @@ class TestConnectionSendall:
         If the underlying socket is closed, `Connection.sendall` propagates the
         write error from the low level write call.
         """
-        server, client = loopback()
+        server, _ = loopback()
         server.sock_shutdown(2)
         with pytest.raises(SysCallError) as err:
             server.sendall(b"hello, world")
@@ -3765,7 +3832,10 @@ class TestMemoryBIO:
         if platform == "win32":
             assert err.value.args == (10054, "WSAECONNRESET")
         else:
-            assert err.value.args == (-1, "Unexpected EOF")
+            assert err.value.args in [
+                (-1, "Unexpected EOF"),
+                (54, "ECONNRESET"),
+            ]
 
     def _check_client_ca_list(self, func):
         """
@@ -3931,7 +4001,7 @@ class TestMemoryBIO:
 
         def multiple_ca(ctx):
             ctx.add_client_ca(cacert)
-            ctx.add_client_ca(secert)
+            ctx.add_client_ca(secert.to_cryptography())
             return [cadesc, sedesc]
 
         self._check_client_ca_list(multiple_ca)
@@ -3971,7 +4041,7 @@ class TestMemoryBIO:
         sedesc = secert.get_subject()
 
         def set_replaces_add_ca(ctx):
-            ctx.add_client_ca(clcert)
+            ctx.add_client_ca(clcert.to_cryptography())
             ctx.set_client_ca_list([cadesc])
             ctx.add_client_ca(secert)
             return [cadesc, sedesc]
@@ -4380,7 +4450,7 @@ class TestDTLS:
     # Arbitrary number larger than any conceivable handshake volley.
     LARGE_BUFFER = 65536
 
-    def test_it_works_at_all(self):
+    def _test_handshake_and_data(self, srtp_profile):
         s_ctx = Context(DTLS_METHOD)
 
         def generate_cookie(ssl):
@@ -4394,11 +4464,15 @@ class TestDTLS:
         s_ctx.use_privatekey(load_privatekey(FILETYPE_PEM, server_key_pem))
         s_ctx.use_certificate(load_certificate(FILETYPE_PEM, server_cert_pem))
         s_ctx.set_options(OP_NO_QUERY_MTU)
+        if srtp_profile is not None:
+            s_ctx.set_tlsext_use_srtp(srtp_profile)
         s = Connection(s_ctx)
         s.set_accept_state()
 
         c_ctx = Context(DTLS_METHOD)
         c_ctx.set_options(OP_NO_QUERY_MTU)
+        if srtp_profile is not None:
+            c_ctx.set_tlsext_use_srtp(srtp_profile)
         c = Connection(c_ctx)
         c.set_connect_state()
 
@@ -4480,17 +4554,25 @@ class TestDTLS:
         pump()
         assert s.read(100) == b"goodbye"
 
+        # Check whether SRTP was negotiated
+        if srtp_profile is not None:
+            assert s.get_selected_srtp_profile() == srtp_profile
+            assert c.get_selected_srtp_profile() == srtp_profile
+        else:
+            assert s.get_selected_srtp_profile() == b""
+            assert c.get_selected_srtp_profile() == b""
+
         # Check that the MTU set/query functions are doing *something*
         c.set_ciphertext_mtu(1000)
-        try:
-            assert 500 < c.get_cleartext_mtu() < 1000
-        except NotImplementedError:  # OpenSSL 1.1.0 and earlier
-            pass
+        assert 500 < c.get_cleartext_mtu() < 1000
         c.set_ciphertext_mtu(500)
-        try:
-            assert 0 < c.get_cleartext_mtu() < 500
-        except NotImplementedError:  # OpenSSL 1.1.0 and earlier
-            pass
+        assert 0 < c.get_cleartext_mtu() < 500
+
+    def test_it_works_at_all(self):
+        self._test_handshake_and_data(srtp_profile=None)
+
+    def test_it_works_with_srtp(self):
+        self._test_handshake_and_data(srtp_profile=b"SRTP_AES128_CM_SHA1_80")
 
     def test_timeout(self, monkeypatch):
         c_ctx = Context(DTLS_METHOD)

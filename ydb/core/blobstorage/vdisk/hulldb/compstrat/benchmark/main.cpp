@@ -16,11 +16,9 @@ namespace {
     using TLogoSstPtr = TIntrusivePtr<TLogoSst>;
     using TStorageRatioStrategy = NHullComp::TStrategyStorageRatio<TKeyLogoBlob, TMemRecLogoBlob>;
 
-    enum class EDueLayout : ui32 {
-        Prefix,
-        Uniform,
-        Edges,
-        Random,
+    enum class EDataLayout : ui32 {
+        UniformOverlap,
+        ProductionLike,
         Count,
     };
 
@@ -56,7 +54,6 @@ namespace {
         TIntrusivePtr<THullDs> Ds = MakeIntrusive<THullDs>(Context.GetHullCtx());
         TVector<TLogoSstPtr> Ssts;
         ui64 TotalRecords = 0;
-        ui64 DueRecords = 0;
 
         TBenchmarkData() {
             const TLevelIndexSettings& settings = Context.GetLevelIndexSettings();
@@ -71,24 +68,29 @@ namespace {
                 ui32 overlap,
                 ui64 freshRecords,
                 ui32 keyStride,
-                ui32 duePercent,
                 bool allLevel0,
-                EDueLayout dueLayout)
+                EDataLayout dataLayout)
         {
             Y_ABORT_UNLESS(numSsts);
-            Y_ABORT_UNLESS(overlap && overlap <= numSsts);
             Y_ABORT_UNLESS(keyStride);
-            Y_ABORT_UNLESS(duePercent <= 100);
-            Y_ABORT_UNLESS(dueLayout < EDueLayout::Count);
+            Y_ABORT_UNLESS(dataLayout < EDataLayout::Count);
 
-            const ui64 recordsPerSst = Max<ui64>(1, requestedRecords / numSsts);
-            for (ui32 sstIndex = 0; sstIndex < numSsts; ++sstIndex) {
-                const ui32 overlapGroup = sstIndex / overlap;
-                const ui32 overlapIndex = sstIndex % overlap;
-                const ui32 level = allLevel0 ? 0 : overlapIndex + 1;
-                const ui64 firstStep =
-                    1 + static_cast<ui64>(overlapGroup) * recordsPerSst * keyStride;
-                AddSst(level, firstStep, recordsPerSst, keyStride, sstIndex);
+            switch (dataLayout) {
+                case EDataLayout::UniformOverlap:
+                    PrepareUniformOverlap(
+                        requestedRecords,
+                        numSsts,
+                        overlap,
+                        keyStride,
+                        allLevel0);
+                    break;
+
+                case EDataLayout::ProductionLike:
+                    PrepareProductionLike(requestedRecords, numSsts);
+                    break;
+
+                case EDataLayout::Count:
+                    Y_ABORT("Unexpected data layout");
             }
 
             Ds->LogoBlobs->LoadCompleted();
@@ -102,79 +104,149 @@ namespace {
                     MakeKey(step),
                     TMemRecLogoBlob());
             }
+        }
 
-            const size_t dueSsts = (Ssts.size() * duePercent + 99) / 100;
-            const TVector<bool> due = SelectDueSsts(Ssts.size(), dueSsts, dueLayout);
-            for (size_t index = 0; index < Ssts.size(); ++index) {
-                const TInstant calculationTime = due[index]
-                    ? TInstant::Zero()
-                    : TInstant::Seconds(10'000'000'000ULL);
-                NHullComp::TSstRatioPtr ratio =
-                    MakeIntrusive<NHullComp::TSstRatio>(calculationTime);
-                ratio->IndexItemsTotal = Ssts[index]->Elements();
-                ratio->IndexItemsKeep = Ssts[index]->Elements();
-                Ssts[index]->StorageRatio.Set(ratio, calculationTime);
-
-                if (due[index]) {
-                    DueRecords += Ssts[index]->Elements();
-                }
+        void MakeAllSstsDue(TInstant now) {
+            const TInstant calculationTime =
+                now - Context.GetHullCtx()->HullCompStorageRatioCalcPeriod;
+            for (const TLogoSstPtr& sst : Ssts) {
+                sst->StorageRatio.SetCalculationTime(calculationTime);
             }
         }
 
     private:
-        static TVector<bool> SelectDueSsts(
-                size_t numSsts,
-                size_t dueSsts,
-                EDueLayout layout)
+        static constexpr ui32 ProductionLikeLevel0Ssts = 13;
+        static constexpr ui32 ProductionLikeMiddleLevels = 12;
+        static constexpr ui32 ProductionLikeLevel17Ssts = 3;
+        static constexpr ui32 ProductionLikeWideSsts =
+            ProductionLikeLevel0Ssts +
+            ProductionLikeMiddleLevels +
+            ProductionLikeLevel17Ssts;
+
+        void PrepareUniformOverlap(
+                ui64 requestedRecords,
+                ui32 numSsts,
+                ui32 overlap,
+                ui32 keyStride,
+                bool allLevel0)
         {
-            Y_ABORT_UNLESS(dueSsts <= numSsts);
-            TVector<bool> due(numSsts, false);
+            Y_ABORT_UNLESS(overlap && overlap <= numSsts);
 
-            switch (layout) {
-                case EDueLayout::Prefix:
-                    for (size_t i = 0; i < dueSsts; ++i) {
-                        due[i] = true;
-                    }
-                    break;
+            const ui64 recordsPerSst = Max<ui64>(1, requestedRecords / numSsts);
+            for (ui32 sstIndex = 0; sstIndex < numSsts; ++sstIndex) {
+                const ui32 overlapGroup = sstIndex / overlap;
+                const ui32 overlapIndex = sstIndex % overlap;
+                const ui32 level = allLevel0 ? 0 : overlapIndex + 1;
+                const ui64 firstStep =
+                    1 + static_cast<ui64>(overlapGroup) * recordsPerSst * keyStride;
+                AddSst(level, firstStep, recordsPerSst, keyStride, sstIndex);
+            }
+        }
 
-                case EDueLayout::Uniform:
-                    for (size_t i = 0; i < dueSsts; ++i) {
-                        due[i * numSsts / dueSsts] = true;
-                    }
-                    break;
+        static ui64 GetPartSize(ui64 total, ui32 index, ui32 parts) {
+            return total / parts + (index < total % parts);
+        }
 
-                case EDueLayout::Edges:
-                    for (size_t i = 0; i < dueSsts; ++i) {
-                        const size_t index = i % 2
-                            ? numSsts - 1 - i / 2
-                            : i / 2;
-                        due[index] = true;
-                    }
-                    break;
+        void AddSparseSst(
+                ui32 level,
+                ui64 firstStep,
+                ui64 lastStep,
+                ui64 numRecords)
+        {
+            Y_ABORT_UNLESS(firstStep <= lastStep);
+            Y_ABORT_UNLESS(numRecords);
 
-                case EDueLayout::Random: {
-                    TVector<size_t> indices;
-                    indices.reserve(numSsts);
-                    for (size_t i = 0; i < numSsts; ++i) {
-                        indices.push_back(i);
-                    }
+            const ui64 keyStride = numRecords > 1
+                ? Max<ui64>(1, (lastStep - firstStep) / (numRecords - 1))
+                : 1;
+            Y_ABORT_UNLESS(keyStride <= Max<ui32>());
+            Y_ABORT_UNLESS(Ssts.size() <= Max<ui32>());
+            AddSst(
+                level,
+                firstStep,
+                numRecords,
+                static_cast<ui32>(keyStride),
+                static_cast<ui32>(Ssts.size()));
+        }
 
-                    ui64 state = 0x6a09e667f3bcc909ULL;
-                    for (size_t size = indices.size(); size > 1; --size) {
-                        state = state * 6364136223846793005ULL + 1442695040888963407ULL;
-                        std::swap(indices[size - 1], indices[state % size]);
-                    }
-                    for (size_t i = 0; i < dueSsts; ++i) {
-                        due[indices[i]] = true;
-                    }
-                    break;
-                }
+        void PrepareProductionLike(ui64 requestedRecords, ui32 numSsts) {
+            // Mirrors w.html: 13 L0 SSTs, one SST on levels 1..12,
+            // three SSTs on level 17 and the remaining non-overlapping
+            // leaf SSTs on level 18.
+            Y_ABORT_UNLESS(numSsts > ProductionLikeWideSsts);
+            Y_ABORT_UNLESS(requestedRecords >= numSsts);
 
-                case EDueLayout::Count:
-                    Y_ABORT("Unexpected due SST layout");
+            const ui32 leafSsts = numSsts - ProductionLikeWideSsts;
+
+            // Record shares from w.html, rounded to tenths of a percent:
+            // L0 0.4%, levels 1..12 0.8%, L17 1.2%, L18 97.6%.
+            const ui64 level0Records = requestedRecords * 4 / 1000;
+            const ui64 middleLevelRecords = requestedRecords * 8 / 1000;
+            const ui64 level17Records = requestedRecords * 12 / 1000;
+            const ui64 leafRecords =
+                requestedRecords -
+                level0Records -
+                middleLevelRecords -
+                level17Records;
+            Y_ABORT_UNLESS(
+                level0Records >= ProductionLikeLevel0Ssts &&
+                middleLevelRecords >= ProductionLikeMiddleLevels &&
+                level17Records >= ProductionLikeLevel17Ssts &&
+                leafRecords >= leafSsts);
+
+            const ui64 firstKey = 1;
+            const ui64 lastKey = leafRecords;
+
+            for (ui32 i = 0; i < ProductionLikeLevel0Ssts; ++i) {
+                AddSparseSst(
+                    0,
+                    firstKey,
+                    lastKey,
+                    GetPartSize(
+                        level0Records,
+                        i,
+                        ProductionLikeLevel0Ssts));
             }
 
-            return due;
+            for (ui32 i = 0; i < ProductionLikeMiddleLevels; ++i) {
+                AddSparseSst(
+                    i + 1,
+                    firstKey,
+                    lastKey,
+                    GetPartSize(
+                        middleLevelRecords,
+                        i,
+                        ProductionLikeMiddleLevels));
+            }
+
+            ui64 level17FirstKey = firstKey;
+            for (ui32 i = 0; i < ProductionLikeLevel17Ssts; ++i) {
+                const ui64 level17LastKey =
+                    (i + 1) * leafRecords / ProductionLikeLevel17Ssts;
+                AddSparseSst(
+                    17,
+                    level17FirstKey,
+                    level17LastKey,
+                    GetPartSize(
+                        level17Records,
+                        i,
+                        ProductionLikeLevel17Ssts));
+                level17FirstKey = level17LastKey + 1;
+            }
+
+            ui64 leafFirstKey = firstKey;
+            for (ui32 i = 0; i < leafSsts; ++i) {
+                const ui64 records = GetPartSize(leafRecords, i, leafSsts);
+                Y_ABORT_UNLESS(Ssts.size() <= Max<ui32>());
+                AddSst(
+                    18,
+                    leafFirstKey,
+                    records,
+                    1,
+                    static_cast<ui32>(Ssts.size()));
+                leafFirstKey += records;
+            }
+            Y_ABORT_UNLESS(leafFirstKey == lastKey + 1);
         }
 
         static TKeyLogoBlob MakeKey(ui64 step) {
@@ -248,17 +320,16 @@ namespace {
                 state.range(3),
                 state.range(4),
                 state.range(5),
-                state.range(6),
-                static_cast<EDueLayout>(state.range(7)));
+                static_cast<EDataLayout>(state.range(6)));
             Snapshot.emplace(Data->Ds->GetIndexSnapshot());
 
             state.counters["SSTs"] = Data->Ssts.size();
             state.counters["Records"] = Data->TotalRecords;
-            state.counters["DueRecords"] = Data->DueRecords;
             state.counters["FreshRecords"] = state.range(3);
             state.counters["Overlap"] = state.range(2);
-            state.counters["DuePercent"] = state.range(5);
-            state.counters["DueLayout"] = state.range(7);
+            state.counters["KeyStride"] = state.range(4);
+            state.counters["AllL0"] = state.range(5);
+            state.counters["DataLayout"] = state.range(6);
         }
 
         void TearDown(benchmark::State&) override {
@@ -270,6 +341,15 @@ namespace {
 
         void AdvanceCalculationTime() {
             TimeProvider->Advance(TDuration::Minutes(5));
+        }
+
+        void MakeAllSstsDue() {
+            Data->MakeAllSstsDue(TimeProvider->Now());
+        }
+
+        void ScheduleFullBatchNow() {
+            Snapshot->HullCtx->StorageRatioFullBatchNextCalculationTime =
+                TimeProvider->Now();
         }
 
         void SetOptimizationEnabled(bool enabled) {
@@ -286,8 +366,11 @@ namespace {
                 true).Work();
         }
 
-        void SetItemsProcessed(benchmark::State& state) const {
-            state.SetItemsProcessed(state.iterations() * Data->DueRecords);
+        void SetItemsProcessed(benchmark::State& state) const
+        {
+            state.counters["CalculatedRecords"] = Data->TotalRecords;
+            state.counters["CalculatedSSTs"] = Data->Ssts.size();
+            state.SetItemsProcessed(state.iterations() * Data->TotalRecords);
         }
 
     private:
@@ -297,28 +380,35 @@ namespace {
         std::optional<THullDsSnap> Snapshot;
     };
 
-    BENCHMARK_DEFINE_F(TStorageRatioFixture, PerSst)(benchmark::State& state) {
+    BENCHMARK_DEFINE_F(TStorageRatioFixture, Legacy)(benchmark::State& state) {
         for (auto _ : state) {
             Y_UNUSED(_);
             state.PauseTiming();
             SetOptimizationEnabled(false);
             AdvanceCalculationTime();
+            MakeAllSstsDue();
             state.ResumeTiming();
 
+            // Represents the total legacy work over one recalculation period:
+            // every SST is calculated once, without measuring the idle time
+            // between individually scheduled SSTs.
             Calculate();
             benchmark::ClobberMemory();
         }
         SetItemsProcessed(state);
     }
 
-    BENCHMARK_DEFINE_F(TStorageRatioFixture, Batch)(benchmark::State& state) {
+    BENCHMARK_DEFINE_F(TStorageRatioFixture, FullBatch)(benchmark::State& state) {
         for (auto _ : state) {
             Y_UNUSED(_);
             state.PauseTiming();
             SetOptimizationEnabled(true);
             AdvanceCalculationTime();
+            ScheduleFullBatchNow();
             state.ResumeTiming();
 
+            // Measures one scheduled production FullBatch over the complete
+            // snapshot.
             Calculate();
             benchmark::ClobberMemory();
         }
@@ -334,38 +424,36 @@ namespace {
                 "Overlap",
                 "Fresh",
                 "Stride",
-                "DuePercent",
                 "AllL0",
-                "DueLayout",
+                "DataLayout",
             })
-            // records, SSTs, overlap, Fresh, stride, due %, all L0, due layout
-            // due layout: 0 prefix, 1 uniform, 2 edges, 3 random
-            ->Args({100'000, 8, 1, 0, 1, 100, 0, 0})
-            ->Args({100'000, 8, 2, 0, 1, 100, 0, 0})
-            ->Args({100'000, 8, 4, 0, 1, 100, 0, 0})
-            ->Args({100'000, 8, 8, 0, 1, 100, 0, 0})
-            ->Args({100'000, 8, 8, 0, 1, 100, 1, 0})
-            ->Args({100'000, 8, 1, 100'000, 1, 100, 0, 0})
-            ->Args({100'000, 8, 4, 0, 16, 100, 0, 0})
-            ->Args({100'000, 100, 4, 0, 1, 0, 0, 0})
-            ->Args({100'000, 100, 4, 0, 1, 1, 0, 0})
-            ->Args({100'000, 100, 4, 0, 1, 10, 0, 0})
-            ->Args({100'000, 100, 4, 0, 1, 100, 0, 0})
-            ->Args({1'000'000, 100, 4, 0, 1, 0, 0, 0})
-            ->Args({1'000'000, 100, 4, 0, 1, 1, 0, 0})
-            ->Args({1'000'000, 100, 4, 0, 1, 10, 0, 0})
-            ->Args({1'000'000, 100, 4, 0, 1, 100, 0, 0})
-            ->Args({100'000, 100, 4, 0, 1, 10, 0, 1})
-            ->Args({100'000, 100, 4, 0, 1, 2, 0, 2})
-            ->Args({100'000, 100, 4, 0, 1, 10, 0, 2})
-            ->Args({100'000, 100, 4, 0, 1, 10, 0, 3})
-            ->Args({1'000'000, 100, 4, 0, 1, 10, 0, 1})
+            // records, SSTs, overlap, Fresh, stride, all L0, data layout
+            // data layout: 0 uniform overlap, 1 production-like
+            // Controlled overlap.
+            ->Args({100'000, 100, 1, 0, 1, 0, 0})
+            ->Args({100'000, 100, 4, 0, 1, 0, 0})
+            ->Args({100'000, 100, 8, 0, 1, 0, 0})
+            ->Args({1'000'000, 100, 1, 0, 1, 0, 0})
+            ->Args({1'000'000, 100, 4, 0, 1, 0, 0})
+            ->Args({1'000'000, 100, 8, 0, 1, 0, 0})
+            // L0, Fresh and sparse-key variants.
+            ->Args({100'000, 100, 8, 0, 1, 1, 0})
+            ->Args({100'000, 100, 4, 100'000, 1, 0, 0})
+            ->Args({100'000, 100, 4, 0, 16, 0, 0})
+            // Topology and record distribution derived from w.html. The
+            // variants with Fresh use its observed ~7% record count.
+            ->Args({100'000, 352, 1, 0, 1, 0, 1})
+            ->Args({100'000, 352, 1, 7'000, 1, 0, 1})
+            ->Args({1'000'000, 352, 1, 0, 1, 0, 1})
+            ->Args({1'000'000, 352, 1, 70'000, 1, 0, 1})
+            ->Args({5'439'294, 352, 1, 0, 1, 0, 1})
+            ->Args({5'439'294, 352, 1, 367'052, 1, 0, 1})
             ->Unit(benchmark::kMillisecond);
     }
 
-    BENCHMARK_REGISTER_F(TStorageRatioFixture, PerSst)
+    BENCHMARK_REGISTER_F(TStorageRatioFixture, Legacy)
         ->Apply(AddStorageRatioScenarios);
-    BENCHMARK_REGISTER_F(TStorageRatioFixture, Batch)
+    BENCHMARK_REGISTER_F(TStorageRatioFixture, FullBatch)
         ->Apply(AddStorageRatioScenarios);
 
 } // namespace

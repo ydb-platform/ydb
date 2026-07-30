@@ -345,10 +345,15 @@ namespace NKikimr {
                 const THullDsSnap& snap,
                 bool enableOptimization,
                 bool allowGarbageCollection = true,
-                TCalcStat* calcStat = nullptr)
+                TCalcStat* calcStat = nullptr,
+                bool forceFullBatchDue = true)
         {
             snap.HullCtx->VCfg->FeatureFlags.SetEnableHullCompStorageRatioOptimization(
                 enableOptimization);
+            if (enableOptimization && forceFullBatchDue) {
+                snap.HullCtx->StorageRatioFullBatchNextCalculationTime =
+                    TInstant::Zero();
+            }
             auto barriers = snap.BarriersSnap.CreateEssence(snap.HullCtx);
             TStorageRatioStrategy(
                 snap.HullCtx,
@@ -474,7 +479,7 @@ namespace NKikimr {
             STR << "action = " << NHullComp::ActionToStr(action) << "\n";
         }
 
-        Y_UNIT_TEST(StorageRatioBatchMatchesPerSst) {
+        Y_UNIT_TEST(StorageRatioFullBatchMatchesLegacy) {
             auto db = MakeStorageRatioTestDb();
             auto snap = db->Ds->GetIndexSnapshot();
             TTimeProviderGuard timeProvider(CreateDeterministicTimeProvider(1000));
@@ -499,7 +504,7 @@ namespace NKikimr {
                 currentRatios.push_back(sst->StorageRatio.Get());
             }
 
-            RunStorageRatio(snap, true);
+            RunStorageRatio(snap, true, true, nullptr, false);
             for (size_t i = 0; i < db->Ssts.size(); ++i) {
                 UNIT_ASSERT_VALUES_EQUAL(
                     currentRatios[i].Get(),
@@ -507,7 +512,7 @@ namespace NKikimr {
             }
         }
 
-        Y_UNIT_TEST(StorageRatioBatchReducesWork) {
+        Y_UNIT_TEST(StorageRatioFullBatchReducesWork) {
             TStorageRatioTestDb db;
             TVector<ui32> steps;
             steps.reserve(100);
@@ -554,49 +559,63 @@ namespace NKikimr {
             UNIT_ASSERT_VALUES_EQUAL(900, batchStat.DbRecordsMerged);
             UNIT_ASSERT_VALUES_EQUAL(8, perSstStat.Seeks);
             UNIT_ASSERT_VALUES_EQUAL(1, batchStat.Seeks);
+            UNIT_ASSERT_VALUES_EQUAL(792, perSstStat.DbIteratorNexts);
+            UNIT_ASSERT_VALUES_EQUAL(99, batchStat.DbIteratorNexts);
 
             UNIT_ASSERT(batchStat.DbRecordsMerged < perSstStat.DbRecordsMerged);
             UNIT_ASSERT(batchStat.Seeks < perSstStat.Seeks);
+            UNIT_ASSERT(batchStat.DbIteratorNexts < perSstStat.DbIteratorNexts);
+
+            auto hullCtx = db.Context.GetHullCtx();
+            auto& totals = hullCtx->StorageRatioGroup;
+            UNIT_ASSERT_VALUES_EQUAL(2, totals.StorageRatioInvocations().Val());
+            UNIT_ASSERT_VALUES_EQUAL(
+                1,
+                totals.StorageRatioFeatureDisabledCalculations().Val());
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                totals.StorageRatioNoCalculationInvocations().Val());
+
+            auto& legacy = hullCtx->StorageRatioLegacyGroup;
+            UNIT_ASSERT_VALUES_EQUAL(1, legacy.StorageRatioCalculations().Val());
+            UNIT_ASSERT_VALUES_EQUAL(8, legacy.StorageRatioSstsCalculated().Val());
+            UNIT_ASSERT_VALUES_EQUAL(
+                perSstStat.KeysProcessed,
+                legacy.StorageRatioDbKeysMerged().Val());
+            UNIT_ASSERT_VALUES_EQUAL(
+                perSstStat.SourceRecordsProcessed,
+                legacy.StorageRatioSourceRecordsProcessed().Val());
+            UNIT_ASSERT_VALUES_EQUAL(
+                perSstStat.DbRecordsMerged,
+                legacy.StorageRatioDbRecordsMerged().Val());
+            UNIT_ASSERT_VALUES_EQUAL(
+                perSstStat.DbIteratorNexts,
+                legacy.StorageRatioDbIteratorNexts().Val());
+            UNIT_ASSERT_VALUES_EQUAL(
+                perSstStat.Seeks,
+                legacy.StorageRatioSeeks().Val());
+
+            auto& batch = hullCtx->StorageRatioBatchGroup;
+            UNIT_ASSERT_VALUES_EQUAL(1, batch.StorageRatioCalculations().Val());
+            UNIT_ASSERT_VALUES_EQUAL(8, batch.StorageRatioSstsCalculated().Val());
+            UNIT_ASSERT_VALUES_EQUAL(
+                batchStat.KeysProcessed,
+                batch.StorageRatioDbKeysMerged().Val());
+            UNIT_ASSERT_VALUES_EQUAL(
+                batchStat.SourceRecordsProcessed,
+                batch.StorageRatioSourceRecordsProcessed().Val());
+            UNIT_ASSERT_VALUES_EQUAL(
+                batchStat.DbRecordsMerged,
+                batch.StorageRatioDbRecordsMerged().Val());
+            UNIT_ASSERT_VALUES_EQUAL(
+                batchStat.DbIteratorNexts,
+                batch.StorageRatioDbIteratorNexts().Val());
+            UNIT_ASSERT_VALUES_EQUAL(
+                batchStat.Seeks,
+                batch.StorageRatioSeeks().Val());
         }
 
-        Y_UNIT_TEST(StorageRatioSkipsUnrelatedKeysForDisjointDueRanges) {
-            TStorageRatioTestDb db;
-            constexpr ui32 numSsts = 8;
-            constexpr ui32 recordsPerSst = 10;
-
-            for (ui32 sstIndex = 0; sstIndex < numSsts; ++sstIndex) {
-                TVector<ui32> steps;
-                steps.reserve(recordsPerSst);
-                for (ui32 record = 0; record < recordsPerSst; ++record) {
-                    steps.push_back(1 + sstIndex * 100 + record);
-                }
-                AddGeneratedSst(db, 0, steps, sstIndex);
-            }
-            db.Load();
-
-            auto snap = db.Ds->GetIndexSnapshot();
-            TTimeProviderGuard timeProvider(CreateDeterministicTimeProvider(1000));
-
-            SetDueSsts(db, {0, numSsts - 1});
-            TCalcStat perSstStat;
-            RunStorageRatio(snap, false, true, &perSstStat);
-            const auto expected = ReadRatios(db.Ssts);
-
-            SetDueSsts(db, {0, numSsts - 1});
-            TCalcStat batchStat;
-            RunStorageRatio(snap, true, true, &batchStat);
-            AssertRatiosEqual(expected, db.Ssts, "scattered due SSTs");
-
-            constexpr ui64 dueRecords = 2 * recordsPerSst;
-            UNIT_ASSERT_VALUES_EQUAL(dueRecords, perSstStat.KeysProcessed);
-            UNIT_ASSERT_VALUES_EQUAL(dueRecords, batchStat.KeysProcessed);
-            UNIT_ASSERT_VALUES_EQUAL(dueRecords, batchStat.SourceRecordsProcessed);
-            UNIT_ASSERT_VALUES_EQUAL(dueRecords, batchStat.DbRecordsMerged);
-            UNIT_ASSERT_VALUES_EQUAL(2, batchStat.Seeks);
-            UNIT_ASSERT(batchStat.KeysProcessed < numSsts * recordsPerSst);
-        }
-
-        Y_UNIT_TEST(StorageRatioBatchSeeksAcrossLargeNonDueGap) {
+        Y_UNIT_TEST(StorageRatioFullBatchSeeksAcrossLargeFreshGap) {
             TStorageRatioTestDb db;
 
             TVector<ui32> spanningSteps;
@@ -609,36 +628,40 @@ namespace NKikimr {
             AddGeneratedSst(db, 0, spanningSteps, 1);
 
             TVector<ui32> overlappingSteps;
-            TVector<ui32> gapSteps;
             for (ui32 offset = 0; offset < 10; ++offset) {
                 overlappingSteps.push_back(701 + offset);
-                gapSteps.push_back(100 + offset);
             }
             AddGeneratedSst(db, 0, overlappingSteps, 2);
-            AddGeneratedSst(db, 0, gapSteps, 3);
             db.Load();
+            for (ui32 offset = 0; offset < 10; ++offset) {
+                db.AddFresh(
+                    MakeKey(100 + offset),
+                    CollectModeDefault,
+                    100 + offset);
+            }
 
             auto snap = db.Ds->GetIndexSnapshot();
             TTimeProviderGuard timeProvider(CreateDeterministicTimeProvider(1000));
 
-            SetDueSsts(db, {0, 1});
             TCalcStat perSstStat;
             RunStorageRatio(snap, false, true, &perSstStat);
             const auto expected = ReadRatios(db.Ssts);
 
-            SetDueSsts(db, {0, 1});
+            db.ResetRatios();
             TCalcStat batchStat;
             RunStorageRatio(snap, true, true, &batchStat);
-            AssertRatiosEqual(expected, db.Ssts, "large non-due gap");
+            AssertRatiosEqual(expected, db.Ssts, "large Fresh-only gap");
 
             UNIT_ASSERT_VALUES_EQUAL(20, batchStat.KeysProcessed);
             UNIT_ASSERT_VALUES_EQUAL(30, batchStat.SourceRecordsProcessed);
             UNIT_ASSERT_VALUES_EQUAL(30, batchStat.DbRecordsMerged);
             UNIT_ASSERT_VALUES_EQUAL(2, batchStat.Seeks);
+            UNIT_ASSERT_VALUES_EQUAL(23, batchStat.DbIteratorNexts);
             UNIT_ASSERT(batchStat.Seeks < perSstStat.Seeks);
+            UNIT_ASSERT(batchStat.DbIteratorNexts < perSstStat.DbIteratorNexts);
         }
 
-        Y_UNIT_TEST(StorageRatioDoesNoWorkWhenNothingIsDue) {
+        Y_UNIT_TEST(StorageRatioDoesNoWorkBeforeNextScheduledCalculation) {
             auto db = MakeStorageRatioTestDb();
             auto snap = db->Ds->GetIndexSnapshot();
             TTimeProviderGuard timeProvider(CreateDeterministicTimeProvider(1000));
@@ -652,12 +675,17 @@ namespace NKikimr {
                     ratiosBeforeCalculation.push_back(sst->StorageRatio.Get());
                 }
 
+                if (enableOptimization) {
+                    snap.HullCtx->StorageRatioFullBatchNextCalculationTime =
+                        TInstant::Seconds(2000);
+                }
                 TCalcStat stat;
                 RunStorageRatio(
                     snap,
                     enableOptimization,
                     true,
-                    &stat);
+                    &stat,
+                    false);
 
                 for (size_t i = 0; i < db->Ssts.size(); ++i) {
                     UNIT_ASSERT_VALUES_EQUAL(
@@ -668,13 +696,34 @@ namespace NKikimr {
                 UNIT_ASSERT_VALUES_EQUAL(0, stat.SourceRecordsProcessed);
                 UNIT_ASSERT_VALUES_EQUAL(0, stat.DbRecordsMerged);
                 UNIT_ASSERT_VALUES_EQUAL(0, stat.Seeks);
+                UNIT_ASSERT_VALUES_EQUAL(0, stat.DbIteratorNexts);
             };
 
             checkAlgorithm(false);
             checkAlgorithm(true);
+
+            auto hullCtx = db->Context.GetHullCtx();
+            UNIT_ASSERT_VALUES_EQUAL(
+                2,
+                hullCtx->StorageRatioGroup.StorageRatioInvocations().Val());
+            UNIT_ASSERT_VALUES_EQUAL(
+                2,
+                hullCtx->StorageRatioGroup
+                    .StorageRatioNoCalculationInvocations()
+                    .Val());
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                hullCtx->StorageRatioLegacyGroup
+                    .StorageRatioCalculations()
+                    .Val());
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                hullCtx->StorageRatioBatchGroup
+                    .StorageRatioCalculations()
+                    .Val());
         }
 
-        Y_UNIT_TEST(StorageRatioBatchFallsBackForDuplicateSst) {
+        Y_UNIT_TEST(StorageRatioFullBatchFallsBackForDuplicateSst) {
             TStorageRatioTestDb db;
             TLogoSstPtr sst = db.AddSst(0, {
                 {MakeKey(1), TMemRecLogoBlob()},
@@ -704,10 +753,19 @@ namespace NKikimr {
                 batchStat.SourceRecordsProcessed);
             UNIT_ASSERT_VALUES_EQUAL(perSstStat.DbRecordsMerged, batchStat.DbRecordsMerged);
             UNIT_ASSERT_VALUES_EQUAL(perSstStat.Seeks, batchStat.Seeks);
+            UNIT_ASSERT_VALUES_EQUAL(
+                perSstStat.DbIteratorNexts,
+                batchStat.DbIteratorNexts);
             UNIT_ASSERT_VALUES_EQUAL(2, batchStat.Seeks);
+            UNIT_ASSERT_VALUES_EQUAL(
+                1,
+                db.Context.GetHullCtx()
+                    ->StorageRatioGroup
+                    .StorageRatioDuplicateSstFallbacks()
+                    .Val());
         }
 
-        Y_UNIT_TEST(StorageRatioBatchOnlyPublishesDueSsts) {
+        Y_UNIT_TEST(StorageRatioFullBatchRecalculatesAllSstsAtVdiskDeadline) {
             auto db = MakeStorageRatioTestDb();
             auto snap = db->Ds->GetIndexSnapshot();
             TTimeProviderGuard timeProvider(CreateDeterministicTimeProvider(1000));
@@ -715,33 +773,315 @@ namespace NKikimr {
             RunStorageRatio(snap, false);
             const auto expected = ReadRatios(db->Ssts);
 
-            db->ResetRatios();
+            SetDueSsts(*db, {0});
             TVector<TSstRatioPtr> ratiosBeforeCalculation;
             ratiosBeforeCalculation.reserve(db->Ssts.size());
-            ratiosBeforeCalculation.push_back(db->Ssts[0]->StorageRatio.Get());
-
-            for (size_t i = 1; i < db->Ssts.size(); ++i) {
-                TSstRatioPtr ratio = MakeIntrusive<TSstRatio>(TInstant::Seconds(900));
-                ratio->IndexItemsTotal = db->Ssts[i]->Elements();
-                ratio->IndexItemsKeep = db->Ssts[i]->Elements();
-                db->Ssts[i]->StorageRatio.Set(ratio, ratio->Time);
-                ratiosBeforeCalculation.push_back(std::move(ratio));
+            for (const TLogoSstPtr& sst : db->Ssts) {
+                ratiosBeforeCalculation.push_back(sst->StorageRatio.Get());
             }
 
-            RunStorageRatio(snap, true);
+            TCalcStat fullBatchStat;
+            RunStorageRatio(snap, true, true, &fullBatchStat);
+            AssertRatiosEqual(expected, db->Ssts, "full batch");
 
-            TSstRatioPtr recalculated = db->Ssts[0]->StorageRatio.Get();
-            UNIT_ASSERT(recalculated.Get() != ratiosBeforeCalculation[0].Get());
-            AssertRatioEqual(
-                expected.at(db->Ssts[0].Get()),
-                *recalculated,
-                db->Ssts[0]->FirstKey().ToString());
+            ui64 totalRecords = 0;
+            TVector<TSstRatioPtr> calculatedRatios;
+            calculatedRatios.reserve(db->Ssts.size());
+            for (size_t i = 0; i < db->Ssts.size(); ++i) {
+                UNIT_ASSERT_VALUES_UNEQUAL(
+                    ratiosBeforeCalculation[i].Get(),
+                    db->Ssts[i]->StorageRatio.Get().Get());
+                totalRecords += db->Ssts[i]->Elements();
+                calculatedRatios.push_back(db->Ssts[i]->StorageRatio.Get());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(
+                totalRecords,
+                fullBatchStat.SourceRecordsProcessed);
 
-            for (size_t i = 1; i < db->Ssts.size(); ++i) {
+            auto hullCtx = db->Context.GetHullCtx();
+            const TDuration calcPeriod =
+                hullCtx->HullCompStorageRatioCalcPeriod;
+            UNIT_ASSERT(
+                hullCtx->StorageRatioFullBatchNextCalculationTime.has_value());
+            const TInstant nextCalculationTime =
+                *hullCtx->StorageRatioFullBatchNextCalculationTime;
+            UNIT_ASSERT(nextCalculationTime > TInstant::Seconds(1000));
+            UNIT_ASSERT(nextCalculationTime <=
+                TInstant::Seconds(1000) + calcPeriod);
+            for (const TLogoSstPtr& sst : db->Ssts) {
+                UNIT_ASSERT_VALUES_EQUAL(
+                    TInstant::Seconds(1000),
+                    sst->StorageRatio.GetCalculationTime());
+            }
+
+            TCalcStat noWorkStat;
+            RunStorageRatio(snap, true, true, &noWorkStat, false);
+            UNIT_ASSERT_VALUES_EQUAL(0, noWorkStat.SourceRecordsProcessed);
+            for (size_t i = 0; i < db->Ssts.size(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(
+                    calculatedRatios[i].Get(),
+                    db->Ssts[i]->StorageRatio.Get().Get());
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(
+                1,
+                hullCtx->StorageRatioGroup
+                    .StorageRatioFullRecalculations()
+                    .Val());
+            UNIT_ASSERT_VALUES_EQUAL(
+                db->Ssts.size(),
+                hullCtx->StorageRatioBatchGroup
+                    .StorageRatioSstsCalculated()
+                    .Val());
+        }
+
+        Y_UNIT_TEST(StorageRatioFullBatchIgnoresPerSstDueAtVdiskDeadline) {
+            auto db = MakeStorageRatioTestDb();
+            auto snap = db->Ds->GetIndexSnapshot();
+
+            {
+                TTimeProviderGuard timeProvider(
+                    CreateDeterministicTimeProvider(1000));
+                RunStorageRatio(snap, false);
+            }
+            const auto expected = ReadRatios(db->Ssts);
+
+            TVector<TSstRatioPtr> ratiosBeforeCalculation;
+            ratiosBeforeCalculation.reserve(db->Ssts.size());
+            for (const TLogoSstPtr& sst : db->Ssts) {
+                ratiosBeforeCalculation.push_back(sst->StorageRatio.Get());
+            }
+
+            auto hullCtx = db->Context.GetHullCtx();
+            const TInstant deadline = TInstant::Seconds(1100);
+            hullCtx->StorageRatioFullBatchNextCalculationTime = deadline;
+
+            TCalcStat stat;
+            {
+                TTimeProviderGuard timeProvider(
+                    MakeIntrusive<TSteppingTimeProvider>(
+                        deadline,
+                        TDuration::Zero()));
+                RunStorageRatio(snap, true, true, &stat, false);
+            }
+
+            AssertRatiosEqual(expected, db->Ssts, "not-due full batch");
+            ui64 totalRecords = 0;
+            for (size_t i = 0; i < db->Ssts.size(); ++i) {
+                UNIT_ASSERT_VALUES_UNEQUAL(
+                    ratiosBeforeCalculation[i].Get(),
+                    db->Ssts[i]->StorageRatio.Get().Get());
+                UNIT_ASSERT_VALUES_EQUAL(
+                    deadline,
+                    db->Ssts[i]->StorageRatio.GetCalculationTime());
+                totalRecords += db->Ssts[i]->Elements();
+            }
+            UNIT_ASSERT_VALUES_EQUAL(
+                totalRecords,
+                stat.SourceRecordsProcessed);
+            UNIT_ASSERT_VALUES_EQUAL(
+                1,
+                hullCtx->StorageRatioGroup
+                    .StorageRatioFullRecalculations()
+                    .Val());
+        }
+
+        Y_UNIT_TEST(StorageRatioFullBatchIgnoresSstDueUntilVdiskDeadline) {
+            auto db = MakeStorageRatioTestDb();
+            auto snap = db->Ds->GetIndexSnapshot();
+
+            {
+                TTimeProviderGuard timeProvider(
+                    CreateDeterministicTimeProvider(900));
+                RunStorageRatio(snap, false);
+            }
+            const auto expected = ReadRatios(db->Ssts);
+
+            // Model a newly created SST: its ratio is due immediately, while
+            // the VDisk-wide full-batch schedule is not initialized yet.
+            SetDueSsts(*db, {0});
+            TVector<TSstRatioPtr> ratiosBeforeCalculation;
+            ratiosBeforeCalculation.reserve(db->Ssts.size());
+            for (const TLogoSstPtr& sst : db->Ssts) {
+                ratiosBeforeCalculation.push_back(sst->StorageRatio.Get());
+            }
+
+            TCalcStat initializationStat;
+            {
+                TTimeProviderGuard timeProvider(
+                    MakeIntrusive<TSteppingTimeProvider>(
+                        TInstant::Seconds(1000),
+                        TDuration::Zero()));
+                RunStorageRatio(
+                    snap,
+                    true,
+                    true,
+                    &initializationStat,
+                    false);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                initializationStat.SourceRecordsProcessed);
+
+            auto hullCtx = db->Context.GetHullCtx();
+            UNIT_ASSERT(
+                hullCtx->StorageRatioFullBatchNextCalculationTime.has_value());
+            const TInstant deadline =
+                *hullCtx->StorageRatioFullBatchNextCalculationTime;
+            UNIT_ASSERT(deadline > TInstant::Seconds(1000));
+            UNIT_ASSERT(deadline <= TInstant::Seconds(1000) +
+                hullCtx->HullCompStorageRatioCalcPeriod);
+
+            TCalcStat beforeDeadlineStat;
+            {
+                TTimeProviderGuard timeProvider(
+                    MakeIntrusive<TSteppingTimeProvider>(
+                        deadline - TDuration::MicroSeconds(1),
+                        TDuration::Zero()));
+                RunStorageRatio(
+                    snap,
+                    true,
+                    true,
+                    &beforeDeadlineStat,
+                    false);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                beforeDeadlineStat.SourceRecordsProcessed);
+            for (size_t i = 0; i < db->Ssts.size(); ++i) {
                 UNIT_ASSERT_VALUES_EQUAL(
                     ratiosBeforeCalculation[i].Get(),
                     db->Ssts[i]->StorageRatio.Get().Get());
             }
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                hullCtx->StorageRatioGroup
+                    .StorageRatioFullRecalculations()
+                    .Val());
+
+            TCalcStat atDeadlineStat;
+            {
+                TTimeProviderGuard timeProvider(
+                    MakeIntrusive<TSteppingTimeProvider>(
+                        deadline,
+                        TDuration::Zero()));
+                RunStorageRatio(
+                    snap,
+                    true,
+                    true,
+                    &atDeadlineStat,
+                    false);
+            }
+            AssertRatiosEqual(
+                expected,
+                db->Ssts,
+                "VDisk full-batch deadline");
+            ui64 totalRecords = 0;
+            for (size_t i = 0; i < db->Ssts.size(); ++i) {
+                UNIT_ASSERT_VALUES_UNEQUAL(
+                    ratiosBeforeCalculation[i].Get(),
+                    db->Ssts[i]->StorageRatio.Get().Get());
+                totalRecords += db->Ssts[i]->Elements();
+            }
+            UNIT_ASSERT_VALUES_EQUAL(
+                totalRecords,
+                atDeadlineStat.SourceRecordsProcessed);
+            UNIT_ASSERT_VALUES_EQUAL(
+                1,
+                hullCtx->StorageRatioGroup
+                    .StorageRatioFullRecalculations()
+                    .Val());
+            const TInstant nextDeadline =
+                *hullCtx->StorageRatioFullBatchNextCalculationTime;
+            UNIT_ASSERT(nextDeadline > deadline);
+
+            SetDueSsts(*db, {0});
+            TVector<TSstRatioPtr> ratiosAfterNewSst;
+            ratiosAfterNewSst.reserve(db->Ssts.size());
+            for (const TLogoSstPtr& sst : db->Ssts) {
+                ratiosAfterNewSst.push_back(sst->StorageRatio.Get());
+            }
+
+            TCalcStat newSstStat;
+            {
+                TTimeProviderGuard timeProvider(
+                    MakeIntrusive<TSteppingTimeProvider>(
+                        deadline + TDuration::MicroSeconds(1),
+                        TDuration::Zero()));
+                RunStorageRatio(
+                    snap,
+                    true,
+                    true,
+                    &newSstStat,
+                    false);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(0, newSstStat.SourceRecordsProcessed);
+            for (size_t i = 0; i < db->Ssts.size(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(
+                    ratiosAfterNewSst[i].Get(),
+                    db->Ssts[i]->StorageRatio.Get().Get());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(
+                1,
+                hullCtx->StorageRatioGroup
+                    .StorageRatioFullRecalculations()
+                    .Val());
+            UNIT_ASSERT_VALUES_EQUAL(
+                nextDeadline,
+                *hullCtx->StorageRatioFullBatchNextCalculationTime);
+        }
+
+        Y_UNIT_TEST(StorageRatioFullBatchRecalculatesAllDisjointSstsViaLegacyFallback) {
+            TStorageRatioTestDb db;
+            AddGeneratedSst(db, 0, {1, 2, 3}, 1);
+            AddGeneratedSst(db, 0, {101, 102, 103}, 2);
+            AddGeneratedSst(db, 0, {201, 202, 203}, 3);
+            db.Load();
+
+            auto snap = db.Ds->GetIndexSnapshot();
+            TTimeProviderGuard timeProvider(CreateDeterministicTimeProvider(1000));
+
+            RunStorageRatio(snap, false);
+            const auto expected = ReadRatios(db.Ssts);
+
+            SetDueSsts(db, {0});
+            TVector<TSstRatioPtr> ratiosBeforeCalculation;
+            ratiosBeforeCalculation.reserve(db.Ssts.size());
+            for (const TLogoSstPtr& sst : db.Ssts) {
+                ratiosBeforeCalculation.push_back(sst->StorageRatio.Get());
+            }
+
+            TCalcStat fullBatchStat;
+            RunStorageRatio(snap, true, true, &fullBatchStat);
+            AssertRatiosEqual(expected, db.Ssts, "full batch disjoint fallback");
+
+            ui64 totalRecords = 0;
+            for (size_t i = 0; i < db.Ssts.size(); ++i) {
+                UNIT_ASSERT_VALUES_UNEQUAL(
+                    ratiosBeforeCalculation[i].Get(),
+                    db.Ssts[i]->StorageRatio.Get().Get());
+                totalRecords += db.Ssts[i]->Elements();
+            }
+            UNIT_ASSERT_VALUES_EQUAL(
+                totalRecords,
+                fullBatchStat.SourceRecordsProcessed);
+
+            auto hullCtx = db.Context.GetHullCtx();
+            UNIT_ASSERT_VALUES_EQUAL(
+                1,
+                hullCtx->StorageRatioGroup
+                    .StorageRatioFullRecalculations()
+                    .Val());
+            UNIT_ASSERT_VALUES_EQUAL(
+                1,
+                hullCtx->StorageRatioGroup
+                    .StorageRatioNonOverlappingFallbacks()
+                    .Val());
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                hullCtx->StorageRatioBatchGroup
+                    .StorageRatioCalculations()
+                    .Val());
         }
 
         Y_UNIT_TEST(StorageRatioAlgorithmsMatchScenarioMatrix) {
@@ -911,7 +1251,7 @@ namespace NKikimr {
             UNIT_ASSERT(batchStat.Seeks < perSstStat.Seeks);
         }
 
-        Y_UNIT_TEST(StorageRatioBatchPublishesAllCompleteRatiosOnTimeout) {
+        Y_UNIT_TEST(StorageRatioFullBatchCompletesPastCalculationDuration) {
             auto db = MakeStorageRatioTestDb();
             auto snap = db->Ds->GetIndexSnapshot();
 
@@ -921,14 +1261,17 @@ namespace NKikimr {
             }
             const auto expected = ReadRatios(db->Ssts);
 
-            db->ResetRatios();
-            TVector<TSstRatioPtr> initialRatios;
-            initialRatios.reserve(db->Ssts.size());
+            SetDueSsts(*db, {0});
+            TVector<TSstRatioPtr> ratiosBeforeCalculation;
+            ratiosBeforeCalculation.reserve(db->Ssts.size());
             for (const TLogoSstPtr& sst : db->Ssts) {
-                initialRatios.push_back(sst->StorageRatio.Get());
+                ratiosBeforeCalculation.push_back(sst->StorageRatio.Get());
             }
 
             {
+                // Work() observes more than HullCompStorageRatioMaxCalcDuration
+                // between its start and finish. FullBatch must still publish a
+                // complete ratio for every SST in the snapshot.
                 TTimeProviderGuard timeProvider(
                     MakeIntrusive<TSteppingTimeProvider>(
                         TInstant::Seconds(1000),
@@ -936,22 +1279,87 @@ namespace NKikimr {
                 RunStorageRatio(snap, true);
             }
 
+            for (size_t i = 0; i < db->Ssts.size(); ++i) {
+                TSstRatioPtr ratio = db->Ssts[i]->StorageRatio.Get();
+                UNIT_ASSERT_VALUES_UNEQUAL(
+                    ratiosBeforeCalculation[i].Get(),
+                    ratio.Get());
+                AssertRatioEqual(
+                    expected.at(db->Ssts[i].Get()),
+                    *ratio,
+                    db->Ssts[i]->FirstKey().ToString());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                db->Context.GetHullCtx()
+                    ->StorageRatioGroup
+                    .StorageRatioTimeouts()
+                    .Val());
+            UNIT_ASSERT_VALUES_EQUAL(
+                1,
+                db->Context.GetHullCtx()
+                    ->StorageRatioGroup
+                    .StorageRatioFullRecalculations()
+                    .Val());
+            UNIT_ASSERT_VALUES_EQUAL(
+                db->Ssts.size(),
+                db->Context.GetHullCtx()
+                    ->StorageRatioBatchGroup
+                    .StorageRatioSstsCalculated()
+                    .Val());
+        }
+
+        Y_UNIT_TEST(StorageRatioLegacyStillRespectsCalculationDuration) {
+            auto db = MakeStorageRatioTestDb();
+            auto snap = db->Ds->GetIndexSnapshot();
+
+            {
+                TTimeProviderGuard timeProvider(
+                    CreateDeterministicTimeProvider(1000));
+                RunStorageRatio(snap, false);
+            }
+            const auto expected = ReadRatios(db->Ssts);
+
+            SetDueSsts(*db, {0, 1, 2});
+            TVector<TSstRatioPtr> ratiosBeforeCalculation;
+            ratiosBeforeCalculation.reserve(db->Ssts.size());
+            for (const TLogoSstPtr& sst : db->Ssts) {
+                ratiosBeforeCalculation.push_back(sst->StorageRatio.Get());
+            }
+
+            {
+                TTimeProviderGuard timeProvider(
+                    MakeIntrusive<TSteppingTimeProvider>(
+                        TInstant::Seconds(1000),
+                        TDuration::Seconds(2)));
+                RunStorageRatio(snap, false);
+            }
+
             size_t publishedRatios = 0;
             for (size_t i = 0; i < db->Ssts.size(); ++i) {
                 TSstRatioPtr ratio = db->Ssts[i]->StorageRatio.Get();
-                if (ratio.Get() != initialRatios[i].Get()) {
+                if (ratiosBeforeCalculation[i].Get() != ratio.Get()) {
                     ++publishedRatios;
                     AssertRatioEqual(
                         expected.at(db->Ssts[i].Get()),
                         *ratio,
                         db->Ssts[i]->FirstKey().ToString());
-                } else {
-                    UNIT_ASSERT_VALUES_EQUAL(
-                        db->Ssts[i]->Elements(),
-                        ratio->IndexItemsKeep);
                 }
             }
-            UNIT_ASSERT_VALUES_EQUAL(2, publishedRatios);
+            UNIT_ASSERT(publishedRatios > 0);
+            UNIT_ASSERT(publishedRatios < db->Ssts.size());
+            UNIT_ASSERT_VALUES_EQUAL(
+                1,
+                db->Context.GetHullCtx()
+                    ->StorageRatioGroup
+                    .StorageRatioTimeouts()
+                    .Val());
+            UNIT_ASSERT_VALUES_EQUAL(
+                0,
+                db->Context.GetHullCtx()
+                    ->StorageRatioGroup
+                    .StorageRatioFullRecalculations()
+                    .Val());
         }
 
     }

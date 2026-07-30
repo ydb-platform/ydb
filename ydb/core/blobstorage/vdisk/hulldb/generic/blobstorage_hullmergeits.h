@@ -54,7 +54,8 @@ namespace NKikimr {
             ui64 *keysProcessedCounter,
             ui64 *sourceRecordsProcessedCounter,
             ui64 *dbRecordsMergedCounter,
-            ui64 *seekCounter)
+            ui64 *seekCounter,
+            ui64 *nextCounter)
     {
         // the subset we processing
         TRecordMerger subsMerger(gtype);
@@ -96,6 +97,9 @@ namespace NKikimr {
                 dbMerger.Clear();
 
                 if (seenItems < skipBeforeSeek) {
+                    if constexpr (CollectStats) {
+                        ++*nextCounter;
+                    }
                     dbIt.Next();
                 } else {
                     if constexpr (CollectStats) {
@@ -134,6 +138,7 @@ namespace NKikimr {
             nullptr,
             nullptr,
             nullptr,
+            nullptr,
             nullptr);
     }
 
@@ -142,7 +147,7 @@ namespace NKikimr {
                                           TDbIterator &dbIt, TNewItem &newItem, TDoMerge &doMerge,
                                           TCrash &crashReport, ui64 &keysProcessedCounter,
                                           ui64 &sourceRecordsProcessedCounter, ui64 &dbRecordsMergedCounter,
-                                          ui64 &seekCounter,
+                                          ui64 &seekCounter, ui64 &nextCounter,
                                           ui32 skipBeforeSeek = 6) {
         MergeIteratorWithWholeDbImpl<true, TSubsIterator, TDbIterator, TRecordMerger>(
             gtype,
@@ -155,7 +160,8 @@ namespace NKikimr {
             &keysProcessedCounter,
             &sourceRecordsProcessedCounter,
             &dbRecordsMergedCounter,
-            &seekCounter);
+            &seekCounter,
+            &nextCounter);
     }
 
 } // NKikimr

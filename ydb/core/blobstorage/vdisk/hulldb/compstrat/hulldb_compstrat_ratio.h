@@ -30,7 +30,7 @@ namespace NKikimr {
             typedef ::NKikimr::TIndexRecordMerger<TKey, TMemRec> TIndexRecordMerger;
 
             struct TCalcStat {
-                // Logical keys for which a ratio contribution was evaluated.
+                // Whole-database keys put into a merger and finished.
                 ui64 KeysProcessed = 0;
                 // SST records attributed to ratio accumulators.
                 ui64 SourceRecordsProcessed = 0;
@@ -38,6 +38,8 @@ namespace NKikimr {
                 ui64 DbRecordsMerged = 0;
                 // Explicit Seek calls made by the calculation.
                 ui64 Seeks = 0;
+                // Next calls made while positioning the whole-database iterator.
+                ui64 DbIteratorNexts = 0;
             };
 
             TStrategyStorageRatio(TIntrusivePtr<THullCtx> hullCtx,
@@ -49,34 +51,39 @@ namespace NKikimr {
                 , LevelSnap(levelSnap)
                 , BarriersEssence(std::move(barriersEssence))
                 , AllowGarbageCollection(allowGarbageCollection)
-                , CalcStat(calcStat)
+                , ExternalCalcStat(calcStat)
             {}
 
 
             void Work() {
-                const bool useBatchAlgorithm =
-                    HullCtx->VCfg->FeatureFlags.GetEnableHullCompStorageRatioOptimization();
+                GetCalcStat() = {};
 
-                if (CalcStat) {
-                    *CalcStat = {};
-                }
-
-                TInstant startTime(TAppData::TimeProvider->Now());
+                const bool optimizationEnabled = HullCtx->VCfg->FeatureFlags
+                    .GetEnableHullCompStorageRatioOptimization();
+                const TInstant startTime(TAppData::TimeProvider->Now());
                 TStat stat;
-                if (CalcStat) {
-                    if (useBatchAlgorithm) {
-                        UpdateStorageRatioForDbBatch<true>(startTime, stat);
-                    } else {
-                        UpdateStorageRatioForDb<true>(startTime, stat);
+                bool fullBatchScheduled = false;
+                if (optimizationEnabled) {
+                    if (IsFullBatchCalculationDue(startTime)) {
+                        fullBatchScheduled = true;
+                        UpdateStorageRatioForDbFullBatch<true>(startTime, stat);
                     }
                 } else {
-                    if (useBatchAlgorithm) {
-                        UpdateStorageRatioForDbBatch<false>(startTime, stat);
-                    } else {
-                        UpdateStorageRatioForDb<false>(startTime, stat);
-                    }
+                    HullCtx->StorageRatioFullBatchNextCalculationTime.reset();
+                    UpdateStorageRatioForDb<true>(startTime, stat);
                 }
-                TInstant finishTime(TAppData::TimeProvider->Now());
+
+                const TInstant finishTime(TAppData::TimeProvider->Now());
+                if (fullBatchScheduled) {
+                    HullCtx->StorageRatioFullBatchNextCalculationTime =
+                        GetNextFullBatchCalculationTime(
+                            finishTime,
+                            HullCtx->HullCompStorageRatioCalcPeriod);
+                }
+                AccountMetrics(
+                    optimizationEnabled,
+                    stat,
+                    finishTime - startTime);
                 if (HullCtx->VCtx->ActorSystem) {
                     YDB_LOG_DEBUG_CTX_COMP(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "%s: StorageRatio: timeSpent# %s stat# %s", PDiskSignatureForHullDbKey<TKey>().ToString().data(), (finishTime - startTime).ToString().data(), stat.ToString().data()));
                 }
@@ -89,20 +96,90 @@ namespace NKikimr {
             const TLevelIndexSnapshot &LevelSnap;
             TIntrusivePtr<TBarriersSnapshot::TBarriersEssence> BarriersEssence;
             const bool AllowGarbageCollection;
-            TCalcStat* const CalcStat;
+            TCalcStat OwnedCalcStat;
+            TCalcStat* const ExternalCalcStat;
+
+            TCalcStat& GetCalcStat() {
+                return ExternalCalcStat ? *ExternalCalcStat : OwnedCalcStat;
+            }
+
+            const TCalcStat& GetCalcStat() const {
+                return ExternalCalcStat ? *ExternalCalcStat : OwnedCalcStat;
+            }
 
             struct TStat {
                 ui32 SstsChecked = 0;
                 bool BreakedActualRatio = false;
                 bool BreakedTimeout = false;
+                bool UsedBatchAlgorithm = false;
+                bool NonOverlappingFallback = false;
+                bool DuplicateSstFallback = false;
 
                 TString ToString() const {
                     auto bool2str = [] (bool v) { return v ? "true" : "false"; };
-                    return Sprintf("{SstsChecked# %" PRIu32 " BreakedActualRatio# %s "
-                                   "BreakedTimeout# %s}", SstsChecked, bool2str(BreakedActualRatio),
-                                   bool2str(BreakedTimeout));
+                    return Sprintf(
+                        "{SstsChecked# %" PRIu32 " "
+                        "BreakedActualRatio# %s BreakedTimeout# %s "
+                        "UsedBatchAlgorithm# %s NonOverlappingFallback# %s "
+                        "DuplicateSstFallback# %s}",
+                        SstsChecked,
+                        bool2str(BreakedActualRatio),
+                        bool2str(BreakedTimeout),
+                        bool2str(UsedBatchAlgorithm),
+                        bool2str(NonOverlappingFallback),
+                        bool2str(DuplicateSstFallback));
                 }
             };
+
+            void AccountMetrics(
+                    bool optimizationEnabled,
+                    const TStat& stat,
+                    TDuration elapsed)
+            {
+                auto& totals = HullCtx->StorageRatioGroup;
+                ++totals.StorageRatioInvocations();
+                totals.StorageRatioTotalElapsedMicroseconds() += elapsed.MicroSeconds();
+
+                if (stat.BreakedTimeout) {
+                    ++totals.StorageRatioTimeouts();
+                }
+                if (stat.NonOverlappingFallback) {
+                    ++totals.StorageRatioNonOverlappingFallbacks();
+                }
+                if (stat.DuplicateSstFallback) {
+                    ++totals.StorageRatioDuplicateSstFallbacks();
+                }
+                const TCalcStat& calcStat = GetCalcStat();
+                const bool hadCalculation =
+                    stat.SstsChecked ||
+                    calcStat.KeysProcessed ||
+                    calcStat.SourceRecordsProcessed;
+                if (!hadCalculation) {
+                    ++totals.StorageRatioNoCalculationInvocations();
+                    return;
+                }
+
+                if (optimizationEnabled) {
+                    ++totals.StorageRatioFullRecalculations();
+                }
+
+                if (!optimizationEnabled) {
+                    ++totals.StorageRatioFeatureDisabledCalculations();
+                }
+
+                auto& algorithm = stat.UsedBatchAlgorithm
+                    ? HullCtx->StorageRatioBatchGroup
+                    : HullCtx->StorageRatioLegacyGroup;
+                ++algorithm.StorageRatioCalculations();
+                algorithm.StorageRatioSstsCalculated() += stat.SstsChecked;
+                algorithm.StorageRatioDbKeysMerged() += calcStat.KeysProcessed;
+                algorithm.StorageRatioSourceRecordsProcessed() +=
+                    calcStat.SourceRecordsProcessed;
+                algorithm.StorageRatioDbRecordsMerged() += calcStat.DbRecordsMerged;
+                algorithm.StorageRatioDbIteratorNexts() += calcStat.DbIteratorNexts;
+                algorithm.StorageRatioSeeks() += calcStat.Seeks;
+                algorithm.StorageRatioElapsedMicroseconds() += elapsed.MicroSeconds();
+            }
 
             struct TTimeSst {
                 TInstant NextCalculationTime;
@@ -165,6 +242,41 @@ namespace NKikimr {
                 return GetCalculationTime(p, startTime, calcPeriod) + calcPeriod;
             }
 
+            TInstant GetNextFullBatchCalculationTime(
+                    TInstant now,
+                    TDuration calcPeriod) const
+            {
+                const ui64 periodUs = calcPeriod.MicroSeconds();
+                if (!periodUs) {
+                    return now;
+                }
+
+                const ui64 vdiskHash = CombineHashes(
+                    IntHash<ui64>(HullCtx->VCtx->GroupId.GetRawId()),
+                    IntHash<ui64>(HullCtx->VCtx->ShortSelfVDisk.GetRaw()));
+                const ui64 phaseUs = vdiskHash % periodUs;
+                const ui64 nowUs = now.MicroSeconds();
+                const ui64 cycleStartUs = nowUs - nowUs % periodUs;
+
+                ui64 nextCalculationUs = cycleStartUs + phaseUs;
+                if (nextCalculationUs <= nowUs) {
+                    nextCalculationUs += periodUs;
+                }
+
+                return TInstant::MicroSeconds(nextCalculationUs);
+            }
+
+            bool IsFullBatchCalculationDue(TInstant now) {
+                auto& nextCalculationTime =
+                    HullCtx->StorageRatioFullBatchNextCalculationTime;
+                if (!nextCalculationTime) {
+                    nextCalculationTime = GetNextFullBatchCalculationTime(
+                        now,
+                        HullCtx->HullCompStorageRatioCalcPeriod);
+                }
+                return now >= *nextCalculationTime;
+            }
+
             void OrderSstByStorageRatioTime(TVector<TTimeSst> &vec, TInstant startTime, TDuration calcPeriod) {
                 vec.clear();
                 TSstIterator it(&LevelSnap.SliceSnap);
@@ -178,13 +290,11 @@ namespace NKikimr {
             }
 
             static bool HaveOverlappingKeyRanges(
-                    const TVector<TTimeSst>& orderedSsts,
-                    size_t sstsToCalculate)
+                    const TVector<TLevelSegmentPtr>& ssts)
             {
                 TVector<std::pair<TKey, TKey>> ranges;
-                ranges.reserve(sstsToCalculate);
-                for (size_t i = 0; i < sstsToCalculate; ++i) {
-                    const TLevelSegmentPtr& sst = orderedSsts[i].LevelSstPtr.SstPtr;
+                ranges.reserve(ssts.size());
+                for (const TLevelSegmentPtr& sst : ssts) {
                     if (sst->Elements()) {
                         ranges.emplace_back(sst->FirstKey(), sst->LastKey());
                     }
@@ -199,43 +309,17 @@ namespace NKikimr {
                 return false;
             }
 
-            static size_t CountSstsToCalculate(
-                    const TVector<TTimeSst>& orderedSsts,
-                    TInstant startTime)
-            {
-                size_t sstsToCalculate = 0;
-                while (sstsToCalculate < orderedSsts.size() &&
-                        startTime >= orderedSsts[sstsToCalculate].NextCalculationTime) {
-                    ++sstsToCalculate;
-                }
-                return sstsToCalculate;
-            }
-
             template <bool CollectStats>
-            void UpdateStorageRatioForOrderedSsts(
-                    const TVector<TTimeSst>& orderedSsts,
-                    size_t sstsToCalculate,
+            void UpdateStorageRatioForSsts(
+                    const TVector<TLevelSegmentPtr>& ssts,
                     TInstant startTime,
-                    TInstant deadline,
                     TStat& stat)
             {
-                for (size_t i = 0; i < sstsToCalculate; ++i) {
-                    const TTimeSst& x = orderedSsts[i];
+                for (const TLevelSegmentPtr& sst : ssts) {
                     TSstRatioPtr newRatio =
-                        CalculateSstRatio<CollectStats>(x.LevelSstPtr.SstPtr, startTime);
-                    x.LevelSstPtr.SstPtr->StorageRatio.Set(newRatio, newRatio->Time);
+                        CalculateSstRatio<CollectStats>(sst, startTime);
+                    sst->StorageRatio.Set(newRatio, newRatio->Time);
                     ++stat.SstsChecked;
-
-                    // Preserve the old boundary: the timeout is checked after
-                    // publishing each complete SST ratio.
-                    if (TAppData::TimeProvider->Now() > deadline) {
-                        stat.BreakedTimeout = true;
-                        return;
-                    }
-                }
-
-                if (sstsToCalculate < orderedSsts.size()) {
-                    stat.BreakedActualRatio = true;
                 }
             }
 
@@ -274,61 +358,56 @@ namespace NKikimr {
             }
 
             template <bool CollectStats>
-            void UpdateStorageRatioForDbBatch(TInstant startTime, TStat &stat) {
-                const TDuration &calcPeriod = HullCtx->HullCompStorageRatioCalcPeriod;
-                const TDuration &calcDuration = HullCtx->HullCompStorageRatioMaxCalcDuration;
-
-                // order all ssts (including level 0) by storage ratio calculation time
-                TVector<TTimeSst> vec;
-                vec.reserve(1000u);
-                OrderSstByStorageRatioTime(vec, startTime, calcPeriod);
-
-                const size_t sstsToCalculate = CountSstsToCalculate(vec, startTime);
+            void UpdateStorageRatioForDbFullBatch(
+                    TInstant startTime,
+                    TStat &stat)
+            {
+                TVector<TLevelSegmentPtr> ssts;
+                ssts.reserve(1000u);
+                TSstIterator it(&LevelSnap.SliceSnap);
+                it.SeekToFirst();
+                while (it.Valid()) {
+                    ssts.push_back(it.Get().SstPtr);
+                    it.Next();
+                }
 
                 // Without overlapping key ranges there is no whole-database
-                // merge work to amortize between due SSTs.
-                if (!HaveOverlappingKeyRanges(vec, sstsToCalculate)) {
-                    UpdateStorageRatioForOrderedSsts<CollectStats>(
-                        vec,
-                        sstsToCalculate,
+                // merge work to amortize between SSTs.
+                if (!HaveOverlappingKeyRanges(ssts)) {
+                    stat.NonOverlappingFallback = ssts.size() > 1;
+                    UpdateStorageRatioForSsts<CollectStats>(
+                        ssts,
                         startTime,
-                        startTime + calcDuration,
                         stat);
                     BarriersEssence.Reset();
                     return;
                 }
 
                 bool duplicateSst = false;
-                bool timedOut = false;
                 // Accumulator construction detects a duplicate SST before the
                 // database scan starts. Such an invalid snapshot cannot be
                 // attributed by pointer to separate accumulators.
                 auto ratios = CalculateSstRatios<CollectStats>(
-                    vec,
-                    sstsToCalculate,
+                    ssts,
                     startTime,
-                    startTime + calcDuration,
-                    duplicateSst,
-                    timedOut);
+                    duplicateSst);
 
                 if (duplicateSst) {
-                    UpdateStorageRatioForOrderedSsts<CollectStats>(
-                        vec,
-                        sstsToCalculate,
+                    stat.DuplicateSstFallback = true;
+                    UpdateStorageRatioForSsts<CollectStats>(
+                        ssts,
                         startTime,
-                        startTime + calcDuration,
                         stat);
                     BarriersEssence.Reset();
                     return;
                 }
 
+                stat.UsedBatchAlgorithm = true;
                 for (auto& [sst, ratio] : ratios) {
                     sst->StorageRatio.Set(ratio, ratio->Time);
                 }
 
                 stat.SstsChecked = static_cast<ui32>(ratios.size());
-                stat.BreakedTimeout = timedOut;
-                stat.BreakedActualRatio = !timedOut && sstsToCalculate < vec.size();
 
                 BarriersEssence.Reset();
             }
@@ -443,8 +522,8 @@ namespace NKikimr {
                 for (const TSourceRecord& source : merger.GetSources()) {
                     auto it = accumulatorIndices.find(source.Sst);
 
-                    // The merger also sees records from SSTs that were not
-                    // selected for recalculation.
+                    // A record without an accumulator still contributes to
+                    // the merged database value, but not to an SST ratio.
                     if (it == accumulatorIndices.end()) {
                         continue;
                     }
@@ -499,26 +578,22 @@ namespace NKikimr {
 
             template <bool CollectStats>
             TVector<std::pair<TLevelSegmentPtr, TSstRatioPtr>> CalculateSstRatios(
-                    const TVector<TTimeSst>& orderedSsts,
-                    size_t sstsToCalculate,
+                    const TVector<TLevelSegmentPtr>& ssts,
                     TInstant now,
-                    TInstant deadline,
-                    bool& duplicateSst,
-                    bool& timedOut)
+                    bool& duplicateSst)
             {
                 duplicateSst = false;
 
                 TVector<TAccumulator> accumulatorStorage;
-                accumulatorStorage.reserve(sstsToCalculate);
+                accumulatorStorage.reserve(ssts.size());
 
                 TAccumulatorIndices accumulatorIndices;
-                accumulatorIndices.reserve(sstsToCalculate);
+                accumulatorIndices.reserve(ssts.size());
 
-                TVector<TMemIterator> dueIterators;
-                dueIterators.reserve(sstsToCalculate);
+                TVector<TMemIterator> sstIterators;
+                sstIterators.reserve(ssts.size());
 
-                for (size_t i = 0; i < sstsToCalculate; ++i) {
-                    const TLevelSegmentPtr& sst = orderedSsts[i].LevelSstPtr.SstPtr;
+                for (const TLevelSegmentPtr& sst : ssts) {
                     const ui64 totalItems = sst->Elements();
 
                     const size_t accumulatorIndex = accumulatorStorage.size();
@@ -539,25 +614,22 @@ namespace NKikimr {
                     });
 
                     if (totalItems) {
-                        dueIterators.emplace_back(sst.Get());
+                        sstIterators.emplace_back(sst.Get());
                     }
                 }
 
                 TVector<std::pair<TLevelSegmentPtr, TSstRatioPtr>> result;
-                result.reserve(sstsToCalculate);
+                result.reserve(ssts.size());
 
                 auto collectCompleted = [&](size_t accumulatorIndex) {
                     TAccumulator& accumulator = accumulatorStorage[accumulatorIndex];
                     Y_ABORT_UNLESS(accumulator.Complete());
                     if (!accumulator.Collected) {
                         // Completion order follows the last key of an SST, not
-                        // its recalculation time. A fully computed ratio is
-                        // valid even when an earlier due SST is still partial.
+                        // the slice order. A fully computed ratio is valid even
+                        // when another SST is still partial.
                         accumulator.Collected = true;
                         result.emplace_back(accumulator.Sst, accumulator.Ratio);
-                        if (!timedOut && TAppData::TimeProvider->Now() > deadline) {
-                            timedOut = true;
-                        }
                     }
                 };
 
@@ -567,24 +639,24 @@ namespace NKikimr {
                     }
                 }
 
-                if (!timedOut && result.size() < accumulatorStorage.size()) {
-                    THeapIterator<TKey, TMemRec, true> dueIt;
-                    for (TMemIterator& it : dueIterators) {
-                        it.PutToHeap(dueIt);
+                if (result.size() < accumulatorStorage.size()) {
+                    THeapIterator<TKey, TMemRec, true> sstIt;
+                    for (TMemIterator& it : sstIterators) {
+                        it.PutToHeap(sstIt);
                     }
-                    dueIt.SeekToFirst();
+                    sstIt.SeekToFirst();
 
                     TLevelIt dbIt(HullCtx, &LevelSnap);
                     TStorageRatioMerger merger(HullCtx->VCtx->Top->GType);
                     TVector<size_t> completedAccumulators;
-                    completedAccumulators.reserve(sstsToCalculate);
+                    completedAccumulators.reserve(ssts.size());
                     bool dbItPositioned = false;
 
                     auto crashReport = [&](const TKey& expectedKey) {
                         TStringStream str;
                         str << MergeIteratorWithWholeDbDefaultCrashReport(
                             HullCtx->VCtx->VDiskLogPrefix,
-                            dueIt,
+                            sstIt,
                             dbIt);
                         str << " ExpectedKey: " << expectedKey.ToString() << "\n";
                         return str.Str();
@@ -595,7 +667,7 @@ namespace NKikimr {
                         if (!dbItPositioned) {
                             dbItPositioned = true;
                             if constexpr (CollectStats) {
-                                ++CalcStat->Seeks;
+                                ++GetCalcStat().Seeks;
                             }
                             dbIt.Seek(key);
                         } else {
@@ -603,10 +675,13 @@ namespace NKikimr {
                             while (dbIt.Valid() && dbIt.GetCurKey() < key) {
                                 ++seenItems;
                                 if (seenItems < skipBeforeSeek) {
+                                    if constexpr (CollectStats) {
+                                        ++GetCalcStat().DbIteratorNexts;
+                                    }
                                     dbIt.Next();
                                 } else {
                                     if constexpr (CollectStats) {
-                                        ++CalcStat->Seeks;
+                                        ++GetCalcStat().Seeks;
                                     }
                                     dbIt.Seek(key);
                                 }
@@ -623,9 +698,9 @@ namespace NKikimr {
                             crashReport(key).data());
                     };
 
-                    while (dueIt.Valid() && !timedOut &&
+                    while (sstIt.Valid() &&
                             result.size() < accumulatorStorage.size()) {
-                        const TKey key = dueIt.GetCurKey();
+                        const TKey key = sstIt.GetCurKey();
                         positionDbIterator(key);
 
                         dbIt.PutToMerger(&merger);
@@ -640,14 +715,14 @@ namespace NKikimr {
                             completedAccumulators);
 
                         if constexpr (CollectStats) {
-                            ++CalcStat->KeysProcessed;
-                            CalcStat->SourceRecordsProcessed += sourceRecordsProcessed;
-                            CalcStat->DbRecordsMerged +=
+                            ++GetCalcStat().KeysProcessed;
+                            GetCalcStat().SourceRecordsProcessed += sourceRecordsProcessed;
+                            GetCalcStat().DbRecordsMerged +=
                                 merger.GetDbMerger().GetNumMergedRecords();
                         }
 
                         merger.Clear();
-                        dueIt.Next();
+                        sstIt.Next();
 
                         for (size_t accumulatorIndex : completedAccumulators) {
                             collectCompleted(accumulatorIndex);
@@ -655,14 +730,12 @@ namespace NKikimr {
                     }
                 }
 
-                if (!timedOut) {
-                    for (const TAccumulator& accumulator : accumulatorStorage) {
-                        Y_ABORT_UNLESS(
-                            accumulator.Complete(),
-                            "StorageRatio calculation did not process all SST items");
-                    }
-                    Y_ABORT_UNLESS(result.size() == accumulatorStorage.size());
+                for (const TAccumulator& accumulator : accumulatorStorage) {
+                    Y_ABORT_UNLESS(
+                        accumulator.Complete(),
+                        "StorageRatio calculation did not process all SST items");
                 }
+                Y_ABORT_UNLESS(result.size() == accumulatorStorage.size());
 
                 return result;
             }
@@ -734,10 +807,11 @@ namespace NKikimr {
                             newItem,
                             doMerge,
                             crash,
-                            CalcStat->KeysProcessed,
-                            CalcStat->SourceRecordsProcessed,
-                            CalcStat->DbRecordsMerged,
-                            CalcStat->Seeks);
+                            GetCalcStat().KeysProcessed,
+                            GetCalcStat().SourceRecordsProcessed,
+                            GetCalcStat().DbRecordsMerged,
+                            GetCalcStat().Seeks,
+                            GetCalcStat().DbIteratorNexts);
                 } else {
                     MergeIteratorWithWholeDb<TMemIterator, TLevelIt, TIndexRecordMerger>(
                             HullCtx->VCtx->Top->GType,

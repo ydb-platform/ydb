@@ -128,6 +128,9 @@ namespace NKikimr {
         , HullCompLevel0MaxSstsAtOnce(hullCompLevel0MaxSstsAtOnce)
         , HullCompSortedPartsNum(hullCompSortedPartsNum)
         , CompactionStrategyGroup(VCtx->VDiskCounters, "subsystem", "compstrategy")
+        , StorageRatioGroup(VCtx->VDiskCounters, "subsystem", "storageratio")
+        , StorageRatioLegacyGroup(StorageRatioGroup.GetGroup(), "algorithm", "legacy")
+        , StorageRatioBatchGroup(StorageRatioGroup.GetGroup(), "algorithm", "batch")
         , LsmHullGroup(VCtx->VDiskCounters, "subsystem", "lsmhull")
         , LsmHullSpaceGroup(VCtx->VDiskCounters, "subsystem", "outofspace")
     {}

@@ -1941,123 +1941,346 @@ def _void_columns(columns: Mapping[str, Column]) -> set[str]:
     return {name for name, column in columns.items() if column.type == VOID}
 
 
-def _validate_average_state_dataflow(snapshot: Snapshot) -> None:
-    """Keep hidden AVG tuples on one exact intermediate-to-final edge.
+def _validate_average_state_dataflow(
+    snapshot: Snapshot,
+    schemas: Mapping[str, Mapping[str, Column]],
+) -> frozenset[tuple[str, str]]:
+    """Recognize the two reviewed hidden-AVG-state lineages.
 
-    The RBO operator graph annotates an intermediate AVG IU with its logical
-    result type even though physical lowering carries a hidden accumulator.
-    Admitting that IU as an ordinary scalar would silently model an average of
-    partial averages.
+    Integral AVG remains confined to one direct intermediate-to-final edge.
+    Decimal AVG additionally admits the exact keyless expansion emitted for
+    multi-aggregate branches: one direct Project of the intermediate state,
+    logical-null Project pads for every other branch, and an unordered,
+    identity-mapped UnionAll tree.  Every node/column that still carries the
+    hidden tuple is returned for the StageGraph routing audit.
     """
 
     nodes = snapshot.plan.node_map()
-    consumers: dict[str, list[PlanNode]] = {node.id: [] for node in snapshot.plan.nodes}
+    consumers: dict[str, list[PlanNode]] = {
+        node.id: [] for node in snapshot.plan.nodes
+    }
     for consumer in snapshot.plan.nodes:
         for producer in plan_node_inputs(consumer):
             consumers[producer].append(consumer)
 
-    for node in snapshot.plan.nodes:
-        if not isinstance(node, Aggregate):
-            continue
+    exposed_roots = {
+        snapshot.plan.root,
+        *(subplan.root for subplan in snapshot.plan.subplans),
+    }
+    carriers: set[tuple[str, str]] = set()
+    claimed_sources: set[tuple[str, str]] = set()
 
-        final_average_traits = tuple(
-            trait for trait in node.aggregates if trait.function == "avg"
-        )
-        if node.phase == "final":
-            child = nodes.get(node.input)
-            if final_average_traits and (
-                not isinstance(child, Aggregate)
-                or child.phase != "intermediate"
-                or child.keys != node.keys
-            ):
-                _fail(
-                    f"node {node.id!r}.aggregates",
-                    "final avg must directly consume an intermediate aggregate "
-                    "with the same ordered keys",
-                )
-            if isinstance(child, Aggregate) and child.phase == "intermediate":
-                child_traits = {trait.output: trait for trait in child.aggregates}
-                for trait in final_average_traits:
-                    source = child_traits.get(trait.input)
-                    if (
-                        source is None
-                        or source.function != "avg"
-                        or source.output_type != trait.output_type
-                        or source.state != trait.state
-                    ):
-                        _fail(
-                            f"node {node.id!r}.aggregates",
-                            "final avg must consume the matching intermediate "
-                            "avg state with identical metadata",
-                        )
+    def require_only_consumer(
+        producer_id: str,
+        consumer_id: str,
+        path: str,
+    ) -> None:
+        if tuple(item.id for item in consumers[producer_id]) != (consumer_id,):
+            _fail(
+                path,
+                "an intermediate avg carrier must have one exact consumer "
+                "and no fanout",
+            )
 
-        if node.phase != "intermediate":
-            continue
-        intermediate_average_traits = tuple(
-            trait for trait in node.aggregates if trait.function == "avg"
-        )
-        if not intermediate_average_traits:
-            continue
-        node_consumers = consumers[node.id]
+    def track(node_id: str, column: str, path: str) -> None:
+        if node_id in exposed_roots:
+            _fail(
+                path,
+                "an intermediate avg carrier may not be a plan or subplan root",
+            )
+        carriers.add((node_id, column))
+
+    def exact_carrier_column(
+        node_id: str,
+        column: str,
+        final_trait: AggregateTrait,
+        path: str,
+    ) -> None:
+        candidate = schemas[node_id].get(column)
         if (
-            len(node_consumers) != 1
-            or not isinstance(node_consumers[0], Aggregate)
-            or node_consumers[0].phase != "final"
-            or node_consumers[0].input != node.id
+            candidate is None
+            or candidate.type != final_trait.output_type
+            or candidate.nullable != final_trait.output_nullable
         ):
             _fail(
-                f"node {node.id!r}.aggregates",
-                "intermediate avg state must have one direct final aggregate consumer",
+                path,
+                "Decimal avg carrier type and nullability must exactly match "
+                "the final avg",
             )
-        final = node_consumers[0]
-        assert isinstance(final, Aggregate)
-        if final.keys != node.keys:
+
+    def claim_source(
+        source: Aggregate,
+        source_trait: AggregateTrait,
+        final_trait: AggregateTrait,
+        path: str,
+    ) -> None:
+        key = (source.id, source_trait.output)
+        if key in claimed_sources:
             _fail(
-                f"node {node.id!r}.keys",
-                "intermediate and final avg must have the same ordered keys",
+                path,
+                "an intermediate avg state may feed only one final avg",
             )
-        for trait in intermediate_average_traits:
+        if (
+            source_trait.function != "avg"
+            or source_trait.distinct
+            or source_trait.unwrap
+            or source_trait.output_type != final_trait.output_type
+            or source_trait.state != final_trait.state
+        ):
+            _fail(
+                path,
+                "final avg must consume the matching intermediate avg state "
+                "with identical type and state metadata",
+            )
+        claimed_sources.add(key)
+        track(source.id, source_trait.output, path)
+
+    def validate_direct(
+        final: Aggregate,
+        child: Aggregate,
+        final_traits: tuple[AggregateTrait, ...],
+    ) -> None:
+        path = f"node {final.id!r}.aggregates"
+        if child.phase != "intermediate" or child.keys != final.keys:
+            _fail(
+                path,
+                "final avg must directly consume an intermediate aggregate "
+                "with the same ordered keys",
+            )
+        require_only_consumer(child.id, final.id, path)
+        child_traits = {trait.output: trait for trait in child.aggregates}
+        for final_trait in final_traits:
+            source_trait = child_traits.get(final_trait.input)
+            if source_trait is None:
+                _fail(
+                    path,
+                    "final avg must consume the matching intermediate avg "
+                    "state with identical metadata",
+                )
             uses = tuple(
                 candidate
                 for candidate in final.aggregates
-                if candidate.input == trait.output
+                if candidate.input == source_trait.output
             )
             if (
-                trait.output in final.keys
+                source_trait.output in final.keys
                 or len(uses) != 1
-                or uses[0].function != "avg"
-                or uses[0].output_type != trait.output_type
-                or uses[0].state != trait.state
+                or uses[0] != final_trait
             ):
                 _fail(
-                    f"node {node.id!r}.aggregates",
+                    f"node {child.id!r}.aggregates",
                     "each intermediate avg state must be used only by one "
                     "matching final avg trait",
                 )
+            claim_source(
+                child,
+                source_trait,
+                final_trait,
+                path,
+            )
 
-        graph = snapshot.stage_graph
-        if graph is not None:
-            output_stages = {
-                (stage.id, output.index): output.node
-                for stage in graph.stages
-                for output in stage.outputs
-            }
-            hidden_outputs = {
-                trait.output for trait in intermediate_average_traits
-            }
-            for edge in graph.edges:
-                if output_stages.get(
-                    (edge.producer, edge.producer_output)
-                ) != node.id:
-                    continue
-                routed = set(edge.keys) | {
-                    item.column for item in edge.order
-                }
-                if hidden_outputs & routed:
+    def validate_decimal_carrier(
+        final: Aggregate,
+        final_trait: AggregateTrait,
+    ) -> None:
+        path = f"node {final.id!r}.aggregates"
+        if snapshot.stage_graph is None:
+            _fail(
+                path,
+                "an indirect Decimal avg carrier requires a StageGraph",
+            )
+        if (
+            final.keys
+            or final.distinct_all
+            or final_trait.distinct
+            or final_trait.unwrap
+            or final_trait.state is None
+            or final_trait.state.kind != "decimal"
+            or not decimal.is_type(final_trait.output_type)
+        ):
+            _fail(
+                path,
+                "an indirect avg carrier is modeled only for one plain "
+                "keyless Decimal final avg",
+            )
+        uses = tuple(
+            candidate
+            for candidate in final.aggregates
+            if candidate.input == final_trait.input
+        )
+        if len(uses) != 1 or uses[0] != final_trait:
+            _fail(
+                path,
+                "a Decimal avg carrier may be consumed only by its matching "
+                "final avg trait",
+            )
+
+        def visit(node_id: str, consumer_id: str) -> int:
+            node = nodes[node_id]
+            node_path = f"node {node.id!r}"
+            require_only_consumer(node.id, consumer_id, node_path)
+            exact_carrier_column(
+                node.id,
+                final_trait.input,
+                final_trait,
+                node_path,
+            )
+            track(node.id, final_trait.input, node_path)
+
+            if isinstance(node, UnionAll):
+                if (
+                    node.ordered
+                    or len(node.inputs) != 2
+                    or final_trait.input not in node.output
+                    or any(item.columns != node.output for item in node.inputs)
+                ):
                     _fail(
-                        f"stage edge {edge.id!r}",
-                        "intermediate avg state may only be transported as payload",
+                        node_path,
+                        "Decimal avg state requires a binary unordered "
+                        "identity UnionAll carrier",
                     )
+                return sum(
+                    visit(item.node, node.id)
+                    for item in node.inputs
+                )
+
+            if not isinstance(node, Project):
+                _fail(
+                    node_path,
+                    "every Decimal avg UnionAll leaf must be one exact Project",
+                )
+            if node.ordered:
+                _fail(
+                    node_path,
+                    "a Decimal avg carrier Project must be unordered",
+                )
+            projection = tuple(
+                item
+                for item in node.columns
+                if item.output == final_trait.input
+            )
+            if len(projection) != 1 or projection[0].error_on_null:
+                _fail(
+                    node_path,
+                    "a Decimal avg carrier Project must define its state "
+                    "column exactly once without error_on_null",
+                )
+            state_projection = projection[0]
+            other_uses = any(
+                item is not state_projection
+                and final_trait.input in expression_columns(item.expression)
+                for item in node.columns
+            )
+            if other_uses:
+                _fail(
+                    node_path,
+                    "a Decimal avg carrier column may not have another scalar use",
+                )
+
+            source = nodes[node.input]
+            if (
+                not isinstance(source, Aggregate)
+                or source.phase != "intermediate"
+                or source.keys
+                or source.distinct_all
+                or len(source.aggregates) != 1
+            ):
+                _fail(
+                    node_path,
+                    "a Decimal avg carrier Project must directly consume one "
+                    "keyless intermediate aggregate",
+                )
+            require_only_consumer(source.id, node.id, node_path)
+
+            expression = state_projection.expression
+            if expression.kind == "column":
+                source_trait = source.aggregates[0]
+                if (
+                    expression.column != final_trait.input
+                    or source_trait.output != final_trait.input
+                ):
+                    _fail(
+                        node_path,
+                        "the Decimal avg state must use direct same-name "
+                        "Project transport",
+                    )
+                exact_carrier_column(
+                    source.id,
+                    final_trait.input,
+                    final_trait,
+                    node_path,
+                )
+                claim_source(
+                    source,
+                    source_trait,
+                    final_trait,
+                    node_path,
+                )
+                return 1
+
+            if (
+                expression.kind != "null"
+                or expression.result_type != final_trait.output_type
+                or expression.nullable is not True
+                or final_trait.input in schemas[source.id]
+            ):
+                _fail(
+                    node_path,
+                    "every non-producing Decimal avg branch must be an exact "
+                    "logical null pad over one keyless intermediate aggregate",
+                )
+            return 0
+
+        child = nodes[final.input]
+        if not isinstance(child, UnionAll):
+            _fail(
+                path,
+                "final avg must directly consume an intermediate aggregate "
+                "with the same ordered keys",
+            )
+        if visit(child.id, final.id) != 1:
+            _fail(
+                path,
+                "a Decimal avg carrier must contain exactly one matching "
+                "intermediate avg producer",
+            )
+
+    for node in snapshot.plan.nodes:
+        if not isinstance(node, Aggregate) or node.phase != "final":
+            continue
+        final_traits = tuple(
+            trait for trait in node.aggregates if trait.function == "avg"
+        )
+        if not final_traits:
+            continue
+        child = nodes[node.input]
+        if isinstance(child, Aggregate):
+            validate_direct(node, child, final_traits)
+        elif isinstance(child, UnionAll):
+            for trait in final_traits:
+                validate_decimal_carrier(node, trait)
+        else:
+            _fail(
+                f"node {node.id!r}.aggregates",
+                "final avg must directly consume an intermediate aggregate "
+                "with the same ordered keys",
+            )
+
+    for node in snapshot.plan.nodes:
+        if not isinstance(node, Aggregate) or node.phase != "intermediate":
+            continue
+        for trait in node.aggregates:
+            if (
+                trait.function == "avg"
+                and (node.id, trait.output) not in claimed_sources
+            ):
+                _fail(
+                    f"node {node.id!r}.aggregates",
+                    "intermediate avg state must have one direct final "
+                    "aggregate consumer or one exact Decimal carrier",
+                )
+
+    return frozenset(carriers)
 
 
 def _validate_error_projection_dataflow(snapshot: Snapshot) -> None:
@@ -2218,6 +2441,7 @@ def stage_input_slots(plan: Plan, stage: Stage) -> tuple[tuple[str, int, str], .
 def _validate_stage_graph(
     snapshot: Snapshot,
     schemas: Mapping[str, Mapping[str, Column]],
+    average_state_carriers: frozenset[tuple[str, str]],
 ) -> None:
     graph = snapshot.stage_graph
     if graph is None:
@@ -2351,6 +2575,11 @@ def _validate_stage_graph(
         for column in edge.keys:
             if column not in columns:
                 _fail(f"{edge_path}.keys", f"column {column!r} is not produced")
+            if (produced_node, column) in average_state_carriers:
+                _fail(
+                    edge_path,
+                    "intermediate avg state may only be transported as payload",
+                )
             if columns[column].type == DOUBLE:
                 _fail(f"{edge_path}.keys", "hash routing may not consume Double")
             if columns[column].type == VOID:
@@ -2361,6 +2590,11 @@ def _validate_stage_graph(
         for item in edge.order:
             if item.column not in columns:
                 _fail(f"{edge_path}.order", f"column {item.column!r} is not produced")
+            if (produced_node, item.column) in average_state_carriers:
+                _fail(
+                    edge_path,
+                    "intermediate avg state may only be transported as payload",
+                )
             _validate_order_column(
                 columns[item.column],
                 item,
@@ -3821,8 +4055,11 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
                 f"node {node_id!r}",
                 "outer_bind must belong to exactly one correlated scalar root",
             )
-    _validate_average_state_dataflow(snapshot)
+    average_state_carriers = _validate_average_state_dataflow(
+        snapshot,
+        schemas,
+    )
     _validate_error_projection_dataflow(snapshot)
     _validate_void_dataflow(snapshot, schemas)
-    _validate_stage_graph(snapshot, schemas)
+    _validate_stage_graph(snapshot, schemas, average_state_carriers)
     return schemas

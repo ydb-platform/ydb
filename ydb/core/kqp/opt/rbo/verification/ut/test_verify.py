@@ -715,6 +715,390 @@ def aggregate_stage_snapshot(
     )
 
 
+def q28_decimal_avg_carrier_stage_graph():
+    stages = [
+        _stage("source", ["a"], [], ["a", "a", "a"], "column"),
+        _stage(
+            "average_branch",
+            ["average_partial", "average_project"],
+            ["a"],
+            ["average_project"],
+        ),
+        _stage(
+            "count_branch",
+            ["count_partial", "count_project"],
+            ["a"],
+            ["count_project"],
+        ),
+        _stage(
+            "distinct_branch",
+            [
+                "distinct_values",
+                "distinct_partial",
+                "distinct_project",
+            ],
+            ["a"],
+            ["distinct_project"],
+        ),
+        _stage(
+            "first_union_stage",
+            ["first_union"],
+            ["average_project", "count_project"],
+            ["first_union"],
+        ),
+        _stage(
+            "second_union_stage",
+            ["second_union"],
+            ["first_union", "distinct_project"],
+            ["second_union"],
+        ),
+        _stage("root", ["final"], ["second_union"], ["final"]),
+    ]
+    edges = [
+        _edge(
+            "average_input",
+            "source",
+            "average_branch",
+            0,
+            0,
+            "union_all",
+            parallel=False,
+        ),
+        _edge(
+            "count_input",
+            "source",
+            "count_branch",
+            1,
+            0,
+            "union_all",
+            parallel=False,
+        ),
+        _edge(
+            "distinct_input",
+            "source",
+            "distinct_branch",
+            2,
+            0,
+            "union_all",
+            parallel=False,
+        ),
+        _edge(
+            "average_lane",
+            "average_branch",
+            "first_union_stage",
+            0,
+            0,
+            "union_all",
+            parallel=False,
+        ),
+        _edge(
+            "count_lane",
+            "count_branch",
+            "first_union_stage",
+            0,
+            1,
+            "union_all",
+            parallel=False,
+        ),
+        _edge(
+            "first_union_lane",
+            "first_union_stage",
+            "second_union_stage",
+            0,
+            0,
+            "union_all",
+            parallel=False,
+        ),
+        _edge(
+            "distinct_lane",
+            "distinct_branch",
+            "second_union_stage",
+            0,
+            1,
+            "union_all",
+            parallel=False,
+        ),
+        _edge(
+            "final_lane",
+            "second_union_stage",
+            "root",
+            0,
+            0,
+            "union_all",
+            parallel=False,
+        ),
+    ]
+    return stages, edges
+
+
+def q28_decimal_avg_union_carrier_snapshot(*, count_from_distinct=False):
+    decimal_type = "Decimal(7,2)"
+    lanes = ("_avg_state", "_count_state", "_distinct_state")
+    average_state = {
+        "sum_type": "Decimal(35,2)",
+        "count_type": "Uint64",
+        "nullable": True,
+    }
+
+    def average_trait(input_name, output_name):
+        return {
+            "input": input_name,
+            "function": "avg",
+            "output": output_name,
+            "type": decimal_type,
+            "nullable": True,
+            "distinct": False,
+            "unwrap": False,
+            "state": copy.deepcopy(average_state),
+        }
+
+    def count_trait(input_name, output_name):
+        return {
+            "input": input_name,
+            "function": "count",
+            "output": output_name,
+            "type": "Uint64",
+            "nullable": False,
+            "distinct": False,
+            "unwrap": False,
+        }
+
+    def column(output):
+        return {
+            "output": output,
+            "expression": {"kind": "column", "column": output},
+        }
+
+    def null(output, scalar_type):
+        return {
+            "output": output,
+            "expression": {"kind": "null", "type": scalar_type},
+        }
+
+    scan = copy.deepcopy(SCAN_A)
+    average_partial = {
+        "id": "average_partial",
+        "op": "aggregate",
+        "input": "a",
+        "keys": [],
+        "aggregates": [average_trait("a.x", "_avg_state")],
+        "phase": "intermediate",
+        "distinct_all": False,
+    }
+    average_project = {
+        "id": "average_project",
+        "op": "project",
+        "input": "average_partial",
+        "ordered": False,
+        "columns": [
+            column("_avg_state"),
+            null("_count_state", "Uint64"),
+            null("_distinct_state", "Uint64"),
+        ],
+    }
+    count_partial = {
+        "id": "count_partial",
+        "op": "aggregate",
+        "input": "a",
+        "keys": [],
+        "aggregates": [count_trait("a.x", "_count_state")],
+        "phase": "intermediate",
+        "distinct_all": False,
+    }
+    count_project = {
+        "id": "count_project",
+        "op": "project",
+        "input": "count_partial",
+        "ordered": False,
+        "columns": [
+            null("_avg_state", decimal_type),
+            column("_count_state"),
+            null("_distinct_state", "Uint64"),
+        ],
+    }
+    distinct_values = {
+        "id": "distinct_values",
+        "op": "aggregate",
+        "input": "a",
+        "keys": ["a.x"],
+        "aggregates": [
+            {
+                "input": "a.x",
+                "function": "distinct",
+                "output": "a.x",
+                "type": decimal_type,
+                "nullable": True,
+                "distinct": False,
+                "unwrap": False,
+            }
+        ],
+        "phase": "undefined",
+        "distinct_all": True,
+    }
+    distinct_partial = {
+        "id": "distinct_partial",
+        "op": "aggregate",
+        "input": "distinct_values",
+        "keys": [],
+        "aggregates": [count_trait("a.x", "_distinct_state")],
+        "phase": "intermediate",
+        "distinct_all": False,
+    }
+    distinct_project = {
+        "id": "distinct_project",
+        "op": "project",
+        "input": "distinct_partial",
+        "ordered": False,
+        "columns": [
+            null("_avg_state", decimal_type),
+            null("_count_state", "Uint64"),
+            column("_distinct_state"),
+        ],
+    }
+    first_union = {
+        "id": "first_union",
+        "op": "union_all",
+        "inputs": [
+            {"node": "average_project", "columns": list(lanes)},
+            {"node": "count_project", "columns": list(lanes)},
+        ],
+        "output": list(lanes),
+        "ordered": False,
+    }
+    second_union = {
+        "id": "second_union",
+        "op": "union_all",
+        "inputs": [
+            {"node": "first_union", "columns": list(lanes)},
+            {"node": "distinct_project", "columns": list(lanes)},
+        ],
+        "output": list(lanes),
+        "ordered": False,
+    }
+    final = {
+        "id": "final",
+        "op": "aggregate",
+        "input": "second_union",
+        "keys": [],
+        "aggregates": [
+            average_trait("_avg_state", "average"),
+            {
+                "input": (
+                    "_distinct_state"
+                    if count_from_distinct
+                    else "_count_state"
+                ),
+                "function": "sum",
+                "output": "count",
+                "type": "Uint64",
+                "nullable": True,
+                "distinct": False,
+                "unwrap": True,
+            },
+            {
+                "input": "_distinct_state",
+                "function": "sum",
+                "output": "distinct_count",
+                "type": "Uint64",
+                "nullable": True,
+                "distinct": False,
+                "unwrap": True,
+            },
+        ],
+        "phase": "final",
+        "distinct_all": False,
+    }
+
+    schema_value = _stage_schema("A")
+    schema_value["tables"][0]["columns"][1].update(
+        type=decimal_type,
+        nullable=True,
+    )
+    stages, edges = q28_decimal_avg_carrier_stage_graph()
+    return parse_snapshot(
+        _snapshot_with_stage_graph(
+            schema_value,
+            [
+                scan,
+                average_partial,
+                average_project,
+                count_partial,
+                count_project,
+                distinct_values,
+                distinct_partial,
+                distinct_project,
+                first_union,
+                second_union,
+                final,
+            ],
+            "final",
+            ["average", "count", "distinct_count"],
+            stages,
+            edges,
+        )
+    )
+
+
+def q28_decimal_logical_snapshot():
+    decimal_type = "Decimal(7,2)"
+    average_state = {
+        "sum_type": "Decimal(35,2)",
+        "count_type": "Uint64",
+        "nullable": True,
+    }
+    aggregate = {
+        "id": "logical",
+        "op": "aggregate",
+        "input": "a",
+        "keys": [],
+        "aggregates": [
+            {
+                "input": "a.x",
+                "function": "avg",
+                "output": "average",
+                "type": decimal_type,
+                "nullable": True,
+                "distinct": False,
+                "unwrap": False,
+                "state": average_state,
+            },
+            {
+                "input": "a.x",
+                "function": "count",
+                "output": "count",
+                "type": "Uint64",
+                "nullable": False,
+                "distinct": False,
+                "unwrap": False,
+            },
+            {
+                "input": "a.x",
+                "function": "count",
+                "output": "distinct_count",
+                "type": "Uint64",
+                "nullable": False,
+                "distinct": True,
+                "unwrap": False,
+            },
+        ],
+        "phase": "undefined",
+        "distinct_all": False,
+    }
+    schema_value = _stage_schema("A")
+    schema_value["tables"][0]["columns"][1].update(
+        type=decimal_type,
+        nullable=True,
+    )
+    return parse_snapshot(
+        _snapshot_with_stage_graph(
+            schema_value,
+            [copy.deepcopy(SCAN_A), aggregate],
+            "logical",
+            ["average", "count", "distinct_count"],
+        )
+    )
+
+
 def unwrapped_uint64_sum_snapshot():
     schema_value = _stage_schema("A")
     schema_value["tables"][0]["columns"][1].update(
@@ -6324,6 +6708,77 @@ class AggregateConcreteDifferentialTest(unittest.TestCase):
                     expected = self._decimal_reference_bag("avg", grouped, rows)
                     self.assertEqual(actual, expected)
 
+    def test_q28_decimal_avg_union_carrier_matches_concrete_reference(self):
+        snapshot = q28_decimal_avg_union_carrier_snapshot()
+        script = smt.Script()
+        database = Database(snapshot, 3, script)
+        router = Router(script)
+        relation = StageEvaluator(
+            snapshot,
+            database,
+            ScalarEncoder(script),
+            router,
+        ).root().certain()
+
+        cases = (
+            (None, None, None),
+            ((0, None), (0, None), None),
+            ((0, 100), (0, 300), None),
+            ((0, 100), (0, 100), (0, 300)),
+            (
+                (0, REFERENCE_DECIMAL_NAN),
+                (0, REFERENCE_DECIMAL_NAN),
+                None,
+            ),
+            (
+                (0, REFERENCE_DECIMAL_INF),
+                (0, -REFERENCE_DECIMAL_INF),
+                None,
+            ),
+            (
+                (0, REFERENCE_DECIMAL_INF),
+                (0, 100),
+                None,
+            ),
+            (
+                (0, None),
+                (0, REFERENCE_DECIMAL_NAN),
+                (0, 100),
+            ),
+        )
+        for rows in cases:
+            non_null = [
+                row[1]
+                for row in rows
+                if row is not None and row[1] is not None
+            ]
+            expected_average = (
+                None
+                if not non_null
+                else self._reference_decimal_average(non_null)
+            )
+            expected = Counter({
+                (
+                    expected_average,
+                    len(non_null),
+                    len(set(non_null)),
+                ): 1,
+            })
+            with self.subTest(rows=rows):
+                constants = self._constants(database, rows)
+                for slot in range(len(rows)):
+                    constants[
+                        router.source_task("A", slot).atom
+                    ] = bool(slot % 2)
+                self.assertEqual(
+                    self._symbolic_bag(
+                        relation,
+                        constants,
+                        self._hash_choice,
+                    ),
+                    expected,
+                )
+
     def test_decimal_extrema_preserve_finite_bound_through_split_state(self):
         for function, staged in product(("max", "min"), (False, True)):
             snapshot = aggregate_stage_snapshot(
@@ -7643,6 +8098,28 @@ class StageGraphRestrictedModelTest(unittest.TestCase):
 
 @unittest.skipUnless(SOLVER, "run through ya or set RBO_Z3 for solver tests")
 class VerificationTest(unittest.TestCase):
+    def test_q28_decimal_avg_union_carrier_has_end_to_end_obligations(self):
+        logical = q28_decimal_logical_snapshot()
+        staged = q28_decimal_avg_union_carrier_snapshot()
+        equivalent = solve(
+            build_problem(logical, staged, 2, 30_000),
+            SOLVER,
+            2,
+            30_000,
+        )
+        self.assertEqual(equivalent.status, "VERIFIED_BOUNDED")
+
+        corrupted = q28_decimal_avg_union_carrier_snapshot(
+            count_from_distinct=True,
+        )
+        inequivalent = solve(
+            build_problem(logical, corrupted, 2, 30_000),
+            SOLVER,
+            2,
+            30_000,
+        )
+        self.assertEqual(inequivalent.status, "COUNTEREXAMPLE")
+
     def test_integral_division_is_an_exact_bounded_observable(self):
         original = integral_division_snapshot()
         equivalent = solve(

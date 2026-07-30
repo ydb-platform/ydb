@@ -216,6 +216,7 @@ class TBlocksDirtyMap
     : public ILockableRanges
     , public IReadyQueue
     , public TDisableCopyMove
+    , public std::enable_shared_from_this<TBlocksDirtyMap>
 {
 public:
     enum class EEraseType

@@ -110,7 +110,7 @@ public:
     void ReportIOError() override;
 
     // ITraceService implementation
-    NWilson::TSpan CreteRootSpan(TStringBuf name) override;
+    NWilson::TSpan CreateRootSpan(TStringBuf name) override;
 
     // IPartitionDirectService implementation
     TVolumeConfigPtr GetVolumeConfig() const override;

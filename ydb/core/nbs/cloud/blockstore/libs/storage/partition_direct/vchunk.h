@@ -15,7 +15,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_state.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
@@ -168,7 +168,7 @@ private:
     TLogTitle LogTitle;
     TVChunkConfig VChunkConfig;
     TList<TPendingVChunkConfig> PendingVChunkConfigs;
-    TBlocksDirtyMap BlocksDirtyMap;
+    TBlocksDirtyMapPtr BlocksDirtyMap;
     // One-shot signal of the INITIAL DirtyMap assembly at tablet start.
     NThreading::TPromise<void> DirtyMapReady = NThreading::NewPromise();
     TMap<THostIndex, TDDiskDataCopierPtr> Copiers;

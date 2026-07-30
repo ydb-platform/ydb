@@ -65,7 +65,10 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
         std::make_shared<TTraceServiceMock>();
     TPartitionDirectServiceMockPtr PartitionDirectService;
     TDirectBlockGroupMockPtr DirectBlockGroup;
-    TBlocksDirtyMap DirtyMap{VChunkConfig, BlockSize, VChunkBlockCount};
+    TBlocksDirtyMapPtr DirtyMap = std::make_shared<TBlocksDirtyMap>(
+        VChunkConfig,
+        BlockSize,
+        VChunkBlockCount);
 
     THostIndex ExpectedHost = 0;
     TBlockRange64 ExpectedRange;
@@ -101,7 +104,7 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
 
     static auto& AccessBlocksDirtyMap(TVChunk& vchunk)
     {
-        return vchunk.BlocksDirtyMap;
+        return *vchunk.BlocksDirtyMap;
     }
 
     static auto& AccessConfig(TVChunk& vchunk)

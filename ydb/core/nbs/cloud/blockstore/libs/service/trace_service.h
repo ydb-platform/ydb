@@ -14,7 +14,7 @@ struct ITraceService
 {
     virtual ~ITraceService() = default;
 
-    [[nodiscard]] virtual NWilson::TSpan CreteRootSpan(TStringBuf name) = 0;
+    [[nodiscard]] virtual NWilson::TSpan CreateRootSpan(TStringBuf name) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

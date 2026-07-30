@@ -52,7 +52,7 @@ TDDiskDataCopier::TDDiskDataCopier(
     const TDiskDescription& diskDescription,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
-    TBlocksDirtyMap* dirtyMap,
+    TBlocksDirtyMapPtr dirtyMap,
     THostIndex destination)
     : ActorSystem(actorSystem)
     , TraceService(traceService)
@@ -60,7 +60,7 @@ TDDiskDataCopier::TDDiskDataCopier(
     , VolumeConfig(partitionDirectService->GetVolumeConfig())
     , DirectBlockGroup(std::move(directBlockGroup))
     , Destination(destination)
-    , DirtyMap(dirtyMap)
+    , DirtyMap(std::move(dirtyMap))
     , LogTitle{
           GetCycleCount(),
           TLogTitle::TDDiskDataCopier{
@@ -120,7 +120,7 @@ TFuture<TDDiskDataCopier::EResult> TDDiskDataCopier::Stop()
 
 NWilson::TSpan TDDiskDataCopier::CreateSpan() const
 {
-    auto span = TraceService->CreteRootSpan("CopyRange");
+    auto span = TraceService->CreateRootSpan("CopyRange");
     span.Attribute("DiskId", VolumeConfig->DiskId);
     span.Attribute("From", static_cast<i64>(FreshWatermark));
     span.Attribute("Length", static_cast<i64>(CopyRangeSize));

@@ -41,8 +41,6 @@ namespace NKikimr::NPQ {
 
 namespace {
 
-constexpr ui32 TEST_MAX_HEADER_SIZE = 64;
-
 } // namespace
 
 namespace NHelpers {
@@ -972,7 +970,7 @@ TBatch CreateBatch(size_t count) {
         batch.AddBlob(blob);
     }
 
-    batch.Pack(TEST_MAX_HEADER_SIZE);
+    batch.Pack();
 
     return batch;
 }
@@ -4228,7 +4226,7 @@ TClientBlob MakeMultipartBodyReadBlob(ui64 seqNo, ui16 partNo, ui16 totalParts, 
 }
 
 TString SerializePackedBatchForReadBodyTest(TBatch batch) {
-    batch.Pack(TEST_MAX_HEADER_SIZE);
+    batch.Pack();
     TString raw;
     batch.SerializeTo(raw);
     return raw;
@@ -4821,7 +4819,7 @@ void AddHeadKeyWithBatch(
     std::deque<TClientBlob> dq;
     dq.push_back(MakeSinglePartBodyReadBlob(seqNo, fill));
     TBatch batch = TBatch::FromBlobs(offset, std::move(dq));
-    batch.Pack(TEST_MAX_HEADER_SIZE);
+    batch.Pack();
     const ui32 blobSize = batch.GetPackedSize();
 
     const TKey key = TKey::ForHead(TKeyPrefix::TypeData, partitionId, offset, 0, 1, 0);
@@ -4860,7 +4858,7 @@ void AddHeadKeyWithPartNo(
     std::deque<TClientBlob> dq;
     dq.push_back(MakeSinglePartBodyReadBlob(seqNo, fill));
     TBatch batch = TBatch::FromBlobs(offset, std::move(dq));
-    batch.Pack(TEST_MAX_HEADER_SIZE);
+    batch.Pack();
     const ui32 blobSize = batch.GetPackedSize();
 
     const TKey key = TKey::ForHead(TKeyPrefix::TypeData, partitionId, offset, partNo, 1, 0);
@@ -4975,7 +4973,7 @@ Y_UNIT_TEST_F(FinalizeEmptyBlobEncoderClearsNewHead, TPartitionFixture) {
     std::deque<TClientBlob> dq;
     dq.push_back(MakeSinglePartBodyReadBlob(1, 'n'));
     TBatch newHeadBatch = TBatch::FromBlobs(50, std::move(dq));
-    newHeadBatch.Pack(TEST_MAX_HEADER_SIZE);
+    newHeadBatch.Pack();
     const ui32 newHeadBatchSize = newHeadBatch.GetPackedSize();
 
     encoder.NewHead.Offset = 50;

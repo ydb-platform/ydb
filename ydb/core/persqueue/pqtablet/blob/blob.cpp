@@ -425,8 +425,8 @@ THead::TBatchAccessor::TBatchAccessor(TBatch& batch)
     : Batch(batch)
 {}
 
-void THead::TBatchAccessor::Pack(ui32 maxHeaderSize) {
-    Batch.Pack(maxHeaderSize);
+void THead::TBatchAccessor::Pack() {
+    Batch.Pack();
 }
 
 void THead::TBatchAccessor::Unpack() {
@@ -485,7 +485,6 @@ TPartitionedBlob& TPartitionedBlob::operator=(const TPartitionedBlob& x)
     GlueNewHead = x.GlueNewHead;
     NeedCompactHead = x.NeedCompactHead;
     MaxBlobSize = x.MaxBlobSize;
-    MaxHeaderSize = x.MaxHeaderSize;
     FastWrite = x.FastWrite;
     return *this;
 }
@@ -512,13 +511,12 @@ TPartitionedBlob::TPartitionedBlob(const TPartitionedBlob& x)
     , GlueNewHead(x.GlueNewHead)
     , NeedCompactHead(x.NeedCompactHead)
     , MaxBlobSize(x.MaxBlobSize)
-    , MaxHeaderSize(x.MaxHeaderSize)
     , FastWrite(x.FastWrite)
 {}
 
 TPartitionedBlob::TPartitionedBlob(const TPartitionId& partition, const ui64 offset, const TString& sourceId, const ui64 seqNo, const ui16 totalParts,
-                                    const ui32 totalSize, THead& head, THead& newHead, bool headCleared, bool needCompactHead, const ui32 maxBlobSize,
-                                    ui32 maxHeaderSize, const ui16 nextPartNo, const bool fastWrite)
+                                    const ui32 totalSize, THead& head, THead& newHead, bool headCleared, bool needCompactHead,
+                                    const ui32 maxBlobSize, const ui16 nextPartNo, const bool fastWrite)
     : Partition(partition)
     , Offset(offset)
     , InternalPartsCount(0)
@@ -538,7 +536,6 @@ TPartitionedBlob::TPartitionedBlob(const TPartitionId& partition, const ui64 off
     , GlueNewHead(true)
     , NeedCompactHead(needCompactHead)
     , MaxBlobSize(maxBlobSize)
-    , MaxHeaderSize(maxHeaderSize)
     , FastWrite(fastWrite)
 {
     //AFL_ENSURE(NewHead.Offset == Head.GetNextOffset() && NewHead.PartNo == 0 || headCleared || needCompactHead || Head.PackedSize == 0) // if head not cleared, then NewHead is going after Head
@@ -585,7 +582,7 @@ TPartitionedBlob::TCompactHeadResult TPartitionedBlob::CompactHead(bool glueHead
             if (!b->Packed) {
                 AFL_ENSURE(pp + 1 == newHead.Batches.size());
                 batch = newHead.Batches[pp];
-                batch.Pack(MaxHeaderSize);
+                batch.Pack();
                 b = &batch;
             }
             endWriteTimestamp = std::max(endWriteTimestamp,b->GetEndWriteTimestamp());
@@ -693,18 +690,18 @@ auto TPartitionedBlob::CreateFormedBlob(ui32 size, bool useRename) -> std::optio
     StartPartNo = NextPartNo;
     InternalPartsCount = 0;
 
-    auto [valueD, endWriteTimestamp] = CompactHead(GlueHead, Head, GlueNewHead, NewHead, HeadSize + BlobsSize + (BlobsSize > 0 ? MaxHeaderSize : 0));
+    auto [valueD, endWriteTimestamp] = CompactHead(GlueHead, Head, GlueNewHead, NewHead, HeadSize + BlobsSize + (BlobsSize > 0 ? GetMaxHeaderSize() : 0));
 
     GlueHead = GlueNewHead = false;
     if (!Blobs.empty()) {
         auto batch = TBatch::FromBlobs(Offset, std::move(Blobs));
         Blobs.clear();
-        batch.Pack(MaxHeaderSize);
+        batch.Pack();
         endWriteTimestamp = std::max(endWriteTimestamp, batch.GetEndWriteTimestamp());
         AFL_ENSURE(batch.Packed);
         batch.SerializeTo(valueD);
     }
-    AFL_ENSURE(valueD.size() <= MaxBlobSize && (valueD.size() + size + 1_MB > MaxBlobSize || HeadSize + BlobsSize + size + MaxHeaderSize <= MaxBlobSize));
+    AFL_ENSURE(valueD.size() <= MaxBlobSize && (valueD.size() + size + 1_MB > MaxBlobSize || HeadSize + BlobsSize + size + GetMaxHeaderSize() <= MaxBlobSize));
     HeadSize = 0;
     BlobsSize = 0;
     TClientBlob::CheckBlob(tmpKey, valueD);
@@ -721,7 +718,7 @@ auto TPartitionedBlob::Add(TClientBlob&& blob) -> std::optional<TFormedBlobInfo>
     AFL_ENSURE(NewHead.Offset >= Head.Offset)("Head.Offset", Head.Offset)("NewHead.Offset", NewHead.Offset);
     const ui32 size = blob.GetSerializedSize();
     AFL_ENSURE(InternalPartsCount < 1000); //just check for future packing
-    if (HeadSize + BlobsSize + size + MaxHeaderSize > MaxBlobSize) {
+    if (HeadSize + BlobsSize + size + GetMaxHeaderSize() > MaxBlobSize) {
         NeedCompactHead = true;
     }
     if (HeadSize + BlobsSize == 0) { //if nothing to compact at all
@@ -733,7 +730,7 @@ auto TPartitionedBlob::Add(TClientBlob&& blob) -> std::optional<TFormedBlobInfo>
         NeedCompactHead = false;
         res = CreateFormedBlob(size, true);
     }
-    BlobsSize += size + MaxHeaderSize;
+    BlobsSize += size + GetMaxHeaderSize();
     ++NextPartNo;
     Blobs.push_back(blob);
     if (!IsComplete()) {

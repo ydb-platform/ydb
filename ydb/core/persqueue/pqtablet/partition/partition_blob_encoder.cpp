@@ -8,7 +8,7 @@ namespace NKikimr::NPQ {
 TPartitionBlobEncoder::TPartitionBlobEncoder(const TPartitionId& partition, bool fastWrite)
     : StartOffset(0)
     , EndOffset(0)
-    , PartitionedBlob(partition, 0, "", 0, 0, 0, Head, NewHead, true, false, 8_MB, 32)
+    , PartitionedBlob(partition, 0, "", 0, 0, 0, Head, NewHead, true, false, 8_MB)
     , NewHeadKey{TKey{}, 0, TInstant::Zero(), 0}
     , BodySize(0)
     , MaxWriteResponsesSize(0)
@@ -429,7 +429,6 @@ void TPartitionBlobEncoder::NewPartitionedBlob(const TPartitionId& partitionId,
                                                bool headCleared,
                                                bool needCompactHead,
                                                const ui32 maxBlobSize,
-                                               ui32 maxHeaderSize,
                                                ui16 nextPartNo)
 {
     PartitionedBlob = TPartitionedBlob(partitionId,
@@ -443,12 +442,11 @@ void TPartitionBlobEncoder::NewPartitionedBlob(const TPartitionId& partitionId,
                                        headCleared,
                                        needCompactHead,
                                        maxBlobSize,
-                                       maxHeaderSize,
                                        nextPartNo,
                                        ForFastWrite);
 }
 
-void TPartitionBlobEncoder::ClearPartitionedBlob(const TPartitionId& partitionId, ui32 maxBlobSize, ui32 maxHeaderSize)
+void TPartitionBlobEncoder::ClearPartitionedBlob(const TPartitionId& partitionId, ui32 maxBlobSize)
 {
     PartitionedBlob = TPartitionedBlob(partitionId,
                                        0,
@@ -460,8 +458,7 @@ void TPartitionBlobEncoder::ClearPartitionedBlob(const TPartitionId& partitionId
                                        NewHead,
                                        true,
                                        false,
-                                       maxBlobSize,
-                                       maxHeaderSize);
+                                       maxBlobSize);
 }
 
 void TPartitionBlobEncoder::SyncHeadKeys()
@@ -624,12 +621,12 @@ bool TPartitionBlobEncoder::IsLastBatchPacked() const
     return NewHead.GetBatches().empty() || NewHead.GetLastBatch().Packed;
 }
 
-void TPartitionBlobEncoder::PackLastBatch(ui32 maxHeaderSize)
+void TPartitionBlobEncoder::PackLastBatch()
 {
-    NewHead.MutableLastBatch().Pack(maxHeaderSize);
+    NewHead.MutableLastBatch().Pack();
     NewHead.PackedSize += NewHead.GetLastBatch().GetPackedSize(); //add real packed size for this blob
 
-    NewHead.PackedSize -= maxHeaderSize; //instead of upper bound
+    NewHead.PackedSize -= GetMaxHeaderSize(); //instead of upper bound
     NewHead.PackedSize -= NewHead.GetLastBatch().GetUnpackedSize();
 }
 

@@ -1,20 +1,10 @@
 # Query Execution
 
-<<<<<<< HEAD
 This article provides an overview of query execution in {{ ydb-short-name }}. It is intended to familiarize users with the capabilities and limitations of {{ ydb-short-name }}'s query execution engine, including key features such as the supported query language and execution flow. The article also introduces essential terminology and concepts related to query processing, which are used throughout the rest of the documentation.
-=======
-{{ ydb-short-name }} provides a unified interface for executing queries in the [YQL](../../yql/reference/index.md) language and a unified distributed execution engine. The same syntax and mechanisms allow accessing data of different nature: from rows in database tables to unbounded streams of events in topics and data in external systems.
->>>>>>> 6c2f08c6922 (Auto-translate docs from PR #30237 (#48223))
 
-{{ ydb-short-name }} provides a unified query interface capable of efficiently handling diverse workloads — from high-throughput [Online Transaction Processing (OLTP)](https://en.wikipedia.org/wiki/Online_transaction_processing) to large-scale analytical [Online Analytical Processing (OLAP)](https://en.wikipedia.org/wiki/Online_analytical_processing) queries. With this approach, applications can run transactional and analytical queries transparently, without having to use different APIs for different workloads.
+{{ ydb-short-name }} provides a unified query interface capable of efficiently handling diverse workloads вЂ” from high-throughput [Online Transaction Processing (OLTP)](https://en.wikipedia.org/wiki/Online_transaction_processing) to large-scale analytical [Online Analytical Processing (OLAP)](https://en.wikipedia.org/wiki/Online_analytical_processing) queries. With this approach, applications can run transactional and analytical queries transparently, without having to use different APIs for different workloads.
 
-<<<<<<< HEAD
-{{ ydb-short-name }} uses a distributed query execution engine designed for high scalability and efficiency in large, distributed environments. When you run a query, {{ ydb-short-name }} automatically breaks the work down across multiple nodes, taking advantage of data locality — processing data where it is stored whenever possible. This reduces unnecessary data movement across the network. Additionally, {{ ydb-short-name }} leverages advanced features like compute pushdown, where filters and computations are pushed closer to the data storage layer, further improving performance. These techniques enable {{ ydb-short-name }} to efficiently handle complex queries and large workloads across clusters of machines.
-=======
-- [database tables](#tables) — transactional (OLTP) and analytical (OLAP) queries to data stored in {{ ydb-short-name }};
-- [external data sources](#federated) — federated queries to data located outside {{ ydb-short-name }};
-- [topics](#streaming) — queries to unbounded data streams: streaming queries and infinite queries to topics.
->>>>>>> 6c2f08c6922 (Auto-translate docs from PR #30237 (#48223))
+{{ ydb-short-name }} uses a distributed query execution engine designed for high scalability and efficiency in large, distributed environments. When you run a query, {{ ydb-short-name }} automatically breaks the work down across multiple nodes, taking advantage of data locality вЂ” processing data where it is stored whenever possible. This reduces unnecessary data movement across the network. Additionally, {{ ydb-short-name }} leverages advanced features like compute pushdown, where filters and computations are pushed closer to the data storage layer, further improving performance. These techniques enable {{ ydb-short-name }} to efficiently handle complex queries and large workloads across clusters of machines.
 
 ## General Workflow
 
@@ -25,12 +15,8 @@ This section provides a step-by-step overview of how SQL queries are handled in 
 1. **Connecting to the Database**
 Your application uses one of the [official {{ ydb-short-name }} SDKs](../../reference/ydb-sdk/index.md) to connect to the database. The SDK automatically manages a pool of sessions, logical connections required to execute queries. Behind the scenes, each session is physically connected to one of the nodes in the {{ ydb-short-name }} cluster. When you need to run a query, the SDK provides a session from this pool, so you don't need to manage connections manually.
 
-<<<<<<< HEAD
 2. **Starting a Transaction and Sending a Query**
 With your session in hand, your application can begin a new transaction. You then issue your query in the [YQL query language](../../yql/reference/index.md) based on your application logic and send it to the {{ ydb-short-name }} cluster using the session.
-=======
-[Federated queries](federated_query/index.md) allow accessing data located in external systems without moving that data into {{ ydb-full-name }}. Using YQL queries, you can read data from external DBMSs and object storages (S3), and also combine them with data in {{ ydb-short-name }} tables.
->>>>>>> 6c2f08c6922 (Auto-translate docs from PR #30237 (#48223))
 
 3. **Parsing and Plan Cache Lookup**
 On the server side, the {{ ydb-short-name }} node that receives your query first parses and analyzes it for correctness. Before planning execution, {{ ydb-short-name }} checks whether a physical execution plan for this query already exists in the query cache. If a cached plan is found, it can be reused to save time and resources.
@@ -38,35 +24,24 @@ On the server side, the {{ ydb-short-name }} node that receives your query first
 4. **Query Optimization and Plan Preparation**
 If no existing plan is found in the cache, {{ ydb-short-name }}'s query optimizer creates a new physical query plan. This plan determines the most efficient way to execute your query across the distributed cluster. For more detailed information about query optimization and query plans, see the [{#T}](optimizer.md) article.
 
-<<<<<<< HEAD
 5. **Distributed Query Execution**
 Using the prepared physical plan, {{ ydb-short-name }} starts distributed execution of the query. Work is distributed across multiple nodes in the database, with each node undertaking a part of the computation or data access as defined by the plan. This parallel processing enables fast and scalable query execution, even on large datasets.
-=======
-Queries to [topics](../datamodel/topic.md) allow processing unbounded data streams. Since the data stream is infinite, such a query does not complete after receiving a result, but runs until explicitly cancelled. There are two variants of such queries.
->>>>>>> 6c2f08c6922 (Auto-translate docs from PR #30237 (#48223))
 
 6. **Streaming Results Back to the Client**
 For queries that produce results (such as `SELECT` statements), they are returned to your application as one or more result sets, which look like strongly typed tables. Instead of sending all results at once, YDB streams the data back in portions (parts). This allows your application to start processing results immediately and handle large result sets efficiently without needing to load everything into memory at once.
 
-<<<<<<< HEAD
 7. **Continuing or Completing the Transaction**
 After receiving and processing the results, your application can choose to continue the transaction by sending additional queries within the same transaction context, or complete the transaction by committing it to save changes.
 
 Further details and explanations of the concepts introduced in this section are provided in the following sections.
-=======
-[Streaming queries](../streaming-query/streaming-query.md) are the primary way of streaming data processing in production. They are created as persistent schema objects (`STREAMING QUERY`), read messages from topics as they arrive, write results to output topics or tables, and automatically recover from failures using [checkpoints](../../dev/streaming-query/checkpoints.md).
-
-For more details, see the [{#T}](../streaming-query/streaming-query.md) section and the description of [{#T}](../../yql/reference/syntax/create-streaming-query.md).
->>>>>>> 6c2f08c6922 (Auto-translate docs from PR #30237 (#48223))
 
 ## Sessions {#sessions}
 
-<<<<<<< HEAD
 A session in {{ ydb-short-name }} is a logical "connection" to the database that maintains the context required to execute queries and manage transactions. Sessions store transaction state and other essential context, enabling a series of related queries to be executed as part of a single transaction. Most query execution operations occur within the context of an active session.
 
 Sessions are designed to be long-living objects. One of their key roles is to enable efficient load balancing: by distributing sessions and their associated queries across different nodes in the cluster, {{ ydb-short-name }} can make better use of resources and achieve high availability and scalability.
 
-In practice, you don't need to worry about creating, reusing, or closing sessions yourself. All official {{ ydb-short-name }} SDKs provide session pooling out of the box. A session pool automatically manages the lifecycle of sessions—creating them when needed, reusing existing ones, and returning them to the pool—so that you can focus on writing your application's logic rather than handling session management details.
+In practice, you don't need to worry about creating, reusing, or closing sessions yourself. All official {{ ydb-short-name }} SDKs provide session pooling out of the box. A session pool automatically manages the lifecycle of sessionsвЂ”creating them when needed, reusing existing ones, and returning them to the poolвЂ”so that you can focus on writing your application's logic rather than handling session management details.
 
 ## Transactions
 
@@ -78,7 +53,7 @@ For comprehensive information on transactions and the available transaction mode
 
 ## Retries
 
-{{ ydb-short-name }} employs [Optimistic concurrency control](https://en.wikipedia.org/wiki/Optimistic_concurrency_control) for transaction management. This means that a transaction may be aborted during execution if {{ ydb-short-name }} detects a conflict and cannot guarantee the requested isolation level — for example, when two transactions attempt to modify the same data concurrently. Additionally, because {{ ydb-short-name }} operates as a distributed system across potentially large clusters, some nodes may become temporarily unavailable due to network partitions, hardware failures, or maintenance. Such events can also cause transaction failures that require retries.
+{{ ydb-short-name }} employs [Optimistic concurrency control](https://en.wikipedia.org/wiki/Optimistic_concurrency_control) for transaction management. This means that a transaction may be aborted during execution if {{ ydb-short-name }} detects a conflict and cannot guarantee the requested isolation level вЂ” for example, when two transactions attempt to modify the same data concurrently. Additionally, because {{ ydb-short-name }} operates as a distributed system across potentially large clusters, some nodes may become temporarily unavailable due to network partitions, hardware failures, or maintenance. Such events can also cause transaction failures that require retries.
 
 Retries should always be handled at the transaction level, not at the level of individual queries. In [Interactive transactions](../glossary.md#interactive-transaction), the sequence of queries and their intermediate results may influence subsequent operations, making it unsafe or impossible to retry only a single failed query. Therefore, if a query fails due to a conflict or a transient error, the entire transaction should be retried from the beginning to ensure correctness and consistency.
 
@@ -86,16 +61,16 @@ All official {{ ydb-short-name }} SDKs provide built-in retry logic and transact
 
 ## Query language
 
-Queries for {{ ydb-short-name }} are written in [YQL](../glossary.md#yql) — an SQL dialect designed with scalable distributed databases in mind. While YQL is not fully ANSI SQL compatible, it closely follows familiar SQL syntax and concepts for most common use cases, making it easy to learn for those with SQL experience. The complete language reference is available in the [YQL documentation](../../yql/reference/index.md).
+Queries for {{ ydb-short-name }} are written in [YQL](../glossary.md#yql) вЂ” an SQL dialect designed with scalable distributed databases in mind. While YQL is not fully ANSI SQL compatible, it closely follows familiar SQL syntax and concepts for most common use cases, making it easy to learn for those with SQL experience. The complete language reference is available in the [YQL documentation](../../yql/reference/index.md).
 
 Most interactions with {{ ydb-short-name }} are performed using YQL, making it the primary tool for querying and managing data in {{ ydb-short-name }}. Because of this, understanding YQL's features and capabilities is essential for effectively working with {{ ydb-short-name }}. Learning YQL enables you to take full advantage of the database's advanced query functionality, express complex business logic, and utilize {{ ydb-short-name }}'s distributed architecture efficiently.
 
 YQL supports most common SQL constructs, including:
 
-- [Data Manipulation Language (DML)](https://en.wikipedia.org/wiki/Data_manipulation_language) — `SELECT`, `INSERT`, `REPLACE`, `UPDATE`, `DELETE`, `UPSERT`.
-- [Data Definition Language (DDL)](https://en.wikipedia.org/wiki/Data_definition_language) — `CREATE`, `ALTER`, `DROP` for tables, indexes, and other schema objects.
-- Joins — all standard `JOIN` types, plus special joins such as `LEFT SEMI`, `RIGHT SEMI`, and `ANY` joins.
-- Aggregations — `GROUP BY` and window functions.
+- [Data Manipulation Language (DML)](https://en.wikipedia.org/wiki/Data_manipulation_language) вЂ” `SELECT`, `INSERT`, `REPLACE`, `UPDATE`, `DELETE`, `UPSERT`.
+- [Data Definition Language (DDL)](https://en.wikipedia.org/wiki/Data_definition_language) вЂ” `CREATE`, `ALTER`, `DROP` for tables, indexes, and other schema objects.
+- Joins вЂ” all standard `JOIN` types, plus special joins such as `LEFT SEMI`, `RIGHT SEMI`, and `ANY` joins.
+- Aggregations вЂ” `GROUP BY` and window functions.
 - [Named expressions](../../yql/reference/syntax/expressions.md#named-nodes) for better query text organization.
 - A collection of built-in functions for processing various data types, empowering users to handle complex logic directly in queries.
 - Pragmas and hints to fine-tune execution plans.
@@ -120,8 +95,3 @@ When working with queries in {{ ydb-short-name }}, there are several important l
 The amount of data that can be written in a single transaction is limited. For detailed thresholds, see the [{#T}](../limits-ydb.md#query) section.
 
 For a full overview of {{ ydb-short-name }} limitations, see [{#T}](../limits-ydb.md).
-=======
-You can also read data from a topic using a regular `SELECT` by specifying `STREAMING = "TRUE"` in the `WITH` clause. Without the `LIMIT` limit, such a query runs indefinitely, returning results to the client as messages arrive. Unlike streaming queries, it does not create a persistent schema object and does not recover from failures, so it is intended primarily for debugging and checking data in a topic.
-
-For more details, see the [{#T}](../../yql/reference/syntax/select/streaming.md) section.
->>>>>>> 6c2f08c6922 (Auto-translate docs from PR #30237 (#48223))

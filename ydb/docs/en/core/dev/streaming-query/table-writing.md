@@ -8,11 +8,7 @@ Writes use [UPSERT INTO](../../yql/reference/syntax/upsert_into) — insert a ne
 
 Not supported:
 
-<<<<<<< HEAD
 - [INSERT INTO](../../yql/reference/syntax/insert_into.md) — use UPSERT INTO instead. `INSERT INTO` would duplicate rows on retries under at-least-once delivery.
-=======
-- [INSERT INTO](../../yql/reference/syntax/insert_into) — use UPSERT INTO instead. INSERT INTO would duplicate rows on retries under at-least-once delivery.
->>>>>>> 6c2f08c6922 (Auto-translate docs from PR #30237 (#48223))
 - Writing to {{ ydb-short-name }} tables in **external** databases. Currently only local tables can be written to.
 
 {% endnote %}
@@ -35,13 +31,8 @@ SELECT
     Country,
     Count
 FROM
-<<<<<<< HEAD
     -- Read events from topic
     ydb_source.input_topic
-=======
-    -- Reading events from a topic
-    input_topic
->>>>>>> 6c2f08c6922 (Auto-translate docs from PR #30237 (#48223))
 WITH (
     -- Data format in the topic
     FORMAT = json_each_row,

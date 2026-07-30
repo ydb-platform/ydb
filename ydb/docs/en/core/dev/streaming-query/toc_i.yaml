@@ -1,11 +1,5 @@
 items:
-<<<<<<< HEAD
 - name: Common patterns
-=======
-- name: Local and External Topics
-  href: local-and-external-topics.md
-- name: Typical Patterns
->>>>>>> 6c2f08c6922 (Auto-translate docs from PR #30237 (#48223))
   href: patterns.md
 - name: Writing to Tables
   href: table-writing.md
@@ -17,8 +11,5 @@ items:
   href: guarantees.md
 - name: Checkpoints
   href: checkpoints.md
-<<<<<<< HEAD
-=======
 - name: Watermarks
   href: watermarks.md
->>>>>>> 6c2f08c6922 (Auto-translate docs from PR #30237 (#48223))

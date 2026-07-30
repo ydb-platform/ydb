@@ -19,19 +19,19 @@ Watermark is used by operations that depend on the progress of event time in the
 
 ```mermaid
 sequenceDiagram
-    participant Топик
-    participant Запрос as Потоковый запрос
-    participant Приёмник
+    participant Topic
+    participant Query as Streaming query
+    participant Sink
 
-    Топик->>Запрос: событие, ts = 10с
-    Note over Запрос: watermark = 5с
-    Топик->>Запрос: событие, ts = 12с
-    Note over Запрос: watermark = 7с
-    Топик->>Запрос: событие, ts = 18с
-    Note over Запрос: watermark = 13с<br/>Окно [0, 10) закрыто
-    Запрос->>Приёмник: результат окна [0, 10)
-    Топик->>Запрос: событие, ts = 8с
-    Note over Запрос: ts=8 меньше watermark=13<br/>Событие будет отброшено
+    Topic->>Query: event, ts = 10s
+    Note over Query: watermark = 5s
+    Topic->>Query: event, ts = 12s
+    Note over Query: watermark = 7s
+    Topic->>Query: event, ts = 18s
+    Note over Query: watermark = 13s<br/>Window [0, 10) closed
+    Query->>Sink: window result [0, 10)
+    Topic->>Query: event, ts = 8s
+    Note over Query: ts=8 is less than watermark=13<br/>Event will be discarded
 ```
 
 

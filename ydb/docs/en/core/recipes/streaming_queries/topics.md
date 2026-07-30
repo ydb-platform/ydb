@@ -85,7 +85,7 @@ DO BEGIN
 $number_errors = SELECT
     Host,
     COUNT(*) AS ErrorCount,
-    CAST(HOP_START() AS String) AS Ts  -- Start time of the window corresponding to the aggregation result
+    CAST(HOP_START() AS String) AS Ts  -- Window start time corresponding to the aggregation result
 FROM
     input_topic
 WITH (
@@ -99,7 +99,7 @@ WITH (
 WHERE
     Level = "error"
 GROUP BY
-    HOP(CAST(Time AS Timestamp), "PT600S", "PT600S", "PT0S"),  -- Number of errors on non-overlapping windows of 10 minutes length
+    HOP(CAST(Time AS Timestamp), "PT600S", "PT600S", "PT0S"),  -- Number of errors on non-overlapping windows of 10 minutes
     Host;
 
 INSERT INTO

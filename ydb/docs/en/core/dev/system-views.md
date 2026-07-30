@@ -1,10 +1,10 @@
-# System database views
+# Database system views
 
-To obtain system information about the database state, you can refer to system views. They are available from the root of the database tree and use the system path prefix `.sys`.
+To obtain administrative information about the database state, you can use system views. They are available from the root of the database tree and use the system path prefix `.sys`.
 
 {% note info %}
 
-Frequent access to system views leads to additional load on the database, especially in the case of a large database size. Exceeding a frequency of 1 query per second is not recommended.
+Frequent access to system views leads to additional load on the database, especially if the database is large. Exceeding a frequency of 1 query per second is not recommended.
 
 {% endnote %}
 
@@ -12,9 +12,9 @@ Frequent access to system views leads to additional load on the database, especi
 
 The following system view stores detailed information about [partitions](../concepts/datamodel/table.md#partitioning_row_table) of database tables:
 
-* `partition_stats` — contains information about instantaneous metrics and cumulative counters of operations. The former include, for example, CPU load data or the number of running [transactions](../concepts/transactions.md). The latter include the total number of rows read.
+* `partition_stats` — contains information about instantaneous metrics and cumulative operation counters. The former include, for example, CPU load data or the number of executing [transactions](../concepts/transactions.md). The latter include the total number of rows read.
 
-It is intended, for example, for identifying unevenly loaded partitions or displaying the size of data in them.
+It is intended, for example, for identifying unevenly loaded partitions or displaying the data size in them.
 
 Instantaneous metrics (`NodeId`, `AccessTime`, `CPUCores`, etc.) contain instantaneous values.
 Cumulative (non-instantaneous) metrics (`RowReads`, `RowUpdates`, `LocksAcquired`, etc.) store accumulated values since the last start of the tablet (`StartTime`) serving the partition.
@@ -23,36 +23,36 @@ View structure:
 
 | Column | Description | Data type | Instantaneous/Cumulative |
 | --- | --- | --- | --- |
-| `OwnerId` | Table SchemeShard ID.<br/>Key: `0`. | `Uint64` | Instant |
-| `PathId` | Path identifier in SchemeShard.<br/>Key: `1`. | `Uint64` | Instant |
+| `OwnerId` | Table SchemeShard ID.<br/>Key: `0`. | `Uint64` | Instantaneous |
+| `PathId` | Path ID in SchemeShard.<br/>Key: `1`. | `Uint64` | Instantaneous |
 | `PartIdx` | Partition sequence number.<br/>Key: `2`. | `Uint64` | Instantaneous |
-| `FollowerId` | Identifier of the [replica](../concepts/glossary.md#tablet-follower) of the partition tablet. A value of 0 means the leader.<br/>Key: `3`. | `Uint32` | Instantaneous |
-| `DataSize` | Approximate data size of the partition in bytes. | `Uint64` | Instantaneous |
-| `RowCount` | Approximate number of rows. | `Uint64` | Instant |
+| `FollowerId` | Partition tablet [replica](../concepts/glossary.md#tablet-follower) ID. A value of 0 means the leader.<br/>Key: `3`. | `Uint32` | Instantaneous |
+| `DataSize` | Approximate partition data size in bytes. | `Uint64` | Instantaneous |
+| `RowCount` | Approximate number of rows. | `Uint64` | Instantaneous |
 | `IndexSize` | Partition index size in bytes. | `Uint64` | Instantaneous |
-| `CPUCores` | Instantaneous load value on the partition (fraction of CPU core time spent by the partition actor). | `Double` | Instant |
-| `TabletId` | Partition tablet identifier. | `Uint64` | Instantaneous |
-| `Path` | Full path to the table. | `Utf8` | Momentary |
-| `NodeId` | Node ID on which the partition is currently served. | `Uint32` | Instantaneous |
+| `CPUCores` | Instantaneous partition load value (fraction of CPU core time spent by the partition actor). | `Double` | Instantaneous |
+| `TabletId` | Partition tablet ID. | `Uint64` | Instantaneous |
+| `Path` | Full table path. | `Utf8` | Instantaneous |
+| `NodeId` | ID of the node currently serving the partition. | `Uint32` | Instantaneous |
 | `StartTime` | Last start time of the partition tablet. | `Timestamp` | Instantaneous |
-| `AccessTime` | Last read moment from the partition. | `Timestamp` | Instantaneous |
-| `UpdateTime` | Last write moment to the partition. | `Timestamp` | Instant |
-| `RowReads` | Number of reads by key. | `Uint64` | Cumulative |
-| `RowUpdates` | Number of written rows. | `Uint64` | Cumulative |
-| `RowDeletes` | Number of deleted rows. | `Uint64` | Cumulative |
-| `RangeReads` | Number of reads by key range. | `Uint64` | Cumulative |
+| `AccessTime` | Last read time from the partition. | `Timestamp` | Instantaneous |
+| `UpdateTime` | Last write time to the partition. | `Timestamp` | Instantaneous |
+| `RowReads` | Number of point reads. | `Uint64` | Cumulative |
+| `RowUpdates` | Number of rows written. | `Uint64` | Cumulative |
+| `RowDeletes` | Number of rows deleted. | `Uint64` | Cumulative |
+| `RangeReads` | Number of range reads. | `Uint64` | Cumulative |
 | `RangeReadRows` | Number of rows read in ranges. | `Uint64` | Cumulative |
-| `InFlightTxCount` | Number of running transactions. | `Uint64` | Instant |
+| `InFlightTxCount` | Number of executing transactions. | `Uint64` | Instantaneous |
 | `ImmediateTxCompleted` | Number of completed [single-shard transactions](../concepts/glossary.md#transactions). | `Uint32` | Cumulative |
 | `CoordinatedTxCompleted` | Number of completed [distributed transactions](../concepts/glossary.md#transactions). | `Uint64` | Cumulative |
 | `TxRejectedByOverload` | Number of transactions cancelled due to [high load](../troubleshooting/performance/queries/overloaded-errors.md). | `Uint64` | Cumulative |
 | `TxRejectedByOutOfStorage` | Number of transactions cancelled due to insufficient storage space. | `Uint64` | Cumulative |
-| `TxCompleteLag` | Transaction execution delay (how far transactions lag behind the scheduled time). | `Interval` | Instantaneous |
-| `LastTtlRunTime` | Last start time of partition cleanup by TTL | `Timestamp` | Instant |
-| `LastTtlRowsProcessed` | Number of partition rows checked during the last TTL cleanup | `Uint64` | Instant |
-| `LastTtlRowsErased` | Number of partition rows deleted during the last TTL cleanup | `Uint64` | Instant |
-| `LocksAcquired` | Number of acquired [locks](../contributor/datashard-locks-and-change-visibility.md). | `Uint64` | Cumulative |
-| `LocksWholeShard` | Number of set [whole-shard locks](../contributor/datashard-locks-and-change-visibility.md#whole-shard-locks). | `Uint64` | Cumulative |
+| `TxCompleteLag` | Transaction execution delay (how far transactions are behind the scheduled time). | `Interval` | Instantaneous |
+| `LastTtlRunTime` | Last start time of partition TTL cleanup | `Timestamp` | Instantaneous |
+| `LastTtlRowsProcessed` | Number of partition rows checked during the last TTL cleanup | `Uint64` | Instantaneous |
+| `LastTtlRowsErased` | Number of partition rows deleted during the last TTL cleanup | `Uint64` | Instantaneous |
+| `LocksAcquired` | Number of [locks](../contributor/datashard-locks-and-change-visibility.md) set. | `Uint64` | Cumulative |
+| `LocksWholeShard` | Number of [whole-shard locks](../contributor/datashard-locks-and-change-visibility.md#whole-shard-locks) set. | `Uint64` | Cumulative |
 | `LocksBroken` | Number of [broken locks](../contributor/datashard-locks-and-change-visibility.md#broken-locks). | `Uint64` | Cumulative |
 
 ### Query examples {#partitions-examples}
@@ -104,17 +104,17 @@ ORDER BY TotalLocksBroken DESC
 
 The following system views store data for analyzing user queries.
 
-Maximum total query execution time:
+Longest total query execution time:
 
-* `top_queries_by_duration_one_minute` — data is divided into minute intervals, contains data for the last 6 hours.
-* `top_queries_by_duration_one_hour`: data is split into hourly intervals, contains data for the last 2 weeks.
+* `top_queries_by_duration_one_minute` — data is split into minute intervals, contains data for the last 6 hours;
+* `top_queries_by_duration_one_hour` — data is split into hourly intervals, contains data for the last 2 weeks.
 
-The largest number of bytes read from the table:
+Most bytes read from a table:
 
 * `top_queries_by_read_bytes_one_minute` — data is split into minute intervals, contains data for the last 6 hours.
 * `top_queries_by_read_bytes_one_hour` — data is split into hour intervals, contains data for the last 2 weeks.
 
-Maximum CPU time spent:
+Greatest CPU time spent:
 
 * `top_queries_by_cpu_time_one_minute` — data is split into minute intervals, contains data for the last 6 hours.
 * `top_queries_by_cpu_time_one_hour` — data is split into hour intervals, contains data for the last 2 weeks.
@@ -243,18 +243,18 @@ View structure:
 
 {% note info %}
 
-This statistic does not include:
+The following are not included in this statistics:
 
 * Locks broken due to schema changes, TTL, asynchronous replication
 * Locks broken due to partition splitting or merging
-* Locks broken during tablet restart
+* Locks broken during tablet restarts
 * Locks broken when committing interactive transactions (when COMMIT is executed as a separate query)
 
 {% endnote %}
 
 ### Query examples {#query-metrics-examples}
 
-Top 10 queries over the last 6 hours by total number of rows written in a minute interval:
+Top 10 queries over the last 6 hours by total number of rows written per minute interval:
 
 
 ```yql
@@ -288,14 +288,14 @@ LIMIT 100
 
 ## Detailed information about session queries {#query-sessions}
 
-The following system view contains detailed information about current sessions and the queries being executed in them.
+The following system view contains detailed information about current sessions and the queries running in them.
 
-* `.sys/query_sessions` — contains information about sessions and the queries being executed in them.
+* `.sys/query_sessions` — contains information about sessions and the queries running in them.
 
 | Column | Description |
 | :--- | :--- |
-| `SessionId` | Unique session identifier.<br/>Type: `Utf8`.<br/>Key: `0`. |
-| `NodeId` | Identifier of the node where the session is running.<br/>Type: `Uint32`. |
+| `SessionId` | Unique session ID.<br/>Type: `Utf8`.<br/>Key: `0`. |
+| `NodeId` | ID of the node where the session is running.<br/>Type: `Uint32`. |
 | `State` | Current session state.<br/>Type: `Utf8`. |
 | `Query` | Text of the last or currently executing query.<br/>Type: `Utf8`. |
 | `QueryCount` | Number of queries executed within this session.<br/>Type: `Uint32`. |
@@ -303,12 +303,12 @@ The following system view contains detailed information about current sessions a
 | `ClientPID` | Process ID (PID) of the client application.<br/>Type: `Utf8`. |
 | `ClientUserAgent` | Client software information (User-Agent).<br/>Type: `Utf8`. |
 | `ClientSdkBuildInfo` | Client SDK build information.<br/>Type: `Utf8`. |
-| `ApplicationName` | Application name specified by the client when connecting.<br/>Type: `Utf8`. |
+| `ApplicationName` | Application name specified by the client upon connection.<br/>Type: `Utf8`. |
 | `SessionStartAt` | Session start (creation) time.<br/>Type: `Timestamp`. |
 | `QueryStartAt` | Start time of the current query execution.<br/>Type: `Timestamp`. |
 | `StateChangeAt` | Time of the last session state change.<br/>Type: `Timestamp`. |
 | `UserSID` | Security ID of the user owning the session.<br/>Type: `Utf8`. |
-| `WmPoolId` | Identifier of the Workload Manager pool in which the session query is executed.<br/>Type: `Utf8`. |
+| `WmPoolId` | Workload Manager pool ID in which the session query is executed.<br/>Type: `Utf8`. |
 | `WmState` | Query state in Workload Manager.<br/>Type: `Utf8`. |
 | `WmEnterTime` | Time when the query transitioned to PENDING or DELAYED status.<br/>Type: `Timestamp`. |
 | `WmExitTime` | Time when the query was submitted for execution.<br/>Type: `Timestamp`. |
@@ -323,7 +323,7 @@ Possible values of the `WmState` field:
 Possible values of the `State` field:
 
 * `IDLE` - Session is waiting for a query.
-* `EXECUTING` - Query is being executed.
+* `EXECUTING` - Query is executing.
 
 ### Query examples {#query-sessions-examples}
 
@@ -351,7 +351,7 @@ LIMIT 20
 ```
 
 
-Search for application sessions filtered by Workload Manager pool:
+Search for application sessions with filtering by Workload Manager pool:
 
 
 ```yql
@@ -381,7 +381,7 @@ The `compile_cache_queries` system view is not available in serverless mode.
 
 Each cluster node has its own cache of compiled queries. This cache is used by all sessions running on that node: if during query execution its text is already in the cache, no additional compilation is required.
 
-The system view `compile_cache_queries` provides data on the cache state on all or selected cluster nodes. When querying this view, requests are sent to each node unless a restriction on `NodeId` is specified in the `WHERE` condition. The response returns current information about the cache contents for each node, and the resulting table combines the received data.
+The system view `compile_cache_queries` provides data on the cache state on all or selected cluster nodes. When querying this view, requests are sent to each node unless a restriction on `NodeId` is specified in the `WHERE` condition. The response returns up-to-date information about the cache contents for each node, and the resulting table combines the obtained data.
 
 View structure:
 
@@ -389,7 +389,7 @@ View structure:
 | --- | --- |
 | `NodeId` | Node ID where the query is stored in the cache.<br/>Type: `Uint32`.<br/>Key: `0`. |
 | `QueryId` | Unique query ID in the node cache.<br/>Type: `Utf8`.<br/>Key: `1`. |
-| `Query` | Query text. If the query exceeds 10 KB, it is truncated.<br/>Type: `Utf8`. |
+| `Query` | Query text. If the query is larger than 10 KB, it is truncated.<br/>Type: `Utf8`. |
 | `AccessCount` | Number of cache hits for the query text.<br/>Type: `Uint64`. |
 | `CompiledAt` | Query compilation time.<br/>Type: `Timestamp`. |
 | `UserSID` | Security ID of the user on whose behalf the query was compiled. May be empty for system queries.<br/>Type: `Utf8`. |
@@ -398,10 +398,10 @@ View structure:
 | `Warnings` | Warnings that occurred during query compilation.<br/>Type: `Utf8`. |
 | `Metadata` | Query parameter types in JSON format. Contains the `parameters` key with parameter names and their types.<br/>Type: `Utf8`. |
 | `IsTruncated` | Flag indicating whether the query text was truncated due to exceeding the 10 KB limit.<br/>Type: `Bool`. |
-| `QueryType` | Query type, one of:<br/>`QUERY_TYPE_SQL_DML` — Table Service<br/>`QUERY_TYPE_SQL_GENERIC_QUERY` — Query Service<br/>`QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY` — Query Service in concurrent mode<br/>May be empty for old entries.<br/>Type: `Utf8`. |
-| `Syntax` | Query syntax, one of:<br/>`SYNTAX_YQL_V1` — YQL<br/>`SYNTAX_UNSPECIFIED` — for old entries without syntax information<br/>`SYNTAX_PG` — deprecated value for entries compiled before the removal of experimental PostgreSQL compatibility; new queries with this syntax are not accepted<br/>Type: `Utf8`. |
+| `QueryType` | Query type, one of:<br/>`QUERY_TYPE_SQL_DML` — Table Service<br/>`QUERY_TYPE_SQL_GENERIC_QUERY` — Query Service<br/>`QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY` — Query Service in concurrent mode<br/>May be empty for old records.<br/>Type: `Utf8`. |
+| `Syntax` | Query syntax, one of:<br/>`SYNTAX_YQL_V1` — YQL<br/>`SYNTAX_UNSPECIFIED` — for old records without syntax information<br/>`SYNTAX_PG` — deprecated value for records compiled before the removal of experimental PostgreSQL compatibility; new queries with this syntax are not accepted<br/>Type: `Utf8`. |
 
-### Example queries {#compile-cache-queries-examples}
+### Query examples {#compile-cache-queries-examples}
 
 View all queries in the compilation cache:
 
@@ -458,40 +458,40 @@ ORDER BY CompilationDurationMs DESC
 
 ## History of overloaded partitions {#top-overload-partitions}
 
-The following system views contain a history of high load moments on individual partitions of database tables:
+The following system views contain the history of high load moments on individual partitions of database tables:
 
 * `top_partitions_one_minute` — data is split into minute intervals, contains history for the last 6 hours.
 * `top_partitions_one_hour` — data is split into hour intervals, contains history for the last 2 weeks.
 
-Partitions with peak load over 70% (`CPUCores` > 0.7) are included in the views. Within one interval, partitions are ranked by peak load value.
+Partitions with peak load over 70% (`CPUCores` > 0.7) are included in the views. Within a single interval, partitions are ranked by peak load value.
 
 Both views contain the same set of fields:
 
 The view keys are:
 
-* `IntervalEnd` — interval end time;
+* `IntervalEnd` — interval end time.
 * `Rank` — partition rank by peak load `CPUCores` in this interval.
 
 For example, if a table has 10 partitions, then `top_partitions_one_hour` for the hour interval `"20.12.2024 10:00-11:00"` will return 10 rows sorted in descending order of `CPUCores`. They will have `Rank` from 1 to 10 and the same `IntervalEnd` `"20.12.2024 11:00"`.
 
 | Column | Description |
 | --- | --- |
-| `IntervalEnd` | End time of the minute or hour interval for which statistics are collected.<br/>Type: `Timestamp`.<br/>Key: `0`. |
+| `IntervalEnd` | End time of the minute or hour interval for which statistics were collected.<br/>Type: `Timestamp`.<br/>Key: `0`. |
 | `Rank` | Partition rank within the interval (by `CPUCores`).<br/>Type: `Uint32`.<br/>Key: `1`. |
 | `TabletId` | Tablet ID serving the partition.<br/>Type: `Uint64`. |
-| `FollowerId` | Replica ID of the partition tablet. [Replica](../concepts/glossary.md#tablet-follower) value 0 means leader.<br/>Type: `Uint32` |
-| `Path` | Full table path.<br/>Type: `Utf8`. |
-| `PeakTime` | Peak time within the interval.<br/>Type: `Timestamp`. |
+| `FollowerId` | Partition tablet [replica](../concepts/glossary.md#tablet-follower) ID. Value 0 means the leader.<br/>Type: `Uint32` |
+| `Path` | Full path to the table.<br/>Type: `Utf8`. |
+| `PeakTime` | Peak value time within the interval.<br/>Type: `Timestamp`. |
 | `CPUCores` | Peak load value on the partition (fraction of CPU core time spent by the partition actor).<br/>Type: `Double`. |
-| `NodeId` | Node ID where the partition was located at the peak.<br/>Type: `Uint32`. |
-| `DataSize` | Approximate partition size in bytes at the peak.<br/>Type: `Uint64`. |
-| `RowCount` | Approximate row count at the peak.<br/>Type: `Uint64`. |
-| `IndexSize` | Partition index size in the tablet at the peak.<br/>Type: `Uint64`. |
-| `InFlightTxCount` | Number of transactions in progress at the peak.<br/>Type: `Uint32`. |
+| `NodeId` | Node ID where the partition was located at the peak time.<br/>Type: `Uint32`. |
+| `DataSize` | Approximate partition size in bytes at the peak time.<br/>Type: `Uint64`. |
+| `RowCount` | Approximate number of rows at the peak time.<br/>Type: `Uint64`. |
+| `IndexSize` | Partition index size in the tablet at the peak time.<br/>Type: `Uint64`. |
+| `InFlightTxCount` | Number of transactions in progress at the peak time.<br/>Type: `Uint32`. |
 
-### Example queries {#top-overload-partitions-examples}
+### Query examples {#top-overload-partitions-examples}
 
-The following query outputs partitions with CPU consumption over 70% in the specified time interval, with tablet IDs and their sizes at the time of exceeding. The query is run against the `.sys/top_partitions_one_minute` view, which contains data for the last 6 hours broken down by minute intervals:
+The following query outputs partitions with CPU consumption over 70% in the specified time interval, with tablet IDs and their sizes at the time of exceeding. The query is executed against the `.sys/top_partitions_one_minute` view, which contains data for the last 6 hours broken down into minute intervals:
 
 
 ```yql
@@ -508,7 +508,7 @@ ORDER BY IntervalEnd desc, CPUCores desc
 ```
 
 
-The following query outputs partitions with CPU consumption over 90% in the specified time interval, with tablet IDs and their sizes at the time of exceeding. The query is run against the `.sys/top_partitions_one_hour` view, which contains data for the last 2 weeks broken down by hourly intervals:
+The following query outputs partitions with CPU consumption over 90% in the specified time interval, with tablet IDs and their sizes at the time of exceeding. The query is executed against the `.sys/top_partitions_one_hour` view, which contains data for the last 2 weeks broken down into hourly intervals:
 
 
 ```yql
@@ -529,15 +529,15 @@ ORDER BY IntervalEnd desc, CPUCores desc
 
 The following system views contain the history of moments with a non-zero number of broken [locks](../contributor/datashard-locks-and-change-visibility.md) `LocksBroken` in individual partitions of database tables:
 
-* `top_partitions_by_tli_one_minute` — data is broken down into minute intervals, contains history for the last 6 hours.
+* `top_partitions_by_tli_one_minute` — data is broken down into minute intervals, contains history for the last 6 hours
 * `top_partitions_by_tli_one_hour` — data is broken down into hourly intervals, contains history for the last 2 weeks.
 
 The views output the top 10 partitions with a non-zero number of broken locks `LocksBroken`. Within a single interval, partitions are ranked by the number of broken locks `LocksBroken`.
 
 The view keys are:
 
-* `IntervalEnd` - the end time of the interval.
-* `Rank` - the rank of the partition by the number of broken locks `LocksBroken` in this interval.
+* `IntervalEnd` - interval end time
+* `Rank` - partition rank by the number of broken locks `LocksBroken` in this interval.
 
 For example, `top_partitions_by_tli_one_hour` for an hourly interval `"20.12.2024 10:00-11:00"` will output 10 rows sorted in descending order of `LocksBroken`. They will have `Rank` from 1 to 10 and the same `IntervalEnd` `"20.12.2024 11:00"`.
 
@@ -546,7 +546,7 @@ Both views contain the same set of fields:
 | Column | Description |
 | --- | --- |
 | `IntervalEnd` | The end time of the minute or hour interval for which statistics were collected.<br/>Type: `Timestamp`.<br/>Key: `0`. |
-| `Rank` | The rank of the partition within the interval (by `LocksBroken`).<br/>Type: `Uint32`.<br/>Key: `1`. |
+| `Rank` | Partition rank within the interval (by `LocksBroken`).<br/>Type: `Uint32`.<br/>Key: `1`. |
 | `TabletId` | ID of the tablet serving the partition.<br/>Type: `Uint64`. |
 | `FollowerId` | ID of the partition tablet [replica](../concepts/glossary.md#tablet-follower). Value 0 means the leader.<br/>Type: `Uint32` |
 | `Path` | Full path to the table.<br/>Type: `Utf8`. |
@@ -554,13 +554,13 @@ Both views contain the same set of fields:
 | `LocksWholeShard` | Number of locks set "on the entire partition" in this interval.<br/>Type: `Uint64`. |
 | `LocksBroken` | Number of broken locks in this interval.<br/>Type: `Uint64`. |
 | `NodeId` | ID of the node where the partition was located at the peak time.<br/>Type: `Uint32`. |
-| `DataSize` | Approximate size of the partition in bytes at the peak time.<br/>Type: `Uint64`. |
+| `DataSize` | Approximate partition size in bytes at the peak time.<br/>Type: `Uint64`. |
 | `RowCount` | Approximate number of rows at the peak time.<br/>Type: `Uint64`. |
-| `IndexSize` | Size of the partition index in the tablet at the peak time.<br/>Type: `Uint64`. |
+| `IndexSize` | Partition index size in the tablet at the peak time.<br/>Type: `Uint64`. |
 
 ### Query examples {#top-tli-partitions-examples}
 
-The following query outputs partitions in the specified time interval, with tablet IDs and the number of broken locks. The query is run against the `.sys/top_partitions_by_tli_one_minute` view:
+The following query outputs partitions in the specified time interval, with tablet IDs and the number of broken locks. The query is executed against the `.sys/top_partitions_by_tli_one_minute` view:
 
 
 ```yql
@@ -589,9 +589,9 @@ System view structure:
 | `ConcurrentQueryLimit` | Maximum number of concurrently executing queries in the resource pool.<br/>Type: `Int32`. |
 | `QueueSize` | Maximum queue size.<br/>Type: `Int32`. |
 | `DatabaseLoadCpuThreshold` | CPU load threshold of the entire database, in percent, after which queries are not sent for execution and remain in the queue.<br/>Type: `Double`. |
-| `ResourceWeight` | [Weights](../dev/resource-consumption-management.md#resources_weight) for distributing resources among pools.<br/>Type: `Double`. |
+| `ResourceWeight` | [Weights](../dev/resource-consumption-management.md#resources_weight) for distributing resources between pools.<br/>Type: `Double`. |
 | `TotalCpuLimitPercentPerNode` | Percentage of available CPU that all queries on the node can use in this resource pool.<br/>Type: `Double`. |
-| `QueryCpuLimitPercentPerNode` | Percentage of available CPU on the node for one query in the resource pool.<br/>Type: `Double`. |
+| `QueryCpuLimitPercentPerNode` | Percentage of available CPU on the node for a single query in the resource pool.<br/>Type: `Double`. |
 | `QueryMemoryLimitPercentPerNode` | Percentage of available memory on the node that a query can use in this resource pool.<br/>Type: `Double`. |
 
 ### Example {#resource_pools-examples}
@@ -626,13 +626,13 @@ System view structure:
 | Column | Description |
 | --- | --- |
 | `Name` | Resource pool classifier name.<br/>Type: `Utf8`.<br/>Key: `0`. |
-| `Rank` | Priority of selecting the resource pool classifier.<br/>Type: `Int64`. |
+| `Rank` | Selection priority of the resource pool classifier.<br/>Type: `Int64`. |
 | `MemberName` | User or group of users that will be sent to the specified resource pool.<br/>Type: `Utf8`. |
-| `ResourcePool` | The name of the resource pool to which queries will be sent.<br/>Type: `Utf8`. |
+| `ResourcePool` | Name of the resource pool to which queries will be sent.<br/>Type: `Utf8`. |
 
 ### Example {#resource_pools_classifiers-examples}
 
-The following query outputs information about the settings of the resource pool classifier named `olap`:
+The following query outputs information about the resource pool classifier settings named `olap`:
 
 
 ```yql
@@ -651,7 +651,7 @@ WHERE Name = "olap";
 
 The following system views contain information about users, access groups, user membership in groups, and access rights granted to groups or directly to users.
 
-### Information about users {#users}
+### User information {#users}
 
 The `auth_users` view contains a list of local [users](../concepts/glossary.md#access-user) {{ ydb-short-name }}. It does not include users authenticated through external systems such as LDAP.
 
@@ -661,16 +661,16 @@ Table structure:
 
 | Column | Description |
 | --- | --- |
-| `Sid` | User [SID](../concepts/glossary.md#tablet-implementation).<br />Type: `Utf8`.<br />Key: `0`. |
+| `Sid` | User [SID](../concepts/glossary.md#sid).<br />Type: `Utf8`.<br />Key: `0`. |
 | `IsEnabled` | Indicates whether login is allowed for this user; used for explicit blocking by an administrator. Independent of `IsLockedOut`.<br />Type: `Bool`. |
-| `IsLockedOut` | Indicates that this user is automatically blocked due to exceeding the number of failed authentications. Does not depend on `IsEnabled`.<br />Type: `Bool`. |
+| `IsLockedOut` | Indicates that this user is automatically locked due to exceeding the number of failed authentications. Does not depend on `IsEnabled`.<br />Type: `Bool`. |
 | `CreatedAt` | User creation time.<br />Type: `Timestamp`. |
 | `LastSuccessfulAttemptAt` | Time of last successful authentication.<br />Type: `Timestamp`. |
 | `LastFailedAttemptAt` | Time of last failed authentication.<br />Type: `Timestamp`. |
 | `FailedAttemptCount` | Number of failed authentications.<br />Type: `Uint32`. |
 | `PasswordHash` | JSON string containing the password hash, salt, and hashing algorithm.<br />Type: `Utf8`. |
 
-### Information about groups
+### Group information
 
 The `auth_groups` view contains a list of [access groups](../concepts/glossary.md#access-group).
 
@@ -680,9 +680,9 @@ Table structure:
 
 | Column | Description |
 | --- | --- |
-| `Sid` | Group [SID](../concepts/glossary.md#tablet-implementation).<br />Type: `Utf8`.<br />Key: `0`. |
+| `Sid` | Group [SID](../concepts/glossary.md#sid).<br />Type: `Utf8`.<br />Key: `0`. |
 
-### Information about group membership
+### Group membership information
 
 The `auth_group_members` view contains information about membership in [access groups](../concepts/glossary.md#access-group).
 
@@ -695,7 +695,7 @@ Table structure:
 | `GroupSid` | Group SID.<br />Type: `Utf8`.<br />Key: `0`. |
 | `MemberSid` | Group member SID. Can be either a user SID or a group SID.<br />Type: `Utf8`.<br />Key: `1`. |
 
-### Information about access rights
+### Access rights information
 
 The views contain a list of granted [access rights](../concepts/glossary.md#access-right).
 
@@ -704,7 +704,7 @@ Include two views:
 * `auth_permissions`: Explicitly granted access rights.
 * `auth_effective_permissions`: Effective access rights considering [inheritance](../concepts/glossary.md#access-right-inheritance).
 
-In this view, the user sees only those [access objects](../concepts/glossary.md#access-object) for which they have the `ydb.granular.describe_schema` right.
+In this view, a user sees only those [access objects](../concepts/glossary.md#access-object) for which they have the `ydb.granular.describe_schema` permission.
 
 Table structure:
 
@@ -714,7 +714,7 @@ Table structure:
 | `Sid` | SID of the [access subject](../concepts/glossary.md#access-subject).<br />Type: `Utf8`.<br />Key: `1`. |
 | `Permission` | Name of the [access right](../yql/reference/syntax/grant.md#permissions-list) {{ ydb-short-name }}.<br />Type: `Utf8`.<br />Key: `2`. |
 
-#### Example queries
+#### Query examples
 
 Getting explicitly granted rights on an access object - the `my_table` table:
 
@@ -746,11 +746,11 @@ WHERE Sid = "user3"
 ```
 
 
-### Information about owners of access objects {#auth-owners}
+### Access object owner information {#auth-owners}
 
 The `auth_owners` view displays information about [owners](../concepts/glossary.md#access-owner) of [access objects](../concepts/glossary.md#access-object).
 
-In this view, the user sees only those [access objects](../concepts/glossary.md#access-object) for which they have been granted the `ydb.granular.describe_schema` right.
+In this view, a user sees only those [access objects](../concepts/glossary.md#access-object) for which they have been granted the `ydb.granular.describe_schema` permission.
 
 Table structure:
 
@@ -761,23 +761,23 @@ Table structure:
 
 ## Streaming queries {#streaming}
 
-### Viewing information about streaming queries {#streaming_queries}
+### Viewing streaming query information {#streaming_queries}
 
 The system view `streaming_queries` contains information about all created [streaming queries](../concepts/streaming-query/streaming-query.md).
 
-In this view, the user sees only those [streaming queries](../concepts/streaming-query/streaming-query.md) for which they have been granted the `ydb.granular.describe_schema` right.
+In this view, a user sees only those [streaming queries](../concepts/streaming-query/streaming-query.md) for which they have been granted the `ydb.granular.describe_schema` permission.
 
 Table structure:
 
 | Column | Description |
 | --- | --- |
 | `Path` | Full path to the query.<br />Type: `Utf8`.<br />Key: `0`. |
-| `Status` | Query execution status, one of: <br />`CREATING` - query is being created, <br />`CREATED` - query created but not started, <br />`STARTING` - query is starting, <br />`RUNNING` - query is running, <br />`STOPPING` - query is stopping, <br />`STOPPED` - query stopped, <br />`SUSPENDED` - query completed with error and is waiting for backoff to retry, <br />Type: `Utf8` |
+| `Status` | Query execution status, one of the following values:<br />`CREATING` - query is being created <br />`CREATED` - query is created but not started<br />`STARTING` - query is starting<br />`RUNNING` - query is running<br />`STOPPING` - query is stopping<br />`STOPPED` - query is stopped<br />`SUSPENDED` - query completed with an error and is waiting for backoff before retry<br />Type: `Utf8` |
 | `Issues` | Query execution errors in JSON format<br />Type: `Utf8` |
 | `Plan` | Query plan in JSON format<br />Type: `Utf8` |
 | `Ast` | Query AST<br />Type: `Utf8` |
 | `Text` | Query text<br />Type: `Utf8` |
-| `Run` | Whether the query is currently being run by the user<br />Type: `Bool` |
+| `Run` | Whether the query is currently running by the user<br />Type: `Bool` |
 | `ResourcePool` | Name of the resource pool the query was bound to ( [see example](../yql/reference/syntax/create-streaming-query.md#examples))<br />Type: `Utf8` |
 | `RetryCount` | Number of query restarts<br />Type: `Uint64` |
 | `LastFailAt` | Time of the last query execution error<br />Type: `Timestamp` |

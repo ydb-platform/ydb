@@ -19,7 +19,7 @@ In the examples:
 
 ## Reading raw data
 
-The simplest way is to read messages in `raw` format, without parsing the schema:
+The simplest way is to read messages in `raw` format, without schema parsing:
 
 
 ```sql
@@ -42,7 +42,7 @@ The `LIMIT` parameter is required — without it, the query will not complete, a
 
 ## Reading with JSON parsing
 
-If the data in the topic is stored in JSON format, you can immediately parse it by fields:
+If the data in the topic is stored in JSON format, you can parse it by fields right away:
 
 
 ```sql

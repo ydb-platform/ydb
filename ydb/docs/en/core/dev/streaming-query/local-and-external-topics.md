@@ -1,12 +1,12 @@
 # Local and external topics in streaming queries
 
-[Streaming queries](../../concepts/streaming-query/streaming-query.md) read events from [topics](../../concepts/datamodel/topic.md) and can write results back to topics. The source and destination of messages can be either a topic **in the same database** where the query is executed, or a topic **in another database** {{ ydb-short-name }}.
+[Streaming queries](../../concepts/streaming-query/streaming-query.md) read events from [topics](../../concepts/datamodel/topic.md) and can write results back to topics. The source and destination of messages can be either a topic **in the same database** where the query is executed, or a topic **in another** {{ ydb-short-name }} database.
 
 All use cases of [streaming queries](../../concepts/streaming-query/streaming-query.md) work the same for local{#local-topics} and external{#external-topics} topics. The same query can simultaneously read a local topic, write to an external one, and vice versa.
 
 ## Local topics {#local-topics}
 
-**Local topics**: topics created in the **same database** {{ ydb-short-name }} as the [streaming query](../../concepts/streaming-query/streaming-query.md).
+**Local topics**: topics created in the **same** {{ ydb-short-name }} **database** as the [streaming query](../../concepts/streaming-query/streaming-query.md).
 
 In the query text, they are referred to **by a short name** — just like a table in the current database:
 
@@ -23,9 +23,9 @@ INSERT INTO output_topic SELECT ...;
 
 ## External topics {#external-topics}
 
-**External topics** — topics located **in another database** {{ ydb-short-name }}.
+**External topics** — topics located **in another** {{ ydb-short-name }} **database**.
 
-Access to them from a streaming query is performed only through a pre-created [external data source](../../concepts/datamodel/external_data_source.md) with the YDB source type. Creating the object is the [CREATE EXTERNAL DATA SOURCE](../../yql/reference/syntax/create-external-data-source.md) command; if authentication is required, secrets are used.
+Access to them from a streaming query is only possible through a pre-created [external data source](../../concepts/datamodel/external_data_source.md) with the YDB source type. Creating the object is the [CREATE EXTERNAL DATA SOURCE](../../yql/reference/syntax/create-external-data-source.md) command; if authentication is required, secrets are used.
 
 After creating a source, for example named `ext_source`, referring to topic `input_topic` in the external database is written as follows:
 

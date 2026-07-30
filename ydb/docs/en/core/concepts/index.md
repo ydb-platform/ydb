@@ -1,6 +1,6 @@
 # Concepts {{ ydb-short-name }}
 
-This documentation section covers the fundamental concepts and architectural principles of {{ ydb-short-name }}. This information will help you better understand what happens when you study more practical content that can be found in [other sections designed for specific roles](#see-also).
+This section of the documentation covers the fundamental concepts and architectural principles of {{ ydb-short-name }}. This information will help you better understand what happens when you study more practical content that can be found in [role-specific sections](#see-also).
 
 The following topics provide comprehensive coverage of the core functionality of {{ ydb-short-name }}, from high-level architecture and data model to advanced capabilities such as transactions, indexing, and federated queries.
 

@@ -1,29 +1,29 @@
 # WITH
 
-Specified after the data source in `FROM` and used to provide additional hints for table usage. Hints cannot be specified for subqueries and [named expressions](../expressions.md#named-nodes).
+Specified after the data source in `FROM` and used to provide additional table usage hints. Hints cannot be specified for subqueries and [named expressions](../expressions.md#named-nodes).
 
 The following values are supported:
 
-* `INFER_SCHEMA` — sets the flag for inferring the table schema. The behavior is similar to setting the [yt.InferSchema pragma](../pragma.md#inferschema), but only for a specific data source. You can specify the number of rows to infer (a number from 1 to 1000).
-* `FORCE_INFER_SCHEMA` — sets the flag for forcing schema inference of the table. The behavior is similar to setting the [yt.ForceInferSchema pragma](../pragma.md#inferschema), but only for a specific data source. You can specify the number of rows to infer (a number from 1 to 1000).
-* `DIRECT_READ` — suppresses the operation of some optimizers and forces the table contents to be used as is. The behavior is similar to setting the debug [DirectRead pragma](../pragma.md#debug), but only for a specific data source.
-* `INLINE` — indicates that the table contents are small and should be processed using an in-memory representation. The actual table size is not checked, and if it is large, the query may fail due to memory exhaustion.
-* `UNORDERED` — suppresses the use of the table's original sorting.
-* `XLOCK` — indicates that an exclusive lock should be taken on the table. Useful when the table is read during the [query metaprogram](../action.md) processing stage and then its contents are updated in the main query. It helps avoid data loss if an external process modifies the table between the execution of the metaprogram phase and the main part of the query.
-* `SCHEMA` type — indicates that the specified table schema should be used entirely, ignoring the schema in the metadata.
-* `COLUMNS` type — indicates that the specified types should be used for columns whose names match the column names in the table metadata, as well as which additional columns are present in the table.
-* `IGNORETYPEV3`, `IGNORE_TYPE_V3` — sets the flag to ignore type_v3 types in the table. The behavior is similar to setting the [yt.IgnoreTypeV3 pragma](../pragma.md#ignoretypev3), but only for a specific data source.
+* `INFER_SCHEMA`: sets the flag for table schema inference. Behavior is similar to setting the [pragma yt.InferSchema](../pragma.md#inferschema), but only for a specific data source. You can specify the number of rows to infer (a number from 1 to 1000).
+* `FORCE_INFER_SCHEMA`: sets the flag for forced table schema inference. Behavior is similar to setting the [pragma yt.ForceInferSchema](../pragma.md#inferschema), but only for a specific data source. You can specify the number of rows to infer (a number from 1 to 1000).
+* `DIRECT_READ`: suppresses some optimizers and forces using the table contents as is. Behavior is similar to setting the debug [pragma DirectRead](../pragma.md#debug), but only for a specific data source.
+* `INLINE`: indicates that the table contents are small and should be processed using an in-memory representation. The actual table size is not checked, and if it is large, the query may fail due to memory exhaustion.
+* `UNORDERED`: suppresses the use of the table's original sort order.
+* `XLOCK`: indicates that an exclusive lock should be taken on the table. Useful when the table is read during the [query metaprogram](../action.md) processing stage and then its contents are updated in the main query. Helps avoid data loss if an external process modifies the table between the execution of the metaprogram phase and the main query.
+* `SCHEMA` type: indicates that the specified table schema should be used entirely, ignoring the schema in metadata.
+* `COLUMNS` type: indicates that the specified types should be used for columns whose names match the column names in the table metadata, as well as which additional columns are present in the table.
+* `IGNORETYPEV3`, `IGNORE_TYPE_V3`: sets the flag to ignore type_v3 types in the table. Behavior is similar to setting the [pragma yt.IgnoreTypeV3](../pragma.md#ignoretypev3), but only for a specific data source.
 
 {% if feature_federated_queries %}
 
 When working with [external file data sources](../../../../concepts/datamodel/external_data_source.md), you can additionally specify a number of parameters:
 
-* `FORMAT`: data storage format in file storages in [federated queries](../../../../concepts/query_execution/federated_query/s3/formats.md). Allowed values: `csv_with_names`, `tsv_with_names`, `json_list`, `json_each_row`, `json_as_string`, `parquet`, `raw`.
-* `COMPRESSION`: file compression format in file storages in [federated queries](../../../../concepts/query_execution/federated_query/s3/partition_projection). Valid values: [gzip](https://en.wikipedia.org/wiki/Gzip), [zstd](https://en.wikipedia.org/wiki/Zstd), [lz4](https://en.wikipedia.org/wiki/LZ4_(compression_algorithm)), [brotli](https://en.wikipedia.org/wiki/Brotli), [bzip2](https://en.wikipedia.org/wiki/Bzip2), [xz](https://en.wikipedia.org/wiki/XZ_Utils).
+* `FORMAT`: format of stored data in file storages in [federated queries](../../../../concepts/query_execution/federated_query/s3/formats.md). Allowed values: `csv_with_names`, `tsv_with_names`, `json_list`, `json_each_row`, `json_as_string`, `parquet`, `raw`.
+* `COMPRESSION` - file compression format in file storages in [federated queries](../../../../concepts/query_execution/federated_query/s3/partition_projection). Allowed values: [gzip](https://en.wikipedia.org/wiki/Gzip), [zstd](https://en.wikipedia.org/wiki/Zstd), [lz4](https://en.wikipedia.org/wiki/LZ4_(compression_algorithm)), [brotli](https://en.wikipedia.org/wiki/Brotli), [bzip2](https://en.wikipedia.org/wiki/Bzip2), [xz](https://en.wikipedia.org/wiki/XZ_Utils).
 * `PARTITIONED_BY` - a list of [partitioning columns](../../../../concepts/query_execution/federated_query/s3/partitioning.md) of data in file storages in federated queries. Contains a list of columns in the order they are placed in the file storage.
-* `projection.enabled` - a flag for enabling [extended data partitioning](../../../../concepts/query_execution/federated_query/s3/partition_projection.md). Valid values: `true`, `false`.
+* `projection.enabled` - a flag to enable [extended data partitioning](../../../../concepts/query_execution/federated_query/s3/partition_projection.md). Valid values: `true`, `false`.
 * `projection.<field_name>.type` - field type of [extended data partitioning](../../../../concepts/query_execution/federated_query/s3/partition_projection.md). Valid values: `integer`, `enum`, `date`.
-* `projection.<field_name>.<options>` - extended properties of the field of [extended data partitioning](../../../../concepts/query_execution/federated_query/s3/partition_projection.md).
+* `projection.<field_name>.<options>` - extended field properties of [extended data partitioning](../../../../concepts/query_execution/federated_query/s3/partition_projection.md).
 
 {% endif %}
 

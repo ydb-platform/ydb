@@ -14,8 +14,8 @@ In the examples:
 
 - `ext_source` — a pre-created `external data source`.
 - `input_topic` — the topic from which data is read.
-- `output_topic` — the topic where results are written.
-- `output_table` — the {{ ydb-short-name }} table where results are written.
+- `output_topic` — the topic to which results are written.
+- `output_table` — the {{ ydb-short-name }} table to which results are written.
 
 {% endnote %}
 

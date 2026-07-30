@@ -54,7 +54,7 @@ WITH (
     )
 );
 
--- Joining reference data to the stream by ServiceId
+-- Joining reference to the stream by ServiceId
 $joined_data = SELECT
     s.Name AS Name,
     t.*
@@ -65,7 +65,7 @@ LEFT JOIN
 ON
     t.ServiceId = s.ServiceId;
 
--- Writing to the output topic (JSON)
+-- Write to output topic (JSON)
 INSERT INTO
     output_topic -- or external topic ext_source.output_topic
 SELECT
@@ -85,7 +85,7 @@ Create an additional [external data source](../../yql/reference/syntax/create-ex
 
 
 ```yql
--- S3 data source for reading reference data
+-- S3 data source for reading reference
 CREATE EXTERNAL DATA SOURCE s3_source WITH (
     SOURCE_TYPE = "ObjectStorage",
     LOCATION = "<s3_endpoint>",
@@ -119,7 +119,7 @@ WITH (
     )
 );
 
--- Reading service reference data from S3
+-- Reading services reference from S3
 $s3_data = SELECT
     *
 FROM
@@ -132,7 +132,7 @@ WITH (
     )
 );
 
--- Joining reference data to the stream by ServiceId
+-- Joining reference to the stream by ServiceId
 $joined_data = SELECT
     s.Name AS Name,
     t.*
@@ -143,7 +143,7 @@ LEFT JOIN
 ON
     t.ServiceId = s.ServiceId;
 
--- Writing the result to the output topic in JSON format
+-- Write the result to output topic in JSON format
 INSERT INTO
     ext_source.output_topic -- or local topic output_topic
 SELECT

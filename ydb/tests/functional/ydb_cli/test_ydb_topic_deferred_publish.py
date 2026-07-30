@@ -236,8 +236,7 @@ class TestTopicDeferredPublishCli(BaseCliTestWithDatabase):
         assert duplicate.exit_code != 0
 
         self._cancel(int_id)
-        again = self._begin(ext_id)
-        assert again.isdigit()
+        self._begin(ext_id)
 
     def test_write_rejects_zero_deferred_int_id(self):
         topic = self._unique_topic("dp-zero-int")

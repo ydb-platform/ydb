@@ -1,5 +1,7 @@
 #include "event.h"
 
+#include <ydb/library/actors/core/event_pb.h>
+
 namespace NKikimr::NBsQueue {
 
 IEventBase *TEventHolder::MakeErrorReply(NKikimrProto::EReplyStatus status, const TString& errorReason,
@@ -27,7 +29,8 @@ IEventBase *TEventHolder::MakeErrorReply(NKikimrProto::EReplyStatus status, cons
 
 void TEventHolder::SendToVDisk(const TActorContext& ctx, const TActorId& remoteVDisk, ui64 queueCookie, ui64 msgId,
         ui64 sequenceId, bool sendMeCostSettings, NWilson::TTraceId traceId, const NBackpressure::TQueueClientId& clientId,
-        const TBSQueueTimer& processingTimer) {
+        const TBSQueueTimer& processingTimer, const ::NMonitoring::TDynamicCounters::TCounterPtr& serItems,
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& serBytes) {
     // check that we are not discarded yet
     Y_ABORT_UNLESS(Type != 0);
 
@@ -51,7 +54,7 @@ void TEventHolder::SendToVDisk(const TActorContext& ctx, const TActorId& remoteV
 
     const ui32 flags = IEventHandle::MakeFlags(InterconnectChannel, IEventHandle::FlagTrackDelivery);
 
-    if (LocalEvent) {
+    if (Local && Event) {
         auto callback = [&](auto *ev) -> std::unique_ptr<IEventBase> {
             using T = std::remove_pointer_t<decltype(ev)>;
             auto clone = std::make_unique<T>();
@@ -63,27 +66,53 @@ void TEventHolder::SendToVDisk(const TActorContext& ctx, const TActorId& remoteV
             return clone;
         };
         ctx.Send(remoteVDisk, Apply(callback).release(), flags, queueCookie, std::move(traceId));
-    } else {
-        // FIXME: ensure that MsgQoS has the same field identifier in all structures
-        NKikimrBlobStorage::TEvVPut record;
-        processMsgQoS(record);
-
-        // serialize that extra buffer
-        TString buf;
-        const bool status = record.SerializeToString(&buf);
-        Y_ABORT_UNLESS(status);
-
-        // send it to disk
-        ctx.Send(new IEventHandle(Type, flags, remoteVDisk, ctx.SelfID,
-            MakeIntrusive<TEventSerializedData>(*Buffer, std::move(buf)), queueCookie, nullptr, std::move(traceId)));
+        return;
     }
+
+    // FIXME: ensure that MsgQoS has the same field identifier in all structures
+    NKikimrBlobStorage::TEvVPut record;
+    processMsgQoS(record);
+
+    // serialize that extra buffer; it is appended to the serialized event as a trailing section and protobuf merges
+    // it into the main record when parsing on the receiving side
+    TString buf;
+    const bool status = record.SerializeToString(&buf);
+    Y_ABORT_UNLESS(status);
+
+    TIntrusivePtr<TEventSerializedData> buffer;
+    if (Event) {
+        // serialize the event right here, at send time; the resulting rope is uniquely owned by us, so the MsgQoS
+        // section gets appended to it in place, without copying the whole chunk list
+        TAllocChunkSerializer serializer;
+        const bool success = Event->SerializeToArcadiaStream(&serializer);
+        Y_ABORT_UNLESS(success);
+        buffer = serializer.Release(Event->CreateSerializationInfo(false));
+        ++*serItems;
+        *serBytes += buffer->GetSize();
+        // account for the trailing section the same way TEventSerializedData's copy-and-extend ctor does, so that
+        // both branches produce identical serialization info
+        if (const auto& info = buffer->GetSerializationInfo(); !info.Sections.empty()) {
+            TEventSerializationInfo updated(info);
+            updated.Sections.push_back(TEventSectionInfo{0, buf.size(), 0, 0, true});
+            buffer->SetSerializationInfo(std::move(updated));
+        }
+        buffer->Append(std::move(buf));
+    } else {
+        // the event is kept in the serialized form and has to survive possible retransmission, so its buffer must
+        // stay intact and we have to copy it here
+        buffer = MakeIntrusive<TEventSerializedData>(*Buffer, std::move(buf));
+    }
+
+    // send it to disk
+    ctx.Send(new IEventHandle(Type, flags, remoteVDisk, ctx.SelfID, std::move(buffer), queueCookie, nullptr,
+        std::move(traceId)));
 }
 
 void TEventHolder::Discard() {
     if (std::exchange(Type, 0)) {
         BSProxyCtx->Queue.Subtract(ByteSize);
         Buffer.Reset();
-        LocalEvent.reset();
+        Event.reset();
     }
 }
 

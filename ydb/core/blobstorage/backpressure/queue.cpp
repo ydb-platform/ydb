@@ -239,7 +239,7 @@ void TBlobStorageQueue::SendToVDisk(const TActorContext& ctx, const TActorId& re
             });
         }
         item.Event.SendToVDisk(ctx, remoteVDisk, item.QueueCookie, item.MsgId, item.SequenceId, sendMeCostSettings,
-            item.Span.GetTraceId(), ClientId, item.ProcessingTimer);
+            item.Span.GetTraceId(), ClientId, item.ProcessingTimer, QueueSerializedItems, QueueSerializedBytes);
 
         // update counters as far as item got sent
         ++NextMsgId;

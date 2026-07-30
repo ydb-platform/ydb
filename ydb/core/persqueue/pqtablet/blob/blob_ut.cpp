@@ -9,6 +9,7 @@ namespace NKikimr::NPQ {
 namespace {
 
 constexpr ui32 TEST_MAX_HEADER_SIZE = 64;
+constexpr ui32 TEST_LEGACY_MAX_HEADER_SIZE = 32;
 
 } // namespace
 
@@ -76,6 +77,24 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
         UNIT_ASSERT_VALUES_EQUAL(batch.PackedData.Size(), 0);
         UNIT_ASSERT_VALUES_EQUAL(batch.PackedData.Capacity(), 0);
         UNIT_ASSERT(!batch.Blobs.empty());
+    }
+
+    Y_UNIT_TEST(LegacyMaxHeaderSizePackInvariant) {
+        TBatch batch(Max<ui64>(), 0);
+        auto ts = TInstant::Seconds(100);
+        batch.AddBlob(TClientBlob(
+            TString("src"), 1, TString(8_KB, 'a'), TMaybe<TPartData>(),
+            ts, ts, 0, "", ""
+        ));
+
+        batch.Pack(TEST_LEGACY_MAX_HEADER_SIZE);
+        UNIT_ASSERT_LE(batch.GetPackedSize(), batch.GetUnpackedSize() + TEST_LEGACY_MAX_HEADER_SIZE);
+
+        batch.Unpack();
+        UNIT_ASSERT_VALUES_EQUAL(batch.Blobs.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.GetCount(), 1u);
+        UNIT_ASSERT(!batch.Header.HasClientBlobCount());
+        UNIT_ASSERT(!batch.Header.HasOffsetDelta());
     }
 
     Y_UNIT_TEST(BatchSizePackUnpack) {

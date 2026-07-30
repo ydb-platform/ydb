@@ -1159,6 +1159,7 @@ void TDataShard::RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order) {
 
     IncCounter(COUNTER_CHANGE_RECORDS_REMOVED);
     SetCounter(COUNTER_CHANGE_QUEUE_SIZE, ChangesQueue.size());
+    SetCounter(COUNTER_CHANGE_QUEUE_BYTES, ChangesQueueBytes);
 
     CheckChangesQueueNoOverflow();
 }
@@ -1217,6 +1218,7 @@ void TDataShard::EnqueueChangeRecords(TVector<IDataShardChangeCollector::TChange
     UpdateChangeExchangeLag(now);
     IncCounter(COUNTER_CHANGE_RECORDS_ENQUEUED, forward.size());
     SetCounter(COUNTER_CHANGE_QUEUE_SIZE, ChangesQueue.size());
+    SetCounter(COUNTER_CHANGE_QUEUE_BYTES, ChangesQueueBytes);
 
     Y_ENSURE(OutChangeSender);
     Send(OutChangeSender, new NChangeExchange::TEvChangeExchange::TEvEnqueueRecords(std::move(forward)));

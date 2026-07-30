@@ -377,6 +377,20 @@ def _live_row_count(relation: Relation) -> int:
     return len(_live_row_indices(relation.rows))
 
 
+def _live_join_input(relation: Relation) -> Relation:
+    """Erase join input slots whose presence guard is literally false."""
+
+    indices = _live_row_indices(relation.rows)
+    return (
+        relation
+        if len(indices) == len(relation.rows)
+        else Relation(
+            relation.columns,
+            tuple(relation.rows[index] for index in indices),
+        )
+    )
+
+
 def _syntactically_implies(term: smt.Term, required: smt.Term) -> bool:
     """Recognize the small guard language used by scan/task routing."""
 
@@ -2287,6 +2301,8 @@ class Evaluator:
         output_columns: tuple[Column, ...] | None = None,
         compact_left_schema: Mapping[str, Column] | None = None,
     ) -> Relation:
+        left = _live_join_input(left)
+        right = _live_join_input(right)
         matching_rows = len(left.rows) * len(right.rows)
         _require_relation_row_pairs(matching_rows, "join matching")
         if self._can_compact_direct_unique_rhs(

@@ -3913,6 +3913,187 @@ class DirectUniqueRhsJoinTest(unittest.TestCase):
         ).root().certain()
         self.assertEqual(len(relation.rows), 2)
 
+    def test_unique_join_erases_syntactically_absent_left_slot(self):
+        snapshot = direct_unique_rhs_join_snapshot("inner")
+        script = smt.Script()
+        evaluator = RelationEvaluator(
+            snapshot,
+            Database(snapshot, 2, script),
+            ScalarEncoder(script),
+        )
+        node = snapshot.plan.node_map()["join"]
+        assert isinstance(node, Join)
+        original = evaluator.node("a").certain()
+        right = evaluator.node("b").certain()
+        left = replace(
+            original,
+            rows=(
+                replace(original.rows[0], present=smt.FALSE, values={}),
+                original.rows[1],
+            ),
+        )
+        clean = replace(left, rows=(left.rows[1],))
+        for kind in ("inner", "left"):
+            with (
+                self.subTest(kind=kind),
+                mock.patch.object(relation_model, "MAX_RELATION_ROWS", 1),
+            ):
+                relation = evaluator._join(
+                    replace(node, kind=kind),
+                    left,
+                    right,
+                    output_columns=left.columns + right.columns,
+                )
+                self.assertEqual(len(relation.rows), 1)
+                self.assertEqual(
+                    relation,
+                    evaluator._join(
+                        replace(node, kind=kind),
+                        clean,
+                        right,
+                        output_columns=left.columns + right.columns,
+                    ),
+                )
+
+    def test_join_capacity_erases_only_syntactically_absent_inputs(self):
+        snapshot = direct_unique_rhs_join_snapshot("inner", unique_key=())
+        script = smt.Script()
+        evaluator = RelationEvaluator(
+            snapshot,
+            Database(snapshot, 2, script),
+            ScalarEncoder(script),
+        )
+        original_left = evaluator.node("a").certain()
+        original_right = evaluator.node("b").certain()
+        left = replace(
+            original_left,
+            rows=(
+                replace(
+                    original_left.rows[0],
+                    present=smt.FALSE,
+                    values={},
+                ),
+                replace(original_left.rows[1], present=smt.TRUE),
+            ),
+            sequence=True,
+            ordinals=(smt.ZERO, smt.ONE),
+        )
+        right = replace(
+            original_right,
+            rows=(
+                replace(original_right.rows[0], present=smt.TRUE),
+                replace(
+                    original_right.rows[1],
+                    present=smt.FALSE,
+                    values={},
+                ),
+            ),
+            sequence=True,
+            present_prefix=True,
+        )
+        true = Expr(
+            kind="literal",
+            value=True,
+            result_type="Bool",
+            nullable=False,
+        )
+
+        def join(kind, left_input, right_input):
+            output_columns = (
+                left.columns
+                if kind in {"left_semi", "left_anti"}
+                else right.columns
+                if kind in {"right_semi", "right_anti"}
+                else left.columns + right.columns
+            )
+            return evaluator._join(
+                Join("join", "a", "b", kind, (), true),
+                left_input,
+                right_input,
+                output_columns=output_columns,
+            )
+
+        expected_rows = {
+            "inner": 1,
+            "cross": 1,
+            "left": 2,
+            "right": 2,
+            "full": 3,
+            "left_semi": 1,
+            "right_semi": 1,
+            "left_anti": 1,
+            "right_anti": 1,
+            "exclusion": 2,
+        }
+        for kind, count in expected_rows.items():
+            with (
+                self.subTest(kind=kind),
+                mock.patch.object(
+                    relation_model,
+                    "MAX_RELATION_ROW_PAIRS",
+                    1,
+                ),
+                mock.patch.object(relation_model, "MAX_RELATION_ROWS", 3),
+            ):
+                relation = join(kind, left, right)
+                self.assertEqual(len(relation.rows), count)
+                self.assertEqual(
+                    relation,
+                    join(
+                        kind,
+                        replace(
+                            left,
+                            rows=(left.rows[1],),
+                            ordinals=(smt.ONE,),
+                        ),
+                        replace(right, rows=(right.rows[0],)),
+                    ),
+                )
+
+        symbolic = smt.symbol("symbolic_presence", smt.BOOL)
+        symbolic_left = replace(
+            left,
+            rows=(replace(left.rows[1], present=symbolic),),
+            ordinals=(smt.ONE,),
+        )
+        relation = join(
+            "inner",
+            symbolic_left,
+            replace(right, rows=(right.rows[0],)),
+        )
+        self.assertEqual(len(relation.rows), 1)
+        self.assertEqual(relation.rows[0].present, symbolic)
+
+        dead_right = replace(
+            right,
+            rows=(
+                replace(
+                    right.rows[1],
+                    present=smt.FALSE,
+                    values={},
+                ),
+            ),
+        )
+        expected = {
+            "inner": (),
+            "cross": (),
+            "left": (smt.TRUE,),
+            "right": (),
+            "full": (smt.TRUE,),
+            "left_semi": (smt.FALSE,),
+            "right_semi": (),
+            "left_anti": (smt.TRUE,),
+            "right_anti": (),
+            "exclusion": (smt.TRUE,),
+        }
+        for kind, presences in expected.items():
+            with self.subTest(kind=kind, right="dead"):
+                relation = join(kind, left, dead_right)
+                self.assertEqual(
+                    tuple(row.present for row in relation.rows),
+                    presences,
+                )
+
     def test_runtime_schema_near_misses_fall_back(self):
         snapshot = direct_unique_rhs_join_snapshot("inner")
         script = smt.Script()

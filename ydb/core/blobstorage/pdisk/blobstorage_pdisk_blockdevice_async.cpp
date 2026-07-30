@@ -4,6 +4,7 @@
 #include "blobstorage_pdisk_impl.h"
 #include "blobstorage_pdisk_log_cache.h"
 #include "blobstorage_pdisk_mon.h"
+#include "blobstorage_pdisk_thread.h"
 #include "blobstorage_pdisk_util_atomicblockcounter.h"
 #include "blobstorage_pdisk_util_countedqueuemanyone.h"
 #include "blobstorage_pdisk_util_countedqueueoneone.h"
@@ -50,16 +51,16 @@ class TRealBlockDevice : public IBlockDevice {
     ////////////////////////////////////////////////////////
     // TCompletionThread
     ////////////////////////////////////////////////////////
-    class TCompletionThread : public ISimpleThread {
+    class TCompletionThread : public TPDiskSimpleThread {
     public:
         TCompletionThread(TRealBlockDevice &device, TString name)
-            : Device(device)
+            : TPDiskSimpleThread(device.ThreadAffinity)
+            , Device(device)
             , Name(name)
         {}
 
-        void *ThreadProc() override {
-            SetCurrentThreadName(Name.data());
-            TAffinityGuard affinityGuard(Device.ThreadAffinity ? &*Device.ThreadAffinity : nullptr);
+        void *DoThreadProc() override {
+            ::SetCurrentThreadName(Name.data());
             auto prevCycleEnd = HPNow();
             bool isWorking = true;
             bool stateError = false;
@@ -225,7 +226,7 @@ class TRealBlockDevice : public IBlockDevice {
         TAtomic SeqnoL7 = 0;
     };
 
-    class TSubmitThreadBase : public TThread {
+    class TSubmitThreadBase : public TPDiskSimpleThread {
     protected:
         TRealBlockDevice &Device;
         std::shared_ptr<TPDiskCtx> &PCtx;
@@ -239,8 +240,8 @@ class TRealBlockDevice : public IBlockDevice {
         TAtomic SubmitInFlightBytes = 0;
 
     public:
-        TSubmitThreadBase(TRealBlockDevice &device, TThread::TThreadProc threadProc, void *_this)
-            : TThread(threadProc, _this)
+        TSubmitThreadBase(TRealBlockDevice &device)
+            : TPDiskSimpleThread(device.ThreadAffinity)
             , Device(device)
             , PCtx(device.PCtx)
         {}
@@ -289,17 +290,17 @@ class TRealBlockDevice : public IBlockDevice {
     class TSubmitThread : public TSubmitThreadBase {
     public:
         TSubmitThread(TRealBlockDevice &device)
-            : TSubmitThreadBase(device, &ThreadProc, this)
+            : TSubmitThreadBase(device)
         {}
 
-        static void* ThreadProc(void* _this) {
-            SetCurrentThreadName("PdSbmEv");
-            auto *thread = static_cast<TSubmitThread*>(_this);
-            TAffinityGuard affinityGuard(thread->Device.ThreadAffinity ? &*thread->Device.ThreadAffinity : nullptr);
-            thread->Exec();
+    private:
+        void* DoThreadProc() override {
+            ::SetCurrentThreadName("PdSbmEv");
+            Exec();
             return nullptr;
         }
 
+    public:
         void ReleaseOp(IAsyncIoOperation *op) {
             Device.DecrementMonInFlight(op->GetType(), op->GetSize());
             Device.FreeOperation(op);
@@ -391,24 +392,24 @@ class TRealBlockDevice : public IBlockDevice {
     ////////////////////////////////////////////////////////
     // TGetThread
     ////////////////////////////////////////////////////////
-    class TGetThread : public TThread {
+    class TGetThread : public TPDiskSimpleThread {
     private:
         TRealBlockDevice &Device;
 
     public:
         TGetThread(TRealBlockDevice &device)
-            : TThread(&ThreadProc, this)
+            : TPDiskSimpleThread(device.ThreadAffinity)
             , Device(device)
         {}
 
-        static void* ThreadProc(void* _this) {
-            SetCurrentThreadName("PdGetEv");
-            auto *thread = static_cast<TGetThread*>(_this);
-            TAffinityGuard affinityGuard(thread->Device.ThreadAffinity ? &*thread->Device.ThreadAffinity : nullptr);
-            thread->Exec();
+    private:
+        void* DoThreadProc() override {
+            ::SetCurrentThreadName("PdGetEv");
+            Exec();
             return nullptr;
         }
 
+    public:
         void Exec() {
             bool isOk = SetHighestThreadPriority();
             // TODO: ckeck isOk
@@ -604,22 +605,28 @@ class TRealBlockDevice : public IBlockDevice {
 
     public:
         TSubmitGetThread(TRealBlockDevice &device)
-            : TSubmitThreadBase(device, &ThreadProc, this)
+            : TSubmitThreadBase(device)
         {}
 
         static int ThreadProcSpdk(void* _this) {
-            SetCurrentThreadName("PdSbmGet");
             auto *thread = static_cast<TSubmitGetThread*>(_this);
             TAffinityGuard affinityGuard(thread->Device.ThreadAffinity ? &*thread->Device.ThreadAffinity : nullptr);
-            thread->Exec();
+            thread->Run();
             return 0;
         }
 
-        static void* ThreadProc(void* _this) {
-            ThreadProcSpdk(_this);
+    private:
+        void* DoThreadProc() override {
+            Run();
             return nullptr;
         }
 
+        void Run() {
+            ::SetCurrentThreadName("PdSbmGet");
+            Exec();
+        }
+
+    public:
         void ReleaseOp(IAsyncIoOperation *op) {
             Device.DecrementMonInFlight(op->GetType(), op->GetSize());
             Device.FreeOperation(op);
@@ -755,26 +762,26 @@ class TRealBlockDevice : public IBlockDevice {
     ////////////////////////////////////////////////////////
     // TTrimThread
     ////////////////////////////////////////////////////////
-    class TTrimThread : public TThread {
+    class TTrimThread : public TPDiskSimpleThread {
         TCountedQueueOneOne<IAsyncIoOperation*, 4 << 10> TrimOperations;
         TRealBlockDevice &Device;
         std::shared_ptr<TPDiskCtx> &PCtx;
 
     public:
         TTrimThread(TRealBlockDevice &device)
-            : TThread(&ThreadProc, this)
+            : TPDiskSimpleThread(device.ThreadAffinity)
             , Device(device)
             , PCtx(device.PCtx)
         {}
 
-        static void* ThreadProc(void* _this) {
-            SetCurrentThreadName("PdTrim");
-            auto *thread = static_cast<TTrimThread*>(_this);
-            TAffinityGuard affinityGuard(thread->Device.ThreadAffinity ? &*thread->Device.ThreadAffinity : nullptr);
-            thread->Exec();
+    private:
+        void* DoThreadProc() override {
+            ::SetCurrentThreadName("PdTrim");
+            Exec();
             return nullptr;
         }
 
+    public:
         void Exec() {
             while(true) {
                 TAtomicBase actionCount = TrimOperations.GetWaitingSize();
@@ -863,7 +870,7 @@ private:
     TAtomicBlockCounter QuitCounter;
     TString LastWarning;
     bool ReadOnly;
-    std::optional<TCpuMask> ThreadAffinity;
+    const std::optional<TCpuMask> ThreadAffinity;
     TDeque<IAsyncIoOperation*> Trash;
     TMutex TrashMutex;
 

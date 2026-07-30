@@ -95,12 +95,13 @@ void TNodeWarden::ApplyServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSe
     }
     MergeServiceSetPDisks(to, serviceSet.GetPDisks(), pdisksToRestart);
 
+    UpdateBlobStorageExecutorPoolMapping();
+    for (const TServiceSetPDisk& pdisk : pdisksToRestart) {
+        DoRestartLocalPDisk(pdisk);
+    }
+
     if (!EnableProxyMock) {
         // in mock mode we don't need PDisk/VDisk instances
-        UpdateStorageActorPoolMap();
-        for (const TServiceSetPDisk& pdisk : pdisksToRestart) {
-            DoRestartLocalPDisk(pdisk);
-        }
         ApplyServiceSetPDisks();
         ApplyServiceSetVDisks(serviceSet);
     }
@@ -371,7 +372,8 @@ void TNodeWarden::HandleIncrHugeInit(NIncrHuge::TEvIncrHugeInit::TPtr ev) {
     };
 
     // register new actor
-    TActorId actorId = Register(CreateIncrHugeKeeper(settings), TMailboxType::HTSwap, GetStorageActorPoolId(pdiskId));
+    TActorId actorId = Register(CreateIncrHugeKeeper(settings), TMailboxType::HTSwap,
+        GetBlobStorageExecutorPoolId(pdiskId));
 
     // bind it to service
     TActivationContext::ActorSystem()->RegisterLocalService(keeperId, actorId);

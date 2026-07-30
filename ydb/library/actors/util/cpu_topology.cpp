@@ -19,10 +19,6 @@
 namespace {
 
 constexpr TStringBuf CpuDir = "cpu";
-constexpr TStringBuf FsDir = "fs";
-constexpr TStringBuf CgroupDir = "cgroup";
-constexpr TStringBuf CpusetDir = "cpuset";
-constexpr TStringBuf CpusetEffectiveCpusFile = "cpuset.effective_cpus";
 constexpr TStringBuf NodeDir = "node";
 
 TFsPath CpuRootPath(const TFsPath& root) {
@@ -31,17 +27,6 @@ TFsPath CpuRootPath(const TFsPath& root) {
 
 TFsPath NodeRootPath(const TFsPath& root) {
     return root / NodeDir;
-}
-
-TFsPath SysRootPath(const TFsPath& root) {
-    if (root.GetName() == "system" && root.Parent().GetName() == "devices") {
-        return root.Parent().Parent();
-    }
-    return root;
-}
-
-TFsPath CpusetEffectiveCpusPath(const TFsPath& root) {
-    return SysRootPath(root) / FsDir / CgroupDir / CpusetDir / CpusetEffectiveCpusFile;
 }
 
 TFsPath CpuPath(const TFsPath& root, TCpuId cpuId) {
@@ -165,24 +150,6 @@ std::expected<TCpuMask, TString> ReadCpuMask(const TFsPath& path) {
     }
     if (!*data) {
         return TCpuMask();
-    }
-    if ((*data)->empty() || **data == "(null)") {
-        return TCpuMask();
-    }
-    try {
-        return TCpuMask(**data);
-    } catch (...) {
-        return std::unexpected("failed to parse CPU list field " + path.GetPath() + ": " + CurrentExceptionMessage());
-    }
-}
-
-std::expected<std::optional<TCpuMask>, TString> ReadOptionalCpuMask(const TFsPath& path) {
-    auto data = ReadValue(path);
-    if (!data) {
-        return std::unexpected{std::move(data).error()};
-    }
-    if (!*data) {
-        return std::nullopt;
     }
     if ((*data)->empty() || **data == "(null)") {
         return TCpuMask();
@@ -385,7 +352,7 @@ void AddUniqueGroup(TVector<TCpuTopologyGroup>& groups, TCpuTopologyGroup group)
     groups.push_back(std::move(group));
 }
 
-void BuildDerivedGroups(TCpuTopology& topology, const std::optional<TCpuMask>& cpusetEffectiveCpus = std::nullopt) {
+void BuildDerivedGroups(TCpuTopology& topology, const std::optional<TCpuMask>& allowedCpus = std::nullopt) {
     TCpuMask offlineCpus;
     for (const auto& cpu : topology.Cpus) {
         if (!cpu.Online) {
@@ -393,8 +360,8 @@ void BuildDerivedGroups(TCpuTopology& topology, const std::optional<TCpuMask>& c
         }
     }
     auto filterCpus = [&](TCpuMask cpus) {
-        if (cpusetEffectiveCpus) {
-            cpus = cpus & *cpusetEffectiveCpus;
+        if (allowedCpus) {
+            cpus = cpus & *allowedCpus;
         }
         return cpus - offlineCpus;
     };
@@ -520,7 +487,10 @@ const TLogicalCpuInfo* TCpuTopology::FindCpu(TCpuId cpuId) const {
     return nullptr;
 }
 
-std::expected<TCpuTopology, TString> ParseSysfsCpuTopology(const TFsPath& root) {
+namespace {
+
+std::expected<TCpuTopology, TString> ParseSysfsCpuTopologyImpl(
+        const TFsPath& root, const std::optional<TCpuMask>& allowedCpus) {
     TCpuTopology result;
 
     auto cpus = ParseCpus(root);
@@ -532,13 +502,8 @@ std::expected<TCpuTopology, TString> ParseSysfsCpuTopology(const TFsPath& root) 
         return std::unexpected("no CPU topology data found under " + CpuRootPath(root).GetPath());
     }
 
-    auto cpusetEffectiveCpus = ReadOptionalCpuMask(CpusetEffectiveCpusPath(root));
-    if (!cpusetEffectiveCpus) {
-        return std::unexpected{std::move(cpusetEffectiveCpus).error()};
-    }
-
     for (const auto& cpu : result.Cpus) {
-        if (cpu.Online && (!*cpusetEffectiveCpus || (*cpusetEffectiveCpus)->IsSet(cpu.CpuId))) {
+        if (cpu.Online && (!allowedCpus || allowedCpus->IsSet(cpu.CpuId))) {
             result.AllCpus.Set(cpu.CpuId);
         }
     }
@@ -561,8 +526,18 @@ std::expected<TCpuTopology, TString> ParseSysfsCpuTopology(const TFsPath& root) 
         }
     }
 
-    BuildDerivedGroups(result, *cpusetEffectiveCpus);
+    BuildDerivedGroups(result, allowedCpus);
     return result;
+}
+
+} // namespace
+
+std::expected<TCpuTopology, TString> ParseSysfsCpuTopology(const TFsPath& root) {
+    return ParseSysfsCpuTopologyImpl(root, std::nullopt);
+}
+
+std::expected<TCpuTopology, TString> ParseSysfsCpuTopology(const TFsPath& root, const TCpuMask& allowedCpus) {
+    return ParseSysfsCpuTopologyImpl(root, allowedCpus);
 }
 
 std::expected<TCpuTopology, TString> ParseCpuTopology() {
@@ -573,6 +548,11 @@ std::expected<TCpuTopology, TString> ParseCpuTopology() {
     }
     return BuildFlatCpuTopology(static_cast<TCpuId>(cpuCount));
 #else
-    return ParseSysfsCpuTopology(TFsPath("/sys/devices/system"));
+    TSchedCpuAffinityBackend affinity;
+    auto allowedCpus = affinity.GetAffinity();
+    if (!allowedCpus) {
+        return std::unexpected{std::move(allowedCpus).error()};
+    }
+    return ParseSysfsCpuTopology(TFsPath("/sys/devices/system"), *allowedCpus);
 #endif
 }

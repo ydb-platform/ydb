@@ -693,7 +693,7 @@ namespace Tests {
         }, TTestActorRuntime::TActorSystemPools{
             pools.SystemPoolId, pools.UserPoolId, pools.IOPoolId, pools.BatchPoolId,
             NAutoConfigInitializer::GetServicePools(actorSystemConfig, useAutoConfig),
-            NActorSystemConfigHelpers::GetStoragePoolIds(actorSystemConfig)
+            NActorSystemConfigHelpers::GetBlobStorageExecutorPoolIds(actorSystemConfig)
         });
     }
 

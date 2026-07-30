@@ -75,13 +75,13 @@ message TActorSystemConfig {
         enum EType {
             BASIC = 1;
             IO = 2;
-            NUMA = 3; // Basic executor expanded into NUMA placement groups.
+            PLACEMENT = 3; // Basic executor expanded according to CPU topology placement groups.
         };
 
         optional EType Type = 1;
         optional uint32 Threads = 2;
-        optional uint32 PlacementGroups = 24; // For NUMA executor; alternative to Threads.
-        optional uint32 PlacementGroupThreads = 25; // For NUMA executor; per placement group thread count, defaults to CPU count.
+        optional uint32 PlacementGroups = 27; // For PLACEMENT executor; alternative to Threads.
+        optional uint32 PlacementGroupThreads = 28; // For PLACEMENT executor; per placement group thread count, defaults to CPU count.
         optional uint64 SpinThreshold = 3;
         optional TAffinity Affinity = 4;
         optional uint32 InjectMadSquirrels = 5; // Obsolete, no more mad squirrels anymore
@@ -122,6 +122,7 @@ message TActorSystemConfig {
     optional uint32 UserExecutor = 4;
     optional uint32 IoExecutor = 5;
     optional uint32 BatchExecutor = 6;
+    repeated uint32 BlobStorageExecutor = 23; // Indices into Executor; PLACEMENT executors expand into all their placement-group pools.
 
     message TServiceExecutor {
         required string ServiceName = 1;

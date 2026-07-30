@@ -8,7 +8,6 @@
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_type_helpers.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
-#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/utils/log/log.h>
 
 namespace NYql::NDq {

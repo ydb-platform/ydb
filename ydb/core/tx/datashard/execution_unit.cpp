@@ -171,9 +171,13 @@ bool TExecutionUnit::CheckRejectDataTx(TOperation::TPtr op, const TActorContext&
     TWriteOperation* writeOp = TWriteOperation::TryCastWriteOperation(op);
 
 <<<<<<< HEAD
+<<<<<<< HEAD
      // COUNTER_WRITE_COMPLETE / COUNTER_PREPARE_COMPLETE are updated in FinishProposeWrite / FinishPropose respectively
 =======
 >>>>>>> 4051bccb4d2 (Account for overload metrics increment in TEvWrite pipelining)
+=======
+     // COUNTER_WRITE_COMPLETE / COUNTER_PREPARE_COMPLETE are updated in FinishProposeWrite / FinishPropose respectively
+>>>>>>> 4fce712647d (review issues)
     auto incOverloaded = [this, writeOp]() {
         DataShard.IncCounter(writeOp ? COUNTER_WRITE_OVERLOADED : COUNTER_PREPARE_OVERLOADED);
     };

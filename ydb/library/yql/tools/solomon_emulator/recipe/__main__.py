@@ -1,16 +1,22 @@
 import argparse
 import logging
-import os
-import signal
 
 from library.python.testing.recipe import declare_recipe, set_env
+from library.recipes import common as recipes_common
 import library.python.port_manager
 import yatest.common as ya_common
 
-PID_FILENAME = "solomon_recipe.pid"
+DAEMON_NAME = "solomon_emulator"
+PID_FILENAME = f"{DAEMON_NAME}_recipe.pid"
+LOG_FILENAME = f"{DAEMON_NAME}.err.log"
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
+
+
+def is_daemon_ready() -> bool:
+    with open(ya_common.output_path(LOG_FILENAME), "r") as logFile:
+        return "Started Solomon emulator on http port" in logFile.read()
 
 
 def parse_args(argv):
@@ -31,7 +37,7 @@ def start(argv):
     pm = library.python.port_manager.PortManager()
     http_port = pm.get_port()
     grpc_port = pm.get_port()
-    binary_path = ya_common.binary_path("ydb/library/yql/tools/solomon_emulator/bin/solomon_emulator")
+    binary_path = ya_common.binary_path(f"ydb/library/yql/tools/{DAEMON_NAME}/bin/{DAEMON_NAME}")
     assert binary_path
     cmd = [
         binary_path,
@@ -47,13 +53,13 @@ def start(argv):
     if args.shard:
         cmd.extend(["--shard", args.shard])
 
-    res = ya_common.execute(
-        cmd,
-        wait=False,
-        stdout=ya_common.output_path("solomon_emulator.stdout"),
-        stderr=ya_common.output_path("solomon_emulator.stderr"),
+    recipes_common.start_daemon(
+        command=cmd,
+        environment=None,
+        is_alive_check=is_daemon_ready,
+        pid_file_name=PID_FILENAME,
+        daemon_name=DAEMON_NAME
     )
-    set_env("SOLOMON_EMULATOR_PID", str(res.process.pid))
 
     http_endpoint = f"localhost:{http_port}"
     grpc_endpoint = f"localhost:{grpc_port}"
@@ -64,21 +70,14 @@ def start(argv):
     set_env("SOLOMON_HTTP_PORT", str(http_port))
     set_env("SOLOMON_GRPC_PORT", str(grpc_port))
 
-    pid = os.fork()
-    if pid == 0:
-        signal.pause()
-    else:
-        with open(PID_FILENAME, "w") as f:
-            f.write(str(pid))
-
     logger.debug(f"Solomon recipe has been started, http_endpoint: {http_endpoint}, grpc_endpoint: {grpc_endpoint}")
 
 
 def stop(argv):
     logger.debug("Stop Solomon recipe")
-    with open(PID_FILENAME, "r") as f:
-        pid = int(f.read())
-        os.kill(pid, 9)
+    with open(PID_FILENAME, "r") as pidFile:
+        pid = int(pidFile.read())
+        recipes_common.stop_daemon(pid)
 
 
 if __name__ == "__main__":

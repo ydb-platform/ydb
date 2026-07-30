@@ -61,11 +61,11 @@ on:
         required: false
         default: ''
       main_table_service_config:
-        description: 'Comma-separated table_service_config options for main branch (e.g. enable_vector_index_read=true)'
+        description: 'Comma-separated table_service_config options for main branch; dotted paths allowed (e.g. enable_vector_index_read=true,resource_manager.kqp_level_cache_max_size_bytes=314572800)'
         required: false
         default: ''
       current_table_service_config:
-        description: 'Comma-separated table_service_config options for current branch (e.g. enable_vector_index_read=true)'
+        description: 'Comma-separated table_service_config options for current branch; dotted paths allowed (e.g. enable_vector_index_read=true,resource_manager.kqp_level_cache_max_size_bytes=314572800)'
         required: false
         default: ''
       build_baseline:

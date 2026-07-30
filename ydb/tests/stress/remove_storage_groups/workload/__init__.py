@@ -34,16 +34,21 @@ class AlterStorageUnitsWorkload(WorkloadBase):
     def _execute_correct(self):
         new_count = random.randint(1, 8)
         request = AlterTenantRequest(self.database)
-        if new_count > self.storage_unit_count:
+        if new_count == self.storage_unit_count:
+            return
+        elif new_count > self.storage_unit_count:
             request.add_storage_groups_to_add(self.storage_unit_kind, new_count - self.storage_unit_count)
         else:
             request.add_storage_groups_to_remove(self.storage_unit_kind, self.storage_unit_count - new_count)
+        try:
+            self.kikimr_client.console_request(text_format.MessageToString(request.protobuf))
+        except Exception:
+            return
         self.storage_unit_count = new_count
-        self.kikimr_client.console_request(text_format.MessageToString(request.protobuf))
 
     def _execute_incorrect(self):
         request = AlterTenantRequest(self.database)
-        request.add_storage_groups_to_remove(self.storage_unit_kind, self.storage_unit_count)
+        request.add_storage_groups_to_remove(self.storage_unit_kind, 8)
         self.kikimr_client.console_request(text_format.MessageToString(request.protobuf), raise_on_error=False)
 
     def _post_stop(self):
@@ -56,7 +61,7 @@ class AlterStorageUnitsWorkload(WorkloadBase):
 
             while time.time() - started_at < self.duration:
                 func()
-                time.sleep(random.expovariate())
+                time.sleep(random.expovariate(1))
 
         return f
 

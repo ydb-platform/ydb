@@ -95,7 +95,7 @@ class TPDiskActor : public TActorBootstrapped<TPDiskActor> {
     TIntrusivePtr<TPDisk> PDisk;
     bool IsMagicAlreadyChecked = false;
 
-    THolder<TThread> FormattingThread;
+    THolder<TPDiskFunctionThread> FormattingThread;
     bool IsFormattingNow = false;
     std::function<void(bool, TString&)> PendingRestartResponse;
 
@@ -424,15 +424,12 @@ public:
         P_LOG(PRI_WARN, BSP01, PDisk->ErrorStr);
 
         // Is used to pass parameters into formatting thread, because TThread can pass only void*
-        using TCookieType = std::tuple<TPDiskActor*, TActorSystem*, TActorId, std::optional<TRcBuf>>;
-        FormattingThread.Reset(new TThread(
+        using TCookieType = std::tuple<TIntrusivePtr<TPDiskConfig>, NPDisk::TKey, TActorSystem*, TActorId, std::optional<TRcBuf>>;
+        FormattingThread.Reset(new TPDiskFunctionThread(
                 [] (void *cookie) -> void* {
                     auto params = static_cast<TCookieType*>(cookie);
-                    auto [actor, actorSystem, pDiskActor, metadata] = *params;
+                    auto [cfg, mainKey, actorSystem, pDiskActor, metadata] = std::move(*params);
                     delete params;
-
-                    TPDiskConfig *cfg = actor->Cfg.Get();
-                    TAffinityGuard affinityGuard(cfg->StoragePoolAffinity ? &*cfg->StoragePoolAffinity : nullptr);
 
                     if (cfg->ReadOnly) {
                         TString readOnlyError = "PDisk is in read-only mode";
@@ -451,12 +448,12 @@ public:
                     try {
                         try {
                             FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, cfg->ChunkSize,
-                                cfg->PDiskGuid, chunkKey, logKey, sysLogKey, actor->MainKey.Keys.back(), TString(), false,
+                                cfg->PDiskGuid, chunkKey, logKey, sysLogKey, mainKey, TString(), false,
                                 cfg->FeatureFlags.GetTrimEntireDeviceOnStartup(), cfg->SectorMap,
                                 cfg->FeatureFlags.GetEnableSmallDiskOptimization(), metadata, cfg->PlainDataChunks);
                         } catch (NPDisk::TPDiskFormatBigChunkException) {
                             FormatPDisk(cfg->GetDevicePath(), 0, cfg->SectorSize, NPDisk::SmallDiskMaximumChunkSize,
-                                cfg->PDiskGuid, chunkKey, logKey, sysLogKey, actor->MainKey.Keys.back(), TString(), false,
+                                cfg->PDiskGuid, chunkKey, logKey, sysLogKey, mainKey, TString(), false,
                                 cfg->FeatureFlags.GetTrimEntireDeviceOnStartup(), cfg->SectorMap,
                                 cfg->FeatureFlags.GetEnableSmallDiskOptimization(), metadata, cfg->PlainDataChunks);
                         }
@@ -467,7 +464,8 @@ public:
                     }
                     return nullptr;
                 },
-                new TCookieType(this, TlsActivationContext->ActorSystem(), SelfId(), std::move(ev->Get()->Metadata))));
+                new TCookieType(Cfg, MainKey.Keys.back(), TlsActivationContext->ActorSystem(), SelfId(), std::move(ev->Get()->Metadata)),
+                Cfg->BlobStorageExecutorPoolAffinity));
 
         FormattingThread->Start();
     }
@@ -482,7 +480,7 @@ public:
 
         // Is used to pass parameters into formatting thread, because TThread can pass only void*
         using TCookieType = std::tuple<TDiskFormat, NPDisk::TKey, TIntrusivePtr<TPDiskConfig>, std::shared_ptr<TPDiskCtx>>;
-        FormattingThread.Reset(new TThread(
+        FormattingThread.Reset(new TPDiskFunctionThread(
             [] (void *cookie) -> void* {
                 std::unique_ptr<TCookieType> params(static_cast<TCookieType*>(cookie));
                 TDiskFormat format = std::get<0>(*params);
@@ -490,8 +488,6 @@ public:
                 TIntrusivePtr<TPDiskConfig> cfg = std::get<2>(*params);
                 const TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(new ::NMonitoring::TDynamicCounters);
                 std::shared_ptr<TPDiskCtx> pCtx = std::get<3>(*params);
-
-                TAffinityGuard affinityGuard(cfg->StoragePoolAffinity ? &*cfg->StoragePoolAffinity : nullptr);
 
                 if (cfg->ReadOnly) {
                     TString readOnlyError = "PDisk is in read-only mode";
@@ -517,7 +513,8 @@ public:
                 }
                 return nullptr;
             },
-            new TCookieType(format, newMainKey, PDisk->Cfg, PCtx)
+            new TCookieType(format, newMainKey, PDisk->Cfg, PCtx),
+            PDisk->Cfg->BlobStorageExecutorPoolAffinity
         ));
         FormattingThread->Start();
     }

@@ -346,6 +346,82 @@ Y_UNIT_TEST_SUITE(StaticValidator) {
         }
         UNIT_ASSERT(!validator.Validate(makeConfig(30, "IO")).Ok());
     }
+
+    Y_UNIT_TEST(PlacementExecutorAndBlobStorageSelection) {
+        auto validator = TMapBuilder()
+            .Field("actor_system_config", ActorSystemConfigBuilder())
+            .CreateValidator();
+        auto makeConfig = [](TStringBuf name, TStringBuf executorFields, TStringBuf actorSystemFields = {}) {
+            return ::TStringBuilder()
+                << "actor_system_config:\n"
+                << "  executor:\n"
+                << "  - name: " << name << "\n"
+                << executorFields
+                << actorSystemFields
+                << "  scheduler:\n"
+                << "    progress_threshold: 10000\n"
+                << "    resolution: 64\n"
+                << "    spin_threshold: 0\n";
+        };
+
+        UNIT_ASSERT(Valid(validator.Validate(makeConfig(
+            "BlobStorage",
+            "    placement_groups: 2\n"
+            "    placement_group_threads: 3\n"
+            "    type: PLACEMENT\n"))));
+
+        UNIT_ASSERT(Valid(validator.Validate(makeConfig(
+            "BlobStorage",
+            "    placement_groups: 2\n"
+            "    type: PLACEMENT\n",
+            "  blob_storage_executor:\n"
+            "  - 0\n"))));
+
+        UNIT_ASSERT(!validator.Validate(makeConfig(
+            "BlobStorage",
+            "    placement_groups: 2\n"
+            "    type: PLACEMENT\n",
+            "  blob_storage_executor:\n"
+            "  - 1\n")).Ok());
+
+        UNIT_ASSERT(!validator.Validate(makeConfig(
+            "BlobStorage",
+            "    placement_groups: 2\n"
+            "    type: PLACEMENT\n",
+            "  blob_storage_executor:\n"
+            "  - 0\n"
+            "  - 0\n")).Ok());
+
+        UNIT_ASSERT(!validator.Validate(makeConfig(
+            "User",
+            "    threads: 2\n"
+            "    type: BASIC\n",
+            "  blob_storage_executor:\n"
+            "  - 0\n")).Ok());
+
+        UNIT_ASSERT(!validator.Validate(makeConfig(
+            "Storage",
+            "    placement_groups: 2\n"
+            "    type: PLACEMENT\n")).Ok());
+        UNIT_ASSERT(!validator.Validate(makeConfig(
+            "BlobStorage",
+            "    threads: 2\n"
+            "    placement_groups: 2\n"
+            "    type: PLACEMENT\n")).Ok());
+        UNIT_ASSERT(!validator.Validate(makeConfig(
+            "BlobStorage",
+            "    type: PLACEMENT\n")).Ok());
+        UNIT_ASSERT(!validator.Validate(makeConfig(
+            "User",
+            "    threads: 2\n"
+            "    placement_groups: 2\n"
+            "    type: BASIC\n")).Ok());
+        UNIT_ASSERT(!validator.Validate(makeConfig(
+            "IO",
+            "    threads: 1\n"
+            "    placement_group_threads: 1\n"
+            "    type: IO\n")).Ok());
+    }
 }
 
 } // namesapce NKikimr

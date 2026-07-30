@@ -229,7 +229,7 @@ Y_UNIT_TEST_SUITE(CpuTopology) {
         AssertGroup(topology->PlacementGroups, 0, 0, "0");
     }
 
-    Y_UNIT_TEST(CpusetEffectiveCpusFiltersTopologyMasks) {
+    Y_UNIT_TEST(AllowedCpusFilterTopologyMasks) {
         TTempDir tempDir;
         WriteCpu(tempDir.Name(), 0, 0, "0-1", 10, "0-3");
         WriteCpu(tempDir.Name(), 1, 0, "0-1", 10, "0-3");
@@ -239,9 +239,8 @@ Y_UNIT_TEST_SUITE(CpuTopology) {
             WriteFile(tempDir.Name(), "cpu/cpu" + ToString(cpuId) + "/topology/package_cpus_list", "0-3\n");
         }
         WriteFile(tempDir.Name(), "node/node0/cpulist", "0-3\n");
-        WriteFile(tempDir.Name(), "fs/cgroup/cpuset/cpuset.effective_cpus", "0,2\n");
 
-        auto topology = ParseSysfsCpuTopology(tempDir.Name());
+        auto topology = ParseSysfsCpuTopology(tempDir.Name(), TCpuMask(TString("0,2")));
         UNIT_ASSERT_C(topology.has_value(), topology.error());
         UNIT_ASSERT_VALUES_EQUAL(ToCpuListString(topology->AllCpus), "0,2");
 

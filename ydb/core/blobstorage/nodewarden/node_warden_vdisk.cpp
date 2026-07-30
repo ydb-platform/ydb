@@ -269,18 +269,18 @@ namespace NKikimr::NStorage {
 
         // create an actor
         auto *as = TActivationContext::ActorSystem();
-        const ui32 storageActorPoolId = GetStorageActorPoolId(vslotId.PDiskId);
+        const ui32 blobStorageExecutorPoolId = GetBlobStorageExecutorPoolId(vslotId.PDiskId);
         TActorId actorId = as->Register(CreateVDisk(vdiskConfig, groupInfo, AppData()->Counters),
-            TMailboxType::Revolving, storageActorPoolId);
+            TMailboxType::Revolving, blobStorageExecutorPoolId);
         as->RegisterLocalService(vdiskServiceId, actorId);
         VDiskIdByActor.try_emplace(actorId, vslotId);
 
         STLOG(PRI_DEBUG, BS_NODE, NW24, "StartLocalVDiskActor done", (VDiskId, vdisk.GetVDiskId()), (VSlotId, vslotId),
-            (PDiskGuid, pdiskGuid), (StorageActorPoolId, storageActorPoolId));
+            (PDiskGuid, pdiskGuid), (BlobStorageExecutorPoolId, blobStorageExecutorPoolId));
 
         // for dynamic groups -- start state aggregator
         if (TGroupID(groupInfo->GroupID).ConfigurationType() == EGroupConfigurationType::Dynamic) {
-            StartAggregator(vdiskServiceId, groupInfo->GroupID.GetRawId(), storageActorPoolId);
+            StartAggregator(vdiskServiceId, groupInfo->GroupID.GetRawId(), blobStorageExecutorPoolId);
         }
 
         Y_ABORT_UNLESS(vdisk.ScrubState == TVDiskRecord::EScrubState::IDLE);

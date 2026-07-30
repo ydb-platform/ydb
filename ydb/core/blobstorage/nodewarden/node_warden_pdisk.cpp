@@ -15,8 +15,6 @@
 #include <optional>
 #include <utility>
 
-#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
-
 namespace NKikimr::NStorage {
     static const std::unordered_map<NPDisk::EDeviceType, ui64> DefaultSpeedLimit{
         {NPDisk::DEVICE_TYPE_ROT, 100000000},
@@ -55,37 +53,18 @@ namespace NKikimr::NStorage {
         pdiskConfig->ExpectedSlotCount = Max(1u, (ui32)lround(slotCount/slotSizeInUnits));
     }
 
-    void TNodeWarden::UpdateStorageActorPoolMap() {
-        auto previousStorageActorPoolByPDiskId = std::move(StorageActorPoolByPDiskId);
-        StorageActorPoolByPDiskId.clear();
-
-        const TVector<ui32>& storagePools = AppData()->StoragePools;
-        if (storagePools.empty()) {
-            return;
-        }
-
-        ui32 index = 0;
+    void TNodeWarden::UpdateBlobStorageExecutorPoolMapping() {
+        TVector<ui32> pdiskIds;
         for (const auto& item : LocalPDisks) {
             const TPDiskKey& key = item.first;
             if (key.NodeId == LocalNodeId) {
-                const auto it = previousStorageActorPoolByPDiskId.find(key.PDiskId);
-                const ui32 storagePoolId = it != previousStorageActorPoolByPDiskId.end()
-                    ? it->second
-                    : storagePools[index % storagePools.size()];
-                const auto [_, inserted] = StorageActorPoolByPDiskId.emplace(key.PDiskId, storagePoolId);
-                if (inserted) {
-                    ++index;
-                }
+                pdiskIds.push_back(key.PDiskId);
             }
         }
 
         auto addPDisk = [&](const TServiceSetPDisk& pdisk) {
-            if (!pdisk.HasNodeID() || pdisk.GetNodeID() == LocalNodeId) {
-                const ui32 pdiskId = pdisk.GetPDiskID();
-                const auto [_, inserted] = StorageActorPoolByPDiskId.emplace(pdiskId, storagePools[index % storagePools.size()]);
-                if (inserted) {
-                    ++index;
-                }
+            if (pdisk.HasNodeID() && pdisk.HasPDiskID() && pdisk.GetNodeID() == LocalNodeId) {
+                pdiskIds.push_back(pdisk.GetPDiskID());
             }
         };
         for (const auto& pdisk : StaticServices.GetPDisks()) {
@@ -94,33 +73,40 @@ namespace NKikimr::NStorage {
         for (const auto& pdisk : DynamicServices.GetPDisks()) {
             addPDisk(pdisk);
         }
+
+        PDiskToBlobStorageExecutorPool.Update(AppData()->BlobStorageExecutorPoolIds, pdiskIds);
     }
 
-    ui32 TNodeWarden::GetStorageActorPoolId(ui32 pdiskId) {
-        if (AppData()->StoragePools.empty()) {
+    ui32 TNodeWarden::GetBlobStorageExecutorPoolId(ui32 pdiskId) {
+        if (AppData()->BlobStorageExecutorPoolIds.empty()) {
             return AppData()->SystemPoolId;
         }
-        const auto it = StorageActorPoolByPDiskId.find(pdiskId);
-        Y_ABORT_UNLESS(it != StorageActorPoolByPDiskId.end(), "No storage actor pool allocated for PDiskId# %u",
-            static_cast<unsigned>(pdiskId));
-        return it->second;
+        if (const std::optional<ui32> executorPoolId = PDiskToBlobStorageExecutorPool.FindPoolId(pdiskId)) {
+            return *executorPoolId;
+        }
+        STLOG(PRI_ERROR, BS_NODE, NW119,
+            "No BlobStorage executor pool allocated for PDisk, falling back to System pool",
+            (PDiskId, pdiskId));
+        return AppData()->SystemPoolId;
     }
 
-    void TNodeWarden::ApplyStorageActorPoolAffinity(const TIntrusivePtr<TPDiskConfig>& pdiskConfig, ui32 storageActorPoolId) {
-        bool isStoragePool = false;
-        for (const ui32 poolId : AppData()->StoragePools) {
-            if (poolId == storageActorPoolId) {
-                isStoragePool = true;
+    void TNodeWarden::ApplyBlobStorageExecutorPoolAffinity(const TIntrusivePtr<TPDiskConfig>& pdiskConfig,
+            ui32 blobStorageExecutorPoolId) {
+        bool isBlobStorageExecutorPool = false;
+        for (const ui32 poolId : AppData()->BlobStorageExecutorPoolIds) {
+            if (poolId == blobStorageExecutorPoolId) {
+                isBlobStorageExecutorPool = true;
                 break;
             }
         }
-        if (!isStoragePool) {
+        if (!isBlobStorageExecutorPool) {
             return;
         }
 
-        std::optional<TCpuMask> affinity = ActorContext().ActorSystem()->GetExecutorPoolAffinity(storageActorPoolId);
+        std::optional<TCpuMask> affinity =
+            ActorContext().ActorSystem()->GetExecutorPoolAffinity(blobStorageExecutorPoolId);
         if (affinity) {
-            pdiskConfig->StoragePoolAffinity = std::move(*affinity);
+            pdiskConfig->BlobStorageExecutorPoolAffinity = std::move(*affinity);
         }
     }
 
@@ -445,13 +431,14 @@ namespace NKikimr::NStorage {
         }
 
         const ui32 pdiskID = pdisk.GetPDiskID();
-        const ui32 storageActorPoolId = temporary ? AppData()->SystemPoolId : GetStorageActorPoolId(pdiskID);
+        const ui32 blobStorageExecutorPoolId =
+            temporary ? AppData()->SystemPoolId : GetBlobStorageExecutorPoolId(pdiskID);
 
         auto pdiskConfig = CreatePDiskConfig(pdisk, &record.PDiskConfigWarning);
         if (temporary) {
             pdiskConfig->MetadataOnly = true;
         } else {
-            ApplyStorageActorPoolAffinity(pdiskConfig, storageActorPoolId);
+            ApplyBlobStorageExecutorPoolAffinity(pdiskConfig, blobStorageExecutorPoolId);
         }
         record.ExpectedSlotCount = pdiskConfig->ExpectedSlotCount;
         record.ExpectedSlotSize = pdiskConfig->ExpectedSlotSize;
@@ -462,12 +449,13 @@ namespace NKikimr::NStorage {
             (ExpectedSlotCount, record.ExpectedSlotCount),
             (ExpectedSlotSize, record.ExpectedSlotSize),
             (Temporary, temporary),
-            (StorageActorPoolId, storageActorPoolId));
+            (BlobStorageExecutorPoolId, blobStorageExecutorPoolId));
 
         const ui64 pdiskGuid = pdisk.GetPDiskGuid();
         const ui64 pdiskCategory = pdisk.GetPDiskCategory();
         Cfg->PDiskKey.Initialize();
-        Cfg->PDiskServiceFactory->Create(ActorContext(), pdiskID, pdiskConfig, Cfg->PDiskKey, storageActorPoolId, LocalNodeId);
+        Cfg->PDiskServiceFactory->Create(ActorContext(), pdiskID, pdiskConfig, Cfg->PDiskKey,
+            blobStorageExecutorPoolId, LocalNodeId);
         if (!temporary) {
             Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate(pdiskID, path, pdiskGuid, pdiskCategory));
             Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddRole("Storage"));
@@ -658,7 +646,7 @@ namespace NKikimr::NStorage {
 
         TIntrusivePtr<TPDiskConfig> pdiskConfig = CreatePDiskConfig(
             it->second.Record, &it->second.PDiskConfigWarning);
-        ApplyStorageActorPoolAffinity(pdiskConfig, GetStorageActorPoolId(pdiskId));
+        ApplyBlobStorageExecutorPoolAffinity(pdiskConfig, GetBlobStorageExecutorPoolId(pdiskId));
 
         Cfg->PDiskKey.Initialize();
         Send(actorId, new TEvBlobStorage::TEvAskWardenRestartPDiskResult(pdiskId, Cfg->PDiskKey, true, pdiskConfig));

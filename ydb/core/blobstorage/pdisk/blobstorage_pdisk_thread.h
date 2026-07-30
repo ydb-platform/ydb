@@ -13,28 +13,91 @@ namespace NKikimr {
 namespace NPDisk {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// PDisk native thread
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+class TPDiskSimpleThread : private ISimpleThread {
+public:
+    explicit TPDiskSimpleThread(std::optional<TCpuMask> affinity = std::nullopt)
+        : Affinity(std::move(affinity))
+    {}
+
+    void Start() {
+        ISimpleThread::Start();
+    }
+
+    void* Join() {
+        return ISimpleThread::Join();
+    }
+
+    bool Running() const noexcept {
+        return ISimpleThread::Running();
+    }
+
+    ::TThread::TId Id() const noexcept {
+        return ISimpleThread::Id();
+    }
+
+protected:
+    virtual void* DoThreadProc() = 0;
+
+private:
+    // The thread applies its own affinity: mutating the creator's affinity for inheritance
+    // would race with other affinity writers (e.g. TExecutorPoolJail) when the creator is
+    // an executor pool thread.
+    void* ThreadProc() final {
+        if (Affinity && !Affinity->IsEmpty()) {
+            TAffinity(*Affinity).Set();
+        }
+        return DoThreadProc();
+    }
+
+    const std::optional<TCpuMask> Affinity;
+};
+
+class TPDiskFunctionThread final : public TPDiskSimpleThread {
+public:
+    TPDiskFunctionThread(::TThread::TThreadProc threadProc, void* cookie,
+            std::optional<TCpuMask> affinity = std::nullopt)
+        : TPDiskSimpleThread(std::move(affinity))
+        , ThreadProcFunction(threadProc)
+        , Cookie(cookie)
+    {}
+
+    ~TPDiskFunctionThread() {
+        Join();
+    }
+
+private:
+    void* DoThreadProc() override {
+        return ThreadProcFunction(Cookie);
+    }
+
+    const ::TThread::TThreadProc ThreadProcFunction;
+    void* const Cookie;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // PDisk Thread
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-class TPDiskThread : public TThread {
+class TPDiskThread : public TPDiskSimpleThread {
 public:
     TPDiskThread(IPDisk &pDisk, std::optional<TCpuMask> affinity = std::nullopt)
-        : TThread(&ThreadProc, this)
-        , Affinity(std::move(affinity))
+        : TPDiskSimpleThread(std::move(affinity))
         , Quit(0)
         , IsEnded(0)
         , PDisk(pDisk)
     {}
 
-    static void* ThreadProc(void* _this) {
-        SetCurrentThreadName("PDisk");
-
-        auto *thread = static_cast<TPDiskThread*>(_this);
-        TAffinityGuard affinityGuard(thread->Affinity ? &*thread->Affinity : nullptr);
-        thread->Exec();
+private:
+    void* DoThreadProc() override {
+        ::SetCurrentThreadName("PDisk");
+        Exec();
         return nullptr;
     }
 
+public:
     void Exec() {
         while (!AtomicGet(Quit)) {
             PDisk.Update();
@@ -55,7 +118,6 @@ public:
     }
 
 private:
-    std::optional<TCpuMask> Affinity;
     TAtomic Quit;
     TAtomic IsEnded;
     IPDisk &PDisk;

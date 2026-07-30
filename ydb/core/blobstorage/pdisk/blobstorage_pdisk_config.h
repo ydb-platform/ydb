@@ -184,7 +184,7 @@ struct TPDiskConfig : public TThrRefBase {
 
     bool SortFreeChunksHDD = true;
 
-    std::optional<TCpuMask> StoragePoolAffinity;
+    std::optional<TCpuMask> BlobStorageExecutorPoolAffinity;
     TPDiskConfig(ui64 pDiskGuid, ui32 pdiskId, ui64 pDiskCategory)
         : TPDiskConfig({}, pDiskGuid, pdiskId, pDiskCategory)
     {}
@@ -347,8 +347,9 @@ struct TPDiskConfig : public TThrRefBase {
         str << " UseNoopScheduler# " << (UseNoopScheduler ? "true" : "false") << x;
         str << " PlainDataChunks# " << PlainDataChunks << x;
         str << " SeparateHugePriorities# " << SeparateHugePriorities << x;
-        if (StoragePoolAffinity) {
-            str << " StoragePoolAffinityCpuCount# " << StoragePoolAffinity->CpuCount() << x;
+        if (BlobStorageExecutorPoolAffinity) {
+            str << " BlobStorageExecutorPoolAffinityCpuCount# "
+                << BlobStorageExecutorPoolAffinity->CpuCount() << x;
         }
         str << "}";
         return str.Str();

@@ -1,4 +1,5 @@
 #include "auto_config_initializer.h"
+#include "config_helpers.h"
 
 #include <ydb/core/protos/config.pb.h>
 
@@ -8,8 +9,6 @@
 
 namespace {
 
-    using TExecutorConfig = NKikimrConfig::TActorSystemConfig::TExecutor;
-
     i16 GetCpuCount() {
         TAffinity affinity;
         affinity.Current();
@@ -18,27 +17,6 @@ namespace {
             return cpuMask.CpuCount();
         }
         return NSystemInfo::CachedNumberOfCpus();
-    }
-
-    ui32 GetExpandedPoolId(const NKikimrConfig::TActorSystemConfig& config, ui32 executorId) {
-        ui32 poolId = 0;
-        for (ui32 i = 0; i < static_cast<ui32>(config.ExecutorSize()); ++i) {
-            const auto& executor = config.GetExecutor(i);
-            if (i == executorId) {
-                return poolId;
-            }
-
-            if (executor.GetType() == TExecutorConfig::NUMA) {
-                const ui32 placementGroups = executor.GetPlacementGroups();
-                Y_ABORT_UNLESS(placementGroups, "NUMA executor must have non-zero placement group count");
-                poolId += placementGroups;
-            } else {
-                ++poolId;
-            }
-        }
-
-        Y_ABORT("ExecutorId# %u is out of range; executor count# %d",
-            static_cast<unsigned>(executorId), config.ExecutorSize());
     }
 
     enum class EPoolKind : i8 {
@@ -212,7 +190,7 @@ namespace NKikimr::NAutoConfigInitializer {
             return GetASPools(cpuCount);
         } else {
             auto expandedPoolId = [&](ui32 executorId) {
-                return static_cast<ui8>(GetExpandedPoolId(config, executorId));
+                return static_cast<ui8>(NKikimr::NActorSystemConfigHelpers::GetExpandedExecutorPoolId(config, executorId));
             };
 
             ui8 icPoolId = 0;
@@ -248,7 +226,7 @@ namespace NKikimr::NAutoConfigInitializer {
             if (servicePools.count(service)) {
                 continue;
             }
-            const ui32 pool = useAutoConfig ? item.GetExecutorId() : GetExpandedPoolId(config, item.GetExecutorId());
+            const ui32 pool = useAutoConfig ? item.GetExecutorId() : NKikimr::NActorSystemConfigHelpers::GetExpandedExecutorPoolId(config, item.GetExecutorId());
             servicePools.insert(std::pair<TString, ui32>(service, pool));
         }
         return servicePools;

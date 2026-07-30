@@ -87,7 +87,7 @@ TAppData::TAppData(
         const NMiniKQL::IFunctionRegistry* functionRegistry,
         const TFormatFactory* formatFactory,
         TProgramShouldContinue *kikimrShouldContinue,
-        TVector<ui32> storagePools)
+        TVector<ui32> blobStorageExecutorPoolIds)
     : Magic(MagicTag)
     , Impl(new TImpl)
     , SystemPoolId(sysPoolId)
@@ -95,7 +95,7 @@ TAppData::TAppData(
     , IOPoolId(ioPoolId)
     , BatchPoolId(batchPoolId)
     , ServicePools(servicePools)
-    , StoragePools(std::move(storagePools))
+    , BlobStorageExecutorPoolIds(std::move(blobStorageExecutorPoolIds))
     , TypeRegistry(typeRegistry)
     , FunctionRegistry(functionRegistry)
     , FormatFactory(formatFactory)

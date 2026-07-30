@@ -1,5 +1,7 @@
 #pragma once
 
+#include "blobstorage_executor_pool_mapping.h"
+
 #include <ydb/library/actors/core/invoke.h>
 
 #include <ydb/core/base/statestorage.h>
@@ -130,7 +132,7 @@ namespace NKikimr::NStorage {
         NKikimrBlobStorage::TNodeWardenServiceSet DynamicServices; // these are controlled by BSC
 
         std::map<TPDiskKey, TPDiskRecord> LocalPDisks;
-        THashMap<ui32, ui32> StorageActorPoolByPDiskId;
+        TBlobStorageExecutorPoolMapping PDiskToBlobStorageExecutorPool;
         TIntrusiveList<TPDiskRecord, TUnreportedMetricTag> PDisksWithUnreportedMetrics;
         std::map<ui64, ui32> PDiskRestartRequests;
         ui64 LastShredCookie = 0;
@@ -292,9 +294,10 @@ namespace NKikimr::NStorage {
             TString *configWarning = nullptr);
         static void InferPDiskSlotCount(TIntrusivePtr<TPDiskConfig> pdiskConfig, ui64 driveSize,
             ui64 unitSizeInBytes, ui32 maxSlots);
-        void UpdateStorageActorPoolMap();
-        ui32 GetStorageActorPoolId(ui32 pdiskId);
-        void ApplyStorageActorPoolAffinity(const TIntrusivePtr<TPDiskConfig>& pdiskConfig, ui32 storageActorPoolId);
+        void UpdateBlobStorageExecutorPoolMapping();
+        ui32 GetBlobStorageExecutorPoolId(ui32 pdiskId);
+        void ApplyBlobStorageExecutorPoolAffinity(const TIntrusivePtr<TPDiskConfig>& pdiskConfig,
+            ui32 blobStorageExecutorPoolId);
         void StartLocalPDisk(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk, bool temporary);
         void AskBSCToRestartPDisk(ui32 pdiskId, bool ignoreDegradedGroups, ui64 requestCookie);
         void OnPDiskRestartFinished(ui32 pdiskId, NKikimrProto::EReplyStatus status);
@@ -303,6 +306,8 @@ namespace NKikimr::NStorage {
         void DoRestartLocalPDisk(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk);
         void OnUnableToRestartPDisk(ui32 pdiskId, TString error);
         void ApplyServiceSetPDisks(const NKikimrBlobStorage::TNodeWardenServiceSet& serviceSet);
+
+        using TServiceSetPDisk = NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk;
 
         void MergeServiceSetPDisks(NProtoBuf::RepeatedPtrField<TServiceSetPDisk> *to,
             const NProtoBuf::RepeatedPtrField<TServiceSetPDisk>& from, TVector<TServiceSetPDisk>& pdisksToRestart);

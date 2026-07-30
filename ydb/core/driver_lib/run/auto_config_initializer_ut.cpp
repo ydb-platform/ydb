@@ -120,12 +120,12 @@ Y_UNIT_TEST(GetServicePoolsWith4AndMoreCPUs) {
     }
 }
 
-Y_UNIT_TEST(GetManualPoolsWithNumaExecutorBeforeNamedPools) {
+Y_UNIT_TEST(GetManualPoolsWithPlacementExecutorBeforeNamedPools) {
     NKikimrConfig::TActorSystemConfig config;
 
-    auto* storage = config.AddExecutor();
-    storage->SetType(NKikimrConfig::TActorSystemConfig::TExecutor::NUMA);
-    storage->SetPlacementGroups(2);
+    auto* placement = config.AddExecutor();
+    placement->SetType(NKikimrConfig::TActorSystemConfig::TExecutor::PLACEMENT);
+    placement->SetPlacementGroups(2);
 
     auto* system = config.AddExecutor();
     system->SetType(NKikimrConfig::TActorSystemConfig::TExecutor::BASIC);

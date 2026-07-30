@@ -1,7 +1,7 @@
 #include "interconnect_handshake.h"
 #include "handshake_broker.h"
 #include "interconnect_tcp_proxy.h"
-#include "uring_context.h" // TUringContext::IsSupported() gates v2 (io_uring data plane)
+#include "uring_context.h" // TUringContext::IsAvailable() gates v2 (io_uring data plane)
 
 #include "rdma/link_manager.h"
 #include "rdma/events.h"

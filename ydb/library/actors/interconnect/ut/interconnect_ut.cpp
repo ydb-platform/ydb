@@ -2,6 +2,7 @@
 #include <ydb/library/actors/interconnect/ut/lib/ic_test_cluster.h>
 #include <ydb/library/actors/interconnect/interconnect_counters.h>
 #include <ydb/library/actors/interconnect/interconnect_metrics_aggregator.h>
+#include <ydb/library/actors/interconnect/uring_context.h>
 #include <ydb/library/actors/interconnect/rdma/ut/utils/utils.h>
 #include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/actors/interconnect/ut/protos/interconnect_test.pb.h>

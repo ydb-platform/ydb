@@ -13,6 +13,7 @@ namespace NKikimr::NPQ {
 bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& parameters, TEvKeyValue::TEvRequest* request, const TInstant blobCreationUnixTime)
 {
     const auto& ctx = ActorContext();
+    const ui32 maxHeaderSize = GetMaxHeaderSize(ctx);
     ui64& curOffset = parameters.CurOffset;
     ui64 poffset = p.Offset ? *p.Offset : curOffset;
 
@@ -54,7 +55,7 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
                                                  parameters.HeadCleared,
                                                  needCompactHead,
                                                  MaxBlobSize,
-                                                 GetMaxHeaderSize(ctx));
+                                                 maxHeaderSize);
     }
 
     YDB_LOG_DEBUG_COMP(Service, "Topic partition part blob processing sourceId seqNo partNo",
@@ -125,7 +126,7 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
         for (auto& x : CompactionBlobEncoder.PartitionedBlob.GetClientBlobs()) {
             if (CompactionBlobEncoder.NewHead.GetBatches().empty() || CompactionBlobEncoder.NewHead.GetLastBatch().Packed) {
                 CompactionBlobEncoder.NewHead.AddBatch(TBatch(curOffset, x.GetPartNo()));
-                CompactionBlobEncoder.NewHead.PackedSize += GetMaxHeaderSize(ctx); //upper bound for packed size
+                CompactionBlobEncoder.NewHead.PackedSize += maxHeaderSize; //upper bound for packed size
             }
 
             if (x.IsLastPart()) {
@@ -136,7 +137,7 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
             CompactionBlobEncoder.NewHead.AddBlob(x);
             CompactionBlobEncoder.NewHead.PackedSize += x.GetSerializedSize();
             if (CompactionBlobEncoder.NewHead.GetLastBatch().GetUnpackedSize() >= BATCH_UNPACK_SIZE_BORDER) {
-                CompactionBlobEncoder.PackLastBatch(GetMaxHeaderSize(ctx));
+                CompactionBlobEncoder.PackLastBatch(maxHeaderSize);
             }
         }
 
@@ -153,7 +154,7 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
             {"newHead", CompactionBlobEncoder.NewHead});
 
         curOffset += p.Msg.LogicalMessageCount;
-        CompactionBlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize, GetMaxHeaderSize(ctx));
+        CompactionBlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize, maxHeaderSize);
     }
 
     return true;
@@ -503,6 +504,7 @@ bool TPartition::InitNewHeadForCompaction()
 void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& blobs)
 {
     const auto& ctx = ActorContext();
+    const ui32 maxHeaderSize = GetMaxHeaderSize(ctx);
 
     YDB_LOG_DEBUG_COMP(Service, "Continue blobs compaction",
         {"logPrefix", NPQ_LOG_PREFIX});
@@ -512,7 +514,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
     AFL_ENSURE(CompactionInProgress);
     AFL_ENSURE(blobs.size() == CompactionBlobsCount);
 
-    CompactionBlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize, GetMaxHeaderSize(ctx));
+    CompactionBlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize, maxHeaderSize);
 
     // Empty partition may will be filling from offset great than zero from mirror actor if source partition old and was clean by retantion time
     if (!CompactionBlobEncoder.Head.GetCount() &&
@@ -565,7 +567,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
                                 parameters,
                                 compactionRequest.Get());
 
-            CompactionBlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize, GetMaxHeaderSize(ctx));
+            CompactionBlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize, maxHeaderSize);
 
             CompactionBlobEncoder.NewHead.Clear();
             CompactionBlobEncoder.NewHead.Offset = parameters.CurOffset;
@@ -596,7 +598,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
     }
 
     if (!CompactionBlobEncoder.IsLastBatchPacked()) {
-        CompactionBlobEncoder.PackLastBatch(GetMaxHeaderSize(ctx));
+        CompactionBlobEncoder.PackLastBatch(maxHeaderSize);
     }
 
     CompactionBlobEncoder.HeadCleared = parameters.HeadCleared;

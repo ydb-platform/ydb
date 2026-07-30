@@ -1883,6 +1883,8 @@ void TColumnShard::Enqueue(STFUNC_SIG) {
         HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
         HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable, Handle);
         HFunc(TEvColumnShard::TEvNotifyTxCompletion, Handle);
+        hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
+        hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
         default:
             YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
                 {"event", "unexpected event in enqueue"});

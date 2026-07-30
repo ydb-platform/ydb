@@ -1,6 +1,7 @@
 #pragma once
 
 #include "public.h"
+#include "tag.h"
 
 #include <library/cpp/yt/misc/port.h>
 
@@ -157,8 +158,8 @@ ELogLevel GetThreadMinLogLevel();
 //! Sets an extra tag for messages in current thread.
 //! NB: Same as above, in fiber environment messages tags
 //! are attached to a fiber.
-void SetThreadMessageTag(std::string messageTag);
-std::string& GetThreadMessageTag();
+void SetThreadMessageTags(TLoggingTagList messageTags);
+const TLoggingTagList& GetThreadMessageTags();
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -223,21 +224,33 @@ public:
 
     void Write(TLogEvent&& event) const;
 
-    void AddRawTag(TStringBuf tag);
+    TLogger& AddTags(const TLoggingTagList& tags);
+    template <class TValue>
+    TLogger& AddTag(TLoggingTagKey key, const TValue& value);
+    template <class TValue>
+    TLogger& AddTag(TLoggingTagKey key, const TValue& value, TLoggingTagSpec spec);
     template <class... TArgs>
-    void AddTag(TFormatString<TArgs...> format, TArgs&&... args);
+    TLogger& AddTagFormat(TLoggingTagKey key, TFormatString<TArgs...> format, TArgs&&... args);
 
     template <class TType>
     void AddStructuredTag(TStringBuf key, TType value);
 
     void AddStructuredValidator(TStructuredValidator validator);
 
-    TLogger WithRawTag(TStringBuf tag) const &;
-    TLogger WithRawTag(TStringBuf tag) &&;
+    [[nodiscard]] TLogger WithTags(const TLoggingTagList& tags) const &;
+    [[nodiscard]] TLogger WithTags(const TLoggingTagList& tags) &&;
+    template <class TValue>
+    [[nodiscard]] TLogger WithTag(TLoggingTagKey key, const TValue& value) const &;
+    template <class TValue>
+    [[nodiscard]] TLogger WithTag(TLoggingTagKey key, const TValue& value) &&;
+    template <class TValue>
+    [[nodiscard]] TLogger WithTag(TLoggingTagKey key, const TValue& value, TLoggingTagSpec spec) const &;
+    template <class TValue>
+    [[nodiscard]] TLogger WithTag(TLoggingTagKey key, const TValue& value, TLoggingTagSpec spec) &&;
     template <class... TArgs>
-    TLogger WithTag(TFormatString<TArgs...> format, TArgs&&... args) const &;
+    [[nodiscard]] TLogger WithTagFormat(TLoggingTagKey key, TFormatString<TArgs...> format, TArgs&&... args) const &;
     template <class... TArgs>
-    TLogger WithTag(TFormatString<TArgs...> format, TArgs&&... args) &&;
+    [[nodiscard]] TLogger WithTagFormat(TLoggingTagKey key, TFormatString<TArgs...> format, TArgs&&... args) &&;
 
     template <class TType>
     TLogger WithStructuredTag(TStringBuf key, TType value) const &;
@@ -253,7 +266,7 @@ public:
     TLogger WithEssential(bool essential = true) const &;
     TLogger WithEssential(bool essential = true) &&;
 
-    const std::string& GetTag() const;
+    const TLoggingTagList& GetTags() const;
     const TStructuredTags& GetStructuredTags() const;
 
     const TStructuredValidators& GetStructuredValidators() const;
@@ -269,7 +282,7 @@ protected:
 
     struct TCoWState final
     {
-        std::string Tag;
+        TLoggingTagList Tags;
         TStructuredTags StructuredTags;
         TStructuredValidators StructuredValidators;
     };

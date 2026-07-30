@@ -62,9 +62,9 @@ TTransaction::TTransaction(
     , PingPeriod_(pingPeriod)
     , StickyProxyAddress_(stickyParameters ? std::optional(stickyParameters->ProxyAddress) : std::nullopt)
     , SequenceNumberSourceId_(sequenceNumberSourceId)
-    , Logger(RpcProxyClientLogger().WithTag("TransactionId: %v, %v",
-        Id_,
-        Connection_->GetLoggingTag()))
+    , Logger(RpcProxyClientLogger()
+        .WithTag("TransactionId", Id_)
+        .WithTags(Connection_->GetLoggingTags()))
     , Proxy_(Channel_)
 {
     const auto& config = Connection_->GetConfig();
@@ -167,7 +167,7 @@ void TTransaction::RegisterAlienTransaction(const ITransactionPtr& transaction)
     }
 
     YT_LOG_DEBUG("Alien transaction registered (AlienConnection: {%v})",
-        transaction->GetConnection()->GetLoggingTag());
+        transaction->GetConnection()->GetLoggingTags());
 }
 
 TFuture<void> TTransaction::Ping(const NApi::TPrerequisitePingOptions& /*options*/)
@@ -330,7 +330,7 @@ TFuture<TTransactionCommitResult> TTransaction::Commit(const TTransactionCommitO
 
                     YT_LOG_DEBUG("Alien transaction flushed (ParticipantCellIds: %v, AlienConnection: {%v})",
                         result.ParticipantCellIds,
-                        transaction->GetConnection()->GetLoggingTag());
+                        transaction->GetConnection()->GetLoggingTags());
 
                     for (auto [cellId, signature] : Zip(result.ParticipantCellIds, result.ExpectedPrepareSignatures)) {
                         EmplaceOrCrash(AdditionalParticipantCellIds_, cellId, signature);

@@ -224,8 +224,8 @@ public:
     TPartitionedBlob(const TPartitionedBlob& x);
 
     TPartitionedBlob(const TPartitionId& partition, const ui64 offset, const TString& sourceId, const ui64 seqNo,
-                     const ui16 totalParts, const ui32 totalSize, THead& head, THead& newHead, bool headCleared, bool needCompactHead,
-                     const ui32 maxBlobSize, ui16 nextPartNo = 0, bool fastWrite = true);
+                     const ui16 totalParts, const ui32 totalSize, THead& head, THead& newHead, bool headCleared, bool needCompactHead, const ui32 maxBlobSize,
+                     ui16 nextPartNo = 0, bool fastWrite = true);
 
     struct TFormedBlobInfo {
         TKey Key;

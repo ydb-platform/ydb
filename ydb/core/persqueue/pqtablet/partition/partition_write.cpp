@@ -1225,6 +1225,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     WriteInflightSize -= p.Msg.Data.size();
 
     const auto& ctx = ActorContext();
+
     ui64& curOffset = parameters.CurOffset;
     auto& sourceIdBatch = parameters.SourceIdBatch;
     auto sourceId = sourceIdBatch.GetSource(p.Msg.SourceId);

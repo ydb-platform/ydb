@@ -515,8 +515,8 @@ TPartitionedBlob::TPartitionedBlob(const TPartitionedBlob& x)
 {}
 
 TPartitionedBlob::TPartitionedBlob(const TPartitionId& partition, const ui64 offset, const TString& sourceId, const ui64 seqNo, const ui16 totalParts,
-                                    const ui32 totalSize, THead& head, THead& newHead, bool headCleared, bool needCompactHead,
-                                    const ui32 maxBlobSize, const ui16 nextPartNo, const bool fastWrite)
+                                    const ui32 totalSize, THead& head, THead& newHead, bool headCleared, bool needCompactHead, const ui32 maxBlobSize,
+                                    const ui16 nextPartNo, const bool fastWrite)
     : Partition(partition)
     , Offset(offset)
     , InternalPartsCount(0)

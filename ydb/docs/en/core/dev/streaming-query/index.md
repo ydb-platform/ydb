@@ -13,4 +13,4 @@ Practical aspects of working with [streaming queries](../../concepts/glossary.md
 ## See also
 
 - [Recipes for working with streaming queries](../../recipes/streaming_queries/index.md)
-- [Streaming queries overview](../../concepts/streaming-query.md)
+- [Streaming queries overview](../../concepts/streaming-query/streaming-query.md)

@@ -25,7 +25,7 @@ END DO
 * `IF NOT EXISTS` — do not output an error if a streaming query with this name already exists; in this case, the existing query will remain unchanged.
 * `query_name` — the name of the streaming query to create.
 * `WITH (<key> = <value>)` — a list of settings for the new streaming query, optional.
-* `AS DO BEGIN ... END DO` — the full text of the new streaming query, including all required SQL statements. Restrictions on the query text are given in [{#T}](../../../concepts/streaming-query.md#limitations), see [below](#examples) for query text examples.
+* `AS DO BEGIN ... END DO` — the full text of the new streaming query, including all required SQL statements. Restrictions on the query text are given in [{#T}](../../../concepts/streaming-query/streaming-query.md#limitations), see [below](#examples) for query text examples.
 
 The `OR REPLACE` and `IF NOT EXISTS` settings cannot be used simultaneously.
 

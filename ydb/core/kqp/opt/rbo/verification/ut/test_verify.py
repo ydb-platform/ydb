@@ -19,6 +19,7 @@ from ydb.core.kqp.opt.rbo.verification.rbo_verifier.ir import (
     Expr,
     Filter,
     Join,
+    JoinKey,
     OPAQUE_DOUBLE_FINGERPRINT_PREFIX,
     Scan,
     ScanColumn,
@@ -1683,7 +1684,7 @@ def delayed_unique_rhs_filter_snapshot(
     return replace(snapshot, plan=plan, stage_graph=stage_graph)
 
 
-def delayed_unique_rhs_filter_chain_snapshot():
+def delayed_unique_rhs_filter_chain_snapshot(*, deferred=False):
     snapshot = delayed_unique_rhs_filter_snapshot()
     nodes = snapshot.plan.node_map()
     true = nodes["join"].predicate
@@ -1699,18 +1700,38 @@ def delayed_unique_rhs_filter_chain_snapshot():
         None,
     )
     join = Join("join2", "join", "c", "cross", (), true)
-    predicate = replace(
-        nodes["filter"].predicate,
-        args=nodes["filter"].predicate.args
-        + (
-            Expr(
-                kind="eq",
-                args=(
-                    Expr(kind="column", column="b.x"),
-                    Expr(kind="column", column="c.k"),
+    second_equality = Expr(
+        kind="eq",
+        args=(
+            Expr(kind="column", column="b.x"),
+            Expr(kind="column", column="c.k"),
+        ),
+    )
+    predicate = (
+        Expr(
+            kind="and",
+            args=(
+                Expr(
+                    kind="eq",
+                    args=(
+                        Expr(kind="column", column="c.x"),
+                        Expr(kind="column", column="b.k"),
+                    ),
+                ),
+                Expr(
+                    kind="eq",
+                    args=(
+                        Expr(kind="column", column="a.k"),
+                        Expr(kind="column", column="c.k"),
+                    ),
                 ),
             ),
-        ),
+        )
+        if deferred
+        else replace(
+            nodes["filter"].predicate,
+            args=nodes["filter"].predicate.args + (second_equality,),
+        )
     )
     filtered = Filter("filter", "join2", predicate)
     plan = replace(
@@ -1729,6 +1750,44 @@ def delayed_unique_rhs_filter_chain_snapshot():
         tables=snapshot.tables + (replace(table_b, name="C"),),
         plan=plan,
     )
+
+
+def explicit_deferred_unique_rhs_chain_snapshot(*, mutate=False):
+    snapshot = delayed_unique_rhs_filter_chain_snapshot(deferred=True)
+    nodes = snapshot.plan.node_map()
+    first = Join(
+        "join",
+        "a",
+        "c",
+        "inner",
+        (JoinKey("a.k", "c.k"),),
+        nodes["join"].predicate,
+    )
+    second = Join(
+        "join2",
+        "join",
+        "b",
+        "inner",
+        (
+            JoinKey(
+                "a.x" if mutate else "c.x",
+                "b.k",
+            ),
+        ),
+        nodes["join2"].predicate,
+    )
+    plan = replace(
+        snapshot.plan,
+        nodes=tuple(
+            first
+            if node.id == "join"
+            else second
+            if node.id == "join2"
+            else node
+            for node in snapshot.plan.nodes
+        ),
+    )
+    return replace(snapshot, plan=plan)
 
 
 def delayed_unique_rhs_filter_subplan_snapshot():
@@ -3892,15 +3951,45 @@ class DirectUniqueRhsJoinTest(unittest.TestCase):
                 )
 
     def test_delayed_filter_compacts_each_left_deep_cross_factor(self):
-        snapshot = delayed_unique_rhs_filter_chain_snapshot()
-        relation = self._evaluate(snapshot)
-        self.assertEqual(len(relation.rows), 2)
-        self.assertEqual(
-            tuple(column.name for column in relation.columns),
-            ("a.k", "a.x", "b.k", "b.x", "c.k", "c.x"),
+        for deferred in (False, True):
+            snapshot = delayed_unique_rhs_filter_chain_snapshot(
+                deferred=deferred,
+            )
+            with self.subTest(deferred=deferred):
+                relation = self._evaluate(snapshot)
+                self.assertEqual(len(relation.rows), 2)
+                self.assertEqual(
+                    tuple(column.name for column in relation.columns),
+                    ("a.k", "a.x", "b.k", "b.x", "c.k", "c.x"),
+                )
+                with mock.patch.object(
+                    relation_model,
+                    "MAX_RELATION_ROWS",
+                    2,
+                ):
+                    self.assertEqual(len(self._evaluate(snapshot).rows), 2)
+
+    def test_delayed_factor_schedule_matches_explicit_inner_join_order(self):
+        delayed = delayed_unique_rhs_filter_chain_snapshot(deferred=True)
+        explicit = explicit_deferred_unique_rhs_chain_snapshot()
+        self.assertFalse(
+            _restricted_domain_has_model(
+                build_logical_kernel_problem_for_tests(
+                    delayed,
+                    explicit,
+                    2,
+                ).script
+            )
         )
-        with mock.patch.object(relation_model, "MAX_RELATION_ROWS", 2):
-            self.assertEqual(len(self._evaluate(snapshot).rows), 2)
+        self.assertTrue(
+            _restricted_domain_has_model(
+                build_logical_kernel_problem_for_tests(
+                    delayed,
+                    explicit_deferred_unique_rhs_chain_snapshot(mutate=True),
+                    2,
+                ).script
+            )
+        )
 
     def test_delayed_filter_near_misses_keep_the_generic_cross(self):
         near_misses = {

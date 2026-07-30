@@ -72,19 +72,10 @@ class ChSqlaType:
     def low_card(self):
         return self.ch_type.low_card
 
-    @staticmethod
-    def result_processor():
+    def result_processor(self, dialect, coltype):
         """
         Override for the SqlAlchemy TypeEngine result_processor method, which is used to convert row values to the
         correct Python type.  The core driver handles this automatically, so we always return None.
-        """
-        return None
-
-    @staticmethod
-    def _cached_result_processor(*_):
-        """
-        Override for the SqlAlchemy TypeEngine _cached_result_processor method to prevent weird behavior
-        when SQLAlchemy tries to cache.
         """
         return None
 

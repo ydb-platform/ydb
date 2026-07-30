@@ -21,7 +21,7 @@ public:
     {
         static_assert(N >= 2, "Logging tag format spec must be a non-empty string literal");
         if (spec[0] != '%') {
-            TheLoggingTagFormatSpecMustStartWithPercentSign();
+            throw "Logging tag format spec must start with '%'";
         }
     }
 
@@ -32,10 +32,6 @@ public:
 
 private:
     const TStringBuf Spec_;
-
-    // Undefined on purpose: calling it from the |consteval| ctor turns a missing
-    // leading |%| into a compile error that names the violated rule.
-    static void TheLoggingTagFormatSpecMustStartWithPercentSign();
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -50,7 +46,7 @@ public:
         static_assert(N >= 2, "Logging tag key must be a non-empty string literal");
         for (size_t index = 0; index + 1 < N; ++index) {
             if (key[index] == '%' || key[index] == ':') {
-                TheLoggingTagKeyMustNotContainPercentSignOrColon();
+                throw "Logging tag key must not contain '%' or ':'";
             }
         }
     }
@@ -72,10 +68,6 @@ private:
     explicit TLoggingTagKey(TStringBuf key)
         : Key_(key)
     { }
-
-    // Undefined on purpose: calling it from the |consteval| ctor turns the printf
-    // spelling into a compile error that names the violated rule.
-    static void TheLoggingTagKeyMustNotContainPercentSignOrColon();
 };
 
 ////////////////////////////////////////////////////////////////////////////////

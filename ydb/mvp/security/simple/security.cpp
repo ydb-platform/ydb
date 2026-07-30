@@ -1,7 +1,7 @@
 #include "security.h"
 
 TStringBuf NKikimr::NSecurity::DefaultUserIp() {
-    return "";
+    return "2a02:6b8:0:80b::5f6c:8ead";
 }
 
 TString NKikimr::NSecurity::BlackBoxTokenFromSessionId(TStringBuf sessionId, TStringBuf userIp) {

@@ -3054,7 +3054,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             )",
             R"(
                 -- используется Index212 (not Index21), since the sort is free due to key order of covering Index212
-                SELECT Value2
+                SELECT Key, SubKey1, SubKey2
                 FROM Table
                 WHERE SubKey2 = "1"
                 ORDER BY SubKey2, Key, SubKey1
@@ -3072,7 +3072,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"([[[0];[0];["1"];["2"];["2"]];[[0];[1];["1"];["4"];["4"]];[[1];[0];["1"];["6"];["6"]];[[1];[1];["1"];["8"];["8"]]])",
             R"([[["1"]];[["3"]];[["5"]];[["7"]]])",
             R"([[[0];[0];["0"];["1"];["1"]];[[0];[0];["1"];["2"];["2"]];[[1];[0];["0"];["5"];["5"]];[[1];[0];["1"];["6"];["6"]]])",
-            R"([[["2"]];[["4"]]])",
+            R"([[[0];[0];["1"]];[[0];[1];["1"]]])",
         };
 
         std::vector<TString> expectedIndexes = {
@@ -3230,7 +3230,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             )",
             R"(
                 -- используется Index212 (not Index21), since the sort is free due to key order of covering Index212
-                SELECT Value2
+                SELECT Key, SubKey1, SubKey2
                 FROM Table
                 WHERE SubKey2 = "1"
                 ORDER BY SubKey2, Key, SubKey1
@@ -3248,7 +3248,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"([[[0];[0];["1"];["2"];["2"]];[[0];[1];["1"];["4"];["4"]];[[1];[0];["1"];["6"];["6"]];[[1];[1];["1"];["8"];["8"]]])",
             R"([[["1"]];[["3"]];[["5"]];[["7"]]])",
             R"([[[0];[0];["0"];["1"];["1"]];[[0];[0];["1"];["2"];["2"]];[[1];[0];["0"];["5"];["5"]];[[1];[0];["1"];["6"];["6"]]])",
-            R"([[["2"]];[["4"]]])",
+            R"([[[0];[0];["1"]];[[0];[1];["1"]]])",
         };
 
         std::vector<TString> expectedIndexes = {

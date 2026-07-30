@@ -350,6 +350,10 @@ namespace {
             ++*RdmaMultipartEvents;
         }
 
+        void IncRdmaSendBufferAllocationFails() override {
+            ++*RdmaSendBufferAllocationFails;
+        }
+
         void UpdateOutputChannelTraffic(ui16 channel, ui64 value) override {
             auto& ch = GetOutputChannel(channel);
             *ch.OutgoingTraffic += value;
@@ -429,14 +433,16 @@ namespace {
                 SubscribersCount = AdaptiveCounters->GetCounter("SubscribersCount");
 
                 PingTimeHistogram = AdaptiveCounters->GetHistogram(
-                    "PingTimeUs", NMonitoring::ExponentialHistogram(18, 2, 125));
+                    "PingTimeUs", NMonitoring::ExponentialHistogram(
+                        18, 2, Common->Settings.EnableRdmaSendReceive ? 1.25 : 125));
                 InterconnectQueueTimeHistogram = AdaptiveCounters->GetHistogram(
                     "InterconnectQueueTimeHistogramUs", NMonitoring::ExplicitHistogram({500, 1000, 5000, 10000, 50000, 100000}));
                 NumEventsInQueueHistogram = AdaptiveCounters->GetHistogram(
                     "NumEventsInQueue", NMonitoring::ExplicitHistogram({0, 1, 2, 6, 24, 120}));
                 RdmaReadTimeHistogram = AdaptiveCounters->GetHistogram(
-+                    "RdmaReadTimeUs", NMonitoring::ExplicitHistogram({0, 5, 10, 20, 50, 100, 200, 1000, 10000}));
+                    "RdmaReadTimeUs", NMonitoring::ExplicitHistogram({0, 5, 10, 20, 50, 100, 200, 1000, 10000}));
                 RdmaMultipartEvents = AdaptiveCounters->GetCounter("RdmaMultipartEvents", true);
+                RdmaSendBufferAllocationFails = AdaptiveCounters->GetCounter("RdmaSendBufferAllocationFails", true);
             }
 
             if (updateGlobal) {
@@ -546,6 +552,7 @@ namespace {
         NMonitoring::THistogramPtr NumEventsInQueueHistogram;
         NMonitoring::THistogramPtr RdmaReadTimeHistogram;
         NMonitoring::TDynamicCounters::TCounterPtr RdmaMultipartEvents;
+        NMonitoring::TDynamicCounters::TCounterPtr RdmaSendBufferAllocationFails;
 
         std::unordered_map<ui16, TOutputChannel> OutputChannels;
         TOutputChannel OtherOutputChannel;
@@ -831,6 +838,10 @@ namespace {
             RdmaMultipartEvents_->Inc();
         }
 
+        void IncRdmaSendBufferAllocationFails() override {
+            RdmaSendBufferAllocationFails_->Inc();
+        }
+
         void UpdateOutputChannelTraffic(ui16 channel, ui64 value) override {
             auto& ch = GetOutputChannel(channel);
             if (ch.OutgoingTraffic) {
@@ -929,7 +940,9 @@ namespace {
                 InflightRdmaDataAmount_ = createRate(AdaptiveMetrics_, "interconnect.inflight_rdma_data");
                 SubscribersCount_ = createIntGauge(AdaptiveMetrics_, "interconnect.subscribers_count");
                 PingTimeHistogram_ = AdaptiveMetrics_->HistogramRate(
-                        NMonitoring::MakeLabels({{"sensor", "interconnect.ping_time_us"}}), NMonitoring::ExponentialHistogram(18, 2, 125));
+                        NMonitoring::MakeLabels({{"sensor", "interconnect.ping_time_us"}}),
+                        NMonitoring::ExponentialHistogram(
+                            18, 2, Common->Settings.EnableRdmaSendReceive ? 1.25 : 125));
                 InterconnectQueueTimeHistogram_ = AdaptiveMetrics_->HistogramRate(
                         NMonitoring::MakeLabels({{"sensor", "interconnect.ic_queue_time_us"}}), NMonitoring::ExplicitHistogram({500, 1000, 5000, 10000, 50000, 100000}));
                 NumEventsInQueueHistogram_ = AdaptiveMetrics_->HistogramRate(
@@ -937,6 +950,7 @@ namespace {
                 RdmaReadTimeHistogram_ = AdaptiveMetrics_->HistogramRate(
                         NMonitoring::MakeLabels({{"sensor", "interconnect.rdma_read_time_us"}}), NMonitoring::ExplicitHistogram({0, 5, 10, 20, 50, 100, 200, 1000, 10000}));
                 RdmaMultipartEvents_ = createRate(AdaptiveMetrics_, "interconnect.rdma_multipart_events");
+                RdmaSendBufferAllocationFails_ = createRate(AdaptiveMetrics_, "interconnect.rdma_send_buffer_allocation_fails");
             }
 
             if (updateGlobal) {
@@ -1080,6 +1094,7 @@ namespace {
         NMonitoring::IHistogram* NumEventsInQueueHistogram_;
         NMonitoring::IHistogram* RdmaReadTimeHistogram_;
         NMonitoring::IRate* RdmaMultipartEvents_;
+        NMonitoring::IRate* RdmaSendBufferAllocationFails_;
 
         THashMap<ui16, TOutputChannel> OutputChannels_;
         TOutputChannel OtherOutputChannel_;

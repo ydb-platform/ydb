@@ -42,6 +42,7 @@
 #include <unordered_map>
 #include <tuple>
 #include <functional>
+#include <optional>
 
 namespace NInterconnect {
     class TInterconnectZcProcessor;
@@ -161,7 +162,7 @@ namespace NActors {
                 std::deque<NInterconnect::NRdma::TMemRegionSlice> RdmaBuffers;
                 TRdmaReadContext::TPtr RdmaReadContext = nullptr;
                 size_t RdmaSize = 0;
-                std::optional<ui32> RdmaCumulativeCheckSum;
+                std::optional<ui32> RdmaReadCumulativeCheckSum;
             };
 
             std::deque<TPendingEvent> PendingEvents;
@@ -351,6 +352,8 @@ namespace NActors {
         ui64 StarvingInRow = 0;
 
         bool CloseInputSessionRequested = false;
+        // Preserve main-socket readiness if processing yields before reaching ReadMore().
+        bool ReadMainChannelRequested = false;
 
         void CloseInputSession();
 
@@ -360,6 +363,7 @@ namespace NActors {
         void Handle(NInterconnect::NRdma::TEvRdmaReadDone::TPtr& ev);
         void Handle(NInterconnect::NRdma::TEvRdmaIoReceiveDone::TPtr& ev);
         void ReceiveData();
+        void ReceiveData(bool readMainChannel);
         void ProcessHeader();
         void ProcessPayload(ui64 *numDataBytes);
         void ProcessInboundPacketQ(ui64 numXdcBytesRead, ui64 numRdmaBytesRead);
@@ -374,6 +378,9 @@ namespace NActors {
         bool ReadXdc(ui64 *numDataBytes);
         void HandleXdcChecksum(TContiguousSpan span);
         TRcBuf AllocateRcBuf(ui64 size, ui64 headroom, ui64 tailroom, ui64 alignment, bool isRdma);
+        bool UseRdmaSendReceiveTransport() const {
+            return Params.AllowRdmaSendReceive && RdmaQp && RdmaCq;
+        }
 
         TReceiveContext::TPerChannelContext& GetPerChannelContext(ui16 channel) const;
 
@@ -571,6 +578,7 @@ namespace NActors {
                 hFunc(TEvSocketDisconnect, OnDisconnect)
                 hFunc(TEvTerminate, Handle)
                 hFunc(TEvProcessPingRequest, Handle)
+                hFunc(NInterconnect::NRdma::TEvRdmaIoDone, Handle)
                 cFunc(static_cast<ui32>(ENetwork::EvProcessDirectSessionQueue), HandleProcessDirectSessionQueue)
             )
             UpdateUtilization();
@@ -588,7 +596,7 @@ namespace NActors {
         void IssueRam(bool batching);
         void HandleRam(TEvRam::TPtr& ev);
         void GenerateTraffic();
-        void ProducePackets();
+        bool ProducePackets();
 
         size_t GetUnsentSize() const {
             return OutgoingStream.CalculateUnsentSize() + OutOfBandStream.CalculateUnsentSize() +
@@ -604,11 +612,13 @@ namespace NActors {
 
         void Handle(TEvPollerReady::TPtr& ev);
         void Handle(TEvPollerRegisterResult::TPtr ev);
-        void WriteData();
+        void Handle(NInterconnect::NRdma::TEvRdmaIoDone::TPtr& ev);
+        void WriteData(bool writeMainChannel);
+        void WriteDataRdma();
         ssize_t HandleWriteResult(ssize_t r, const TString& err);
         ssize_t Write(NInterconnect::TOutgoingStream& stream, NInterconnect::TStreamSocket& socket, size_t maxBytes);
 
-        ui32 MakePacket(bool data, TMaybe<ui64> pingMask = {});
+        std::optional<ui32> MakePacket(bool data, TMaybe<ui64> pingMask = {});
         void FillSendingBuffer(TTcpPacketOutTask& packet, ui64 serial);
         void DropConfirmed(ui64 confirm);
         void ShutdownSocket(TDisconnectReason reason);
@@ -630,6 +640,10 @@ namespace NActors {
         bool UseKernelLivenessMode() const {
             // Effective liveness mode for the currently attached transport connection.
             return KernelLivenessMode;
+        }
+
+        bool UseRdmaSendReceiveTransport() const {
+            return Params.AllowRdmaSendReceive && RdmaQp && RdmaCq;
         }
 
 
@@ -719,6 +733,16 @@ namespace NActors {
         TPollerToken::TPtr PollerToken;
         TPollerToken::TPtr XdcPollerToken;
         ui32 SendBufferSize;
+
+        struct TRdmaSendInFlight {
+            size_t Bytes = 0;
+            bool IsOutOfBand = false;
+        };
+        std::optional<TRdmaSendInFlight> RdmaSendInFlight;
+        ui64 RdmaSendWrSubmitted = 0;
+        ui64 RdmaSendWrCompleted = 0;
+        bool RdmaInitialTrafficStateReported = false;
+
         ui64 InflightDataAmount = 0;
         ui64 RdmaInflightDataAmount = 0;
 
@@ -793,6 +817,7 @@ namespace NActors {
             TInterconnectProxyTCP* const proxy,
             NInterconnect::NRdma::TQueuePair::TPtr rdmaQp);
         NInterconnect::NRdma::TQueuePair::TPtr RdmaQp;
+        NInterconnect::NRdma::ICq::TPtr RdmaCq;
 
     private:
 

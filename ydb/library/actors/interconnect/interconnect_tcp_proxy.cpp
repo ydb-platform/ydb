@@ -1,5 +1,6 @@
 #include "interconnect_tcp_proxy.h"
 #include "interconnect_handshake.h"
+#include "packet.h"
 #include "interconnect_tcp_session.h"
 #include "interconnect_tcp_session_v2.h"
 #include <ydb/library/actors/core/log.h>
@@ -10,6 +11,16 @@
 #define YDB_LOG_THIS_FILE_COMPONENT ::NActorsServices::INTERCONNECT
 
 namespace NActors {
+    NInterconnect::NRdma::TRdmaRuntimeParams CreateRdmaRuntimeParams(int maxWr, bool enableSendReceive) noexcept {
+        const int rdmaReceiveBufSize = sizeof(TTcpPacketHeader_v2) + TTcpPacketBuf::PacketDataLen;
+        return {
+            -1,
+            maxWr,
+            enableSendReceive ? maxWr : 0,
+            enableSendReceive ? rdmaReceiveBufSize : 0,
+        };
+    }
+
     static constexpr TDuration GetNodeRequestTimeout = TDuration::Seconds(5);
     static constexpr TDuration BaseRdmaRetryDelay = TDuration::Seconds(5);
     static constexpr ui32 MaxSafeRdmaRetryBackoffLevel = 30;

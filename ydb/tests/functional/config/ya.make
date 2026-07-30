@@ -35,6 +35,7 @@ DEPENDS(
 
 PEERDIR(
     contrib/python/requests
+    ydb/public/api/grpc/draft
     ydb/tests/library
     ydb/tests/library/clients
     contrib/python/requests

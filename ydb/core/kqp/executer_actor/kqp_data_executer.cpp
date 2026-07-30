@@ -7,6 +7,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/client/minikql_compile/db_key_resolver.h>
 #include <ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h>
+#include <ydb/core/fq/libs/actors/streaming_query_nodes_manager.h>
 #include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/kqp_data_integrity_trails.h>
 #include <ydb/core/kqp/common/kqp_tx_manager.h>
@@ -444,6 +445,7 @@ private:
                 hFunc(TEvKqpBuffer::TEvError, Handle);
                 hFunc(NFq::TEvCheckpointCoordinator::TEvZeroCheckpointDone, Handle);
                 hFunc(NFq::TEvCheckpointCoordinator::TEvRaiseTransientIssues, Handle);
+                hFunc(NFq::TEvStreamingQueryNodesManager::TEvAbortQuery, Handle);
                 hFunc(NActors::NMon::TEvHttpInfo, HandleHttpInfo);
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 default:
@@ -473,6 +475,17 @@ private:
                 {"sender", ev->Sender},
                 {"traceId", TraceId()});
         }
+    }
+
+    void Handle(NFq::TEvStreamingQueryNodesManager::TEvAbortQuery::TPtr& ev) {
+        YDB_LOG_WARN("StreamingQueryNodesManager requested query abort",
+            {"marker", "KQPDATA"},
+            {"actorId", SelfId()},
+            {"txId", TxId},
+            {"reason", ev->Get()->Reason},
+            {"traceId", TraceId()});
+        auto issue = YqlIssue({}, TIssuesIds::DEFAULT_ERROR, ev->Get()->Reason);
+        ReplyErrorAndDie(Ydb::StatusIds::CANCELLED, issue);
     }
 
     void Handle(TEvKqpBuffer::TEvError::TPtr& ev) {
@@ -611,7 +624,23 @@ private:
         LWTRACK(KqpDataExecuterStartExecute, ResponseEv->Orbit, TxId);
 
         // TODO: move graph restoration outside of executer
-        const bool graphRestored = RestoreTasksGraph();
+        // For streaming queries with external sources (CREATE STREAMING QUERY), skip saved task
+        // graph restoration and re-plan tasks from the physical plan instead. This recalculates
+        // the task count based on the current cluster topology (resource snapshot) rather than
+        // using the stale count persisted in the saved physical graph.
+        // Note: checkpoint/offset/aggregation state restoration may produce runtime errors,
+        // which is acceptable as the task IDs will differ from those stored in checkpoints.
+        const bool isStreamingQueryRestore = HasExternalSources && Request.QueryPhysicalGraph != nullptr;
+        const bool graphRestored = isStreamingQueryRestore ? false : RestoreTasksGraph();
+        if (isStreamingQueryRestore) {
+            YDB_LOG_INFO("Streaming query re-planning: skipping saved task graph, re-planning from physical plan",
+                {"marker", "KQPDATA"},
+                {"actorId", SelfId()},
+                {"txId", TxId},
+                {"ctx", *GetUserRequestContext()},
+                {"resourceSnapshotSize", ResourcesSnapshot.size()},
+                {"traceId", TraceId()});
+        }
 
         NDq::TTxId dqTxId = TxId;
         if (GetUserRequestContext() && GetUserRequestContext()->StreamingQueryPath) {
@@ -1039,6 +1068,11 @@ private:
             Send(MakePipePerNodeCacheID(true), new TEvPipeCache::TEvUnlink(0));
         }
 
+        if (StreamingQueryNodesManagerId) {
+            Send(StreamingQueryNodesManagerId, new NActors::TEvents::TEvPoisonPill());
+            StreamingQueryNodesManagerId = TActorId{};
+        }
+
         if (CheckpointCoordinatorId) {
             Send(CheckpointCoordinatorId, new NActors::TEvents::TEvPoisonPill());
             CheckpointCoordinatorId = TActorId{};
@@ -1214,8 +1248,19 @@ private:
 
         NFq::NProto::TGraphParams graphParams;
         if (Request.QueryPhysicalGraph) {
-            for (const auto& task : Request.QueryPhysicalGraph->GetTasks()) {
-                *graphParams.AddTasks() = task.GetDqTask();
+            if (HasExternalSources) {
+                // Streaming query re-planning: tasks have been re-planned from the physical plan
+                // using the current cluster resource snapshot, so task IDs differ from those
+                // in the saved physical graph. Use the current TasksGraph task topology instead.
+                NKikimrKqp::TQueryPhysicalGraph currentGraph;
+                TasksGraph.PersistTasksGraphInfo(currentGraph);
+                for (const auto& task : currentGraph.GetTasks()) {
+                    *graphParams.AddTasks() = task.GetDqTask();
+                }
+            } else {
+                for (const auto& task : Request.QueryPhysicalGraph->GetTasks()) {
+                    *graphParams.AddTasks() = task.GetDqTask();
+                }
             }
         }
 
@@ -1247,6 +1292,19 @@ private:
             {"streamingDisposition", streamingDisposition.ShortDebugString()},
             {"hasQueryPhysicalGraph", Request.QueryPhysicalGraph != nullptr},
             {"enableWatermarks", Request.QueryPhysicalGraph && Request.QueryPhysicalGraph->GetPreparedQuery().GetPhysicalQuery().GetEnableWatermarks()},
+            {"traceId", TraceId()});
+
+        StreamingQueryNodesManagerId = Register(
+            NFq::CreateStreamingQueryNodesManager(
+                SelfId(),
+                Database,
+                static_cast<ui64>(graphParams.GetTasks().size()),
+                ToString(TxId)));
+        YDB_LOG_DEBUG("Created new StreamingQueryNodesManager",
+            {"marker", "KQPDATA"},
+            {"actorId", SelfId()},
+            {"txId", TxId},
+            {"streamingQueryNodesManagerId", StreamingQueryNodesManagerId},
             {"traceId", TraceId()});
     }
 
@@ -1367,6 +1425,8 @@ private:
 
     NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
     ui64 Generation = 0;
+
+    NActors::TActorId StreamingQueryNodesManagerId;
 };
 
 } // namespace

@@ -11,6 +11,7 @@ SRCS(
     rate_limiter_resources.cpp
     result_writer.cpp
     run_actor.cpp
+    streaming_query_nodes_manager.cpp
     table_bindings_from_bindings.cpp
     task_get.cpp
     task_ping.cpp
@@ -27,6 +28,7 @@ PEERDIR(
     library/cpp/yson
     library/cpp/yson/node
     ydb/core/base
+    ydb/core/mind
     ydb/core/fq/libs/checkpointing
     ydb/core/fq/libs/checkpointing_common
     ydb/core/fq/libs/common

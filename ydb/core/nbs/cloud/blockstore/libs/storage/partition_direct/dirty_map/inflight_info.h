@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/record_id.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_mask.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/disable_copy.h>
@@ -32,13 +33,13 @@ struct IReadyQueue
 
     virtual ~IReadyQueue() = default;
 
-    // Registers an Lsn ready for cloning, flushing, or erasing.
-    // An Lsn can only be registered in one queue. The new registration deletes
-    // the old one.
-    virtual void Register(ui64 lsn, EQueueType queueType) = 0;
+    // Registers a record ready for cloning, flushing, or erasing.
+    // A record can only be registered in one queue. The new registration
+    // deletes the old one.
+    virtual void Register(TRecordId recordId, EQueueType queueType) = 0;
 
-    // Removes all registrations from Lsn.
-    virtual void UnRegister(ui64 lsn) = 0;
+    // Removes all registrations of the record.
+    virtual void UnRegister(TRecordId recordId) = 0;
 
     // Notification about the change of byte counters in PBuffer
     virtual void DataToPBufferAdded(
@@ -57,10 +58,11 @@ struct IReadyQueue
 struct TReadSource
 {
     THostMask Mask;
-    // 0 -> read from DDisk (Mask is the set of DDisk hosts to read from).
-    // >0 -> read from a PBuffer that holds the inflight write at this lsn
+    // RecordId.Lsn == 0 -> read from DDisk (Mask is the set of DDisk hosts to
+    // read from).
+    // RecordId.Lsn > 0 -> read from a PBuffer that holds this inflight record
     // (Mask is the set of PBuffer hosts that confirmed the write).
-    ui64 Lsn = 0;
+    TRecordId RecordId;
 
     [[nodiscard]] bool Empty() const
     {
@@ -69,7 +71,7 @@ struct TReadSource
 
     [[nodiscard]] bool OnlyDDisk() const
     {
-        return Lsn == 0;
+        return RecordId.Lsn == 0;
     }
 };
 
@@ -78,7 +80,7 @@ class TInflightInfo: public TDisableCopy
 public:
     enum class EState
     {
-        // The lsn is generated but the write has not been acknowledged yet.
+        // The record id is issued but the write has not been acknowledged yet.
         // Tracked only to hold the cleanup watermark; invisible to reads (a
         // concurrent read sees the pre-write data on DDisk, as before).
         PBufferPendingWrite,
@@ -111,14 +113,18 @@ public:
 
     TInflightInfo(
         IReadyQueue* readyQueues,
-        ui64 lsn,
+        TRecordId recordId,
         size_t byteCount,
         THostIndex host);
 
-    // Pending write: lsn is generated but data is not in any PBuffer yet.
-    // ReadMask is empty (reads wait on the quorum future) and the write is not
-    // flushable. Call OnWritten once a quorum of PBuffers confirms the write.
-    TInflightInfo(IReadyQueue* readyQueue, ui64 lsn, size_t byteCount);
+    // Pending write: the record id is issued but data is not in any PBuffer
+    // yet. ReadMask is empty (reads wait on the quorum future) and the write is
+    // not flushable. Call OnWritten once a quorum of PBuffers confirms the
+    // write.
+    TInflightInfo(
+        IReadyQueue* readyQueue,
+        TRecordId recordId,
+        size_t byteCount);
 
     TInflightInfo(TInflightInfo&& other) noexcept;
 
@@ -185,7 +191,7 @@ private:
     EState State;
 
     IReadyQueue* ReadyQueue = nullptr;
-    ui64 Lsn = 0;
+    TRecordId RecordId;
     size_t ByteCount = 0;
     TInstant StartAt;
     size_t PBuffersLockCount = 0;

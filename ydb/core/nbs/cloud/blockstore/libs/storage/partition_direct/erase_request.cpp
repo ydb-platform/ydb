@@ -88,16 +88,16 @@ void TEraseRequestExecutor::OnEraseResponse(const TDBGEraseResponse& response)
             LogTitle.GetWithTime().c_str(),
             FormatError(response.Error).c_str());
 
-        Reply({}, MakeLsnVector(Hint.Segments));
+        Reply({}, MakeRecordIds(Hint.Segments));
         return;
     }
 
-    Reply(MakeLsnVector(Hint.Segments), {});
+    Reply(MakeRecordIds(Hint.Segments), {});
 }
 
 void TEraseRequestExecutor::Reply(
-    TVector<ui64> eraseOk,
-    TVector<ui64> eraseFailed)
+    TVector<TRecordId> eraseOk,
+    TVector<TRecordId> eraseFailed)
 {
     Promise.TrySetValue(TResponse{
         .Host = Host,
@@ -140,7 +140,7 @@ void TEraseRequestExecutor::OnRequestTimeout()
         "%s OnRequestTimeout.",
         LogTitle.GetWithTime().c_str());
 
-    Reply({}, MakeLsnVector(Hint.Segments));
+    Reply({}, MakeRecordIds(Hint.Segments));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

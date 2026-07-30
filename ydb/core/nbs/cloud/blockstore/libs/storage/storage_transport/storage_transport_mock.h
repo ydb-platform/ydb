@@ -109,7 +109,7 @@ public:
     NThreading::TFuture<TEvReadPersistentBufferResult> ReadFromPBuffer(
         const THostConnection& connection,
         const NKikimr::NDDisk::TBlockSelector& selector,
-        const ui64 lsn,
+        const TRecordId recordId,
         const NKikimr::NDDisk::TReadInstruction instruction,
         const TGuardedSgList& data,
         NWilson::TSpan* span) override;
@@ -151,12 +151,12 @@ public:
         const THostConnection& pbufferConnection,
         const THostConnection& ddiskConnection,
         TVector<NKikimr::NDDisk::TBlockSelector> selectors,
-        TVector<ui64> lsns,
+        TVector<TRecordId> recordIds,
         NWilson::TSpan* span) override;
 
     NThreading::TFuture<TEvErasePersistentBufferResult> BatchEraseFromPBuffer(
         const THostConnection& connection,
-        TVector<ui64> lsns,
+        TVector<TRecordId> recordIds,
         NWilson::TSpan* span) override;
 
     NThreading::TFuture<TEvErasePersistentBufferResult> BarrierEraseFromPBuffer(

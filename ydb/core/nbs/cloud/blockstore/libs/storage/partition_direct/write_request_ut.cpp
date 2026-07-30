@@ -108,7 +108,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
         DirectBlockGroup->WriteBlocksToPBufferHandler = [&]   //
             (ui32 vChunkIndex,
              THostIndex hostIndex,
-             ui64 lsn,
+             TRecordId recordId,
              TBlockRange64 range,
              const TGuardedSgList& guardedSglist,
              const NWilson::TTraceId& traceId)
@@ -116,7 +116,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
             Y_UNUSED(traceId);
             Y_UNUSED(guardedSglist);
 
-            UNIT_ASSERT_C(UserLsn, lsn);
+            UNIT_ASSERT_VALUES_EQUAL(UserRecordId, recordId);
             UNIT_ASSERT_VALUES_EQUAL(
                 VChunkConfig.GetVChunkIndex(),
                 vChunkIndex);
@@ -171,7 +171,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
         DirectBlockGroup->WriteBlocksToPBufferHandler = [&]   //
             (ui32 vChunkIndex,
              THostIndex hostIndex,
-             ui64 lsn,
+             TRecordId recordId,
              TBlockRange64 range,
              const TGuardedSgList& guardedSglist,
              const NWilson::TTraceId& traceId)
@@ -179,7 +179,7 @@ Y_UNIT_TEST_SUITE(TWriteRequestTest)
             Y_UNUSED(traceId);
             Y_UNUSED(guardedSglist);
 
-            UNIT_ASSERT_C(UserLsn, lsn);
+            UNIT_ASSERT_VALUES_EQUAL(UserRecordId, recordId);
             UNIT_ASSERT_VALUES_EQUAL(
                 VChunkConfig.GetVChunkIndex(),
                 vChunkIndex);

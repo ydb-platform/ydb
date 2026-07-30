@@ -19,8 +19,8 @@ Y_UNIT_TEST_SUITE(TEraseRequestTest)
 
         THostIndex host = 1;
         TEraseHint hint;
-        hint.Segments.push_back(TEraseSegment{.Generation = 1, .Lsn = 42});
-        hint.Segments.push_back(TEraseSegment{.Generation = 1, .Lsn = 43});
+        hint.Segments.push_back(TEraseSegment{.RecordId = MakeId(42)});
+        hint.Segments.push_back(TEraseSegment{.RecordId = MakeId(43)});
 
         auto eraseRequest = std::make_shared<TEraseRequestExecutor>(
             Runtime->GetActorSystem(0),
@@ -42,8 +42,8 @@ Y_UNIT_TEST_SUITE(TEraseRequestTest)
         UNIT_ASSERT_VALUES_EQUAL(true, future.HasValue());
         const auto& response = future.GetValue();
         UNIT_ASSERT_VALUES_EQUAL(2, response.EraseOk.size());
-        UNIT_ASSERT_VALUES_EQUAL(42, response.EraseOk[0]);
-        UNIT_ASSERT_VALUES_EQUAL(43, response.EraseOk[1]);
+        UNIT_ASSERT_VALUES_EQUAL(MakeId(42), response.EraseOk[0]);
+        UNIT_ASSERT_VALUES_EQUAL(MakeId(43), response.EraseOk[1]);
         UNIT_ASSERT_VALUES_EQUAL(0, response.EraseFailed.size());
     }
 }

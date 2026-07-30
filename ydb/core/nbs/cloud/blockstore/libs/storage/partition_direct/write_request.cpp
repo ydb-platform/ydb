@@ -36,7 +36,7 @@ TWriteRequestExecutor::TWriteRequestExecutor(
     , LogTitle(logTitle.GetChildWithTags(
           GetCycleCount(),
           {{"t", ToString(WriteMode)},
-           {"lsn", ToString(bundle->GetLsn())},
+           {"recordId", bundle->GetRecordId().Print()},
            {"r", bundle->GetRange().Print()},
            {"rv", bundle->GetVChunkRange().Print()}}))
     , VChunkConfig(vChunkConfig)
@@ -120,7 +120,7 @@ void TWriteRequestExecutor::SendIndirectWriteRequest(THostMask hosts)
         VChunkConfig.GetVChunkIndex(),
         coordinator,
         hosts,
-        Bundle->GetLsn(),
+        Bundle->GetRecordId(),
         Bundle->GetVChunkRange(),
         IndirectWriteReplyTimeout,
         Bundle->GetSgList(),
@@ -288,7 +288,7 @@ void TWriteRequestExecutor::SendDirectWriteRequest(THostIndex host)
     auto future = DirectBlockGroup->WriteBlocksToPBuffer(
         VChunkConfig.GetVChunkIndex(),
         host,
-        Bundle->GetLsn(),
+        Bundle->GetRecordId(),
         Bundle->GetVChunkRange(),
         Bundle->GetSgList(),
         span ? span->GetTraceId() : NWilson::TTraceId());

@@ -4,6 +4,7 @@
 #include "range_locker.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range_map.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/record_id.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_mask.h>
 
 #include <library/cpp/threading/future/core/future.h>
@@ -25,7 +26,7 @@ struct TReadRangeHint
 {
     TReadRangeHint(
         THostMask hostMask,
-        ui64 lsn,
+        TRecordId recordId,
         TBlockRange64 requestRelativeRange,
         TBlockRange64 vchunkRange,
         TRangeLock&& lock);
@@ -34,10 +35,11 @@ struct TReadRangeHint
     TReadRangeHint& operator=(TReadRangeHint&& other) noexcept;
 
     THostMask HostMask;
-    // 0 -> read from DDisk (HostMask is the DDisk hosts to choose from).
-    // >0 -> read from a PBuffer that holds the inflight write at this lsn
+    // RecordId.Lsn == 0 -> read from DDisk (HostMask is the DDisk hosts to
+    // choose from).
+    // RecordId.Lsn > 0 -> read from a PBuffer that holds this inflight record
     // (HostMask is the PBuffer hosts that confirmed the write).
-    ui64 Lsn = 0;
+    TRecordId RecordId;
 
     // Range relative to the request.
     TBlockRange64 RequestRelativeRange;
@@ -65,10 +67,10 @@ struct TReadHint
 
 struct TPBufferSegment
 {
-    ui64 Lsn = 0;
+    TRecordId RecordId;
     TBlockRange64 Range;
 
-    static TVector<ui64> MakeLsnVector(
+    static TVector<TRecordId> MakeRecordIds(
         std::span<const TPBufferSegment> segments);
 
     [[nodiscard]] TString DebugPrint(bool brief) const;
@@ -89,7 +91,7 @@ public:
     void AddHint(
         THostIndex source,
         THostIndex destination,
-        ui64 lsn,
+        TRecordId recordId,
         TBlockRange64 range);
 
     [[nodiscard]] bool Empty() const;
@@ -106,8 +108,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 struct TEraseSegment
 {
-    ui32 Generation = 0;
-    ui64 Lsn = 0;
+    TRecordId RecordId;
 
     [[nodiscard]] TString DebugPrint(bool brief) const;
 };
@@ -126,7 +127,7 @@ class TEraseHints
 public:
     using THints = TMap<THostIndex, TEraseHint>;
 
-    void AddHint(THostIndex host, ui64 lsn);
+    void AddHint(THostIndex host, TRecordId recordId);
 
     [[nodiscard]] bool Empty() const;
 
@@ -233,7 +234,8 @@ public:
     // Note. Fresh watermarks are not applying for exists DDisks.
     void UpdateConfig(const TVChunkConfig& vChunkConfig);
 
-    void RestorePBuffer(ui64 lsn, TBlockRange64 range, THostIndex host);
+    void
+    RestorePBuffer(TRecordId recordId, TBlockRange64 range, THostIndex host);
 
     // MakeReadHint can work with multiple locations and returns multiple
     // RangeHints
@@ -242,25 +244,26 @@ public:
     [[nodiscard]] TEraseHints MakeEraseHint(size_t batchSize);
     [[nodiscard]] TEraseHints MakeEraseBelatedHint();
 
-    // Registers a write as pending (lsn generated, data not in any PBuffer
-    // yet) so that the cleanup bound covers it from the moment of generation.
-    void RegisterInflightWrite(ui64 lsn, TBlockRange64 range);
+    // Registers a write as pending (the record id is issued, data not in any
+    // PBuffer yet) so that the cleanup bound covers it from the moment it is
+    // issued.
+    void RegisterInflightWrite(TRecordId recordId, TBlockRange64 range);
 
     void WriteFinished(
-        ui64 lsn,
+        TRecordId recordId,
         TBlockRange64 range,
         THostMask requested,
         THostMask confirmed);
     void FlushFinished(
         THostRoute route,
-        const TVector<ui64>& flushOk,
-        const TVector<ui64>& flushFailed);
+        const TVector<TRecordId>& flushOk,
+        const TVector<TRecordId>& flushFailed);
     void EraseFinished(
         THostIndex host,
-        const TVector<ui64>& eraseOk,
-        const TVector<ui64>& eraseFailed);
+        const TVector<TRecordId>& eraseOk,
+        const TVector<TRecordId>& eraseFailed);
 
-    void UpdateBelatedEraseQueue(THostMask completedWrites, ui64 lsn);
+    void UpdateBelatedEraseQueue(THostMask completedWrites, TRecordId recordId);
 
     // Sets a mark on the ddisk to which offset it contains data and can be read
     // from it.
@@ -280,22 +283,22 @@ public:
     [[nodiscard]] size_t GetEraseBelatedCount() const;
     [[nodiscard]] ui64 GetMinFlushPendingLsn() const;
     [[nodiscard]] ui64 GetMinErasePendingLsn() const;
-    [[nodiscard]] std::optional<ui64> GetSafeBarrierForErase() const;
+    [[nodiscard]] std::optional<TRecordId> GetSafeBarrierForErase() const;
     [[nodiscard]] const TPBufferCounters& GetPBufferCounters(
         THostIndex host) const;
     [[nodiscard]] ui64 GetPBufferUsedSize(THostIndex host) const;
 
     // ILockableRanges implementation
-    void LockPBuffer(ui64 lsn) override;
-    void UnlockPBuffer(ui64 lsn) override;
+    void LockPBuffer(TRecordId recordId) override;
+    void UnlockPBuffer(TRecordId recordId) override;
     TLockRangeHandle LockDDiskRange(
         TBlockRange64 range,
         THostMask mask) override;
     void UnLockDDiskRange(TLockRangeHandle handle) override;
 
     // IReadyQueue implementation
-    void Register(ui64 lsn, EQueueType queueType) override;
-    void UnRegister(ui64 lsn) override;
+    void Register(TRecordId recordId, EQueueType queueType) override;
+    void UnRegister(TRecordId recordId) override;
     void DataToPBufferAdded(
         THostIndex host,
         EPBufferCounter counter,
@@ -318,13 +321,13 @@ public:
     [[nodiscard]] TString DebugPrintReadyToErase() const;
 
 private:
-    using TInflightMap = TBlockRangeMap<ui64, TInflightInfo>;
+    using TInflightMap = TBlockRangeMap<TRecordId, TInflightInfo>;
     using TInflightDDiskReadsMap =
         TBlockRangeMap<ILockableRanges::TLockRangeHandle, THostMask>;
 
     struct TInfoEraseBelated
     {
-        ui64 Lsn{};
+        TRecordId RecordId;
         THostMask Hosts;
 
         bool operator<(const TInfoEraseBelated& other) const;
@@ -339,7 +342,7 @@ private:
     // Create single readRangeHint for specified parameters
     [[nodiscard]] TReadRangeHint MakeReadRangeHint(
         THostMask mask,
-        ui64 lsn,
+        TRecordId recordId,
         TBlockRange64 range,
         ui64 offsetBlocks);
 
@@ -354,15 +357,15 @@ private:
 
     // Ranges that need to be copied to other PBuffers in order to reach a
     // quorum.
-    THashSet<ui64> ReadyToClone;
+    THashSet<TRecordId> ReadyToClone;
 
     // Ranges that are written PBuffers with quorum and ready to be flushed to
-    // DDisk. Using TSet for O(1) min LSN access.
-    TSet<ui64> ReadyToFlush;
+    // DDisk. Using TSet for O(1) min record access.
+    TSet<TRecordId> ReadyToFlush;
 
     // Ranges that are fully transferred to DDisk and can be erased.
-    // Using TSet for O(1) min LSN access.
-    TSet<ui64> ReadyToErase;
+    // Using TSet for O(1) min record access.
+    TSet<TRecordId> ReadyToErase;
 
     TSet<TInfoEraseBelated> ReadyToEraseBelated;
 
@@ -379,8 +382,8 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TVector<ui64> MakeLsnVector(std::span<const TPBufferSegment> segments);
-TVector<ui64> MakeLsnVector(std::span<const TEraseSegment> segments);
+TVector<TRecordId> MakeRecordIds(std::span<const TPBufferSegment> segments);
+TVector<TRecordId> MakeRecordIds(std::span<const TEraseSegment> segments);
 
 ////////////////////////////////////////////////////////////////////////////////
 

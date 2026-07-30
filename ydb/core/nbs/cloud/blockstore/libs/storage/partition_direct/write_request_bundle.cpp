@@ -39,7 +39,7 @@ void TWriteRequestBundle::Reply(
             shared_from_this(),
             TWriteRequestResponse{
                 .Error = std::move(error),
-                .Lsn = Lsn,
+                .RecordId = RecordId,
                 .RequestedWrites = requestedWrites,
                 .CompletedWrites = completedWrites});
     } else {
@@ -84,14 +84,14 @@ TBlockRange64 TWriteRequestBundle::GetVChunkRange() const
     return VChunkRange;
 }
 
-void TWriteRequestBundle::SetLsn(ui64 lsn)
+void TWriteRequestBundle::SetRecordId(TRecordId recordId)
 {
-    Lsn = lsn;
+    RecordId = recordId;
 }
 
-ui64 TWriteRequestBundle::GetLsn() const
+TRecordId TWriteRequestBundle::GetRecordId() const
 {
-    return Lsn;
+    return RecordId;
 }
 
 TGuardedSgList& TWriteRequestBundle::GetSgList()

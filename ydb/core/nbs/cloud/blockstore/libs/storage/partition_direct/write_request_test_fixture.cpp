@@ -38,12 +38,12 @@ void TWriteRequestTestFixture::Init()
     DirectBlockGroup->WriteBlocksToPBufferHandler = [this]   //
         (ui32 vChunkIndex,
          ui8 hostIndex,
-         ui64 lsn,
+         TRecordId recordId,
          TBlockRange64 range,
          const TGuardedSgList& guardedSglist,
          const NWilson::TTraceId& traceId)
     {
-        Y_UNUSED(hostIndex, lsn, traceId, guardedSglist);
+        Y_UNUSED(hostIndex, recordId, traceId, guardedSglist);
 
         UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.GetVChunkIndex(), vChunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
@@ -60,7 +60,7 @@ void TWriteRequestTestFixture::Init()
             ui32 vChunkIndex,
             THostIndex coordinatorHostIndex,
             THostMask hostIndexes,
-            ui64 lsn,
+            TRecordId recordId,
             TBlockRange64 range,
             TDuration replyTimeout,
             const TGuardedSgList& guardedSglist,
@@ -71,7 +71,7 @@ void TWriteRequestTestFixture::Init()
             vChunkIndex,
             coordinatorHostIndex,
             hostIndexes,
-            lsn,
+            recordId,
             range,
             replyTimeout,
             guardedSglist,
@@ -142,7 +142,7 @@ TWriteRequestTestFixture::GetManyPBuffersHandlerWithImmediateOkResponse()
             ui32 vChunkIndex,
             THostIndex coordinatorHostIndex,
             THostMask hostIndexes,
-            ui64 lsn,
+            TRecordId recordId,
             TBlockRange64 range,
             TDuration replyTimeout,
             const TGuardedSgList& guardedSglist,
@@ -151,7 +151,7 @@ TWriteRequestTestFixture::GetManyPBuffersHandlerWithImmediateOkResponse()
     {
         Y_UNUSED(coordinatorHostIndex, replyTimeout, guardedSglist, traceId);
 
-        UNIT_ASSERT_VALUES_EQUAL(UserLsn, lsn);
+        UNIT_ASSERT_VALUES_EQUAL(UserRecordId, recordId);
         UNIT_ASSERT_VALUES_EQUAL(VChunkConfig.GetVChunkIndex(), vChunkIndex);
         UNIT_ASSERT_VALUES_EQUAL(ExpectedRange, range);
 
@@ -188,7 +188,7 @@ TWriteRequestExecutorPtr TWriteRequestTestFixture::CreateRequestExecutor(
         NWilson::TTraceId(),
         MakeIntrusive<TCallContext>(),
         Range);
-    bundle->SetLsn(UserLsn);
+    bundle->SetRecordId(UserRecordId);
 
     WriteClient->Response.reset();
     DirectBlockGroup->Oracle.WriteMode = writeMode;

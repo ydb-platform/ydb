@@ -51,13 +51,15 @@ TListPBufferResponse MakeListPBufferResponse(
     result.Error = TranslateError(response);
     result.Meta.reserve(response.GetRecords().size());
     for (const auto& segment: response.GetRecords()) {
-        ui64 lsn = segment.GetLsn();
+        TRecordId recordId{
+            .Generation = segment.GetGeneration(),
+            .Lsn = segment.GetLsn()};
         ui32 vChunkIndex = segment.GetSelector().GetVChunkIndex();
         auto range = TBlockRange64::WithLength(
             segment.GetSelector().GetOffsetInBytes() / DefaultBlockSize,
             segment.GetSelector().GetSize() / DefaultBlockSize);
         result.Meta.push_back(
-            {.VChunkIndex = vChunkIndex, .Lsn = lsn, .Range = range});
+            {.VChunkIndex = vChunkIndex, .RecordId = recordId, .Range = range});
     }
     return result;
 }
@@ -243,6 +245,11 @@ TExecutorPtr TDirectBlockGroup::GetExecutor()
     return Executor;
 }
 
+ui32 TDirectBlockGroup::GetTabletGeneration() const
+{
+    return TabletGeneration;
+}
+
 IOraclePtr TDirectBlockGroup::GetOracle()
 {
     return &Oracle;
@@ -421,7 +428,7 @@ NThreading::TFuture<TDBGReadBlocksResponse>
 TDirectBlockGroup::ReadBlocksFromPBuffer(
     ui32 vChunkIndex,
     THostIndex hostIndex,
-    ui64 lsn,
+    TRecordId recordId,
     TBlockRange64 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
@@ -446,7 +453,7 @@ TDirectBlockGroup::ReadBlocksFromPBuffer(
             vChunkIndex,
             range.Start * DefaultBlockSize,
             range.Size() * DefaultBlockSize),
-        lsn,
+        recordId,
         NKikimr::NDDisk::TReadInstruction(true),
         guardedSglist,
         childSpan.get());
@@ -622,13 +629,15 @@ NThreading::TFuture<TDBGWriteBlocksResponse>
 TDirectBlockGroup::WriteBlocksToPBuffer(
     ui32 vChunkIndex,
     THostIndex hostIndex,
-    ui64 lsn,
+    TRecordId recordId,
     TBlockRange64 range,
     const TGuardedSgList& guardedSglist,
     const NWilson::TTraceId& traceId)
 {
     // INVARIANT: PBuffer does NOT require a session/lock
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    // New records are always minted under the current tablet generation.
+    Y_ABORT_UNLESS(recordId.Generation == TabletGeneration);
 
     using TEvWritePersistentBufferResultFuture = NThreading::TFuture<
         NKikimrBlobStorage::NDDisk::TEvWritePersistentBufferResult>;
@@ -647,7 +656,7 @@ TDirectBlockGroup::WriteBlocksToPBuffer(
             vChunkIndex,
             range.Start * DefaultBlockSize,
             range.Size() * DefaultBlockSize),
-        lsn,
+        recordId.Lsn,
         NKikimr::NDDisk::TWriteInstruction(0),
         guardedSglist,
         childSpan.get());
@@ -697,7 +706,7 @@ void TDirectBlockGroup::WriteBlocksToManyPBuffers(
     ui32 vChunkIndex,
     THostIndex coordinatorHostIndex,
     THostMask hostIndexes,
-    ui64 lsn,
+    TRecordId recordId,
     TBlockRange64 range,
     TDuration replyTimeout,
     const TGuardedSgList& guardedSglist,
@@ -710,6 +719,8 @@ void TDirectBlockGroup::WriteBlocksToManyPBuffers(
     // INVARIANT: PBuffer does NOT require a session/lock
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
     Y_ABORT_UNLESS(hostIndexes.Count() > 0);
+    // New records are always minted under the current tablet generation.
+    Y_ABORT_UNLESS(recordId.Generation == TabletGeneration);
 
     const auto startAt = TMonotonic::Now();
 
@@ -788,7 +799,7 @@ void TDirectBlockGroup::WriteBlocksToManyPBuffers(
             vChunkIndex,
             range.Start * DefaultBlockSize,
             range.Size() * DefaultBlockSize),
-        lsn,
+        recordId.Lsn,
         NKikimr::NDDisk::TWriteInstruction(0),
         std::move(disksIds),
         replyTimeout,
@@ -907,7 +918,7 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
         PBufferConnections[pbufferHostIndex].HostConnection,
         DDiskConnections[ddiskHostIndex].HostConnection,
         std::move(selectors),
-        TPBufferSegment::MakeLsnVector(segments),
+        TPBufferSegment::MakeRecordIds(segments),
         childSpan.get());
 
     future.Subscribe(
@@ -1026,7 +1037,7 @@ NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::BatchEraseFromPBuffer(
 
     auto future = StorageTransport->BatchEraseFromPBuffer(
         PBufferConnections[hostIndex].HostConnection,
-        MakeLsnVector(segments),
+        MakeRecordIds(segments),
         childSpan.get());
 
     auto promise = NewPromise<TDBGEraseResponse>();
@@ -1167,10 +1178,10 @@ void TDirectBlockGroup::DoBarrierEraseFromPBuffer(
         });
 }
 
-NThreading::TFuture<std::optional<ui64>>
+NThreading::TFuture<std::optional<TRecordId>>
 TDirectBlockGroup::GatherSafeBarrierForErase()
 {
-    auto promise = NewPromise<std::optional<ui64>>();
+    auto promise = NewPromise<std::optional<TRecordId>>();
     auto future = promise.GetFuture();
 
     Executor->ExecuteSimple(
@@ -1182,15 +1193,15 @@ TDirectBlockGroup::GatherSafeBarrierForErase()
                 return;
             }
 
-            std::optional<ui64> safeBarrier;
+            std::optional<TRecordId> safeBarrier;
             for (const auto& weakVChunk: self->VChunks) {
                 auto vChunk = weakVChunk.lock();
                 if (!vChunk) {
                     continue;
                 }
-                const auto lsn = vChunk->GetSafeBarrierForErase();
-                if (lsn && (!safeBarrier || *lsn < *safeBarrier)) {
-                    safeBarrier = lsn;
+                const auto candidate = vChunk->GetSafeBarrierForErase();
+                if (candidate && (!safeBarrier || *candidate < *safeBarrier)) {
+                    safeBarrier = candidate;
                 }
             }
             promise.SetValue(safeBarrier);
@@ -1725,7 +1736,9 @@ void TDirectBlockGroup::OnPBuffersListed(
                 restoredPBuffer.Error = response.Error;
             }
             restoredPBuffer.Meta.push_back(
-                {.Lsn = meta.Lsn, .Range = meta.Range, .HostIndex = hostIndex});
+                {.RecordId = meta.RecordId,
+                 .Range = meta.Range,
+                 .HostIndex = hostIndex});
         }
     }
     RestoredPBuffersPromise.SetValue();

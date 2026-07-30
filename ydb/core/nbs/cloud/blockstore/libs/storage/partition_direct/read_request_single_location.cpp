@@ -37,7 +37,7 @@ TReadSingleLocationRequestExecutor::TReadSingleLocationRequestExecutor(
     , LogTitle(logTitle.GetChildWithTags(
           GetCycleCount(),
           {{"t", "Read"},
-           {"lsn", ToString(readHint.Lsn)},
+           {"recordId", readHint.RecordId.Print()},
            {"r", request->Headers.Range.Print()},
            {"vr", readHint.VChunkRange.Print()}}))
     , VChunkConfig(vChunkConfig)
@@ -111,7 +111,7 @@ void TReadSingleLocationRequestExecutor::StartReading()
     }
     Requested.Set(*host);
 
-    const bool fromDDisk = ReadHint.Lsn == 0;
+    const bool fromDDisk = ReadHint.RecordId.Lsn == 0;
 
     const size_t tryCount = Requested.Count();
     NActors::NLog::EPriority printPriority =
@@ -132,7 +132,7 @@ void TReadSingleLocationRequestExecutor::StartReading()
 
     ScheduleHedging(DirectBlockGroup->GetOracle()->GetReadHedgingDelay(
         *host,
-        ReadHint.Lsn == 0 ? EDataLocation::DDisk : EDataLocation::PBuffer));
+        fromDDisk ? EDataLocation::DDisk : EDataLocation::PBuffer));
 
     auto future = fromDDisk ? DirectBlockGroup->ReadBlocksFromDDisk(
                                   VChunkConfig.GetVChunkIndex(),
@@ -143,7 +143,7 @@ void TReadSingleLocationRequestExecutor::StartReading()
                             : DirectBlockGroup->ReadBlocksFromPBuffer(
                                   VChunkConfig.GetVChunkIndex(),
                                   *host,
-                                  ReadHint.Lsn,
+                                  ReadHint.RecordId,
                                   ReadHint.VChunkRange,
                                   Request->Sglist,
                                   TraceId);

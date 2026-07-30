@@ -238,7 +238,9 @@ def render_node(node: ir.PlanNode) -> str:
         columns = _list(
             node.columns,
             lambda item: (
-                f"{{output={_quote(item.output)}, expression={render_expression(item.expression)}}}"
+                f"{{output={_quote(item.output)}, "
+                f"expression={render_expression(item.expression)}, "
+                f"error_on_null={_boolean(item.error_on_null)}}}"
             ),
         )
         return (

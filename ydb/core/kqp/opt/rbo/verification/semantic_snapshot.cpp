@@ -406,12 +406,32 @@ bool HasStageGraphState(TOpRoot& root) {
 bool NeedsInitialSnapshotTypeMaterialization(TOpRoot& root) {
     // Scalar descriptors require an exact type on their selected root output,
     // including Project/Filter/Limit wrappers that otherwise do not trigger
-    // the legacy Aggregate/Sort materialization path.
+    // the legacy Aggregate/Sort materialization path. A checked Map likewise
+    // needs an independently materialized output type before its exceptional
+    // projection can be admitted.
     bool result = !root.PlanProps.Subplans.PlanMap.empty();
     THashSet<const IOperator*> visited;
     const auto inspect = [&](IOperator& op) {
         result = result || op.GetKind() == EOperator::Aggregate ||
             op.GetKind() == EOperator::Sort;
+        if (op.GetKind() != EOperator::Map) {
+            return;
+        }
+        const auto& map = static_cast<const TOpMap&>(op);
+        for (const auto& element : map.MapElements) {
+            if (element.IsRename()) {
+                continue;
+            }
+            const auto& expression = element.GetExpression().Node;
+            if (expression &&
+                expression->IsLambda() &&
+                expression->ChildrenSize() == 2 &&
+                expression->Child(1)->IsCallable("Unwrap"))
+            {
+                result = true;
+                return;
+            }
+        }
     };
     VisitOperators(root.GetInput(), visited, inspect);
     for (const auto& subplanRoot : OrderedSubplanRoots(root.PlanProps.Subplans)) {
@@ -6971,6 +6991,82 @@ NJson::TJsonValue ExportExpr(
     return result;
 }
 
+std::optional<TString> TryExtractErrorOnNullStringUnwrap(
+    const TExpression& expression,
+    const THashSet<TString>& physicalInputColumns)
+{
+    if (!expression.Node ||
+        !expression.Node->IsLambda() ||
+        expression.Node->ChildrenSize() != 2)
+    {
+        return std::nullopt;
+    }
+
+    const auto* arguments = expression.Node->Child(0);
+    const auto* body = expression.Node->Child(1);
+    if (!body->IsCallable("Unwrap")) {
+        return std::nullopt;
+    }
+
+    bool resultNullable = false;
+    const TString resultType = ScalarTypeName(*body, &resultNullable);
+    if (resultType == "Date") {
+        // The separately audited, proven-total Date normalization is exported
+        // as an ordinary scalar expression below.
+        return std::nullopt;
+    }
+    if (resultType != "String" || resultNullable) {
+        Unsupported(
+            "Exact error-on-null String Unwrap requires a non-null String result");
+    }
+    if (body->ChildrenSize() != 1) {
+        Unsupported(
+            "Exact error-on-null String Unwrap requires exactly one argument");
+    }
+    if (!arguments->IsArguments() ||
+        arguments->ChildrenSize() != 1 ||
+        !arguments->Child(0)->IsArgument())
+    {
+        Unsupported(
+            "Exact error-on-null String Unwrap requires exactly one row argument");
+    }
+
+    const auto* rowArgument = arguments->Child(0);
+    const auto& member = *body->Child(0);
+    bool memberNullable = false;
+    if (!member.IsCallable("Member") ||
+        member.ChildrenSize() != 2 ||
+        !member.Child(1)->IsAtom() ||
+        ScalarTypeName(member, &memberNullable) != "String" ||
+        !memberNullable ||
+        member.Child(0) != rowArgument)
+    {
+        Unsupported(
+            "Exact error-on-null String Unwrap requires a direct "
+            "Optional<String> input member");
+    }
+
+    const TString column(member.Child(1)->Content());
+    if (!physicalInputColumns.contains(column)) {
+        Unsupported(TStringBuilder()
+            << "Exact error-on-null String Unwrap member is not a physical "
+               "Map input column: "
+            << column);
+    }
+
+    // The admitted source tree is deliberately closed. In particular,
+    // Unwrap is not added to the generic scalar allow-list: its exceptional
+    // NULL path is represented by projection metadata at this Map boundary.
+    CheckScalarSafetyMetadata(*expression.Node);
+    CheckScalarSafetyMetadata(*arguments);
+    CheckScalarSafetyMetadata(*rowArgument);
+    CheckScalarSafetyMetadata(*body);
+    CheckScalarSafetyMetadata(member);
+    CheckScalarSafetyMetadata(*member.Child(1));
+
+    return column;
+}
+
 struct TOlapColumn {
     TString Output;
     TString Type;
@@ -8031,6 +8127,7 @@ public:
             ExportNode(subplan.ExportedRoot);
         }
         RootId = ExportNode(Root.GetInput());
+        ValidateErrorOnNullProjectionTopology();
         const auto rootNames = OutputNames(*Root.GetInput());
         auto output = JsonArray();
         THashSet<TString> seen;
@@ -8709,6 +8806,14 @@ private:
                 << "Scalar subplan binding " << binding
                 << " has tuple inputs");
         }
+        THashSet<const IOperator*> errorNodes;
+        VisitOperators(plan, errorNodes, [&](IOperator& op) {
+            if (HasErrorOnNullProjectionShape(op)) {
+                Unsupported(TStringBuilder()
+                    << "Scalar subplan binding " << binding
+                    << " has an error-bearing Project");
+            }
+        });
         std::optional<TScalarSubplanDetails::TCorrelation> correlation;
         if (entry.DependentIUs.empty()) {
             THashSet<const IOperator*> nodes;
@@ -8754,6 +8859,181 @@ private:
         };
     }
 
+    std::optional<NJson::TJsonValue>
+    TryExportErrorOnNullStringProjection(
+        TOpMap& map,
+        const TMapElement& element,
+        const THashSet<TString>& physicalInputColumns)
+    {
+        if (element.IsRename()) {
+            return std::nullopt;
+        }
+        const auto source = TryExtractErrorOnNullStringUnwrap(
+            element.GetExpression(),
+            physicalInputColumns);
+        if (!source) {
+            return std::nullopt;
+        }
+
+        const auto* inputProvenance =
+            StoredStringOutputs(*map.GetInput()).FindPtr(*source);
+        if (!inputProvenance || !inputProvenance->Nullable) {
+            Unsupported(TStringBuilder()
+                << "Exact error-on-null String Unwrap source " << *source
+                << " must have exact physical Optional<String> "
+                   "storage provenance at the Map input");
+        }
+
+        bool expressionNullable = false;
+        const TExactType expressionType{
+            ScalarTypeName(
+                *element.GetExpression().GetExpressionBody(),
+                &expressionNullable),
+            expressionNullable,
+        };
+        const TString output = element.GetElementName().GetFullName();
+        if (output.empty() ||
+            !SameType(
+                ExactType(OutputType(map, output)),
+                expressionType))
+        {
+            Unsupported(
+                "Exact error-on-null String Unwrap Map output type must "
+                "exactly match its non-null String result");
+        }
+
+        auto result = ColumnExpr(*source);
+        AuditExactScalarExpression(result);
+        return result;
+    }
+
+    THashSet<TString> ErrorOnNullProjectionOutputs(TOpMap& map) {
+        THashSet<TString> outputs;
+        const auto physicalInputColumns =
+            OutputNames(*map.GetInput());
+        for (const auto& element : map.MapElements) {
+            if (TryExportErrorOnNullStringProjection(
+                    map,
+                    element,
+                    physicalInputColumns))
+            {
+                const TString output =
+                    element.GetElementName().GetFullName();
+                if (!outputs.insert(output).second) {
+                    Unsupported(TStringBuilder()
+                        << "Exact error-on-null String Unwrap has duplicate "
+                           "Map output "
+                        << output);
+                }
+            }
+        }
+        return outputs;
+    }
+
+    bool HasErrorOnNullProjectionShape(IOperator& op) {
+        if (op.GetKind() != EOperator::Map) {
+            return false;
+        }
+        auto& map = static_cast<TOpMap&>(op);
+        const auto physicalInputColumns =
+            OutputNames(*map.GetInput());
+        for (const auto& element : map.MapElements) {
+            if (!element.IsRename() &&
+                TryExtractErrorOnNullStringUnwrap(
+                    element.GetExpression(),
+                    physicalInputColumns))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void ValidateErrorOnNullProjectionTopology() {
+        // A result-root Project is necessarily demanded. The second admitted
+        // shape relies on the private keyed RHS being the eager/build side of
+        // left_semi; the empty-left real-runtime regression locks that premise.
+        THashSet<const IOperator*> nodes;
+        THashMap<const IOperator*, TVector<IOperator*>> parents;
+        TVector<IOperator*> orderedNodes;
+        VisitOperators(
+            Root.GetInput(),
+            nodes,
+            [&](IOperator& op) {
+                orderedNodes.push_back(&op);
+                for (const auto& child : op.GetChildren()) {
+                    parents[child.Get()].push_back(&op);
+                }
+            });
+
+        for (auto* candidate : orderedNodes) {
+            if (candidate->GetKind() != EOperator::Map) {
+                continue;
+            }
+            auto& map = static_cast<TOpMap&>(*candidate);
+            const auto markedOutputs =
+                ErrorOnNullProjectionOutputs(map);
+            if (markedOutputs.empty()) {
+                continue;
+            }
+
+            const auto* mapParents = parents.FindPtr(&map);
+            const bool isMainRoot =
+                Root.GetInput().Get() == &map;
+            if (isMainRoot) {
+                if (mapParents && !mapParents->empty()) {
+                    Unsupported(
+                        "An error-on-null Project at the main plan root "
+                        "must not have another plan parent");
+                }
+                THashSet<TString> rootOutputs(
+                    Root.ColumnOrder.begin(),
+                    Root.ColumnOrder.end());
+                for (const auto& output : markedOutputs) {
+                    if (!rootOutputs.contains(output)) {
+                        Unsupported(TStringBuilder()
+                            << "Error-on-null Project output " << output
+                            << " must be a main root result output");
+                    }
+                }
+                continue;
+            }
+
+            if (!mapParents || mapParents->size() != 1) {
+                Unsupported(
+                    "An error-on-null Project below the main root must have "
+                    "exactly one plan parent");
+            }
+            auto* parent = mapParents->front();
+            if (parent->GetKind() != EOperator::Join) {
+                Unsupported(
+                    "An error-on-null Project below the main root must be "
+                    "the direct RHS of a left_semi Join");
+            }
+            auto& join = static_cast<TOpJoin&>(*parent);
+            if (JoinKind(join.JoinKind) != "left_semi" ||
+                join.GetRightInput().Get() != &map)
+            {
+                Unsupported(
+                    "An error-on-null Project below the main root must be "
+                    "the direct RHS of a left_semi Join");
+            }
+
+            THashSet<TString> rightKeys;
+            for (const auto& [left, right] : join.JoinKeys) {
+                Y_UNUSED(left);
+                rightKeys.insert(right.GetFullName());
+            }
+            for (const auto& output : markedOutputs) {
+                if (!rightKeys.contains(output)) {
+                    Unsupported(TStringBuilder()
+                        << "Error-on-null Project output " << output
+                        << " must be an exact RHS key of its left_semi Join");
+                }
+            }
+        }
+    }
+
     TSubplanDescriptor PrepareInSubplan(
         const TString& binding,
         const TSubplanEntry& entry,
@@ -8787,6 +9067,11 @@ private:
                 Unsupported(TStringBuilder()
                     << "IN subplan binding " << binding
                     << " has an error-bearing cardinality check");
+            }
+            if (HasErrorOnNullProjectionShape(op)) {
+                Unsupported(TStringBuilder()
+                    << "IN subplan binding " << binding
+                    << " has an error-bearing Project");
             }
         });
 
@@ -8829,6 +9114,11 @@ private:
 
     void ValidatePeeledExistsMap(TOpMap& map, const TString& binding) {
         CheckSnapshotProperties(map, false);
+        if (HasErrorOnNullProjectionShape(map)) {
+            Unsupported(TStringBuilder()
+                << "EXISTS subplan binding " << binding
+                << " has an error-bearing Project");
+        }
         const auto inputNames = OutputNames(*map.GetInput());
         const auto outputNames = OutputNames(map);
         if (outputNames.empty()) {
@@ -8890,6 +9180,11 @@ private:
                 Unsupported(TStringBuilder()
                     << "EXISTS subplan binding " << binding
                     << " has an error-bearing cardinality check");
+            }
+            if (HasErrorOnNullProjectionShape(op)) {
+                Unsupported(TStringBuilder()
+                    << "EXISTS subplan binding " << binding
+                    << " has an error-bearing Project");
             }
             if (correlated &&
                 (op.GetKind() == EOperator::Limit ||
@@ -10286,6 +10581,8 @@ private:
                     Unsupported("Map must have one input");
                 }
                 auto& map = static_cast<TOpMap&>(base);
+                const auto physicalInputNames =
+                    OutputNames(*map.GetInput());
                 const auto inputNames =
                     VisibleInputNames(map, *map.GetInput());
                 THashSet<TString> renameSources;
@@ -10324,12 +10621,23 @@ private:
                     }
                     auto column = JsonMap();
                     column["output"] = output;
-                    column["expression"] = element.IsRename()
-                        ? ColumnExpr(element.GetRename().GetFullName())
-                        : ExportExpr(
+                    if (element.IsRename()) {
+                        column["expression"] =
+                            ColumnExpr(element.GetRename().GetFullName());
+                    } else if (auto exactUnwrap =
+                            TryExportErrorOnNullStringProjection(
+                                map,
+                                element,
+                                physicalInputNames))
+                    {
+                        column["expression"] = std::move(*exactUnwrap);
+                        column["error_on_null"] = true;
+                    } else {
+                        column["expression"] = ExportExpr(
                             element.GetExpression(),
                             inputNames,
                             StoredStringOutputs(*map.GetInput()));
+                    }
                     columns.AppendValue(std::move(column));
                 }
                 if (outputs.empty()) {

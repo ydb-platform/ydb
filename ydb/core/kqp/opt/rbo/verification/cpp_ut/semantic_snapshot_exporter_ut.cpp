@@ -3855,6 +3855,171 @@ TSemanticSnapshotExportResult ExportDateUnwrapExpression(
     return ExportSemanticSnapshotV1(root, ctx.RboCtx);
 }
 
+enum class EStringUnwrapShape {
+    Exact,
+    TwoArguments,
+    Utf8,
+    NonOptionalMember,
+    NullableResult,
+    WrongResult,
+    NestedArgument,
+    NestedRoot,
+    InvisibleMember,
+    FreeMember,
+    NonNullablePhysicalSource,
+    WrongMapOutput,
+    UnsafeRoot,
+    UnsafeMember,
+    UnorderedRoot,
+    UnorderedMember,
+};
+
+TExpression TypedStringUnwrap(
+    TExportTestContext& ctx,
+    EStringUnwrapShape shape,
+    TStringBuf column = "a.s")
+{
+    const auto pos = TPositionHandle();
+    const auto* stringType =
+        ScalarType(ctx, NUdf::EDataSlot::String);
+    const auto* optionalStringType =
+        ScalarType(ctx, NUdf::EDataSlot::String, true);
+    const auto* utf8Type =
+        ScalarType(ctx, NUdf::EDataSlot::Utf8);
+    const auto* optionalUtf8Type =
+        ScalarType(ctx, NUdf::EDataSlot::Utf8, true);
+
+    if (shape == EStringUnwrapShape::FreeMember) {
+        auto row = ctx.ExprCtx.NewArgument(pos, "row");
+        auto foreign = ctx.ExprCtx.NewArgument(pos, "foreign");
+        auto member = ctx.ExprCtx.NewCallable(
+            pos,
+            "Member",
+            {foreign, ctx.ExprCtx.NewAtom(pos, "a.s")});
+        member->SetTypeAnn(optionalStringType);
+        auto body = TypedCallable(
+            ctx,
+            "Unwrap",
+            {std::move(member)},
+            stringType);
+        return TExpression(
+            ctx.ExprCtx.NewLambda(
+                pos,
+                ctx.ExprCtx.NewArguments(pos, {std::move(row)}),
+                std::move(body)),
+            &ctx.ExprCtx,
+            &ctx.ExpressionProps);
+    }
+
+    const auto* memberType =
+        shape == EStringUnwrapShape::Utf8
+        ? optionalUtf8Type
+        : shape == EStringUnwrapShape::NonOptionalMember
+            ? stringType
+            : optionalStringType;
+    TExprNode::TPtr argument = TypedMember(
+        ctx,
+        shape == EStringUnwrapShape::InvisibleMember
+            ? TStringBuf("a.missing")
+            : column,
+        memberType);
+    if (shape == EStringUnwrapShape::NestedArgument) {
+        argument = TypedCallable(
+            ctx,
+            "Just",
+            {TypedLiteral(ctx, "String", "present", stringType)},
+            optionalStringType);
+    }
+
+    TExprNode::TListType unwrapArguments{std::move(argument)};
+    if (shape == EStringUnwrapShape::TwoArguments) {
+        unwrapArguments.push_back(
+            TypedLiteral(ctx, "String", "message", stringType));
+    }
+    const auto* resultType =
+        shape == EStringUnwrapShape::Utf8
+        ? utf8Type
+        : shape == EStringUnwrapShape::NullableResult
+            ? optionalStringType
+            : shape == EStringUnwrapShape::WrongResult
+                ? ScalarType(ctx, NUdf::EDataSlot::Int32)
+                : stringType;
+    TExprNode::TPtr body = TypedCallable(
+        ctx,
+        "Unwrap",
+        std::move(unwrapArguments),
+        resultType);
+    if (shape == EStringUnwrapShape::NestedRoot) {
+        body = TypedCallable(
+            ctx,
+            "Concat",
+            {
+                std::move(body),
+                TypedLiteral(ctx, "String", "suffix", stringType),
+            },
+            stringType);
+    }
+    TExpression expression(
+        std::move(body),
+        &ctx.ExprCtx,
+        &ctx.ExpressionProps);
+
+    switch (shape) {
+        case EStringUnwrapShape::UnsafeRoot:
+            expression.GetExpressionBody()->SetSideEffects(
+                ESideEffects::General);
+            break;
+        case EStringUnwrapShape::UnsafeMember:
+            expression.GetExpressionBody()->Child(0)->SetSideEffects(
+                ESideEffects::General);
+            break;
+        case EStringUnwrapShape::UnorderedRoot:
+            expression.GetExpressionBody()->SetUnorderedChildren();
+            break;
+        case EStringUnwrapShape::UnorderedMember:
+            expression.GetExpressionBody()->Child(0)->SetUnorderedChildren();
+            break;
+        default:
+            break;
+    }
+    return expression;
+}
+
+TSemanticSnapshotExportResult ExportStringUnwrapExpression(
+    TExportTestContext& ctx,
+    EStringUnwrapShape shape)
+{
+    const bool nonNullableSource =
+        shape == EStringUnwrapShape::NonNullablePhysicalSource;
+    const auto& table = AddTable(ctx, "/Root/StringUnwrap", {
+        {"s", "String", nonNullableSource},
+    });
+    auto read = MakeRead(ctx, table, "a", {"s"});
+    const auto* sourceType = ScalarType(
+        ctx,
+        NUdf::EDataSlot::String,
+        !nonNullableSource);
+    SetExactOutputType(ctx, *read, {{"a.s", sourceType}});
+    auto map = MakeIntrusive<TOpMap>(
+        read,
+        TPositionHandle(),
+        TVector<TMapElement>{TMapElement(
+            TInfoUnit("result"),
+            TypedStringUnwrap(ctx, shape))});
+    SetExactOutputType(ctx, *map, {
+        {"a.s", sourceType},
+        {
+            "result",
+            ScalarType(
+                ctx,
+                NUdf::EDataSlot::String,
+                shape == EStringUnwrapShape::WrongMapOutput),
+        },
+    });
+    TOpRoot root(map, TPositionHandle(), {"result"});
+    return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+}
+
 TExprNode::TPtr StringLiteral(TExportTestContext& ctx, TStringBuf value) {
     return TypedLiteral(
         ctx,
@@ -6878,6 +7043,252 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         }
     }
 
+    Y_UNIT_TEST(DirectOptionalStringUnwrapExportsExactErrorProjection) {
+        TExportTestContext ctx;
+        const auto snapshot = ParseSupported(
+            ExportStringUnwrapExpression(
+                ctx,
+                EStringUnwrapShape::Exact));
+        const auto& columns =
+            FindNode(snapshot, "project")["columns"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(columns.size(), 2);
+        UNIT_ASSERT(!columns.front().Has("error_on_null"));
+
+        const auto& result = columns.back();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetMapSafe().size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(
+            result["output"].GetStringSafe(),
+            "result");
+        UNIT_ASSERT(result["error_on_null"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            result["expression"].GetMapSafe().size(),
+            2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            result["expression"]["kind"].GetStringSafe(),
+            "column");
+        UNIT_ASSERT_VALUES_EQUAL(
+            result["expression"]["column"].GetStringSafe(),
+            "a.s");
+        UNIT_ASSERT_VALUES_EQUAL(
+            NJson::WriteJson(result, false, true),
+            "{\"error_on_null\":true,\"expression\":{\"column\":\"a.s\","
+            "\"kind\":\"column\"},\"output\":\"result\"}");
+    }
+
+    Y_UNIT_TEST(ErrorOnNullStringProjectionRequiresDemandingTopology) {
+        enum class EShape {
+            KeyedLeftSemiRight,
+            InnerRight,
+            UnkeyedLeftSemiRight,
+            LeftSemiLeft,
+            Fanout,
+            LimitParent,
+            UnobservedMainRoot,
+        };
+        const auto exportShape = [](EShape shape) {
+            TExportTestContext ctx;
+            const auto& leftTable = AddTable(
+                ctx,
+                "/Root/ErrorDemandLeft",
+                {{"k", "String", true}});
+            const auto& rightTable = AddTable(
+                ctx,
+                "/Root/ErrorDemandRight",
+                {{"s", "String", false}});
+            auto leftRead = MakeRead(
+                ctx,
+                leftTable,
+                "left",
+                {"k"});
+            auto rightRead = MakeRead(
+                ctx,
+                rightTable,
+                "right",
+                {"s"});
+            const auto* string =
+                ScalarType(ctx, NUdf::EDataSlot::String);
+            const auto* optionalString =
+                ScalarType(ctx, NUdf::EDataSlot::String, true);
+            SetExactOutputType(ctx, *leftRead, {
+                {"left.k", string},
+            });
+            SetExactOutputType(ctx, *rightRead, {
+                {"right.s", optionalString},
+            });
+
+            const auto pos = TPositionHandle();
+            auto errorProject = MakeIntrusive<TOpMap>(
+                rightRead,
+                pos,
+                TVector<TMapElement>{TMapElement(
+                    TInfoUnit("right.key"),
+                    TypedStringUnwrap(
+                        ctx,
+                        EStringUnwrapShape::Exact,
+                        "right.s"))});
+            SetExactOutputType(ctx, *errorProject, {
+                {"right.s", optionalString},
+                {"right.key", string},
+            });
+
+            if (shape == EShape::UnobservedMainRoot) {
+                TOpRoot root(
+                    errorProject,
+                    pos,
+                    {"right.s"});
+                return ExportSemanticSnapshotV1(
+                    root,
+                    ctx.RboCtx);
+            }
+            if (shape == EShape::LimitParent) {
+                auto limit = MakeIntrusive<TOpLimit>(
+                    errorProject,
+                    pos,
+                    MakeConstant(
+                        "Uint64",
+                        "1",
+                        pos,
+                        &ctx.ExprCtx),
+                    EOpPhase::Undefined);
+                SetExactOutputType(ctx, *limit, {
+                    {"right.s", optionalString},
+                    {"right.key", string},
+                });
+                TOpRoot root(
+                    limit,
+                    pos,
+                    {"right.key"});
+                return ExportSemanticSnapshotV1(
+                    root,
+                    ctx.RboCtx);
+            }
+            if (shape == EShape::LeftSemiLeft) {
+                auto join = MakeIntrusive<TOpJoin>(
+                    errorProject,
+                    leftRead,
+                    pos,
+                    TString("LeftSemi"),
+                    TVector<std::pair<TInfoUnit, TInfoUnit>>{{
+                        TInfoUnit("right.key"),
+                        TInfoUnit("left.k"),
+                    }});
+                SetExactOutputType(ctx, *join, {
+                    {"right.s", optionalString},
+                    {"right.key", string},
+                });
+                TOpRoot root(join, pos, {"right.key"});
+                return ExportSemanticSnapshotV1(
+                    root,
+                    ctx.RboCtx);
+            }
+            if (shape == EShape::Fanout) {
+                const auto makeJoin = [&]() {
+                    auto join = MakeIntrusive<TOpJoin>(
+                        leftRead,
+                        errorProject,
+                        pos,
+                        TString("LeftSemi"),
+                        TVector<std::pair<TInfoUnit, TInfoUnit>>{{
+                            TInfoUnit("left.k"),
+                            TInfoUnit("right.key"),
+                        }});
+                    SetExactOutputType(ctx, *join, {
+                        {"left.k", string},
+                    });
+                    return join;
+                };
+                auto unionAll = MakeIntrusive<TOpUnionAll>(
+                    makeJoin(),
+                    makeJoin(),
+                    pos,
+                    TVector<TInfoUnit>{TInfoUnit("left.k")});
+                SetExactOutputType(ctx, *unionAll, {
+                    {"left.k", string},
+                });
+                TOpRoot root(unionAll, pos, {"left.k"});
+                return ExportSemanticSnapshotV1(
+                    root,
+                    ctx.RboCtx);
+            }
+
+            const bool unkeyed =
+                shape == EShape::UnkeyedLeftSemiRight;
+            auto join = MakeIntrusive<TOpJoin>(
+                leftRead,
+                errorProject,
+                pos,
+                shape == EShape::InnerRight
+                    ? TString("Inner")
+                    : TString("LeftSemi"),
+                TVector<std::pair<TInfoUnit, TInfoUnit>>{{
+                    TInfoUnit("left.k"),
+                    TInfoUnit(
+                        unkeyed ? "right.s" : "right.key"),
+                }});
+            if (shape == EShape::InnerRight) {
+                SetExactOutputType(ctx, *join, {
+                    {"left.k", string},
+                    {"right.s", optionalString},
+                    {"right.key", string},
+                });
+            } else {
+                SetExactOutputType(ctx, *join, {
+                    {"left.k", string},
+                });
+            }
+            TOpRoot root(join, pos, {"left.k"});
+            return ExportSemanticSnapshotV1(
+                root,
+                ctx.RboCtx);
+        };
+
+        const auto accepted = ParseSupported(
+            exportShape(EShape::KeyedLeftSemiRight));
+        const auto& marked =
+            FindNode(accepted, "project")["columns"].GetArraySafe().back();
+        UNIT_ASSERT(marked["error_on_null"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            marked["output"].GetStringSafe(),
+            "right.key");
+
+        struct TCase {
+            EShape Shape;
+            TStringBuf Reason;
+        };
+        for (const auto& test : {
+            TCase{
+                EShape::InnerRight,
+                "direct RHS of a left_semi Join",
+            },
+            TCase{
+                EShape::UnkeyedLeftSemiRight,
+                "exact RHS key",
+            },
+            TCase{
+                EShape::LeftSemiLeft,
+                "direct RHS of a left_semi Join",
+            },
+            TCase{
+                EShape::Fanout,
+                "exactly one plan parent",
+            },
+            TCase{
+                EShape::LimitParent,
+                "direct RHS of a left_semi Join",
+            },
+            TCase{
+                EShape::UnobservedMainRoot,
+                "main root result output",
+            },
+        }) {
+            const auto result = exportShape(test.Shape);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                test.Reason);
+        }
+    }
+
     Y_UNIT_TEST(DateUnwrapExactGateFailsClosed) {
         struct TCase {
             EDateUnwrapShape Shape;
@@ -6938,7 +7349,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             {
                 EDateUnwrapShape::StringUnwrap,
                 "generic String Unwrap",
-                "non-null Date result",
+                "direct Optional<String>",
             },
             {
                 EDateUnwrapShape::UnsafeRoot,
@@ -6966,6 +7377,303 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                 result.UnsupportedReason,
                 test.Reason,
                 test.Label);
+        }
+    }
+
+    Y_UNIT_TEST(DirectOptionalStringUnwrapExactGateFailsClosed) {
+        struct TCase {
+            EStringUnwrapShape Shape;
+            TStringBuf Label;
+            TStringBuf Reason;
+        };
+        const TVector<TCase> cases = {
+            {
+                EStringUnwrapShape::TwoArguments,
+                "two-argument message",
+                "exactly one argument",
+            },
+            {
+                EStringUnwrapShape::Utf8,
+                "Utf8",
+                "non-null String result",
+            },
+            {
+                EStringUnwrapShape::NonOptionalMember,
+                "non-optional member",
+                "direct Optional<String>",
+            },
+            {
+                EStringUnwrapShape::NullableResult,
+                "nullable result",
+                "non-null String result",
+            },
+            {
+                EStringUnwrapShape::WrongResult,
+                "wrong result type",
+                "non-null String result",
+            },
+            {
+                EStringUnwrapShape::NestedArgument,
+                "nested argument",
+                "direct Optional<String>",
+            },
+            {
+                EStringUnwrapShape::NestedRoot,
+                "nested outer expression",
+                "Restricted Concat: contains unsupported callable Unwrap",
+            },
+            {
+                EStringUnwrapShape::InvisibleMember,
+                "invisible member",
+                "not a physical Map input column",
+            },
+            {
+                EStringUnwrapShape::FreeMember,
+                "free member",
+                "direct Optional<String>",
+            },
+            {
+                EStringUnwrapShape::NonNullablePhysicalSource,
+                "non-null physical source",
+                "exact physical Optional<String>",
+            },
+            {
+                EStringUnwrapShape::WrongMapOutput,
+                "wrong Map output type",
+                "Map output type must exactly match",
+            },
+            {
+                EStringUnwrapShape::UnsafeRoot,
+                "unsafe root",
+                "side-effecting or CSE-unsafe",
+            },
+            {
+                EStringUnwrapShape::UnsafeMember,
+                "unsafe member",
+                "side-effecting or CSE-unsafe",
+            },
+            {
+                EStringUnwrapShape::UnorderedRoot,
+                "unordered root",
+                "unordered children",
+            },
+            {
+                EStringUnwrapShape::UnorderedMember,
+                "unordered member",
+                "unordered children",
+            },
+        };
+
+        for (const auto& test : cases) {
+            TExportTestContext ctx;
+            const auto result = ExportStringUnwrapExpression(
+                ctx,
+                test.Shape);
+            UNIT_ASSERT_C(
+                !result.IsSupported(),
+                TStringBuilder()
+                    << test.Label << " unexpectedly exported "
+                    << result.Json);
+            UNIT_ASSERT_STRING_CONTAINS_C(
+                result.UnsupportedReason,
+                test.Reason,
+                test.Label);
+        }
+    }
+
+    Y_UNIT_TEST(StringUnwrapRejectsVirtualScalarSubplanBinding) {
+        TExportTestContext ctx;
+        const auto& outerTable = AddTable(
+            ctx,
+            "/Root/StringUnwrapVirtualOuter",
+            {{"k", "Int32", true}});
+        const auto& innerTable = AddTable(
+            ctx,
+            "/Root/StringUnwrapVirtualInner",
+            {{"s", "String", false}});
+        auto outerRead = MakeRead(ctx, outerTable, "outer", {"k"});
+        auto innerRead = MakeRead(ctx, innerTable, "inner", {"s"});
+        const auto* int32 =
+            ScalarType(ctx, NUdf::EDataSlot::Int32);
+        const auto* string =
+            ScalarType(ctx, NUdf::EDataSlot::String);
+        const auto* optionalString =
+            ScalarType(ctx, NUdf::EDataSlot::String, true);
+        SetExactOutputType(ctx, *outerRead, {{"outer.k", int32}});
+        SetExactOutputType(ctx, *innerRead, {
+            {"inner.s", optionalString},
+        });
+
+        const auto pos = TPositionHandle();
+        TOpRoot root(outerRead, pos, {"result"});
+        const TInfoUnit binding("_rbo_string_scalar", true);
+        root.PlanProps.Subplans.Add(
+            binding,
+            TSubplanEntry{
+                innerRead,
+                {},
+                ESubplanType::EXPR,
+                binding,
+                {}});
+
+        auto expression = TypedStringUnwrap(
+            ctx,
+            EStringUnwrapShape::Exact,
+            binding.GetFullName());
+        expression.PlanProps = &root.PlanProps;
+        auto map = MakeIntrusive<TOpMap>(
+            outerRead,
+            pos,
+            TVector<TMapElement>{TMapElement(
+                TInfoUnit("result"),
+                std::move(expression))});
+        SetExactOutputType(ctx, *map, {
+            {"outer.k", int32},
+            {"result", string},
+        });
+        root.SetInput(map);
+
+        const auto result = ExportSemanticSnapshotV1(
+            root,
+            ctx.RboCtx);
+        UNIT_ASSERT(!result.IsSupported());
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.UnsupportedReason,
+            "not a physical Map input column");
+    }
+
+    Y_UNIT_TEST(ErrorOnNullProjectFailsClosedInsideEverySubplanRegion) {
+        for (const auto type : {
+            ESubplanType::EXPR,
+            ESubplanType::EXISTS,
+            ESubplanType::IN_SUBPLAN,
+        }) {
+            TExportTestContext ctx;
+            const auto& outerTable = AddTable(
+                ctx,
+                "/Root/ErrorProjectOuter",
+                {{"k", "String", true}});
+            const auto& innerTable = AddTable(
+                ctx,
+                "/Root/ErrorProjectInner",
+                {{"s", "String", false}});
+            auto outerRead = MakeRead(
+                ctx,
+                outerTable,
+                "outer",
+                {"k"});
+            auto innerRead = MakeRead(
+                ctx,
+                innerTable,
+                "inner",
+                {"s"});
+            const auto* boolean =
+                ScalarType(ctx, NUdf::EDataSlot::Bool);
+            const auto* string =
+                ScalarType(ctx, NUdf::EDataSlot::String);
+            const auto* optionalString =
+                ScalarType(ctx, NUdf::EDataSlot::String, true);
+            SetExactOutputType(ctx, *outerRead, {
+                {"outer.k", string},
+            });
+            SetExactOutputType(ctx, *innerRead, {
+                {"inner.s", optionalString},
+            });
+
+            const auto pos = TPositionHandle();
+            auto errorProject = MakeIntrusive<TOpMap>(
+                innerRead,
+                pos,
+                TVector<TMapElement>{TMapElement(
+                    TInfoUnit("unwrapped.s"),
+                    TypedStringUnwrap(
+                        ctx,
+                        EStringUnwrapShape::Exact,
+                        "inner.s"))});
+            SetExactOutputType(ctx, *errorProject, {
+                {"inner.s", optionalString},
+                {"unwrapped.s", string},
+            });
+            auto limit = MakeIntrusive<TOpLimit>(
+                errorProject,
+                pos,
+                MakeConstant(
+                    "Uint64",
+                    "1",
+                    pos,
+                    &ctx.ExprCtx),
+                EOpPhase::Undefined);
+            SetExactOutputType(ctx, *limit, {
+                {"inner.s", optionalString},
+                {"unwrapped.s", string},
+            });
+
+            const TInfoUnit binding(
+                type == ESubplanType::EXPR
+                    ? "_rbo_error_scalar"
+                    : type == ESubplanType::EXISTS
+                        ? "_rbo_error_exists"
+                        : "_rbo_error_in",
+                true);
+            TOpRoot root(outerRead, pos, {"outer.k"});
+            TVector<TInfoUnit> tuple;
+            if (type == ESubplanType::IN_SUBPLAN) {
+                tuple.emplace_back("outer.k");
+            }
+            root.PlanProps.Subplans.Add(
+                binding,
+                TSubplanEntry{
+                    limit,
+                    std::move(tuple),
+                    type,
+                    binding,
+                    {}});
+
+            auto bindingValue = MakeColumnAccess(
+                binding,
+                pos,
+                &ctx.ExprCtx,
+                &root.PlanProps);
+            if (type == ESubplanType::EXPR) {
+                AnnotateExpression(bindingValue, optionalString);
+                auto consumer = MakeIntrusive<TOpMap>(
+                    outerRead,
+                    pos,
+                    TVector<TMapElement>{TMapElement(
+                        TInfoUnit("scalar.value"),
+                        std::move(bindingValue))});
+                SetExactOutputType(ctx, *consumer, {
+                    {"outer.k", string},
+                    {"scalar.value", optionalString},
+                });
+                root.SetInput(consumer);
+                root.ColumnOrder = {"scalar.value"};
+            } else {
+                AnnotateExpression(bindingValue, boolean);
+                auto consumer = MakeIntrusive<TOpFilter>(
+                    outerRead,
+                    pos,
+                    std::move(bindingValue));
+                SetExactOutputType(ctx, *consumer, {
+                    {"outer.k", string},
+                });
+                root.SetInput(consumer);
+            }
+
+            const auto result = ExportSemanticSnapshotV1(
+                root,
+                ctx.RboCtx);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                type == ESubplanType::EXPR
+                    ? "Scalar subplan binding _rbo_error_scalar has an "
+                      "error-bearing Project"
+                    : type == ESubplanType::EXISTS
+                        ? "EXISTS subplan binding _rbo_error_exists has an "
+                          "error-bearing Project"
+                        : "IN subplan binding _rbo_error_in has an "
+                          "error-bearing Project");
         }
     }
 
@@ -16270,7 +16978,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT(!result.IsSupported());
         UNIT_ASSERT_STRING_CONTAINS(
             result.UnsupportedReason,
-            "Exact Date Unwrap requires");
+            "Unwrap requires");
 
         result = exportCallable("+", [](TExprNode& node) {
             node.SetSideEffects(ESideEffects::General);

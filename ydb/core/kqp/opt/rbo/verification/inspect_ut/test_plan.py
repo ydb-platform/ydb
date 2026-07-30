@@ -255,7 +255,8 @@ class OperatorRendererTest(unittest.TestCase):
                     True,
                 ),
                 'node "project" project input="scan" '
-                'columns=[{output="out", expression=column("a.k")}] ordered=true',
+                'columns=[{output="out", expression=column("a.k"), '
+                'error_on_null=false}] ordered=true',
             ),
             (
                 ir.Filter("filter", "scan", predicate),
@@ -396,6 +397,26 @@ class OperatorRendererTest(unittest.TestCase):
         for node, expected in nodes:
             with self.subTest(node=node.id):
                 self.assertEqual(render_node(node), expected)
+
+    def test_checked_projection_error_is_explicit(self):
+        node = ir.Project(
+            "checked",
+            "scan",
+            (
+                ir.Projection(
+                    "out",
+                    _column("a.s"),
+                    error_on_null=True,
+                ),
+            ),
+            True,
+        )
+        self.assertEqual(
+            render_node(node),
+            'node "checked" project input="scan" '
+            'columns=[{output="out", expression=column("a.s"), '
+            'error_on_null=true}] ordered=true',
+        )
 
     def test_integral_average_rank_comparison_is_visible_only_when_present(self):
         tagged = ir.SortOrder(

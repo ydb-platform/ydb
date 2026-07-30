@@ -280,6 +280,18 @@ void CreateSqlInColumnTable(TKikimrRunner& kikimr) {
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
+void CreateRuntimeStringTable(TKikimrRunner& kikimr) {
+    auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+    const auto result = session.ExecuteSchemeQuery(R"(
+        CREATE TABLE `/Root/RboRuntimeString` (
+            Id Int64 NOT NULL,
+            S String,
+            PRIMARY KEY (Id)
+        ) WITH (STORE = COLUMN);
+    )").GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
 void CreateDecimalColumnTable(TKikimrRunner& kikimr) {
     auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
     const auto result = session.ExecuteSchemeQuery(R"(
@@ -1876,6 +1888,210 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
             "VERIFIED_BOUNDED");
         UNIT_ASSERT_VALUES_EQUAL(verdict["row_bound"].GetIntegerSafe(), 2);
         UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
+    }
+
+    Y_UNIT_TEST(RealHostVerifiesDirectNullableStringUnwrap) {
+        TKikimrRunner kikimr;
+        CreateSqlInColumnTable(kikimr);
+
+        const auto pair = VerifyRealHostSnapshotPair(kikimr, R"(--!syntax_v1
+            SELECT UNWRAP(S) AS RequiredString
+            FROM `/Root/RboSqlIn`;
+        )");
+
+        const auto assertCheckedProjection = [](
+            const NJson::TJsonValue& snapshot)
+        {
+            const NJson::TJsonValue* checked = nullptr;
+            for (const auto* project : PlanNodes(snapshot, "project")) {
+                for (const auto& column :
+                     (*project)["columns"].GetArraySafe())
+                {
+                    if (!column["error_on_null"].IsBoolean() ||
+                        !column["error_on_null"].GetBooleanSafe())
+                    {
+                        continue;
+                    }
+                    UNIT_ASSERT_C(
+                        !checked,
+                        NJson::WriteJson(snapshot, false));
+                    checked = &column;
+                }
+            }
+            UNIT_ASSERT_C(checked, NJson::WriteJson(snapshot, false));
+            UNIT_ASSERT_VALUES_EQUAL(
+                (*checked)["expression"]["kind"].GetStringSafe(),
+                "column");
+            UNIT_ASSERT(
+                !(*checked)["expression"]["column"].GetStringSafe().empty());
+        };
+
+        assertCheckedProjection(pair.Initial);
+        assertCheckedProjection(pair.Final);
+    }
+
+    Y_UNIT_TEST(RealRuntimeStringUnwrapEagerBoundaries) {
+        auto kikimr = MakeTpcdsRunner();
+        CreateRuntimeStringTable(kikimr);
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList()
+            .AddListItem()
+                    .BeginStruct()
+                    .AddMember("Id").Int64(1)
+                    .AddMember("S").OptionalString("present")
+                .EndStruct()
+            .AddListItem()
+                    .BeginStruct()
+                    .AddMember("Id").Int64(2)
+                    .AddMember("S").OptionalString(std::nullopt)
+                .EndStruct()
+            .EndList();
+        const auto bulkResult = kikimr.GetTableClient()
+            .BulkUpsert("/Root/RboRuntimeString", rows.Build())
+            .GetValueSync();
+        UNIT_ASSERT_C(
+            bulkResult.IsSuccess(),
+            bulkResult.GetIssues().ToString());
+
+        auto rootSession = kikimr.GetTableClient()
+            .CreateSession()
+            .GetValueSync()
+            .GetSession();
+        const TString rootQuery = R"(
+            SELECT UNWRAP(S)
+            FROM `/Root/RboRuntimeString`
+            WHERE Id = 2;
+        )";
+        const auto preparedRoot =
+            rootSession.PrepareDataQuery(rootQuery).ExtractValueSync();
+        UNIT_ASSERT_C(
+            preparedRoot.IsSuccess(),
+            preparedRoot.GetIssues().ToString());
+        auto result = preparedRoot.GetQuery().Execute(
+            NYdb::NTable::TTxControl::BeginTx().CommitTx())
+            .ExtractValueSync();
+        UNIT_ASSERT(!result.IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.GetIssues().ToString(),
+            "Failed to unwrap empty optional");
+
+        auto intersectSession = kikimr.GetTableClient()
+            .CreateSession()
+            .GetValueSync()
+            .GetSession();
+        const TString intersectQuery = R"(
+            SELECT CAST("never" AS String) AS S
+            FROM `/Root/RboRuntimeString`
+            WHERE Id = 999
+            INTERSECT
+            SELECT UNWRAP(S) AS S
+            FROM `/Root/RboRuntimeString`
+            WHERE Id = 2;
+        )";
+        const auto prepared =
+            intersectSession
+                .PrepareDataQuery(intersectQuery)
+                .ExtractValueSync();
+        UNIT_ASSERT_C(prepared.IsSuccess(), prepared.GetIssues().ToString());
+
+        const auto pair =
+            VerifyRealHostSnapshotPair(kikimr, intersectQuery);
+        const auto assertPrivateKeyedRhs = [](
+            const NJson::TJsonValue& snapshot)
+        {
+            const NJson::TJsonValue* checkedProject = nullptr;
+            TString checkedOutput;
+            for (const auto* project : PlanNodes(snapshot, "project")) {
+                for (const auto& column :
+                     (*project)["columns"].GetArraySafe())
+                {
+                    if (
+                        column["error_on_null"].IsBoolean() &&
+                        column["error_on_null"].GetBooleanSafe())
+                    {
+                        UNIT_ASSERT_C(
+                            !checkedProject,
+                            NJson::WriteJson(snapshot, false));
+                        checkedProject = project;
+                        checkedOutput =
+                            column["output"].GetStringSafe();
+                    }
+                }
+            }
+            UNIT_ASSERT_C(
+                checkedProject,
+                NJson::WriteJson(snapshot, false));
+            const TString projectId =
+                (*checkedProject)["id"].GetStringSafe();
+            UNIT_ASSERT_VALUES_UNEQUAL(
+                snapshot["plan"]["root"].GetStringSafe(),
+                projectId);
+
+            const NJson::TJsonValue* consumingJoin = nullptr;
+            size_t consumerCount = 0;
+            static const std::array<TStringBuf, 3> InputFields = {
+                "input",
+                "left",
+                "right",
+            };
+            for (const auto& node :
+                 snapshot["plan"]["nodes"].GetArraySafe())
+            {
+                for (const TStringBuf field : InputFields)
+                {
+                    if (
+                        node[field].IsString() &&
+                        node[field].GetStringSafe() == projectId)
+                    {
+                        ++consumerCount;
+                    }
+                }
+                if (node["inputs"].IsArray()) {
+                    for (const auto& input :
+                         node["inputs"].GetArraySafe())
+                    {
+                        consumerCount +=
+                            input["node"].IsString() &&
+                            input["node"].GetStringSafe() == projectId;
+                    }
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(consumerCount, 1);
+            for (const auto* join : PlanNodes(snapshot, "join")) {
+                if (
+                    (*join)["kind"].GetStringSafe() == "left_semi" &&
+                    (*join)["right"].GetStringSafe() == projectId)
+                {
+                    UNIT_ASSERT_C(
+                        !consumingJoin,
+                        NJson::WriteJson(snapshot, false));
+                    consumingJoin = join;
+                }
+            }
+            UNIT_ASSERT_C(
+                consumingJoin,
+                NJson::WriteJson(snapshot, false));
+            bool keyed = false;
+            for (const auto& key :
+                 (*consumingJoin)["keys"].GetArraySafe())
+            {
+                keyed =
+                    keyed ||
+                    key["right"].GetStringSafe() == checkedOutput;
+            }
+            UNIT_ASSERT_C(keyed, NJson::WriteJson(snapshot, false));
+        };
+        assertPrivateKeyedRhs(pair.Initial);
+        assertPrivateKeyedRhs(pair.Final);
+
+        result = prepared.GetQuery().Execute(
+            NYdb::NTable::TTxControl::BeginTx().CommitTx())
+            .ExtractValueSync();
+        UNIT_ASSERT(!result.IsSuccess());
+        UNIT_ASSERT_STRING_CONTAINS(
+            result.GetIssues().ToString(),
+            "Failed to unwrap empty optional");
     }
 
     Y_UNIT_TEST(RealHostVerifiesStaticSqlInWithNullableLookups) {

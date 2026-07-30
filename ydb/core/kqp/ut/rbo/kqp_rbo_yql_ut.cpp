@@ -3052,6 +3052,14 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 WHERE SubKey1 = 0
                 ORDER BY Key, SubKey1, SubKey2;
             )",
+            R"(
+                -- используется Index212 (not Index21), since the sort is free due to key order of covering Index212
+                SELECT Value2
+                FROM Table
+                WHERE SubKey2 = "1"
+                ORDER BY SubKey2, Key, SubKey1
+                LIMIT 2;
+            )",
         };
 
         std::vector<std::string> results = {
@@ -3064,6 +3072,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"([[[0];[0];["1"];["2"];["2"]];[[0];[1];["1"];["4"];["4"]];[[1];[0];["1"];["6"];["6"]];[[1];[1];["1"];["8"];["8"]]])",
             R"([[["1"]];[["3"]];[["5"]];[["7"]]])",
             R"([[[0];[0];["0"];["1"];["1"]];[[0];[0];["1"];["2"];["2"]];[[1];[0];["0"];["5"];["5"]];[[1];[0];["1"];["6"];["6"]]])",
+            R"([[["2"]];[["4"]]])",
         };
 
         std::vector<TString> expectedIndexes = {
@@ -3076,6 +3085,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             "Index21",
             "Index212",
             "Index12",
+            "Index212",
         };
 
         const std::string header = "PRAGMA ydb.OptDisableAutoIndexSelection = \"false\";\n";
@@ -3218,6 +3228,14 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 WHERE SubKey1 = 0
                 ORDER BY Key, SubKey1, SubKey2;
             )",
+            R"(
+                -- используется Index212 (not Index21), since the sort is free due to key order of covering Index212
+                SELECT Value2
+                FROM Table
+                WHERE SubKey2 = "1"
+                ORDER BY SubKey2, Key, SubKey1
+                LIMIT 2;
+            )",
         };
 
         std::vector<std::string> results = {
@@ -3230,6 +3248,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             R"([[[0];[0];["1"];["2"];["2"]];[[0];[1];["1"];["4"];["4"]];[[1];[0];["1"];["6"];["6"]];[[1];[1];["1"];["8"];["8"]]])",
             R"([[["1"]];[["3"]];[["5"]];[["7"]]])",
             R"([[[0];[0];["0"];["1"];["1"]];[[0];[0];["1"];["2"];["2"]];[[1];[0];["0"];["5"];["5"]];[[1];[0];["1"];["6"];["6"]]])",
+            R"([[["2"]];[["4"]]])",
         };
 
         std::vector<TString> expectedIndexes = {
@@ -3242,6 +3261,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             "Index21",
             "Index212",
             "Index12",
+            "Index212",
         };
 
         const std::string header = "PRAGMA ydb.OptDisableAutoIndexSelection = \"false\";\n";

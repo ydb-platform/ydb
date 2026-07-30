@@ -505,6 +505,11 @@ namespace NKikimr {
 
             // ---- Inner reads -------------------------------------------------------
 
+            // How much one drain cycle may pull out of a single inner read. Bounds the work
+            // done in one event so a slow search cannot monopolize the mailbox, and leaves the
+            // datashard quota unacked while we are behind, which throttles the shard.
+            static constexpr i64 InnerReadFreeSpace = 32 * 1024 * 1024;
+
             static TSerializedTableRange SingleColumnPointRange(ui64 value) {
                 // Range matching rows whose first key column equals `value`:
                 // (value-1, value] open on the left (null is -inf), missing suffix is +inf.
@@ -922,10 +927,9 @@ namespace NKikimr {
                     for (; i < ActiveReads.size(); ++i) {
                         auto& ar = ActiveReads[i];
                         TMaybe<TInstant> watermark;
-                        ui64 freeSpace = 32 * 1024 * 1024;
                         bool finished = false;
                         NKikimr::NMiniKQL::TUnboxedValueBatch rows;
-                        ar.Read->GetAsyncInputData(rows, watermark, finished, freeSpace);
+                        ar.Read->GetAsyncInputData(rows, watermark, finished, InnerReadFreeSpace);
                         if (ar.Kind == EReadKind::Posting && !PostingCovers && rows.RowCount() > 0) {
                             PendingMainKeys.reserve(PendingMainKeys.size() + rows.RowCount());
                         }

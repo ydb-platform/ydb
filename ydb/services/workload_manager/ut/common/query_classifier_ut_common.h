@@ -26,34 +26,28 @@ inline TResourcePoolClassifierConfig MakeClassifierConfig(
     std::optional<TString> hasFullScan = std::nullopt,
     std::optional<TString> hasPath = std::nullopt,
     std::optional<bool> hasStream = std::nullopt,
-    std::optional<TString> action = std::nullopt)
+    std::optional<NResourcePool::EClassifierAction> action = std::nullopt)
 {
-    NJson::TJsonValue json(NJson::JSON_MAP);
-    json["resource_pool"] = resourcePool;
-    if (memberName) {
-        json["member_name"] = *memberName;
-    }
-    if (hasAppName) {
-        json["has_app_name"] = *hasAppName;
-    }
+    NResourcePool::TClassifierSettings settings;
+    settings.Rank = rank;
+    settings.ResourcePool = resourcePool;
+    settings.MemberName = memberName;
+    settings.HasAppName = hasAppName;
     if (hasFullScan) {
-        json["has_full_scan"] = *hasFullScan;
+        settings.HasFullScan = NResourcePool::TRegexPredicate::FromGlob(*hasFullScan);
     }
     if (hasPath) {
-        json["has_path"] = *hasPath;
+        settings.HasPath = NResourcePool::TRegexPredicate::FromGlob(*hasPath);
     }
-    if (hasStream) {
-        json["has_stream"] = *hasStream;
-    }
-    if (action) {
-        json["action"] = *action;
-    }
+    settings.HasStream = hasStream;
+    settings.Action = action;
+
 
     TResourcePoolClassifierConfig config;
     config.SetDatabase(database);
     config.SetName(name);
-    config.SetRank(rank);
-    config.SetConfigJson(json);
+    config.SetClassifierSettings(settings);
+
     return config;
 }
 
@@ -99,7 +93,7 @@ struct TClassifyTestCase {
     std::optional<TString> ClassifierHasFullScan;
     std::optional<TString> ClassifierHasPath;
     std::optional<bool> ClassifierHasStream;
-    std::optional<TString> ClassifierAction;
+    std::optional<NResourcePool::EClassifierAction> ClassifierAction;
 
     TString ContextAppName;
     TString ContextMemberName;
@@ -116,7 +110,7 @@ struct TClassifyTestCase {
         std::optional<TString> HasFullScan;
         std::optional<TString> HasPath;
         std::optional<bool> HasStream;
-        std::optional<TString> Action;
+        std::optional<NResourcePool::EClassifierAction> Action;
     };
     std::vector<TExtraClassifier> ExtraClassifiers;
 

@@ -839,11 +839,14 @@ Implementation sequence:
     pushed `KqpOlapApply`, grouped fixed-width integer `count(distinct)`, and
     exact value-preserving pushed Boolean `?? true/false` lowering, moving
     TPCH q13 and q16 through formula construction and bounded proof. No
-    separate `starts_with` extension is needed for the observed q16 plan.
+    separate `starts_with` extension is needed for the observed q16 plan;
+69. M4: exact branch-local scheduling of delayed direct unique-RHS equalities
+    over one private logical left-deep Cross spine, retaining the original
+    Filter and restoring its input column order, moving TPC-DS q64 through
+    formula construction without raising either global construction bound.
     More than two
     dependencies, broader correlations, coercing and nullable-String dynamic
-    `IN`, broader range grammars, and other OLAP pushdowns remain. q64's
-    separate 8,192-row join blocker is a larger construction slice.
+    `IN`, broader range grammars, and other OLAP pushdowns remain.
 
 The exact read-range slice is a closed exporter grammar, not a general
 expression rewriter. It accepts only a column-store StageGraph source with
@@ -1414,7 +1417,7 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   resource caps, deferred sealing, and quantified-choice fail-closed behavior.
   A focused run moves TPC-DS q42 and q50 through formula construction and proves
   q42. The remaining former String blockers now reach deeper construction caps
-  (q4, q11, q25, q29, q46, q64, q68, and q91).
+  (q4, q11, q25, q29, q46, q68, and q91).
 - Reviewed deterministic total scalar subtrees are exported as canonical typed
   opaque functions. Unit tests cover IU alpha-renaming, first-use argument order,
   repeated arguments, structural/literal/callable mutations, DAG-sharing
@@ -1974,7 +1977,7 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Its strict version-four input policy and independently versioned
   version-three evaluation enforce one orthogonal preparation-success floor
   and three monotonic semantic depths: TPCH q1, q13, and q16 plus TPC-DS q5,
-  q9, q59, q65, q72, q78, and q80 must reach the verifier, the 85-query
+  q9, q59, q65, q72, q78, and q80 must reach the verifier, the 86-query
   formula floor must keep constructing SMT, and the thirty-query hermetic
   proof floor must remain
   `VERIFIED_BOUNDED`. A verifier-side `UNSUPPORTED` result satisfies only the
@@ -1989,25 +1992,42 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   recursion limit, while 3,000 randomized shared and quantified DAGs preserve
   the preceding renderer's bytes exactly.
 
-  The current Milestone 68 checkpoint includes the preceding q72, q9, and q24
+  The current Milestone 69 checkpoint includes the preceding q72, q9, and q24
   formula checkpoints plus reviewed generic/pushed compiled LIKE, exact
   pushed Boolean coalesce, and grouped fixed-width integer count-distinct, as
-  well as the
+  well as delayed direct unique-RHS factor scheduling for q64 and the
   literal-`Concat`/Decimal-bound q66 and exact point/finite-point
   `RangeInfo::ComputeNode`, integral-AVG, integral-extrema, and derived-ordering
   milestones.
   TPCH's semantic partition is 20 formulas, no unsupported query, and two
-  no-pair optimizer failures; TPC-DS has 65 formulas, 16 unsupported queries,
+  no-pair optimizer failures; TPC-DS has 66 formulas, 15 unsupported queries,
   and 18 no-pair optimizer failures. Preparation succeeds for 20/22 TPCH and
   73/99 TPC-DS queries and fails for the other 2 and 26. TPCH retains 20 exact
   pairs and 20 verifier entrants; TPC-DS retains 81 exact pairs and 70
   verifier entrants. Eight failed TPC-DS preparations retain exact pairs and
   overlap the unsupported inventory.
-  Across both suites, 85/121 construct formulas (70.2%), 85/101 exact pairs do
-  so (84.2%), 85/93 do so within the preparation-successful subset (91.4%),
-  and 85/90 verifier entrants do so (94.4%). The 16 unsupported rows split by
-  primary terminal layer into 11 initial-export, zero final-export, and five
+  Across both suites, 86/121 construct formulas (71.1%), 86/101 exact pairs do
+  so (85.1%), 86/93 do so within the preparation-successful subset (92.5%),
+  and 86/90 verifier entrants do so (95.6%). The 15 unsupported rows split by
+  primary terminal layer into 11 initial-export, zero final-export, and four
   verifier results; secondary boundary diagnostics remain recorded.
+
+  The completed post-M69 TPCH dashboard confirms 20 formula / 0 unsupported /
+  2 no-pair after 2,928/93,582 ms, with report SHA-256
+  `3e36c25a277c81ef0b817452c3b1fddad1ff96bfbb32d0096023af580682fb32`.
+  TPC-DS confirms 66 / 15 / 18 after 64,878/750,968 ms, with report SHA-256
+  `28ac807523973e4b963c2f9eef2a5271437d81a7d573377e5a9f35d887d4bb7b`.
+  Both complete reports satisfy the preparation and formula floors with no
+  policy violation.
+  The unchanged proof floor is freshly green: 13/13 TPCH after
+  1,523/60,015 ms (report SHA-256
+  `4788bd065a9e0cb7e58b0c2d2be851e50d5eb411abe8216ea0df5f2fcc890ed5`)
+  and 17/17 TPC-DS after 12,465/100,402 ms (report SHA-256
+  `325c5970a4decedf961bb8958a6871cf965f1f7237d4406e500b449981327194`),
+  all `VERIFIED_BOUNDED`.
+  Validation passes 647/647 Python verifier tests, 14/14 policy tests, and the
+  5/5 proof-floor target. M69 changes no exporter code; the last complete C++
+  exporter gate remains M68's 259/259.
 
   The preceding q66 complete TPCH formula dashboard spent 2,880/31,400 ms in
   preparation/verifier work and produced report SHA-256
@@ -2320,6 +2340,46 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   and compact exact encoding. No new optimizer bug or counterexample was
   found.
 
+  Milestone 69 is implemented by commits `743643cc20f` and `ad3613f1816`.
+  It adds no snapshot, exporter, scalar, or StageGraph semantics. The logical
+  evaluator recognizes only a Filter whose input is a private left-deep spine
+  of keyless Cross joins with literal non-null `TRUE` residuals. The snapshot
+  must have no StageGraph; the Filter may have no consumer subplan or edge
+  input; each spine node must have exactly its next spine node, or the Filter,
+  as its sole parent. Cached or edge-supplied spine nodes, explicit overrides
+  of the seed or any spine factor, and subplan roots all retain the original
+  path.
+
+  The admitted predicate is either one direct equality or a flat top-level
+  conjunction containing ordinary, non-null-safe direct column equalities.
+  Nested conjunctions, computed operands, cross-type equality, and every
+  nonconjunctive context are ignored. A pending right factor may move earlier
+  only when all left key columns are already available and the existing
+  static direct unique-RHS gate proves that the factor is an unfiltered,
+  unlimited direct Scan whose same-type equality columns cover a declared
+  non-null catalog unique key. The scheduler repeatedly takes the first such
+  factor; if none is ready, it takes the first pending Cross factor unchanged.
+  The existing runtime gate still rechecks exact schema, payload, occurrence,
+  slot, and presence provenance before compacting. A runtime near miss executes
+  the original Cross, not a weakened join.
+
+  Scheduling is a private evaluation representation: the captured plan and
+  node identities are unchanged, every seed and right relation still uses the
+  ordinary evaluator/cache path, and the original Filter remains intact with
+  all residual conjuncts. Cross reassociation preserves its bag, a promoted
+  equality only removes pairs that the retained Filter necessarily rejects,
+  and the final map restores the original Filter-input columns and value order
+  exactly. The 4,096-row and 16,384-pair construction audits remain in force.
+
+  Focused row-bound-two/task-bound-two q64 evidence is `FORMULA_EMITTED` after
+  7,356/121,306 ms of preparation/verifier work. Its report SHA-256 is
+  `858677db83fd7af634fc96982214c3a4d4d2db3eba2aa6f968a7ac007a22e2ec`.
+  The canonical SMT artifact is 279,504,238 bytes and 3,589 lines, has SHA-256
+  `478b4d0b72cef35684ef2c418afc11fa3d55ae9fbd21b8a0af866ca0f676c124`,
+  and the focused process tree peaks at 2.24 GiB. This raises the checked-in
+  formula floor to 86; no solver was run, so it adds no bounded proof,
+  counterexample, or optimizer correctness finding.
+
   A focused version-five audit of TPC-DS q12, q20, q49, q51, q53, q63, q89,
   and q98 preserves exact pairs despite failed preparation. All eight are
   semantically unsupported: window callables dominate, q49 first exposes a
@@ -2336,12 +2396,13 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   removes q9's ordered singleton-`Limit` construction blocker. Milestone 67
   removes q24's exact nullable `Unicode.ToUpper` exporter blocker. Milestone 68
   removes TPCH q13/q16's compiled-LIKE, grouped count-distinct, and pushed
-  coalesce blockers.
+  coalesce blockers. Milestone 69 removes q64's delayed Cross-spine
+  construction blocker with private unique-RHS factor scheduling.
   Including exact
   window semantics
   for the failed-preparation pairs, the full captured-pair gap is roughly
   6--8 feature families or 8--16 milestones. Those workload-targeted
-  estimates now start from 85 formulas and can change as later blockers become
+  estimates now start from 86 formulas and can change as later blockers become
   visible. The 20 no-pair entries require
   frontend/optimizer progress; the present captured-pair ceiling is 101/121,
   and formula construction is not solver proof.
@@ -2567,12 +2628,14 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Construction preflights cap every materialized relation at 4096 candidate
   rows and each unshared quadratic construction or shared symmetric comparison
   triangle at 16384 candidate-row pairs. Remaining verifier-side construction
-  blockers include TPC-DS q4's 20,736-pair join match, q64's 8,192-row join
-  output, q11/q74's 8,126,496-pair Sort constructions, q31's 8,386,560-pair
-  Sort construction, and other shapes outside the comparator, logical payload,
-  or key-width network gates. q1, q5, q25, q29, q46, q59, q65, q68, q77, q78,
-  q80, and q91 now construct complete formulas instead of stopping at their
-  historical aggregate, Sort, or Merge gates.
+  blockers include TPC-DS q4's 20,736-pair join match, q11/q74's
+  8,126,496-pair Sort constructions, and q31's current 2,096,128-pair Sort
+  construction. q31's packed payload already fits at 124,928 cells, but its
+  67,584 comparators exceed the independent 32,768 cap. Other shapes remain
+  outside the comparator, logical payload, or key-width network gates. q1, q5,
+  q25, q29, q46, q59, q64, q65, q68, q77, q78, q80, and q91 now construct
+  complete formulas instead of stopping at their historical aggregate, join,
+  Sort, or Merge gates.
 - A shared expanded-node/depth budget now caps every complete exact scalar tree
   at 1,024 normalized occurrences and depth 128. Independent C++ and Python
   checks cover exact 1,024/1,025-node and 128/129-depth boundaries, expanded DAG
@@ -3210,7 +3273,7 @@ regression locks the corrected boundary.
 - Explicit diagnostic transformation-prefix verifier boundary, committed-rule
   and atomic-stage snapshot hooks, strict real-host capture command, and
   separate sequential localization driver are implemented.
-- The 85 formula-construction and thirty curated proof obligations have
+- The 86 formula-construction and thirty curated proof obligations have
   separate checked-in regression floors. The current complete gate confirms all
   thirty as `VERIFIED_BOUNDED`; focused rows retain independent
   evidence for the newly added obligations. Every future solver witness has a

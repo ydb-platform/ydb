@@ -428,8 +428,9 @@ namespace {
             AddSst(1, 0, {2'100, 2'110});
             AddSst(2, 0, {3'000, 3'010});
             AddSst(2, 0, {3'100, 3'110});
-            AddSst(3, 0, {4'000, 4'010});
-            AddSst(3, 0, {4'100, 4'110});
+            // Singleton SSTs ensure yielding also works at an SST boundary.
+            AddSst(3, 0, {4'000});
+            AddSst(3, 0, {4'100});
         }
 
         TIntrusivePtr<THullCtx> GetHullCtx() {
@@ -442,7 +443,7 @@ namespace {
 
         static TVector<ui32> GetExpectedSteps() {
             return {
-                4'110, 4'100, 4'010, 4'000,
+                4'100, 4'000,
                 3'110, 3'100, 3'010, 3'000,
                 2'110, 2'100, 2'010, 2'000,
                 1'110, 1'100, 1'010, 1'000,

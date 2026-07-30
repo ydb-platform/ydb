@@ -165,6 +165,7 @@ namespace NKikimr {
                 }
             }
 
+            bool processedLevelRecord = false;
             while (sstIterator.Valid()) {
                 TLevelSstPtr levelSstPtr = sstIterator.Get();
                 TMemIterator memIterator(levelSstPtr.SstPtr.Get());
@@ -179,11 +180,12 @@ namespace NKikimr {
                 // resume applies only to the first matching SST
                 resumeLevels = false;
                 while (memIterator.Valid()) {
-                    aggr->UpdateLevel(levelSstPtr, memIterator.GetCurKey(), memIterator.GetMemRec());
-                    memIterator.Prev();
-                    if (memIterator.Valid() && yieldChecker.StepAndCheckForYield()) {
+                    if (processedLevelRecord && yieldChecker.StepAndCheckForYield()) {
                         return TYieldedState{makeLevelPosition(levelSstPtr, memIterator.GetCurKey())};
                     }
+                    aggr->UpdateLevel(levelSstPtr, memIterator.GetCurKey(), memIterator.GetMemRec());
+                    processedLevelRecord = true;
+                    memIterator.Prev();
                 }
                 sstIterator.Prev();
             }

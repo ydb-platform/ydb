@@ -448,8 +448,10 @@ TResult AddConsumer(
         auto* readQuota = NPQ::GetOrAddReadQuota(*config, consumerName);
         if (consumerConfig.read_speed_bytes_per_second() == 0) {
             readQuota->ClearSpeedInBytesPerSecond();
+            readQuota->ClearBurstSize();
         } else {
             readQuota->SetSpeedInBytesPerSecond(consumerConfig.read_speed_bytes_per_second());
+            readQuota->SetBurstSize(consumerConfig.read_speed_bytes_per_second());
         }
     }
     if (consumerConfig.has_read_speed_messages_per_second()) {
@@ -461,8 +463,10 @@ TResult AddConsumer(
         auto* readQuota = NPQ::GetOrAddReadQuota(*config, consumerName);
         if (consumerConfig.read_speed_messages_per_second() == 0) {
             readQuota->ClearSpeedInMessagesPerSecond();
+            readQuota->ClearBurstSizeInMessages();
         } else {
             readQuota->SetSpeedInMessagesPerSecond(consumerConfig.read_speed_messages_per_second());
+            readQuota->SetBurstSizeInMessages(consumerConfig.read_speed_messages_per_second());
         }
     }
 

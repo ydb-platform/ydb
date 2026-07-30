@@ -385,8 +385,10 @@ TResult ApplyChangesInt(
         }
         if (request.set_partition_total_read_speed_bytes_per_second() == 0) {
             partConfig->ClearReadSpeedInBytesPerSecond();
+            partConfig->ClearReadBurstBytes();
         } else {
             partConfig->SetReadSpeedInBytesPerSecond(request.set_partition_total_read_speed_bytes_per_second());
+            partConfig->SetReadBurstBytes(request.set_partition_total_read_speed_bytes_per_second());
         }
     }
     if (request.has_set_partition_total_read_speed_messages_per_second()) {
@@ -397,8 +399,10 @@ TResult ApplyChangesInt(
         }
         if (request.set_partition_total_read_speed_messages_per_second() == 0) {
             partConfig->ClearReadSpeedInMessagesPerSecond();
+            partConfig->ClearReadBurstMessages();
         } else {
             partConfig->SetReadSpeedInMessagesPerSecond(request.set_partition_total_read_speed_messages_per_second());
+            partConfig->SetReadBurstMessages(request.set_partition_total_read_speed_messages_per_second());
         }
     }
 
@@ -413,8 +417,10 @@ TResult ApplyChangesInt(
         auto* readQuota = NPQ::GetOrAddReadQuota(*pqTabletConfig, NPQ::CLIENTID_WITHOUT_CONSUMER);
         if (request.set_partition_read_without_consumer_speed_bytes_per_second() == 0) {
             readQuota->ClearSpeedInBytesPerSecond();
+            readQuota->ClearBurstSize();
         } else {
             readQuota->SetSpeedInBytesPerSecond(request.set_partition_read_without_consumer_speed_bytes_per_second());
+            readQuota->SetBurstSize(request.set_partition_read_without_consumer_speed_bytes_per_second());
         }
     }
     if (request.has_set_partition_read_without_consumer_speed_messages_per_second()) {
@@ -426,8 +432,10 @@ TResult ApplyChangesInt(
         auto* readQuota = NPQ::GetOrAddReadQuota(*pqTabletConfig, NPQ::CLIENTID_WITHOUT_CONSUMER);
         if (request.set_partition_read_without_consumer_speed_messages_per_second() == 0) {
             readQuota->ClearSpeedInMessagesPerSecond();
+            readQuota->ClearBurstSizeInMessages();
         } else {
             readQuota->SetSpeedInMessagesPerSecond(request.set_partition_read_without_consumer_speed_messages_per_second());
+            readQuota->SetBurstSizeInMessages(request.set_partition_read_without_consumer_speed_messages_per_second());
         }
     }
 

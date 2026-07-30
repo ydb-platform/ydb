@@ -119,8 +119,10 @@ TResult AddConsumerImpl(
         auto* readQuota = NPQ::GetOrAddReadQuota(*config, consumerName);
         if (rr.read_speed_bytes_per_second() == 0) {
             readQuota->ClearSpeedInBytesPerSecond();
+            readQuota->ClearBurstSize();
         } else {
             readQuota->SetSpeedInBytesPerSecond(rr.read_speed_bytes_per_second());
+            readQuota->SetBurstSize(rr.read_speed_bytes_per_second());
         }
     }
     if (rr.has_read_speed_messages_per_second()) {
@@ -132,8 +134,10 @@ TResult AddConsumerImpl(
         auto* readQuota = NPQ::GetOrAddReadQuota(*config, consumerName);
         if (rr.read_speed_messages_per_second() == 0) {
             readQuota->ClearSpeedInMessagesPerSecond();
+            readQuota->ClearBurstSizeInMessages();
         } else {
             readQuota->SetSpeedInMessagesPerSecond(rr.read_speed_messages_per_second());
+            readQuota->SetBurstSizeInMessages(rr.read_speed_messages_per_second());
         }
     }
 
@@ -348,18 +352,29 @@ TResult ApplyChangesInt( // create and alter
     }
 
     // Total read speed for a single partition (across all consumers).
-    if (settings.partition_total_read_speed_bytes_per_second() < 0) {
-        return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "partition_total_read_speed_bytes_per_second can't be negative, provided " << settings.partition_total_read_speed_bytes_per_second()};
-    }
-    if (settings.partition_total_read_speed_messages_per_second() < 0) {
-        return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "partition_total_read_speed_messages_per_second can't be negative, provided " << settings.partition_total_read_speed_messages_per_second()};
-    }
-    if (settings.partition_total_read_speed_bytes_per_second()) {
+     if (settings.partition_total_read_speed_bytes_per_second() > 0) {
         partConfig->SetReadSpeedInBytesPerSecond(settings.partition_total_read_speed_bytes_per_second());
+        partConfig->SetReadBurstBytes(settings.partition_total_read_speed_bytes_per_second());
+    } else if (settings.partition_total_read_speed_bytes_per_second() == 0) {
+        partConfig->ClearReadSpeedInBytesPerSecond();
+        partConfig->ClearReadBurstBytes();
+    } else {
+        return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+            << "partition_total_read_speed_bytes_per_second can't be negative, provided "
+            << settings.partition_total_read_speed_bytes_per_second()};
     }
-    if (settings.partition_total_read_speed_messages_per_second()) {
+    if (settings.partition_total_read_speed_messages_per_second() > 0) {
         partConfig->SetReadSpeedInMessagesPerSecond(settings.partition_total_read_speed_messages_per_second());
+        partConfig->SetReadBurstMessages(settings.partition_total_read_speed_messages_per_second());
+    } else if (settings.partition_total_read_speed_messages_per_second() == 0) {
+        partConfig->ClearReadSpeedInMessagesPerSecond();
+        partConfig->ClearReadBurstMessages();
+    } else {
+        return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+            << "partition_total_read_speed_messages_per_second can't be negative, provided "
+            << settings.partition_total_read_speed_messages_per_second()};
     }
+
 
     // Read speed for reading a single partition without a consumer is stored in
     // TPartitionConfig.ReadQuota keyed by CLIENTID_WITHOUT_CONSUMER.
@@ -372,10 +387,21 @@ TResult ApplyChangesInt( // create and alter
     if (settings.partition_read_without_consumer_speed_bytes_per_second()
             || settings.partition_read_without_consumer_speed_messages_per_second()) {
         auto* readQuota = NPQ::GetOrAddReadQuota(*pqTabletConfig, NPQ::CLIENTID_WITHOUT_CONSUMER);
-        if (settings.partition_read_without_consumer_speed_bytes_per_second())
+        if (settings.partition_read_without_consumer_speed_bytes_per_second() == 0) {
+            readQuota->ClearSpeedInBytesPerSecond(settings.partition_read_without_consumer_speed_bytes_per_second());
+            readQuota->ClearBurstSize(settings.partition_read_without_consumer_speed_bytes_per_second());
+        } else if (settings.partition_read_without_consumer_speed_bytes_per_second()) {
             readQuota->SetSpeedInBytesPerSecond(settings.partition_read_without_consumer_speed_bytes_per_second());
-        if (settings.partition_read_without_consumer_speed_messages_per_second())
+            readQuota->SetBurstSize(settings.partition_read_without_consumer_speed_bytes_per_second());
+        }
+        if (settings.partition_read_without_consumer_speed_messages_per_second() == 0) {
+            readQuota->ClearSpeedInMessagesPerSecond();
+            readQuota->ClearBurstSizeInMessages();
+        }
+        else if (settings.partition_read_without_consumer_speed_messages_per_second()) {
             readQuota->SetSpeedInMessagesPerSecond(settings.partition_read_without_consumer_speed_messages_per_second());
+            readQuota->SetBurstSizeInMessages(settings.partition_read_without_consumer_speed_messages_per_second());
+        }
     }
 
     if (!Ydb::PersQueue::V1::TopicSettings::Format_IsValid((int)settings.supported_format()) || settings.supported_format() == 0) {

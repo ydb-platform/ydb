@@ -219,9 +219,11 @@ TResult ApplyChangesInt(
     }
     if (request.partition_total_read_speed_bytes_per_second()) {
         partConfig->SetReadSpeedInBytesPerSecond(request.partition_total_read_speed_bytes_per_second());
+        partConfig->SetReadBurstBytes(request.partition_total_read_speed_bytes_per_second());
     }
     if (request.partition_total_read_speed_messages_per_second()) {
         partConfig->SetReadSpeedInMessagesPerSecond(request.partition_total_read_speed_messages_per_second());
+        partConfig->SetReadBurstMessages(request.partition_total_read_speed_messages_per_second());
     }
 
     // Read speed for reading a single partition without a consumer is stored in
@@ -235,10 +237,14 @@ TResult ApplyChangesInt(
     if (request.partition_read_without_consumer_speed_bytes_per_second()
             || request.partition_read_without_consumer_speed_messages_per_second()) {
         auto* readQuota = NPQ::GetOrAddReadQuota(*pqTabletConfig, NPQ::CLIENTID_WITHOUT_CONSUMER);
-        if (request.partition_read_without_consumer_speed_bytes_per_second())
+        if (request.partition_read_without_consumer_speed_bytes_per_second()) {
             readQuota->SetSpeedInBytesPerSecond(request.partition_read_without_consumer_speed_bytes_per_second());
-        if (request.partition_read_without_consumer_speed_messages_per_second())
+            readQuota->SetBurstSize(request.partition_read_without_consumer_speed_bytes_per_second());
+        }
+        if (request.partition_read_without_consumer_speed_messages_per_second()) {
             readQuota->SetSpeedInMessagesPerSecond(request.partition_read_without_consumer_speed_messages_per_second());
+            readQuota->SetBurstSizeInMessages(request.partition_read_without_consumer_speed_messages_per_second());
+        }
     }
 
     return {};

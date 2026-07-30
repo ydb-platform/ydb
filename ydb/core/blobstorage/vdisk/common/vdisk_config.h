@@ -269,6 +269,8 @@ namespace NKikimr {
 
         ///////////// SYNC SETTINGS //////////////////
         TControlWrapper MaxInProgressSyncCount;
+        TControlWrapper EnableChecksumReadValidationOnVDisk;
+        TControlWrapper EnableChecksumWriteValidationOnVDisk;
 
         ///////////// FEATURE FLAGS ////////////////////////
         NKikimrConfig::TFeatureFlags FeatureFlags;

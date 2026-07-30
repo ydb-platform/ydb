@@ -1634,6 +1634,20 @@ message TImmediateControlsConfig {
           MinValue: 0,
           MaxValue: 10000,
           DefaultValue: 0 }];
+
+        optional uint64 EnableChecksumReadValidationOnVDisk = 51 [(ControlOptions) = {
+            Description: "Enable checksum calculation and validation on VDisk read path",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0,
+        }];
+
+        optional uint64 EnableChecksumWriteValidationOnVDisk = 52 [(ControlOptions) = {
+            Description: "Enable checksum calculation and validation on VDisk write path",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0,
+        }];
     }
 
     message TTabletControls {
@@ -1718,6 +1732,12 @@ message TImmediateControlsConfig {
             DefaultValue: 2 }];
 
         optional TRequestReportingSettings RequestReportingSettings = 12;
+
+        optional uint64 EnableChecksumCalcAndValidationOnDsProxy = 17 [(ControlOptions) = {
+            Description: "Enable checksum calculation and validation on DSProxy read and write paths",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
     }
 
     message TPDiskControls {

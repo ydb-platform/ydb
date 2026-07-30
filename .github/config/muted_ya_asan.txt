@@ -1,7 +1,9 @@
 ydb/core/blobstorage/ddisk/ut TDDiskActorPDiskTest.PDiskRestartWithReservedChunks_DDiskZombie_Uring
 ydb/core/blobstorage/ddisk/ut TDDiskActorTest.LateOutdatedSyncReadResultDoesNotLogUnknownSync
+ydb/core/blobstorage/ddisk/ut_large TDDiskActorPDiskSyncTest.Large_4Tablets_32VChunks_FullBlocks_16Segments
 ydb/core/blobstorage/ddisk/ut_large TDDiskActorPDiskSyncTest.Large_4Tablets_32VChunks_FullBlocks_1Segment
 ydb/core/blobstorage/ddisk/ut_large unittest.[*/*] chunk
+ydb/core/blobstorage/ut_blobstorage Get.TestRdmaRegiseredMemory
 ydb/core/blobstorage/ut_blobstorage NodeDisconnected.BsQueueRetries
 ydb/core/blobstorage/ut_blobstorage unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_bridge BridgeGet.PartRestorationAcrossBridgeOnRange
@@ -441,11 +443,13 @@ ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_Replace
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_SubFoldersDropRestore
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_SubFoldersReplace
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_UseTokenWithOldSecret
+ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_UseTokenWithSchemaSecret
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_UseUserPasswordWithOldSecret
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_UseUserPasswordWithSchemaSecret
 ydb/services/ydb/backup_ut BackupRestore.BackupRestoreTransfer_WithConnectionStringFakeTopicPath
 ydb/services/ydb/backup_ut BackupRestore.ReplicasAreNotBackedUp+UseSchemeSecret
 ydb/services/ydb/backup_ut BackupRestore.ReplicasAreNotBackedUp-UseSchemeSecret
+ydb/services/ydb/backup_ut BackupRestore.RestoreReplicationThatDoesNotUseSecret
 ydb/tests/datashard/truncate/concurrency py3test.[test_truncate_table_concurrency.py */*] chunk
 ydb/tests/datashard/truncate/concurrency test_truncate_table_concurrency.py.TestTruncateTableConcurrency.test_truncate_with_concurrent_rw_operations
 ydb/tests/datashard/ttl test_ttl.py.TestTTL.test_ttl[table_Date_1_UNIQUE_SYNC-pk_types35-all_types35-index35-Date-UNIQUE-SYNC]

@@ -24,12 +24,8 @@ bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig& c
     if (const auto* readQuota = NPQ::GetReadQuota(config, in.GetName())) {
         if (readQuota->HasSpeedInBytesPerSecond())
             out.set_read_speed_bytes_per_second(readQuota->GetSpeedInBytesPerSecond());
-        if (readQuota->HasBurstSize())
-            out.set_partition_read_burst_bytes(readQuota->GetBurstSize());
         if (readQuota->HasSpeedInMessagesPerSecond())
             out.set_read_speed_messages_per_second(readQuota->GetSpeedInMessagesPerSecond());
-        if (readQuota->HasBurstSizeInMessages())
-            out.set_partition_read_burst_messages(readQuota->GetBurstSizeInMessages());
     }
     out.mutable_read_from()->set_seconds(in.GetReadFromTimestampsMs() / 1000);
     auto version = in.GetVersion();
@@ -216,14 +212,8 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
     if (partConfig.HasReadSpeedInBytesPerSecond()) {
         out.set_partition_total_read_speed_bytes_per_second(partConfig.GetReadSpeedInBytesPerSecond());
     }
-    if (partConfig.HasReadBurstBytes()) {
-        out.set_partition_total_read_burst_bytes(partConfig.GetReadBurstBytes());
-    }
     if (partConfig.HasReadSpeedInMessagesPerSecond()) {
         out.set_partition_total_read_speed_messages_per_second(partConfig.GetReadSpeedInMessagesPerSecond());
-    }
-    if (partConfig.HasReadBurstMessages()) {
-        out.set_partition_total_read_burst_messages(partConfig.GetReadBurstMessages());
     }
 
     // Read speed for reading a single partition without a consumer is stored in
@@ -231,12 +221,8 @@ bool FillTopicDescription(Ydb::Topic::DescribeTopicResult& out, const NKikimrSch
     if (const auto* readQuota = NPQ::GetReadQuota(config, NPQ::CLIENTID_WITHOUT_CONSUMER)) {
         if (readQuota->HasSpeedInBytesPerSecond())
             out.set_partition_read_without_consumer_speed_bytes_per_second(readQuota->GetSpeedInBytesPerSecond());
-        if (readQuota->HasBurstSize())
-            out.set_partition_read_without_consumer_burst_bytes(readQuota->GetBurstSize());
         if (readQuota->HasSpeedInMessagesPerSecond())
             out.set_partition_read_without_consumer_speed_messages_per_second(readQuota->GetSpeedInMessagesPerSecond());
-        if (readQuota->HasBurstSizeInMessages())
-            out.set_partition_read_without_consumer_burst_messages(readQuota->GetBurstSizeInMessages());
     }
 
     for (const auto &codec : config.GetCodecs().GetIds()) {

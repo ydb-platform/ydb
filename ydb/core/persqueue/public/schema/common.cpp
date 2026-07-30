@@ -449,19 +449,6 @@ TResult AddConsumer(
             readQuota->SetSpeedInBytesPerSecond(consumerConfig.read_speed_bytes_per_second());
         }
     }
-    if (consumerConfig.has_partition_read_burst_bytes()) {
-        if (consumerConfig.partition_read_burst_bytes() < 0) {
-            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
-                << "partition_read_without_consumer_burst_bytes can't be negative, provided "
-                << consumerConfig.partition_read_burst_bytes()};
-        }
-        auto* readQuota = NPQ::GetOrAddReadQuota(*config, consumerName);
-        if (consumerConfig.partition_read_burst_bytes() == 0) {
-            readQuota->ClearBurstSize();
-        } else {
-            readQuota->SetBurstSize(consumerConfig.partition_read_burst_bytes());
-        }
-    }
     if (consumerConfig.has_read_speed_messages_per_second()) {
         if (consumerConfig.read_speed_messages_per_second() < 0) {
             return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
@@ -473,19 +460,6 @@ TResult AddConsumer(
             readQuota->ClearSpeedInMessagesPerSecond();
         } else {
             readQuota->SetSpeedInMessagesPerSecond(consumerConfig.read_speed_messages_per_second());
-        }
-    }
-    if (consumerConfig.has_partition_read_burst_messages()) {
-        if (consumerConfig.partition_read_burst_messages() < 0) {
-            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
-                << "partition_read_without_consumer_burst_messages can't be negative, provided "
-                << consumerConfig.partition_read_burst_messages()};
-        }
-        auto* readQuota = NPQ::GetOrAddReadQuota(*config, consumerName);
-        if (consumerConfig.partition_read_burst_messages() == 0) {
-            readQuota->ClearBurstSizeInMessages();
-        } else {
-            readQuota->SetBurstSizeInMessages(consumerConfig.partition_read_burst_messages());
         }
     }
 

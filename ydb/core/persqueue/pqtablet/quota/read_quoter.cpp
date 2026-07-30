@@ -2,6 +2,7 @@
 
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/utils.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NPQ {
 

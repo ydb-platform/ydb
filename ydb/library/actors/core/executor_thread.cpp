@@ -223,7 +223,7 @@ namespace NActors {
         auto finishActorEvent = [&](IActor* currentActor, IEventHandle* ev, ui32 eventType,
                 const std::type_info* currentActorType, ui32 activityType,
                 bool updateActorsStats = true,
-                bool lockEmptyMailbox = true) {
+                bool reclaimEmptyMailbox = true) {
             hpnow = GetCycleCountFast();
             hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
 
@@ -233,8 +233,10 @@ namespace NActors {
                 ExecutionStats.UpdateActorsStats(dyingActorsCnt, ThreadCtx.Pool());
             }
 
-            if (lockEmptyMailbox && mailbox->IsEmpty()) {
-                // had actors and became empty, prepare to reclaim mailbox
+            if (reclaimEmptyMailbox && mailbox->IsEmpty()) {
+                // The last actor has been detached. Mark the mailbox as free so new
+                // events cannot be enqueued and move already queued events to the local
+                // queue. Nested lifecycle notifications defer this to the enclosing event.
                 mailbox->LockToFree();
             }
 
@@ -612,6 +614,7 @@ namespace NActors {
         NProfiling::TMemoryTagScope::Reset(0);
         TlsActivationContext = nullptr;
         ThreadCtx.ResetMailboxContext();
+        // A free mailbox can be reclaimed after its local event queue is drained.
         if (mailbox->IsEmpty() && mailbox->CanReclaim()) {
             ThreadCtx.FreeMailbox(mailbox);
         } else {

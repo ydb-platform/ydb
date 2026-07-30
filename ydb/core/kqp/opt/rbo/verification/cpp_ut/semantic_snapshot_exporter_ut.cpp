@@ -1244,6 +1244,487 @@ TExprNode::TPtr UdfSettings(
     return ctx.ExprCtx.NewList(TPositionHandle(), std::move(children));
 }
 
+struct TNamedCallableArgument {
+    const TTypeAnnotationNode* Type;
+    TStringBuf Name;
+    ui64 Flags = 0;
+};
+
+const TCallableExprType* NamedCallableType(
+    TExportTestContext& ctx,
+    const TTypeAnnotationNode* result,
+    const TVector<TNamedCallableArgument>& arguments,
+    size_t optionalArguments = 0,
+    TStringBuf payload = {})
+{
+    TVector<TCallableExprType::TArgumentInfo> infos;
+    infos.reserve(arguments.size());
+    for (const auto& argument : arguments) {
+        TCallableExprType::TArgumentInfo info;
+        info.Type = argument.Type;
+        info.Name = argument.Name;
+        info.Flags = argument.Flags;
+        infos.push_back(std::move(info));
+    }
+    return ctx.ExprCtx.MakeType<TCallableExprType>(
+        result,
+        std::move(infos),
+        optionalArguments,
+        payload);
+}
+
+struct TNamedArgumentDescriptor {
+    TExprNode::TPtr Type;
+    TStringBuf Name;
+    ui64 Flags = 0;
+};
+
+TExprNode::TPtr NamedCallableTypeDescriptor(
+    TExportTestContext& ctx,
+    TExprNode::TPtr result,
+    TVector<TNamedArgumentDescriptor> arguments,
+    const TCallableExprType* callable,
+    size_t optionalArguments = 0,
+    TStringBuf payload = {})
+{
+    TExprNode::TListType header;
+    if (optionalArguments != 0 || !payload.empty()) {
+        header.push_back(ctx.ExprCtx.NewAtom(
+            TPositionHandle(), ToString(optionalArguments)));
+    }
+    if (!payload.empty()) {
+        header.push_back(
+            ctx.ExprCtx.NewAtom(TPositionHandle(), payload));
+    }
+
+    TExprNode::TListType children = {
+        ctx.ExprCtx.NewList(TPositionHandle(), std::move(header)),
+        ctx.ExprCtx.NewList(
+            TPositionHandle(), {std::move(result)}),
+    };
+    for (auto& argument : arguments) {
+        TExprNode::TListType settings = {std::move(argument.Type)};
+        if (!argument.Name.empty() || argument.Flags != 0) {
+            settings.push_back(
+                ctx.ExprCtx.NewAtom(TPositionHandle(), argument.Name));
+        }
+        if (argument.Flags != 0) {
+            settings.push_back(ctx.ExprCtx.NewAtom(
+                TPositionHandle(), ToString(argument.Flags)));
+        }
+        children.push_back(ctx.ExprCtx.NewList(
+            TPositionHandle(), std::move(settings)));
+    }
+    return TypedCallable(
+        ctx,
+        "CallableType",
+        std::move(children),
+        ctx.ExprCtx.MakeType<TTypeExprType>(callable));
+}
+
+constexpr std::array<TStringBuf, 13> Re2OptionStructNames = {{
+    "CaseSensitive", "DotNl", "Literal", "LogErrors", "LongestMatch",
+    "MaxMem", "NeverCapture", "NeverNl", "OneLine", "PerlClasses",
+    "PosixSyntax", "Utf8", "WordBoundary",
+}};
+
+constexpr std::array<TStringBuf, 13> Re2OptionArgumentNames = {{
+    "Utf8", "PosixSyntax", "LongestMatch", "LogErrors", "MaxMem",
+    "Literal", "NeverNl", "DotNl", "NeverCapture", "CaseSensitive",
+    "PerlClasses", "WordBoundary", "OneLine",
+}};
+
+TExprNode::TPtr Re2OptionsTypeDescriptor(
+    TExportTestContext& ctx,
+    const TTypeAnnotationNode* boolType,
+    const TTypeAnnotationNode* uint64Type,
+    const TTypeAnnotationNode* optionsType)
+{
+    TExprNode::TListType fields;
+    fields.reserve(Re2OptionStructNames.size());
+    for (const TStringBuf name : Re2OptionStructNames) {
+        const bool maxMem = name == "MaxMem";
+        fields.push_back(ctx.ExprCtx.NewList(
+            TPositionHandle(),
+            {
+                ctx.ExprCtx.NewAtom(TPositionHandle(), name),
+                DataTypeDescriptor(
+                    ctx,
+                    maxMem ? TStringBuf("Uint64") : TStringBuf("Bool"),
+                    maxMem ? uint64Type : boolType),
+            }));
+    }
+    return TypedCallable(
+        ctx,
+        "StructType",
+        std::move(fields),
+        ctx.ExprCtx.MakeType<TTypeExprType>(optionsType));
+}
+
+struct TCompiledLikeFixture {
+    const TTypeAnnotationNode* BoolType = nullptr;
+    const TTypeAnnotationNode* OptionalBoolType = nullptr;
+    const TTypeAnnotationNode* StringType = nullptr;
+    const TTypeAnnotationNode* OptionalStringType = nullptr;
+    const TTypeAnnotationNode* Uint64Type = nullptr;
+    const TTypeAnnotationNode* OptionalUint64Type = nullptr;
+    const TStructExprType* OptionsType = nullptr;
+    const TOptionalExprType* OptionalOptionsType = nullptr;
+    const TTupleExprType* RunConfigType = nullptr;
+    const TTupleExprType* EmptyTupleType = nullptr;
+    const TStructExprType* NamedOptionsType = nullptr;
+    const TCallableExprType* MatchCallable = nullptr;
+    const TCallableExprType* PatternCallable = nullptr;
+    const TCallableExprType* OptionsCallable = nullptr;
+
+    TExprNode::TPtr Root;
+    TExprNode::TPtr AssumeStrict;
+    TExprNode::TPtr Member;
+    TExprNode::TPtr MatchUdf;
+    TExprNode::TPtr MatchRunConfig;
+    TExprNode::TPtr MatchUserType;
+    TExprNode::TPtr MatchCachedType;
+    TExprNode::TPtr MatchRunConfigType;
+    TExprNode::TPtr MatchSettings;
+    TExprNode::TPtr PatternApply;
+    TExprNode::TPtr PatternUdf;
+    TExprNode::TPtr PatternLiteral;
+    TExprNode::TPtr PatternUserType;
+    TExprNode::TPtr PatternCachedType;
+    TExprNode::TPtr PatternRunConfigType;
+    TExprNode::TPtr PatternSettings;
+    TExprNode::TPtr OptionsJust;
+    TExprNode::TPtr OptionsApply;
+    TExprNode::TPtr OptionsUdf;
+    TExprNode::TPtr OptionsUserType;
+    TExprNode::TPtr OptionsCachedType;
+    TExprNode::TPtr OptionsRunConfigType;
+    TExprNode::TPtr OptionsSettings;
+    TExprNode::TPtr OptionsPositional;
+    TExprNode::TPtr OptionsNamed;
+    TExprNode::TPtr CaseSensitiveItem;
+    TExprNode::TPtr CaseSensitiveJust;
+    TExprNode::TPtr CaseSensitiveLiteral;
+};
+
+TCompiledLikeFixture TypedCompiledLike(
+    TExportTestContext& ctx,
+    TStringBuf pattern = "%special%requests%")
+{
+    TCompiledLikeFixture result;
+    result.BoolType = ScalarType(ctx, NUdf::EDataSlot::Bool);
+    result.OptionalBoolType =
+        ScalarType(ctx, NUdf::EDataSlot::Bool, true);
+    result.StringType = ScalarType(ctx, NUdf::EDataSlot::String);
+    result.OptionalStringType =
+        ScalarType(ctx, NUdf::EDataSlot::String, true);
+    result.Uint64Type = ScalarType(ctx, NUdf::EDataSlot::Uint64);
+    result.OptionalUint64Type =
+        ScalarType(ctx, NUdf::EDataSlot::Uint64, true);
+
+    TVector<const TItemExprType*> optionItems;
+    optionItems.reserve(Re2OptionStructNames.size());
+    for (const TStringBuf name : Re2OptionStructNames) {
+        optionItems.push_back(ctx.ExprCtx.MakeType<TItemExprType>(
+            name,
+            name == "MaxMem" ? result.Uint64Type : result.BoolType));
+    }
+    result.OptionsType =
+        ctx.ExprCtx.MakeType<TStructExprType>(std::move(optionItems));
+    result.OptionalOptionsType =
+        ctx.ExprCtx.MakeType<TOptionalExprType>(result.OptionsType);
+    result.RunConfigType = ctx.ExprCtx.MakeType<TTupleExprType>(
+        TTypeAnnotationNode::TListType{
+            result.StringType,
+            result.OptionalOptionsType,
+        });
+    result.EmptyTupleType =
+        ctx.ExprCtx.MakeType<TTupleExprType>(
+            TTypeAnnotationNode::TListType{});
+    result.NamedOptionsType =
+        ctx.ExprCtx.MakeType<TStructExprType>(
+            TVector<const TItemExprType*>{
+                ctx.ExprCtx.MakeType<TItemExprType>(
+                    "CaseSensitive", result.OptionalBoolType),
+            });
+
+    result.MatchCallable = NamedCallableType(
+        ctx,
+        result.BoolType,
+        {{result.OptionalStringType, ""}});
+    result.PatternCallable = NamedCallableType(
+        ctx,
+        result.StringType,
+        {
+            {result.StringType, ""},
+            {result.OptionalStringType, ""},
+        },
+        1);
+    TVector<TNamedCallableArgument> optionArguments;
+    optionArguments.reserve(Re2OptionArgumentNames.size());
+    for (const TStringBuf name : Re2OptionArgumentNames) {
+        optionArguments.push_back({
+            name == "MaxMem"
+                ? static_cast<const TTypeAnnotationNode*>(
+                    result.OptionalUint64Type)
+                : static_cast<const TTypeAnnotationNode*>(
+                    result.OptionalBoolType),
+            name,
+        });
+    }
+    result.OptionsCallable = NamedCallableType(
+        ctx,
+        result.OptionsType,
+        optionArguments,
+        optionArguments.size());
+
+    result.PatternUserType = VoidTypeDescriptor(ctx);
+    result.PatternCachedType = NamedCallableTypeDescriptor(
+        ctx,
+        DataTypeDescriptor(ctx, "String", result.StringType),
+        {
+            {DataTypeDescriptor(
+                ctx, "String", result.StringType), ""},
+            {OptionalDataTypeDescriptor(
+                ctx,
+                "String",
+                result.StringType,
+                result.OptionalStringType), ""},
+        },
+        result.PatternCallable,
+        1);
+    result.PatternRunConfigType = VoidTypeDescriptor(ctx);
+    result.PatternSettings =
+        ctx.ExprCtx.NewList(TPositionHandle(), {});
+    result.PatternUdf = TypedCallable(
+        ctx,
+        "Udf",
+        {
+            ctx.ExprCtx.NewAtom(
+                TPositionHandle(), "Re2.PatternFromLike"),
+            VoidValue(ctx),
+            result.PatternUserType,
+            ctx.ExprCtx.NewAtom(TPositionHandle(), ""),
+            result.PatternCachedType,
+            result.PatternRunConfigType,
+            ctx.ExprCtx.NewAtom(TPositionHandle(), ""),
+            result.PatternSettings,
+        },
+        result.PatternCallable);
+    result.PatternLiteral = TypedLiteral(
+        ctx, "String", pattern, result.StringType);
+    result.PatternApply = TypedCallable(
+        ctx,
+        "Apply",
+        {result.PatternUdf, result.PatternLiteral},
+        result.StringType);
+
+    result.OptionsUserType = VoidTypeDescriptor(ctx);
+    TVector<TNamedArgumentDescriptor> optionDescriptors;
+    optionDescriptors.reserve(Re2OptionArgumentNames.size());
+    for (const TStringBuf name : Re2OptionArgumentNames) {
+        optionDescriptors.push_back({
+            OptionalDataTypeDescriptor(
+                ctx,
+                name == "MaxMem"
+                    ? TStringBuf("Uint64")
+                    : TStringBuf("Bool"),
+                name == "MaxMem"
+                    ? result.Uint64Type
+                    : result.BoolType,
+                name == "MaxMem"
+                    ? static_cast<const TTypeAnnotationNode*>(
+                        result.OptionalUint64Type)
+                    : static_cast<const TTypeAnnotationNode*>(
+                        result.OptionalBoolType)),
+            name,
+        });
+    }
+    result.OptionsCachedType = NamedCallableTypeDescriptor(
+        ctx,
+        Re2OptionsTypeDescriptor(
+            ctx,
+            result.BoolType,
+            result.Uint64Type,
+            result.OptionsType),
+        std::move(optionDescriptors),
+        result.OptionsCallable,
+        Re2OptionArgumentNames.size());
+    result.OptionsRunConfigType = VoidTypeDescriptor(ctx);
+    result.OptionsSettings = UdfSettings(ctx, {"strict"});
+    result.OptionsUdf = TypedCallable(
+        ctx,
+        "Udf",
+        {
+            ctx.ExprCtx.NewAtom(TPositionHandle(), "Re2.Options"),
+            VoidValue(ctx),
+            result.OptionsUserType,
+            ctx.ExprCtx.NewAtom(TPositionHandle(), ""),
+            result.OptionsCachedType,
+            result.OptionsRunConfigType,
+            ctx.ExprCtx.NewAtom(TPositionHandle(), ""),
+            result.OptionsSettings,
+        },
+        result.OptionsCallable);
+    result.OptionsPositional =
+        ctx.ExprCtx.NewList(TPositionHandle(), {});
+    result.OptionsPositional->SetTypeAnn(result.EmptyTupleType);
+    result.CaseSensitiveLiteral = TypedLiteral(
+        ctx, "Bool", "true", result.BoolType);
+    result.CaseSensitiveJust = TypedCallable(
+        ctx,
+        "Just",
+        {result.CaseSensitiveLiteral},
+        result.OptionalBoolType);
+    result.CaseSensitiveItem = ctx.ExprCtx.NewList(
+        TPositionHandle(),
+        {
+            ctx.ExprCtx.NewAtom(TPositionHandle(), "CaseSensitive"),
+            result.CaseSensitiveJust,
+        });
+    result.OptionsNamed = TypedCallable(
+        ctx,
+        "AsStruct",
+        {result.CaseSensitiveItem},
+        result.NamedOptionsType);
+    result.OptionsApply = TypedCallable(
+        ctx,
+        "NamedApply",
+        {
+            result.OptionsUdf,
+            result.OptionsPositional,
+            result.OptionsNamed,
+        },
+        result.OptionsType);
+    result.OptionsJust = TypedCallable(
+        ctx,
+        "Just",
+        {result.OptionsApply},
+        result.OptionalOptionsType);
+
+    result.MatchRunConfig = ctx.ExprCtx.NewList(
+        TPositionHandle(),
+        {result.PatternApply, result.OptionsJust});
+    result.MatchRunConfig->SetTypeAnn(result.RunConfigType);
+    result.MatchUserType = VoidTypeDescriptor(ctx);
+    result.MatchCachedType = NamedCallableTypeDescriptor(
+        ctx,
+        DataTypeDescriptor(ctx, "Bool", result.BoolType),
+        {{
+            OptionalDataTypeDescriptor(
+                ctx,
+                "String",
+                result.StringType,
+                result.OptionalStringType),
+            "",
+        }},
+        result.MatchCallable);
+    result.MatchRunConfigType = TupleTypeDescriptor(
+        ctx,
+        {
+            DataTypeDescriptor(
+                ctx, "String", result.StringType),
+            OptionalTypeDescriptor(
+                ctx,
+                Re2OptionsTypeDescriptor(
+                    ctx,
+                    result.BoolType,
+                    result.Uint64Type,
+                    result.OptionsType),
+                result.OptionalOptionsType),
+        },
+        result.RunConfigType);
+    result.MatchSettings =
+        ctx.ExprCtx.NewList(TPositionHandle(), {});
+    result.MatchUdf = TypedCallable(
+        ctx,
+        "Udf",
+        {
+            ctx.ExprCtx.NewAtom(TPositionHandle(), "Re2.Match"),
+            result.MatchRunConfig,
+            result.MatchUserType,
+            ctx.ExprCtx.NewAtom(TPositionHandle(), ""),
+            result.MatchCachedType,
+            result.MatchRunConfigType,
+            ctx.ExprCtx.NewAtom(TPositionHandle(), ""),
+            result.MatchSettings,
+        },
+        result.MatchCallable);
+    result.AssumeStrict = TypedCallable(
+        ctx,
+        "AssumeStrict",
+        {result.MatchUdf},
+        result.MatchCallable);
+    result.Member = TypedMember(
+        ctx, "a.x", result.OptionalStringType);
+    result.Root = TypedCallable(
+        ctx,
+        "Apply",
+        {result.AssumeStrict, result.Member},
+        result.BoolType);
+    return result;
+}
+
+TExprNode::TPtr CopyTypedCallable(
+    TExportTestContext& ctx,
+    const TExprNode& node,
+    TStringBuf callable,
+    TExprNode::TListType children)
+{
+    return TypedCallable(
+        ctx, callable, std::move(children), node.GetTypeAnn());
+}
+
+TExprNode::TPtr CopyTypedList(
+    TExportTestContext& ctx,
+    const TExprNode& node,
+    TExprNode::TListType children)
+{
+    auto result =
+        ctx.ExprCtx.NewList(TPositionHandle(), std::move(children));
+    result->SetTypeAnn(node.GetTypeAnn());
+    return result;
+}
+
+TVector<TNamedCallableArgument> Re2OptionCallableArguments(
+    const TCompiledLikeFixture& fixture)
+{
+    TVector<TNamedCallableArgument> result;
+    result.reserve(Re2OptionArgumentNames.size());
+    for (const TStringBuf name : Re2OptionArgumentNames) {
+        result.push_back({
+            name == "MaxMem"
+                ? static_cast<const TTypeAnnotationNode*>(
+                    fixture.OptionalUint64Type)
+                : static_cast<const TTypeAnnotationNode*>(
+                    fixture.OptionalBoolType),
+            name,
+        });
+    }
+    return result;
+}
+
+TVector<TExprNode*> CompiledLikeNodes(TExprNode& root) {
+    TVector<TExprNode*> pending{&root};
+    TVector<TExprNode*> result;
+    THashSet<TExprNode*> seen;
+    while (!pending.empty()) {
+        TExprNode* node = pending.back();
+        pending.pop_back();
+        if (!seen.insert(node).second) {
+            continue;
+        }
+        result.push_back(node);
+        for (const auto& child : node->Children()) {
+            pending.push_back(child.Get());
+        }
+    }
+    return result;
+}
+
+using TCompiledLikeMutation =
+    std::function<void(TExportTestContext&, TCompiledLikeFixture&)>;
+
 const TCallableExprType* IntervalFromDaysCallableType(
     TExportTestContext& ctx,
     const TTypeAnnotationNode* resultType,
@@ -2697,6 +3178,23 @@ NJson::TJsonValue ExportTypedMapExpression(
     const auto& columns = FindNode(snapshot, "project")["columns"].GetArraySafe();
     UNIT_ASSERT_VALUES_EQUAL(columns.back()["output"].GetStringSafe(), "result");
     return columns.back()["expression"];
+}
+
+TSemanticSnapshotExportResult ExportCompiledLike(
+    TExportTestContext& ctx,
+    TStringBuf pattern = "%special%requests%",
+    const TCompiledLikeMutation& mutate = {})
+{
+    auto fixture = TypedCompiledLike(ctx, pattern);
+    if (mutate) {
+        mutate(ctx, fixture);
+    }
+    return ExportTypedMapExpressionResult(
+        ctx,
+        "a",
+        "String",
+        true,
+        std::move(fixture.Root));
 }
 
 NJson::TJsonValue ExportMapExpression(
@@ -6542,6 +7040,554 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             missing["kind"].GetStringSafe(), "null");
         UNIT_ASSERT_VALUES_EQUAL(
             missing["type"].GetStringSafe(), "Utf8");
+    }
+
+    Y_UNIT_TEST(ExportsExactCompiledLikeApplyWithNullFalseSemantics) {
+        TExportTestContext ctx;
+        const auto snapshot = ParseSupported(ExportCompiledLike(ctx));
+        const auto& expression = FindNode(snapshot, "project")
+            ["columns"].GetArraySafe().back()["expression"];
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            expression["kind"].GetStringSafe(), "if_present");
+        UNIT_ASSERT_VALUES_EQUAL(
+            expression["type"].GetStringSafe(), "Bool");
+        UNIT_ASSERT(!expression["nullable"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            expression["optional"]["kind"].GetStringSafe(), "column");
+        UNIT_ASSERT_VALUES_EQUAL(
+            expression["optional"]["column"].GetStringSafe(), "a.x");
+
+        const auto& present = expression["present"];
+        UNIT_ASSERT_VALUES_EQUAL(
+            present["kind"].GetStringSafe(), "opaque");
+        UNIT_ASSERT_VALUES_EQUAL(
+            present["type"].GetStringSafe(), "Bool");
+        UNIT_ASSERT(!present["nullable"].GetBooleanSafe());
+        UNIT_ASSERT_STRING_CONTAINS(
+            present["fingerprint"].GetStringSafe(),
+            "format:34:yql-re2-pattern-from-like-match-v1;");
+        UNIT_ASSERT_STRING_CONTAINS(
+            present["fingerprint"].GetStringSafe(),
+            "pattern:18:%special%requests%;");
+        UNIT_ASSERT_STRING_CONTAINS(
+            present["fingerprint"].GetStringSafe(),
+            "escape:4:none;case_sensitive:4:true;");
+        UNIT_ASSERT_VALUES_EQUAL(
+            present["args"].GetArraySafe().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            present["args"][0]["kind"].GetStringSafe(), "bound");
+        UNIT_ASSERT_VALUES_EQUAL(
+            present["args"][0]["depth"].GetUIntegerSafe(), 0);
+
+        const auto& missing = expression["missing"];
+        UNIT_ASSERT_VALUES_EQUAL(
+            missing["kind"].GetStringSafe(), "literal");
+        UNIT_ASSERT_VALUES_EQUAL(
+            missing["type"].GetStringSafe(), "Bool");
+        UNIT_ASSERT(!missing["value"].GetBooleanSafe());
+    }
+
+    Y_UNIT_TEST(CompiledLikeFingerprintLengthDelimitsPattern) {
+        const auto fingerprint = [](TStringBuf pattern) {
+            TExportTestContext ctx;
+            const auto snapshot =
+                ParseSupported(ExportCompiledLike(ctx, pattern));
+            return FindNode(snapshot, "project")
+                ["columns"].GetArraySafe().back()["expression"]
+                ["present"]["fingerprint"].GetStringSafe();
+        };
+
+        const TString first = fingerprint("a;pattern:1:b");
+        const TString second = fingerprint("a");
+        UNIT_ASSERT_VALUES_UNEQUAL(first, second);
+        UNIT_ASSERT_STRING_CONTAINS(first, "pattern:13:a;pattern:1:b;");
+        UNIT_ASSERT_STRING_CONTAINS(second, "pattern:1:a;");
+    }
+
+    Y_UNIT_TEST(CompiledLikePatternByteLimitAndAsciiGateFailClosed) {
+        {
+            TExportTestContext ctx;
+            ParseSupported(ExportCompiledLike(ctx, TString(4096, 'a')));
+        }
+        {
+            TExportTestContext ctx;
+            const auto result =
+                ExportCompiledLike(ctx, TString(4097, 'a'));
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "pattern exceeds the byte audit limit");
+        }
+        {
+            TExportTestContext ctx;
+            const auto result = ExportCompiledLike(ctx, "\xC3\xA9");
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "only ASCII patterns");
+        }
+    }
+
+    Y_UNIT_TEST(CompiledLikeEnvelopeMutationsFailClosed) {
+        struct TMutation {
+            TStringBuf Name;
+            TCompiledLikeMutation Apply;
+        };
+        const TVector<TMutation> mutations = {
+            {"outer arity", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.Root = CopyTypedCallable(
+                    ctx, *f.Root, "Apply", {f.AssumeStrict});
+            }},
+            {"outer result", [](TExportTestContext&, TCompiledLikeFixture& f) {
+                f.Root->SetTypeAnn(f.OptionalBoolType);
+            }},
+            {"AssumeStrict callable", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.Root->ChildRef(0) = CopyTypedCallable(
+                    ctx,
+                    *f.AssumeStrict,
+                    "AssumeNonStrict",
+                    f.AssumeStrict->ChildrenList());
+            }},
+            {"AssumeStrict arity", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.Root->ChildRef(0) = CopyTypedCallable(
+                    ctx, *f.AssumeStrict, "AssumeStrict", {});
+            }},
+            {"AssumeStrict signature", [](TExportTestContext&, TCompiledLikeFixture& f) {
+                f.AssumeStrict->SetTypeAnn(f.PatternCallable);
+            }},
+            {"Match name", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.MatchUdf->ChildRef(0) =
+                    ctx.ExprCtx.NewAtom(TPositionHandle(), "Re2.Grep");
+            }},
+            {"Match arity", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                auto children = f.MatchUdf->ChildrenList();
+                children.pop_back();
+                f.AssumeStrict->ChildRef(0) = CopyTypedCallable(
+                    ctx, *f.MatchUdf, "Udf", std::move(children));
+            }},
+            {"Match run-config arity", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.MatchUdf->ChildRef(1) = CopyTypedList(
+                    ctx, *f.MatchRunConfig, {f.PatternApply});
+            }},
+            {"Match run-config annotation", [](TExportTestContext&, TCompiledLikeFixture& f) {
+                f.MatchRunConfig->SetTypeAnn(f.EmptyTupleType);
+            }},
+            {"Match user type", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.MatchUdf->ChildRef(2) =
+                    DataTypeDescriptor(ctx, "String", f.StringType);
+            }},
+            {"Match type config", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.MatchUdf->ChildRef(3) =
+                    ctx.ExprCtx.NewAtom(TPositionHandle(), "config");
+            }},
+            {"Match file alias", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.MatchUdf->ChildRef(6) =
+                    ctx.ExprCtx.NewAtom(TPositionHandle(), "module");
+            }},
+            {"Match settings", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.MatchUdf->ChildRef(7) = UdfSettings(ctx, {"strict"});
+            }},
+            {"Match return signature", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.MatchUdf->SetTypeAnn(NamedCallableType(
+                    ctx,
+                    f.StringType,
+                    {{f.OptionalStringType, ""}}));
+            }},
+            {"Match argument signature", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.MatchUdf->SetTypeAnn(NamedCallableType(
+                    ctx,
+                    f.BoolType,
+                    {{f.StringType, ""}}));
+            }},
+            {"Match optional count", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.MatchUdf->SetTypeAnn(NamedCallableType(
+                    ctx,
+                    f.BoolType,
+                    {{f.OptionalStringType, ""}},
+                    1));
+            }},
+            {"Match payload", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.MatchUdf->SetTypeAnn(NamedCallableType(
+                    ctx,
+                    f.BoolType,
+                    {{f.OptionalStringType, ""}},
+                    0,
+                    "payload"));
+            }},
+            {"Match argument name", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.MatchUdf->SetTypeAnn(NamedCallableType(
+                    ctx,
+                    f.BoolType,
+                    {{f.OptionalStringType, "text"}}));
+            }},
+            {"Match argument flags", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.MatchUdf->SetTypeAnn(NamedCallableType(
+                    ctx,
+                    f.BoolType,
+                    {{f.OptionalStringType, "", 1}}));
+            }},
+            {"Match cached annotation", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.MatchCachedType->SetTypeAnn(
+                    ctx.ExprCtx.MakeType<TTypeExprType>(
+                        f.PatternCallable));
+            }},
+            {"Match cached header", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.MatchCachedType->ChildRef(0) =
+                    ctx.ExprCtx.NewList(
+                        TPositionHandle(),
+                        {ctx.ExprCtx.NewAtom(TPositionHandle(), "0")});
+            }},
+            {"Match cached return", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.MatchCachedType->Child(1)->ChildRef(0) =
+                    DataTypeDescriptor(ctx, "String", f.StringType);
+            }},
+            {"Match cached argument", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.MatchCachedType->Child(2)->ChildRef(0) =
+                    DataTypeDescriptor(ctx, "String", f.StringType);
+            }},
+            {"Match run-config descriptor", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.MatchRunConfigType->ChildRef(1) =
+                    DataTypeDescriptor(ctx, "String", f.StringType);
+            }},
+            {"Pattern Apply escape", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                auto children = f.PatternApply->ChildrenList();
+                children.push_back(TypedLiteral(
+                    ctx, "String", "#", f.StringType));
+                f.MatchRunConfig->ChildRef(0) = CopyTypedCallable(
+                    ctx, *f.PatternApply, "Apply", std::move(children));
+            }},
+            {"Pattern Apply result", [](TExportTestContext&, TCompiledLikeFixture& f) {
+                f.PatternApply->SetTypeAnn(f.OptionalStringType);
+            }},
+            {"Pattern literal type", [](TExportTestContext&, TCompiledLikeFixture& f) {
+                f.PatternLiteral->SetTypeAnn(f.OptionalStringType);
+            }},
+            {"Pattern name", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.PatternUdf->ChildRef(0) =
+                    ctx.ExprCtx.NewAtom(TPositionHandle(), "Re2.Escape");
+            }},
+            {"Pattern run config", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.PatternUdf->ChildRef(1) = TypedLiteral(
+                    ctx, "String", "run", f.StringType);
+            }},
+            {"Pattern user type", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.PatternUdf->ChildRef(2) =
+                    DataTypeDescriptor(ctx, "String", f.StringType);
+            }},
+            {"Pattern settings", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.PatternUdf->ChildRef(7) = UdfSettings(ctx, {"strict"});
+            }},
+            {"Pattern signature", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.PatternUdf->SetTypeAnn(NamedCallableType(
+                    ctx,
+                    f.StringType,
+                    {
+                        {f.OptionalStringType, ""},
+                        {f.OptionalStringType, ""},
+                    },
+                    1));
+            }},
+            {"Pattern optional count", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.PatternUdf->SetTypeAnn(NamedCallableType(
+                    ctx,
+                    f.StringType,
+                    {
+                        {f.StringType, ""},
+                        {f.OptionalStringType, ""},
+                    }));
+            }},
+            {"Pattern cached header", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.PatternCachedType->ChildRef(0) =
+                    ctx.ExprCtx.NewList(TPositionHandle(), {});
+            }},
+            {"Pattern cached return", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.PatternCachedType->Child(1)->ChildRef(0) =
+                    DataTypeDescriptor(ctx, "Bool", f.BoolType);
+            }},
+            {"Pattern cached argument", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.PatternCachedType->Child(2)->ChildRef(0) =
+                    OptionalDataTypeDescriptor(
+                        ctx,
+                        "String",
+                        f.StringType,
+                        f.OptionalStringType);
+            }},
+            {"Pattern run-config type", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.PatternUdf->ChildRef(5) =
+                    DataTypeDescriptor(ctx, "String", f.StringType);
+            }},
+            {"Options Just annotation", [](TExportTestContext&, TCompiledLikeFixture& f) {
+                f.OptionsJust->SetTypeAnn(f.OptionsType);
+            }},
+            {"Options NamedApply arity", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.OptionsJust->ChildRef(0) = CopyTypedCallable(
+                    ctx,
+                    *f.OptionsApply,
+                    "NamedApply",
+                    {f.OptionsUdf, f.OptionsPositional});
+            }},
+            {"Options NamedApply result", [](TExportTestContext&, TCompiledLikeFixture& f) {
+                f.OptionsApply->SetTypeAnn(f.OptionalOptionsType);
+            }},
+            {"Options name", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.OptionsUdf->ChildRef(0) =
+                    ctx.ExprCtx.NewAtom(TPositionHandle(), "Re2.PosixOptions");
+            }},
+            {"Options run config", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.OptionsUdf->ChildRef(1) =
+                    TypedLiteral(ctx, "Bool", "true", f.BoolType);
+            }},
+            {"Options user type", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.OptionsUdf->ChildRef(2) =
+                    DataTypeDescriptor(ctx, "String", f.StringType);
+            }},
+            {"Options type config", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.OptionsUdf->ChildRef(3) =
+                    ctx.ExprCtx.NewAtom(TPositionHandle(), "config");
+            }},
+            {"Options file alias", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.OptionsUdf->ChildRef(6) =
+                    ctx.ExprCtx.NewAtom(TPositionHandle(), "module");
+            }},
+            {"Options settings", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.OptionsUdf->ChildRef(7) =
+                    UdfSettings(ctx, {"blocks", "strict"});
+            }},
+            {"Options optional count", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.OptionsUdf->SetTypeAnn(NamedCallableType(
+                    ctx,
+                    f.OptionsType,
+                    Re2OptionCallableArguments(f),
+                    12));
+            }},
+            {"Options payload", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.OptionsUdf->SetTypeAnn(NamedCallableType(
+                    ctx,
+                    f.OptionsType,
+                    Re2OptionCallableArguments(f),
+                    13,
+                    "payload"));
+            }},
+            {"Options cached header", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.OptionsCachedType->ChildRef(0) =
+                    ctx.ExprCtx.NewList(
+                        TPositionHandle(),
+                        {ctx.ExprCtx.NewAtom(TPositionHandle(), "12")});
+            }},
+            {"Options cached return name", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.OptionsCachedType->Child(1)->Child(0)
+                    ->Child(0)->ChildRef(0) =
+                    ctx.ExprCtx.NewAtom(
+                        TPositionHandle(), "WrongCaseSensitive");
+            }},
+            {"Options cached return type", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.OptionsCachedType->Child(1)->Child(0)
+                    ->Child(0)->ChildRef(1) =
+                    DataTypeDescriptor(ctx, "Uint64", f.Uint64Type);
+            }},
+            {"Options cached argument name", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.OptionsCachedType->Child(2)->ChildRef(1) =
+                    ctx.ExprCtx.NewAtom(TPositionHandle(), "WrongUtf8");
+            }},
+            {"Options positional value", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.OptionsApply->ChildRef(1) = CopyTypedList(
+                    ctx,
+                    *f.OptionsPositional,
+                    {TypedLiteral(ctx, "Bool", "true", f.BoolType)});
+            }},
+            {"Options positional annotation", [](TExportTestContext&, TCompiledLikeFixture& f) {
+                f.OptionsPositional->SetTypeAnn(f.RunConfigType);
+            }},
+            {"Options named annotation", [](TExportTestContext&, TCompiledLikeFixture& f) {
+                f.OptionsNamed->SetTypeAnn(f.OptionsType);
+            }},
+            {"Options field name", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.CaseSensitiveItem->ChildRef(0) =
+                    ctx.ExprCtx.NewAtom(TPositionHandle(), "Utf8");
+            }},
+            {"Options field Just type", [](TExportTestContext&, TCompiledLikeFixture& f) {
+                f.CaseSensitiveJust->SetTypeAnn(f.BoolType);
+            }},
+            {"Options CaseSensitive false", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.CaseSensitiveJust->ChildRef(0) =
+                    TypedLiteral(ctx, "Bool", "false", f.BoolType);
+            }},
+            {"source type", [](TExportTestContext&, TCompiledLikeFixture& f) {
+                f.Member->SetTypeAnn(f.StringType);
+            }},
+            {"source visibility", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.Member->ChildRef(1) =
+                    ctx.ExprCtx.NewAtom(TPositionHandle(), "a.hidden");
+            }},
+            {"source identity", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                auto foreign =
+                    ctx.ExprCtx.NewArgument(TPositionHandle(), "foreign");
+                foreign->SetTypeAnn(f.OptionalStringType);
+                f.Member->ChildRef(0) = std::move(foreign);
+                auto row =
+                    ctx.ExprCtx.NewArgument(TPositionHandle(), "row");
+                f.Root = ctx.ExprCtx.NewLambda(
+                    TPositionHandle(),
+                    ctx.ExprCtx.NewArguments(
+                        TPositionHandle(), {std::move(row)}),
+                    std::move(f.Root));
+            }},
+            {"source is not Member", [](TExportTestContext& ctx, TCompiledLikeFixture& f) {
+                f.Root->ChildRef(1) = TypedNothing(
+                    ctx,
+                    "String",
+                    f.StringType,
+                    f.OptionalStringType);
+            }},
+        };
+
+        for (const auto& mutation : mutations) {
+            TExportTestContext ctx;
+            const auto result =
+                ExportCompiledLike(ctx, "%special%requests%", mutation.Apply);
+            UNIT_ASSERT_C(!result.IsSupported(), mutation.Name);
+        }
+    }
+
+    Y_UNIT_TEST(CompiledLikeOptionsSignatureAndCacheFieldsFailClosed) {
+        for (size_t index = 0;
+             index < Re2OptionArgumentNames.size();
+             ++index)
+        {
+            for (size_t mutation = 0; mutation < 3; ++mutation) {
+                TExportTestContext ctx;
+                const auto result = ExportCompiledLike(
+                    ctx,
+                    "%special%requests%",
+                    [index, mutation](
+                        TExportTestContext& inner,
+                        TCompiledLikeFixture& fixture)
+                    {
+                        auto arguments =
+                            Re2OptionCallableArguments(fixture);
+                        if (mutation == 0) {
+                            arguments[index].Name = "WrongName";
+                        } else if (mutation == 1) {
+                            arguments[index].Type =
+                                fixture.OptionalStringType;
+                        } else {
+                            arguments[index].Flags = 1;
+                        }
+                        fixture.OptionsUdf->SetTypeAnn(NamedCallableType(
+                            inner,
+                            fixture.OptionsType,
+                            arguments,
+                            arguments.size()));
+                    });
+                UNIT_ASSERT_C(
+                    !result.IsSupported(),
+                    TStringBuilder() << index << "/" << mutation);
+            }
+
+            for (size_t mutation = 0; mutation < 3; ++mutation) {
+                TExportTestContext ctx;
+                const auto result = ExportCompiledLike(
+                    ctx,
+                    "%special%requests%",
+                    [index, mutation](
+                        TExportTestContext& inner,
+                        TCompiledLikeFixture& fixture)
+                    {
+                        auto& descriptor =
+                            fixture.OptionsCachedType->ChildRef(index + 2);
+                        if (mutation == 0) {
+                            descriptor->ChildRef(1) =
+                                inner.ExprCtx.NewAtom(
+                                    TPositionHandle(), "WrongName");
+                        } else if (mutation == 1) {
+                            descriptor->ChildRef(0) =
+                                OptionalDataTypeDescriptor(
+                                    inner,
+                                    "String",
+                                    fixture.StringType,
+                                    fixture.OptionalStringType);
+                        } else {
+                            descriptor = CopyTypedList(
+                                inner,
+                                *descriptor,
+                                {
+                                    descriptor->ChildPtr(0),
+                                    descriptor->ChildPtr(1),
+                                    inner.ExprCtx.NewAtom(
+                                        TPositionHandle(), "1"),
+                                });
+                        }
+                    });
+                UNIT_ASSERT_C(
+                    !result.IsSupported(),
+                    TStringBuilder() << "cache " << index << "/" << mutation);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(CompiledLikeSafetyMetadataFailsClosedAtEveryNode) {
+        TExportTestContext baseline;
+        auto baselineFixture = TypedCompiledLike(baseline);
+        const size_t nodeCount =
+            CompiledLikeNodes(*baselineFixture.Root).size();
+        UNIT_ASSERT(nodeCount > 100);
+
+        for (size_t index = 0; index < nodeCount; ++index) {
+            TExportTestContext ctx;
+            const auto result = ExportCompiledLike(
+                ctx,
+                "%special%requests%",
+                [index](
+                    TExportTestContext& inner,
+                    TCompiledLikeFixture& fixture)
+                {
+                    auto nodes = CompiledLikeNodes(*fixture.Root);
+                    UNIT_ASSERT(index < nodes.size());
+                    nodes[index]->SetSideEffects(ESideEffects::General);
+                    fixture.Root = inner.ExprCtx.NewLambda(
+                        TPositionHandle(),
+                        inner.ExprCtx.NewArguments(
+                            TPositionHandle(),
+                            {fixture.Member->ChildPtr(0)}),
+                        std::move(fixture.Root));
+                });
+            UNIT_ASSERT_C(
+                !result.IsSupported(),
+                TStringBuilder() << "unsafe node " << index);
+        }
+
+        const TVector<std::pair<TStringBuf, TCompiledLikeMutation>> otherMetadata = {
+            {"position aware", [](TExportTestContext&, TCompiledLikeFixture& fixture) {
+                fixture.MatchRunConfig->SetPosAware();
+            }},
+            {"unordered children", [](TExportTestContext&, TCompiledLikeFixture& fixture) {
+                fixture.MatchRunConfig->SetUnorderedChildren();
+            }},
+            {"executed result", [](TExportTestContext& ctx, TCompiledLikeFixture& fixture) {
+                fixture.PatternLiteral->SetResult(
+                    ctx.ExprCtx.NewAtom(TPositionHandle(), "executed"));
+            }},
+        };
+        for (const auto& [name, mutate] : otherMetadata) {
+            TExportTestContext ctx;
+            const auto result = ExportCompiledLike(
+                ctx,
+                "%special%requests%",
+                [&mutate](
+                    TExportTestContext& inner,
+                    TCompiledLikeFixture& fixture)
+                {
+                    mutate(inner, fixture);
+                    fixture.Root = inner.ExprCtx.NewLambda(
+                        TPositionHandle(),
+                        inner.ExprCtx.NewArguments(
+                            TPositionHandle(),
+                            {fixture.Member->ChildPtr(0)}),
+                        std::move(fixture.Root));
+                });
+            UNIT_ASSERT_C(!result.IsSupported(), name);
+        }
     }
 
     Y_UNIT_TEST(NullableUnicodeToUpperMapGateFailsClosed) {

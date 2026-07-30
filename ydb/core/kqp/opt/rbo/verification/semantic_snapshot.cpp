@@ -27,6 +27,7 @@
 #include <util/string/cast.h>
 
 #include <algorithm>
+#include <array>
 #include <functional>
 #include <limits>
 #include <optional>
@@ -2911,6 +2912,695 @@ void CheckReviewedUdfApply(
     }
 }
 
+enum class ECompiledLikeUdf : ui8 {
+    Match,
+    PatternFromLike,
+    Options,
+};
+
+enum class ECompiledLikeType : ui8 {
+    Bool,
+    String,
+    Uint64,
+    OptionalBool,
+    OptionalString,
+    OptionalUint64,
+    Options,
+    OptionalOptions,
+};
+
+struct TCompiledLikeDataField {
+    TStringBuf Name;
+    ECompiledLikeType Type;
+};
+
+constexpr std::array<TCompiledLikeDataField, 13>
+    CompiledLikeOptionsStructFields = {{
+        {"CaseSensitive", ECompiledLikeType::Bool},
+        {"DotNl", ECompiledLikeType::Bool},
+        {"Literal", ECompiledLikeType::Bool},
+        {"LogErrors", ECompiledLikeType::Bool},
+        {"LongestMatch", ECompiledLikeType::Bool},
+        {"MaxMem", ECompiledLikeType::Uint64},
+        {"NeverCapture", ECompiledLikeType::Bool},
+        {"NeverNl", ECompiledLikeType::Bool},
+        {"OneLine", ECompiledLikeType::Bool},
+        {"PerlClasses", ECompiledLikeType::Bool},
+        {"PosixSyntax", ECompiledLikeType::Bool},
+        {"Utf8", ECompiledLikeType::Bool},
+        {"WordBoundary", ECompiledLikeType::Bool},
+    }};
+
+constexpr std::array<TCompiledLikeDataField, 13>
+    CompiledLikeOptionsArguments = {{
+        {"Utf8", ECompiledLikeType::OptionalBool},
+        {"PosixSyntax", ECompiledLikeType::OptionalBool},
+        {"LongestMatch", ECompiledLikeType::OptionalBool},
+        {"LogErrors", ECompiledLikeType::OptionalBool},
+        {"MaxMem", ECompiledLikeType::OptionalUint64},
+        {"Literal", ECompiledLikeType::OptionalBool},
+        {"NeverNl", ECompiledLikeType::OptionalBool},
+        {"DotNl", ECompiledLikeType::OptionalBool},
+        {"NeverCapture", ECompiledLikeType::OptionalBool},
+        {"CaseSensitive", ECompiledLikeType::OptionalBool},
+        {"PerlClasses", ECompiledLikeType::OptionalBool},
+        {"WordBoundary", ECompiledLikeType::OptionalBool},
+        {"OneLine", ECompiledLikeType::OptionalBool},
+    }};
+
+constexpr std::array<TCompiledLikeDataField, 1>
+    CompiledLikeMatchArguments = {{
+        {"", ECompiledLikeType::OptionalString},
+    }};
+constexpr std::array<TCompiledLikeDataField, 2>
+    CompiledLikePatternArguments = {{
+        {"", ECompiledLikeType::String},
+        {"", ECompiledLikeType::OptionalString},
+    }};
+
+struct TCompiledLikeUdfSpec {
+    TStringBuf Name;
+    ECompiledLikeType Result;
+    const TCompiledLikeDataField* Arguments;
+    size_t ArgumentCount;
+    size_t OptionalArgumentCount;
+    bool Strict;
+};
+
+const TCompiledLikeUdfSpec& CompiledLikeUdfSpec(
+    ECompiledLikeUdf kind)
+{
+    static const std::array<TCompiledLikeUdfSpec, 3> Specs = {{
+        {"Re2.Match", ECompiledLikeType::Bool,
+            CompiledLikeMatchArguments.data(),
+            CompiledLikeMatchArguments.size(), 0, false},
+        {"Re2.PatternFromLike", ECompiledLikeType::String,
+            CompiledLikePatternArguments.data(),
+            CompiledLikePatternArguments.size(), 1, false},
+        {"Re2.Options", ECompiledLikeType::Options,
+            CompiledLikeOptionsArguments.data(),
+            CompiledLikeOptionsArguments.size(),
+            CompiledLikeOptionsArguments.size(), true},
+    }};
+    return Specs[static_cast<size_t>(kind)];
+}
+
+// The reviewed workload patterns are ASCII.  Keeping that gate makes
+// PatternFromLike produce a valid RE2 program under Utf8=true, while this byte
+// cap bounds both regexp compilation work and the exported identity.
+constexpr size_t MaxCompiledLikePatternBytes = 4096;
+
+void CheckCompiledLikeSafetyTree(const TExprNode& root) {
+    struct TPending {
+        const TExprNode* Node;
+        size_t Depth;
+    };
+
+    TVector<TPending> pending{{&root, 1}};
+    size_t nodes = 0;
+    while (!pending.empty()) {
+        const auto current = pending.back();
+        pending.pop_back();
+        if (current.Depth > MaxExactScalarDepth) {
+            Unsupported(TStringBuilder()
+                << "Compiled LIKE expression exceeds the source depth audit "
+                   "limit of "
+                << MaxExactScalarDepth);
+        }
+        if (++nodes > MaxExactScalarNodes) {
+            Unsupported(TStringBuilder()
+                << "Compiled LIKE expression exceeds the source node audit "
+                   "limit of "
+                << MaxExactScalarNodes);
+        }
+
+        CheckScalarSafetyMetadata(*current.Node);
+        for (const auto& child : current.Node->Children()) {
+            pending.push_back({child.Get(), current.Depth + 1});
+        }
+    }
+}
+
+bool IsCompiledLikeType(
+    const TTypeAnnotationNode* annotation,
+    ECompiledLikeType type);
+void CheckCompiledLikeTypeDescriptor(
+    const TExprNode& node,
+    ECompiledLikeType type,
+    TStringBuf label);
+
+bool IsCompiledLikeOptionsStruct(const TTypeAnnotationNode* annotation) {
+    if (!annotation ||
+        annotation->GetKind() != ETypeAnnotationKind::Struct)
+    {
+        return false;
+    }
+    const auto& items = annotation->Cast<TStructExprType>()->GetItems();
+    if (items.size() != CompiledLikeOptionsStructFields.size()) {
+        return false;
+    }
+    for (size_t index = 0; index < items.size(); ++index) {
+        const auto& expected = CompiledLikeOptionsStructFields[index];
+        if (items[index]->GetName() != expected.Name ||
+            !IsCompiledLikeType(items[index]->GetItemType(), expected.Type))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool IsCompiledLikeType(
+    const TTypeAnnotationNode* annotation,
+    ECompiledLikeType type)
+{
+    switch (type) {
+        case ECompiledLikeType::Bool:
+        case ECompiledLikeType::OptionalBool:
+            return IsExactDataAnnotation(annotation, NUdf::EDataSlot::Bool,
+                type == ECompiledLikeType::OptionalBool);
+        case ECompiledLikeType::String:
+        case ECompiledLikeType::OptionalString:
+            return IsExactDataAnnotation(annotation, NUdf::EDataSlot::String,
+                type == ECompiledLikeType::OptionalString);
+        case ECompiledLikeType::Uint64:
+        case ECompiledLikeType::OptionalUint64:
+            return IsExactDataAnnotation(annotation, NUdf::EDataSlot::Uint64,
+                type == ECompiledLikeType::OptionalUint64);
+        case ECompiledLikeType::Options:
+            return IsCompiledLikeOptionsStruct(annotation);
+        case ECompiledLikeType::OptionalOptions:
+            return annotation &&
+                annotation->GetKind() == ETypeAnnotationKind::Optional &&
+                IsCompiledLikeOptionsStruct(
+                    annotation->Cast<TOptionalExprType>()->GetItemType());
+    }
+}
+
+void CheckCompiledLikeOptionsStructDescriptor(
+    const TExprNode& node,
+    TStringBuf label)
+{
+    if (!node.IsCallable("StructType") ||
+        node.ChildrenSize() != CompiledLikeOptionsStructFields.size() ||
+        !IsCompiledLikeOptionsStruct(&DescribedType(node, label)))
+    {
+        Unsupported(TStringBuilder()
+            << label << " is not the exact Re2.Options StructType");
+    }
+
+    for (size_t index = 0; index < node.ChildrenSize(); ++index) {
+        const auto& item = *node.Child(index);
+        const auto& expected = CompiledLikeOptionsStructFields[index];
+        if (!item.IsList() || item.ChildrenSize() != 2 ||
+            !item.Child(0)->IsAtom(expected.Name))
+        {
+            Unsupported(TStringBuilder()
+                << label << " field " << index << " is not canonical");
+        }
+        CheckCompiledLikeTypeDescriptor(
+            *item.Child(1), expected.Type,
+            TStringBuilder() << label << " field " << expected.Name);
+    }
+}
+
+void CheckCompiledLikeTypeDescriptor(
+    const TExprNode& node,
+    ECompiledLikeType type,
+    TStringBuf label)
+{
+    if (type == ECompiledLikeType::Options) {
+        CheckCompiledLikeOptionsStructDescriptor(node, label);
+        return;
+    }
+    if (type == ECompiledLikeType::OptionalOptions) {
+        if (!node.IsCallable("OptionalType") || node.ChildrenSize() != 1 ||
+            !IsCompiledLikeType(&DescribedType(node, label), type))
+        {
+            Unsupported(TStringBuilder()
+                << label << " is not Optional<Re2.Options>");
+        }
+        CheckCompiledLikeOptionsStructDescriptor(*node.Child(0), label);
+        return;
+    }
+
+    if (type == ECompiledLikeType::Bool ||
+        type == ECompiledLikeType::OptionalBool)
+    {
+        CheckDataDescriptor(node, NUdf::EDataSlot::Bool,
+            type == ECompiledLikeType::OptionalBool, label);
+    } else if (type == ECompiledLikeType::String ||
+        type == ECompiledLikeType::OptionalString)
+    {
+        CheckDataDescriptor(node, NUdf::EDataSlot::String,
+            type == ECompiledLikeType::OptionalString, label);
+    } else {
+        CheckDataDescriptor(node, NUdf::EDataSlot::Uint64,
+            type == ECompiledLikeType::OptionalUint64, label);
+    }
+}
+
+bool IsCompiledLikeCallable(
+    const TTypeAnnotationNode* annotation,
+    ECompiledLikeUdf kind)
+{
+    if (!annotation ||
+        annotation->GetKind() != ETypeAnnotationKind::Callable)
+    {
+        return false;
+    }
+    const auto& spec = CompiledLikeUdfSpec(kind);
+    const auto& callable = *annotation->Cast<TCallableExprType>();
+    const auto& arguments = callable.GetArguments();
+    if (!IsCompiledLikeType(callable.GetReturnType(), spec.Result) ||
+        arguments.size() != spec.ArgumentCount ||
+        callable.GetOptionalArgumentsCount() != spec.OptionalArgumentCount ||
+        !callable.GetPayload().empty())
+    {
+        return false;
+    }
+    for (size_t index = 0; index < arguments.size(); ++index) {
+        const auto& expected = spec.Arguments[index];
+        if (!IsCompiledLikeType(arguments[index].Type, expected.Type) ||
+            arguments[index].Name != expected.Name ||
+            arguments[index].Flags != 0)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+const TCallableExprType& CheckCompiledLikeCachedCallable(
+    const TExprNode& node,
+    const TCallableExprType& udfType,
+    ECompiledLikeUdf kind)
+{
+    const auto& spec = CompiledLikeUdfSpec(kind);
+    const TStringBuf label = "compiled LIKE cached CallableType";
+    if (!node.IsCallable("CallableType") ||
+        node.ChildrenSize() != spec.ArgumentCount + 2 ||
+        !IsCompiledLikeCallable(&DescribedType(node, label), kind))
+    {
+        Unsupported(TStringBuilder() << "Malformed cached " << spec.Name);
+    }
+    const auto& cached = *DescribedType(node, label).Cast<TCallableExprType>();
+    if (!IsSameAnnotation(cached, udfType)) {
+        Unsupported(TStringBuilder() << "Cached " << spec.Name
+            << " annotation disagrees with Udf");
+    }
+
+    const auto& header = *node.Child(0);
+    const size_t headerSize = spec.OptionalArgumentCount == 0 ? 0 : 1;
+    if (!header.IsList() || header.ChildrenSize() != headerSize ||
+        (headerSize == 1 &&
+         !header.Child(0)->IsAtom(ToString(spec.OptionalArgumentCount))))
+    {
+        Unsupported(TStringBuilder() << "Malformed " << spec.Name
+            << " optional-argument header");
+    }
+    const auto& result = *node.Child(1);
+    if (!result.IsList() || result.ChildrenSize() != 1) {
+        Unsupported(TStringBuilder() << "Malformed " << spec.Name
+            << " return descriptor");
+    }
+    CheckCompiledLikeTypeDescriptor(
+        *result.Child(0), spec.Result,
+        TStringBuilder() << spec.Name << " return type");
+
+    for (size_t index = 0; index < spec.ArgumentCount; ++index) {
+        const auto& argument = *node.Child(index + 2);
+        const auto& expected = spec.Arguments[index];
+        const bool named = !expected.Name.empty();
+        if (!argument.IsList() ||
+            argument.ChildrenSize() != (named ? 2 : 1) ||
+            (named && !argument.Child(1)->IsAtom(expected.Name)))
+        {
+            Unsupported(TStringBuilder() << "Malformed cached " << spec.Name
+                << " argument " << index);
+        }
+        CheckCompiledLikeTypeDescriptor(
+            *argument.Child(0), expected.Type,
+            TStringBuilder() << spec.Name << " argument " << index);
+    }
+    return cached;
+}
+
+void CheckCompiledLikeRunConfigDescriptor(const TExprNode& node) {
+    CheckTupleDescriptor(node, 2, "Re2.Match run-config type");
+    CheckCompiledLikeTypeDescriptor(
+        *node.Child(0), ECompiledLikeType::String,
+        "Re2.Match pattern run-config type");
+    CheckCompiledLikeTypeDescriptor(
+        *node.Child(1), ECompiledLikeType::OptionalOptions,
+        "Re2.Match options run-config type");
+}
+
+const TCallableExprType& CheckCompiledLikeUdf(
+    const TExprNode& node,
+    ECompiledLikeUdf kind,
+    TString* matchPattern = nullptr);
+
+TString CheckCompiledLikePatternApply(const TExprNode& node) {
+    if (!node.IsCallable("Apply") || node.ChildrenSize() != 2 ||
+        !IsCompiledLikeType(node.GetTypeAnn(), ECompiledLikeType::String))
+    {
+        Unsupported("Malformed Re2.PatternFromLike Apply");
+    }
+    const auto& callable = CheckCompiledLikeUdf(
+        *node.Child(0), ECompiledLikeUdf::PatternFromLike);
+    const auto& literal = *node.Child(1);
+    if (!IsSameAnnotation(*node.GetTypeAnn(), *callable.GetReturnType()) ||
+        !literal.IsCallable("String") || literal.ChildrenSize() != 1 ||
+        !literal.Child(0)->IsAtom() ||
+        !IsCompiledLikeType(
+            literal.GetTypeAnn(), ECompiledLikeType::String) ||
+        !IsSameAnnotation(
+            *literal.GetTypeAnn(), *callable.GetArguments()[0].Type))
+    {
+        Unsupported("Malformed compiled LIKE pattern literal");
+    }
+    LiteralExpr(literal);
+    const TString pattern(literal.Child(0)->Content());
+    if (pattern.size() > MaxCompiledLikePatternBytes) {
+        Unsupported(TStringBuilder()
+            << "Compiled LIKE pattern exceeds the byte audit limit of "
+            << MaxCompiledLikePatternBytes);
+    }
+    if (std::any_of(pattern.begin(), pattern.end(), [](char byte) {
+            return static_cast<unsigned char>(byte) >= 0x80;
+        }))
+    {
+        Unsupported("Compiled LIKE admits only ASCII patterns");
+    }
+    return pattern;
+}
+
+void CheckCompiledLikeNamedOptions(const TExprNode& node) {
+    if (!node.IsCallable("Just") || node.ChildrenSize() != 1 ||
+        !IsCompiledLikeType(
+            node.GetTypeAnn(), ECompiledLikeType::OptionalOptions))
+    {
+        Unsupported(
+            "Compiled LIKE requires Just of exact Re2.Options");
+    }
+
+    const auto& apply = *node.Child(0);
+    if (!apply.IsCallable("NamedApply") || apply.ChildrenSize() != 3 ||
+        !IsCompiledLikeType(
+            apply.GetTypeAnn(), ECompiledLikeType::Options))
+    {
+        Unsupported(
+            "Compiled LIKE requires exact Re2.Options NamedApply");
+    }
+    const auto& callable = CheckCompiledLikeUdf(
+        *apply.Child(0), ECompiledLikeUdf::Options);
+    const auto* justItem =
+        node.GetTypeAnn()->Cast<TOptionalExprType>()->GetItemType();
+    if (!IsSameAnnotation(
+            *apply.GetTypeAnn(), *callable.GetReturnType()) ||
+        !IsSameAnnotation(*justItem, *apply.GetTypeAnn()))
+    {
+        Unsupported("Re2.Options NamedApply disagrees with its callable");
+    }
+
+    const auto& positional = *apply.Child(1);
+    if (!positional.IsList() || positional.ChildrenSize() != 0 ||
+        !positional.GetTypeAnn() ||
+        positional.GetTypeAnn()->GetKind() != ETypeAnnotationKind::Tuple ||
+        positional.GetTypeAnn()->Cast<TTupleExprType>()->GetSize() != 0)
+    {
+        Unsupported(
+            "Compiled LIKE Re2.Options positional arguments must be empty");
+    }
+
+    const auto& named = *apply.Child(2);
+    if (!named.IsCallable("AsStruct") || named.ChildrenSize() != 1 ||
+        !named.GetTypeAnn() ||
+        named.GetTypeAnn()->GetKind() != ETypeAnnotationKind::Struct)
+    {
+        Unsupported(
+            "Compiled LIKE Re2.Options named arguments are not canonical");
+    }
+    const auto& namedItems =
+        named.GetTypeAnn()->Cast<TStructExprType>()->GetItems();
+    if (namedItems.size() != 1 ||
+        namedItems[0]->GetName() != "CaseSensitive" ||
+        !IsCompiledLikeType(
+            namedItems[0]->GetItemType(),
+            ECompiledLikeType::OptionalBool))
+    {
+        Unsupported(
+            "Compiled LIKE requires only Optional<Bool> CaseSensitive");
+    }
+
+    const auto& item = *named.Child(0);
+    if (!item.IsList() || item.ChildrenSize() != 2 ||
+        !item.Child(0)->IsAtom("CaseSensitive"))
+    {
+        Unsupported(
+            "Compiled LIKE CaseSensitive field is not canonical");
+    }
+    const auto& value = *item.Child(1);
+    if (!value.IsCallable("Just") || value.ChildrenSize() != 1 ||
+        !IsCompiledLikeType(
+            value.GetTypeAnn(), ECompiledLikeType::OptionalBool) ||
+        !IsSameAnnotation(
+            *value.GetTypeAnn(), *namedItems[0]->GetItemType()) ||
+        !IsSameAnnotation(
+            *value.GetTypeAnn(), *callable.GetArguments()[9].Type))
+    {
+        Unsupported(
+            "Compiled LIKE CaseSensitive must be Just(Bool)");
+    }
+    const auto& literal = *value.Child(0);
+    if (!literal.IsCallable("Bool") || literal.ChildrenSize() != 1 ||
+        !literal.Child(0)->IsAtom("true") ||
+        !IsCompiledLikeType(
+            literal.GetTypeAnn(), ECompiledLikeType::Bool))
+    {
+        Unsupported(
+            "Compiled LIKE requires CaseSensitive=true");
+    }
+    LiteralExpr(literal);
+}
+
+TString CheckCompiledLikeRunConfig(const TExprNode& node) {
+    if (!node.IsList() || node.ChildrenSize() != 2 ||
+        !node.GetTypeAnn() ||
+        node.GetTypeAnn()->GetKind() != ETypeAnnotationKind::Tuple)
+    {
+        Unsupported(
+            "Compiled LIKE Re2.Match run config is not an exact tuple");
+    }
+    const auto& tuple = *node.GetTypeAnn()->Cast<TTupleExprType>();
+    if (tuple.GetSize() != 2 ||
+        !IsCompiledLikeType(
+            tuple.GetItems()[0], ECompiledLikeType::String) ||
+        !IsCompiledLikeType(
+            tuple.GetItems()[1], ECompiledLikeType::OptionalOptions) ||
+        !node.Child(0)->GetTypeAnn() ||
+        !node.Child(1)->GetTypeAnn() ||
+        !IsSameAnnotation(
+            *tuple.GetItems()[0], *node.Child(0)->GetTypeAnn()) ||
+        !IsSameAnnotation(
+            *tuple.GetItems()[1], *node.Child(1)->GetTypeAnn()))
+    {
+        Unsupported(
+            "Compiled LIKE Re2.Match run config annotation disagrees");
+    }
+
+    TString pattern = CheckCompiledLikePatternApply(*node.Child(0));
+    CheckCompiledLikeNamedOptions(*node.Child(1));
+    return pattern;
+}
+
+const TCallableExprType& CheckCompiledLikeUdf(
+    const TExprNode& node,
+    ECompiledLikeUdf kind,
+    TString* matchPattern)
+{
+    const auto& spec = CompiledLikeUdfSpec(kind);
+    if (!node.IsCallable("Udf") || node.ChildrenSize() != 8 ||
+        !node.Child(0)->IsAtom(spec.Name) ||
+        !node.Child(3)->IsAtom("") ||
+        !node.Child(6)->IsAtom("") ||
+        !IsCompiledLikeCallable(node.GetTypeAnn(), kind))
+    {
+        Unsupported(TStringBuilder()
+            << spec.Name << " is not the exact compiled LIKE Udf");
+    }
+    const auto& callable = *node.GetTypeAnn()->Cast<TCallableExprType>();
+    CheckVoidNode(
+        *node.Child(2), true, TStringBuilder() << spec.Name << " user type");
+    CheckCompiledLikeCachedCallable(*node.Child(4), callable, kind);
+
+    if (kind == ECompiledLikeUdf::Match) {
+        const TString pattern =
+            CheckCompiledLikeRunConfig(*node.Child(1));
+        if (matchPattern) {
+            *matchPattern = pattern;
+        }
+        CheckCompiledLikeRunConfigDescriptor(*node.Child(5));
+    } else {
+        CheckVoidNode(
+            *node.Child(1), false,
+            TStringBuilder() << spec.Name << " run config");
+        CheckVoidNode(
+            *node.Child(5),
+            true,
+            TStringBuilder() << spec.Name << " run-config type");
+    }
+
+    const auto& settings = *node.Child(7);
+    if (!settings.IsList() ||
+        settings.ChildrenSize() != (spec.Strict ? 1 : 0) ||
+        (spec.Strict &&
+         (!settings.Child(0)->IsList() ||
+          settings.Child(0)->ChildrenSize() != 1 ||
+          !settings.Child(0)->Child(0)->IsAtom("strict"))))
+    {
+        Unsupported(TStringBuilder()
+            << spec.Name << " settings are not canonical");
+    }
+    return callable;
+}
+
+struct TCompiledLikeApply {
+    const TExprNode* Input;
+    TString Pattern;
+};
+
+TCompiledLikeApply CheckCompiledLikeApply(const TExprNode& node) {
+    CheckCompiledLikeSafetyTree(node);
+    if (!node.IsCallable("Apply") || node.ChildrenSize() != 2 ||
+        !IsCompiledLikeType(
+            node.GetTypeAnn(), ECompiledLikeType::Bool))
+    {
+        Unsupported(
+            "Compiled LIKE requires a two-child non-null Bool Apply");
+    }
+
+    const auto& assumeStrict = *node.Child(0);
+    if (!assumeStrict.IsCallable("AssumeStrict") ||
+        assumeStrict.ChildrenSize() != 1 ||
+        !IsCompiledLikeCallable(
+            assumeStrict.GetTypeAnn(), ECompiledLikeUdf::Match))
+    {
+        Unsupported(
+            "Compiled LIKE requires exact AssumeStrict(Re2.Match)");
+    }
+    const auto& match = *assumeStrict.Child(0);
+    TString pattern;
+    const auto& callable =
+        CheckCompiledLikeUdf(
+            match, ECompiledLikeUdf::Match, &pattern);
+    if (!IsSameAnnotation(
+            *assumeStrict.GetTypeAnn(), callable) ||
+        !IsSameAnnotation(
+            *node.GetTypeAnn(), *callable.GetReturnType()))
+    {
+        Unsupported(
+            "Compiled LIKE Apply annotations disagree with Re2.Match");
+    }
+
+    const auto& input = *node.Child(1);
+    if (!IsCompiledLikeType(
+            input.GetTypeAnn(), ECompiledLikeType::OptionalString) ||
+        !IsSameAnnotation(
+            *input.GetTypeAnn(), *callable.GetArguments()[0].Type))
+    {
+        Unsupported(
+            "Compiled LIKE requires exactly one Optional<String> input");
+    }
+    return {&input, std::move(pattern)};
+}
+
+struct TScalarCompiledLike {
+    TString Column;
+    TString Pattern;
+};
+
+TScalarCompiledLike CheckScalarCompiledLike(
+    const TExprNode& node,
+    const TExprNode* rowArgument,
+    const THashSet<TString>& visibleColumns)
+{
+    auto like = CheckCompiledLikeApply(node);
+    const auto& member = *like.Input;
+    if (!member.IsCallable("Member") || member.ChildrenSize() != 2 ||
+        !member.Child(1)->IsAtom() || member.Child(0) != rowArgument)
+    {
+        Unsupported(
+            "Compiled LIKE requires a direct Optional<String> input member");
+    }
+    const TString column(member.Child(1)->Content());
+    if (column.empty() || !visibleColumns.contains(column)) {
+        Unsupported(TStringBuilder()
+            << "Compiled LIKE references invisible member " << column);
+    }
+
+    return {column, std::move(like.Pattern)};
+}
+
+bool IsCompiledLikeApplyCandidate(const TExprNode& node) {
+    return node.IsCallable("Apply") && node.ChildrenSize() > 0 &&
+        node.Child(0)->IsCallable("AssumeStrict") &&
+        node.Child(0)->ChildrenSize() == 1 &&
+        node.Child(0)->Child(0)->IsCallable("Udf") &&
+        node.Child(0)->Child(0)->ChildrenSize() > 0 &&
+        node.Child(0)->Child(0)->Child(0)->IsAtom("Re2.Match");
+}
+
+NJson::TJsonValue CompiledLikeExpr(
+    const TExprNode& node,
+    const TExprNode* rowArgument,
+    const THashSet<TString>& visibleColumns,
+    const TVector<const TExprNode*>& boundArguments,
+    TExactScalarBudget& budget,
+    size_t normalizedDepth)
+{
+    const auto like =
+        CheckScalarCompiledLike(node, rowArgument, visibleColumns);
+    if (boundArguments.size() >= MaxIfPresentBindingDepth) {
+        Unsupported(
+            "Compiled LIKE binding depth exceeds the audit limit");
+    }
+
+    TStringBuilder fingerprint;
+    AppendIdentityField(
+        fingerprint, "format", "yql-re2-pattern-from-like-match-v1");
+    AppendIdentityField(fingerprint, "pattern", like.Pattern);
+    AppendIdentityField(fingerprint, "escape", "none");
+    AppendIdentityField(fingerprint, "case_sensitive", "true");
+
+    budget.Charge(normalizedDepth + 1, 3);
+    budget.Charge(normalizedDepth + 2);
+
+    auto arguments = JsonArray();
+    arguments.AppendValue(BoundExpr(0));
+    auto present = JsonMap();
+    present["kind"] = "opaque";
+    present["fingerprint"] = TString(fingerprint);
+    present["type"] = "Bool";
+    present["nullable"] = false;
+    present["args"] = std::move(arguments);
+
+    auto missing = JsonMap();
+    missing["kind"] = "literal";
+    missing["type"] = "Bool";
+    missing["value"] = false;
+
+    auto result = JsonMap();
+    result["kind"] = "if_present";
+    result["optional"] = ColumnExpr(like.Column);
+    result["present"] = std::move(present);
+    result["missing"] = std::move(missing);
+    result["type"] = "Bool";
+    result["nullable"] = false;
+    return result;
+}
+
 i32 ParseExactInt32Literal(const TExprNode& node, TStringBuf label) {
     CheckScalarSafetyMetadata(node);
     if (!node.IsCallable("Int32") || node.ChildrenSize() != 1 ||
@@ -5083,6 +5773,16 @@ NJson::TJsonValue ExportExprNode(
         result["type"] = signature.ResultType;
         result["nullable"] = signature.ResultNullable;
         return result;
+    }
+
+    if (IsCompiledLikeApplyCandidate(node)) {
+        return CompiledLikeExpr(
+            node,
+            rowArgument,
+            visibleColumns,
+            boundArguments,
+            budget,
+            normalizedDepth);
     }
 
     if (IsNullableUnicodeToUpperMap(node)) {

@@ -1754,6 +1754,107 @@ def date_year_snapshot(
     )
 
 
+def _identity_field(name, value):
+    return f"{name}:{len(value.encode('utf-8'))}:{value};"
+
+
+def compiled_like_fingerprint(pattern):
+    return "".join(
+        (
+            _identity_field("format", "yql-re2-pattern-from-like-match-v1"),
+            _identity_field("pattern", pattern),
+            _identity_field("escape", "none"),
+            _identity_field("case_sensitive", "true"),
+        )
+    )
+
+
+def compiled_like_snapshot(
+    fingerprint=None,
+    *,
+    missing=False,
+    staged=False,
+):
+    if fingerprint is None:
+        fingerprint = compiled_like_fingerprint("%x%")
+    predicate = {
+        "kind": "if_present",
+        "optional": {"kind": "column", "column": "t.s"},
+        "present": {
+            "kind": "opaque",
+            "fingerprint": fingerprint,
+            "type": "Bool",
+            "nullable": False,
+            "args": [{"kind": "bound", "depth": 0}],
+        },
+        "missing": {"kind": "literal", "type": "Bool", "value": missing},
+        "type": "Bool",
+        "nullable": False,
+    }
+    scan = {
+        "id": "scan",
+        "op": "scan",
+        "table": "T",
+        "columns": [{"source": "s", "output": "t.s"}],
+        "predicate": predicate if staged else None,
+        "pushed_limit": None,
+    }
+    nodes = [scan]
+    root = "scan"
+    if not staged:
+        nodes.append(
+            {
+                "id": "filter",
+                "op": "filter",
+                "input": "scan",
+                "predicate": predicate,
+            }
+        )
+        root = "filter"
+    stage_graph = (
+        {
+            "root_stage": "source",
+            "stages": [
+                {
+                    "id": "source",
+                    "nodes": ["scan"],
+                    "inputs": [],
+                    "outputs": [{"index": 0, "node": "scan"}],
+                    "source_storage": "column",
+                }
+            ],
+            "edges": [],
+            "assumptions": [],
+        }
+        if staged
+        else None
+    )
+    return parse_snapshot(
+        {
+            "format": "ydb-rbo-semantic-snapshot",
+            "version": 1,
+            "schema": {
+                "tables": [
+                    {
+                        "name": "T",
+                        "columns": [
+                            {"name": "s", "type": "String", "nullable": True}
+                        ],
+                        "unique_keys": [],
+                    }
+                ]
+            },
+            "plan": {
+                "nodes": nodes,
+                "root": root,
+                "output": ["t.s"],
+                "subplans": [],
+            },
+            "stage_graph": stage_graph,
+        }
+    )
+
+
 def passive_double_snapshot(
     fingerprint=OPAQUE_DOUBLE_FINGERPRINT_PREFIX + "identity",
     argument_columns=("a.k", "a.x", "a.y"),
@@ -6468,6 +6569,60 @@ class VerificationTest(unittest.TestCase):
                 result = solve(
                     build_logical_kernel_problem_for_tests(
                         original,
+                        changed,
+                        1,
+                        10_000,
+                    ),
+                    SOLVER,
+                    1,
+                    10_000,
+                )
+                self.assertEqual(result.status, "COUNTEREXAMPLE")
+
+    def test_compiled_like_bridge_preserves_null_and_function_identity(self):
+        fingerprint = compiled_like_fingerprint("%special%requests%")
+        logical = compiled_like_snapshot(fingerprint)
+
+        identical = solve(
+            build_logical_kernel_problem_for_tests(
+                logical,
+                compiled_like_snapshot(fingerprint),
+                1,
+                10_000,
+            ),
+            SOLVER,
+            1,
+            10_000,
+        )
+        self.assertEqual(identical.status, "VERIFIED_BOUNDED")
+
+        pushed = solve(
+            build_problem(
+                logical,
+                compiled_like_snapshot(fingerprint, staged=True),
+                1,
+                10_000,
+            ),
+            SOLVER,
+            1,
+            10_000,
+        )
+        self.assertEqual(pushed.status, "VERIFIED_BOUNDED")
+
+        mutations = {
+            "pattern identity": compiled_like_snapshot(
+                fingerprint.replace("special", "changed")
+            ),
+            "NULL fallback": compiled_like_snapshot(
+                fingerprint,
+                missing=True,
+            ),
+        }
+        for mutation, changed in mutations.items():
+            with self.subTest(mutation=mutation):
+                result = solve(
+                    build_logical_kernel_problem_for_tests(
+                        logical,
                         changed,
                         1,
                         10_000,

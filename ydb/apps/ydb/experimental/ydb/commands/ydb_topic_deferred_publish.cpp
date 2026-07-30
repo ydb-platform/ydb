@@ -383,6 +383,7 @@ int TCommandTopicDeferredPublicationDescribe::Run(TConfig& config) {
     const auto& publication = result.GetPublication();
     if (OutputFormat == EDataFormat::Json) {
         NJson::TJsonValue json(NJson::JSON_MAP);
+        json["int_publication_id"] = IntPublicationId_;
         json["ext_publication_id"] = TString(publication.ExtPublicationId);
         if (publication.WriterIdentity) {
             json["writer_identity"] = TString(*publication.WriterIdentity);
@@ -407,6 +408,7 @@ int TCommandTopicDeferredPublicationDescribe::Run(TConfig& config) {
         return EXIT_SUCCESS;
     }
 
+    Cout << "int_publication_id: " << IntPublicationId_ << Endl;
     Cout << "ext_publication_id: " << publication.ExtPublicationId << Endl;
     if (publication.WriterIdentity) {
         Cout << "writer_identity: " << *publication.WriterIdentity << Endl;

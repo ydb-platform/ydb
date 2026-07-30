@@ -9,6 +9,7 @@ The same suite runs on dedicated (/Root) and serverless databases.
 """
 
 import logging
+import json
 import os
 import tempfile
 import uuid
@@ -166,6 +167,12 @@ class TestTopicDeferredPublishCli(BaseCliTestWithDatabase):
         describe = self._describe(int_id)
         assert ext_id in describe.stdout
         assert AUTH_TOKEN in describe.stdout
+        assert f"int_publication_id: {int_id}" in describe.stdout
+
+        describe_json = self._describe(int_id, output_format="json")
+        description = json.loads(describe_json.stdout)
+        assert description["int_publication_id"] == int(int_id)
+        assert description["ext_publication_id"] == ext_id
 
         listed = self._list()
         assert ext_id in listed.stdout

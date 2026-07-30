@@ -1554,7 +1554,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredVerifiedQueries ==
             std::set<ui32>({
-                3, 8, 9, 16, 34, 38, 42, 48, 52, 55, 69, 73, 87, 90, 93, 94, 95,
+                3, 8, 9, 16, 28, 34, 38, 42, 48, 52, 55, 69, 73, 87, 90, 93, 94, 95,
                 96,
             }));
 
@@ -2089,12 +2089,14 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
     Y_UNIT_TEST(PolicyEnforcesCuratedProofFloor) {
         const auto policy = LoadCoveragePolicy();
         const std::set<ui32> selected = {
-            3, 8, 9, 16, 34, 38, 42, 48, 52, 55, 69, 73, 87, 90, 93, 94, 95, 96};
+            3, 8, 9, 16, 28, 34, 38, 42, 48, 52, 55, 69, 73, 87, 90, 93, 94, 95,
+            96};
         const TMap<ui32, TString> statuses = {
             {3, "VERIFIED_BOUNDED"},
             {8, "VERIFIED_BOUNDED"},
             {9, "VERIFIED_BOUNDED"},
             {16, "VERIFIED_BOUNDED"},
+            {28, "VERIFIED_BOUNDED"},
             {34, "VERIFIED_BOUNDED"},
             {38, "VERIFIED_BOUNDED"},
             {42, "VERIFIED_BOUNDED"},
@@ -2154,6 +2156,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             {8, "VERIFIED_BOUNDED"},
             {9, "VERIFIED_BOUNDED"},
             {16, "VERIFIED_BOUNDED"},
+            {28, "VERIFIED_BOUNDED"},
             {34, "VERIFIED_BOUNDED"},
             {38, "VERIFIED_BOUNDED"},
             {42, "VERIFIED_BOUNDED"},
@@ -2171,7 +2174,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         const auto evaluation = EvaluateCoveragePolicy(
             policy,
             Tpcds,
-            {3, 8, 9, 16, 34, 38, 42, 48, 52, 55, 69, 73, 87, 90, 93, 94, 95, 96},
+            {3, 8, 9, 16, 28, 34, 38, 42, 48, 52, 55, 69, 73, 87, 90, 93, 94, 95, 96},
             statuses,
             {},
             policy.Suites.at(Tpcds.Name).RequiredPrepareSuccessQueries,
@@ -2192,7 +2195,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         const auto optimizerFailure = EvaluateCoveragePolicy(
             policy,
             Tpcds,
-            {3, 8, 9, 16, 34, 38, 42, 48, 52, 55, 69, 73, 87, 90, 93, 94, 95, 96},
+            {3, 8, 9, 16, 28, 34, 38, 42, 48, 52, 55, 69, 73, 87, 90, 93, 94, 95, 96},
             optimizerFailureStatuses,
             {},
             policy.Suites.at(Tpcds.Name).RequiredPrepareSuccessQueries,
@@ -2302,8 +2305,8 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         UNIT_ASSERT(
             config.Selected ==
             std::set<ui32>({
-                3, 8, 9, 16, 34, 38, 42, 48, 52, 55, 69, 73, 87, 90, 93, 94, 95,
-                96,
+                3, 8, 9, 16, 28, 34, 38, 42, 48, 52, 55, 69, 73, 87, 90, 93, 94,
+                95, 96,
             }));
         UNIT_ASSERT(config.Solver);
         UNIT_ASSERT_STRING_CONTAINS(

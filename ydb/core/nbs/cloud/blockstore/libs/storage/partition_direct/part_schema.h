@@ -12,13 +12,6 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 struct TPartitionSchema: public NKikimr::NIceDb::Schema
 {
-    enum EChannels
-    {
-        SystemChannel,
-        LogChannel,
-        IndexChannel,
-    };
-
     struct TabletInfo: public TTableSchema<1>
     {
         struct Id: public Column<1, NKikimr::NScheme::NTypeIds::Uint32>
@@ -60,8 +53,6 @@ struct TPartitionSchema: public NKikimr::NIceDb::Schema
             VolumeConfig,
             DirectBlockGroupsConnections,
             AddHostInProgress>;
-
-        using StoragePolicy = TStoragePolicy<IndexChannel>;
     };
 
     // Persisted vchunk config overrides, keyed by vchunk index. Only vchunks
@@ -79,8 +70,6 @@ struct TPartitionSchema: public NKikimr::NIceDb::Schema
 
         using TKey = TableKey<VChunkIndex>;
         using TColumns = TableColumns<VChunkIndex, Config>;
-
-        using StoragePolicy = TStoragePolicy<IndexChannel>;
     };
 
     using TTables = SchemaTables<TabletInfo, VChunkConfigs>;

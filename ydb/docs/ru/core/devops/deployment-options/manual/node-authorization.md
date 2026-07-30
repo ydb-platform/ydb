@@ -67,8 +67,8 @@
       client_certificate_definitions:
         - member_groups: ["registerNode@cert"]
           subject_terms:
-          - short_name: "O"
-            values: ["YDB"]
+            - short_name: "O"
+              values: ["YDB"]
     ```
 
     При необходимости добавьте дополнительные проверки сертификатов согласно [документации по `client_certificate_authorization`](../../../reference/configuration/client_certificate_authorization.md).
@@ -79,13 +79,13 @@
 
     ```yaml
     domains_config:
+      ...
+      security_config:
+        enforce_user_token_requirement: true
         ...
-        security_config:
-            enforce_user_token_requirement: true
-            ...
-            register_dynamic_node_allowed_sids:
-            - "root@builtin"
-            - "registerNode@cert"
+        register_dynamic_node_allowed_sids:
+          - "root@builtin"
+          - "registerNode@cert"
     ```
 
     Включение `root@builtin` в этот список обязательно по техническим причинам: некоторые внутренние процессы кластера используют его независимо от режима аутентификации узлов.

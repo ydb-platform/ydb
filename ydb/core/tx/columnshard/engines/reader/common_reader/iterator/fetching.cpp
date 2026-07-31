@@ -97,8 +97,16 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
     const TDuration finishDurationMs = source->GetAndResetWaitDuration();
     const auto processorType = processor->GetProcessorType();
     const TString details = processor->DebugJson().GetStringRobust();
-    const auto& resources = source->GetExecutionContext().GetExecutionVisitorVerified()->MutableContext().GetResources();
-    const ui32 filteredRows = resources.GetRecordsCountActualOptional().value_or(source->GetRecordsCount());
+    const bool resourcesExtracted =
+        source->GetExecutionContext().GetExecutionVisitorVerified()->MutableContext().IsExtracted();
+    const ui32 filteredRows = resourcesExtracted
+        ? source->GetRecordsCount()
+        : source->GetExecutionContext()
+              .GetExecutionVisitorVerified()
+              ->MutableContext()
+              .GetResources()
+              .GetRecordsCountActualOptional()
+              .value_or(source->GetRecordsCount());
 #define PROGRAM_PROBE_ARGS                                                                                                            \
     source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(), source->GetDeprecatedPortionId(), \
         step.GetStepIndex(), tracingName, nodeId, finishDurationMs, executionDurationMs, filteredRows
@@ -175,7 +183,9 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
             TString indexStatus = "Unknown";
             ui32 indexFilteredRows = source->GetRecordsCount();
             auto* indexProcessor = dynamic_cast<const NArrow::NSSA::TIndexCheckerProcessor*>(processor.get());
-            if (indexProcessor && source->GetSourceSchemaOptional()) {
+            if (indexProcessor && source->GetSourceSchemaOptional() && !resourcesExtracted) {
+                const auto& resources =
+                    source->GetExecutionContext().GetExecutionVisitorVerified()->MutableContext().GetResources();
                 const auto& idxCtx = indexProcessor->GetIndexContext();
                 NIndexes::NRequest::TOriginalDataAddress addr(idxCtx.GetColumnId(), idxCtx.GetSubColumnName());
                 auto skipIndexes = source->GetSourceSchemaOptional()->GetIndexInfo().FindSkipIndexes(addr, idxCtx.GetOperation());

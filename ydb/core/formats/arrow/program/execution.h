@@ -357,6 +357,10 @@ private:
     bool Extracted = false;
 
 public:
+    bool IsExtracted() const {
+        return Extracted;
+    }
+
     const NAccessor::TAccessorsCollection& GetResources() const {
         AFL_VERIFY(!Extracted);
         return *Resources;

@@ -161,6 +161,8 @@ public:
         AddHandler({
             TDqCnUnionAll::CallableName(),
             TDqCnParallelUnionAll::CallableName(),
+        }, Hndl(&ConstraintDqCnUnionAll));
+        AddHandler({
             TDqCnBroadcast::CallableName(),
             TDqCnMap::CallableName(),
             TDqCnStreamLookup::CallableName(),
@@ -232,6 +234,17 @@ TStatus ConstraintDqOutput(const TExprNode::TPtr& input, TExprContext& /* ctx */
 TStatus ConstraintDqConnection(const TExprNode::TPtr& input, TExprContext& /* ctx */) {
     const TDqConnection connection(input);
     connection.MutableRef().CopyConstraints(connection.Output().Ref());
+    return TStatus::Ok;
+}
+
+TStatus ConstraintDqCnUnionAll(const TExprNode::TPtr& input, TExprContext& /* ctx */) {
+    const TDqConnection connection(input);
+    auto constraints = connection.Output().Ref().GetConstraintSet();
+    constraints.RemoveConstraint(TSortedConstraintNode::Name());
+    constraints.RemoveConstraint(TPartOfSortedConstraintNode::Name());
+    constraints.RemoveConstraint(TChoppedConstraintNode::Name());
+    constraints.RemoveConstraint(TPartOfChoppedConstraintNode::Name());
+    connection.MutableRef().SetConstraints(constraints);
     return TStatus::Ok;
 }
 

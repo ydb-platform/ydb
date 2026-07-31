@@ -2087,9 +2087,7 @@ void TStreamingConstraintNode::Out(IOutputStream& out) const {
     TConstraintNode::Out(out);
     if (EventTime_.Defined()) {
         out.Write('(');
-        out.Write('(');
-        out.Write(JoinSeq('.', *EventTime_));
-        out.Write(')');
+        out.Write(JoinSeq(';', *EventTime_));
         out.Write(')');
     }
 }
@@ -2158,6 +2156,10 @@ const TConstraintWithFieldsNode* TStreamingConstraintNode::DoRenameFields(TExprC
 
     auto renamed = reduce(*EventTime_);
     if (renamed.size() != 1U) {
+        if (const auto original = std::find(renamed.cbegin(), renamed.cend(), *EventTime_);
+            renamed.cend() != original) {
+            return ctx.MakeConstraint<TStreamingConstraintNode>(*original);
+        }
         return ctx.MakeConstraint<TStreamingConstraintNode>();
     }
     return ctx.MakeConstraint<TStreamingConstraintNode>(std::move(renamed.front()));

@@ -82,7 +82,7 @@ const TPartOfStreamingConstraintNode* MakeEventTimeLineageProbe(
     YQL_ENSURE(!paths.empty());
     TPartOfStreamingConstraintNode::TMapType mapping;
     for (const auto& path : paths) {
-        const auto* origin = ctx.MakeConstraint<TStreamingConstraintNode>(path);
+        const auto origin = ctx.MakeConstraint<TStreamingConstraintNode>(path);
         TPartOfStreamingConstraintNode::UniqueMerge(
             mapping,
             TPartOfStreamingConstraintNode::GetCommonMapping(origin));
@@ -90,8 +90,77 @@ const TPartOfStreamingConstraintNode* MakeEventTimeLineageProbe(
     return ctx.MakeConstraint<TPartOfStreamingConstraintNode>(std::move(mapping));
 }
 
+void CollectEventTimeLineageProbePaths(
+    const TTypeAnnotationNode& type,
+    TPartOfConstraintBase::TPathType& path,
+    TPartOfConstraintBase::TSetType& paths,
+    TExprContext& ctx
+) {
+    switch (type.GetKind()) {
+        case ETypeAnnotationKind::Optional:
+            CollectEventTimeLineageProbePaths(*type.Cast<TOptionalExprType>()->GetItemType(), path, paths, ctx);
+            break;
+        case ETypeAnnotationKind::Struct:
+            for (const auto item : type.Cast<TStructExprType>()->GetItems()) {
+                path.emplace_back(item->GetName());
+                CollectEventTimeLineageProbePaths(*item->GetItemType(), path, paths, ctx);
+                path.pop_back();
+            }
+            break;
+        case ETypeAnnotationKind::Tuple: {
+            ui32 index = 0U;
+            for (const auto item : type.Cast<TTupleExprType>()->GetItems()) {
+                path.emplace_back(ctx.GetIndexAsString(index++));
+                CollectEventTimeLineageProbePaths(*item, path, paths, ctx);
+                path.pop_back();
+            }
+            break;
+        }
+        case ETypeAnnotationKind::Multi: {
+            ui32 index = 0U;
+            for (const auto item : type.Cast<TMultiExprType>()->GetItems()) {
+                path.emplace_back(ctx.GetIndexAsString(index++));
+                CollectEventTimeLineageProbePaths(*item, path, paths, ctx);
+                path.pop_back();
+            }
+            break;
+        }
+        case ETypeAnnotationKind::Variant:
+            CollectEventTimeLineageProbePaths(*type.Cast<TVariantExprType>()->GetUnderlyingType(), path, paths, ctx);
+            break;
+        default:
+            paths.insert(path);
+            break;
+    }
+}
+
+IGraphTransformer::TStatus UpdateLambdaEventTimeLineage(
+    TExprNode::TPtr& lambda,
+    TExprContext& ctx
+) {
+    YQL_ENSURE(lambda->IsLambda());
+    YQL_ENSURE(lambda->Head().ChildrenSize() == 1U);
+
+    const auto argType = lambda->Head().Head().GetTypeAnn();
+    YQL_ENSURE(argType);
+
+    TPartOfConstraintBase::TSetType paths;
+    TPartOfConstraintBase::TPathType path;
+    CollectEventTimeLineageProbePaths(*argType, path, paths, ctx);
+
+    // Treat every leaf as a distinct interned streaming origin. Constraint
+    // propagation records the symbolic input-to-output lineage, and the parent
+    // later selects the origin matching its actual event-time constraint.
+    // Non-timestamp leaves are intentional: an extractor may parse or cast them.
+    TConstraintNode::TListType constraints;
+    if (!paths.empty()) {
+        constraints.emplace_back(MakeEventTimeLineageProbe(paths, ctx));
+    }
+    return UpdateLambdaConstraints(lambda, ctx, {constraints});
+}
+
 TMaybe<TPartOfConstraintBase::TPathType> TryExtractEventTimeFromConstraints(const TExprNode& body) {
-    const auto* partOfStreaming = body.GetConstraint<TPartOfStreamingConstraintNode>();
+    const auto partOfStreaming = body.GetConstraint<TPartOfStreamingConstraintNode>();
     if (!partOfStreaming) {
         return Nothing();
     }
@@ -130,11 +199,19 @@ IGraphTransformer::TStatus StreamingHoppingWrap(
         return IGraphTransformer::TStatus::Error;
     }
 
-    const auto lambda = TExprBase(timeExtractor).Cast<TCoLambda>();
-    const auto args = lambda.Args();
-    YQL_ENSURE(args.Size() == 1U);
-    const auto hoppingEventTime = TryExtractDirectEventTimePath(lambda.Body(), args.Arg(0));
+    const auto hoppingEventTime = TryExtractEventTimeFromConstraints(timeExtractor->Tail());
     if (!hoppingEventTime) {
+        const auto directPath = TryExtractDirectEventTimePath(
+            TExprBase(&timeExtractor->Tail()),
+            TExprBase(&timeExtractor->Head().Head()));
+        if (directPath && *directPath != *streaming->GetEventTime()) {
+            ctx.AddError(TIssue(pos, TStringBuilder()
+                << "HoppingWindow time extractor does not match assigned event time (expected: "
+                << JoinSeq('.', *streaming->GetEventTime())
+                << ", got: " << JoinSeq('.', *directPath) << ")"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
         ctx.AddError(TIssue(pos, "HoppingWindow time expression must reference the assigned event-time path directly or through a simple timestamp cast"));
         return IGraphTransformer::TStatus::Error;
     }
@@ -183,8 +260,8 @@ IGraphTransformer::TStatus TryExtractEventTime(
         return IGraphTransformer::TStatus::Ok;
     }
 
-    TConstraintNode::TListType argConstraints{MakeEventTimeLineageProbe(paths, ctx)};
-    if (const auto status = UpdateLambdaConstraints(node, ctx, {argConstraints});
+    TConstraintNode::TListType constraints{MakeEventTimeLineageProbe(paths, ctx)};
+    if (const auto status = UpdateLambdaConstraints(node, ctx, {constraints});
         status != IGraphTransformer::TStatus::Ok) {
         return status;
     }
@@ -430,10 +507,15 @@ public:
         Functions_["ReplicateScalars"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions_["BlockMergeFinalizeHashed"] = &TCallableConstraintTransformer::AggregateWrap<true>;
         Functions_["BlockMergeManyFinalizeHashed"] = &TCallableConstraintTransformer::AggregateWrap<true>;
+        Functions_["HoppingTraits"] = &TCallableConstraintTransformer::HoppingTraitsWrap;
         Functions_["MultiHoppingCore"] = &TCallableConstraintTransformer::MultiHoppingCoreWrap;
         Functions_["MatchRecognize"] = &TCallableConstraintTransformer::MatchRecognizeWrap;
         Functions_["MatchRecognizeCore"] = &TCallableConstraintTransformer::MatchRecognizeWrap;
         Functions_["TimeOrderRecover"] = &TCallableConstraintTransformer::TimeOrderRecoverWrap;
+        Functions_["SqlProjectItem"] = &TCallableConstraintTransformer::SqlProjectItemWrap;
+        Functions_["SqlProjectStarItem"] = &TCallableConstraintTransformer::SqlProjectItemWrap;
+        Functions_["SqlProject"] = &TCallableConstraintTransformer::SqlProjectWrap;
+        Functions_["OrderedSqlProject"] = &TCallableConstraintTransformer::SqlProjectWrap;
         Functions_["WatermarkGenerator"] = &TCallableConstraintTransformer::WatermarkGeneratorWrap;
         Functions_["StablePickle"] = &TCallableConstraintTransformer::PickleWrap;
         Functions_["Unpickle"] = &TCallableConstraintTransformer::FromSecond<TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TPartOfChoppedConstraintNode, TVarIndexConstraintNode>;
@@ -567,6 +649,16 @@ private:
             return status;
         }
         return FromFirst<TEmptyConstraintNode>(input, output, ctx);
+    }
+
+    TStatus HoppingTraitsWrap(const TExprNode::TPtr& input, TExprNode::TPtr&, TExprContext& ctx) const {
+        auto& lambda = input->ChildRef(TCoHoppingTraits::idx_TimeExtractor);
+        return UpdateLambdaEventTimeLineage(lambda, ctx);
+    }
+
+    TStatus SqlProjectItemWrap(const TExprNode::TPtr& input, TExprNode::TPtr&, TExprContext& ctx) const {
+        auto& lambda = input->ChildRef(2U);
+        return UpdateLambdaEventTimeLineage(lambda, ctx);
     }
 
     template<bool Sort>
@@ -2129,7 +2221,7 @@ private:
     TStatus SwitchWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
         TStatus status = TStatus::Ok;
         TDynBitMap outFromChildren; // children, from which take a multi constraint for output
-        const auto* inputStreaming = input->Head().GetConstraint<TStreamingConstraintNode>();
+        const auto inputStreaming = input->Head().GetConstraint<TStreamingConstraintNode>();
 
         if (const auto multi = input->Head().GetConstraint<TMultiConstraintNode>()) {
             for (size_t i = 2; i < input->ChildrenSize(); ++i) {
@@ -2613,7 +2705,7 @@ private:
                 }
             }
 
-            if (const auto* c = input->Head().GetConstraint<TStreamingConstraintNode>()) {
+            if (const auto c = input->Head().GetConstraint<TStreamingConstraintNode>()) {
                 input->AddConstraint(c);
             }
         }
@@ -3446,6 +3538,32 @@ private:
 
     template <bool Final>
     TStatus AggregateWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
+        if (auto streaming = input->Head().GetConstraint<TStreamingConstraintNode>()) {
+            const auto hoppingSetting = GetSetting(input->Tail(), "hopping");
+            if (!hoppingSetting) {
+                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Aggregation of streaming input without windows is not supported"));
+                return TStatus::Error;
+            }
+
+            const auto hoppingName = hoppingSetting->Child(0)->Content();
+            YQL_ENSURE(hoppingName == "hopping");
+            const auto hoppingValue = hoppingSetting->Child(1);
+
+            const auto isLegacyHopping = hoppingValue->Type() != TExprNode::List;
+            if (!isLegacyHopping) {
+                const auto hoppingColumn = hoppingValue->Child(0)->Content();
+                const auto hoppingTraits = hoppingValue->Child(1);
+                streaming = GetDetailed(streaming, *input->Head().GetTypeAnn(), ctx);
+
+                const auto timeExtractor = hoppingTraits->Child(TCoHoppingTraits::idx_TimeExtractor);
+                if (const auto status = StreamingHoppingWrap(input, streaming, timeExtractor, hoppingColumn, ctx); status != TStatus::Ok) {
+                    return status;
+                }
+            } else {
+                input->AddConstraint(ctx.MakeConstraint<TStreamingConstraintNode>());
+            }
+        }
+
         if (HasSetting(input->Tail(), "session")) {
             // TODO: support sessions
             return TStatus::Ok;
@@ -3473,32 +3591,6 @@ private:
                 }
             }
             FromFirst<TEmptyConstraintNode>(input, output, ctx);
-        }
-
-        if (auto streaming = input->Head().GetConstraint<TStreamingConstraintNode>()) {
-            const auto hoppingSetting = GetSetting(input->Tail(), "hopping");
-            if (!hoppingSetting) {
-                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Aggregation of streaming input without windows is not supported"));
-                return TStatus::Error;
-            }
-
-            const auto hoppingName = hoppingSetting->Child(0)->Content();
-            YQL_ENSURE(hoppingName == "hopping");
-            const auto hoppingValue = hoppingSetting->Child(1);
-
-            const auto isLegacyHopping = hoppingValue->Type() != TExprNode::List;
-            if (!isLegacyHopping) {
-                const auto hoppingColumn = hoppingValue->Child(0)->Content();
-                const auto hoppingTraits = hoppingValue->Child(1);
-                streaming = GetDetailed(streaming, *input->Head().GetTypeAnn(), ctx);
-                const auto* timeExtractor = hoppingTraits->Child(TCoHoppingTraits::idx_TimeExtractor);
-
-                if (const auto status = StreamingHoppingWrap(input, streaming, timeExtractor, hoppingColumn, ctx); status != TStatus::Ok) {
-                    return status;
-                }
-            } else {
-                input->AddConstraint(ctx.MakeConstraint<TStreamingConstraintNode>());
-            }
         }
 
         return TStatus::Ok;
@@ -3554,8 +3646,48 @@ private:
         const auto hoppingColumn = input->Child(TCoMultiHoppingCore::idx_HoppingColumn)->Content();
         const auto isLegacyHopping = "_yql_time" == hoppingColumn;
 
-        if (const auto status = UpdateAllChildLambdasConstraints(*input); status != TStatus::Ok) {
-            return status;
+        for (const auto index : {
+                 TCoMultiHoppingCore::idx_KeyExtractor,
+                 TCoMultiHoppingCore::idx_InitHandler,
+                 TCoMultiHoppingCore::idx_UpdateHandler,
+                 TCoMultiHoppingCore::idx_SaveHandler,
+                 TCoMultiHoppingCore::idx_LoadHandler,
+                 TCoMultiHoppingCore::idx_MergeHandler,
+                 TCoMultiHoppingCore::idx_FinishHandler,
+             })
+        {
+            if (const auto status = UpdateLambdaConstraints(*input->Child(index)); status != TStatus::Ok) {
+                return status;
+            }
+        }
+
+        if (auto streaming = input->Head().GetConstraint<TStreamingConstraintNode>()) {
+            if (!isLegacyHopping) {
+                streaming = GetDetailed(streaming, *input->Head().GetTypeAnn(), ctx);
+                const auto constraints = GetConstraintsForInputArgument<false, false>(*input, ctx);
+                if (const auto status = UpdateLambdaConstraints(input->ChildRef(TCoMultiHoppingCore::idx_TimeExtractor), ctx, constraints);
+                    status != TStatus::Ok) {
+                    return status;
+                }
+
+                const auto timeExtractor = input->Child(TCoMultiHoppingCore::idx_TimeExtractor);
+
+                if (const auto status = StreamingHoppingWrap(input, streaming, timeExtractor, hoppingColumn, ctx); status != TStatus::Ok) {
+                    return status;
+                }
+            } else {
+                if (const auto status = UpdateLambdaConstraints(*input->Child(TCoMultiHoppingCore::idx_TimeExtractor));
+                    status != TStatus::Ok) {
+                    return status;
+                }
+
+                input->AddConstraint(ctx.MakeConstraint<TStreamingConstraintNode>());
+            }
+        } else {
+            if (const auto status = UpdateLambdaConstraints(*input->Child(TCoMultiHoppingCore::idx_TimeExtractor));
+                status != TStatus::Ok) {
+                return status;
+            }
         }
 
         TExprNode::TPtr keySelectorLambda = input->Child(TCoMultiHoppingCore::idx_KeyExtractor);
@@ -3574,19 +3706,46 @@ private:
             input->AddConstraint(ctx.MakeConstraint<TDistinctConstraintNode>(columns));
         }
 
-        if (auto streaming = input->Head().GetConstraint<TStreamingConstraintNode>()) {
-            if (!isLegacyHopping) {
-                streaming = GetDetailed(streaming, *input->Head().GetTypeAnn(), ctx);
-                const auto* timeExtractor = input->Child(TCoMultiHoppingCore::idx_TimeExtractor);
+        return FromFirst<TEmptyConstraintNode>(input, output, ctx);
+    }
 
-                if (const auto status = StreamingHoppingWrap(input, streaming, timeExtractor, hoppingColumn, ctx); status != TStatus::Ok) {
-                    return status;
-                }
+    TStatus SqlProjectWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /* output */, TExprContext& ctx) const {
+        const auto streaming = input->Head().GetConstraint<TStreamingConstraintNode>();
+        if (!streaming) {
+            return TStatus::Ok;
+        }
+
+        const auto detailed = GetDetailed(streaming, *input->Head().GetTypeAnn(), ctx);
+        if (!detailed->GetEventTime()) {
+            input->AddConstraint(detailed);
+            return TStatus::Ok;
+        }
+
+        TPartOfStreamingConstraintNode::TMapType mapping;
+        for (const auto& item : input->Child(1)->Children()) {
+            const auto lambda = item->Child(2);
+            const auto part = lambda->Tail().GetConstraint<TPartOfStreamingConstraintNode>();
+            if (!part) {
+                continue;
+            }
+
+            if (item->IsCallable("SqlProjectItem")) {
+                TPartOfStreamingConstraintNode::UniqueMerge(
+                    mapping,
+                    part->GetColumnMapping(item->Child(1)->Content()));
             } else {
-                input->AddConstraint(ctx.MakeConstraint<TStreamingConstraintNode>());
+                TPartOfStreamingConstraintNode::UniqueMerge(
+                    mapping,
+                    TPartOfStreamingConstraintNode::TMapType(part->GetColumnMapping()));
             }
         }
-        return FromFirst<TEmptyConstraintNode>(input, output, ctx);
+
+        if (const auto complete = TPartOfStreamingConstraintNode::MakeComplete(ctx, mapping, detailed)) {
+            input->AddConstraint(complete->GetSimplifiedForType(*input->GetTypeAnn(), ctx));
+        } else {
+            input->AddConstraint(ctx.MakeConstraint<TStreamingConstraintNode>());
+        }
+        return TStatus::Ok;
     }
 
     TStatus WatermarkGeneratorWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {

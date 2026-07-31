@@ -112,7 +112,7 @@ private:
         if (!eventTimeAndDelay) {
             return TStatus::Error;
         }
-        const auto [eventTimeExpr, _] = *eventTimeAndDelay;
+        const auto eventTimeExpr = lambda.Body().Cast<TCoSub>().Left();
 
         TMaybe<TPartOfConstraintBase::TPathType> eventTime;
         if (const auto status = NYql::TryExtractEventTime(

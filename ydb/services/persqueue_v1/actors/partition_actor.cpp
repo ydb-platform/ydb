@@ -1,5 +1,6 @@
 #include "partition_actor.h"
 #include "persqueue_utils.h"
+#include "fill_batched_data_offset.h"
 
 #include <limits>
 #include <ydb/core/persqueue/common/actor.h>
@@ -542,11 +543,10 @@ bool FillBatchedData(
     for (ui32 i = 0; i < res.ResultSize(); ++i) {
         const auto& r = res.GetResult(i);
         WTime = r.GetWriteTimestampMS();
-        const ui64 messageCount = Max<ui64>(1, r.GetLogicalMessageCount());
         // When reading from the middle of a batch, tablet returns the whole blob
         // with base offset below ReadOffset; SDK skips already-committed records.
-        AFL_ENSURE(r.GetOffset() + static_cast<i64>(messageCount) > ReadOffset);
-        ReadOffset = r.GetOffset() + messageCount;
+        AFL_ENSURE(BatchedResultCoversReadOffset(r.GetOffset(), r.GetLogicalMessageCount(), ReadOffset));
+        AdvanceReadOffsetFromBatchedResult(r.GetOffset(), r.GetLogicalMessageCount(), ReadOffset);
         hasOffset = true;
 
         auto proto(GetDeserializedData(r.GetData()));

@@ -70,7 +70,7 @@ public:
 
     /// Pre compile classification
     [[nodiscard]]
-    virtual TPreCompileClassifyResult PreCompileClassify() = 0;
+    virtual TPreCompileClassifyResult PreCompileClassify(const NKqp::TUserRequestContext& userRequestContext) = 0;
 
     /// Refines classification once the query plan is available
     [[nodiscard]]

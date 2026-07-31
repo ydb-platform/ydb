@@ -122,9 +122,9 @@ void AddPrecompiledModule(
 std::unique_ptr<IWebAssemblyCompartment> CreateRegistryCompartment(
     const TVector<TNamedModuleBytecode>& libraries)
 {
-    // Prefer CreateEmptyImage + AddSdk over CreateImageFromSdk: the latter keeps a
-    // process-wide TSdkImageCache whose static dtor races WAVM Module teardown.
-    // MinimalRuntime must not be used — it lacks AllocateBytes / ThrowException.
+    // CreateImageFromSdk clones from a process-wide cache (first call is slow,
+    // later Acquires are cheap). MinimalRuntime must not be used — it lacks
+    // AllocateBytes / ThrowException.
     //
     // Empty required_libraries: install a default bump-allocator as "env"
     // (CreateEmptyImage alone has host intrinsics but no RuntimeLibraryInstance_
@@ -143,8 +143,7 @@ std::unique_ptr<IWebAssemblyCompartment> CreateRegistryCompartment(
         sdkBytecode = &libraries.front().Bytecode;
     }
 
-    auto compartment = CreateEmptyImage();
-    compartment->AddSdk(*sdkBytecode);
+    auto compartment = CreateImageFromSdk(*sdkBytecode);
     for (size_t i = 1; i < libraries.size(); ++i) {
         AddPrecompiledModule(
             compartment.get(),

@@ -6,7 +6,7 @@
 
 #include <cstring>
 
-using namespace NYT::NQueryClient::NUdf;
+using namespace NYdb::NUdfStore::NAbi;
 
 extern "C" {
     __attribute__((visibility("default"))) void md5(

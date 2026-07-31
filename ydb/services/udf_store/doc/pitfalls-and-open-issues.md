@@ -76,7 +76,7 @@ Acquire мержит libraries нескольких артефактов: пер
 ### E. Emscripten multi-module imports
 
 C++ UDF → отдельная библиотека: нужен `import_module("helpers")` / `import_name(...)`, не PEERDIR (иначе статический линк в один wasm).  
-Сборка: `--target-platform=clang18-emscripten-wasm64`.
+Сборка: `--target-platform=clang20-emscripten-wasm64`.
 
 ### F. Ошибки и UI
 

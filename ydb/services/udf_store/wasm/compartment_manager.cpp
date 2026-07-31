@@ -97,7 +97,7 @@ TQueryCompartmentHandlePtr TWasmCompartmentManager::Acquire(
 
     auto handle = std::make_unique<TQueryCompartmentHandle>();
     handle->Generation = NextCompartmentGeneration();
-    // CreateRegistryCompartment installs the first library via AddSdk ("env");
+    // CreateRegistryCompartment clones SDK from CreateImageFromSdk cache ("env");
     // only then do we AddPrecompiledModule the UDF (e.g. Md5).
     handle->Compartment = CreateRegistryCompartment(libraries);
 

@@ -41,7 +41,7 @@ ENDIF()
 END()
 
 # WASM UDF examples / SDK (cross-compile with Arcadia/YT-compatible flags):
-#   ya make --target-platform=clang18-emscripten-wasm64 --build profile \
+#   ya make --target-platform=clang20-emscripten-wasm64 --build profile \
 #     ydb/tests/functional/udf_store/examples/sdk \
 #     ydb/tests/functional/udf_store/examples/helpers \
 #     ydb/tests/functional/udf_store/examples/add \

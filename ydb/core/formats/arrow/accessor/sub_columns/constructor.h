@@ -50,7 +50,7 @@ public:
         const TStringBuf data, const NKikimrArrowAccessorProto::TSubColumnsAccessor& proto, const TChunkConstructionData& externalInfo, const bool deserialize);
 
     static TConclusion<std::shared_ptr<TSubColumnsPartialArray>> BuildPartialReader(
-        const TString& originalData, const TChunkConstructionData& externalInfo);
+        const TString& originalData, const TChunkConstructionData& externalInfo, const TSettings& settings);
 
     TConstructor(const TSettings& settings)
         : TBase(IChunkedArray::EType::SubColumnsArray)

@@ -106,13 +106,13 @@ TConclusion<std::shared_ptr<TGeneralContainer>> TConstructor::BuildOthersContain
 }
 
 TConclusion<std::shared_ptr<TSubColumnsPartialArray>> TConstructor::BuildPartialReader(
-    const TString& originalData, const TChunkConstructionData& externalInfo) {
+    const TString& originalData, const TChunkConstructionData& externalInfo, const TSettings& settings) {
     auto headerConclusion = TSubColumnsHeader::ReadHeader(originalData, externalInfo);
     if (headerConclusion.IsFail()) {
         return headerConclusion;
     }
     return std::make_shared<TSubColumnsPartialArray>(
-        headerConclusion.DetachResult(), externalInfo.GetRecordsCount(), externalInfo.GetColumnType());
+        headerConclusion.DetachResult(), externalInfo.GetRecordsCount(), externalInfo.GetColumnType(), settings);
 }
 
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

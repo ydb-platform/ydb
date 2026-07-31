@@ -185,6 +185,7 @@ public:
         }
         if (proto.HasDenseEncodingVersion()) {
             DenseEncodingVersion = proto.GetDenseEncodingVersion();
+            AFL_VERIFY(*DenseEncodingVersion <= GetMaxDenseEncodingVersion())("version", *DenseEncodingVersion)("max", GetMaxDenseEncodingVersion());
         }
         if (!proto.HasDataExtractor()) {
             AFL_VERIFY(DataExtractor.Initialize(TJsonScanExtractor::GetClassNameStatic()));

@@ -770,7 +770,8 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                     settings.V2.EnableSQPOLL,
                     settings.V2.UringEngineRingsPerShard,
                     settings.V2.UringEngineSqThreadIdleMs,
-                    settings.V2.ShareRingsAmongThreads);
+                    settings.V2.ShareRingsAmongThreads,
+                    GetDestructActorID());
                 setup->OnActorSystemCreated.push_back([engine = icCommon->UringEngineV2](TActorSystem *actorSystem) {
                     if (engine) {
                         engine->SetActorSystem(actorSystem);

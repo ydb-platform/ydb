@@ -8,6 +8,7 @@
 #include <ydb/core/kafka_proxy/kafka_messages.h>
 #include <ydb/core/persqueue/public/list_topics/list_all_topics_actor.h>
 #include <ydb/services/persqueue_v1/actors/schema_actors.h>
+#include <ydb/library/actors/core/log.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KAFKA_PROXY
 
@@ -123,7 +124,7 @@ void TKafkaMetadataActor::ProcessTopicsFromRequest() {
 }
 
 void TKafkaMetadataActor::HandleListTopics(NKikimr::TEvPQ::TEvListAllTopicsResponse::TPtr& ev) {
-    Y_ABORT_UNLESS(PendingResponses > 0);
+    AFL_ENSURE(PendingResponses > 0)("pending", PendingResponses)("database", Context->DatabasePath);
     PendingResponses--;
     auto topics = std::move(ev->Get()->Topics);
     Response->Topics.resize(topics.size());

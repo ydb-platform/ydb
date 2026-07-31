@@ -5,6 +5,16 @@ items:
   include:
     path: analytics/toc_p.yaml
     mode: link
+- name: Stream processing
+  href: streaming-query/index.md
+  include:
+    path: streaming-query/toc_p.yaml
+    mode: link
+- name: Architecture
+  href: architecture/index.md
+  include:
+    path: architecture/toc_p.yaml
+    mode: link
 - name: Connecting to a database
   href: connect.md
 - name: Schema objects
@@ -40,13 +50,3 @@ items:
   when: feature_transfer
 - name: Streaming queries
   href: streaming-query.md
-- name: Architecture
-  href: architecture/index.md
-  include:
-    path: architecture/toc_p.yaml
-    mode: link
-- name: Architecture
-  href: architecture/index.md
-  include:
-    path: architecture/toc_p.yaml
-    mode: link

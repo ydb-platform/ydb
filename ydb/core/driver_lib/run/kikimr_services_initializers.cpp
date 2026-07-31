@@ -262,7 +262,6 @@
 #include <ydb/library/actors/interconnect/load.h>
 #include <ydb/library/actors/interconnect/poller/poller_actor.h>
 #include <ydb/library/actors/interconnect/poller/poller_tcp.h>
-#include <ydb/library/actors/interconnect/poller/uring_poller_actor.h>
 #include <ydb/library/actors/interconnect/rdma/cq_actor/cq_actor.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/library/actors/interconnect/rdma/rdma.h>
@@ -595,14 +594,6 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
         result.CollectSubscriptionStackTrace = config.GetCollectSubscriptionStackTrace();
     }
 
-    if (config.HasUseUring()) {
-        result.UseUring = config.GetUseUring();
-    }
-
-    if (config.HasEnableUringSQPOLL()) {
-        result.EnableUringSQPOLL = config.GetEnableUringSQPOLL();
-    }
-
     if (config.HasV2Config()) {
         const auto& v2 = config.GetV2Config();
         result.V2.Enable = v2.GetEnable();
@@ -730,11 +721,6 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             // create poller actor (whether platform supports it)
             setup->LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(
                 CreatePollerActor(schedulerConfig.MonCounters), TMailboxType::ReadAsFilled, systemPoolId));
-
-            if (settings.UseUring && TUringContext::IsSupported()) {
-                setup->LocalServices.emplace_back(MakeUringPollerActorId(), TActorSetupCmd(
-                    CreateUringPollerActor(settings.EnableUringSQPOLL), TMailboxType::ReadAsFilled, systemPoolId));
-            }
 
             auto destructorQueueSize = std::make_shared<std::atomic<TAtomicBase>>(0);
 
@@ -3284,48 +3270,49 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
         settings.TcpNotDelay = true;
 
         std::shared_ptr<NKafka::TInet64SecureStreamSocket::TServerMtlsCreds> serverCreds = std::make_shared<NKafka::TInet64SecureStreamSocket::TServerMtlsCreds>();
+        if (Config.GetKafkaProxyConfig().GetMtlsEnable()) {
+            auto readFile = [](std::optional<TString> path) {
+                if (path) {
+                    try {
+                        return TFileInput(*path).ReadAll();
+                    } catch (const std::exception& ex) {
+                        return TString();
+                    }
+                }
+                return TString();
+            };
 
-        auto readFile = [](std::optional<TString> path) {
-            if (path) {
-                try {
-                    return TFileInput(*path).ReadAll();
-                } catch (const std::exception& ex) {
-                    return TString();
+            TString serverCert = readFile(settings.CertificateFile);
+            TString serverPrivateKey = readFile(settings.PrivateKeyFile);
+            TString caCert = readFile(Config.GetKafkaProxyConfig().GetCA());
+            serverCreds->AllowSelfSignedCerts = Config.GetKafkaProxyConfig().GetEnableSelfSignedCerts();
+
+            {
+                TSslHolder<BIO> bio(BIO_new_mem_buf(serverCert.data(), serverCert.size()));
+                if (bio) {
+                    serverCreds->ServerCert = TSslHolder<X509>(PEM_read_bio_X509(bio.get(), nullptr, nullptr, nullptr));
+                } else {
+                    serverCreds->ServerCert = TSslHolder<X509>();
                 }
             }
-            return TString();
-        };
 
-        TString serverCert = readFile(settings.CertificateFile);
-        TString serverPrivateKey = readFile(settings.PrivateKeyFile);
-        TString caCert = readFile(Config.GetKafkaProxyConfig().GetCA());
-        serverCreds->AllowSelfSignedCerts = Config.GetKafkaProxyConfig().GetEnableSelfSignedCerts();
-
-        {
-            TSslHolder<BIO> bio(BIO_new_mem_buf(serverCert.data(), serverCert.size()));
-            if (bio) {
-                serverCreds->ServerCert = TSslHolder<X509>(PEM_read_bio_X509(bio.get(), nullptr, nullptr, nullptr));
-            } else {
-                serverCreds->ServerCert = TSslHolder<X509>();
+            {
+                TSslHolder<BIO> bio(BIO_new_mem_buf(serverPrivateKey.data(), serverPrivateKey.size()));
+                if (bio) {
+                    serverCreds->ServerPrivateKey = TSslHolder<EVP_PKEY>(PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, nullptr));
+                } else {
+                    serverCreds->ServerPrivateKey = TSslHolder<EVP_PKEY>();
+                }
             }
-        }
 
-        {
-            TSslHolder<BIO> bio(BIO_new_mem_buf(serverPrivateKey.data(), serverPrivateKey.size()));
-            if (bio) {
-                serverCreds->ServerPrivateKey = TSslHolder<EVP_PKEY>(PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, nullptr));
-            } else {
-                serverCreds->ServerPrivateKey = TSslHolder<EVP_PKEY>();
-            }
-        }
-
-        {
-            TSslHolder<BIO> bio(BIO_new_mem_buf(caCert.data(), caCert.size()));
-            if (bio) {
-                serverCreds->CACert = TSslHolder<X509>(
-                    PEM_read_bio_X509_AUX(bio.get(), nullptr, nullptr, nullptr));
-            } else {
-                serverCreds->CACert = TSslHolder<X509>();
+            {
+                TSslHolder<BIO> bio(BIO_new_mem_buf(caCert.data(), caCert.size()));
+                if (bio) {
+                    serverCreds->CACert = TSslHolder<X509>(
+                        PEM_read_bio_X509_AUX(bio.get(), nullptr, nullptr, nullptr));
+                } else {
+                    serverCreds->CACert = TSslHolder<X509>();
+                }
             }
         }
         setup->LocalServices.emplace_back(
@@ -3347,7 +3334,7 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
 
         setup->LocalServices.emplace_back(
             TActorId(),
-            TActorSetupCmd(NKafka::CreateKafkaListener(MakePollerActorId(), settings, Config.GetKafkaProxyConfig(), serverCreds),
+            TActorSetupCmd(NKafka::CreateKafkaListener(MakePollerActorId(), settings, Config.GetKafkaProxyConfig(), Config.GetKafkaProxyConfig().GetMtlsEnable() ? serverCreds : nullptr),
                            TMailboxType::HTSwap, appData->UserPoolId)
         );
 

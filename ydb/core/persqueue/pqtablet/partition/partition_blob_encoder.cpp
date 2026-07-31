@@ -2,6 +2,7 @@
 #include "partition_util.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NPQ {
 
@@ -353,7 +354,7 @@ TString TPartitionBlobEncoder::SerializeForKey(const TKey& key, ui32 size,
     AFL_ENSURE(size >= valueD.size());
 
     if (size > valueD.size() && key.HasSuffix()) { //change to real size if real packed size is smaller
-        Y_ABORT("Can't be here right now, only after merging of small batches");
+        AFL_ENSURE(false)("reason", "Can't be here right now, only after merging of small batches")("key", key.ToString())("size", size)("value_size", valueD.size());
 
         //for (auto it = DataKeysHead.rbegin(); it != DataKeysHead.rend(); ++it) {
         //    if (it->KeysCount() > 0 ) {

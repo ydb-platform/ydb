@@ -64,6 +64,9 @@ private:
     // across all DBGs. 0 until the first round finishes.
     std::atomic<ui64> LastSafeBarrier{0};
 
+    TAdaptiveLock PBufferBarrierLock;
+    TMap<NKikimr::NBsController::TDDiskId, ui64> LastSentBarrierByPBuffer;
+
 public:
     TFastPathService(
         NActors::TActorSystem* actorSystem,
@@ -107,7 +110,7 @@ public:
     void ReportIOError() override;
 
     // ITraceService implementation
-    NWilson::TSpan CreteRootSpan(TStringBuf name) override;
+    NWilson::TSpan CreateRootSpan(TStringBuf name) override;
 
     // IPartitionDirectService implementation
     TVolumeConfigPtr GetVolumeConfig() const override;
@@ -117,13 +120,18 @@ public:
         TDuration delay,
         NYdb::NBS::TCallback callback) override;
 
-    void UpdateVChunkConfig(const TVChunkConfig& cfg) override;
+    NThreading::TFuture<void> UpdateVChunkConfig(
+        const TVChunkConfig& cfg) override;
 
     void QueryAddHost(size_t directBlockGroupId, size_t newHostIndex) override;
 
     ui64 GenerateLsn() override;
 
     void StopTablet(const TString& reason) override;
+
+    bool TryAdvancePBufferBarrier(
+        const NKikimr::NBsController::TDDiskId& pbufferDDiskId,
+        ui64 lsn) override;
 
     // Read-only info for the monitoring UI.
     [[nodiscard]] TFastPathServiceInfo GetMonInfo() const;

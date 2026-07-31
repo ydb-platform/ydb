@@ -125,6 +125,7 @@ public:
         if (!Context->RequireAuthentication) {
             Context->DatabasePath = NKikimr::AppData()->TenantName;
             Context->ResourceDatabasePath = NKikimr::AppData()->TenantName;
+            Context->InitialServerlessTransactionsFlagValue = NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions();
         }
 
         MtlsAuthStage = NO_CERT_YET;
@@ -378,7 +379,8 @@ protected:
             message,
             Context->ConnectionId,
             Context->DatabasePath,
-            Context->ResourceDatabasePath
+            Context->ResourceDatabasePath,
+            Context->InitialServerlessTransactionsFlagValue.value_or(false)
         ));
     }
 
@@ -388,7 +390,8 @@ protected:
             message,
             Context->ConnectionId,
             Context->DatabasePath,
-            Context->ResourceDatabasePath
+            Context->ResourceDatabasePath,
+            Context->InitialServerlessTransactionsFlagValue.value_or(false)
         ));
     }
 
@@ -398,7 +401,8 @@ protected:
             message,
             Context->ConnectionId,
             Context->DatabasePath,
-            Context->ResourceDatabasePath
+            Context->ResourceDatabasePath,
+            Context->InitialServerlessTransactionsFlagValue.value_or(false)
         ));
     }
 
@@ -408,7 +412,8 @@ protected:
             message,
             Context->ConnectionId,
             Context->DatabasePath,
-            Context->ResourceDatabasePath
+            Context->ResourceDatabasePath,
+            Context->InitialServerlessTransactionsFlagValue.value_or(false)
         ));
     }
 
@@ -569,6 +574,12 @@ protected:
 
     void Handle(TEvKafka::TEvResponse::TPtr response, const TActorContext& ctx) {
         auto r = response->Get();
+        if ((r->ErrorCode == EKafkaErrors::COORDINATOR_NOT_AVAILABLE || r->ErrorCode == EKafkaErrors::INVALID_TXN_STATE)
+                && Context->KafkaTableFeatureFlagChanged(NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions())) {
+            YDB_LOG_DEBUG("EnableKafkaServerlessTransactions feature flag changed; closing connection so the client reconnects and rebinds Kafka metadata tables.",
+                {LogPrefix()});
+            CloseConnection = true;
+        }
         Reply(r->CorrelationId, r->Response, r->ErrorCode, ctx);
     }
 
@@ -622,6 +633,7 @@ protected:
         Context->FolderId = event->FolderId;
         Context->IsServerless = event->IsServerless;
         Context->ResourceDatabasePath = event->ResourceDatabasePath ? NKikimr::CanonizePath(event->ResourceDatabasePath) : Context->DatabasePath;
+        Context->InitialServerlessTransactionsFlagValue = NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions();
 
         YDB_LOG_DEBUG("Authentication successful",
             {LogPrefix()},
@@ -788,7 +800,7 @@ protected:
 
     bool UpgradeToSecure() {
         if (IsSslRequired && !IsSslActive) {
-            int res = Socket->TryUpgradeToSecure(NKikimrServices::KAFKA_PROXY, ServerCreds);
+            int res = Socket->TryUpgradeToSecure(NKikimrServices::KAFKA_PROXY, ServerCreds ? std::make_optional(ServerCreds) : std::nullopt);
             if (res < 0) {
                 YDB_LOG_ERROR("Connection closed - error in UpgradeToSecure",
                     {LogPrefix()},

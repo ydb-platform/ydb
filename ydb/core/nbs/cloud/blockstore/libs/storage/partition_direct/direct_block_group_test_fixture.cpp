@@ -141,7 +141,8 @@ TDBGFixture::MakeDirectBlockGroup(
         0,
         ddisksIds,
         pbufferIds,
-        std::move(transport));
+        std::move(transport),
+        nullptr);
 }
 
 bool TDBGFixture::DoExecutorAndRuntimeWorkWithPredicate(
@@ -217,6 +218,15 @@ void TDBGFixture::WaitReady(
         [&]() { return future.HasValue() || future.HasException(); },
         timeout);
     UNIT_ASSERT(future.HasValue());
+}
+
+size_t TDBGFixture::ReplyUpdateRequests()
+{
+    auto requests = std::move(Service->UpdateConfigRequests);
+    for (auto& r: requests) {
+        r.Promise.SetValue();
+    }
+    return requests.size();
 }
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

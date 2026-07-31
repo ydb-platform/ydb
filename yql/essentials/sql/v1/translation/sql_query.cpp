@@ -2100,7 +2100,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore62: {
-            // show_create_table_stmt: SHOW CREATE (TABLE | VIEW | EXTERNAL DATA SOURCE) simple_table_ref
+            // show_create_table_stmt: SHOW CREATE (TABLE | VIEW | EXTERNAL DATA SOURCE | EXTERNAL TABLE) simple_table_ref
             Ctx_.BodyPart();
             const auto& rule = core.GetAlt_sql_stmt_core62().GetRule_show_create_table_stmt1();
 
@@ -2110,16 +2110,23 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             }
             const auto& block = rule.GetBlock3();
             TString type;
-            if (block.HasAlt1()) {
-                type = "showCreateTable"; // TABLE
-            } else if (block.HasAlt2()) {
-                type = "showCreateView"; // VIEW
-            } else if (block.HasAlt3()) {
-                type = "showCreateExternalDataSource"; // EXTERNAL DATA SOURCE
+            switch (block.Alt_case()) {
+                case TRule_show_create_table_stmt_TBlock3::kAlt1:
+                    type = "showCreateTable"; // TABLE
+                    break;
+                case TRule_show_create_table_stmt_TBlock3::kAlt2:
+                    type = "showCreateView"; // VIEW
+                    break;
+                case TRule_show_create_table_stmt_TBlock3::kAlt3:
+                    type = "showCreateExternalDataSource"; // EXTERNAL DATA SOURCE
+                    break;
+                case TRule_show_create_table_stmt_TBlock3::kAlt4:
+                    type = "showCreateExternalTable"; // EXTERNAL TABLE
+                    break;
+                case TRule_show_create_table_stmt_TBlock3::ALT_NOT_SET:
+                    YQL_ENSURE(false, "Unreachable");
             }
-            YQL_ENSURE(!type.empty(),
-                       "Unsupported SHOW CREATE statement type, expected one of TABLE, VIEW, EXTERNAL DATA SOURCE; got: "
-                           << block.DebugString());
+            YQL_ENSURE(!type.empty());
 
             AddStatementToBlocks(blocks, BuildShowCreate(Ctx_.Pos(), tr, type, Ctx_.Scoped));
             break;

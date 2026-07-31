@@ -15,7 +15,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_state.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
@@ -96,14 +96,12 @@ private:
     friend struct TBaseFixture;
 
     using TPrepareConfigFunc = std::function<TVChunkConfig()>;
-    using TApplyPersistedConfigFunc = std::function<void()>;
 
     struct TPendingVChunkConfig
     {
         TPrepareConfigFunc PrepareConfig;
-        TApplyPersistedConfigFunc ApplyPersisted;
-
         TVChunkConfig Config;
+        TString Message;
     };
 
     void UpdateDirtyMap(const TDBGRestoreResponse& response);
@@ -136,16 +134,14 @@ private:
 
     // Persists newConfig to the partition's local DB. The in-memory config is
     // unchanged; the new value applies after config persisted.
-    void UpdateConfig(
-        TPrepareConfigFunc prepareConfig,
-        TApplyPersistedConfigFunc applyPersisted);
+    void UpdateConfig(TPrepareConfigFunc prepareConfig, TString message);
     void PersistNextPendingConfig();
     void OnConfigPersisted();
+    void ApplyConfig(TVChunkConfig newConfig, const TString& message);
 
     TVChunkConfig PrepareNewConfig(
         THostIndex hostIndex,
         EHostState state) const;
-    void ApplyConfig();
 
     void OnCopierStopped(
         THostIndex hostIndex,
@@ -155,6 +151,7 @@ private:
     // Checks DirtyMap's initial readiness and waits it if need.
     void WaitForDirtyMapReady();
 
+    [[nodiscard]] TString PrintHostAndNode(THostIndex host) const;
     [[nodiscard]] TString PrintInflight() const;
 
     NActors::TActorSystem* const ActorSystem = nullptr;
@@ -171,7 +168,7 @@ private:
     TLogTitle LogTitle;
     TVChunkConfig VChunkConfig;
     TList<TPendingVChunkConfig> PendingVChunkConfigs;
-    TBlocksDirtyMap BlocksDirtyMap;
+    TBlocksDirtyMapPtr BlocksDirtyMap;
     // One-shot signal of the INITIAL DirtyMap assembly at tablet start.
     NThreading::TPromise<void> DirtyMapReady = NThreading::NewPromise();
     TMap<THostIndex, TDDiskDataCopierPtr> Copiers;

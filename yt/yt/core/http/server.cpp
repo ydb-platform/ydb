@@ -64,7 +64,7 @@ public:
         IRequestPathMatcherPtr requestPathMatcher,
         bool ownPoller = false)
         : Config_(std::move(config))
-        , Logger(HttpLogger().WithTag("ServerName: %v", Config_->ServerName))
+        , Logger(HttpLogger().WithTag("ServerName", Config_->ServerName))
         , Listener_(std::move(listener))
         , Poller_(std::move(poller))
         , Acceptor_(std::move(acceptor))

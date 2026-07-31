@@ -44,10 +44,7 @@ TString BuildGrafanaLoggingExpr(const TVector<std::pair<TString, TString>>& bind
     return expr;
 }
 
-NJson::TJsonValue BuildGrafanaLoggingPanesJson(
-    const TString& datasource,
-    const TVector<std::pair<TString, TString>>& bindings)
-{
+NJson::TJsonValue BuildGrafanaLoggingPanesJson(const TString& datasource, const TVector<std::pair<TString, TString>>& bindings) {
     NJson::TJsonValue panesJson(NJson::JSON_MAP);
     NJson::TJsonValue paneJson(NJson::JSON_MAP);
     NJson::TJsonValue queryJson(NJson::JSON_MAP);
@@ -171,6 +168,9 @@ void ValidateGrafanaLoggingSourceConfig(const TSupportLinkEntryConfig& config, c
     const TStringBuf url = config.GetUrl().empty()
         ? GRAFANA_LOGGING_DEFAULT_URL
         : TStringBuf(config.GetUrl());
+    if (url.Contains('{') || url.Contains('}')) {
+        ythrow yexception() << "url template placeholders are not supported for source=" << config.GetSource();
+    }
     if (url.Contains('?')) {
         ythrow yexception() << "query parameters are not supported in url for source=" << config.GetSource();
     }

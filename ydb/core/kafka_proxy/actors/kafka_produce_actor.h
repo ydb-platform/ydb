@@ -24,7 +24,8 @@ using namespace NKikimrClient;
 // Requests are processed in parallel, but it is guaranteed that the recording order will be preserved.
 // The order of responses to requests is also guaranteed.
 //
-class TKafkaProduceActor: public NActors::TActorBootstrapped<TKafkaProduceActor> {
+class TKafkaProduceActor: public NActors::TActorBootstrapped<TKafkaProduceActor>
+                        , public TKafkaExceptionHandler<TKafkaProduceActor> {
     struct TPendingRequest;
 
     enum ETopicStatus {
@@ -42,6 +43,10 @@ public:
     void Bootstrap(const NActors::TActorContext& ctx);
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() { return NKikimrServices::TActivity::KAFKA_PRODUCE_ACTOR; }
+
+    NActors::TActorId GetKafkaConnectionId() const {
+        return Context ? Context->ConnectionId : NActors::TActorId{};
+    }
 
 private:
     void PassAway() override;

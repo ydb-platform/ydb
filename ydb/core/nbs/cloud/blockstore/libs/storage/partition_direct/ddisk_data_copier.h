@@ -5,6 +5,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/public.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_roles.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
@@ -40,7 +41,7 @@ public:
         const TDiskDescription& diskDescription,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
-        TBlocksDirtyMap* dirtyMap,
+        TBlocksDirtyMapPtr dirtyMap,
         THostIndex destination);
 
     // Starts processing from the FreshWatermark position, which is stored in
@@ -68,7 +69,7 @@ private:
     const TVolumeConfigPtr VolumeConfig;
     const IDirectBlockGroupPtr DirectBlockGroup;
     const THostIndex Destination;
-    TBlocksDirtyMap* const DirtyMap;
+    const TBlocksDirtyMapPtr DirtyMap;
 
     TLogTitle LogTitle;
     EState State = EState::Stopped;

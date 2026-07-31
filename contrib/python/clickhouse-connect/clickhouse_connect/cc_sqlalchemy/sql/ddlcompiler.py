@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from sqlalchemy import Column
@@ -12,6 +13,20 @@ from clickhouse_connect.cc_sqlalchemy.datatypes.sqltypes import Nullable
 from clickhouse_connect.cc_sqlalchemy.sql import format_table
 from clickhouse_connect.datatypes.base import TypeDef
 from clickhouse_connect.driver.binding import format_str, quote_identifier
+
+
+def render_setting_value(value: Any) -> str:
+    if isinstance(value, bool):
+        return "1" if value else "0"
+    if isinstance(value, (int, float)):
+        return str(value)
+    return format_str(str(value))
+
+
+def render_settings(settings: Mapping[str, Any] | None) -> str:
+    if not settings:
+        return ""
+    return ", ".join(f"{key} = {render_setting_value(value)}" for key, value in settings.items())
 
 
 class ClickHouseDDLHelper:
@@ -85,9 +100,7 @@ class ClickHouseDDLHelper:
 
     @staticmethod
     def render_settings(settings: dict[str, Any] | None) -> str:
-        if not settings:
-            return ""
-        return ", ".join(f"{key} = {ClickHouseDDLHelper._render_setting_value(value)}" for key, value in settings.items())
+        return render_settings(settings)
 
     @staticmethod
     def render_comment(comment: str | None) -> str:
@@ -98,11 +111,7 @@ class ClickHouseDDLHelper:
 
     @staticmethod
     def _render_setting_value(value: Any) -> str:
-        if isinstance(value, bool):
-            return "1" if value else "0"
-        if isinstance(value, (int, float)):
-            return str(value)
-        return format_str(str(value))
+        return render_setting_value(value)
 
 
 def column_specification(dialect, column: Column) -> str:
@@ -180,15 +189,18 @@ class ChDDLCompiler(DDLCompiler):
         text = f"{quote_identifier(column.name)} {ClickHouseDDLHelper.effective_column_type(column).compile()}"
         materialized = ClickHouseDDLHelper.get_option(column, "materialized")
         alias = ClickHouseDDLHelper.get_option(column, "alias")
+        # DEFAULT, MATERIALIZED, and ALIAS are mutually exclusive in ClickHouse.
         if materialized is not None:
             text += f" MATERIALIZED {self.render_default_string(materialized)}"
-            return text
-        if alias is not None:
+        elif alias is not None:
             text += f" ALIAS {self.render_default_string(alias)}"
-            return text
-        default = self.get_column_default_string(column)
-        if default is not None:
-            text += f" DEFAULT {default}"
+        else:
+            default = self.get_column_default_string(column)
+            if default is not None:
+                text += f" DEFAULT {default}"
+        # ClickHouse requires the clause order COMMENT, then CODEC, then TTL.
+        if column.comment:
+            text += f" COMMENT {self.sql_compiler.render_literal_value(column.comment, sqltypes.STRINGTYPE)}"
         codec = ClickHouseDDLHelper.get_option(column, "codec")
         if codec is not None:
             codec_sql = codec if isinstance(codec, str) else ", ".join(str(item) for item in codec)
@@ -196,6 +208,4 @@ class ChDDLCompiler(DDLCompiler):
         ttl = ClickHouseDDLHelper.get_option(column, "ttl")
         if ttl is not None:
             text += f" TTL {self.render_default_string(ttl)}"
-        if column.comment:
-            text += f" COMMENT {self.sql_compiler.render_literal_value(column.comment, sqltypes.STRINGTYPE)}"
         return text

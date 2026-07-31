@@ -10,7 +10,6 @@
 #include <ydb/core/persqueue/pqtablet/cache/read.h>
 #include <ydb/core/persqueue/pqtablet/readproxy/readproxy.h>
 #include <ydb/core/persqueue/pqtablet/batching/batch_processor.h>
-#include <ydb/core/persqueue/pqtablet/blob/header.h>
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/pqtablet/common/tracing_support.h>
@@ -5879,7 +5878,6 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
 namespace NKikimr {
 
 IActor* CreatePersQueue(const TActorId& tablet, TTabletStorageInfo *info) {
-    NPQ::InitMaxHeaderSize(AppData()->FeatureFlags);
     return new NPQ::TPersQueue(tablet, info);
 }
 

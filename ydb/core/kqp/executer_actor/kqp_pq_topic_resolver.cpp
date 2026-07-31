@@ -243,8 +243,15 @@ private:
                         auto* fc = topicSource.MutableFederatedClusters(ci);
                         auto cit = clusterPartitions.ByClusterName.find(fc->GetName());
                         if (cit != clusterPartitions.ByClusterName.end()) {
-                            fc->SetPartitionsCount(cit->second);
-                            sourceModified = true;
+                            const ui32 oldCount = fc->GetPartitionsCount();
+                            const ui32 newCount = cit->second;
+                            // Only increase partition count: if cluster returned 0
+                            // (e.g. it is unavailable), keep the compiled value.
+                            const ui32 effectiveCount = Max(oldCount, newCount);
+                            if (effectiveCount != oldCount) {
+                                fc->SetPartitionsCount(effectiveCount);
+                                sourceModified = true;
+                            }
                         }
                     }
 
@@ -274,14 +281,23 @@ private:
                     if (params.PartitioningParamsSize() == 0) {
                         continue;
                     }
+                    bool rangeModified = false;
                     for (int ppIdx = 0;
                          ppIdx < static_cast<int>(params.PartitioningParamsSize());
                          ++ppIdx)
                     {
-                        params.MutablePartitioningParams(ppIdx)
-                            ->SetTopicPartitionsCount(maxPartitionsCount);
+                        auto* pp = params.MutablePartitioningParams(ppIdx);
+                        const ui32 oldTotal = pp->GetTopicPartitionsCount();
+                        // Only increase: keep compiled value if describe returned less.
+                        const ui32 effectiveTotal = Max(oldTotal, maxPartitionsCount);
+                        if (effectiveTotal != oldTotal) {
+                            pp->SetTopicPartitionsCount(effectiveTotal);
+                            rangeModified = true;
+                        }
                     }
-                    dqTask->SetReadRanges(rangeIdx, params.SerializeAsString());
+                    if (rangeModified) {
+                        dqTask->SetReadRanges(rangeIdx, params.SerializeAsString());
+                    }
                 }
             }
         }

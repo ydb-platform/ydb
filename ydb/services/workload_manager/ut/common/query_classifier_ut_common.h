@@ -154,9 +154,13 @@ struct TClassifyTestCase {
         return NWorkloadManager::CreateQueryClassifier(poolSnap, TClassifierConfigsView(classifierSnap, TEST_DB), TEST_DB, std::move(ctx));
     }
 
-    NWorkloadManager::IQueryClassifier::TPreCompileClassifyResult RunPreClassify() const {
+    NWorkloadManager::IQueryClassifier::TPreCompileClassifyResult RunPreClassify(
+        bool isStreamingQuery = false) const
+    {
         auto classifier = BuildClassifier();
-        return classifier->PreCompileClassify();
+        NKqp::TUserRequestContext userRequestContext;
+        userRequestContext.IsStreamingQuery = isStreamingQuery;
+        return classifier->PreCompileClassify(userRequestContext);
     }
 
     ///
@@ -168,7 +172,8 @@ struct TClassifyTestCase {
         const TString& queryTablePath, bool isFullScan) const
     {
         auto classifier = BuildClassifier();
-        (void)classifier->PreCompileClassify();
+        NKqp::TUserRequestContext userRequestContext;
+        (void)classifier->PreCompileClassify(userRequestContext);
 
         auto proto = std::make_unique<NKikimrKqp::TPreparedQuery>();
         auto* phyQuery = proto->MutablePhysicalQuery();
@@ -184,7 +189,6 @@ struct TClassifyTestCase {
         }
 
         NKqp::TPreparedQueryHolder holder(proto.release(), nullptr, /*noFillTables=*/true);
-        NKqp::TUserRequestContext userRequestContext;
         return classifier->PostCompileClassify(holder, userRequestContext);
     }
 
@@ -195,10 +199,12 @@ struct TClassifyTestCase {
     /// for wiring verification; the matcher UT covers the full walk surface.
     ///
     NWorkloadManager::IQueryClassifier::TPostCompileClassifyResult RunPostClassifyForPath(
-        const TString& queryTablePath) const
+        const TString& queryTablePath, bool isStreamingQuery = false) const
     {
         auto classifier = BuildClassifier();
-        (void)classifier->PreCompileClassify();
+        NKqp::TUserRequestContext userRequestContext;
+        userRequestContext.IsStreamingQuery = isStreamingQuery;
+        (void)classifier->PreCompileClassify(userRequestContext);
 
         auto proto = std::make_unique<NKikimrKqp::TPreparedQuery>();
         auto* phyQuery = proto->MutablePhysicalQuery();
@@ -206,7 +212,6 @@ struct TClassifyTestCase {
         tx->AddTables()->MutableId()->SetPath(queryTablePath);
 
         NKqp::TPreparedQueryHolder holder(proto.release(), nullptr, /*noFillTables=*/true);
-        NKqp::TUserRequestContext userRequestContext;
         return classifier->PostCompileClassify(holder, userRequestContext);
     }
 
@@ -214,12 +219,12 @@ struct TClassifyTestCase {
         bool isStreamingQuery) const
     {
         auto classifier = BuildClassifier();
-        (void)classifier->PreCompileClassify();
+        NKqp::TUserRequestContext userRequestContext;
+        userRequestContext.IsStreamingQuery = isStreamingQuery;
+        (void)classifier->PreCompileClassify(userRequestContext);
 
         auto proto = std::make_unique<NKikimrKqp::TPreparedQuery>();
         NKqp::TPreparedQueryHolder holder(proto.release(), nullptr, /*noFillTables=*/true);
-        NKqp::TUserRequestContext userRequestContext;
-        userRequestContext.IsStreamingQuery = isStreamingQuery;
         return classifier->PostCompileClassify(holder, userRequestContext);
     }
 };

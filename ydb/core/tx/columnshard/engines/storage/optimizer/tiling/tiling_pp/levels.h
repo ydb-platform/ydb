@@ -57,8 +57,13 @@ struct LastLevel: ICompactionUnit<TKey, TPortion> {
         const ui64 measure = Measure(p);
         this->Counters.Portions->AddWidth(measure);
         AFL_VERIFY(WidthByPortionId.emplace(portionId, measure).second)("portion_id", portionId);
-        AFL_VERIFY(CandidateIds.insert(portionId).second)("portion_id", portionId);
-        Candidates.insert(p);
+        if (!Portions.size()) {
+            AFL_VERIFY(PortionIds.insert(portionId).second)("portion_id", portionId);
+            Portions.insert(p);
+        } else {
+            AFL_VERIFY(CandidateIds.insert(portionId).second)("portion_id", portionId);
+            Candidates.insert(p);
+        }
         this->Counters.Portions->SetHeight(CandidateIds.size());
     }
 
@@ -147,8 +152,11 @@ struct LastLevel: ICompactionUnit<TKey, TPortion> {
                 continue;
             }
             if (result.size() == 1) {
-                if (auto neighbour = NearestNeighbour(candidate, isLocked)) {
+                if (std::optional<typename TPortion::TConstPtr> neighbour = NearestNeighbour(candidate, isLocked);
+                    neighbour && !isLocked(*neighbour)) {
                     result.push_back(*neighbour);
+                } else {
+                    continue;
                 }
             }
             return CompactionTask<TKey, TPortion>{ result, 1, BuildPriority(locked) };
@@ -233,7 +241,7 @@ struct Accumulator: ICompactionUnit<TKey, TPortion> {
             }
         }
 
-        if (result.Portions.size()) {
+        if (result.Portions.size() > 1) {
             result.Priority = BuildPriority(locked);
             return result;
         }
@@ -318,7 +326,7 @@ struct MiddleLevel: ICompactionUnit<TKey, TPortion> {
             }
             return true;
         });
-        if (result.Portions.size()) {
+        if (result.Portions.size() > 1) {
             result.TargetLevel = LevelIdx;
             result.Priority = BuildPriority();
             return result;

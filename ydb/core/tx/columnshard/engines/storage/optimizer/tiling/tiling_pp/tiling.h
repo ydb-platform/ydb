@@ -377,10 +377,7 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
                 return std::nullopt;
             }
             GeneratedTasksPriorityLevel->Collect(result->Priority.GetLevel());
-            AFL_VERIFY(result->Portions.size())("reason", "zero_sized_task");
-            if (result->Portions.size() == 1) {
-                result->TargetLevel = 1;
-            }
+            AFL_VERIFY(result->Portions.size() > 1)("reason", "zero_or_one_sized_task");
         }
 
         return result;

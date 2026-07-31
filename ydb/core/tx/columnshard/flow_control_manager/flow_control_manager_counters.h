@@ -30,6 +30,8 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr WaitQueueEnqueuedCount;
     NMonitoring::TDynamicCounters::TCounterPtr WaitQueueDrainedCount;
     NMonitoring::TDynamicCounters::TCounterPtr WaitQueueRejectedDeadlineCount;
+    NMonitoring::TDynamicCounters::TCounterPtr WaitQueueTimedOutCount;
+    NMonitoring::TDynamicCounters::TCounterPtr WaitQueueCancelledCount;
     NMonitoring::TDynamicCounters::TCounterPtr WaitQueueRejectedFullCount;
     NMonitoring::TDynamicCounters::TCounterPtr DelayedRejectEnqueuedCount;
     NMonitoring::TDynamicCounters::TCounterPtr DelayedRejectFiredCount;
@@ -66,6 +68,8 @@ public:
         , WaitQueueEnqueuedCount(TBase::GetDeriviative("FlowControl/WaitQueue/Enqueued/Count"))
         , WaitQueueDrainedCount(TBase::GetDeriviative("FlowControl/WaitQueue/Drained/Count"))
         , WaitQueueRejectedDeadlineCount(TBase::GetDeriviative("FlowControl/WaitQueue/RejectedDeadline/Count"))
+        , WaitQueueTimedOutCount(TBase::GetDeriviative("FlowControl/WaitQueue/TimedOut/Count"))
+        , WaitQueueCancelledCount(TBase::GetDeriviative("FlowControl/WaitQueue/Cancelled/Count"))
         , WaitQueueRejectedFullCount(TBase::GetDeriviative("FlowControl/WaitQueue/RejectedFull/Count"))
         , DelayedRejectEnqueuedCount(TBase::GetDeriviative("FlowControl/DelayedRejectQueue/Enqueued/Count"))
         , DelayedRejectFiredCount(TBase::GetDeriviative("FlowControl/DelayedRejectQueue/Fired/Count"))
@@ -148,7 +152,17 @@ public:
         WaitQueueRejectedFullCount->Inc();
     }
 
-    void OnWaitQueueCancel() const {
+    // A queued waiter hit its WaitDeadline while still waiting: distinct from a
+    // client-initiated cancel. Also drops the WaitQueue/Count gauge.
+    void OnWaitQueueTimedOut() const {
+        WaitQueueTimedOutCount->Inc();
+        WaitQueueCount->Dec();
+    }
+
+    // A queued waiter was cancelled by the client (not a deadline timeout).
+    // Also drops the WaitQueue/Count gauge.
+    void OnWaitQueueCancelled() const {
+        WaitQueueCancelledCount->Inc();
         WaitQueueCount->Dec();
     }
 

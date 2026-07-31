@@ -77,6 +77,10 @@ class TFlowControlManager: public NActors::TActor<TFlowControlManager> {
     TInstant LastOverloadAt;
     TInstant HoldUntil;
     TInstant LastGrowAt;
+    // Set when a waiter is actually drained (TEvDrainWaiter Allow), cleared on each
+    // rate grow. Makes AIMD additive-increase drain-relative: RefillRateR only creeps
+    // up while there is real drain progress, so it does not grow during idle/no-traffic.
+    bool DrainedSinceLastGrow = false;
     bool DrainWakeupScheduled = false;
 
     // clang-format off
@@ -118,7 +122,7 @@ class TFlowControlManager: public NActors::TActor<TFlowControlManager> {
     void MaybeGrowRate(TInstant now);
     void CutRateOnOverload(TInstant now);
     void ScheduleDrainEligible(const TActorContext& ctx);
-    void EraseWaiter(ui64 waiterId, bool countCancel);
+    void EraseWaiter(ui64 waiterId);
     void RefundDrainToken(TWaiter& waiter);
 
 public:

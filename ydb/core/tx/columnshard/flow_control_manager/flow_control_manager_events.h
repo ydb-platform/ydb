@@ -87,10 +87,14 @@ public:
 
 class TEvCancelWait: public NActors::TEventLocal<TEvCancelWait, EvCancelWait> {
     YDB_READONLY(ui64, WaiterId, 0);
+    // True when the wait was aborted because the waiter's WaitDeadline expired,
+    // false for a genuine client-side cancel. Lets FCM count timeouts distinctly.
+    YDB_READONLY(bool, DeadlineExpired, false);
 
 public:
-    explicit TEvCancelWait(ui64 waiterId)
+    explicit TEvCancelWait(ui64 waiterId, bool deadlineExpired)
         : WaiterId(waiterId)
+        , DeadlineExpired(deadlineExpired)
     {
     }
 };

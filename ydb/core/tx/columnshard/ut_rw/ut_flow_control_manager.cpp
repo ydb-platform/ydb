@@ -219,6 +219,15 @@ public:
         return Runtime.GrabEdgeEventRethrow<TEvents::TEvCompleted>(ReplyTo);
     }
 
+    // Read a FlowControl derivative counter value by its short name (as passed to
+    // GetDeriviative, e.g. "FlowControl/WaitQueue/TimedOut/Count"). Mirrors the
+    // subgroup layout from TCommonCountersOwner (module_id=CSFlowControlManager,
+    // "Deriviative/" prefix) so tests can assert on FCM signals directly.
+    i64 ReadFcmDeriviative(const TString& name) const {
+        auto sub = Runtime.GetDynamicCounters(0)->GetSubgroup("module_id", "CSFlowControlManager");
+        return sub->GetCounter(TString("Deriviative/") + name, true)->Val();
+    }
+
 private:
     static std::shared_ptr<arrow::RecordBatch> MakeEmptyBatch() {
         auto schema = arrow::schema({ arrow::field("id", arrow::uint64(), false) });
@@ -491,6 +500,40 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
         UNIT_ASSERT_VALUES_EQUAL((Ydb::StatusIds::StatusCode)completed->Get()->Status, Ydb::StatusIds::OVERLOADED);
     }
 
+    Y_UNIT_TEST(WaitDeadlineTimeoutIncrementsTimedOutCounter) {
+        TTestBasicRuntime runtime;
+        const ui64 shardTabletId = TTestTxConfig::TxTablet0;
+        const ui32 hotNodeId = 42;
+        const TDuration operationTimeout = TDuration::MilliSeconds(200);
+
+        bool writeObserved = false;
+        InstallFakeShardWriteResponder(runtime, shardTabletId, MakeFakeShardWriteCompleted, &writeObserved);
+
+        TFlowControlManagerTestEnv env(runtime);
+        env.EnableSchedulesForAllActors();
+        TFlowControlManagerServiceOperator::SetWaitQueueParams(TDuration::Zero(), TDuration::Zero(), /*maxWaitQueueSize=*/1024);
+        env.SeedTabletLocation(shardTabletId, hotNodeId);
+        env.SeedNodeOverloadStatus(hotNodeId, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED);
+
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadFcmDeriviative("FlowControl/WaitQueue/TimedOut/Count"), 0);
+
+        env.StartLongTxWrite(env.BuildLongTxWrite(MakeNavigateForSingleColumnShard(shardTabletId), MakeHappyPathBatch(), operationTimeout));
+
+        // Waiter is enqueued (STATUS_OVERLOADED) and its WaitDeadline (50% of 200ms = 100ms)
+        // elapses while still in-queue ⇒ helper cancels with DeadlineExpired=true.
+        const auto completed = env.WaitCompleted(operationTimeout / 2 + TDuration::MilliSeconds(20));
+        UNIT_ASSERT(!writeObserved);
+        UNIT_ASSERT_VALUES_EQUAL((Ydb::StatusIds::StatusCode)completed->Get()->Status, Ydb::StatusIds::OVERLOADED);
+
+        // The in-queue deadline timeout is counted distinctly from client cancels and
+        // from arrive-already-past-deadline rejects.
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadFcmDeriviative("FlowControl/WaitQueue/TimedOut/Count"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadFcmDeriviative("FlowControl/WaitQueue/Cancelled/Count"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadFcmDeriviative("FlowControl/WaitQueue/RejectedDeadline/Count"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadFcmDeriviative("FlowControl/WaitQueue/Enqueued/Count"), 1);
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadFcmDeriviative("FlowControl/WaitQueue/Drained/Count"), 0);
+    }
+
     Y_UNIT_TEST(WaitTimeoutPercentFromConfig) {
         TTestBasicRuntime runtime;
         const ui64 tabletA = TTestTxConfig::TxTablet0;
@@ -730,6 +773,42 @@ Y_UNIT_TEST_SUITE(TFlowControlManager) {
             const auto drained = runtime.GrabEdgeEventRethrow<TEvTryAdmitResult>(env.GetReplyTo());
             UNIT_ASSERT_VALUES_EQUAL((int)drained->Get()->GetDecision(), (int)EAdmitDecision::Allow);
         }
+    }
+
+    Y_UNIT_TEST(DrainRateDoesNotGrowWithoutTraffic) {
+        // AimdGrow small and AimdAdd > 0: under the old time-only growth, RefillRateR would
+        // creep up on every ScheduleDrainEligible (fired by STATUS_READY) even with an empty
+        // queue. With drain-relative growth it must stay flat until a real drain happens.
+        TFlowControlManagerServiceOperator::TDrainRateParams drain;
+        drain.RMin = 10.0;
+        drain.RMax = 500.0;
+        drain.RStart = 10.0;
+        drain.Burst = 1.0;
+        drain.AimdAdd = 50.0;
+        drain.AimdGrow = TDuration::MilliSeconds(1);
+        drain.AimdHold = TDuration::MilliSeconds(1);
+        TFlowControlManagerServiceOperator::SetDrainRateParams(drain);
+
+        TTestBasicRuntime runtime;
+        TFlowControlManagerTestEnv env(runtime);
+        env.EnableSchedulesForAllActors();
+        TFlowControlManagerServiceOperator::SetWaitQueueParams(TDuration::Zero(), TDuration::Zero(), 1024);
+
+        const ui64 tabletA = TTestTxConfig::TxTablet0;
+        const ui32 nodeA = 42;
+        env.SeedTabletLocation(tabletA, nodeA);
+
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadFcmDeriviative("FlowControl/Drain/RateGrow/Count"), 0);
+
+        // No waiters in queue. Repeatedly poke ScheduleDrainEligible via READY + time.
+        for (int i = 0; i < 5; ++i) {
+            env.SeedNodeOverloadStatus(nodeA, NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY, /*generation=*/1 + i);
+            runtime.AdvanceCurrentTime(TDuration::MilliSeconds(50));
+            runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(10));
+        }
+
+        // Empty queue ⇒ no growth despite elapsed time and repeated scheduling.
+        UNIT_ASSERT_VALUES_EQUAL(env.ReadFcmDeriviative("FlowControl/Drain/RateGrow/Count"), 0);
     }
 
     Y_UNIT_TEST(AllowsWhenHotNodeBecomesReady) {

@@ -165,7 +165,7 @@ private:
 
         const TInstant now = TActivationContext::Now();
         if (waitDeadline <= now) {
-            CancelAndReject(ctx, "destination node is overloaded");
+            CancelAndReject(ctx, "destination node is overloaded", /*deadlineExpired=*/true);
             return;
         }
         ctx.Schedule(waitDeadline - now, new NActors::TEvents::TEvWakeup(static_cast<ui64>(EHelperWakeup::WaitDeadline)));
@@ -203,12 +203,13 @@ private:
         if (!Queued) {
             return;
         }
-        CancelAndReject(ctx, "destination node is overloaded");
+        CancelAndReject(ctx, "destination node is overloaded", /*deadlineExpired=*/true);
     }
 
-    void CancelAndReject(const TActorContext& ctx, const TString& message) {
+    void CancelAndReject(const TActorContext& ctx, const TString& message, bool deadlineExpired) {
         if (Queued && WaiterId) {
-            ctx.Send(TFlowControlManagerServiceOperator::MakeServiceId(ctx.SelfID.NodeId()), std::make_unique<TEvCancelWait>(WaiterId));
+            ctx.Send(TFlowControlManagerServiceOperator::MakeServiceId(ctx.SelfID.NodeId()),
+                std::make_unique<TEvCancelWait>(WaiterId, deadlineExpired));
         }
         Queued = false;
         ReplyOverloaded(ctx, message);
@@ -367,7 +368,7 @@ void TFlowControlManager::RefundDrainToken(TWaiter& waiter) {
     }
 }
 
-void TFlowControlManager::EraseWaiter(ui64 waiterId, bool countCancel) {
+void TFlowControlManager::EraseWaiter(ui64 waiterId) {
     auto it = Waiters.find(waiterId);
     if (it == Waiters.end()) {
         return;
@@ -380,9 +381,6 @@ void TFlowControlManager::EraseWaiter(ui64 waiterId, bool countCancel) {
             WaitQueueOrder.erase(qIt);
             break;
         }
-    }
-    if (countCancel) {
-        Counters.OnWaitQueueCancel();
     }
     PublishMapSizes();
     PublishDrainGauges();
@@ -402,6 +400,15 @@ void TFlowControlManager::RefillTokens(TInstant now) {
 }
 
 void TFlowControlManager::MaybeGrowRate(TInstant now) {
+    // Drain-relative additive increase: only grow the rate when there is real drain
+    // demand and progress. Without this, RefillRateR would creep up to RMax during
+    // idle/no-traffic periods just because wall-clock time passed.
+    if (Waiters.empty()) {
+        return;
+    }
+    if (!DrainedSinceLastGrow) {
+        return;
+    }
     if (now < HoldUntil) {
         return;
     }
@@ -418,6 +425,7 @@ void TFlowControlManager::MaybeGrowRate(TInstant now) {
     RefillRateR = Min(RMax, RefillRateR + AimdAdd);
     RecomputeBurst();
     LastGrowAt = now;
+    DrainedSinceLastGrow = false;
     if (RefillRateR > prev) {
         Counters.OnDrainRateGrow();
     }
@@ -583,7 +591,18 @@ void TFlowControlManager::Handle(const NFlowControl::TEvTryAdmit::TPtr& ev, cons
 }
 
 void TFlowControlManager::Handle(const NFlowControl::TEvCancelWait::TPtr& ev, const TActorContext& /*ctx*/) {
-    EraseWaiter(ev->Get()->GetWaiterId(), /*countCancel=*/true);
+    const ui64 waiterId = ev->Get()->GetWaiterId();
+    // Only count against the wait-queue gauge/derivatives if the waiter was
+    // actually present (EraseWaiter is a no-op for an unknown id).
+    if (!Waiters.contains(waiterId)) {
+        return;
+    }
+    if (ev->Get()->GetDeadlineExpired()) {
+        Counters.OnWaitQueueTimedOut();
+    } else {
+        Counters.OnWaitQueueCancelled();
+    }
+    EraseWaiter(waiterId);
 }
 
 void TFlowControlManager::Handle(const NFlowControl::TEvContinueDrain::TPtr& /*ev*/, const TActorContext& ctx) {
@@ -619,8 +638,9 @@ void TFlowControlManager::Handle(const NFlowControl::TEvDrainWaiter::TPtr& ev, c
     const TDuration waited = now - waiter->EnqueuedAt;
     // Token already reserved at schedule time; clear flag before erase so EraseWaiter does not refund.
     waiter->TokenReserved = false;
-    EraseWaiter(waiterId, /*countCancel=*/false);
+    EraseWaiter(waiterId);
     LastDrainActivityAt = now;
+    DrainedSinceLastGrow = true;
     Counters.OnWaitQueueDrain(waited);
     Counters.OnAdmitAllowed(TDuration::Zero());
     Counters.OnDrainAllowed();

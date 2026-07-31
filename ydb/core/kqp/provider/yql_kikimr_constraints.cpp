@@ -67,9 +67,9 @@ TStatus ConstraintKqpProgram(const TExprNode::TPtr& input, TExprContext& ctx) {
                 try {
                     auto set = ctx.MakeConstraintSet(NYT::NodeFromYsonString(argsConstraint->Content()));
                     constraints.push_back(set.GetAllConstraints());
-                } catch (...) {
+                } catch (const yexception& e) {
                     ctx.AddError(TIssue(ctx.GetPosition(argsConstraint->Pos()), TStringBuilder()
-                        << "Bad KqpProgram ArgsConstraints yson-value: " << CurrentExceptionMessage()));
+                        << "Bad KqpProgram ArgsConstraints yson-value: " << e.what()));
                     return TStatus::Error;
                 }
             }

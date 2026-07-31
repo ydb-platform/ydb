@@ -46,13 +46,21 @@ private:
     TString YqlToken_;
 };
 
+<<<<<<< HEAD
 class TStaticSecuredCredentialsFactory : public NYql::ISecuredServiceAccountCredentialsFactory {
+=======
+class TStaticSecuredCredentialsFactory final : public NYql::ISecuredServiceAccountCredentialsFactory {
+>>>>>>> 02cd5d09937 (YQ-5552 fixed streaming query stop after restart (#48397))
 public:
     TStaticSecuredCredentialsFactory(const TString& yqlToken)
         : YqlToken_(yqlToken)
     {}
 
+<<<<<<< HEAD
     std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString&, const TString&) override {
+=======
+    std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString&, const TString&) final {
+>>>>>>> 02cd5d09937 (YQ-5552 fixed streaming query stop after restart (#48397))
         return std::make_shared<TStaticCredentialsProviderFactory>(YqlToken_);
     }
 
@@ -86,7 +94,7 @@ NKikimr::Tests::TServerSettings TKikimrSetupBase::GetServerSettings(const TServe
     const auto& kqpSettings = settings.AppConfig.GetKQPConfig().GetSettings();
     serverSettings.SetKqpSettings({kqpSettings.begin(), kqpSettings.end()});
 
-    serverSettings.SetCredentialsFactory(std::make_shared<TStaticSecuredCredentialsFactory>(settings.YqlToken));
+    serverSettings.SetCredentialsFactory(NYql::CreateStructuredTokenCredentialsFactory(std::make_shared<TStaticSecuredCredentialsFactory>(settings.YqlToken)));
     serverSettings.SetComputationFactory(settings.ComputationFactory);
     serverSettings.SetYtGateway(settings.YtGateway);
     serverSettings.S3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();

@@ -44,7 +44,7 @@ class StreamingTestBase:
                 'KQP_EXECUTER': LogLevels.DEBUG},
         )
 
-    def create_objects(self, external: bool):
+    def create_objects(self, external: bool, with_precompute: bool = True):
         if not external and min(self.versions) < (26, 1):
             logger.debug("skip local topics, only available since 26-1")
             pytest.skip("Local topics only available since 26-1")
@@ -53,7 +53,7 @@ class StreamingTestBase:
         self.input_topic = 'streaming_recipe/input_topic'
         self.output_topic = 'streaming_recipe/output_topic'
         self.consumer_name = 'consumer_name'
-        self.test_precompute_queries = min(self.versions) >= (26, 1)
+        self.test_precompute_queries = with_precompute and min(self.versions) >= (26, 1)
         with ydb.QuerySessionPool(self.driver) as session_pool:
             query = f"""
                 CREATE TOPIC `{self.input_topic}`;
@@ -160,6 +160,112 @@ class StreamingTestBase:
             """
             session_pool.execute_with_retries(query)
 
+    def create_join_objects(self):
+        if min(self.versions) < (26, 1):
+            logger.debug("skip local table join, only available since 26-1")
+            pytest.skip("Streaming query with local table JOIN only available since 26-1")
+
+        logger.debug("create_join_objects")
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            session_pool.execute_with_retries("""
+                CREATE TABLE join_row_table (
+                    id Utf8,
+                    value Utf8,
+                    PRIMARY KEY (id)
+                );
+            """)
+            session_pool.execute_with_retries("""
+                CREATE TABLE join_column_table (
+                    id Utf8 NOT NULL,
+                    value Utf8,
+                    PRIMARY KEY (id)
+                ) WITH (
+                    STORE = COLUMN
+                );
+            """)
+            session_pool.execute_with_retries("""
+                UPSERT INTO join_row_table (id, value) VALUES ('id1', '-row');
+            """)
+            session_pool.execute_with_retries("""
+                UPSERT INTO join_column_table (id, value) VALUES ('id1', '-col');
+            """)
+
+    def create_streaming_query_with_join(self):
+        logger.debug("create_streaming_query_with_join")
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            query = f"""
+                CREATE STREAMING QUERY `my_queries/query_name` AS DO BEGIN
+
+                $input = (
+                    SELECT * FROM
+                        {self.input_object} WITH (
+                            FORMAT = 'json_each_row',
+                            SCHEMA (time String NOT NULL, level String NOT NULL, host String NOT NULL)
+                        )
+                );
+                $filtered = (SELECT * FROM $input WHERE level == 'error');
+
+                $number_errors = (
+                    SELECT host, COUNT(*) AS error_count, CAST(HOP_START() AS String) AS ts, CAST("id1" AS Utf8) AS jk
+                    FROM $filtered
+                    GROUP BY
+                        HOP(CAST(time AS Timestamp), 'PT600S', 'PT600S', 'PT0S'),
+                        host
+                );
+
+                $joined = (
+                    SELECT n.host AS host, n.error_count AS error_count, n.ts AS ts, r.value AS rv, c.value AS cv
+                    FROM $number_errors AS n
+                    LEFT JOIN join_row_table AS r ON n.jk = r.id
+                    CROSS JOIN join_column_table AS c
+                );
+
+                $json = (SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(AsStruct(host AS host, error_count AS error_count, ts AS ts))))) || Unwrap(rv) || Unwrap(cv)
+                    FROM $joined
+                );
+
+                INSERT INTO {self.output_object}
+                SELECT * FROM $json;
+                END DO;
+
+            """
+            session_pool.execute_with_retries(query)
+
+    def create_simple_streaming_query_with_join(self):
+        logger.debug("create_simple_streaming_query_with_join")
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            query = f"""
+                CREATE STREAMING QUERY `my_queries/query_name` AS DO BEGIN
+
+                $input = (
+                    SELECT
+                        i.*, CAST("id1" AS Utf8) AS jk
+                    FROM
+                        {self.input_object} WITH (
+                            FORMAT = 'json_each_row',
+                            SCHEMA (time String NOT NULL, level String NOT NULL, host String NOT NULL)
+                        )
+                    AS i
+                );
+
+                $joined = (
+                    SELECT i.*, r.value AS rv, c.value AS cv
+                    FROM $input AS i
+                    LEFT JOIN join_row_table AS r ON i.jk = r.id
+                    CROSS JOIN join_column_table AS c
+                );
+
+                $json = (SELECT ToBytes(Unwrap(Yson::SerializeJson(Yson::From(AsStruct(host AS host, level AS level, time AS time))))) || Unwrap(rv) || Unwrap(cv)
+                    FROM $joined
+                );
+
+                INSERT INTO {self.output_object}
+                SELECT * FROM $json;
+                END DO;
+
+            """
+            session_pool.execute_with_retries(query)
+
     def do_write_read(self, input, expected_output):
         logger.debug("do_write_read")
         endpoint = f"localhost:{self.cluster.nodes[1].port}"
@@ -177,8 +283,8 @@ class StreamingTestBase:
             read_data = read_data[-len(expected_output):]        # deduplication disabled
         assert sorted(read_data) == sorted(expected_output)
 
-    def do_test_part1(self):
-        suffix = 'value1' if self.test_precompute_queries else ''
+    def do_test_part1(self, extra_suffix=''):
+        suffix = ('value1' if self.test_precompute_queries else '') + extra_suffix
         input = [
             '{"time": "2025-01-01T00:00:00.000000Z", "level": "error", "host": "host-1"}',
             '{"time": "2025-01-01T00:04:00.000000Z", "level": "error", "host": "host-2"}',
@@ -190,8 +296,8 @@ class StreamingTestBase:
             '{"error_count":2,"host":"host-1","ts":"2025-01-01T00:00:00Z"}' + suffix])
         self.do_write_read(input, expected_data)
 
-    def do_test_part2(self):
-        suffix = 'value1' if self.test_precompute_queries else ''
+    def do_test_part2(self, extra_suffix=''):
+        suffix = ('value1' if self.test_precompute_queries else '') + extra_suffix
         input = [
             '{"time": "2025-01-01T00:15:00.000000Z", "level": "error", "host": "host-2"}',
             '{"time": "2025-01-01T00:22:00.000000Z", "level": "error", "host": "host-1"}',
@@ -215,6 +321,15 @@ class TestStreamingMixedCluster(StreamingTestBase, MixedClusterFixture):
         self.do_test_part1()
         self.do_test_part2()
 
+    @link_test_case("#46772")
+    @pytest.mark.parametrize("external", [True, False])
+    def test_mixed_cluster_join(self, external):
+        self.create_objects(external, with_precompute=False)
+        self.create_join_objects()
+        self.create_streaming_query_with_join()
+        self.do_test_part1(extra_suffix='-row-col')
+        self.do_test_part2(extra_suffix='-row-col')
+
 
 class TestStreamingRestartToAnotherVersion(StreamingTestBase, RestartToAnotherVersionFixture):
     @pytest.fixture(autouse=True, scope="function")
@@ -230,6 +345,16 @@ class TestStreamingRestartToAnotherVersion(StreamingTestBase, RestartToAnotherVe
         self.change_cluster_version()
         self.do_test_part2()
 
+    @link_test_case("#46772")
+    @pytest.mark.parametrize("external", [True, False])
+    def test_restart_to_another_version_join(self, external):
+        self.create_objects(external, with_precompute=False)
+        self.create_join_objects()
+        self.create_streaming_query_with_join()
+        self.do_test_part1(extra_suffix='-row-col')
+        self.change_cluster_version()
+        self.do_test_part2(extra_suffix='-row-col')
+
 
 class TestStreamingRollingUpgradeAndDowngrade(StreamingTestBase, RollingUpgradeAndDowngradeFixture):
     @pytest.fixture(autouse=True, scope="function")
@@ -242,6 +367,23 @@ class TestStreamingRollingUpgradeAndDowngrade(StreamingTestBase, RollingUpgradeA
         self.create_objects(external)
         self.create_simple_streaming_query()
         suffix = 'value1' if self.test_precompute_queries else ''
+
+        for i, _ in enumerate(self.roll()):  # every iteration is a step in rolling upgrade process
+            #
+            # 2. check written data is correct during rolling upgrade
+            #
+            input = [f'{{"time": "2025-01-01T00:15:00.000000Z", "level": "error", "host": "host-{i}"}}']
+            expected_data = [f'{{"host":"host-{i}","level":"error","time":"2025-01-01T00:15:00.000000Z"}}{suffix}']
+            self.do_write_read(input, expected_data)
+            time.sleep(0.5)
+
+    @link_test_case("#46772")
+    @pytest.mark.parametrize("external", [True, False])
+    def test_rolling_upgrade_join(self, external):
+        self.create_objects(external, with_precompute=False)
+        self.create_join_objects()
+        self.create_simple_streaming_query_with_join()
+        suffix = '-row-col'
 
         for i, _ in enumerate(self.roll()):  # every iteration is a step in rolling upgrade process
             #

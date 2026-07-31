@@ -1230,6 +1230,7 @@ private:
     void HandleWork(NMon::TEvHttpInfo::TPtr& ev, const TActorContext &ctx);
     void HandleWakeup(const TActorContext &ctx);
     void HandleWork(TEvTabletCounters::TEvRemoveDatabase::TPtr& ev);
+    void HandleWork(TEvTabletCounters::TEvTabletSetTableInfo::TPtr& ev);
 
     TString RenderSearch(const TStringBuf relPath, const TString& name) const;
 
@@ -1465,6 +1466,12 @@ void TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvRemoveData
 }
 
 ////////////////////////////////////////////
+void TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletSetTableInfo::TPtr& ev) {
+    // TODO(djant) join incoming metrics with it later
+    Y_UNUSED(ev);
+}
+
+////////////////////////////////////////////
 TString TTabletCountersAggregatorActor::RenderSearch(const TStringBuf relPath, const TString& name) const {
     TStringStream str;
 
@@ -1588,6 +1595,7 @@ STFUNC(TTabletCountersAggregatorActor::StateWork) {
         HFunc(TEvTabletCounters::TEvTabletLabeledCountersRequest, HandleWork);
         HFunc(TEvTabletCounters::TEvTabletLabeledCountersResponse, HandleWork); //from cluster aggregator, for http requests
         hFunc(TEvTabletCounters::TEvRemoveDatabase, HandleWork);
+        hFunc(TEvTabletCounters::TEvTabletSetTableInfo, HandleWork);
         HFunc(NMon::TEvHttpInfo, HandleWork);
         CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
 

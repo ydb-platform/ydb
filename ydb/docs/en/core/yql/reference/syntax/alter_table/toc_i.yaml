@@ -1,9 +1,7 @@
 items:
  - { name: Overview,      href: index.md                                          }
  - { name: INDEX,       href: indexes.md, when: feature_secondary_index }
-- name: COLUMN
-  href: columns.md
-  items:
+ - { name: COLUMN,      href: columns.md                                        }
  - { name: FAMILY,      href: family.md                                         }
  - { name: NOT NULL,   href: not_null.md,        when: backend_name == "YDB"   }
  - { name: SET,         href: set.md,             when: backend_name == "YDB"   }

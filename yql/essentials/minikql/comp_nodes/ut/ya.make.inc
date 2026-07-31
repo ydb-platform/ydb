@@ -25,6 +25,7 @@ SET(ORIG_SRC_DIR yql/essentials/minikql/comp_nodes/ut)
 SET(ORIG_SOURCES
     mkql_test_factory.cpp
     mkql_bit_utils_ut.cpp
+    mkql_block_agg_ut.cpp
     mkql_block_compress_ut.cpp
     mkql_block_coalesce_ut.cpp
     mkql_block_exists_ut.cpp

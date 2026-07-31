@@ -1,14 +1,7 @@
-from ._url import (
-    URL,
-    Query,
-    QueryVariable,
-    SimpleQuery,
-    cache_clear,
-    cache_configure,
-    cache_info,
-)
+from ._query import Query, QueryVariable, SimpleQuery
+from ._url import URL, cache_clear, cache_configure, cache_info
 
-__version__ = "1.15.5"
+__version__ = "1.16.0"
 
 __all__ = (
     "URL",

@@ -5,6 +5,14 @@ import pytest
 
 from yarl import URL
 
+_WHATWG_C0_CONTROL_OR_SPACE = (
+    "\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0b\x0c\r\x0e\x0f\x10"
+    "\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f "
+)
+_VERTICAL_COLON = "\ufe13"  # normalizes to ":"
+_FULL_WITH_NUMBER_SIGN = "\uFF03"  # normalizes to "#"
+_ACCOUNT_OF = "\u2100"  # normalizes to "a/c"
+
 
 def test_inheritance():
     with pytest.raises(TypeError) as ctx:
@@ -63,9 +71,9 @@ def test_origin():
     assert URL("http://example.com:8888") == url.origin()
 
 
-def test_origin_is_self():
+def test_origin_is_equal_to_self():
     url = URL("http://example.com:8888")
-    assert url.origin() is url
+    assert url.origin() == url
 
 
 def test_origin_with_no_auth():
@@ -204,6 +212,11 @@ def test_host_subcomponent_return_idna_encoded_host():
     assert url.host_subcomponent == "xn----8sb1bdhvc.xn--j1amh"
 
 
+def test_invalid_idna_hyphen_encoding():
+    url = URL("http://x-----xn1agdj.tld")
+    assert url.host == "x-----xn1agdj.tld"
+
+
 def test_raw_host_non_ascii():
     url = URL("http://оун-упа.укр")
     assert "xn----8sb1bdhvc.xn--j1amh" == url.raw_host
@@ -289,6 +302,26 @@ def test_compressed_ipv6():
     assert url.raw_host == "1dec::1"
     assert url.host == url.raw_host
     assert url.raw_host == url._val.hostname
+
+
+def test_ipv6_missing_left_bracket():
+    with pytest.raises(ValueError, match="Invalid IPv6 URL"):
+        URL("http://[1dec:0:0:0::1/")
+
+
+def test_ipv6_missing_right_bracket():
+    with pytest.raises(ValueError, match="Invalid IPv6 URL"):
+        URL("http://[1dec:0:0:0::1/")
+
+
+def test_ipv4_brackets_not_allowed():
+    with pytest.raises(ValueError, match="An IPv4 address cannot be in brackets"):
+        URL("http://[127.0.0.1]/")
+
+
+def test_ipfuture_brackets_not_allowed():
+    with pytest.raises(ValueError, match="IPvFuture address is invalid"):
+        URL("http://[v10]/")
 
 
 def test_ipv4_zone():
@@ -1704,7 +1737,7 @@ def test_str_for_empty_url():
 
 def test_parent_for_empty_url():
     url = URL()
-    assert url is url.parent
+    assert url == url.parent
 
 
 def test_parent_for_relative_url_with_child():
@@ -1939,6 +1972,24 @@ def test_split_result_non_decoded():
         URL(SplitResult("http", "example.com", "path", "qs", "frag"))
 
 
+def test_split_result_encoded():
+    url = URL(SplitResult("http", "example.com", "path", "qs", "frag"), encoded=True)
+    assert str(url) == "http://example.com/path?qs#frag"
+
+
+def test_str_encoded():
+    url = URL("http://example.com/path?qs#frag%2F%2D", encoded=True)
+    assert str(url) == "http://example.com/path?qs#frag%2F%2D"
+
+
+def test_subclassed_str_encoded():
+    class S(str):
+        """Subclass of str."""
+
+    url = URL(S("http://example.com/path?qs#frag%2F%2D"), encoded=True)
+    assert str(url) == "http://example.com/path?qs#frag%2F%2D"
+
+
 def test_human_repr():
     url = URL("http://бажан:пароль@хост.домен:8080/шлях/сюди?арг=вал#фраг")
     s = url.human_repr()
@@ -2141,3 +2192,29 @@ def test_parsing_populates_cache():
 def test_build_with_invalid_ipv6_host(host: str, is_authority: bool):
     with pytest.raises(ValueError, match="Invalid IPv6 URL"):
         URL(f"http://{host}/")
+
+
+@pytest.mark.parametrize("byte", ["\r", "\n", "\t"])
+def test_unsafe_url_bytes_are_removed(byte: str) -> None:
+    url = URL(f"http://example.com{byte}/")
+    assert str(url) == "http://example.com/"
+
+
+@pytest.mark.parametrize("byte", tuple(_WHATWG_C0_CONTROL_OR_SPACE))
+def test_control_chars_are_removed(byte: str) -> None:
+    url = URL(f"{byte}http://example.com/")
+    assert str(url) == "http://example.com/"
+
+
+@pytest.mark.parametrize(
+    "disallowed_unicode", [_VERTICAL_COLON, _FULL_WITH_NUMBER_SIGN, _ACCOUNT_OF]
+)
+def test_url_with_invalid_unicode(disallowed_unicode: str) -> None:
+    with pytest.raises(
+        ValueError, match="contains invalid characters under NFKC normalization"
+    ):
+        URL(f"http://example.com{disallowed_unicode}80/")
+    with pytest.raises(
+        ValueError, match="contains invalid characters under NFKC normalization"
+    ):
+        URL(f"http://example.{disallowed_unicode}.com/frag")

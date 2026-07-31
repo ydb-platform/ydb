@@ -19,6 +19,7 @@ SRCS(
     backpressure.cpp
     block_race.cpp
     counting_events.cpp
+    corrupted_reads.cpp
     deadlines.cpp
     decommit_3dc.cpp
     defrag.cpp

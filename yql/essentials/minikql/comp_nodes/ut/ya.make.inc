@@ -62,6 +62,7 @@ SET(ORIG_SOURCES
     mkql_multihopping_ut.cpp
     mkql_multimap_ut.cpp
     mkql_fold_ut.cpp
+    mkql_erased_ut.cpp
     mkql_heap_ut.cpp
     mkql_compare_ut.cpp
     mkql_computation_node_ut.cpp

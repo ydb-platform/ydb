@@ -40,6 +40,7 @@
 #include "mkql_element.h"
 #include "mkql_ensure.h"
 #include "mkql_enumerate.h"
+#include "mkql_erased.h"
 #include "mkql_exists.h"
 #include "mkql_expand_map.h"
 #include "mkql_extend.h"
@@ -259,6 +260,8 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"FromBytes", &WrapFromBytes},
         {"NewMTRand", &WrapNewMTRand},
         {"NextMTRand", &WrapNextMTRand},
+        {"AsErased", &WrapAsErased},
+        {"PeekErased", &WrapPeekErased},
         {"Random", &WrapRandom<ERandom::Double>},
         {"RandomNumber", &WrapRandom<ERandom::Number>},
         {"RandomUuid", &WrapRandom<ERandom::Uuid>},

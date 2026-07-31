@@ -239,7 +239,9 @@ public:
             Root_.ForceDelete();
             Root_.MkDirs(DIR_MODE);
         } catch (...) {
-            Y_ABORT("Can not start DQ local file spilling service: %s", CurrentExceptionMessage().c_str());
+            const TString root = Root_.GetPath();
+            const TString error = CurrentExceptionMessage();
+            Y_ABORT("Cannot start DQ local file spilling service at %s: %s", root.c_str(), error.c_str());
         }
 
         Send(SelfId(), MakeHolder<TEvPrivate::TEvRemoveOldTmp>(rootToRemoveOldTmp, nodeId, sessionId));

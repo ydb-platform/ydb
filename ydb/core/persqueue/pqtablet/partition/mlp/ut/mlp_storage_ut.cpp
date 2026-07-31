@@ -565,6 +565,39 @@ Y_UNIT_TEST(AddMessageWithSkippedMessage) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 }
 
+static void AddMessageWithHolesReturnsAllMessagesImpl(bool keepMessageOrder) {
+    auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
+    auto writeTimestamp = timeProvider->Now() - TDuration::Seconds(1);
+
+    TStorage storage(timeProvider, TStorage::TStorageSettings{.MinMessages = 1, .MaxMessages = 8, .KeepMessageOrder = keepMessageOrder});
+
+    // Add messages with holes in the offset sequence. Every message uses its own message group so
+    // that (in keep-order mode) none of them blocks the others and all should be readable.
+    std::vector<ui64> addedOffsets;
+    for (ui64 offset = 0; offset < 8; offset += 2) {
+        storage.AddMessage(offset, true, static_cast<ui32>(offset), writeTimestamp);
+        addedOffsets.push_back(offset);
+    }
+
+    std::set<ui64> returned;
+    TStorage::TPosition position;
+    while (auto result = storage.Next(timeProvider->Now() + TDuration::Seconds(30), position)) {
+        returned.insert(result->Offset);
+    }
+
+    for (ui64 offset : addedOffsets) {
+        UNIT_ASSERT_C(returned.contains(offset), "message with offset " << offset << " was lost, returned: [" << JoinSeq(",", returned) << "]");
+    }
+}
+
+Y_UNIT_TEST(AddMessageWithHolesReturnsAllMessages_WithoutKeepMessageOrder) {
+    AddMessageWithHolesReturnsAllMessagesImpl(false);
+}
+
+Y_UNIT_TEST(AddMessageWithHolesReturnsAllMessages_WithKeepMessageOrder) {
+    AddMessageWithHolesReturnsAllMessagesImpl(true);
+}
+
 Y_UNIT_TEST(AddMessageWithDelay) {
     TUtils utils;
     utils.Begin();

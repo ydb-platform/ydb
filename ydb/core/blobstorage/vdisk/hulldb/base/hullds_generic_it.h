@@ -171,6 +171,11 @@ namespace NKikimr {
             Iter2.Seek(key);
         }
 
+        void SeekToLast() {
+            Iter1.SeekToLast();
+            Iter2.SeekToLast();
+        }
+
     protected:
         TIter1 Iter1;
         TIter2 Iter2;
@@ -395,7 +400,9 @@ namespace NKikimr {
 
                 if (!x->Valid()) {
                     x->Prev();
-                    PQueue.push(x);
+                    if (x->Valid()) {
+                        PQueue.push(x);
+                    }
                 } else {
                     if (x->GetCurKey() == key) {
                         PQueue.push(x);
@@ -405,6 +412,16 @@ namespace NKikimr {
                             PQueue.push(x);
                         }
                     }
+                }
+            }
+        }
+
+        void SeekToLast() {
+            TPQueue().swap(PQueue); // clear PQueue
+            for (auto &x : Iters) {
+                x->SeekToLast();
+                if (x->Valid()) {
+                    PQueue.push(x);
                 }
             }
         }
@@ -463,4 +480,3 @@ namespace NKikimr {
     };
 
 } // NKikimr
-

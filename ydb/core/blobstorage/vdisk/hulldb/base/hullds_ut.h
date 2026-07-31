@@ -81,6 +81,9 @@ namespace NKikimr {
 
         TIntContainer *Vec;
         TIntContainer::iterator It;
+        // std::vector has no iterator value before begin(). Prev() from begin()
+        // keeps It at begin() and uses this flag to represent that invalid state.
+        bool BeforeBegin = false;
 
         TVectorIt(const THullCtxPtr &hullCtx, TContType *vec)
             : Vec(vec)
@@ -92,7 +95,7 @@ namespace NKikimr {
         TVectorIt() = default;
 
         bool Valid() const {
-            return Vec && It >= Vec->begin() && It < Vec->end();
+            return Vec && !BeforeBegin && It >= Vec->begin() && It < Vec->end();
         }
 
         void Next() {
@@ -120,10 +123,11 @@ namespace NKikimr {
         }
 
         void Prev() {
-            if (It == Vec->begin())
-                It = {};
-            else
+            if (It == Vec->begin()) {
+                BeforeBegin = true;
+            } else {
                 --It;
+            }
         }
 
         int GetCurKey() const {
@@ -132,10 +136,17 @@ namespace NKikimr {
         }
 
         void SeekToFirst() {
+            BeforeBegin = false;
             It = Vec->begin();
         }
 
+        void SeekToLast() {
+            BeforeBegin = false;
+            It = Vec->empty() ? Vec->end() : Vec->end() - 1;
+        }
+
         void Seek(int key) {
+            BeforeBegin = false;
             It = ::LowerBound(Vec->begin(), Vec->end(), key);
         }
 

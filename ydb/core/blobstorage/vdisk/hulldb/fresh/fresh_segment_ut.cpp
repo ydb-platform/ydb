@@ -217,6 +217,9 @@ namespace NKikimr {
             auto snap = seg->GetSnapshot();
             using T = std::decay_t<decltype(snap)>;
 
+            auto withMergeBackward = withMerge;
+            auto withoutMergeBackward = withoutMerge;
+
             auto check = [&](auto iter, auto& queue, auto&& getKey) {
                 for (iter.SeekToFirst(); iter.Valid(); iter.Next()) {
                     UNIT_ASSERT(!queue.empty());
@@ -228,6 +231,58 @@ namespace NKikimr {
 
             check(T::TForwardIterator(hullCtx, &snap), withMerge, [](auto& iter) { return iter.GetCurKey(); });
             check(T::TIteratorWOMerge(hullCtx, &snap), withoutMerge, [](auto& iter) { return iter.GetUnmergedKey(); });
+
+            auto checkBackward = [&](auto iter, auto& queue, auto&& getKey) {
+                for (iter.SeekToLast(); iter.Valid(); iter.Prev()) {
+                    UNIT_ASSERT(!queue.empty());
+                    UNIT_ASSERT_VALUES_EQUAL(queue.back(), getKey(iter).LogoBlobID());
+                    queue.pop_back();
+                }
+                UNIT_ASSERT(queue.empty());
+            };
+
+            checkBackward(T::TBackwardIterator(hullCtx, &snap), withMergeBackward,
+                [](auto& iter) { return iter.GetCurKey(); });
+            checkBackward(T::TBackwardIteratorWOMerge(hullCtx, &snap), withoutMergeBackward,
+                [](auto& iter) { return iter.GetUnmergedKey(); });
+        }
+
+        Y_UNIT_TEST(BackwardIteratorWithoutMergeAcrossSources) {
+            auto hullCtx = GetLevelIndexSetting().HullCtx;
+            auto seg = MakeIntrusive<TFreshSegment>(hullCtx, ui64(128) << 20,
+                TAppData::TimeProvider->Now(), Arena);
+
+            TMemRecLogoBlob memRec;
+            memRec.SetNoBlob();
+            auto makeKey = [](ui32 step) {
+                return TKeyLogoBlob(TLogoBlobID(1, 1, step, 0, 0, 0));
+            };
+
+            seg->Put(1, makeKey(1), memRec);
+            seg->Put(2, makeKey(3), memRec);
+
+            ::NMonitoring::TDynamicCounters counters;
+            TMemoryConsumer memConsumer(counters.GetCounter("FreshAppendix"));
+            auto appendix = std::make_shared<TAppendix>(memConsumer);
+            appendix->Add(makeKey(2), memRec);
+            appendix->Add(makeKey(3), memRec);
+            seg->PutAppendix(std::move(appendix), 3, 4);
+
+            auto snap = seg->GetSnapshot();
+            using TSnapshot = std::decay_t<decltype(snap)>;
+            typename TSnapshot::TBackwardIteratorWOMerge it(hullCtx, &snap);
+
+            TVector<ui32> actual;
+            for (it.SeekToLast(); it.Valid(); it.Prev()) {
+                actual.push_back(it.GetUnmergedKey().LogoBlobID().Step());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(actual, TVector<ui32>({3, 3, 2, 1}));
+
+            actual.clear();
+            for (it.Seek(makeKey(2)); it.Valid(); it.Prev()) {
+                actual.push_back(it.GetUnmergedKey().LogoBlobID().Step());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(actual, TVector<ui32>({2, 1}));
         }
     }
 

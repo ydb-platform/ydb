@@ -1,5 +1,9 @@
 #include "hullds_sst_it_all_ut.h"
 
+#include <algorithm>
+#include <random>
+#include <util/system/hp_timer.h>
+
 namespace NKikimr {
 
     Y_UNIT_TEST_SUITE(TBlobStorageHullSstIt) {
@@ -327,6 +331,177 @@ namespace NKikimr {
         }
 
         // FIXME: not all cases covered
+    }
+
+    Y_UNIT_TEST_SUITE(TBlobStorageHullReversePhysicalIt) {
+
+        using namespace NBlobStorageHullSstItHelpers;
+        using TLevelSlice = ::NKikimr::TLevelSlice<TKeyLogoBlob, TMemRecLogoBlob>;
+        using TLevelSliceSnapshot = ::NKikimr::TLevelSliceSnapshot<TKeyLogoBlob, TMemRecLogoBlob>;
+
+        struct TRecordPosition {
+            ui32 Level;
+            ui64 SstId;
+            TLogoBlobID BlobId;
+        };
+
+        void AssertEqual(const TVector<TRecordPosition>& actual, const TVector<TRecordPosition>& expected,
+                ui32 round) {
+            UNIT_ASSERT_C(actual.size() == expected.size(),
+                "round# " << round << " actual size# " << actual.size() << " expected size# " << expected.size());
+            for (size_t i = 0; i < expected.size(); ++i) {
+                UNIT_ASSERT_C(actual[i].Level == expected[i].Level
+                        && actual[i].SstId == expected[i].SstId
+                        && actual[i].BlobId == expected[i].BlobId,
+                    "round# " << round << " item# " << i
+                    << " actual# {level# " << actual[i].Level << " sst# " << actual[i].SstId
+                    << " key# " << actual[i].BlobId.ToString() << "}"
+                    << " expected# {level# " << expected[i].Level << " sst# " << expected[i].SstId
+                    << " key# " << expected[i].BlobId.ToString() << "}");
+            }
+        }
+
+        TLogoBlobSstPtr MakeSst(TVDiskContextPtr vctx, ui64 tabletId, ui32 firstStep, ui32 numRecords,
+                ui64 sstId) {
+            TTrackableVector<TLogoBlobSst::TRec> index(TMemoryConsumer(vctx->SstIndex));
+            auto sst = MakeIntrusive<TLogoBlobSst>(vctx);
+            for (ui32 i = 0; i < numRecords; ++i) {
+                TLogoBlobID id(tabletId, 1, firstStep + i, 0, 0, 0);
+                index.emplace_back(TKeyLogoBlob(id), TMemRecLogoBlob());
+            }
+            sst->LoadLinearIndex(index);
+            sst->AssignedSstId = sstId;
+            return sst;
+        }
+
+        void AppendExpected(TVector<TRecordPosition>& expected, ui32 level, ui64 sstId,
+                ui64 tabletId, ui32 firstStep, ui32 numRecords) {
+            for (ui32 i = 0; i < numRecords; ++i) {
+                expected.push_back({level, sstId, TLogoBlobID(tabletId, 1, firstStep + i, 0, 0, 0)});
+            }
+        }
+
+        TVector<TRecordPosition> ReadSnapshot(const TLevelSliceSnapshot& snapshot, bool reverse) {
+            TVector<TRecordPosition> result;
+            TLevelSliceSnapshot::TSstIterator sstIt(&snapshot);
+            if (reverse) {
+                sstIt.SeekToLast();
+            } else {
+                sstIt.SeekToFirst();
+            }
+
+            while (sstIt.Valid()) {
+                const auto levelSst = sstIt.Get();
+                TLogoBlobSst::TMemIterator memIt(levelSst.SstPtr.Get());
+                if (reverse) {
+                    memIt.SeekToLast();
+                } else {
+                    memIt.SeekToFirst();
+                }
+                while (memIt.Valid()) {
+                    result.push_back({levelSst.Level, levelSst.SstPtr->AssignedSstId,
+                        memIt.GetCurKey().LogoBlobID()});
+                    if (reverse) {
+                        memIt.Prev();
+                    } else {
+                        memIt.Next();
+                    }
+                }
+                if (reverse) {
+                    sstIt.Prev();
+                } else {
+                    sstIt.Next();
+                }
+            }
+            return result;
+        }
+
+        Y_UNIT_TEST(GenericMemIteratorReverseBoundaries) {
+            using TBlockSst = TLevelSegment<TKeyBlock, TMemRecBlock>;
+            TTestContexts contexts;
+
+            auto empty = MakeIntrusive<TBlockSst>(contexts.GetVCtx());
+            TBlockSst::TMemIterator emptyIt(empty.Get());
+            emptyIt.SeekToLast();
+            UNIT_ASSERT(!emptyIt.Valid());
+
+            auto sst = MakeIntrusive<TBlockSst>(contexts.GetVCtx());
+            for (ui64 tabletId = 1; tabletId <= 5; ++tabletId) {
+                sst->LoadedIndex.emplace_back(TKeyBlock(tabletId), TMemRecBlock(tabletId));
+            }
+
+            TBlockSst::TMemIterator it(sst.Get());
+            it.SeekToLast();
+            for (ui64 expected = 5; expected != 0; --expected) {
+                UNIT_ASSERT(it.Valid());
+                UNIT_ASSERT_VALUES_EQUAL(it.GetCurKey().TabletId, expected);
+                it.Prev();
+            }
+            UNIT_ASSERT(!it.Valid());
+
+            it.SeekToLast();
+            UNIT_ASSERT(it.Valid());
+            UNIT_ASSERT_VALUES_EQUAL(it.GetCurKey().TabletId, 5);
+        }
+
+        Y_UNIT_TEST(RandomizedSnapshotReverseWalk) {
+            std::mt19937_64 random(0x8f3d9a24c61b507eULL);
+            TTestContexts contexts;
+            THPTimer timer;
+
+            for (ui32 round = 0; TDuration::Seconds(timer.Passed()) < TDuration::Minutes(5); ++round) {
+                auto levelCtx = std::make_shared<TLevelIndexCtx>();
+                auto slice = MakeIntrusive<TLevelSlice>(contexts.GetLevelIndexSettings(), levelCtx);
+                TVector<TRecordPosition> expected;
+                ui64 nextSstId = 1;
+
+                const ui32 numLevel0Ssts = random() % 8;
+                const ui32 level0SnapshotLimit = random() % (numLevel0Ssts + 1);
+                for (ui32 sstIdx = 0; sstIdx < numLevel0Ssts; ++sstIdx) {
+                    const ui32 numRecords = 1 + random() % 9;
+                    const ui32 firstStep = random() % 1000000;
+                    const ui64 tabletId = 100 + sstIdx;
+                    auto sst = MakeSst(contexts.GetVCtx(), tabletId, firstStep, numRecords, nextSstId);
+                    slice->Level0.Put(sst);
+                    if (sstIdx < level0SnapshotLimit) {
+                        AppendExpected(expected, 0, nextSstId, tabletId, firstStep, numRecords);
+                    }
+                    ++nextSstId;
+                }
+
+                const ui32 numSortedLevels = random() % 8;
+                for (ui32 levelIdx = 0; levelIdx < numSortedLevels; ++levelIdx) {
+                    slice->SortedLevels.emplace_back(TKeyLogoBlob());
+                    const ui32 numSsts = random() % 7; // empty levels are intentional
+                    ui32 nextStep = random() % 1000;
+                    const ui64 tabletId = 1000 + levelIdx;
+                    for (ui32 sstIdx = 0; sstIdx < numSsts; ++sstIdx) {
+                        const ui32 numRecords = 1 + random() % 9;
+                        auto sst = MakeSst(contexts.GetVCtx(), tabletId, nextStep, numRecords, nextSstId);
+                        slice->SortedLevels.back().Put(sst);
+                        AppendExpected(expected, levelIdx + 1, nextSstId, tabletId, nextStep, numRecords);
+                        nextStep += numRecords + 1 + random() % 20;
+                        ++nextSstId;
+                    }
+                }
+
+                TLevelSliceSnapshot snapshot(slice, level0SnapshotLimit);
+
+                TLevelSliceSnapshot::TSortedLevelsIter levelIt(&snapshot);
+                levelIt.SeekToLast();
+                for (ui32 level = numSortedLevels; level != 0; --level) {
+                    UNIT_ASSERT(levelIt.Valid());
+                    UNIT_ASSERT_VALUES_EQUAL(levelIt.Get().Level, level);
+                    levelIt.Prev();
+                }
+                UNIT_ASSERT(!levelIt.Valid());
+
+                AssertEqual(ReadSnapshot(snapshot, false), expected, round);
+
+                std::reverse(expected.begin(), expected.end());
+                AssertEqual(ReadSnapshot(snapshot, true), expected, round);
+            }
+        }
     }
 
 } // NKikimr

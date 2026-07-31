@@ -166,7 +166,7 @@ namespace NKikimr {
 
         TSstIterator(const TOrderedLevelSegments *s)
             : S(s)
-            , Cur()
+            , Cur(s ? s->Segments.end() : typename TSegments::const_iterator())
         {}
 
         void SeekToFirst() {
@@ -176,8 +176,11 @@ namespace NKikimr {
 
         void SeekToLast() {
             Y_DEBUG_ABORT_UNLESS(S);
-            Cur = S->Segments.end();
-            --Cur;
+            if (S->Segments.empty()) {
+                Cur = S->Segments.end();
+            } else {
+                Cur = S->Segments.end() - 1;
+            }
         }
 
         void Seek(const TKey &key) {
@@ -200,7 +203,11 @@ namespace NKikimr {
 
         void Prev() {
             Y_DEBUG_ABORT_UNLESS(Valid());
-            --Cur;
+            if (Cur == S->Segments.begin()) {
+                Cur = S->Segments.end();
+            } else {
+                --Cur;
+            }
         }
 
         TLevelSegmentPtr Get() {
@@ -243,6 +250,22 @@ namespace NKikimr {
             }
         }
 
+        void SeekToLast() {
+            Y_DEBUG_ABORT_UNLESS(S);
+            if (NumLimit > 0) {
+                Cur = S->Segments.begin();
+                CurNum = 0;
+                while (CurNum + 1 < NumLimit) {
+                    Y_DEBUG_ABORT_UNLESS(Cur != S->Segments.end());
+                    ++Cur;
+                    ++CurNum;
+                }
+                Y_DEBUG_ABORT_UNLESS(Cur != S->Segments.end());
+            } else {
+                CurNum = ui32(-1);
+            }
+        }
+
         bool Valid() const {
             return S && CurNum != ui32(-1) && CurNum < NumLimit;
         }
@@ -255,6 +278,16 @@ namespace NKikimr {
                 // otherwise we have a race
                 Y_DEBUG_ABORT_UNLESS(Cur != S->Segments.end());
                 ++Cur;
+            }
+        }
+
+        void Prev() {
+            Y_DEBUG_ABORT_UNLESS(Valid());
+            if (CurNum == 0) {
+                CurNum = ui32(-1);
+            } else {
+                --Cur;
+                --CurNum;
             }
         }
 

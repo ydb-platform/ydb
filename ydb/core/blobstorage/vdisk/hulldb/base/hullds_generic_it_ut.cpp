@@ -63,7 +63,7 @@ Y_UNIT_TEST_SUITE(THullDsGenericNWayIt) {
         TVector<int> allData;
         TGenericNWayBackwardIterator<int, TVectorIt> it(nullptr, {&ds1, &ds2, &ds3});
         // full iteration
-        it.Seek(17);
+        it.SeekToLast();
         while (it.Valid()) {
             STR << it.GetCurKey() << " ";
             allData.push_back(it.GetCurKey());
@@ -99,5 +99,4 @@ Y_UNIT_TEST_SUITE(THullDsGenericNWayIt) {
         UNIT_ASSERT_EQUAL(allData, TVector<int>({10, 9, 8, 7, 6, 5, 4, 2, 1}));
     }
 }
-
 

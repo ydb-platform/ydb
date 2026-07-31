@@ -65,7 +65,7 @@ LEFT JOIN
 ON
     t.ServiceId = s.ServiceId;
 
--- Write to output topic (JSON)
+-- Writing to the output topic (JSON)
 INSERT INTO
     output_topic -- or external topic ext_source.output_topic
 SELECT

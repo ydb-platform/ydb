@@ -4,6 +4,11 @@ Core implementation of YDB topics (persistent queues).
 
 Shared rules: [`RULES.md`](RULES.md).
 
+## Guidelines
+
+* In `pqrb` / `pqtablet`: batch when persisting; minimize persists and
+  inter-actor messages.
+
 ## Layout
 
 One root directory per tablet or service, plus `common/`, `public/`, `events/`.
@@ -26,7 +31,6 @@ Protocol layers and related Topics trees (each has its own `AGENTS.md`):
   [`http_proxy`](../http_proxy/AGENTS.md) ·
   [`datastreams`](../../services/datastreams/AGENTS.md) ·
   [`sqs_topic`](../../services/sqs_topic/AGENTS.md) ·
-  [`transfer`](../transfer/AGENTS.md) ·
   [`library/persqueue`](../../library/persqueue/AGENTS.md)
 
 ## Tests

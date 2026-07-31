@@ -1,3 +1,4 @@
+import copy
 import logging
 import os
 import pytest
@@ -23,7 +24,7 @@ def set_test_env(request):
     param = getattr(request, "param", {})
     checkpointing_period_ms = param.get("checkpointing_period_ms", "200")
     os.environ["YDB_TEST_DEFAULT_CHECKPOINTING_PERIOD_MS"] = checkpointing_period_ms
-    os.environ["YDB_TEST_LEASE_DURATION_SEC"] = "5"
+    os.environ["YDB_TEST_LEASE_DURATION_SEC"] = param.get("lease_duration_sec", "5")
     rebalancing_timeout_ms = param.get("rebalancing_timeout_ms", "60000")
     print(f"rebalancing_timeout_ms {rebalancing_timeout_ms}")
     os.environ["YDB_TEST_ROW_DISPATCHER_REBALANCING_TIMEOUT_MS"] = rebalancing_timeout_ms
@@ -115,6 +116,10 @@ def get_ydb_config(request, enable_fq_connector=None):
 class YdbClient:
     WAIT_TIMEOUT: int = 5
 
+    def __fail_retry_callback(self, e):
+        self.retry_settings.on_ydb_error_callback(e)
+        raise RuntimeError(e)
+
     def __init__(self, driver: ydb.Driver, owns_driver: bool = False):
         self.owns_driver = owns_driver
         self.driver = driver
@@ -139,8 +144,11 @@ class YdbClient:
         if self.owns_driver:
             self.driver.stop()
 
-    def query(self, statement: str):
-        return self.session_pool.execute_with_retries(statement, retry_settings=self.retry_settings)
+    def query(self, statement: str, fail_fast: bool = False):
+        retry_settings = copy.copy(self.retry_settings)
+        if fail_fast:
+            retry_settings.on_ydb_error_callback = lambda e: self.__fail_retry_callback(e)
+        return self.session_pool.execute_with_retries(statement, retry_settings=retry_settings)
 
     def query_async(self, statement: str, timeout: float | None = None):
         settings = None

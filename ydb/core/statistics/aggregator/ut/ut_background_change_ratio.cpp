@@ -117,7 +117,7 @@ Y_UNIT_TEST_SUITE(BackgroundChangeRatio) {
     }
 
     // 4. Change counters reset after ANALYZE: after ANALYZE completes,
-    //    LastAnalyzeRowModifications is updated ->
+    //    LastAnalyzeRowUpdates and LastAnalyzeRowDeletes are updated ->
     //    subsequent small changes do not trigger another ANALYZE
     Y_UNIT_TEST(CountersResetAfterAnalyze) {
         TTestEnv env = CreateTestEnv();
@@ -131,9 +131,9 @@ Y_UNIT_TEST_SUITE(BackgroundChangeRatio) {
 
         // Insert a moderate number of rows that would exceed the 20% threshold
         // if the counters had NOT been reset.
-        // After the primary collection, LastAnalyzeRowModifications
-        // is set to the current value. So only NEW changes since the last
-        // ANALYZE count toward the ratio.
+        // After the primary collection, LastAnalyzeRowUpdates and
+        // LastAnalyzeRowDeletes are set to the current values. So only
+        // NEW changes since the last ANALYZE count toward the ratio.
         InsertDataIntoTable(env, "Database", "Table", 50); // 5% change ratio — below 20%
 
         // Wait and verify no new save was triggered.
@@ -383,10 +383,11 @@ Y_UNIT_TEST_SUITE(BackgroundChangeRatio) {
         UNIT_ASSERT(countMin);
     }
 
-    // 10. Restart persistence: the analyze baseline (LastAnalyzeRowModifications)
-    //     and LastUpdateTime live only in the SA-local ScheduleTraversals table.
-    //     After a primary collection, an SA tablet restart must reload both, so a
-    //     subsequent below-threshold change still does NOT trigger a re-analysis.
+    // 10. Restart persistence: the analyze baseline (LastAnalyzeRowUpdates
+    //     and LastAnalyzeRowDeletes) and LastUpdateTime live only in the
+    //     SA-local ScheduleTraversals table. After a primary collection, an
+    //     SA tablet restart must reload all of them, so a subsequent
+    //     below-threshold change still does NOT trigger a re-analysis.
     //     If either field were lost on reload, the table would look either
     //     "never analyzed" (baseline -> Max<ui64>()) or time-stale
     //     (LastUpdateTime -> 0) and be re-analyzed immediately.
@@ -397,8 +398,9 @@ Y_UNIT_TEST_SUITE(BackgroundChangeRatio) {
         CreateDatabase(env, "Database");
         const auto tableInfo = PrepareColumnTableWithIndexes(env, "Database", "Table", 1);
 
-        // Wait for the primary background traversal: this persists both
-        // LastUpdateTime and LastAnalyzeRowModifications for the table.
+        // Wait for the primary background traversal: this persists
+        // LastUpdateTime, LastAnalyzeRowUpdates, and LastAnalyzeRowDeletes
+        // for the table.
         WaitForSavedStatistics(runtime, tableInfo.PathId);
 
         ui64 saTabletId = 0;

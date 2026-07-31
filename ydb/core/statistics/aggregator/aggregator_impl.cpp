@@ -952,12 +952,14 @@ void TStatisticsAggregator::FinishTraversal(
         traversalTable.LastUpdateTime = TraversalStartTime;
 
         if (traversalSucceeded) {
-            auto [currentModifications, _] = GetCurrentChangeCounters(pathId);
-            traversalTable.LastAnalyzeRowModifications = currentModifications;
+            auto [currentRowUpdates, currentRowDeletes, _] = GetCurrentChangeCounters(pathId);
+            traversalTable.LastAnalyzeRowUpdates = currentRowUpdates;
+            traversalTable.LastAnalyzeRowDeletes = currentRowDeletes;
 
             db.Table<Schema::ScheduleTraversals>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
                 NIceDb::TUpdate<Schema::ScheduleTraversals::LastUpdateTime>(TraversalStartTime.MicroSeconds()),
-                NIceDb::TUpdate<Schema::ScheduleTraversals::LastAnalyzeRowModifications>(currentModifications));
+                NIceDb::TUpdate<Schema::ScheduleTraversals::LastAnalyzeRowUpdates>(currentRowUpdates),
+                NIceDb::TUpdate<Schema::ScheduleTraversals::LastAnalyzeRowDeletes>(currentRowDeletes));
         } else {
             db.Table<Schema::ScheduleTraversals>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
                 NIceDb::TUpdate<Schema::ScheduleTraversals::LastUpdateTime>(TraversalStartTime.MicroSeconds()));
@@ -1474,44 +1476,54 @@ bool TStatisticsAggregator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev
     TabletCounters->Simple()[COUNTER_BASE_STATISTICS_TOTAL_BYTES_SIZE].Set(totalBytesSize);
  }
 
-std::pair<ui64, ui64> TStatisticsAggregator::GetCurrentChangeCounters(const TPathId& pathId) const {
+std::tuple<ui64, ui64, ui64> TStatisticsAggregator::GetCurrentChangeCounters(const TPathId& pathId) const {
     // A path is owned by the schemeshard identified by pathId.OwnerId, so its
     // base stats live in that schemeshard's blob (see IsKnownTable).
     auto it = BaseStatistics.find(pathId.OwnerId);
     if (it == BaseStatistics.end() || !it->second.Latest) {
-        return {0, 0};
+        return {0, 0, 0};
     }
     NKikimrStat::TSchemeShardStats stats;
     if (!stats.ParseFromString(*it->second.Latest)) {
-        return {0, 0};
+        return {0, 0, 0};
     }
     for (const auto& entry : stats.GetEntries()) {
         if (TPathId::FromProto(entry.GetPathId()) == pathId) {
-            return {entry.GetRowModifications(), entry.GetRowCount()};
+            return {entry.GetRowUpdates(), entry.GetRowDeletes(), entry.GetRowCount()};
         }
     }
-    return {0, 0};
+    return {0, 0, 0};
 }
 
 bool TStatisticsAggregator::IsChangeRatioAboveThreshold(
-    ui64 lastAnalyzeRowModifications, ui64 currentRowModifications, ui64 rowCount) const
+    ui64 lastAnalyzeRowUpdates, ui64 lastAnalyzeRowDeletes,
+    ui64 currentRowUpdates, ui64 currentRowDeletes,
+    ui64 rowCount) const
 {
-    if (lastAnalyzeRowModifications == Max<ui64>()) {
+    if (lastAnalyzeRowUpdates == Max<ui64>() || lastAnalyzeRowDeletes == Max<ui64>()) {
         return true;  // Never analyzed — stale (primary collection)
     }
-    // RowModifications is a monotonic cumulative counter, so current should not
-    // fall below the snapshot taken at the last ANALYZE. Guard against underflow.
-    if (rowCount == 0 || currentRowModifications <= lastAnalyzeRowModifications) {
+    // RowUpdates and RowDeletes are monotonic cumulative counters, so current
+    // should not fall below the snapshot taken at the last ANALYZE. Guard
+    // against underflow.
+    if (rowCount == 0) {
+        return false;
+    }
+    if (currentRowUpdates <= lastAnalyzeRowUpdates && currentRowDeletes <= lastAnalyzeRowDeletes) {
         return false;
     }
 
     // Use integer arithmetic to avoid floating-point precision loss for very
     // large counters (> 2^53). The comparison is:
-    //   changesSinceAnalyze / rowCount * 100 >= threshold
+    //   (changesSinceAnalyze) / rowCount * 100 >= threshold
     // rewritten as:
     //   changesSinceAnalyze * 100 >= threshold * rowCount
     // using __int128 to avoid overflow.
-    ui64 changesSinceAnalyze = currentRowModifications - lastAnalyzeRowModifications;
+    ui64 updatesSinceAnalyze = currentRowUpdates > lastAnalyzeRowUpdates
+        ? currentRowUpdates - lastAnalyzeRowUpdates : 0;
+    ui64 deletesSinceAnalyze = currentRowDeletes > lastAnalyzeRowDeletes
+        ? currentRowDeletes - lastAnalyzeRowDeletes : 0;
+    ui64 changesSinceAnalyze = updatesSinceAnalyze + deletesSinceAnalyze;
     auto threshold = StatisticsConfig.GetBackgroundAnalyzeChangeRatioThresholdPercent();
 
     __int128 lhs = static_cast<__int128>(changesSinceAnalyze) * 100;
@@ -1520,11 +1532,12 @@ bool TStatisticsAggregator::IsChangeRatioAboveThreshold(
     return lhs >= rhs;
 }
 
-const THashMap<TPathId, std::pair<ui64, ui64>>& TStatisticsAggregator::GetCachedChangeCounters() {
+const THashMap<TPathId, std::tuple<ui64, ui64, ui64>>& TStatisticsAggregator::GetCachedChangeCounters() {
     if (!CachedChangeCountersValid) {
-        // Parse each schemeshard's base stats once into a pathId -> (rowModifications,
-        // rowCount) lookup. The cache is reused across scheduling ticks and counter
-        // reports, avoiding re-parsing all BaseStatistics blobs every second.
+        // Parse each schemeshard's base stats once into a pathId -> (rowUpdates,
+        // rowDeletes, rowCount) lookup. The cache is reused across scheduling
+        // ticks and counter reports, avoiding re-parsing all BaseStatistics
+        // blobs every second.
         CachedChangeCounters.clear();
         for (const auto& [ssId, serializedStats] : BaseStatistics) {
             if (!serializedStats.Latest) {
@@ -1536,7 +1549,7 @@ const THashMap<TPathId, std::pair<ui64, ui64>>& TStatisticsAggregator::GetCached
             }
             for (const auto& entry : stats.GetEntries()) {
                 CachedChangeCounters[TPathId::FromProto(entry.GetPathId())] =
-                    {entry.GetRowModifications(), entry.GetRowCount()};
+                    {entry.GetRowUpdates(), entry.GetRowDeletes(), entry.GetRowCount()};
             }
         }
         CachedChangeCountersValid = true;
@@ -1561,9 +1574,11 @@ TStatisticsAggregator::TScheduleTraversal* TStatisticsAggregator::FindStaleColum
             continue;
         }
         auto it = currentCounters.find(pathId);
-        auto [currentModifications, rowCount] = it != currentCounters.end()
-            ? it->second : std::pair<ui64, ui64>{0, 0};
-        if (!IsChangeRatioAboveThreshold(traversal.LastAnalyzeRowModifications, currentModifications, rowCount)) {
+        auto [currentRowUpdates, currentRowDeletes, rowCount] = it != currentCounters.end()
+            ? it->second : std::tuple<ui64, ui64, ui64>{0, 0, 0};
+        if (!IsChangeRatioAboveThreshold(
+                traversal.LastAnalyzeRowUpdates, traversal.LastAnalyzeRowDeletes,
+                currentRowUpdates, currentRowDeletes, rowCount)) {
             continue;
         }
         if (!stalest || traversal.LastUpdateTime < stalest->LastUpdateTime) {
@@ -1598,9 +1613,11 @@ void TStatisticsAggregator::ReportAnalyzeCounters() {
             continue;
         }
         auto it = currentCounters.find(pathId);
-        auto [currentModifications, rowCount] = it != currentCounters.end()
-            ? it->second : std::pair<ui64, ui64>{0, 0};
-        if (IsChangeRatioAboveThreshold(traversal.LastAnalyzeRowModifications, currentModifications, rowCount)) {
+        auto [currentRowUpdates, currentRowDeletes, rowCount] = it != currentCounters.end()
+            ? it->second : std::tuple<ui64, ui64, ui64>{0, 0, 0};
+        if (IsChangeRatioAboveThreshold(
+                traversal.LastAnalyzeRowUpdates, traversal.LastAnalyzeRowDeletes,
+                currentRowUpdates, currentRowDeletes, rowCount)) {
             ++pendingTables;
         }
     }

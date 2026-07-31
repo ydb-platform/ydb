@@ -3235,7 +3235,7 @@ message TStatisticsConfig {
     optional uint32 AnalyzeMaxPerNodeScanActorsInFlight = 7 [default = 1];
 
     // Threshold percentage of changed rows that triggers background ANALYZE.
-    // When (RowModifications since last ANALYZE) / RowCount * 100 >= this value,
+    // When (RowUpdates + RowDeletes since last ANALYZE) / RowCount * 100 >= this value,
     // column statistics are considered stale and will be recalculated.
     optional uint32 BackgroundAnalyzeChangeRatioThresholdPercent = 8 [default = 20];
 };

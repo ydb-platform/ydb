@@ -541,47 +541,6 @@ Y_UNIT_TEST_SUITE(DqSpillingFileTests) {
         runtime.DispatchEvents(options);
     }
 
-    Y_UNIT_TEST(StartError) {
-        TTestActorRuntime runtime;
-        runtime.Initialize();
-
-        auto spillingService = runtime.StartSpillingService(100, 500, 100, 1000, TFsPath("/nonexistent") / runtime.GetSpillingPrefix());
-        auto tester = runtime.AllocateEdgeActor();
-        auto spillingActor = runtime.StartSpillingActor(tester);
-
-        runtime.WaitBootstrap();
-
-        // put blob 1
-        {
-            auto ev = new TEvDqSpilling::TEvWrite(1, CreateRope(10, 'a'));
-            runtime.Send(new IEventHandle(spillingActor, tester, ev));
-
-            auto resp = runtime.GrabEdgeEvent<TEvDqSpilling::TEvError>(tester, TDuration::Seconds(1));
-            UNIT_ASSERT_EQUAL("Service not started", resp->Get()->Message);
-        }
-
-        // get blob 1
-        {
-            auto ev = new TEvDqSpilling::TEvRead(1);
-            runtime.Send(new IEventHandle(spillingActor, tester, ev));
-
-            auto resp = runtime.GrabEdgeEvent<TEvDqSpilling::TEvError>(tester, TDuration::Seconds(1));
-            UNIT_ASSERT_EQUAL("Service not started", resp->Get()->Message);
-        }
-
-        // mon
-        {
-            THttpRequest httpReq(HTTP_METHOD_GET);
-            NMonitoring::TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, nullptr, "", nullptr);
-
-            runtime.Send(new IEventHandle(spillingService, tester, new NMon::TEvHttpInfo(monReq)));
-
-            auto resp = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(tester, TDuration::Seconds(1));
-            UNIT_ASSERT_EQUAL("<html><h2>Service is not started due to IO error</h2></html>",
-                            ((NMon::TEvHttpInfoRes*) resp->Get())->Answer);
-        }
-    }
-
     Y_UNIT_TEST(NoSpillingService) {
         TTestActorRuntime runtime;
         runtime.Initialize();

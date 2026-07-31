@@ -74,8 +74,9 @@ std::shared_ptr<NChunks::TChunkPreparation> BuildColumnChunkFromArray(
     const auto loadContext = loader->BuildAccessorContext(accessor->GetRecordsCount());
     auto arrToWrite = accessorConstructor->Construct(accessor, loadContext);
     UNIT_ASSERT(arrToWrite.IsSuccess());
+    auto blobAndMeta = accessorConstructor->SerializeToBlobAndMeta(*arrToWrite, loadContext);
     return std::make_shared<NChunks::TChunkPreparation>(
-        accessorConstructor->SerializeToString(*arrToWrite, loadContext), *arrToWrite, TChunkAddress(columnId, 0), columnFeatures);
+        std::move(blobAndMeta.Blob), *arrToWrite, TChunkAddress(columnId, 0), columnFeatures, std::move(blobAndMeta.Meta));
 }
 
 }   // namespace

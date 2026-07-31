@@ -37,17 +37,23 @@ private:
     NActors::TChannelsConfig ChannelsConfig;
     NInterconnectTest::IPortManager::TPtr PortManager;
     TIntrusivePtr<NLog::TSettings> LoggerSettings;
+    TNode::TLogBackendFactory LogBackendFactory;
+    const ui32 NumThreads;
 
 public:
     TTestICCluster(ui32 numNodes = 1, NActors::TChannelsConfig channelsConfig = NActors::TChannelsConfig(),
                    TTrafficInterrupterSettings* tiSettings = nullptr, TIntrusivePtr<NLog::TSettings> loggerSettings = nullptr, Flags flags = EMPTY,
-                   TCheckerFactory checkerFactory = {}, TDuration deadPeerTimeout = TDuration::Seconds(2), ui32 inflight = TNode::DefaultInflight())
+                   TCheckerFactory checkerFactory = {}, TDuration deadPeerTimeout = TDuration::Seconds(2), ui32 inflight = TNode::DefaultInflight(),
+                   std::function<void(ui32, NActors::TInterconnectSettings&)> settingsCustomizer = {},
+                   TNode::TLogBackendFactory logBackendFactory = {}, ui32 numThreads = 1)
         : NumNodes(numNodes)
         , DeadPeerTimeout(deadPeerTimeout)
         , Counters(new NMonitoring::TDynamicCounters)
         , ChannelsConfig(channelsConfig)
         , PortManager(NInterconnectTest::CreatePortmanager())
         , LoggerSettings(loggerSettings)
+        , LogBackendFactory(std::move(logBackendFactory))
+        , NumThreads(numThreads)
     {
         THashMap<ui32, ui16> nodeToPortMap;
         THashMap<ui32, THashMap<ui32, ui16>> specificNodePortMap;
@@ -75,9 +81,10 @@ public:
         for (ui32 i = 1; i <= NumNodes; ++i) {
             auto& portMap = tiSettings ? specificNodePortMap[i] : nodeToPortMap;
             Nodes.emplace(i, MakeHolder<TNode>(i, NumNodes, portMap, Address, Counters, DeadPeerTimeout, ChannelsConfig,
-                /*numDynamicNodes=*/0, /*numThreads=*/1, LoggerSettings, inflight,
+                /*numDynamicNodes=*/0, NumThreads, LoggerSettings, inflight,
                 flags & USE_ZC ? ESocketSendOptimization::IC_MSG_ZEROCOPY : ESocketSendOptimization::DISABLED,
-                flags & USE_TLS, checkerFactory, flags & RDMA_POLLING_CQ ? NInterconnect::NRdma::ECqMode::POLLING : NInterconnect::NRdma::ECqMode::EVENT));
+                flags & USE_TLS, checkerFactory, flags & RDMA_POLLING_CQ ? NInterconnect::NRdma::ECqMode::POLLING : NInterconnect::NRdma::ECqMode::EVENT,
+                settingsCustomizer, LogBackendFactory));
         }
     }
 

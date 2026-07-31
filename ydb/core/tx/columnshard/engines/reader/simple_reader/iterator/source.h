@@ -63,7 +63,7 @@ private:
     std::optional<TFetchingScriptCursor> ScriptCursor;
     std::shared_ptr<NGroupedMemoryManager::TGroupGuard> SourceGroupGuard;
 
-    virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
+    virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, std::shared_ptr<NCommon::IDataSource>&& sourcePtr) override;
     virtual void DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
     virtual void DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
 
@@ -187,11 +187,12 @@ public:
         ScriptCursor = std::move(scriptCursor);
     }
 
-    void ContinueCursor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
+    // Moves ownership into a conveyor task only when the cursor advances.
+    void ContinueCursor(std::shared_ptr<NCommon::IDataSource>& sourcePtr);
 
     virtual NArrow::TSimpleRow GetStartPKRecordBatch() const = 0;
 
-    void StartProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
+    void StartProcessing(std::shared_ptr<NCommon::IDataSource>&& sourcePtr);
     virtual void InitializeProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
     virtual ui64 PredictAccessorsSize(const std::set<ui32>& entityIds) const = 0;
 

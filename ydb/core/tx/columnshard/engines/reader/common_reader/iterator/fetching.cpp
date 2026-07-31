@@ -25,7 +25,8 @@ bool TStepAction::DoApply(IDataReader& owner) {
     YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
         {"event", "apply"});
     Source->StartSyncSection();
-    Source->OnSourceFetchingFinishedSafe(owner, Source);
+    auto source = std::move(Source);
+    source->OnSourceFetchingFinishedSafe(owner, std::move(source));
     return true;
 }
 
@@ -279,14 +280,17 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(std::shared_ptr<IDataSource>&& 
 
         const TMonotonic start = TMonotonic::Now();
         IDataSource* sourceRaw = source.get();
-        sourceRaw->MutableExecutionContext().BindSourceOwnership(source);
+        // Move ownership into ExecutionContext for the duration of Execute().
+        // Async paths take it via ExtractSourceOwnership(); sync paths restore it below.
+        sourceRaw->MutableExecutionContext().SetSourceOwnership(std::move(source));
         auto conclusion = sourceRaw->GetExecutionContext().GetExecutionVisitorVerified()->Execute();
-        sourceRaw->MutableExecutionContext().UnbindSourceOwnership();
-        // Background work took ownership via ExtractSourceOwnership before arming.
         if (conclusion.IsSuccess() && *conclusion == NArrow::NSSA::IResourceProcessor::EExecutionResult::InBackground) {
+            // Background work took ownership via ExtractSourceOwnership before arming.
+            AFL_VERIFY(!sourceRaw->GetExecutionContext().HasSourceOwnership());
             AFL_VERIFY(!source);
             return false;
         }
+        source = sourceRaw->MutableExecutionContext().ExtractSourceOwnership();
         AFL_VERIFY(source);
         const TDuration executionDurationMs = TMonotonic::Now() - start;
         source->GetContext()->GetCommonContext()->GetCounters().AddExecutionDuration(executionDurationMs);

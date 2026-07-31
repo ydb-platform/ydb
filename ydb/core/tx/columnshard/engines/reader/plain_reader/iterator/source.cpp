@@ -52,7 +52,7 @@ void IDataSource::RegisterInterval(TFetchingInterval& interval, const std::share
     }
 }
 
-void IDataSource::DoOnSourceFetchingFinishedSafe(IDataReader& /*owner*/, const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) {
+void IDataSource::DoOnSourceFetchingFinishedSafe(IDataReader& /*owner*/, std::shared_ptr<NCommon::IDataSource>&& /*sourcePtr*/) {
     AFL_VERIFY(!IsReadyFlag);
     IsReadyFlag = true;
     for (auto&& i : Intervals) {

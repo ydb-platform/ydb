@@ -33,12 +33,12 @@ void IDataSource::InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetch
     FetchingPlan = fetching;
 }
 
-void IDataSource::StartProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) {
+void IDataSource::StartProcessing(std::shared_ptr<NCommon::IDataSource>&& sourcePtr) {
     AFL_VERIFY(FetchingPlan);
+    AFL_VERIFY(sourcePtr);
     TFetchingScriptCursor cursor(FetchingPlan, 0);
     const auto& commonContext = *GetContext()->GetCommonContext();
-    auto sourceCopy = sourcePtr;
-    auto task = std::make_shared<TStepAction>(std::move(sourceCopy), std::move(cursor), commonContext.GetScanActorId(), true);
+    auto task = std::make_shared<TStepAction>(std::move(sourcePtr), std::move(cursor), commonContext.GetScanActorId(), true);
     NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
 }
 
@@ -61,7 +61,8 @@ void IDataSource::InitializeProcessing(const std::shared_ptr<NCommon::IDataSourc
     }
 }
 
-void IDataSource::ContinueCursor(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) {
+void IDataSource::ContinueCursor(std::shared_ptr<NCommon::IDataSource>& sourcePtr) {
+    AFL_VERIFY(sourcePtr);
     AFL_VERIFY(!!ScriptCursor)("source_idx", GetSourceIdx());
     if (ScriptCursor->Next()) {
         YDB_LOG_DEBUG("",
@@ -70,8 +71,7 @@ void IDataSource::ContinueCursor(const std::shared_ptr<NCommon::IDataSource>& so
         auto cursor = std::move(*ScriptCursor);
         ScriptCursor.reset();
         const auto& commonContext = *GetContext()->GetCommonContext();
-        auto sourceCopy = sourcePtr;
-        auto task = std::make_shared<TStepAction>(std::move(sourceCopy), std::move(cursor), commonContext.GetScanActorId(), true);
+        auto task = std::make_shared<TStepAction>(std::move(sourcePtr), std::move(cursor), commonContext.GetScanActorId(), true);
         NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
     } else {
         YDB_LOG_WARN("",
@@ -80,10 +80,10 @@ void IDataSource::ContinueCursor(const std::shared_ptr<NCommon::IDataSource>& so
     }
 }
 
-void IDataSource::DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<NCommon::IDataSource>& sourcePtr) {
+void IDataSource::DoOnSourceFetchingFinishedSafe(IDataReader& owner, std::shared_ptr<NCommon::IDataSource>&& sourcePtr) {
     auto* plainReader = static_cast<TPlainReadData*>(&owner);
-    auto sourceTrivial = std::static_pointer_cast<IDataSource>(sourcePtr);
-    plainReader->MutableScanner().GetSyncPoint(sourceTrivial->GetPurposeSyncPointIndex())->OnSourcePrepared(sourceTrivial, *plainReader);
+    const ui32 syncPointIndex = GetPurposeSyncPointIndex();
+    plainReader->MutableScanner().GetSyncPoint(syncPointIndex)->OnSourcePrepared(std::move(sourcePtr), *plainReader);
 }
 
 void IDataSource::DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) {

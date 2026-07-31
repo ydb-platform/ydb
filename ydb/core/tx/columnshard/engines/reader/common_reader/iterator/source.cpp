@@ -282,10 +282,10 @@ void IDataSource::ResetSourceFinishedFlag() {
     AFL_VERIFY(AtomicCas(&SourceFinishedSafeFlag, 0, 1));
 }
 
-void IDataSource::OnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<IDataSource>& sourcePtr) {
+void IDataSource::OnSourceFetchingFinishedSafe(IDataReader& owner, std::shared_ptr<IDataSource>&& sourcePtr) {
     AFL_VERIFY(AtomicCas(&SourceFinishedSafeFlag, 1, 0));
     AFL_VERIFY(sourcePtr);
-    DoOnSourceFetchingFinishedSafe(owner, sourcePtr);
+    DoOnSourceFetchingFinishedSafe(owner, std::move(sourcePtr));
 }
 
 void IDataSource::OnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) {

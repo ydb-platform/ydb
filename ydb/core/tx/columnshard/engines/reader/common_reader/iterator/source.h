@@ -42,31 +42,24 @@ private:
     std::optional<TFetchingScriptCursor> CursorStep;
     YDB_ACCESSOR_DEF(TString, PrevCategoryName);
     YDB_ACCESSOR_DEF(TString, PrevExecutionResult);
-    // Points to the shared_ptr that currently owns the source on the conveyor thread.
+    // Holds conveyor-thread ownership for the duration of a program node Execute().
     // Background fetch/allocation must ExtractSourceOwnership() before arming work.
-    std::shared_ptr<IDataSource>* SourceOwnership = nullptr;
+    std::shared_ptr<IDataSource> SourceOwnership;
 
 public:
-    void BindSourceOwnership(std::shared_ptr<IDataSource>& ownership) {
+    void SetSourceOwnership(std::shared_ptr<IDataSource>&& ownership) {
         AFL_VERIFY(!SourceOwnership);
         AFL_VERIFY(ownership);
-        SourceOwnership = &ownership;
-    }
-
-    void UnbindSourceOwnership() {
-        SourceOwnership = nullptr;
+        SourceOwnership = std::move(ownership);
     }
 
     std::shared_ptr<IDataSource> ExtractSourceOwnership() {
         AFL_VERIFY(SourceOwnership);
-        AFL_VERIFY(*SourceOwnership);
-        auto result = std::move(*SourceOwnership);
-        SourceOwnership = nullptr;
-        return result;
+        return std::move(SourceOwnership);
     }
 
     bool HasSourceOwnership() const {
-        return SourceOwnership && !!*SourceOwnership;
+        return !!SourceOwnership;
     }
 
     void OnStartProgramStepExecution(const ui32 nodeId, const std::shared_ptr<TFetchingStepSignals>& signals);
@@ -143,7 +136,7 @@ private:
     bool InFlightReleasedFlag = false;
     TAtomic SourceFinishedSafeFlag = 0;
     TAtomic StageResultBuiltFlag = 0;
-    virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<IDataSource>& sourcePtr) = 0;
+    virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, std::shared_ptr<IDataSource>&& sourcePtr) = 0;
     virtual void DoBuildStageResult(const std::shared_ptr<IDataSource>& sourcePtr) = 0;
     virtual void DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) = 0;
 
@@ -396,7 +389,7 @@ public:
 
     void ResetSourceFinishedFlag();
 
-    void OnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<IDataSource>& sourcePtr);
+    void OnSourceFetchingFinishedSafe(IDataReader& owner, std::shared_ptr<IDataSource>&& sourcePtr);
 
     void OnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr);
 

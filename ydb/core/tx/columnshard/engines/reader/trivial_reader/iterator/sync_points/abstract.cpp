@@ -34,9 +34,22 @@ void ISyncPoint::OnSourcePrepared(std::shared_ptr<NCommon::IDataSource>&& source
         {"sourceIdx", sourceInput->GetSourceIdx()},
         {"prepared", IsSourcePrepared(sourceInput)});
     AFL_VERIFY(SourcesSequentially.size());
-    AFL_VERIFY(sourceInput->GetSourceIdx() != SourcesSequentially.front()->GetSourceIdx() || IsSourcePrepared(SourcesSequentially.front()));
-    while (SourcesSequentially.size() && IsSourcePrepared(SourcesSequentially.front())) {
-        auto source = SourcesSequentially.front();
+
+    const ui32 preparedSourceIdx = sourceInput->GetSourceIdx();
+    bool restored = false;
+    for (auto& slot : SourcesSequentially) {
+        if (slot.SourceIdx == preparedSourceIdx) {
+            AFL_VERIFY(!slot.Owned)("source_idx", preparedSourceIdx);
+            slot.Owned = std::move(sourceInput);
+            restored = true;
+            break;
+        }
+    }
+    AFL_VERIFY(restored)("source_idx", preparedSourceIdx);
+
+    AFL_VERIFY(SourcesSequentially.front().SourceIdx != preparedSourceIdx || IsSourcePrepared(SourcesSequentially.front().Owned));
+    while (SourcesSequentially.size() && SourcesSequentially.front().Owned && IsSourcePrepared(SourcesSequentially.front().Owned)) {
+        auto source = std::move(SourcesSequentially.front().Owned);
         switch (OnSourceReady(source, reader)) {
             case ESourceAction::Finish: {
                 YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
@@ -68,7 +81,13 @@ void ISyncPoint::OnSourcePrepared(std::shared_ptr<NCommon::IDataSource>&& source
             case ESourceAction::Wait: {
                 YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
                     {"event", "wait_source"},
-                    {"sourceIdx", source->GetSourceIdx()});
+                    {"sourceIdx", SourcesSequentially.front().SourceIdx});
+                // OnSourceReady may have moved ownership into ContinueCursor.
+                if (source) {
+                    SourcesSequentially.front().Owned = std::move(source);
+                } else {
+                    AFL_VERIFY(!SourcesSequentially.front().Owned);
+                }
                 ReleaseInFlightForPreparedEmptySources();
                 return;
             }
@@ -81,7 +100,11 @@ void ISyncPoint::ReleaseInFlightForPreparedEmptySources() {
     if (!Collection) {
         return;
     }
-    for (auto& source : SourcesSequentially) {
+    for (auto& slot : SourcesSequentially) {
+        if (!slot.Owned) {
+            continue;
+        }
+        auto& source = slot.Owned;
         if (!source->IsInFlightReleased() && IsSourcePrepared(source) && source->HasStageResult() && source->GetStageResult().IsEmpty()) {
             YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
                 {"event", "early_release_inflight_empty_source"},
@@ -103,7 +126,7 @@ TString ISyncPoint::DebugString() const {
         sb << "SRCS:[";
         ui32 idx = 0;
         for (auto&& i : SourcesSequentially) {
-            sb << "{" << i->GetSourceIdx() << "," << i->GetSequentialMemoryGroupIdx() << "}" << ",";
+            sb << "{" << i.SourceIdx << "," << (i.Owned ? ToString(i.Owned->GetSequentialMemoryGroupIdx()) : TString("fly")) << "}" << ",";
             if (++idx == 10) {
                 break;
             }
@@ -119,14 +142,18 @@ TString ISyncPoint::DebugString() const {
 
 void ISyncPoint::Continue(const TPartialSourceAddress& continueAddress, TPlainReadData& /*reader*/) {
     AFL_VERIFY(PointIndex == continueAddress.GetSyncPointIndex());
-    AFL_VERIFY(SourcesSequentially.size() && SourcesSequentially.front()->GetSourceIdx() == continueAddress.GetSourceIdx())("first_source_idx", SourcesSequentially.front()->GetSourceIdx())(
-                                                   "continue_source_idx", continueAddress.GetSourceIdx());
+    AFL_VERIFY(SourcesSequentially.size() && SourcesSequentially.front().SourceIdx == continueAddress.GetSourceIdx())(
+                                                                                      "first_source_idx", SourcesSequentially.front().SourceIdx)(
+                                                                                      "continue_source_idx", continueAddress.GetSourceIdx());
+    AFL_VERIFY(SourcesSequentially.front().Owned)("source_idx", SourcesSequentially.front().SourceIdx);
     YDB_LOG_CREATE_CONTEXT(
         {"syncPoint", GetPointName()},
         {"event", "continue_source"});
     YDB_LOG_DEBUG_COMP(NKikimrServices::TX_COLUMNSHARD_SCAN, "",
-        {"sourceIdx", SourcesSequentially.front()->GetSourceIdx()});
-    SourcesSequentially.front()->MutableAs<IDataSource>()->ContinueCursor(SourcesSequentially.front());
+        {"sourceIdx", SourcesSequentially.front().SourceIdx});
+    auto source = std::move(SourcesSequentially.front().Owned);
+    source->MutableAs<IDataSource>()->ContinueCursor(source);
+    AFL_VERIFY(!source);
 }
 
 void ISyncPoint::AddSource(std::shared_ptr<NCommon::IDataSource>&& source) {
@@ -145,8 +172,8 @@ void ISyncPoint::AddSource(std::shared_ptr<NCommon::IDataSource>&& source) {
         AFL_VERIFY(*LastSourceIdx < source->GetSourceIdx())("idx_last", *LastSourceIdx)("idx_new", source->GetSourceIdx());
     }
     LastSourceIdx = source->GetSourceIdx();
-    if (auto genSource = OnAddSource(source)) {
-        genSource->MutableAs<IDataSource>()->StartProcessing(genSource);
+    if (auto genSource = OnAddSource(std::move(source))) {
+        genSource->MutableAs<IDataSource>()->StartProcessing(std::move(genSource));
     }
 }
 
@@ -157,7 +184,7 @@ void ISyncPoint::InitSourceTracingMetrics(const std::shared_ptr<NCommon::IDataSo
     source->SetSourcesAheadQueueEnterTime(TMonotonic::Now());
     ui32 sourcesAhead = 0;
     for (const auto& s : SourcesSequentially) {
-        if (s->GetSourceIdx() == source->GetSourceIdx()) {
+        if (s.SourceIdx == source->GetSourceIdx()) {
             break;
         }
         ++sourcesAhead;
@@ -170,7 +197,7 @@ void ISyncPoint::OnSourceFinished() {
         Next->OnSourceFinished();
     }
     if (auto genSource = DoOnSourceFinishedOnPreviouse()) {
-        genSource->MutableAs<IDataSource>()->StartProcessing(genSource);
+        genSource->MutableAs<IDataSource>()->StartProcessing(std::move(genSource));
     }
 }
 

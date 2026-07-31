@@ -64,7 +64,7 @@ private:
         result->InitPurposeSyncPointIndex(GetPointIndex());
         SourcesToAggregate.clear();
         MemoryToAggregate = 0;
-        SourcesSequentially.emplace_back(result);
+        SourcesSequentially.push_back(TQueuedSource{ .SourceIdx = result->GetSourceIdx(), .Owned = nullptr });
         result->InitFetchingPlan(AggregationScript);
         return result;
     }
@@ -104,7 +104,7 @@ private:
         return ISyncPoint::IsFinished() && SourcesToAggregate.empty();
     }
 
-    virtual std::shared_ptr<NCommon::IDataSource> OnAddSource(const std::shared_ptr<NCommon::IDataSource>& source) override {
+    virtual std::shared_ptr<NCommon::IDataSource> OnAddSource(std::shared_ptr<NCommon::IDataSource>&& source) override {
         bool localAggregationActivity = true;
         if (SourcesToAggregate.empty()) {
             if (AggregationActivity) {
@@ -122,16 +122,16 @@ private:
         ++SourcesCount;
         if (localAggregationActivity) {
             MemoryToAggregate += source->GetReservedMemory();
-            SourcesToAggregate.emplace_back(source);
+            SourcesToAggregate.emplace_back(std::move(source));
             if (InFlightControl.Val() == 0) {
-                source->MutableAs<IDataSource>()->ClearMemoryGuards();
+                SourcesToAggregate.back()->MutableAs<IDataSource>()->ClearMemoryGuards();
             }
             return TryToFlush();
         } else {
             ++InFlightControl;
-            SourcesSequentially.emplace_back(source);
+            SourcesSequentially.push_back(TQueuedSource{ .SourceIdx = source->GetSourceIdx(), .Owned = nullptr });
             source->MutableAs<IDataSource>()->InitFetchingPlan(RestoreResultScript);
-            return source;
+            return std::move(source);
         }
     }
 
@@ -140,7 +140,7 @@ private:
         SourcesToAggregate.clear();
     }
 
-    virtual ESourceAction OnSourceReady(const std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& reader) override {
+    virtual ESourceAction OnSourceReady(std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& reader) override {
         LWTRACK(SyncAggrSyncPoint, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(),
             source->GetDeprecatedPortionId(), GetPointName(), source->GetFilteredRowsCount(), source->GetReservedMemory(),
             source->GetSourcesAheadQueueWaitDuration(), source->GetSourcesAhead(), DebugString());

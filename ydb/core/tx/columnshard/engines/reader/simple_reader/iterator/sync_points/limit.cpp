@@ -40,15 +40,14 @@ bool TSyncPointLimitControl::DrainToLimit() {
     return false;
 }
 
-std::shared_ptr<NCommon::IDataSource> TSyncPointLimitControl::OnAddSource(const std::shared_ptr<NCommon::IDataSource>& source) {
+std::shared_ptr<NCommon::IDataSource> TSyncPointLimitControl::OnAddSource(std::shared_ptr<NCommon::IDataSource>&& source) {
     AFL_VERIFY(FetchedCount < Limit)("fetched", FetchedCount)("limit", Limit);
     UnfilledIterators.emplace_back(TSourceIterator(source));
 
-    return TBase::OnAddSource(source);
+    return TBase::OnAddSource(std::move(source));
 }
 
-ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
-    const std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& /*reader*/) {
+ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(std::shared_ptr<NCommon::IDataSource>& source, TPlainReadData& /*reader*/) {
     LWTRACK(LimitSyncPoint, source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(),
         source->GetDeprecatedPortionId(), GetPointName(), source->GetFilteredRowsCount(), source->GetReservedMemory(),
         source->GetSourcesAheadQueueWaitDuration(), source->GetSourcesAhead(), DebugString());
@@ -69,7 +68,7 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
         }
         for (auto it : SourcesSequentially) {
             YDB_LOG_ERROR_COMP(NKikimrServices::TX_COLUMNSHARD, "",
-                {"sourcesSequentially", it->GetSourceIdx()});
+                {"sourcesSequentially", it.SourceIdx});
         }
         if (FindIf(UnfilledIterators, [&](const auto& item) {
                 return item.GetSourceIdx() == source->GetSourceIdx();
@@ -132,11 +131,11 @@ ISyncPoint::ESourceAction TSyncPointLimitControl::OnSourceReady(
 TString TSyncPointLimitControl::TSourceIterator::DebugString() const {
     TStringBuilder sb;
     sb << "{";
-    sb << "idx=" << Source->GetSourceIdx() << ";";
+    sb << "idx=" << SourceIdx << ";";
     sb << "f=" << IsFilled() << ";";
     sb << "record=" << SortableRecord->DebugJson() << ";";
-    sb << "start=" << Source->GetAs<TPortionDataSource>()->GetStart().DebugString() << ";";
-    sb << "finish=" << Source->GetAs<TPortionDataSource>()->GetFinish().DebugString() << ";";
+    sb << "start=" << StartDebug << ";";
+    sb << "finish=" << FinishDebug << ";";
     return sb;
 }
 

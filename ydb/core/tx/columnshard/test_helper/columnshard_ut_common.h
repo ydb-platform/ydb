@@ -496,6 +496,10 @@ inline void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, TPlanStep p
     PlanCommit(runtime, sender, planStep, ids);
 }
 
+inline void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, const NOlap::TSnapshot& snapshot) {
+    PlanCommit(runtime, sender, TPlanStep{snapshot.GetPlanStep()}, snapshot.GetTxId());
+}
+
 void Wakeup(TTestBasicRuntime& runtime, const TActorId& sender, const ui64 shardId);
 
 ui64 CountLocalDbTableRows(

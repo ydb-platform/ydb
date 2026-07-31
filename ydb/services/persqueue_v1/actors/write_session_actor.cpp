@@ -968,8 +968,9 @@ void TWriteSessionActor<Protocol>::MakeAndSendInitResponse(
         init->set_cluster(FullConverter->GetCluster());
         init->set_block_format_version(0);
         if (InitialPQTabletConfig.HasCodecs()) {
-            for (const auto& codecName : InitialPQTabletConfig.GetCodecs().GetCodecs()) {
-                init->add_supported_codecs(CodecByName<Protocol>(codecName));
+            // Read numeric ids rather than string names: custom codecs are stored as "CUSTOM" and would map back to 0.
+            for (const auto codecId : InitialPQTabletConfig.GetCodecs().GetIds()) {
+                init->add_supported_codecs(static_cast<ECodec<Protocol>>(codecId + 1));
             }
         }
     } else {
@@ -979,8 +980,9 @@ void TWriteSessionActor<Protocol>::MakeAndSendInitResponse(
         }
         init->set_partition_id(Partition);
         if (InitialPQTabletConfig.HasCodecs()) {
-            for (const auto& codecName : InitialPQTabletConfig.GetCodecs().GetCodecs()) {
-                init->mutable_supported_codecs()->add_codecs(CodecByName<Protocol>(codecName));
+            // Read numeric ids rather than string names: custom codecs are stored as "CUSTOM" and would map back to 0.
+            for (const auto codecId : InitialPQTabletConfig.GetCodecs().GetIds()) {
+                init->mutable_supported_codecs()->add_codecs(static_cast<ECodec<Protocol>>(codecId + 1));
             }
         }
         init->set_is_batching_supported(NPQ::IsTopicMessagesBatchingEnabled(ctx));

@@ -2910,6 +2910,60 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kReadResponse, resp);
     }
 
+    // Regression test: a topic that allows only custom codecs must report those exact codec
+    // numbers in the StreamWrite InitResponse. Previously the server rebuilt supported_codecs
+    // from the stored string codec names (custom codecs are stored as "CUSTOM"), so custom
+    // codecs collapsed to CODEC_UNSPECIFIED (0) even though DescribeTopic returned them correctly.
+    Y_UNIT_TEST(TopicServiceCustomCodecsInInitResponse) {
+        NPersQueue::TTestServer server;
+        server.EnableLogs({NKikimrServices::PQ_READ_PROXY});
+
+        auto channel = grpc::CreateChannel("localhost:" + ToString(server.GrpcPort), grpc::InsecureChannelCredentials());
+        auto topicStub = Ydb::Topic::V1::TopicService::NewStub(channel);
+
+        const TString topicShortName = "acc/custom-codecs-topic";
+        const TVector<i32> customCodecs{Ydb::Topic::CODEC_CUSTOM, Ydb::Topic::CODEC_CUSTOM + 1};
+
+        {
+            Ydb::Topic::CreateTopicRequest request;
+            Ydb::Topic::CreateTopicResponse response;
+            request.set_path("/Root/PQ/rt3.dc1--acc--custom-codecs-topic");
+            request.mutable_partitioning_settings()->set_min_active_partitions(1);
+            for (const auto codec : customCodecs) {
+                request.mutable_supported_codecs()->add_codecs(static_cast<Ydb::Topic::Codec>(codec));
+            }
+            request.add_consumers()->set_name("user");
+
+            grpc::ClientContext rcontext;
+            auto status = topicStub->CreateTopic(&rcontext, request, &response);
+            UNIT_ASSERT(status.ok());
+            UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
+
+            server.AnnoyingClient->WaitTopicInit(topicShortName);
+            server.AnnoyingClient->AddTopic(topicShortName);
+        }
+
+        grpc::ClientContext wcontext;
+        auto writeStream = topicStub->StreamWrite(&wcontext);
+        UNIT_ASSERT(writeStream);
+
+        Ydb::Topic::StreamWriteMessage::FromClient req;
+        Ydb::Topic::StreamWriteMessage::FromServer resp;
+        req.mutable_init_request()->set_path(topicShortName);
+        req.mutable_init_request()->set_producer_id("producer");
+        req.mutable_init_request()->set_message_group_id("producer");
+
+        UNIT_ASSERT(writeStream->Write(req));
+        UNIT_ASSERT(writeStream->Read(&resp));
+        Cerr << "===Got init response: " << resp.ShortDebugString() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(resp.status(), Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamWriteMessage::FromServer::kInitResponse);
+
+        const auto& initCodecs = resp.init_response().supported_codecs().codecs();
+        TVector<i32> gotCodecs(initCodecs.begin(), initCodecs.end());
+        UNIT_ASSERT_VALUES_EQUAL_C(gotCodecs, customCodecs, resp.init_response().ShortDebugString());
+    }
+
     Y_UNIT_TEST(SetupWriteSession) {
         NPersQueue::TTestServer server{PQSettings(0, 2), false};
         server.StartServer();

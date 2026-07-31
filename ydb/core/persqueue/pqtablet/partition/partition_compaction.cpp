@@ -583,7 +583,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
                 YDB_LOG_DEBUG_COMP(Service, "Can't append blob for key",
                     {"logPrefix", NPQ_LOG_PREFIX},
                     {"key", k.Key});
-                PQ_ENSURE(false)("reason", "Something went wrong")("topic", TopicName())("key", k.Key.ToString());
+                PQ_ENSURE(false)("reason", "Something went wrong")("key", k.Key.ToString());
                 return;
             }
 

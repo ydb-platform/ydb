@@ -22,6 +22,8 @@
 
 #define LOG_PREFIX (TStringBuilder() << "Direct read proxy " << ctx.SelfID.ToString() << ": " << PQ_LOG_PREFIX)
 
+#define DR_ENSURE(condition) AFL_ENSURE(condition)("session", Session)
+
 namespace NKikimr::NGRpcProxy::V1 {
 
 using namespace NKikimrClient;
@@ -281,7 +283,7 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvInitDirectRead::TPtr& ev, co
                 "unauthenticated access is forbidden, please provide credentials");
         }
     } else {
-        AFL_ENSURE(Request->GetYdbToken())("reason", "ydb token expected when credentials provided")("session", Session);
+        DR_ENSURE(Request->GetYdbToken())("reason", "ydb token expected when credentials provided");
         Auth = *(Request->GetYdbToken());
         Token = new NACLib::TUserToken(Request->GetSerializedToken());
     }
@@ -346,7 +348,7 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, cons
         }
 
         if (IsQuotaRequired()) {
-            AFL_ENSURE(MaybeRequestQuota(1, EWakeupTag::RlInit, ctx))("reason", "quota request failed on init")("session", Session);
+            DR_ENSURE(MaybeRequestQuota(1, EWakeupTag::RlInit, ctx))("reason", "quota request failed on init");
         } else {
             InitSession(ctx);
         }
@@ -466,7 +468,7 @@ void TDirectReadSessionActor::Handle(TEvents::TEvWakeup::TPtr& ev, const TActorC
             }
             if (PendingQuota) {
                 auto res = MaybeRequestQuota(PendingQuota->RequiredQuota, EWakeupTag::RlAllowed, ctx);
-                AFL_ENSURE(res)("reason", "quota request failed")("required_quota", PendingQuota->RequiredQuota)("session", Session);
+                DR_ENSURE(res)("reason", "quota request failed")("required_quota", PendingQuota->RequiredQuota);
             }
 
             break;
@@ -475,7 +477,7 @@ void TDirectReadSessionActor::Handle(TEvents::TEvWakeup::TPtr& ev, const TActorC
         case EWakeupTag::RlInitNoResource:
             if (PendingQuota) {
                 auto res = MaybeRequestQuota(PendingQuota->RequiredQuota, EWakeupTag::RlAllowed, ctx);
-                AFL_ENSURE(res)("reason", "quota request failed after no resource")("required_quota", PendingQuota->RequiredQuota)("session", Session);
+                DR_ENSURE(res)("reason", "quota request failed after no resource")("required_quota", PendingQuota->RequiredQuota);
             } else {
                 return CloseSession(PersQueue::ErrorCode::OVERLOAD, "throughput limit exceeded");
             }
@@ -502,7 +504,7 @@ void TDirectReadSessionActor::RecheckACL(const TActorContext& ctx) {
 
 
 void TDirectReadSessionActor::RunAuthActor(const TActorContext& ctx) {
-    AFL_ENSURE(!AuthInitActor)("reason", "auth init actor must not already exist")("session", Session);
+    DR_ENSURE(!AuthInitActor)("reason", "auth init actor must not already exist");
     AuthInitActor = ctx.Register(new TReadInitAndAuthActor(
         ctx, ctx.SelfID, ClientId, Cookie, Session, SchemeCache, NewSchemeCache, Counters, Token, TopicsList,
         TopicsHandler.GetLocalCluster(), ReadWithoutConsumer));

@@ -32,6 +32,8 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_WRITE_PROXY
 
+#define WS_ENSURE(condition) AFL_ENSURE(condition)("cookie", Cookie)
+
 using namespace NActors;
 using namespace NKikimrClient;
 
@@ -247,7 +249,7 @@ TWriteSessionActor<Protocol>::TWriteSessionActor(
 
 template <EProtocol Protocol>
 void TWriteSessionActor<Protocol>::Bootstrap(const TActorContext& ctx) {
-    AFL_ENSURE(Request)("reason", "write session request expected")("cookie", Cookie);
+    WS_ENSURE(Request)("reason", "write session request expected");
 
     Span = NWilson::TSpan(TWilsonTopic::TopicTopLevel, Request->GetWilsonTraceId(), Protocol == EProtocol::PQv1 ? "Topic.WriteSession[migration]" : "Topic.WriteSession");
 
@@ -409,7 +411,7 @@ void TWriteSessionActor<Protocol>::CheckACL(const TActorContext& ctx) {
 
     NACLib::EAccessRights rights = NACLib::EAccessRights::UpdateRow;
 
-    AFL_ENSURE(ACL)("reason", "ACL wrapper expected for access check")("cookie", Cookie)("session_id", OwnerCookie);
+    WS_ENSURE(ACL)("reason", "ACL wrapper expected for access check")("session_id", OwnerCookie);
     if (ACL->CheckAccess(rights, *Token)) {
         ACLCheckInProgress = false;
         if (FirstACLCheck) {
@@ -654,7 +656,7 @@ void TWriteSessionActor<Protocol>::InitCheckSchema(const TActorContext& ctx, boo
 template <EProtocol Protocol>
 void TWriteSessionActor<Protocol>::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
     auto& res = ev->Get()->Result;
-    AFL_ENSURE(res->ResultSet.size() == 1)("result_set_size", res->ResultSet.size())("cookie", Cookie);
+    WS_ENSURE(res->ResultSet.size() == 1)("result_set_size", res->ResultSet.size());
 
     auto& entry = res->ResultSet[0];
     TString errorReason;
@@ -663,16 +665,16 @@ void TWriteSessionActor<Protocol>::Handle(TEvDescribeTopicsResponse::TPtr& ev, c
         CloseSession(processResult.Reason, processResult.ErrorCode, ctx);
         return;
     }
-    AFL_ENSURE(entry.PQGroupInfo)("reason", "PQ group info expected")("cookie", Cookie);
+    WS_ENSURE(entry.PQGroupInfo)("reason", "PQ group info expected");
     PQGroupInfo = entry.PQGroupInfo;
     const auto& config = PQGroupInfo->Description;
     Chooser = PQGroupInfo->PartitionChooser;
-    AFL_ENSURE(Chooser)("reason", "partition chooser expected")("cookie", Cookie);
+    WS_ENSURE(Chooser)("reason", "partition chooser expected");
     PartitionGraph = PQGroupInfo->PartitionGraph;
-    AFL_ENSURE(PartitionGraph)("reason", "partition graph expected")("cookie", Cookie);
+    WS_ENSURE(PartitionGraph)("reason", "partition graph expected");
 
-    AFL_ENSURE(config.PartitionsSize() > 0)("partitions_size", config.PartitionsSize())("cookie", Cookie);
-    AFL_ENSURE(config.HasPQTabletConfig())("reason", "PQ tablet config expected")("cookie", Cookie);
+    WS_ENSURE(config.PartitionsSize() > 0)("partitions_size", config.PartitionsSize());
+    WS_ENSURE(config.HasPQTabletConfig())("reason", "PQ tablet config expected");
     InitialPQTabletConfig = config.GetPQTabletConfig();
     if (!DiscoveryConverter->IsValid()) {
         errorReason = Sprintf("Internal server error with topic '%s', Marker# PQ503", DiscoveryConverter->GetPrintableString().c_str());
@@ -700,7 +702,7 @@ void TWriteSessionActor<Protocol>::Handle(TEvDescribeTopicsResponse::TPtr& ev, c
         SetupCounters();
     }
 
-    AFL_ENSURE(entry.SecurityObject)("reason", "security object expected")("cookie", Cookie);
+    WS_ENSURE(entry.SecurityObject)("reason", "security object expected");
     ACL.Reset(new TAclWrapper(entry.SecurityObject));
     YDB_LOG_INFO_CTX(ctx, "Session v1 describe result for acl check",
         {"cookie", Cookie},
@@ -719,16 +721,16 @@ void TWriteSessionActor<Protocol>::Handle(TEvDescribeTopicsResponse::TPtr& ev, c
             Die(ctx);
             return;
         }
-        AFL_ENSURE(FirstACLCheck)("reason", "first ACL check expected for unauthenticated session")("cookie", Cookie);
+        WS_ENSURE(FirstACLCheck)("reason", "first ACL check expected for unauthenticated session");
         FirstACLCheck = false;
         DiscoverPartition(ctx);
     } else {
-        AFL_ENSURE(Request->GetYdbToken())("reason", "ydb token expected when credentials provided")("cookie", Cookie);
+        WS_ENSURE(Request->GetYdbToken())("reason", "ydb token expected when credentials provided");
         Auth = *Request->GetYdbToken();
         Token = new NACLib::TUserToken(Request->GetSerializedToken());
 
         if (FirstACLCheck && IsQuotaRequired()) {
-            AFL_ENSURE(MaybeRequestQuota(1, EWakeupTag::RlInit, ctx, InitSpan.GetTraceId()))("reason", "quota request failed on init")("cookie", Cookie);
+            WS_ENSURE(MaybeRequestQuota(1, EWakeupTag::RlInit, ctx, InitSpan.GetTraceId()))("reason", "quota request failed on init");
         } else {
             CheckACL(ctx);
         }
@@ -744,7 +746,7 @@ void TWriteSessionActor<Protocol>::DiscoverPartition(const NActors::TActorContex
     }
 
     std::optional<ui32> preferedPartition = PreferedPartition == Max<ui32>() ? std::nullopt : std::optional(PreferedPartition);
-    AFL_ENSURE(PQGroupInfo)("reason", "PQ group info expected for partition discovery")("cookie", Cookie);
+    WS_ENSURE(PQGroupInfo)("reason", "PQ group info expected for partition discovery");
     const auto& config = PQGroupInfo->Description;
     PartitionChooser = ctx.RegisterWithSameMailbox(NPQ::CreatePartitionChooserActor(ctx.SelfID,
                                                                                     config,
@@ -1030,7 +1032,7 @@ void TWriteSessionActor<Protocol>::Handle(NPQ::TEvPartitionWriter::TEvInitResult
         return CloseSession("got init result but not wait for it", PersQueue::ErrorCode::ERROR, ctx);
     }
 
-    AFL_ENSURE(!result.SessionId && !result.TxId)("session_id", result.SessionId)("tx_id", result.TxId)("cookie", Cookie);
+    WS_ENSURE(!result.SessionId && !result.TxId)("session_id", result.SessionId)("tx_id", result.TxId);
 
     if (!result.IsSuccess()) {
         const auto& error = result.GetError();
@@ -1063,7 +1065,7 @@ void TWriteSessionActor<Protocol>::Handle(NPQ::TEvPartitionWriter::TEvWriteAccep
         return CloseSession("got write permission but not wait for it", PersQueue::ErrorCode::ERROR, ctx);
     }
 
-    AFL_ENSURE(!SentRequests.empty())("reason", "sent requests expected on write accepted")("cookie", Cookie);
+    WS_ENSURE(!SentRequests.empty())("reason", "sent requests expected on write accepted");
     auto writeRequest = std::move(SentRequests.front());
 
     if (ev->Get()->Cookie != writeRequest->Cookie) {
@@ -1113,7 +1115,7 @@ void TWriteSessionActor<Protocol>::ProcessWriteResponse(
         batchWriteResponse->add_sequence_numbers(res.GetSeqNo());
         batchWriteResponse->add_offsets(res.GetOffset());
         if (!UseDeduplication) {
-            AFL_ENSURE(!res.GetAlreadyWritten())("reason", "already written without deduplication")("seq_no", res.GetSeqNo())("cookie", Cookie);
+            WS_ENSURE(!res.GetAlreadyWritten())("reason", "already written without deduplication")("seq_no", res.GetSeqNo());
         }
         batchWriteResponse->add_already_written(res.GetAlreadyWritten());
         stat->set_queued_in_partition_duration_ms(
@@ -1132,7 +1134,7 @@ void TWriteSessionActor<Protocol>::ProcessWriteResponse(
         // TODO (ildar-khisam@): validate res before filling ack fields
         ack->set_seq_no(res.GetSeqNo());
         if (res.GetAlreadyWritten()) {
-            AFL_ENSURE(UseDeduplication)("reason", "already written requires deduplication")("seq_no", res.GetSeqNo())("cookie", Cookie);
+            WS_ENSURE(UseDeduplication)("reason", "already written requires deduplication")("seq_no", res.GetSeqNo());
             ack->mutable_skipped()->set_reason(Topic::StreamWriteMessage::WriteResponse::WriteAck::Skipped::REASON_ALREADY_WRITTEN);
         } else if (res.HasWrittenInTx() && res.GetWrittenInTx()) {
             ack->mutable_written_in_tx();
@@ -1302,7 +1304,7 @@ void TWriteSessionActor<Protocol>::PrepareRequest(THolder<TEvWrite>&& ev, const 
     if (PendingRequests.empty()) {
         PendingRequests.emplace_back(new TWriteRequestInfo(++NextRequestCookie, GenerateWriteSpan()));
     } else if constexpr (Protocol == EProtocol::Topic) {
-        AFL_ENSURE(!PendingRequests.back()->UserWriteRequests.empty())("reason", "previous pending request must have user writes")("cookie", Cookie);
+        WS_ENSURE(!PendingRequests.back()->UserWriteRequests.empty())("reason", "previous pending request must have user writes");
 
         auto& last = PendingRequests.back()->UserWriteRequests.back().Write->Request.write_request();
 
@@ -1715,7 +1717,7 @@ void TWriteSessionActor<Protocol>::Handle(typename TEvWrite::TPtr& ev, const TAc
     }
 
     if (BytesInflight_ < AppData(ctx)->PQConfig.GetMaxWriteSessionBytesInflight()) { //allow only one big request to be readed but not sended
-        AFL_ENSURE(NextRequestInited)("reason", "next request must be inited")("cookie", Cookie);
+        WS_ENSURE(NextRequestInited)("reason", "next request must be inited");
         if (!Request->Read()) {
             YDB_LOG_INFO_CTX(ctx, "Session v1 grpc read failed",
                 {"cookie", Cookie},
@@ -1791,7 +1793,7 @@ void TWriteSessionActor<Protocol>::Handle(TEvents::TEvWakeup::TPtr& ev, const TA
                 PendingQuotaRequest->QuotaSpan.EndError("Timeout");
                 PendingQuotaRequest->StartQuotaSpan(); // Start new quota span for second request
                 PendingQuotaRequest->SetSpanParamRequestedQuota();
-                AFL_ENSURE(MaybeRequestQuota(PendingQuotaRequest->RequiredQuota, EWakeupTag::RlAllowed, ctx))("reason", "quota request failed after no resource")("required_quota", PendingQuotaRequest->RequiredQuota)("cookie", Cookie);
+                WS_ENSURE(MaybeRequestQuota(PendingQuotaRequest->RequiredQuota, EWakeupTag::RlAllowed, ctx))("reason", "quota request failed after no resource")("required_quota", PendingQuotaRequest->RequiredQuota);
             } else {
                 return CloseSession("Throughput limit exceeded", PersQueue::ErrorCode::OVERLOAD, ctx);
             }

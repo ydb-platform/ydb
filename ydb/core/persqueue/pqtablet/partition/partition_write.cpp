@@ -444,7 +444,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
 
             ReplyOk(ctx, response.GetCookie(), response.Span);
         } else {
-            PQ_ENSURE(false)("reason", "Unexpected message")("topic", TopicName())("cookie", response.GetCookie())("index", response.Body.index());
+            PQ_ENSURE(false)("reason", "Unexpected message")("cookie", response.GetCookie())("index", response.Body.index());
         }
         Responses.pop_front();
     }
@@ -1353,7 +1353,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
                 {"endOffset", BlobEncoder.EndOffset},
                 {"curOffset", curOffset},
                 {"offset", poffset});
-            PQ_ENSURE(!p.Internal)("topic", TopicName()); // No Already for transactions;
+            PQ_ENSURE(!p.Internal); // No Already for transactions;
             TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ALREADY].Increment(1);
             MsgsDiscarded.Inc();
             TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ALREADY].Increment(p.Msg.Data.size());

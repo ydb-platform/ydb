@@ -576,7 +576,7 @@ bool TPartition::CleanUpBlobsInEncoder(TPartitionBlobEncoder& encoder, bool isCo
                 return false;
             }
         } else {
-            PQ_ENSURE(nextKey)("topic", TopicName());
+            PQ_ENSURE(nextKey);
             if (ImportantConsumersNeedToKeepCurrentKey(firstKey, *nextKey, now)) {
                 return false;
             }
@@ -1667,7 +1667,7 @@ void TPartition::HandleOnInit(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TAc
     YDB_LOG_DEBUG_COMP(Service, "HandleOnInit TEvPQ::TEvGetWriteInfoRequest",
         {"logPrefix", NPQ_LOG_PREFIX});
 
-    PQ_ENSURE(IsSupportive())("reason", "supportive partition required")("topic", TopicName());
+    PQ_ENSURE(IsSupportive())("reason", "supportive partition required");
 
     ev->Get()->OriginalPartition = ev->Sender;
     AddPendingEvent(ev);
@@ -1678,7 +1678,7 @@ void TPartition::HandleOnInit(TEvPQ::TEvGetWriteInfoResponse::TPtr& ev, const TA
     YDB_LOG_DEBUG_COMP(Service, "HandleOnInit TEvPQ::TEvGetWriteInfoResponse",
         {"logPrefix", NPQ_LOG_PREFIX});
 
-    PQ_ENSURE(!IsSupportive())("reason", "not a supportive partition")("topic", TopicName());
+    PQ_ENSURE(!IsSupportive())("reason", "not a supportive partition");
 
     AddPendingEvent(ev);
 }
@@ -1688,7 +1688,7 @@ void TPartition::HandleOnInit(TEvPQ::TEvGetWriteInfoError::TPtr& ev, const TActo
     YDB_LOG_DEBUG_COMP(Service, "HandleOnInit TEvPQ::TEvGetWriteInfoError",
         {"logPrefix", NPQ_LOG_PREFIX});
 
-    PQ_ENSURE(!IsSupportive())("reason", "not a supportive partition")("topic", TopicName());
+    PQ_ENSURE(!IsSupportive())("reason", "not a supportive partition");
 
     AddPendingEvent(ev);
 }
@@ -2576,7 +2576,7 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
         SET_METRIC(PartitionCountersLabeled, METRIC_READ_QUOTA_PARTITION_TOTAL_USAGE, quotaUsage);
     }
     if (PartitionKeyCompactionCounters) {
-        PQ_ENSURE(Compacter)("topic", TopicName());
+        PQ_ENSURE(Compacter);
         auto counters = Compacter->GetCounters();
         SET_METRIC(PartitionKeyCompactionCounters, METRIC_UNCOMPACTED_SIZE_MAX, counters.UncompactedSize);
         SET_METRIC(PartitionKeyCompactionCounters, METRIC_UNCOMPACTED_SIZE_SUM, counters.UncompactedSize);
@@ -3412,7 +3412,7 @@ TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimple
         t->State = ECommitState::Committed;
         return EProcessResult::Break;
     }
-    AFL_ENSURE(false)("reason", "unreachable transaction kind")("tablet_id", TabletId)("partition_id", Partition)("topic", TopicName());
+    PQ_ENSURE(false)("reason", "unreachable transaction kind");
     return result;
 }
 
@@ -3423,7 +3423,7 @@ bool TPartition::HasPendingCommitsOrPendingWrites() const
 
 void TPartition::TryAddCmdWriteForTransaction(const TTransaction& tx)
 {
-    PQ_ENSURE(!IsSupportive())("reason", "not a supportive partition")("topic", TopicName());
+    PQ_ENSURE(!IsSupportive())("reason", "not a supportive partition");
 
     if (!tx.SerializedTx.Defined()) {
         return;
@@ -3494,7 +3494,7 @@ void TPartition::FlushStaleTxMetaDone(const TActorContext& ctx)
 
 void TPartition::AddCmdWritePersistStaleTxMeta(const TStaleTxMetaEntry& entry)
 {
-    PQ_ENSURE(!IsSupportive())("reason", "not a supportive partition")("topic", TopicName());
+    PQ_ENSURE(!IsSupportive())("reason", "not a supportive partition");
 
     if (!entry.SerializedTx.Defined()) {
         return;
@@ -5110,7 +5110,7 @@ void TPartition::HandleOnInit(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorC
     YDB_LOG_DEBUG_COMP(Service, "HandleOnInit TEvPQ::TEvDeletePartition",
         {"logPrefix", NPQ_LOG_PREFIX});
 
-    PQ_ENSURE(IsSupportive())("reason", "supportive partition required")("topic", TopicName());
+    PQ_ENSURE(IsSupportive())("reason", "supportive partition required");
 
     AddPendingEvent(ev);
 }
@@ -5120,7 +5120,7 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvDeletePartition> 
 {
     Y_UNUSED(ev);
 
-    PQ_ENSURE(IsSupportive())("reason", "supportive partition required")("topic", TopicName());
+    PQ_ENSURE(IsSupportive())("reason", "supportive partition required");
     PQ_ENSURE(DeletePartitionState == DELETION_NOT_INITED)("DeletePartitionState", static_cast<int>(DeletePartitionState));
 
     NeedDeletePartition = true;
@@ -5181,17 +5181,17 @@ void TPartition::AddCmdDeleteRangeForAllKeys(TEvKeyValue::TEvRequest& request)
 
 void TPartition::ScheduleNegativeReply(const TEvPQ::TEvSetClientInfo&)
 {
-    PQ_ENSURE(false)("reason", "The supportive partition does not accept read operations")("topic", TopicName());
+    PQ_ENSURE(false)("reason", "The supportive partition does not accept read operations");
 }
 
 void TPartition::ScheduleNegativeReply(const TEvPersQueue::TEvProposeTransaction&)
 {
-    PQ_ENSURE(false)("reason", "The supportive partition does not accept immediate transactions")("topic", TopicName());
+    PQ_ENSURE(false)("reason", "The supportive partition does not accept immediate transactions");
 }
 
 void TPartition::ScheduleNegativeReply(const TTransaction&)
 {
-    PQ_ENSURE(false)("reason", "The supportive partition does not accept distribute transactions")("topic", TopicName());
+    PQ_ENSURE(false)("reason", "The supportive partition does not accept distribute transactions");
 }
 
 void TPartition::ScheduleNegativeReply(const TMessage& msg)
@@ -5257,10 +5257,8 @@ void TPartition::AttachPersistRequestSpan(NWilson::TSpan& span)
 }
 
 void TPartition::SendCompacterWriteRequest(THolder<TEvKeyValue::TEvRequest>&& request) {
-    AFL_ENSURE(!CompacterKvRequestInflight)
-        ("tablet_id", TabletId)("partition_id", Partition)("topic", TopicName());
-    AFL_ENSURE(!CompacterKvRequest)
-        ("tablet_id", TabletId)("partition_id", Partition)("topic", TopicName());
+    PQ_ENSURE(!CompacterKvRequestInflight);
+    PQ_ENSURE(!CompacterKvRequest);
     YDB_LOG_DEBUG_COMP(Service, "Topic partition Acquire RW Lock",
         {"logPrefix", NPQ_LOG_PREFIX},
         {"clientSideName", TopicConverter->GetClientsideName()},

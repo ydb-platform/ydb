@@ -259,8 +259,7 @@ private:
         EFetchResult FillBuffer() {
             const auto flushSink = [&](auto flush) { Buffer_ = std::move(flush); };
             if constexpr (HasFilter) {
-                return RunPackedHashJoinBatch<OutputThreshold_>(*JoinCtx_, Join_, Output_, flushSink,
-                                                                std::ref(*PairFilter_));
+                return RunPackedHashJoinBatch<OutputThreshold_>(*JoinCtx_, Join_, Output_, flushSink, &*PairFilter_);
             } else {
                 return RunPackedHashJoinBatch<OutputThreshold_>(*JoinCtx_, Join_, Output_, flushSink);
             }

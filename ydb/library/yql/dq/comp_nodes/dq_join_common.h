@@ -1,6 +1,7 @@
 #pragma once
 #include "dq_hash_join_table.h"
 #include "dq_block_hash_join_settings.h"
+#include "dq_join_filters.h"
 #include <algorithm>
 #include <numeric>
 #include <vector>
@@ -356,12 +357,6 @@ template <typename Source> class TInMemoryHashJoin {
     ui32 ResumeIndex_ = 0;
 };
 
-struct AlwaysPassPair {
-    bool operator()(TSides<TSingleTuple>) const {
-        return true;
-    }
-};
-
 template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THybridHashJoin {
     struct Logger {
         Logger(TComputationContext& ctx, TString name)
@@ -522,9 +517,11 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
     }
 
 
-    // `pairPasses` drives the `found` decision, so LEFT rows whose matches are all rejected by it
-    // stay null-padded.
-    EFetchResult MatchRows([[maybe_unused]] TComputationContext& ctx, auto consume, auto isFull, auto pairPasses) {
+    // A null `filter` means no ON-clause predicates. The filter drives the `found` decision, so LEFT
+    // rows whose matches are all rejected by it stay null-padded.
+    EFetchResult MatchRows([[maybe_unused]] TComputationContext& ctx, auto consume, auto isFull,
+                           TPackedTuplePairFilter* filter = nullptr) {
+        auto pairAccepted = [&](const TSides<TSingleTuple>& pair) { return !filter || (*filter)(pair); };
         auto notEnoughMemory = [hasSpiller = !!Spiller_] {
             return hasSpiller && TlsAllocState->IsMemoryYellowZoneEnabled();
         };
@@ -533,7 +530,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
             if constexpr (Kind == EJoinKind::Left) {
                 table.Lookup(tuple, [&](TSingleTuple tableMatch) {
                     const TSides<TSingleTuple> pair{.Build = tableMatch, .Probe = tuple};
-                    if (pairPasses(pair)) {
+                    if (pairAccepted(pair)) {
                         found = true;
                         consume(pair);
                     }
@@ -546,7 +543,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
             } else {
                 table.Lookup(tuple, [&](TSingleTuple tableMatch) {
                     const TSides<TSingleTuple> pair{.Build = tableMatch, .Probe = tuple};
-                    if (pairPasses(pair)) {
+                    if (pairAccepted(pair)) {
                         found = true;
                         if constexpr (Kind == EJoinKind::Inner) {
                             consume(pair);
@@ -1049,13 +1046,12 @@ protected:
     bool LeftIsBuild_;
 };
 
-template <i64 MaxOutputRows, typename JoinType, typename OutputType, typename FlushSink,
-          typename PairPasses = NJoinPackedTuples::AlwaysPassPair>
+template <i64 MaxOutputRows, typename JoinType, typename OutputType, typename FlushSink>
 EFetchResult RunPackedHashJoinBatch(TComputationContext& ctx, JoinType& join, OutputType& output, FlushSink&& onFlush,
-                                    PairPasses pairPasses = {}) {
+                                    TPackedTuplePairFilter* filter = nullptr) {
     auto outputIsFull = [&]() { return output.SizeTuples() >= MaxOutputRows; };
     while (!outputIsFull()) {
-        switch (join.MatchRows(ctx, output.MakeConsumeFn(), outputIsFull, pairPasses)) {
+        switch (join.MatchRows(ctx, output.MakeConsumeFn(), outputIsFull, filter)) {
         case EFetchResult::Finish:
             if (output.SizeTuples() == 0) {
                 return EFetchResult::Finish;

@@ -287,7 +287,7 @@ class TBlockHashJoinWrapper : public TMutableComputationNode<TBlockHashJoinWrapp
             const auto flushSink = [&](auto flush) { WriteFlushToOutput(output, std::move(flush)); };
             EFetchResult res;
             if constexpr (HasFilter) {
-                res = RunPackedHashJoinBatch<MaxOutputRows_>(*Ctx_, Join_, Output_, flushSink, std::ref(*PairFilter_));
+                res = RunPackedHashJoinBatch<MaxOutputRows_>(*Ctx_, Join_, Output_, flushSink, &*PairFilter_);
             } else {
                 res = RunPackedHashJoinBatch<MaxOutputRows_>(*Ctx_, Join_, Output_, flushSink);
             }

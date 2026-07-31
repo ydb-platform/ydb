@@ -28,6 +28,7 @@ public:
 
     void RequestStarted(ui32 bytes);
     void RequestFinished(bool ok, TDuration duration);
+
     NMonitoring::THistogramPtr GetRequestTime() const
     {
         return RequestTime;
@@ -46,7 +47,9 @@ public:
     explicit TVolumeCounters(NMonitoring::TDynamicCounterPtr parent);
 
     void RequestStarted(EBlockStoreRequest requestType, ui32 bytes);
-    void RequestFinished(EBlockStoreRequest requestType, bool ok,
+    void RequestFinished(
+        EBlockStoreRequest requestType,
+        bool ok,
         TDuration duration);
 
 private:

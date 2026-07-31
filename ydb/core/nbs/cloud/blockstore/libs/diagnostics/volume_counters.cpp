@@ -19,7 +19,7 @@ const TVector<double> RequestTimeBoundsMs = {
     0.25,
     0.5,
     0.75,
-    1,     // ms
+    1,   // ms
     2,
     4,
     8,
@@ -84,7 +84,9 @@ void TVolumeCounters::RequestStarted(EBlockStoreRequest requestType, ui32 bytes)
     Get(requestType).RequestStarted(bytes);
 }
 
-void TVolumeCounters::RequestFinished(EBlockStoreRequest requestType, bool ok,
+void TVolumeCounters::RequestFinished(
+    EBlockStoreRequest requestType,
+    bool ok,
     TDuration duration)
 {
     Get(requestType).RequestFinished(ok, duration);

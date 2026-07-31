@@ -210,6 +210,68 @@ Y_UNIT_TEST_SUITE(SelfHeal) {
     SELF_HEAL_MAINTENANCE_TEST(OneFaultyMaintenanceRequestOneMaintenanceRequest, Mirror3dc, TPDisks({ Active, Active, Active, Active, Active, FaultyMaintenance, Active, ActiveMaintenance, Active }));
     SELF_HEAL_MAINTENANCE_TEST(OneFaultyMaintenanceRequestOneMaintenanceRequest, 4Plus2Block, TPDisks({ ActiveMaintenance, Active, Active, Active, Active, Active, FaultyMaintenance, Active }));
 
+    Y_UNIT_TEST(FaultyDiskReassignedBeforeMaintenanceDisk) {
+        const TBlobStorageGroupType erasure = TBlobStorageGroupType::ErasureMirror3dc;
+        TEnvironmentSetup env({
+            .NodeCount = erasure.BlobSubgroupSize(),
+            .Erasure = erasure,
+        });
+
+        env.CreateBoxAndPool(2, 1);
+        env.Sim(TDuration::Minutes(1));
+
+        const auto base = env.FetchBaseConfig();
+        UNIT_ASSERT_VALUES_EQUAL(base.GroupSize(), 1);
+
+        TBlobStorageGroupInfo::TTopology topology(erasure, 3, 3, 1, true);
+        std::vector<TPDiskId> orderNumberToPDiskId(erasure.BlobSubgroupSize());
+        for (const auto& vslot : base.GetVSlot()) {
+            const TVDiskIdShort vdiskId(vslot.GetFailRealmIdx(), vslot.GetFailDomainIdx(), vslot.GetVDiskIdx());
+            orderNumberToPDiskId[topology.GetOrderNumber(vdiskId)] = {
+                vslot.GetVSlotId().GetNodeId(),
+                vslot.GetVSlotId().GetPDiskId(),
+            };
+        }
+
+        constexpr ui32 maintenanceOrderNumber = 0;
+        constexpr ui32 faultyOrderNumber = 7;
+        std::optional<ui32> firstReassignedOrderNumber;
+        env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+            if (!firstReassignedOrderNumber &&
+                    ev->GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigRequest::EventType) {
+                const auto& request = ev->Get<TEvBlobStorage::TEvControllerConfigRequest>()->Record.GetRequest();
+                for (const auto& command : request.GetCommand()) {
+                    if (command.HasReassignGroupDisk()) {
+                        const auto& reassign = command.GetReassignGroupDisk();
+                        firstReassignedOrderNumber = topology.GetOrderNumber(TVDiskIdShort(
+                            reassign.GetFailRealmIdx(), reassign.GetFailDomainIdx(), reassign.GetVDiskIdx()));
+                        break;
+                    }
+                }
+            }
+            return true;
+        };
+
+        NKikimrBlobStorage::TConfigRequest request;
+        auto addStatusUpdate = [&](ui32 orderNumber, NKikimrBlobStorage::EDriveStatus driveStatus) {
+            const TPDiskId pdiskId = orderNumberToPDiskId.at(orderNumber);
+            auto* cmd = request.AddCommand()->MutableUpdateDriveStatus();
+            cmd->MutableHostKey()->SetNodeId(pdiskId.NodeId);
+            cmd->SetPDiskId(pdiskId.PDiskId);
+            cmd->SetStatus(driveStatus);
+            cmd->SetMaintenanceStatus(NKikimrBlobStorage::TMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED);
+        };
+        addStatusUpdate(maintenanceOrderNumber, NKikimrBlobStorage::EDriveStatus::ACTIVE);
+        addStatusUpdate(faultyOrderNumber, NKikimrBlobStorage::EDriveStatus::FAULTY);
+
+        const auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+        env.Sim(TDuration::Seconds(30));
+
+        UNIT_ASSERT(firstReassignedOrderNumber);
+        UNIT_ASSERT_VALUES_EQUAL(*firstReassignedOrderNumber, faultyOrderNumber);
+    }
+
     Y_UNIT_TEST(DefaultMaintenanceStatusValue) {
         const TBlobStorageGroupType erasure = TBlobStorageGroupType::ErasureMirror3dc;
         TEnvironmentSetup env({

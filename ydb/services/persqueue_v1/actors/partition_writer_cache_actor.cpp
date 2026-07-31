@@ -93,7 +93,7 @@ void TPartitionWriterCacheActor::Handle(NPQ::TEvPartitionWriter::TEvTxWriteReque
 
     if (auto* writer = GetPartitionWriter(event.SessionId, event.TxId, event.DeferredPublish, ctx); writer) {
         if (PendingWriteAccepted.Expected == Max<ui64>()) {
-            AFL_ENSURE(PendingWriteResponse.Expected == Max<ui64>());
+            AFL_ENSURE(PendingWriteResponse.Expected == Max<ui64>())("pending_write_response_expected", PendingWriteResponse.Expected)("partition", Partition)("tablet_id", TabletId);
 
             PendingWriteAccepted.Expected = event.Request->GetCookie();
             PendingWriteResponse.Expected = event.Request->GetCookie();
@@ -140,7 +140,7 @@ void TPartitionWriterCacheActor::Handle(NPQ::TEvPartitionWriter::TEvInitResult::
 
     auto key = std::make_pair(result.SessionId, result.TxId);
     auto p = Writers.find(key);
-    AFL_ENSURE(p != Writers.end());
+    AFL_ENSURE(p != Writers.end())("session_id", result.SessionId)("tx_id", result.TxId)("partition", Partition)("tablet_id", TabletId);
 
     if (result.IsSuccess()) {
         p->second->OnEvInitResult(ev);
@@ -161,7 +161,7 @@ void TPartitionWriterCacheActor::TryForwardToOwner(TEvent* event, TEventQueue<TE
                                                    ui64 cookie,
                                                    const TActorContext& ctx)
 {
-    AFL_ENSURE(queue.Expected != Max<ui64>());
+    AFL_ENSURE(queue.Expected != Max<ui64>())("queue_expected", queue.Expected)("cookie", cookie)("partition", Partition);
 
     if (queue.Expected == cookie) {
         ctx.Send(Owner, event);
@@ -185,7 +185,7 @@ void TPartitionWriterCacheActor::Handle(NPQ::TEvPartitionWriter::TEvWriteAccepte
 
     auto key = std::make_pair(result.SessionId, result.TxId);
     auto p = Writers.find(key);
-    AFL_ENSURE(p != Writers.end());
+    AFL_ENSURE(p != Writers.end())("session_id", result.SessionId)("tx_id", result.TxId)("partition", Partition)("tablet_id", TabletId);
 
     if (result.Cookie == p->second->SentRequests.front().Cookie) {
         p->second->OnWriteAccepted(result, ctx);
@@ -208,7 +208,7 @@ void TPartitionWriterCacheActor::Handle(NPQ::TEvPartitionWriter::TEvWriteRespons
 
     auto key = std::make_pair(result.SessionId, result.TxId);
     auto p = Writers.find(key);
-    AFL_ENSURE(p != Writers.end());
+    AFL_ENSURE(p != Writers.end())("session_id", result.SessionId)("tx_id", result.TxId)("partition", Partition)("tablet_id", TabletId);
 
     if (result.IsSuccess()) {
         ui64 cookie = result.Record.GetPartitionResponse().GetCookie();
@@ -268,14 +268,14 @@ auto TPartitionWriterCacheActor::GetPartitionWriter(
     RegisterPartitionWriter(sessionId, txId, deferredPublish, ctx);
 
     p = Writers.find(key);
-    AFL_ENSURE(p != Writers.end());
+    AFL_ENSURE(p != Writers.end())("session_id", sessionId)("tx_id", txId)("partition", Partition)("tablet_id", TabletId);
 
     return p->second.get();
 }
 
 bool TPartitionWriterCacheActor::TryDeleteOldestWriter(const TActorContext& ctx)
 {
-    AFL_ENSURE(!Writers.empty());
+    AFL_ENSURE(!Writers.empty())("reason", "writers must not be empty")("partition", Partition)("tablet_id", TabletId);
 
     auto minLastActivity = TInstant::Max();
     auto oldest = Writers.end();

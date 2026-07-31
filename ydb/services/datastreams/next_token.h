@@ -34,7 +34,7 @@ TNextToken(const TString& streamArn, ui32 alreadyRead, ui32 maxResults, ui64 cre
 TString Serialize() const {
     TString data;
     bool result = Proto.SerializeToString(&data);
-    AFL_ENSURE(result);
+    AFL_ENSURE(result)("reason", "failed to serialize next token")("stream_arn", Proto.GetStreamArn())("already_read", Proto.GetAlreadyRead());
     TString encoded;
     Base64Encode(data, encoded);
     return encoded;

@@ -131,7 +131,7 @@ void TPartition::ProcessChangeOwnerRequest(TAutoPtr<TEvPQ::TEvChangeOwner> ev, c
 
     if (it->second.NeedResetOwner || ev->Force) { //change owner
 
-        PQ_ENSURE(ReservedSize >= it->second.ReservedSize);
+        PQ_ENSURE(ReservedSize >= it->second.ReservedSize)("ReservedSize", ReservedSize)("requested", it->second.ReservedSize);
         ReservedSize -= it->second.ReservedSize;
 
         it->second.GenerateCookie(owner, ev->PipeClient, ev->Sender, TopicName(), Partition, ctx);//will change OwnerCookie
@@ -150,7 +150,7 @@ THashMap<TString, NKikimr::NPQ::TOwnerInfo>::iterator TPartition::DropOwner(THas
     YDB_LOG_DEBUG("TPartition::DropOwner",
         {"logPrefix", NPQ_LOG_PREFIX});
 
-    PQ_ENSURE(ReservedSize >= it->second.ReservedSize);
+    PQ_ENSURE(ReservedSize >= it->second.ReservedSize)("ReservedSize", ReservedSize)("requested", it->second.ReservedSize);
     ReservedSize -= it->second.ReservedSize;
     UpdateWriteBufferIsFullState(ctx.Now());
     TabletCounters.Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Set(ReservedSize);
@@ -168,7 +168,7 @@ void TPartition::Handle(TEvPQ::TEvChangeOwner::TPtr& ev, const TActorContext& ct
         {"logPrefix", NPQ_LOG_PREFIX});
 
     bool res = OwnerPipes.insert(ev->Get()->PipeClient).second;
-    PQ_ENSURE(res);
+    PQ_ENSURE(res)("reason", "operation failed");
     WaitToChangeOwner.push_back(ev->Release());
     ProcessChangeOwnerRequests(ctx);
 }
@@ -353,14 +353,14 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
 
             if (!already) {
                 if (wrOffset) {
-                    PQ_ENSURE(*wrOffset >= offset);
+                    PQ_ENSURE(*wrOffset >= offset)("wrOffset", *wrOffset)("offset", offset);
                     offset = *wrOffset;
                 }
             }
 
             if (!already && partNo + 1 == totalParts) {
                 if (it == SourceIdStorage.GetInMemorySourceIds().end()) {
-                    PQ_ENSURE(!writeResponse.Msg.HeartbeatVersion);
+                    PQ_ENSURE(!writeResponse.Msg.HeartbeatVersion)("HeartbeatVersion", writeResponse.Msg.HeartbeatVersion.has_value());
                     TabletCounters.Cumulative()[COUNTER_PQ_SID_CREATED].Increment(1);
                     SourceIdStorage.RegisterSourceId(s, seqNo, offset, CurrentTimestamp, producerEpoch);
                 } else if (const auto& hbVersion = writeResponse.Msg.HeartbeatVersion) {
@@ -417,7 +417,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
                 keyRange = TPartitionKeyRange::Parse(*body.KeyRange);
             }
 
-            PQ_ENSURE(body.AssignedOffset);
+            PQ_ENSURE(body.AssignedOffset)("reason", "assigned offset not set");
             SourceIdStorage.RegisterSourceId(body.SourceId, body.SeqNo, *body.AssignedOffset, CurrentTimestamp, std::move(keyRange));
             ReplyOk(ctx, response.GetCookie(), response.Span);
         } else if (response.IsDeregisterMessageGroup()) {
@@ -438,7 +438,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
                     keyRange = TPartitionKeyRange::Parse(*body.KeyRange);
                 }
 
-                PQ_ENSURE(body.AssignedOffset);
+                PQ_ENSURE(body.AssignedOffset)("reason", "assigned offset not set");
                 SourceIdStorage.RegisterSourceId(body.SourceId, body.SeqNo, *body.AssignedOffset, CurrentTimestamp, std::move(keyRange), true);
             }
 
@@ -636,7 +636,7 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     //if EndOffset changed there could be subscriptions witch could be completed
     TVector<std::pair<TReadInfo, ui64>> reads = Subscriber.GetReads(BlobEncoder.EndOffset);
     for (auto& read : reads) {
-        PQ_ENSURE(BlobEncoder.EndOffset > read.first.Offset);
+        PQ_ENSURE(BlobEncoder.EndOffset > read.first.Offset)("EndOffset", BlobEncoder.EndOffset)("read_offset", read.first.Offset);
         ProcessRead(ctx, std::move(read.first), read.second, true);
     }
     //same for read requests
@@ -768,8 +768,8 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
     }
     for (const auto& msg: ev->Get()->Msgs) {
         //this is checked in pq_impl when forming EvWrite request
-        PQ_ENSURE(!msg.SourceId.empty() || ev->Get()->IsDirectWrite || msg.DisableDeduplication);
-        PQ_ENSURE(!msg.Data.empty());
+        PQ_ENSURE(!msg.SourceId.empty() || ev->Get()->IsDirectWrite || msg.DisableDeduplication)("SourceId", msg.SourceId)("IsDirectWrite", ev->Get()->IsDirectWrite)("DisableDeduplication", msg.DisableDeduplication);
+        PQ_ENSURE(!msg.Data.empty())("Data_size", msg.Data.size());
 
         if (msg.SeqNo > (ui64)Max<i64>()) {
             YDB_LOG_ERROR("Request to write wrong SeqNo. Partition sourceId seqno",
@@ -816,7 +816,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
     WriteInflightSize += size;
 
     // TODO: remove decReservedSize == 0
-    PQ_ENSURE(size <= decReservedSize || decReservedSize == 0);
+    PQ_ENSURE(size <= decReservedSize || decReservedSize == 0)("size", size)("decReservedSize", decReservedSize);
     UpdateWriteBufferIsFullState(ctx.Now());
 
 }
@@ -1410,7 +1410,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         return false;
     }
 
-    PQ_ENSURE(poffset >= curOffset);
+    PQ_ENSURE(poffset >= curOffset)("poffset", poffset)("curOffset", curOffset);
 
     bool needCompactHead = poffset > curOffset;
     if (needCompactHead) { //got gap
@@ -1558,9 +1558,9 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     }
 
     if (lastBlobPart) {
-        PQ_ENSURE(BlobEncoder.PartitionedBlob.IsComplete());
+        PQ_ENSURE(BlobEncoder.PartitionedBlob.IsComplete())("reason", "partitioned blob not complete");
         ui32 curWrites = RenameTmpCmdWrites(request);
-        PQ_ENSURE(curWrites <= BlobEncoder.PartitionedBlob.GetFormedBlobs().size());
+        PQ_ENSURE(curWrites <= BlobEncoder.PartitionedBlob.GetFormedBlobs().size())("curWrites", curWrites)("FormedBlobs_size", BlobEncoder.PartitionedBlob.GetFormedBlobs().size());
         RenameFormedBlobs(BlobEncoder.PartitionedBlob.GetFormedBlobs(),
                           parameters,
                           curWrites,
@@ -1583,7 +1583,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
                 ++countOfLastParts;
             }
 
-            PQ_ENSURE(!BlobEncoder.NewHead.GetLastBatch().Packed);
+            PQ_ENSURE(!BlobEncoder.NewHead.GetLastBatch().Packed)("Packed", BlobEncoder.NewHead.GetLastBatch().Packed);
             BlobEncoder.NewHead.AddBlob(x);
             BlobEncoder.NewHead.PackedSize += x.GetSerializedSize();
             if (BlobEncoder.NewHead.GetLastBatch().GetUnpackedSize() >= BATCH_UNPACK_SIZE_BORDER) {
@@ -1591,7 +1591,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             }
         }
 
-        PQ_ENSURE(countOfLastParts == 1);
+        PQ_ENSURE(countOfLastParts == 1)("countOfLastParts", countOfLastParts);
 
         YDB_LOG_DEBUG("Topic partition part blob complete sourceId seqNo partNo FormedBlobsCount",
             {"logPrefix", NPQ_LOG_PREFIX},
@@ -1620,12 +1620,13 @@ std::pair<TKey, ui32> TPartition::GetNewFastWriteKeyImpl(bool headCleared, ui32 
     TKey key = BlobEncoder.KeyForFastWrite(TKeyPrefix::TypeData, Partition);
 
     BlobEncoder.DataKeysHead[TotalLevels - 1].AddKey(key, BlobEncoder.NewHead.PackedSize);
-    PQ_ENSURE(headSize + BlobEncoder.NewHead.PackedSize <= 3 * MaxSizeCheck);
+    PQ_ENSURE(headSize + BlobEncoder.NewHead.PackedSize <= 3 * MaxSizeCheck)("headSize", headSize)("NewHead.PackedSize", BlobEncoder.NewHead.PackedSize)("MaxSizeCheck", MaxSizeCheck);
 
     auto res = BlobEncoder.Compact(key, headCleared);
-    PQ_ENSURE(res.first.HasSuffix());//may compact some KV blobs from head, but new KV blob is from head too
-    PQ_ENSURE(res.second >= BlobEncoder.NewHead.PackedSize); //at least new data must be writed
-    PQ_ENSURE(res.second <= MaxBlobSize);
+    PQ_ENSURE(res.first.HasSuffix()) //may compact some KV blobs from head, but new KV blob is from head too
+        ("key", res.first.ToString())("has_suffix", res.first.HasSuffix());
+    PQ_ENSURE(res.second >= BlobEncoder.NewHead.PackedSize)("res_second", res.second)("NewHead.PackedSize", BlobEncoder.NewHead.PackedSize);
+    PQ_ENSURE(res.second <= MaxBlobSize)("res_second", res.second)("MaxBlobSize", MaxBlobSize);
 
     return res;
 }
@@ -1634,7 +1635,7 @@ std::pair<TKey, ui32> TPartition::GetNewFastWriteKey(bool headCleared)
 {
     ui32 headSize = headCleared ? 0 : BlobEncoder.Head.PackedSize;
 
-    PQ_ENSURE(BlobEncoder.NewHead.PackedSize > 0); // smthing must be here
+    PQ_ENSURE(BlobEncoder.NewHead.PackedSize > 0)("NewHead.PackedSize", BlobEncoder.NewHead.PackedSize);
 
     return GetNewFastWriteKeyImpl(headCleared, headSize);
 }
@@ -1662,7 +1663,7 @@ void TPartition::AddNewFastWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TE
         write->SetTactic(AppData(ctx)->PQConfig.GetTactic());
     }
 
-    PQ_ENSURE(BlobEncoder.NewHeadKey.Size == 0);
+    PQ_ENSURE(BlobEncoder.NewHeadKey.Size == 0)("NewHeadKey.Size", BlobEncoder.NewHeadKey.Size);
     BlobEncoder.NewHeadKey = {key, res.second, PendingWriteTimestamp, 0, MakeBlobKeyToken(key.ToString())};
 
     WriteCycleSize += write->GetValue().size();
@@ -1795,7 +1796,7 @@ void TPartition::HandlePendingRequests(const TActorContext& ctx)
 
 void TPartition::BeginHandleRequests(TEvKeyValue::TEvRequest* request, const TActorContext& ctx)
 {
-    PQ_ENSURE(BlobEncoder.Head.PackedSize + BlobEncoder.NewHead.PackedSize <= 2 * MaxSizeCheck);
+    PQ_ENSURE(BlobEncoder.Head.PackedSize + BlobEncoder.NewHead.PackedSize <= 2 * MaxSizeCheck)("Head.PackedSize", BlobEncoder.Head.PackedSize)("NewHead.PackedSize", BlobEncoder.NewHead.PackedSize)("MaxSizeCheck", MaxSizeCheck);
 
     TInstant now = ctx.Now();
     WriteCycleStartTime = now;
@@ -1836,7 +1837,7 @@ void TPartition::BeginProcessWrites(const TActorContext& ctx)
 void TPartition::EndProcessWrites(TEvKeyValue::TEvRequest* request, const TActorContext& ctx)
 {
     if (BlobEncoder.HeadCleared) {
-        PQ_ENSURE(!BlobEncoder.CompactedKeys.empty() || BlobEncoder.Head.PackedSize == 0);
+        PQ_ENSURE(!BlobEncoder.CompactedKeys.empty() || BlobEncoder.Head.PackedSize == 0)("CompactedKeys_size", BlobEncoder.CompactedKeys.size())("Head.PackedSize", BlobEncoder.Head.PackedSize);
         for (ui32 i = 0; i < TotalLevels; ++i) {
             BlobEncoder.DataKeysHead[i].Clear();
         }
@@ -1895,7 +1896,7 @@ void TPartition::BeginAppendHeadWithNewWrites(const TActorContext& ctx)
     BlobEncoder.NewHead.PartNo = 0;
     BlobEncoder.NewHead.PackedSize = 0;
 
-    PQ_ENSURE(BlobEncoder.NewHead.GetBatches().empty());
+    PQ_ENSURE(BlobEncoder.NewHead.GetBatches().empty())("Batches_size", BlobEncoder.NewHead.GetBatches().size());
 
     Parameters->OldPartsCleared = false;
     Parameters->HeadCleared = (BlobEncoder.Head.PackedSize == 0);
@@ -1944,7 +1945,11 @@ void TPartition::EndAppendHeadWithNewWrites(const TActorContext& ctx)
         BlobEncoder.PackLastBatch();
     }
 
-    PQ_ENSURE((Parameters->HeadCleared ? 0 : BlobEncoder.Head.PackedSize) + BlobEncoder.NewHead.PackedSize <= MaxBlobSize); //otherwise last PartitionedBlob.Add must compact all except last cl
+    PQ_ENSURE((Parameters->HeadCleared ? 0 : BlobEncoder.Head.PackedSize) + BlobEncoder.NewHead.PackedSize <= MaxBlobSize) //otherwise last PartitionedBlob.Add must compact all except last cl
+        ("head_cleared", Parameters->HeadCleared)
+        ("head_packed_size", BlobEncoder.Head.PackedSize)
+        ("new_head_packed_size", BlobEncoder.NewHead.PackedSize)
+        ("max_blob_size", MaxBlobSize);
     BlobEncoder.MaxWriteResponsesSize = Max<ui32>(BlobEncoder.MaxWriteResponsesSize, Responses.size());
 
     BlobEncoder.HeadCleared = Parameters->HeadCleared;
@@ -1982,7 +1987,7 @@ void TPartition::RequestBlobQuota(size_t quotaSize, size_t messagesQuotaSize)
     YDB_LOG_TRACE("TPartition::RequestBlobQuota",
         {"logPrefix", NPQ_LOG_PREFIX});
 
-    PQ_ENSURE(!WaitingForPreviousBlobQuota());
+    PQ_ENSURE(!WaitingForPreviousBlobQuota())("reason", "waiting for previous blob quota");
 
     TopicQuotaRequestCookie = NextTopicWriteQuotaRequestCookie++;
     BlobQuotaSize = quotaSize;
@@ -1996,7 +2001,7 @@ void TPartition::ConsumeBlobQuota()
         return;
     }
 
-    PQ_ENSURE(TopicQuotaRequestCookie != 0);
+    PQ_ENSURE(TopicQuotaRequestCookie != 0)("TopicQuotaRequestCookie", TopicQuotaRequestCookie);
     Send(WriteQuotaTrackerActor, new TEvPQ::TEvConsumed(BlobQuotaSize, MessagesQuotaSize, TopicQuotaRequestCookie, {}));
 }
 

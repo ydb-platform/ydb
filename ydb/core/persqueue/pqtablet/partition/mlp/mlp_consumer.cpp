@@ -314,7 +314,7 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
 
             switch(readResult.GetStatus()) {
                 case NKikimrProto::OK: {
-                    AFL_ENSURE(readResult.HasValue() && readResult.GetValue().size());
+                    AFL_ENSURE(readResult.HasValue() && readResult.GetValue().size())("has_value", readResult.HasValue())("value_size", readResult.GetValue().size());
 
                     NKikimrPQ::TMLPStorageSnapshot snapshot;
                     if (!snapshot.ParseFromString(readResult.GetValue())) {
@@ -1041,7 +1041,7 @@ void TConsumerActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
     }
 
     auto& response = ev->Get()->Record;
-    AFL_ENSURE(response.GetPartitionResponse().HasCmdReadResult());
+    AFL_ENSURE(response.GetPartitionResponse().HasCmdReadResult())("reason", "read result not set");
     auto& results = response.GetPartitionResponse().GetCmdReadResult();
 
     bool allMessagesAdded = false;

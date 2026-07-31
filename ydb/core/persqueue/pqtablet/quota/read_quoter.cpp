@@ -30,7 +30,7 @@ TString TReadQuoter::BuildLogPrefix() const {
 }
 
 void TReadQuoter::CheckConsumerPerPartitionQuota(TRequestContext&& context) {
-    AFL_ENSURE(context.Request->Request);
+    AFL_ENSURE(context.Request->Request)("reason", "request not set");
     auto consumerQuota = GetOrCreateConsumerQuota(
             context.Request->Request->CastAsLocal<TEvPQ::TEvRead>()->ClientId,
             ActorContext()
@@ -180,7 +180,7 @@ THolder<TAccountQuoterHolder> TReadQuoter::CreateAccountQuotaTracker(const TStri
 }
 
 TConsumerReadQuota* TReadQuoter::GetOrCreateConsumerQuota(const TString& consumerStr, const TActorContext& ctx) {
-    AFL_ENSURE(!consumerStr.empty());
+    AFL_ENSURE(!consumerStr.empty())("consumerStr", consumerStr);
     auto it = ConsumerQuotas.find(consumerStr);
     if (it == ConsumerQuotas.end()) {
         TConsumerReadQuota consumer(

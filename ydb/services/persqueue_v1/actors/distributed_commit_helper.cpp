@@ -57,7 +57,7 @@ bool TDistributedCommitHelper::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TP
     }
 
     KqpSessionId = record.GetResponse().GetSessionId();
-    AFL_ENSURE(!KqpSessionId.empty());
+    AFL_ENSURE(!KqpSessionId.empty())("reason", "KQP session id expected")("cookie", Cookie)("path", Path);
     BeginTransaction(ctx);
     return true;
 }
@@ -85,7 +85,7 @@ THolder<NKqp::TEvKqp::TEvCloseSessionRequest> TDistributedCommitHelper::MakeClos
 void TDistributedCommitHelper::SendCommits(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const NActors::TActorContext& ctx) {
     auto& record = ev->Get()->Record;
     TxId = record.GetResponse().GetTxMeta().id();
-    AFL_ENSURE(!TxId.empty());
+    AFL_ENSURE(!TxId.empty())("reason", "transaction id expected")("cookie", Cookie)("path", Path);
 
     auto offsets = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
     offsets->Record.MutableRequest()->SetDatabase(DataBase);

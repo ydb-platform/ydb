@@ -229,9 +229,13 @@ private:
                 YDB_LOG_DEBUG_CTX(Ctx(), "HandleWhileWorking TEvQueryResponse UpdateClustersList");
                 UpdateClustersList(parser);
 
-                AFL_ENSURE(ClustersList);
-                AFL_ENSURE(ClustersList->Clusters.size());
-                AFL_ENSURE(ClustersListUpdateTimestamp && *ClustersListUpdateTimestamp);
+                AFL_ENSURE(ClustersList)("reason", "clusters list must be parsed");
+                AFL_ENSURE(ClustersList->Clusters.size())
+                    ("reason", "clusters list must not be empty")("clusters_size", ClustersList->Clusters.size());
+                AFL_ENSURE(ClustersListUpdateTimestamp && *ClustersListUpdateTimestamp)
+                    ("reason", "clusters list update timestamp must be set")
+                    ("has_timestamp", ClustersListUpdateTimestamp.Defined())
+                    ("timestamp", ClustersListUpdateTimestamp ? ClustersListUpdateTimestamp->ToString() : TString());
 
                 BroadcastClustersUpdate();
                 ReplyAllGetClustersListRequests();

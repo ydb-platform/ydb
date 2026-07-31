@@ -31,13 +31,13 @@ TString GetSerializedData(const NYdb::NPersQueue::TReadSessionEvent::TDataReceiv
     proto.SetSeqNo(message.GetSeqNo(0));
     proto.SetCreateTime(message.GetCreateTime(0).MilliSeconds());
     auto codec = NPQ::FromV1Codec(message.GetCodec());
-    AFL_ENSURE(codec);
+    AFL_ENSURE(codec)("reason", "unsupported codec")("codec", static_cast<int>(message.GetCodec()));
     proto.SetCodec(codec.value());
     proto.SetData(TString{message.GetData()});
 
     TString str;
     bool res = proto.SerializeToString(&str);
-    AFL_ENSURE(res);
+    AFL_ENSURE(res)("reason", "failed to serialize data chunk")("seq_no", message.GetSeqNo(0));
     return str;
 }
 
@@ -68,7 +68,7 @@ TString GetSerializedData(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEv
 
     TString str;
     bool res = proto.SerializeToString(&str);
-    AFL_ENSURE(res);
+    AFL_ENSURE(res)("reason", "failed to serialize data chunk")("seq_no", message.GetSeqNo());
     return str;
 }
 

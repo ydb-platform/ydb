@@ -96,7 +96,7 @@ public:
         }
 
         KqpSessionId = record.GetResponse().GetSessionId();
-        AFL_ENSURE(!KqpSessionId.empty());
+        AFL_ENSURE(!KqpSessionId.empty())("reason", "KQP session id must be set")("topic", TopicName);
 
         return true;
     }
@@ -165,7 +165,7 @@ public:
 
         NYdb::TResultSetParser parser(record.GetResponse().GetYdbResults(0));
         TxId = record.GetResponse().GetTxMeta().id();
-        AFL_ENSURE(!TxId.empty());
+        AFL_ENSURE(!TxId.empty())("reason", "transaction id must be set")("topic", TopicName)("kqp_session_id", KqpSessionId);
 
         while(parser.TryNextRow()) {
             auto tt = parser.ColumnParser(0).GetOptionalUint32();

@@ -46,7 +46,7 @@ namespace NPQ {
         {
             ui64 cookie = Cookie++;
             auto savedRequest = KvRequests.emplace(cookie, std::move(kvRequest));
-            AFL_ENSURE(savedRequest.second);
+            AFL_ENSURE(savedRequest.second)("cookie", cookie);
             return cookie;
         }
 
@@ -108,7 +108,7 @@ namespace NPQ {
 
         void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx)
         {
-            AFL_ENSURE(ev->Sender == TabletActorId);
+            AFL_ENSURE(ev->Sender == TabletActorId)("Sender", ev->Sender)("TabletActorId", TabletActorId);
             Die(ctx);
         }
 
@@ -162,9 +162,9 @@ namespace NPQ {
         void Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx)
         {
             const auto& resp = ev->Get()->Record;
-            AFL_ENSURE(resp.HasCookie());
+            AFL_ENSURE(resp.HasCookie())("reason", "cookie not set");
             auto it = KvRequests.find(resp.GetCookie());
-            AFL_ENSURE(it != KvRequests.end());
+            AFL_ENSURE(it != KvRequests.end())("cookie", resp.GetCookie());
 
             switch (it->second.Type) {
             case TKvRequest::TypeRead:
@@ -217,7 +217,7 @@ namespace NPQ {
                         AFL_ENSURE(i > 0)("description", "OVERRUN in first read request")("i", i);
                         break;
                     } else if (r->GetStatus() == NKikimrProto::OK) {
-                        AFL_ENSURE(r->HasValue() && r->GetValue().size());
+                        AFL_ENSURE(r->HasValue() && r->GetValue().size())("has_value", r->HasValue())("value_size", r->GetValue().size());
 
                         // skip cached blobs, find position for the next value
                         while (pos < outBlobs.size() && !outBlobs[pos].Empty()) {
@@ -228,7 +228,7 @@ namespace NPQ {
                             ("pos", pos)("outBlobs.size()", outBlobs.size());
                         kvBlobs[pos] = true;
 
-                        AFL_ENSURE(outBlobs[pos].Empty());
+                        AFL_ENSURE(outBlobs[pos].Empty())("pos", pos);
                         outBlobs[pos].RawValue = r->GetValue();
                         outBlobs[pos].CreationUnixTime = r->GetCreationUnixTime();
                     } else {
@@ -397,7 +397,7 @@ namespace NPQ {
         void Handle(TEvPqCache::TEvCacheL2Response::TPtr& ev, const TActorContext& ctx)
         {
             THolder<TCacheL2Response> resp(ev->Get()->Data.Release());
-            AFL_ENSURE(resp->TabletId == TabletId);
+            AFL_ENSURE(resp->TabletId == TabletId)("TabletId", resp->TabletId)("expected", TabletId);
 
             for (const TCacheBlobL2& blob : resp->Removed)
                 Cache.RemoveEvictedBlob(ctx, TBlobId(blob.Partition, blob.Offset, blob.PartNo, blob.Count, blob.InternalPartsCount, blob.Suffix), blob.Value);

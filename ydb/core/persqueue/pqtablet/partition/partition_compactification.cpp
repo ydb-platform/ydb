@@ -111,12 +111,12 @@ void TPartitionCompaction::ProcessResponse(TEvPQ::TEvProxyResponse::TPtr& ev) {
     bool processResponseResult = true;
     switch (Step) {
         case EStep::READING: {
-            AFL_ENSURE(ReadState);
+            AFL_ENSURE(ReadState)("reason", "read state not set");
             processResponseResult = ReadState->ProcessResponse(ev);
             break;
         }
         case EStep::COMPACTING: {
-            AFL_ENSURE(CompactState);
+            AFL_ENSURE(CompactState)("reason", "compact state not set");
             processResponseResult = CompactState->ProcessResponse(ev);
             break;
         }
@@ -159,7 +159,7 @@ void TPartitionCompaction::ProcessResponse(NBatching::TEvProcessBatchKeysResult:
 
 void TPartitionCompaction::ProcessResponse(TEvKeyValue::TEvResponse::TPtr& ev) {
     //Partition must reset this flag;
-    AFL_ENSURE(!PartitionActor->CompacterKvRequestInflight);
+    AFL_ENSURE(!PartitionActor->CompacterKvRequestInflight)("CompacterKvRequestInflight", PartitionActor->CompacterKvRequestInflight);
     YDB_LOG_DEBUG("Compaction for topic Process KV response",
         {"logPrefix", LogPrefix()},
         {"clientSideName", PartitionActor->TopicConverter->GetClientsideName()},
@@ -229,7 +229,7 @@ ui64 GetLogicalMessageCount(const NKikimrClient::TCmdReadResult::TResult& messag
 }
 
 void TPartitionCompaction::TReadState::ProcessResponse(NBatching::TEvProcessBatchKeysResult::TPtr& ev) {
-    AFL_ENSURE(BatchKeysRequestsInflight > 0);
+    AFL_ENSURE(BatchKeysRequestsInflight > 0)("BatchKeysRequestsInflight", BatchKeysRequestsInflight);
     --BatchKeysRequestsInflight;
 
     for (auto& [offset, key] : ev->Get()->OffsetToKey) {
@@ -271,7 +271,7 @@ bool TPartitionCompaction::TReadState::ProcessResponse(TEvPQ::TEvProxyResponse::
             }
             // otherwise it's a single part message, will parse it in place
         } else { //glue to last res
-            AFL_ENSURE(LastMessage.Defined());
+            AFL_ENSURE(LastMessage.Defined())("reason", "last message not defined");
             //auto rr = partResp->MutableResult(partResp->ResultSize() - 1);
             if (LastMessage->GetSeqNo() != res.GetSeqNo()
                 || LastMessage->GetPartNo() + 1 != res.GetPartNo()
@@ -283,7 +283,7 @@ bool TPartitionCompaction::TReadState::ProcessResponse(TEvPQ::TEvProxyResponse::
                     {"seqNo", res.GetSeqNo()},
                     {"partNo", res.GetPartNo()});
             }
-            AFL_ENSURE(LastMessage->GetSeqNo() == res.GetSeqNo());
+            AFL_ENSURE(LastMessage->GetSeqNo() == res.GetSeqNo())("last_seqNo", LastMessage->GetSeqNo())("seqNo", res.GetSeqNo());
             (*LastMessage->MutableData()) += res.GetData();
             LastMessage->SetPartitionKey(res.GetPartitionKey());
             LastMessage->SetPartNo(res.GetPartNo());
@@ -291,7 +291,7 @@ bool TPartitionCompaction::TReadState::ProcessResponse(TEvPQ::TEvProxyResponse::
             LastMessage->SetLogicalMessageCount(res.GetLogicalMessageCount());
             LastMessage->SetIsBatch(res.GetIsBatch());
             if (res.HasTotalParts() && res.GetPartNo() + 1 == res.GetTotalParts()) {
-                AFL_ENSURE((ui32)LastMessage->GetTotalSize() == (ui32)LastMessage->GetData().size());
+                AFL_ENSURE((ui32)LastMessage->GetTotalSize() == (ui32)LastMessage->GetData().size())("totalSize", LastMessage->GetTotalSize())("data_size", LastMessage->GetData().size());
             }
         }
         if (isLastPart) {
@@ -327,7 +327,7 @@ bool TPartitionCompaction::TReadState::ProcessResponse(TEvPQ::TEvProxyResponse::
 
             LastMessage = Nothing();
         } else {
-            AFL_ENSURE(LastMessage.Defined());
+            AFL_ENSURE(LastMessage.Defined())("reason", "last message not defined");
             OffsetToRead = LastMessage->GetOffset();
             NextPartNo = LastMessage->GetPartNo() + 1;
         }
@@ -427,7 +427,7 @@ TPartitionCompaction::EStep TPartitionCompaction::TCompactState::ContinueIfPossi
     if (BatchKeysRequestInflight) {
         return EStep::COMPACTING;
     }
-    AFL_ENSURE(!PartitionActor->CompacterPartitionRequestInflight && !PartitionActor->CompacterKvRequestInflight);
+    AFL_ENSURE(!PartitionActor->CompacterPartitionRequestInflight && !PartitionActor->CompacterKvRequestInflight)("CompacterPartitionRequestInflight", PartitionActor->CompacterPartitionRequestInflight)("CompacterKvRequestInflight", PartitionActor->CompacterKvRequestInflight);
 
     bool doFinalize = false;
     while (KeysIter != DataKeysBody.end()) {
@@ -556,8 +556,8 @@ bool TPartitionCompaction::TCompactState::MaybeRequestBatchKeys(NKikimrClient::T
 }
 
 bool TPartitionCompaction::TCompactState::ProcessResponse(NBatching::TEvProcessBatchKeysResult::TPtr& ev) {
-    AFL_ENSURE(BatchKeysRequestInflight);
-    AFL_ENSURE(PendingReadResult);
+    AFL_ENSURE(BatchKeysRequestInflight)("BatchKeysRequestInflight", BatchKeysRequestInflight);
+    AFL_ENSURE(PendingReadResult)("reason", "pending read result not set");
 
     BatchKeysRequestInflight = false;
     PendingBatchOffsetKeys = std::move(ev->Get()->OffsetToKey);
@@ -658,7 +658,7 @@ bool TPartitionCompaction::TCompactState::ProcessReadResult(NKikimrClient::TCmdR
                 ("seqNo", res.GetSeqNo());
             CurrentMessage = Nothing();
         }
-        AFL_ENSURE(res.GetData().size() != 0);
+        AFL_ENSURE(res.GetData().size() != 0)("data_size", res.GetData().size());
 
         bool isLastPart = !res.HasTotalParts()
                           || res.GetTotalParts() == res.GetPartNo() + 1;
@@ -667,7 +667,7 @@ bool TPartitionCompaction::TCompactState::ProcessReadResult(NKikimrClient::TCmdR
         if (isNewMsg) {
             CurrentMessage.ConstructInPlace().CopyFrom(res);
         } else { //glue to last res
-            AFL_ENSURE(CurrentMessage.Defined());
+            AFL_ENSURE(CurrentMessage.Defined())("reason", "current message not defined");
             if (CurrentMessage->GetSeqNo() != res.GetSeqNo()
                 || CurrentMessage->GetPartNo() + 1 != res.GetPartNo()
             ) {
@@ -678,7 +678,7 @@ bool TPartitionCompaction::TCompactState::ProcessReadResult(NKikimrClient::TCmdR
                     {"seqNo", res.GetSeqNo()},
                     {"partNo", res.GetPartNo()});
             }
-            AFL_ENSURE(CurrentMessage->GetSeqNo() == res.GetSeqNo());
+            AFL_ENSURE(CurrentMessage->GetSeqNo() == res.GetSeqNo())("current_seqNo", CurrentMessage->GetSeqNo())("seqNo", res.GetSeqNo());
             (*CurrentMessage->MutableData()) += res.GetData();
             CurrentMessage->SetPartitionKey(res.GetPartitionKey());
             CurrentMessage->SetPartNo(res.GetPartNo());
@@ -691,7 +691,7 @@ bool TPartitionCompaction::TCompactState::ProcessReadResult(NKikimrClient::TCmdR
 
         if (isLastPart) {
             LastProcessedOffset = res.GetOffset();
-            AFL_ENSURE(!CurrentMessage->HasTotalSize() || (ui32)CurrentMessage->GetTotalSize() == CurrentMessage->GetData().size());
+            AFL_ENSURE(!CurrentMessage->HasTotalSize() || (ui32)CurrentMessage->GetTotalSize() == CurrentMessage->GetData().size())("totalSize", CurrentMessage->GetTotalSize())("data_size", CurrentMessage->GetData().size());
             auto offset = CurrentMessage->GetOffset();
             bool keepMessage = false;
             if (CurrentMessage->GetIsBatch()) {
@@ -849,8 +849,8 @@ void TPartitionCompaction::TCompactState::AddDeleteRange(const TKey& key) {
 void TPartitionCompaction::TCompactState::RunKvRequest() {
     // TODO verify that the last message is full
     CurrentMessage.Clear();
-    AFL_ENSURE(Request);
-    AFL_ENSURE(!PartitionActor->CompacterKvRequestInflight);
+    AFL_ENSURE(Request)("reason", "request not set");
+    AFL_ENSURE(!PartitionActor->CompacterKvRequestInflight)("CompacterKvRequestInflight", PartitionActor->CompacterKvRequestInflight);
 
     for (const auto&[offset, key] : EmptyBlobs) {
         AddDeleteRange(key);
@@ -864,7 +864,7 @@ void TPartitionCompaction::TCompactState::RunKvRequest() {
 
 
 bool TPartitionCompaction::TCompactState::ProcessKVResponse(TEvKeyValue::TEvResponse::TPtr& ev) {
-    AFL_ENSURE(!PartitionActor->CompacterKvRequestInflight);
+    AFL_ENSURE(!PartitionActor->CompacterKvRequestInflight)("CompacterKvRequestInflight", PartitionActor->CompacterKvRequestInflight);
     auto& response = ev->Get()->Record;
     if (response.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
         YDB_LOG_CRIT("Partition compaction state: Got not OK KV response",
@@ -909,7 +909,7 @@ void TPartitionCompaction::TCompactState::SendCommit(ui64 cookie) {
 }
 
 void TPartitionCompaction::TCompactState::UpdateDataKeysBody() {
-    AFL_ENSURE(UpdatedKeys || DeletedKeys);
+    AFL_ENSURE(UpdatedKeys || DeletedKeys)("UpdatedKeys", UpdatedKeys)("DeletedKeys", DeletedKeys);
 
     auto itUpdated = UpdatedKeys.begin();
     auto itDeleted = DeletedKeys.begin();

@@ -20,7 +20,7 @@ public:
     }
 
     void SendRequest(const NActors::TActorContext& ctx) {
-        AFL_ENSURE(BalancerTabletId);
+        AFL_ENSURE(BalancerTabletId)("reason", "balancer tablet id must be set")("balancer_tablet_id", BalancerTabletId);
 
         if (!Pipe) {
             NTabletPipe::TClientConfig clientConfig;

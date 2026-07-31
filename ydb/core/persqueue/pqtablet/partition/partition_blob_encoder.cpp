@@ -25,33 +25,33 @@ void TPartitionBlobEncoder::CheckHeadConsistency(const TVector<ui32>& compactLev
     for (ui32 j = 0; j < DataKeysHead.size(); ++j) {
         ui32 s = 0;
         for (ui32 k = 0; k < DataKeysHead[j].KeysCount(); ++k) {
-            AFL_ENSURE(p < HeadKeys.size());
+            AFL_ENSURE(p < HeadKeys.size())("p", p)("HeadKeys_size", HeadKeys.size());
             AFL_ENSURE(DataKeysHead[j].GetKey(k) == HeadKeys[p].Key)
                 ("j", j)
                 ("k", k)
                 ("p", p)
                 ("l", DataKeysHead[j].GetKey(k).ToString())
                 ("r", HeadKeys[p].Key.ToString());
-            AFL_ENSURE(DataKeysHead[j].GetSize(k) == HeadKeys[p].Size);
+            AFL_ENSURE(DataKeysHead[j].GetSize(k) == HeadKeys[p].Size)("j", j)("k", k)("p", p)("head_size", HeadKeys[p].Size)("level_size", DataKeysHead[j].GetSize(k));
             s += DataKeysHead[j].GetSize(k);
-            AFL_ENSURE(j + 1 == totalLevels || DataKeysHead[j].GetSize(k) >= compactLevelBorder[j + 1]);
+            AFL_ENSURE(j + 1 == totalLevels || DataKeysHead[j].GetSize(k) >= compactLevelBorder[j + 1])("j", j)("totalLevels", totalLevels)("size", DataKeysHead[j].GetSize(k))("border", compactLevelBorder[j + 1]);
             ++p;
         }
-        AFL_ENSURE(s < DataKeysHead[j].Border());
+        AFL_ENSURE(s < DataKeysHead[j].Border())("s", s)("Border", DataKeysHead[j].Border())("j", j);
     }
     AFL_ENSURE(DataKeysBody.empty() ||
                    Head.Offset >= DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount())
                    ("DataKeysBody.size", DataKeysBody.size())
                    ("lastKey", DataKeysBody.back().Key.ToString())
                    ("head.offset", Head.Offset);
-    AFL_ENSURE(p == HeadKeys.size());
+    AFL_ENSURE(p == HeadKeys.size())("p", p)("HeadKeys_size", HeadKeys.size());
     if (!HeadKeys.empty()) {
-        AFL_ENSURE(HeadKeys.size() <= totalMaxCount);
-        AFL_ENSURE(HeadKeys.front().Key.GetOffset() == Head.Offset);
-        AFL_ENSURE(HeadKeys.front().Key.GetPartNo() == Head.PartNo);
+        AFL_ENSURE(HeadKeys.size() <= totalMaxCount)("HeadKeys_size", HeadKeys.size())("totalMaxCount", totalMaxCount);
+        AFL_ENSURE(HeadKeys.front().Key.GetOffset() == Head.Offset)("head_offset", Head.Offset)("key_offset", HeadKeys.front().Key.GetOffset());
+        AFL_ENSURE(HeadKeys.front().Key.GetPartNo() == Head.PartNo)("head_partNo", Head.PartNo)("key_partNo", HeadKeys.front().Key.GetPartNo());
         for (p = 1; p < HeadKeys.size(); ++p) {
-            AFL_ENSURE(HeadKeys[p].Key.GetOffset() == HeadKeys[p-1].Key.GetOffset() + HeadKeys[p-1].Key.GetCount());
-            AFL_ENSURE(HeadKeys[p].Key.ToString() > HeadKeys[p-1].Key.ToString());
+            AFL_ENSURE(HeadKeys[p].Key.GetOffset() == HeadKeys[p-1].Key.GetOffset() + HeadKeys[p-1].Key.GetCount())("p", p)("prev_offset", HeadKeys[p-1].Key.GetOffset())("prev_count", HeadKeys[p-1].Key.GetCount())("offset", HeadKeys[p].Key.GetOffset());
+            AFL_ENSURE(HeadKeys[p].Key.ToString() > HeadKeys[p-1].Key.ToString())("p", p)("prev_key", HeadKeys[p-1].Key.ToString())("key", HeadKeys[p].Key.ToString());
         }
     }
 }
@@ -90,10 +90,11 @@ TVector<TRequestedBlob> TPartitionBlobEncoder::GetBlobsFromBody(const ui64 start
         if (it == DataKeysBody.begin()) { //could be true if data is deleted or gaps are created
             return blobs;
         }
-        AFL_ENSURE(it != DataKeysBody.begin()); //always greater, startoffset can't be less that StartOffset
-        AFL_ENSURE(it == DataKeysBody.end() || it->Key.GetOffset() > startOffset || it->Key.GetOffset() == startOffset && it->Key.GetPartNo() > partNo);
+        AFL_ENSURE(it != DataKeysBody.begin()) //always greater, startoffset can't be less that StartOffset
+            ("startOffset", startOffset)("partNo", partNo)("DataKeysBody_size", DataKeysBody.size());
+        AFL_ENSURE(it == DataKeysBody.end() || it->Key.GetOffset() > startOffset || it->Key.GetOffset() == startOffset && it->Key.GetPartNo() > partNo)("startOffset", startOffset)("partNo", partNo)("key_offset", it == DataKeysBody.end() ? 0 : it->Key.GetOffset())("key_partNo", it == DataKeysBody.end() ? 0 : it->Key.GetPartNo());
         --it;
-        AFL_ENSURE(it->Key.GetOffset() < startOffset || (it->Key.GetOffset() == startOffset && it->Key.GetPartNo() <= partNo));
+        AFL_ENSURE(it->Key.GetOffset() < startOffset || (it->Key.GetOffset() == startOffset && it->Key.GetPartNo() <= partNo))("startOffset", startOffset)("partNo", partNo)("key_offset", it->Key.GetOffset())("key_partNo", it->Key.GetPartNo());
         ui32 cnt = 0;
         ui32 sz = 0;
         if (startOffset > it->Key.GetOffset() + it->Key.GetCount()) { //there is a gap or startOffset is inside the batch
@@ -105,7 +106,7 @@ TVector<TRequestedBlob> TPartitionBlobEncoder::GetBlobsFromBody(const ui64 start
                 sz = it->Size;
             }
         } else {
-            AFL_ENSURE(it->Key.GetCount() >= (startOffset - it->Key.GetOffset()));
+            AFL_ENSURE(it->Key.GetCount() >= (startOffset - it->Key.GetOffset()))("key_count", it->Key.GetCount())("startOffset", startOffset)("key_offset", it->Key.GetOffset());
             cnt = it->Key.GetCount() - (startOffset - it->Key.GetOffset()); //don't count all elements from first blob
             sz = (cnt == it->Key.GetCount() ? it->Size : 0); //not readed client blobs can be of ~8Mb, so don't count this size at all
         }
@@ -146,7 +147,7 @@ TVector<TClientBlob> TPartitionBlobEncoder::GetBlobsFromHead(const ui64 startOff
     ui32 pos = 0;
     if (!Head.GetBatches().empty() && PositionInHead(startOffset, partNo)) {
         pos = Head.FindPos(startOffset, partNo);
-        AFL_ENSURE(pos != Max<ui32>());
+        AFL_ENSURE(pos != Max<ui32>())("pos", pos);
     }
     ui32 lastBlobSize = 0;
     for (; pos < Head.GetBatches().size(); ++pos) {
@@ -159,7 +160,7 @@ TVector<TClientBlob> TPartitionBlobEncoder::GetBlobsFromHead(const ui64 startOff
 
             ui64 curOffset = offset;
 
-            AFL_ENSURE(pno == blobs[i].GetPartNo());
+            AFL_ENSURE(pno == blobs[i].GetPartNo())("pno", pno)("partNo", blobs[i].GetPartNo())("i", i);
             bool skip = (offset + blobs[i].LogicalMessageCount <= startOffset)
                 || (offset == startOffset && blobs[i].GetPartNo() < partNo);
 
@@ -237,7 +238,7 @@ ui64 TPartitionBlobEncoder::GetSizeLag(i64 offset) const
                 [](const std::pair<ui64, ui16>& offsetAndPartNo, const TDataKey& p) { return offsetAndPartNo.first < p.Key.GetOffset() || offsetAndPartNo.first == p.Key.GetOffset() && offsetAndPartNo.second < p.Key.GetPartNo();});
         if (it != DataKeysBody.begin())
             --it; //point to blob with this offset
-        AFL_ENSURE(it != DataKeysBody.end());
+        AFL_ENSURE(it != DataKeysBody.end())("reason", "data key not found");
         sizeLag = DataKeysBody.back().CumulativeSize + DataKeysBody.back().Size - it->CumulativeSize;
         AFL_ENSURE(BodySize == DataKeysBody.back().CumulativeSize + DataKeysBody.back().Size - DataKeysBody.front().CumulativeSize)
             ("BodySize", BodySize)
@@ -333,12 +334,12 @@ TString TPartitionBlobEncoder::SerializeForKey(const TKey& key, ui32 size,
 
     ui32 pp = Head.FindPos(key.GetOffset(), key.GetPartNo());
     if (pp < Max<ui32>() && key.GetOffset() < endOffset) { //this batch trully contains this offset
-        AFL_ENSURE(pp < Head.GetBatches().size());
-        AFL_ENSURE(Head.GetBatch(pp).GetOffset() == key.GetOffset());
-        AFL_ENSURE(Head.GetBatch(pp).GetPartNo() == key.GetPartNo());
+        AFL_ENSURE(pp < Head.GetBatches().size())("pp", pp)("Batches_size", Head.GetBatches().size());
+        AFL_ENSURE(Head.GetBatch(pp).GetOffset() == key.GetOffset())("pp", pp)("batch_offset", Head.GetBatch(pp).GetOffset())("key_offset", key.GetOffset());
+        AFL_ENSURE(Head.GetBatch(pp).GetPartNo() == key.GetPartNo())("pp", pp)("batch_partNo", Head.GetBatch(pp).GetPartNo())("key_partNo", key.GetPartNo());
 
         for (; pp < Head.GetBatches().size(); ++pp) { //TODO - merge small batches here
-            AFL_ENSURE(Head.GetBatch(pp).Packed);
+            AFL_ENSURE(Head.GetBatch(pp).Packed)("pp", pp)("Packed", Head.GetBatch(pp).Packed);
             const auto& b = Head.GetBatch(pp);
             b.SerializeTo(valueD);
             writeTimestamp = std::max(writeTimestamp, b.GetEndWriteTimestamp());
@@ -351,7 +352,7 @@ TString TPartitionBlobEncoder::SerializeForKey(const TKey& key, ui32 size,
         writeTimestamp = std::max(writeTimestamp, b.GetEndWriteTimestamp());
     }
 
-    AFL_ENSURE(size >= valueD.size());
+    AFL_ENSURE(size >= valueD.size())("size", size)("valueD_size", valueD.size());
 
     if (size > valueD.size() && key.HasSuffix()) { //change to real size if real packed size is smaller
         AFL_ENSURE(false)("reason", "Can't be here right now, only after merging of small batches")("key", key.ToString())("size", size)("value_size", valueD.size());
@@ -374,7 +375,7 @@ TString TPartitionBlobEncoder::SerializeForKey(const TKey& key, ui32 size,
         //}
     }
 
-    AFL_ENSURE(size == valueD.size() || key.HasSuffix());
+    AFL_ENSURE(size == valueD.size() || key.HasSuffix())("size", size)("valueD_size", valueD.size())("HasSuffix", key.HasSuffix());
 
     TClientBlob::CheckBlob(key, valueD);
 
@@ -402,7 +403,7 @@ TKey TPartitionBlobEncoder::KeyForWrite(TKeyPrefix::EType type,
                                         const TPartitionId& partitionId,
                                         bool needCompaction) const
 {
-    AFL_ENSURE(!ForFastWrite);
+    AFL_ENSURE(!ForFastWrite)("ForFastWrite", ForFastWrite);
     if (needCompaction) {
         return WithHeadOffsetDelta(
             TKey::ForBody(type, partitionId, NewHead.Offset, NewHead.PartNo, NewHead.GetCount(), NewHead.GetInternalPartsCount()),
@@ -415,7 +416,7 @@ TKey TPartitionBlobEncoder::KeyForWrite(TKeyPrefix::EType type,
 
 TKey TPartitionBlobEncoder::KeyForFastWrite(TKeyPrefix::EType type, const TPartitionId& partitionId) const
 {
-    AFL_ENSURE(ForFastWrite);
+    AFL_ENSURE(ForFastWrite)("ForFastWrite", ForFastWrite);
     return WithHeadOffsetDelta(
         TKey::ForFastWrite(type, partitionId, NewHead.Offset, NewHead.PartNo, NewHead.GetCount(), NewHead.GetInternalPartsCount()),
         NewHead);
@@ -556,7 +557,7 @@ void TPartitionBlobEncoder::SyncHeadFromNewHead()
 
 void TPartitionBlobEncoder::SyncHead(ui64& startOffset, ui64& endOffset)
 {
-    AFL_ENSURE(!ForFastWrite);
+    AFL_ENSURE(!ForFastWrite)("ForFastWrite", ForFastWrite);
     //append Head with newHead
     while (!NewHead.GetBatches().empty()) {
         Head.AddBatch(NewHead.ExtractFirstBatch());
@@ -572,13 +573,13 @@ void TPartitionBlobEncoder::SyncHead(ui64& startOffset, ui64& endOffset)
 
 void TPartitionBlobEncoder::SyncHeadFastWrite(ui64& startOffset, ui64& endOffset)
 {
-    AFL_ENSURE(ForFastWrite);
+    AFL_ENSURE(ForFastWrite)("ForFastWrite", ForFastWrite);
     AFL_ENSURE(Head.PackedSize == 0)("Head.PackedSize", Head.PackedSize);
 
     // We calculate the initial offset if this is the first write operation.
     if (NewHead.PackedSize > 0 && DataKeysBody.empty()) {
-        AFL_ENSURE(Head.Offset == NewHead.Offset);
-        AFL_ENSURE(Head.PartNo == NewHead.PartNo);
+        AFL_ENSURE(Head.Offset == NewHead.Offset)("Head.Offset", Head.Offset)("NewHead.Offset", NewHead.Offset);
+        AFL_ENSURE(Head.PartNo == NewHead.PartNo)("Head.PartNo", Head.PartNo)("NewHead.PartNo", NewHead.PartNo);
 
         startOffset = NewHead.Offset + (NewHead.PartNo > 0 ? 1 : 0);
     }
@@ -592,7 +593,7 @@ void TPartitionBlobEncoder::SyncHeadFastWrite(ui64& startOffset, ui64& endOffset
     HeadKeys.clear();
 
     // Here is the Head.Packed Size != 0. Therefore, the keys must be in the body.
-    AFL_ENSURE(!DataKeysBody.empty());
+    AFL_ENSURE(!DataKeysBody.empty())("DataKeysBody_size", DataKeysBody.size());
 
     endOffset = NewHead.GetNextOffset();
 
@@ -636,7 +637,7 @@ std::pair<TKey, ui32> TPartitionBlobEncoder::Compact(const TKey& key, bool headC
     const ui32 size = NewHead.PackedSize;
     std::pair<TKey, ui32> res(key, size);
     ui32 x = headCleared ? 0 : Head.PackedSize;
-    AFL_ENSURE(std::accumulate(DataKeysHead.begin(), DataKeysHead.end(), 0u, [](ui32 sum, const TKeyLevel& level){return sum + level.Sum();}) == NewHead.PackedSize + x);
+    AFL_ENSURE(std::accumulate(DataKeysHead.begin(), DataKeysHead.end(), 0u, [](ui32 sum, const TKeyLevel& level){return sum + level.Sum();}) == NewHead.PackedSize + x)("NewHead.PackedSize", NewHead.PackedSize)("x", x);
     for (auto it = DataKeysHead.rbegin(); it != DataKeysHead.rend(); ++it) {
         auto jt = it; ++jt;
         if (it->NeedCompaction()) {
@@ -645,12 +646,15 @@ std::pair<TKey, ui32> TPartitionBlobEncoder::Compact(const TKey& key, bool headC
                 jt->AddKey(res.first, res.second);
             }
         } else {
-            AFL_ENSURE(jt == DataKeysHead.rend() || !jt->NeedCompaction()); //compact must start from last level, not internal
+            AFL_ENSURE(jt == DataKeysHead.rend() || !jt->NeedCompaction()) //compact must start from last level, not internal
+                ("reason", "compact must start from last level")
+                ("jt_is_rend", jt == DataKeysHead.rend())
+                ("jt_need_compaction", jt != DataKeysHead.rend() && jt->NeedCompaction());
         }
-        AFL_ENSURE(!it->NeedCompaction());
+        AFL_ENSURE(!it->NeedCompaction())("reason", "unexpected compaction needed");
     }
-    AFL_ENSURE(res.second >= size);
-    AFL_ENSURE(res.first.GetOffset() < key.GetOffset() || res.first.GetOffset() == key.GetOffset() && res.first.GetPartNo() <= key.GetPartNo());
+    AFL_ENSURE(res.second >= size)("res_second", res.second)("size", size);
+    AFL_ENSURE(res.first.GetOffset() < key.GetOffset() || res.first.GetOffset() == key.GetOffset() && res.first.GetPartNo() <= key.GetPartNo())("res_offset", res.first.GetOffset())("res_partNo", res.first.GetPartNo())("key_offset", key.GetOffset())("key_partNo", key.GetPartNo());
     return res;
 }
 
@@ -662,7 +666,7 @@ void TPartitionBlobEncoder::pop_front() {
 }
 
 void TPartitionBlobEncoder::PopFrontHeadKey() {
-    AFL_ENSURE(!HeadKeys.empty());
+    AFL_ENSURE(!HeadKeys.empty())("HeadKeys_size", HeadKeys.size());
 
     const TDataKey deletedKey = HeadKeys.front();
     ScheduleDelete(HeadKeys.front());
@@ -670,13 +674,13 @@ void TPartitionBlobEncoder::PopFrontHeadKey() {
 
     for (auto& level : DataKeysHead) {
         if (level.KeysCount() > 0) {
-            AFL_ENSURE(level.GetKey(0) == deletedKey.Key);
+            AFL_ENSURE(level.GetKey(0) == deletedKey.Key)("deleted_key", deletedKey.Key.ToString())("level_key", level.GetKey(0).ToString());
             level.PopFront();
             break;
         }
     }
 
-    AFL_ENSURE(Head.PackedSize >= deletedKey.Size);
+    AFL_ENSURE(Head.PackedSize >= deletedKey.Size)("Head.PackedSize", Head.PackedSize)("deleted_size", deletedKey.Size);
     Head.PackedSize -= deletedKey.Size;
 
     if (HeadKeys.empty()) {

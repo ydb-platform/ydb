@@ -100,7 +100,7 @@ void TBasicAccountQuoter::HandleQuotaConsumed(NAccountQuoterEvents::TEvConsumed:
         {"consumedBytesInCredit", ConsumedBytesInCredit},
         {"creditBytes", CreditBytes});
     auto it = InProcessQuotaRequestCookies.find(ev->Get()->RequestCookie);
-    PQ_ENSURE(it != InProcessQuotaRequestCookies.end());
+    PQ_ENSURE(it != InProcessQuotaRequestCookies.end())("cookie", ev->Get()->RequestCookie);
     InProcessQuotaRequestCookies.erase(it);
 
     if (!QuotaRequestInFlight) {
@@ -130,14 +130,15 @@ void TBasicAccountQuoter::HandleClearance(TEvQuota::TEvClearance::TPtr& ev, cons
         {"fromKesus", ev->Get()->Result},
         {"cookie", cookie});
 
-    PQ_ENSURE(CurrentQuotaRequestCookie == cookie);
+    PQ_ENSURE(CurrentQuotaRequestCookie == cookie)("CurrentQuotaRequestCookie", CurrentQuotaRequestCookie)("cookie", cookie);
     if (!Queue.empty()) {
         ApproveQuota(Queue.front().Request, Queue.front().StartWait, ctx);
         Queue.pop_front();
     }
 
     if (Y_UNLIKELY(ev->Get()->Result != TEvQuota::TEvClearance::EResult::Success)) {
-        PQ_ENSURE(ev->Get()->Result != TEvQuota::TEvClearance::EResult::Deadline); // We set deadline == inf in quota request.
+        PQ_ENSURE(ev->Get()->Result != TEvQuota::TEvClearance::EResult::Deadline) // We set deadline == inf in quota request.
+            ("result", static_cast<int>(ev->Get()->Result));
         if (ctx.Now() - LastReportedErrorTime > TDuration::Minutes(1)) {
             YDB_LOG_ERROR_COMP(Service, "Got quota request",
                 {"logPrefix", NPQ_LOG_PREFIX},
@@ -252,7 +253,7 @@ TQuoterParams TAccountWriteQuoter::CreateQuoterParams(
 ) {
     TQuoterParams params;
     const auto& quotingConfig = pqConfig.GetQuotingConfig();
-    AFL_ENSURE(quotingConfig.GetTopicWriteQuotaEntityToLimit() != NKikimrPQ::TPQConfig::TQuotingConfig::UNSPECIFIED);
+    AFL_ENSURE(quotingConfig.GetTopicWriteQuotaEntityToLimit() != NKikimrPQ::TPQConfig::TQuotingConfig::UNSPECIFIED)("entity", static_cast<int>(quotingConfig.GetTopicWriteQuotaEntityToLimit()));
     auto topicPath = topicConverter->GetFederationPath();
 
     auto topicParts = SplitPath(topicPath); // account/folder/topic // account is first element

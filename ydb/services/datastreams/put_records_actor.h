@@ -39,7 +39,7 @@ namespace NKikimr::NDataStreams::V1 {
 
         TString str;
         bool res = proto.SerializeToString(&str);
-        AFL_ENSURE(res);
+        AFL_ENSURE(res)("reason", "failed to serialize data chunk");
         return str;
     }
 
@@ -133,7 +133,8 @@ namespace NKikimr::NDataStreams::V1 {
                 return;
             }
 
-            AFL_ENSURE(ev->Get()->Record.HasPartitionResponse());
+            AFL_ENSURE(ev->Get()->Record.HasPartitionResponse())
+                ("reason", "partition response expected")("tablet_id", TabletId)("partition", Partition)("topic", Topic);
             AFL_ENSURE(ev->Get()->Record.GetPartitionResponse().GetCmdWriteResult().size() > 0)("reason", "Wrong number of cmd write commands");
             auto offset = ev->Get()->Record.GetPartitionResponse().GetCmdWriteResult(0).GetOffset();
             ReplySuccessAndDie(ctx, offset);
@@ -275,7 +276,7 @@ namespace NKikimr::NDataStreams::V1 {
             , TRlHelpers({}, request, 4_KB, false, TDuration::Seconds(1))
             , Ip(request->GetPeerName())
     {
-        AFL_ENSURE(request);
+        AFL_ENSURE(request)("reason", "request must not be null");
     }
 
     template<class TDerived, class TProto>
@@ -356,7 +357,8 @@ namespace NKikimr::NDataStreams::V1 {
 
         if (IsQuotaRequired()) {
             const auto ru = 1 + CalcRuConsumption(GetPayloadSize());
-            AFL_ENSURE(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, this->ActorContext()));
+            AFL_ENSURE(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, this->ActorContext()))
+                ("reason", "quota request must succeed")("ru", ru)("stream_name", this->GetProtoRequest()->stream_name());
         } else {
             Write(this->ActorContext());
         }
@@ -401,7 +403,8 @@ namespace NKikimr::NDataStreams::V1 {
     template<class TDerived, class TProto>
     void TPutRecordsActorBase<TDerived, TProto>::Handle(NDataStreams::V1::TEvDataStreams::TEvPartitionActorResult::TPtr& ev, const TActorContext& ctx) {
         auto it = PartitionToActor.find(ev->Get()->PartitionId);
-        AFL_ENSURE(it != PartitionToActor.end());
+        AFL_ENSURE(it != PartitionToActor.end())
+            ("reason", "unknown partition actor result")("partition_id", ev->Get()->PartitionId);
         if (ev->Get()->ErrorText.Defined()) {
             PutRecordsResult.set_failed_record_count(
                     PutRecordsResult.failed_record_count() + it->second.RecordIndexes.size());

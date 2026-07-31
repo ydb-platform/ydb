@@ -827,9 +827,9 @@ void TStorage::UpdateMessageGroupsParentLocks(const absl::flat_hash_set<ui32>& c
 
 void TStorage::UpdateMessageGroupToNextMessage(ui64 offset, const TMessage& message) {
     auto messageGroupIterator = MessageGroups.Groups.find(message.MessageGroupIdHash);
-    AFL_ENSURE(messageGroupIterator != MessageGroups.Groups.end());
+    AFL_ENSURE(messageGroupIterator != MessageGroups.Groups.end())("reason", "message group not found");
     TSingleMessageGroupIdInfo* ptr = &messageGroupIterator->second;
-    AFL_ENSURE(ptr->Size > 0);
+    AFL_ENSURE(ptr->Size > 0)("Size", ptr->Size);
     ptr->Size -= 1;
     AFL_ENSURE((ptr->Size == 0) == message.NextMessageGroupIdOffset().Empty())("size", ptr->Size)("next", message.NextMessageGroupIdOffset());
     AFL_ENSURE(ptr->FirstOffset <= offset)("first", ptr->FirstOffset)("offset", offset);
@@ -839,13 +839,13 @@ void TStorage::UpdateMessageGroupToNextMessage(ui64 offset, const TMessage& mess
         MessageGroups.Groups.erase(messageGroupIterator);
         MessageGroups.LockedMessageGroupsId.erase(message.MessageGroupIdHash);
         MessageGroups.UnlockedMessageGroupsIdErase(message.MessageGroupIdHash);
-        AFL_ENSURE(Metrics.InflightMessageGroupCount > 0);
+        AFL_ENSURE(Metrics.InflightMessageGroupCount > 0)("InflightMessageGroupCount", Metrics.InflightMessageGroupCount);
         --Metrics.InflightMessageGroupCount;
         return;
     }
     ptr->FirstOffset = *nextOffset;
     auto [nextMessage, _] = GetMessageInt(*nextOffset);
-    AFL_ENSURE(nextMessage != nullptr);
+    AFL_ENSURE(nextMessage != nullptr)("reason", "next message not set");
     ptr->Locked.FillFromStatus(nextMessage->GetStatus());
     MessageGroups.UpdateLockedMaps(ptr->Locked, message.MessageGroupIdHash);
 }
@@ -897,7 +897,7 @@ void TStorage::UpdateMessageGroupForRemovedMessage(ui64 offset, const TMessage& 
     AFL_ENSURE(ptr != nullptr)("offset", offset)("messageGroupIdHash", message.MessageGroupIdHash);
 
     if (message.GetStatus() == EMessageStatus::Locked) {
-        AFL_ENSURE(ptr->Locked.LockedSelf);
+        AFL_ENSURE(ptr->Locked.LockedSelf)("LockedSelf", ptr->Locked.LockedSelf);
         ptr->Locked.LockedSelf = false;
     }
     if (message.GetStatus() == EMessageStatus::Delayed) {
@@ -932,7 +932,7 @@ void TStorage::UpdateMessageGroupForNewMessage(ui64 offset, TMessage& message) {
         firstReadableMessageInGroup = TrackMessageStatusInLockedGroups(message); // may be false on snapshot restore
     } else {
         auto [prev, _] = GetMessageInt(group.LastOffset);
-        AFL_ENSURE(prev != nullptr);
+        AFL_ENSURE(prev != nullptr)("reason", "prev message not set");
         prev->SetNextMessageGroupIdOffset(offset);
         if (!TrackMessageStatusInLockedGroups(*prev)) {
             firstReadableMessageInGroup = true;
@@ -953,43 +953,43 @@ void TStorage::UpdateMessageGroupForNewMessage(ui64 offset, TMessage& message) {
 }
 
 void TStorage::RemoveMessage(ui64 offset, const TMessage& message) {
-    AFL_ENSURE(Metrics.InflightMessageCount > 0);
+    AFL_ENSURE(Metrics.InflightMessageCount > 0)("InflightMessageCount", Metrics.InflightMessageCount);
     --Metrics.InflightMessageCount;
 
     UpdateMessageGroupForRemovedMessage(offset, message);
 
     switch(message.GetStatus()) {
         case EMessageStatus::Unprocessed:
-            AFL_ENSURE(Metrics.UnprocessedMessageCount > 0);
+            AFL_ENSURE(Metrics.UnprocessedMessageCount > 0)("UnprocessedMessageCount", Metrics.UnprocessedMessageCount);
             --Metrics.UnprocessedMessageCount;
             break;
         case EMessageStatus::Locked:
-            AFL_ENSURE(Metrics.LockedMessageCount > 0);
+            AFL_ENSURE(Metrics.LockedMessageCount > 0)("LockedMessageCount", Metrics.LockedMessageCount);
             --Metrics.LockedMessageCount;
             if (KeepMessageOrder && message.HasMessageGroupId) {
-                AFL_ENSURE(Metrics.LockedMessageGroupCount > 0);
+                AFL_ENSURE(Metrics.LockedMessageGroupCount > 0)("LockedMessageGroupCount", Metrics.LockedMessageGroupCount);
                 --Metrics.LockedMessageGroupCount;
             }
             break;
         case EMessageStatus::Delayed:
-            AFL_ENSURE(Metrics.DelayedMessageCount > 0);
+            AFL_ENSURE(Metrics.DelayedMessageCount > 0)("DelayedMessageCount", Metrics.DelayedMessageCount);
             --Metrics.DelayedMessageCount;
             break;
         case EMessageStatus::Committed:
-            AFL_ENSURE(Metrics.CommittedMessageCount > 0);
+            AFL_ENSURE(Metrics.CommittedMessageCount > 0)("CommittedMessageCount", Metrics.CommittedMessageCount);
             --Metrics.CommittedMessageCount;
             break;
         case EMessageStatus::DLQ:
             DLQMessages.erase(offset);
 
-            AFL_ENSURE(Metrics.DLQMessageCount > 0);
+            AFL_ENSURE(Metrics.DLQMessageCount > 0)("DLQMessageCount", Metrics.DLQMessageCount);
             --Metrics.DLQMessageCount;
             break;
     }
 }
 
 void TStorage::RemoveFirstMessageFromFastZone() {
-    AFL_ENSURE(!Messages.empty());
+    AFL_ENSURE(!Messages.empty())("Messages_size", Messages.size());
     auto& message = Messages.front();
     RemoveMessage(FirstOffset, message);
     Messages.pop_front();

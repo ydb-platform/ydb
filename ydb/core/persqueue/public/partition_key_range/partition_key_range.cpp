@@ -10,7 +10,7 @@ namespace NKikimr {
 namespace NPQ {
 
 TString MiddleOf(const TString& from, const TString& to) {
-    AFL_ENSURE(to.empty() || from < to);
+    AFL_ENSURE(to.empty() || from < to)("reason", "from must be less than to")("from", from)("to", to);
 
     auto GetChar = [](const TString& str, size_t i, unsigned char defaultValue) {
         if (i >= str.size()) {
@@ -145,7 +145,7 @@ void TPartitionKeyRange::Serialize(NKikimrPQ::TPartitionKeyRange& proto) const {
 
 void TPartitionKeyRange::ParseBound(const TString& data, TMaybe<TSerializedCellVec>& bound) {
     TSerializedCellVec cells;
-    AFL_ENSURE(TSerializedCellVec::TryParse(data, cells));
+    AFL_ENSURE(TSerializedCellVec::TryParse(data, cells))("reason", "failed to parse partition key bound")("data_size", data.size());
     bound.ConstructInPlace(std::move(cells));
 }
 

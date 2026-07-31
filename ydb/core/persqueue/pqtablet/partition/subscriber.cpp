@@ -21,11 +21,11 @@ TMaybe<TReadInfo> TSubscriberLogic::ForgetSubscription(const ui64 cookie)
 
 void TSubscriberLogic::AddSubscription(TReadInfo&& info, const ui64 cookie)
 {
-    AFL_ENSURE(WaitingReads.empty() || WaitingReads.back().Offset == info.Offset);
+    AFL_ENSURE(WaitingReads.empty() || WaitingReads.back().Offset == info.Offset)("info_offset", info.Offset)("waiting_reads_size", WaitingReads.size());
     info.IsSubscription = true;
     WaitingReads.push_back({info.Offset, cookie});
     bool res = ReadInfo.emplace(cookie, std::move(info)).second;
-    AFL_ENSURE(res);
+    AFL_ENSURE(res)("reason", "duplicate subscription cookie")("cookie", cookie);
 }
 
 TVector<std::pair<TReadInfo, ui64>> TSubscriberLogic::CompleteSubscriptions(const ui64 endOffset)
@@ -39,7 +39,7 @@ TVector<std::pair<TReadInfo, ui64>> TSubscriberLogic::CompleteSubscriptions(cons
         auto it = ReadInfo.find(cookie);
         if (it != ReadInfo.end()) {
             it->second.Timestamp = TAppData::TimeProvider->Now();
-            AFL_ENSURE(it->second.Offset == offset);
+            AFL_ENSURE(it->second.Offset == offset)("offset", offset)("stored_offset", it->second.Offset);
             res.emplace_back(std::move(it->second), it->first);
             ReadInfo.erase(it);
         }

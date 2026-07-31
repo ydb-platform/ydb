@@ -65,7 +65,7 @@ struct TTransaction {
         , CalcPredicateSpan(std::move(tx->Span))
         , CalcPredicateTimestamp(calcPredicateTimestamp)
     {
-        AFL_ENSURE(Tx);
+        AFL_ENSURE(Tx)("reason", "transaction not set");
     }
 
     TTransaction(TSimpleSharedPtr<TEvPQ::TEvChangePartitionConfig> changeConfig,
@@ -73,13 +73,13 @@ struct TTransaction {
         : ChangeConfig(changeConfig)
         , SendReply(sendReply)
     {
-        AFL_ENSURE(ChangeConfig);
+        AFL_ENSURE(ChangeConfig)("reason", "change config not set");
     }
 
     explicit TTransaction(TSimpleSharedPtr<TEvPQ::TEvProposePartitionConfig> proposeConfig)
         : ProposeConfig(proposeConfig)
     {
-        AFL_ENSURE(ProposeConfig);
+        AFL_ENSURE(ProposeConfig)("reason", "propose config not set");
     }
 
     explicit TTransaction(TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction> proposeTx)
@@ -90,7 +90,7 @@ struct TTransaction {
         if (record.HasSupportivePartitionActor()) {
             SupportivePartitionActor = ActorIdFromProto(record.GetSupportivePartitionActor());
         }
-        AFL_ENSURE(ProposeTransaction);
+        AFL_ENSURE(ProposeTransaction)("reason", "propose transaction not set");
     }
 
     TMaybe<ui64> GetTxId() const {

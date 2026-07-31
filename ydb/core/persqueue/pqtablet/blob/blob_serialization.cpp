@@ -39,7 +39,7 @@ NScheme::TDataRef GetChunk(const char*& data, const char *end)
 {
     ui32 size = ReadUnaligned<ui32>(data);
     data += sizeof(ui32) + size;
-    AFL_ENSURE(data <= end);
+    AFL_ENSURE(data <= end)("remaining", end - data);
     return NScheme::TDataRef(data - size, size);
 }
 
@@ -53,7 +53,7 @@ TAutoPtr<NScheme::IChunkCoder> MakeChunk(TBuffer& output)
 void WriteActualChunkSize(TBuffer& output, ui32 sizeOffset)
 {
     ui32 currSize = output.size();
-    AFL_ENSURE(currSize >= sizeOffset + sizeof(ui32));
+    AFL_ENSURE(currSize >= sizeOffset + sizeof(ui32))("currSize", currSize)("sizeOffset", sizeOffset);
     ui32 size = currSize - sizeOffset - sizeof(ui32);
 
     Y_DEBUG_ABORT_UNLESS(ReadUnaligned<ui32>(output.data() + sizeOffset) == CHUNK_SIZE_PLACEMENT);
@@ -160,8 +160,8 @@ void TBatchSerializer<NKikimrPQ::TBatchHeader::ECompressed>::Pack() {
         }
         ++reorderMap[TStringBuf(Batch.Blobs[i].SourceId)];
     }
-    AFL_ENSURE(offsetSpan == Batch.Header.GetCount());
-    AFL_ENSURE(lastPartCount + Batch.Header.GetInternalPartsCount() == totalBlobs);
+    AFL_ENSURE(offsetSpan == Batch.Header.GetCount())("offsetSpan", offsetSpan)("Header.Count", Batch.Header.GetCount());
+    AFL_ENSURE(lastPartCount + Batch.Header.GetInternalPartsCount() == totalBlobs)("lastPartCount", lastPartCount)("Header.InternalPartsCount", Batch.Header.GetInternalPartsCount())("totalBlobs", totalBlobs);
     if (totalBlobs != Batch.Header.GetCount() + Batch.Header.GetInternalPartsCount()) {
         Batch.Header.SetClientBlobCount(totalBlobs);
     } else {
@@ -328,8 +328,8 @@ void TBatchSerializer<NKikimrPQ::TBatchHeader::ECompressed>::Pack() {
 
 template<>
 void TBatchDeserializer<NKikimrPQ::TBatchHeader::ECompressed>::Unpack(TVector<TClientBlob>* blobs) const {
-    AFL_ENSURE(Batch.Header.GetFormat() == NKikimrPQ::TBatchHeader::ECompressed);
-    AFL_ENSURE(Batch.PackedData.size());
+    AFL_ENSURE(Batch.Header.GetFormat() == NKikimrPQ::TBatchHeader::ECompressed)("format", static_cast<int>(Batch.Header.GetFormat()));
+    AFL_ENSURE(Batch.PackedData.size())("PackedData_size", Batch.PackedData.size());
 
     ui32 totalBlobs = GetBatchClientBlobCount(Batch.Header);
     ui32 partsSize = 0;
@@ -489,7 +489,7 @@ void TBatchDeserializer<NKikimrPQ::TBatchHeader::ECompressed>::Unpack(TVector<TC
         isBatches.resize(totalBlobs, false);
     }
 
-    AFL_ENSURE(data == dataEnd);
+    AFL_ENSURE(data == dataEnd)("remaining", dataEnd - data);
 
     blobs->resize(totalBlobs);
     ui32 currentSID = 0;
@@ -538,17 +538,17 @@ void TBatchSerializer<NKikimrPQ::TBatchHeader::EUncompressed>::Pack() {
 
 template<>
 void TBatchDeserializer<NKikimrPQ::TBatchHeader::EUncompressed>::Unpack(TVector<TClientBlob>* blobs) const {
-    AFL_ENSURE(Batch.Header.GetFormat() == NKikimrPQ::TBatchHeader::EUncompressed);
-    AFL_ENSURE(Batch.PackedData.size());
+    AFL_ENSURE(Batch.Header.GetFormat() == NKikimrPQ::TBatchHeader::EUncompressed)("format", static_cast<int>(Batch.Header.GetFormat()));
+    AFL_ENSURE(Batch.PackedData.size())("PackedData_size", Batch.PackedData.size());
     ui32 shift = 0;
 
     const ui32 totalBlobs = GetBatchClientBlobCount(Batch.Header);
     for (ui32 i = 0; i < totalBlobs; ++i) {
-        AFL_ENSURE(shift < Batch.PackedData.size());
+        AFL_ENSURE(shift < Batch.PackedData.size())("shift", shift)("PackedData_size", Batch.PackedData.size());
         blobs->push_back(DeserializeClientBlob(Batch.PackedData.data() + shift, Batch.PackedData.size() - shift));
         shift += ReadUnaligned<ui32>(Batch.PackedData.data() + shift);
     }
-    AFL_ENSURE(shift == Batch.PackedData.size());
+    AFL_ENSURE(shift == Batch.PackedData.size())("shift", shift)("PackedData_size", Batch.PackedData.size());
 }
 
 } // namespace
@@ -567,13 +567,13 @@ ui32 TClientBlob::GetSerializedSize() const {
 //
 
 void TBatch::SerializeTo(TString& res) const{
-    AFL_ENSURE(Packed);
+    AFL_ENSURE(Packed)("Packed", Packed);
 
     ui16 sz = Header.ByteSize();
     res.append((const char*)&sz, sizeof(ui16));
 
     bool rs = Header.AppendToString(&res);
-    AFL_ENSURE(rs);
+    AFL_ENSURE(rs)("reason", "failed to append header to string");
 
     res.append(PackedData.data(), PackedData.size());
 }
@@ -597,16 +597,17 @@ void TBatch::Pack() {
     TVector<TClientBlob> tmp;
     Blobs.swap(tmp);
     InternalPartsPos.resize(0);
-    AFL_ENSURE(GetPackedSize() <= GetUnpackedSize() + GetMaxHeaderSize()); //be sure that PackedSize is not bigger than packed size for packing type 0
+    AFL_ENSURE(GetPackedSize() <= GetUnpackedSize() + GetMaxHeaderSize()) //be sure that PackedSize is not bigger than packed size for packing type 0
+        ("packed_size", GetPackedSize())("unpacked_size", GetUnpackedSize())("max_header_size", GetMaxHeaderSize());
 }
 
 void TBatch::Unpack() {
     if (!Packed)
         return;
     Packed = false;
-    AFL_ENSURE(Blobs.empty());
+    AFL_ENSURE(Blobs.empty())("Blobs_size", Blobs.size());
     UnpackTo(&Blobs);
-    AFL_ENSURE(InternalPartsPos.empty());
+    AFL_ENSURE(InternalPartsPos.empty())("InternalPartsPos_size", InternalPartsPos.size());
     for (ui32 i = 0; i < Blobs.size(); ++i) {
         auto& b = Blobs[i];
         if (!b.IsLastPart()) {
@@ -614,14 +615,14 @@ void TBatch::Unpack() {
         }
         EndWriteTimestamp = std::max(EndWriteTimestamp, b.WriteTimestamp);
     }
-    AFL_ENSURE(InternalPartsPos.size() == GetInternalPartsCount());
+    AFL_ENSURE(InternalPartsPos.size() == GetInternalPartsCount())("InternalPartsPos_size", InternalPartsPos.size())("InternalPartsCount", GetInternalPartsCount());
 
     TBuffer().Swap(PackedData);
 }
 
 void TBatch::UnpackTo(TVector<TClientBlob> *blobs) const
 {
-    AFL_ENSURE(PackedData.size());
+    AFL_ENSURE(PackedData.size())("PackedData_size", PackedData.size());
     auto type = Header.GetFormat();
     switch (type) {
         case NKikimrPQ::TBatchHeader::EUncompressed:
@@ -685,13 +686,13 @@ void Serialize(const TClientBlob& blob, TBuffer& res) {
     res.Append(blob.SourceId.data(), blob.SourceId.size());
     res.Append(blob.Data.data(), blob.Data.size());
 
-    AFL_ENSURE(res.Size() == expectedSize);
+    AFL_ENSURE(res.Size() == expectedSize)("res_size", res.Size())("expectedSize", expectedSize);
 }
 
 TClientBlob DeserializeClientBlob(const char *data, ui32 size) {
-    AFL_ENSURE(size > TClientBlob::OVERHEAD);
+    AFL_ENSURE(size > TClientBlob::OVERHEAD)("size", size)("OVERHEAD", TClientBlob::OVERHEAD);
     ui32 totalSize = ReadUnaligned<ui32>(data);
-    AFL_ENSURE(size >= totalSize);
+    AFL_ENSURE(size >= totalSize)("size", size)("totalSize", totalSize);
     const char *end = data + totalSize;
     data += sizeof(ui32);
 
@@ -748,10 +749,10 @@ TClientBlob DeserializeClientBlob(const char *data, ui32 size) {
             data += sizeof(ui32);
     }
 
-    AFL_ENSURE(data < end);
+    AFL_ENSURE(data < end)("remaining", end - data);
     ui16 sz = ReadUnaligned<ui16>(data);
     data += sizeof(ui16);
-    AFL_ENSURE(data + sz <= end);
+    AFL_ENSURE(data + sz <= end)("sz", sz)("remaining", end - data);
     TString sourceId(data, sz);
     data += sz;
 

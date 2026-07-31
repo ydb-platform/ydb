@@ -156,7 +156,9 @@ TString EncodeSimple(const TString& sourceId) {
 }
 
 TString DecodeSimple(const TString& sourceId) {
-    AFL_ENSURE(!sourceId.empty() && sourceId[0] == TTags::Simple);
+    AFL_ENSURE(!sourceId.empty() && sourceId[0] == TTags::Simple)
+        ("reason", "source id must have Simple tag")("source_id_size", sourceId.size())
+        ("tag", sourceId.empty() ? 0 : static_cast<ui8>(sourceId[0]));
     return sourceId.substr(1);
 }
 
@@ -180,7 +182,9 @@ TString EncodeBase64(const TString& sourceId) {
 }
 
 TString DecodeBase64(const TString& sourceId) {
-    AFL_ENSURE(!sourceId.empty() && sourceId[0] == TTags::Base64);
+    AFL_ENSURE(!sourceId.empty() && sourceId[0] == TTags::Base64)
+        ("reason", "source id must have Base64 tag")("source_id_size", sourceId.size())
+        ("tag", sourceId.empty() ? 0 : static_cast<ui8>(sourceId[0]));
     return Base64Prefix + StripStringRight(Base64EncodeUrl(sourceId.substr(1)), EqualsStripAdapter(','));
 }
 
@@ -193,7 +197,7 @@ TString Encode(const TString& sourceId) {
 }
 
 TString Decode(const TString& sourceId) {
-    AFL_ENSURE(!sourceId.empty());
+    AFL_ENSURE(!sourceId.empty())("reason", "source id must not be empty")("source_id_size", sourceId.size());
 
     switch (sourceId[0]) {
     case TTags::Simple:

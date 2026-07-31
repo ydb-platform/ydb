@@ -192,7 +192,7 @@ void TDLQMoverActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
     }
 
     auto& response = ev->Get()->Record;
-    AFL_ENSURE(response.GetPartitionResponse().HasCmdReadResult());
+    AFL_ENSURE(response.GetPartitionResponse().HasCmdReadResult())("reason", "read result not set");
     auto* result = response.MutablePartitionResponse()->MutableCmdReadResult()->MutableResult(0);
     auto messageSize = result->GetData().size();
 

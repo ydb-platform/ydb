@@ -172,8 +172,8 @@ TSourceIdInfo TSourceIdInfo::Parse(const TString& data, TInstant now) {
 }
 
 void TSourceIdInfo::Serialize(TBuffer& data) const {
-    AFL_ENSURE(!Explicit);
-    AFL_ENSURE(!KeyRange);
+    AFL_ENSURE(!Explicit)("Explicit", Explicit);
+    AFL_ENSURE(!KeyRange)("KeyRange", KeyRange.Defined());
 
     data.Resize(4 * sizeof(ui64) + sizeof(TMaybe<i16>));
     ui32 pos = 0;
@@ -292,7 +292,7 @@ bool TSourceIdStorage::DropOldSourceIds(TEvKeyValue::TEvRequest* request, TInsta
         maxDeleteSourceIds = Min(maxDeleteSourceIds, MAX_DELETE_COMMAND_COUNT);
     }
 
-    AFL_ENSURE(maxDeleteSourceIds <= InMemorySourceIds.size());
+    AFL_ENSURE(maxDeleteSourceIds <= InMemorySourceIds.size())("maxDeleteSourceIds", maxDeleteSourceIds)("InMemorySourceIds_size", InMemorySourceIds.size());
 
     const auto ttl = TDuration::Seconds(config.GetSourceIdLifetimeSeconds());
     ui32 size = request->Record.ByteSize();
@@ -303,7 +303,7 @@ bool TSourceIdStorage::DropOldSourceIds(TEvKeyValue::TEvRequest* request, TInsta
         }
 
         auto it = InMemorySourceIds.find(sourceId);
-        AFL_ENSURE(it != InMemorySourceIds.end());
+        AFL_ENSURE(it != InMemorySourceIds.end())("sourceId", sourceId);
         if (it->second.Explicit) {
             continue;
         }
@@ -341,10 +341,10 @@ bool TSourceIdStorage::DropOldSourceIds(TEvKeyValue::TEvRequest* request, TInsta
     for (auto& t : toDelOffsets) {
         // delete sourceId from memory
         size_t res = InMemorySourceIds.erase(t.second);
-        AFL_ENSURE(res == 1);
+        AFL_ENSURE(res == 1)("offset", t.first)("sourceId", t.second);
         // delete sourceID from offsets
         res = SourceIdsByOffset[0].erase(t);
-        AFL_ENSURE(res == 1);
+        AFL_ENSURE(res == 1)("offset", t.first)("sourceId", t.second);
         // save owners to drop and delete records from map
         auto it = SourceIdOwners.find(t.second);
         if (it != SourceIdOwners.end()) {
@@ -357,7 +357,7 @@ bool TSourceIdStorage::DropOldSourceIds(TEvKeyValue::TEvRequest* request, TInsta
 }
 
 void TSourceIdStorage::LoadSourceIdInfo(const TString& key, const TString& data, TInstant now) {
-    AFL_ENSURE(key.size() >= TKeyPrefix::MarkedSize());
+    AFL_ENSURE(key.size() >= TKeyPrefix::MarkedSize())("key_size", key.size())("MarkedSize", TKeyPrefix::MarkedSize());
 
     const auto mark = TKeyPrefix::EMark(key[TKeyPrefix::MarkPosition()]);
     switch (mark) {
@@ -371,21 +371,19 @@ void TSourceIdStorage::LoadSourceIdInfo(const TString& key, const TString& data,
 }
 
 void TSourceIdStorage::LoadRawSourceIdInfo(const TString& key, const TString& data, TInstant now) {
-    AFL_ENSURE(key.size() >= TKeyPrefix::MarkedSize());
-    AFL_ENSURE(key[TKeyPrefix::MarkPosition()] == TKeyPrefix::MarkSourceId);
+    AFL_ENSURE(key.size() >= TKeyPrefix::MarkedSize())("key_size", key.size())("MarkedSize", TKeyPrefix::MarkedSize());
+    AFL_ENSURE(key[TKeyPrefix::MarkPosition()] == TKeyPrefix::MarkSourceId)("mark", key[TKeyPrefix::MarkPosition()]);
 
     RegisterSourceIdInfo(key.substr(TKeyPrefix::MarkedSize()), TSourceIdInfo::Parse(data, now), true);
 }
 
 void TSourceIdStorage::LoadProtoSourceIdInfo(const TString& key, const TString& data) {
-    AFL_ENSURE(key.size() >= TKeyPrefix::MarkedSize());
-    AFL_ENSURE(key[TKeyPrefix::MarkPosition()] == TKeyPrefix::MarkProtoSourceId);
+    AFL_ENSURE(key.size() >= TKeyPrefix::MarkedSize())("key_size", key.size())("MarkedSize", TKeyPrefix::MarkedSize());
+    AFL_ENSURE(key[TKeyPrefix::MarkPosition()] == TKeyPrefix::MarkProtoSourceId)("mark", key[TKeyPrefix::MarkPosition()]);
 
     NKikimrPQ::TMessageGroupInfo proto;
     const bool ok = proto.ParseFromString(data);
-    AFL_ENSURE(ok);
-
-    RegisterSourceIdInfo(key.substr(TKeyPrefix::MarkedSize()), TSourceIdInfo::Parse(proto), true);
+    AFL_ENSURE(ok)("reason", "failed to parse message group info")("key", key);
 }
 
 void TSourceIdStorage::RegisterSourceIdInfo(const TString& sourceId, TSourceIdInfo&& sourceIdInfo, bool load) {
@@ -393,21 +391,21 @@ void TSourceIdStorage::RegisterSourceIdInfo(const TString& sourceId, TSourceIdIn
     if (it != InMemorySourceIds.end()) {
         if (!load || it->second.Offset < sourceIdInfo.Offset) {
             const auto res = SourceIdsByOffset[sourceIdInfo.Explicit].erase(std::make_pair(it->second.Offset, sourceId));
-            AFL_ENSURE(res == 1);
+            AFL_ENSURE(res == 1)("offset", it->second.Offset)("sourceId", sourceId);
         } else {
             return;
         }
     }
 
     const bool res = SourceIdsByOffset[sourceIdInfo.Explicit].emplace(sourceIdInfo.Offset, sourceId).second;
-    AFL_ENSURE(res);
+    AFL_ENSURE(res)("offset", sourceIdInfo.Offset)("sourceId", sourceId);
 
     if (sourceIdInfo.Explicit) {
         ExplicitSourceIds.insert(sourceId);
     }
 
     if (const auto& heartbeat = sourceIdInfo.LastHeartbeat) {
-        AFL_ENSURE(sourceIdInfo.Explicit);
+        AFL_ENSURE(sourceIdInfo.Explicit)("sourceId", sourceId)("Explicit", sourceIdInfo.Explicit);
 
         if (it != InMemorySourceIds.end() && it->second.LastHeartbeat) {
             ForgetHeartbeat(sourceId, it->second.LastHeartbeat->Version);
@@ -444,7 +442,7 @@ TInstant TSourceIdStorage::MinAvailableTimestamp(TInstant now) const {
     for (ui32 i = 0 ; i < 2; ++i) {
         if (!SourceIdsByOffset[i].empty()) {
             auto it = InMemorySourceIds.find(SourceIdsByOffset[i].begin()->second);
-            AFL_ENSURE(it != InMemorySourceIds.end());
+            AFL_ENSURE(it != InMemorySourceIds.end())("sourceId", SourceIdsByOffset[i].begin()->second);
             ds = Min(ds, it->second.WriteTimestamp);
         }
     }
@@ -603,18 +601,18 @@ TMaybe<THeartbeat> THeartbeatEmitter::CanEmit() const {
 }
 
 TMaybe<THeartbeat> THeartbeatEmitter::GetFromStorage(TSourceIdsByHeartbeat::const_iterator it) const {
-    AFL_ENSURE(!it->second.empty());
+    AFL_ENSURE(!it->second.empty())("size", it->second.size());
     const auto& someSourceId = *it->second.begin();
 
-    AFL_ENSURE(Storage.InMemorySourceIds.contains(someSourceId));
+    AFL_ENSURE(Storage.InMemorySourceIds.contains(someSourceId))("sourceId", someSourceId);
     return Storage.InMemorySourceIds.at(someSourceId).LastHeartbeat;
 }
 
 TMaybe<THeartbeat> THeartbeatEmitter::GetFromDiff(TSourceIdsByHeartbeat::const_iterator it) const {
-    AFL_ENSURE(!it->second.empty());
+    AFL_ENSURE(!it->second.empty())("size", it->second.size());
     const auto& someSourceId = *it->second.begin();
 
-    AFL_ENSURE(Heartbeats.contains(someSourceId));
+    AFL_ENSURE(Heartbeats.contains(someSourceId))("sourceId", someSourceId);
     return Heartbeats.at(someSourceId);
 }
 

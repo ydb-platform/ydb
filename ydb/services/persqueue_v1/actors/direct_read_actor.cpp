@@ -281,7 +281,7 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvInitDirectRead::TPtr& ev, co
                 "unauthenticated access is forbidden, please provide credentials");
         }
     } else {
-        AFL_ENSURE(Request->GetYdbToken());
+        AFL_ENSURE(Request->GetYdbToken())("reason", "ydb token expected when credentials provided")("session", Session);
         Auth = *(Request->GetYdbToken());
         Token = new NACLib::TUserToken(Request->GetSerializedToken());
     }
@@ -346,7 +346,7 @@ void TDirectReadSessionActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, cons
         }
 
         if (IsQuotaRequired()) {
-            AFL_ENSURE(MaybeRequestQuota(1, EWakeupTag::RlInit, ctx));
+            AFL_ENSURE(MaybeRequestQuota(1, EWakeupTag::RlInit, ctx))("reason", "quota request failed on init")("session", Session);
         } else {
             InitSession(ctx);
         }
@@ -466,7 +466,7 @@ void TDirectReadSessionActor::Handle(TEvents::TEvWakeup::TPtr& ev, const TActorC
             }
             if (PendingQuota) {
                 auto res = MaybeRequestQuota(PendingQuota->RequiredQuota, EWakeupTag::RlAllowed, ctx);
-                AFL_ENSURE(res);
+                AFL_ENSURE(res)("reason", "quota request failed")("required_quota", PendingQuota->RequiredQuota)("session", Session);
             }
 
             break;
@@ -475,7 +475,7 @@ void TDirectReadSessionActor::Handle(TEvents::TEvWakeup::TPtr& ev, const TActorC
         case EWakeupTag::RlInitNoResource:
             if (PendingQuota) {
                 auto res = MaybeRequestQuota(PendingQuota->RequiredQuota, EWakeupTag::RlAllowed, ctx);
-                AFL_ENSURE(res);
+                AFL_ENSURE(res)("reason", "quota request failed after no resource")("required_quota", PendingQuota->RequiredQuota)("session", Session);
             } else {
                 return CloseSession(PersQueue::ErrorCode::OVERLOAD, "throughput limit exceeded");
             }
@@ -502,7 +502,7 @@ void TDirectReadSessionActor::RecheckACL(const TActorContext& ctx) {
 
 
 void TDirectReadSessionActor::RunAuthActor(const TActorContext& ctx) {
-    AFL_ENSURE(!AuthInitActor);
+    AFL_ENSURE(!AuthInitActor)("reason", "auth init actor must not already exist")("session", Session);
     AuthInitActor = ctx.Register(new TReadInitAndAuthActor(
         ctx, ctx.SelfID, ClientId, Cookie, Session, SchemeCache, NewSchemeCache, Counters, Token, TopicsList,
         TopicsHandler.GetLocalCluster(), ReadWithoutConsumer));

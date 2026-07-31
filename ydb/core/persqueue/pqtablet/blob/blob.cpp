@@ -135,7 +135,7 @@ TBatch::TBatch(const NKikimrPQ::TBatchHeader &header, const char* data)
 }
 
 TBatch TBatch::FromBlobs(const ui64 offset, std::deque<TClientBlob>&& blobs) {
-    AFL_ENSURE(!blobs.empty());
+    AFL_ENSURE(!blobs.empty())("blobs_size", blobs.size());
     TBatch batch(offset, blobs.front().GetPartNo());
     for (auto& b : blobs) {
         batch.AddBlob(b);
@@ -234,12 +234,12 @@ TInstant TBatch::GetEndWriteTimestamp() const {
 }
 
 ui32 TBatch::GetPackedSize() const {
-    AFL_ENSURE(Packed);
+    AFL_ENSURE(Packed)("Packed", Packed);
     return sizeof(ui16) + PackedData.size() + Header.ByteSize();
 }
 
 TPosition TBatch::FindPos(const ui64 offset, const ui16 partNo) const {
-    AFL_ENSURE(!Packed);
+    AFL_ENSURE(!Packed)("Packed", Packed);
     if (offset < GetOffset() || (offset == GetOffset() && partNo < GetPartNo())) {
         return TPosition{Max<ui32>(), 0, 0};
     }
@@ -341,12 +341,12 @@ const TBatch& THead::GetBatch(ui32 idx) const {
 }
 
 const TBatch& THead::GetLastBatch() const {
-    AFL_ENSURE(!Batches.empty());
+    AFL_ENSURE(!Batches.empty())("Batches_size", Batches.size());
     return Batches.back();
 }
 
 TBatch THead::ExtractFirstBatch() {
-    AFL_ENSURE(!Batches.empty());
+    AFL_ENSURE(!Batches.empty())("Batches_size", Batches.size());
     auto batch = std::move(Batches.front());
     InternalPartsCount -= batch.GetInternalPartsCount();
     Batches.pop_front();
@@ -354,7 +354,7 @@ TBatch THead::ExtractFirstBatch() {
 }
 
 void THead::AddBlob(const TClientBlob& blob) {
-    AFL_ENSURE(!Batches.empty());
+    AFL_ENSURE(!Batches.empty())("Batches_size", Batches.size());
     auto& batch = Batches.back();
     InternalPartsCount -= batch.GetInternalPartsCount();
     batch.AddBlob(blob);
@@ -414,12 +414,12 @@ ui64 THead::GetOffsetDelta() const
 //
 
 THead::TBatchAccessor THead::MutableBatch(ui32 idx) {
-    AFL_ENSURE(idx < Batches.size());
+    AFL_ENSURE(idx < Batches.size())("idx", idx)("Batches_size", Batches.size());
     return TBatchAccessor(Batches[idx]);
 }
 
 THead::TBatchAccessor THead::MutableLastBatch() {
-    AFL_ENSURE(!Batches.empty());
+    AFL_ENSURE(!Batches.empty())("Batches_size", Batches.size());
     return TBatchAccessor(Batches.back());
 }
 
@@ -573,7 +573,7 @@ TPartitionedBlob::TCompactHeadResult TPartitionedBlob::CompactHead(bool glueHead
     if (glueHead) {
         for (ui32 pp = 0; pp < head.Batches.size(); ++pp) {
             endWriteTimestamp = std::max(endWriteTimestamp, head.Batches[pp].GetEndWriteTimestamp());
-            AFL_ENSURE(head.Batches[pp].Packed);
+            AFL_ENSURE(head.Batches[pp].Packed)("pp", pp)("Packed", head.Batches[pp].Packed);
             head.Batches[pp].SerializeTo(valueD);
         }
     }
@@ -582,13 +582,13 @@ TPartitionedBlob::TCompactHeadResult TPartitionedBlob::CompactHead(bool glueHead
             TBatch *b = &newHead.Batches[pp];
             TBatch batch;
             if (!b->Packed) {
-                AFL_ENSURE(pp + 1 == newHead.Batches.size());
+                AFL_ENSURE(pp + 1 == newHead.Batches.size())("pp", pp)("Batches_size", newHead.Batches.size());
                 batch = newHead.Batches[pp];
                 batch.Pack();
                 b = &batch;
             }
             endWriteTimestamp = std::max(endWriteTimestamp,b->GetEndWriteTimestamp());
-            AFL_ENSURE(b->Packed);
+            AFL_ENSURE(b->Packed)("pp", pp)("Packed", b->Packed);
             b->SerializeTo(valueD);
         }
     }
@@ -640,14 +640,14 @@ auto TPartitionedBlob::CreateFormedBlob(ui32 size, bool useRename) -> std::optio
     HeadPartNo = NextPartNo;
     ui32 count = (GlueHead ? Head.GetCount() : 0) + (GlueNewHead ? NewHead.GetCount() : 0);
 
-    AFL_ENSURE(Offset >= (GlueHead ? Head.Offset : NewHead.Offset));
+    AFL_ENSURE(Offset >= (GlueHead ? Head.Offset : NewHead.Offset))("Offset", Offset)("Head.Offset", Head.Offset)("NewHead.Offset", NewHead.Offset)("GlueHead", GlueHead);
 
-    AFL_ENSURE(NewHead.GetNextOffset() >= (GlueHead ? Head.Offset : NewHead.Offset));
+    AFL_ENSURE(NewHead.GetNextOffset() >= (GlueHead ? Head.Offset : NewHead.Offset))("NewHead.GetNextOffset", NewHead.GetNextOffset())("Head.Offset", Head.Offset)("NewHead.Offset", NewHead.Offset)("GlueHead", GlueHead);
 
     const ui64 offsetDelta = CanWriteOffsetDeltaInKeys() ? GetOffsetDelta() : 0;
     TMaybe<ui32> keyOffsetDelta;
     if (offsetDelta > 0) {
-        AFL_ENSURE(offsetDelta <= Max<ui32>());
+        AFL_ENSURE(offsetDelta <= Max<ui32>())("offsetDelta", offsetDelta);
         keyOffsetDelta = static_cast<ui32>(offsetDelta);
     }
 
@@ -700,10 +700,10 @@ auto TPartitionedBlob::CreateFormedBlob(ui32 size, bool useRename) -> std::optio
         Blobs.clear();
         batch.Pack();
         endWriteTimestamp = std::max(endWriteTimestamp, batch.GetEndWriteTimestamp());
-        AFL_ENSURE(batch.Packed);
+        AFL_ENSURE(batch.Packed)("Packed", batch.Packed);
         batch.SerializeTo(valueD);
     }
-    AFL_ENSURE(valueD.size() <= MaxBlobSize && (valueD.size() + size + 1_MB > MaxBlobSize || HeadSize + BlobsSize + size + GetMaxHeaderSize() <= MaxBlobSize));
+    AFL_ENSURE(valueD.size() <= MaxBlobSize && (valueD.size() + size + 1_MB > MaxBlobSize || HeadSize + BlobsSize + size + GetMaxHeaderSize() <= MaxBlobSize))("valueD_size", valueD.size())("size", size)("MaxBlobSize", MaxBlobSize)("HeadSize", HeadSize)("BlobsSize", BlobsSize);
     HeadSize = 0;
     BlobsSize = 0;
     TClientBlob::CheckBlob(tmpKey, valueD);
@@ -719,7 +719,7 @@ auto TPartitionedBlob::Add(TClientBlob&& blob) -> std::optional<TFormedBlobInfo>
 {
     AFL_ENSURE(NewHead.Offset >= Head.Offset)("Head.Offset", Head.Offset)("NewHead.Offset", NewHead.Offset);
     const ui32 size = blob.GetSerializedSize();
-    AFL_ENSURE(InternalPartsCount < 1000); //just check for future packing
+    AFL_ENSURE(InternalPartsCount < 1000)("InternalPartsCount", InternalPartsCount);
     if (HeadSize + BlobsSize + size + GetMaxHeaderSize() > MaxBlobSize) {
         NeedCompactHead = true;
     }
@@ -807,18 +807,18 @@ TBlobIterator::TBlobIterator(const TKey& key, const TString& blob)
 {
     AFL_ENSURE(Data != End)("Key", Key.ToString())("blob.size", blob.size());
     ParseBatch();
-    AFL_ENSURE(Header.GetPartNo() == Key.GetPartNo());
+    AFL_ENSURE(Header.GetPartNo() == Key.GetPartNo())("header_partNo", Header.GetPartNo())("key_partNo", Key.GetPartNo());
 }
 
 void TBlobIterator::ParseBatch() {
-    AFL_ENSURE(Data < End);
+    AFL_ENSURE(Data < End)("remaining", End - Data);
     Header = ExtractHeader(Data, End - Data);
     //AFL_ENSURE(Header.GetOffset() == Offset);
     Count += Header.GetCount();
     Offset += Header.GetCount();
     InternalPartsCount += Header.GetInternalPartsCount();
-    AFL_ENSURE(Count <= Key.GetCount());
-    AFL_ENSURE(InternalPartsCount <= Key.GetInternalPartsCount());
+    AFL_ENSURE(Count <= Key.GetCount())("Count", Count)("Key.Count", Key.GetCount());
+    AFL_ENSURE(InternalPartsCount <= Key.GetInternalPartsCount())("InternalPartsCount", InternalPartsCount)("Key.InternalPartsCount", Key.GetInternalPartsCount());
 }
 
 bool TBlobIterator::IsValid()
@@ -828,11 +828,11 @@ bool TBlobIterator::IsValid()
 
 bool TBlobIterator::Next()
 {
-    AFL_ENSURE(IsValid());
+    AFL_ENSURE(IsValid())("Key", Key.ToString());
     Data += Header.GetPayloadSize() + sizeof(ui16) + Header.ByteSize();
     if (Data == End) { //this was last batch
-        AFL_ENSURE(Count == Key.GetCount());
-        AFL_ENSURE(InternalPartsCount == Key.GetInternalPartsCount());
+        AFL_ENSURE(Count == Key.GetCount())("Count", Count)("Key.Count", Key.GetCount());
+        AFL_ENSURE(InternalPartsCount == Key.GetInternalPartsCount())("InternalPartsCount", InternalPartsCount)("Key.InternalPartsCount", Key.GetInternalPartsCount());
         return false;
     }
     ParseBatch();
@@ -841,7 +841,7 @@ bool TBlobIterator::Next()
 
 TBatch TBlobIterator::GetBatch()
 {
-    AFL_ENSURE(IsValid());
+    AFL_ENSURE(IsValid())("Key", Key.ToString());
 
     return TBatch(Header, Data + sizeof(ui16) + Header.ByteSize());
 }

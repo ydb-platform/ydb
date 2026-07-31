@@ -79,7 +79,7 @@ static TShardIterator Cdc(const TString& streamName, const TString& streamArn,
 TString Serialize() const {
     TString data;
     bool result = Proto.SerializeToString(&data);
-    AFL_ENSURE(result);
+    AFL_ENSURE(result)("reason", "failed to serialize shard iterator")("stream_name", Proto.GetStreamName())("shard_id", Proto.GetShardId());
     TString encoded;
     Base64Encode(data, encoded);
     return encoded;

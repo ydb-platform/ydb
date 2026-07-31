@@ -263,7 +263,7 @@ public:
     }
 
     void SetOffsetDelta(ui64 offsetDelta) {
-        AFL_ENSURE(offsetDelta <= Max<ui32>());
+        AFL_ENSURE(offsetDelta <= Max<ui32>())("offsetDelta", offsetDelta);
         SetOffsetDelta(TMaybe<ui32>(static_cast<ui32>(offsetDelta)));
     }
 
@@ -350,7 +350,7 @@ private:
 
     void EnsureValidBodySize() const {
         const ui32 bodySize = GetBodySize();
-        AFL_ENSURE(bodySize == KeySize() || bodySize == KeySizeWithOffsetDelta());
+        AFL_ENSURE(bodySize == KeySize() || bodySize == KeySizeWithOffsetDelta())("bodySize", bodySize)("KeySize", KeySize())("KeySizeWithOffsetDelta", KeySizeWithOffsetDelta());
     }
 
     TKey(EType type, const TPartitionId& partition, const ui64 offset, const ui16 partNo, const ui32 count, const ui16 internalPartsCount, const TMaybe<char> suffix, const TMaybe<ui32> offsetDelta = Nothing())
@@ -375,11 +375,11 @@ private:
     {
         Assign(data.data(), data.size());
         const ui32 bodySize = GetBodySize();
-        AFL_ENSURE(bodySize == KeySize() || bodySize == KeySizeWithOffsetDelta());
-        AFL_ENSURE(*(PtrOffset() - 1) == '_');
-        AFL_ENSURE(*(PtrCount() - 1) == '_');
-        AFL_ENSURE(*(PtrPartNo() - 1) == '_');
-        AFL_ENSURE(*(PtrInternalPartsCount() - 1) == '_');
+        AFL_ENSURE(bodySize == KeySize() || bodySize == KeySizeWithOffsetDelta())("bodySize", bodySize)("KeySize", KeySize())("KeySizeWithOffsetDelta", KeySizeWithOffsetDelta());
+        AFL_ENSURE(*(PtrOffset() - 1) == '_')("char", *(PtrOffset() - 1));
+        AFL_ENSURE(*(PtrCount() - 1) == '_')("char", *(PtrCount() - 1));
+        AFL_ENSURE(*(PtrPartNo() - 1) == '_')("char", *(PtrPartNo() - 1));
+        AFL_ENSURE(*(PtrInternalPartsCount() - 1) == '_')("char", *(PtrInternalPartsCount() - 1));
 
         ParsePartition();
         ParseOffset();
@@ -388,7 +388,7 @@ private:
         ParseInternalPartsCount();
 
         if (bodySize == KeySizeWithOffsetDelta()) {
-            AFL_ENSURE(Data()[KeySize()] == '_');
+            AFL_ENSURE(Data()[KeySize()] == '_')("char", Data()[KeySize()]);
             OffsetDelta = FromString<ui32>(TStringBuf{PtrOffsetDelta(), 10});
         } else {
             OffsetDelta = Nothing();

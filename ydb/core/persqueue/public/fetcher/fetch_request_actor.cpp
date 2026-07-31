@@ -258,7 +258,7 @@ public:
             return SendReplyAndDie(CreateErrorReply(Ydb::StatusIds::BAD_REQUEST, reason), ctx);
         }
 
-        AFL_ENSURE(!TabletInfo.empty()); // if TabletInfo is empty - topic is empty
+        AFL_ENSURE(!TabletInfo.empty())("reason", "topic must have partitions")("topic", name);
     }
 
     void ProceedFetchRequest(const TActorContext& ctx) {
@@ -324,7 +324,9 @@ public:
                 ("partition", partitionId)
                 ("tabletId", tabletId);
             auto& tabletInfo = jt->second;
-            AFL_ENSURE(!tabletInfo.BrokenPipe); // If pipe is broken, than partition status is DataReceived. It is verified early.
+            AFL_ENSURE(!tabletInfo.BrokenPipe)
+                ("reason", "tablet pipe must not be broken")("topic", topic)("partition", partitionId)
+                ("tablet_id", tabletId)("broken_pipe", tabletInfo.BrokenPipe);
 
             FetchRequestCurrentReadTablet = tabletId;
             PartitionStatus[FetchRequestCurrentPartitionIndex] = EPartitionStatus::DataRequested;
@@ -385,7 +387,9 @@ public:
         YDB_LOG_DEBUG("Handle TEvPersQueue::TEvResponse",
             {"logPrefix", LOG_PREFIX},
             {"ev", record.ShortDebugString()});
-        AFL_ENSURE(record.HasPartitionResponse());
+        AFL_ENSURE(record.HasPartitionResponse())
+            ("reason", "response must have partition response")("fetch_partition_index", FetchRequestCurrentPartitionIndex)
+            ("has_partition_response", record.HasPartitionResponse());
 
         if (record.GetPartitionResponse().GetCookie() != FetchRequestCurrentPartitionIndex || FetchRequestCurrentReadTablet == 0) {
             YDB_LOG_WARN("Proxy fetch error: got response from tablet while waiting from and requested tablet is",
@@ -404,7 +408,8 @@ public:
         FetchRequestCurrentReadTablet = 0;
         EnsureResponse();
 
-        AFL_ENSURE(FetchRequestCurrentPartitionIndex < Settings.Partitions.size());
+        AFL_ENSURE(FetchRequestCurrentPartitionIndex < Settings.Partitions.size())
+            ("fetch_partition_index", FetchRequestCurrentPartitionIndex)("partitions_size", Settings.Partitions.size());
         PartitionStatus[FetchRequestCurrentPartitionIndex] = EPartitionStatus::DataReceived;
 
         const auto& req = Settings.Partitions[FetchRequestCurrentPartitionIndex];

@@ -1570,7 +1570,9 @@ namespace NKikimr::NDataStreams::V1 {
                         Result.set_millis_behind_latest(0);
 
                         if (IsQuotaRequired()) {
-                            AFL_ENSURE(MaybeRequestQuota(1, EWakeupTag::RlAllowed, ctx));
+                            AFL_ENSURE(MaybeRequestQuota(1, EWakeupTag::RlAllowed, ctx))
+                                ("reason", "quota request must succeed")("ru", 1)
+                                ("stream_name", ShardIterator.GetStreamName())("shard_id", ShardIterator.GetShardId());
                         } else {
                             SendResponse(ctx);
                         }
@@ -1639,7 +1641,9 @@ namespace NKikimr::NDataStreams::V1 {
 
         if (IsQuotaRequired()) {
             const auto ru = 1 + CalcRuConsumption(GetPayloadSize());
-            AFL_ENSURE(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, ctx));
+            AFL_ENSURE(MaybeRequestQuota(ru, EWakeupTag::RlAllowed, ctx))
+                ("reason", "quota request must succeed")("ru", ru)
+                ("stream_name", ShardIterator.GetStreamName())("shard_id", ShardIterator.GetShardId());
         } else {
             SendResponse(ctx);
         }

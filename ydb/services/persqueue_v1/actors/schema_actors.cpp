@@ -30,7 +30,7 @@ void TPQDescribeTopicActor::StateWork(TAutoPtr<IEventHandle>& ev) {
 
 
 void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-    AFL_ENSURE(ev->Get()->Request.Get()->ResultSet.size() == 1); // describe for only one topic
+    AFL_ENSURE(ev->Get()->Request.Get()->ResultSet.size() == 1)("result_set_size", ev->Get()->Request.Get()->ResultSet.size());
     if (ReplyIfNotTopic(ev)) {
         return;
     }
@@ -372,17 +372,17 @@ void TDescribeTopicActorImpl::Handle(TEvPQProxy::TEvRequestTablet::TPtr& ev, con
             return;
         }
         if (!GotLocation) {
-            AFL_ENSURE(RequestsInfly > 0);
+            AFL_ENSURE(RequestsInfly > 0)("requests_inflight", RequestsInfly)("tablet_id", ev->Get()->TabletId)("reason", "location request inflight expected");
             --RequestsInfly;
         }
         if (!GotReadSessions) {
-            AFL_ENSURE(RequestsInfly > 0);
+            AFL_ENSURE(RequestsInfly > 0)("requests_inflight", RequestsInfly)("tablet_id", ev->Get()->TabletId)("reason", "read sessions request inflight expected");
             --RequestsInfly;
         }
     } else if (tabletInfo.ResultRecived) {
         return;
     } else {
-        AFL_ENSURE(RequestsInfly > 0);
+        AFL_ENSURE(RequestsInfly > 0)("requests_inflight", RequestsInfly)("tablet_id", ev->Get()->TabletId);
         --RequestsInfly;
     }
 
@@ -426,7 +426,7 @@ void TDescribeTopicActorImpl::RequestTablet(TTabletInfo& tablet, const TActorCon
 }
 
 void TDescribeTopicActorImpl::RequestBalancer(const TActorContext& ctx) {
-    AFL_ENSURE(BalancerTabletId);
+    AFL_ENSURE(BalancerTabletId)("reason", "balancer tablet id expected")("balancer_tablet_id", BalancerTabletId);
     if (Settings.RequireLocation) {
         if (!GotLocation) {
             RequestPartitionsLocation(ctx);
@@ -487,7 +487,7 @@ void TDescribeTopicActorImpl::RequestPartitionsLocation(const TActorContext& ctx
 }
 
 void TDescribeTopicActorImpl::RequestReadSessionsInfo(const TActorContext& ctx) {
-    AFL_ENSURE(Settings.Mode == TDescribeTopicActorSettings::EMode::DescribeConsumer);
+    AFL_ENSURE(Settings.Mode == TDescribeTopicActorSettings::EMode::DescribeConsumer)("mode", static_cast<int>(Settings.Mode));
     NTabletPipe::SendData(
             ctx, Tablets[BalancerTabletId].Pipe,
                     new TEvPersQueue::TEvGetReadSessionsInfo(NPersQueue::ConvertNewConsumerName(Settings.Consumer, ctx))
@@ -521,7 +521,7 @@ void TDescribeTopicActorImpl::Handle(NKikimr::TEvPersQueue::TEvStatusResponse::T
     }
 
     tabletInfo.ResultRecived = true;
-    AFL_ENSURE(RequestsInfly > 0);
+    AFL_ENSURE(RequestsInfly > 0)("requests_inflight", RequestsInfly)("tablet_id", record.GetTabletId());
     --RequestsInfly;
 
     NTabletPipe::CloseClient(ctx, tabletInfo.Pipe);
@@ -543,10 +543,10 @@ void TDescribeTopicActorImpl::Handle(NKikimr::TEvPersQueue::TEvReadSessionsInfoR
         return;
 
     auto it = Tablets.find(BalancerTabletId);
-    AFL_ENSURE(it != Tablets.end());
+    AFL_ENSURE(it != Tablets.end())("balancer_tablet_id", BalancerTabletId)("tablets_size", Tablets.size());
 
     GotReadSessions = true;
-    AFL_ENSURE(RequestsInfly > 0);
+    AFL_ENSURE(RequestsInfly > 0)("requests_inflight", RequestsInfly)("reason", "read sessions response inflight expected");
     --RequestsInfly;
 
     CheckCloseBalancerPipe(ctx);
@@ -565,7 +565,7 @@ void TDescribeTopicActorImpl::Handle(TEvPersQueue::TEvGetPartitionsLocationRespo
         return;
 
     auto it = Tablets.find(BalancerTabletId);
-    AFL_ENSURE(it != Tablets.end());
+    AFL_ENSURE(it != Tablets.end())("balancer_tablet_id", BalancerTabletId)("tablets_size", Tablets.size());
 
     const auto& record = ev->Get()->Record;
     if (record.GetStatus()) {
@@ -573,7 +573,7 @@ void TDescribeTopicActorImpl::Handle(TEvPersQueue::TEvGetPartitionsLocationRespo
         if (res) {
             GotLocation = true;
             LocationsBackoff.Reset();
-            AFL_ENSURE(RequestsInfly > 0);
+            AFL_ENSURE(RequestsInfly > 0)("requests_inflight", RequestsInfly)("reason", "location response inflight expected");
             --RequestsInfly;
 
             CheckCloseBalancerPipe(ctx);
@@ -733,7 +733,7 @@ bool TDescribeTopicActor::ApplyResponse(
         TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext&
 ) {
     const auto& record = ev->Get()->Record;
-    AFL_ENSURE(Settings.RequireLocation);
+    AFL_ENSURE(Settings.RequireLocation)("require_location", Settings.RequireLocation);
 
     for (auto i = 0u; i < std::min<ui64>(record.LocationsSize(), TotalPartitions); ++i) {
         const auto& location = record.GetLocations(i);
@@ -757,7 +757,7 @@ void TDescribeTopicActor::Reply(const TActorContext& ctx) {
 }
 
 void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-    AFL_ENSURE(ev->Get()->Request.Get()->ResultSet.size() == 1); // describe for only one topic
+    AFL_ENSURE(ev->Get()->Request.Get()->ResultSet.size() == 1)("result_set_size", ev->Get()->Request.Get()->ResultSet.size());
     if (ReplyIfNotTopic(ev)) {
         return;
     }

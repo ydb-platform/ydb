@@ -32,7 +32,7 @@ namespace NDeprecatedUserData {
     }
 
     void Parse(const TString& data, ui64& offset, ui32& gen, ui32& step, TString& session) {
-        AFL_ENSURE(sizeof(ui64) <= data.size());
+        AFL_ENSURE(sizeof(ui64) <= data.size())("data_size", data.size());
 
         offset = *reinterpret_cast<const ui64*>(data.c_str());
         gen = 0;
@@ -163,14 +163,14 @@ void TUserInfo::ReadDone(const TActorContext& ctx, const TInstant& now, ui64 rea
     for (auto& avg : AvgReadBytes) {
         avg.Update(readSize, now);
     }
-    AFL_ENSURE(ActiveReads > 0);
+    AFL_ENSURE(ActiveReads > 0)("ActiveReads", ActiveReads);
     --ActiveReads;
     UpdateReadingTimeAndState(endOffset, now);
     ReadTimestamp = now;
 }
 
 static TUserInfo::TPerPartitionCounters CreateDetailedMetricsForSubgroup(const TActorContext& ctx, const TString& user, NMonitoring::TDynamicCounterPtr subgroup) {
-    AFL_ENSURE(subgroup);
+    AFL_ENSURE(subgroup)("reason", "subgroup not set");
 
     bool fcc = AppData()->PQConfig.GetTopicsAreFirstClassCitizen();
 
@@ -210,7 +210,7 @@ void TUserInfo::ResetDetailedMetrics() {
 }
 
 void TUserInfo::SetupStreamCounters(NMonitoring::TDynamicCounterPtr subgroup) {
-    AFL_ENSURE(subgroup);
+    AFL_ENSURE(subgroup)("reason", "subgroup not set");
     TVector<std::pair<TString, TString>> subgroups;
     if (!NoConsumer) {
         subgroups.push_back({"consumer", User});
@@ -339,9 +339,9 @@ TUsersInfoStorage::TUsersInfoStorage(
 }
 
 void TUsersInfoStorage::Init(TActorId tabletActor, TActorId partitionActor, const TActorContext& ctx) {
-    AFL_ENSURE(UsersInfo.empty());
-    AFL_ENSURE(!TabletActor);
-    AFL_ENSURE(!PartitionActor);
+    AFL_ENSURE(UsersInfo.empty())("UsersInfo_size", UsersInfo.size());
+    AFL_ENSURE(!TabletActor)("TabletActor", TabletActor);
+    AFL_ENSURE(!PartitionActor)("PartitionActor", PartitionActor);
     TabletActor = tabletActor;
     PartitionActor = partitionActor;
 
@@ -355,8 +355,8 @@ void TUsersInfoStorage::Init(TActorId tabletActor, TActorId partitionActor, cons
 }
 
 void TUsersInfoStorage::ParseDeprecated(const TString& key, const TString& data, const TActorContext& ctx) {
-    AFL_ENSURE(key.size() >= TKeyPrefix::MarkedSize());
-    AFL_ENSURE(key[TKeyPrefix::MarkPosition()] == TKeyPrefix::MarkUserDeprecated);
+    AFL_ENSURE(key.size() >= TKeyPrefix::MarkedSize())("key_size", key.size())("MarkedSize", TKeyPrefix::MarkedSize());
+    AFL_ENSURE(key[TKeyPrefix::MarkPosition()] == TKeyPrefix::MarkUserDeprecated)("mark", key[TKeyPrefix::MarkPosition()]);
     TString user = key.substr(TKeyPrefix::MarkedSize());
 
     TUserInfo* userInfo = GetIfExists(user);
@@ -382,17 +382,15 @@ void TUsersInfoStorage::ParseDeprecated(const TString& key, const TString& data,
 }
 
 void TUsersInfoStorage::Parse(const TString& key, const TString& data, const TActorContext& ctx) {
-    AFL_ENSURE(key.size() >= TKeyPrefix::MarkedSize());
-    AFL_ENSURE(key[TKeyPrefix::MarkPosition()] == TKeyPrefix::MarkUser);
+    AFL_ENSURE(key.size() >= TKeyPrefix::MarkedSize())("key_size", key.size())("MarkedSize", TKeyPrefix::MarkedSize());
+    AFL_ENSURE(key[TKeyPrefix::MarkPosition()] == TKeyPrefix::MarkUser)("mark", key[TKeyPrefix::MarkPosition()]);
     TString user = key.substr(TKeyPrefix::MarkedSize());
 
-    AFL_ENSURE(sizeof(ui64) <= data.size());
+    AFL_ENSURE(sizeof(ui64) <= data.size())("data_size", data.size());
 
     NKikimrPQ::TUserInfo userData;
     bool res = userData.ParseFromString(data);
-    AFL_ENSURE(res);
-
-    AFL_ENSURE(userData.GetOffset() <= (ui64)Max<i64>())("description", "Offset is too big")("offset", userData.GetOffset());
+    AFL_ENSURE(res)("reason", "failed to parse user info")("user", user);
     i64 offset = static_cast<i64>(userData.GetOffset());
 
     TUserInfo* userInfo = GetIfExists(user);
@@ -412,13 +410,12 @@ void TUsersInfoStorage::Parse(const TString& key, const TString& data, const TAc
         userInfo->ReadRuleGeneration = userData.GetReadRuleGeneration();
     }
     userInfo = GetIfExists(user);
-    AFL_ENSURE(userInfo);
-    userInfo->Parsed = true;
+    AFL_ENSURE(userInfo)("reason", "user info not found after create")("user", user);
 }
 
 void TUsersInfoStorage::Remove(const TString& user, const TActorContext&) {
     auto it = UsersInfo.find(user);
-    AFL_ENSURE(it != UsersInfo.end());
+    AFL_ENSURE(it != UsersInfo.end())("user", user);
     if (ImporantOrExtendedAvailabilityPeriod(*it->second)) {
         UpdateImportantExtSlice(it->second.Get(), EImportantSliceAction::Remove);
     } else {
@@ -598,7 +595,7 @@ TUserInfo& TUsersInfoStorage::Create(
                                               gen, step, offset, readOffsetRewindSum, readFromTimestamp, pipeClient,
                                               anyCommits, committedMetadata);
     auto result = UsersInfo.emplace(user, userInfo);
-    AFL_ENSURE(result.second);
+    AFL_ENSURE(result.second)("user", user);
     if (ImporantOrExtendedAvailabilityPeriod(*userInfo)) {
         UpdateImportantExtSlice(userInfo.Get(), EImportantSliceAction::Insert);
     }

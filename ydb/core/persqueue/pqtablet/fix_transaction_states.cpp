@@ -9,7 +9,7 @@ static const size_t TX_KEY_LENGTH = GetTxKey(0).size();
 
 bool IsMainContextOfTransaction(const TString& key)
 {
-    AFL_ENSURE(key.size() >= TX_KEY_LENGTH);
+    AFL_ENSURE(key.size() >= TX_KEY_LENGTH)("key_size", key.size())("TX_KEY_LENGTH", TX_KEY_LENGTH);
     return key.size() == TX_KEY_LENGTH;
 }
 
@@ -21,7 +21,7 @@ ui32 GetPartitionsCount(const NKikimrPQ::TTransaction& tx)
     case NKikimrPQ::TTransaction::KIND_CONFIG:
         return tx.GetTabletConfig().PartitionsSize();
     case NKikimrPQ::TTransaction::KIND_UNKNOWN:
-        AFL_ENSURE(false);
+        AFL_ENSURE(false)("reason", "unknown transaction kind")("kind", static_cast<int>(tx.GetKind()));
     }
 }
 
@@ -38,8 +38,8 @@ THashMap<ui64, NKikimrPQ::TTransaction> CollectTransactions(const TVector<NKikim
             const auto& pair = readRange.GetPair(i);
 
             NKikimrPQ::TTransaction tx;
-            AFL_ENSURE(tx.ParseFromString(pair.GetValue()));
-            AFL_ENSURE(tx.GetKind() != NKikimrPQ::TTransaction::KIND_UNKNOWN);
+            AFL_ENSURE(tx.ParseFromString(pair.GetValue()))("reason", "failed to parse transaction")("key", pair.GetKey());
+            AFL_ENSURE(tx.GetKind() != NKikimrPQ::TTransaction::KIND_UNKNOWN)("kind", static_cast<int>(tx.GetKind()));
 
             if (IsMainContextOfTransaction(pair.GetKey())) {
                 txId = tx.GetTxId();
@@ -51,9 +51,9 @@ THashMap<ui64, NKikimrPQ::TTransaction> CollectTransactions(const TVector<NKikim
                 }
             } else {
                 // не может быть бесхозных субтранзакций
-                AFL_ENSURE(txId.Defined() && (*txId == tx.GetTxId()));
+                AFL_ENSURE(txId.Defined() && (*txId == tx.GetTxId()))("txId", txId.GetOrElse(0))("tx_txId", tx.GetTxId());
                 ++current;
-                AFL_ENSURE(current <= expected);
+                AFL_ENSURE(current <= expected)("current", current)("expected", expected);
                 // если есть записи от всех субтранзакций, то партиции уже выполнили транзакцию (stable-26-1)
                 // если у основной транзакции статус EXECUTED, то таблетка уже выполнила транзакцию (stable-25-4)
                 // иначе нам надо вернуть транзакцию в состояние PLANNED

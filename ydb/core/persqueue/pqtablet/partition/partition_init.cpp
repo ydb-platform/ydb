@@ -1230,7 +1230,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
 
     UsersInfoStorage->Init(TabletActorId, SelfId(), ctx);
 
-    PQ_ENSURE(AppData(ctx)->PQConfig.GetMaxBlobsPerLevel() > 0);
+    PQ_ENSURE(AppData(ctx)->PQConfig.GetMaxBlobsPerLevel() > 0)("MaxBlobsPerLevel", AppData(ctx)->PQConfig.GetMaxBlobsPerLevel());
     ui32 border = LEVEL0;
     MaxSizeCheck = 0;
     MaxBlobSize = AppData(ctx)->PQConfig.GetMaxBlobSize();
@@ -1238,7 +1238,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
     for (ui32 i = 0; i < TotalLevels; ++i) {
         CompactLevelBorder.push_back(border);
         MaxSizeCheck += border;
-        PQ_ENSURE(i + 1 < TotalLevels && border < MaxBlobSize || i + 1 == TotalLevels && border == MaxBlobSize);
+        PQ_ENSURE(i + 1 < TotalLevels && border < MaxBlobSize || i + 1 == TotalLevels && border == MaxBlobSize)("i", i)("TotalLevels", TotalLevels)("border", border)("MaxBlobSize", MaxBlobSize);
         border *= AppData(ctx)->PQConfig.GetMaxBlobsPerLevel();
         border = Min(border, MaxBlobSize);
     }
@@ -1582,7 +1582,7 @@ static void RequestRange(const TActorContext& ctx, const TActorId& dst, const TP
     const TKeyPrefix& to = keyPrefixes.second;
 
     if (!key.empty()) {
-        AFL_ENSURE(key.StartsWith(TStringBuf(from.Data(), from.Size())));
+        AFL_ENSURE(key.StartsWith(TStringBuf(from.Data(), from.Size())))("key", key)("from", TStringBuf(from.Data(), from.Size()));
         from.Clear();
         from.Append(key.data(), key.size());
     }

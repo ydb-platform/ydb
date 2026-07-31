@@ -374,7 +374,7 @@ private:
 
     void SendEvent(TEvPQ::TEvReserveBytes::TPtr ev) {
         bool prevFromDeduplicatedQueue = std::exchange(ev->Get()->FromDeduplicatedQueue, true);
-        AFL_ENSURE(prevFromDeduplicatedQueue == false);
+        AFL_ENSURE(prevFromDeduplicatedQueue == false)("prevFromDeduplicatedQueue", prevFromDeduplicatedQueue);
         YDB_LOG_DEBUG("Forward event",
             {"logPrefix", NPQ_LOG_PREFIX},
             {"typeRewrite", ev->GetTypeRewrite()},

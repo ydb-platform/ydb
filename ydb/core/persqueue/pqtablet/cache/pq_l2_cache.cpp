@@ -14,7 +14,7 @@ IActor* CreateNodePersQueueL2Cache(const TCacheL2Parameters& params, TIntrusiveP
 void TPersQueueCacheL2::Bootstrap(const TActorContext& ctx)
 {
     TAppData * appData = AppData(ctx);
-    AFL_ENSURE(appData);
+    AFL_ENSURE(appData)("reason", "app data not set");
 
     auto mon = appData->Mon;
     if (mon) {

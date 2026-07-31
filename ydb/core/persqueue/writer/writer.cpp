@@ -79,7 +79,7 @@ TString TEvPartitionWriter::TEvWriteAccepted::ToString() const {
 }
 
 TString TEvPartitionWriter::TEvWriteResponse::DumpError() const {
-    AFL_ENSURE(!IsSuccess());
+    AFL_ENSURE(!IsSuccess())("reason", "DumpError requires failure")("session_id", SessionId)("tx_id", TxId);
 
     return TStringBuilder() << "Error {"
         << " SessionId: " << SessionId

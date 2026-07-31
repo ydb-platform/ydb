@@ -840,7 +840,7 @@ bool TPartition::CleanUpBlobsLegacy(TEvKeyValue::TEvRequest *request, const TAct
         hasDrop = true;
     }
 
-    PQ_ENSURE(!CompactionBlobEncoder.DataKeysBody.empty());
+    PQ_ENSURE(!CompactionBlobEncoder.DataKeysBody.empty())("DataKeysBody_size", CompactionBlobEncoder.DataKeysBody.size());
 
     if (!hasDrop) {
         return false;
@@ -1051,7 +1051,7 @@ void TPartition::InitComplete(const TActorContext& ctx) {
 
 
     for (auto&& userInfoPair : UsersInfoStorage->GetAll()) {
-        PQ_ENSURE(userInfoPair.second.Offset >= 0);
+        PQ_ENSURE(userInfoPair.second.Offset >= 0)("offset", userInfoPair.second.Offset);
         ReadTimestampForOffset(userInfoPair.first, userInfoPair.second, ctx);
     }
     if (PartitionCountersLabeled) {
@@ -1190,13 +1190,13 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
     result.SetGapCount(gapsCount);
     result.SetGapSize(headGapSize + GapSize);
 
-    PQ_ENSURE(AvgWriteBytes.size() == 4);
+    PQ_ENSURE(AvgWriteBytes.size() == 4)("size", AvgWriteBytes.size());
     result.SetAvgWriteSpeedPerSec(AvgWriteBytes[0].GetValue());
     result.SetAvgWriteSpeedPerMin(AvgWriteBytes[1].GetValue());
     result.SetAvgWriteSpeedPerHour(AvgWriteBytes[2].GetValue());
     result.SetAvgWriteSpeedPerDay(AvgWriteBytes[3].GetValue());
 
-    PQ_ENSURE(AvgQuotaBytes.size() == 4);
+    PQ_ENSURE(AvgQuotaBytes.size() == 4)("size", AvgQuotaBytes.size());
     result.SetAvgQuotaSpeedPerSec(AvgQuotaBytes[0].GetValue());
     result.SetAvgQuotaSpeedPerMin(AvgQuotaBytes[1].GetValue());
     result.SetAvgQuotaSpeedPerHour(AvgQuotaBytes[2].GetValue());
@@ -1228,7 +1228,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
             ? requiredConsumers.contains(userInfo.User)
             : clientId.empty() || clientId == userInfo.User;
         if (consumerShouldBeProcessed) {
-            PQ_ENSURE(userInfo.AvgReadBytes.size() == 4);
+            PQ_ENSURE(userInfo.AvgReadBytes.size() == 4)("size", userInfo.AvgReadBytes.size());
             for (ui32 i = 0; i < 4; ++i) {
                 resSpeed[i] += userInfo.AvgReadBytes[i].GetValue();
             }
@@ -1538,7 +1538,11 @@ TInstant TPartition::GetWriteTimeEstimate(ui64 offset) const {
         ("is-fast-write", blobEncoder.ForFastWrite);
     PQ_ENSURE(it == container.end() ||
                    offset < it->Key.GetOffset() ||
-                   it->Key.GetOffset() == offset && it->Key.GetPartNo() > 0);
+                   it->Key.GetOffset() == offset && it->Key.GetPartNo() > 0)
+        ("offset", offset)
+        ("it_is_end", it == container.end())
+        ("it_offset", it == container.end() ? Max<ui64>() : it->Key.GetOffset())
+        ("it_partNo", it == container.end() ? Max<ui16>() : it->Key.GetPartNo());
 
     --it;
     if (it != container.begin())
@@ -1562,8 +1566,8 @@ void TPartition::Handle(TEvPQ::TEvUpdateWriteTimestamp::TPtr& ev, const TActorCo
 void TPartition::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx)
 {
     NKikimrPQ::TEvProposeTransaction& event = *ev->Get()->MutableRecord();
-    PQ_ENSURE(event.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kData);
-    PQ_ENSURE(event.HasData());
+    PQ_ENSURE(event.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kData)("TxBodyCase", static_cast<int>(event.GetTxBodyCase()));
+    PQ_ENSURE(event.HasData())("reason", "data required");
     EnsureCanonical(*event.MutableData());
     const NKikimrPQ::TDataTransaction& txBody = event.GetData();
 
@@ -1663,7 +1667,7 @@ void TPartition::HandleOnInit(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TAc
     YDB_LOG_DEBUG_COMP(Service, "HandleOnInit TEvPQ::TEvGetWriteInfoRequest",
         {"logPrefix", NPQ_LOG_PREFIX});
 
-    PQ_ENSURE(IsSupportive());
+    PQ_ENSURE(IsSupportive())("reason", "supportive partition required")("topic", TopicName());
 
     ev->Get()->OriginalPartition = ev->Sender;
     AddPendingEvent(ev);
@@ -1674,7 +1678,7 @@ void TPartition::HandleOnInit(TEvPQ::TEvGetWriteInfoResponse::TPtr& ev, const TA
     YDB_LOG_DEBUG_COMP(Service, "HandleOnInit TEvPQ::TEvGetWriteInfoResponse",
         {"logPrefix", NPQ_LOG_PREFIX});
 
-    PQ_ENSURE(!IsSupportive());
+    PQ_ENSURE(!IsSupportive())("reason", "not a supportive partition")("topic", TopicName());
 
     AddPendingEvent(ev);
 }
@@ -1684,7 +1688,7 @@ void TPartition::HandleOnInit(TEvPQ::TEvGetWriteInfoError::TPtr& ev, const TActo
     YDB_LOG_DEBUG_COMP(Service, "HandleOnInit TEvPQ::TEvGetWriteInfoError",
         {"logPrefix", NPQ_LOG_PREFIX});
 
-    PQ_ENSURE(!IsSupportive());
+    PQ_ENSURE(!IsSupportive())("reason", "not a supportive partition")("topic", TopicName());
 
     AddPendingEvent(ev);
 }
@@ -1747,7 +1751,7 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvTxCommit> ev, con
     PQ_ENSURE(!txIter.IsEnd())("Step", ev->Step)("TxId",  ev->TxId);
     auto& tx = txIter->second;
 
-    PQ_ENSURE(tx->State == ECommitState::Pending);
+    PQ_ENSURE(tx->State == ECommitState::Pending)("State", static_cast<int>(tx->State));
 
     tx->State = ECommitState::Committed;
     tx->ExplicitMessageGroups = std::move(ev->ExplicitMessageGroups);
@@ -1797,15 +1801,15 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvTxRollback> ev, c
 
     auto txIter = TransactionsInflight.begin();
     if (ChangeConfig) {
-        PQ_ENSURE(TransactionsInflight.size() == 1);
+        PQ_ENSURE(TransactionsInflight.size() == 1)("TransactionsInflight_size", TransactionsInflight.size());
     } else {
-        PQ_ENSURE(!TransactionsInflight.empty());
+        PQ_ENSURE(!TransactionsInflight.empty())("TransactionsInflight_size", TransactionsInflight.size());
         txIter = TransactionsInflight.find(ev->TxId);
-        PQ_ENSURE(!txIter.IsEnd());
+        PQ_ENSURE(!txIter.IsEnd())("TxId", ev->TxId);
     }
     auto& tx = txIter->second;
 
-    PQ_ENSURE(tx->State == ECommitState::Pending);
+    PQ_ENSURE(tx->State == ECommitState::Pending)("State", static_cast<int>(tx->State));
 
     tx->State = ECommitState::Aborted;
     tx->SerializedTx = std::move(ev->SerializedTx);
@@ -1831,7 +1835,7 @@ template <>
 void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvGetWriteInfoRequest> ev, const TActorContext& ctx)
 {
     TActorId originalPartition = ev->OriginalPartition;
-    PQ_ENSURE(originalPartition != TActorId());
+    PQ_ENSURE(originalPartition != TActorId())("originalPartition", originalPartition);
 
     if (ClosedInternalPartition || WaitingForPreviousBlobQuota() || (CurrentStateFunc() != &TThis::StateIdle)) {
         YDB_LOG_DEBUG_COMP(Service, "Send TEvPQ::TEvGetWriteInfoError",
@@ -1902,7 +1906,7 @@ void TPartition::WriteInfoResponseHandler(
         const TActorContext& ctx
 ) {
     auto txIter = WriteInfosToTx.find(sender);
-    PQ_ENSURE(!txIter.IsEnd());
+    PQ_ENSURE(!txIter.IsEnd())("reason", "transaction not found");
 
     auto& tx = (*txIter->second);
 
@@ -1934,7 +1938,7 @@ void TPartition::WriteInfoResponseHandler(
         tx.WriteInfoApplied = true;
         tx.Message = (*err)->Message;
     } else {
-        PQ_ENSURE(false);
+        PQ_ENSURE(false)("reason", "unexpected transaction state");
     }
 
     WriteInfosToTx.erase(txIter);
@@ -1945,8 +1949,8 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx,
                                                               TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
 {
     bool isImmediate = (tx.ProposeTransaction != nullptr);
-    PQ_ENSURE(tx.WriteInfo);
-    PQ_ENSURE(!tx.WriteInfoApplied);
+    PQ_ENSURE(tx.WriteInfo)("reason", "write info not set");
+    PQ_ENSURE(!tx.WriteInfoApplied)("WriteInfoApplied", tx.WriteInfoApplied);
     if (!tx.Predicate.GetOrElse(true)) {
         return EProcessResult::Continue;
     }
@@ -2095,7 +2099,7 @@ void TPartition::ReplyToProposeOrPredicate(TSimpleSharedPtr<TTransaction>& tx, b
         tx->CalcPredicateSpan = {};
 
         auto insRes = TransactionsInflight.emplace(tx->Tx->TxId, tx);
-        PQ_ENSURE(insRes.second);
+        PQ_ENSURE(insRes.second)("reason", "insert failed");
 
         if ((Now() - tx->WriteInfoResponseTimestamp) >= TDuration::Seconds(1)) {
             YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "The long answer to TEvTxCalcPredicate",
@@ -2115,7 +2119,7 @@ void TPartition::ReplyToProposeOrPredicate(TSimpleSharedPtr<TTransaction>& tx, b
                                                          tx->Message).Release());
     } else {
         auto insRes = TransactionsInflight.emplace(tx->ProposeConfig->TxId, tx);
-        PQ_ENSURE(insRes.second);
+        PQ_ENSURE(insRes.second)("reason", "insert failed");
 
         auto result = MakeHolder<TEvPQ::TEvProposePartitionConfigResult>(tx->ProposeConfig->Step,
                                                                 tx->ProposeConfig->TxId,
@@ -2281,8 +2285,8 @@ void TPartition::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx) {
         ProcessTimestampRead(ctx);
         return;
     }
-    PQ_ENSURE(userInfo->ReadScheduled);
-    PQ_ENSURE(ReadingForUser != "");
+    PQ_ENSURE(userInfo->ReadScheduled)("ReadScheduled", userInfo->ReadScheduled);
+    PQ_ENSURE(ReadingForUser != "")("ReadingForUser", ReadingForUser);
 
     YDB_LOG_ERROR_COMP(Service, "Topic partition user readTimeStamp",
         {"logPrefix", NPQ_LOG_PREFIX},
@@ -2444,7 +2448,7 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
             }
             id += 2;
         }
-        PQ_ENSURE(id == METRIC_MAX_READ_SPEED_4 + 1);
+        PQ_ENSURE(id == METRIC_MAX_READ_SPEED_4 + 1)("id", id)("expected", METRIC_MAX_READ_SPEED_4 + 1);
         if (userInfo.LabeledCounters->GetCounters()[METRIC_READ_QUOTA_PER_CONSUMER_BYTES].Get()) {
             ui64 quotaUsage = ui64(userInfo.AvgReadBytes[1].GetValue()) * 1000000 / userInfo.LabeledCounters->GetCounters()[METRIC_READ_QUOTA_PER_CONSUMER_BYTES].Get() / 60;
 
@@ -2498,7 +2502,7 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
         }
         id += 2;
     }
-    PQ_ENSURE(id == METRIC_MAX_WRITE_SPEED_4 + 1);
+    PQ_ENSURE(id == METRIC_MAX_WRITE_SPEED_4 + 1)("id", id)("expected", METRIC_MAX_WRITE_SPEED_4 + 1);
 
 
     id = METRIC_TOTAL_QUOTA_SPEED_1;
@@ -2511,7 +2515,7 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
         }
         id += 2;
     }
-    PQ_ENSURE(id == METRIC_MAX_QUOTA_SPEED_4 + 1);
+    PQ_ENSURE(id == METRIC_MAX_QUOTA_SPEED_4 + 1)("id", id)("expected", METRIC_MAX_QUOTA_SPEED_4 + 1);
 
     ui64 bytesThrottledMicroseconds = 0;
     ui64 messagesThrottledMicroseconds = 0;
@@ -2630,7 +2634,7 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
     auto& response = ev->Get()->Record;
 
     if (response.HasCookie() && (response.GetCookie() == static_cast<ui64>(ERequestCookie::CompactificationWrite))) {
-        PQ_ENSURE(CompacterKvRequestInflight);
+        PQ_ENSURE(CompacterKvRequestInflight)("CompacterKvRequestInflight", CompacterKvRequestInflight);
         CompacterKvRequestInflight = false;
         YDB_LOG_DEBUG_COMP(Service, "Topic partition Got compacter KV response, release RW lock",
             {"logPrefix", NPQ_LOG_PREFIX},
@@ -2780,9 +2784,9 @@ void TPartition::AddUserAct(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo> act)
 void TPartition::RemoveUserAct(const TString& consumerId)
 {
     auto p = UserActCount.find(consumerId);
-    PQ_ENSURE(p != UserActCount.end());
+    PQ_ENSURE(p != UserActCount.end())("reason", "user act count not found");
 
-    PQ_ENSURE(p->second > 0);
+    PQ_ENSURE(p->second > 0)("count", p->second);
     if (!--p->second) {
         UserActCount.erase(p);
     }
@@ -2943,7 +2947,7 @@ bool TPartition::WritingCycleDoesNotExceedTheLimits() const
 void TPartition::ProcessUserActionAndTxPendingCommits() {
     CurrentBatchSize = 0;
 
-    PQ_ENSURE(!KVWriteInProgress);
+    PQ_ENSURE(!KVWriteInProgress)("KVWriteInProgress", KVWriteInProgress);
     if (!PersistRequest) {
         PersistRequest = MakeHolder<TEvKeyValue::TEvRequest>();
     }
@@ -3047,8 +3051,8 @@ void TPartition::DeleteFromSet(const TVector<TString>& p, THashMap<TString, size
 {
     for (const auto& s : p) {
         auto i = q.find(s);
-        PQ_ENSURE(i != q.end());
-        PQ_ENSURE(i->second > 0);
+        PQ_ENSURE(i != q.end())("reason", "queue entry not found");
+        PQ_ENSURE(i->second > 0)("count", i->second);
         if (--i->second) {
             continue;
         }
@@ -3063,7 +3067,7 @@ void TPartition::DeleteAffectedSourceIdsAndConsumers(const TAffectedSourceIdsAnd
     DeleteFromSet(affectedSourceIdsAndConsumers.TxReadConsumers, TxAffectedConsumers);
     DeleteFromSet(affectedSourceIdsAndConsumers.ReadConsumers, SetOffsetAffectedConsumers);
 
-    PQ_ENSURE(WriteKeysSizeEstimate >= affectedSourceIdsAndConsumers.WriteKeysSize);
+    PQ_ENSURE(WriteKeysSizeEstimate >= affectedSourceIdsAndConsumers.WriteKeysSize)("WriteKeysSizeEstimate", WriteKeysSizeEstimate)("WriteKeysSize", affectedSourceIdsAndConsumers.WriteKeysSize);
     WriteKeysSizeEstimate -= affectedSourceIdsAndConsumers.WriteKeysSize;
 }
 
@@ -3360,7 +3364,7 @@ TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimple
             YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "The TxId must be blocked",
                 {"logPrefix", LogPrefix()},
                 {"tTxId", t->GetTxId()});
-            PQ_ENSURE(result != EProcessResult::Continue);
+            PQ_ENSURE(result != EProcessResult::Continue)("result", static_cast<int>(result));
             return result;
         }
     }
@@ -3395,9 +3399,9 @@ TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimple
         ReplyToProposeOrPredicate(t, false);
         return EProcessResult::Break;
     } else {
-        PQ_ENSURE(t->ChangeConfig);
+        PQ_ENSURE(t->ChangeConfig)("reason", "change config not set");
 
-        PQ_ENSURE(!ChangeConfig && !ChangingConfig);
+        PQ_ENSURE(!ChangeConfig && !ChangingConfig)("ChangeConfig", static_cast<bool>(ChangeConfig))("ChangingConfig", ChangingConfig);
         if (HasPendingCommitsOrPendingWrites()) {
             YDB_LOG_DEBUG_COMP(Service, "Wait until the operation with the config becomes the first in the queue",
                 {"logPrefix", NPQ_LOG_PREFIX});
@@ -3419,7 +3423,7 @@ bool TPartition::HasPendingCommitsOrPendingWrites() const
 
 void TPartition::TryAddCmdWriteForTransaction(const TTransaction& tx)
 {
-    PQ_ENSURE(!IsSupportive());
+    PQ_ENSURE(!IsSupportive())("reason", "not a supportive partition")("topic", TopicName());
 
     if (!tx.SerializedTx.Defined()) {
         return;
@@ -3427,8 +3431,8 @@ void TPartition::TryAddCmdWriteForTransaction(const TTransaction& tx)
 
     const TMaybe<ui64> txId = tx.GetTxId();
     const TMaybe<ui64> step = tx.GetStep();
-    PQ_ENSURE(txId.Defined());
-    PQ_ENSURE(step.Defined());
+    PQ_ENSURE(txId.Defined())("reason", "tx id not defined");
+    PQ_ENSURE(step.Defined())("reason", "step not defined");
 
     TStaleTxMetaEntry entry;
     entry.Step = *step;
@@ -3490,16 +3494,16 @@ void TPartition::FlushStaleTxMetaDone(const TActorContext& ctx)
 
 void TPartition::AddCmdWritePersistStaleTxMeta(const TStaleTxMetaEntry& entry)
 {
-    PQ_ENSURE(!IsSupportive());
+    PQ_ENSURE(!IsSupportive())("reason", "not a supportive partition")("topic", TopicName());
 
     if (!entry.SerializedTx.Defined()) {
         return;
     }
 
-    PQ_ENSURE(PersistRequest);
+    PQ_ENSURE(PersistRequest)("reason", "persist request not set");
 
     TString value;
-    PQ_ENSURE(entry.SerializedTx->SerializeToString(&value));
+    PQ_ENSURE(entry.SerializedTx->SerializeToString(&value))("reason", "failed to serialize tx");
 
     auto command = PersistRequest->Record.AddCmdWrite();
     command->SetKey(GetTxKey(entry.TxId, Partition.OriginalPartitionId));
@@ -3510,10 +3514,10 @@ void TPartition::AddCmdWritePersistStaleTxMeta(const TStaleTxMetaEntry& entry)
         return;
     }
 
-    PQ_ENSURE(entry.BootstrapConfig.Defined() && entry.PartitionsData.Defined());
+    PQ_ENSURE(entry.BootstrapConfig.Defined() && entry.PartitionsData.Defined())("BootstrapConfig", entry.BootstrapConfig.Defined())("PartitionsData", entry.PartitionsData.Defined());
 
     value.clear();
-    PQ_ENSURE(entry.TabletConfig->SerializeToString(&value));
+    PQ_ENSURE(entry.TabletConfig->SerializeToString(&value))("reason", "failed to serialize tablet config");
 
     command = PersistRequest->Record.AddCmdWrite();
     command->SetKey("_config");
@@ -3556,14 +3560,14 @@ bool TPartition::ExecUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t,
             break;
     }
     if (t->ChangeConfig) {
-        PQ_ENSURE(!ChangeConfig);
-        PQ_ENSURE(ChangingConfig);
+        PQ_ENSURE(!ChangeConfig)("ChangeConfig", static_cast<bool>(ChangeConfig));
+        PQ_ENSURE(ChangingConfig)("ChangingConfig", ChangingConfig);
         ChangeConfig = t->ChangeConfig;
         SendChangeConfigReply = t->SendReply;
         BeginChangePartitionConfig(ChangeConfig->Config);
     } else if (t->ProposeConfig) {
-        PQ_ENSURE(!ChangeConfig);
-        PQ_ENSURE(ChangingConfig);
+        PQ_ENSURE(!ChangeConfig)("ChangeConfig", static_cast<bool>(ChangeConfig));
+        PQ_ENSURE(ChangingConfig)("ChangingConfig", ChangingConfig);
         ChangeConfig =
             MakeSimpleShared<TEvPQ::TEvChangePartitionConfig>(TopicConverter,
                                                               t->ProposeConfig->Config);
@@ -3725,8 +3729,8 @@ void TPartition::CommitWriteOperations(TTransaction& t)
         {"logPrefix", NPQ_LOG_PREFIX},
         {"txId", t.GetTxId()});
 
-    PQ_ENSURE(PersistRequest);
-    PQ_ENSURE(!BlobEncoder.PartitionedBlob.IsInited());
+    PQ_ENSURE(PersistRequest)("reason", "persist request not set");
+    PQ_ENSURE(!BlobEncoder.PartitionedBlob.IsInited())("reason", "partitioned blob already inited");
 
     if (!t.WriteInfo) {
         return;
@@ -3742,7 +3746,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
             auto [iter, ins] = TxInflightMaxSeqNoPerSourceId.emplace(s.first, pair);
             if (!ins) {
                 bool ok = !SeqnoViolation(iter->second.KafkaProducerEpoch, iter->second.SeqNo, s.second.ProducerEpoch, s.second.SeqNo);
-                PQ_ENSURE(ok);
+                PQ_ENSURE(ok)("reason", "operation failed");
                 iter->second = pair;
             }
         }
@@ -3830,7 +3834,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
 void TPartition::CommitTransaction(TSimpleSharedPtr<TTransaction>& t)
 {
     if (t->Tx) {
-        PQ_ENSURE(t->Predicate.Defined() && *t->Predicate);
+        PQ_ENSURE(t->Predicate.Defined() && *t->Predicate)("Predicate", t->Predicate.Defined());
 
         for (auto& operation : t->Tx->Operations) {
             if (operation.GetOnlyCheckCommitedToFinish()) {
@@ -3840,7 +3844,7 @@ void TPartition::CommitTransaction(TSimpleSharedPtr<TTransaction>& t)
             TUserInfoBase& userInfo = GetOrCreatePendingUser(operation.GetConsumer());
 
             if (!operation.GetForceCommit()) {
-                PQ_ENSURE(userInfo.Offset == (i64)operation.GetCommitOffsetsBegin());
+                PQ_ENSURE(userInfo.Offset == (i64)operation.GetCommitOffsetsBegin())("offset", userInfo.Offset)("begin", operation.GetCommitOffsetsBegin());
             }
 
             if ((i64)operation.GetCommitOffsetsEnd() < userInfo.Offset && !operation.GetReadSessionId().empty()) {
@@ -3872,7 +3876,7 @@ void TPartition::CommitTransaction(TSimpleSharedPtr<TTransaction>& t)
         ChangePlanStepAndTxId(t->Tx->Step, t->Tx->TxId);
         ScheduleReplyTxDone(t->Tx->Step, t->Tx->TxId, std::move(t->CommitSpan));
     } else if (t->ProposeConfig) {
-        PQ_ENSURE(t->Predicate.Defined() && *t->Predicate);
+        PQ_ENSURE(t->Predicate.Defined() && *t->Predicate)("Predicate", t->Predicate.Defined());
 
         BeginChangePartitionConfig(t->ProposeConfig->Config);
         ExecChangePartitionConfig();
@@ -3880,7 +3884,7 @@ void TPartition::CommitTransaction(TSimpleSharedPtr<TTransaction>& t)
 
         ScheduleReplyTxDone(t->ProposeConfig->Step, t->ProposeConfig->TxId, std::move(t->CommitSpan));
     } else {
-        PQ_ENSURE(t->ChangeConfig);
+        PQ_ENSURE(t->ChangeConfig)("reason", "change config not set");
         ExecChangePartitionConfig();
     }
 }
@@ -3890,17 +3894,17 @@ void TPartition::RollbackTransaction(TSimpleSharedPtr<TTransaction>& t)
     auto stepAndId = GetStepAndTxId(*t->Tx);
 
     auto txIter = TransactionsInflight.find(stepAndId.second);
-    PQ_ENSURE(!txIter.IsEnd());
+    PQ_ENSURE(!txIter.IsEnd())("reason", "transaction not found");
 
     if (t->Tx) {
-        PQ_ENSURE(t->Predicate.Defined());
+        PQ_ENSURE(t->Predicate.Defined())("reason", "predicate not defined");
         ChangePlanStepAndTxId(t->Tx->Step, t->Tx->TxId);
     } else if (t->ProposeConfig) {
-        PQ_ENSURE(t->Predicate.Defined());
+        PQ_ENSURE(t->Predicate.Defined())("reason", "predicate not defined");
         ChangingConfig = false;
         ChangePlanStepAndTxId(t->ProposeConfig->Step, t->ProposeConfig->TxId);
     } else {
-        PQ_ENSURE(t->ChangeConfig);
+        PQ_ENSURE(t->ChangeConfig)("reason", "change config not set");
         ChangeConfig = nullptr;
         ChangingConfig = false;
     }
@@ -3932,7 +3936,7 @@ void TPartition::BeginChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& co
                                         TEvPQ::TEvSetClientInfo::ESCI_INIT_READ_RULE, rrGen);
 
             auto res = PreProcessUserAct(*act, nullptr);
-            PQ_ENSURE(res == EProcessResult::Continue);
+            PQ_ENSURE(res == EProcessResult::Continue)("res", static_cast<int>(res));
 
             ChangeConfigActs.emplace_back(std::move(act));
         }
@@ -3945,7 +3949,7 @@ void TPartition::BeginChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& co
                                     TEvPQ::TEvSetClientInfo::ESCI_DROP_READ_RULE, 0);
 
         auto res = PreProcessUserAct(*act, nullptr);
-        PQ_ENSURE(res == EProcessResult::Continue);
+        PQ_ENSURE(res == EProcessResult::Continue)("res", static_cast<int>(res));
 
         ChangeConfigActs.emplace_back(std::move(act));
     }
@@ -4072,7 +4076,7 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
     TopicConverter = topicConverter;
     NewPartition = false;
 
-    PQ_ENSURE(Config.GetPartitionConfig().GetTotalPartitions() > 0);
+    PQ_ENSURE(Config.GetPartitionConfig().GetTotalPartitions() > 0)("TotalPartitions", Config.GetPartitionConfig().GetTotalPartitions());
 
     if (autopartitioningChanged) {
         AutopartitioningManager.reset(CreateAutopartitioningManager(Config, Partition));
@@ -4155,8 +4159,8 @@ TPartition::EProcessResult TPartition::PreProcessImmediateTx(TTransaction& t,
     if (AffectedUsers.size() >= MAX_USERS) {
         return EProcessResult::Blocked;
     }
-    PQ_ENSURE(tx.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kData);
-    PQ_ENSURE(tx.HasData());
+    PQ_ENSURE(tx.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kData)("TxBodyCase", static_cast<int>(tx.GetTxBodyCase()));
+    PQ_ENSURE(tx.HasData())("reason", "data required");
     TVector<TString> consumers;
     for (const auto& operation : tx.GetData().GetOperations()) {
         if (!HasTopicReadCommit(operation) || GetReadConsumer(operation).empty()) {
@@ -4203,8 +4207,8 @@ void TPartition::ExecImmediateTx(TTransaction& t)
 {
     --ImmediateTxCount;
     const auto& record = t.ProposeTransaction->GetRecord();
-    PQ_ENSURE(record.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kData);
-    PQ_ENSURE(record.HasData());
+    PQ_ENSURE(record.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kData)("TxBodyCase", static_cast<int>(record.GetTxBodyCase()));
+    PQ_ENSURE(record.HasData())("reason", "data required");
 
 
     //ToDo - check, this probably wouldn't work any longer.
@@ -4322,7 +4326,7 @@ TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TMessag
     } else if (msg.IsSplitMessageGroup()) {
         result = PreProcessRequest(msg.GetSplitMessageGroup(), affectedSourceIdsAndConsumers);
     } else {
-        PQ_ENSURE(msg.IsOwnership());
+        PQ_ENSURE(msg.IsOwnership())("reason", "ownership message required");
     }
 
     return result;
@@ -4351,7 +4355,7 @@ bool TPartition::ExecUserActionOrTransaction(TMessage& msg,
     } else if (msg.IsSplitMessageGroup()) {
         ExecRequest(msg.GetSplitMessageGroup(), *Parameters);
     } else {
-        PQ_ENSURE(msg.IsOwnership());
+        PQ_ENSURE(msg.IsOwnership())("reason", "ownership message required");
     }
     if (doReply) {
         EmplaceResponse(std::move(msg), ctx);
@@ -4362,7 +4366,7 @@ bool TPartition::ExecUserActionOrTransaction(TMessage& msg,
 TPartition::EProcessResult TPartition::PreProcessUserAct(TEvPQ::TEvSetClientInfo& act,
                                                          TAffectedSourceIdsAndConsumers* affectedSourceIdsAndConsumers)
 {
-    PQ_ENSURE(!KVWriteInProgress);
+    PQ_ENSURE(!KVWriteInProgress)("KVWriteInProgress", KVWriteInProgress);
 
     const TString& user = act.ClientId;
     if (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET) {
@@ -4776,8 +4780,8 @@ void TPartition::AddCmdWriteTxMeta(NKikimrClient::TKeyValueRequest& request)
         return;
     }
 
-    PQ_ENSURE(PlanStep.Defined());
-    PQ_ENSURE(TxId.Defined());
+    PQ_ENSURE(PlanStep.Defined())("reason", "plan step not defined");
+    PQ_ENSURE(TxId.Defined())("reason", "tx id not defined");
 
     TKeyPrefix ikey(TKeyPrefix::TypeTxMeta, Partition);
 
@@ -4830,7 +4834,7 @@ void TPartition::AddCmdWriteConfig(NKikimrClient::TKeyValueRequest& request)
     TString key = GetKeyConfig();
 
     TString data;
-    PQ_ENSURE(ChangeConfig->Config.SerializeToString(&data));
+    PQ_ENSURE(ChangeConfig->Config.SerializeToString(&data))("reason", "failed to serialize config");
 
     auto write = request.AddCmdWrite();
     write->SetKey(key.data(), key.size());
@@ -4914,7 +4918,7 @@ THolder<TEvPQ::TEvProxyResponse> TPartition::MakeReplyGetClientOffsetOk(const ui
     if (writeTimestamp)
         user->SetWriteTimestampMS(writeTimestamp.MilliSeconds());
     if (createTimestamp) {
-        PQ_ENSURE(writeTimestamp);
+        PQ_ENSURE(writeTimestamp)("writeTimestamp", writeTimestamp.GetValue());
         user->SetCreateTimestampMS(createTimestamp.MilliSeconds());
     }
     user->SetEndOffset(GetEndOffset());
@@ -4997,7 +5001,7 @@ void TPartition::Handle(TEvPQ::TEvApproveWriteQuota::TPtr& ev, const TActorConte
         {"partitionWaitTime", ev->Get()->PartitionQuotaWaitTime});
 
     // Search for proper request
-    PQ_ENSURE(TopicQuotaRequestCookie == cookie);
+    PQ_ENSURE(TopicQuotaRequestCookie == cookie)("TopicQuotaRequestCookie", TopicQuotaRequestCookie)("cookie", cookie);
     ConsumeBlobQuota();
     TopicQuotaRequestCookie = 0;
     for (auto& r : QuotaWaitingRequests) {
@@ -5106,7 +5110,7 @@ void TPartition::HandleOnInit(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorC
     YDB_LOG_DEBUG_COMP(Service, "HandleOnInit TEvPQ::TEvDeletePartition",
         {"logPrefix", NPQ_LOG_PREFIX});
 
-    PQ_ENSURE(IsSupportive());
+    PQ_ENSURE(IsSupportive())("reason", "supportive partition required")("topic", TopicName());
 
     AddPendingEvent(ev);
 }
@@ -5116,8 +5120,8 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvDeletePartition> 
 {
     Y_UNUSED(ev);
 
-    PQ_ENSURE(IsSupportive());
-    PQ_ENSURE(DeletePartitionState == DELETION_NOT_INITED);
+    PQ_ENSURE(IsSupportive())("reason", "supportive partition required")("topic", TopicName());
+    PQ_ENSURE(DeletePartitionState == DELETION_NOT_INITED)("DeletePartitionState", static_cast<int>(DeletePartitionState));
 
     NeedDeletePartition = true;
 
@@ -5197,8 +5201,8 @@ void TPartition::ScheduleNegativeReply(const TMessage& msg)
 
 void TPartition::ScheduleTransactionCompleted(const NKikimrPQ::TEvProposeTransaction& tx)
 {
-    PQ_ENSURE(tx.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kData);
-    PQ_ENSURE(tx.HasData());
+    PQ_ENSURE(tx.GetTxBodyCase() == NKikimrPQ::TEvProposeTransaction::kData)("TxBodyCase", static_cast<int>(tx.GetTxBodyCase()));
+    PQ_ENSURE(tx.HasData())("reason", "data required");
 
     TMaybe<TWriteId> writeId;
     if (tx.GetData().HasWriteId()) {

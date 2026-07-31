@@ -18,15 +18,17 @@ TMultiCounter::TMultiCounter(::NMonitoring::TDynamicCounterPtr counters,
                              bool expiring)
     : Value(0)
 {
-    AFL_ENSURE(counters);
+    AFL_ENSURE(counters)("reason", "counters must be non-null")("name", name);
 
     for (const auto& counter : counter_names) {
         for (ui32 i = 0; i <= labels.size(); ++i) {
             auto cc = counters;
             for (ui32 j = 0; j < labels.size(); ++j) {
-                AFL_ENSURE(!labels[j].Labels.empty());
+                AFL_ENSURE(!labels[j].Labels.empty())("reason", "labels must not be empty")("label_index", j)("name", name);
                 for (ui32 k = 0; k < labels[j].Labels.size(); ++k) {
-                    AFL_ENSURE(labels[j].Labels.size() == labels[j].AggrNames.size());
+                    AFL_ENSURE(labels[j].Labels.size() == labels[j].AggrNames.size())
+                        ("reason", "labels and aggregation names size mismatch")("label_index", j)
+                        ("labels_size", labels[j].Labels.size())("aggr_names_size", labels[j].AggrNames.size())("name", name);
                     const TString& res = (j < i) ? labels[j].Labels[k].second : labels[j].AggrNames[k];
                     cc = cc->GetSubgroup(labels[j].Labels[k].first, res);
                 }
@@ -69,7 +71,7 @@ TPercentileCounter::TPercentileCounter(
         const TVector<std::pair<TString, TString>>& subgroups, const TString& sensor,
         const TVector<std::pair<ui64, TString>>& intervals, const bool deriv, bool expiring
 ) {
-    AFL_ENSURE(!intervals.empty());
+    AFL_ENSURE(!intervals.empty())("reason", "intervals must not be empty")("sensor", sensor);
     Counters.reserve(intervals.size());
     Ranges.reserve(intervals.size());
     for (auto& interval : intervals) {
@@ -198,7 +200,7 @@ TVector<ui64> TPartitionHistogramWrapper::GetValues() const {
     return res;
 }
 const TVector<ui64>& TPartitionHistogramWrapper::GetRanges() const {
-    AFL_ENSURE(!IsSupportivePartition);
+    AFL_ENSURE(!IsSupportivePartition)("reason", "histogram ranges are available for non-supportive partitions only")("is_supportive_partition", IsSupportivePartition);
     return Histogram->Ranges;
 }
 

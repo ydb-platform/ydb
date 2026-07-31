@@ -348,7 +348,8 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
     for (auto& p : record.GetPartitions()) {
         auto it = PartitionsInfo.find(p.GetPartition());
         if (it == PartitionsInfo.end()) {
-            PQ_ENSURE((p.GetPartition() >= prevNextPartitionId && p.GetPartition() < NextPartitionId) || NextPartitionId == 0);
+            PQ_ENSURE((p.GetPartition() >= prevNextPartitionId && p.GetPartition() < NextPartitionId) || NextPartitionId == 0)
+                ("partition_id", p.GetPartition())("prev_next_partition_id", prevNextPartitionId)("next_partition_id", NextPartitionId);
 
             partitionsInfo[p.GetPartition()] = {p.GetTabletId()};
 
@@ -455,7 +456,7 @@ void TPersQueueReadBalancer::ClosePipe(const ui64 tabletId, const TActorContext&
     auto it = TabletPipes.find(tabletId);
     if (it != TabletPipes.end()) {
         if (it->second.Ready) {
-            PQ_ENSURE(ReadyPartitionTablets > 0);
+            PQ_ENSURE(ReadyPartitionTablets > 0)("tablet_id", tabletId)("ready_partition_tablets", ReadyPartitionTablets);
             --ReadyPartitionTablets;
             it->second.Ready = false;
         }
@@ -474,7 +475,7 @@ TActorId TPersQueueReadBalancer::GetPipeClient(const ui64 tabletId, const TActor
         pipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, tabletId, clientConfig));
         TabletPipes[tabletId].PipeActor = pipeClient;
         auto res = PipesRequested.insert(tabletId);
-        PQ_ENSURE(res.second);
+        PQ_ENSURE(res.second)("tablet_id", tabletId);
     } else {
         pipeClient = it->second.PipeActor;
     }
@@ -1038,8 +1039,9 @@ void TPersQueueReadBalancer::OnReceiveAttemptPartitionsWriteComplete(
     TReceiveAttemptPartitionsWriteBatch batch,
     const TActorContext& ctx
 ) {
-    AFL_ENSURE(ReceiveAttemptPartitionsWriteInProgress);
-    AFL_ENSURE(!PendingReceiveAttemptPartitionsWrites.empty());
+    PQ_ENSURE(ReceiveAttemptPartitionsWriteInProgress)("reason", "write must be in progress");
+    PQ_ENSURE(!PendingReceiveAttemptPartitionsWrites.empty())
+        ("reason", "pending writes must not be empty")("pending_size", PendingReceiveAttemptPartitionsWrites.size());
 
     PendingReceiveAttemptPartitionsWrites.pop_front();
     ReceiveAttemptPartitionsWriteInProgress = false;

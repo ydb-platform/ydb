@@ -172,7 +172,7 @@ TSourceIdInfo TSourceIdInfo::Parse(const TString& data, TInstant now) {
 }
 
 void TSourceIdInfo::Serialize(TBuffer& data) const {
-    AFL_ENSURE(!Explicit)("Explicit", Explicit);
+    AFL_ENSURE(!Explicit)("reason", "Explicit must be false");
     AFL_ENSURE(!KeyRange)("KeyRange", KeyRange.Defined());
 
     data.Resize(4 * sizeof(ui64) + sizeof(TMaybe<i16>));
@@ -405,7 +405,7 @@ void TSourceIdStorage::RegisterSourceIdInfo(const TString& sourceId, TSourceIdIn
     }
 
     if (const auto& heartbeat = sourceIdInfo.LastHeartbeat) {
-        AFL_ENSURE(sourceIdInfo.Explicit)("sourceId", sourceId)("Explicit", sourceIdInfo.Explicit);
+        AFL_ENSURE(sourceIdInfo.Explicit)("sourceId", sourceId);
 
         if (it != InMemorySourceIds.end() && it->second.LastHeartbeat) {
             ForgetHeartbeat(sourceId, it->second.LastHeartbeat->Version);
@@ -601,7 +601,7 @@ TMaybe<THeartbeat> THeartbeatEmitter::CanEmit() const {
 }
 
 TMaybe<THeartbeat> THeartbeatEmitter::GetFromStorage(TSourceIdsByHeartbeat::const_iterator it) const {
-    AFL_ENSURE(!it->second.empty())("size", it->second.size());
+    AFL_ENSURE(!it->second.empty())("reason", "heartbeat source ids must not be empty");
     const auto& someSourceId = *it->second.begin();
 
     AFL_ENSURE(Storage.InMemorySourceIds.contains(someSourceId))("sourceId", someSourceId);
@@ -609,7 +609,7 @@ TMaybe<THeartbeat> THeartbeatEmitter::GetFromStorage(TSourceIdsByHeartbeat::cons
 }
 
 TMaybe<THeartbeat> THeartbeatEmitter::GetFromDiff(TSourceIdsByHeartbeat::const_iterator it) const {
-    AFL_ENSURE(!it->second.empty())("size", it->second.size());
+    AFL_ENSURE(!it->second.empty())("reason", "heartbeat source ids must not be empty");
     const auto& someSourceId = *it->second.begin();
 
     AFL_ENSURE(Heartbeats.contains(someSourceId))("sourceId", someSourceId);

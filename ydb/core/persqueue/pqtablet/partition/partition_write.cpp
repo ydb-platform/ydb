@@ -769,7 +769,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
     for (const auto& msg: ev->Get()->Msgs) {
         //this is checked in pq_impl when forming EvWrite request
         PQ_ENSURE(!msg.SourceId.empty() || ev->Get()->IsDirectWrite || msg.DisableDeduplication)("SourceId", msg.SourceId)("IsDirectWrite", ev->Get()->IsDirectWrite)("DisableDeduplication", msg.DisableDeduplication);
-        PQ_ENSURE(!msg.Data.empty())("Data_size", msg.Data.size());
+        PQ_ENSURE(!msg.Data.empty())("reason", "message data must not be empty");
 
         if (msg.SeqNo > (ui64)Max<i64>()) {
             YDB_LOG_ERROR("Request to write wrong SeqNo. Partition sourceId seqno",
@@ -1623,8 +1623,8 @@ std::pair<TKey, ui32> TPartition::GetNewFastWriteKeyImpl(bool headCleared, ui32 
     PQ_ENSURE(headSize + BlobEncoder.NewHead.PackedSize <= 3 * MaxSizeCheck)("headSize", headSize)("NewHead.PackedSize", BlobEncoder.NewHead.PackedSize)("MaxSizeCheck", MaxSizeCheck);
 
     auto res = BlobEncoder.Compact(key, headCleared);
-    PQ_ENSURE(res.first.HasSuffix()) //may compact some KV blobs from head, but new KV blob is from head too
-        ("key", res.first.ToString())("has_suffix", res.first.HasSuffix());
+    PQ_ENSURE(res.first.HasSuffix())
+        ("key", res.first.ToString());
     PQ_ENSURE(res.second >= BlobEncoder.NewHead.PackedSize)("res_second", res.second)("NewHead.PackedSize", BlobEncoder.NewHead.PackedSize);
     PQ_ENSURE(res.second <= MaxBlobSize)("res_second", res.second)("MaxBlobSize", MaxBlobSize);
 

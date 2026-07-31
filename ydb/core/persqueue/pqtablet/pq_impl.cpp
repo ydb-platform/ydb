@@ -173,7 +173,7 @@ public:
 
     bool HandleProxyResponse(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& ctx)
     {
-        AFL_ENSURE(Waiting)("Waiting", Waiting);
+        AFL_ENSURE(Waiting)("reason", "response wait flag expected");
         AFL_ENSURE(Response)("reason", "response not set");
         --Waiting;
         bool skip = false;
@@ -680,7 +680,7 @@ void TPersQueue::CreateOriginalPartition(const NKikimrPQ::TPQTabletConfig& confi
 void TPersQueue::MoveTopTxToCalculating(TDistributedTransaction& tx,
                                         const TActorContext& ctx)
 {
-    PQ_ENSURE(!TxQueue.empty())("TxQueue_size", TxQueue.size());
+    PQ_ENSURE(!TxQueue.empty())("reason", "TxQueue must not be empty");
 
     std::tie(ExecStep, ExecTxId) = TxQueue.front();
     YDB_LOG_INFO_COMP(NKikimrServices::PQ_TX, "New ExecStep ExecTxId",
@@ -794,7 +794,7 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
         return;
     }
 
-    PQ_ENSURE(!ConfigInited)("ConfigInited", ConfigInited);
+    PQ_ENSURE(!ConfigInited)("reason", "config must not be inited yet");
 
     if (read.GetStatus() == NKikimrProto::OK) {
         bool res = Config.ParseFromString(read.GetValue());
@@ -929,7 +929,7 @@ void TPersQueue::EndReadConfig(const TActorContext& ctx)
 
     InitializeMeteringSink(ctx);
 
-    PQ_ENSURE(!NewConfigShouldBeApplied)("NewConfigShouldBeApplied", NewConfigShouldBeApplied);
+    PQ_ENSURE(!NewConfigShouldBeApplied)("reason", "new config must not be pending apply");
     for (auto& req : UpdateConfigRequests) {
         ProcessUpdateConfigRequest(req.first, req.second, ctx);
     }
@@ -1293,7 +1293,7 @@ void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& c
 {
     const auto& partitionId = ev->Get()->Partition;
     auto& partition = GetPartitionInfo(partitionId);
-    PQ_ENSURE(!partition.InitDone)("partition_id", partitionId)("InitDone", partition.InitDone);
+    PQ_ENSURE(!partition.InitDone)("partition_id", partitionId);
     partition.InitDone = true;
 
     if (partitionId.IsSupportivePartition()) {
@@ -1309,7 +1309,7 @@ void TPersQueue::Handle(TEvPQ::TEvInitComplete::TPtr& ev, const TActorContext& c
         ++PartitionsInited;
     }
 
-    PQ_ENSURE(ConfigInited)("ConfigInited", ConfigInited);
+    PQ_ENSURE(ConfigInited)("reason", "config must be inited");
 
     auto allInitialized = AllOriginalPartitionsInited();
     if (!InitCompleted && allInitialized) {
@@ -1925,7 +1925,7 @@ void TPersQueue::HandleCreateSessionRequest(const ui64 responseCookie, NWilson::
 
         }
         if (cmd.GetRestoreSession()) {
-            PQ_ENSURE(isDirectRead)("isDirectRead", isDirectRead);
+            PQ_ENSURE(isDirectRead)("reason", "direct read expected");
             auto fakeResponse = MakeHolder<TEvPQ::TEvProxyResponse>(responseCookie, false);
             auto& record = *fakeResponse->Response;
             record.SetStatus(NMsgBusProxy::MSTATUS_OK);
@@ -2695,7 +2695,7 @@ const TPartitionInfo& TPersQueue::GetPartitionInfo(const NKikimrClient::TPersQue
     const TPartitionId& partitionId = TxWrites.at(writeId).Partitions.at(originalPartitionId);
     PQ_ENSURE(Partitions.contains(partitionId))("partition_id", partitionId);
     const TPartitionInfo& partition = Partitions.at(partitionId);
-    PQ_ENSURE(partition.InitDone)("partition_id", partitionId)("InitDone", partition.InitDone);
+    PQ_ENSURE(partition.InitDone)("partition_id", partitionId);
 
     return partition;
 }
@@ -4132,7 +4132,7 @@ void TPersQueue::CreateSupportivePartitionActors(const TActorContext& ctx)
 
 void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
 {
-    PQ_ENSURE(!WriteTxsInProgress)("WriteTxsInProgress", WriteTxsInProgress);
+    PQ_ENSURE(!WriteTxsInProgress)("reason", "write txs must not be in progress");
 
     bool canProcess =
         CanProcessProposeTransactionQueue() ||
@@ -4171,7 +4171,7 @@ void TPersQueue::BeginWriteTxs(const TActorContext& ctx)
 void TPersQueue::EndWriteTxs(const NKikimrClient::TResponse& resp,
                              const TActorContext& ctx)
 {
-    PQ_ENSURE(WriteTxsInProgress)("WriteTxsInProgress", WriteTxsInProgress);
+    PQ_ENSURE(WriteTxsInProgress)("reason", "write txs must be in progress");
 
     bool ok = (resp.GetStatus() == NMsgBusProxy::MSTATUS_OK);
     if (ok) {
@@ -4215,7 +4215,7 @@ void TPersQueue::TryWriteTxs(const TActorContext& ctx)
 void TPersQueue::ProcessProposeTransactionQueue(const TActorContext& ctx,
                                                 NKikimrClient::TKeyValueRequest& request)
 {
-    PQ_ENSURE(!WriteTxsInProgress)("WriteTxsInProgress", WriteTxsInProgress);
+    PQ_ENSURE(!WriteTxsInProgress)("reason", "write txs must not be in progress");
 
     if (CanProcessProposeTransactionQueue() || DeleteTxsContainsKafkaTxs) {
         ProcessDeleteTxs(ctx, request);
@@ -4408,7 +4408,7 @@ void TPersQueue::SendPlanStepAccepted(const TActorContext& ctx,
 void TPersQueue::ProcessWriteTxs(const TActorContext& ctx,
                                  NKikimrClient::TKeyValueRequest& request)
 {
-    PQ_ENSURE(!WriteTxsInProgress)("WriteTxsInProgress", WriteTxsInProgress);
+    PQ_ENSURE(!WriteTxsInProgress)("reason", "write txs must not be in progress");
 
     if (!WriteTxs.empty() && HasTxPersistSpan && !WriteTxsSpan) {
         WriteTxsSpan = GenerateSpan("Topic.Transaction.WriteTxs", WriteTxsSpanVerbosity);
@@ -4439,7 +4439,7 @@ void TPersQueue::ProcessWriteTxs(const TActorContext& ctx,
 void TPersQueue::ProcessDeleteTxs(const TActorContext& ctx,
                                   NKikimrClient::TKeyValueRequest& request)
 {
-    PQ_ENSURE(!WriteTxsInProgress)("WriteTxsInProgress", WriteTxsInProgress);
+    PQ_ENSURE(!WriteTxsInProgress)("reason", "write txs must not be in progress");
 
     if (!DeleteTxs.empty() && HasTxDeleteSpan && !WriteTxsSpan) {
         WriteTxsSpan = GenerateSpan("Topic.Transaction.WriteTxs", WriteTxsSpanVerbosity);
@@ -4476,7 +4476,7 @@ void TPersQueue::AddCmdDeleteTx(NKikimrClient::TKeyValueRequest& request,
 void TPersQueue::ProcessConfigTx(const TActorContext& ctx,
                                  TEvKeyValue::TEvRequest* request)
 {
-    PQ_ENSURE(!WriteTxsInProgress)("WriteTxsInProgress", WriteTxsInProgress);
+    PQ_ENSURE(!WriteTxsInProgress)("reason", "write txs must not be in progress");
 
     if (!TabletConfigTx.Defined()) {
         return;

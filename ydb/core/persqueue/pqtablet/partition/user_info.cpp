@@ -340,8 +340,8 @@ TUsersInfoStorage::TUsersInfoStorage(
 
 void TUsersInfoStorage::Init(TActorId tabletActor, TActorId partitionActor, const TActorContext& ctx) {
     AFL_ENSURE(UsersInfo.empty())("UsersInfo_size", UsersInfo.size());
-    AFL_ENSURE(!TabletActor)("TabletActor", TabletActor);
-    AFL_ENSURE(!PartitionActor)("PartitionActor", PartitionActor);
+    AFL_ENSURE(!TabletActor)("reason", "TabletActor must be null");
+    AFL_ENSURE(!PartitionActor)("reason", "PartitionActor must be null");
     TabletActor = tabletActor;
     PartitionActor = partitionActor;
 

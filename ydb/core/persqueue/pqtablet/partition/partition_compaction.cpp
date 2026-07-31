@@ -505,7 +505,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
     YDB_LOG_INFO_COMP(NKikimrServices::PQ_KV_OPS, "Begin blobs compaction",
         {"LOGPREFIXINT", LOG_PREFIX_INT});
 
-    AFL_ENSURE(CompactionInProgress)("CompactionInProgress", CompactionInProgress);
+    AFL_ENSURE(CompactionInProgress)("reason", "compaction must be in progress");
     AFL_ENSURE(blobs.size() == CompactionBlobsCount)("blobs_size", blobs.size())("CompactionBlobsCount", CompactionBlobsCount);
 
     CompactionBlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);
@@ -622,7 +622,7 @@ void TPartition::BlobsForCompactionWereWrite()
     YDB_LOG_INFO_COMP(NKikimrServices::PQ_KV_OPS, "Blobs compaction is completed",
         {"LOGPREFIXINT", LOG_PREFIX_INT});
 
-    AFL_ENSURE(CompactionInProgress)("CompactionInProgress", CompactionInProgress);
+    AFL_ENSURE(CompactionInProgress)("reason", "compaction must be in progress");
     AFL_ENSURE(BlobEncoder.DataKeysBody.size() >= KeysForCompaction.size())("DataKeysBody_size", BlobEncoder.DataKeysBody.size())("KeysForCompaction_size", KeysForCompaction.size());
 
     for (size_t i = 0; i < KeysForCompaction.size(); ++i) {

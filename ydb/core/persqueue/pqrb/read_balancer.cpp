@@ -1041,7 +1041,7 @@ void TPersQueueReadBalancer::OnReceiveAttemptPartitionsWriteComplete(
 ) {
     PQ_ENSURE(ReceiveAttemptPartitionsWriteInProgress)("reason", "write must be in progress");
     PQ_ENSURE(!PendingReceiveAttemptPartitionsWrites.empty())
-        ("reason", "pending writes must not be empty")("pending_size", PendingReceiveAttemptPartitionsWrites.size());
+        ("reason", "pending writes must not be empty");
 
     PendingReceiveAttemptPartitionsWrites.pop_front();
     ReceiveAttemptPartitionsWriteInProgress = false;

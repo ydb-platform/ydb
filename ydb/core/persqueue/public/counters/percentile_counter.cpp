@@ -200,7 +200,7 @@ TVector<ui64> TPartitionHistogramWrapper::GetValues() const {
     return res;
 }
 const TVector<ui64>& TPartitionHistogramWrapper::GetRanges() const {
-    AFL_ENSURE(!IsSupportivePartition)("reason", "histogram ranges are available for non-supportive partitions only")("is_supportive_partition", IsSupportivePartition);
+    AFL_ENSURE(!IsSupportivePartition)("reason", "histogram ranges are available for non-supportive partitions only");
     return Histogram->Ranges;
 }
 

@@ -314,9 +314,8 @@ public:
 
             ui64 tabletId = topicInfo.PartitionToTablet[partitionId];
             AFL_ENSURE(tabletId)
-                ("topic", topic)
-                ("partition", partitionId)
-                ("tabletId", tabletId);
+        ("topic", topic)
+        ("partition", partitionId);
 
             auto jt = TabletInfo.find(tabletId);
             AFL_ENSURE(jt != TabletInfo.end())
@@ -325,8 +324,10 @@ public:
                 ("tabletId", tabletId);
             auto& tabletInfo = jt->second;
             AFL_ENSURE(!tabletInfo.BrokenPipe)
-                ("reason", "tablet pipe must not be broken")("topic", topic)("partition", partitionId)
-                ("tablet_id", tabletId)("broken_pipe", tabletInfo.BrokenPipe);
+        ("reason", "tablet pipe must not be broken")
+        ("topic", topic)
+        ("partition", partitionId)
+        ("tablet_id", tabletId);
 
             FetchRequestCurrentReadTablet = tabletId;
             PartitionStatus[FetchRequestCurrentPartitionIndex] = EPartitionStatus::DataRequested;
@@ -388,8 +389,8 @@ public:
             {"logPrefix", LOG_PREFIX},
             {"ev", record.ShortDebugString()});
         AFL_ENSURE(record.HasPartitionResponse())
-            ("reason", "response must have partition response")("fetch_partition_index", FetchRequestCurrentPartitionIndex)
-            ("has_partition_response", record.HasPartitionResponse());
+        ("reason", "response must have partition response")
+        ("fetch_partition_index", FetchRequestCurrentPartitionIndex);
 
         if (record.GetPartitionResponse().GetCookie() != FetchRequestCurrentPartitionIndex || FetchRequestCurrentReadTablet == 0) {
             YDB_LOG_WARN("Proxy fetch error: got response from tablet while waiting from and requested tablet is",

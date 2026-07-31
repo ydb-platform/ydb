@@ -122,7 +122,7 @@ public:
     }
 
     void RestorePrimaryPath() {
-        AFL_ENSURE(!OriginalPath.empty())("original_path", OriginalPath)("primary_path", PrimaryPath);
+        AFL_ENSURE(!OriginalPath.empty())("primary_path", PrimaryPath);
         PrimaryPath = OriginalPath;
         OriginalPath.clear();
     }

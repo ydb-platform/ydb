@@ -209,7 +209,7 @@ void TMirrorer::ProcessError(const TActorContext& ctx, const TString& msg, const
 
 void TMirrorer::AfterSuccesWrite(const TActorContext& ctx) {
     PQ_ENSURE(WriteInFlight.empty())("WriteInFlight_size", WriteInFlight.size());
-    PQ_ENSURE(WriteRequestInFlight)("WriteRequestInFlight", WriteRequestInFlight);
+    PQ_ENSURE(WriteRequestInFlight)("reason", "write request must be in flight");
     YDB_LOG_INFO("Written messages with current queue bytes",
         {"logPrefix", NPQ_LOG_PREFIX},
         {"writeRequestInFlightValueCmdWriteSize", WriteRequestInFlight.value().CmdWriteSize()},
@@ -530,7 +530,7 @@ void TMirrorer::HandleCredentialsCreated(TEvPQ::TEvCredentialsCreated::TPtr& ev,
 }
 
 void TMirrorer::RetryWrite(const TActorContext& ctx) {
-    PQ_ENSURE(WriteRequestInFlight)("WriteRequestInFlight", WriteRequestInFlight);
+    PQ_ENSURE(WriteRequestInFlight)("reason", "write request must be in flight");
 
     THolder<TEvPersQueue::TEvRequest> request = MakeHolder<TEvPersQueue::TEvRequest>();
     auto req = request->Record.MutablePartitionRequest();

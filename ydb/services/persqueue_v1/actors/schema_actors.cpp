@@ -426,7 +426,7 @@ void TDescribeTopicActorImpl::RequestTablet(TTabletInfo& tablet, const TActorCon
 }
 
 void TDescribeTopicActorImpl::RequestBalancer(const TActorContext& ctx) {
-    AFL_ENSURE(BalancerTabletId)("reason", "balancer tablet id expected")("balancer_tablet_id", BalancerTabletId);
+    AFL_ENSURE(BalancerTabletId)("reason", "balancer tablet id expected");
     if (Settings.RequireLocation) {
         if (!GotLocation) {
             RequestPartitionsLocation(ctx);
@@ -733,7 +733,7 @@ bool TDescribeTopicActor::ApplyResponse(
         TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext&
 ) {
     const auto& record = ev->Get()->Record;
-    AFL_ENSURE(Settings.RequireLocation)("require_location", Settings.RequireLocation);
+    AFL_ENSURE(Settings.RequireLocation)("reason", "RequireLocation expected");
 
     for (auto i = 0u; i < std::min<ui64>(record.LocationsSize(), TotalPartitions); ++i) {
         const auto& location = record.GetLocations(i);

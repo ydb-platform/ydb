@@ -159,7 +159,7 @@ void TPartitionCompaction::ProcessResponse(NBatching::TEvProcessBatchKeysResult:
 
 void TPartitionCompaction::ProcessResponse(TEvKeyValue::TEvResponse::TPtr& ev) {
     //Partition must reset this flag;
-    AFL_ENSURE(!PartitionActor->CompacterKvRequestInflight)("CompacterKvRequestInflight", PartitionActor->CompacterKvRequestInflight);
+    AFL_ENSURE(!PartitionActor->CompacterKvRequestInflight)("reason", "CompacterKvRequest must not be in flight");
     YDB_LOG_DEBUG("Compaction for topic Process KV response",
         {"logPrefix", LogPrefix()},
         {"clientSideName", PartitionActor->TopicConverter->GetClientsideName()},
@@ -556,7 +556,7 @@ bool TPartitionCompaction::TCompactState::MaybeRequestBatchKeys(NKikimrClient::T
 }
 
 bool TPartitionCompaction::TCompactState::ProcessResponse(NBatching::TEvProcessBatchKeysResult::TPtr& ev) {
-    AFL_ENSURE(BatchKeysRequestInflight)("BatchKeysRequestInflight", BatchKeysRequestInflight);
+    AFL_ENSURE(BatchKeysRequestInflight)("reason", "BatchKeysRequest must be in flight");
     AFL_ENSURE(PendingReadResult)("reason", "pending read result not set");
 
     BatchKeysRequestInflight = false;
@@ -850,7 +850,7 @@ void TPartitionCompaction::TCompactState::RunKvRequest() {
     // TODO verify that the last message is full
     CurrentMessage.Clear();
     AFL_ENSURE(Request)("reason", "request not set");
-    AFL_ENSURE(!PartitionActor->CompacterKvRequestInflight)("CompacterKvRequestInflight", PartitionActor->CompacterKvRequestInflight);
+    AFL_ENSURE(!PartitionActor->CompacterKvRequestInflight)("reason", "CompacterKvRequest must not be in flight");
 
     for (const auto&[offset, key] : EmptyBlobs) {
         AddDeleteRange(key);
@@ -864,7 +864,7 @@ void TPartitionCompaction::TCompactState::RunKvRequest() {
 
 
 bool TPartitionCompaction::TCompactState::ProcessKVResponse(TEvKeyValue::TEvResponse::TPtr& ev) {
-    AFL_ENSURE(!PartitionActor->CompacterKvRequestInflight)("CompacterKvRequestInflight", PartitionActor->CompacterKvRequestInflight);
+    AFL_ENSURE(!PartitionActor->CompacterKvRequestInflight)("reason", "CompacterKvRequest must not be in flight");
     auto& response = ev->Get()->Record;
     if (response.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
         YDB_LOG_CRIT("Partition compaction state: Got not OK KV response",

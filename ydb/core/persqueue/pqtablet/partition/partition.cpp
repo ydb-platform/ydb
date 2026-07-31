@@ -840,7 +840,7 @@ bool TPartition::CleanUpBlobsLegacy(TEvKeyValue::TEvRequest *request, const TAct
         hasDrop = true;
     }
 
-    PQ_ENSURE(!CompactionBlobEncoder.DataKeysBody.empty())("DataKeysBody_size", CompactionBlobEncoder.DataKeysBody.size());
+    PQ_ENSURE(!CompactionBlobEncoder.DataKeysBody.empty())("reason", "compaction DataKeysBody must not be empty");
 
     if (!hasDrop) {
         return false;
@@ -1803,7 +1803,7 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvTxRollback> ev, c
     if (ChangeConfig) {
         PQ_ENSURE(TransactionsInflight.size() == 1)("TransactionsInflight_size", TransactionsInflight.size());
     } else {
-        PQ_ENSURE(!TransactionsInflight.empty())("TransactionsInflight_size", TransactionsInflight.size());
+        PQ_ENSURE(!TransactionsInflight.empty())("reason", "TransactionsInflight must not be empty");
         txIter = TransactionsInflight.find(ev->TxId);
         PQ_ENSURE(!txIter.IsEnd())("TxId", ev->TxId);
     }
@@ -1950,7 +1950,7 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx,
 {
     bool isImmediate = (tx.ProposeTransaction != nullptr);
     PQ_ENSURE(tx.WriteInfo)("reason", "write info not set");
-    PQ_ENSURE(!tx.WriteInfoApplied)("WriteInfoApplied", tx.WriteInfoApplied);
+    PQ_ENSURE(!tx.WriteInfoApplied)("reason", "WriteInfoApplied must be false");
     if (!tx.Predicate.GetOrElse(true)) {
         return EProcessResult::Continue;
     }
@@ -2285,7 +2285,7 @@ void TPartition::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx) {
         ProcessTimestampRead(ctx);
         return;
     }
-    PQ_ENSURE(userInfo->ReadScheduled)("ReadScheduled", userInfo->ReadScheduled);
+    PQ_ENSURE(userInfo->ReadScheduled)("reason", "expected userInfo->ReadScheduled");
     PQ_ENSURE(ReadingForUser != "")("ReadingForUser", ReadingForUser);
 
     YDB_LOG_ERROR_COMP(Service, "Topic partition user readTimeStamp",
@@ -2634,7 +2634,7 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
     auto& response = ev->Get()->Record;
 
     if (response.HasCookie() && (response.GetCookie() == static_cast<ui64>(ERequestCookie::CompactificationWrite))) {
-        PQ_ENSURE(CompacterKvRequestInflight)("CompacterKvRequestInflight", CompacterKvRequestInflight);
+        PQ_ENSURE(CompacterKvRequestInflight)("reason", "CompacterKvRequest must be in flight");
         CompacterKvRequestInflight = false;
         YDB_LOG_DEBUG_COMP(Service, "Topic partition Got compacter KV response, release RW lock",
             {"logPrefix", NPQ_LOG_PREFIX},
@@ -2947,7 +2947,7 @@ bool TPartition::WritingCycleDoesNotExceedTheLimits() const
 void TPartition::ProcessUserActionAndTxPendingCommits() {
     CurrentBatchSize = 0;
 
-    PQ_ENSURE(!KVWriteInProgress)("KVWriteInProgress", KVWriteInProgress);
+    PQ_ENSURE(!KVWriteInProgress)("reason", "KV write must not be in progress");
     if (!PersistRequest) {
         PersistRequest = MakeHolder<TEvKeyValue::TEvRequest>();
     }
@@ -3560,14 +3560,14 @@ bool TPartition::ExecUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t,
             break;
     }
     if (t->ChangeConfig) {
-        PQ_ENSURE(!ChangeConfig)("ChangeConfig", static_cast<bool>(ChangeConfig));
-        PQ_ENSURE(ChangingConfig)("ChangingConfig", ChangingConfig);
+        PQ_ENSURE(!ChangeConfig)("reason", "ChangeConfig must be null");
+        PQ_ENSURE(ChangingConfig)("reason", "ChangingConfig expected");
         ChangeConfig = t->ChangeConfig;
         SendChangeConfigReply = t->SendReply;
         BeginChangePartitionConfig(ChangeConfig->Config);
     } else if (t->ProposeConfig) {
-        PQ_ENSURE(!ChangeConfig)("ChangeConfig", static_cast<bool>(ChangeConfig));
-        PQ_ENSURE(ChangingConfig)("ChangingConfig", ChangingConfig);
+        PQ_ENSURE(!ChangeConfig)("reason", "ChangeConfig must be null");
+        PQ_ENSURE(ChangingConfig)("reason", "ChangingConfig expected");
         ChangeConfig =
             MakeSimpleShared<TEvPQ::TEvChangePartitionConfig>(TopicConverter,
                                                               t->ProposeConfig->Config);
@@ -4366,7 +4366,7 @@ bool TPartition::ExecUserActionOrTransaction(TMessage& msg,
 TPartition::EProcessResult TPartition::PreProcessUserAct(TEvPQ::TEvSetClientInfo& act,
                                                          TAffectedSourceIdsAndConsumers* affectedSourceIdsAndConsumers)
 {
-    PQ_ENSURE(!KVWriteInProgress)("KVWriteInProgress", KVWriteInProgress);
+    PQ_ENSURE(!KVWriteInProgress)("reason", "KV write must not be in progress");
 
     const TString& user = act.ClientId;
     if (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET) {

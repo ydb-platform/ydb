@@ -403,7 +403,7 @@ TKey TPartitionBlobEncoder::KeyForWrite(TKeyPrefix::EType type,
                                         const TPartitionId& partitionId,
                                         bool needCompaction) const
 {
-    AFL_ENSURE(!ForFastWrite)("ForFastWrite", ForFastWrite);
+    AFL_ENSURE(!ForFastWrite)("reason", "expected not ForFastWrite mode");
     if (needCompaction) {
         return WithHeadOffsetDelta(
             TKey::ForBody(type, partitionId, NewHead.Offset, NewHead.PartNo, NewHead.GetCount(), NewHead.GetInternalPartsCount()),
@@ -416,7 +416,7 @@ TKey TPartitionBlobEncoder::KeyForWrite(TKeyPrefix::EType type,
 
 TKey TPartitionBlobEncoder::KeyForFastWrite(TKeyPrefix::EType type, const TPartitionId& partitionId) const
 {
-    AFL_ENSURE(ForFastWrite)("ForFastWrite", ForFastWrite);
+    AFL_ENSURE(ForFastWrite)("reason", "expected ForFastWrite mode");
     return WithHeadOffsetDelta(
         TKey::ForFastWrite(type, partitionId, NewHead.Offset, NewHead.PartNo, NewHead.GetCount(), NewHead.GetInternalPartsCount()),
         NewHead);
@@ -557,7 +557,7 @@ void TPartitionBlobEncoder::SyncHeadFromNewHead()
 
 void TPartitionBlobEncoder::SyncHead(ui64& startOffset, ui64& endOffset)
 {
-    AFL_ENSURE(!ForFastWrite)("ForFastWrite", ForFastWrite);
+    AFL_ENSURE(!ForFastWrite)("reason", "expected not ForFastWrite mode");
     //append Head with newHead
     while (!NewHead.GetBatches().empty()) {
         Head.AddBatch(NewHead.ExtractFirstBatch());
@@ -573,7 +573,7 @@ void TPartitionBlobEncoder::SyncHead(ui64& startOffset, ui64& endOffset)
 
 void TPartitionBlobEncoder::SyncHeadFastWrite(ui64& startOffset, ui64& endOffset)
 {
-    AFL_ENSURE(ForFastWrite)("ForFastWrite", ForFastWrite);
+    AFL_ENSURE(ForFastWrite)("reason", "expected ForFastWrite mode");
     AFL_ENSURE(Head.PackedSize == 0)("Head.PackedSize", Head.PackedSize);
 
     // We calculate the initial offset if this is the first write operation.
@@ -593,7 +593,7 @@ void TPartitionBlobEncoder::SyncHeadFastWrite(ui64& startOffset, ui64& endOffset
     HeadKeys.clear();
 
     // Here is the Head.Packed Size != 0. Therefore, the keys must be in the body.
-    AFL_ENSURE(!DataKeysBody.empty())("DataKeysBody_size", DataKeysBody.size());
+    AFL_ENSURE(!DataKeysBody.empty())("reason", "DataKeysBody must not be empty");
 
     endOffset = NewHead.GetNextOffset();
 
@@ -666,7 +666,7 @@ void TPartitionBlobEncoder::pop_front() {
 }
 
 void TPartitionBlobEncoder::PopFrontHeadKey() {
-    AFL_ENSURE(!HeadKeys.empty())("HeadKeys_size", HeadKeys.size());
+    AFL_ENSURE(!HeadKeys.empty())("reason", "HeadKeys must not be empty");
 
     const TDataKey deletedKey = HeadKeys.front();
     ScheduleDelete(HeadKeys.front());

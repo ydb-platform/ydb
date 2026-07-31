@@ -212,7 +212,7 @@ void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TAc
         auto commit = request.MutablePartitionRequest()->MutableCmdSetClientOffset();
         commit->SetClientId(ClientId);
         commit->SetOffset(offset);
-        AFL_ENSURE(!Session.empty())("reason", "session id required for commit")("session", Session)("partition", Partition.Partition)("assign_id", Partition.AssignId);
+        AFL_ENSURE(!Session.empty())("reason", "session id required for commit")("partition", Partition.Partition)("assign_id", Partition.AssignId);
         commit->SetSessionId(Session);
 
         YDB_LOG_DEBUG_CTX(ctx, "Committing to position prev end by cookie",
@@ -280,7 +280,7 @@ void TPartitionActor::SendPublishDirectRead(const ui64 directReadId, const TActo
     ActorIdToProto(PipeClient, request.MutablePartitionRequest()->MutablePipeClient());
     auto publish = request.MutablePartitionRequest()->MutableCmdPublishRead();
     publish->SetDirectReadId(directReadId);
-    AFL_ENSURE(!Session.empty())("reason", "session id required for publish direct read")("session", Session)("direct_read_id", directReadId)("assign_id", Partition.AssignId);
+    AFL_ENSURE(!Session.empty())("reason", "session id required for publish direct read")("direct_read_id", directReadId)("assign_id", Partition.AssignId);
 
     publish->MutableSessionKey()->SetSessionId(Session);
     publish->MutableSessionKey()->SetPartitionSessionId(Partition.AssignId);
@@ -307,7 +307,7 @@ void TPartitionActor::SendForgetDirectRead(const ui64 directReadId, const TActor
     ActorIdToProto(PipeClient, request.MutablePartitionRequest()->MutablePipeClient());
     auto publish = request.MutablePartitionRequest()->MutableCmdForgetRead();
     publish->SetDirectReadId(directReadId);
-    AFL_ENSURE(!Session.empty())("reason", "session id required for forget direct read")("session", Session)("direct_read_id", directReadId)("assign_id", Partition.AssignId);
+    AFL_ENSURE(!Session.empty())("reason", "session id required for forget direct read")("direct_read_id", directReadId)("assign_id", Partition.AssignId);
 
     publish->MutableSessionKey()->SetSessionId(Session);
     publish->MutableSessionKey()->SetPartitionSessionId(Partition.AssignId);
@@ -1362,8 +1362,8 @@ void TPartitionActor::InitLockPartition(const TActorContext& ctx) {
 
         NTabletPipe::SendData(ctx, PipeClient, req.Release());
     } else {
-        AFL_ENSURE(StartReading)("reason", "start reading expected on re-lock")("start_reading", StartReading)("session", Session)("assign_id", Partition.AssignId);
-        AFL_ENSURE(InitDone)("reason", "init must be done on re-lock")("init_done", InitDone)("session", Session)("assign_id", Partition.AssignId);
+        AFL_ENSURE(StartReading)("reason", "start reading expected on re-lock")("session", Session)("assign_id", Partition.AssignId);
+        AFL_ENSURE(InitDone)("reason", "init must be done on re-lock")("session", Session)("assign_id", Partition.AssignId);
         InitStartReading(ctx);
     }
 }
@@ -1478,7 +1478,7 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
         return;
     }
 
-    AFL_ENSURE(InitDone)("reason", "init must be done before wait data")("init_done", InitDone)("session", Session)("partition", Partition.Partition)("assign_id", Partition.AssignId);
+    AFL_ENSURE(InitDone)("reason", "init must be done before wait data")("session", Session)("partition", Partition.Partition)("assign_id", Partition.AssignId);
     AFL_ENSURE(PipeClient)("reason", "pipe client expected for wait data")("session", Session)("partition", Partition.Partition)("assign_id", Partition.AssignId)("tablet_id", TabletID);
     AFL_ENSURE(MaxTimeLagMs || ReadTimestampMs || IsNeedMorePartitionData())
         ("max_time_lag_ms", MaxTimeLagMs)("read_timestamp_ms", ReadTimestampMs)("session", Session)("assign_id", Partition.AssignId);
@@ -1661,7 +1661,7 @@ void TPartitionActor::Handle(TEvPQProxy::TEvRead::TPtr& ev, const TActorContext&
         {"guid", ev->Get()->Guid});
 
     AFL_ENSURE(ReadGuid.empty())("read_guid", ReadGuid)("session", Session)("partition", Partition.Partition)("assign_id", Partition.AssignId);
-    AFL_ENSURE(!RequestInfly)("reason", "no read request expected inflight")("request_inflight", RequestInfly)("session", Session)("assign_id", Partition.AssignId);
+    AFL_ENSURE(!RequestInfly)("reason", "no read request expected inflight")("session", Session)("assign_id", Partition.AssignId);
 
     ReadGuid = ev->Get()->Guid;
 

@@ -897,7 +897,7 @@ void TStorage::UpdateMessageGroupForRemovedMessage(ui64 offset, const TMessage& 
     AFL_ENSURE(ptr != nullptr)("offset", offset)("messageGroupIdHash", message.MessageGroupIdHash);
 
     if (message.GetStatus() == EMessageStatus::Locked) {
-        AFL_ENSURE(ptr->Locked.LockedSelf)("LockedSelf", ptr->Locked.LockedSelf);
+        AFL_ENSURE(ptr->Locked.LockedSelf)("reason", "expected ptr->Locked.LockedSelf");
         ptr->Locked.LockedSelf = false;
     }
     if (message.GetStatus() == EMessageStatus::Delayed) {
@@ -989,7 +989,7 @@ void TStorage::RemoveMessage(ui64 offset, const TMessage& message) {
 }
 
 void TStorage::RemoveFirstMessageFromFastZone() {
-    AFL_ENSURE(!Messages.empty())("Messages_size", Messages.size());
+    AFL_ENSURE(!Messages.empty())("reason", "messages must not be empty");
     auto& message = Messages.front();
     RemoveMessage(FirstOffset, message);
     Messages.pop_front();

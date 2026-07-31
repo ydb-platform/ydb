@@ -29,7 +29,7 @@ void TPartitionWriter::OnWriteRequest(THolder<NPQ::TEvPartitionWriter::TEvWriteR
 
 void TPartitionWriter::OnWriteAccepted(const NPQ::TEvPartitionWriter::TEvWriteAccepted& ev, const TActorContext& ctx)
 {
-    AFL_ENSURE(!SentRequests.empty())("reason", "sent requests expected on write accepted")("sent_requests_size", SentRequests.size());
+    AFL_ENSURE(!SentRequests.empty())("reason", "sent requests expected on write accepted");
     AFL_ENSURE(ev.Cookie == SentRequests.front().Cookie)("event_cookie", ev.Cookie)("expected_cookie", SentRequests.front().Cookie);
 
     const TSentRequest& front = SentRequests.front();
@@ -54,7 +54,7 @@ void TPartitionWriter::OnWriteAccepted(const NPQ::TEvPartitionWriter::TEvWriteAc
 void TPartitionWriter::OnWriteResponse(const NPQ::TEvPartitionWriter::TEvWriteResponse& ev)
 {
     AFL_ENSURE(ev.IsSuccess())("reason", "write response must be success");
-    AFL_ENSURE(!AcceptedRequests.empty())("reason", "accepted requests expected")("accepted_requests_size", AcceptedRequests.size());
+    AFL_ENSURE(!AcceptedRequests.empty())("reason", "accepted requests expected");
     AFL_ENSURE(ev.Record.GetPartitionResponse().GetCookie() == AcceptedRequests.front().Cookie)
         ("response_cookie", ev.Record.GetPartitionResponse().GetCookie())("expected_cookie", AcceptedRequests.front().Cookie);
 

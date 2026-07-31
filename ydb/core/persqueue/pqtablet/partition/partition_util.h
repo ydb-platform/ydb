@@ -71,7 +71,7 @@ public:
     }
 
     std::pair<TKey, ui32> Compact() {
-        AFL_ENSURE(!Keys_.empty())("reason", "keys empty on compact")("size", Keys_.size());
+        AFL_ENSURE(!Keys_.empty())("reason", "keys empty on compact");
         TKey tmp(Keys_.front().first);
         tmp.SetCount(RecsCount_);
         tmp.SetInternalPartsCount(InternalPartsCount_);
@@ -84,7 +84,7 @@ public:
     }
 
     std::pair<TKey, ui32> PopFront() {
-        AFL_ENSURE(!Keys_.empty())("reason", "keys empty on pop front")("size", Keys_.size());
+        AFL_ENSURE(!Keys_.empty())("reason", "keys empty on pop front");
         Sum_ -= Keys_.front().second;
         RecsCount_ -= Keys_.front().first.GetCount();
         InternalPartsCount_ -= Keys_.front().first.GetInternalPartsCount();
@@ -97,7 +97,7 @@ public:
     }
 
     std::pair<TKey, ui32> PopBack() {
-        AFL_ENSURE(!Keys_.empty())("reason", "keys empty on pop back")("size", Keys_.size());
+        AFL_ENSURE(!Keys_.empty())("reason", "keys empty on pop back");
         Sum_ -= Keys_.back().second;
         RecsCount_ -= Keys_.back().first.GetCount();
         InternalPartsCount_ -= Keys_.back().first.GetInternalPartsCount();

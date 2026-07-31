@@ -1063,7 +1063,7 @@ void TWriteSessionActor<Protocol>::Handle(NPQ::TEvPartitionWriter::TEvWriteAccep
         return CloseSession("got write permission but not wait for it", PersQueue::ErrorCode::ERROR, ctx);
     }
 
-    AFL_ENSURE(!SentRequests.empty())("reason", "sent requests expected on write accepted")("sent_requests_size", SentRequests.size())("cookie", Cookie);
+    AFL_ENSURE(!SentRequests.empty())("reason", "sent requests expected on write accepted")("cookie", Cookie);
     auto writeRequest = std::move(SentRequests.front());
 
     if (ev->Get()->Cookie != writeRequest->Cookie) {
@@ -1715,7 +1715,7 @@ void TWriteSessionActor<Protocol>::Handle(typename TEvWrite::TPtr& ev, const TAc
     }
 
     if (BytesInflight_ < AppData(ctx)->PQConfig.GetMaxWriteSessionBytesInflight()) { //allow only one big request to be readed but not sended
-        AFL_ENSURE(NextRequestInited)("reason", "next request must be inited")("next_request_inited", NextRequestInited)("cookie", Cookie);
+        AFL_ENSURE(NextRequestInited)("reason", "next request must be inited")("cookie", Cookie);
         if (!Request->Read()) {
             YDB_LOG_INFO_CTX(ctx, "Session v1 grpc read failed",
                 {"cookie", Cookie},

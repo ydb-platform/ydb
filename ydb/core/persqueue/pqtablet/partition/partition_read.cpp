@@ -1058,7 +1058,7 @@ void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo
         return;
     }
 
-    PQ_ENSURE(!ReadingTimestamp)("ReadingTimestamp", ReadingTimestamp);
+    PQ_ENSURE(!ReadingTimestamp)("reason", "ReadingTimestamp must be false");
 
     ReadingTimestamp = true;
     ReadingForUser = user;
@@ -1129,7 +1129,7 @@ void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& 
         {"userInfoWriteTimestampMilliSeconds", userInfo->WriteTimestamp.MilliSeconds()},
         {"updateUserInfoTimestampSize", UpdateUserInfoTimestamp.size()},
         {"startOffset", GetStartOffset()});
-    PQ_ENSURE(userInfo->ReadScheduled)("ReadScheduled", userInfo->ReadScheduled);
+    PQ_ENSURE(userInfo->ReadScheduled)("reason", "expected userInfo->ReadScheduled");
     userInfo->ReadScheduled = false;
     PQ_ENSURE(ReadingForUser != "")("ReadingForUser", ReadingForUser);
 
@@ -1186,7 +1186,7 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
     ui32 count = 0;
     ui32 size = 0;
 
-    PQ_ENSURE(!info.User.empty())("User", info.User);
+    PQ_ENSURE(!info.User.empty())("reason", "user must not be empty");
     auto& userInfo = UsersInfoStorage->GetOrCreate(info.User, ctx);
 
     if (subscription) {

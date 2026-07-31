@@ -197,7 +197,7 @@ TString Encode(const TString& sourceId) {
 }
 
 TString Decode(const TString& sourceId) {
-    AFL_ENSURE(!sourceId.empty())("reason", "source id must not be empty")("source_id_size", sourceId.size());
+    AFL_ENSURE(!sourceId.empty())("reason", "source id must not be empty");
 
     switch (sourceId[0]) {
     case TTags::Simple:

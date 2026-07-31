@@ -48,7 +48,7 @@ public:
         , CanReadBatches(request.GetPartitionRequest().GetCmdRead().GetCanReadBatches())
         , BatchProcessorActor(batchProcessorActor)
     {
-        AFL_ENSURE(Request.HasPartitionRequest() && Request.GetPartitionRequest().HasCmdRead())("HasPartitionRequest", Request.HasPartitionRequest())("HasCmdRead", Request.HasPartitionRequest() && Request.GetPartitionRequest().HasCmdRead());
+        AFL_ENSURE(Request.HasPartitionRequest() && Request.GetPartitionRequest().HasCmdRead())("HasPartitionRequest", Request.HasPartitionRequest());
         AFL_ENSURE(Request.GetPartitionRequest().GetCmdRead().GetPartNo() == 0) //partial request are not allowed, otherwise remove ReadProxy
             ("part_no", Request.GetPartitionRequest().GetCmdRead().GetPartNo())
             ("reason", "partial requests are not allowed");
@@ -103,7 +103,7 @@ private:
                                        const NKikimrClient::TPersQueuePartitionResponse& partitionResponse)
     {
         const auto& responseRecord = isDirectRead ? *PreparedResponse : Response->Record;
-        AFL_ENSURE(responseRecord.HasPartitionResponse() && responseRecord.GetPartitionResponse().HasCmdReadResult())("HasPartitionResponse", responseRecord.HasPartitionResponse())("HasCmdReadResult", responseRecord.HasPartitionResponse() && responseRecord.GetPartitionResponse().HasCmdReadResult());
+        AFL_ENSURE(responseRecord.HasPartitionResponse() && responseRecord.GetPartitionResponse().HasCmdReadResult())("HasPartitionResponse", responseRecord.HasPartitionResponse());
         const auto& cmdReadResult = responseRecord.GetPartitionResponse().GetCmdReadResult();
 
         if (!CanReadBatches && HasBatchMessages(cmdReadResult)) {
@@ -150,7 +150,7 @@ private:
             PassAway();
             return;
         }
-        AFL_ENSURE(record.HasPartitionResponse() && record.GetPartitionResponse().HasCmdReadResult())("HasPartitionResponse", record.HasPartitionResponse())("HasCmdReadResult", record.HasPartitionResponse() && record.GetPartitionResponse().HasCmdReadResult());
+        AFL_ENSURE(record.HasPartitionResponse() && record.GetPartitionResponse().HasCmdReadResult())("HasPartitionResponse", record.HasPartitionResponse());
         const auto& readResult = record.GetPartitionResponse().GetCmdReadResult();
         if (isDirectRead) {
             if (!PreparedResponse) {

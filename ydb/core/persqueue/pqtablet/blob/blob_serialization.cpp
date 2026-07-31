@@ -567,7 +567,7 @@ ui32 TClientBlob::GetSerializedSize() const {
 //
 
 void TBatch::SerializeTo(TString& res) const{
-    AFL_ENSURE(Packed)("Packed", Packed);
+    AFL_ENSURE(Packed)("reason", "batch must be packed");
 
     ui16 sz = Header.ByteSize();
     res.append((const char*)&sz, sizeof(ui16));

@@ -329,7 +329,7 @@ void TReadSessionActor<Protocol>::Handle(typename IContext::TEvWriteFinished::TP
         return Die(ctx);
     }
 
-    AFL_ENSURE(!ActiveWrites.empty())("reason", "write finished but no active writes")("session", Session)("active_writes_size", ActiveWrites.size());
+    AFL_ENSURE(!ActiveWrites.empty())("reason", "write finished but no active writes")("session", Session);
     const auto sz = ActiveWrites.front();
     ActiveWrites.pop();
 
@@ -1525,7 +1525,7 @@ bool TReadSessionActor<Protocol>::SendControlMessage(TPartitionId id, TServerMes
     if (!buffer || it == PartitionToControlMessages.end()) {
         return WriteToStreamOrDie(ctx, std::move(message));
     } else {
-        AFL_ENSURE(it->second.Infly)("reason", "control message inflight expected")("session", Session)("infly", it->second.Infly);
+        AFL_ENSURE(it->second.Infly)("reason", "control message inflight expected")("session", Session);
         it->second.ControlMessages.push_back(std::move(message));
     }
 

@@ -1031,8 +1031,8 @@ bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
     AFL_ENSURE(offset >= GetLastOffset())("l", offset)("r", GetLastOffset());
 
     // The fast zone is a contiguous deque indexed by (offset - FirstOffset), so it cannot contain
-    // holes. When the new offset leaves a gap, relocate the current fast-zone messages to the slow
-    // zone (a sparse map) instead of dropping them.
+    // offset gaps. When the new offset leaves a gap, relocate the current fast-zone messages to the
+    // slow zone (a sparse map) instead of dropping them.
     while (!Messages.empty() && offset > GetLastOffset()) {
         MoveFirstMessageFromFastZoneToSlowZone();
     }

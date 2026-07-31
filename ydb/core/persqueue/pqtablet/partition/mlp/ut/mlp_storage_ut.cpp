@@ -532,7 +532,7 @@ Y_UNIT_TEST(AddMessageWithSkippedMessage) {
 
     storage.AddMessage(7, true, 5, writeTimestamp);
     // The message with offset 3 is preserved (moved to the slow zone) rather than dropped, so that
-    // the hole between offsets 3 and 7 does not lose already added messages.
+    // the offset gap between offsets 3 and 7 does not lose already added messages.
     UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 7);
     UNIT_ASSERT_VALUES_EQUAL(storage.GetLastOffset(), 8);
 
@@ -583,13 +583,13 @@ Y_UNIT_TEST(AddMessageWithSkippedMessage) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.TotalDeletedByRetentionMessageCount, 0);
 }
 
-static void AddMessageWithHolesReturnsAllMessagesImpl(bool keepMessageOrder) {
+static void AddMessageWithOffsetGapsReturnsAllMessagesImpl(bool keepMessageOrder) {
     auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
     auto writeTimestamp = timeProvider->Now() - TDuration::Seconds(1);
 
     TStorage storage(timeProvider, TStorage::TStorageSettings{.MinMessages = 1, .MaxMessages = 8, .KeepMessageOrder = keepMessageOrder});
 
-    // Add messages with holes in the offset sequence. Every message uses its own message group so
+    // Add messages with gaps in the offset sequence. Every message uses its own message group so
     // that (in keep-order mode) none of them blocks the others and all should be readable.
     std::vector<ui64> addedOffsets;
     for (ui64 offset = 0; offset < 8; offset += 2) {
@@ -608,12 +608,73 @@ static void AddMessageWithHolesReturnsAllMessagesImpl(bool keepMessageOrder) {
     }
 }
 
-Y_UNIT_TEST(AddMessageWithHolesReturnsAllMessages_WithoutKeepMessageOrder) {
-    AddMessageWithHolesReturnsAllMessagesImpl(false);
+Y_UNIT_TEST(AddMessageWithOffsetGapsReturnsAllMessages_WithoutKeepMessageOrder) {
+    AddMessageWithOffsetGapsReturnsAllMessagesImpl(false);
 }
 
-Y_UNIT_TEST(AddMessageWithHolesReturnsAllMessages_WithKeepMessageOrder) {
-    AddMessageWithHolesReturnsAllMessagesImpl(true);
+Y_UNIT_TEST(AddMessageWithOffsetGapsReturnsAllMessages_WithKeepMessageOrder) {
+    AddMessageWithOffsetGapsReturnsAllMessagesImpl(true);
+}
+
+// An offset gap drains the fast zone through MoveFirstMessageFromFastZoneToSlowZone(). Committed
+// messages preceding the gap are dropped, while Locked/Unprocessed ones are preserved in the slow
+// zone. The scenario also stresses serialization: within a single batch a message is added and
+// committed (then dropped), another is added and moved to the slow zone while Locked, exercising the
+// WAL round-trip.
+Y_UNIT_TEST(AddMessageWithOffsetGapPreservesNonCommittedMessages) {
+    TUtils utils;
+    auto ts = utils.TimeProvider->Now();
+
+    utils.Begin();
+
+    utils.Storage.AddMessage(0, true, 100, ts);
+    utils.Storage.AddMessage(1, true, 101, ts);
+    utils.Storage.AddMessage(2, true, 102, ts);
+
+    UNIT_ASSERT(utils.Commit(0));               // offset 0 becomes Committed -> must be dropped on drain
+    UNIT_ASSERT_VALUES_EQUAL(utils.Next(), 1);  // offset 1 becomes Locked -> must be preserved
+
+    // Offset gap: offset 5 > last offset 3, so the whole fast zone is drained.
+    utils.Storage.AddMessage(5, true, 105, ts);
+
+    UNIT_ASSERT_VALUES_EQUAL(utils.Storage.GetFirstOffset(), 5);
+
+    auto it = utils.Storage.begin();
+    {
+        UNIT_ASSERT(it != utils.Storage.end());
+        auto message = *it;
+        UNIT_ASSERT_VALUES_EQUAL(message.Offset, 1);
+        UNIT_ASSERT(message.SlowZone);
+        UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Locked);
+    }
+    ++it;
+    {
+        UNIT_ASSERT(it != utils.Storage.end());
+        auto message = *it;
+        UNIT_ASSERT_VALUES_EQUAL(message.Offset, 2);
+        UNIT_ASSERT(message.SlowZone);
+        UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Unprocessed);
+    }
+    ++it;
+    {
+        UNIT_ASSERT(it != utils.Storage.end());
+        auto message = *it;
+        UNIT_ASSERT_VALUES_EQUAL(message.Offset, 5);
+        UNIT_ASSERT(!message.SlowZone);
+        UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Unprocessed);
+    }
+    ++it;
+    UNIT_ASSERT(it == utils.Storage.end());
+
+    auto& metrics = utils.Storage.GetMetrics();
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 3);   // offsets 1, 2, 5 (offset 0 dropped)
+    UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 2); // offsets 2, 5
+    UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 1);      // offset 1
+    UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);   // offset 0 was dropped
+    UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+
+    utils.End();
+    utils.AssertLoad();
 }
 
 Y_UNIT_TEST(AddMessageWithDelay) {
@@ -1811,7 +1872,7 @@ Y_UNIT_TEST(StorageSerialization_WAL_WithHole) {
 
         auto it = storage.begin();
         {
-            // Offset 3 was moved to the slow zone (not dropped) when the hole appeared.
+            // Offset 3 was moved to the slow zone (not dropped) when the offset gap appeared.
             UNIT_ASSERT(it != storage.end());
             auto message = *it;
             UNIT_ASSERT_VALUES_EQUAL(message.Offset, 3);

@@ -23,10 +23,10 @@ void CheckDecision(std::function<void(NResourcePool::TPoolSettings&)> setup, EEx
     });
 
     TClassifyContext ctx{.PoolId = "", .AppName = "", .UserToken = nullptr};
-    auto classifier = NWorkloadManager::CreateQueryClassifier(
+    auto classifier = CreateQueryClassifierForUt(
         poolSnap, TClassifierConfigsView(classifierSnap, TEST_DB), TEST_DB, std::move(ctx));
 
-    NKqp::TUserRequestContext userRequestContext;
+    NKqp::TUserRequestContext userRequestContext{};
     auto result = classifier->PreCompileClassify(userRequestContext);
 
     switch (expected) {

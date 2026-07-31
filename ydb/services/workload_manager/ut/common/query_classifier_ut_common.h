@@ -1,11 +1,16 @@
 #pragma once
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/services/workload_manager/metadata_subscription/resource_pool_classifier/snapshot.h>
 #include <ydb/services/workload_manager/query_classifier.h>
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/executor_thread.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -17,6 +22,66 @@
 namespace NKikimr::NWorkloadManager {
 
 inline constexpr char TEST_DB[] = "/Root/testdb";
+
+///
+/// Provides AppData() for classifier UTs via a minimal actor system + TLS activation context.
+/// Required because TQueryClassifier reads ResourcePoolForSharedReading from AppData in its ctor.
+///
+class TWithAppData {
+public:
+    explicit TWithAppData(const TString& resourcePoolForSharedReading = {})
+        : App(new TAppData(0, 0, 0, 0, {}, nullptr, nullptr, nullptr, nullptr))
+        , Setup(MakeHolder<NActors::TActorSystemSetup>())
+        , LogName("query_classifier_ut")
+        , LogSettings(new NActors::NLog::TSettings(
+              NActors::TActorId(),
+              0,
+              NKikimrServices::EServiceKikimr_MIN,
+              NKikimrServices::EServiceKikimr_MAX,
+              [this](auto&&) { return std::ref(LogName); },
+              NActors::NLog::EPriority::PRI_EMERG))
+        , ActorSystem(Setup, App.Get(), LogSettings)
+        , Executor(0, &ActorSystem, nullptr, "dummy")
+        , Context(Mailbox, Executor, 0, NActors::TActorId())
+    {
+        if (resourcePoolForSharedReading) {
+            App->QueryServiceConfig.MutableStreamingQueries()->SetResourcePoolForSharedReading(
+                resourcePoolForSharedReading);
+        }
+        Prev = NActors::TlsActivationContext;
+        NActors::TlsActivationContext = &Context;
+    }
+
+    ~TWithAppData() {
+        NActors::TlsActivationContext = Prev;
+    }
+
+    TWithAppData(const TWithAppData&) = delete;
+    TWithAppData& operator=(const TWithAppData&) = delete;
+
+private:
+    THolder<TAppData> App;
+    THolder<NActors::TActorSystemSetup> Setup;
+    TString LogName;
+    TIntrusivePtr<NActors::NLog::TSettings> LogSettings;
+    NActors::TActorSystem ActorSystem;
+    NActors::TMailbox Mailbox;
+    NActors::TExecutorThread Executor;
+    NActors::TActorContext Context;
+    NActors::TActivationContext* Prev = nullptr;
+};
+
+inline std::shared_ptr<IQueryClassifier> CreateQueryClassifierForUt(
+    TResourcePoolMapPtr resourcePoolMap,
+    TClassifierConfigsView classifierView,
+    const TString& databaseId,
+    TClassifyContext context,
+    const TString& resourcePoolForSharedReading = {})
+{
+    TWithAppData appData(resourcePoolForSharedReading);
+    return CreateQueryClassifier(
+        std::move(resourcePoolMap), std::move(classifierView), databaseId, std::move(context));
+}
 
 inline TResourcePoolClassifierConfig MakeClassifierConfig(
     const TString& database, const TString& name, i64 rank,
@@ -151,14 +216,14 @@ struct TClassifyTestCase {
             .UserToken = token,
         };
 
-        return NWorkloadManager::CreateQueryClassifier(poolSnap, TClassifierConfigsView(classifierSnap, TEST_DB), TEST_DB, std::move(ctx));
+        return CreateQueryClassifierForUt(poolSnap, TClassifierConfigsView(classifierSnap, TEST_DB), TEST_DB, std::move(ctx));
     }
 
     NWorkloadManager::IQueryClassifier::TPreCompileClassifyResult RunPreClassify(
         bool isStreamingQuery = false) const
     {
         auto classifier = BuildClassifier();
-        NKqp::TUserRequestContext userRequestContext;
+        NKqp::TUserRequestContext userRequestContext{};
         userRequestContext.IsStreamingQuery = isStreamingQuery;
         return classifier->PreCompileClassify(userRequestContext);
     }
@@ -172,7 +237,7 @@ struct TClassifyTestCase {
         const TString& queryTablePath, bool isFullScan) const
     {
         auto classifier = BuildClassifier();
-        NKqp::TUserRequestContext userRequestContext;
+        NKqp::TUserRequestContext userRequestContext{};
         (void)classifier->PreCompileClassify(userRequestContext);
 
         auto proto = std::make_unique<NKikimrKqp::TPreparedQuery>();
@@ -202,7 +267,7 @@ struct TClassifyTestCase {
         const TString& queryTablePath, bool isStreamingQuery = false) const
     {
         auto classifier = BuildClassifier();
-        NKqp::TUserRequestContext userRequestContext;
+        NKqp::TUserRequestContext userRequestContext{};
         userRequestContext.IsStreamingQuery = isStreamingQuery;
         (void)classifier->PreCompileClassify(userRequestContext);
 
@@ -219,7 +284,7 @@ struct TClassifyTestCase {
         bool isStreamingQuery) const
     {
         auto classifier = BuildClassifier();
-        NKqp::TUserRequestContext userRequestContext;
+        NKqp::TUserRequestContext userRequestContext{};
         userRequestContext.IsStreamingQuery = isStreamingQuery;
         (void)classifier->PreCompileClassify(userRequestContext);
 

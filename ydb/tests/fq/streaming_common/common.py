@@ -97,27 +97,13 @@ def get_ydb_config(request):
 
 
 class YdbClient:
-<<<<<<< HEAD
-    def __init__(self, endpoint: str, database: str, token: str = "root@builtin", enable_discovery: bool = True):
-        self.driver_config = ydb.DriverConfig(
-            endpoint, database, auth_token=token, disable_discovery=not enable_discovery
-=======
-    WAIT_TIMEOUT: int = 5
-
     def __fail_retry_callback(self, e):
         self.retry_settings.on_ydb_error_callback(e)
         raise RuntimeError(e)
 
-    def __init__(self, driver: ydb.Driver, owns_driver: bool = False):
-        self.owns_driver = owns_driver
-        self.driver = driver
-        if self.owns_driver:
-            self.driver.wait(self.WAIT_TIMEOUT, fail_fast=True)
-
-        self.session_pool = ydb.QuerySessionPool(self.driver)
-        self.retry_settings = ydb.RetrySettings(
-            on_ydb_error_callback=lambda e: logger.error(f"Query execution failed and may be retried: {e}"),
->>>>>>> 02cd5d09937 (YQ-5552 fixed streaming query stop after restart (#48397))
+    def __init__(self, endpoint: str, database: str, token: str = "root@builtin", enable_discovery: bool = True):
+        self.driver_config = ydb.DriverConfig(
+            endpoint, database, auth_token=token, disable_discovery=not enable_discovery
         )
         self.driver = None
         self.session_pool = None

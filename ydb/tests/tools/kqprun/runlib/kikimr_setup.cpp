@@ -46,21 +46,13 @@ private:
     TString YqlToken_;
 };
 
-<<<<<<< HEAD
 class TStaticSecuredCredentialsFactory : public NYql::ISecuredServiceAccountCredentialsFactory {
-=======
-class TStaticSecuredCredentialsFactory final : public NYql::ISecuredServiceAccountCredentialsFactory {
->>>>>>> 02cd5d09937 (YQ-5552 fixed streaming query stop after restart (#48397))
 public:
     TStaticSecuredCredentialsFactory(const TString& yqlToken)
         : YqlToken_(yqlToken)
     {}
 
-<<<<<<< HEAD
     std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString&, const TString&) override {
-=======
-    std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString&, const TString&) final {
->>>>>>> 02cd5d09937 (YQ-5552 fixed streaming query stop after restart (#48397))
         return std::make_shared<TStaticCredentialsProviderFactory>(YqlToken_);
     }
 

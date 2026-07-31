@@ -206,16 +206,21 @@ private:
     void ReportAnalyzeCounters();
     void InitAnalyzeCounters();
 
+    // Per-table change counters parsed from BaseStatistics.
+    struct TChangeCounters {
+        ui64 RowUpdates = 0;
+        ui64 RowDeletes = 0;
+        ui64 RowCount = 0;
+    };
+
     bool IsChangeRatioAboveThreshold(
-        ui64 lastAnalyzeRowUpdates, ui64 lastAnalyzeRowDeletes,
-        ui64 currentRowUpdates, ui64 currentRowDeletes,
-        ui64 rowCount) const;
-    std::tuple<ui64, ui64, ui64> GetCurrentChangeCounters(const TPathId& pathId) const;
+        const TChangeCounters& lastAnalyze, const TChangeCounters& current) const;
+    TChangeCounters GetCurrentChangeCounters(const TPathId& pathId) const;
 
     // Returns cached change counters, rebuilding the cache from BaseStatistics
     // if it is invalid. The cache is invalidated when BaseStatistics is updated
     // (TTxSchemeShardStats::Complete) or when a traversal finishes (FinishTraversal).
-    const THashMap<TPathId, std::tuple<ui64, ui64, ui64>>& GetCachedChangeCounters();
+    const THashMap<TPathId, TChangeCounters>& GetCachedChangeCounters();
     void InvalidateCachedChangeCounters();
 
     std::optional<bool> IsKnownTable(const TPathId& pathId) const;
@@ -295,11 +300,11 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr BackgroundAnalyzeCompletedCounter;
     NMonitoring::TDynamicCounters::TCounterPtr BackgroundAnalyzeFailedCounter;
 
-    // Cached parsed change counters (pathId -> (rowModifications, rowCount)).
+    // Cached parsed change counters (pathId -> TChangeCounters).
     // Invalidated when BaseStatistics is updated (TTxSchemeShardStats::Complete)
     // or when a traversal finishes (FinishTraversal). This avoids re-parsing
     // all BaseStatistics protobuf blobs on every 1-second scheduling tick.
-    THashMap<TPathId, std::tuple<ui64, ui64, ui64>> CachedChangeCounters;
+    THashMap<TPathId, TChangeCounters> CachedChangeCounters;
     bool CachedChangeCountersValid = false;
 
     TInstant AggregationRequestBeginTime;

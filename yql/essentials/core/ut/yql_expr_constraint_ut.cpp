@@ -4832,6 +4832,21 @@ Y_UNIT_TEST(DirectStreamingConstraintWithSwitch) {
     CheckConstraint<TStreamingConstraintNode>(exprRoot, "Nth", "Streaming");
 }
 
+Y_UNIT_TEST(DetailedStreamingConstraintWithNonVariantSwitch) {
+    const TStringBuf s = R"((
+        (let data (AsList (AsStruct '('ts (Timestamp '1)) '('value (String 'x)))))
+        (let streaming (AssumeConstraints data '"{\"Streaming\" = [\"ts\"]}"))
+        (let switched (Switch (Iterator streaming) '0 '('0) (lambda '(items) items)))
+        (let res (DataSink 'result))
+        (let world (Write! world res (Key) (Collect switched) '()))
+        (return (Commit! world res))
+    ))";
+
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Switch", "Streaming(ts)");
+}
+
 Y_UNIT_TEST(MultiItemStreamingConstraintWithSwitch) {
     const auto s = R"((
 (let res (DataSink 'result))

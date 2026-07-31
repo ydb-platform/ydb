@@ -1523,7 +1523,7 @@ private:
             const auto c = input->Head().GetConstraint<TStreamingConstraintNode>();
             if (!c) {
                 if (const auto c = input->Tail().GetConstraint<TStreamingConstraintNode>()) {
-                    output->AddConstraint(c);
+                    input->AddConstraint(c);
                 }
             }
         }
@@ -2356,7 +2356,7 @@ private:
             input->CopyConstraints(*input->Child(3));
         }
 
-        if (hasStreamingOutput || inputStreaming) {
+        if ((hasStreamingOutput || inputStreaming) && !input->GetConstraint<TStreamingConstraintNode>()) {
             input->AddConstraint(ctx.MakeConstraint<TStreamingConstraintNode>());
         }
 

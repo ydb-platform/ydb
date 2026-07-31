@@ -301,6 +301,63 @@ Y_UNIT_TEST(DataQueryMulti) {
     UNIT_ASSERT_EQUAL_C(plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe().size(), 0, result.GetQueryPlan());
 }
 
+Y_UNIT_TEST(TxIdInFullStatsPlan) {
+    auto kikimr = DefaultKikimrRunner();
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    TExecDataQuerySettings settings;
+    settings.CollectQueryStats(ECollectQueryStatsMode::Full);
+
+    auto result = session.ExecuteDataQuery(R"(
+        SELECT * FROM `/Root/TwoShard`;
+    )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), settings).ExtractValueSync();
+    result.GetIssues().PrintTo(Cerr);
+    AssertSuccessResult(result);
+
+    NJson::TJsonValue plan;
+    UNIT_ASSERT_C(NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true), result.GetQueryPlan());
+
+    // Executer TxId is reported per execution phase, so that the plan can be matched with
+    // the TxId written by LWTrace probes.
+    const auto& plans = plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe();
+    UNIT_ASSERT_C(!plans.empty(), result.GetQueryPlan());
+
+    bool txIdFound = false;
+    for (const auto& phase : plans) {
+        const auto* txId = phase.GetMapSafe().FindPtr("TxId");
+        if (txId) {
+            UNIT_ASSERT_C(txId->GetUIntegerSafe() > 0, result.GetQueryPlan());
+            txIdFound = true;
+        }
+    }
+    UNIT_ASSERT_C(txIdFound, result.GetQueryPlan());
+}
+
+Y_UNIT_TEST(NoTxIdForLiteralOnlyQuery) {
+    auto kikimr = DefaultKikimrRunner();
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    TExecDataQuerySettings settings;
+    settings.CollectQueryStats(ECollectQueryStatsMode::Full);
+
+    // Literal-only execution never reaches shards and gets no executer TxId,
+    // so nothing must be reported (and nothing must crash).
+    auto result = session.ExecuteDataQuery(R"(
+        SELECT 1;
+    )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), settings).ExtractValueSync();
+    result.GetIssues().PrintTo(Cerr);
+    AssertSuccessResult(result);
+
+    NJson::TJsonValue plan;
+    UNIT_ASSERT_C(NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true), result.GetQueryPlan());
+
+    for (const auto& phase : plan.GetMapSafe().at("Plan").GetMapSafe().at("Plans").GetArraySafe()) {
+        UNIT_ASSERT_C(!phase.GetMapSafe().contains("TxId"), result.GetQueryPlan());
+    }
+}
+
 Y_UNIT_TEST(RequestUnitForBadRequestExecute) {
     auto kikimr = DefaultKikimrRunner();
     auto db = kikimr.GetTableClient();

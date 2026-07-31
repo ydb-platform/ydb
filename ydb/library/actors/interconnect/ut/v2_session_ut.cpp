@@ -306,7 +306,9 @@ namespace {
         std::atomic<size_t> DisconnectCount{0};
     };
 
-    std::unique_ptr<TTestICCluster> MakeV2Cluster(ui32 tcpSocketBufferSize = 0) {
+    std::unique_ptr<TTestICCluster> MakeV2Cluster(ui32 tcpSocketBufferSize = 0,
+            TTestICCluster::TTrafficInterrupterSettings *tiSettings = nullptr,
+            TDuration deadPeerTimeout = TDuration::Seconds(2)) {
         auto customizer = [tcpSocketBufferSize](ui32, TInterconnectSettings& settings) {
             settings.V2.Enable = true;
             settings.V2.ChecksumEvents = true;
@@ -315,9 +317,9 @@ namespace {
             }
         };
         return std::make_unique<TTestICCluster>(
-            /*numNodes=*/2, TChannelsConfig(), /*tiSettings=*/nullptr, /*loggerSettings=*/nullptr,
+            /*numNodes=*/2, TChannelsConfig(), tiSettings, /*loggerSettings=*/nullptr,
             TTestICCluster::EMPTY, /*checkerFactory=*/TTestICCluster::TCheckerFactory{},
-            /*deadPeerTimeout=*/TDuration::Seconds(2), /*inflight=*/TNode::DefaultInflight(), customizer);
+            deadPeerTimeout, /*inflight=*/TNode::DefaultInflight(), customizer);
     }
 
     std::shared_ptr<IDirectSession> GrabDirectSession(TTestICCluster& cluster, ui32 fromNode, ui32 peerNode) {
@@ -859,5 +861,66 @@ Y_UNIT_TEST_SUITE(InterconnectSessionV2) {
             /*channel=*/1, promise), 1);
         UNIT_ASSERT_C(future.Wait(TDuration::Seconds(60)), "connection did not recover after disconnect churn");
         UNIT_ASSERT_VALUES_EQUAL(future.GetValueSync(), kTotal);
+    }
+
+    // A link that stops delivering anything while both sockets stay open (blackholed traffic) gives the
+    // engine no error to react to: only the dead-peer watchdog can notice that the peer went silent. The
+    // session must be torn down shortly after the timeout expires -- and not before -- and the connection
+    // must come back once traffic flows again.
+    Y_UNIT_TEST(DeadPeerTimeout) {
+        if (!TUringContext::IsAvailable()) {
+            Cerr << "io_uring not available; skipping" << Endl;
+            return;
+        }
+
+        constexpr TDuration deadPeerTimeout = TDuration::Seconds(2);
+        TTestICCluster::TTrafficInterrupterSettings tiSettings{
+            .RejectingTrafficTimeout = TDuration::Zero(), // no random rejects; the test drives the blackhole
+            .BandWidth = 0.0,
+            .Disconnect = false,
+        };
+        auto cluster = MakeV2Cluster(/*tcpSocketBufferSize=*/0, &tiSettings, deadPeerTimeout);
+
+        const TActorId responder = cluster->RegisterActor(new TLoadEchoActor, 2);
+        auto* monitor = new TConnectionMonitorActor(2);
+        cluster->RegisterActor(monitor, 1);
+
+        auto runLoad = [&](ui32 total, TStringBuf what) {
+            auto promise = NThreading::NewPromise<ui32>();
+            auto future = promise.GetFuture();
+            cluster->RegisterActor(new TLoadDriverActor(responder, total, /*inFlyMax=*/16, /*payloadSize=*/4096,
+                /*channel=*/1, promise), 1);
+            UNIT_ASSERT_C(future.Wait(TDuration::Seconds(60)), what);
+            UNIT_ASSERT_VALUES_EQUAL(future.GetValueSync(), total);
+        };
+
+        runLoad(500, "initial load stalled");
+        AssertV2InUse(*cluster, 1, 2);
+        WaitFor(TDuration::Seconds(20), [&] { return monitor->Connects() >= 1; }, "connection observed");
+
+        // Connecting may take a couple of attempts (handshake races at startup), so count from where we are
+        // rather than from zero.
+        const size_t disconnectsBefore = monitor->Disconnects();
+
+        // From now on nothing gets through in either direction, but the sockets remain open.
+        cluster->StartBlackhole(1);
+        cluster->StartBlackhole(2);
+        const TInstant blackholeStart = TInstant::Now();
+
+        WaitFor(deadPeerTimeout + TDuration::Seconds(20),
+            [&] { return monitor->Disconnects() > disconnectsBefore; },
+            "dead peer detected while traffic is blackholed");
+
+        // Pings keep the stream alive right up to the blackhole, so a disconnect noticeably earlier than the
+        // timeout would mean something other than the dead-peer watchdog tore the session down.
+        const TDuration elapsed = TInstant::Now() - blackholeStart;
+        UNIT_ASSERT_C(elapsed >= deadPeerTimeout / 2, TStringBuilder()
+            << "session died after " << elapsed << ", too early for a dead-peer timeout of " << deadPeerTimeout);
+
+        cluster->StopBlackhole(1);
+        cluster->StopBlackhole(2);
+
+        runLoad(500, "load after dead peer stalled -- reconnect broken");
+        AssertV2InUse(*cluster, 1, 2);
     }
 }

@@ -24,7 +24,7 @@ public:
     TQueryClassifier& operator=(const TQueryClassifier&) = delete;
 
     [[nodiscard]]
-    TPreCompileClassifyResult PreCompileClassify() override {
+    TPreCompileClassifyResult PreCompileClassify(const NKqp::TUserRequestContext& userRequestContext) override {
         // User requested an explicit pool
         if (Context.PoolId) {
             TryResolve(Context.PoolId, PreClassifyResult, RESOLVER_IS_USER);
@@ -34,6 +34,13 @@ public:
         // If no classification, use default pool
         if (!ClassifierView) {
             TryResolve(NResourcePool::DEFAULT_POOL_ID, PreClassifyResult, DEFAULT_RESOLVER);
+            return *PreClassifyResult;
+        }
+
+        // Streaming queries always go through post-compile so dynamic predicates
+        // (HAS_STREAM / HAS_PATH / HAS_FULL_SCAN) are evaluated from ResumeRank 0.
+        if (userRequestContext.IsStreamingQuery) {
+            PreClassifyResult = TPendingCompilation{.ResumeRank = 0};
             return *PreClassifyResult;
         }
 

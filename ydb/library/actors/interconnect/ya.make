@@ -124,7 +124,12 @@ IF (OS_LINUX)
     )
 ENDIF()
 
+RECURSE(
+    bench
+)
+
 RECURSE_FOR_TESTS(
+    benchmark
     ut
     ut_fat
     ut_huge_cluster

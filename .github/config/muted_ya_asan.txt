@@ -777,6 +777,7 @@ ydb/tests/fq/yt/kqp_yt_file/part9 test.py.test[aggregate-group_by_rollup_aggr_ex
 ydb/tests/functional/audit test_canonical_records.py.test_dstool_evict_vdisk_grpc
 ydb/tests/functional/blobstorage test_node_warden_cache.py.TestNodeWardenCacheFile.test_cache_file_lifecycle_and_restart
 ydb/tests/functional/config test_distconf_sentinel_node_status.py.TestKiKiMRDistConfSelfHealReplicasSpecificVolume.test_state_storage
+ydb/tests/functional/dstool py3test.sole chunk
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_capacity_metrics
 ydb/tests/functional/kqp/kqp_indexes ConsistentIndexRead.InteractiveTx
 ydb/tests/functional/kqp/kqp_indexes unittest.sole chunk

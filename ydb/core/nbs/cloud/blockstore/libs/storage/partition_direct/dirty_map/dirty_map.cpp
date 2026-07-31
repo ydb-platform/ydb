@@ -562,13 +562,31 @@ void TBlocksDirtyMap::WriteFinished(
     Y_ABORT_UNLESS(item);
     Y_ABORT_UNLESS(item->Range == range);
 
+    auto& inflightItem = item->Value;
+
     if (confirmed.Count() < QuorumDirectBlockGroupHostCount) {
+        // The write request did not reach the quorum. We responded to the
+        // client with an error. The written PBuffers will be cleared through a
+        // barrier garbage collection later. For now, we will forget about this
+        // request as if it never existed.
         const bool removed = Inflight.RemoveRange(lsn);
         Y_ABORT_UNLESS(removed);
         return;
     }
 
-    item->Value.OnWritten(requested, confirmed);
+    inflightItem.OnWritten(requested, confirmed);
+
+    if (!DisabledHosts.Empty()) {
+        const auto demotedHosts = DisabledHosts.Exclude(DesiredDDisks);
+        // It could happen that the host was turned off before we received a
+        // successful write response. In this case, remove all references to the
+        // turned-off host.
+        inflightItem.RemoveHosts(demotedHosts);
+        if (inflightItem.GetState() == TInflightInfo::EState::PBufferErased) {
+            const bool removed = Inflight.RemoveRange(lsn);
+            Y_ABORT_UNLESS(removed);
+        }
+    }
 }
 
 void TBlocksDirtyMap::FlushFinished(

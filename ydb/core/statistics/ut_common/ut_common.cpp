@@ -432,6 +432,12 @@ TTableInfo PrepareColumnTableWithIndexes(TTestEnv& env, const TString& databaseN
     )", fullTableName.c_str()));
     runtime.SimulateSleep(TDuration::Seconds(1));
 
+    ExecuteYqlScript(env, Sprintf(R"(
+        ALTER OBJECT `%s` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS,
+                    `INSERT_OPTIONS.BUILD_INDEXES_ENABLED`=`true`);
+    )", fullTableName.c_str()));
+    runtime.SimulateSleep(TDuration::Seconds(1));
+
     using TEvBulkUpsertRequest = NGRpcService::TGrpcRequestOperationCall<
         Ydb::Table::BulkUpsertRequest,
         Ydb::Table::BulkUpsertResponse>;

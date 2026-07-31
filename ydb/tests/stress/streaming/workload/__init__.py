@@ -235,7 +235,7 @@ class Workload():
                 f"SELECT COUNT(*) AS cnt FROM `{self.prefix}/output_table_{suffix}`"
             )
             count = result_sets[0].rows[0].cnt
-            expected = 2 * (self.duration - 30)  # Group by HOP 1s X two queries - checkpoint duration
+            expected = self.duration - 30  # Group by HOP 1s - checkpoint duration
             if count < expected * 0.7:
                 raise Exception(f"Insufficient data in output table: expected ~{expected} messages, got {count}")
 

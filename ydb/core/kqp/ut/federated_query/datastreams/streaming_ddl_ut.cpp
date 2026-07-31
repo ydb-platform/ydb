@@ -3422,7 +3422,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "pq_source"_a = pqSource,
             "input_topic"_a = inputTopic,
             "output_topic"_a = outputTopic
-        ), EStatus::UNSUPPORTED, " Save state of query is not supported for queries with intermediate writes");
+        ), EStatus::UNSUPPORTED, "Save state of query is not supported for queries with intermediate writes");
 
         for (const auto& table : {rowTable, columnTable}) {
             for (const auto& mode : {"INSERT", "REPLACE"}) {

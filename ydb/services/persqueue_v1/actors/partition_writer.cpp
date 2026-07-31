@@ -29,7 +29,7 @@ void TPartitionWriter::OnWriteRequest(THolder<NPQ::TEvPartitionWriter::TEvWriteR
 
 void TPartitionWriter::OnWriteAccepted(const NPQ::TEvPartitionWriter::TEvWriteAccepted& ev, const TActorContext& ctx)
 {
-    AFL_ENSURE(!SentRequests.empty())("reason", "sent requests expected on write accepted");
+    AFL_ENSURE(!SentRequests.empty())("reason", "sent requests expected on write accepted")("accepted_size", AcceptedRequests.size())("quoted_size", QuotedRequests.size());
     AFL_ENSURE(ev.Cookie == SentRequests.front().Cookie)("event_cookie", ev.Cookie)("expected_cookie", SentRequests.front().Cookie);
 
     const TSentRequest& front = SentRequests.front();

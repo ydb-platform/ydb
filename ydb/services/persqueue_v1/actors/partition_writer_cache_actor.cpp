@@ -277,7 +277,7 @@ auto TPartitionWriterCacheActor::GetPartitionWriter(
 
 bool TPartitionWriterCacheActor::TryDeleteOldestWriter(const TActorContext& ctx)
 {
-    PWC_ENSURE(!Writers.empty())("reason", "writers must not be empty");
+    PWC_ENSURE(!Writers.empty())("reason", "writers must not be empty")("pending_write_accepted_expected", PendingWriteAccepted.Expected);
 
     auto minLastActivity = TInstant::Max();
     auto oldest = Writers.end();

@@ -180,7 +180,7 @@ THolder<TAccountQuoterHolder> TReadQuoter::CreateAccountQuotaTracker(const TStri
 }
 
 TConsumerReadQuota* TReadQuoter::GetOrCreateConsumerQuota(const TString& consumerStr, const TActorContext& ctx) {
-    AFL_ENSURE(!consumerStr.empty())("reason", "consumer must not be empty");
+    AFL_ENSURE(!consumerStr.empty())("reason", "consumer must not be empty")("partition", Partition);
     auto it = ConsumerQuotas.find(consumerStr);
     if (it == ConsumerQuotas.end()) {
         TConsumerReadQuota consumer(

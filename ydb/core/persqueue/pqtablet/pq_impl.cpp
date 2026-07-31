@@ -680,7 +680,7 @@ void TPersQueue::CreateOriginalPartition(const NKikimrPQ::TPQTabletConfig& confi
 void TPersQueue::MoveTopTxToCalculating(TDistributedTransaction& tx,
                                         const TActorContext& ctx)
 {
-    PQ_ENSURE(!TxQueue.empty())("reason", "TxQueue must not be empty");
+    PQ_ENSURE(!TxQueue.empty())("reason", "TxQueue must not be empty")("txs_size", Txs.size())("write_txs_in_progress", WriteTxsInProgress);
 
     std::tie(ExecStep, ExecTxId) = TxQueue.front();
     YDB_LOG_INFO_COMP(NKikimrServices::PQ_TX, "New ExecStep ExecTxId",
@@ -705,7 +705,7 @@ void TPersQueue::MoveTopTxToCalculating(TDistributedTransaction& tx,
         break;
     }
     case NKikimrPQ::TTransaction::KIND_UNKNOWN:
-        PQ_ENSURE(false)("reason", "unexpected state");
+        PQ_ENSURE(false)("reason", "unexpected transaction kind")("kind", NKikimrPQ::TTransaction_EKind_Name(tx.Kind))("tx_id", tx.TxId)("state", NKikimrPQ::TTransaction_EState_Name(tx.State));
     }
 
     TryChangeTxState(tx, NKikimrPQ::TTransaction::CALCULATING);
@@ -798,7 +798,7 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
 
     if (read.GetStatus() == NKikimrProto::OK) {
         bool res = Config.ParseFromString(read.GetValue());
-        PQ_ENSURE(res)("reason", "operation failed");
+        PQ_ENSURE(res)("reason", "operation failed")("value_size", read.GetValue().size())("status", read.GetStatus());
 
         Migrate(Config);
 
@@ -958,7 +958,7 @@ void TPersQueue::ReadState(const NKikimrClient::TKeyValueResponse::TReadResult& 
     if (read.GetStatus() == NKikimrProto::OK) {
         NKikimrPQ::TTabletState stateProto;
         bool ok = stateProto.ParseFromString(read.GetValue());
-        PQ_ENSURE(ok)("reason", "operation failed");
+        PQ_ENSURE(ok)("reason", "operation failed")("value_size", read.GetValue().size())("status", read.GetStatus());
         PQ_ENSURE(stateProto.HasState())("reason", "state proto has no state");
         TabletState = stateProto.GetState();
     } else if (read.GetStatus() == NKikimrProto::NODATA) {
@@ -1063,7 +1063,7 @@ void TPersQueue::BeginWriteTabletState(const TActorContext& ctx, NKikimrPQ::ETab
     stateProto.SetState(state);
     TString strState;
     bool ok = stateProto.SerializeToString(&strState);
-    PQ_ENSURE(ok)("reason", "operation failed");
+    PQ_ENSURE(ok)("reason", "operation failed")("state", NKikimrPQ::ETabletState_Name(state));
 
     TAutoPtr<TEvKeyValue::TEvRequest> kvRequest(new TEvKeyValue::TEvRequest);
     kvRequest->Record.SetCookie(WRITE_STATE_COOKIE);
@@ -3221,7 +3221,7 @@ void TPersQueue::HandleDie(const TActorContext& ctx)
     for (const auto& p : ResponseProxy) {
         THolder<TEvPQ::TEvError> ev = MakeHolder<TEvPQ::TEvError>(NPersQueue::NErrorCode::INITIALIZING, "tablet will be restarted right now", p.first);
         bool res = p.second->HandleError(ev.Get(), ctx);
-        PQ_ENSURE(res)("reason", "operation failed");
+        PQ_ENSURE(res)("reason", "operation failed")("cookie", p.first);
     }
     ResponseProxy.clear();
 
@@ -5124,7 +5124,7 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
             break;
 
         case NKikimrPQ::TTransaction::KIND_UNKNOWN:
-            PQ_ENSURE(false)("reason", "unexpected state");
+            PQ_ENSURE(false)("reason", "unexpected transaction kind")("kind", NKikimrPQ::TTransaction_EKind_Name(tx.Kind))("tx_id", tx.TxId)("state", NKikimrPQ::TTransaction_EState_Name(tx.State));
         }
 
         [[fallthrough]];
@@ -5203,7 +5203,7 @@ void TPersQueue::CheckTxState(const TActorContext& ctx,
 
             break;
         case NKikimrPQ::TTransaction::KIND_UNKNOWN:
-            PQ_ENSURE(false)("reason", "unexpected state");
+            PQ_ENSURE(false)("reason", "unexpected transaction kind")("kind", NKikimrPQ::TTransaction_EKind_Name(tx.Kind))("tx_id", tx.TxId)("state", NKikimrPQ::TTransaction_EState_Name(tx.State));
         }
 
         TryChangeTxState(tx, NKikimrPQ::TTransaction::EXECUTED);
@@ -5420,7 +5420,7 @@ bool TPersQueue::ReadyForDroppedReply() const
             }
             break;
         case NKikimrPQ::TTransaction::KIND_UNKNOWN:
-            PQ_ENSURE(false)("reason", "unexpected state");
+            PQ_ENSURE(false)("reason", "unexpected transaction kind")("kind", NKikimrPQ::TTransaction_EKind_Name(tx.Kind))("tx_id", tx.TxId)("state", NKikimrPQ::TTransaction_EState_Name(tx.State));
         }
     }
 

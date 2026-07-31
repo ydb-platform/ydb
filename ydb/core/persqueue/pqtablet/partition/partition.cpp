@@ -840,7 +840,7 @@ bool TPartition::CleanUpBlobsLegacy(TEvKeyValue::TEvRequest *request, const TAct
         hasDrop = true;
     }
 
-    PQ_ENSURE(!CompactionBlobEncoder.DataKeysBody.empty())("reason", "compaction DataKeysBody must not be empty");
+    PQ_ENSURE(!CompactionBlobEncoder.DataKeysBody.empty())("reason", "compaction DataKeysBody must not be empty")("head_offset", CompactionBlobEncoder.Head.Offset)("end_offset", CompactionBlobEncoder.EndOffset);
 
     if (!hasDrop) {
         return false;
@@ -1803,7 +1803,7 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvTxRollback> ev, c
     if (ChangeConfig) {
         PQ_ENSURE(TransactionsInflight.size() == 1)("TransactionsInflight_size", TransactionsInflight.size());
     } else {
-        PQ_ENSURE(!TransactionsInflight.empty())("reason", "TransactionsInflight must not be empty");
+        PQ_ENSURE(!TransactionsInflight.empty())("reason", "TransactionsInflight must not be empty")("end_offset", GetEndOffset())("kv_write_in_progress", KVWriteInProgress);
         txIter = TransactionsInflight.find(ev->TxId);
         PQ_ENSURE(!txIter.IsEnd())("TxId", ev->TxId);
     }
@@ -1938,7 +1938,7 @@ void TPartition::WriteInfoResponseHandler(
         tx.WriteInfoApplied = true;
         tx.Message = (*err)->Message;
     } else {
-        PQ_ENSURE(false)("reason", "unexpected transaction state");
+        PQ_ENSURE(false)("reason", "unexpected write info response variant")("variant_index", ev.index());
     }
 
     WriteInfosToTx.erase(txIter);
@@ -2099,7 +2099,7 @@ void TPartition::ReplyToProposeOrPredicate(TSimpleSharedPtr<TTransaction>& tx, b
         tx->CalcPredicateSpan = {};
 
         auto insRes = TransactionsInflight.emplace(tx->Tx->TxId, tx);
-        PQ_ENSURE(insRes.second)("reason", "insert failed");
+        PQ_ENSURE(insRes.second)("reason", "insert failed")("tx_id", tx->Tx->TxId)("inflight_size", TransactionsInflight.size());
 
         if ((Now() - tx->WriteInfoResponseTimestamp) >= TDuration::Seconds(1)) {
             YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "The long answer to TEvTxCalcPredicate",
@@ -2119,7 +2119,7 @@ void TPartition::ReplyToProposeOrPredicate(TSimpleSharedPtr<TTransaction>& tx, b
                                                          tx->Message).Release());
     } else {
         auto insRes = TransactionsInflight.emplace(tx->ProposeConfig->TxId, tx);
-        PQ_ENSURE(insRes.second)("reason", "insert failed");
+        PQ_ENSURE(insRes.second)("reason", "insert failed")("tx_id", tx->ProposeConfig->TxId)("inflight_size", TransactionsInflight.size());
 
         auto result = MakeHolder<TEvPQ::TEvProposePartitionConfigResult>(tx->ProposeConfig->Step,
                                                                 tx->ProposeConfig->TxId,
@@ -3412,7 +3412,7 @@ TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimple
         t->State = ECommitState::Committed;
         return EProcessResult::Break;
     }
-    PQ_ENSURE(false)("reason", "unreachable transaction kind");
+    PQ_ENSURE(false)("reason", "unreachable transaction kind")("has_tx", static_cast<bool>(t->Tx))("has_change_config", static_cast<bool>(t->ChangeConfig))("has_propose_config", static_cast<bool>(t->ProposeConfig))("has_propose_transaction", static_cast<bool>(t->ProposeTransaction));
     return result;
 }
 
@@ -3746,7 +3746,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
             auto [iter, ins] = TxInflightMaxSeqNoPerSourceId.emplace(s.first, pair);
             if (!ins) {
                 bool ok = !SeqnoViolation(iter->second.KafkaProducerEpoch, iter->second.SeqNo, s.second.ProducerEpoch, s.second.SeqNo);
-                PQ_ENSURE(ok)("reason", "operation failed");
+                PQ_ENSURE(ok)("reason", "operation failed")("source_id", s.first)("stored_seq_no", iter->second.SeqNo)("new_seq_no", s.second.SeqNo)("stored_epoch", iter->second.KafkaProducerEpoch)("new_epoch", s.second.ProducerEpoch);
                 iter->second = pair;
             }
         }
@@ -5181,17 +5181,17 @@ void TPartition::AddCmdDeleteRangeForAllKeys(TEvKeyValue::TEvRequest& request)
 
 void TPartition::ScheduleNegativeReply(const TEvPQ::TEvSetClientInfo&)
 {
-    PQ_ENSURE(false)("reason", "The supportive partition does not accept read operations");
+    PQ_ENSURE(false)("reason", "The supportive partition does not accept read operations")("end_offset", GetEndOffset());
 }
 
 void TPartition::ScheduleNegativeReply(const TEvPersQueue::TEvProposeTransaction&)
 {
-    PQ_ENSURE(false)("reason", "The supportive partition does not accept immediate transactions");
+    PQ_ENSURE(false)("reason", "The supportive partition does not accept immediate transactions")("end_offset", GetEndOffset());
 }
 
 void TPartition::ScheduleNegativeReply(const TTransaction&)
 {
-    PQ_ENSURE(false)("reason", "The supportive partition does not accept distribute transactions");
+    PQ_ENSURE(false)("reason", "The supportive partition does not accept distribute transactions")("end_offset", GetEndOffset());
 }
 
 void TPartition::ScheduleNegativeReply(const TMessage& msg)

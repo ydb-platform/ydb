@@ -168,7 +168,7 @@ void TPartition::Handle(TEvPQ::TEvChangeOwner::TPtr& ev, const TActorContext& ct
         {"logPrefix", NPQ_LOG_PREFIX});
 
     bool res = OwnerPipes.insert(ev->Get()->PipeClient).second;
-    PQ_ENSURE(res)("reason", "operation failed");
+    PQ_ENSURE(res)("reason", "operation failed")("pipe_client", ev->Get()->PipeClient.ToString())("owner_cookie", ev->Get()->Cookie);
     WaitToChangeOwner.push_back(ev->Release());
     ProcessChangeOwnerRequests(ctx);
 }
@@ -769,7 +769,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
     for (const auto& msg: ev->Get()->Msgs) {
         //this is checked in pq_impl when forming EvWrite request
         PQ_ENSURE(!msg.SourceId.empty() || ev->Get()->IsDirectWrite || msg.DisableDeduplication)("SourceId", msg.SourceId)("IsDirectWrite", ev->Get()->IsDirectWrite)("DisableDeduplication", msg.DisableDeduplication);
-        PQ_ENSURE(!msg.Data.empty())("reason", "message data must not be empty");
+        PQ_ENSURE(!msg.Data.empty())("reason", "message data must not be empty")("source_id", msg.SourceId)("seq_no", msg.SeqNo)("cookie", ev->Get()->Cookie);
 
         if (msg.SeqNo > (ui64)Max<i64>()) {
             YDB_LOG_ERROR("Request to write wrong SeqNo. Partition sourceId seqno",

@@ -1065,7 +1065,7 @@ void TWriteSessionActor<Protocol>::Handle(NPQ::TEvPartitionWriter::TEvWriteAccep
         return CloseSession("got write permission but not wait for it", PersQueue::ErrorCode::ERROR, ctx);
     }
 
-    WS_ENSURE(!SentRequests.empty())("reason", "sent requests expected on write accepted");
+    WS_ENSURE(!SentRequests.empty())("reason", "sent requests expected on write accepted")("accepted_size", AcceptedRequests.size());
     auto writeRequest = std::move(SentRequests.front());
 
     if (ev->Get()->Cookie != writeRequest->Cookie) {

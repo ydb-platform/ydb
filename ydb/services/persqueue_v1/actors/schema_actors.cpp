@@ -643,7 +643,7 @@ void TDescribeTopicActor::ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPer
     Y_UNUSED(ctx);
     Y_UNUSED(tabletInfo);
     Y_UNUSED(ev);
-    AFL_ENSURE(false)("reason", "TDescribeTopicActor: unexpected TEvReadSessionsInfoResponse");
+    AFL_ENSURE(false)("reason", "TDescribeTopicActor: unexpected TEvReadSessionsInfoResponse")("event_type", ev->GetTypeName())("settings_mode", static_cast<int>(Settings.Mode));
 }
 
 

@@ -39,7 +39,7 @@ namespace NPQ {
             if (!lastRequest) {
                 Requests.push_back(size);
             } else {
-                AFL_ENSURE(!Requests.empty())("reason", "requests must not be empty");
+                AFL_ENSURE(!Requests.empty())("reason", "requests must not be empty")("reserved_size", ReservedSize);
                 Requests.back() += size;
             }
         }

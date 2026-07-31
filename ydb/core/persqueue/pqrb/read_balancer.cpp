@@ -117,7 +117,7 @@ void TPersQueueReadBalancer::OnActivateExecutor(const TActorContext &ctx) {
     ResourceMetrics = Executor()->GetResourceMetrics();
     Become(&TThis::StateWork);
     if (Executor()->GetStats().IsFollower())
-        PQ_ENSURE(false)("reason", "is follower works well with Balancer?");
+        PQ_ENSURE(false)("reason", "is follower works well with Balancer?")("tablet_id", TabletID())("generation", Generation);
     else
         Execute(new TTxPreInit(this), ctx);
 }
@@ -1041,7 +1041,7 @@ void TPersQueueReadBalancer::OnReceiveAttemptPartitionsWriteComplete(
 ) {
     PQ_ENSURE(ReceiveAttemptPartitionsWriteInProgress)("reason", "write must be in progress");
     PQ_ENSURE(!PendingReceiveAttemptPartitionsWrites.empty())
-        ("reason", "pending writes must not be empty");
+        ("reason", "pending writes must not be empty")("pending_writes_count", PendingReceiveAttemptPartitionsWrites.size());
 
     PendingReceiveAttemptPartitionsWrites.pop_front();
     ReceiveAttemptPartitionsWriteInProgress = false;

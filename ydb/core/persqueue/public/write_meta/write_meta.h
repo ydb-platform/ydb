@@ -63,7 +63,7 @@ TString GetSerializedData(const NKikimrPQClient::TDataChunk& init, TArgs&...args
 
     TString str;
     bool res = proto.SerializeToString(&str);
-    AFL_ENSURE(res)("reason", "failed to serialize data chunk");
+    AFL_ENSURE(res)("reason", "failed to serialize data chunk")("byte_size", proto.ByteSizeLong());
     return str;
 }
 

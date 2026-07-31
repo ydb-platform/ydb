@@ -135,7 +135,7 @@ TBatch::TBatch(const NKikimrPQ::TBatchHeader &header, const char* data)
 }
 
 TBatch TBatch::FromBlobs(const ui64 offset, std::deque<TClientBlob>&& blobs) {
-    AFL_ENSURE(!blobs.empty())("reason", "blobs must not be empty");
+    AFL_ENSURE(!blobs.empty())("reason", "blobs must not be empty")("offset", offset);
     TBatch batch(offset, blobs.front().GetPartNo());
     for (auto& b : blobs) {
         batch.AddBlob(b);
@@ -341,12 +341,12 @@ const TBatch& THead::GetBatch(ui32 idx) const {
 }
 
 const TBatch& THead::GetLastBatch() const {
-    AFL_ENSURE(!Batches.empty())("reason", "batches must not be empty");
+    AFL_ENSURE(!Batches.empty())("reason", "batches must not be empty")("offset", Offset)("part_no", PartNo)("packed_size", PackedSize);
     return Batches.back();
 }
 
 TBatch THead::ExtractFirstBatch() {
-    AFL_ENSURE(!Batches.empty())("reason", "batches must not be empty");
+    AFL_ENSURE(!Batches.empty())("reason", "batches must not be empty")("offset", Offset)("part_no", PartNo)("packed_size", PackedSize);
     auto batch = std::move(Batches.front());
     InternalPartsCount -= batch.GetInternalPartsCount();
     Batches.pop_front();
@@ -354,7 +354,7 @@ TBatch THead::ExtractFirstBatch() {
 }
 
 void THead::AddBlob(const TClientBlob& blob) {
-    AFL_ENSURE(!Batches.empty())("reason", "batches must not be empty");
+    AFL_ENSURE(!Batches.empty())("reason", "batches must not be empty")("offset", Offset)("part_no", PartNo)("packed_size", PackedSize);
     auto& batch = Batches.back();
     InternalPartsCount -= batch.GetInternalPartsCount();
     batch.AddBlob(blob);
@@ -419,7 +419,7 @@ THead::TBatchAccessor THead::MutableBatch(ui32 idx) {
 }
 
 THead::TBatchAccessor THead::MutableLastBatch() {
-    AFL_ENSURE(!Batches.empty())("reason", "batches must not be empty");
+    AFL_ENSURE(!Batches.empty())("reason", "batches must not be empty")("offset", Offset)("part_no", PartNo)("packed_size", PackedSize);
     return TBatchAccessor(Batches.back());
 }
 

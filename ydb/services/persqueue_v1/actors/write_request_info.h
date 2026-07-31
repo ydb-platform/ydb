@@ -57,7 +57,7 @@ struct TWriteRequestInfoImpl : public TSimpleRefCount<TWriteRequestInfoImpl<TEvW
 template<class TEvWrite>
 std::pair<TString, TString> TWriteRequestInfoImpl<TEvWrite>::GetTransactionId() const
 {
-    AFL_ENSURE(!UserWriteRequests.empty())("reason", "user write requests expected")("cookie", Cookie);
+    AFL_ENSURE(!UserWriteRequests.empty())("reason", "user write requests expected")("cookie", Cookie)("has_partition_write_request", static_cast<bool>(PartitionWriteRequest));
 
     static constexpr EProtocol Protocol = std::is_same_v<TEvWrite, TEvPQProxy::TEvTopicWrite> ? EProtocol::Topic : EProtocol::PQv1;
 
@@ -79,7 +79,7 @@ std::pair<TString, TString> TWriteRequestInfoImpl<TEvWrite>::GetTransactionId() 
 template<class TEvWrite>
 TMaybe<NPQ::TDeferredPublishWriterOpts> TWriteRequestInfoImpl<TEvWrite>::GetDeferredPublishOpts() const
 {
-    AFL_ENSURE(!UserWriteRequests.empty())("reason", "user write requests expected")("cookie", Cookie);
+    AFL_ENSURE(!UserWriteRequests.empty())("reason", "user write requests expected")("cookie", Cookie)("has_partition_write_request", static_cast<bool>(PartitionWriteRequest));
 
     static constexpr EProtocol Protocol = std::is_same_v<TEvWrite, TEvPQProxy::TEvTopicWrite> ? EProtocol::Topic : EProtocol::PQv1;
 

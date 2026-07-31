@@ -989,7 +989,7 @@ void TStorage::RemoveMessage(ui64 offset, const TMessage& message) {
 }
 
 void TStorage::RemoveFirstMessageFromFastZone() {
-    AFL_ENSURE(!Messages.empty())("reason", "messages must not be empty");
+    AFL_ENSURE(!Messages.empty())("reason", "messages must not be empty")("first_offset", FirstOffset)("committed_message_count", Metrics.CommittedMessageCount);
     auto& message = Messages.front();
     RemoveMessage(FirstOffset, message);
     Messages.pop_front();

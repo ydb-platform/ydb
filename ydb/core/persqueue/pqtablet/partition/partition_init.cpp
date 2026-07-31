@@ -323,7 +323,7 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse) {
     auto loadMeta = [&](const NKikimrClient::TKeyValueResponse::TReadResult& response) {
         NKikimrPQ::TPartitionMeta meta;
         bool res = meta.ParseFromString(response.GetValue());
-        PQ_INIT_ENSURE(res);
+        PQ_INIT_ENSURE(res)("value_size", response.GetValue().size())("status", response.GetStatus());
 
         Partition()->BlobEncoder.StartOffset = meta.GetStartOffset();
         Partition()->BlobEncoder.EndOffset = meta.GetEndOffset();
@@ -368,7 +368,7 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse) {
     auto loadTxMeta = [this](const NKikimrClient::TKeyValueResponse::TReadResult& response) {
         NKikimrPQ::TPartitionTxMeta meta;
         bool res = meta.ParseFromString(response.GetValue());
-        PQ_INIT_ENSURE(res);
+        PQ_INIT_ENSURE(res)("value_size", response.GetValue().size())("status", response.GetStatus());
 
         if (meta.HasPlanStep()) {
             Partition()->PlanStep = meta.GetPlanStep();

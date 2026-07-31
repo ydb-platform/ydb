@@ -258,7 +258,7 @@ public:
             return SendReplyAndDie(CreateErrorReply(Ydb::StatusIds::BAD_REQUEST, reason), ctx);
         }
 
-        AFL_ENSURE(!TabletInfo.empty())("reason", "topic must have partitions")("topic", name);
+        AFL_ENSURE(!TabletInfo.empty())("reason", "topic must have partitions")("topic", name)("partitions_requested", Settings.Partitions.size());
     }
 
     void ProceedFetchRequest(const TActorContext& ctx) {

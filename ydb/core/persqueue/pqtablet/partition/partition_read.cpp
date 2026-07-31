@@ -270,7 +270,7 @@ void TPartition::Handle(TEvPersQueue::TEvHasDataInfo::TPtr& ev, const TActorCont
         THasDataDeadline dl{TInstant::MilliSeconds(record.GetDeadline()), req};
         auto res = HasDataRequests.insert(std::move(req));
         HasDataDeadlines.insert(dl);
-        PQ_ENSURE(res.second)("reason", "insert failed");
+        PQ_ENSURE(res.second)("reason", "insert failed")("offset", record.GetOffset())("cookie", cookie)("client_id", record.HasClientId() ? record.GetClientId() : TString());
 
         if (InitDone && record.HasClientId() && !record.GetClientId().empty()) {
             auto& userInfo = UsersInfoStorage->GetOrCreate(record.GetClientId(), ctx);
@@ -1186,7 +1186,7 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
     ui32 count = 0;
     ui32 size = 0;
 
-    PQ_ENSURE(!info.User.empty())("reason", "user must not be empty");
+    PQ_ENSURE(!info.User.empty())("reason", "user must not be empty")("destination", info.Destination);
     auto& userInfo = UsersInfoStorage->GetOrCreate(info.User, ctx);
 
     if (subscription) {
@@ -1239,11 +1239,12 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
         return;
     }
 
+    const TString readUser = info.User;
     bool res = ReadInfo.emplace(cookie, std::move(info)).second;
     YDB_LOG_DEBUG_COMP(Service, "Reading cookie Send blob request",
         {"logPrefix", NPQ_LOG_PREFIX},
         {"cookie", cookie});
-    PQ_ENSURE(res)("reason", "operation failed");
+    PQ_ENSURE(res)("reason", "operation failed")("cookie", cookie)("user", readUser);
 
     auto request = MakeHolder<TEvPQ::TEvBlobRequest>(cookie, Partition,
                                                      std::move(blobs));

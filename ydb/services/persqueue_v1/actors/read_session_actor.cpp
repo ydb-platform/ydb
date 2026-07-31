@@ -329,7 +329,7 @@ void TReadSessionActor<Protocol>::Handle(typename IContext::TEvWriteFinished::TP
         return Die(ctx);
     }
 
-    AFL_ENSURE(!ActiveWrites.empty())("reason", "write finished but no active writes")("session", Session);
+    AFL_ENSURE(!ActiveWrites.empty())("reason", "write finished but no active writes")("session", Session)("bytes_inflight", BytesInflight_);
     const auto sz = ActiveWrites.front();
     ActiveWrites.pop();
 

@@ -601,7 +601,7 @@ TMaybe<THeartbeat> THeartbeatEmitter::CanEmit() const {
 }
 
 TMaybe<THeartbeat> THeartbeatEmitter::GetFromStorage(TSourceIdsByHeartbeat::const_iterator it) const {
-    AFL_ENSURE(!it->second.empty())("reason", "heartbeat source ids must not be empty");
+    AFL_ENSURE(!it->second.empty())("reason", "heartbeat source ids must not be empty")("heartbeat_step", it->first.Step)("heartbeat_tx_id", it->first.TxId);
     const auto& someSourceId = *it->second.begin();
 
     AFL_ENSURE(Storage.InMemorySourceIds.contains(someSourceId))("sourceId", someSourceId);
@@ -609,7 +609,7 @@ TMaybe<THeartbeat> THeartbeatEmitter::GetFromStorage(TSourceIdsByHeartbeat::cons
 }
 
 TMaybe<THeartbeat> THeartbeatEmitter::GetFromDiff(TSourceIdsByHeartbeat::const_iterator it) const {
-    AFL_ENSURE(!it->second.empty())("reason", "heartbeat source ids must not be empty");
+    AFL_ENSURE(!it->second.empty())("reason", "heartbeat source ids must not be empty")("heartbeat_step", it->first.Step)("heartbeat_tx_id", it->first.TxId);
     const auto& someSourceId = *it->second.begin();
 
     AFL_ENSURE(Heartbeats.contains(someSourceId))("sourceId", someSourceId);

@@ -593,7 +593,7 @@ void TPartitionBlobEncoder::SyncHeadFastWrite(ui64& startOffset, ui64& endOffset
     HeadKeys.clear();
 
     // Here is the Head.Packed Size != 0. Therefore, the keys must be in the body.
-    AFL_ENSURE(!DataKeysBody.empty())("reason", "DataKeysBody must not be empty");
+    AFL_ENSURE(!DataKeysBody.empty())("reason", "DataKeysBody must not be empty")("head_offset", Head.Offset)("end_offset", EndOffset);
 
     endOffset = NewHead.GetNextOffset();
 
@@ -666,7 +666,7 @@ void TPartitionBlobEncoder::pop_front() {
 }
 
 void TPartitionBlobEncoder::PopFrontHeadKey() {
-    AFL_ENSURE(!HeadKeys.empty())("reason", "HeadKeys must not be empty");
+    AFL_ENSURE(!HeadKeys.empty())("reason", "HeadKeys must not be empty")("head_offset", Head.Offset)("head_packed_size", Head.PackedSize);
 
     const TDataKey deletedKey = HeadKeys.front();
     ScheduleDelete(HeadKeys.front());

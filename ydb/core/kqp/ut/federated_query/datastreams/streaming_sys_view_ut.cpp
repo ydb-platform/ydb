@@ -332,15 +332,42 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
             "text"_a = GetQueryText(queryName)
         ));
 
-        // After CREATE: both created_by and modified_by should be the creator
+        // After CREATE: created_by, modified_by, created_at, modified_at must be set; started_by, stopped_by must be null
+        {
+            const auto& queryResult = ExecQuery(fmt::format(R"(
+                SELECT CreatedBy, ModifiedBy, CreatedAt, ModifiedAt, StartedBy, StoppedBy
+                FROM `.sys/streaming_queries`
+                WHERE Path = '/Root/{name}'
+            )", "name"_a = queryName));
+            CheckScriptResult(queryResult[0], 6, 1, [&](TResultSetParser& rs) {
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("CreatedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
+                UNIT_ASSERT_VALUES_EQUAL(*rs.ColumnParser("ModifiedBy").GetOptionalUtf8(), BUILTIN_ACL_ROOT);
+                UNIT_ASSERT_C(rs.ColumnParser("CreatedAt").GetOptionalTimestamp().has_value(), "CreatedAt must be set after CREATE");
+                UNIT_ASSERT_C(rs.ColumnParser("ModifiedAt").GetOptionalTimestamp().has_value(), "ModifiedAt must be set after CREATE");
+                UNIT_ASSERT_C(!rs.ColumnParser("StartedBy").GetOptionalUtf8().has_value(), "StartedBy must be null after CREATE with RUN=FALSE");
+                UNIT_ASSERT_C(!rs.ColumnParser("StoppedBy").GetOptionalUtf8().has_value(), "StoppedBy must be null after CREATE with RUN=FALSE");
+            });
+        }
+
+        // ALTER: turn the query on (RUN = TRUE) — this should set started_by
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = TRUE
+            ))",
+            "query_name"_a = queryName
+        ));
+
+        // After start ALTER: started_by must be set; stopped_by must still be null; created_by preserved
         CheckSysView({{
             .Name = queryName,
             .Status = "CREATED",
-            .Run = false,
+            .Run = true,
             .CreatedBy = BUILTIN_ACL_ROOT,
             .ModifiedBy = BUILTIN_ACL_ROOT,
+            .StartedBy = BUILTIN_ACL_ROOT,
         }});
 
+        // ALTER: turn the query off (RUN = FALSE) — this should set stopped_by
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
                 RUN = FALSE
@@ -348,14 +375,34 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
             "query_name"_a = queryName
         ));
 
-        // After ALTER: created_by must be unchanged, modified_by updated
+        // After stop ALTER: stopped_by must be set; created_by must be unchanged
         CheckSysView({{
             .Name = queryName,
             .Status = "CREATED",
             .Run = false,
             .CreatedBy = BUILTIN_ACL_ROOT,
             .ModifiedBy = BUILTIN_ACL_ROOT,
+            .StoppedBy = BUILTIN_ACL_ROOT,
         }});
+    }
+
+    Y_UNIT_TEST_F(SysViewTimestampColumns, TStreamingSysViewTestFixture) {
+        Setup();
+
+        // Start a running query so submitted_at and started_at get populated
+        StartQuery("tsQuery");
+        Sleep(STATS_WAIT_DURATION);
+
+        // Verify submitted_at and started_at are non-null for a running query
+        const auto& queryResult = ExecQuery(R"(
+            SELECT SubmittedAt, StartedAt
+            FROM `.sys/streaming_queries`
+            WHERE Path = '/Root/tsQuery'
+        )");
+        CheckScriptResult(queryResult[0], 2, 1, [&](TResultSetParser& rs) {
+            UNIT_ASSERT_C(rs.ColumnParser("SubmittedAt").GetOptionalTimestamp().has_value(), "SubmittedAt must be set for a running query");
+            UNIT_ASSERT_C(rs.ColumnParser("StartedAt").GetOptionalTimestamp().has_value(), "StartedAt must be set for a running query");
+        });
     }
 
     Y_UNIT_TEST_F(ReadSysViewWithRowCountBackPressure, TStreamingSysViewTestFixture) {

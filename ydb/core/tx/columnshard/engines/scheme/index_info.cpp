@@ -231,6 +231,9 @@ void TIndexInfo::DeserializeOptionsFromProto(const NKikimrSchemeOp::TColumnTable
     if (optionsProto.HasScanReaderPolicyName()) {
         ScanReaderPolicyName = optionsProto.GetScanReaderPolicyName();
     }
+    if (optionsProto.HasDeduplicationEnabled()) {
+        DeduplicationEnabled = optionsProto.GetDeduplicationEnabled();
+    }
     if (optionsProto.HasInsertOptions()) {
         const auto& options = optionsProto.GetInsertOptions();
         if (options.HasBuildIndexesEnabled()) {

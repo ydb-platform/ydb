@@ -50,7 +50,19 @@ void TTxScan::Complete(const TActorContext& ctx) {
     }
     const NColumnShard::TSchemeShardLocalPathId ssPathId = NColumnShard::TSchemeShardLocalPathId::FromProto(request);
     snapshot = Self->TablesManager.ResolveReadSnapshot(ssPathId, snapshot);
-    const bool deduplicationEnabled = AppDataVerified().ColumnShardConfig.GetDeduplicationEnabled();
+    const bool deduplicationEnabled = [&]() {
+        const bool defGlobal = AppDataVerified().ColumnShardConfig.GetDeduplicationEnabled();
+        if (Self->HasIndex()) {
+            return Self->GetIndexAs<TColumnEngineForLogs>()
+                .GetVersionedIndex()
+                .GetLastSchema()
+                ->GetIndexInfo()
+                .GetDeduplicationEnabled()
+                .value_or(defGlobal);
+        } else {
+            return defGlobal;
+        }
+    }();
     const TReadMetadataBase::ESorting sorting = [&]() {
         if (request.HasReverse()) {
             return request.GetReverse() ? TReadMetadataBase::ESorting::DESC : TReadMetadataBase::ESorting::ASC;

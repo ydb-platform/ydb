@@ -8,7 +8,7 @@ from typing import Callable
 
 import ydb
 
-from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase
+from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase, YdbClient
 from ydb.tests.library.test_meta import link_test_case
 from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule
 
@@ -1789,3 +1789,46 @@ FROM `{table_name}`"""
         kikimr.ydb_client.query(f"""
             DROP STREAMING QUERY `{query_name}`;
         """)
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    @pytest.mark.parametrize("kikimr", [{"enable_discovery": False, "lease_duration_sec": "30"}], indirect=["kikimr"])
+    def test_streaming_query_stop_after_restart(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
+        inp, out, endpoint = self.get_io_names(kikimr, f"test_stop_after_restart_{local_topics!s:.1}", local_topics, entity_name)
+
+        path = f"/Root/{entity_name(f'test_stop_after_restart_query_{local_topics!s:.1}')}"
+        kikimr.ydb_client.query(f"""
+            CREATE STREAMING QUERY `{path}` AS DO BEGIN
+                INSERT INTO {out}
+                SELECT * FROM {inp}
+            END DO;
+        """)
+
+        self.wait_completed_checkpoints(kikimr, path)
+
+        expected_data = ["test_data1"]
+        self.write_stream(expected_data, endpoint=endpoint)
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+
+        self.wait_completed_checkpoints(kikimr, path)
+        logger.info("Query checked")
+
+        kikimr.ydb_client.stop()
+        kikimr.first_node.stop()
+        kikimr.first_node.set_log_file_prefix("logfile_restarted_")
+        kikimr.first_node.start()
+        logger.info("Node with query restarted")
+
+        second_node = list(kikimr.cluster.nodes.values())[1]
+        kikimr.ydb_client = YdbClient.from_driver_config(database=kikimr.endpoint.database, endpoint=f"grpc://{second_node.host}:{second_node.port}", enable_discovery=False)
+        kikimr.ydb_client.query(f"""
+            ALTER STREAMING QUERY `{path}` SET (RUN = FALSE);
+        """, fail_fast=True)
+        logger.info("Query stopped")
+
+        expected_data = ["test_data2"]
+        self.write_stream(expected_data, endpoint=endpoint)
+
+        kikimr.ydb_client.query(f"""
+            ALTER STREAMING QUERY `{path}` SET (RUN = TRUE);
+        """)
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data

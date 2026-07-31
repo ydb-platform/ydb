@@ -400,6 +400,7 @@ TTableMetadataResult GetExternalTableMetadataResult(const NSchemeCache::TSchemeC
 
     tableMeta->Attributes = entry.Attributes;
 
+    TMap<ui32, TString> columnOrder;
     for (auto& columnDesc : description.GetColumns()) {
         const auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(columnDesc.GetTypeId(),
             columnDesc.HasTypeInfo() ? &columnDesc.GetTypeInfo() : nullptr);
@@ -412,6 +413,16 @@ TTableMetadataResult GetExternalTableMetadataResult(const NSchemeCache::TSchemeC
                 columnDesc.GetDefaultFromSequence()
             )
         );
+        columnOrder[columnDesc.GetId()] = columnDesc.GetName();
+    }
+
+    // ColumnOrder must cover every column, the same way it does for tables and
+    // system views: reads of external tables are normally rewritten into reads
+    // of the underlying source before type annotation, but SHOW CREATE EXTERNAL
+    // TABLE reads reach it and rely on the order being filled in.
+    tableMeta->ColumnOrder.reserve(columnOrder.size());
+    for (const auto& columnName : std::views::values(columnOrder)) {
+        tableMeta->ColumnOrder.push_back(columnName);
     }
 
     tableMeta->ExternalSource.SourceType = NYql::ESourceType::ExternalTable;

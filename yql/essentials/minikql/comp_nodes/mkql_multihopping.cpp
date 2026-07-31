@@ -247,6 +247,16 @@ public:
             }
             MKQL_SET_STAT(Ctx.Stats, Hop_KeysCount, StatesMap.size());
 
+            // Restore GlobalCloseBeforeIndex_ as the maximum HopIndex across all loaded
+            // key states. This is a conservative approximation: after loading a checkpoint
+            // we don't know the exact watermark that was in effect when the checkpoint was
+            // saved, but we know that any surviving key state has a HopIndex at least as
+            // large as the watermark that closed windows before it.
+            GlobalCloseBeforeIndex_ = 0;
+            for (auto& [key, state] : StatesMap) {
+                GlobalCloseBeforeIndex_ = Max(GlobalCloseBeforeIndex_, state.HopIndex);
+            }
+
             in(Finished);
         }
 
@@ -437,12 +447,17 @@ public:
 
         TKeyState& GetOrCreateKeyState(NUdf::TUnboxedValue& key, ui64 hopIndex) {
             i64 keyHopIndex = Max<i64>(hopIndex + 1 - IntervalHopCount, 0);
+            // Prevent late events from reopening windows already closed by a watermark.
+            // A key whose state was erased must not restart from a hopIndex that is
+            // earlier than the global high-watermark: doing so would re-emit windows
+            // that have already been emitted and violate exactly-once semantics.
+            keyHopIndex = Max<i64>(keyHopIndex, (i64)GlobalCloseBeforeIndex_);
             // For first element we shouldn't forget windows in the past
             // Overflow is not possible, because hopIndex is a product of a division
             const auto iter = StatesMap.try_emplace(
                 key,
                 IntervalHopCount + DelayHopCount,
-                keyHopIndex);
+                (ui64)keyHopIndex);
             if (iter.second) {
                 key.Ref();
             }
@@ -589,9 +604,13 @@ public:
 
         void CloseOldBuckets(ui64 watermarkTs, i64& newHops, i64& farFutureStateSizeChange) {
             const auto watermarkIndex = watermarkTs / HopTime;
+            // Compute the close-before index once for all keys.
+            // Track the global maximum so that recreated key states (after erasure)
+            // always start at or after the latest watermark position.
+            const ui64 closeBeforeIndex = (ui64)Max<i64>((i64)(watermarkIndex + 1 - IntervalHopCount), (i64)0);
+            GlobalCloseBeforeIndex_ = Max(GlobalCloseBeforeIndex_, closeBeforeIndex);
             EraseNodesIf(StatesMap, [&](auto& iter) {
                 auto& [key, val] = iter;
-                ui64 closeBeforeIndex = Max<i64>(watermarkIndex + 1 - IntervalHopCount, 0);
                 const auto keyStateBecameEmpty = CloseOldBucketsForKey(key, val, closeBeforeIndex, newHops, farFutureStateSizeChange);
                 if (keyStateBecameEmpty) {
                     key.UnRef();
@@ -608,6 +627,7 @@ public:
                 return true;
             });
             StatesMap.rehash(0);
+            GlobalCloseBeforeIndex_ = 0;
         }
 
         const NUdf::TUnboxedValue Stream;
@@ -635,6 +655,10 @@ public:
 
         TComputationContext& Ctx;
         std::optional<TWatermarkTracker> DataWatermarkTracker;
+        // The maximum closeBeforeIndex ever applied via CloseOldBuckets.
+        // Used in GetOrCreateKeyState to prevent late events from resurrecting
+        // already-emitted windows after their key state was erased from StatesMap.
+        ui64 GlobalCloseBeforeIndex_ = 0;
     };
 
     TMultiHoppingCoreWrapper(

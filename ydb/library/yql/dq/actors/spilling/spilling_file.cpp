@@ -239,9 +239,9 @@ public:
             Root_.ForceDelete();
             Root_.MkDirs(DIR_MODE);
         } catch (...) {
-            LOG_E(CurrentExceptionMessage());
-            Become(&TDqLocalFileSpillingService::BrokenState);
-            return;
+            const TString root = Root_.GetPath();
+            const TString error = CurrentExceptionMessage();
+            Y_ABORT("Cannot start DQ local file spilling service at %s: %s", root.c_str(), error.c_str());
         }
         
         Send(SelfId(), MakeHolder<TEvPrivate::TEvRemoveOldTmp>(rootToRemoveOldTmp, nodeId, sessionId));
@@ -258,32 +258,6 @@ protected:
         if (Config_.CleanupOnShutdown) {
             Root_.ForceDelete();
         }
-    }
-
-private:
-    STATEFN(BrokenState) {
-        switch (ev->GetTypeRewrite()) {
-            case TEvDqSpillingLocalFile::TEvOpenFile::EventType:
-            case TEvDqSpillingLocalFile::TEvCloseFile::EventType:
-            case TEvDqSpilling::TEvWrite::EventType:
-            case TEvDqSpilling::TEvRead::EventType: {
-                HandleBroken(ev->Sender);
-                break;
-            }
-            hFunc(NMon::TEvHttpInfo, HandleBroken);
-            cFunc(TEvents::TEvPoison::EventType, PassAway);
-            default:
-                Y_DEBUG_ABORT_UNLESS(false, "%s: unexpected message type 0x%08" PRIx32, __func__, ev->GetTypeRewrite());
-        }
-    }
-
-    void HandleBroken(const TActorId& from) {
-        LOG_E("Service is broken, send error to client " << from);
-        Send(from, new TEvDqSpilling::TEvError("Service not started"));
-    }
-
-    void HandleBroken(NMon::TEvHttpInfo::TPtr& ev) {
-        Send(ev->Sender, new NMon::TEvHttpInfoRes("<html><h2>Service is not started due to IO error</h2></html>"));
     }
 
 private:

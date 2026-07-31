@@ -146,7 +146,9 @@ namespace NActors {
                 XXH3_64bits_update(&queue.ChecksumState, span.data(), span.size());
             }
 
-            if (span.size() <= 64 && (span.data() + span.size() <= bufferSpan.data() || span.data() >= bufferSpan.data() + bufferSpan.size())) {
+            bool fromBuffer = span.data() >= bufferSpan.data() && span.data() + span.size() <= bufferSpan.data() + bufferSpan.size();
+
+            if (span.size() <= 64 && !fromBuffer) {
                 // we got span referenced outside original buffer; check if we can copy it into the buffer, if it is
                 // small enough and buffer has the space to do it
                 const uintptr_t spanBegin = reinterpret_cast<uintptr_t>(span.data());
@@ -156,7 +158,7 @@ namespace NActors {
                     memcpy(buffer.UnsafeGetDataMut(), span.data(), span.size());
                     span = {buffer.data(), span.size()};
                     buffer.TrimFront(buffer.size() - span.size());
-                    *bufferProduced = CumulativeProduced + span.size();
+                    fromBuffer = true;
                 }
             }
 
@@ -179,6 +181,11 @@ namespace NActors {
             } else {
                 BytesCopied += span.size();
             }
+
+            if (fromBuffer) {
+                Y_DEBUG_ABORT_UNLESS(*bufferProduced < CumulativeProduced);
+                *bufferProduced = CumulativeProduced;
+            }
         };
 
         // this function allocated specified amount of space in provided buffer and returns reference to it, also
@@ -189,7 +196,6 @@ namespace NActors {
             TMutableContiguousSpan res(buffer.UnsafeGetDataMut(), numBytes);
             buffer.TrimFront(buffer.size() - numBytes);
             produceOutputSpan(res, false);
-            *bufferProduced = CumulativeProduced;
             return res.data();
         };
 

@@ -183,7 +183,7 @@ class TCreateStreamingQuery : public TSubOperation {
         }
     }
 
-    void CreateStreamingQueryPathElement(const TPath& dstPath, const TOperationContext& context) const {
+    void CreateStreamingQueryPathElement(const TPath& dstPath, const TString& owner, const TOperationContext& context) const {
         TPathElement::TPtr streamingQuery = dstPath.Base();
 
         streamingQuery->CreateTxId = OperationId.GetTxId();
@@ -195,9 +195,17 @@ class TCreateStreamingQuery : public TSubOperation {
             streamingQuery->ApplyACL(acl);
         }
 
+        auto properties = Transaction.GetCreateStreamingQuery().GetProperties();
+        auto& propertiesMap = *properties.MutableProperties();
+        propertiesMap["__created_by"] = owner;
+        propertiesMap["__modified_by"] = owner;
+        const TString nowStr = ToString(TInstant::Now().MicroSeconds());
+        propertiesMap["__created_at"] = nowStr;
+        propertiesMap["__modified_at"] = nowStr;
+
         const auto streamingQueryInfo = MakeIntrusive<TStreamingQueryInfo>(TStreamingQueryInfo{
             .AlterVersion = 1,
-            .Properties = Transaction.GetCreateStreamingQuery().GetProperties(),
+            .Properties = std::move(properties),
         });
         const auto [it, inserted] = context.SS->StreamingQueries.emplace(dstPath.Base()->PathId, streamingQueryInfo);
         if (inserted) {
@@ -246,7 +254,7 @@ public:
         PersistCreateStreamingQuery(parentPath.Base()->PathId, newPathId, context);
         AddPathIntoSchemeShard(result, dstPath, newPathId, owner, context);
         CreateTransaction(dstPath, context);
-        CreateStreamingQueryPathElement(dstPath, context);
+        CreateStreamingQueryPathElement(dstPath, owner, context);
 
         SetState(NextState());
         return result;

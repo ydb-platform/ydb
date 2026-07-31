@@ -320,6 +320,44 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         });
     }
 
+    Y_UNIT_TEST_F(SysViewCreatedByModifiedByColumns, TStreamingSysViewTestFixture) {
+        Setup();
+
+        constexpr char queryName[] = "createdByQuery";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` WITH (
+                RUN = FALSE
+            ) AS DO BEGIN{text}END DO)",
+            "query_name"_a = queryName,
+            "text"_a = GetQueryText(queryName)
+        ));
+
+        // After CREATE: both created_by and modified_by should be the creator
+        CheckSysView({{
+            .Name = queryName,
+            .Status = "CREATED",
+            .Run = false,
+            .CreatedBy = BUILTIN_ACL_ROOT,
+            .ModifiedBy = BUILTIN_ACL_ROOT,
+        }});
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = FALSE
+            ))",
+            "query_name"_a = queryName
+        ));
+
+        // After ALTER: created_by must be unchanged, modified_by updated
+        CheckSysView({{
+            .Name = queryName,
+            .Status = "CREATED",
+            .Run = false,
+            .CreatedBy = BUILTIN_ACL_ROOT,
+            .ModifiedBy = BUILTIN_ACL_ROOT,
+        }});
+    }
+
     Y_UNIT_TEST_F(ReadSysViewWithRowCountBackPressure, TStreamingSysViewTestFixture) {
         LogSettings.Freeze = true;
         SetupAppConfig().MutableTableServiceConfig()->MutableResourceManager()->SetChannelBufferSize(1_KB);

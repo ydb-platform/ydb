@@ -1,6 +1,6 @@
 # Quickstart: reading and writing topics
 
-This tutorial walks you through your first [streaming query](../../concepts/streaming-query.md).
+This tutorial walks you through your first [streaming query](../../concepts/streaming-query/streaming-query.md).
 
 The query will:
 
@@ -92,7 +92,8 @@ Set `LOCATION` and `DATABASE_NAME` to match your {{ ydb-short-name }} deployment
 
 ## Step 3. Create the streaming query {#step3}
 
-Create a [streaming query](../../concepts/streaming-query.md) with [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md):
+Create a [streaming query](../../concepts/streaming-query/streaming-query.md) with [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md):
+
 
 ```sql
 CREATE STREAMING QUERY query_example AS
@@ -138,6 +139,7 @@ More detail:
 
 Inspect the `.sys/streaming_queries` system view [{#T}](../../dev/system-views.md#streaming_queries):
 
+
 ```sql
 SELECT
     Path,
@@ -156,6 +158,7 @@ If the query is `SUSPENDED` or `Issues` contains errors, see troubleshooting doc
 
 Write test messages with [{{ ydb-short-name }} CLI](../../reference/ydb-cli/index.md):
 
+
 ```bash
 echo '{"Time": "2025-01-01T00:00:00.000000Z", "Level": "error", "Host": "host-1"}' | ./ydb --profile quickstart topic write input_topic
 echo '{"Time": "2025-01-01T00:04:00.000000Z", "Level": "error", "Host": "host-2"}' | ./ydb --profile quickstart topic write input_topic
@@ -164,9 +167,11 @@ echo '{"Time": "2025-01-01T00:12:00.000000Z", "Level": "error", "Host": "host-2"
 echo '{"Time": "2025-01-01T00:12:00.000000Z", "Level": "error", "Host": "host-1"}' | ./ydb --profile quickstart topic write input_topic
 ```
 
+
 Results appear in the output topic after the 10-minute aggregation window closes.
 
 ## Step 6. Read the output topic {#step6}
+
 
 ```bash
 ./ydb --profile quickstart topic read output_topic --partition-ids 0 --start-offset 0 --limit 10 --format newline-delimited
@@ -181,6 +186,7 @@ Expected output:
 
 ## Step 7. Delete the query {#step7}
 
+
 ```sql
 DROP STREAMING QUERY query_example;
 ```
@@ -193,5 +199,5 @@ DROP STREAMING QUERY query_example;
 
 ## See also
 
-* [{#T}](../../concepts/streaming-query.md);
+* [{#T}](../../concepts/streaming-query/streaming-query.md);
 * [{#T}](../../dev/streaming-query/streaming-query-formats.md).

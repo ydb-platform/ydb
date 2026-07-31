@@ -1,10 +1,10 @@
-# Streaming reads from a topic
+# Streaming read from a topic
 
-You can read from a [topic](../../../../concepts/datamodel/topic.md) with a regular `SELECT` without creating a [streaming query](../../../../concepts/streaming-query.md). Set `STREAMING = "TRUE"` in the `WITH` block and limit output rows with `LIMIT`; otherwise the query does not complete.
+You can read data from a [topic](../../../../concepts/datamodel/topic.md) using a regular `SELECT` without creating a [streaming query](../../../../concepts/streaming-query/streaming-query.md). To do this, specify `STREAMING = TRUE` in the `WITH` block and set a limit on the number of output rows via `LIMIT`; otherwise, the query will not complete.
 
 {% note warning %}
 
-Use this only for debugging and inspecting topic data. For production workloads, create streaming queries with [CREATE STREAMING QUERY](../create-streaming-query.md).
+This method is intended only for debugging and checking data in a topic. For production processes, create streaming queries using [CREATE STREAMING QUERY](../create-streaming-query.md).
 
 {% endnote %}
 
@@ -16,6 +16,7 @@ In the examples, `ydb_source` is a pre-created [external data source](../../../.
 
 ## Example
 
+
 ```yql
 SELECT
     Data
@@ -26,13 +27,14 @@ WITH (
     SCHEMA = (
         Data String
     ),
-    STREAMING = "TRUE"
+    STREAMING = TRUE
 )
 LIMIT 1
 ```
 
+
 ## See also
 
-* [{#T}](../../../../recipes/streaming_queries/debug-read.md) — recipe with more examples
-* [{#T}](../../../../concepts/streaming-query.md)
+* [{#T}](../../../../recipes/streaming_queries/debug-read.md) — recipe with additional examples
+* [{#T}](../../../../concepts/streaming-query/streaming-query.md)
 * [{#T}](../create-streaming-query.md)

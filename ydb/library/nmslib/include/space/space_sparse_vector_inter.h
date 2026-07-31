@@ -278,7 +278,9 @@ inline  void PackSparseElements(const vector<SparseVectElem<dist_t>>& InpVect,
   dist_t*   pSqSum = reinterpret_cast<dist_t*>(pQty + 1);
   *pSqSum = sqSum;
   float*    pNormCoeff = reinterpret_cast<float*>(pSqSum + 1);
-  *pNormCoeff = 1.0f/sqrt(static_cast<float>(sqSum));
+  // An all-zero vector has no direction: use a zero coefficient rather than
+  // storing +inf, which would turn later dot products into NaNs.
+  *pNormCoeff = sqSum > 0 ? 1.0f/sqrt(static_cast<float>(sqSum)) : 0.0f;
   size_t*   pBlockQtyOff = reinterpret_cast<size_t*>(pNormCoeff + 1);
 
   for (size_t i = 0; i < blocks.size(); ++i) {

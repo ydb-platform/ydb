@@ -262,6 +262,7 @@ inline void CheckDataSize(const ObjectVector &data) {
   if (data.size() > MAX_DATASET_QTY) {
     PREPARE_RUNTIME_ERR(err) << "Bug: the number of data elements (" << data.size() << ") is too big, "
                              << "bigger than " << MAX_DATASET_QTY;
+    THROW_RUNTIME_ERR(err);
   }
 }
 

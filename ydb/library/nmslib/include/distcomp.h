@@ -233,6 +233,10 @@ dist_t inline BitJaccard(const dist_uint_t* a, const dist_uint_t* b, size_t qty)
     den +=  __builtin_popcount(a[i] | b[i]);
   }
 
+  // Both bitvectors are all-zeros: let's say it's a perfect overlap
+  // (consistent with JaccardSparse) rather than returning inf/NaN.
+  if (den == 0) return 0;
+
   return 1  - (dist_t(num) / dist_t(den));
 }
 

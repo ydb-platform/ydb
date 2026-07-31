@@ -20,6 +20,7 @@
 #include <string>
 #include <sstream>
 #include <stdexcept>
+#include <cstdlib>
 
 using std::ostream;
 using std::ofstream;
@@ -91,10 +92,12 @@ class LogItem {
     if (logger) {
         logger->log(severity, file, line, function, message.str());
     }
-    // TODO: probably better to throw an exception here rather than die outright
-    // but this matches previous behaviour
+    // This library is embedded into a larger application, so a plain exit(1)
+    // would tear down the whole process silently and without a core dump.
+    // Since we are in a destructor we cannot throw, so abort() is used
+    // instead: it at least produces a core dump for post-mortem diagnosis.
     if (severity == LIB_FATAL) {
-      exit(1);
+      std::abort();
     }
   }
 

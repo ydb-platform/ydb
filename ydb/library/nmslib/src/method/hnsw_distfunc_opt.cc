@@ -51,7 +51,12 @@ namespace similarity {
         TMP_RES_ARRAY(TmpRes);
         size_t qty = query->QueryObject()->datalength() >> 2;
 
+        // Normalization must not modify the caller's query object, which may be
+        // reused or inspected after the search, so normalize a private copy.
+        vector<float> normalizedQueryVect;
         if (normalize) {
+            normalizedQueryVect.assign(pVectq, pVectq + qty);
+            pVectq = normalizedQueryVect.data();
             NormalizeVect(pVectq, qty);
         }
 
@@ -157,7 +162,12 @@ namespace similarity {
         TMP_RES_ARRAY(TmpRes);
         size_t qty = query->QueryObject()->datalength() >> 2;
 
+        // Normalization must not modify the caller's query object, which may be
+        // reused or inspected after the search, so normalize a private copy.
+        vector<float> normalizedQueryVect;
         if (normalize) {
+            normalizedQueryVect.assign(pVectq, pVectq + qty);
+            pVectq = normalizedQueryVect.data();
             NormalizeVect(pVectq, qty);
         }
 

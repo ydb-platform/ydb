@@ -23,8 +23,10 @@
 *
 */
 
+#include <atomic>
 #include <cmath>
 #include <iostream>
+#include <limits>
 #include <memory>
 
 #include "portable_prefetch.h"
@@ -272,10 +274,11 @@ namespace similarity {
                     if (progress_bar1)
                         ++(*progress_bar1);
                 }
-                if (progress_bar1)
-                  progress_bar1->finish();
             });
-            int maxF = 0;
+            if (progress_bar1)
+                progress_bar1->finish();
+
+            std::atomic<size_t> maxF(0);
 
 // int degrees[100] = {0};
             ParallelFor(1, this->data_.size(), indexThreadQty_, [&](int id, int threadId) {
@@ -290,8 +293,13 @@ namespace similarity {
                 for (HnswNode *cur : f2) {
                     intersect.insert(cur->getId());
                 }
-                if (intersect.size() > maxF)
-                    maxF = intersect.size();
+                // Atomically compute max(maxF, intersect.size()): plain
+                // read-modify-write would race with other worker threads.
+                for (size_t prevMaxF = maxF.load(std::memory_order_relaxed);
+                     intersect.size() > prevMaxF &&
+                     !maxF.compare_exchange_weak(prevMaxF, intersect.size(),
+                                                 std::memory_order_relaxed);) {
+                }
                 vector<HnswNode *> rez = vector<HnswNode *>();
 
                 if (post_ == 2) {
@@ -319,8 +327,8 @@ namespace similarity {
                         resultSet.pop();
                     }
                 } else if (post_ == 1) {
-                    maxM0_ = maxF;
-
+                    // maxM0_ is updated once, after the loop: assigning it here
+                    // would be a data race with the readers above.
                     for (int cur : intersect) {
                         rez.push_back(ElList_[cur]);
                     }
@@ -332,6 +340,10 @@ namespace similarity {
                 }
                 // degrees[ElList_[id]->allFriends_[0].size()]++;
             });
+            if (post_ == 1) {
+                // The level-0 friend lists now hold up to maxF entries each.
+                maxM0_ = maxF.load(std::memory_order_relaxed);
+            }
             for (int i = 0; i < temp.size(); i++)
                 delete temp[i];
             temp.clear();
@@ -536,14 +548,25 @@ namespace similarity {
     Hnsw<dist_t>::add(const Space<dist_t> *space, HnswNode *NewElement)
     {
         int curlevel = getRandomLevel(mult_);
-        unique_lock<mutex> *lock = nullptr;
-        if (curlevel > maxlevel_)
-            lock = new unique_lock<mutex>(MaxLevelGuard_);
+
+        /*
+         * maxlevel_ and enterpoint_ are shared between the threads that build
+         * the index concurrently, so they must never be read or written without
+         * holding MaxLevelGuard_.
+         *
+         * If the new element may become the new entry point (curlevel >
+         * maxlevel_), the guard is held for the whole insertion: otherwise a
+         * concurrent inserter could pick up this element as the entry point
+         * before its links have been created.
+         */
+        unique_lock<mutex> maxLevelLock(MaxLevelGuard_);
+        int maxlevelcopy = maxlevel_;
+        HnswNode *ep = enterpoint_;
+        if (curlevel <= maxlevelcopy)
+            maxLevelLock.unlock();
 
         NewElement->init(curlevel, maxM_, maxM0_);
 
-        int maxlevelcopy = maxlevel_;
-        HnswNode *ep = enterpoint_;
         if (curlevel < maxlevelcopy) {
             const Object *currObj = ep->getData();
 
@@ -600,12 +623,12 @@ namespace similarity {
                 resultSet.pop();
             }
         }
-        if (curlevel > enterpoint_->level) {
+        // maxLevelLock is still held exactly when curlevel > maxlevelcopy, i.e.
+        // when this element becomes the new entry point.
+        if (maxLevelLock.owns_lock()) {
             enterpoint_ = NewElement;
             maxlevel_ = curlevel;
         }
-        if (lock != nullptr)
-            delete lock;
     }
 
     template <typename dist_t>
@@ -1046,6 +1069,34 @@ namespace similarity {
 
         //        LOG(LIB_INFO) << input.tellg();
         LOG(LIB_INFO) << "Total: " << totalElementsStored_ << ", Memory per object: " << memoryPerObject_;
+
+        /*
+         * Everything above was read from a file that we do not necessarily
+         * trust. Validate it before using any of it to size allocations or to
+         * index into memory: otherwise a corrupted or hand-crafted index leads
+         * to integer overflow and heap corruption.
+         */
+        CHECK_MSG(maxlevel_ >= 0, "Invalid maxlevel in the index: " + ConvertToString(maxlevel_));
+        CHECK_MSG(memoryPerObject_ > 0, "Invalid memory per object in the index: " + ConvertToString(memoryPerObject_));
+        // The data section starts at offsetData_ and the level-0 link section at
+        // offsetLevel0_; both must lie inside a single object's memory block.
+        CHECK_MSG(offsetData_ < memoryPerObject_,
+                  "Invalid data offset in the index: " + ConvertToString(offsetData_) +
+                  ", memory per object: " + ConvertToString(memoryPerObject_));
+        CHECK_MSG(offsetLevel0_ < memoryPerObject_,
+                  "Invalid level-0 offset in the index: " + ConvertToString(offsetLevel0_) +
+                  ", memory per object: " + ConvertToString(memoryPerObject_));
+        if (totalElementsStored_ > 0) {
+            CHECK_MSG(enterpointId_ < totalElementsStored_,
+                      "Invalid enterpoint id in the index: " + ConvertToString(enterpointId_) +
+                      ", the number of stored elements: " + ConvertToString(totalElementsStored_));
+        }
+        // memoryPerObject_ * totalElementsStored_ must not overflow size_t.
+        CHECK_MSG(totalElementsStored_ == 0 ||
+                  memoryPerObject_ <= std::numeric_limits<size_t>::max() / totalElementsStored_,
+                  "The index is too large: " + ConvertToString(totalElementsStored_) +
+                  " elements of " + ConvertToString(memoryPerObject_) + " bytes each");
+
         size_t data_plus_links0_size = memoryPerObject_ * totalElementsStored_;
         // we allocate a few extra bytes to prevent prefetch from accessing out of range memory
         data_level0_memory_ = (char *)malloc(data_plus_links0_size + EXTRA_MEM_PAD_SIZE);
@@ -1057,9 +1108,20 @@ namespace similarity {
 
         data_rearranged_.resize(totalElementsStored_);
 
+        /*
+         * SaveOptimizedIndex() writes ((level) * (maxM_ + 1)) * sizeof(int)
+         * bytes of higher-level links per element, and no level exceeds
+         * maxlevel_. Anything above that bound means the index is corrupted.
+         */
+        const size_t maxLinkListSize = static_cast<size_t>(maxlevel_) * (maxM_ + 1) * sizeof(int);
+
         for (size_t i = 0; i < totalElementsStored_; i++) {
             SIZEMASS_TYPE linkListSize;
             readBinaryPOD(input, linkListSize);
+
+            CHECK_MSG(linkListSize <= maxLinkListSize,
+                      "Invalid link list size " + ConvertToString(linkListSize) + " for element " +
+                      ConvertToString(i) + ", the maximum is " + ConvertToString(maxLinkListSize));
 
             if (linkListSize == 0) {
                 linkLists_[i] = nullptr;

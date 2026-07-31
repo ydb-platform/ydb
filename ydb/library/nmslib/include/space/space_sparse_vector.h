@@ -22,6 +22,7 @@
 #include <ostream>
 #include <functional>
 #include <cstdint>
+#include <memory>
 
 #include <string.h>
 #include "global.h"
@@ -137,7 +138,7 @@ protected:
   template <typename DistObjType> 
   static dist_t ComputeDistanceHelper(const Object* obj1, const Object* obj2,  
                                const DistObjType distObj, dist_t missingValue = 0) {
-    dist_t *mem1 = NULL, *mem2 = NULL;
+    std::unique_ptr<dist_t[]> mem1, mem2;
     dist_t buf1[MAX_BUFFER_QTY], buf2[MAX_BUFFER_QTY];
     dist_t *vect1 = buf1;
     dist_t *vect2 = buf2;
@@ -152,14 +153,16 @@ protected:
     const size_t qty2 = obj2->datalength() / sizeof(ElemType);
     const size_t maxQty = qty1 + qty2;
 
-    /* 
+    /*
      * We hope not to allocate memory frequently, b/c memory allocation can be expensive
      * TODO:@leo check how expensive are memory allocations, perhaps, this fear is not substantiated
-     */      
-    try {
+     */
+    {
       if (maxQty > MAX_BUFFER_QTY) {
-        vect1 = mem1 = new dist_t[maxQty];
-        vect2 = mem2 = new dist_t[maxQty];
+        mem1.reset(new dist_t[maxQty]);
+        mem2.reset(new dist_t[maxQty]);
+        vect1 = mem1.get();
+        vect2 = mem2.get();
       }
 
       size_t qty = 0;
@@ -208,14 +211,7 @@ protected:
       CHECK(qty <= maxQty);
 
       res = distObj(vect1, vect2, qty);
-
-    } catch (...) {
-      delete [] mem1;
-      delete [] mem2;
     }
-
-    delete [] mem1;
-    delete [] mem2;
 
     return res;
   }

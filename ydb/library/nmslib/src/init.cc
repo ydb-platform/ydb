@@ -37,7 +37,12 @@ thread_local std::unique_ptr<RandomGeneratorType>   randomGen;
 void initLibrary(int seed, LogChoice choice, const char* pLogFile) {
   defaultRandomSeed = seed;
 
-  std::ios_base::sync_with_stdio(false);
+  /*
+   * Note: we deliberately do NOT call std::ios_base::sync_with_stdio(false)
+   * here. It is a process-wide side effect and this library is embedded into a
+   * larger application, which must be free to choose its own I/O
+   * synchronization policy.
+   */
   InitializeLogger(choice, pLogFile);
   initSpaces();
   initMethods();

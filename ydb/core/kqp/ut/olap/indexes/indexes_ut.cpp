@@ -771,7 +771,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
         runDMLQuery(R"(
             $data1 = ListMap(ListFromRange(1, 1500001), ($x) -> { RETURN AsStruct($x AS item); });
-            UPSERT INTO `/Root/olap_indexes_applied_test` (`key`, `value`, `value_bloom`) SELECT 
+            UPSERT INTO `/Root/olap_indexes_applied_test` (`key`, `value`, `value_bloom`) SELECT
             CAST(item AS Int32) AS `key`,
             "Value_" || CAST(item AS String) AS `value`,
             "Value_" || CAST(item AS String) AS `value_bloom`,
@@ -864,7 +864,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         )");
         UNIT_ASSERT_VALUES_EQUAL_C(resDistinctFromNull.CountResult, 1500000, "incorrect result for query with 'IS DISCTINCT FROM NULL' filter over min_max-indexed column");
         UNIT_ASSERT_C(!resDistinctFromNull.LocalIndexUsed, "query with 'IS DISCTINCT FROM NULL' filter over min_max-indexed column use min_max index, but it shouldn't(will use in future, see https://github.com/ydb-platform/ydb/issues/38574)");
-        
+
         TQueryResult resBloom = runQuery(R"(
             SELECT COUNT(*) FROM `/Root/olap_indexes_applied_test` WHERE `value_bloom` LIKE '%alue?_50000%' ESCAPE '?';
         )");
@@ -2170,9 +2170,9 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
                 )");
         ExecQuery(kikimr, UseQueryService,
             TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
+        csController->WaitActualization(TDuration::Seconds(30), /*waitWrites=*/true);
         // Make the just-actualized portions (with index data) visible to the following scan.
         AdvancePlanStep(kikimr);
-        csController->WaitActualization(TDuration::Seconds(10));
         {
             auto it = tableClient
                           .StreamExecuteScanQuery(R"(

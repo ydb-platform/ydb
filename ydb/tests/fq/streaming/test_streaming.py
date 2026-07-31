@@ -1573,7 +1573,8 @@ FROM `{table_name}`"""
         logger.info("Node with query restarted")
 
         second_node = list(kikimr.cluster.nodes.values())[1]
-        kikimr.ydb_client = YdbClient.from_driver_config(database=kikimr.endpoint.database, endpoint=f"grpc://{second_node.host}:{second_node.port}", enable_discovery=False)
+        kikimr.ydb_client = YdbClient(database=kikimr.endpoint.database, endpoint=f"grpc://{second_node.host}:{second_node.port}", enable_discovery=False)
+        kikimr.ydb_client.wait_connection()
         kikimr.ydb_client.query(f"""
             ALTER STREAMING QUERY `{path}` SET (RUN = FALSE);
         """, fail_fast=True)

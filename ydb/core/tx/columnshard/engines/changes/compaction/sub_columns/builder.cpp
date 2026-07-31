@@ -84,12 +84,10 @@ void TMergedBuilder::Initialize() {
         const auto valueType = ResultColumnStats.GetValueType(i);
         switch (ResultColumnStats.GetAccessorType(i)) {
             case NArrow::NAccessor::IChunkedArray::EType::Array:
-                ColumnBuilders.emplace_back(
-                    TEncodingPlainBuilder(NArrow::NAccessor::NSubColumns::GetCodecForValueType(valueType), 0, 0), valueType);
+                ColumnBuilders.emplace_back(TEncodingPlainBuilder(valueType, 0, 0), valueType);
                 break;
             case NArrow::NAccessor::IChunkedArray::EType::SparsedArray:
-                ColumnBuilders.emplace_back(
-                    TEncodingSparsedBuilder(NArrow::NAccessor::NSubColumns::GetCodecForValueType(valueType), 0, 0), valueType);
+                ColumnBuilders.emplace_back(TEncodingSparsedBuilder(valueType, 0, 0), valueType);
                 break;
             case NArrow::NAccessor::IChunkedArray::EType::Undefined:
             case NArrow::NAccessor::IChunkedArray::EType::SerializedChunkedArray:

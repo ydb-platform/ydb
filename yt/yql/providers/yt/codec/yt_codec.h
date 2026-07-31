@@ -299,6 +299,12 @@ void WriteYsonValueInTableFormat(NCommon::TOutputBuf& buf, NKikimr::NMiniKQL::TT
 extern "C" void WriteYsonContainerValue(NKikimr::NMiniKQL::TType* type,
     const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf);
 
+// Helper method used to keep backward compatibility
+// with old optional singulars behavior after switching to mandatory v3 schema
+// TODO: remove this helper and its usages
+// to switch to correct, non-backward compatible behavior
+bool IsOptionalSingular(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags);
+
 void SkipSkiffData(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, NCommon::TInputBuf& buf);
 void SkipSkiffValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, NCommon::TInputBuf& buf);
 void SkipSkiffComplexValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, NCommon::TInputBuf& buf);

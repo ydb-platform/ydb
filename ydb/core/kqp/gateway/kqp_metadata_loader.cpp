@@ -315,9 +315,11 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
             defaultFromSequencePathId = sequenceIt->second;
         } else if (columnDesc.IsDefaultFromLiteral()) {
             defaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL;
+        } else if (columnDesc.IsDefaultFromExpression()) {
+            defaultKind = NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_EXPRESSION;
         }
 
-        tableMeta->Columns.emplace(
+        auto emplaceResult = tableMeta->Columns.emplace(
             columnDesc.Name,
             NYql::TKikimrColumnMetadata(
                 columnDesc.Name,
@@ -334,6 +336,15 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
                 columnDesc.SetNotNullInProgress
             )
         );
+        if (columnDesc.IsDefaultFromExpression()) {
+            auto& columnMeta = emplaceResult.first->second;
+            columnMeta.DefaultExpression.ConstructInPlace();
+            columnMeta.DefaultExpression->Context = columnDesc.DefaultExpression->Context;
+            columnMeta.DefaultExpression->ExprText = columnDesc.DefaultExpression->ExprText;
+            columnMeta.DefaultExpression->Stored = columnDesc.DefaultExpression->Stored;
+            columnMeta.DefaultExpression->Dependencies.assign(
+                columnDesc.DefaultExpression->Dependencies.begin(), columnDesc.DefaultExpression->Dependencies.end());
+        }
         if (columnDesc.KeyOrder >= 0) {
             keyColumns[columnDesc.KeyOrder] = columnDesc.Name;
         }
@@ -389,6 +400,7 @@ TTableMetadataResult GetExternalTableMetadataResult(const NSchemeCache::TSchemeC
 
     tableMeta->Attributes = entry.Attributes;
 
+    TMap<ui32, TString> columnOrder;
     for (auto& columnDesc : description.GetColumns()) {
         const auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(columnDesc.GetTypeId(),
             columnDesc.HasTypeInfo() ? &columnDesc.GetTypeInfo() : nullptr);
@@ -401,6 +413,16 @@ TTableMetadataResult GetExternalTableMetadataResult(const NSchemeCache::TSchemeC
                 columnDesc.GetDefaultFromSequence()
             )
         );
+        columnOrder[columnDesc.GetId()] = columnDesc.GetName();
+    }
+
+    // ColumnOrder must cover every column, the same way it does for tables and
+    // system views: reads of external tables are normally rewritten into reads
+    // of the underlying source before type annotation, but SHOW CREATE EXTERNAL
+    // TABLE reads reach it and rely on the order being filled in.
+    tableMeta->ColumnOrder.reserve(columnOrder.size());
+    for (const auto& columnName : std::views::values(columnOrder)) {
+        tableMeta->ColumnOrder.push_back(columnName);
     }
 
     tableMeta->ExternalSource.SourceType = NYql::ESourceType::ExternalTable;

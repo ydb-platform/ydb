@@ -786,6 +786,20 @@
       ],
       "documentation":"<p>Disassociates an Amazon FSx file system from the specified gateway. After the disassociation process finishes, the gateway can no longer access the Amazon FSx file system. This operation is only supported in the FSx File Gateway type.</p>"
     },
+    "EvictFilesFailingUpload":{
+      "name":"EvictFilesFailingUpload",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"EvictFilesFailingUploadInput"},
+      "output":{"shape":"EvictFilesFailingUploadOutput"},
+      "errors":[
+        {"shape":"InvalidGatewayRequestException"},
+        {"shape":"InternalServerError"}
+      ],
+      "documentation":"<p>Starts a process that cleans the specified file share's cache of file entries that are failing upload to Amazon S3. This API operation reports success if the request is received with valid arguments, and there are no other cache clean operations currently in-progress for the specified file share. After a successful request, the cache clean operation occurs asynchronously and reports progress using CloudWatch logs and notifications.</p> <important> <p>If <code>ForceRemove</code> is set to <code>True</code>, the cache clean operation will delete file data from the gateway which might otherwise be recoverable. We recommend using this operation only after all other methods to clear files failing upload have been exhausted, and if your business need outweighs the potential data loss.</p> </important>"
+    },
     "JoinDomain":{
       "name":"JoinDomain",
       "http":{
@@ -1413,7 +1427,8 @@
         "JOINING",
         "NETWORK_ERROR",
         "TIMEOUT",
-        "UNKNOWN_ERROR"
+        "UNKNOWN_ERROR",
+        "INSUFFICIENT_PERMISSIONS"
       ]
     },
     "AddCacheInput":{
@@ -3847,6 +3862,29 @@
         "VolumeNotReady"
       ]
     },
+    "EvictFilesFailingUploadInput":{
+      "type":"structure",
+      "required":["FileShareARN"],
+      "members":{
+        "FileShareARN":{
+          "shape":"FileShareARN",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the file share for which you want to start the cache clean operation.</p>"
+        },
+        "ForceRemove":{
+          "shape":"boolean",
+          "documentation":"<p>Specifies whether cache entries with full or partial file data currently stored on the gateway will be forcibly removed by the cache clean operation.</p> <p>Valid arguments:</p> <ul> <li> <p> <code>False</code> - The cache clean operation skips cache entries failing upload if they are associated with data currently stored on the gateway. This preserves the cached data.</p> </li> <li> <p> <code>True</code> - The cache clean operation removes cache entries failing upload even if they are associated with data currently stored on the gateway. This deletes the cached data.</p> <important> <p>If <code>ForceRemove</code> is set to <code>True</code>, the cache clean operation will delete file data from the gateway which might otherwise be recoverable.</p> </important> </li> </ul>"
+        }
+      }
+    },
+    "EvictFilesFailingUploadOutput":{
+      "type":"structure",
+      "members":{
+        "NotificationId":{
+          "shape":"string",
+          "documentation":"<p>The randomly generated ID of the CloudWatch notification associated with the cache clean operation. This ID is in UUID format.</p>"
+        }
+      }
+    },
     "FileShareARN":{
       "type":"string",
       "documentation":"<p>The Amazon Resource Name (ARN) of the file share.</p>",
@@ -4266,7 +4304,7 @@
         },
         "ActiveDirectoryStatus":{
           "shape":"ActiveDirectoryStatus",
-          "documentation":"<p>Indicates the status of the gateway as a member of the Active Directory domain.</p> <note> <p>This field is only used as part of a <code>JoinDomain</code> request. It is not affected by Active Directory connectivity changes that occur after the <code>JoinDomain</code> request succeeds.</p> </note> <ul> <li> <p> <code>ACCESS_DENIED</code>: Indicates that the <code>JoinDomain</code> operation failed due to an authentication error.</p> </li> <li> <p> <code>DETACHED</code>: Indicates that gateway is not joined to a domain.</p> </li> <li> <p> <code>JOINED</code>: Indicates that the gateway has successfully joined a domain.</p> </li> <li> <p> <code>JOINING</code>: Indicates that a <code>JoinDomain</code> operation is in progress.</p> </li> <li> <p> <code>NETWORK_ERROR</code>: Indicates that <code>JoinDomain</code> operation failed due to a network or connectivity error.</p> </li> <li> <p> <code>TIMEOUT</code>: Indicates that the <code>JoinDomain</code> operation failed because the operation didn't complete within the allotted time.</p> </li> <li> <p> <code>UNKNOWN_ERROR</code>: Indicates that the <code>JoinDomain</code> operation failed due to another type of error.</p> </li> </ul>"
+          "documentation":"<p>Indicates the status of the gateway as a member of the Active Directory domain.</p> <note> <p>This field is only used as part of a <code>JoinDomain</code> request. It is not affected by Active Directory connectivity changes that occur after the <code>JoinDomain</code> request succeeds.</p> </note> <ul> <li> <p> <code>ACCESS_DENIED</code>: Indicates that the <code>JoinDomain</code> operation failed due to an authentication error.</p> </li> <li> <p> <code>DETACHED</code>: Indicates that gateway is not joined to a domain.</p> </li> <li> <p> <code>JOINED</code>: Indicates that the gateway has successfully joined a domain.</p> </li> <li> <p> <code>JOINING</code>: Indicates that a <code>JoinDomain</code> operation is in progress.</p> </li> <li> <p> <code>INSUFFICIENT_PERMISSIONS</code>: Indicates that the <code>JoinDomain</code> operation failed because the specified user lacks the necessary permissions to join the domain.</p> </li> <li> <p> <code>NETWORK_ERROR</code>: Indicates that <code>JoinDomain</code> operation failed due to a network or connectivity error.</p> </li> <li> <p> <code>TIMEOUT</code>: Indicates that the <code>JoinDomain</code> operation failed because the operation didn't complete within the allotted time.</p> </li> <li> <p> <code>UNKNOWN_ERROR</code>: Indicates that the <code>JoinDomain</code> operation failed due to another type of error.</p> </li> </ul>"
         }
       },
       "documentation":"<p>JoinDomainOutput</p>"
@@ -4608,7 +4646,7 @@
     },
     "Marker":{
       "type":"string",
-      "max":1000,
+      "max":2000,
       "min":1
     },
     "MediumChangerType":{
@@ -5309,11 +5347,11 @@
         },
         "LocationARN":{
           "shape":"LocationARN",
-          "documentation":"<p>The ARN of the Amazon S3 bucket where the cache report will be saved.</p> <note> <p>We do not recommend saving the cache report to the same Amazon S3 bucket for which you are generating the report.</p> <p>This field does not accept access point ARNs.</p> </note>"
+          "documentation":"<p>The ARN of the Amazon S3 bucket where you want to save the cache report.</p> <note> <p>We do not recommend saving the cache report to the same Amazon S3 bucket for which you are generating the report.</p> <p>This field does not accept access point ARNs.</p> </note>"
         },
         "BucketRegion":{
           "shape":"RegionId",
-          "documentation":"<p>The Amazon Web Services Region of the Amazon S3 bucket associated with the file share for which you want to generate the cache report.</p>"
+          "documentation":"<p>The Amazon Web Services Region of the Amazon S3 bucket where you want to save the cache report.</p>"
         },
         "VPCEndpointDNSName":{
           "shape":"DNSHostName",

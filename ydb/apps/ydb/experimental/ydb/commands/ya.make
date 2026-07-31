@@ -6,6 +6,7 @@ SRCS(
     ydb_service_experimental_fq.cpp
     ydb_service_experimental.cpp
     ydb_sql.cpp
+    ydb_topic_deferred_publish.cpp
 )
 
 PEERDIR(

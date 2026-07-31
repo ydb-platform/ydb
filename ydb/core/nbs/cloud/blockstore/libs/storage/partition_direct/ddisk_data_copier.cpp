@@ -5,6 +5,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
 
@@ -48,9 +49,10 @@ TDDiskDataCopier::TDDiskDataCopier(
     NActors::TActorSystem* actorSystem,
     ITraceService* traceService,
     IPartitionDirectService* partitionDirectService,
+    const TDiskDescription& diskDescription,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
-    TBlocksDirtyMap* dirtyMap,
+    TBlocksDirtyMapPtr dirtyMap,
     THostIndex destination)
     : ActorSystem(actorSystem)
     , TraceService(traceService)
@@ -58,11 +60,15 @@ TDDiskDataCopier::TDDiskDataCopier(
     , VolumeConfig(partitionDirectService->GetVolumeConfig())
     , DirectBlockGroup(std::move(directBlockGroup))
     , Destination(destination)
-    , DirtyMap(dirtyMap)
+    , DirtyMap(std::move(dirtyMap))
     , LogTitle{
           GetCycleCount(),
           TLogTitle::TDDiskDataCopier{
-              .DiskId = VolumeConfig->DiskId,
+              .DiskId = diskDescription.DiskId,
+              .TabletId = diskDescription.TabletId,
+              .Generation = diskDescription.Generation,
+              .DBGIndex = VChunkConfig.GetDBGIndex(),
+              .VChunkIndex = VChunkConfig.GetVChunkIndex(),
               .Destination = static_cast<int>(Destination)}}
 {
     Y_ABORT_UNLESS(traceService);
@@ -114,7 +120,7 @@ TFuture<TDDiskDataCopier::EResult> TDDiskDataCopier::Stop()
 
 NWilson::TSpan TDDiskDataCopier::CreateSpan() const
 {
-    auto span = TraceService->CreteRootSpan("CopyRange");
+    auto span = TraceService->CreateRootSpan("CopyRange");
     span.Attribute("DiskId", VolumeConfig->DiskId);
     span.Attribute("From", static_cast<i64>(FreshWatermark));
     span.Attribute("Length", static_cast<i64>(CopyRangeSize));
@@ -210,7 +216,8 @@ void TDDiskDataCopier::OnRangeRead(
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "TDDiskDataCopier. %s Read error: %s",
+            "%s %s Read error: %s",
+            LogTitle.GetWithTime().c_str(),
             copyRangeState->Range.Print().c_str(),
             FormatError(response.Error).c_str());
 
@@ -245,7 +252,8 @@ void TDDiskDataCopier::OnRangeWritten(
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "TDDiskDataCopier. %s Write error: %s",
+            "%s %s Write error: %s",
+            LogTitle.GetWithTime().c_str(),
             copyRangeState->Range.Print().c_str(),
             FormatError(response.Error).c_str());
 

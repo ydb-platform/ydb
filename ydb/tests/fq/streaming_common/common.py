@@ -1,3 +1,4 @@
+import copy
 import logging
 import os
 import pytest
@@ -23,13 +24,13 @@ def set_test_env(request):
     param = getattr(request, "param", {})
     checkpointing_period_ms = param.get("checkpointing_period_ms", "200")
     os.environ["YDB_TEST_DEFAULT_CHECKPOINTING_PERIOD_MS"] = checkpointing_period_ms
-    os.environ["YDB_TEST_LEASE_DURATION_SEC"] = "5"
+    os.environ["YDB_TEST_LEASE_DURATION_SEC"] = param.get("lease_duration_sec", "5")
     rebalancing_timeout_ms = param.get("rebalancing_timeout_ms", "60000")
     print(f"rebalancing_timeout_ms {rebalancing_timeout_ms}")
     os.environ["YDB_TEST_ROW_DISPATCHER_REBALANCING_TIMEOUT_MS"] = rebalancing_timeout_ms
 
 
-def get_ydb_config(request):
+def get_ydb_config(request, enable_fq_connector=None):
     param = getattr(request, "param", {})
     enable_watermarks = param.get("enable_watermarks", True)
     enable_watermarks_advanced = param.get("enable_watermarks_advanced", True)
@@ -37,6 +38,8 @@ def get_ydb_config(request):
     enable_streaming_queries = param.get("enable_streaming_queries", True)
     enable_streaming_partition_balancing = param.get("use_partition_balancing", True)
     enable_user_attributes_in_topic_query = param.get("enable_user_attributes_in_topic_query", True)
+    enable_dq_source_stream_lookup_join = param.get("enable_dq_source_stream_lookup_join", True)
+    enable_kqp_constraints_transformer = param.get("kqp_constraints_transformer", True)
 
     extra_feature_flags = {
         "enable_external_data_sources",
@@ -55,6 +58,8 @@ def get_ydb_config(request):
         extra_feature_flags.add("enable_user_attributes_in_topic_query")
     else:
         disabled_feature_flags.append("enable_user_attributes_in_topic_query")
+    if not enable_kqp_constraints_transformer:
+        disabled_feature_flags.append("enable_kqp_constraints_transformer")
 
     config = KikimrConfigGenerator(
         erasure=Erasure.MIRROR_3_DC,
@@ -72,6 +77,7 @@ def get_ydb_config(request):
             "enable_streaming_partition_balancing": enable_streaming_partition_balancing,
             "enable_compile_cache_warmup": False,
             "enable_channel_memory_tracking": False,  # Remove after fix https://github.com/ydb-platform/ydb/issues/46891
+            "enable_dq_source_stream_lookup_join": enable_dq_source_stream_lookup_join,
         },
         replication_config={
             "iam_service_control": {
@@ -86,6 +92,17 @@ def get_ydb_config(request):
         use_in_memory_pdisks=False,
     )
 
+    if enable_fq_connector:
+        config.yaml_config["query_service_config"]["generic"] = {
+            "connector": {
+                "use_ssl": False,
+                "endpoint": {
+                    "host": enable_fq_connector.connector.grpc_host,
+                    "port": enable_fq_connector.connector.grpc_port,
+                },
+            },
+        }
+
     config.yaml_config["log_config"]["default_level"] = 8
     if "auth_config" not in config.yaml_config:
         config.yaml_config["auth_config"] = {}
@@ -98,6 +115,10 @@ def get_ydb_config(request):
 
 class YdbClient:
     WAIT_TIMEOUT: int = 5
+
+    def __fail_retry_callback(self, e):
+        self.retry_settings.on_ydb_error_callback(e)
+        raise RuntimeError(e)
 
     def __init__(self, driver: ydb.Driver, owns_driver: bool = False):
         self.owns_driver = owns_driver
@@ -123,8 +144,11 @@ class YdbClient:
         if self.owns_driver:
             self.driver.stop()
 
-    def query(self, statement: str):
-        return self.session_pool.execute_with_retries(statement, retry_settings=self.retry_settings)
+    def query(self, statement: str, fail_fast: bool = False):
+        retry_settings = copy.copy(self.retry_settings)
+        if fail_fast:
+            retry_settings.on_ydb_error_callback = lambda e: self.__fail_retry_callback(e)
+        return self.session_pool.execute_with_retries(statement, retry_settings=retry_settings)
 
     def query_async(self, statement: str, timeout: float | None = None):
         settings = None

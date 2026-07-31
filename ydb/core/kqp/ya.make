@@ -79,6 +79,7 @@ RECURSE(
 RECURSE_FOR_TESTS(
     ut
     common/result_set_format/ut
+    tools/cbo_latency_dataset
     tools/hash_test
 )
 

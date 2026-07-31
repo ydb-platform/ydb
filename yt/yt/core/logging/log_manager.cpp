@@ -27,7 +27,6 @@
 #include <yt/yt/core/misc/mpsc_stack.h>
 #include <yt/yt/core/misc/pattern_formatter.h>
 #include <yt/yt/core/misc/proc.h>
-#include <yt/yt/core/misc/property.h>
 #include <yt/yt/core/misc/shutdown.h>
 #include <yt/yt/core/misc/ref_counted_tracker.h>
 #include <yt/yt/core/misc/shutdown.h>
@@ -46,6 +45,7 @@
 #include <yt/yt/library/signals/signal_registry.h>
 
 #include <library/cpp/yt/misc/hash.h>
+#include <library/cpp/yt/misc/property.h>
 #include <library/cpp/yt/misc/variant.h>
 #include <library/cpp/yt/misc/tls.h>
 
@@ -1596,35 +1596,26 @@ TFiberMinLogLevelGuard::~TFiberMinLogLevelGuard()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TFiberMessageTagGuard::TFiberMessageTagGuard(std::string messageTag)
-    : TFiberMessageTagGuard(std::move(messageTag), EMode::Prepend)
+TFiberMessageTagGuard::TFiberMessageTagGuard(TLoggingTagList messageTags)
+    : TFiberMessageTagGuard(std::move(messageTags), EMode::Prepend)
 { }
 
-TFiberMessageTagGuard::TFiberMessageTagGuard(std::string messageTag, EMode mode)
-    : OldMessageTag_(std::move(GetThreadMessageTag()))
+TFiberMessageTagGuard::TFiberMessageTagGuard(TLoggingTagList messageTags, EMode mode)
+    : OldMessageTags_(GetThreadMessageTags())
 {
-    auto concatenateTags = [] (const std::string& lhs, const std::string& rhs) {
-        if (lhs.empty()) {
-            return rhs;
-        } else if (rhs.empty()) {
-            return lhs;
-        } else {
-            return lhs + ", " + rhs;
-        }
-    };
-
-    SetThreadMessageTag([&] {
+    SetThreadMessageTags([&] {
         switch (mode) {
             case EMode::Replace:
-                return std::move(messageTag);
+                return std::move(messageTags);
             case EMode::Prepend:
-                return concatenateTags(messageTag, OldMessageTag_);
+                messageTags.Add(OldMessageTags_);
+                return std::move(messageTags);
         }
     } ());
 }
 
 TFiberMessageTagGuard::TFiberMessageTagGuard(TFiberMessageTagGuard&& other) noexcept
-    : OldMessageTag_(std::move(other.OldMessageTag_))
+    : OldMessageTags_(std::move(other.OldMessageTags_))
     , Active_(other.Active_)
 {
     other.Active_ = false;
@@ -1633,7 +1624,7 @@ TFiberMessageTagGuard::TFiberMessageTagGuard(TFiberMessageTagGuard&& other) noex
 TFiberMessageTagGuard::~TFiberMessageTagGuard()
 {
     if (Active_) {
-        SetThreadMessageTag(std::move(OldMessageTag_));
+        SetThreadMessageTags(std::move(OldMessageTags_));
     }
 }
 

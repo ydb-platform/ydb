@@ -68,6 +68,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         TVector<TString> Path;
         bool RequireRedirect = true;
 
+        // Resolve the path only to check access on it if it exists, absence is not an error.
+        bool AllowNotExist = false;
+
         TPathToResolve(const NKikimrSchemeOp::TModifyScheme& modifyScheme)
             : ModifyScheme(modifyScheme)
         {
@@ -548,6 +551,22 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         return IsCreateRequest(modifyScheme);
     }
 
+    // Schemeshard executes CREATE OR REPLACE over an existing object as an alter of it,
+    // so alter rights on the object are required too: create rights on the parent dir
+    // alone must not be enough to overwrite an object owned by somebody else.
+    // The object may not exist yet, then it is a plain create and the check is skipped.
+    void AddResolveForCreateOrReplace(NKikimrSchemeOp::TModifyScheme& pbModifyScheme, const TVector<TString>& workingDir) {
+        if (!pbModifyScheme.GetReplaceIfExists()) {
+            return;
+        }
+
+        auto toResolve = TPathToResolve(pbModifyScheme);
+        toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
+        toResolve.RequireAccess = NACLib::EAccessRights::AlterSchema;
+        toResolve.AllowNotExist = true;
+        ResolveForACL.push_back(toResolve);
+    }
+
     static TVector<TString> GetFullPath(NKikimrSchemeOp::TModifyScheme& scheme) {
         switch (scheme.GetOperationType()) {
         case NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups:
@@ -872,6 +891,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             toResolve.Path = workingDir;
             toResolve.RequireAccess = NACLib::EAccessRights::CreateTable | accessToUserAttrs;
             ResolveForACL.push_back(toResolve);
+            AddResolveForCreateOrReplace(pbModifyScheme, workingDir);
             break;
         }
         case NKikimrSchemeOp::ESchemeOpAlterTransfer:
@@ -1001,6 +1021,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             toResolve.Path = workingDir;
             toResolve.RequireAccess = NACLib::EAccessRights::CreateTable | accessToUserAttrs;
             ResolveForACL.push_back(toResolve);
+            AddResolveForCreateOrReplace(pbModifyScheme, workingDir);
             break;
         }
         case NKikimrSchemeOp::ESchemeOpCreateTransfer:
@@ -1301,6 +1322,29 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         } else {
             return msg;
         }
+    }
+
+    // The only tolerable resolve error is a missing AllowNotExist path.
+    bool HasOnlyTolerableResolveErrors(const NSchemeCache::TSchemeCacheNavigate* navigate) const {
+        if (navigate->ResultSet.size() != ResolveForACL.size()) {
+            return false;
+        }
+
+        for (size_t i = 0; i < navigate->ResultSet.size(); ++i) {
+            switch (navigate->ResultSet[i].Status) {
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
+                break;
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
+                if (ResolveForACL[i].AllowNotExist) {
+                    break;
+                }
+                return false;
+            default:
+                return false;
+            }
+        }
+
+        return true;
     }
 
     void InterpretResolveError(const NSchemeCache::TSchemeCacheNavigate* navigate, const TActorContext &ctx) {
@@ -1700,7 +1744,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         Y_ABORT_UNLESS(!navigate->ResultSet.empty());
 
-        if (navigate->ErrorCount > 0) {
+        if (navigate->ErrorCount > 0 && !HasOnlyTolerableResolveErrors(navigate)) {
             InterpretResolveError(navigate, ctx);
             return Die(ctx);
         }

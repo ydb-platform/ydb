@@ -1,6 +1,7 @@
 #pragma once
 
 #include "public.h"
+#include "tag.h"
 
 #include <library/cpp/yt/misc/port.h>
 
@@ -157,8 +158,8 @@ ELogLevel GetThreadMinLogLevel();
 //! Sets an extra tag for messages in current thread.
 //! NB: Same as above, in fiber environment messages tags
 //! are attached to a fiber.
-void SetThreadMessageTag(std::string messageTag);
-std::string& GetThreadMessageTag();
+void SetThreadMessageTags(TLoggingTagList messageTags);
+const TLoggingTagList& GetThreadMessageTags();
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -223,21 +224,33 @@ public:
 
     void Write(TLogEvent&& event) const;
 
-    void AddRawTag(TStringBuf tag);
+    TLogger& AddTags(const TLoggingTagList& tags);
+    template <class TValue>
+    TLogger& AddTag(TLoggingTagKey key, const TValue& value);
+    template <class TValue>
+    TLogger& AddTag(TLoggingTagKey key, const TValue& value, TLoggingTagSpec spec);
     template <class... TArgs>
-    void AddTag(TFormatString<TArgs...> format, TArgs&&... args);
+    TLogger& AddTagFormat(TLoggingTagKey key, TFormatString<TArgs...> format, TArgs&&... args);
 
     template <class TType>
     void AddStructuredTag(TStringBuf key, TType value);
 
     void AddStructuredValidator(TStructuredValidator validator);
 
-    TLogger WithRawTag(TStringBuf tag) const &;
-    TLogger WithRawTag(TStringBuf tag) &&;
+    [[nodiscard]] TLogger WithTags(const TLoggingTagList& tags) const &;
+    [[nodiscard]] TLogger WithTags(const TLoggingTagList& tags) &&;
+    template <class TValue>
+    [[nodiscard]] TLogger WithTag(TLoggingTagKey key, const TValue& value) const &;
+    template <class TValue>
+    [[nodiscard]] TLogger WithTag(TLoggingTagKey key, const TValue& value) &&;
+    template <class TValue>
+    [[nodiscard]] TLogger WithTag(TLoggingTagKey key, const TValue& value, TLoggingTagSpec spec) const &;
+    template <class TValue>
+    [[nodiscard]] TLogger WithTag(TLoggingTagKey key, const TValue& value, TLoggingTagSpec spec) &&;
     template <class... TArgs>
-    TLogger WithTag(TFormatString<TArgs...> format, TArgs&&... args) const &;
+    [[nodiscard]] TLogger WithTagFormat(TLoggingTagKey key, TFormatString<TArgs...> format, TArgs&&... args) const &;
     template <class... TArgs>
-    TLogger WithTag(TFormatString<TArgs...> format, TArgs&&... args) &&;
+    [[nodiscard]] TLogger WithTagFormat(TLoggingTagKey key, TFormatString<TArgs...> format, TArgs&&... args) &&;
 
     template <class TType>
     TLogger WithStructuredTag(TStringBuf key, TType value) const &;
@@ -253,7 +266,7 @@ public:
     TLogger WithEssential(bool essential = true) const &;
     TLogger WithEssential(bool essential = true) &&;
 
-    const std::string& GetTag() const;
+    const TLoggingTagList& GetTags() const;
     const TStructuredTags& GetStructuredTags() const;
 
     const TStructuredValidators& GetStructuredValidators() const;
@@ -269,7 +282,7 @@ protected:
 
     struct TCoWState final
     {
-        std::string Tag;
+        TLoggingTagList Tags;
         TStructuredTags StructuredTags;
         TStructuredValidators StructuredValidators;
     };
@@ -468,12 +481,18 @@ void LogStructuredEvent(
 // Tags are supplied via a fluent |.With(name, value)| (or |.With(name, value, "%spec")|)
 // chain; they are carried as structured key/value pairs in the event payload. A single-
 // argument |.With(value)| attaches the value under a statically known key resolved by ADL
-// (e.g. |.With(error)| under the "Error" key):
+// (e.g. |.With(error)| under the "Error" key). |.WithFormat(name, format, args...)| composes
+// one tag out of several values:
 //
 //     YT_TLOG_INFO("Message")
 //         .With("Key", value)
 //         .With("Count", count, "%08x")
+//         .WithFormat("Method", "%v.%v", service, method)
 //         .With(error);
+//
+// |.With(tagList)| splices a #TLoggingTagList -- a set of keyed tags a component builds
+// once (with the same fluent API) and attaches to many events, without collapsing them
+// into a single tag.
 //
 // If the message is not logged then the |.With| chain is not evaluated, so tag value
 // expressions cost nothing.
@@ -498,7 +517,7 @@ void LogStructuredEvent(
             (message));                                               \
         !loggingGuard__.IsEnabled())                                  \
     { } else                                                          \
-        loggingGuard__
+        loggingGuard__.Self()
 
 #ifdef YT_ENABLE_TRACE_LOGGING
 #define YT_TLOG_TRACE(message)                     YT_TLOG_EVENT_FLUENT(Logger, ::NYT::NLogging::ELogLevel::Trace, message)
@@ -545,7 +564,7 @@ void LogStructuredEvent(
             (message));                                                     \
         loggingGuard__.TryEnter();                                          \
         loggingGuard__.Commit())                                            \
-        loggingGuard__
+        loggingGuard__.Self()
 #define YT_TLOG_FATAL_IF(condition, message)       if (condition) [[unlikely]]    YT_TLOG_FATAL(message)
 #define YT_TLOG_FATAL_UNLESS(condition, message)   if (!(condition)) [[unlikely]] YT_TLOG_FATAL(message)
 
@@ -564,7 +583,7 @@ void LogStructuredEvent(
             ::NYT::EErrorCode::Fatal,                                          \
             "Malformed request or incorrect state detected")                   \
             << ::NYT::TErrorAttribute("message", loggingGuard__.Commit()))     \
-        loggingGuard__
+        loggingGuard__.Self()
 #define YT_TLOG_ALERT_AND_THROW_IF(condition, message)     if (condition) [[unlikely]]    YT_TLOG_ALERT_AND_THROW(message)
 #define YT_TLOG_ALERT_AND_THROW_UNLESS(condition, message) if (!(condition)) [[unlikely]] YT_TLOG_ALERT_AND_THROW(message)
 

@@ -2,6 +2,7 @@
 
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/event_local.h>
+#include <ydb/library/actors/core/mon.h>
 #include <ydb/library/actors/util/rc_buf.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
@@ -44,6 +45,9 @@ namespace NActors {
 
         // Stops every reaper thread. Must be called before the actor system is torn down.
         virtual void Stop() = 0;
+
+        // Issue monitoring request.
+        virtual void IssueMonRequest(ui64 conn, NMon::TEvHttpInfoRes::TPtr ev) = 0;
     };
 
     using TUringEnginePtr = TIntrusivePtr<IUringEngine>;
@@ -60,6 +64,7 @@ namespace NActors {
     // the bottleneck, raise numShards / lower ringsPerShard.
     // sqThreadIdleMs is the SQPOLL kernel-thread idle timeout in milliseconds (ignored when sqpoll is false).
     TUringEnginePtr CreateUringEngine(ui32 numShards, NMonitoring::TDynamicCounterPtr counters, bool sqpoll,
-        ui32 ringsPerShard = 1, ui32 sqThreadIdleMs = 2000, bool shareRingsAmongThreads = false);
+        ui32 ringsPerShard = 1, ui32 sqThreadIdleMs = 2000, bool shareRingsAmongThreads = false,
+        TActorId destructorActorId = {});
 
 }

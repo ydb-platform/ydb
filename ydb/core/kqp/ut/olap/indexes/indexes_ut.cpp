@@ -1,4 +1,5 @@
 
+#include <ydb/core/base/counters.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/kqp/ut/common/olap_indexes_enums.h>
@@ -166,9 +167,9 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 )");
         ExecQuery(kikimr, UseQueryService,
             TStringBuilder() << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);");
+        csController->WaitActualization(TDuration::Seconds(30), /*waitWrites=*/true);
         // Make the just-actualized portions (with index data) visible to the following scan.
         AdvancePlanStep(kikimr);
-        csController->WaitActualization(TDuration::Seconds(10));
         {
             auto it = tableClient
                           .StreamExecuteScanQuery(R"(
@@ -4121,6 +4122,38 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
             --!syntax_v1
             SELECT COUNT(*) FROM `/Root/olapTableBloomWithDict` WHERE resource_id LIKE "alp%";
         )"), "[[2u]]");
+    }
+
+    Y_UNIT_TEST(DataAndIndexBytesCounters) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
+        TKikimrRunner kikimr(settings);
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+
+        auto helper = TLocalHelper(kikimr);
+        helper.CreateTestOlapTable();
+
+        // A MIN_MAX index gives compacted portions index blobs, so IndexBytes becomes non-zero.
+        ExecQuery(kikimr, false, R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=MIN_MAX,
+            FEATURES=`{"column_name" : "uid"}`);)");
+
+        for (ui32 i = 0; i < 5; ++i) {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 1000000 + i * 100000, 300000000 + i * 100000, 10000);
+        }
+
+        auto* runtime = kikimr.GetTestServer().GetRuntime();
+        auto appCounters = GetServiceCounters(runtime->GetAppData().Counters, "tablets")
+                               ->GetSubgroup("type", "ColumnShard")
+                               ->GetSubgroup("category", "app");
+        auto dataBytes = appCounters->GetCounter("SUM(ColumnShard/DataBytes)", false);
+        auto indexBytes = appCounters->GetCounter("SUM(ColumnShard/IndexBytes)", false);
+
+        // Index blobs are produced by async background compaction, and each shard's counters roll up into
+        // the SUM(...) aggregate sensor only periodically, so poll until both surface.
+        csController->WaitCondition(TDuration::Seconds(30), [&]() { return dataBytes->Val() > 0 && indexBytes->Val() > 0; });
+        UNIT_ASSERT_GT(dataBytes->Val(), 0);
+        UNIT_ASSERT_GT(indexBytes->Val(), 0);
     }
 }
 

@@ -7,10 +7,12 @@ SRCS(
     device_handler_ut.cpp
     overlapped_requests_guard_wrapper_ut.cpp
     split_requests_wrapper_ut.cpp
+    storage_gate_ut.cpp
+    trace_service_gate_ut.cpp
 )
 
 PEERDIR(
-
+    ydb/library/actors/wilson
 )
 
 END()

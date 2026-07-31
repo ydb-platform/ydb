@@ -9,6 +9,7 @@
 #include <ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h>
 
 #include <library/cpp/json/json_writer.h>
+#include <ydb/library/actors/core/log.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_READ_PROXY
 
@@ -82,6 +83,7 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
         }
         bool local = config.GetLocalDC();
         settings->set_client_write_disabled(!local);
+        settings->set_content_based_deduplication(config.GetContentBasedDeduplication());
         const auto &partConfig = config.GetPartitionConfig();
         i64 msip = partConfig.GetMaxSizeInPartition();
         if (msip != Max<i64>())
@@ -641,7 +643,7 @@ void TDescribeTopicActor::ApplyResponse(TTabletInfo& tabletInfo, NKikimr::TEvPer
     Y_UNUSED(ctx);
     Y_UNUSED(tabletInfo);
     Y_UNUSED(ev);
-    Y_ABORT("");
+    AFL_ENSURE(false)("reason", "TDescribeTopicActor: unexpected TEvReadSessionsInfoResponse");
 }
 
 

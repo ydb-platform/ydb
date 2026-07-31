@@ -428,18 +428,21 @@ class StressUtilDeployer:
     def _set_schedules_enabled(
         self, enabled: bool, nemesis_log: list[str]
     ) -> bool:
-        """Call ``POST /api/schedule/all`` to enable or disable all nemesis schedules.
+        """Start or stop the nemesis scheduler via the orchestrator API.
+
+        ``POST /api/scheduler/start`` (empty profile → catalog defaults) or
+        ``POST /api/scheduler/stop``.
 
         Returns:
             ``True`` on success, ``False`` on failure.
         """
         endpoint = self._get_orchestrator_endpoint()
-        url = f"{endpoint}/api/schedule/all"
-        payload = json.dumps({"enabled": enabled}).encode()
+        url = f"{endpoint}/api/scheduler/{'start' if enabled else 'stop'}"
+        payload = json.dumps({}).encode()
 
         action = "Enabling" if enabled else "Disabling"
-        nemesis_log.append(f"{action} all nemesis schedules via {url}")
-        logging.info(f"{action} nemesis schedules: POST {url}")
+        nemesis_log.append(f"{action} nemesis scheduler via {url}")
+        logging.info(f"{action} nemesis scheduler: POST {url}")
 
         try:
             req = urllib.request.Request(
@@ -456,13 +459,63 @@ class StressUtilDeployer:
                     )
                     logging.info(f"Nemesis schedules response: {body}")
                     return True
-                nemesis_log.append(f"Unexpected schedule response: {body}")
-                logging.warning(f"Unexpected /api/schedule/all response: {body}")
+                nemesis_log.append(f"Unexpected scheduler response: {body}")
+                logging.warning(f"Unexpected {url} response: {body}")
                 return False
         except Exception as exc:
-            nemesis_log.append(f"Failed to {action.lower()} schedules: {exc}")
-            logging.error(f"Error calling /api/schedule/all: {exc}")
+            nemesis_log.append(f"Failed to {action.lower()} scheduler: {exc}")
+            logging.error(f"Error calling {url}: {exc}")
             return False
+
+    def _fetch_nemesis_problems(self, nemesis_log: list[str]) -> dict:
+        """``GET /api/problems``: chaos-side anomalies cluster checks cannot see.
+
+        Returns:
+            The parsed payload, or ``{}`` when the endpoint is unavailable.
+        """
+        endpoint = self._get_orchestrator_endpoint()
+        url = f"{endpoint}/api/problems"
+        try:
+            req = urllib.request.Request(url, method="GET")
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                body = json.loads(resp.read().decode())
+            return body if isinstance(body, dict) else {}
+        except Exception as exc:
+            nemesis_log.append(f"Could not fetch nemesis problems from {url}: {exc}")
+            logging.warning(f"Could not fetch nemesis problems from {url}: {exc}")
+            return {}
+
+    def _report_nemesis_problems(self, nemesis_log: list[str]) -> int:
+        """Log chaos-side problems and attach them to Allure. Informational: does not fail the
+        workload, but a stuck fault explains both a degraded cluster and a calm chaos phase.
+
+        Returns:
+            Number of reported problems.
+        """
+        payload = self._fetch_nemesis_problems(nemesis_log)
+        if not payload:
+            return 0
+
+        problems = payload.get("problems") or []
+        if not problems:
+            nemesis_log.append("Nemesis problems: none")
+            return 0
+
+        by_kind = payload.get("by_kind") or {}
+        summary = ", ".join(f"{kind}={count}" for kind, count in sorted(by_kind.items()))
+        nemesis_log.append(f"Nemesis problems: {len(problems)} ({summary})")
+        for problem in problems:
+            nemesis_log.append(
+                f"  [{problem.get('kind')}] x{problem.get('count', 1)} {problem.get('summary')}"
+            )
+        logging.warning(f"Nemesis reported {len(problems)} problem(s): {summary}")
+
+        allure.attach(
+            json.dumps(payload, indent=2, ensure_ascii=False),
+            f"Nemesis Problems ({len(problems)})",
+            attachment_type=allure.attachment_type.JSON,
+        )
+        return len(problems)
 
     # ------------------------------------------------------------------
     # Nemesis install (subprocess)
@@ -645,6 +698,8 @@ class StressUtilDeployer:
                 nemesis_log.append("Nemesis chaos disabled successfully")
             else:
                 nemesis_log.append("Failed to disable nemesis chaos schedules")
+            # After the scheduler stopped: report what misbehaved.
+            self._report_nemesis_problems(nemesis_log)
         else:
             nemesis_log.append(
                 "Nemesis services not installed, nothing to disable"
@@ -733,10 +788,11 @@ class StressUtilDeployer:
         operation_context: str = None,
         existing_log: list = None,
     ):
-        """Manage nemesis chaos schedules via the orchestrator HTTP API.
+        """Manage nemesis chaos via the orchestrator HTTP API.
 
-        * **enable** — install → health-poll → ``POST /api/schedule/all``
-        * **disable** — ``POST /api/schedule/all {"enabled": false}``
+        * **enable** — install → health-poll → ``POST /api/scheduler/start``
+        * **disable** — ``POST /api/scheduler/stop`` → ``GET /api/problems``, whose stuck faults
+          and inventory degradation are attached to the Allure report
 
         Args:
             enable_nemesis: True to enable chaos, False to disable

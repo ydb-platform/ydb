@@ -29,7 +29,7 @@ from botocore.endpoint import EndpointCreator
 from botocore.regions import EndpointResolverBuiltins as EPRBuiltins
 from botocore.regions import EndpointRulesetResolver
 from botocore.signers import RequestSigner
-from botocore.useragent import UserAgentString
+from botocore.useragent import UserAgentString, register_feature_id
 from botocore.utils import ensure_boolean, is_s3_accelerate_url
 
 logger = logging.getLogger(__name__)
@@ -71,11 +71,18 @@ VALID_RESPONSE_CHECKSUM_VALIDATION_CONFIG = (
 )
 
 PRIORITY_ORDERED_SUPPORTED_PROTOCOLS = (
+    'smithy-rpc-v2-cbor',
     'json',
     'rest-json',
     'rest-xml',
     'query',
     'ec2',
+)
+
+VALID_ACCOUNT_ID_ENDPOINT_MODE_CONFIG = (
+    'preferred',
+    'disabled',
+    'required',
 )
 
 
@@ -136,6 +143,7 @@ class ClientArgsCreator:
         configured_endpoint_url = final_args['configured_endpoint_url']
         signing_region = endpoint_config['signing_region']
         endpoint_region_name = endpoint_config['region_name']
+        account_id_endpoint_mode = config_kwargs['account_id_endpoint_mode']
 
         event_emitter = copy.copy(self._event_emitter)
         signer = RequestSigner(
@@ -183,6 +191,8 @@ class ClientArgsCreator:
             is_secure,
             endpoint_bridge,
             event_emitter,
+            credentials,
+            account_id_endpoint_mode,
         )
 
         # Copy the session's user agent factory and adds client configuration.
@@ -233,6 +243,8 @@ class ClientArgsCreator:
             client_config=client_config,
             endpoint_url=endpoint_url,
         )
+        if configured_endpoint_url is not None:
+            register_feature_id('ENDPOINT_OVERRIDE')
 
         endpoint_config = self._compute_endpoint_config(
             service_name=service_name,
@@ -294,6 +306,7 @@ class ClientArgsCreator:
                 response_checksum_validation=(
                     client_config.response_checksum_validation
                 ),
+                account_id_endpoint_mode=client_config.account_id_endpoint_mode,
             )
         self._compute_retry_config(config_kwargs)
         self._compute_connect_timeout(config_kwargs)
@@ -301,6 +314,8 @@ class ClientArgsCreator:
         self._compute_request_compression_config(config_kwargs)
         self._compute_sigv4a_signing_region_set_config(config_kwargs)
         self._compute_checksum_config(config_kwargs)
+        self._compute_account_id_endpoint_mode_config(config_kwargs)
+        self._compute_inject_host_prefix(client_config, config_kwargs)
         s3_config = self.compute_s3_config(client_config)
 
         is_s3_service = self._is_s3_service(service_name)
@@ -322,6 +337,25 @@ class ClientArgsCreator:
                 scoped_config, client_config
             ),
         }
+
+    def _compute_inject_host_prefix(self, client_config, config_kwargs):
+        # In the cases that a Config object was not provided, or the private value
+        # remained UNSET, we should resolve the value from the config store.
+        if (
+            client_config is None
+            or client_config._inject_host_prefix == 'UNSET'
+        ):
+            configured_disable_host_prefix_injection = (
+                self._config_store.get_config_variable(
+                    'disable_host_prefix_injection'
+                )
+            )
+            if configured_disable_host_prefix_injection is not None:
+                config_kwargs[
+                    'inject_host_prefix'
+                ] = not configured_disable_host_prefix_injection
+            else:
+                config_kwargs['inject_host_prefix'] = True
 
     def _compute_configured_endpoint_url(self, client_config, endpoint_url):
         if endpoint_url is not None:
@@ -645,6 +679,8 @@ class ClientArgsCreator:
         is_secure,
         endpoint_bridge,
         event_emitter,
+        credentials,
+        account_id_endpoint_mode,
     ):
         if endpoints_ruleset_data is None:
             return None
@@ -669,6 +705,8 @@ class ClientArgsCreator:
             endpoint_bridge=endpoint_bridge,
             client_endpoint_url=endpoint_url,
             legacy_endpoint_url=endpoint.host,
+            credentials=credentials,
+            account_id_endpoint_mode=account_id_endpoint_mode,
         )
         # Client context params for s3 conflict with the available settings
         # in the `s3` parameter on the `Config` object. If the same parameter
@@ -704,6 +742,8 @@ class ClientArgsCreator:
         endpoint_bridge,
         client_endpoint_url,
         legacy_endpoint_url,
+        credentials,
+        account_id_endpoint_mode,
     ):
         # EndpointRulesetResolver rulesets may accept an "SDK::Endpoint" as
         # input. If the endpoint_url argument of create_client() is set, it
@@ -778,6 +818,12 @@ class ClientArgsCreator:
                 's3_disable_multiregion_access_points', False
             ),
             EPRBuiltins.SDK_ENDPOINT: given_endpoint,
+            EPRBuiltins.ACCOUNT_ID: credentials.get_deferred_property(
+                'account_id'
+            )
+            if credentials
+            else None,
+            EPRBuiltins.ACCOUNT_ID_ENDPOINT_MODE: account_id_endpoint_mode,
         }
 
     def _compute_user_agent_appid_config(self, config_kwargs):
@@ -855,3 +901,33 @@ class ClientArgsCreator:
                 valid_options=valid_options,
             )
         config_kwargs[config_key] = value
+
+    def _compute_account_id_endpoint_mode_config(self, config_kwargs):
+        config_key = 'account_id_endpoint_mode'
+
+        # Disable account id based endpoint routing for unsigned requests
+        # since there are no credentials to resolve.
+        signature_version = config_kwargs.get('signature_version')
+        if signature_version is botocore.UNSIGNED:
+            config_kwargs[config_key] = 'disabled'
+            return
+
+        account_id_endpoint_mode = config_kwargs.get(config_key)
+        if account_id_endpoint_mode is None:
+            account_id_endpoint_mode = self._config_store.get_config_variable(
+                config_key
+            )
+
+        if isinstance(account_id_endpoint_mode, str):
+            account_id_endpoint_mode = account_id_endpoint_mode.lower()
+
+        if (
+            account_id_endpoint_mode
+            not in VALID_ACCOUNT_ID_ENDPOINT_MODE_CONFIG
+        ):
+            raise botocore.exceptions.InvalidConfigError(
+                error_msg=f"The configured value '{account_id_endpoint_mode}' for '{config_key}' is "
+                f"invalid. Valid values are: {VALID_ACCOUNT_ID_ENDPOINT_MODE_CONFIG}."
+            )
+
+        config_kwargs[config_key] = account_id_endpoint_mode

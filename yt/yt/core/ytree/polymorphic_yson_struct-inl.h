@@ -17,7 +17,7 @@ namespace NDetail {
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TEnum, std::same_as<TEnum>... TArgs>
-consteval bool AllDifferentValues(TArgs... args)
+consteval bool AreAllValuesDifferent(TArgs... args)
 {
     TEnumIndexedArray<TEnum, bool> array;
     ((array[args] = true), ...);

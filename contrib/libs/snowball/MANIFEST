@@ -33,8 +33,12 @@ src_c/stem_ISO_8859_1_spanish.c
 src_c/stem_ISO_8859_1_spanish.h
 src_c/stem_ISO_8859_1_swedish.c
 src_c/stem_ISO_8859_1_swedish.h
+src_c/stem_ISO_8859_2_czech.c
+src_c/stem_ISO_8859_2_czech.h
 src_c/stem_ISO_8859_2_hungarian.c
 src_c/stem_ISO_8859_2_hungarian.h
+src_c/stem_ISO_8859_2_polish.c
+src_c/stem_ISO_8859_2_polish.h
 src_c/stem_KOI8_R_russian.c
 src_c/stem_KOI8_R_russian.h
 src_c/stem_UTF_8_arabic.c
@@ -45,6 +49,8 @@ src_c/stem_UTF_8_basque.c
 src_c/stem_UTF_8_basque.h
 src_c/stem_UTF_8_catalan.c
 src_c/stem_UTF_8_catalan.h
+src_c/stem_UTF_8_czech.c
+src_c/stem_UTF_8_czech.h
 src_c/stem_UTF_8_danish.c
 src_c/stem_UTF_8_danish.h
 src_c/stem_UTF_8_dutch.c
@@ -81,6 +87,10 @@ src_c/stem_UTF_8_nepali.c
 src_c/stem_UTF_8_nepali.h
 src_c/stem_UTF_8_norwegian.c
 src_c/stem_UTF_8_norwegian.h
+src_c/stem_UTF_8_persian.c
+src_c/stem_UTF_8_persian.h
+src_c/stem_UTF_8_polish.c
+src_c/stem_UTF_8_polish.h
 src_c/stem_UTF_8_porter.c
 src_c/stem_UTF_8_porter.h
 src_c/stem_UTF_8_portuguese.c
@@ -91,6 +101,8 @@ src_c/stem_UTF_8_russian.c
 src_c/stem_UTF_8_russian.h
 src_c/stem_UTF_8_serbian.c
 src_c/stem_UTF_8_serbian.h
+src_c/stem_UTF_8_sesotho.c
+src_c/stem_UTF_8_sesotho.h
 src_c/stem_UTF_8_spanish.c
 src_c/stem_UTF_8_spanish.h
 src_c/stem_UTF_8_swedish.c
@@ -103,7 +115,7 @@ src_c/stem_UTF_8_yiddish.c
 src_c/stem_UTF_8_yiddish.h
 runtime/api.c
 runtime/api.h
-runtime/header.h
+runtime/snowball_runtime.h
 runtime/utilities.c
 libstemmer/libstemmer.c
 libstemmer/libstemmer_utf8.c

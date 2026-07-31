@@ -122,6 +122,12 @@ TTaggedPayloadReader::TTaggedPayloadReader(const TTaggedLogEventPayload& payload
     , End_(payload.Underlying().End())
 { }
 
+TTaggedPayloadReader::TTaggedPayloadReader(TLoggingTagListPayloadView tags)
+    : Current_(tags.Underlying().begin())
+    , End_(tags.Underlying().end())
+    , MessageRead_(true)
+{ }
+
 TStringBuf TTaggedPayloadReader::ReadMessage()
 {
     YT_ASSERT(!MessageRead_);
@@ -198,8 +204,10 @@ std::string FormatTaggedPayload(const TTaggedLogEventPayload& payload)
         } else {
             result += parenOpen ? ", " : " (";
             parenOpen = true;
-            result += tag->Key;
-            result += ": ";
+            if (tag->Key != TraceLoggingTagKey) {
+                result += tag->Key;
+                result += ": ";
+            }
             result += tag->Value;
         }
     }

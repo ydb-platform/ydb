@@ -99,10 +99,9 @@ class _Quoter:
 
                 continue
 
-            if self._qs:
-                if ch == ord(" "):
-                    ret.append(ord("+"))
-                    continue
+            if self._qs and ch == ord(" "):
+                ret.append(ord("+"))
+                continue
             if ch in bsafe:
                 ret.append(ch)
                 continue

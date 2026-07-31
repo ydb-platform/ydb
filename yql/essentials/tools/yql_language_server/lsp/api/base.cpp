@@ -68,6 +68,11 @@ TCompletionList TBaseLspApi::Completion(const TCompletionParams& params) const {
     throw TLspException::MethodNotFound(Method.TextDocument.Completion);
 }
 
+TVector<TTextEdit> TBaseLspApi::Formatting(const TDocumentFormattingParams& params) const {
+    Y_UNUSED(params);
+    throw TLspException::MethodNotFound(Method.TextDocument.Formatting);
+}
+
 void TBaseLspApi::Send(NJsonRpc::TJsonRpcResponse response) const {
     Out_->Receive(std::move(response));
 }
@@ -112,6 +117,11 @@ void TBaseLspApi::Receive(NJsonRpc::TJsonRpcRequest request) {
     else if (m == Method.TextDocument.Completion) {
         auto params = Parse<TCompletionParams>(std::move(request.Params));
         execute(Completion(params));
+    }
+
+    else if (m == Method.TextDocument.Formatting) {
+        auto params = Parse<TDocumentFormattingParams>(std::move(request.Params));
+        execute(Formatting(params));
     }
 
     else {

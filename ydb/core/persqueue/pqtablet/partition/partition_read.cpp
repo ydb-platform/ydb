@@ -804,7 +804,7 @@ void CollectReadRequestFromBody(ui64 startOffset, const ui16 partNo, const ui32 
                                 TPartitionBlobEncoder& zone,
                                 TVector<TRequestedBlob>& result)
 {
-    AFL_ENSURE(rcount && rsize)("rcount", rcount)("rsize", rsize);
+    AFL_ENSURE(rcount && rsize)("reason", "rcount and rsize must be non-null");
     startOffset = Max(startOffset, zone.DataKeysBody.empty() ? zone.StartOffset : zone.DataKeysBody.front().Key.GetOffset());
     auto blobs = zone.GetBlobsFromBody(startOffset,
                                        partNo,
@@ -849,7 +849,7 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(
         const ui64 startOffset, const ui16 partNo, const ui32 maxCount, const ui32 maxSize, const ui64 readTimestampMs, ui32* rcount,
         ui32* rsize, ui64* insideHeadOffset, ui64 lastOffset
 ) {
-    PQ_ENSURE(rcount && rsize)("rcount", rcount)("rsize", rsize);
+    PQ_ENSURE(rcount && rsize)("reason", "rcount and rsize must be non-null");
     return CompactionBlobEncoder.GetBlobsFromHead(startOffset,
                                                   partNo,
                                                   maxCount,

@@ -909,7 +909,7 @@ void TPartitionCompaction::TCompactState::SendCommit(ui64 cookie) {
 }
 
 void TPartitionCompaction::TCompactState::UpdateDataKeysBody() {
-    AFL_ENSURE(UpdatedKeys || DeletedKeys)("UpdatedKeys", UpdatedKeys)("DeletedKeys", DeletedKeys);
+    AFL_ENSURE(UpdatedKeys || DeletedKeys)("updated_keys_size", UpdatedKeys.size())("deleted_keys_size", DeletedKeys.size());
 
     auto itUpdated = UpdatedKeys.begin();
     auto itDeleted = DeletedKeys.begin();

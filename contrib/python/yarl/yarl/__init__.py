@@ -8,7 +8,7 @@ from ._url import (
     cache_info,
 )
 
-__version__ = "1.14.0"
+__version__ = "1.15.5"
 
 __all__ = (
     "URL",

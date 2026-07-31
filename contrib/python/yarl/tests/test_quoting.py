@@ -1,5 +1,3 @@
-from typing import Type
-
 import pytest
 from hypothesis import assume, example, given, note
 from hypothesis import strategies as st
@@ -395,6 +393,18 @@ def test_quote_percent_non_ascii3_percent_encoded(quoter):
     assert quoter()("%🐍%3f") == "%25%F0%9F%90%8D%3F"
 
 
+def test_quote_starts_with_percent(quoter):
+    assert quoter()("%a") == "%25a"
+
+
+def test_quote_ends_with_percent(quoter):
+    assert quoter()("a%") == "a%25"
+
+
+def test_quote_all_percent(quoter):
+    assert quoter()("%%%%") == "%25%25%25%25"
+
+
 class StrLike(str):
     pass
 
@@ -491,8 +501,8 @@ def test_fuzz__PyUnquoter(ignore, unsafe, qs):
 @pytest.mark.parametrize("quoter", quoters, ids=quoter_ids)
 @pytest.mark.parametrize("unquoter", unquoters, ids=unquoter_ids)
 def test_quote_unquote_parameter(
-    quoter: Type[_PyQuoter],
-    unquoter: Type[_PyUnquoter],
+    quoter: type[_PyQuoter],
+    unquoter: type[_PyUnquoter],
     text_input: str,
 ) -> None:
     quote = quoter()
@@ -512,8 +522,8 @@ def test_quote_unquote_parameter(
 @pytest.mark.parametrize("quoter", quoters, ids=quoter_ids)
 @pytest.mark.parametrize("unquoter", unquoters, ids=unquoter_ids)
 def test_quote_unquote_parameter_requote(
-    quoter: Type[_PyQuoter],
-    unquoter: Type[_PyUnquoter],
+    quoter: type[_PyQuoter],
+    unquoter: type[_PyUnquoter],
     text_input: str,
 ) -> None:
     quote = quoter(requote=True)
@@ -533,8 +543,8 @@ def test_quote_unquote_parameter_requote(
 @pytest.mark.parametrize("quoter", quoters, ids=quoter_ids)
 @pytest.mark.parametrize("unquoter", unquoters, ids=unquoter_ids)
 def test_quote_unquote_parameter_path_safe(
-    quoter: Type[_PyQuoter],
-    unquoter: Type[_PyUnquoter],
+    quoter: type[_PyQuoter],
+    unquoter: type[_PyUnquoter],
     text_input: str,
 ) -> None:
     quote = quoter()

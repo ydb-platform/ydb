@@ -7,7 +7,10 @@ from typing import Any, Callable, NoReturn, Union
 
 from cryptography.hazmat.bindings.openssl.binding import Binding
 
-StrOrBytesPath = Union[str, bytes, os.PathLike]
+if sys.version_info >= (3, 9):
+    StrOrBytesPath = Union[str, bytes, os.PathLike[str], os.PathLike[bytes]]
+else:
+    StrOrBytesPath = Union[str, bytes, os.PathLike]
 
 binding = Binding()
 ffi = binding.ffi

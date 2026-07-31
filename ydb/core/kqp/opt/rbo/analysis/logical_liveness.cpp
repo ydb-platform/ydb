@@ -300,6 +300,14 @@ void TOpSort::PropagateLiveness(ILivenessContext& ctx) {
 void TOpTableLookup::PropagateLiveness(ILivenessContext& ctx) {
     TInfoUnitSet inputLive;
     AddInfoUnits(inputLive, LookupKeys);
+    if (IsJoin()) {
+        const auto& liveOut = ctx.GetLiveOut(this);
+        for (const auto& iu : GetInput()->GetOutputIUs()) {
+            if (liveOut.contains(iu)) {
+                AddInfoUnit(inputLive, iu);
+            }
+        }
+    }
     ctx.AddLiveInput(this, 0, inputLive);
 }
 

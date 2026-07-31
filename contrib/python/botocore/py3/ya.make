@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(1.36.26)
+VERSION(1.37.38)
 
 LICENSE(Apache-2.0)
 
@@ -34,6 +34,7 @@ PY_SRCS(
     botocore/config.py
     botocore/configloader.py
     botocore/configprovider.py
+    botocore/context.py
     botocore/credentials.py
     botocore/crt/__init__.py
     botocore/crt/auth.py
@@ -764,10 +765,6 @@ RESOURCE_FILES(
     botocore/data/eks/2017-11-01/service-2.json
     botocore/data/eks/2017-11-01/service-2.sdk-extras.json
     botocore/data/eks/2017-11-01/waiters-2.json
-    botocore/data/elastic-inference/2017-07-25/endpoint-rule-set-1.json
-    botocore/data/elastic-inference/2017-07-25/examples-1.json
-    botocore/data/elastic-inference/2017-07-25/paginators-1.json
-    botocore/data/elastic-inference/2017-07-25/service-2.json
     botocore/data/elasticache/2014-09-30/endpoint-rule-set-1.json
     botocore/data/elasticache/2014-09-30/paginators-1.json
     botocore/data/elasticache/2014-09-30/service-2.json
@@ -870,6 +867,10 @@ RESOURCE_FILES(
     botocore/data/gamelift/2015-10-01/examples-1.json
     botocore/data/gamelift/2015-10-01/paginators-1.json
     botocore/data/gamelift/2015-10-01/service-2.json
+    botocore/data/gameliftstreams/2018-05-10/endpoint-rule-set-1.json
+    botocore/data/gameliftstreams/2018-05-10/paginators-1.json
+    botocore/data/gameliftstreams/2018-05-10/service-2.json
+    botocore/data/gameliftstreams/2018-05-10/waiters-2.json
     botocore/data/geo-maps/2020-11-19/endpoint-rule-set-1.json
     botocore/data/geo-maps/2020-11-19/paginators-1.json
     botocore/data/geo-maps/2020-11-19/service-2.json
@@ -968,6 +969,9 @@ RESOURCE_FILES(
     botocore/data/iot-jobs-data/2017-09-29/examples-1.json
     botocore/data/iot-jobs-data/2017-09-29/paginators-1.json
     botocore/data/iot-jobs-data/2017-09-29/service-2.json
+    botocore/data/iot-managed-integrations/2025-03-03/endpoint-rule-set-1.json
+    botocore/data/iot-managed-integrations/2025-03-03/paginators-1.json
+    botocore/data/iot-managed-integrations/2025-03-03/service-2.json
     botocore/data/iot/2015-05-28/endpoint-rule-set-1.json
     botocore/data/iot/2015-05-28/examples-1.json
     botocore/data/iot/2015-05-28/paginators-1.json
@@ -1453,6 +1457,7 @@ RESOURCE_FILES(
     botocore/data/qconnect/2020-10-19/endpoint-rule-set-1.json
     botocore/data/qconnect/2020-10-19/paginators-1.json
     botocore/data/qconnect/2020-10-19/service-2.json
+    botocore/data/qconnect/2020-10-19/waiters-2.json
     botocore/data/qldb-session/2019-07-11/endpoint-rule-set-1.json
     botocore/data/qldb-session/2019-07-11/examples-1.json
     botocore/data/qldb-session/2019-07-11/paginators-1.json
@@ -1610,6 +1615,7 @@ RESOURCE_FILES(
     botocore/data/sagemaker/2017-07-24/endpoint-rule-set-1.json
     botocore/data/sagemaker/2017-07-24/examples-1.json
     botocore/data/sagemaker/2017-07-24/paginators-1.json
+    botocore/data/sagemaker/2017-07-24/paginators-1.sdk-extras.json
     botocore/data/sagemaker/2017-07-24/service-2.json
     botocore/data/sagemaker/2017-07-24/waiters-2.json
     botocore/data/savingsplans/2019-06-28/endpoint-rule-set-1.json

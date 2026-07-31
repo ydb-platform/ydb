@@ -422,7 +422,7 @@ private:
 /// Request
 void TDataShard::Handle(NChangeExchange::TEvChangeExchange::TEvRequestRecords::TPtr& ev, const TActorContext& ctx) {
     ChangeRecordsRequested[ev->Sender].insert(ev->Get()->Records.begin(), ev->Get()->Records.end());
-    SetCounter(COUNTER_CHANGE_QUEUE_SIZE, Accumulate(ChangeRecordsRequested, (size_t)0, [](size_t sum, const auto& kv) {
+    SetCounter(COUNTER_CHANGE_RECORDS_REQUESTED, Accumulate(ChangeRecordsRequested, (size_t)0, [](size_t sum, const auto& kv) {
         return sum + kv.second.size();
     }));
     ScheduleRequestChangeRecords(ctx);

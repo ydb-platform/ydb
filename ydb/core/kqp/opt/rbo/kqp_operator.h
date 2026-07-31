@@ -22,7 +22,7 @@ namespace NKqp {
 
 using namespace NYql;
 
-enum EOperator : ui32 { EmptySource, Source, Map, AddDependencies, Filter, Join, Aggregate, Limit, Sort, UnionAll, TableLookup, CBOTree, Root };
+enum EOperator : ui32 { EmptySource, Source, Map, AddDependencies, Filter, Join, Aggregate, Limit, Sort, UnionAll, TableLookup, IndexLookupJoin, CBOTree, Root };
 
 // clang-format off
 #define PHASE_ENUM(X) \
@@ -760,22 +760,63 @@ private:
     EOpPhase SortPhase{EOpPhase::Undefined};
 };
 
+enum class ELookupStrategy : ui32 {
+    LookupRows,
+    LookupJoinRows,
+};
+
 class TOpTableLookup: public IUnaryOperator {
 public:
     TOpTableLookup(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExprNode::TPtr& table,
                    const TVector<TString>& fetchColumns, const TVector<TInfoUnit>& outputIUs, const TVector<TInfoUnit>& lookupKeys);
 
+    TOpTableLookup(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TExprNode::TPtr& table,
+                   const TVector<TString>& fetchColumns, const TVector<TInfoUnit>& outputIUs, const TVector<TInfoUnit>& lookupKeys,
+                   const TVector<TString>& lookupKeyColumns, const TString& joinKind,
+                   const std::optional<TExpression>& fetchedRowFilter);
+
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
+    virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
     virtual TString ToString(TExprContext& ctx) override;
-    virtual TString GetExplainName() const override { return "TableLookup"; }
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
+    virtual TString GetExplainName() const override { return IsJoin() ? "TableLookupJoin" : "TableLookup"; }
 
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
+
+    bool IsJoin() const {
+        return Strategy == ELookupStrategy::LookupJoinRows;
+    }
 
     TExprNode::TPtr Table;
     TVector<TString> FetchColumns;
     TVector<TInfoUnit> OutputIUs;
     TVector<TInfoUnit> LookupKeys;
+    TVector<TString> LookupKeyColumns;
+    TString JoinKind;
+    std::optional<TExpression> FetchedRowFilter;
+    ELookupStrategy Strategy{ELookupStrategy::LookupRows};
+
+protected:
+    void ComputeOutputIUs() override;
+};
+
+/***
+ * Logical representation of index lookup join. Index lookup join has one input, so we cannot use OpJoin.
+***/
+class TOpIndexLookupJoin: public IUnaryOperator {
+public:
+    TOpIndexLookupJoin(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TString& joinKind,
+                       const TVector<std::pair<TInfoUnit, TInfoUnit>>& joinKeys);
+
+    virtual TString ToString(TExprContext& ctx) override;
+    virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
+    virtual TString GetExplainName() const override { return "IndexLookupJoin"; }
+
+    TIntrusivePtr<TOpTableLookup> GetTableLookup();
+
+    TString JoinKind;
+    TVector<std::pair<TInfoUnit, TInfoUnit>> JoinKeys;
 
 protected:
     void ComputeOutputIUs() override;

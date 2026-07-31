@@ -15,12 +15,27 @@ def test_with_scheme_uppercased():
     assert str(url.with_scheme("HTTPS")) == "https://example.com"
 
 
-def test_with_scheme_for_relative_url():
+@pytest.mark.parametrize(
+    ("scheme"),
+    [
+        ("http"),
+        ("https"),
+        ("HTTP"),
+    ],
+)
+def test_with_scheme_for_relative_url(scheme: str) -> None:
     """Test scheme can be set for relative URL."""
-    msg = "scheme replacement is not allowed for " "relative URLs for the http scheme"
+    lower_scheme = scheme.lower()
+    msg = (
+        "scheme replacement is not allowed for "
+        f"relative URLs for the {lower_scheme} scheme"
+    )
     with pytest.raises(ValueError, match=msg):
-        assert URL("path/to").with_scheme("http")
+        assert URL("path/to").with_scheme(scheme)
 
+
+def test_with_scheme_for_relative_file_url() -> None:
+    """Test scheme can be set for relative file URL."""
     expected = URL("file:///absolute/path")
     assert expected.with_scheme("file") == expected
 

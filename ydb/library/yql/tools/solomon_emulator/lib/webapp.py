@@ -387,4 +387,5 @@ def run_web_app(config, http_port, grpc_port):
     server = create_grpc_server(emulator, grpc_port)
 
     server.start()
+    logger.info(f"Started Solomon emulator on http port {http_port}, grpc port {grpc_port}")
     web.run_app(app, port=http_port)

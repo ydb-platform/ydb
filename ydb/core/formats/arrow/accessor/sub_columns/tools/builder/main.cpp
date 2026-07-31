@@ -195,7 +195,7 @@ int main(int argc, const char* argv[]) {
             return 1;
         }
         if (doc.GetType() != NJson::JSON_MAP) {
-            Cerr << "JSON row " << i << "is not a map: " << lines[i].substr(0, 80) << "\n";
+            Cerr << "JSON row " << i << " is not a map: " << lines[i].substr(0, 80) << "\n";
             return 1;
         }
         const TString jsonText = NJson::WriteJson(&doc, /*formatOutput=*/false);

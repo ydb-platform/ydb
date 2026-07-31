@@ -176,7 +176,7 @@ class StreamingTestBase:
             """)
             session_pool.execute_with_retries("""
                 CREATE TABLE join_column_table (
-                    id Utf8,
+                    id Utf8 NOT NULL,
                     value Utf8,
                     PRIMARY KEY (id)
                 ) WITH (

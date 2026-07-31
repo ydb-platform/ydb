@@ -82,7 +82,7 @@ class Workload():
                     PRIMARY KEY (level)
                 );
                 CREATE TABLE `{self.prefix}/join_column_table` (
-                    level Utf8,
+                    level Utf8 NOT NULL,
                     descr Utf8,
                     PRIMARY KEY (level)
                 ) WITH (

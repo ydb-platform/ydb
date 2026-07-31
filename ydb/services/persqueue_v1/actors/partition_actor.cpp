@@ -499,24 +499,24 @@ void SetBatchWriteTimestampMS(Topic::StreamReadMessage::ReadResponse::Batch* bat
 }
 
 TString GetBatchSourceId(PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::Batch* batch) {
-    AFL_ENSURE(batch)("reason", "batch is null");
+    AFL_ENSURE(batch);
     return batch->source_id();
 }
 
 TString GetBatchSourceId(Topic::StreamReadMessage::ReadResponse::Batch* batch) {
-    AFL_ENSURE(batch)("reason", "batch is null");
+    AFL_ENSURE(batch);
     return batch->producer_id();
 }
 
 void SetBatchExtraField(PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::Batch* batch, TString key, TString value) {
-    AFL_ENSURE(batch)("reason", "batch is null")("key", key);
+    AFL_ENSURE(batch)("key", key);
     auto* item = batch->add_extra_fields();
     item->set_key(std::move(key));
     item->set_value(std::move(value));
 }
 
 void SetBatchExtraField(Topic::StreamReadMessage::ReadResponse::Batch* batch, TString key, TString value) {
-    AFL_ENSURE(batch)("reason", "batch is null")("key", key);
+    AFL_ENSURE(batch)("key", key);
     (*batch->mutable_write_session_meta())[key] = std::move(value);
 }
 
@@ -1008,8 +1008,8 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
 
     if (ev->Get()->Record.GetStatus() != NKikimr::NMsgBusProxy::MSTATUS_OK) { //this is incorrect answer, die
         PARTITION_ENSURE(!ev->Get()->Record.HasErrorCode())
-            ("error_code", static_cast<int>(ev->Get()->Record.GetErrorCode()))
-            ("status", static_cast<int>(ev->Get()->Record.GetStatus()))
+            ("error_code", NPersQueue::NErrorCode::EErrorCode_Name(ev->Get()->Record.GetErrorCode()))
+            ("status", NMsgBusProxy::ToCString(static_cast<NMsgBusProxy::EResponseStatus>(ev->Get()->Record.GetStatus())))
             ("error_reason", ev->Get()->Record.GetErrorReason());
         Counters.Errors.Inc();
         // map NMsgBusProxy::EResponseStatus to PersQueue::ErrorCode???

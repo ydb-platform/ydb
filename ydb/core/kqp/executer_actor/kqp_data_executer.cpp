@@ -1424,11 +1424,25 @@ private:
         auto mutableGraph = std::const_pointer_cast<NKikimrKqp::TQueryPhysicalGraph>(
             Request.QueryPhysicalGraph);
 
+        // TDqPqTopicSource.Token.Name is the *external source name*
+        // (e.g. "cluster:default_/Root/logbroker_source2"), which is the key in
+        // externalSource.GetSourceName() and in task.Meta.SecureParams.
+        // FillExternalSourceSecureParams resolves the structured token authInfo
+        // (from externalSource.GetAuthInfo()) using TasksGraph.GetMeta().SecureParams
+        // (raw secret name -> secret value), producing the map the resolver needs:
+        //   "cluster:default_/Root/logbroker_source2" -> "<actual_token>"
+        THashMap<TString, TString> resolvedSecureParams;
+        for (const auto& transaction : Request.Transactions) {
+            for (const auto& stage : transaction.Body->GetStages()) {
+                TasksGraph.FillExternalSourceSecureParams(resolvedSecureParams, stage);
+            }
+        }
+
         auto* resolverActor = CreateKqpPqTopicResolver(
             SelfId(),
             TxId,
             std::move(PendingPqTopicResolveSources),
-            THashMap<TString, TString>(TasksGraph.GetMeta().SecureParams.begin(), TasksGraph.GetMeta().SecureParams.end()),
+            std::move(resolvedSecureParams),
             FederatedQuerySetup->PqGatewayFactory,
             std::move(mutableGraph));
 

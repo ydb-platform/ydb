@@ -130,10 +130,8 @@ private:
 
 private:
     void DescribeTopic(const TPqTopicResolverSource& src) {
-        const TString token = [&] {
-            auto it = SecureParams.find(src.TokenName);
-            return it != SecureParams.end() ? it->second : TString{};
-        }();
+        auto it = SecureParams.find(src.TokenName);
+        const TString token = it != SecureParams.end() ? it->second : TString{};
 
         const TString sessionId = CreateGuidAsString();
         auto gateway = PqGatewayFactory->CreatePqGateway();

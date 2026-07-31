@@ -14866,7 +14866,7 @@ END DO)",
         }
     }
 
-    Y_UNIT_TEST(TruncateTableWithColumnFamiliesFails) {
+    Y_UNIT_TEST(TruncateTableWithColumnFamilies) {
         NKikimrConfig::TFeatureFlags featureFlags;
         TKikimrRunner kikimr(featureFlags);
         auto db = kikimr.GetTableClient();
@@ -14892,8 +14892,7 @@ END DO)",
             auto result = session.ExecuteSchemeQuery(R"(
                 TRUNCATE TABLE `/Root/TableWithFamilies`;
             )").ExtractValueSync();
-            UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot truncate table with column families");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
     }
 

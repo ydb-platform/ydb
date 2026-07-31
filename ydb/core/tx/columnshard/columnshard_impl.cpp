@@ -1684,8 +1684,8 @@ public:
                     }
                     if (!itPortionConstructor->second.HasIndexes()) {
                         if (!itPortionConstructor->second.GetPortionInfo()
-                                ->GetSchema(Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetVersionedIndex())
-                                ->GetIndexesCount()) {
+                                 ->GetSchema(Self->GetIndexAs<NOlap::TColumnEngineForLogs>().GetVersionedIndex())
+                                 ->GetIndexesCount()) {
                             itPortionConstructor->second.SetIndexes({});
                         } else {
                             auto rowset = db.Table<NColumnShard::Schema::IndexIndexes>().Prefix(i.first.GetRawValue(), p).Select();

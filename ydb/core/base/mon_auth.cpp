@@ -51,8 +51,8 @@ bool IsTabletDevUiAppPageAdminOnly(const TAppData* appData, TTabletTypes::EType 
         TTabletTypes::BSController,
     };
 
-    return std::find(tabletTypes.begin(), tabletTypes.end(), type) != tabletTypes.end()
-        && appData->FeatureFlags.GetEnableTabletDevUiSecurePath();
+    return appData->FeatureFlags.GetEnableTabletDevUiSecurePath() &&
+           std::find(tabletTypes.begin(), tabletTypes.end(), type) != tabletTypes.end();
 }
 
 bool IsTabletDevUiAccessAllowed(

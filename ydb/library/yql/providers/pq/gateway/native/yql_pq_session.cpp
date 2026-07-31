@@ -176,16 +176,6 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopi
         path = requestedPath.substr(pos + 1);
     }
 
-    Cerr << "Describing PQ topic config->GetEndpoint() " 
-        << config->GetEndpoint() 
-        << " cluster " << cluster 
-        << " database " << database 
-        << " path " << path 
-         << " UseSsl " << config->GetUseSsl() 
-         << " token " << token
-         << " config->GetAddBearerToToken() " << config->GetAddBearerToToken()
-         << Endl;
-
     std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory = CredentialsFactory->Create(token, config->GetAddBearerToToken());
     if (!config->GetEndpoint() && LocalTopicClientFactory) {
         NYdb::NTopic::TDescribeTopicSettings settings;
@@ -226,8 +216,6 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopi
     }
     YQL_ENSURE(config->GetEndpoint(), "Can't describe topic `" << cluster << "`.`" << path << "`: no endpoint, and local topics are not enabled");
 
-Cerr << "GetAllClusterInfo " <<  Endl;
-
     with_lock (Mutex) {
         return GetYdbFederatedPqClient(cluster, database, *config, credentialsProviderFactory)
             .GetAllClusterInfo()
@@ -236,9 +224,6 @@ Cerr << "GetAllClusterInfo " <<  Endl;
                 cluster, database, path,
                 topicSettings = GetYdbPqClientOptions(database, *config, credentialsProviderFactory)
             ](const auto& futureClusterInfo) mutable {
-
-                Cerr << "GetAllClusterInfo ok " <<  Endl;
-
                 auto allClustersInfo = futureClusterInfo.GetValue();
                 Y_ENSURE(!allClustersInfo.empty());
                 std::vector<TAsyncDescribeTopicResult> futures;
@@ -254,7 +239,6 @@ Cerr << "GetAllClusterInfo " <<  Endl;
                         futures.emplace_back(NThreading::MakeErrorFuture<TDescribeTopicResult>(std::make_exception_ptr(NThreading::TFutureException() << "Cluster " << clusterInfo.Name << " is unavailable for read")));
                     } else {
                         clusterInfo.AdjustTopicClientSettings(topicSettings);
-                         Cerr << "DescribeTopic " <<  Endl;
                         futures.emplace_back(TTopicClient(ydbDriver, topicSettings).DescribeTopic(clusterTopicPath));
                     }
                     results.emplace_back(std::move(clusterInfo));

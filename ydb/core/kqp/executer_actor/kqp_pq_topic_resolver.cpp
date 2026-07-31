@@ -212,10 +212,7 @@ private:
                 // in a single DqTask come from the same external source.
                 ui32 maxPartitionsCount = 0;
                 for (auto& input : *dqTask->MutableInputs()) {
-                    if (!input.HasSource()) {
-                        continue;
-                    }
-                    if (input.GetSource().GetType() != "PqSource") {
+                    if (!input.HasSource() || input.GetSource().GetType() != "PqSource") {
                         continue;
                     }
 

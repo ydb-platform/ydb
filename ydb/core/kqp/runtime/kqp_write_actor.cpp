@@ -808,6 +808,19 @@ public:
             YDB_LOG_ERROR("Failed to resolve table shards from scheme cache.",
                 {"logPrefix", this->LogPrefix},
                 {"table", TableId});
+            // For inconsistent-tx (streaming) row-table writes there was no attempt
+            // counter here, so a deleted table caused an infinite internal retry loop
+            // inside the actor.  Mirror the OLAP path: after MaxResolveAttempts give
+            // up and surface a SCHEME_ERROR so the session actor can propagate it to
+            // the streaming-query retry policy (which will restart the whole execution).
+            if (ResolveAttempts++ >= MessageSettings.MaxResolveAttempts) {
+                RuntimeError(
+                    NYql::NDqProto::StatusIds::SCHEME_ERROR,
+                    NYql::TIssuesIds::KIKIMR_SCHEME_ERROR,
+                    TStringBuilder()
+                        << "Too many table resolve attempts for table `" << TablePath << "`.");
+                return;
+            }
             PlanResolve();
             return;
         }

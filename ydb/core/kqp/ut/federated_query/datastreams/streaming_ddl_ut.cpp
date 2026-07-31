@@ -3817,6 +3817,198 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             });
         }
     }
+
+    Y_UNIT_TEST_F(StreamingQueryFailsWhenUpsertTableDeletedAfterStop, TStreamingTestFixture) {
+        // Regression test for YQ-5172:
+        // A streaming query doing UPSERT INTO a local YDB table must transition to
+        // FAILED (not retry indefinitely) when the target table is dropped while the
+        // query is stopped and then restarted with the cached physical graph.
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+
+        constexpr char inputTopicName[] = "sqFailsUpsertMissingTableInputTopic";
+        constexpr char pqSourceName[] = "sqFailsUpsertMissingTablePqSource";
+        constexpr char outputTableName[] = "sqFailsUpsertMissingTable";
+        constexpr char queryName[] = "sqFailsUpsertMissingTableQuery";
+
+        CreateTopic(inputTopicName);
+        CreatePqSource(pqSourceName);
+
+        // Create the output table that the streaming query will UPSERT into.
+        ExecQuery(fmt::format(R"(
+            CREATE TABLE `{output_table}` (
+                Key String NOT NULL,
+                Value String NOT NULL,
+                PRIMARY KEY (Key)
+            );)",
+            "output_table"_a = outputTableName
+        ));
+
+        // Create a streaming query: read from topic, UPSERT into local YDB table.
+        // SaveQueryPhysicalGraph is enabled by default so the compiled plan will
+        // be persisted and reused on restart without recompilation.
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                UPSERT INTO `{output_table}`
+                SELECT * FROM `{pq_source}`.`{input_topic}` WITH (
+                    FORMAT = json_each_row,
+                    SCHEMA (
+                        Key String NOT NULL,
+                        Value String NOT NULL
+                    )
+                )
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_table"_a = outputTableName
+        ));
+
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        // Write a message and let it reach the table so that a checkpoint is
+        // committed and the physical graph is persisted.
+        WriteTopicMessage(inputTopicName, R"({"Key": "key1", "Value": "value1"})");
+        Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
+        CheckTable(*this, outputTableName, {{"key1", "value1"}});
+
+        // Stop the query (RUN = FALSE).
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);)",
+            "query_name"_a = queryName
+        ));
+        CheckScriptExecutionsCount(1, 0);
+
+        // Drop the output table while the query is stopped.
+        // This simulates the user deleting the sink table.
+        ExecQuery(fmt::format(R"(DROP TABLE `{output_table}`;)",
+            "output_table"_a = outputTableName
+        ));
+
+        // Restart the query (RUN = TRUE).
+        // The saved physical graph will be reused (no recompilation), so the
+        // missing table will only be discovered at runtime when the write actor
+        // tries to resolve the table path and gets PathErrorNotExist.
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);)",
+            "query_name"_a = queryName
+        ));
+        CheckScriptExecutionsCount(2, 1);
+
+        // The query must transition to FAILED, not keep retrying indefinitely.
+        // Before the fix, SCHEME_ERROR was converted to ABORTED in
+        // kqp_session_actor.cpp and ABORTED was included in the retry mapping,
+        // causing the query to restart in a loop forever.
+        WaitFor(TDuration::Seconds(30), "Wait for FAILED status", [&](TString& error) {
+            const auto& result = ExecQuery("SELECT Status, Issues FROM `.sys/streaming_queries`");
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+
+            std::string status;
+            std::string issues;
+            CheckScriptResult(result[0], 2, 1, [&](TResultSetParser& resultSet) {
+                status = resultSet.ColumnParser("Status").GetOptionalUtf8().value_or("");
+                issues = resultSet.ColumnParser("Issues").GetOptionalUtf8().value_or("");
+            });
+
+            error = TStringBuilder() << "Query status: " << status << ", issues: " << issues;
+            return status == "FAILED";
+        });
+
+        // Verify that the issues mention the missing table so the user can diagnose
+        // the root cause.
+        {
+            const auto& result = ExecQuery("SELECT Issues FROM `.sys/streaming_queries`");
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+            CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
+                const auto issues = resultSet.ColumnParser("Issues").GetOptionalUtf8().value_or("");
+                UNIT_ASSERT_STRING_CONTAINS(issues, outputTableName);
+            });
+        }
+    }
+    Y_UNIT_TEST_F(StreamingQueryRestartsWhenUpsertTableDeletedWhileRunning, TStreamingTestFixture) {
+        // Regression test for YQ-5172 (runtime variant):
+        // When the UPSERT sink table is dropped while the streaming query is actively
+        // running, the write actor used to enter an infinite internal resolve loop
+        // (PlanResolve() → ResolveShards() → PlanResolve() ...) instead of surfacing
+        // the error.  After the fix the write actor raises SCHEME_ERROR after
+        // MaxResolveAttempts, the session actor propagates it as ABORTED, and the
+        // streaming-query infrastructure schedules a new execution (retry).
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+
+        constexpr char inputTopicName[] = "sqRestartsUpsertMissingTableRuntimeInputTopic";
+        constexpr char pqSourceName[] = "sqRestartsUpsertMissingTableRuntimePqSource";
+        constexpr char outputTableName[] = "sqRestartsUpsertMissingTableRuntime";
+        constexpr char queryName[] = "sqRestartsUpsertMissingTableRuntimeQuery";
+
+        CreateTopic(inputTopicName);
+        CreatePqSource(pqSourceName);
+
+        ExecQuery(fmt::format(R"(
+            CREATE TABLE `{output_table}` (
+                Key String NOT NULL,
+                Value String NOT NULL,
+                PRIMARY KEY (Key)
+            );)",
+            "output_table"_a = outputTableName
+        ));
+
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                UPSERT INTO `{output_table}`
+                SELECT * FROM `{pq_source}`.`{input_topic}` WITH (
+                    FORMAT = json_each_row,
+                    SCHEMA (
+                        Key String NOT NULL,
+                        Value String NOT NULL
+                    )
+                )
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_table"_a = outputTableName
+        ));
+
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        // Write a message so the query actually reads from the topic and
+        // the write actor reaches the DataShard with data in flight.
+        WriteTopicMessage(inputTopicName, R"({"Key": "key1", "Value": "value1"})");
+        Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
+        CheckTable(*this, outputTableName, {{"key1", "value1"}});
+
+        // Drop the sink table while the streaming query is actively running.
+        // After the fix, the write actor exhausts MaxResolveAttempts and raises
+        // SCHEME_ERROR, which the streaming-query infrastructure treats as a
+        // retriable failure and starts a new execution.
+        ExecQuery(fmt::format(R"(DROP TABLE `{output_table}`;)",
+            "output_table"_a = outputTableName
+        ));
+
+        // Trigger another batch so the write actor tries to write to the now-deleted
+        // table and kicks off the resolve loop.
+        WriteTopicMessage(inputTopicName, R"({"Key": "key2", "Value": "value2"})");
+
+        // Wait for the streaming query to detect the error and schedule a new
+        // execution (total executions > 1).  The query should NOT be stuck forever
+        // with a single execution that internally loops inside the write actor.
+        WaitFor(TDuration::Seconds(60), "Wait for execution restart after table drop", [&](TString& error) {
+            const auto& result = ExecQuery(
+                R"sql(SELECT COUNT(*) FROM `.metadata/script_executions`;)sql"
+            );
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+
+            ui64 count = 0;
+            CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
+                count = resultSet.ColumnParser(0).GetUint64();
+            });
+            error = TStringBuilder() << "Execution count: " << count;
+            return count > 1;
+        });
+    }
 }
 
 } // namespace NKikimr::NKqp

@@ -1,6 +1,7 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/testlib/cs_helper.h>
+#include <ydb/core/tx/columnshard/blobs_action/tier/object_key.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/ro_controller.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
@@ -21,6 +22,7 @@
 
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/string/split.h>
 #include <util/system/hostname.h>
 
 namespace NKikimr {
@@ -387,6 +389,32 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
     const TString TierEndpoint = "fake.fake";
 #endif
 
+#ifndef S3_TEST_USAGE
+    // Tier blobs must be spread over a tree of object keys instead of lying in the bucket root
+    void CheckTierObjectKeysLayout(const TString& bucketName) {
+        using TObjectKey = NOlap::NBlobOperations::NTier::TObjectKey;
+        const auto& bucket = Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket(bucketName);
+        ui32 checked = 0;
+        for (auto it = bucket.begin(); it != bucket.end(); ++it) {
+            const TString& key = it->first;
+            TLogoBlobID blobId;
+            TString error;
+            UNIT_ASSERT_C(TObjectKey::Parse(key, blobId, error), error + ", key: " + key);
+            UNIT_ASSERT_VALUES_UNEQUAL_C(key, blobId.ToString(), "blob is stored in the bucket root");
+
+            TVector<TString> parts;
+            StringSplitter(key).Split('/').Collect(&parts);
+            UNIT_ASSERT_VALUES_EQUAL_C(parts.size(), 5, key);
+            UNIT_ASSERT_VALUES_EQUAL_C(parts[0], ToString(blobId.TabletID()), key);
+            UNIT_ASSERT_VALUES_EQUAL_C(parts[1], ToString(blobId.Generation()), key);
+            UNIT_ASSERT_VALUES_EQUAL_C(parts[4], blobId.ToString(), key);
+            ++checked;
+        }
+        UNIT_ASSERT_C(checked, "no objects to check in bucket " + bucketName);
+        Cerr << "object keys checked: " << checked << Endl;
+    }
+#endif
+
     Y_UNIT_TEST(TieringUsage) {
         auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TFastTTLCompactionController>();
 
@@ -486,6 +514,9 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             UNIT_ASSERT(check);
         }
         Cerr << "storage initialized..." << Endl;
+#ifndef S3_TEST_USAGE
+        CheckTierObjectKeysLayout("fake");
+#endif
 /*
         lHelper.DropTable("/Root/olapStore/olapTable");
         lHelper.StartDataRequest("DELETE FROM `/Root/olapStore/olapTable`");

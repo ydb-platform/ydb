@@ -1,3 +1,4 @@
+#include "object_key.h"
 #include "write.h"
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
@@ -8,7 +9,7 @@
 namespace NKikimr::NOlap::NBlobOperations::NTier {
 
 void TWriteAction::DoSendWriteBlobRequest(const TString& data, const TUnifiedBlobId& blobId) {
-    auto awsRequest = Aws::S3::Model::PutObjectRequest().WithKey(blobId.GetLogoBlobId().ToString());
+    auto awsRequest = Aws::S3::Model::PutObjectRequest().WithKey(TObjectKey::Make(blobId.GetLogoBlobId()));
 
     TString moveData = data;
     auto request = std::make_unique<NWrappers::NExternalStorage::TEvPutObjectRequest>(awsRequest, std::move(moveData));
@@ -33,7 +34,8 @@ void TWriteAction::DoOnExecuteTxBeforeWrite(NColumnShard::TColumnShard& /*self*/
 }
 
 NKikimr::NOlap::TUnifiedBlobId TWriteAction::AllocateNextBlobId(const TString& data) {
-    return TUnifiedBlobId(Max<ui32>(), TLogoBlobID(TabletId, Generation, Step, TLogoBlobID::MaxChannel, data.size(), ++BlobIdsCounter));
+    return TUnifiedBlobId(
+        Max<ui32>(), TLogoBlobID(TabletId, Generation, Step, TObjectKey::GetChannelForWriting(), data.size(), ++BlobIdsCounter));
 }
 
 void TWriteAction::DoOnCompleteTxAfterWrite(NColumnShard::TColumnShard& /*self*/, const bool blobsWroteSuccessfully) {

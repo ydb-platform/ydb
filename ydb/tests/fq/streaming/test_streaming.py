@@ -8,12 +8,7 @@ from typing import Callable
 
 import ydb
 
-<<<<<<< HEAD
-from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase
-=======
 from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase, YdbClient
-from ydb.tests.library.test_meta import link_test_case
->>>>>>> 02cd5d09937 (YQ-5552 fixed streaming query stop after restart (#48397))
 from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule
 
 logger = logging.getLogger(__name__)

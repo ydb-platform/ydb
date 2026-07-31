@@ -285,9 +285,9 @@ namespace NYdbWorkload {
         auto& listBuilder = paramsBuilder.AddParam("$rows").BeginList();
 
         if (!UpsertData.empty()) {
+            const size_t baseIndex = UpsertCurrentIndex.fetch_add(batchSize);
             for (size_t i = 0; i < batchSize; ++i) {
-                const TString& text = UpsertData[UpsertCurrentIndex];
-                UpsertCurrentIndex = (UpsertCurrentIndex + 1) % UpsertData.size();
+                const TString& text = UpsertData[(baseIndex + i) % UpsertData.size()];
 
                 auto& item = listBuilder.AddListItem().BeginStruct();
                 item.AddMember("id").Uint64(idDist(rng));

@@ -37,7 +37,7 @@ namespace NYdbWorkload {
         std::atomic<size_t> CurrentIndex = 0;
 
         TVector<TString> UpsertData;
-        size_t UpsertCurrentIndex = 0;
+        std::atomic<size_t> UpsertCurrentIndex = 0;
 
         TMaybe<TMarkovModelEvaluator> Evaluator;
     };

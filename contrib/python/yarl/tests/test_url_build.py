@@ -140,10 +140,16 @@ def test_build_with_invalid_host(host: str, is_authority: bool):
 
 
 def test_build_with_authority():
-    url = URL.build(scheme="http", authority="степан:bar@host.com:8000", path="path")
+    url = URL.build(scheme="http", authority="степан:bar@host.com:8000", path="/path")
     assert (
         str(url) == "http://%D1%81%D1%82%D0%B5%D0%BF%D0%B0%D0%BD:bar@host.com:8000/path"
     )
+
+
+def test_build_with_authority_no_leading_flash():
+    msg = r"Path in a URL with authority should start with a slash \('/'\) if set"
+    with pytest.raises(ValueError, match=msg):
+        URL.build(scheme="http", authority="степан:bar@host.com:8000", path="path")
 
 
 def test_build_with_authority_without_encoding():

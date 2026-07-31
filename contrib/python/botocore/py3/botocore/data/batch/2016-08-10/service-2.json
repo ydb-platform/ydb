@@ -42,6 +42,20 @@
       ],
       "documentation":"<p>Creates an Batch compute environment. You can create <code>MANAGED</code> or <code>UNMANAGED</code> compute environments. <code>MANAGED</code> compute environments can use Amazon EC2 or Fargate resources. <code>UNMANAGED</code> compute environments can only use EC2 resources.</p> <p>In a managed compute environment, Batch manages the capacity and instance types of the compute resources within the environment. This is based on the compute resource specification that you define or the <a href=\"https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-launch-templates.html\">launch template</a> that you specify when you create the compute environment. Either, you can choose to use EC2 On-Demand Instances and EC2 Spot Instances. Or, you can use Fargate and Fargate Spot capacity in your managed compute environment. You can optionally set a maximum price so that Spot Instances only launch when the Spot Instance price is less than a specified percentage of the On-Demand price.</p> <note> <p>Multi-node parallel jobs aren't supported on Spot Instances.</p> </note> <p>In an unmanaged compute environment, you can manage your own EC2 compute resources and have flexibility with how you configure your compute resources. For example, you can use custom AMIs. However, you must verify that each of your AMIs meet the Amazon ECS container instance AMI specification. For more information, see <a href=\"https://docs.aws.amazon.com/AmazonECS/latest/developerguide/container_instance_AMIs.html\">container instance AMIs</a> in the <i>Amazon Elastic Container Service Developer Guide</i>. After you created your unmanaged compute environment, you can use the <a>DescribeComputeEnvironments</a> operation to find the Amazon ECS cluster that's associated with it. Then, launch your container instances into that Amazon ECS cluster. For more information, see <a href=\"https://docs.aws.amazon.com/AmazonECS/latest/developerguide/launch_container_instance.html\">Launching an Amazon ECS container instance</a> in the <i>Amazon Elastic Container Service Developer Guide</i>.</p> <note> <p>To create a compute environment that uses EKS resources, the caller must have permissions to call <code>eks:DescribeCluster</code>.</p> </note> <note> <p>Batch doesn't automatically upgrade the AMIs in a compute environment after it's created. For example, it also doesn't update the AMIs in your compute environment when a newer version of the Amazon ECS optimized AMI is available. You're responsible for the management of the guest operating system. This includes any updates and security patches. You're also responsible for any additional application software or utilities that you install on the compute resources. There are two ways to use a new AMI for your Batch jobs. The original method is to complete these steps:</p> <ol> <li> <p>Create a new compute environment with the new AMI.</p> </li> <li> <p>Add the compute environment to an existing job queue.</p> </li> <li> <p>Remove the earlier compute environment from your job queue.</p> </li> <li> <p>Delete the earlier compute environment.</p> </li> </ol> <p>In April 2022, Batch added enhanced support for updating compute environments. For more information, see <a href=\"https://docs.aws.amazon.com/batch/latest/userguide/updating-compute-environments.html\">Updating compute environments</a>. To use the enhanced updating of compute environments to update AMIs, follow these rules:</p> <ul> <li> <p>Either don't set the service role (<code>serviceRole</code>) parameter or set it to the <b>AWSBatchServiceRole</b> service-linked role.</p> </li> <li> <p>Set the allocation strategy (<code>allocationStrategy</code>) parameter to <code>BEST_FIT_PROGRESSIVE</code>, <code>SPOT_CAPACITY_OPTIMIZED</code>, or <code>SPOT_PRICE_CAPACITY_OPTIMIZED</code>.</p> </li> <li> <p>Set the update to latest image version (<code>updateToLatestImageVersion</code>) parameter to <code>true</code>. The <code>updateToLatestImageVersion</code> parameter is used when you update a compute environment. This parameter is ignored when you create a compute environment.</p> </li> <li> <p>Don't specify an AMI ID in <code>imageId</code>, <code>imageIdOverride</code> (in <a href=\"https://docs.aws.amazon.com/batch/latest/APIReference/API_Ec2Configuration.html\"> <code>ec2Configuration</code> </a>), or in the launch template (<code>launchTemplate</code>). In that case, Batch selects the latest Amazon ECS optimized AMI that's supported by Batch at the time the infrastructure update is initiated. Alternatively, you can specify the AMI ID in the <code>imageId</code> or <code>imageIdOverride</code> parameters, or the launch template identified by the <code>LaunchTemplate</code> properties. Changing any of these properties starts an infrastructure update. If the AMI ID is specified in the launch template, it can't be replaced by specifying an AMI ID in either the <code>imageId</code> or <code>imageIdOverride</code> parameters. It can only be replaced by specifying a different launch template, or if the launch template version is set to <code>$Default</code> or <code>$Latest</code>, by setting either a new default version for the launch template (if <code>$Default</code>) or by adding a new version to the launch template (if <code>$Latest</code>).</p> </li> </ul> <p>If these rules are followed, any update that starts an infrastructure update causes the AMI ID to be re-selected. If the <code>version</code> setting in the launch template (<code>launchTemplate</code>) is set to <code>$Latest</code> or <code>$Default</code>, the latest or default version of the launch template is evaluated up at the time of the infrastructure update, even if the <code>launchTemplate</code> wasn't updated.</p> </note>"
     },
+    "CreateConsumableResource":{
+      "name":"CreateConsumableResource",
+      "http":{
+        "method":"POST",
+        "requestUri":"/v1/createconsumableresource"
+      },
+      "input":{"shape":"CreateConsumableResourceRequest"},
+      "output":{"shape":"CreateConsumableResourceResponse"},
+      "errors":[
+        {"shape":"ClientException"},
+        {"shape":"ServerException"}
+      ],
+      "documentation":"<p>Creates an Batch consumable resource.</p>"
+    },
     "CreateJobQueue":{
       "name":"CreateJobQueue",
       "http":{
@@ -83,6 +97,20 @@
         {"shape":"ServerException"}
       ],
       "documentation":"<p>Deletes an Batch compute environment.</p> <p>Before you can delete a compute environment, you must set its state to <code>DISABLED</code> with the <a>UpdateComputeEnvironment</a> API operation and disassociate it from any job queues with the <a>UpdateJobQueue</a> API operation. Compute environments that use Fargate resources must terminate all active jobs on that compute environment before deleting the compute environment. If this isn't done, the compute environment enters an invalid state.</p>"
+    },
+    "DeleteConsumableResource":{
+      "name":"DeleteConsumableResource",
+      "http":{
+        "method":"POST",
+        "requestUri":"/v1/deleteconsumableresource"
+      },
+      "input":{"shape":"DeleteConsumableResourceRequest"},
+      "output":{"shape":"DeleteConsumableResourceResponse"},
+      "errors":[
+        {"shape":"ClientException"},
+        {"shape":"ServerException"}
+      ],
+      "documentation":"<p>Deletes the specified consumable resource.</p>"
     },
     "DeleteJobQueue":{
       "name":"DeleteJobQueue",
@@ -139,6 +167,20 @@
         {"shape":"ServerException"}
       ],
       "documentation":"<p>Describes one or more of your compute environments.</p> <p>If you're using an unmanaged compute environment, you can use the <code>DescribeComputeEnvironment</code> operation to determine the <code>ecsClusterArn</code> that you launch your Amazon ECS container instances into.</p>"
+    },
+    "DescribeConsumableResource":{
+      "name":"DescribeConsumableResource",
+      "http":{
+        "method":"POST",
+        "requestUri":"/v1/describeconsumableresource"
+      },
+      "input":{"shape":"DescribeConsumableResourceRequest"},
+      "output":{"shape":"DescribeConsumableResourceResponse"},
+      "errors":[
+        {"shape":"ClientException"},
+        {"shape":"ServerException"}
+      ],
+      "documentation":"<p>Returns a description of the specified consumable resource.</p>"
     },
     "DescribeJobDefinitions":{
       "name":"DescribeJobDefinitions",
@@ -210,6 +252,20 @@
       ],
       "documentation":"<p>Provides a list of the first 100 <code>RUNNABLE</code> jobs associated to a single job queue.</p>"
     },
+    "ListConsumableResources":{
+      "name":"ListConsumableResources",
+      "http":{
+        "method":"POST",
+        "requestUri":"/v1/listconsumableresources"
+      },
+      "input":{"shape":"ListConsumableResourcesRequest"},
+      "output":{"shape":"ListConsumableResourcesResponse"},
+      "errors":[
+        {"shape":"ClientException"},
+        {"shape":"ServerException"}
+      ],
+      "documentation":"<p>Returns a list of Batch consumable resources.</p>"
+    },
     "ListJobs":{
       "name":"ListJobs",
       "http":{
@@ -223,6 +279,20 @@
         {"shape":"ServerException"}
       ],
       "documentation":"<p>Returns a list of Batch jobs.</p> <p>You must specify only one of the following items:</p> <ul> <li> <p>A job queue ID to return a list of jobs in that job queue</p> </li> <li> <p>A multi-node parallel job ID to return a list of nodes for that job</p> </li> <li> <p>An array job ID to return a list of the children for that job</p> </li> </ul> <p>You can filter the results by job status with the <code>jobStatus</code> parameter. If you don't specify a status, only <code>RUNNING</code> jobs are returned.</p>"
+    },
+    "ListJobsByConsumableResource":{
+      "name":"ListJobsByConsumableResource",
+      "http":{
+        "method":"POST",
+        "requestUri":"/v1/listjobsbyconsumableresource"
+      },
+      "input":{"shape":"ListJobsByConsumableResourceRequest"},
+      "output":{"shape":"ListJobsByConsumableResourceResponse"},
+      "errors":[
+        {"shape":"ClientException"},
+        {"shape":"ServerException"}
+      ],
+      "documentation":"<p>Returns a list of Batch jobs that require a specific consumable resource.</p>"
     },
     "ListSchedulingPolicies":{
       "name":"ListSchedulingPolicies",
@@ -335,6 +405,20 @@
         {"shape":"ServerException"}
       ],
       "documentation":"<p>Updates an Batch compute environment.</p>"
+    },
+    "UpdateConsumableResource":{
+      "name":"UpdateConsumableResource",
+      "http":{
+        "method":"POST",
+        "requestUri":"/v1/updateconsumableresource"
+      },
+      "input":{"shape":"UpdateConsumableResourceRequest"},
+      "output":{"shape":"UpdateConsumableResourceResponse"},
+      "errors":[
+        {"shape":"ClientException"},
+        {"shape":"ServerException"}
+      ],
+      "documentation":"<p>Updates a consumable resource.</p>"
     },
     "UpdateJobQueue":{
       "name":"UpdateJobQueue",
@@ -615,6 +699,11 @@
       "error":{"httpStatusCode":400},
       "exception":true
     },
+    "ClientRequestToken":{
+      "type":"string",
+      "max":64,
+      "min":1
+    },
     "ComputeEnvironmentDetail":{
       "type":"structure",
       "required":[
@@ -771,7 +860,7 @@
         },
         "tags":{
           "shape":"TagsMap",
-          "documentation":"<p>Key-value pair tags to be applied to Amazon EC2 resources that are launched in the compute environment. For Batch, these take the form of <code>\"String1\": \"String2\"</code>, where <code>String1</code> is the tag key and <code>String2</code> is the tag value-for example, <code>{ \"Name\": \"Batch Instance - C4OnDemand\" }</code>. This is helpful for recognizing your Batch instances in the Amazon EC2 console. Updating these tags requires an infrastructure update to the compute environment. For more information, see <a href=\"https://docs.aws.amazon.com/batch/latest/userguide/updating-compute-environments.html\">Updating compute environments</a> in the <i>Batch User Guide</i>. These tags aren't seen when using the Batch <code>ListTagsForResource</code> API operation.</p> <note> <p>This parameter isn't applicable to jobs that are running on Fargate resources. Don't specify it.</p> </note>"
+          "documentation":"<p>Key-value pair tags to be applied to Amazon EC2 resources that are launched in the compute environment. For Batch, these take the form of <code>\"String1\": \"String2\"</code>, where <code>String1</code> is the tag key and <code>String2</code> is the tag value (for example, <code>{ \"Name\": \"Batch Instance - C4OnDemand\" }</code>). This is helpful for recognizing your Batch instances in the Amazon EC2 console. Updating these tags requires an infrastructure update to the compute environment. For more information, see <a href=\"https://docs.aws.amazon.com/batch/latest/userguide/updating-compute-environments.html\">Updating compute environments</a> in the <i>Batch User Guide</i>. These tags aren't seen when using the Batch <code>ListTagsForResource</code> API operation.</p> <note> <p>This parameter isn't applicable to jobs that are running on Fargate resources. Don't specify it.</p> </note>"
         },
         "placementGroup":{
           "shape":"String",
@@ -837,7 +926,7 @@
         },
         "tags":{
           "shape":"TagsMap",
-          "documentation":"<p>Key-value pair tags to be applied to Amazon EC2 resources that are launched in the compute environment. For Batch, these take the form of <code>\"String1\": \"String2\"</code>, where <code>String1</code> is the tag key and <code>String2</code> is the tag value-for example, <code>{ \"Name\": \"Batch Instance - C4OnDemand\" }</code>. This is helpful for recognizing your Batch instances in the Amazon EC2 console. These tags aren't seen when using the Batch <code>ListTagsForResource</code> API operation.</p> <p>When updating a compute environment, changing this setting requires an infrastructure update of the compute environment. For more information, see <a href=\"https://docs.aws.amazon.com/batch/latest/userguide/updating-compute-environments.html\">Updating compute environments</a> in the <i>Batch User Guide</i>.</p> <note> <p>This parameter isn't applicable to jobs that are running on Fargate resources. Don't specify it.</p> </note>"
+          "documentation":"<p>Key-value pair tags to be applied to Amazon EC2 resources that are launched in the compute environment. For Batch, these take the form of <code>\"String1\": \"String2\"</code>, where <code>String1</code> is the tag key and <code>String2</code> is the tag value (for example, <code>{ \"Name\": \"Batch Instance - C4OnDemand\" }</code>). This is helpful for recognizing your Batch instances in the Amazon EC2 console. These tags aren't seen when using the Batch <code>ListTagsForResource</code> API operation.</p> <p>When updating a compute environment, changing this setting requires an infrastructure update of the compute environment. For more information, see <a href=\"https://docs.aws.amazon.com/batch/latest/userguide/updating-compute-environments.html\">Updating compute environments</a> in the <i>Batch User Guide</i>.</p> <note> <p>This parameter isn't applicable to jobs that are running on Fargate resources. Don't specify it.</p> </note>"
         },
         "placementGroup":{
           "shape":"String",
@@ -869,6 +958,68 @@
         }
       },
       "documentation":"<p>An object that represents the attributes of a compute environment that can be updated. For more information, see <a href=\"https://docs.aws.amazon.com/batch/latest/userguide/updating-compute-environments.html\">Updating compute environments</a> in the <i>Batch User Guide</i>.</p>"
+    },
+    "ConsumableResourceList":{
+      "type":"list",
+      "member":{"shape":"ConsumableResourceRequirement"}
+    },
+    "ConsumableResourceProperties":{
+      "type":"structure",
+      "members":{
+        "consumableResourceList":{
+          "shape":"ConsumableResourceList",
+          "documentation":"<p>The list of consumable resources required by a job.</p>"
+        }
+      },
+      "documentation":"<p>Contains a list of consumable resources required by a job.</p>"
+    },
+    "ConsumableResourceRequirement":{
+      "type":"structure",
+      "members":{
+        "consumableResource":{
+          "shape":"String",
+          "documentation":"<p>The name or ARN of the consumable resource.</p>"
+        },
+        "quantity":{
+          "shape":"Long",
+          "documentation":"<p>The quantity of the consumable resource that is needed.</p>"
+        }
+      },
+      "documentation":"<p>Information about a consumable resource required to run a job.</p>"
+    },
+    "ConsumableResourceSummary":{
+      "type":"structure",
+      "required":[
+        "consumableResourceArn",
+        "consumableResourceName"
+      ],
+      "members":{
+        "consumableResourceArn":{
+          "shape":"String",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the consumable resource.</p>"
+        },
+        "consumableResourceName":{
+          "shape":"String",
+          "documentation":"<p>The name of the consumable resource.</p>"
+        },
+        "totalQuantity":{
+          "shape":"Long",
+          "documentation":"<p>The total amount of the consumable resource that is available.</p>"
+        },
+        "inUseQuantity":{
+          "shape":"Long",
+          "documentation":"<p>The amount of the consumable resource that is currently in use.</p>"
+        },
+        "resourceType":{
+          "shape":"String",
+          "documentation":"<p>Indicates whether the resource is available to be re-used after a job completes. Can be one of: </p> <ul> <li> <p> <code>REPLENISHABLE</code> </p> </li> <li> <p> <code>NON_REPLENISHABLE</code> </p> </li> </ul>"
+        }
+      },
+      "documentation":"<p>Current information about a consumable resource.</p>"
+    },
+    "ConsumableResourceSummaryList":{
+      "type":"list",
+      "member":{"shape":"ConsumableResourceSummary"}
     },
     "ContainerDetail":{
       "type":"structure",
@@ -988,6 +1139,10 @@
         "repositoryCredentials":{
           "shape":"RepositoryCredentials",
           "documentation":"<p>The private repository authentication credentials to use.</p>"
+        },
+        "enableExecuteCommand":{
+          "shape":"Boolean",
+          "documentation":"<p>Determines whether execute command functionality is turned on for this task. If <code>true</code>, execute command functionality is turned on all the containers in the task.</p>"
         }
       },
       "documentation":"<p>An object that represents the details of a container that's part of a job.</p>"
@@ -1113,6 +1268,10 @@
           "shape":"FargatePlatformConfiguration",
           "documentation":"<p>The platform configuration for jobs that are running on Fargate resources. Jobs that are running on Amazon EC2 resources must not specify this parameter.</p>"
         },
+        "enableExecuteCommand":{
+          "shape":"Boolean",
+          "documentation":"<p>Determines whether execute command functionality is turned on for this task. If <code>true</code>, execute command functionality is turned on all the containers in the task.</p>"
+        },
         "ephemeralStorage":{
           "shape":"EphemeralStorage",
           "documentation":"<p>The amount of ephemeral storage to allocate for the task. This parameter is used to expand the total amount of ephemeral storage available, beyond the default amount, for tasks hosted on Fargate.</p>"
@@ -1198,6 +1357,45 @@
         "computeEnvironmentArn":{
           "shape":"String",
           "documentation":"<p>The Amazon Resource Name (ARN) of the compute environment.</p>"
+        }
+      }
+    },
+    "CreateConsumableResourceRequest":{
+      "type":"structure",
+      "required":["consumableResourceName"],
+      "members":{
+        "consumableResourceName":{
+          "shape":"String",
+          "documentation":"<p>The name of the consumable resource. Must be unique.</p>"
+        },
+        "totalQuantity":{
+          "shape":"Long",
+          "documentation":"<p>The total amount of the consumable resource that is available. Must be non-negative.</p>"
+        },
+        "resourceType":{
+          "shape":"String",
+          "documentation":"<p>Indicates whether the resource is available to be re-used after a job completes. Can be one of: </p> <ul> <li> <p> <code>REPLENISHABLE</code> (default)</p> </li> <li> <p> <code>NON_REPLENISHABLE</code> </p> </li> </ul>"
+        },
+        "tags":{
+          "shape":"TagrisTagsMap",
+          "documentation":"<p>The tags that you apply to the consumable resource to help you categorize and organize your resources. Each tag consists of a key and an optional value. For more information, see <a href=\"https://docs.aws.amazon.com/batch/latest/userguide/using-tags.html\">Tagging your Batch resources</a>.</p>"
+        }
+      }
+    },
+    "CreateConsumableResourceResponse":{
+      "type":"structure",
+      "required":[
+        "consumableResourceName",
+        "consumableResourceArn"
+      ],
+      "members":{
+        "consumableResourceName":{
+          "shape":"String",
+          "documentation":"<p>The name of the consumable resource.</p>"
+        },
+        "consumableResourceArn":{
+          "shape":"String",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the consumable resource.</p>"
         }
       }
     },
@@ -1309,6 +1507,21 @@
       "members":{
       }
     },
+    "DeleteConsumableResourceRequest":{
+      "type":"structure",
+      "required":["consumableResource"],
+      "members":{
+        "consumableResource":{
+          "shape":"String",
+          "documentation":"<p>The name or ARN of the consumable resource that will be deleted.</p>"
+        }
+      }
+    },
+    "DeleteConsumableResourceResponse":{
+      "type":"structure",
+      "members":{
+      }
+    },
     "DeleteJobQueueRequest":{
       "type":"structure",
       "required":["jobQueue"],
@@ -1384,6 +1597,57 @@
         "nextToken":{
           "shape":"String",
           "documentation":"<p>The <code>nextToken</code> value to include in a future <code>DescribeComputeEnvironments</code> request. When the results of a <code>DescribeComputeEnvironments</code> request exceed <code>maxResults</code>, this value can be used to retrieve the next page of results. This value is <code>null</code> when there are no more results to return.</p>"
+        }
+      }
+    },
+    "DescribeConsumableResourceRequest":{
+      "type":"structure",
+      "required":["consumableResource"],
+      "members":{
+        "consumableResource":{
+          "shape":"String",
+          "documentation":"<p>The name or ARN of the consumable resource whose description will be returned.</p>"
+        }
+      }
+    },
+    "DescribeConsumableResourceResponse":{
+      "type":"structure",
+      "required":[
+        "consumableResourceName",
+        "consumableResourceArn"
+      ],
+      "members":{
+        "consumableResourceName":{
+          "shape":"String",
+          "documentation":"<p>The name of the consumable resource.</p>"
+        },
+        "consumableResourceArn":{
+          "shape":"String",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the consumable resource.</p>"
+        },
+        "totalQuantity":{
+          "shape":"Long",
+          "documentation":"<p>The total amount of the consumable resource that is available.</p>"
+        },
+        "inUseQuantity":{
+          "shape":"Long",
+          "documentation":"<p>The amount of the consumable resource that is currently in use.</p>"
+        },
+        "availableQuantity":{
+          "shape":"Long",
+          "documentation":"<p>The amount of the consumable resource that is currently available to use.</p>"
+        },
+        "resourceType":{
+          "shape":"String",
+          "documentation":"<p>Indicates whether the resource is available to be re-used after a job completes. Can be one of: </p> <ul> <li> <p> <code>REPLENISHABLE</code> </p> </li> <li> <p> <code>NON_REPLENISHABLE</code> </p> </li> </ul>"
+        },
+        "createdAt":{
+          "shape":"Long",
+          "documentation":"<p>The Unix timestamp (in milliseconds) for when the consumable resource was created.</p>"
+        },
+        "tags":{
+          "shape":"TagrisTagsMap",
+          "documentation":"<p>The tags that you apply to the consumable resource to help you categorize and organize your resources. Each tag consists of a key and an optional value. For more information, see <a href=\"https://docs.aws.amazon.com/batch/latest/userguide/using-tags.html\">Tagging your Batch resources</a>.</p>"
         }
       }
     },
@@ -1691,6 +1955,10 @@
         "volumes":{
           "shape":"Volumes",
           "documentation":"<p>A list of data volumes used in a job.</p>"
+        },
+        "enableExecuteCommand":{
+          "shape":"Boolean",
+          "documentation":"<p>Determines whether execute command functionality is turned on for this task. If <code>true</code>, execute command functionality is turned on all the containers in the task.</p>"
         }
       },
       "documentation":"<p>The details of a task definition that describes the container and volume definitions of an Amazon ECS task.</p>"
@@ -1738,6 +2006,10 @@
         "volumes":{
           "shape":"Volumes",
           "documentation":"<p>A list of volumes that are associated with the job.</p>"
+        },
+        "enableExecuteCommand":{
+          "shape":"Boolean",
+          "documentation":"<p>Determines whether execute command functionality is turned on for this task. If <code>true</code>, execute command functionality is turned on all the containers in the task.</p>"
         }
       },
       "documentation":"<p>The properties for a task definition that describes the container and volume definitions of an Amazon ECS task. You can specify which Docker images to use, the required resources, and other configurations related to launching the task definition through an Amazon ECS service or task.</p>"
@@ -2366,7 +2638,7 @@
       "members":{
         "shareDecaySeconds":{
           "shape":"Integer",
-          "documentation":"<p>The amount of time (in seconds) to use to calculate a fair-share percentage for each share identifier in use. A value of zero (0) indicates the default minimum time window (600 seconds). The maximum supported value is 604800 (1 week).</p> <p>The decay allows for more recently run jobs to have more weight than jobs that ran earlier. Consider adjusting this number if you have jobs that (on average) run longer than ten minutes, or a large difference in job count or job run times between share identifiers, and the allocation of resources doesn’t meet your needs.</p>"
+          "documentation":"<p>The amount of time (in seconds) to use to calculate a fair-share percentage for each share identifier in use. A value of zero (0) indicates the default minimum time window (600 seconds). The maximum supported value is 604800 (1 week).</p> <p>The decay allows for more recently run jobs to have more weight than jobs that ran earlier. Consider adjusting this number if you have jobs that (on average) run longer than ten minutes, or a large difference in job count or job run times between share identifiers, and the allocation of resources doesn't meet your needs.</p>"
         },
         "computeReservation":{
           "shape":"Integer",
@@ -2388,6 +2660,33 @@
         }
       },
       "documentation":"<p>The platform configuration for jobs that are running on Fargate resources. Jobs that run on Amazon EC2 resources must not specify this parameter.</p>"
+    },
+    "FirelensConfiguration":{
+      "type":"structure",
+      "required":["type"],
+      "members":{
+        "type":{
+          "shape":"FirelensConfigurationType",
+          "documentation":"<p>The log router to use. The valid values are <code>fluentd</code> or <code>fluentbit</code>.</p>"
+        },
+        "options":{
+          "shape":"FirelensConfigurationOptionsMap",
+          "documentation":"<p>The options to use when configuring the log router. This field is optional and can be used to specify a custom configuration file or to add additional metadata, such as the task, task definition, cluster, and container instance details to the log event. If specified, the syntax to use is <code>\"options\":{\"enable-ecs-log-metadata\":\"true|false\",\"config-file-type:\"s3|file\",\"config-file-value\":\"arn:aws:s3:::mybucket/fluent.conf|filepath\"}</code>. For more information, see <a href=\"https://docs.aws.amazon.com/AmazonECS/latest/developerguide/using_firelens.html#firelens-taskdef\">Creating a task definition that uses a FireLens configuration</a> in the <i>Amazon Elastic Container Service Developer Guide</i>.</p>"
+        }
+      },
+      "documentation":"<p>The FireLens configuration for the container. This is used to specify and configure a log router for container logs. For more information, see <a href=\"https://docs.aws.amazon.com/AmazonECS/latest/developerguide/using_firelens.html\">Custom log</a> routing in the <i>Amazon Elastic Container Service Developer Guide</i>.</p>"
+    },
+    "FirelensConfigurationOptionsMap":{
+      "type":"map",
+      "key":{"shape":"String"},
+      "value":{"shape":"String"}
+    },
+    "FirelensConfigurationType":{
+      "type":"string",
+      "enum":[
+        "fluentd",
+        "fluentbit"
+      ]
     },
     "Float":{"type":"float"},
     "FrontOfQueueDetail":{
@@ -2571,6 +2870,10 @@
         "containerOrchestrationType":{
           "shape":"OrchestrationType",
           "documentation":"<p>The orchestration type of the compute environment. The valid values are <code>ECS</code> (default) or <code>EKS</code>.</p>"
+        },
+        "consumableResourceProperties":{
+          "shape":"ConsumableResourceProperties",
+          "documentation":"<p>Contains a list of consumable resources required by the job.</p>"
         }
       },
       "documentation":"<p>An object that represents an Batch job definition.</p>"
@@ -2730,6 +3033,10 @@
         "isTerminated":{
           "shape":"Boolean",
           "documentation":"<p>Indicates whether the job is terminated.</p>"
+        },
+        "consumableResourceProperties":{
+          "shape":"ConsumableResourceProperties",
+          "documentation":"<p>Contains a list of consumable resources required by the job.</p>"
         }
       },
       "documentation":"<p>An object that represents an Batch job.</p>"
@@ -2950,7 +3257,7 @@
           "documentation":"<p>The filter values.</p>"
         }
       },
-      "documentation":"<p>A filter name and value pair that's used to return a more specific list of results from a <code>ListJobs</code> API operation.</p>"
+      "documentation":"<p>A filter name and value pair that's used to return a more specific list of results from a <code>ListJobs</code> or <code>ListJobsByConsumableResource</code> API operation.</p>"
     },
     "KubernetesVersion":{
       "type":"string",
@@ -3043,6 +3350,41 @@
       "type":"list",
       "member":{"shape":"AttemptTaskContainerDetails"}
     },
+    "ListConsumableResourcesFilterList":{
+      "type":"list",
+      "member":{"shape":"KeyValuesPair"}
+    },
+    "ListConsumableResourcesRequest":{
+      "type":"structure",
+      "members":{
+        "filters":{
+          "shape":"ListConsumableResourcesFilterList",
+          "documentation":"<p>The filters to apply to the consumable resource list query. If used, only those consumable resources that match the filter are listed. Filter names and values can be:</p> <ul> <li> <p>name: <code>CONSUMABLE_RESOURCE_NAME </code> </p> <p>values: case-insensitive matches for the consumable resource name. If a filter value ends with an asterisk (*), it matches any consumable resource name that begins with the string before the '*'.</p> </li> </ul>"
+        },
+        "maxResults":{
+          "shape":"Integer",
+          "documentation":"<p>The maximum number of results returned by <code>ListConsumableResources</code> in paginated output. When this parameter is used, <code>ListConsumableResources</code> only returns <code>maxResults</code> results in a single page and a <code>nextToken</code> response element. The remaining results of the initial request can be seen by sending another <code>ListConsumableResources</code> request with the returned <code>nextToken</code> value. This value can be between 1 and 100. If this parameter isn't used, then <code>ListConsumableResources</code> returns up to 100 results and a <code>nextToken</code> value if applicable.</p>"
+        },
+        "nextToken":{
+          "shape":"String",
+          "documentation":"<p>The <code>nextToken</code> value returned from a previous paginated <code>ListConsumableResources</code> request where <code>maxResults</code> was used and the results exceeded the value of that parameter. Pagination continues from the end of the previous results that returned the <code>nextToken</code> value. This value is <code>null</code> when there are no more results to return.</p> <note> <p>Treat this token as an opaque identifier that's only used to retrieve the next items in a list and not for other programmatic purposes.</p> </note>"
+        }
+      }
+    },
+    "ListConsumableResourcesResponse":{
+      "type":"structure",
+      "required":["consumableResources"],
+      "members":{
+        "consumableResources":{
+          "shape":"ConsumableResourceSummaryList",
+          "documentation":"<p>A list of consumable resources that match the request.</p>"
+        },
+        "nextToken":{
+          "shape":"String",
+          "documentation":"<p>The <code>nextToken</code> value to include in a future <code>ListConsumableResources</code> request. When the results of a <code>ListConsumableResources</code> request exceed <code>maxResults</code>, this value can be used to retrieve the next page of results. This value is <code>null</code> when there are no more results to return.</p>"
+        }
+      }
+    },
     "ListEcsTaskDetails":{
       "type":"list",
       "member":{"shape":"EcsTaskDetails"}
@@ -3050,6 +3392,109 @@
     "ListEcsTaskProperties":{
       "type":"list",
       "member":{"shape":"EcsTaskProperties"}
+    },
+    "ListJobsByConsumableResourceFilterList":{
+      "type":"list",
+      "member":{"shape":"KeyValuesPair"}
+    },
+    "ListJobsByConsumableResourceRequest":{
+      "type":"structure",
+      "required":["consumableResource"],
+      "members":{
+        "consumableResource":{
+          "shape":"String",
+          "documentation":"<p>The name or ARN of the consumable resource.</p>"
+        },
+        "filters":{
+          "shape":"ListJobsByConsumableResourceFilterList",
+          "documentation":"<p>The filters to apply to the job list query. If used, only those jobs requiring the specified consumable resource (<code>consumableResource</code>) and that match the value of the filters are listed. The filter names and values can be:</p> <ul> <li> <p>name: <code>JOB_STATUS</code> </p> <p>values: <code>SUBMITTED | PENDING | RUNNABLE | STARTING | RUNNING | SUCCEEDED | FAILED</code> </p> </li> <li> <p>name: <code>JOB_NAME </code> </p> <p>The values are case-insensitive matches for the job name. If a filter value ends with an asterisk (*), it matches any job name that begins with the string before the '*'.</p> </li> </ul>"
+        },
+        "maxResults":{
+          "shape":"Integer",
+          "documentation":"<p>The maximum number of results returned by <code>ListJobsByConsumableResource</code> in paginated output. When this parameter is used, <code>ListJobsByConsumableResource</code> only returns <code>maxResults</code> results in a single page and a <code>nextToken</code> response element. The remaining results of the initial request can be seen by sending another <code>ListJobsByConsumableResource</code> request with the returned <code>nextToken</code> value. This value can be between 1 and 100. If this parameter isn't used, then <code>ListJobsByConsumableResource</code> returns up to 100 results and a <code>nextToken</code> value if applicable.</p>"
+        },
+        "nextToken":{
+          "shape":"String",
+          "documentation":"<p>The <code>nextToken</code> value returned from a previous paginated <code>ListJobsByConsumableResource</code> request where <code>maxResults</code> was used and the results exceeded the value of that parameter. Pagination continues from the end of the previous results that returned the <code>nextToken</code> value. This value is <code>null</code> when there are no more results to return.</p> <note> <p>Treat this token as an opaque identifier that's only used to retrieve the next items in a list and not for other programmatic purposes.</p> </note>"
+        }
+      }
+    },
+    "ListJobsByConsumableResourceResponse":{
+      "type":"structure",
+      "required":["jobs"],
+      "members":{
+        "jobs":{
+          "shape":"ListJobsByConsumableResourceSummaryList",
+          "documentation":"<p>The list of jobs that require the specified consumable resources.</p>"
+        },
+        "nextToken":{
+          "shape":"String",
+          "documentation":"<p>The <code>nextToken</code> value to include in a future <code>ListJobsByConsumableResource</code> request. When the results of a <code>ListJobsByConsumableResource</code> request exceed <code>maxResults</code>, this value can be used to retrieve the next page of results. This value is <code>null</code> when there are no more results to return.</p>"
+        }
+      }
+    },
+    "ListJobsByConsumableResourceSummary":{
+      "type":"structure",
+      "required":[
+        "jobArn",
+        "jobQueueArn",
+        "jobName",
+        "jobStatus",
+        "quantity",
+        "createdAt",
+        "consumableResourceProperties"
+      ],
+      "members":{
+        "jobArn":{
+          "shape":"String",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the job.</p>"
+        },
+        "jobQueueArn":{
+          "shape":"String",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the job queue.</p>"
+        },
+        "jobName":{
+          "shape":"String",
+          "documentation":"<p>The name of the job.</p>"
+        },
+        "jobDefinitionArn":{
+          "shape":"String",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the job definition.</p>"
+        },
+        "shareIdentifier":{
+          "shape":"String",
+          "documentation":"<p>The fair-share scheduling policy identifier for the job.</p>"
+        },
+        "jobStatus":{
+          "shape":"String",
+          "documentation":"<p>The status of the job. Can be one of:</p> <ul> <li> <p> <code>SUBMITTED</code> </p> </li> <li> <p> <code>PENDING</code> </p> </li> <li> <p> <code>RUNNABLE</code> </p> </li> <li> <p> <code>STARTING</code> </p> </li> <li> <p> <code>RUNNING</code> </p> </li> <li> <p> <code>SUCCEEDED</code> </p> </li> <li> <p> <code>FAILED</code> </p> </li> </ul>"
+        },
+        "quantity":{
+          "shape":"Long",
+          "documentation":"<p>The total amount of the consumable resource that is available.</p>"
+        },
+        "statusReason":{
+          "shape":"String",
+          "documentation":"<p>A short, human-readable string to provide more details for the current status of the job.</p>"
+        },
+        "startedAt":{
+          "shape":"Long",
+          "documentation":"<p>The Unix timestamp for when the job was started. More specifically, it's when the job transitioned from the <code>STARTING</code> state to the <code>RUNNING</code> state.</p>"
+        },
+        "createdAt":{
+          "shape":"Long",
+          "documentation":"<p>The Unix timestamp (in milliseconds) for when the consumable resource was created.</p>"
+        },
+        "consumableResourceProperties":{
+          "shape":"ConsumableResourceProperties",
+          "documentation":"<p>Contains a list of consumable resources required by the job.</p>"
+        }
+      },
+      "documentation":"<p>Current information about a consumable resource required by a job.</p>"
+    },
+    "ListJobsByConsumableResourceSummaryList":{
+      "type":"list",
+      "member":{"shape":"ListJobsByConsumableResourceSummary"}
     },
     "ListJobsFilterList":{
       "type":"list",
@@ -3174,7 +3619,7 @@
       "members":{
         "logDriver":{
           "shape":"LogDriver",
-          "documentation":"<p>The log driver to use for the container. The valid values that are listed for this parameter are log drivers that the Amazon ECS container agent can communicate with by default.</p> <p>The supported log drivers are <code>awslogs</code>, <code>fluentd</code>, <code>gelf</code>, <code>json-file</code>, <code>journald</code>, <code>logentries</code>, <code>syslog</code>, and <code>splunk</code>.</p> <note> <p>Jobs that are running on Fargate resources are restricted to the <code>awslogs</code> and <code>splunk</code> log drivers.</p> </note> <dl> <dt>awslogs</dt> <dd> <p>Specifies the Amazon CloudWatch Logs logging driver. For more information, see <a href=\"https://docs.aws.amazon.com/batch/latest/userguide/using_awslogs.html\">Using the awslogs log driver</a> in the <i>Batch User Guide</i> and <a href=\"https://docs.docker.com/config/containers/logging/awslogs/\">Amazon CloudWatch Logs logging driver</a> in the Docker documentation.</p> </dd> <dt>fluentd</dt> <dd> <p>Specifies the Fluentd logging driver. For more information including usage and options, see <a href=\"https://docs.docker.com/config/containers/logging/fluentd/\">Fluentd logging driver</a> in the <i>Docker documentation</i>.</p> </dd> <dt>gelf</dt> <dd> <p>Specifies the Graylog Extended Format (GELF) logging driver. For more information including usage and options, see <a href=\"https://docs.docker.com/config/containers/logging/gelf/\">Graylog Extended Format logging driver</a> in the <i>Docker documentation</i>.</p> </dd> <dt>journald</dt> <dd> <p>Specifies the journald logging driver. For more information including usage and options, see <a href=\"https://docs.docker.com/config/containers/logging/journald/\">Journald logging driver</a> in the <i>Docker documentation</i>.</p> </dd> <dt>json-file</dt> <dd> <p>Specifies the JSON file logging driver. For more information including usage and options, see <a href=\"https://docs.docker.com/config/containers/logging/json-file/\">JSON File logging driver</a> in the <i>Docker documentation</i>.</p> </dd> <dt>splunk</dt> <dd> <p>Specifies the Splunk logging driver. For more information including usage and options, see <a href=\"https://docs.docker.com/config/containers/logging/splunk/\">Splunk logging driver</a> in the <i>Docker documentation</i>.</p> </dd> <dt>syslog</dt> <dd> <p>Specifies the syslog logging driver. For more information including usage and options, see <a href=\"https://docs.docker.com/config/containers/logging/syslog/\">Syslog logging driver</a> in the <i>Docker documentation</i>.</p> </dd> </dl> <note> <p>If you have a custom driver that's not listed earlier that you want to work with the Amazon ECS container agent, you can fork the Amazon ECS container agent project that's <a href=\"https://github.com/aws/amazon-ecs-agent\">available on GitHub</a> and customize it to work with that driver. We encourage you to submit pull requests for changes that you want to have included. However, Amazon Web Services doesn't currently support running modified copies of this software.</p> </note> <p>This parameter requires version 1.18 of the Docker Remote API or greater on your container instance. To check the Docker Remote API version on your container instance, log in to your container instance and run the following command: <code>sudo docker version | grep \"Server API version\"</code> </p>"
+          "documentation":"<p>The log driver to use for the container. The valid values that are listed for this parameter are log drivers that the Amazon ECS container agent can communicate with by default.</p> <p>The supported log drivers are <code>awslogs</code>, <code>fluentd</code>, <code>gelf</code>, <code>json-file</code>, <code>journald</code>, <code>logentries</code>, <code>syslog</code>, and <code>splunk</code>.</p> <note> <p>Jobs that are running on Fargate resources are restricted to the <code>awslogs</code> and <code>splunk</code> log drivers.</p> </note> <dl> <dt>awsfirelens</dt> <dd> <p>Specifies the firelens logging driver. For more information on configuring Firelens, see <a href=\"https://docs.aws.amazon.com/AmazonECS/latest/developerguide/using_firelens.html\">Send Amazon ECS logs to an Amazon Web Services service or Amazon Web Services Partner</a> in the <i>Amazon Elastic Container Service Developer Guide</i>.</p> </dd> <dt>awslogs</dt> <dd> <p>Specifies the Amazon CloudWatch Logs logging driver. For more information, see <a href=\"https://docs.aws.amazon.com/batch/latest/userguide/using_awslogs.html\">Using the awslogs log driver</a> in the <i>Batch User Guide</i> and <a href=\"https://docs.docker.com/config/containers/logging/awslogs/\">Amazon CloudWatch Logs logging driver</a> in the Docker documentation.</p> </dd> <dt>fluentd</dt> <dd> <p>Specifies the Fluentd logging driver. For more information including usage and options, see <a href=\"https://docs.docker.com/config/containers/logging/fluentd/\">Fluentd logging driver</a> in the <i>Docker documentation</i>.</p> </dd> <dt>gelf</dt> <dd> <p>Specifies the Graylog Extended Format (GELF) logging driver. For more information including usage and options, see <a href=\"https://docs.docker.com/config/containers/logging/gelf/\">Graylog Extended Format logging driver</a> in the <i>Docker documentation</i>.</p> </dd> <dt>journald</dt> <dd> <p>Specifies the journald logging driver. For more information including usage and options, see <a href=\"https://docs.docker.com/config/containers/logging/journald/\">Journald logging driver</a> in the <i>Docker documentation</i>.</p> </dd> <dt>json-file</dt> <dd> <p>Specifies the JSON file logging driver. For more information including usage and options, see <a href=\"https://docs.docker.com/config/containers/logging/json-file/\">JSON File logging driver</a> in the <i>Docker documentation</i>.</p> </dd> <dt>splunk</dt> <dd> <p>Specifies the Splunk logging driver. For more information including usage and options, see <a href=\"https://docs.docker.com/config/containers/logging/splunk/\">Splunk logging driver</a> in the <i>Docker documentation</i>.</p> </dd> <dt>syslog</dt> <dd> <p>Specifies the syslog logging driver. For more information including usage and options, see <a href=\"https://docs.docker.com/config/containers/logging/syslog/\">Syslog logging driver</a> in the <i>Docker documentation</i>.</p> </dd> </dl> <note> <p>If you have a custom driver that's not listed earlier that you want to work with the Amazon ECS container agent, you can fork the Amazon ECS container agent project that's <a href=\"https://github.com/aws/amazon-ecs-agent\">available on GitHub</a> and customize it to work with that driver. We encourage you to submit pull requests for changes that you want to have included. However, Amazon Web Services doesn't currently support running modified copies of this software.</p> </note> <p>This parameter requires version 1.18 of the Docker Remote API or greater on your container instance. To check the Docker Remote API version on your container instance, log in to your container instance and run the following command: <code>sudo docker version | grep \"Server API version\"</code> </p>"
         },
         "options":{
           "shape":"LogConfigurationOptionsMap",
@@ -3201,7 +3646,8 @@
         "gelf",
         "fluentd",
         "awslogs",
-        "splunk"
+        "splunk",
+        "awsfirelens"
       ]
     },
     "Long":{"type":"long"},
@@ -3351,6 +3797,10 @@
         "eksPropertiesOverride":{
           "shape":"EksPropertiesOverride",
           "documentation":"<p>An object that contains the properties that you want to replace for the existing Amazon EKS resources of a job.</p>"
+        },
+        "consumableResourcePropertiesOverride":{
+          "shape":"ConsumableResourceProperties",
+          "documentation":"<p>An object that contains overrides for the consumable resources of a job.</p>"
         }
       },
       "documentation":"<p>The object that represents any node overrides to a job definition that's used in a <a href=\"https://docs.aws.amazon.com/batch/latest/APIReference/API_SubmitJob.html\">SubmitJob</a> API operation.</p>"
@@ -3386,6 +3836,10 @@
         "eksProperties":{
           "shape":"EksProperties",
           "documentation":"<p>This is an object that represents the properties of the node range for a multi-node parallel job.</p>"
+        },
+        "consumableResourceProperties":{
+          "shape":"ConsumableResourceProperties",
+          "documentation":"<p>Contains a list of consumable resources required by a job.</p>"
         }
       },
       "documentation":"<p>This is an object that represents the properties of the node range for a multi-node parallel job.</p>"
@@ -3476,6 +3930,10 @@
         "ecsProperties":{
           "shape":"EcsProperties",
           "documentation":"<p>An object with properties that are specific to Amazon ECS-based jobs. This must not be specified for Amazon EKS-based job definitions.</p>"
+        },
+        "consumableResourceProperties":{
+          "shape":"ConsumableResourceProperties",
+          "documentation":"<p>Contains a list of consumable resources required by the job.</p>"
         }
       },
       "documentation":"<p>Contains the parameters for <code>RegisterJobDefinition</code>.</p>"
@@ -3750,6 +4208,10 @@
         "ecsPropertiesOverride":{
           "shape":"EcsPropertiesOverride",
           "documentation":"<p>An object, with properties that override defaults for the job definition, can only be specified for jobs that are run on Amazon ECS resources.</p>"
+        },
+        "consumableResourcePropertiesOverride":{
+          "shape":"ConsumableResourceProperties",
+          "documentation":"<p>An object that contains overrides for the consumable resources of a job.</p>"
         }
       },
       "documentation":"<p>Contains the parameters for <code>SubmitJob</code>.</p>"
@@ -3864,6 +4326,10 @@
           "shape":"Boolean",
           "documentation":"<p>If the essential parameter of a container is marked as <code>true</code>, and that container fails or stops for any reason, all other containers that are part of the task are stopped. If the <code>essential</code> parameter of a container is marked as false, its failure doesn't affect the rest of the containers in a task. If this parameter is omitted, a container is assumed to be essential.</p> <p>All jobs must have at least one essential container. If you have an application that's composed of multiple containers, group containers that are used for a common purpose into components, and separate the different components into multiple task definitions. For more information, see <a href=\"https://docs.aws.amazon.com/AmazonECS/latest/developerguide/application_architecture.html\">Application Architecture</a> in the <i>Amazon Elastic Container Service Developer Guide</i>.</p>"
         },
+        "firelensConfiguration":{
+          "shape":"FirelensConfiguration",
+          "documentation":"<p>The FireLens configuration for the container. This is used to specify and configure a log router for container logs. For more information, see <a href=\"https://docs.aws.amazon.com/AmazonECS/latest/developerguide/using_firelens.html\">Custom log</a> routing in the <i>Amazon Elastic Container Service Developer Guide</i>.</p>"
+        },
         "image":{
           "shape":"String",
           "documentation":"<p>The image used to start a container. This string is passed directly to the Docker daemon. By default, images in the Docker Hub registry are available. Other repositories are specified with either <code>repository-url/image:tag</code> or <code>repository-url/image@digest</code>. Up to 255 letters (uppercase and lowercase), numbers, hyphens, underscores, colons, periods, forward slashes, and number signs are allowed. This parameter maps to <code>Image</code> in the <a href=\"https://docs.docker.com/engine/api/v1.35/#operation/ContainerCreate\">Create a container</a> section of the <a href=\"https://docs.docker.com/engine/api/v1.35/\">Docker Remote API</a> and the <code>IMAGE</code> parameter of the <a href=\"https://docs.docker.com/engine/reference/run/#security-configuration\"> <i>docker run</i> </a>.</p>"
@@ -3972,6 +4438,10 @@
         "essential":{
           "shape":"Boolean",
           "documentation":"<p>If the essential parameter of a container is marked as <code>true</code>, and that container fails or stops for any reason, all other containers that are part of the task are stopped. If the <code>essential</code> parameter of a container is marked as false, its failure doesn't affect the rest of the containers in a task. If this parameter is omitted, a container is assumed to be essential.</p> <p>All jobs must have at least one essential container. If you have an application that's composed of multiple containers, group containers that are used for a common purpose into components, and separate the different components into multiple task definitions. For more information, see <a href=\"https://docs.aws.amazon.com/AmazonECS/latest/developerguide/application_architecture.html\">Application Architecture</a> in the <i>Amazon Elastic Container Service Developer Guide</i>.</p>"
+        },
+        "firelensConfiguration":{
+          "shape":"FirelensConfiguration",
+          "documentation":"<p>The FireLens configuration for the container. This is used to specify and configure a log router for container logs. For more information, see <a href=\"https://docs.aws.amazon.com/AmazonECS/latest/developerguide/using_firelens.html\">Custom log</a> routing in the <i>Amazon Elastic Container Service Developer Guide</i>.</p>"
         },
         "image":{
           "shape":"String",
@@ -4185,6 +4655,50 @@
         }
       }
     },
+    "UpdateConsumableResourceRequest":{
+      "type":"structure",
+      "required":["consumableResource"],
+      "members":{
+        "consumableResource":{
+          "shape":"String",
+          "documentation":"<p>The name or ARN of the consumable resource to be updated.</p>"
+        },
+        "operation":{
+          "shape":"String",
+          "documentation":"<p>Indicates how the quantity of the consumable resource will be updated. Must be one of:</p> <ul> <li> <p> <code>SET</code> </p> <p>Sets the quantity of the resource to the value specified by the <code>quantity</code> parameter.</p> </li> <li> <p> <code>ADD</code> </p> <p>Increases the quantity of the resource by the value specified by the <code>quantity</code> parameter.</p> </li> <li> <p> <code>REMOVE</code> </p> <p>Reduces the quantity of the resource by the value specified by the <code>quantity</code> parameter.</p> </li> </ul>"
+        },
+        "quantity":{
+          "shape":"Long",
+          "documentation":"<p>The change in the total quantity of the consumable resource. The <code>operation</code> parameter determines whether the value specified here will be the new total quantity, or the amount by which the total quantity will be increased or reduced. Must be a non-negative value.</p>"
+        },
+        "clientToken":{
+          "shape":"ClientRequestToken",
+          "documentation":"<p>If this parameter is specified and two update requests with identical payloads and <code>clientToken</code>s are received, these requests are considered the same request and the second request is rejected. A <code>clientToken</code> is valid for 8 hours or until one hour after the consumable resource is deleted, whichever is less.</p>",
+          "idempotencyToken":true
+        }
+      }
+    },
+    "UpdateConsumableResourceResponse":{
+      "type":"structure",
+      "required":[
+        "consumableResourceName",
+        "consumableResourceArn"
+      ],
+      "members":{
+        "consumableResourceName":{
+          "shape":"String",
+          "documentation":"<p>The name of the consumable resource to be updated.</p>"
+        },
+        "consumableResourceArn":{
+          "shape":"String",
+          "documentation":"<p>The Amazon Resource Name (ARN) of the consumable resource.</p>"
+        },
+        "totalQuantity":{
+          "shape":"Long",
+          "documentation":"<p>The total amount of the consumable resource that is available.</p>"
+        }
+      }
+    },
     "UpdateJobQueueRequest":{
       "type":"structure",
       "required":["jobQueue"],
@@ -4241,7 +4755,7 @@
           "documentation":"<p>Specifies the job timeout (in minutes) when the compute environment infrastructure is updated. The default value is 30.</p>"
         }
       },
-      "documentation":"<p>Specifies the infrastructure update policy for the compute environment. For more information about infrastructure updates, see <a href=\"https://docs.aws.amazon.com/batch/latest/userguide/updating-compute-environments.html\">Updating compute environments</a> in the <i>Batch User Guide</i>.</p>"
+      "documentation":"<p>Specifies the infrastructure update policy for the Amazon EC2 compute environment. For more information about infrastructure updates, see <a href=\"https://docs.aws.amazon.com/batch/latest/userguide/updating-compute-environments.html\">Updating compute environments</a> in the <i>Batch User Guide</i>.</p>"
     },
     "UpdateSchedulingPolicyRequest":{
       "type":"structure",

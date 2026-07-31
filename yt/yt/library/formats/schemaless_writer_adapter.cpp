@@ -67,11 +67,21 @@ TSchemalessFormatWriterBase::TSchemalessFormatWriterBase(
 TFuture<void> TSchemalessFormatWriterBase::GetReadyEvent()
 {
     ProcessWriteFutures();
-    if (HasError()) {
-        return MakeFuture(GetError());
+    if (WriteFutures_.empty()) {
+        if (HasError()) {
+            return MakeFuture(GetError());
+        }
+        return OKFuture;
     }
+
     // NB: Must wait for *all* outstanding requests, not just the first (front) one.
-    return WriteFutures_.empty() ? OKFuture : WriteFutures_.back();
+    if (HasError()) {
+        return WriteFutures_.back()
+            .Apply(BIND([error = GetError()] (const TError& /*writeError*/) {
+                THROW_ERROR error;
+            }));
+    }
+    return WriteFutures_.back();
 }
 
 TFuture<void> TSchemalessFormatWriterBase::Close()

@@ -140,6 +140,28 @@ TEST(TTaggedPayloadTest, FormatWellKnownTagTrailing)
     EXPECT_EQ(FormatTaggedPayload(writer.Finish()), "Message (Key: Value)\nboom");
 }
 
+TEST(TTaggedPayloadTest, FormatTraceTagSpliced)
+{
+    TTaggedPayloadWriter writer;
+    WriteMessage(&writer, "Message");
+    WriteTag(&writer, "Key", "Value");
+    WriteTag(&writer, TraceLoggingTagKey, "TraceKey: TraceValue");
+    WriteTag(&writer, "Other", "Thing");
+    // The trace tag contributes its value verbatim, exactly as the pre-tag-list logger
+    // spliced the trace context's rendered tag into the message.
+    EXPECT_EQ(
+        FormatTaggedPayload(writer.Finish()),
+        "Message (Key: Value, TraceKey: TraceValue, Other: Thing)");
+}
+
+TEST(TTaggedPayloadTest, FormatTraceTagAlone)
+{
+    TTaggedPayloadWriter writer;
+    WriteMessage(&writer, "Message");
+    WriteTag(&writer, TraceLoggingTagKey, "TraceKey: TraceValue");
+    EXPECT_EQ(FormatTaggedPayload(writer.Finish()), "Message (TraceKey: TraceValue)");
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace

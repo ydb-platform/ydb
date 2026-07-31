@@ -6,7 +6,6 @@
 
 #include "collection_helpers.h"
 #include "maybe_inf.h"
-#include "mpl.h"
 
 #include <yt/yt/core/phoenix/concepts.h>
 
@@ -19,6 +18,8 @@
 
 #include <library/cpp/yt/containers/enum_indexed_array.h>
 #include <library/cpp/yt/containers/non_empty.h>
+
+#include <library/cpp/yt/mpl/type_traits.h>
 
 #include <library/cpp/yt/assert/assert.h>
 

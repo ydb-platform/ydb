@@ -1091,7 +1091,7 @@ public:
         , Schema_(std::move(schema))
         , Schemaful_(schemaful)
         , MemoryChunkProvider_(std::move(memoryChunkProvider))
-        , Logger(logger.WithTag("ReaderId: %v", TGuid::Create()))
+        , Logger(logger.WithTag("ReaderId", TGuid::Create()))
         , Options_(std::move(options))
         , CompressedBlocks_(std::move(compressedBlocks))
     {
@@ -1233,7 +1233,7 @@ public:
         , DesiredUncompressedBlockSize_(desiredUncompressedBlockSize)
         , Schema_(std::move(schema))
         , Schemaful_(schemaful)
-        , Logger(logger.WithTag("WriterId: %v", TGuid::Create()))
+        , Logger(logger.WithTag("WriterId", TGuid::Create()))
     {
         YT_LOG_DEBUG("Wire protocol rowset writer created (Codec: %v, DesiredUncompressedBlockSize: %v)",
             codecId,

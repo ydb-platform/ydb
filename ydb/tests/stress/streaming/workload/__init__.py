@@ -72,6 +72,35 @@ class Workload():
             """
         )
 
+    def create_join_tables(self):
+        logger.info("Workload::create_join_tables")
+        self.pool.execute_with_retries(
+            f"""
+                CREATE TABLE `{self.prefix}/join_row_table` (
+                    level Utf8,
+                    descr Utf8,
+                    PRIMARY KEY (level)
+                );
+                CREATE TABLE `{self.prefix}/join_column_table` (
+                    level Utf8,
+                    descr Utf8,
+                    PRIMARY KEY (level)
+                ) WITH (
+                    STORE = COLUMN
+                );
+            """
+        )
+        self.pool.execute_with_retries(
+            f"""
+                UPSERT INTO `{self.prefix}/join_row_table` (level, descr) VALUES ('error', 'row-descr');
+            """
+        )
+        self.pool.execute_with_retries(
+            f"""
+                UPSERT INTO `{self.prefix}/join_column_table` (level, descr) VALUES ('error', 'col-descr');
+            """
+        )
+
     def create_streaming_query(self, external):
         logger.info("Workload::create_streaming_query")
         source = f"`{self.prefix}/source_name`." if external else ""
@@ -91,9 +120,16 @@ class Workload():
                 );
                 $filtered = (SELECT * FROM $input WHERE level = 'error');
 
+                $joined = (
+                    SELECT f.time AS time, f.level AS level, jr.descr AS row_descr, jc.descr AS col_descr
+                    FROM $filtered AS f
+                    LEFT JOIN `{self.prefix}/join_row_table` AS jr ON f.level = jr.level
+                    LEFT JOIN `{self.prefix}/join_column_table` AS jc ON f.level = jc.level
+                );
+
                 $number_errors = (
-                    SELECT COUNT(*) AS error_count, CAST(HOP_START() AS String) AS ts
-                    FROM $filtered
+                    SELECT COUNT(*) AS error_count, CAST(HOP_START() AS String) AS ts, SOME(row_descr) AS row_descr, SOME(col_descr) AS col_descr
+                    FROM $joined
                     GROUP BY
                         HoppingWindow(CAST(time AS Timestamp), 'PT1S', 'PT1S')
                 );
@@ -179,6 +215,7 @@ class Workload():
         self.create_topics()
         self.create_external_data_source()
         self.create_table()
+        self.create_join_tables()
         self.create_streaming_query(external=True)
         self.create_streaming_query(external=False)
         self.check_status()

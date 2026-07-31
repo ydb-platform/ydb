@@ -3170,6 +3170,293 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         UNIT_ASSERT_STRINGS_EQUAL(GetSolomonMetrics(soLocation), expectedMetrics);
     }
 
+    void CreateMultiOutputQuery(TStreamingTestFixture& self, const std::string& queryName, const std::string& pqSource,
+        const std::string& inputTopic, const std::string& outputTopic1, const std::string& outputTopic2,
+        const std::string& rowTable, const std::string& columnTable)
+    {
+        self.ExecQuery(fmt::format(R"(
+            CREATE TABLE `{row_table}` (
+                Key String NOT NULL,
+                Value String NOT NULL,
+                PRIMARY KEY (Key)
+            );
+            CREATE TABLE `{column_table}` (
+                Key String NOT NULL,
+                Value String NOT NULL,
+                PRIMARY KEY (Key)
+            ) WITH (
+                STORE = COLUMN
+            );)",
+            "row_table"_a = rowTable,
+            "column_table"_a = columnTable
+        ));
+
+        self.ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $in = SELECT Key, Value FROM `{pq_source}`.`{input_topic}` WITH (
+                    FORMAT = json_each_row,
+                    SCHEMA (
+                        Key String NOT NULL,
+                        Value String NOT NULL
+                    )
+                );
+
+                INSERT INTO `{pq_source}`.`{output_topic1}` SELECT Unwrap(Value || "-t1") AS Data FROM $in;
+                INSERT INTO `{pq_source}`.`{output_topic2}` SELECT Unwrap(Value || "-t2") AS Data FROM $in;
+                UPSERT INTO `{row_table}` SELECT Key, Unwrap(Value || "-r") AS Value FROM $in;
+                UPSERT INTO `{column_table}` SELECT Key, Unwrap(Value || "-c") AS Value FROM $in;
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSource,
+            "input_topic"_a = inputTopic,
+            "output_topic1"_a = outputTopic1,
+            "output_topic2"_a = outputTopic2,
+            "row_table"_a = rowTable,
+            "column_table"_a = columnTable
+        ));
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryMultiOutputRestart, TStreamingTestFixture) {
+        constexpr char inputTopic[] = "streamingQueryMultiOutputRestartInputTopic";
+        constexpr char outputTopic1[] = "streamingQueryMultiOutputRestartOutputTopic1";
+        constexpr char outputTopic2[] = "streamingQueryMultiOutputRestartOutputTopic2";
+        constexpr char pqSource[] = "pqSourceName";
+        CreateTopic(inputTopic);
+        CreateTopic(outputTopic1);
+        CreateTopic(outputTopic2);
+        CreatePqSource(pqSource);
+
+        constexpr char rowTable[] = "rowSink";
+        constexpr char columnTable[] = "columnSink";
+        constexpr char queryName[] = "streamingQuery";
+        CreateMultiOutputQuery(*this, queryName, pqSource, inputTopic, outputTopic1, outputTopic2, rowTable, columnTable);
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopic, R"({"Key": "k1", "Value": "m1"})");
+        ReadTopicMessage(outputTopic1, "m1-t1");
+        ReadTopicMessage(outputTopic2, "m1-t2");
+        Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
+        CheckTable(*this, rowTable, {{"k1", "m1-r"}});
+        CheckTable(*this, columnTable, {{"k1", "m1-c"}});
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = FALSE
+            );)",
+            "query_name"_a = queryName
+        ));
+        CheckScriptExecutionsCount(1, 0);
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = TRUE
+            );)",
+            "query_name"_a = queryName
+        ));
+        CheckScriptExecutionsCount(2, 1);
+        Sleep(TDuration::Seconds(1));
+
+        const auto disposition = TInstant::Now();
+        WriteTopicMessage(inputTopic, R"({"Key": "k2", "Value": "m2"})");
+        ReadTopicMessage(outputTopic1, "m2-t1", disposition);
+        ReadTopicMessage(outputTopic2, "m2-t2", disposition);
+        Sleep(TDuration::Seconds(1));
+        CheckTable(*this, rowTable, {{"k1", "m1-r"}, {"k2", "m2-r"}});
+        CheckTable(*this, columnTable, {{"k1", "m1-c"}, {"k2", "m2-c"}});
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryMultiOutputCheckpointRecovery, TStreamingTestFixture) {
+        constexpr char inputTopic[] = "streamingQueryMultiOutputCheckpointRecoveryInputTopic";
+        constexpr char outputTopic1[] = "streamingQueryMultiOutputCheckpointRecoveryOutputTopic1";
+        constexpr char outputTopic2[] = "streamingQueryMultiOutputCheckpointRecoveryOutputTopic2";
+        constexpr char pqSource[] = "pqSourceName";
+        CreateTopic(inputTopic);
+        CreateTopic(outputTopic1);
+        CreateTopic(outputTopic2);
+        CreatePqSource(pqSource);
+
+        constexpr char rowTable[] = "rowSink";
+        constexpr char columnTable[] = "columnSink";
+        constexpr char queryName[] = "streamingQuery";
+        CreateMultiOutputQuery(*this, queryName, pqSource, inputTopic, outputTopic1, outputTopic2, rowTable, columnTable);
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopic, R"({"Key": "k1", "Value": "m1"})");
+        ReadTopicMessage(outputTopic1, "m1-t1");
+        ReadTopicMessage(outputTopic2, "m1-t2");
+        Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
+        CheckTable(*this, rowTable, {{"k1", "m1-r"}});
+        CheckTable(*this, columnTable, {{"k1", "m1-c"}});
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = FALSE
+            );)",
+            "query_name"_a = queryName
+        ));
+        CheckScriptExecutionsCount(1, 0);
+
+        Sleep(TDuration::Seconds(1));
+        WriteTopicMessage(inputTopic, R"({"Key": "k2", "Value": "m2"})");
+        const auto disposition = TInstant::Now();
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = TRUE
+            );)",
+            "query_name"_a = queryName
+        ));
+        CheckScriptExecutionsCount(2, 1);
+
+        // Every output receives exactly the message added after the checkpoint (offset recovery, no loss / no duplicates)
+        ReadTopicMessage(outputTopic1, "m2-t1", disposition);
+        ReadTopicMessage(outputTopic2, "m2-t2", disposition);
+        Sleep(TDuration::Seconds(1));
+        CheckTable(*this, rowTable, {{"k1", "m1-r"}, {"k2", "m2-r"}});
+        CheckTable(*this, columnTable, {{"k1", "m1-c"}, {"k2", "m2-c"}});
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryMultiOutputConsistencyOnRestart, TStreamingTestFixture) {
+        const auto pqGateway = SetupMockPqGateway();
+
+        constexpr char inputTopic[] = "streamingQueryMultiOutputConsistencyInputTopic";
+        constexpr char outputTopic1[] = "streamingQueryMultiOutputConsistencyOutputTopic1";
+        constexpr char outputTopic2[] = "streamingQueryMultiOutputConsistencyOutputTopic2";
+        constexpr char pqSource[] = "pqSourceName";
+        CreateTopic(inputTopic);
+        CreateTopic(outputTopic1);
+        CreateTopic(outputTopic2);
+        CreatePqSource(pqSource);
+
+        constexpr char rowTable[] = "rowSink";
+        constexpr char columnTable[] = "columnSink";
+        constexpr char queryName[] = "streamingQuery";
+        CreateMultiOutputQuery(*this, queryName, pqSource, inputTopic, outputTopic1, outputTopic2, rowTable, columnTable);
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        const auto readSession = pqGateway->WaitReadSession(inputTopic);
+        readSession->AddDataReceivedEvent(0, R"({"Key": "k1", "Value": "m1"})");
+        pqGateway->WaitWriteSession(outputTopic1)->ExpectMessage("m1-t1");
+        pqGateway->WaitWriteSession(outputTopic2)->ExpectMessage("m1-t2");
+        Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
+        CheckTable(*this, rowTable, {{"k1", "m1-r"}});
+        CheckTable(*this, columnTable, {{"k1", "m1-c"}});
+
+        // Automatic restart via read session failure
+        readSession->AddCloseSessionEvent(EStatus::UNAVAILABLE, {NIssue::TIssue("Test pq session failure")});
+        pqGateway->WaitReadSession(inputTopic)->AddDataReceivedEvent(1, R"({"Key": "k2", "Value": "m2"})");
+
+        // All outputs stay consistent after restart: exactly the second message, no re-delivery of the first
+        pqGateway->WaitWriteSession(outputTopic1)->ExpectMessage("m2-t1");
+        pqGateway->WaitWriteSession(outputTopic2)->ExpectMessage("m2-t2");
+        Sleep(TDuration::Seconds(1));
+        CheckTable(*this, rowTable, {{"k1", "m1-r"}, {"k2", "m2-r"}});
+        CheckTable(*this, columnTable, {{"k1", "m1-c"}, {"k2", "m2-c"}});
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryMultiOutputInvalidConfigurations, TStreamingTestFixture) {
+        constexpr char inputTopic[] = "streamingQueryMultiOutputInvalidInputTopic";
+        constexpr char outputTopic[] = "streamingQueryMultiOutputInvalidOutputTopic";
+        constexpr char pqSource[] = "pqSourceName";
+        CreateTopic(inputTopic);
+        CreateTopic(outputTopic);
+        CreatePqSource(pqSource);
+
+        constexpr char rowTable[] = "rowSink";
+        constexpr char columnTable[] = "columnSink";
+        ExecQuery(fmt::format(R"(
+            CREATE TABLE `{row_table}` (
+                Value String NOT NULL,
+                PRIMARY KEY (Value)
+            );
+            CREATE TABLE `{column_table}` (
+                Value String NOT NULL,
+                PRIMARY KEY (Value)
+            ) WITH (
+                STORE = COLUMN 
+            );)",
+            "row_table"_a = rowTable,
+            "column_table"_a = columnTable
+        ));
+
+        for (const auto& sink : {
+            TStringBuilder() << "nonExistentSource`.`" << outputTopic,
+            TStringBuilder() << rowTable << "Unk"
+        }) {
+            ExecQuery(fmt::format(R"(
+                CREATE STREAMING QUERY `streamingQuery` AS
+                DO BEGIN
+                    INSERT INTO `{sink}`
+                    SELECT Data FROM `{pq_source}`.`{input_topic}`
+                END DO;)",
+                "pq_source"_a = pqSource,
+                "input_topic"_a = inputTopic,
+                "sink"_a = sink
+            ), EStatus::SCHEME_ERROR, "does not exist");
+        }
+
+        for (const auto& mode : {"UPSERT", "REPLACE"}) {
+            ExecQuery(fmt::format(R"(
+                CREATE STREAMING QUERY `streamingQuery` AS
+                DO BEGIN
+                    {mode} INTO `{pq_source}`.`{output_topic}`
+                    SELECT Data FROM `{pq_source}`.`{input_topic}`
+                END DO;)",
+                "mode"_a = mode,
+                "pq_source"_a = pqSource,
+                "input_topic"_a = inputTopic,
+                "output_topic"_a = outputTopic
+            ), EStatus::GENERIC_ERROR, TStringBuilder() << "Write mode '" << to_lower(TString(mode)) << "' is not supported for external entities");
+        }
+
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `streamingQuery` AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}` SELECT * FROM `{pq_source}`.`{input_topic}`;
+                INSERT INTO `{pq_source}`.`{output_topic}` SELECT * FROM `{pq_source}`.`{input_topic}`;
+            END DO;)",
+            "pq_source"_a = pqSource,
+            "input_topic"_a = inputTopic,
+            "output_topic"_a = outputTopic
+        ), EStatus::UNSUPPORTED, " Save state of query is not supported for queries with intermediate writes");
+
+        for (const auto& table : {rowTable, columnTable}) {
+            for (const auto& mode : {"INSERT", "REPLACE"}) {
+                ExecQuery(fmt::format(R"(
+                    CREATE STREAMING QUERY `streamingQuery` AS
+                    DO BEGIN
+                        {mode} INTO `{table}`
+                        SELECT Unwrap(Value) AS Value FROM `{pq_source}`.`{input_topic}` WITH (
+                            FORMAT = json_each_row,
+                            SCHEMA (
+                                Value String NOT NULL
+                            )
+                        )
+                    END DO;)",
+                    "mode"_a = mode,
+                    "table"_a = table,
+                    "pq_source"_a = pqSource,
+                    "input_topic"_a = inputTopic
+                ), EStatus::GENERIC_ERROR, "Only UPSERT writing mode is supported for YDB writes inside streaming queries");
+            }
+        }
+
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `streamingQuery` AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}` SELECT Data FROM `{pq_source}`.`{input_topic}`;
+                SELECT * FROM `{pq_source}`.`{input_topic}`;
+            END DO;)",
+            "pq_source"_a = pqSource,
+            "input_topic"_a = inputTopic,
+            "output_topic"_a = outputTopic
+        ), EStatus::GENERIC_ERROR, "Results is not allowed for streaming queries, please use INSERT to record the query result");
+    }
+
     Y_UNIT_TEST_F(DropStreamingQueryDuringRetries, TStreamingWithSchemaSecretsTestFixture) {
         constexpr char topic[] = "dropStreamingQueryDuringRetriesTopic";
         constexpr char pqSource[] = "pqSource";

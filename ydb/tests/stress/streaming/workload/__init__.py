@@ -101,9 +101,23 @@ class Workload():
             """
         )
 
+    def create_output_tables(self):
+        logger.info("Workload::create_output_tables")
+        for suffix in ('ext', 'loc'):
+            self.pool.execute_with_retries(
+                f"""
+                    CREATE TABLE `{self.prefix}/output_table_{suffix}` (
+                        ts Utf8 NOT NULL,
+                        error_count Uint64,
+                        PRIMARY KEY (ts)
+                    );
+                """
+            )
+
     def create_streaming_query(self, external):
         logger.info("Workload::create_streaming_query")
         source = f"`{self.prefix}/source_name`." if external else ""
+        output_table = f"{self.prefix}/output_table_{'ext' if external else 'loc'}"
         self.pool.execute_with_retries(
             f"""
                 CREATE STREAMING QUERY `{self.prefix}/query_name_{'ext' if external else 'loc'}` AS DO BEGIN
@@ -140,6 +154,9 @@ class Workload():
 
                 INSERT INTO {source}`{self.output_topic}`
                 SELECT * FROM $json;
+
+                UPSERT INTO `{output_table}`
+                SELECT Unwrap(CAST(ts || "{'ext' if external else 'loc'}" AS Utf8)) AS ts, error_count FROM $number_errors;
                 END DO;
             """
         )
@@ -211,16 +228,29 @@ class Workload():
         if count < expected * 0.7:
             raise Exception(f"Insufficient data in output topic: expected ~{expected} messages, got {count}")
 
+    def check_output_tables(self):
+        logger.info("Workload::check_output_tables")
+        for suffix in ('ext', 'loc'):
+            result_sets = self.pool.execute_with_retries(
+                f"SELECT COUNT(*) AS cnt FROM `{self.prefix}/output_table_{suffix}`"
+            )
+            count = result_sets[0].rows[0].cnt
+            expected = 2 * (self.duration - 30)  # Group by HOP 1s X two queries - checkpoint duration
+            if count < expected * 0.7:
+                raise Exception(f"Insufficient data in output table: expected ~{expected} messages, got {count}")
+
     def loop(self):
         self.create_topics()
         self.create_external_data_source()
         self.create_table()
         self.create_join_tables()
+        self.create_output_tables()
         self.create_streaming_query(external=True)
         self.create_streaming_query(external=False)
         self.check_status()
         self.write_to_input_topic()
         self.read_from_output_topic()
+        self.check_output_tables()
         self.drop_topics()
 
     def __enter__(self):

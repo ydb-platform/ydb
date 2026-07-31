@@ -57,7 +57,7 @@ Backup collections are recommended for production environments with regular back
 For step-by-step instructions on configuring and using backup collections, see:
 
 - [Backup collections](../concepts/datamodel/backup-collection.md) — architecture, concepts, and limitations
-- [Backup collection recipes](../recipes/backup-collections/index.md) — common scenarios and examples
+- [Backup collection recipes](../recipes/backup/backup-collections/index.md) — common scenarios and examples
 
 {% include [_includes/backup_and_recovery/cli_overlay.md](_includes/backup_and_recovery/cli_overlay.md) %}
 

@@ -2,7 +2,7 @@
 
 {% note info %}
 
-For conceptual information about the mechanism, see the [System tablet backup](../../concepts/backup.md#system-tablet-backup) section.
+For conceptual information about the mechanism, see the [System tablet backup](../../../concepts/backup.md#system-tablet-backup) section.
 
 {% endnote %}
 
@@ -14,20 +14,20 @@ Recovering system tablets is a critical operation that may result in data loss. 
 
 ## Step 1. Put the tablet into Recovery mode {#enable-recovery-mode}
 
-The tablet to be recovered must be put into Recovery mode. In this mode, the tablet starts and is accessible via the [Embedded UI](../../reference/embedded-ui/index.md), but **does not work normally** and **does not read data from the distributed storage**, allowing recovery operations to be performed. Other tablets will continue to operate normally, allowing the cluster to keep functioning, but some control-plane operations may be unavailable.
+The tablet to be recovered must be put into Recovery mode. In this mode, the tablet starts and is accessible via the [Embedded UI](../../../reference/embedded-ui/index.md), but **does not work normally** and **does not read data from the distributed storage**, allowing recovery operations to be performed. Other tablets will continue to operate normally, allowing the cluster to keep functioning, but some control-plane operations may be unavailable.
 
 {% note warning %}
 
-If recovery is performed after a complete loss of the [static group](../../concepts/glossary.md#static-group), all system tablets must be put into Recovery mode simultaneously with recreating the static group on new hosts. If you recreate the static group without putting the tablets into Recovery mode, they will automatically start on top of an empty static group, leading to incorrect cluster operation.
+If recovery is performed after a complete loss of the [static group](../../../concepts/glossary.md#static-group), all system tablets must be put into Recovery mode simultaneously with recreating the static group on new hosts. If you recreate the static group without putting the tablets into Recovery mode, they will automatically start on top of an empty static group, leading to incorrect cluster operation.
 
 {% endnote %}
 
-1. Determine the ID of the system tablet to be recovered. The tablet ID can be found in the Tablets section of the [Embedded UI](../../reference/embedded-ui/index.md).
-2. Determine the list of nodes where the system tablet to be recovered can run. This list is located in the `bootstrap_config` section of the corresponding tablet in the [cluster configuration](../../devops/configuration-management/index.md). If the `bootstrap_config` section is missing from the configuration, use the list of all [static nodes](../../concepts/glossary.md#static-node) of the cluster specified in the `hosts` section of the cluster configuration.
+1. Determine the ID of the system tablet to be recovered. The tablet ID can be found in the Tablets section of the [Embedded UI](../../../reference/embedded-ui/index.md).
+2. Determine the list of nodes where the system tablet to be recovered can run. This list is located in the `bootstrap_config` section of the corresponding tablet in the [cluster configuration](../../../devops/configuration-management/index.md). If the `bootstrap_config` section is missing from the configuration, use the list of all [static nodes](../../../concepts/glossary.md#static-node) of the cluster specified in the `hosts` section of the cluster configuration.
 3. Modify the configuration by adding `boot_mode: RECOVERY` to the `bootstrap_config` section of the tablet being recovered.
 
-   - When using configuration V1, you need to modify the [static configuration](../../devops/configuration-management/configuration-v1/static-config.md) on all nodes where the tablet being recovered can run.
-   - When using configuration V2, follow the [instructions](../../devops/configuration-management/configuration-v2/update-config.md).
+   - When using configuration V1, you need to modify the [static configuration](../../../devops/configuration-management/configuration-v1/static-config.md) on all nodes where the tablet being recovered can run.
+   - When using configuration V2, follow the [instructions](../../../devops/configuration-management/configuration-v2/update-config.md).
    - Example for tablet `Hive` with ID `72057594037968897`:
 
 
@@ -69,15 +69,15 @@ If recovery is performed after a complete loss of the [static group](../../conce
    {% endnote %}
 5. Make sure that:
 
-   - There are no issues with the tablet in [HealthCheck](../../reference/ydb-sdk/health-check-api.md).
+   - There are no issues with the tablet in [HealthCheck](../../../reference/ydb-sdk/health-check-api.md).
    - The tablet is not restarting.
-   - The recovery form is available in the tablet's App in the [Embedded UI](../../reference/embedded-ui/index.md).
+   - The recovery form is available in the tablet's App in the [Embedded UI](../../../reference/embedded-ui/index.md).
 
 ## Step 2. Find the backup files {#find-backup-files}
 
 1. Determine which hosts to search. First, check the hosts where the tablet was running before the failure. These hosts can be identified using logs or a monitoring system.
 
-   If you cannot determine specific hosts, check all hosts where the tablet could have been running. This list is located in the `bootstrap_config` section of the corresponding tablet in the [cluster configuration](../../devops/configuration-management/index.md). If the `bootstrap_config` section is missing from the configuration, use the list of all [static nodes](../../concepts/glossary.md#static-node) of the cluster specified in the `hosts` section of the cluster configuration.
+   If you cannot determine specific hosts, check all hosts where the tablet could have been running. This list is located in the `bootstrap_config` section of the corresponding tablet in the [cluster configuration](../../../devops/configuration-management/index.md). If the `bootstrap_config` section is missing from the configuration, use the list of all [static nodes](../../../concepts/glossary.md#static-node) of the cluster specified in the `hosts` section of the cluster configuration.
 2. Find the directory with backups. On each candidate host, check for the presence of backups. The path to backups is determined by the `path` parameter in the `system_tablet_backup_config` configuration:
 
 
@@ -103,7 +103,7 @@ If recovery is performed after a complete loss of the [static group](../../conce
 3. Select the most recent backup. The name of each backup contains key information: `backup_<timestamp>_g<generation>_s<step>`, where:
 
    - `timestamp` — backup creation time.
-   - — [tablet `generation`](../../concepts/glossary.md#tablet-generation), increases with each tablet restart.
+   - — [tablet `generation`](../../../concepts/glossary.md#tablet-generation), increases with each tablet restart.
    - `step` — tablet step within a generation, increases with each change in tablet state.
 
    Select the backup with the **maximum generation**, and if generations are equal, with the **maximum step**. If backups are found on multiple hosts, compare them and select the most recent one.
@@ -125,7 +125,7 @@ If recovery is performed after a complete loss of the [static group](../../conce
 
 ## Step 3. Transfer the backup files {#transfer-backup-files}
 
-1. Determine which host the tablet is running on in Recovery mode. To do this, open the [Embedded UI](../../reference/embedded-ui/index.md) and find the node where the tablet is running.
+1. Determine which host the tablet is running on in Recovery mode. To do this, open the [Embedded UI](../../../reference/embedded-ui/index.md) and find the node where the tablet is running.
 2. If the backup files are on a different host, copy them to the host with the tablet in Recovery mode using `scp`, `rsync`, or any other available tool:
 
 
@@ -138,7 +138,7 @@ If recovery is performed after a complete loss of the [static group](../../conce
 
 ## Step 4. Perform the recovery {#perform-recovery}
 
-1. Open the App of the tablet being restored in the [Embedded UI](../../reference/embedded-ui/index.md).
+1. Open the App of the tablet being restored in the [Embedded UI](../../../reference/embedded-ui/index.md).
 2. In the recovery form, specify the full path to the directory with the backup files, for example:
 
 
@@ -199,14 +199,14 @@ If recovery is performed after a complete loss of the [static group](../../conce
 
 After successful recovery:
 
-1. Determine the list of nodes on which the system tablet being recovered can run. This list is located in the `bootstrap_config` section of the corresponding tablet in the [cluster configuration](../../devops/configuration-management/index.md). If the `bootstrap_config` section is absent from the configuration, use the list of all [static nodes](../../concepts/glossary.md#static-node) of the cluster specified in the `hosts` section of the cluster configuration.
+1. Determine the list of nodes on which the system tablet being recovered can run. This list is located in the `bootstrap_config` section of the corresponding tablet in the [cluster configuration](../../../devops/configuration-management/index.md). If the `bootstrap_config` section is absent from the configuration, use the list of all [static nodes](../../../concepts/glossary.md#static-node) of the cluster specified in the `hosts` section of the cluster configuration.
 2. Modify the configuration by removing `boot_mode: RECOVERY` from the `bootstrap_config` section of the tablet being recovered.
 
-   - When using configuration V1, you need to change the [static configuration](../../devops/configuration-management/configuration-v1/static-config.md) on all nodes on which the tablet being recovered can run.
-   - When using configuration V2, follow the [instructions](../../devops/configuration-management/configuration-v2/update-config.md).
+   - When using configuration V1, you need to change the [static configuration](../../../devops/configuration-management/configuration-v1/static-config.md) on all nodes on which the tablet being recovered can run.
+   - When using configuration V2, follow the [instructions](../../../devops/configuration-management/configuration-v2/update-config.md).
 3. Restart all nodes on which the tablet being recovered can run. If any nodes were isolated from the cluster over the network in previous steps, remove the network isolation.
 4. Make sure that:
 
-   - There are no issues with the tablet in [HealthCheck](../../reference/ydb-sdk/health-check-api.md).
+   - There are no issues with the tablet in [HealthCheck](../../../reference/ydb-sdk/health-check-api.md).
    - The tablet does not restart.
-   - The recovery form is absent in the tablet's App in [Embedded UI](../../reference/embedded-ui/index.md).
+   - The recovery form is absent in the tablet's App in [Embedded UI](../../../reference/embedded-ui/index.md).

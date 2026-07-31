@@ -2,7 +2,7 @@
 
 {% note info %}
 
-For conceptual information about the mechanism, see the [System tablet backup](../../concepts/backup.md#system-tablet-backup) section.
+For conceptual information about the mechanism, see the [System tablet backup](../../../concepts/backup.md#system-tablet-backup) section.
 
 {% endnote %}
 
@@ -14,7 +14,7 @@ Only local file systems are supported as backup storage. Network file systems, s
 
 By default, backup of system tablets is **disabled** because it requires storage configuration. {{ ydb-short-name }} nodes typically do not use a local file system, so enabling it requires an informed decision by the administrator.
 
-To enable it, add the `system_tablet_backup_config` section to the [cluster configuration](../../reference/configuration/index.md):
+To enable it, add the `system_tablet_backup_config` section to the [cluster configuration](../../../reference/configuration/index.md):
 
 
 ```yaml
@@ -36,8 +36,8 @@ After changing the configuration, restart the cluster nodes that may run system 
 
 {% note warning %}
 
-By default, system tablets can run on any static nodes of the cluster, including those whose disks are part of a [static group](../../concepts/glossary.md#static-group). Backups are stored locally on the hosts where system tablets run. This means that if static group hosts are lost, the backups that may be needed to restore the static group can also be lost.
+By default, system tablets can run on any static nodes of the cluster, including those whose disks are part of a [static group](../../../concepts/glossary.md#static-group). Backups are stored locally on the hosts where system tablets run. This means that if static group hosts are lost, the backups that may be needed to restore the static group can also be lost.
 
-It is recommended to configure the `bootstrap_config` section in the [cluster configuration](../../reference/configuration/index.md) so that system tablets run on nodes that are not part of the static group. In this case, backups will be stored separately from the static group data.
+It is recommended to configure the `bootstrap_config` section in the [cluster configuration](../../../reference/configuration/index.md) so that system tablets run on nodes that are not part of the static group. In this case, backups will be stored separately from the static group data.
 
 {% endnote %}

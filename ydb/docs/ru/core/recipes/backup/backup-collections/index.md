@@ -23,9 +23,9 @@
 
 ## См. также
 
-- [Коллекции резервных копий](../../concepts/datamodel/backup-collection.md)
-- [Резервное копирование и восстановление](../../devops/backup-and-recovery/index.md)
-- [CREATE BACKUP COLLECTION](../../yql/reference/syntax/create-backup-collection.md)
-- [BACKUP](../../yql/reference/syntax/backup.md)
-- [RESTORE](../../yql/reference/syntax/restore-backup-collection.md)
-- [DROP BACKUP COLLECTION](../../yql/reference/syntax/drop-backup-collection.md)
+- [Коллекции резервных копий](../../../concepts/datamodel/backup-collection.md)
+- [Резервное копирование и восстановление](../../../devops/backup-and-recovery/index.md)
+- [CREATE BACKUP COLLECTION](../../../yql/reference/syntax/create-backup-collection.md)
+- [BACKUP](../../../yql/reference/syntax/backup.md)
+- [RESTORE](../../../yql/reference/syntax/restore-backup-collection.md)
+- [DROP BACKUP COLLECTION](../../../yql/reference/syntax/drop-backup-collection.md)

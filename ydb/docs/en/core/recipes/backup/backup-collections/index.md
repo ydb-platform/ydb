@@ -23,9 +23,9 @@ Step-by-step guides for common backup collection scenarios.
 
 ## See also
 
-- [Backup collections](../../concepts/datamodel/backup-collection.md)
-- [Backup and recovery guide](../../devops/backup-and-recovery.md)
-- [CREATE BACKUP COLLECTION](../../yql/reference/syntax/create-backup-collection.md)
-- [BACKUP](../../yql/reference/syntax/backup.md)
-- [RESTORE](../../yql/reference/syntax/restore-backup-collection.md)
-- [DROP BACKUP COLLECTION](../../yql/reference/syntax/drop-backup-collection.md)
+- [Backup collections](../../../concepts/datamodel/backup-collection.md)
+- [Backup and recovery guide](../../../devops/backup-and-recovery.md)
+- [CREATE BACKUP COLLECTION](../../../yql/reference/syntax/create-backup-collection.md)
+- [BACKUP](../../../yql/reference/syntax/backup.md)
+- [RESTORE](../../../yql/reference/syntax/restore-backup-collection.md)
+- [DROP BACKUP COLLECTION](../../../yql/reference/syntax/drop-backup-collection.md)

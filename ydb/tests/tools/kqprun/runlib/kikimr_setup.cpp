@@ -86,7 +86,7 @@ NKikimr::Tests::TServerSettings TKikimrSetupBase::GetServerSettings(const TServe
     const auto& kqpSettings = settings.AppConfig.GetKQPConfig().GetSettings();
     serverSettings.SetKqpSettings({kqpSettings.begin(), kqpSettings.end()});
 
-    serverSettings.SetCredentialsFactory(NYql::CreateStructuredTokenCredentialsFactory(std::make_shared<TStaticSecuredCredentialsFactory>(settings.YqlToken)));
+    serverSettings.SetCredentialsFactory(std::make_shared<TStaticSecuredCredentialsFactory>(settings.YqlToken));
     serverSettings.SetComputationFactory(settings.ComputationFactory);
     serverSettings.SetYtGateway(settings.YtGateway);
     serverSettings.S3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();

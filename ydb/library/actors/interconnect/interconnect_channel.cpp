@@ -310,7 +310,14 @@ namespace NActors {
         bool complete = false;
         if (event.Event) {
             while (!complete) {
-                TMutableContiguousSpan out = task.AcquireSpanForWriting<External>().SubSpan(0, PartLenRemain);
+                Y_ABORT_UNLESS(event.EventActuallySerialized <= MaxSerializedEventSize);
+                const size_t limitRemain = MaxSerializedEventSize - event.EventActuallySerialized;
+                if (!limitRemain) {
+                    throw TExSerializedEventTooLarge(event.Descr.Type);
+                }
+
+                TMutableContiguousSpan out = task.AcquireSpanForWriting<External>()
+                    .SubSpan(0, Min(PartLenRemain, limitRemain));
                 if (!out.size()) {
                     break;
                 }
@@ -638,13 +645,12 @@ namespace NActors {
     void TEventOutputChannel::ProcessUndelivered(TEventHolderPool& pool, NInterconnect::IZcGuard* zg) {
         LOG_DEBUG_IC_SESSION("ICOCH89", "Notyfying about Undelivered messages! NotYetConfirmed size: %zu, Queue size: %zu", NotYetConfirmed.size(), Queue.size());
         if (State == EState::BODY && Queue.front().Event) {
-            if (!Chunker.IsComplete()) {
-                Y_ABORT_UNLESS(!Queue.empty()); // this event must be the first event in queue
-                TEventHolder& event = Queue.front();
-                Y_ABORT_UNLESS(Chunker.GetCurrentEvent() == event.Event.Get()); // ensure the event is valid
-                Chunker.Abort(); // stop serializing current event
-                Y_ABORT_UNLESS(Chunker.IsComplete());
-            }
+            Y_ABORT_UNLESS(!Chunker.IsComplete()); // chunk must have an event being serialized
+            Y_ABORT_UNLESS(!Queue.empty()); // this event must be the first event in queue
+            TEventHolder& event = Queue.front();
+            Y_ABORT_UNLESS(Chunker.GetCurrentEvent() == event.Event.Get()); // ensure the event is valid
+            Chunker.Abort(); // stop serializing current event
+            Y_ABORT_UNLESS(Chunker.IsComplete());
         }
         for (auto& item : NotYetConfirmed) {
             if (item.Descr.Flags & IEventHandle::FlagGenerateUnsureUndelivered) { // notify only when unsure flag is set

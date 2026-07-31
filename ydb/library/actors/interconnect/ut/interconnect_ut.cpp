@@ -1282,7 +1282,7 @@ void RunSubscriberLivenessCheck(bool useSessionV2, TDuration checkInterval) {
 
 Y_UNIT_TEST_SUITE(Interconnect) {
 
-    Y_UNIT_TEST(ProcessUndeliveredAfterCompletedOversizedTcpEvent) {
+    Y_UNIT_TEST(ProcessUndeliveredAfterOversizedTcpEvent) {
         TTestICCluster cluster(2, TChannelsConfig(), nullptr, nullptr, TTestICCluster::DISABLE_RDMA);
 
         auto context = std::make_shared<TOversizedTcpEventContext>();
@@ -1294,9 +1294,9 @@ Y_UNIT_TEST_SUITE(Interconnect) {
         //
         //   1 + 4 + (EventMaxByteSize - 4) = EventMaxByteSize + 1.
         //
-        // Exceeding the limit by exactly one byte guarantees that no FeedBuf boundary can occur between
-        // crossing the limit and completing serialization. The size check thus throws after the coroutine
-        // serializer has completed, reproducing the ProcessUndelivered failure independently of packet layout.
+        // Exceeding the limit by exactly one byte makes the coroutine request more output after consuming
+        // the complete serialization budget. The size check must terminate the session while the coroutine
+        // is suspended and ProcessUndelivered must abort the pending serialization.
         event->Record.SetBuffer(TString(EventMaxByteSize - 4, 'x'));
         UNIT_ASSERT_VALUES_EQUAL(event->CalculateSerializedSize(), EventMaxByteSize + 1);
 

@@ -1,3 +1,4 @@
+ydb/core/blobstorage/ddisk/ut TDDiskActorPDiskTest.PDiskRestartWithReservedChunks_DDiskZombie_PDiskFallback
 ydb/core/blobstorage/ddisk/ut TDDiskActorPDiskTest.PDiskRestartWithReservedChunks_DDiskZombie_Uring
 ydb/core/blobstorage/ut_blobstorage Get.TestRdmaRegiseredMemory
 ydb/core/blobstorage/ut_blobstorage NodeDisconnected.BsQueueRetries
@@ -15,9 +16,6 @@ ydb/core/blobstorage/ut_blobstorage/ut_replication ReplicationSpace.HugeBlobsWit
 ydb/core/blobstorage/ut_blobstorage/ut_replication ReplicationSpace.SmallBlobsNoDonor
 ydb/core/blobstorage/ut_blobstorage/ut_replication ReplicationSpace.SmallBlobsWithDonor
 ydb/core/blobstorage/ut_blobstorage/ut_replication unittest.[*/*] chunk
-ydb/core/kafka_proxy/ut KafkaProtocol.TopicsCompactionGapFromRetention
-ydb/core/kafka_proxy/ut unittest.sole chunk
-ydb/core/kqp/ut/federated_query/datastreams HasPathDatastreams.FederatedEdsPathMatches
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/tx/schemeshard/ut_background_cleaning TSchemeshardBackgroundCleaningTest.SchemeshardBackgroundCleaningTestCreateCleanManyTables
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.ColumnTableWithLocalBloomIndexes
@@ -28,12 +26,10 @@ ydb/tests/functional/blobstorage test_node_warden_cache.py.TestNodeWardenCacheFi
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_add
 ydb/tests/functional/query_cache/warmup test_warmup.py.TestCompileCacheViewPeerWarnings.test_peer_scan_warnings_increment_on_dead_peer
 ydb/tests/functional/sqs/migration/topic_creation/multinode ydb.tests.functional.sqs.multinode.test_multinode_cluster.py.TestSqsMultinodeCluster.test_has_messages_counters[kick_tablets-fifo]
-ydb/tests/functional/sqs/migration/topic_creation/multinode ydb.tests.functional.sqs.multinode.test_multinode_cluster.py.TestSqsMultinodeCluster.test_has_messages_counters[kick_tablets-std]
 ydb/tests/functional/sqs/migration/topic_creation/multinode ydb.tests.functional.sqs.multinode.test_multinode_cluster.py.TestSqsMultinodeCluster.test_has_messages_counters[stop_node-fifo]
 ydb/tests/functional/sqs/migration/topic_creation/multinode ydb.tests.functional.sqs.multinode.test_multinode_cluster.py.TestSqsMultinodeCluster.test_has_messages_counters[stop_node-std]
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
-ydb/tests/stress/reconfig_state_storage_workload/tests test_scheme_board_workload.py.TestReconfigSchemeBoardWorkload.test_scheme_board
 ydb/tests/stress/testshard_workload/tests test_workload.py.TestYdbTestShardWorkload.test
 ydb/tests/stress/topic_sqs/tests test_workload.py.TestYdbTopicSqsWorkload.test
 ydb/tools/mnc/viewer/ut py3test.sole chunk

@@ -1,4 +1,4 @@
-dimport json
+import json
 import logging
 import pytest
 import random
@@ -995,7 +995,7 @@ FROM `{table_name}`"""
 
     @pytest.mark.parametrize("use_partition_balancing", [True, False], ids=["partition_balancing", "no_partition_balancing"])
     @pytest.mark.parametrize("local_topics", [True, False])
-    def test_restart_query22(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, use_partition_balancing) -> None:
+    def test_restart_query(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, use_partition_balancing) -> None:
         inp, out, endpoint = self.get_io_names(kikimr, "test_restart_query", local_topics, entity_name, partitions_count=10)
 
         name = f"test_restart_query_{local_topics!s:.1}{use_partition_balancing!s:.1}"

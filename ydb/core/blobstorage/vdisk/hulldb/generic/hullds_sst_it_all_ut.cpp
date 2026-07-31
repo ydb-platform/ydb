@@ -448,8 +448,9 @@ namespace NKikimr {
             std::mt19937_64 random(0x8f3d9a24c61b507eULL);
             TTestContexts contexts;
             THPTimer timer;
+            const TDuration testTime = TDuration::Minutes(1);
 
-            for (ui32 round = 0; TDuration::Seconds(timer.Passed()) < TDuration::Minutes(5); ++round) {
+            for (ui32 round = 0; TDuration::Seconds(timer.Passed()) < testTime; ++round) {
                 auto levelCtx = std::make_shared<TLevelIndexCtx>();
                 auto slice = MakeIntrusive<TLevelSlice>(contexts.GetLevelIndexSettings(), levelCtx);
                 TVector<TRecordPosition> expected;

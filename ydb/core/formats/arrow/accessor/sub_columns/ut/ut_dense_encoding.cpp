@@ -231,4 +231,24 @@ Y_UNIT_TEST_SUITE(DenseEncodingEndToEnd) {
     Y_UNIT_TEST(NativeStringColumns) {
         CheckLevers(/*native*/ true, /*dictFraction*/ 0.0, "native");
     }
+
+    Y_UNIT_TEST(PartialReaderKeepsEncodingSettings) {
+        NSubColumns::TSettings settings(
+            4, 1024, 0, /*othersFraction*/ 0, NSubColumns::TDataAdapterContainer::GetDefault(), /*dictFraction*/ 0.0);
+        settings.SetDenseEncodingVersion(1);
+
+        const auto value = NBinaryJson::SerializeToBinaryJson(R"({"key":"value"})");
+        const auto* binaryJson = std::get_if<NBinaryJson::TBinaryJson>(&value);
+        UNIT_ASSERT(binaryJson);
+        TTrivialArray::TPlainBuilder<arrow::BinaryType> builder;
+        builder.AddRecord(0, std::string_view(binaryJson->data(), binaryJson->size()));
+        auto array = builder.Finish(1);
+        auto data = TSubColumnsArray::Make(array, settings, array->GetDataType()).DetachResult();
+
+        const auto serializer = NSerialization::TSerializerContainer::GetDefaultSerializer();
+        const TChunkConstructionData constructionData(data->GetRecordsCount(), nullptr, arrow::binary(), serializer);
+        const TString blob = data->SerializeToString(constructionData);
+        const auto partial = NSubColumns::TConstructor::BuildPartialReader(blob, constructionData, settings).DetachResult();
+        UNIT_ASSERT(partial->GetSettings().GetEncodingParams().IsEnabled());
+    }
 }

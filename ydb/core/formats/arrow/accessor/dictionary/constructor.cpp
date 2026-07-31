@@ -224,13 +224,13 @@ TConclusion<std::shared_ptr<arrow::Array>> TConstructor::BuildDictionaryOnlyRead
 
 std::shared_ptr<arrow::FixedWidthType> TConstructor::GetTypeByVariantsCount(const ui32 count) {
     if (count <= Max<ui8>()) {
-        return std::make_shared<arrow::UInt8Type>();
+        return std::static_pointer_cast<arrow::FixedWidthType>(arrow::uint8());
     }
     if (count <= Max<ui16>()) {
-        return std::make_shared<arrow::UInt16Type>();
+        return std::static_pointer_cast<arrow::FixedWidthType>(arrow::uint16());
     }
     if (count <= Max<ui32>()) {
-        return std::make_shared<arrow::UInt32Type>();
+        return std::static_pointer_cast<arrow::FixedWidthType>(arrow::uint32());
     }
     AFL_VERIFY(false);
     return nullptr;

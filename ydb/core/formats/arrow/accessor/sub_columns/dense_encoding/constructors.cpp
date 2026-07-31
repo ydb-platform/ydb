@@ -66,7 +66,7 @@ TConclusion<std::shared_ptr<IChunkedArray>> TDictionaryDenseConstructor::DoDeser
     ui32 dictLength;
     memcpy(&dictLength, originalData.data(), sizeof(dictLength));
     const TStringBuf dictBlob(originalData.data() + sizeof(ui32), meta->DictionaryBlobSize - sizeof(ui32));
-    const TString positionsBlob(originalData.data() + meta->DictionaryBlobSize, meta->PositionsBlobSize);
+    const TStringBuf positionsBlob(originalData.data() + meta->DictionaryBlobSize, meta->PositionsBlobSize);
     const auto codec = GetCompressionCodec(externalInfo);
 
     auto dictionary = DeserializeBinaryArray(dictBlob, dictLength, codec);

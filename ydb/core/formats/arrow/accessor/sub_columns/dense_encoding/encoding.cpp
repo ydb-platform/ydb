@@ -255,6 +255,7 @@ std::shared_ptr<arrow::BinaryArray> DeserializeBinaryArray(
     if (hasNulls) {
         validityHolder = ReadSection(blob, pos, codec);
         validity = validityHolder;
+        AFL_VERIFY(validity.size() == (recordsCount + CHAR_BIT - 1) / CHAR_BIT)("size", validity.size())("records", recordsCount);
         nullBitmap = CopyToBuffer(validity.data(), validity.size());
         presentCount = CountSetBits(validity, recordsCount);
     }

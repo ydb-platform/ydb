@@ -239,12 +239,13 @@ class StreamingTestBase:
 
                 $input = (
                     SELECT
-                        *, CAST("id1" AS Utf8) AS jk
+                        i.*, CAST("id1" AS Utf8) AS jk
                     FROM
                         {self.input_object} WITH (
                             FORMAT = 'json_each_row',
                             SCHEMA (time String NOT NULL, level String NOT NULL, host String NOT NULL)
                         )
+                    AS i
                 );
 
                 $joined = (

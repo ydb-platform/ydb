@@ -79,8 +79,24 @@ public:
     using TPtr = std::shared_ptr<IReplyAdapter>;
     virtual ~IReplyAdapter() = default;
 
+    // Outcome of a single finished request, reported to the adapter along with the
+    // measured wall-clock latency of that request.
+    struct TRequestStats {
+        TStringBuf RequestName;
+        TDuration Latency;
+        bool Success = false;
+        int HttpResponseCode = 0;
+        size_t BytesRead = 0;
+        size_t BytesWritten = 0;
+    };
+
     NActors::TActorId GetRecipient(const NActors::TActorId& defaultValue) {
         return CustomRecipient.value_or(defaultValue);
+    }
+
+    // Called once for every finished request, before the reply event is built. Runs in
+    // AWS SDK callback threads, so implementations must be thread-safe.
+    virtual void OnRequestFinished(const TRequestStats& /*stats*/) const {
     }
 
     virtual std::unique_ptr<IEventBase> RebuildReplyEvent(std::unique_ptr<TEvListObjectsResponse>&& ev) const = 0;
@@ -124,6 +140,12 @@ public:
 
     NActors::TActorId GetRecipient(const NActors::TActorId& defaultValue) const {
         return Adapter ? Adapter->GetRecipient(defaultValue) : defaultValue;
+    }
+
+    void OnRequestFinished(const IReplyAdapter::TRequestStats& stats) const {
+        if (Adapter) {
+            Adapter->OnRequestFinished(stats);
+        }
     }
 
     template <class TBaseEventObject>

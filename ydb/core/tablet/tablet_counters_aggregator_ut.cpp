@@ -953,4 +953,23 @@ Y_UNIT_TEST_SUITE(TTabletLabeledCountersAggregator) {
     }
 }
 
+Y_UNIT_TEST_SUITE(TEvTabletAddCountersDetailedMetricsFields) {
+    Y_UNIT_TEST(DefaultsToLeader) {
+        TEvTabletCounters::TEvTabletAddCounters ev(
+            new TEvTabletCounters::TInFlightCookie, 1, TTabletTypes::DataShard, TPathId(1113, 1001),
+            new TTabletCountersBase, new TTabletCountersBase);
+
+        UNIT_ASSERT_VALUES_EQUAL(ev.FollowerId, 0u);
+    }
+
+    Y_UNIT_TEST(StampsFollowerIdWhenProvided) {
+        TEvTabletCounters::TEvTabletAddCounters ev(
+            new TEvTabletCounters::TInFlightCookie, 1, TTabletTypes::DataShard, TPathId(1113, 1001),
+            new TTabletCountersBase, new TTabletCountersBase,
+            7);
+
+        UNIT_ASSERT_VALUES_EQUAL(ev.FollowerId, 7u);
+    }
+}
+
 }

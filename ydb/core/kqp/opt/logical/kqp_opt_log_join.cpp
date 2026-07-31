@@ -529,8 +529,16 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
         return {};
     }
 
+    const bool useStreamIndexLookupJoin = (kqpCtx.IsDataQuery() || kqpCtx.IsGenericQuery())
+        && kqpCtx.Config->GetEnableKqpDataQueryStreamIdxLookupJoin();
+
     const auto& rightTableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, lookupTable);
-    if (rightTableDesc.Metadata->Kind == NYql::EKikimrTableKind::Olap) {
+    if (rightTableDesc.Metadata->Kind == NYql::EKikimrTableKind::Olap && !useStreamIndexLookupJoin) {
+        // Column-store (OLAP) tables can only serve as the lookup (right) side of
+        // a join via the stream lookup join strategy: it issues point reads by
+        // primary key through the datashard read-iterator protocol
+        // (TEvDataShard::TEvRead) which ColumnShard implements. The non-stream
+        // (precompute) index lookup path is not supported against ColumnShard.
         return {};
     }
 
@@ -558,9 +566,6 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
 
         leftJoinKeys.emplace(leftKey);
     }
-
-    const bool useStreamIndexLookupJoin = (kqpCtx.IsDataQuery() || kqpCtx.IsGenericQuery())
-        && kqpCtx.Config->GetEnableKqpDataQueryStreamIdxLookupJoin();
 
     auto leftRowArg = Build<TCoArgument>(ctx, join.Pos())
         .Name("leftRowArg")

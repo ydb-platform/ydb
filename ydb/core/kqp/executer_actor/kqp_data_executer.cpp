@@ -592,11 +592,10 @@ private:
             return true;
         }
 
-        for (const auto& input : stage.GetInputs()) {
-            if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup) {
-                return true;
-            }
-        }
+        // NOTE: a StreamLookup connection is a read-only point lookup, not a DML
+        // operation. ColumnShard now implements the datashard read-iterator
+        // protocol (TEvDataShard::TEvRead), so stream lookup joins whose right
+        // (lookup) side is a column-oriented table are allowed here.
 
         for (const auto &tableOp : stage.GetTableOps()) {
             if (tableOp.GetTypeCase() != NKqpProto::TKqpPhyTableOperation::kReadOlapRange) {

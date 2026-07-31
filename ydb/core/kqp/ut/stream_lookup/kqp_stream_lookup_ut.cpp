@@ -262,6 +262,123 @@ Y_UNIT_TEST_SUITE(KqpStreamLookup) {
             UNIT_ASSERT_VALUES_EQUAL(cnt, 8 * TotalRows);
         }
     }
+
+    // Simple Stream Idx Lookup Join cases with column-store (OLAP) tables.
+    // The left (streaming) side supplies join keys, the right side is a column-store
+    // table looked up by its primary key.
+
+    void CreateSimpleJoinTables(NYdb::NQuery::TQueryClient& db, bool leftColumn, bool rightColumn) {
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        const TString leftStore = leftColumn ? "WITH (STORE = COLUMN)" : "";
+        const TString rightStore = rightColumn ? "WITH (STORE = COLUMN)" : "";
+
+        auto ddl = Sprintf(R"(
+            CREATE TABLE `/Root/LeftTable` (
+                Id Int32 NOT NULL,
+                Fk Int32 NOT NULL,
+                PRIMARY KEY (Id)
+            ) %s;
+
+            CREATE TABLE `/Root/RightTable` (
+                Key Int32 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            ) %s;
+        )", leftStore.c_str(), rightStore.c_str());
+
+        auto result = session.ExecuteQuery(ddl, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        auto dml = session.ExecuteQuery(R"(
+            REPLACE INTO `/Root/LeftTable` (Id, Fk) VALUES
+                (1, 10), (2, 20), (3, 30), (4, 40), (5, 50);
+
+            REPLACE INTO `/Root/RightTable` (Key, Value) VALUES
+                (10, "Value10"), (20, "Value20"), (30, "Value30"), (40, "Value40");
+        )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(dml.IsSuccess(), dml.GetIssues().ToString());
+    }
+
+    // Runs `LeftTable JOIN RightTable ON Fk = Key` with the requested storage
+    // kind for each side and checks both the produced rows and whether a Stream
+    // Idx Lookup Join was actually chosen by the optimizer.
+    //
+    // Stream Idx Lookup Join performs point lookups by primary key against the
+    // right (lookup) table using the datashard read-iterator protocol
+    // (TEvDataShard::TEvRead). ColumnShard now implements that protocol (see
+    // ydb/core/tx/columnshard/columnshard__read.cpp), so a column-store table is
+    // allowed on the lookup (right) side.
+    //
+    // When both sides are column-store the optimizer instead keeps the whole plan
+    // in block/OLAP form and picks a block-based broadcast MapJoin; that is an
+    // independent optimizer strategy choice for OLAP-on-OLAP joins and does not
+    // depend on read-iterator support. In every case the produced rows must match.
+    void DoSimpleStreamLookupJoin(bool leftColumn, bool rightColumn) {
+        const bool expectStreamLookup = !(leftColumn && rightColumn);
+
+        TKikimrSettings settings;
+        settings.SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetQueryClient();
+
+        CreateSimpleJoinTables(db, leftColumn, rightColumn);
+
+        const TString query = R"(
+            SELECT a.Id AS Id, b.Value AS Value
+            FROM `/Root/LeftTable` AS a
+            INNER JOIN `/Root/RightTable` AS b ON a.Fk = b.Key
+            ORDER BY Id;
+        )";
+
+        {
+            auto explain = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(explain.GetStatus(), EStatus::SUCCESS, explain.GetIssues().ToString());
+            auto ast = explain.GetStats()->GetAst();
+            UNIT_ASSERT(ast.has_value());
+            Cerr << "=== AST (leftColumn=" << leftColumn << ", rightColumn=" << rightColumn << ") ===" << Endl;
+            Cerr << *ast << Endl;
+            const bool hasStreamLookup = TString(*ast).Contains("StreamLookup");
+            UNIT_ASSERT_VALUES_EQUAL_C(hasStreamLookup, expectStreamLookup,
+                TStringBuilder() << "Unexpected join strategy for leftColumn=" << leftColumn
+                    << ", rightColumn=" << rightColumn << "; AST: " << *ast);
+        }
+
+        auto result = db.ExecuteQuery(query,
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [1;["Value10"]];
+            [2;["Value20"]];
+            [3;["Value30"]];
+            [4;["Value40"]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    // Right (lookup) side is a column-store table: Stream Lookup Join issues point
+    // reads by primary key against ColumnShard via TEvDataShard::TEvRead.
+    Y_UNIT_TEST(StreamLookupJoinRightColumnTable) {
+        DoSimpleStreamLookupJoin(/* leftColumn */ false, /* rightColumn */ true);
+    }
+
+    // Left (streaming) side is a column-store table, lookup side is row-store:
+    // Stream Lookup Join is used as usual.
+    Y_UNIT_TEST(StreamLookupJoinLeftColumnTable) {
+        DoSimpleStreamLookupJoin(/* leftColumn */ true, /* rightColumn */ false);
+    }
+
+    // Both sides are column-store tables: the optimizer keeps the plan in block/OLAP
+    // form and falls back to a block-based broadcast MapJoin. Result must still be
+    // correct.
+    Y_UNIT_TEST(StreamLookupJoinBothColumnTables) {
+        DoSimpleStreamLookupJoin(/* leftColumn */ true, /* rightColumn */ true);
+    }
 }
 
 } // namespace NKqp

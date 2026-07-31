@@ -740,14 +740,24 @@ bool TStorage::TBatch::SerializeTo(NKikimrPQ::TMLPStorageWAL& wal) {
         TSerializerWithOffset<TAddedMessage> serializer;
         serializer.Reserve(NewMessageCount);
 
+        auto add = [&](ui64 offset, const TMessage& message) {
+            TAddedMessage msg;
+            msg.MessageGroup.Fields.HasMessageGroupId = message.HasMessageGroupId;
+            msg.MessageGroup.Fields.MessageGroupIdHash = message.MessageGroupIdHash;
+            msg.WriteTimestampDelta = message.WriteTimestampDelta;
+            serializer.Add(offset, msg);
+        };
+
+        // New messages that were moved to the slow zone within this batch (e.g. when a hole in the
+        // offset sequence appears) live below FirstOffset, so they are emitted here in offset order.
+        for (auto it = Storage->SlowMessages.lower_bound(FirstNewMessage.value()); it != Storage->SlowMessages.end() && it->first < Storage->FirstOffset; ++it) {
+            add(it->first, it->second);
+        }
+
         for (size_t offset = std::max(FirstNewMessage.value(), Storage->FirstOffset); offset < lastOffset; ++offset) {
             auto [message, _] = Storage->GetMessage(offset);
             if (message) {
-                TAddedMessage msg;
-                msg.MessageGroup.Fields.HasMessageGroupId = message->HasMessageGroupId;
-                msg.MessageGroup.Fields.MessageGroupIdHash = message->MessageGroupIdHash;
-                msg.WriteTimestampDelta = message->WriteTimestampDelta;
-                serializer.Add(offset, msg);
+                add(offset, *message);
             }
         }
 

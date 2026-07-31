@@ -528,26 +528,44 @@ Y_UNIT_TEST(AddMessageWithSkippedMessage) {
 
     Cerr << "DUMP 1: " << storage.DebugString() << Endl;
 
+    auto writeTimestamp3 = timeProvider->Now() - TDuration::Seconds(137);
+
     storage.AddMessage(7, true, 5, writeTimestamp);
+    // The message with offset 3 is preserved (moved to the slow zone) rather than dropped, so that
+    // the hole between offsets 3 and 7 does not lose already added messages.
     UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 7);
     UNIT_ASSERT_VALUES_EQUAL(storage.GetLastOffset(), 8);
 
     Cerr << "DUMP 2: " << storage.DebugString() << Endl;
 
     auto it = storage.begin();
-    UNIT_ASSERT(it != storage.end());
-    auto message = *it;
-    UNIT_ASSERT_VALUES_EQUAL(message.Offset, 7);
-    UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Unprocessed);
-    UNIT_ASSERT_VALUES_EQUAL(message.ProcessingCount, 0);
-    UNIT_ASSERT_VALUES_EQUAL(message.ProcessingDeadline, TInstant::Zero());
-    UNIT_ASSERT_VALUES_EQUAL(message.WriteTimestamp, writeTimestamp);
+    {
+        UNIT_ASSERT(it != storage.end());
+        auto message = *it;
+        UNIT_ASSERT_VALUES_EQUAL(message.Offset, 3);
+        UNIT_ASSERT(message.SlowZone);
+        UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Unprocessed);
+        UNIT_ASSERT_VALUES_EQUAL(message.ProcessingCount, 0);
+        UNIT_ASSERT_VALUES_EQUAL(message.ProcessingDeadline, TInstant::Zero());
+        UNIT_ASSERT_VALUES_EQUAL(message.WriteTimestamp, writeTimestamp3);
+    }
+    ++it;
+    {
+        UNIT_ASSERT(it != storage.end());
+        auto message = *it;
+        UNIT_ASSERT_VALUES_EQUAL(message.Offset, 7);
+        UNIT_ASSERT(!message.SlowZone);
+        UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Unprocessed);
+        UNIT_ASSERT_VALUES_EQUAL(message.ProcessingCount, 0);
+        UNIT_ASSERT_VALUES_EQUAL(message.ProcessingDeadline, TInstant::Zero());
+        UNIT_ASSERT_VALUES_EQUAL(message.WriteTimestamp, writeTimestamp);
+    }
     ++it;
     UNIT_ASSERT(it == storage.end());
 
     auto& metrics = storage.GetMetrics();
-    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
-    UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 2);
+    UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 2);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageGroupCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
@@ -555,7 +573,7 @@ Y_UNIT_TEST(AddMessageWithSkippedMessage) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
 
-    AssertMessagesLocks(metrics.MessageLocks, {{0, 1}});
+    AssertMessagesLocks(metrics.MessageLocks, {{0, 2}});
 
     UNIT_ASSERT_VALUES_EQUAL(metrics.TotalCommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.TotalMovedToDLQMessageCount, 0);
@@ -1793,9 +1811,22 @@ Y_UNIT_TEST(StorageSerialization_WAL_WithHole) {
 
         auto it = storage.begin();
         {
+            // Offset 3 was moved to the slow zone (not dropped) when the hole appeared.
+            UNIT_ASSERT(it != storage.end());
+            auto message = *it;
+            UNIT_ASSERT_VALUES_EQUAL(message.Offset, 3);
+            UNIT_ASSERT(message.SlowZone);
+            UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Unprocessed);
+            UNIT_ASSERT_VALUES_EQUAL(message.ProcessingCount, 0);
+            UNIT_ASSERT_VALUES_EQUAL(message.ProcessingDeadline, TInstant::Zero());
+            UNIT_ASSERT_VALUES_EQUAL(message.WriteTimestamp, writeTimestamp3);
+        }
+        ++it;
+        {
             UNIT_ASSERT(it != storage.end());
             auto message = *it;
             UNIT_ASSERT_VALUES_EQUAL(message.Offset, 7);
+            UNIT_ASSERT(!message.SlowZone);
             UNIT_ASSERT_VALUES_EQUAL(message.Status, TStorage::EMessageStatus::Unprocessed);
             UNIT_ASSERT_VALUES_EQUAL(message.ProcessingCount, 0);
             UNIT_ASSERT_VALUES_EQUAL(message.ProcessingDeadline, TInstant::Zero());
@@ -1805,8 +1836,8 @@ Y_UNIT_TEST(StorageSerialization_WAL_WithHole) {
         UNIT_ASSERT(it == storage.end());
 
         auto& metrics = storage.GetMetrics();
-        UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 1);
-        UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 2);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 2);
         UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageCount, 0);
         UNIT_ASSERT_VALUES_EQUAL(metrics.LockedMessageGroupCount, 0);
         UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);

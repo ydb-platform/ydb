@@ -996,6 +996,26 @@ void TStorage::RemoveFirstMessageFromFastZone() {
     ++FirstOffset;
 }
 
+void TStorage::MoveFirstMessageFromFastZoneToSlowZone() {
+    AFL_ENSURE(!Messages.empty());
+    auto& message = Messages.front();
+    switch (message.GetStatus()) {
+        case EMessageStatus::Unprocessed:
+        case EMessageStatus::Locked:
+        case EMessageStatus::Delayed:
+        case EMessageStatus::DLQ:
+            SlowMessages.insert_or_assign(FirstOffset, message);
+            Batch.MoveToSlow(FirstOffset);
+            Messages.pop_front();
+            ++FirstOffset;
+            break;
+        case EMessageStatus::Committed:
+            // Committed messages are not kept in the slow zone, just drop them.
+            RemoveFirstMessageFromFastZone();
+            break;
+    }
+}
+
 TStorage::TSlowMessagesMap::iterator TStorage::RemoveMessageFromSlowZone(TSlowMessagesMap::iterator it) {
     RemoveMessage(it->first, it->second);
     return SlowMessages.erase(it);
@@ -1010,28 +1030,17 @@ void TStorage::RemoveMessageFromSlowZone(ui64 offset) {
 bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash, TInstant writeTimestamp, TDuration delay, ui64 logicalMessageCount) {
     AFL_ENSURE(offset >= GetLastOffset())("l", offset)("r", GetLastOffset());
 
+    // The fast zone is a contiguous deque indexed by (offset - FirstOffset), so it cannot contain
+    // holes. When the new offset leaves a gap, relocate the current fast-zone messages to the slow
+    // zone (a sparse map) instead of dropping them.
     while (!Messages.empty() && offset > GetLastOffset()) {
-        RemoveFirstMessageFromFastZone();
+        MoveFirstMessageFromFastZoneToSlowZone();
     }
 
     if (Messages.size() >= MaxFastMessages) {
         // Move to slow zone
         for (size_t i = std::max<size_t>(std::min(std::min(Messages.size(), MaxMessages / 64), MaxSlowMessages - SlowMessages.size()), 1); i; --i) {
-            auto& message = Messages.front();
-            switch (message.GetStatus()) {
-                case EMessageStatus::Unprocessed:
-                case EMessageStatus::Locked:
-                case EMessageStatus::Delayed:
-                case EMessageStatus::DLQ:
-                    SlowMessages.insert_or_assign(FirstOffset, message);
-                    Batch.MoveToSlow(FirstOffset);
-                    Messages.pop_front();
-                    ++FirstOffset;
-                    break;
-                case EMessageStatus::Committed:
-                    RemoveFirstMessageFromFastZone();
-                    break;
-            }
+            MoveFirstMessageFromFastZoneToSlowZone();
         }
     }
 

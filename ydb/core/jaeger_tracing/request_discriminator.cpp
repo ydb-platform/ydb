@@ -100,6 +100,9 @@ extern const THashMap<TStringBuf, ERequestType> NameToRequestType = {
 
     {"Bridge.GetClusterState", ERequestType::BRIDGE_GETCLUSTERSTATE},
     {"Bridge.UpdateClusterState", ERequestType::BRIDGE_UPDATECLUSTERSTATE},
+
+    {"DistributedStorage.StreamStorageState", ERequestType::DISTRIBUTED_STORAGE_STREAMSTORAGESTATE},
+    {"DistributedStorage.ReassignVDisk", ERequestType::DISTRIBUTED_STORAGE_REASSIGNVDISK},
 };
 
 extern const THashSet<ERequestType> NoDefaultSamplingRequestTypes = {

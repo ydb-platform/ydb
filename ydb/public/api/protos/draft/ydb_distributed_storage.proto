@@ -1,0 +1,549 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package Ydb.DistributedStorage;
+
+option java_package = "com.yandex.ydb.distributed_storage.proto";
+option java_outer_classname = "DistributedStorageProtos";
+option java_multiple_files = true;
+
+import "ydb/public/api/protos/annotations/validation.proto";
+import "ydb/public/api/protos/ydb_discovery.proto";
+import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/ydb_operation.proto";
+import "ydb/public/api/protos/ydb_status_codes.proto";
+
+// Identifies a PDisk: node it is attached to + per-node disk id.
+message PDiskId {
+    uint32 node_id = 1;
+    uint32 pdisk_id = 2;
+}
+
+// Canonical VDisk identifier: position of the disk within its storage group.
+// Rendered as "group-generation-realm-domain-idx" in tooling (e.g. 2181038080-3-0-0-0).
+message VDiskId {
+    // Zero identifies the static group and is therefore a valid group id.
+    uint32 group_id = 1;
+    uint32 group_generation = 2 [(value) = "> 0"];
+    uint32 fail_realm_idx = 3;
+    uint32 fail_domain_idx = 4;
+    uint32 vdisk_idx = 5;
+}
+
+// Physical placement of a VDisk: a slot on a specific PDisk.
+message VSlotId {
+    uint32 node_id = 1;
+    uint32 pdisk_id = 2;
+    uint32 vslot_id = 3;
+}
+
+// Kind of the underlying storage device.
+enum DeviceType {
+    DEVICE_TYPE_UNSPECIFIED = 0;
+    DEVICE_TYPE_HDD = 1;
+    DEVICE_TYPE_SSD = 2;
+    DEVICE_TYPE_NVME = 3;
+}
+
+// Administrative status of a PDisk, controls group placement decisions.
+enum PDiskStatus {
+    PDISK_STATUS_UNSPECIFIED = 0;
+    // Working as expected, new groups may be created over this disk.
+    PDISK_STATUS_ACTIVE = 1;
+    // New groups are not created over this disk, existing ones continue to work.
+    PDISK_STATUS_INACTIVE = 2;
+    // Disk is not working; groups are automatically moved out of this disk.
+    PDISK_STATUS_BROKEN = 3;
+    // Disk is expected to become BROKEN soon; new groups are not created,
+    // existing groups are asynchronously moved out.
+    PDISK_STATUS_FAULTY = 4;
+    // Same as INACTIVE, but the disk is counted in the fault model as not working.
+    PDISK_STATUS_TO_BE_REMOVED = 5;
+}
+
+// Decommission status of a PDisk.
+enum PDiskDecommitStatus {
+    PDISK_DECOMMIT_STATUS_UNSPECIFIED = 0;
+    // No decommission.
+    PDISK_DECOMMIT_STATUS_NONE = 1;
+    // Disk is going to be removed soon, but SelfHeal does not move slots out automatically.
+    PDISK_DECOMMIT_STATUS_PENDING = 2;
+    // SelfHeal automatically moves VDisk slots out of the disk.
+    PDISK_DECOMMIT_STATUS_IMMINENT = 3;
+    // Disk is working as usual, but decommitted slots are not placed here.
+    PDISK_DECOMMIT_STATUS_REJECTED = 4;
+}
+
+// Maintenance request status of a PDisk (set through CMS/maintenance API).
+enum PDiskMaintenanceStatus {
+    PDISK_MAINTENANCE_STATUS_UNSPECIFIED = 0;
+    // No active maintenance request.
+    PDISK_MAINTENANCE_STATUS_NO_REQUEST = 1;
+    // Maintenance requested, VDisks should be asynchronously moved out of the disk.
+    PDISK_MAINTENANCE_STATUS_LONG_TERM_MAINTENANCE_PLANNED = 2;
+    // No new VDisks should be allocated on this disk, existing ones are not moved.
+    PDISK_MAINTENANCE_STATUS_NO_NEW_VDISKS = 3;
+}
+
+// Operational status of a VDisk as tracked by the BSC.
+enum VDiskStatus {
+    VDISK_STATUS_UNSPECIFIED = 0;
+    // The disk is not operational.
+    VDISK_STATUS_ERROR = 1;
+    // Initialization in progress.
+    VDISK_STATUS_INIT_PENDING = 2;
+    // The disk accepts queries, but not all the data has been replicated yet.
+    VDISK_STATUS_REPLICATING = 3;
+    // The disk is fully operational and does not degrade group fault tolerance.
+    VDISK_STATUS_READY = 4;
+}
+
+// Health of a storage group derived from the state of its VDisks and PDisks.
+enum GroupStatus {
+    GROUP_STATUS_UNSPECIFIED = 0;
+    // All VDisks of the group have been stably READY for the required period.
+    GROUP_STATUS_FULL = 1;
+    // Some VDisks are not ready, but the group is not degraded yet.
+    GROUP_STATUS_PARTIAL = 2;
+    // One more failure may render the group unusable.
+    GROUP_STATUS_DEGRADED = 3;
+    // The group is not available for operation.
+    GROUP_STATUS_DISINTEGRATED = 4;
+}
+
+// Free-space pressure level, from GREEN (normal operation) to BLACK (emergency
+// reserve). Values are ordered by severity, and each level also implies the
+// effects of all preceding, less severe levels. Percentages below are default
+// transition thresholds; they are configurable and are not API guarantees.
+enum SpaceColor {
+    SPACE_COLOR_UNSPECIFIED = 0;
+    // Normal operation, no space-related restrictions.
+    SPACE_COLOR_GREEN = 1;
+    // At approximately 13% free space, report that the disk is running low.
+    SPACE_COLOR_CYAN = 2;
+    // At approximately 10% free space, tablets try to move their channels to
+    // other storage groups.
+    SPACE_COLOR_LIGHT_YELLOW = 3;
+    // At approximately 8% free space, tablets start switching to read-only.
+    SPACE_COLOR_YELLOW = 4;
+    // At approximately 6.5% free space, report that tablets have not stopped
+    // writing yet.
+    SPACE_COLOR_LIGHT_ORANGE = 5;
+    // At approximately 5% free space, the affected VDisk rejects regular
+    // writes and becomes read-only.
+    SPACE_COLOR_PRE_ORANGE = 6;
+    // At approximately 3% free space, all VDisks in the group reject regular
+    // writes and become read-only.
+    SPACE_COLOR_ORANGE = 7;
+    // At approximately 1% free space, the PDisk stops allocating new chunks.
+    SPACE_COLOR_RED = 8;
+    // At approximately 0.1% free space, only the reserve for emergency recovery
+    // remains.
+    SPACE_COLOR_BLACK = 9;
+}
+
+// State of a virtual (BlobDepot-based) group.
+enum VirtualGroupState {
+    VIRTUAL_GROUP_STATE_UNSPECIFIED = 0;
+    // The BlobDepot tablet is still being set up and is not serving the
+    // virtual group yet.
+    VIRTUAL_GROUP_STATE_NEW = 1;
+    // BlobDepot tablet setup failed; see error_reason for details.
+    VIRTUAL_GROUP_STATE_CREATE_FAILED = 2;
+    // The BlobDepot tablet is up and the group is serving requests.
+    VIRTUAL_GROUP_STATE_WORKING = 3;
+    // The group is being deleted.
+    VIRTUAL_GROUP_STATE_DELETING = 4;
+}
+
+// Progress of group decommission: transformation of a regular group into
+// a virtual one by moving its data into a BlobDepot tablet.
+enum GroupDecommitStatus {
+    GROUP_DECOMMIT_STATUS_UNSPECIFIED = 0;
+    // The group is not being decommitted.
+    GROUP_DECOMMIT_STATUS_NONE = 1;
+    // Decommission has been requested; the BlobDepot tablet is being set up,
+    // data movement has not started yet.
+    GROUP_DECOMMIT_STATUS_PENDING = 2;
+    // Data is being moved from the group's VDisks into the BlobDepot tablet.
+    GROUP_DECOMMIT_STATUS_IN_PROGRESS = 3;
+    // All the data has been moved, the group is fully virtual.
+    GROUP_DECOMMIT_STATUS_DONE = 4;
+    // The group is being converted back to a regular one.
+    GROUP_DECOMMIT_STATUS_RECOMMISSIONING = 5;
+}
+
+// How the node is configured in the cluster.
+enum NodeType {
+    NODE_TYPE_UNSPECIFIED = 0;
+    NODE_TYPE_STATIC = 1;
+    NODE_TYPE_DYNAMIC = 2;
+}
+
+// Registration state of a bare disk drive (identified by serial number).
+enum DeviceLifeStage {
+    DEVICE_LIFE_STAGE_UNSPECIFIED = 0;
+    // The drive has been seen on a node, but is not registered in the cluster yet.
+    DEVICE_LIFE_STAGE_FREE = 1;
+    // The drive has been registered through serial number management;
+    // drives of PDisks defined via the storage layout (host configs) stay FREE.
+    DEVICE_LIFE_STAGE_ADDED = 2;
+    // The drive has been unregistered through serial number management.
+    DEVICE_LIFE_STAGE_REMOVED = 3;
+}
+
+// A physical disk attached to a cluster node.
+message PDisk {
+    PDiskId id = 1;
+    // Device path on the node, e.g. "/dev/disk/by-partlabel/ydb_ssd_01".
+    string path = 2;
+    // Type of the underlying storage device.
+    DeviceType device_type = 3;
+    // Box ID of the PDisk.
+    uint64 box_id = 4;
+    // Unique id assigned to the disk when it is formatted.
+    uint64 guid = 5;
+    // User-defined disk kind, matched against storage pool PDisk filters.
+    uint64 kind = 6;
+
+    // Administrative status of the PDisk.
+    PDiskStatus status = 7;
+    // Decommission status of the PDisk.
+    PDiskDecommitStatus decommit_status = 8;
+    // Maintenance status of the PDisk.
+    PDiskMaintenanceStatus maintenance_status = 9;
+    // Whether the PDisk is read-only.
+    bool read_only = 10;
+
+    // Serial number expected by the configuration and the one actually seen on the node.
+    string expected_serial = 11;
+    string last_seen_serial = 12;
+
+    // Whether the disk is shared with the operating system; unset when unknown.
+    optional bool shared_with_os = 13;
+    // Whether the disk is intended primarily for reads; unset when unknown.
+    optional bool read_centric = 14;
+
+    // True for a PDisk from the static cluster configuration (box_id is zero).
+    bool is_static = 15;
+
+    // Configured or reported number of base VDisk slots on the PDisk.
+    uint32 expected_slot_count = 16;
+    // Number of slots occupied by static VDisks.
+    uint32 num_static_slots = 17;
+    // Number of allocation units represented by one base slot. A VDisk may
+    // occupy multiple base slots.
+    uint32 slot_size_in_units = 18;
+    // If nonzero, every slot on the disk is guaranteed this many bytes.
+    uint64 enforced_dynamic_slot_size = 19;
+
+    // Space in bytes as reported by the disk; 0 when metrics have not been reported yet.
+    uint64 total_size = 20;
+    uint64 available_size = 21;
+
+    // Device performance limits, as reported by the disk.
+    uint64 max_read_throughput_bytes_per_second = 22;
+    uint64 max_write_throughput_bytes_per_second = 23;
+    uint32 max_iops = 24;
+}
+
+// A former replica of a VDisk that keeps serving reads until the new replica
+// finishes replication.
+message Donor {
+    VDiskId vdisk_id = 1;
+    VSlotId slot_id = 2;
+    uint64 allocated_size = 3;
+}
+
+// A virtual disk: member of a storage group residing in a slot on some PDisk.
+message VDisk {
+    VDiskId id = 1;
+    VSlotId slot_id = 2;
+    // VDisk kind name from the storage configuration.
+    string kind = 3;
+
+    VDiskStatus status = 4;
+    // True when the VDisk has been stably READY for some time,
+    // as tracked by the BSC (used in fail model checks).
+    bool ready = 5;
+    // True when the VDisk is read-only.
+    bool read_only = 6;
+    // True for VDisks of the static group.
+    bool is_static = 7;
+
+    // Donors of this VDisk, present when the VDisk is being replicated after reassignment.
+    repeated Donor donors = 8;
+
+    // Allocated space in bytes; falls back to the value reported separately
+    // by the BSC when detailed metrics are unavailable.
+    uint64 allocated_size = 9;
+    // Available space in bytes; 0 when metrics are unavailable.
+    uint64 available_size = 10;
+    // Space consumption as a fraction of the LIGHT_YELLOW slot limit.
+    // May exceed 1 when the limit has been crossed; unset when metrics are unavailable.
+    optional double slot_usage = 11;
+    // Space consumption as a fraction of the hard slot limit.
+    // May exceed 1 after forced allocation; unset when metrics are unavailable.
+    optional double raw_usage = 12;
+    // Occupancy used by PDisk capacity-pressure calculations. A value of 1
+    // corresponds to hard-limit exhaustion and may be exceeded after overcommit.
+    // Unset when metrics are unavailable.
+    optional double normalized_occupancy = 13;
+    // Capacity-pressure level; unset when metrics are unavailable.
+    optional SpaceColor space_color = 14;
+}
+
+// Details of a virtual (BlobDepot-based) group; also carries decommission state
+// for regular groups being converted to virtual ones.
+message VirtualGroupInfo {
+    VirtualGroupState state = 1;
+    string name = 2;
+    uint64 blob_depot_id = 3;
+    // Human-readable error description when state is CREATE_FAILED.
+    string error_reason = 4;
+    GroupDecommitStatus decommit_status = 5;
+}
+
+// A storage group: set of VDisks providing fault-tolerant storage.
+message Group {
+    uint32 group_id = 1;
+    uint32 generation = 2;
+    // Erasure species, e.g. "block-4-2", "mirror-3-dc", "none".
+    string erasure_species = 3;
+    uint64 box_id = 4;
+    uint64 storage_pool_id = 5;
+    // Slots of the group members, ordered by (fail realm, fail domain, vdisk index).
+    repeated VSlotId vslot_ids = 6;
+
+    // Current health based on the actual state of the group's VDisks.
+    GroupStatus operating_status = 7;
+    // Health additionally taking into account the administrative status of the
+    // underlying drives (e.g. FAULTY drives count as failed even if VDisks are up).
+    GroupStatus expected_status = 8;
+    // True once the operational VDisks have satisfied the group failure model
+    // at least once.
+    bool seen_operational = 9;
+
+    // Group size in allocation units; 0 means the default of one unit.
+    uint32 size_in_units = 10;
+    // True for the static group defined in the cluster bootstrap configuration.
+    bool is_static = 11;
+    // True for bridge-mode proxy groups.
+    bool is_proxy = 12;
+
+    // Present only for virtual groups and groups being decommissioned.
+    VirtualGroupInfo virtual_group = 13;
+}
+
+// Restrictions on fault domain placement of group VDisks. Location level keys
+// are 5 for bridge pile, 10 for data center, 20 for module, 30 for rack and 40
+// for unit. BSC uses defaults when all level boundaries or all topology counts
+// are zero.
+message GroupGeometry {
+    uint32 realm_level_begin = 1;
+    uint32 realm_level_end = 2;
+    uint32 domain_level_begin = 3;
+    uint32 domain_level_end = 4;
+    uint32 num_fail_realms = 5;
+    uint32 num_fail_domains_per_fail_realm = 6;
+    uint32 num_vdisks_per_fail_domain = 7;
+}
+
+// Constraint on PDisks a storage pool may use, part of the pool
+// configuration. A PDisk matches the filter if all
+// the properties set in the filter match.
+message PDiskFilter {
+    optional DeviceType device_type = 1;
+    optional bool shared_with_os = 2;
+    optional bool read_centric = 3;
+    optional uint64 kind = 4;
+}
+
+enum EncryptionMode {
+    ENCRYPTION_MODE_UNSPECIFIED = 0;
+    ENCRYPTION_MODE_NONE = 1;
+    ENCRYPTION_MODE_CHACHA8 = 2;
+}
+
+// A named collection of storage groups with common settings.
+message StoragePool {
+    uint64 box_id = 1;
+    uint64 storage_pool_id = 2;
+    string name = 3;
+    string erasure_species = 4;
+    // User-defined pool kind, e.g. "ssd"; referenced from database storage settings.
+    string kind = 5;
+    string vdisk_kind = 6;
+
+    // Target number of groups in the pool.
+    uint32 num_groups = 7;
+    // Size of newly allocated groups in allocation units; 0 means one unit.
+    uint32 default_group_size_in_units = 8;
+    GroupGeometry geometry = 9;
+    // PDisks the pool may use; a disk matches if any of the filters match.
+    repeated PDiskFilter pdisk_filters = 10;
+    EncryptionMode encryption_mode = 11;
+
+    // Configuration item generation, used for optimistic concurrency control
+    // in configuration updates.
+    uint64 config_generation = 12;
+}
+
+// A cluster node as known to the storage controller.
+message Node {
+    uint32 node_id = 1;
+    // Fully qualified domain name of the host.
+    string host = 2;
+    // Interconnect port.
+    uint32 port = 3;
+    NodeType type = 4;
+    Ydb.Discovery.NodeLocation location = 5;
+}
+
+// A bare disk drive identified by its serial number
+// (inventory for serial-number-based disk management).
+message Device {
+    string serial_number = 1;
+    uint64 box_id = 2;
+    // Node the drive is attached to.
+    uint32 node_id = 3;
+    DeviceType device_type = 4;
+    // Device path on the node, when known.
+    string path = 5;
+    // PDisk created over this device; unset when there is none.
+    PDiskId pdisk_id = 6;
+    optional uint64 guid = 7;
+    DeviceLifeStage life_stage = 8;
+}
+
+// Cluster-wide settings reported by the Blob Storage Controller.
+message ClusterSettings {
+    // Default maximum number of VDisk slots for a PDisk without an explicit
+    // or reported slot count.
+    uint32 default_max_slots = 1;
+    // Whether the controller automatically replaces failed VDisks.
+    bool enable_self_heal = 2;
+    // Whether a replaced VDisk remains available as a donor while the new
+    // replica is being populated.
+    bool enable_donor_mode = 3;
+    // Interval between scrub cycles. Zero disables periodic scrubbing.
+    uint64 scrub_periodicity_seconds = 4;
+    // PDisk space kept outside the capacity available for placement,
+    // in parts per thousand.
+    uint32 pdisk_space_margin_promille = 5;
+    // Minimum placement capacity, measured in groups, that must remain reserved.
+    uint32 group_reserve_min = 6;
+    // Additional placement capacity to keep reserved, as a fraction of total
+    // group capacity, in parts per million.
+    uint32 group_reserve_part_ppm = 7;
+    // Maximum number of PDisks that may be scrubbed concurrently.
+    uint32 max_scrubbed_pdisks_at_once = 8;
+    // Space-color threshold configured for PDisks.
+    SpaceColor pdisk_space_color_border = 9;
+    // Whether SelfHeal detects and repairs groups with invalid placement.
+    bool enable_group_layout_sanitizer = 10;
+    // Whether VDisks of one fail realm may occupy multiple physical realms.
+    bool allow_multiple_realms_occupation = 11;
+    // Whether a reassignment without an explicit target PDisk is constrained
+    // to the source node.
+    bool use_self_heal_local_policy = 12;
+    // Whether reassignment first tries the source node and falls back to
+    // unrestricted placement when local placement is impossible.
+    bool try_to_relocate_broken_disks_locally_first = 13;
+}
+
+// Safety checks that may be explicitly relaxed for an administrative action.
+// Every option is false by default. Enabling an option may reduce storage
+// availability or fault tolerance and should only be used after a normal
+// request has been rejected by the corresponding check.
+message SafetyOptions {
+    // Allow the operation even if it may leave a group degraded.
+    bool ignore_degraded_groups = 1;
+    // Skip the group failure-model check. The operation may cause data loss.
+    bool ignore_group_failure_model = 2;
+}
+
+message ReassignVDiskOptions {
+    // Safety checks to relax for this reassignment.
+    SafetyOptions safety = 1;
+    // Do not keep the source VDisk as a donor during replication.
+    bool suppress_donor_mode = 2;
+    // Allow existing PDisks that are ineligible for new VDisks to remain in
+    // the group. They are never selected as the new target.
+    bool allow_existing_ineligible_pdisks = 3;
+    // Require the target PDisk to be operational. A PDisk is operational when
+    // its node is connected and its reported state is Normal or has not been
+    // reported yet. When false, placement prefers operational PDisks but may
+    // fall back to a non-operational one.
+    bool settle_only_on_operational_pdisks = 4;
+    // Skip checking whether the target PDisk has enough space for this VDisk.
+    // Replication may fail if its actual capacity is insufficient.
+    bool ignore_target_space_check = 5;
+}
+
+// Starts relocation of a VDisk from its current VSlot. Success means that the configuration change was accepted, not
+// that replication has finished. A static-group VDisk requires configuration V2 to be enabled.
+message ReassignVDiskRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    VDiskId vdisk_id = 2 [(required) = true];
+    // Optional target PDisk. Reassignment without a target is also called eviction;
+    // the storage configuration manager selects the new placement automatically.
+    PDiskId target_pdisk_id = 3;
+    ReassignVDiskOptions options = 4;
+    // Validate the operation and calculate placement without committing changes.
+    // Currently supported only for dynamic VDisks.
+    bool dry_run = 5;
+}
+
+message ReassignVDiskResponse {
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ReassignVDiskResult {
+    // Requested VDisk identifier with the pre-reassignment group generation.
+    VDiskId vdisk_id = 1;
+    // Placement before and after reassignment.
+    VSlotId source_slot_id = 2;
+    VSlotId target_slot_id = 3;
+}
+
+// Returns a consistent snapshot of the cluster storage state and configuration:
+// storage pools, groups, VDisks, PDisks, nodes, bare drive inventory and
+// cluster-wide storage settings. The request selects sections to include; an
+// empty request returns an empty successful stream.
+message StorageStateRequest {
+    // Include storage pool definitions.
+    bool include_storage_pools = 1;
+    // Include storage groups.
+    bool include_groups = 2;
+    // Include VDisks and their physical placement.
+    bool include_vdisks = 3;
+    // Include PDisks and their latest reported metrics.
+    bool include_pdisks = 4;
+    // Include cluster nodes known to the storage controller.
+    bool include_nodes = 5;
+    // Include the bare drive inventory.
+    bool include_devices = 6;
+    // Include cluster-wide storage controller settings.
+    bool include_settings = 7;
+}
+
+// One part of a consistent storage snapshot. All data parts returned by one
+// RPC belong to the same snapshot.
+message StorageStateResponse {
+    Ydb.StatusIds.StatusCode status = 1;
+    repeated Ydb.Issue.IssueMessage issues = 2;
+    StorageStateResult result = 3;
+}
+
+// A result may contain a subset of the requested sections. A section may be
+// split across several responses.
+message StorageStateResult {
+    repeated StoragePool storage_pools = 1;
+    repeated Group groups = 2;
+    repeated VDisk vdisks = 3;
+    repeated PDisk pdisks = 4;
+    repeated Node nodes = 5;
+    repeated Device devices = 6;
+    ClusterSettings settings = 7;
+}

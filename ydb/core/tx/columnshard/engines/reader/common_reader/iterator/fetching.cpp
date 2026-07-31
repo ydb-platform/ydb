@@ -37,17 +37,22 @@ TConclusion<bool> TStepAction::DoExecuteImpl() {
         CacheSourceStats();
         return true;
     }
-    auto executeResult = Cursor.Execute(Source);
+    auto executeResult = Cursor.Execute(std::move(Source));
     if (executeResult.IsFail()) {
+        AFL_VERIFY(Source);
         AFL_VERIFY(!FinishedFlag);
         FinishedFlag = true;
         CacheSourceStats();
         return executeResult;
     }
     if (*executeResult) {
+        AFL_VERIFY(Source);
         AFL_VERIFY(!FinishedFlag);
         FinishedFlag = true;
         CacheSourceStats();
+    } else {
+        // Ownership transferred to async work; Source must be empty.
+        AFL_VERIFY(!Source);
     }
     return FinishedFlag;
 }
@@ -241,7 +246,7 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
 }
 
 NO_SANITIZE_THREAD
-TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
+TConclusion<bool> TProgramStep::DoExecuteInplace(std::shared_ptr<IDataSource>&& source, const TFetchingScriptCursor& step) const {
     const bool started = !source->GetExecutionContext().HasProgramIterator();
     if (!source->GetExecutionContext().HasProgramIterator()) {
         source->MutableExecutionContext().Start(source, Program, step);
@@ -273,7 +278,16 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
         auto signals = GetSignals(tracingNodeId);
 
         const TMonotonic start = TMonotonic::Now();
-        auto conclusion = source->GetExecutionContext().GetExecutionVisitorVerified()->Execute();
+        IDataSource* sourceRaw = source.get();
+        sourceRaw->MutableExecutionContext().BindSourceOwnership(source);
+        auto conclusion = sourceRaw->GetExecutionContext().GetExecutionVisitorVerified()->Execute();
+        sourceRaw->MutableExecutionContext().UnbindSourceOwnership();
+        // Background work took ownership via ExtractSourceOwnership before arming.
+        if (conclusion.IsSuccess() && *conclusion == NArrow::NSSA::IResourceProcessor::EExecutionResult::InBackground) {
+            AFL_VERIFY(!source);
+            return false;
+        }
+        AFL_VERIFY(source);
         const TDuration executionDurationMs = TMonotonic::Now() - start;
         source->GetContext()->GetCommonContext()->GetCounters().AddExecutionDuration(executionDurationMs);
         signals->AddExecutionDuration(executionDurationMs);
@@ -284,8 +298,6 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
         if (conclusion.IsFail()) {
             source->MutableExecutionContext().OnFailedProgramStepExecution();
             return conclusion;
-        } else if (*conclusion == NArrow::NSSA::IResourceProcessor::EExecutionResult::InBackground) {
-            return false;
         }
         source->MutableExecutionContext().OnFinishProgramStepExecution();
         GetSignals(iterator->GetCurrentNodeId())->OnExecuteGraphNode(source->GetRecordsCount());

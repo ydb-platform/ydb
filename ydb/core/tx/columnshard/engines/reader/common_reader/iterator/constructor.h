@@ -115,15 +115,16 @@ private:
 
 public:
     TColumnsFetcherTask(TReadActionsCollection&& actions, const THashMap<ui32, std::shared_ptr<IKernelFetchLogic>>& fetchers,
-        const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& cursor, const TString& taskCustomer,
+        std::shared_ptr<IDataSource>&& source, const TFetchingScriptCursor& cursor, const TString& taskCustomer,
         const TString& externalTaskId = "")
         : TBase(actions, taskCustomer, externalTaskId)
-        , Source(source)
+        , Source(std::move(source))
         , DataFetchers(fetchers)
         , Cursor(cursor)
         , Guard(Source->GetContext()->GetCommonContext()->GetCounters().GetFetchBlobsGuard())
     {
-        FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("scf"));
+        AFL_VERIFY(Source);
+        FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Source->AddEvent("scf"));
     }
 };
 
@@ -140,16 +141,17 @@ private:
 
 public:
     template <class TSource>
-    TBlobsFetcherTask(const std::vector<std::shared_ptr<IBlobsReadingAction>>& readActions, const std::shared_ptr<TSource>& sourcePtr,
+    TBlobsFetcherTask(const std::vector<std::shared_ptr<IBlobsReadingAction>>& readActions, std::shared_ptr<TSource>&& sourcePtr,
         const TFetchingScriptCursor& step, const std::shared_ptr<NCommon::TSpecialReadContext>& context, const TString& taskCustomer,
         const TString& externalTaskId)
-        : TBlobsFetcherTask(readActions, std::static_pointer_cast<IDataSource>(sourcePtr), step, context, taskCustomer, externalTaskId)
+        : TBlobsFetcherTask(
+              readActions, std::static_pointer_cast<IDataSource>(std::move(sourcePtr)), step, context, taskCustomer, externalTaskId)
     {
     }
 
-    TBlobsFetcherTask(const std::vector<std::shared_ptr<IBlobsReadingAction>>& readActions,
-        const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step,
-        const std::shared_ptr<NCommon::TSpecialReadContext>& context, const TString& taskCustomer, const TString& externalTaskId);
+    TBlobsFetcherTask(const std::vector<std::shared_ptr<IBlobsReadingAction>>& readActions, std::shared_ptr<NCommon::IDataSource>&& sourcePtr,
+        const TFetchingScriptCursor& step, const std::shared_ptr<NCommon::TSpecialReadContext>& context, const TString& taskCustomer,
+        const TString& externalTaskId);
 };
 
 }   // namespace NKikimr::NOlap::NReader::NCommon

@@ -24,7 +24,7 @@ private:
     }
 
     virtual bool DoStartFetchingAccessor(
-        const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/, const NReader::NCommon::TFetchingScriptCursor& /*step*/) override {
+        std::shared_ptr<NCommon::IDataSource>&& /*sourcePtr*/, const NReader::NCommon::TFetchingScriptCursor& /*step*/) override {
         return false;
     }
 
@@ -45,7 +45,7 @@ private:
         }
     }
 
-    virtual bool DoStartFetchingColumns(const std::shared_ptr<NReader::NCommon::IDataSource>& /*sourcePtr*/,
+    virtual bool DoStartFetchingColumns(std::shared_ptr<NReader::NCommon::IDataSource>&& /*sourcePtr*/,
         const NReader::NCommon::TFetchingScriptCursor& /*step*/, const NReader::NCommon::TColumnsSetIds& /*columns*/) override {
         return false;
     }

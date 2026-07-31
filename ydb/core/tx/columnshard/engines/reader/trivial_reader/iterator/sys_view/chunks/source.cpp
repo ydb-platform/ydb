@@ -55,7 +55,7 @@ public:
 }   // namespace
 
 bool TSourceData::DoStartFetchingAccessor(
-    const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const NReader::NCommon::TFetchingScriptCursor& step) {
+    std::shared_ptr<NCommon::IDataSource>&& sourcePtr, const NReader::NCommon::TFetchingScriptCursor& step) {
     AFL_VERIFY(!HasPortionAccessor());
     YDB_LOG_DEBUG("",
         {"event", step.GetName()},
@@ -65,7 +65,7 @@ bool TSourceData::DoStartFetchingAccessor(
         std::make_shared<TDataAccessorsRequest>(NGeneralCache::TPortionsMetadataCachePolicy::EConsumer::SCAN);
     request->AddPortion(GetPortion());
     request->SetColumnIds(GetContext()->GetAllUsageColumns()->GetColumnIds());
-    request->RegisterSubscriber(std::make_shared<NCommon::TPortionAccessorFetchingSubscriber>(step, sourcePtr));
+    request->RegisterSubscriber(std::make_shared<NCommon::TPortionAccessorFetchingSubscriber>(step, std::move(sourcePtr)));
     GetContext()->GetCommonContext()->GetDataAccessorsManager()->AskData(request);
     return true;
 }
@@ -304,8 +304,8 @@ TConclusion<bool> TSourceData::DoStartFetchImpl(
     }
 
     TReadActionsCollection readActions;
-    auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
-    NCommon::TFetchingResultContext contextFetch(*OriginalData, *GetStageData().GetIndexes(), source, nullptr);
+    auto sourceForContext = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
+    NCommon::TFetchingResultContext contextFetch(*OriginalData, *GetStageData().GetIndexes(), sourceForContext, nullptr);
     for (auto&& i : fetchersExt) {
         i->Start(readActions, contextFetch);
     }
@@ -322,9 +322,10 @@ TConclusion<bool> TSourceData::DoStartFetchImpl(
     for (auto&& i : fetchersExt) {
         AFL_VERIFY(fetchers.emplace(i->GetEntityId(), i).second);
     }
+    auto source = MutableExecutionContext().ExtractSourceOwnership();
     NActors::TActivationContext::AsActorContext().Register(
         new NOlap::NBlobOperations::NRead::TActor(std::make_shared<NCommon::TColumnsFetcherTask>(
-            std::move(readActions), fetchers, source, GetExecutionContext().GetCursorStep(), "fetcher", "")));
+            std::move(readActions), fetchers, std::move(source), GetExecutionContext().GetCursorStep(), "fetcher", "")));
     return true;
 }
 

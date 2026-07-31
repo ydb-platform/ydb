@@ -42,8 +42,33 @@ private:
     std::optional<TFetchingScriptCursor> CursorStep;
     YDB_ACCESSOR_DEF(TString, PrevCategoryName);
     YDB_ACCESSOR_DEF(TString, PrevExecutionResult);
+    // Points to the shared_ptr that currently owns the source on the conveyor thread.
+    // Background fetch/allocation must ExtractSourceOwnership() before arming work.
+    std::shared_ptr<IDataSource>* SourceOwnership = nullptr;
 
 public:
+    void BindSourceOwnership(std::shared_ptr<IDataSource>& ownership) {
+        AFL_VERIFY(!SourceOwnership);
+        AFL_VERIFY(ownership);
+        SourceOwnership = &ownership;
+    }
+
+    void UnbindSourceOwnership() {
+        SourceOwnership = nullptr;
+    }
+
+    std::shared_ptr<IDataSource> ExtractSourceOwnership() {
+        AFL_VERIFY(SourceOwnership);
+        AFL_VERIFY(*SourceOwnership);
+        auto result = std::move(*SourceOwnership);
+        SourceOwnership = nullptr;
+        return result;
+    }
+
+    bool HasSourceOwnership() const {
+        return SourceOwnership && !!*SourceOwnership;
+    }
+
     void OnStartProgramStepExecution(const ui32 nodeId, const std::shared_ptr<TFetchingStepSignals>& signals);
 
     void OnFinishProgramStepExecution();
@@ -129,7 +154,7 @@ private:
         const std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>& fetchersExt) override final;
 
     virtual bool DoStartFetchingColumns(
-        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) = 0;
+        std::shared_ptr<IDataSource>&& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) = 0;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) = 0;
 
     std::optional<NEvLog::TLogsThread> Events;
@@ -356,8 +381,8 @@ public:
 
     void AssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential = false);
 
-    bool StartFetchingColumns(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) {
-        return DoStartFetchingColumns(sourcePtr, step, columns);
+    bool StartFetchingColumns(std::shared_ptr<IDataSource>&& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) {
+        return DoStartFetchingColumns(std::move(sourcePtr), step, columns);
     }
 
     bool IsInFlightReleased() const {

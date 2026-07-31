@@ -22,19 +22,21 @@ void TColumnBlobsFetchingStep::ReportTracing(const std::shared_ptr<IDataSource>&
         Columns.GetColumnsCount(), blobBytes, rawBytes, source->GetRecordsCount(), source->GetReservedMemory());
 }
 
-TConclusion<bool> TColumnBlobsFetchingStep::DoExecuteInplace(
-    const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
+TConclusion<bool> TColumnBlobsFetchingStep::DoExecuteInplace(std::shared_ptr<IDataSource>&& source, const TFetchingScriptCursor& step) const {
     const TMonotonic start = TMonotonic::Now();
-    auto result = !source->StartFetchingColumns(source, step, Columns);
-    const TDuration executionDurationMs = TMonotonic::Now() - start;
-    source->AddExecutionDuration(executionDurationMs);
-
     ui64 blobBytes = source->GetColumnBlobBytes(Columns.GetColumnIds());
     ui64 rawBytes = source->GetColumnRawBytes(Columns.GetColumnIds());
     source->AddBytesRead(blobBytes);
+    const TDuration executionDurationMs = TMonotonic::Now() - start;
+    source->AddExecutionDuration(executionDurationMs);
     ReportTracing(source, step, executionDurationMs, blobBytes, rawBytes);
 
-    return result;
+    if (source->StartFetchingColumns(std::move(source), step, Columns)) {
+        AFL_VERIFY(!source);
+        return false;
+    }
+    AFL_VERIFY(source);
+    return true;
 }
 
 ui64 TColumnBlobsFetchingStep::GetProcessingDataSize(const std::shared_ptr<IDataSource>& source) const {
@@ -49,7 +51,7 @@ void TAssemblerStep::ReportTracing(const std::shared_ptr<IDataSource>& source, c
         Columns->GetColumnsCount(), bytesAssembled, source->GetRecordsCount(), source->GetReservedMemory());
 }
 
-TConclusion<bool> TAssemblerStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
+TConclusion<bool> TAssemblerStep::DoExecuteInplace(std::shared_ptr<IDataSource>&& source, const TFetchingScriptCursor& step) const {
     const TMonotonic start = TMonotonic::Now();
     source->AssembleColumns(Columns);
     const TDuration executionDurationMs = TMonotonic::Now() - start;
@@ -65,8 +67,7 @@ ui64 TAssemblerStep::GetProcessingDataSize(const std::shared_ptr<IDataSource>& s
     return source->GetColumnRawBytes(Columns->GetColumnIds());
 }
 
-TConclusion<bool> TOptionalAssemblerStep::DoExecuteInplace(
-    const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+TConclusion<bool> TOptionalAssemblerStep::DoExecuteInplace(std::shared_ptr<IDataSource>&& source, const TFetchingScriptCursor& /*step*/) const {
     source->AssembleColumns(Columns, !source->IsSourceInMemory());
     return true;
 }
@@ -77,48 +78,47 @@ ui64 TOptionalAssemblerStep::GetProcessingDataSize(const std::shared_ptr<IDataSo
 
 bool TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
     const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) {
-    auto data = Source.lock();
-    if (!data || data->GetContext()->IsAborted()) {
-        if (data) {
-            FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, data->AddEvent("fail_malloc"));
-        }
+    AFL_VERIFY(Source);
+    if (Source->GetContext()->IsAborted()) {
+        FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Source->AddEvent("fail_malloc"));
         guard->Release();
         return false;
     }
     if (StageIndex == NArrow::NSSA::IMemoryCalculationPolicy::EStage::Accessors) {
-        //        data->SetAccessorsGuard( std::move(guard));
+        //        Source->SetAccessorsGuard( std::move(guard));
     } else {
-        data->RegisterAllocationGuard(std::move(guard));
+        Source->RegisterAllocationGuard(std::move(guard));
     }
     if (NeedNextStep) {
         Step.Next();
     }
-    FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, data->AddEvent("fmalloc"));
-    auto convProcId = data->GetContext()->GetCommonContext()->GetConveyorProcessId();
-    auto task = std::make_shared<TStepAction>(std::move(data), std::move(Step), data->GetContext()->GetCommonContext()->GetScanActorId(), false);
+    FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Source->AddEvent("fmalloc"));
+    auto convProcId = Source->GetContext()->GetCommonContext()->GetConveyorProcessId();
+    auto scanActorId = Source->GetContext()->GetCommonContext()->GetScanActorId();
+    auto task = std::make_shared<TStepAction>(std::move(Source), std::move(Step), scanActorId, false);
     NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, convProcId);
     return true;
 }
 
-TAllocateMemoryStep::TFetchingStepAllocation::TFetchingStepAllocation(const std::shared_ptr<IDataSource>& source, const ui64 mem,
+TAllocateMemoryStep::TFetchingStepAllocation::TFetchingStepAllocation(std::shared_ptr<IDataSource>&& source, const ui64 mem,
     const TFetchingScriptCursor& step, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stageIndex, const bool needNextStep)
     : TBase(mem)
-    , Source(source)
+    , Source(std::move(source))
     , Step(step)
-    , TasksGuard(source->GetContext()->GetCommonContext()->GetCounters().GetResourcesAllocationTasksGuard())
+    , TasksGuard(Source->GetContext()->GetCommonContext()->GetCounters().GetResourcesAllocationTasksGuard())
     , StageIndex(stageIndex)
     , NeedNextStep(needNextStep)
 {
+    AFL_VERIFY(Source);
 }
 
 void TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocationImpossible(const TString& errorMessage) {
-    auto sourcePtr = Source.lock();
     YDB_LOG_WARN("",
         {"event", "allocation_impossible"},
         {"error", errorMessage});
-    if (sourcePtr) {
-        FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, sourcePtr->AddEvent("fail_malloc"));
-        sourcePtr->GetContext()->GetCommonContext()->AbortWithError(
+    if (Source) {
+        FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Source->AddEvent("fail_malloc"));
+        Source->GetContext()->GetCommonContext()->AbortWithError(
             "cannot allocate memory for step " + Step.GetName() + ": '" + errorMessage + "'");
     }
 }
@@ -130,7 +130,7 @@ void TAllocateMemoryStep::ReportTracing(
         size, true, source->GetReservedMemory());
 }
 
-TConclusion<bool> TAllocateMemoryStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
+TConclusion<bool> TAllocateMemoryStep::DoExecuteInplace(std::shared_ptr<IDataSource>&& source, const TFetchingScriptCursor& step) const {
     ui64 size = PredefinedSize.value_or(0);
     for (auto&& i : Packs) {
         ui32 sizeLocal = source->GetColumnsVolume(i.GetColumns().GetColumnIds(), i.GetMemType());
@@ -145,11 +145,14 @@ TConclusion<bool> TAllocateMemoryStep::DoExecuteInplace(const std::shared_ptr<ID
         size += sizeLocal;
     }
     const TMonotonic start = TMonotonic::Now();
-    auto allocation = std::make_shared<TFetchingStepAllocation>(source, size, step, StageIndex);
     const TDuration executionDurationMs = TMonotonic::Now() - start;
     ReportTracing(source, step, executionDurationMs, size);
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("smalloc"));
-    source->GetContext()->SendToGroupedMemoryAllocation(source->GetMemoryGroupId(), { allocation }, (ui32)StageIndex);
+    const ui64 memoryGroupId = source->GetMemoryGroupId();
+    auto* context = source->GetContext().get();
+    auto allocation = std::make_shared<TFetchingStepAllocation>(std::move(source), size, step, StageIndex);
+    AFL_VERIFY(!source);
+    context->SendToGroupedMemoryAllocation(memoryGroupId, { allocation }, (ui32)StageIndex);
     return false;
 }
 
@@ -158,7 +161,7 @@ ui64 TAllocateMemoryStep::GetProcessingDataSize(const std::shared_ptr<IDataSourc
 }
 
 NKikimr::TConclusion<bool> TBuildStageResultStep::DoExecuteInplace(
-    const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+    std::shared_ptr<IDataSource>&& source, const TFetchingScriptCursor& /*step*/) const {
     source->BuildStageResult(source);
     return true;
 }

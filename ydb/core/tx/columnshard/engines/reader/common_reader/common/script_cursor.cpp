@@ -10,7 +10,7 @@
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
-TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSource>& source) {
+TConclusion<bool> TFetchingScriptCursor::Execute(std::shared_ptr<IDataSource>&& source) {
     AFL_VERIFY(source);
     YDB_LOG_CREATE_CONTEXT(
         {"sourceIdx", source->GetSourceIdx()},
@@ -22,6 +22,7 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
     Script->OnExecute();
     AFL_VERIFY(!Script->IsFinished(CurrentStepIdx));
     while (!Script->IsFinished(CurrentStepIdx)) {
+        AFL_VERIFY(source);
         if (source->HasStageData() && source->GetStageData().IsEmptyWithData()) {
             YDB_LOG_DEBUG("",
                 {"event", "empty_data"},
@@ -53,7 +54,7 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
             {"scanStepIdx", CurrentStepIdx});
 
         const TMonotonic startInstant = TMonotonic::Now();
-        const TConclusion<bool> resultStep = step->ExecuteInplace(source, *this);
+        const TConclusion<bool> resultStep = step->ExecuteInplace(std::move(source), *this);
         const auto executionTime = TMonotonic::Now() - startInstant;
 
         counters.CountersForStep(step->GetName()).ExecutionDurationMicroSeconds->Add(executionTime.MicroSeconds());
@@ -65,20 +66,25 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
                 {"scanStep", step->DebugString()},
                 {"scanStepIdx", CurrentStepIdx},
                 {"error", resultStep.GetErrorMessage()});
+            AFL_VERIFY(source);
             return resultStep;
         }
         if (!*resultStep) {
+            // Async yield: ownership of source must have been transferred out of this thread.
+            AFL_VERIFY(!source);
             StepEndIfStepIsAsync.emplace(TMonotonic::Now());
             YDB_LOG_DEBUG("",
                 {"scanStep", step->DebugString()},
                 {"scanStepIdx", CurrentStepIdx});
             return false;
         } else {
+            AFL_VERIFY(source);
             StepEndIfStepIsAsync = std::nullopt;
         }
         StepStartInstant = TMonotonic::Now();
         ++CurrentStepIdx;
     }
+    AFL_VERIFY(source);
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("fcursor"));
     return true;
 }

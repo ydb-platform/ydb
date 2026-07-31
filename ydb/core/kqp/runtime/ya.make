@@ -36,6 +36,8 @@ SRCS(
     kqp_write_table.cpp
 
     scheduler/kqp_compute_scheduler_service.cpp
+    scheduler/kqp_dq_scheduler_context.cpp
+    scheduler/kqp_http_pool_cap_pusher.cpp
     scheduler/kqp_schedulable_actor.cpp
     scheduler/kqp_schedulable_read.cpp
     scheduler/kqp_schedulable_task.cpp
@@ -68,6 +70,7 @@ PEERDIR(
     ydb/library/yql/dq/actors/spilling
     ydb/library/yql/dq/common
     ydb/library/yql/dq/runtime
+    ydb/library/yql/providers/common/http_gateway
     yql/essentials/minikql/computation/llvm16
     yql/essentials/minikql/comp_nodes
     yql/essentials/utils

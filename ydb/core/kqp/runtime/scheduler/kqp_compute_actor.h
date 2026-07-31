@@ -1,5 +1,6 @@
 #pragma once
 
+#include "kqp_dq_scheduler_context.h"
 #include "kqp_schedulable_actor.h"
 #include "kqp_schedulable_task.h"
 
@@ -16,10 +17,15 @@ namespace NKikimr::NKqp::NScheduler {
         TSchedulableComputeActorBase(const TSchedulableActorOptions& options, TArgs&& ... args)
             : TBase(std::forward<TArgs>(args) ...)
             , TSchedulableActorBase(options)
+            , SchedulerContext(std::make_shared<TDqSchedulerContext>(options.Query, options.IsSchedulable))
         {
         }
 
     protected:
+        NYql::NDq::IDqSchedulerContextPtr GetSchedulerContext() const override {
+            return SchedulerContext;
+        }
+
         void DoBootstrap() {
             if (IsAccountable()) {
                 RegisterForResume(this->SelfId());
@@ -80,6 +86,7 @@ namespace NKikimr::NKqp::NScheduler {
         }
 
     private:
+        const NYql::NDq::IDqSchedulerContextPtr SchedulerContext;
         bool PassedAway = false;
         bool ForcedResume = false;
     };

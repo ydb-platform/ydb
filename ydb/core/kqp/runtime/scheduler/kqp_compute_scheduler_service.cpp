@@ -386,6 +386,24 @@ bool TComputeScheduler::RemoveQuery(const NHdrf::TQueryId& queryId) {
     return false;
 }
 
+std::vector<TComputeScheduler::TPoolShare> TComputeScheduler::GetPoolShares() const {
+    std::vector<TPoolShare> result;
+    auto snapshot = Root->GetSnapshot();
+    if (!snapshot) {
+        return result;
+    }
+    const auto totalCpu = std::max<ui64>(GetTotalCpuLimit(), 1);
+    snapshot->ForEachChild<NHdrf::NSnapshot::TDatabase>([&](auto* database, size_t) {
+        database->template ForEachChild<NHdrf::NSnapshot::TPool>([&](auto* pool, size_t) {
+            result.push_back({
+                std::get<NHdrf::TPoolId>(pool->GetId()),
+                double(pool->FairShare) / totalCpu,
+            });
+        });
+    });
+    return result;
+}
+
 void TComputeScheduler::UpdateFairShare() {
     auto startTime = TMonotonic::Now();
 

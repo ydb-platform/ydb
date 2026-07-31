@@ -32,6 +32,12 @@ public:
 
     void UpdateFairShare();
 
+    struct TPoolShare {
+        TString PoolId;
+        double Share; // pool FairShare / TotalCpu, normalized to [0..1]
+    };
+    std::vector<TPoolShare> GetPoolShares() const;
+
 private:
     static constexpr NHdrf::TQueryId READ_QUERY_ID = -1;
 

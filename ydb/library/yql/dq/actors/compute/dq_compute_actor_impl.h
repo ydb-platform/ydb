@@ -375,6 +375,10 @@ protected:
         return MemoryQuota->GetMkqlMemoryLimit();
     }
 
+    virtual IDqSchedulerContextPtr GetSchedulerContext() const {
+        return nullptr;
+    }
+
     void DoExecute() {
         Y_ASSERT(!Terminated);
 
@@ -1999,7 +2003,8 @@ protected:
                         .SourceSettings = (!settings.empty() ? settings.at(inputIndex) : nullptr),
                         .Arena = Task.GetArena(),
                         .TraceId = ComputeActorSpan.GetTraceId(),
-                        .DatumValidationMode = CoreRuntimeSettings->DatumValidation.Get()
+                        .DatumValidationMode = CoreRuntimeSettings->DatumValidation.Get(),
+                        .SchedulerContext = GetSchedulerContext(),
                     });
             } catch (const std::exception& ex) {
                 throw yexception() << "Failed to create source " << inputDesc.GetSource().GetType() << ": " << ex.what();

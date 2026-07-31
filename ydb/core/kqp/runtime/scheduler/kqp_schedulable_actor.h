@@ -35,6 +35,8 @@ protected:
         return Throttled;
     }
 
+    void IncreaseBurstUsage(const TDuration& burstUsage);
+
     bool StartExecution(TMonotonic now);
     void StopExecution(bool& forcedResume);
 

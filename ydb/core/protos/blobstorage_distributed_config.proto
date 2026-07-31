@@ -200,6 +200,11 @@ message TEvNodeConfigInvokeOnRoot {
         bool FromSelfHeal = 8;
         bool AllowUnusableDisks = 9;
         bool SettleOnlyOnOperationalDisks = 10;
+        // Placement policies forwarded to the static-group allocator.
+        bool PreferLessOccupiedRack = 11;
+        bool WithAttentionToReplication = 12;
+        bool UseSelfHealLocalPolicy = 13;
+        bool TryToRelocateBrokenDisksLocallyFirst = 14;
     }
 
     // Regenerate configuration so the slain VDisk is no more reported as DESTROY one in the list.

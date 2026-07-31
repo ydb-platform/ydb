@@ -51,8 +51,8 @@ jobs:
         with:
           revision: "pr-${{ github.event_name == 'workflow_dispatch' && inputs.pull_number || github.event.pull_request.number }}-${{ steps.sha.outputs.value }}"
           src-root: "./ydb/docs"
-          cli-version: "4.59.12"
-          use-ya-opensource: true
+          cli-version: "stable"
+          use-ya-opensource: false
 
       - name: Fail on documentation build issues
         run: |

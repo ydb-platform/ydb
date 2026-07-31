@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-using namespace NYT::NQueryClient::NUdf;
+using namespace NYdb::NUdfStore::NAbi;
 
 namespace {
 

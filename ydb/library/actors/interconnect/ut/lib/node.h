@@ -29,6 +29,8 @@ class TNode {
     TString CaPath;
 
 public:
+    using TLogBackendFactory = std::function<TAutoPtr<TLogBackend>()>;
+
     static constexpr ui32 DefaultInflight() { return 512 * 1024; }
     TNode(ui32 nodeId, ui32 numNodes, const THashMap<ui32, ui16>& nodeToPort, const TString& address,
           NMonitoring::TDynamicCounterPtr counters, TDuration deadPeerTimeout,
@@ -37,7 +39,9 @@ public:
           TIntrusivePtr<NLog::TSettings> loggerSettings = nullptr, ui32 inflight = DefaultInflight(),
           ESocketSendOptimization sendOpt = ESocketSendOptimization::DISABLED,
           bool withTls = false, std::function<IActor*(ui32)> checkerFactory = {},
-          NInterconnect::NRdma::ECqMode rdmaCqMode = NInterconnect::NRdma::ECqMode::EVENT) {
+          NInterconnect::NRdma::ECqMode rdmaCqMode = NInterconnect::NRdma::ECqMode::EVENT,
+          std::function<void(ui32, TInterconnectSettings&)> settingsCustomizer = {},
+          TLogBackendFactory logBackendFactory = {}) {
         TActorSystemSetup setup;
         setup.NodeId = nodeId;
         setup.ExecutorsCount = 2;
@@ -62,6 +66,9 @@ public:
         common->Settings.TCPSocketBufferSize = 2048 * 1024;
         common->Settings.SocketSendOptimization = sendOpt;
         common->OutgoingHandshakeInflightLimit = 3;
+        if (settingsCustomizer) {
+            settingsCustomizer(nodeId, common->Settings);
+        }
 
         if (common->Settings.V2.Enable) {
             // Mirror production: create the shared v2 io_uring engine up front and publish it in Common; the
@@ -169,7 +176,7 @@ public:
 
         // register logger
         setup.LocalServices.emplace_back(loggerActorId, TActorSetupCmd(new TLoggerActor(loggerSettings,
-            CreateStderrBackend(), counters->GetSubgroup("subsystem", "logger")),
+            logBackendFactory ? logBackendFactory() : CreateStderrBackend(), counters->GetSubgroup("subsystem", "logger")),
             TMailboxType::ReadAsFilled, 1));
 
         if (common->OutgoingHandshakeInflightLimit) {

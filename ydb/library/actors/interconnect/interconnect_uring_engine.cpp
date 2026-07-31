@@ -111,7 +111,10 @@ namespace NActors {
 
         // Low 3 bits of the session pointer are used as an io_uring user_data op tag; heap allocation
         // alignment of this type is already >= 8 (actually 64 via base/members).
-        struct TSession : TEventDeserializer::IEventProcessor {
+        struct TSession
+            : TEventDeserializer::IEventProcessor
+            , TIntrusiveListItem<TSession>
+        {
             std::atomic_uint32_t OwnerShard;
             const TIntrusivePtr<NInterconnect::TStreamSocket> Socket;
             const TActorId SessionId;
@@ -498,6 +501,7 @@ namespace NActors {
             };
 
             std::unordered_set<std::unique_ptr<TSession>, TSessionHash, TSessionEqual> Sessions;
+            TIntrusiveList<TSession> TouchedSessions;
 
             NMonitoring::TDynamicCounters::TCounterPtr SessionsRegistered;
             NMonitoring::TDynamicCounters::TCounterPtr SessionsUnregistered;
@@ -942,6 +946,17 @@ namespace NActors {
                         break;
                     }
 
+                    // process touched sessions
+                    while (!TouchedSessions.Empty()) {
+                        TSession *session = TouchedSessions.PopFront();
+                        MaybeIssueReadForSession(*session);
+                        MaybeIssueWriteForSession(*session);
+                        if (MaybeFinishMigrate(*session)) {
+                            continue;
+                        }
+                        MaybeEraseSession(*session);
+                    }
+
                     // discard pending events/buffers, if any
                     if (!EvDestroyEvents->Events.empty() || !EvDestroyEvents->Buffers.empty()) {
                         Engine.ActorSystem->Send(new IEventHandle(Engine.DestructorActorId, {}, EvDestroyEvents.release()));
@@ -1058,7 +1073,7 @@ namespace NActors {
                         session->OwnerShard.store(ShardIdx, std::memory_order_release);
                         const auto [it, inserted] = Sessions.emplace(std::move(session));
                         Y_ABORT_UNLESS(inserted);
-                        MaybeIssueReadForSession(**it);
+                        TouchedSessions.PushBack(it->get());
                         break;
                     }
 
@@ -1075,7 +1090,7 @@ namespace NActors {
                         if (session.ReadPending) { // cancel pending read in order to unregister the session
                             CancelOp(session, kOpRead, session.ReadPendingRingIdx);
                         }
-                        MaybeEraseSession(session);
+                        TouchedSessions.PushBack(&session);
                         break;
                     }
 
@@ -1092,7 +1107,9 @@ namespace NActors {
                             session.ReceiveCallbacks[record->Ev->Sender] = std::move(record->Callback);
                         }
                         session.Serializer.Push(std::move(record->Ev));
-                        MaybeIssueWriteForSession(session);
+                        if (!session.WritePending) {
+                            TouchedSessions.PushBack(&session);
+                        }
                         break;
                     }
                 }
@@ -1190,7 +1207,7 @@ namespace NActors {
                     if (session->SendPings && session->PingRequestSentTimestamp == 0 &&
                             now - session->LastPingSentTimestamp >= Engine.PingPeriodCycles) {
                         session->SendPingRequest(now);
-                        MaybeIssueWriteForSession(*session);
+                        TouchedSessions.PushBack(session.get());
                     }
                 }
 
@@ -1239,7 +1256,7 @@ namespace NActors {
                     CancelOp(*candidate, kOpRead, candidate->ReadPendingRingIdx);
                 }
 
-                MaybeFinishMigrate(*candidate);
+                TouchedSessions.PushBack(candidate);
             }
 
             void CancelOp(TSession& session, EOperationType op, int ringIdx) {
@@ -1298,12 +1315,7 @@ namespace NActors {
                     }
                 }
 
-                MaybeIssueReadForSession(session);
-                MaybeIssueWriteForSession(session); // some reads may lead to generation of traffic
-                if (MaybeFinishMigrate(session)) {
-                    return;
-                }
-                MaybeEraseSession(session);
+                TouchedSessions.PushBack(&session);
             }
 
             void MaybeIssueReadForSession(TSession& session) {
@@ -1344,11 +1356,7 @@ namespace NActors {
                     }
                 }
 
-                MaybeIssueWriteForSession(session);
-                if (MaybeFinishMigrate(session)) {
-                    return;
-                }
-                MaybeEraseSession(session);
+                TouchedSessions.PushBack(&session);
             }
 
             void MaybeIssueWriteForSession(TSession& session) {

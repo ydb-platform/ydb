@@ -194,6 +194,16 @@ TWriteSessionImpl::TWriteSessionImpl(
                 TDuration::MilliSeconds(100)
     )
 {
+    // Avoid sending the token used to open the session as a token refresh.
+    if (auto credentialsProvider = DbDriverState->GetCredentialsProvider()) {
+        try {
+            auto authInfo = credentialsProvider->GetAuthInfoAsync();
+            if (authInfo.IsReady()) {
+                PrevToken = authInfo.GetValue();
+            }
+        } catch (...) {
+        }
+    }
     if (!Settings.RetryPolicy_) {
         Settings.RetryPolicy_ = IRetryPolicy::GetDefaultPolicy();
     }

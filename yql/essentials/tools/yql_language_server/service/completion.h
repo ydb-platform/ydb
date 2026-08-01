@@ -8,7 +8,7 @@
 
 namespace NLsp::NYql {
 
-class TCompletionService: public TThrRefBase {
+class TCompletionService final: public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<TCompletionService>;
 

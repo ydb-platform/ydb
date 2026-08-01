@@ -277,6 +277,7 @@ ELSEIF (ARCH_ARM64)
         -DTOOLCHAIN_MISS_ASM_HWCAP_H
     )
 
+    SRC(numpy/_core/src/highway/hwy/abort.cc)
     SRC(numpy/_core/src/umath/_umath_tests.dispatch.asimdhp.c)
     SRC(numpy/_core/src/npysort/highway_qsort.dispatch.asimd.cpp)
     SRC(numpy/_core/src/npysort/highway_qsort.dispatch.sve.cpp)

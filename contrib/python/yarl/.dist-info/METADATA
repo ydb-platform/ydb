@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: yarl
-Version: 1.15.5
+Version: 1.16.0
 Summary: Yet another URL library
 Home-page: https://github.com/aio-libs/yarl
 Author: Andrew Svetlov
@@ -45,22 +45,23 @@ yarl
 The module provides handy URL class for URL parsing and changing.
 
 .. image:: https://github.com/aio-libs/yarl/workflows/CI/badge.svg
-  :target: https://github.com/aio-libs/yarl/actions?query=workflow%3ACI
-  :align: right
+   :target: https://github.com/aio-libs/yarl/actions?query=workflow%3ACI
+   :align: right
 
 .. image:: https://codecov.io/gh/aio-libs/yarl/branch/master/graph/badge.svg
-  :target: https://codecov.io/gh/aio-libs/yarl
+   :target: https://codecov.io/gh/aio-libs/yarl
+
+.. image:: https://img.shields.io/endpoint?url=https://codspeed.io/badge.json
+   :target: https://codspeed.io/aio-libs/yarl
 
 .. image:: https://badge.fury.io/py/yarl.svg
-    :target: https://badge.fury.io/py/yarl
-
+   :target: https://badge.fury.io/py/yarl
 
 .. image:: https://readthedocs.org/projects/yarl/badge/?version=latest
-    :target: https://yarl.aio-libs.org
-
+   :target: https://yarl.aio-libs.org
 
 .. image:: https://img.shields.io/pypi/pyversions/yarl.svg
-    :target: https://pypi.python.org/pypi/yarl
+   :target: https://pypi.python.org/pypi/yarl
 
 .. image:: https://img.shields.io/matrix/aio-libs:matrix.org?label=Discuss%20on%20Matrix%20at%20%23aio-libs%3Amatrix.org&logo=matrix&server_fqdn=matrix.org&style=flat
    :target: https://matrix.to/#/%23aio-libs:matrix.org
@@ -69,6 +70,7 @@ The module provides handy URL class for URL parsing and changing.
 .. image:: https://img.shields.io/matrix/aio-libs-space:matrix.org?label=Discuss%20on%20Matrix%20at%20%23aio-libs-space%3Amatrix.org&logo=matrix&server_fqdn=matrix.org&style=flat
    :target: https://matrix.to/#/%23aio-libs-space:matrix.org
    :alt: Matrix Space — #aio-libs-space:matrix.org
+
 
 Introduction
 ------------
@@ -262,6 +264,54 @@ Changelog
     WARNING: Don't drop the next directive!
 
 .. towncrier release notes start
+
+1.16.0
+======
+
+*(2024-10-21)*
+
+
+Bug fixes
+---------
+
+- Fixed blocking I/O to load Python code when creating a new ``~yarl.URL`` with non-ascii characters in the network location part -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1342 <https://github.com/aio-libs/yarl/issues/1342>`__.
+
+
+Removals and backward incompatible breaking changes
+---------------------------------------------------
+
+- Migrated to using a single cache for encoding hosts -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  Passing ``ip_address_size`` and ``host_validate_size`` to ``yarl.cache_configure()`` is deprecated in favor of the new ``encode_host_size`` parameter and will be removed in a future release. For backwards compatibility, the old parameters affect the ``encode_host`` cache size.
+
+  *Related issues and pull requests on GitHub:*
+  `#1348 <https://github.com/aio-libs/yarl/issues/1348>`__, `#1357 <https://github.com/aio-libs/yarl/issues/1357>`__, `#1363 <https://github.com/aio-libs/yarl/issues/1363>`__.
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved performance of constructing ``~yarl.URL`` -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1336 <https://github.com/aio-libs/yarl/issues/1336>`__.
+
+- Improved performance of calling ``yarl.URL.build()`` and constructing unencoded ``~yarl.URL`` -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1345 <https://github.com/aio-libs/yarl/issues/1345>`__.
+
+- Reworked the internal encoding cache to improve performance on cache hit -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1369 <https://github.com/aio-libs/yarl/issues/1369>`__.
+
+
+----
+
 
 1.15.5
 ======

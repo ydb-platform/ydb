@@ -243,6 +243,7 @@ class QuerySessionPool:
         parameters: Optional[dict] = None,
         retry_settings: Optional[RetrySettings] = None,
         *args,
+        pool_id: Optional[str] = None,
         **kwargs,
     ) -> List[convert.ResultSet]:
         """Special interface to execute a one-shot queries in a safe, retriable way.
@@ -252,6 +253,7 @@ class QuerySessionPool:
         :param query: A query, yql or sql text.
         :param parameters: dict with parameters and YDB types;
         :param retry_settings: RetrySettings object.
+        :param pool_id: Optional resource pool ID for routing the query to a specific compute pool.
 
         :return: Result sets or exception in case of execution errors.
         """
@@ -263,7 +265,7 @@ class QuerySessionPool:
 
         def wrapped_callee():
             with self.checkout(timeout=retry_settings.max_session_acquire_timeout) as session:
-                it = session.execute(query, parameters, *args, **kwargs)
+                it = session.execute(query, parameters, *args, pool_id=pool_id, **kwargs)
                 return convert.aggregate_result_sets_by_index(it)
 
         return retry_operation_sync(wrapped_callee, retry_settings)
@@ -274,6 +276,7 @@ class QuerySessionPool:
         parameters: Optional[dict] = None,
         retry_settings: Optional[RetrySettings] = None,
         *args,
+        pool_id: Optional[str] = None,
         **kwargs,
     ) -> futures.Future:
         """Asynchronously execute a query with retries."""
@@ -287,6 +290,7 @@ class QuerySessionPool:
             parameters,
             retry_settings,
             *args,
+            pool_id=pool_id,
             **kwargs,
         )
 

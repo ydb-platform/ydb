@@ -30,4 +30,12 @@ TExpected<ui64> TFromJson<ui64>::operator()(TJsonValue json) const {
     return static_cast<ui64>(json.GetUIntegerSafe());
 }
 
+TExpected<bool> TFromJson<bool>::operator()(TJsonValue json) const {
+    if (!json.IsBoolean()) {
+        return Unexpected("must be a boolean");
+    }
+
+    return json.GetBooleanSafe();
+}
+
 } // namespace NYql::NJson

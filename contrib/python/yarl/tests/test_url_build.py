@@ -268,6 +268,33 @@ def test_build_already_encoded():
     assert str(u) == "http://оун-упа.укр/шлях/криївка?ключ=знач#фраг"
 
 
+def test_build_already_encoded_username_password():
+    u = URL.build(
+        scheme="http",
+        host="x.org",
+        path="/x/y/z",
+        query_string="x=z",
+        fragment="any",
+        user="u",
+        password="p",
+        encoded=True,
+    )
+    assert str(u) == "http://u:p@x.org/x/y/z?x=z#any"
+    assert u.host_subcomponent == "x.org"
+
+
+def test_build_already_encoded_empty_host():
+    u = URL.build(
+        host="",
+        path="/x/y/z",
+        query_string="x=z",
+        fragment="any",
+        encoded=True,
+    )
+    assert str(u) == "/x/y/z?x=z#any"
+    assert u.host_subcomponent is None
+
+
 def test_build_percent_encoded():
     u = URL.build(
         scheme="http",

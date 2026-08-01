@@ -6,6 +6,7 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     create_topic_ut.cpp
+    schema_ops_ut.cpp
 )
 
 PEERDIR(

@@ -76,6 +76,10 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 25538:added basic monitoring tests and separate events file [#25538](https://github.com/ydb-platform/ydb/pull/25538) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 25458:Сейчас при автопартициронировании топиков учитывается скорость записи различными producer-ами: партиция делится не пополам, а стараемся разделить партицию таким образом, что бы producer-ы распределились по новым партициям равномерно с учетом скорости записи. [#25458](https://github.com/ydb-platform/ydb/pull/25458) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 25387:Change the audit logging logic from AllowedList checking to DenyList checking [#25387](https://github.com/ydb-platform/ydb/pull/25387) ([Andrei Rykov](https://github.com/StekPerepolnen))
+* 38234:Add OpenTelemetry lib and metric-interfaces
+... [#38234](https://github.com/ydb-platform/ydb/pull/38234) ([Maria Okorochkova](https://github.com/maladetska))
+* 38149:Introduce detailed VDisk replication status. This allows to distinguish situations when replication is actively processing data, when it is waiting for token and when it can't finish due to phantoms. [#38149](https://github.com/ydb-platform/ydb/pull/38149) ([Sergey Belyakov](https://github.com/serbel324))
+* 37112:This PR adds a new support-links source that resolves Grafana dashboards via Grafana’s Search API, wiring it into the support-links factory and adding unit test coverage for the new source. [#37112](https://github.com/ydb-platform/ydb/pull/37112) ([Andrei Rykov](https://github.com/StekPerepolnen))
 
 ### Bug fixes
 
@@ -146,12 +150,13 @@ https://github.com/ydb-platform/ydb/issues/25454 [#25536](https://github.com/ydb
 * 25515:Fixed fault for checkpoint on not drained channels [#25515](https://github.com/ydb-platform/ydb/pull/25515) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 25412:https://github.com/ydb-platform/ydb/issues/23180 [#25412](https://github.com/ydb-platform/ydb/pull/25412) ([Vasily Gerasimov](https://github.com/UgnineSirdis))
 * 25408:Fixed tests:
+* None:CreateStreamingQueryMatchRecognize
+* 38033:Disable change data collection for `DEFAULT` columns if they are under build operations (`ADD COLUMN DEFAULT`), in `TBuildColumnsScan`.
 
-* TestRetryLimiter 
-* RestoreScriptPhysicalGraphOnRetry 
-* CreateStreamingQueryMatchRecognize 
+Closes #36069
 
-Also increased default test logs level [#25408](https://github.com/ydb-platform/ydb/pull/25408) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+... [#38033](https://github.com/ydb-platform/ydb/pull/38033) ([Daniil Timižev](https://github.com/dahbka-lis))
+* 37948:Fixed group by hop over DQ replicate [#37948](https://github.com/ydb-platform/ydb/pull/37948) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 
 ### YDB UI
 
@@ -160,6 +165,7 @@ Also increased default test logs level [#25408](https://github.com/ydb-platform/
 * 20432:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/20431) with the pdisk info timeout when target node is disconnected or dead. [#20432](https://github.com/ydb-platform/ydb/pull/20432) ([Alexey Efimov](https://github.com/adameat))
 * 17157:Fixed the retrieval of tablet lists for tables with secondary indexes in the Viewer API. #17103 [#17157](https://github.com/ydb-platform/ydb/pull/17157) ([Alexey Efimov](https://github.com/adameat))
 * 20929:Fixed [data doubling](https://github.com/ydb-platform/ydb/issues/20116) on memory reallocation when processing an incoming chunk. [#20929](https://github.com/ydb-platform/ydb/pull/20929) ([Alexey Efimov](https://github.com/adameat))
+* 37997:Improved deepest issue finding in case if first issue tree branch has non minimal severity [#37997](https://github.com/ydb-platform/ydb/pull/37997) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 
 ### Performance
 

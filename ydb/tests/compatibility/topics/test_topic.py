@@ -402,9 +402,9 @@ class BlobSerializationWorkload:
                 time.sleep(1)
         raise AssertionError("topic did not become ready after PQ tablet restart")
 
-    def read_and_verify(self, consumer):
+    def read_and_verify(self, consumer, timeout_sec=180):
         received = []
-        deadline = time.time() + 180
+        deadline = time.time() + timeout_sec
         with self.driver.topic_client.reader(self.topic_name, consumer=consumer) as reader:
             while len(received) < len(self.expected) and time.time() < deadline:
                 try:
@@ -442,6 +442,111 @@ class BlobSerializationWorkload:
             )
 
 
+class BlobSerializationTxWorkload(BlobSerializationWorkload):
+    """Same verification as BlobSerializationWorkload, but messages are written via several large txs."""
+
+    CONSUMER_BEFORE = "blob-serialization-tx-consumer-before"
+    CONSUMER_AFTER = "blob-serialization-tx-consumer-after"
+    PRODUCER_ID = "blob-serialization-tx-producer"
+    MIN_TX_BYTES = 16 * 1024 * 1024
+
+    # Each entry is one transaction: several messages, total payload > 16 MiB.
+    # Small/large and compressible/incompressible are interleaved inside a tx.
+    _MB = 1024 * 1024
+    TRANSACTION_SPECS = (
+        (
+            (1, False),
+            (4 * _MB, True),
+            (2, False),
+            (4 * _MB + 1, True),
+            (100, False),
+            (4 * _MB - 1, False),
+            (512 * 1024, True),
+            (5 * _MB, True),
+        ),
+        (
+            (3, False),
+            (5 * _MB, True),
+            (10, False),
+            (5 * _MB, False),
+            (64 * 1024, False),
+            (6 * _MB + 17, True),
+            (7, False),
+        ),
+        (
+            (0, False),
+            (3 * _MB, True),
+            (255, False),
+            (8 * _MB, True),
+            (1024 * 1024, False),
+            (5 * _MB - 100, True),
+            (11, False),
+        ),
+    )
+
+    def __init__(self, fixture, seed=43):
+        super().__init__(fixture, seed=seed)
+        self.topic_name = f"blob_serialization_tx_topic_{uuid.uuid4().hex}"
+
+    def write_all(self):
+        self.expected.clear()
+        offset = 0
+        seqno = 1
+
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            for tx_index, specs in enumerate(self.TRANSACTION_SPECS):
+                batch = []
+                for size, incompressible in specs:
+                    data = self._make_payload(offset, size, incompressible)
+                    metadata = self._make_metadata(offset)
+                    batch.append((data, metadata, seqno, offset))
+                    seqno += 1
+                    offset += 1
+
+                total_bytes = sum(len(item[0]) for item in batch)
+                assert total_bytes > self.MIN_TX_BYTES, (
+                    f"tx[{tx_index}] payload too small: {total_bytes} <= {self.MIN_TX_BYTES}"
+                )
+                assert len(batch) > 1, f"tx[{tx_index}] must contain several messages"
+
+                def callee(tx, messages=batch):
+                    writer = self.driver.topic_client.tx_writer(
+                        tx,
+                        self.topic_name,
+                        producer_id=self.PRODUCER_ID,
+                        partition_id=0,
+                        auto_seqno=False,
+                    )
+                    for data, metadata, message_seqno, _ in messages:
+                        writer.write(
+                            ydb.TopicWriterMessage(
+                                data,
+                                metadata_items=metadata,
+                                seqno=message_seqno,
+                            )
+                        )
+
+                session_pool.retry_tx_sync(callee)
+                logger.info(
+                    "Committed blob-serialization tx[%s] with %s messages (%s bytes)",
+                    tx_index,
+                    len(batch),
+                    total_bytes,
+                )
+
+                for data, metadata, message_seqno, message_offset in batch:
+                    self.expected.append(
+                        {
+                            "offset": message_offset,
+                            "seqno": message_seqno,
+                            "data": data,
+                            "metadata_items": self._normalize_metadata(metadata),
+                        }
+                    )
+
+        self._wait_written(len(self.expected), timeout_sec=300)
+
+
 class TestTopicBlobSerializationRestart(RestartToAnotherVersionFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
@@ -460,3 +565,23 @@ class TestTopicBlobSerializationRestart(RestartToAnotherVersionFixture):
 
         workload.restart_pq_tablets()
         workload.read_and_verify(workload.CONSUMER_AFTER)
+
+
+class TestTopicBlobSerializationTxRestart(RestartToAnotherVersionFixture):
+    @pytest.fixture(autouse=True, scope="function")
+    def setup(self):
+        yield from self.setup_cluster(use_in_memory_pdisks=False)
+
+    def test_tx_write_restart_upgrade_downgrade_preserves_messages(self):
+        workload = BlobSerializationTxWorkload(self)
+
+        workload.create_topic()
+        workload.write_all()
+
+        workload.restart_pq_tablets()
+        workload.read_and_verify(workload.CONSUMER_BEFORE, timeout_sec=600)
+
+        self.change_cluster_version()
+
+        workload.restart_pq_tablets()
+        workload.read_and_verify(workload.CONSUMER_AFTER, timeout_sec=600)

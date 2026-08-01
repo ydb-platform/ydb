@@ -38,6 +38,28 @@ void CreateTopic(TIntrusivePtr<IYdbSetup> ydb, TString name) {
 
 Y_UNIT_TEST_SUITE(StreamingQueryClassification) {
     using namespace std::chrono_literals;
+
+    void CreateStreamingPoolAndClassifier(TIntrusivePtr<IYdbSetup> ydb, const TString& poolId, const TString& classifierSql) {
+        const auto& result = ydb->ExecuteQuery(TStringBuilder() << R"(
+            CREATE RESOURCE POOL )" << poolId << R"( WITH (
+                CONCURRENT_QUERY_LIMIT = 10,
+                QUEUE_SIZE = 100,
+                TOTAL_CPU_LIMIT_PERCENT_PER_NODE = 10,
+                QUERY_CPU_LIMIT_PERCENT_PER_NODE = 1
+            );
+            )" << classifierSql);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        ydb->WaitForClassifierPropagation();
+    }
+
+    void CreateAndWaitStreamingQuery(TIntrusivePtr<IYdbSetup> ydb, const TString& createSql, const TString& poolId) {
+        const auto& result = ydb->ExecuteQuery(createSql);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        ydb->WaitPoolState({.DelayedRequests = 0, .RunningRequests = 1}, poolId);
+        std::this_thread::sleep_for(5s);
+        ydb->WaitPoolState({.DelayedRequests = 0, .RunningRequests = 1}, poolId);
+    }
+
     Y_UNIT_TEST(TestStreamingQueryClassificationByPath) {
         auto ydb = MakeStreamingYdb();
 
@@ -45,38 +67,19 @@ Y_UNIT_TEST_SUITE(StreamingQueryClassification) {
         CreateTopic(ydb, "input_topic");
         CreateTopic(ydb, "output_topic");
 
-        {
-            const auto& result = ydb->ExecuteQuery(TStringBuilder() << R"(
-                CREATE RESOURCE POOL )" << poolId << R"( WITH (
-                    CONCURRENT_QUERY_LIMIT = 10,
-                    QUEUE_SIZE = 100,
-                    TOTAL_CPU_LIMIT_PERCENT_PER_NODE = 10,
-                    QUERY_CPU_LIMIT_PERCENT_PER_NODE = 1
-                );
-                CREATE RESOURCE POOL CLASSIFIER streaming_classifier WITH (
-                    RESOURCE_POOL=")" << poolId << R"(",
-                    HAS_PATH = "*input_topic*"
-                );
-            )");
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
-        }
-        ydb->WaitForClassifierPropagation();
+        CreateStreamingPoolAndClassifier(ydb, poolId, TStringBuilder() << R"(
+            CREATE RESOURCE POOL CLASSIFIER streaming_classifier WITH (
+                RESOURCE_POOL=")" << poolId << R"(",
+                HAS_PATH = "*input_topic*"
+            );
+        )");
 
-        {
-            const auto& result = ydb->ExecuteQuery(R"(
-                CREATE STREAMING QUERY MyStreamingQuery
-                AS DO BEGIN
-                    INSERT INTO output_topic SELECT * FROM input_topic;
-                END DO
-            )");
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
-            ydb->WaitPoolState({.DelayedRequests = 0, .RunningRequests = 1}, poolId);
-
-        }
-        {
-            std::this_thread::sleep_for(5s);
-            ydb->WaitPoolState({.DelayedRequests = 0, .RunningRequests = 1}, poolId);
-        }
+        CreateAndWaitStreamingQuery(ydb, R"(
+            CREATE STREAMING QUERY MyStreamingQuery
+            AS DO BEGIN
+                INSERT INTO output_topic SELECT * FROM input_topic;
+            END DO
+        )", poolId);
     }
 
     Y_UNIT_TEST(TestClassifierMatchesStreamingQuery) {
@@ -86,16 +89,45 @@ Y_UNIT_TEST_SUITE(StreamingQueryClassification) {
         CreateTopic(ydb, "input_topic");
         CreateTopic(ydb, "output_topic");
 
+        CreateStreamingPoolAndClassifier(ydb, poolId, TStringBuilder() << R"(
+            CREATE RESOURCE POOL CLASSIFIER streaming_classifier WITH (
+                RESOURCE_POOL=")" << poolId << R"(",
+                HAS_STREAM = "true"
+            );
+        )");
+
+        CreateAndWaitStreamingQuery(ydb, R"(
+            CREATE STREAMING QUERY MyStreamingQuery
+            AS DO BEGIN
+                INSERT INTO output_topic SELECT * FROM input_topic;
+            END DO
+        )", poolId);
+    }
+
+    Y_UNIT_TEST(TestStreamingQueryUsesExplicitResourcePool) {
+        auto ydb = MakeStreamingYdb();
+
+        const TString& classifierPoolId = "classifier_pool";
+        const TString& explicitPoolId = "explicit_pool";
+        CreateTopic(ydb, "input_topic");
+        CreateTopic(ydb, "output_topic");
+
         {
             const auto& result = ydb->ExecuteQuery(TStringBuilder() << R"(
-                CREATE RESOURCE POOL )" << poolId << R"( WITH (
+                CREATE RESOURCE POOL )" << classifierPoolId << R"( WITH (
+                    CONCURRENT_QUERY_LIMIT = 10,
+                    QUEUE_SIZE = 100,
+                    TOTAL_CPU_LIMIT_PERCENT_PER_NODE = 10,
+                    QUERY_CPU_LIMIT_PERCENT_PER_NODE = 1
+                );
+                CREATE RESOURCE POOL )" << explicitPoolId << R"( WITH (
                     CONCURRENT_QUERY_LIMIT = 10,
                     QUEUE_SIZE = 100,
                     TOTAL_CPU_LIMIT_PERCENT_PER_NODE = 10,
                     QUERY_CPU_LIMIT_PERCENT_PER_NODE = 1
                 );
                 CREATE RESOURCE POOL CLASSIFIER streaming_classifier WITH (
-                    RESOURCE_POOL=")" << poolId << R"(",
+                    RESOURCE_POOL=")" << classifierPoolId << R"(",
                     HAS_STREAM = "true"
                 );
             )");
@@ -103,21 +135,15 @@ Y_UNIT_TEST_SUITE(StreamingQueryClassification) {
         }
         ydb->WaitForClassifierPropagation();
 
-        {
-            const auto& result = ydb->ExecuteQuery(R"(
-                CREATE STREAMING QUERY MyStreamingQuery
-                AS DO BEGIN
-                    INSERT INTO output_topic SELECT * FROM input_topic;
-                END DO
-            )");
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
-            ydb->WaitPoolState({.DelayedRequests = 0, .RunningRequests = 1}, poolId);
+        CreateAndWaitStreamingQuery(ydb, TStringBuilder() << R"(
+            CREATE STREAMING QUERY MyStreamingQuery WITH (
+                RESOURCE_POOL = ")" << explicitPoolId << R"("
+            ) AS DO BEGIN
+                INSERT INTO output_topic SELECT * FROM input_topic;
+            END DO
+        )", explicitPoolId);
 
-        }
-        {
-            std::this_thread::sleep_for(5s);
-            ydb->WaitPoolState({.DelayedRequests = 0, .RunningRequests = 1}, poolId);
-        }
+        ydb->WaitPoolState({.DelayedRequests = 0, .RunningRequests = 0}, classifierPoolId);
     }
 }
 

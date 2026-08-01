@@ -225,7 +225,7 @@ int main(int argc, const char* argv[]) {
 
     auto subColsResult = constructor->Construct(plainArray, chunkData);
     if (subColsResult.IsFail()) {
-        std::cerr << "Error building sub_columns array: " << subColsResult.GetErrorMessage() << "\n";
+        Cerr << "Error building sub_columns array: " << subColsResult.GetErrorMessage() << "\n";
         return 1;
     }
     auto subArr = std::static_pointer_cast<TSubColumnsArray>(subColsResult.DetachResult());

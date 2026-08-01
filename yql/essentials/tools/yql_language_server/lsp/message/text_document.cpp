@@ -23,6 +23,13 @@ JSON_DEFINE_FROM(NLsp::TRange, json) {
     return x;
 }
 
+JSON_DEFINE_TO(NLsp::TRange, value) {
+    TJsonValue json(JSON_MAP);
+    SaveTo(json, "start", value.Start);
+    SaveTo(json, "end", value.End);
+    return json;
+}
+
 JSON_DEFINE_FROM(NLsp::TTextDocumentIdentifier, json) {
     NLsp::TTextDocumentIdentifier x;
     JSON_MOVE_FROM(json, "uri", x.Uri);
@@ -43,6 +50,13 @@ JSON_DEFINE_FROM(NLsp::TTextDocumentPositionParams, json) {
     JSON_MOVE_FROM(json, "textDocument", x.TextDocument);
     JSON_MOVE_FROM(json, "position", x.Position);
     return x;
+}
+
+JSON_DEFINE_TO(NLsp::TTextEdit, value) {
+    TJsonValue json(JSON_MAP);
+    SaveTo(json, "range", value.Range);
+    SaveTo(json, "newText", value.NewText);
+    return json;
 }
 
 } // namespace NYql::NJson

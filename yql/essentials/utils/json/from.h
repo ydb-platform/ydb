@@ -48,6 +48,11 @@ struct TFromJson<ui64> {
     TExpected<ui64> operator()(TJsonValue json) const;
 };
 
+template <>
+struct TFromJson<bool> {
+    TExpected<bool> operator()(TJsonValue json) const;
+};
+
 template <CFromJson T>
 struct TFromJson<TVector<T>> {
     TExpected<TVector<T>> operator()(TJsonValue json) const {

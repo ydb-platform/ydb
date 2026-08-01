@@ -1,5 +1,6 @@
 #include "blob_int.h"
 #include "blob.h"
+#include "blob_offset.h"
 #include "header.h"
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -413,4 +414,37 @@ Y_UNIT_TEST_SUITE(ClientBlobSerialization) {
         }
     }
 }
+
+Y_UNIT_TEST_SUITE(BlobOffset) {
+    Y_UNIT_TEST(IdentityWhenSpacesAgree) {
+        constexpr ui64 offset = 100;
+        UNIT_ASSERT_VALUES_EQUAL(HeaderOffsetToKeySpace(offset, offset, 105), 105u);
+        UNIT_ASSERT_VALUES_EQUAL(KeyOffsetToHeaderSpace(offset, offset, 105), 105u);
+    }
+
+    Y_UNIT_TEST(RoundTripAfterTxKeyRename) {
+        // Production-like: parent Key offset vs supportive first header.
+        constexpr ui64 blobKeyOffset = 547'189'849;
+        constexpr ui64 firstHeaderOffset = 391;
+        constexpr ui64 midInBlob = 2;
+
+        const ui64 keySpace = blobKeyOffset + midInBlob;
+        const ui64 headerSpace = firstHeaderOffset + midInBlob;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            HeaderOffsetToKeySpace(blobKeyOffset, firstHeaderOffset, headerSpace),
+            keySpace);
+        UNIT_ASSERT_VALUES_EQUAL(
+            KeyOffsetToHeaderSpace(blobKeyOffset, firstHeaderOffset, keySpace),
+            headerSpace);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            HeaderOffsetToKeySpace(
+                blobKeyOffset,
+                firstHeaderOffset,
+                KeyOffsetToHeaderSpace(blobKeyOffset, firstHeaderOffset, keySpace)),
+            keySpace);
+    }
 }
+
+} // namespace NKikimr::NPQ

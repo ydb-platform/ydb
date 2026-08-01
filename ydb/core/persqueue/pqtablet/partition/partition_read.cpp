@@ -2,6 +2,7 @@
 #include "partition_compactification.h"
 #include "partition_common.h"
 
+#include <ydb/core/persqueue/pqtablet/blob/blob_offset.h>
 #include <ydb/core/persqueue/pqtablet/cache/read.h>
 #include <ydb/core/persqueue/pqtablet/common/constants.h>
 #include <ydb/core/persqueue/pqtablet/common/event_helpers.h>
@@ -520,6 +521,7 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
         }
         AFL_ENSURE(offset <= Offset)("offset", offset)("Offset", Offset);
         AFL_ENSURE(offset < Offset || partNo <= PartNo)("offset", offset)("Offset", Offset)("partNo", partNo)("PartNo", PartNo);
+        const ui64 blobKeyOffset = blobs[blobIdx].Key.GetOffset();
         const ui64 firstHeaderOffset = blobBatches->front().GetOffset();
 
         for (const auto& batch : *blobBatches) {
@@ -528,17 +530,23 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
             }
 
             const auto& header = batch.Header;
-            const ui64 trueOffset = blobs[blobIdx].Key.GetOffset() + (header.GetOffset() - firstHeaderOffset);
+            // Batch start in key/client space (header may still be supportive after tx rename).
+            const ui64 trueOffset = HeaderOffsetToKeySpace(
+                blobKeyOffset, firstHeaderOffset, header.GetOffset());
 
             ui32 batchStartIdx = 0;
             if (trueOffset > Offset || (trueOffset == Offset && header.GetPartNo() >= PartNo)) {
                 batchStartIdx = 0;
             } else {
-                const ui64 trueSearchOffset = Offset - blobs[blobIdx].Key.GetOffset() + firstHeaderOffset;
+                // FindPos searches in header space; convert reader Offset the other way.
+                const ui64 trueSearchOffset = KeyOffsetToHeaderSpace(
+                    blobKeyOffset, firstHeaderOffset, Offset);
                 const auto& position = batch.FindPos(trueSearchOffset, PartNo);
                 batchStartIdx = position.BlobIdx;
                 if (batchStartIdx != Max<ui32>()) {
-                    Offset = position.Offset;
+                    // FindPos returns header-space offsets; map back to key space.
+                    Offset = HeaderOffsetToKeySpace(
+                        blobKeyOffset, firstHeaderOffset, position.Offset);
                     PartNo = position.PartNo;
                 }
             }

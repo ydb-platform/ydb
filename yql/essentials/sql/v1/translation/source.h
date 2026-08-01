@@ -28,6 +28,7 @@ struct TTableRef {
 using TTableList = TVector<TTableRef>;
 
 class IJoin;
+class TCompositeSelect;
 class ISource: public INode {
 public:
     ~ISource() override;
@@ -92,6 +93,7 @@ public:
     virtual bool SetSamplingRate(TContext& ctx, ESampleClause clause, TNodePtr samplingRate);
     virtual IJoin* GetJoin();
     virtual ISource* GetCompositeSource();
+    virtual void SetCompositeSelect(TCompositeSelect* composite);
     bool IsSelect() const override;
     virtual bool IsTableSource() const;
     virtual bool ShouldUseSourceAsColumn(const TString& source) const;

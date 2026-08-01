@@ -1547,6 +1547,7 @@ FROM `{table_name}`"""
 
     @link_test_case("#46136")
     @link_test_case("#46137")
+    @link_test_case("#48466")
     @pytest.mark.parametrize("local_topics", [True, False])
     @pytest.mark.parametrize("additional_operator", ["hop", "mr", "join"])
     def test_precompute_and_other_ops(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool, additional_operator: str) -> None:
@@ -2056,6 +2057,80 @@ FROM `{table_name}`"""
         self.write_stream(expected_data, endpoint=endpoint)
         assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
 
+        kikimr.ydb_client.query(f"""
+            DROP STREAMING QUERY `{query_name}`;
+        """)
+
+    @link_test_case("#48468")
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_alter_query_outputs(self: StreamingTestBase, kikimr: Kikimr, entity_name: Callable[[str], str], local_topics: bool) -> None:
+        inp, out, endpoint = self.get_io_names(kikimr, f"test_alter_query_outputs_{local_topics!s:.1}", local_topics, entity_name)
+
+        output_table = f"test_alter_query_outputs_table_{local_topics!s:.1}"
+        kikimr.ydb_client.query(f"""
+            CREATE TABLE `{output_table}` (
+                Data String NOT NULL,
+                PRIMARY KEY (Data)
+            );
+        """)
+
+        def table_rows():
+            result_sets = kikimr.ydb_client.query(f"""
+                SELECT * FROM `{output_table}` ORDER BY Data;
+            """)
+            return [row["Data"].decode("utf-8") for row in result_sets[0].rows]
+
+        query_name = f"test_alter_query_outputs_query_{local_topics!s:.1}"
+        # 1. Single output (topic)
+        kikimr.ydb_client.query(f"""
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO {out}
+                SELECT * FROM {inp}
+            END DO;
+        """)
+
+        path = f"/Root/{query_name}"
+        self.wait_completed_checkpoints(kikimr, path)
+
+        expected_data = ["test_data1"]
+        self.write_stream(expected_data, endpoint=endpoint)
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+
+        # 2. Add a second output (table)
+        self.wait_completed_checkpoints(kikimr, path)
+        kikimr.ydb_client.query(f"""
+            ALTER STREAMING QUERY `{query_name}` SET (FORCE = TRUE) AS
+            DO BEGIN
+                $in = SELECT * FROM {inp};
+                INSERT INTO {out} SELECT * FROM $in;
+                UPSERT INTO `{output_table}` SELECT Unwrap(Data) AS Data FROM $in;
+            END DO;
+        """)
+
+        self.wait_completed_checkpoints(kikimr, path)
+        self.write_stream(["test_data2"], endpoint=endpoint)
+        assert self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint) == ["test_data2"]
+        self.wait_completed_checkpoints(kikimr, path)
+        assert table_rows() == ["test_data2"]
+
+        # 3. Remove the second output (back to single topic output)
+        kikimr.ydb_client.query(f"""
+            ALTER STREAMING QUERY `{query_name}` SET (FORCE = TRUE) AS
+            DO BEGIN
+                INSERT INTO {out}
+                SELECT * FROM {inp}
+            END DO;
+        """)
+
+        self.wait_completed_checkpoints(kikimr, path)
+        expected_data = ["test_data3"]
+        self.write_stream(expected_data, endpoint=endpoint)
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic, endpoint=endpoint) == expected_data
+        # Table output was removed, so it must not receive test_data3
+        assert table_rows() == ["test_data2"]
+
+        # 4. Drop query
         kikimr.ydb_client.query(f"""
             DROP STREAMING QUERY `{query_name}`;
         """)

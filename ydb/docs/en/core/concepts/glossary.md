@@ -16,7 +16,7 @@ Clusters {{ ydb-short-name }} are multi-tenant and can contain several isolated 
 
 As in most database management systems, a **database** in {{ ydb-short-name }} is a logical container for other entities, such as [tables](#table). However, in {{ ydb-short-name }}, the namespace within databases is hierarchical, like in [virtual file systems](https://en.wikipedia.org/wiki/Virtual_file_system), and thus [directories](#folder) allow for a more structured organization of entities.
 
-Another important characteristic of databases {{ ydb-short-name }} is that they are usually allocated dedicated computing resources. As a result, creating a database requires additional actions by [DevOps engineers](../devops/index.md).
+Another important characteristic of databases {{ ydb-short-name }} is that they are usually allocated dedicated computing resources. As a result, creating a database requires additional actions by [cluster administrators](../devops/index.md).
 
 ### Node {#node}
 

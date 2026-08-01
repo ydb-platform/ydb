@@ -50,6 +50,7 @@ SET(ORIG_SOURCES
     mkql_element.cpp
     mkql_ensure.cpp
     mkql_enumerate.cpp
+    mkql_erased.cpp
     mkql_exists.cpp
     mkql_expand_map.cpp
     mkql_extend.cpp

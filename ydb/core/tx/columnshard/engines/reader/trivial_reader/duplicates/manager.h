@@ -14,6 +14,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator/collections/constructors.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/monotonic.h>
 #include <ydb/library/range_treap/range_treap.h>
 
 namespace NKikimr::NOlap::NReader::NTrivial {
@@ -67,6 +68,17 @@ private:
 
     void TryStartPendingExecutor();
 
+    static constexpr TDuration DefaultInflightTimeout = TDuration::Minutes(15);
+    const TDuration InflightTimeout;
+    const TDuration WatchdogInterval;
+    std::optional<TMonotonic> LastProgressInstant;
+    bool WatchdogScheduled = false;
+
+    void OnProgress();
+    void EnsureWatchdogScheduled();
+    bool HasInflightFetchOrMerge() const;
+    void HandleWakeup();
+
 private:
     static NArrow::NMerger::TCursor GetVersionBatch(const TSnapshot& snapshot, const ui64 writeId);
     static std::shared_ptr<TPortionStore> MakePortionsIndex(const std::deque<std::shared_ptr<TPortionInfo>>& portions);
@@ -80,6 +92,7 @@ private:
             hFunc(NActors::TEvents::TEvPoison, Handle);
             hFunc(TEvBordersConstructionResult, Handle);
             hFunc(TEvMergeBordersResult, Handle);
+            cFunc(NActors::TEvents::TEvWakeup::EventType, HandleWakeup);
             default:
                 AFL_VERIFY(false)("unexpected_event", ev->GetTypeName());
         }
@@ -94,7 +107,8 @@ private:
     std::map<ui32, std::shared_ptr<arrow::Field>> GetFetchingColumns() const;
 
 public:
-    TDuplicateManager(const TSpecialReadContext& context, const std::deque<std::shared_ptr<TPortionInfo>>& portions);
+    TDuplicateManager(const TSpecialReadContext& context, const std::deque<std::shared_ptr<TPortionInfo>>& portions,
+        const TDuration inflightTimeout = DefaultInflightTimeout);
 };
 
 }   // namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering

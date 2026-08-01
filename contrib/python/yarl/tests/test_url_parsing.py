@@ -1,3 +1,5 @@
+from urllib.parse import SplitResult
+
 import pytest
 
 from yarl import URL
@@ -616,7 +618,7 @@ def test_url_round_trips(
 ) -> None:
     """Verify that URLs round-trip correctly."""
     parsed = URL(url)
-    assert parsed._val.hostname == hostname_without_brackets
+    assert SplitResult(*parsed._val).hostname == hostname_without_brackets
     assert parsed.raw_host == hostname_without_brackets
     assert parsed.host_subcomponent == hostname
     assert str(parsed) == url

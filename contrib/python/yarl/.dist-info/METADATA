@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: yarl
-Version: 1.16.0
+Version: 1.17.2
 Summary: Yet another URL library
 Home-page: https://github.com/aio-libs/yarl
 Author: Andrew Svetlov
@@ -264,6 +264,103 @@ Changelog
     WARNING: Don't drop the next directive!
 
 .. towncrier release notes start
+
+1.17.2
+======
+
+*(2024-11-17)*
+
+
+Bug fixes
+---------
+
+- Stopped implicitly allowing the use of Cython pre-release versions when
+  building the distribution package -- by `@ajsanchezsanz <https://github.com/sponsors/ajsanchezsanz>`__ and
+  `@markgreene74 <https://github.com/sponsors/markgreene74>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1411 <https://github.com/aio-libs/yarl/issues/1411>`__, `#1412 <https://github.com/aio-libs/yarl/issues/1412>`__.
+
+- Fixed a bug causing ``~yarl.URL.port`` to return the default port when the given port was zero
+  -- by `@gmacon <https://github.com/sponsors/gmacon>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1413 <https://github.com/aio-libs/yarl/issues/1413>`__.
+
+
+Features
+--------
+
+- Make error messages include details of incorrect type when ``port`` is not int in ``yarl.URL.build()``.
+  -- by `@Cycloctane <https://github.com/sponsors/Cycloctane>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1414 <https://github.com/aio-libs/yarl/issues/1414>`__.
+
+
+Packaging updates and notes for downstreams
+-------------------------------------------
+
+- Stopped implicitly allowing the use of Cython pre-release versions when
+  building the distribution package -- by `@ajsanchezsanz <https://github.com/sponsors/ajsanchezsanz>`__ and
+  `@markgreene74 <https://github.com/sponsors/markgreene74>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1411 <https://github.com/aio-libs/yarl/issues/1411>`__, `#1412 <https://github.com/aio-libs/yarl/issues/1412>`__.
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved performance of the ``yarl.URL.joinpath()`` method -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1418 <https://github.com/aio-libs/yarl/issues/1418>`__.
+
+
+----
+
+
+1.17.1
+======
+
+*(2024-10-30)*
+
+
+Miscellaneous internal changes
+------------------------------
+
+- Improved performance of many ``~yarl.URL`` methods -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1396 <https://github.com/aio-libs/yarl/issues/1396>`__, `#1397 <https://github.com/aio-libs/yarl/issues/1397>`__, `#1398 <https://github.com/aio-libs/yarl/issues/1398>`__.
+
+- Improved performance of passing a `dict` or `str` to ``yarl.URL.extend_query()`` -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1401 <https://github.com/aio-libs/yarl/issues/1401>`__.
+
+
+----
+
+
+1.17.0
+======
+
+*(2024-10-28)*
+
+
+Features
+--------
+
+- Added ``~yarl.URL.host_port_subcomponent`` which returns the ``3986#section-3.2.2`` host and ``3986#section-3.2.3`` port subcomponent -- by `@bdraco <https://github.com/sponsors/bdraco>`__.
+
+  *Related issues and pull requests on GitHub:*
+  `#1375 <https://github.com/aio-libs/yarl/issues/1375>`__.
+
+
+----
+
 
 1.16.0
 ======

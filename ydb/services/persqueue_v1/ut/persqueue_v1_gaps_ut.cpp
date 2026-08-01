@@ -16,6 +16,8 @@
 
 #include <google/protobuf/util/time_util.h>
 
+#include <functional>
+
 namespace NKikimr::NPersQueueTests {
 
 namespace {
@@ -726,8 +728,7 @@ Y_UNIT_TEST(CommitSurvivesTabletRestart) {
     UNIT_ASSERT_C(
         resp.status() == Ydb::StatusIds::SESSION_EXPIRED
             || resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kStopPartitionSessionRequest
-            || resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kCommitOffsetResponse
-            || resp.status() != Ydb::StatusIds::SUCCESS,
+            || resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kCommitOffsetResponse,
         resp);
 
     // Fresh session after restart: commit API still works and advances committed offset.

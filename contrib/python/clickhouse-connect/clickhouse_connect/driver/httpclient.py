@@ -43,7 +43,7 @@ from clickhouse_connect.driver.httputil import (
     get_response_data,
 )
 from clickhouse_connect.driver.insert import InsertContext
-from clickhouse_connect.driver.query import QueryContext, QueryResult, TzMode, TzSource, returns_empty_string_on_empty_body
+from clickhouse_connect.driver.query import QueryContext, QueryResult, TzMode, TzSource
 from clickhouse_connect.driver.summary import QuerySummary
 from clickhouse_connect.driver.transform import NativeTransform
 
@@ -502,7 +502,8 @@ class HttpClient(Client):
                 return result
             except UnicodeDecodeError:
                 return str(response.data)
-        if returns_empty_string_on_empty_body(bound_cmd):
+        # A result-producing statement sends a format header even when the result is empty.
+        if response.headers.get("X-ClickHouse-Format") is not None:
             return ""
         return QuerySummary(self._summary(response))
 

@@ -314,8 +314,8 @@ namespace NActors {
                 if (!out.size()) {
                     break;
                 }
-                for (const auto& [buffer, size] : Chunker.FeedBuf(out.data(), out.size())) {
-                    addChunk(buffer, size, false);
+                for (const auto& chunk : Chunker.FeedBuf(out.data(), out.size())) {
+                    addChunk(chunk.Buf, chunk.Size, false);
                 }
                 complete = Chunker.IsComplete();
                 if (complete) {

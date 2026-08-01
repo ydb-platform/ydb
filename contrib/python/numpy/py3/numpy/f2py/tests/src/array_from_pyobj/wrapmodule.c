@@ -115,7 +115,7 @@ static PyObject *f2py_rout_wrap_attrs(PyObject *capi_self,
                        PyArray_DESCR(arr)->type,
                        PyArray_TYPE(arr),
                        PyArray_ITEMSIZE(arr),
-                       PyArray_DESCR(arr)->alignment,
+                       PyDataType_ALIGNMENT(arr),
                        PyArray_FLAGS(arr),
                        PyArray_ITEMSIZE(arr));
 }
@@ -191,7 +191,7 @@ PyMODINIT_FUNC PyInit_test_array_from_pyobj_ext(void) {
   ADDCONST("NPY_STRING", NPY_STRING);
   ADDCONST("NPY_UNICODE", NPY_UNICODE);
   ADDCONST("NPY_VOID", NPY_VOID);
-  ADDCONST("NPY_NTYPES", NPY_NTYPES);
+  ADDCONST("NPY_NTYPES_LEGACY", NPY_NTYPES_LEGACY);
   ADDCONST("NPY_NOTYPE", NPY_NOTYPE);
   ADDCONST("NPY_USERDEF", NPY_USERDEF);
 

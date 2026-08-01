@@ -201,7 +201,7 @@ public:
         TStringBuf threadNamePrefix,
         TDuration pollingPeriod)
         : TThread(Format("%v:%v", threadNamePrefix, "Poll"))
-        , Logger(ConcurrencyLogger().WithTag("ThreadNamePrefix: %v", threadNamePrefix))
+        , Logger(ConcurrencyLogger().WithTag("ThreadNamePrefix", threadNamePrefix))
     {
         // Register auxilary notifictation handle to wake up poller thread when deregistering
         // pollables and on shutdown.
@@ -243,7 +243,7 @@ public:
         RegisterQueue_.Enqueue(pollable);
 
         YT_LOG_DEBUG("Pollable registered (%v)",
-            pollable->GetLoggingTag());
+            pollable->GetLoggingTags());
 
         return true;
     }
@@ -272,7 +272,7 @@ public:
         YT_LOG_TRACE("Arming poller (FD: %v, Control: %v, %v)",
             fd,
             control,
-            pollable->GetLoggingTag());
+            pollable->GetLoggingTags());
 
         PollerImpl_.Set(pollable.Get(), fd, ToImplControl(control));
     }
@@ -432,7 +432,7 @@ private:
     void DoUnregister(const IPollablePtr& pollable)
     {
         YT_LOG_DEBUG("Requesting pollable unregistration (%v)",
-            pollable->GetLoggingTag());
+            pollable->GetLoggingTags());
 
         auto* cookie = TPollableCookie::TryFromPollable(pollable.Get());
         YT_VERIFY(cookie);
@@ -461,7 +461,7 @@ private:
             }
 
             YT_LOG_TRACE("Got pollable event (Pollable: %v, Control: %v)",
-                pollable->GetLoggingTag(),
+                pollable->GetLoggingTags(),
                 control);
 
             ScheduleEvent(pollable, control);

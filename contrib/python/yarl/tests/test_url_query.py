@@ -1,4 +1,4 @@
-from typing import List, Sequence, Tuple
+from collections.abc import Sequence
 from urllib.parse import parse_qs, urlencode
 
 import pytest
@@ -10,7 +10,7 @@ from yarl import URL
 # Basic chars in query values
 # ========================================
 
-URLS_WITH_BASIC_QUERY_VALUES: List[Tuple[URL, MultiDict]] = [
+URLS_WITH_BASIC_QUERY_VALUES: list[tuple[URL, MultiDict]] = [
     # Empty strings, keys and values
     (
         URL("http://example.com"),
@@ -88,7 +88,7 @@ def test_query_dont_unqoute_twice():
 _SEMICOLON_XFAIL = pytest.mark.xfail(
     condition="separator" not in parse_qs.__code__.co_varnames,
     reason=(
-        "Python versions < 3.8.8 and < 3.9.2 lack a fix for "
+        "Python versions < 3.9.2 lack a fix for "
         'CVE-2021-23336 dropping ";" as a valid query parameter separator, '
         "making this test fail."
     ),

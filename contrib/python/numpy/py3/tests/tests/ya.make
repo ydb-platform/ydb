@@ -11,6 +11,7 @@ SRCDIR(contrib/python/numpy/py3)
 TEST_SRCS(
     numpy/tests/__init__.py
     numpy/tests/test__all__.py
+    numpy/tests/test_configtool.py
     #numpy/tests/test_ctypeslib.py
     numpy/tests/test_lazyloading.py
     numpy/tests/test_matlib.py

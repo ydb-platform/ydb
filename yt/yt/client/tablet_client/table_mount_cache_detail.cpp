@@ -188,7 +188,7 @@ TTableMountCacheBase::TTableMountCacheBase(
     : TAsyncExpiringCache(
         config,
         NRpc::TDispatcher::Get()->GetHeavyInvoker(),
-        logger.WithTag("Cache: TableMount"),
+        logger.WithTag("Cache", "TableMount"),
         profiler)
     , Logger(std::move(logger))
     , TabletInfoOwnerCache_(Logger)

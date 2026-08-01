@@ -63,6 +63,11 @@ def test_origin():
     assert URL("http://example.com:8888") == url.origin()
 
 
+def test_origin_is_self():
+    url = URL("http://example.com:8888")
+    assert url.origin() is url
+
+
 def test_origin_with_no_auth():
     url = URL("http://example.com:8888/path/to?a=1&b=2")
     assert URL("http://example.com:8888") == url.origin()
@@ -309,14 +314,12 @@ def test_port_for_implicit_port():
 def test_port_for_relative_url():
     url = URL("/path/to")
     assert url.port is None
-    assert url._port_not_default is None
     assert url.explicit_port is None
 
 
 def test_port_for_unknown_scheme():
     url = URL("unknown://example.com")
     assert url.port is None
-    assert url._port_not_default is None
     assert url.explicit_port is None
 
 
@@ -324,28 +327,24 @@ def test_explicit_port_for_explicit_port():
     url = URL("http://example.com:8888")
     assert 8888 == url.explicit_port
     assert url.explicit_port == url._val.port
-    assert url._port_not_default == 8888
 
 
 def test_explicit_port_for_implicit_port():
     url = URL("http://example.com")
     assert url.explicit_port is None
     assert url.explicit_port == url._val.port
-    assert url._port_not_default is None
 
 
 def test_explicit_port_for_relative_url():
     url = URL("/path/to")
     assert url.explicit_port is None
     assert url.explicit_port == url._val.port
-    assert url._port_not_default is None
 
 
 def test_explicit_port_for_unknown_scheme():
     url = URL("unknown://example.com")
     assert url.explicit_port is None
     assert url.explicit_port == url._val.port
-    assert url._port_not_default is None
 
 
 def test_raw_path_string_empty():
@@ -961,6 +960,16 @@ def test_joinpath(base, to_join, expected):
         pytest.param("path", "a/", "path/a/", id="default_trailing-empty-segment"),
         pytest.param("path", "a//", "path/a//", id="default_trailing-empty-segments"),
         pytest.param("path", "a//b", "path/a//b", id="default_embedded-empty-segment"),
+        pytest.param(
+            "path/a/b/c/d/e", "a/../../../../../../c", "path/c", id="long-backtrack"
+        ),
+        pytest.param(
+            "path/a/b/c/d/e",
+            "a/../../../././../../../c",
+            "path/c",
+            id="long-backtrack-with-dots",
+        ),
+        pytest.param("path/a/../../d/e", "a/../c", "d/e/c", id="backtrack-in-both"),
     ],
 )
 def test_joinpath_empty_segments(base, to_join, expected):
@@ -969,6 +978,14 @@ def test_joinpath_empty_segments(base, to_join, expected):
         f"http://example.com/{expected}" == str(url.joinpath(to_join))
         and str(url / to_join) == f"http://example.com/{expected}"
     )
+
+
+def test_joinpath_backtrack_to_base():
+    url = URL("http://example.com/../../c")
+    new_url = url.joinpath("../../..")
+    assert str(new_url) == "http://example.com"
+    assert new_url.path == "/"
+    assert new_url.raw_path == "/"
 
 
 def test_joinpath_single_empty_segments():
@@ -1470,7 +1487,6 @@ def test_is_default_port_for_absolute_url_without_port():
     assert url.is_default_port()
 
 
-@pytest.mark.skip
 def test_is_default_port_for_absolute_url_with_default_port():
     url = URL("http://example.com:80")
     assert url.is_default_port()
@@ -1484,6 +1500,14 @@ def test_is_default_port_for_absolute_url_with_nondefault_port():
 
 def test_is_default_port_for_unknown_scheme():
     url = URL("unknown://example.com:8080")
+    assert not url.is_default_port()
+
+
+def test_handling_port_zero():
+    url = URL("http://example.com:0")
+    assert url.explicit_port == 0
+    assert url.explicit_port == url._val.port
+    assert str(url) == "http://example.com:0"
     assert not url.is_default_port()
 
 
@@ -1681,6 +1705,40 @@ def test_str_for_empty_url():
 def test_parent_for_empty_url():
     url = URL()
     assert url is url.parent
+
+
+def test_parent_for_relative_url_with_child():
+    url = URL("path/to")
+    assert url.parent == URL("path")
+    assert url.parent._val.path == "path"
+
+
+def test_parent_for_relative_url():
+    url = URL("path")
+    assert url.parent == URL("")
+    assert url.parent._val.path == ""
+
+
+def test_parent_for_no_netloc_url():
+    url = URL("/path/to")
+    assert url.parent == URL("/path")
+
+
+def test_parent_for_top_level_no_netloc_url():
+    url = URL("/")
+    assert url.parent == URL("/")
+    assert url.parent._val.path == "/"
+
+
+def test_parent_for_absolute_url():
+    url = URL("http://go.to/path/to")
+    assert url.parent == URL("http://go.to/path")
+
+
+def test_parent_for_top_level_absolute_url():
+    url = URL("http://go.to/")
+    assert url.parent == URL("http://go.to/")
+    assert url.parent._val.path == "/"
 
 
 def test_empty_value_for_query():

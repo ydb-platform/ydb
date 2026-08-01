@@ -78,18 +78,11 @@ TString TSubColumnsArray::SerializeToString(const TChunkConstructionData& extern
         TChunkConstructionData cData(
             GetRecordsCount(), nullptr, ColumnsData.GetStats().GetField(columnIdx)->type(), externalInfo.GetDefaultSerializer());
         auto* cInfo = proto.AddKeyColumns();
-        if (ColumnsData.GetStats().GetAccessorType(columnIdx) == IChunkedArray::EType::Dictionary) {
-            // Dictionary columns produce [dictionary blob][positions blob]; the split is not
-            // recoverable from the blob, so persist it in the per-column proto (the sub-columns
-            // analog of TIndexColumnMeta.AdditionalAccessorData for scalar columns).
-            auto blobAndMeta = NDictionary::TConstructor::SerializeToBlobAndMeta(i, cData);
-            if (auto additional = blobAndMeta.Meta->SerializeToProto()) {
-                *cInfo->MutableAdditionalAccessorData() = std::move(*additional);
-            }
-            blobRanges.emplace_back(std::move(blobAndMeta.Blob));
-        } else {
-            blobRanges.emplace_back(ColumnsData.GetStats().GetAccessorConstructor(columnIdx).SerializeToString(i, cData));
+        auto blobAndMeta = ColumnsData.GetStats().GetAccessorConstructor(columnIdx).SerializeToBlobAndMeta(i, cData);
+        if (auto additional = blobAndMeta.Meta->SerializeToProto()) {
+            *cInfo->MutableAdditionalAccessorData() = std::move(*additional);
         }
+        blobRanges.emplace_back(std::move(blobAndMeta.Blob));
         cInfo->SetSize(blobRanges.back().size());
         TMonotonic next = TMonotonic::Now();
         NSubColumns::TSignals::GetColumnSignals().OnBlobSize(ColumnsData.GetStats().GetColumnSize(columnIdx), blobRanges.back().size(), next - pred);
@@ -101,7 +94,7 @@ TString TSubColumnsArray::SerializeToString(const TChunkConstructionData& extern
         TMonotonic pred = TMonotonic::Now();
         for (auto&& i : OthersData.GetRecords()->GetColumns()) {
             TChunkConstructionData cData(i->GetRecordsCount(), nullptr, i->GetDataType(), externalInfo.GetDefaultSerializer());
-            blobRanges.emplace_back(NPlain::TConstructor().SerializeToString(i, cData));
+            blobRanges.emplace_back(NPlain::TConstructor().SerializeToBlobAndMeta(i, cData).Blob);
             TMonotonic next = TMonotonic::Now();
             NSubColumns::TSignals::GetOtherSignals().OnBlobSize(i->GetRawSizeVerified(), blobRanges.back().size(), next - pred);
             pred = next;

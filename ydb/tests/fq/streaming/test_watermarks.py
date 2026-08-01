@@ -265,12 +265,14 @@ class TestWatermarksInYdb(StreamingTestBase):
         shared_reading: bool,
     ) -> None:
         idle_timeout_seconds = 10
+        keep_alive_interval = 3
         ydb_client = self.get_ydb_client(kikimr, local_topics)
         query_name = f"idle_partition_gt_timeout_{shared_reading}{local_topics}"
         query_name = self._create_query(
             kikimr, entity_name, query_name, local_topics, shared_reading,
             tasks=1, partitions_count=2, idle_timeout_seconds=idle_timeout_seconds,
         )
+        query_path = f"/Root/{query_name}"
         self._wait_for_shared_reading_start(shared_reading)
 
         try:
@@ -278,27 +280,46 @@ class TestWatermarksInYdb(StreamingTestBase):
             self._write_topic(ydb_client, [self._event(0, "snd-0")], partition_id=1)
 
             # Start measuring idleness only after both partitions consume the initial events.
-            self.wait_completed_checkpoints(kikimr, f"/Root/{query_name}")
+            self.wait_completed_checkpoints(kikimr, query_path)
+            idle_started = time.monotonic()
 
-            # Keep the first partition active while the second approaches idle timeout.
-            time.sleep(idle_timeout_seconds / 2 + 1)
+            # Visible event that must appear in output.
             self._write_topic(ydb_client, [self._event(10, "fst-10")], partition_id=0)
+            self.wait_completed_checkpoints(kikimr, query_path)
 
-            # Ensure this event keeps the first partition active before the next interval starts.
-            self.wait_completed_checkpoints(kikimr, f"/Root/{query_name}")
+            while True:
+                input_bytes_before = self.get_streaming_query_metric(
+                    kikimr, query_path, "streaming.query.input.bytes"
+                )
+                self._write_topic(
+                    ydb_client,
+                    [self._event(10, "keepalive", filter=True)],
+                    partition_id=0,
+                )
+                self.wait_streaming_query_metric(
+                    kikimr, query_path, "streaming.query.input.bytes",
+                    expected_value=input_bytes_before + 1,
+                )
+                if time.monotonic() - idle_started >= idle_timeout_seconds + 1:
+                    break
+                time.sleep(keep_alive_interval)
 
-            # Let the second partition exceed idle timeout without idling the first.
-            time.sleep(idle_timeout_seconds / 2 + 1)
+            input_bytes_before = self.get_streaming_query_metric(
+                kikimr, query_path, "streaming.query.input.bytes"
+            )
             self._write_topic(ydb_client, [self._event(20, "snd-20")], partition_id=1)
+            self.wait_streaming_query_metric(
+                kikimr, query_path, "streaming.query.input.bytes",
+                expected_value=input_bytes_before + 1,
+            )
+            self.wait_completed_checkpoints(kikimr, query_path)
 
-            # Ensure the second-partition event is processed before advancing the first watermark.
-            self.wait_completed_checkpoints(kikimr, f"/Root/{query_name}")
             self._write_topic(ydb_client, [self._event(20, "fst-20")], partition_id=0)
             self._write_topic(ydb_client, [self._event(30, "fst-30")], partition_id=0)
 
             # Advance the second partition too, so its event at 20 closes its window.
             self._write_topic(ydb_client, [self._event(30, "snd-30", filter=True)], partition_id=1)
-            self.wait_completed_checkpoints(kikimr, f"/Root/{query_name}")
+            self.wait_completed_checkpoints(kikimr, query_path)
 
             expected = ["fst-0", "snd-0", "fst-10", "fst-20", "snd-20"]
             self._read_topic_check_rows(ydb_client, expected)

@@ -52,7 +52,6 @@ TResolvedParamBindings ResolveParamBindings(const TSupportLinkEntryConfig& confi
 
     return defaultParamBindings;
 }
-
 void ValidateParamsAreUnique(const TResolvedParamBindings& paramBindings, const TSupportLinkEntryConfig& config) {
     THashSet<TString> labels;
 

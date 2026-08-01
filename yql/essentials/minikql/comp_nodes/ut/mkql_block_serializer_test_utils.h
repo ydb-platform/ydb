@@ -6,7 +6,7 @@
 
 namespace arrow {
 struct ArrayData;
-}
+} // namespace arrow
 
 namespace NKikimr::NMiniKQL {
 

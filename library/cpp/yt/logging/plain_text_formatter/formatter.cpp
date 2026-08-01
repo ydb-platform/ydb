@@ -1,6 +1,7 @@
 #include "formatter.h"
 
 #include <library/cpp/yt/logging/structured_payload.h>
+#include <library/cpp/yt/logging/tag.h>
 
 #include <library/cpp/yt/cpu_clock/clock.h>
 
@@ -171,8 +172,10 @@ void FormatPayload(TBaseFormatter* out, const TTaggedLogEventPayload& payload)
         } else {
             out->AppendString(parenOpen ? ", "_sb : " ("_sb);
             parenOpen = true;
-            FormatMessage(out, tag->Key);
-            out->AppendString(": "_sb);
+            if (tag->Key != TraceLoggingTagKey) {
+                FormatMessage(out, tag->Key);
+                out->AppendString(": "_sb);
+            }
             FormatMessage(out, tag->Value);
         }
     }

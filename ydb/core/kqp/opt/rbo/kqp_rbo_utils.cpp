@@ -157,5 +157,27 @@ bool IUIsSubset(TVector<TInfoUnit> left, TVector<TInfoUnit> right) {
     return IUSetDiff(left, right).empty();
 }
 
+bool SortMatchesKeyOrder(const TVector<TString>& sortColumns, const TVector<TString>& keyColumns, size_t pointPrefixLen) {
+    if (sortColumns.empty() || pointPrefixLen > keyColumns.size()) {
+        return false;
+    }
+
+    const THashSet<TString> pointKeys(keyColumns.begin(), keyColumns.begin() + pointPrefixLen);
+    size_t next = pointPrefixLen;
+    for (const auto& sortColumn : sortColumns) {
+        if (sortColumn.empty()) {
+            return false;
+        }
+        if (pointKeys.contains(sortColumn)) {
+            continue;
+        }
+        if (next >= keyColumns.size() || keyColumns[next] != sortColumn) {
+            return false;
+        }
+        ++next;
+    }
+    return true;
+}
+
 }
 }

@@ -33,6 +33,9 @@ namespace NActors {
         IC_MSG_ZEROCOPY,
     };
 
+    // Effective dead-peer timeout when TInterconnectSettings::DeadPeer is left unset.
+    static constexpr TDuration DEFAULT_DEADPEER_TIMEOUT = TDuration::Seconds(10);
+
     struct TInterconnectSettings {
         TDuration Handshake;
         TDuration DeadPeer;
@@ -85,8 +88,6 @@ namespace NActors {
         ui32 MaxRdmaRetryBackoffLevel = 8;
         bool CollectSubscriptionStackTrace = false;
         TDuration SubscriberLivenessCheckInterval = TDuration::Hours(1);
-        bool UseUring = false;
-        bool EnableUringSQPOLL = false; // only effective when UseUring is set
 
         struct {
             // Enables negotiation and usage of TInterconnectSessionTCPv2 (no session continuation, no encryption).

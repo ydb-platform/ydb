@@ -27,9 +27,9 @@ TChaosLeaseBase::TChaosLeaseBase(
     , Timeout_(timeout)
     , PingAncestors_(pingAncestors)
     , PingPeriod_(pingPeriod)
-    , Logger(logger.WithTag("ChaosLeaseId: %v, %v",
-        Id_,
-        Client_->GetConnection()->GetLoggingTag()))
+    , Logger(logger
+        .WithTag("ChaosLeaseId", Id_)
+        .WithTags(Client_->GetConnection()->GetLoggingTags()))
 { }
 
 NApi::IClientPtr TChaosLeaseBase::GetClient() const

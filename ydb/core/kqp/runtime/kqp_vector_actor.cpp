@@ -417,9 +417,23 @@ private:
             RuntimeError(error, NYql::NDqProto::StatusIds::INTERNAL_ERROR);
             return;
         }
-        if (!ReadingChildClustersOf && !FetchedClusters.size()) {
-            // Index is empty
-            EmptyIndex = true;
+        if (!FetchedClusters.size()) {
+            if (!ReadingChildClustersOf) {
+                // Index is empty
+                EmptyIndex = true;
+            } else {
+                // The cluster has no children in the level table, i.e. its subtree is empty.
+                // It's possible when the cluster didn't get any rows during the index build,
+                // for example when two clusters of the same level got equal centroids.
+                // Just skip such clusters instead of failing the query - the row is either
+                // resolved into other (overlapping) clusters or isn't added to the index at all,
+                // which is the same as what the read path does for such clusters.
+                YDB_LOG_NOTICE("Cluster has no child clusters, skipping it",
+                    {"logPrefix", this->LogPrefix},
+                    {"parent", ReadingChildClustersOf});
+                CurClusters = std::move(clusters);
+                CurClusterIds.clear();
+            }
             ContinueResolveClusters();
             return;
         }

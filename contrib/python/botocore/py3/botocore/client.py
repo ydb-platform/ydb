@@ -18,6 +18,7 @@ from botocore.auth import AUTH_TYPE_MAPS, resolve_auth_type
 from botocore.awsrequest import prepare_request_dict
 from botocore.compress import maybe_compress_request
 from botocore.config import Config
+from botocore.context import with_current_context
 from botocore.credentials import RefreshableCredentials
 from botocore.discovery import (
     EndpointDiscoveryHandler,
@@ -933,11 +934,18 @@ class BaseClient:
         self.meta.events.register(
             f"request-created.{service_id}", self._request_signer.handler
         )
+        # Rebuild user agent string right before request is sent
+        # to ensure all registered features are included.
+        self.meta.events.register_last(
+            f"request-created.{service_id}",
+            self._user_agent_creator.rebuild_and_replace_user_agent_handler,
+        )
 
     @property
     def _service_model(self):
         return self.meta.service_model
 
+    @with_current_context()
     def _make_api_call(self, operation_name, api_params):
         operation_model = self._service_model.operation_model(operation_name)
         service_name = self._service_model.service_name

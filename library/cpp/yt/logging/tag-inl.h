@@ -21,7 +21,7 @@ public:
     {
         static_assert(N >= 2, "Logging tag format spec must be a non-empty string literal");
         if (spec[0] != '%') {
-            TheLoggingTagFormatSpecMustStartWithPercentSign();
+            throw "Logging tag format spec must start with '%'";
         }
     }
 
@@ -32,81 +32,147 @@ public:
 
 private:
     const TStringBuf Spec_;
+};
 
-    // Undefined on purpose: calling it from the |consteval| ctor turns a missing
-    // leading |%| into a compile error that names the violated rule.
-    static void TheLoggingTagFormatSpecMustStartWithPercentSign();
+////////////////////////////////////////////////////////////////////////////////
+
+class TLoggingTagKey
+{
+public:
+    template <size_t N>
+    consteval TLoggingTagKey(const char (&key)[N])
+        : Key_(key, N - 1)
+    {
+        static_assert(N >= 2, "Logging tag key must be a non-empty string literal");
+        for (size_t index = 0; index + 1 < N; ++index) {
+            if (key[index] == '%' || key[index] == ':') {
+                throw "Logging tag key must not contain '%' or ':'";
+            }
+        }
+    }
+
+    //! Escape hatch for the few call sites that compose a key at run time.
+    static TLoggingTagKey FromRuntime(TStringBuf key)
+    {
+        return TLoggingTagKey(key);
+    }
+
+    TStringBuf Get() const
+    {
+        return Key_;
+    }
+
+private:
+    const TStringBuf Key_;
+
+    explicit TLoggingTagKey(TStringBuf key)
+        : Key_(key)
+    { }
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TValue>
-TLoggingTagList& TLoggingTagList::With(TStringBuf key, const TValue& value) &
+TLoggingTagList& TLoggingTagList::Add(TLoggingTagKey key, const TValue& value)
 {
-    DoWith(key, value, "v"_sb);
+    DoAdd(key, value, "v"_sb);
     return *this;
 }
 
 template <class TValue>
-TLoggingTagList& TLoggingTagList::With(TStringBuf key, const TValue& value, TLoggingTagSpec spec) &
+TLoggingTagList& TLoggingTagList::Add(TLoggingTagKey key, const TValue& value, TLoggingTagSpec spec)
 {
-    DoWith(key, value, spec.Get());
+    DoAdd(key, value, spec.Get());
     return *this;
 }
 
 template <class... TArgs>
-TLoggingTagList& TLoggingTagList::WithFormat(TStringBuf key, TFormatString<TArgs...> format, TArgs&&... args) &
+TLoggingTagList& TLoggingTagList::AddFormat(TLoggingTagKey key, TFormatString<TArgs...> format, TArgs&&... args)
 {
     TStringBuilder builder;
     Format(&builder, format, std::forward<TArgs>(args)...);
-    AppendTag(key, builder.GetBuffer());
+    DoAdd(key, builder.GetBuffer());
     return *this;
 }
 
 template <class TValue>
-TLoggingTagList&& TLoggingTagList::With(TStringBuf key, const TValue& value) &&
+TLoggingTagList TLoggingTagList::With(TLoggingTagKey key, const TValue& value) const &
 {
-    DoWith(key, value, "v"_sb);
+    auto result = *this;
+    result.Add(key, value);
+    return result;
+}
+
+template <class TValue>
+TLoggingTagList TLoggingTagList::With(TLoggingTagKey key, const TValue& value) &&
+{
+    Add(key, value);
     return std::move(*this);
 }
 
 template <class TValue>
-TLoggingTagList&& TLoggingTagList::With(TStringBuf key, const TValue& value, TLoggingTagSpec spec) &&
+TLoggingTagList TLoggingTagList::With(TLoggingTagKey key, const TValue& value, TLoggingTagSpec spec) const &
 {
-    DoWith(key, value, spec.Get());
+    auto result = *this;
+    result.Add(key, value, spec);
+    return result;
+}
+
+template <class TValue>
+TLoggingTagList TLoggingTagList::With(TLoggingTagKey key, const TValue& value, TLoggingTagSpec spec) &&
+{
+    Add(key, value, spec);
     return std::move(*this);
 }
 
 template <class... TArgs>
-TLoggingTagList&& TLoggingTagList::WithFormat(TStringBuf key, TFormatString<TArgs...> format, TArgs&&... args) &&
+TLoggingTagList TLoggingTagList::WithFormat(TLoggingTagKey key, TFormatString<TArgs...> format, TArgs&&... args) const &
 {
-    TStringBuilder builder;
-    Format(&builder, format, std::forward<TArgs>(args)...);
-    AppendTag(key, builder.GetBuffer());
+    auto result = *this;
+    result.AddFormat(key, format, std::forward<TArgs>(args)...);
+    return result;
+}
+
+template <class... TArgs>
+TLoggingTagList TLoggingTagList::WithFormat(TLoggingTagKey key, TFormatString<TArgs...> format, TArgs&&... args) &&
+{
+    AddFormat(key, format, std::forward<TArgs>(args)...);
     return std::move(*this);
+}
+
+inline TLoggingTagList::TLoggingTagList(TLoggingTagListPayload payload)
+    : Payload_(std::move(payload))
+{ }
+
+inline TLoggingTagList& TLoggingTagList::Add(const TLoggingTagList& other)
+{
+    Payload_.Underlying() += other.Payload_.Underlying();
+    return *this;
 }
 
 inline bool TLoggingTagList::IsEmpty() const
 {
-    return Payload_.empty();
+    return Payload_.Underlying().empty();
 }
 
-inline TStringBuf TLoggingTagList::GetPayload() const
+inline const TLoggingTagListPayload& TLoggingTagList::GetPayload() const
 {
     return Payload_;
 }
 
 template <class TValue>
-void TLoggingTagList::DoWith(TStringBuf key, const TValue& value, TStringBuf spec)
+void TLoggingTagList::DoAdd(TLoggingTagKey key, const TValue& value, TStringBuf spec)
 {
     TStringBuilder builder;
     FormatValue(&builder, value, spec);
-    AppendTag(key, builder.GetBuffer());
+    DoAdd(key, builder.GetBuffer());
 }
 
-inline void TLoggingTagList::AppendTag(TStringBuf key, TStringBuf value)
+////////////////////////////////////////////////////////////////////////////////
+
+inline TLoggingTagListPayloadView AsView(const TLoggingTagListPayload& payload)
 {
-    TTaggedPayloadWriter::AppendTag(&Payload_, key, value);
+    return TLoggingTagListPayloadView(payload.Underlying());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

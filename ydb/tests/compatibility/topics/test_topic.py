@@ -1,10 +1,21 @@
 # -*- coding: utf-8 -*-
-import pytest
+import logging
+import random
 import time
 import uuid
 
-from ydb.tests.library.compatibility.fixtures import RollingUpgradeAndDowngradeFixture, RollingDowngradeAndUpgradeFixture, string_version_to_tuple
+import pytest
+
+from ydb.tests.library.common.types import TabletTypes
+from ydb.tests.library.compatibility.fixtures import (
+    RestartToAnotherVersionFixture,
+    RollingUpgradeAndDowngradeFixture,
+    RollingDowngradeAndUpgradeFixture,
+    string_version_to_tuple,
+)
 from ydb.tests.oss.ydb_sdk_import import ydb
+
+logger = logging.getLogger(__name__)
 
 
 class Workload:
@@ -240,3 +251,212 @@ class TestTopicTransaction(RollingUpgradeAndDowngradeFixture):
             raise Exception(
                 f"Expected {expected_total} messages to be processed, got {utils.processed_message_count}"
             )
+
+
+class BlobSerializationWorkload:
+    """Write interleaved small/large messages with metadata, then verify after tablet/version restarts."""
+
+    CONSUMER_BEFORE = "blob-serialization-consumer-before"
+    CONSUMER_AFTER = "blob-serialization-consumer-after"
+    PRODUCER_ID = "blob-serialization-producer"
+
+    # Interleave tiny and large payloads so body blobs mix PartData / packing paths.
+    # Sizes around 512KiB exercise multipart client blobs.
+    MESSAGE_SPECS = (
+        (1, False),
+        (512 * 1024, True),
+        (2, False),
+        (1024 * 1024, True),
+        (100, False),
+        (512 * 1024 + 1, True),
+        (255, False),
+        (2 * 1024 * 1024, True),
+        (0, False),
+        (64 * 1024, False),
+        (3, False),
+        (512 * 1024 - 1, True),
+        (10, False),
+        (1024 * 1024 + 17, True),
+        (7, False),
+    )
+
+    def __init__(self, fixture, seed=42):
+        self.fixture = fixture
+        self.rng = random.Random(seed)
+        self.topic_name = f"blob_serialization_topic_{uuid.uuid4().hex}"
+        self.expected = []  # list of dicts: offset, seqno, data, metadata_items
+
+    @property
+    def driver(self):
+        return self.fixture.driver
+
+    def create_topic(self):
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            session_pool.execute_with_retries(
+                f"CREATE TOPIC `{self.topic_name}` "
+                f"(CONSUMER `{self.CONSUMER_BEFORE}`, CONSUMER `{self.CONSUMER_AFTER}`) "
+                f"WITH (MIN_ACTIVE_PARTITIONS = 1);"
+            )
+
+    def _make_payload(self, index, size, incompressible):
+        if size == 0:
+            return b""
+        if incompressible:
+            # Distinct pseudo-random bytes (columnar pack often falls back to EUncompressed).
+            return bytes(self.rng.getrandbits(8) for _ in range(size))
+        # Highly compressible — prefers ECompressed packing.
+        return bytes([index % 256]) * size
+
+    def _make_metadata(self, index):
+        kind = index % 4
+        if kind == 0:
+            return {}
+        if kind == 1:
+            return {"idx": str(index), "tag": "small-meta"}
+        if kind == 2:
+            return {
+                "idx": str(index),
+                "bin": bytes([index % 256, (index * 3) % 256, 0xFF]),
+                "unicode": f"значение-{index}",
+            }
+        return {
+            "idx": str(index),
+            "long": ("x" * 200) + str(index),
+            "empty": "",
+        }
+
+    @staticmethod
+    def _normalize_metadata(metadata):
+        if not metadata:
+            return {}
+        result = {}
+        for key, value in metadata.items():
+            if isinstance(value, bytes):
+                result[key] = value
+            else:
+                result[key] = value.encode("utf-8")
+        return result
+
+    def write_all(self):
+        self.expected.clear()
+        with self.driver.topic_client.writer(
+            self.topic_name,
+            producer_id=self.PRODUCER_ID,
+            partition_id=0,
+            auto_seqno=False,
+        ) as writer:
+            for index, (size, incompressible) in enumerate(self.MESSAGE_SPECS):
+                data = self._make_payload(index, size, incompressible)
+                metadata = self._make_metadata(index)
+                seqno = index + 1
+                writer.write(
+                    ydb.TopicWriterMessage(
+                        data,
+                        metadata_items=metadata,
+                        seqno=seqno,
+                    )
+                )
+                self.expected.append(
+                    {
+                        "offset": index,
+                        "seqno": seqno,
+                        "data": data,
+                        "metadata_items": self._normalize_metadata(metadata),
+                    }
+                )
+                # Flush periodically so several body blobs are persisted, not one giant head.
+                if index % 3 == 2:
+                    writer.flush()
+            writer.flush()
+
+        self._wait_written(len(self.expected))
+
+    def _wait_written(self, expected_count, timeout_sec=120):
+        deadline = time.time() + timeout_sec
+        while time.time() < deadline:
+            try:
+                describe = self.driver.topic_client.describe_topic(self.topic_name, include_stats=True)
+                end = sum(p.partition_stats.partition_end for p in describe.partitions)
+                if end >= expected_count:
+                    return
+            except Exception as exc:
+                logger.info("describe_topic while waiting write: %s", exc)
+            time.sleep(1)
+        raise AssertionError(f"messages were not persisted in time: want {expected_count}")
+
+    def restart_pq_tablets(self):
+        response = self.fixture.cluster.client.tablet_state(TabletTypes.PERSQUEUE)
+        tablet_ids = [info.TabletId for info in response.TabletStateInfo]
+        assert tablet_ids, "no PERSQUEUE tablets found"
+        for tablet_id in tablet_ids:
+            logger.info("Restarting PERSQUEUE tablet %s", tablet_id)
+            self.fixture.cluster.client.tablet_kill(tablet_id)
+
+        deadline = time.time() + 120
+        while time.time() < deadline:
+            try:
+                self.driver.topic_client.describe_topic(self.topic_name, include_stats=True)
+                return
+            except Exception as exc:
+                logger.info("topic not ready after tablet restart: %s", exc)
+                time.sleep(1)
+        raise AssertionError("topic did not become ready after PQ tablet restart")
+
+    def read_and_verify(self, consumer):
+        received = []
+        deadline = time.time() + 180
+        with self.driver.topic_client.reader(self.topic_name, consumer=consumer) as reader:
+            while len(received) < len(self.expected) and time.time() < deadline:
+                try:
+                    message = reader.receive_message(timeout=5)
+                except TimeoutError:
+                    continue
+                data = message.data if isinstance(message.data, bytes) else bytes(message.data)
+                received.append(
+                    {
+                        "offset": message.offset,
+                        "seqno": message.seqno,
+                        "data": data,
+                        "metadata_items": dict(message.metadata_items or {}),
+                    }
+                )
+                reader.commit(message)
+
+        assert len(received) == len(self.expected), (
+            f"message count mismatch: got {len(received)}, want {len(self.expected)}"
+        )
+        for i, (actual, expect) in enumerate(zip(received, self.expected)):
+            assert actual["offset"] == expect["offset"], (
+                f"msg[{i}] offset: got {actual['offset']}, want {expect['offset']}"
+            )
+            assert actual["seqno"] == expect["seqno"], (
+                f"msg[{i}] seqno: got {actual['seqno']}, want {expect['seqno']}"
+            )
+            assert actual["data"] == expect["data"], (
+                f"msg[{i}] data mismatch: got len={len(actual['data'])}, "
+                f"want len={len(expect['data'])}"
+            )
+            assert actual["metadata_items"] == expect["metadata_items"], (
+                f"msg[{i}] metadata mismatch: got {actual['metadata_items']!r}, "
+                f"want {expect['metadata_items']!r}"
+            )
+
+
+class TestTopicBlobSerializationRestart(RestartToAnotherVersionFixture):
+    @pytest.fixture(autouse=True, scope="function")
+    def setup(self):
+        yield from self.setup_cluster(use_in_memory_pdisks=False)
+
+    def test_write_restart_upgrade_downgrade_preserves_messages(self):
+        workload = BlobSerializationWorkload(self)
+
+        workload.create_topic()
+        workload.write_all()
+
+        workload.restart_pq_tablets()
+        workload.read_and_verify(workload.CONSUMER_BEFORE)
+
+        self.change_cluster_version()
+
+        workload.restart_pq_tablets()
+        workload.read_and_verify(workload.CONSUMER_AFTER)

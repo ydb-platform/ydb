@@ -350,6 +350,95 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         Sleep(TDuration::Seconds(1));
     }
 
+    void PrepareMigrationCompatibilityTablesFormat0(THttpProxyTestMock& fixture) {
+        PrepareConfigs(fixture.KikimrServer.Get());
+        fixture.KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        fixture.KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+        fixture.KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationFinished(false);
+
+        NYdb::TDriver driver(CreateDriver(fixture.KikimrGrpcPort));
+        SetCreateQueuesTablesFormat(fixture.KikimrServer, driver, 0);
+        driver.Stop(true);
+    }
+
+    bool DirectoryHasChild(NYdb::NScheme::TSchemeClient& schemeClient, const TString& path, const TString& childName) {
+        auto list = schemeClient.ListDirectory(path).GetValueSync();
+        if (!list.IsSuccess()) {
+            return false;
+        }
+        for (const auto& child : list.GetChildren()) {
+            if (child.Name == childName) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void AssertPerQueueTablesFormat0Layout(
+        THttpProxyTestMock& fixture,
+        const TString& queueUrl,
+        const TString& queueName
+    ) {
+        NYdb::TDriver driver(CreateDriver(fixture.KikimrGrpcPort));
+        NYdb::NScheme::TSchemeClient schemeClient(driver);
+        const TString& sqsRoot = fixture.KikimrServer->GetRuntime()->GetAppData().SqsConfig.GetRoot();
+        const TString queueResourceDir = QueueResourceDirFromQueueUrl(queueUrl, queueName, sqsRoot);
+        const auto topicPath = TryMigrationTopicPathFromScheme(schemeClient, queueResourceDir);
+        UNIT_ASSERT_C(topicPath.has_value(), TStringBuilder() << "expected versioned queue dir for " << queueName);
+
+        const TString versionDir = topicPath->substr(0, topicPath->rfind('/'));
+        auto list = schemeClient.ListDirectory(versionDir).GetValueSync();
+        UNIT_ASSERT_C(list.IsSuccess(), list.GetIssues().ToString());
+
+        // FIFO format=0 keeps Messages in the version directory; STD format=0 keeps it under shard dirs.
+        bool hasMessagesTable = DirectoryHasChild(schemeClient, versionDir, "Messages");
+        if (!hasMessagesTable) {
+            for (const auto& child : list.GetChildren()) {
+                const TString name(child.Name);
+                if (name.empty() || name[0] < '0' || name[0] > '9') {
+                    continue;
+                }
+                if (DirectoryHasChild(schemeClient, versionDir + '/' + name, "Messages")) {
+                    hasMessagesTable = true;
+                    break;
+                }
+            }
+        }
+        UNIT_ASSERT_C(hasMessagesTable, TStringBuilder()
+            << "expected per-queue Messages table under " << versionDir
+            << " (or shard subdirectory)");
+
+        auto describe = NYdb::NTopic::TTopicClient(driver).DescribeTopic(*topicPath).GetValueSync();
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+        driver.Stop(true);
+    }
+
+    NJson::TJsonValue ReceiveUntilBody(
+        THttpProxyTestMock& fixture,
+        const TString& queueUrl,
+        const TString& expectedBody,
+        int attempts = 20
+    ) {
+        for (int i = 0; i < attempts; ++i) {
+            auto json = fixture.ReceiveMessage({
+                {"QueueUrl", queueUrl},
+                {"WaitTimeSeconds", 2},
+                {"VisibilityTimeout", 30},
+                {"MaxNumberOfMessages", 10},
+            });
+            if (!json["Messages"].IsArray()) {
+                continue;
+            }
+            for (const auto& message : json["Messages"].GetArray()) {
+                if (message["Body"] == expectedBody) {
+                    return message;
+                }
+            }
+        }
+        UNIT_FAIL(TStringBuilder() << "failed to receive message body [" << expectedBody << "]");
+        return {};
+    }
+
     void WaitMigrationTopicPresent(
         NYdb::NTopic::TTopicClient& topicClient,
         NYdb::NScheme::TSchemeClient& schemeClient,
@@ -4211,6 +4300,99 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         driver.Stop(true);
     }
 
+    Y_UNIT_TEST_F(TestReceiveMessage_Fifo_Compatibility_SkipMessageGroups_TablesFormat1, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+
+        NYdb::TDriver driver(CreateDriver(KikimrGrpcPort));
+        SetCreateQueuesTablesFormat(KikimrServer, driver, 1);
+
+        const TString queueName = "SkipMessageGroupsTablesFormat1.fifo";
+        auto json = CreateQueue({
+            {"QueueName", queueName},
+            {"Attributes", NJson::TJsonMap{
+                {"FifoQueue", "true"},
+                {"ReceiveMessageWaitTimeSeconds", "1"},
+                {"VisibilityTimeout", "30"},
+            }}
+        });
+        const TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        // Table-only message locks group-A for topic reads until deleted.
+        SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", "table-group-a"},
+            {"MessageGroupId", "group-A"},
+            {"MessageDeduplicationId", "dedup-table-a"},
+        });
+
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", "topic-group-a"},
+            {"MessageGroupId", "group-A"},
+            {"MessageDeduplicationId", "dedup-topic-a"},
+        });
+        SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", "topic-group-b"},
+            {"MessageGroupId", "group-B"},
+            {"MessageDeduplicationId", "dedup-topic-b"},
+        });
+
+        NJson::TJsonValue tableReceipt;
+        {
+            auto received = ReceiveMessage({
+                {"QueueUrl", queueUrl},
+                {"WaitTimeSeconds", 2},
+                {"VisibilityTimeout", 30},
+            });
+            UNIT_ASSERT_VALUES_EQUAL(received["Messages"][0]["Body"], "table-group-a");
+            tableReceipt = received["Messages"][0]["ReceiptHandle"];
+        }
+
+        // group-A is still present in table Messages, so topic message in group-A must be skipped.
+        // group-B topic message should still be readable.
+        {
+            auto received = ReceiveMessage({
+                {"QueueUrl", queueUrl},
+                {"WaitTimeSeconds", 2},
+                {"VisibilityTimeout", 30},
+            });
+            UNIT_ASSERT_VALUES_EQUAL(received["Messages"][0]["Body"], "topic-group-b");
+        }
+        {
+            auto received = ReceiveMessage({
+                {"QueueUrl", queueUrl},
+                {"WaitTimeSeconds", 1},
+                {"VisibilityTimeout", 1},
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                received["Messages"].GetType(),
+                NJson::EJsonValueType::JSON_UNDEFINED,
+                TStringBuilder() << "topic group-A must stay skipped while table group exists: "
+                    << received.GetStringRobust());
+        }
+
+        DeleteMessage({
+            {"QueueUrl", queueUrl},
+            {"ReceiptHandle", tableReceipt},
+        });
+
+        {
+            auto received = ReceiveMessage({
+                {"QueueUrl", queueUrl},
+                {"WaitTimeSeconds", 2},
+                {"VisibilityTimeout", 30},
+            });
+            UNIT_ASSERT_VALUES_EQUAL(received["Messages"][0]["Body"], "topic-group-a");
+        }
+
+        driver.Stop(true);
+    }
+
     Y_UNIT_TEST_F(TestReceiveMessage_Fifo_Compatibility_SkipMessageGroups_TablesFormat0, THttpProxyTestMock) {
         PrepareConfigs(KikimrServer.Get());
         KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
@@ -4302,6 +4484,321 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         }
 
         driver.Stop(true);
+    }
+
+    Y_UNIT_TEST_F(TestMigrationCompatibility_TablesFormat0_StdMessagingApis, THttpProxyTestMock) {
+        PrepareMigrationCompatibilityTablesFormat0(*this);
+
+        const TString queueName = "MigFmt0StdMessaging";
+        auto json = CreateQueue({{"QueueName", queueName}});
+        const TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+        AssertPerQueueTablesFormat0Layout(*this, queueUrl, queueName);
+
+        auto send = SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", "std-body-0"},
+        });
+        UNIT_ASSERT(!GetByPath<TString>(send, "MessageId").empty());
+        UNIT_ASSERT(!GetByPath<TString>(send, "MD5OfMessageBody").empty());
+
+        auto batch = SendMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonArray{
+                NJson::TJsonMap{{"Id", "b0"}, {"MessageBody", "std-body-1"}},
+                NJson::TJsonMap{{"Id", "b1"}, {"MessageBody", "std-body-2"}},
+            }},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(batch["Successful"].GetArray().size(), 2);
+
+        auto message0 = ReceiveUntilBody(*this, queueUrl, "std-body-0");
+        ChangeMessageVisibility({
+            {"QueueUrl", queueUrl},
+            {"ReceiptHandle", message0["ReceiptHandle"]},
+            {"VisibilityTimeout", 60},
+        });
+        DeleteMessage({
+            {"QueueUrl", queueUrl},
+            {"ReceiptHandle", message0["ReceiptHandle"]},
+        });
+
+        TVector<NJson::TJsonValue> remaining;
+        for (int i = 0; i < 20 && remaining.size() < 2; ++i) {
+            auto received = ReceiveMessage({
+                {"QueueUrl", queueUrl},
+                {"WaitTimeSeconds", 2},
+                {"VisibilityTimeout", 30},
+                {"MaxNumberOfMessages", 10},
+            });
+            if (!received["Messages"].IsArray()) {
+                continue;
+            }
+            for (const auto& message : received["Messages"].GetArray()) {
+                remaining.push_back(message);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(remaining.size(), 2);
+
+        auto deleteBatch = DeleteMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonArray{
+                NJson::TJsonMap{{"Id", "d0"}, {"ReceiptHandle", remaining[0]["ReceiptHandle"]}},
+                NJson::TJsonMap{{"Id", "d1"}, {"ReceiptHandle", remaining[1]["ReceiptHandle"]}},
+            }},
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(deleteBatch["Successful"].GetArray().size(), 2, deleteBatch.GetStringRobust());
+
+        SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", "to-purge-0"}});
+        SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", "to-purge-1"}});
+        WaitQueueAttributes(queueUrl, 20, [](NJson::TJsonMap attrs) {
+            return attrs["Attributes"]["ApproximateNumberOfMessages"] == "2";
+        });
+        PurgeQueue({{"QueueUrl", queueUrl}});
+        WaitQueueAttributes(queueUrl, 20, [](NJson::TJsonMap attrs) {
+            return attrs["Attributes"]["ApproximateNumberOfMessages"] == "0"
+                && attrs["Attributes"]["ApproximateNumberOfMessagesNotVisible"] == "0";
+        });
+    }
+
+    Y_UNIT_TEST_F(TestMigrationCompatibility_TablesFormat0_FifoMessagingApis, THttpProxyTestMock) {
+        PrepareMigrationCompatibilityTablesFormat0(*this);
+
+        const TString queueName = "MigFmt0FifoMessaging.fifo";
+        auto json = CreateQueue({
+            {"QueueName", queueName},
+            {"Attributes", NJson::TJsonMap{
+                {"FifoQueue", "true"},
+                {"ContentBasedDeduplication", "false"},
+                {"ReceiveMessageWaitTimeSeconds", "1"},
+                {"VisibilityTimeout", "30"},
+            }},
+        });
+        const TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+        AssertPerQueueTablesFormat0Layout(*this, queueUrl, queueName);
+
+        SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", "fifo-body-0"},
+            {"MessageGroupId", "group-0"},
+            {"MessageDeduplicationId", "dedup-0"},
+        });
+        SendMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonArray{
+                NJson::TJsonMap{
+                    {"Id", "b0"},
+                    {"MessageBody", "fifo-body-1"},
+                    {"MessageGroupId", "group-1"},
+                    {"MessageDeduplicationId", "dedup-1"},
+                },
+                NJson::TJsonMap{
+                    {"Id", "b1"},
+                    {"MessageBody", "fifo-body-2"},
+                    {"MessageGroupId", "group-2"},
+                    {"MessageDeduplicationId", "dedup-2"},
+                },
+            }},
+        });
+
+        auto message0 = ReceiveUntilBody(*this, queueUrl, "fifo-body-0");
+        UNIT_ASSERT_VALUES_EQUAL(message0["Attributes"]["MessageGroupId"], "group-0");
+
+        auto visibilityBatch = ChangeMessageVisibilityBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonArray{
+                NJson::TJsonMap{
+                    {"Id", "v0"},
+                    {"ReceiptHandle", message0["ReceiptHandle"]},
+                    {"VisibilityTimeout", 60},
+                },
+            }},
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(visibilityBatch["Successful"].GetArray().size(), 1, visibilityBatch.GetStringRobust());
+
+        DeleteMessage({
+            {"QueueUrl", queueUrl},
+            {"ReceiptHandle", message0["ReceiptHandle"]},
+        });
+
+        auto message1 = ReceiveUntilBody(*this, queueUrl, "fifo-body-1");
+        auto message2 = ReceiveUntilBody(*this, queueUrl, "fifo-body-2");
+        auto deleteBatch = DeleteMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonArray{
+                NJson::TJsonMap{{"Id", "d0"}, {"ReceiptHandle", message1["ReceiptHandle"]}},
+                NJson::TJsonMap{{"Id", "d1"}, {"ReceiptHandle", message2["ReceiptHandle"]}},
+            }},
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(deleteBatch["Successful"].GetArray().size(), 2, deleteBatch.GetStringRobust());
+
+        // Content-based dedup path on format=0.
+        SetQueueAttributes({
+            {"QueueUrl", queueUrl},
+            {"Attributes", NJson::TJsonMap{{"ContentBasedDeduplication", "true"}}},
+        });
+        WaitQueueAttributes(queueUrl, 10, [](NJson::TJsonMap attrs) {
+            return attrs["Attributes"]["ContentBasedDeduplication"] == "true";
+        });
+        auto first = SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", "same-fifo-body"},
+            {"MessageGroupId", "group-dedup"},
+        });
+        auto second = SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", "same-fifo-body"},
+            {"MessageGroupId", "group-dedup"},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetByPath<TString>(first, "MessageId"),
+            GetByPath<TString>(second, "MessageId"));
+        auto deduped = ReceiveUntilBody(*this, queueUrl, "same-fifo-body");
+        DeleteMessage({{"QueueUrl", queueUrl}, {"ReceiptHandle", deduped["ReceiptHandle"]}});
+        json = ReceiveMessage({
+            {"QueueUrl", queueUrl},
+            {"WaitTimeSeconds", 1},
+            {"VisibilityTimeout", 1},
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            json["Messages"].GetType(),
+            NJson::EJsonValueType::JSON_UNDEFINED,
+            json.GetStringRobust());
+    }
+
+    Y_UNIT_TEST_F(TestMigrationCompatibility_TablesFormat0_QueueManagementApis, THttpProxyTestMock) {
+        PrepareMigrationCompatibilityTablesFormat0(*this);
+
+        const TString stdName = "MigFmt0ManageStd";
+        const TString fifoName = "MigFmt0ManageFifo.fifo";
+
+        auto stdCreate = CreateQueue({{"QueueName", stdName}});
+        auto fifoCreate = CreateQueue({
+            {"QueueName", fifoName},
+            {"Attributes", NJson::TJsonMap{
+                {"FifoQueue", "true"},
+                {"DelaySeconds", "1"},
+            }},
+        });
+        const TString stdUrl = GetByPath<TString>(stdCreate, "QueueUrl");
+        const TString fifoUrl = GetByPath<TString>(fifoCreate, "QueueUrl");
+        AssertPerQueueTablesFormat0Layout(*this, stdUrl, stdName);
+        AssertPerQueueTablesFormat0Layout(*this, fifoUrl, fifoName);
+
+        auto getUrl = GetQueueUrl({{"QueueName", stdName}});
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(getUrl, "QueueUrl"), stdUrl);
+
+        auto listed = ListQueues({});
+        UNIT_ASSERT_C(listed["QueueUrls"].IsArray(), listed.GetStringRobust());
+        bool sawStd = false;
+        bool sawFifo = false;
+        for (const auto& url : listed["QueueUrls"].GetArray()) {
+            if (url.GetStringRobust() == stdUrl) {
+                sawStd = true;
+            }
+            if (url.GetStringRobust() == fifoUrl) {
+                sawFifo = true;
+            }
+        }
+        UNIT_ASSERT(sawStd && sawFifo);
+
+        auto attrs = GetQueueAttributes({
+            {"QueueUrl", fifoUrl},
+            {"AttributeNames", NJson::TJsonArray{"All"}},
+        });
+        UNIT_ASSERT_VALUES_EQUAL(attrs["Attributes"]["FifoQueue"], "true");
+        UNIT_ASSERT_VALUES_EQUAL(attrs["Attributes"]["DelaySeconds"], "1");
+
+        SetQueueAttributes({
+            {"QueueUrl", fifoUrl},
+            {"Attributes", NJson::TJsonMap{
+                {"DelaySeconds", "2"},
+                {"VisibilityTimeout", "33"},
+                {"ReceiveMessageWaitTimeSeconds", "1"},
+            }},
+        });
+        WaitQueueAttributes(fifoUrl, 10, [](NJson::TJsonMap json) {
+            return json["Attributes"]["DelaySeconds"] == "2"
+                && json["Attributes"]["VisibilityTimeout"] == "33";
+        });
+
+        TagQueue({{"QueueUrl", stdUrl}, {"Tags", NJson::TJsonMap{{"env", "test"}, {"team", "ymq"}}}});
+        auto tags = ListQueueTags({{"QueueUrl", stdUrl}});
+        UNIT_ASSERT((tags["Tags"] == NJson::TJsonMap{{"env", "test"}, {"team", "ymq"}}));
+        UntagQueue({{"QueueUrl", stdUrl}, {"TagKeys", NJson::TJsonArray{"env"}}});
+        tags = ListQueueTags({{"QueueUrl", stdUrl}});
+        UNIT_ASSERT((tags["Tags"] == NJson::TJsonMap{{"team", "ymq"}}));
+
+        DeleteQueue({{"QueueUrl", stdUrl}});
+        bool deleted = false;
+        for (int i = 0; i < 61; ++i) {
+            auto res = SendHttpRequest(
+                "/Root",
+                "AmazonSQS.GetQueueUrl",
+                NJson::TJsonMap{{"QueueName", stdName}},
+                FormAuthorizationStr("ru-central1"));
+            if (res.HttpCode == 200) {
+                Sleep(TDuration::Seconds(1));
+                continue;
+            }
+            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
+            NJson::TJsonMap errorJson;
+            UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &errorJson));
+            UNIT_ASSERT_VALUES_EQUAL(
+                GetByPath<TString>(errorJson, "__type"),
+                "AWS.SimpleQueueService.NonExistentQueue");
+            deleted = true;
+            break;
+        }
+        UNIT_ASSERT_C(deleted, "queue was not deleted within timeout");
+    }
+
+    Y_UNIT_TEST_F(TestMigrationCompatibility_TablesFormat0_DlqApis, THttpProxyTestMock) {
+        PrepareMigrationCompatibilityTablesFormat0(*this);
+
+        auto dlqCreate = CreateQueue({
+            {"QueueName", "MigFmt0Dlq.fifo"},
+            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}},
+        });
+        const TString dlqUrl = GetByPath<TString>(dlqCreate, "QueueUrl");
+        auto dlqAttrs = GetQueueAttributes({
+            {"QueueUrl", dlqUrl},
+            {"AttributeNames", NJson::TJsonArray{"QueueArn"}},
+        });
+        const TString dlqArn = GetByPath<TString>(dlqAttrs, "Attributes.QueueArn");
+
+        const TString sourceName = "MigFmt0Source.fifo";
+        auto sourceCreate = CreateQueue({
+            {"QueueName", sourceName},
+            {"Attributes", NJson::TJsonMap{
+                {"FifoQueue", "true"},
+                {"VisibilityTimeout", "1"},
+                {"ReceiveMessageWaitTimeSeconds", "1"},
+                {"RedrivePolicy", TStringBuilder()
+                    << "{\"deadLetterTargetArn\":\"" << dlqArn << "\", \"maxReceiveCount\": 1}"},
+            }},
+        });
+        const TString sourceUrl = GetByPath<TString>(sourceCreate, "QueueUrl");
+        AssertPerQueueTablesFormat0Layout(*this, sourceUrl, sourceName);
+
+        auto sources = SendJsonRequest("ListDeadLetterSourceQueues", {{"QueueUrl", dlqUrl}});
+        UNIT_ASSERT_C(sources["QueueUrls"].IsArray(), sources.GetStringRobust());
+        UNIT_ASSERT_VALUES_EQUAL(sources["QueueUrls"][0], sourceUrl);
+
+        SendMessage({
+            {"QueueUrl", sourceUrl},
+            {"MessageBody", "dlq-body"},
+            {"MessageGroupId", "group-0"},
+            {"MessageDeduplicationId", "dedup-dlq"},
+        });
+        {
+            auto received = ReceiveMessage({
+                {"QueueUrl", sourceUrl},
+                {"WaitTimeSeconds", 2},
+                {"VisibilityTimeout", 1},
+            });
+            UNIT_ASSERT_VALUES_EQUAL(received["Messages"][0]["Body"], "dlq-body");
+        }
+        auto dlqMessage = ReceiveUntilBody(*this, dlqUrl, "dlq-body", 30);
+        UNIT_ASSERT_VALUES_EQUAL(dlqMessage["Body"], "dlq-body");
     }
 
     Y_UNIT_TEST_F(NoBillingRecordsOnJsonApiAuthFailure, THttpProxyTestMockWithMetering) {

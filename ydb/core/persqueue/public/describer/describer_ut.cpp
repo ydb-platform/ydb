@@ -364,10 +364,9 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         UNIT_ASSERT_VALUES_EQUAL(ev->Topics["/Root/topic1"].Status, NDescriber::EStatus::SUCCESS);
     }
 
-    // Note: AccessDenied / BalancerTabletID==0 / LookupError / async-cache-miss branches
-    // require intercepting TEvNavigateKeySetResult. TTopicSdkTestSetup runs with
-    // UseRealThreads=true, where test-runtime observers do not see in-flight actor mail.
-    // Those paths stay uncovered here; ForceSyncVersion covers UsedSyncVersion=true.
+    // Scheme-cache error / incomplete-topic branches that need a controllable
+    // NavigateKeySetResult live in describer_fake_scheme_cache_ut.cpp
+    // (TTestBasicRuntime with UseRealThreads=false).
 
     // -------------------------------------------------------------------------
     // P1 — Convert / Description helpers

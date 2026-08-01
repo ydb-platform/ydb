@@ -10,6 +10,8 @@ from botocore.config import Config
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.compatibility.fixtures import (
     RollingUpgradeAndDowngradeFixture,
+    current_binary_path,
+    current_name,
     logger,
     prepare_feature_flags,
     prepare_table_service_config,
@@ -295,6 +297,24 @@ class TestYmqHttpProxyBotoRollingUpdate(YmqRollingUpdateBase):
                 )
                 assert "Attributes" in attrs
                 assert "QueueArn" in attrs["Attributes"]
+
+                if is_fifo:
+                    fifo_attrs = client.get_queue_attributes(
+                        QueueUrl=queue_url,
+                        AttributeNames=["FifoQueue"],
+                    )
+                    fifo_val = fifo_attrs.get("Attributes", {}).get("FifoQueue")
+                    # Older YMQ proxy builds omit FifoQueue from GetQueueAttributesResult.
+                    # Hard-require it only on source-built current after the proxy node is upgraded.
+                    if fifo_val is not None:
+                        assert fifo_val == "true"
+                    elif (
+                        current_name == "current"
+                        and self.cluster.nodes[1].binary_path == current_binary_path
+                    ):
+                        raise AssertionError(
+                            "FifoQueue missing from GetQueueAttributes: {!r}".format(fifo_attrs)
+                        )
 
                 client.set_queue_attributes(
                     QueueUrl=queue_url,

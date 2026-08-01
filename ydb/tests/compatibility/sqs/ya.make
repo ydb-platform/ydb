@@ -7,7 +7,12 @@ FORK_TESTS()
 FORK_SUBTESTS()
 SPLIT_FACTOR(10)
 
+PY_SRCS(
+    ymq_rolling_base.py
+)
+
 TEST_SRCS(
+    test_ymq_native.py
     test_ymq_boto.py
 )
 

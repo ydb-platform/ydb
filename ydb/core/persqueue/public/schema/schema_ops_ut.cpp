@@ -59,7 +59,8 @@ Y_UNIT_TEST(AddAndRemoveConsumerActors) {
         consumer.set_name("c2");
         consumer.mutable_streaming_consumer_type();
         AssertStatus(DoAddConsumer(runtime, path, consumer), Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT(NPQ::GetConsumer(DescribeTabletConfig(runtime, path), "c2"));
+        auto config = DescribeTabletConfig(runtime, path);
+        UNIT_ASSERT(NPQ::GetConsumer(config, "c2"));
     }
 
     {
@@ -68,7 +69,8 @@ Y_UNIT_TEST(AddAndRemoveConsumerActors) {
         auto* type = consumer.mutable_shared_consumer_type();
         type->set_keep_messages_order(true);
         AssertStatus(DoAddConsumer(runtime, path, consumer), Ydb::StatusIds::SUCCESS);
-        const auto* c = NPQ::GetConsumer(DescribeTabletConfig(runtime, path), "shared_c");
+        auto config = DescribeTabletConfig(runtime, path);
+        const auto* c = NPQ::GetConsumer(config, "shared_c");
         UNIT_ASSERT(c);
         UNIT_ASSERT_VALUES_EQUAL(
             NKikimrPQ::TPQTabletConfig::EConsumerType_Name(c->GetType()),

@@ -141,7 +141,7 @@ inline void ExecuteDDL(TTopicSdkTestSetup& setup, const TString& query) {
     driver.Stop(true);
 }
 
-inline const NKikimrPQ::TPartitionConfig& DescribePartitionConfig(
+inline NKikimrPQ::TPartitionConfig DescribePartitionConfig(
     NActors::TTestActorRuntime& runtime,
     const TString& path,
     const TString& database = "/Root")

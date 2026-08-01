@@ -4228,12 +4228,16 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
             {"QueueUrl", queueUrl},
             {"WaitTimeSeconds", 1},
             {"VisibilityTimeout", 1},
-        }, 500);
-        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(receive, "__type"), "InternalFailure");
+        }, 400);
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetByPath<TString>(receive, "__type"),
+            "AWS.SimpleQueueService.NonExistentQueue");
         AssertErrorDoesNotLeakTopicPath(receive, topicPath);
 
-        auto purge = PurgeQueue({{"QueueUrl", queueUrl}}, 500);
-        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(purge, "__type"), "InternalFailure");
+        auto purge = PurgeQueue({{"QueueUrl", queueUrl}}, 400);
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetByPath<TString>(purge, "__type"),
+            "AWS.SimpleQueueService.NonExistentQueue");
         AssertErrorDoesNotLeakTopicPath(purge, topicPath);
 
         auto attrs = GetQueueAttributes({
@@ -5115,12 +5119,16 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
             {"QueueUrl", queueUrl},
             {"WaitTimeSeconds", 1},
             {"VisibilityTimeout", 1},
-        }, 500);
-        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(receive, "__type"), "InternalFailure");
+        }, 400);
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetByPath<TString>(receive, "__type"),
+            "AWS.SimpleQueueService.NonExistentQueue");
         AssertErrorDoesNotLeakTopicPath(receive, topicPath);
 
-        auto purge = PurgeQueue({{"QueueUrl", queueUrl}}, 500);
-        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(purge, "__type"), "InternalFailure");
+        auto purge = PurgeQueue({{"QueueUrl", queueUrl}}, 400);
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetByPath<TString>(purge, "__type"),
+            "AWS.SimpleQueueService.NonExistentQueue");
         AssertErrorDoesNotLeakTopicPath(purge, topicPath);
 
         auto attrs = GetQueueAttributes({
@@ -5298,11 +5306,10 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestDeferredTopicCreation_MessagingWhileTopicPending, THttpProxyTestMock) {
-        // TopicCreation off: table messaging must work before deferred create finishes.
-        // Compatibility stays off here — with Compatibility on and TopicCreated=false, empty
-        // STD receive falls through to a missing topic and returns InternalFailure.
+        // Compatibility may be on while TopicCreated=false: empty receive must stay empty
+        // (AWS-compatible), and table messaging must still work before deferred create finishes.
         PrepareConfigs(KikimrServer.Get());
-        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
         KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
         KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationFinished(false);
 
@@ -5321,6 +5328,17 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         UNIT_ASSERT(topicPath.has_value());
         UNIT_ASSERT(!topicClient.DescribeTopic(*topicPath).GetValueSync().IsSuccess());
 
+        json = ReceiveMessage({
+            {"QueueUrl", queueUrl},
+            {"WaitTimeSeconds", 1},
+            {"VisibilityTimeout", 1},
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            json["Messages"].GetType(),
+            NJson::EJsonValueType::JSON_UNDEFINED,
+            TStringBuilder() << "empty receive must not fail while topic is pending: "
+                << json.GetStringRobust());
+
         SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", "pending-topic-body"}});
         auto message = ReceiveOneMessage(*this, queueUrl, 5);
         UNIT_ASSERT_VALUES_EQUAL(message["Body"], "pending-topic-body");
@@ -5329,7 +5347,6 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
         WaitMigrationTopicPresent(topicClient, schemeClient, resourceDir);
 
-        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
         SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", "after-topic-body"}});
         message = ReceiveUntilBody(*this, queueUrl, "after-topic-body");
         UNIT_ASSERT_VALUES_EQUAL(message["Body"], "after-topic-body");

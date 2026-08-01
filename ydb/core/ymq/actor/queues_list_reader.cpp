@@ -133,7 +133,11 @@ void TQueuesListReader::OnQueuesList(const TSqsEvents::TEvExecuted::TRecord& rec
             rec.DlqName = row["DlqName"];
             rec.CreatedTimestamp = TInstant::MilliSeconds(ui64(row["CreatedTimestamp"]));
             rec.IsFifo = row["FifoQueue"];
-            rec.TopicCreated = row["TopicCreated"];
+            // TopicCreated may be missing for queues created by older versions.
+            const TValue topicCreated = row["TopicCreated"];
+            if (topicCreated.HaveValue()) {
+                rec.TopicCreated = topicCreated;
+            }
         }
 
         const bool truncated = val["truncated"];

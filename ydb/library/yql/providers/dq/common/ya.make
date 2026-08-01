@@ -5,6 +5,7 @@ PEERDIR(
     yql/essentials/minikql
     yql/essentials/utils
     yql/essentials/core
+    yql/essentials/providers/common/proto
     yql/essentials/utils/log
     ydb/library/yql/dq/actors
     ydb/library/yql/dq/proto

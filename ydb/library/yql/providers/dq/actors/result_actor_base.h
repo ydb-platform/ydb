@@ -113,6 +113,9 @@ struct TWriteQueue {
             , BlockingActors()
             , QueryResponse()
             , WaitingAckFromFRW(false) {
+            YQL_CLOG(INFO, ProviderDq) << "ResultActor init: FullResultTableEnabled=" << FullResultTableEnabled
+                << " discard=" << Discard
+                << " sizeLimit=" << SizeLimit;
             YQL_CLOG(DEBUG, ProviderDq) << "_AllResultsBytesLimit = " << SizeLimit;
             YQL_CLOG(DEBUG, ProviderDq) << "_RowsLimitPerWrite = " << (RowsLimit.Defined() ? ToString(RowsLimit.GetRef()) : "nothing");
         }
@@ -198,7 +201,9 @@ struct TWriteQueue {
         }
 
         void Finish() {
-            YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__ << ", truncated=" << Truncated;
+            YQL_CLOG(INFO, ProviderDq) << __FUNCTION__ << " truncated=" << Truncated
+                << " hasFullResultWriter=" << (bool)FullResultWriterID
+                << " FullResultTableEnabled=" << FullResultTableEnabled;
             YQL_ENSURE(!FinishCalled);
             FinishCalled = true;
 
@@ -255,7 +260,8 @@ struct TWriteQueue {
                 FinishFullResultWriter();
             }
 
-            YQL_CLOG(DEBUG, ProviderDq) << "Waiting for " << BlockingActors.size() << " blocking actors";
+            YQL_CLOG(INFO, ProviderDq) << "Waiting for " << BlockingActors.size() << " blocking actors"
+                << " hasFullResultWriter=" << (bool)FullResultWriterID;
 
             QueryResponse.Reset(ev->Release().Release());
             TBase::Become(&TDerived::ShutdownHandler);
@@ -333,7 +339,7 @@ struct TWriteQueue {
         }
 
         void FlushCurrent() {
-            YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__;
+            YQL_CLOG(INFO, ProviderDq) << __FUNCTION__ << ": requesting FullResultWriter on worker";
             YQL_ENSURE(!FullResultWriterID);
             YQL_ENSURE(FullResultTableEnabled);
 

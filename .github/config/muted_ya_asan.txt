@@ -132,6 +132,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestChangeMessageVisib
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestChangeMessageVisibilityBatchNonExistentConsumerInFederation
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestChangeMessageVisibilityBatchWithLeadingSlashInConsumerNameInFederation
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestChangeMessageVisibilityExtendTimeout
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestChangeMessageVisibilityWithLeadingSlashInConsumerNameInFederation
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestChangeMessageVisibilityZeroTimeout
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestCreateFifoQueueWithoutSuffix
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestCreateQueue
@@ -174,6 +175,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueAttributes
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueAttributesWithLeadingSlashInConsumerNameInFederation
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueUrlWithAtSignInConsumerNameInFederation
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueUrlWithConsumer
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestNoAuthCreateQueue
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestNoAuthDeleteMessage
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestNoAuthGetQueueUrl
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestNoAuthGetQueueUrlEmpty
@@ -235,6 +237,7 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueExis
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueFifo
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueSetsContentBasedDeduplicationMessageRateLimit
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueWithAttributes
+ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueWithBadQueueName
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestCreateQueueWithSameNameAndSameParams
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestDeleteQueueInvalid
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxyXml.TestDeleteQueueMultiConsumer
@@ -319,9 +322,11 @@ ydb/core/kqp/ut/tli KqpTli.ManyUpsertsDeferredLock
 ydb/core/kqp/ut/tli KqpTli.ManyUpsertsStandaloneCommit
 ydb/core/kqp/ut/tli KqpTli.ManyUpsertsStandaloneCommit2Node
 ydb/core/kqp/ut/tli KqpTli.MultipleKeys
+ydb/core/kqp/ut/tli KqpTli.SeparateCommit
 ydb/core/kqp/ut/tli KqpTli.SeparateCommitBreakerInMiddleOfSameShard
 ydb/core/kqp/ut/tli KqpTli.SeparateCommitDataQuery
 ydb/core/kqp/ut/tli KqpTli.VictimReadThenWriteSameTable
+ydb/core/kqp/ut/tli KqpTli.VictimReadThenWriteSameTableMultiTable
 ydb/core/kqp/ut/view TCreateAndDropViewTest.CallDropViewOnTable
 ydb/core/kqp/ut/view TCreateAndDropViewTest.CreateViewIfNotExists
 ydb/core/kqp/ut/view TCreateAndDropViewTest.CreateViewOccupiedName
@@ -361,6 +366,7 @@ ydb/core/tx/datashard/ut_lock_rows DataShardLockRows.RandomizedDeadlockDetection
 ydb/core/tx/datashard/ut_lock_rows unittest.[*/*] chunk
 ydb/core/tx/datashard/ut_stats DataShardStats.CollectKeySampleLeader-0-0
 ydb/core/tx/datashard/ut_stats DataShardStats.CollectKeySampleLeader-0-1
+ydb/core/tx/datashard/ut_stats DataShardStats.CollectKeySampleLeader-1-0
 ydb/core/tx/datashard/ut_stats DataShardStats.HasSchemaChanges_BTreeIndex
 ydb/core/tx/datashard/ut_stats DataShardStats.HasSchemaChanges_Columns
 ydb/core/tx/datashard/ut_stats DataShardStats.HasSchemaChanges_Families

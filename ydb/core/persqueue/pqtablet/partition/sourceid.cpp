@@ -384,6 +384,8 @@ void TSourceIdStorage::LoadProtoSourceIdInfo(const TString& key, const TString& 
     NKikimrPQ::TMessageGroupInfo proto;
     const bool ok = proto.ParseFromString(data);
     AFL_ENSURE(ok)("reason", "failed to parse message group info")("key", key);
+
+    RegisterSourceIdInfo(key.substr(TKeyPrefix::MarkedSize()), TSourceIdInfo::Parse(proto), true);
 }
 
 void TSourceIdStorage::RegisterSourceIdInfo(const TString& sourceId, TSourceIdInfo&& sourceIdInfo, bool load) {

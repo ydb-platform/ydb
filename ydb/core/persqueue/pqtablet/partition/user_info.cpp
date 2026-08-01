@@ -391,6 +391,8 @@ void TUsersInfoStorage::Parse(const TString& key, const TString& data, const TAc
     NKikimrPQ::TUserInfo userData;
     bool res = userData.ParseFromString(data);
     AFL_ENSURE(res)("reason", "failed to parse user info")("user", user);
+
+    AFL_ENSURE(userData.GetOffset() <= (ui64)Max<i64>())("description", "Offset is too big")("offset", userData.GetOffset());
     i64 offset = static_cast<i64>(userData.GetOffset());
 
     TUserInfo* userInfo = GetIfExists(user);
@@ -411,6 +413,7 @@ void TUsersInfoStorage::Parse(const TString& key, const TString& data, const TAc
     }
     userInfo = GetIfExists(user);
     AFL_ENSURE(userInfo)("reason", "user info not found after create")("user", user);
+    userInfo->Parsed = true;
 }
 
 void TUsersInfoStorage::Remove(const TString& user, const TActorContext&) {

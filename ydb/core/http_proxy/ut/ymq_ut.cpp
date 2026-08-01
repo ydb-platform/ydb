@@ -502,6 +502,85 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         return json["Messages"][0];
     }
 
+    struct TMixedTableAndTopicReceipts {
+        TString QueueUrl;
+        NJson::TJsonValue TableMessage;
+        NJson::TJsonValue TopicMessage;
+    };
+
+    TMixedTableAndTopicReceipts PrepareMixedTableAndTopicReceipts(
+        THttpProxyTestMock& fixture,
+        const TString& queueName,
+        ui32 visibilityTimeout = 30
+    ) {
+        auto json = fixture.CreateQueue({
+            {"QueueName", queueName},
+            {"Attributes", NJson::TJsonMap{
+                {"FifoQueue", "true"},
+                {"ReceiveMessageWaitTimeSeconds", "1"},
+                {"VisibilityTimeout", TStringBuilder() << visibilityTimeout},
+            }}
+        });
+        TMixedTableAndTopicReceipts result;
+        result.QueueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        fixture.SendMessage({
+            {"QueueUrl", result.QueueUrl},
+            {"MessageBody", "table-body"},
+            {"MessageGroupId", "group-table"},
+            {"MessageDeduplicationId", "dedup-table"},
+        });
+
+        fixture.KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        fixture.SendMessage({
+            {"QueueUrl", result.QueueUrl},
+            {"MessageBody", "topic-body"},
+            {"MessageGroupId", "group-topic"},
+            {"MessageDeduplicationId", "dedup-topic"},
+        });
+
+        for (int i = 0; i < 20 && (!result.TableMessage.IsDefined() || !result.TopicMessage.IsDefined()); ++i) {
+            auto received = fixture.ReceiveMessage({
+                {"QueueUrl", result.QueueUrl},
+                {"WaitTimeSeconds", 2},
+                {"VisibilityTimeout", visibilityTimeout},
+                {"MaxNumberOfMessages", 10},
+            });
+            if (!received["Messages"].IsArray()) {
+                continue;
+            }
+            for (const auto& message : received["Messages"].GetArray()) {
+                if (message["Body"] == "table-body") {
+                    result.TableMessage = message;
+                } else if (message["Body"] == "topic-body") {
+                    result.TopicMessage = message;
+                }
+            }
+        }
+        UNIT_ASSERT_C(result.TableMessage.IsDefined(), "failed to receive table-sourced message");
+        UNIT_ASSERT_C(result.TopicMessage.IsDefined(), "failed to receive topic-sourced message");
+        return result;
+    }
+
+    void PrepareMigrationFinishedTablesFormat0(THttpProxyTestMock& fixture) {
+        PrepareConfigs(fixture.KikimrServer.Get());
+        fixture.KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        fixture.KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+        fixture.KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationFinished(true);
+
+        NYdb::TDriver driver(CreateDriver(fixture.KikimrGrpcPort));
+        SetCreateQueuesTablesFormat(fixture.KikimrServer, driver, 0);
+        driver.Stop(true);
+    }
+
+    void PrepareTopicCreationOnly(THttpProxyTestMock& fixture) {
+        PrepareConfigs(fixture.KikimrServer.Get());
+        fixture.KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        fixture.KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        fixture.KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationFinished(false);
+    }
+
     Y_UNIT_TEST_F(TestCreateQueue, THttpProxyTestMock) {
         PrepareConfigs(KikimrServer.Get());
         KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
@@ -4799,6 +4878,550 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         }
         auto dlqMessage = ReceiveUntilBody(*this, dlqUrl, "dlq-body", 30);
         UNIT_ASSERT_VALUES_EQUAL(dlqMessage["Body"], "dlq-body");
+    }
+
+    Y_UNIT_TEST_F(TestMigrationFinished_TablesFormat0_SendReceiveDelete, THttpProxyTestMock) {
+        PrepareMigrationFinishedTablesFormat0(*this);
+
+        const TString queueName = "FinishedFmt0Fifo.fifo";
+        auto json = CreateQueue({
+            {"QueueName", queueName},
+            {"Attributes", NJson::TJsonMap{
+                {"FifoQueue", "true"},
+                {"ReceiveMessageWaitTimeSeconds", "1"},
+                {"VisibilityTimeout", "30"},
+            }},
+        });
+        const TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+        AssertPerQueueTablesFormat0Layout(*this, queueUrl, queueName);
+
+        auto send = SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", "finished-fmt0-body"},
+            {"MessageGroupId", "group-0"},
+            {"MessageDeduplicationId", "dedup-0"},
+        });
+        const TString messageId = GetByPath<TString>(send, "MessageId");
+        UNIT_ASSERT(!messageId.empty());
+
+        auto message = ReceiveOneMessage(*this, queueUrl, 5);
+        UNIT_ASSERT_VALUES_EQUAL(message["Body"], "finished-fmt0-body");
+        UNIT_ASSERT_VALUES_EQUAL(message["MessageId"], messageId);
+
+        DeleteMessage({
+            {"QueueUrl", queueUrl},
+            {"ReceiptHandle", message["ReceiptHandle"]},
+        });
+        json = ReceiveMessage({
+            {"QueueUrl", queueUrl},
+            {"WaitTimeSeconds", 1},
+            {"VisibilityTimeout", 1},
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            json["Messages"].GetType(),
+            NJson::EJsonValueType::JSON_UNDEFINED,
+            json.GetStringRobust());
+    }
+
+    Y_UNIT_TEST_F(TestMigrationFinished_TablesFormat0_PurgeAndApproximateAttributes, THttpProxyTestMock) {
+        PrepareMigrationFinishedTablesFormat0(*this);
+
+        const TString queueName = "FinishedFmt0Purge";
+        auto json = CreateQueue({{"QueueName", queueName}});
+        const TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+        AssertPerQueueTablesFormat0Layout(*this, queueUrl, queueName);
+
+        SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", "purge-fmt0-0"}});
+        SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", "purge-fmt0-1"}});
+        WaitQueueAttributes(queueUrl, 20, [](NJson::TJsonMap attrs) {
+            return attrs["Attributes"]["ApproximateNumberOfMessages"] == "2";
+        });
+
+        ReceiveMessage({
+            {"QueueUrl", queueUrl},
+            {"WaitTimeSeconds", 1},
+            {"VisibilityTimeout", 43000},
+            {"MaxNumberOfMessages", 1},
+        });
+        WaitQueueAttributes(queueUrl, 20, [](NJson::TJsonMap attrs) {
+            return attrs["Attributes"]["ApproximateNumberOfMessages"] == "2"
+                && attrs["Attributes"]["ApproximateNumberOfMessagesNotVisible"] == "1";
+        });
+
+        PurgeQueue({{"QueueUrl", queueUrl}});
+        WaitQueueAttributes(queueUrl, 20, [](NJson::TJsonMap attrs) {
+            return attrs["Attributes"]["ApproximateNumberOfMessages"] == "0"
+                && attrs["Attributes"]["ApproximateNumberOfMessagesNotVisible"] == "0";
+        });
+    }
+
+    Y_UNIT_TEST_F(TestDeleteMessageBatch_MixedTableAndTopicReceipts_TablesFormat0, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+
+        NYdb::TDriver driver(CreateDriver(KikimrGrpcPort));
+        SetCreateQueuesTablesFormat(KikimrServer, driver, 0);
+
+        auto mixed = PrepareMixedTableAndTopicReceipts(*this, "MixedDeleteBatchFmt0.fifo");
+        AssertPerQueueTablesFormat0Layout(*this, mixed.QueueUrl, "MixedDeleteBatchFmt0.fifo");
+
+        auto json = DeleteMessageBatch({
+            {"QueueUrl", mixed.QueueUrl},
+            {"Entries", NJson::TJsonArray{
+                NJson::TJsonMap{{"Id", "table"}, {"ReceiptHandle", mixed.TableMessage["ReceiptHandle"]}},
+                NJson::TJsonMap{{"Id", "topic"}, {"ReceiptHandle", mixed.TopicMessage["ReceiptHandle"]}},
+            }},
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(json["Successful"].GetArray().size(), 2, json.GetStringRobust());
+
+        json = ReceiveMessage({
+            {"QueueUrl", mixed.QueueUrl},
+            {"WaitTimeSeconds", 1},
+            {"VisibilityTimeout", 1},
+            {"MaxNumberOfMessages", 10},
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            json["Messages"].GetType(),
+            NJson::EJsonValueType::JSON_UNDEFINED,
+            json.GetStringRobust());
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST_F(TestChangeMessageVisibilityBatch_MixedTableAndTopicReceipts_TablesFormat0, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+
+        NYdb::TDriver driver(CreateDriver(KikimrGrpcPort));
+        SetCreateQueuesTablesFormat(KikimrServer, driver, 0);
+
+        auto mixed = PrepareMixedTableAndTopicReceipts(*this, "MixedVisibilityBatchFmt0.fifo", 1);
+        AssertPerQueueTablesFormat0Layout(*this, mixed.QueueUrl, "MixedVisibilityBatchFmt0.fifo");
+
+        auto json = ChangeMessageVisibilityBatch({
+            {"QueueUrl", mixed.QueueUrl},
+            {"Entries", NJson::TJsonArray{
+                NJson::TJsonMap{
+                    {"Id", "table"},
+                    {"ReceiptHandle", mixed.TableMessage["ReceiptHandle"]},
+                    {"VisibilityTimeout", 60},
+                },
+                NJson::TJsonMap{
+                    {"Id", "topic"},
+                    {"ReceiptHandle", mixed.TopicMessage["ReceiptHandle"]},
+                    {"VisibilityTimeout", 60},
+                },
+            }},
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(json["Successful"].GetArray().size(), 2, json.GetStringRobust());
+
+        json = ReceiveMessage({
+            {"QueueUrl", mixed.QueueUrl},
+            {"WaitTimeSeconds", 1},
+            {"VisibilityTimeout", 1},
+            {"MaxNumberOfMessages", 10},
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            json["Messages"].GetType(),
+            NJson::EJsonValueType::JSON_UNDEFINED,
+            TStringBuilder() << "messages must stay invisible after mixed ChangeMessageVisibilityBatch: "
+                << json.GetStringRobust());
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST_F(TestGetMessageGroups_OverloadedSkipsTopicReceive, THttpProxyTestMock) {
+        // When >100 table messages exist, GetMessageGroups returns OVERLOADED and FIFO
+        // Compatibility receive must not fall through to the topic path.
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationFinished(false);
+
+        const TString queueName = "OverloadedGroups.fifo";
+        auto json = CreateQueue({
+            {"QueueName", queueName},
+            {"Attributes", NJson::TJsonMap{
+                {"FifoQueue", "true"},
+                {"ReceiveMessageWaitTimeSeconds", "1"},
+                {"VisibilityTimeout", "30"},
+            }},
+        });
+        const TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        constexpr int messageCount = 101;
+        for (int i = 0; i < messageCount; ++i) {
+            SendMessage({
+                {"QueueUrl", queueUrl},
+                {"MessageBody", TStringBuilder() << "table-" << i},
+                {"MessageGroupId", TStringBuilder() << "group-" << i},
+                {"MessageDeduplicationId", TStringBuilder() << "dedup-" << i},
+            });
+        }
+
+        int locked = 0;
+        for (int attempt = 0; attempt < 40 && locked < messageCount; ++attempt) {
+            auto received = ReceiveMessage({
+                {"QueueUrl", queueUrl},
+                {"WaitTimeSeconds", 1},
+                {"VisibilityTimeout", 43000},
+                {"MaxNumberOfMessages", 10},
+            });
+            if (!received["Messages"].IsArray()) {
+                continue;
+            }
+            locked += received["Messages"].GetArray().size();
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(locked, messageCount, "failed to lock all table messages");
+
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", "topic-should-be-skipped"},
+            {"MessageGroupId", "group-topic"},
+            {"MessageDeduplicationId", "dedup-topic"},
+        });
+
+        json = ReceiveMessage({
+            {"QueueUrl", queueUrl},
+            {"WaitTimeSeconds", 2},
+            {"VisibilityTimeout", 30},
+            {"MaxNumberOfMessages", 10},
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            json["Messages"].GetType(),
+            NJson::EJsonValueType::JSON_UNDEFINED,
+            TStringBuilder() << "OVERLOADED GetMessageGroups must skip topic receive: "
+                << json.GetStringRobust());
+    }
+
+    Y_UNIT_TEST_F(TestTopicMissing_Compatibility_ReceivePurgeGetAttributes_DoNotLeakPath, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationFinished(false);
+
+        const TString queueName = "MissingTopicCompatQueue";
+        auto json = CreateQueue({{"QueueName", queueName}});
+        const TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        DescribeMigrationTopicByQueueUrl(*this, queueUrl, queueName);
+        const TString topicPath = DropMigrationTopic(*this, queueUrl, queueName);
+
+        auto receive = ReceiveMessage({
+            {"QueueUrl", queueUrl},
+            {"WaitTimeSeconds", 1},
+            {"VisibilityTimeout", 1},
+        }, 500);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(receive, "__type"), "InternalFailure");
+        AssertErrorDoesNotLeakTopicPath(receive, topicPath);
+
+        auto purge = PurgeQueue({{"QueueUrl", queueUrl}}, 500);
+        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(purge, "__type"), "InternalFailure");
+        AssertErrorDoesNotLeakTopicPath(purge, topicPath);
+
+        auto attrs = GetQueueAttributes({
+            {"QueueUrl", queueUrl},
+            {"AttributeNames", NJson::TJsonArray{
+                "ApproximateNumberOfMessages",
+                "ApproximateNumberOfMessagesNotVisible",
+            }},
+        }, 400);
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetByPath<TString>(attrs, "__type"),
+            "AWS.SimpleQueueService.NonExistentQueue");
+        AssertErrorDoesNotLeakTopicPath(attrs, topicPath);
+    }
+
+    Y_UNIT_TEST_F(TestGetQueueAttributes_ApproximateSum_TableAndTopic_Compatibility, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationFinished(false);
+
+        const TString queueName = "ApproxSumCompat";
+        auto json = CreateQueue({{"QueueName", queueName}});
+        const TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", "table-only"}});
+
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", "topic-only"}});
+
+        WaitQueueAttributes(queueUrl, 30, [](NJson::TJsonMap attrs) {
+            return attrs["Attributes"]["ApproximateNumberOfMessages"] == "2";
+        });
+    }
+
+    Y_UNIT_TEST_F(TestTopicCreationStage_StdMessagingApis, THttpProxyTestMock) {
+        // topic_creation: topic exists, Compatibility/Finished off — messaging stays on tables.
+        PrepareTopicCreationOnly(*this);
+
+        const TString queueName = "TopicCreationStd";
+        auto json = CreateQueue({{"QueueName", queueName}});
+        const TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+        DescribeMigrationTopicByQueueUrl(*this, queueUrl, queueName);
+
+        SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", "tc-body-0"}});
+        SendMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonArray{
+                NJson::TJsonMap{{"Id", "b0"}, {"MessageBody", "tc-body-1"}},
+                NJson::TJsonMap{{"Id", "b1"}, {"MessageBody", "tc-body-2"}},
+            }},
+        });
+
+        auto message0 = ReceiveUntilBody(*this, queueUrl, "tc-body-0");
+        ChangeMessageVisibility({
+            {"QueueUrl", queueUrl},
+            {"ReceiptHandle", message0["ReceiptHandle"]},
+            {"VisibilityTimeout", 60},
+        });
+        DeleteMessage({
+            {"QueueUrl", queueUrl},
+            {"ReceiptHandle", message0["ReceiptHandle"]},
+        });
+
+        auto message1 = ReceiveUntilBody(*this, queueUrl, "tc-body-1");
+        auto message2 = ReceiveUntilBody(*this, queueUrl, "tc-body-2");
+        auto deleteBatch = DeleteMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonArray{
+                NJson::TJsonMap{{"Id", "d0"}, {"ReceiptHandle", message1["ReceiptHandle"]}},
+                NJson::TJsonMap{{"Id", "d1"}, {"ReceiptHandle", message2["ReceiptHandle"]}},
+            }},
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(deleteBatch["Successful"].GetArray().size(), 2, deleteBatch.GetStringRobust());
+
+        SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", "to-purge"}});
+        WaitQueueAttributes(queueUrl, 20, [](NJson::TJsonMap attrs) {
+            return attrs["Attributes"]["ApproximateNumberOfMessages"] == "1";
+        });
+        PurgeQueue({{"QueueUrl", queueUrl}});
+        WaitQueueAttributes(queueUrl, 20, [](NJson::TJsonMap attrs) {
+            return attrs["Attributes"]["ApproximateNumberOfMessages"] == "0";
+        });
+    }
+
+    Y_UNIT_TEST_F(TestMigrationFinished_TablesFormat1_MessagingApis, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationFinished(true);
+
+        const TString stdName = "FinishedFmt1Std";
+        const TString fifoName = "FinishedFmt1Fifo.fifo";
+        auto stdUrl = GetByPath<TString>(CreateQueue({{"QueueName", stdName}}), "QueueUrl");
+        auto fifoUrl = GetByPath<TString>(CreateQueue({
+            {"QueueName", fifoName},
+            {"Attributes", NJson::TJsonMap{
+                {"FifoQueue", "true"},
+                {"ReceiveMessageWaitTimeSeconds", "1"},
+                {"VisibilityTimeout", "30"},
+            }},
+        }), "QueueUrl");
+
+        SendMessage({{"QueueUrl", stdUrl}, {"MessageBody", "fin-std"}});
+        auto stdMessage = ReceiveUntilBody(*this, stdUrl, "fin-std");
+        DeleteMessage({{"QueueUrl", stdUrl}, {"ReceiptHandle", stdMessage["ReceiptHandle"]}});
+
+        SendMessage({
+            {"QueueUrl", fifoUrl},
+            {"MessageBody", "fin-fifo"},
+            {"MessageGroupId", "g0"},
+            {"MessageDeduplicationId", "d0"},
+        });
+        auto fifoMessage = ReceiveUntilBody(*this, fifoUrl, "fin-fifo");
+        DeleteMessage({{"QueueUrl", fifoUrl}, {"ReceiptHandle", fifoMessage["ReceiptHandle"]}});
+
+        SetQueueAttributes({
+            {"QueueUrl", stdUrl},
+            {"Attributes", NJson::TJsonMap{{"VisibilityTimeout", "42"}}},
+        });
+        WaitQueueAttributes(stdUrl, 10, [](NJson::TJsonMap attrs) {
+            return attrs["Attributes"]["VisibilityTimeout"] == "42";
+        });
+
+        SendMessage({{"QueueUrl", stdUrl}, {"MessageBody", "fin-purge"}});
+        WaitQueueAttributes(stdUrl, 20, [](NJson::TJsonMap attrs) {
+            return attrs["Attributes"]["ApproximateNumberOfMessages"] == "1";
+        });
+        PurgeQueue({{"QueueUrl", stdUrl}});
+        WaitQueueAttributes(stdUrl, 20, [](NJson::TJsonMap attrs) {
+            return attrs["Attributes"]["ApproximateNumberOfMessages"] == "0";
+        });
+    }
+
+    Y_UNIT_TEST_F(TestMigrationFinished_TablesFormat0_MessagingApis, THttpProxyTestMock) {
+        PrepareMigrationFinishedTablesFormat0(*this);
+
+        const TString stdName = "FinishedFmt0StdMsg";
+        const TString fifoName = "FinishedFmt0FifoMsg.fifo";
+        auto stdUrl = GetByPath<TString>(CreateQueue({{"QueueName", stdName}}), "QueueUrl");
+        auto fifoUrl = GetByPath<TString>(CreateQueue({
+            {"QueueName", fifoName},
+            {"Attributes", NJson::TJsonMap{
+                {"FifoQueue", "true"},
+                {"ReceiveMessageWaitTimeSeconds", "1"},
+                {"VisibilityTimeout", "30"},
+            }},
+        }), "QueueUrl");
+        AssertPerQueueTablesFormat0Layout(*this, stdUrl, stdName);
+        AssertPerQueueTablesFormat0Layout(*this, fifoUrl, fifoName);
+
+        SendMessage({{"QueueUrl", stdUrl}, {"MessageBody", "fin0-std"}});
+        auto stdMessage = ReceiveUntilBody(*this, stdUrl, "fin0-std");
+        DeleteMessage({{"QueueUrl", stdUrl}, {"ReceiptHandle", stdMessage["ReceiptHandle"]}});
+
+        SendMessage({
+            {"QueueUrl", fifoUrl},
+            {"MessageBody", "fin0-fifo"},
+            {"MessageGroupId", "g0"},
+            {"MessageDeduplicationId", "d0"},
+        });
+        auto fifoMessage = ReceiveUntilBody(*this, fifoUrl, "fin0-fifo");
+        UNIT_ASSERT_VALUES_EQUAL(fifoMessage["Attributes"]["MessageGroupId"], "g0");
+        DeleteMessage({{"QueueUrl", fifoUrl}, {"ReceiptHandle", fifoMessage["ReceiptHandle"]}});
+
+        SendMessage({{"QueueUrl", stdUrl}, {"MessageBody", "fin0-purge"}});
+        WaitQueueAttributes(stdUrl, 20, [](NJson::TJsonMap attrs) {
+            return attrs["Attributes"]["ApproximateNumberOfMessages"] == "1";
+        });
+        PurgeQueue({{"QueueUrl", stdUrl}});
+        WaitQueueAttributes(stdUrl, 20, [](NJson::TJsonMap attrs) {
+            return attrs["Attributes"]["ApproximateNumberOfMessages"] == "0";
+        });
+    }
+
+    Y_UNIT_TEST_F(TestDeferredTopicCreation_MessagingWhileTopicPending, THttpProxyTestMock) {
+        // TopicCreation off: table messaging must work before deferred create finishes.
+        // Compatibility stays off here — with Compatibility on and TopicCreated=false, empty
+        // STD receive falls through to a missing topic and returns InternalFailure.
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationFinished(false);
+
+        const TString queueName = "DeferredPendingMessaging";
+        auto json = CreateQueue({{"QueueName", queueName}});
+        const TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        NYdb::TDriver driver(CreateDriver(KikimrGrpcPort));
+        NYdb::NTopic::TTopicClient topicClient(driver);
+        NYdb::NScheme::TSchemeClient schemeClient(driver);
+        const TString& sqsRoot = KikimrServer->GetRuntime()->GetAppData().SqsConfig.GetRoot();
+        const TString resourceDir = QueueResourceDirFromQueueUrl(queueUrl, queueName, sqsRoot);
+
+        Sleep(TDuration::Seconds(3));
+        const auto topicPath = TryMigrationTopicPathFromScheme(schemeClient, resourceDir);
+        UNIT_ASSERT(topicPath.has_value());
+        UNIT_ASSERT(!topicClient.DescribeTopic(*topicPath).GetValueSync().IsSuccess());
+
+        SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", "pending-topic-body"}});
+        auto message = ReceiveOneMessage(*this, queueUrl, 5);
+        UNIT_ASSERT_VALUES_EQUAL(message["Body"], "pending-topic-body");
+        DeleteMessage({{"QueueUrl", queueUrl}, {"ReceiptHandle", message["ReceiptHandle"]}});
+
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        WaitMigrationTopicPresent(topicClient, schemeClient, resourceDir);
+
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+        SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", "after-topic-body"}});
+        message = ReceiveUntilBody(*this, queueUrl, "after-topic-body");
+        UNIT_ASSERT_VALUES_EQUAL(message["Body"], "after-topic-body");
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST_F(TestDeferredTopicCreation_ConcurrentPreexistingQueues, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+
+        TVector<TString> names = {
+            "DeferredConcurrentA",
+            "DeferredConcurrentB",
+            "DeferredConcurrentC",
+        };
+        TVector<TString> urls;
+        urls.reserve(names.size());
+        for (const auto& name : names) {
+            urls.push_back(GetByPath<TString>(CreateQueue({{"QueueName", name}}), "QueueUrl"));
+        }
+
+        NYdb::TDriver driver(CreateDriver(KikimrGrpcPort));
+        NYdb::NTopic::TTopicClient topicClient(driver);
+        NYdb::NScheme::TSchemeClient schemeClient(driver);
+        const TString& sqsRoot = KikimrServer->GetRuntime()->GetAppData().SqsConfig.GetRoot();
+
+        Sleep(TDuration::Seconds(3));
+        TVector<TString> resourceDirs;
+        for (size_t i = 0; i < names.size(); ++i) {
+            resourceDirs.push_back(QueueResourceDirFromQueueUrl(urls[i], names[i], sqsRoot));
+            const auto topicPath = TryMigrationTopicPathFromScheme(schemeClient, resourceDirs.back());
+            UNIT_ASSERT_C(topicPath.has_value(), names[i]);
+            UNIT_ASSERT_C(
+                !topicClient.DescribeTopic(*topicPath).GetValueSync().IsSuccess(),
+                names[i]);
+        }
+
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+
+        for (const auto& resourceDir : resourceDirs) {
+            WaitMigrationTopicPresent(topicClient, schemeClient, resourceDir);
+        }
+
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+        for (size_t i = 0; i < names.size(); ++i) {
+            const TString body = TStringBuilder() << "concurrent-body-" << i;
+            SendMessage({{"QueueUrl", urls[i]}, {"MessageBody", body}});
+            auto message = ReceiveUntilBody(*this, urls[i], body);
+            UNIT_ASSERT_VALUES_EQUAL(message["Body"], body);
+        }
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST_F(TestSendMessage_MigrationFinished_WithUserSettings, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationFinished(false);
+
+        NYdb::TDriver driver(CreateDriver(KikimrGrpcPort));
+        EnableCompatibility(KikimrServer, driver);
+        EnableMigrationFinished(KikimrServer, driver);
+
+        const TString queueName = "FinishedViaUserSettings";
+        auto json = CreateQueue({{"QueueName", queueName}});
+        const TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", "user-settings-finished"}});
+        auto message = ReceiveOneMessage(*this, queueUrl, 5);
+        UNIT_ASSERT_VALUES_EQUAL(message["Body"], "user-settings-finished");
+
+        // Message must land in the migration topic (Finished path), not only in tables.
+        NYdb::NTopic::TTopicClient topicClient(driver);
+        NYdb::NScheme::TSchemeClient schemeClient(driver);
+        const TString& sqsRoot = KikimrServer->GetRuntime()->GetAppData().SqsConfig.GetRoot();
+        const TString resourceDir = QueueResourceDirFromQueueUrl(queueUrl, queueName, sqsRoot);
+        const auto topicPath = TryMigrationTopicPathFromScheme(schemeClient, resourceDir);
+        UNIT_ASSERT(topicPath.has_value());
+
+        NYdb::NTopic::TDescribeTopicSettings settings;
+        settings.IncludeStats(true);
+        auto describe = topicClient.DescribeTopic(*topicPath, settings).GetValueSync();
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 1);
+        UNIT_ASSERT_GE(
+            describe.GetTopicDescription().GetPartitions()[0].GetPartitionStats()->GetEndOffset(),
+            1);
+
+        driver.Stop(true);
     }
 
     Y_UNIT_TEST_F(NoBillingRecordsOnJsonApiAuthFailure, THttpProxyTestMockWithMetering) {

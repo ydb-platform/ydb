@@ -178,7 +178,7 @@ TTableId ResolveTableId(TTestActorRuntime& runtime, const TString& path) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(TSchemeshardStatsBatchingTest) {
-    constexpr ui64 WRITTEN_TOPIC_DATA_SIZE = 16975350; // unstable value, can change if internal message store changes
+    constexpr ui64 WRITTEN_TOPIC_DATA_SIZE = 16975298; // unstable value, can change if internal message store changes
 
     Y_UNIT_TEST(ShouldNotBatchWhenDisabled) {
         TTestBasicRuntime runtime;

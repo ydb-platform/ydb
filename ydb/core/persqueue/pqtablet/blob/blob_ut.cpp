@@ -6,6 +6,34 @@
 
 namespace NKikimr::NPQ {
 
+namespace {
+
+constexpr ui32 TEST_LEGACY_MAX_HEADER_SIZE = 32;
+
+void SetTestMaxHeaderSize(bool enableExtendedBatchHeader) {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableTopicWriteOffsetDeltaInKeys(enableExtendedBatchHeader);
+    InitMaxHeaderSize(featureFlags);
+}
+
+class TTestMaxHeaderSizeGuard {
+public:
+    explicit TTestMaxHeaderSizeGuard(bool enableExtendedBatchHeader)
+        : PreviousMaxHeaderSize(GetMaxHeaderSize())
+    {
+        SetTestMaxHeaderSize(enableExtendedBatchHeader);
+    }
+
+    ~TTestMaxHeaderSizeGuard() {
+        SetTestMaxHeaderSize(PreviousMaxHeaderSize == 64);
+    }
+
+private:
+    const ui32 PreviousMaxHeaderSize;
+};
+
+} // namespace
+
 Y_UNIT_TEST_SUITE(BlobTest) {
     Y_UNIT_TEST(Flags_HasPartData) {
         TMessageFlags flags;
@@ -70,6 +98,50 @@ Y_UNIT_TEST_SUITE(BatchMemory) {
         UNIT_ASSERT_VALUES_EQUAL(batch.PackedData.Size(), 0);
         UNIT_ASSERT_VALUES_EQUAL(batch.PackedData.Capacity(), 0);
         UNIT_ASSERT(!batch.Blobs.empty());
+    }
+
+    Y_UNIT_TEST(LegacyMaxHeaderSizePackInvariant) {
+        TTestMaxHeaderSizeGuard maxHeaderSizeGuard(false);
+
+        TBatch batch(Max<ui64>(), 0);
+        auto ts = TInstant::Seconds(100);
+        batch.AddBlob(TClientBlob(
+            TString("src"), 1, TString(8_KB, 'a'), TMaybe<TPartData>(),
+            ts, ts, 0, "", ""
+        ));
+
+        batch.Pack();
+        UNIT_ASSERT_LE(batch.GetPackedSize(), batch.GetUnpackedSize() + TEST_LEGACY_MAX_HEADER_SIZE);
+
+        batch.Unpack();
+        UNIT_ASSERT_VALUES_EQUAL(batch.Blobs.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.GetCount(), 1u);
+        UNIT_ASSERT(!batch.Header.HasClientBlobCount());
+        UNIT_ASSERT(!batch.Header.HasOffsetDelta());
+    }
+
+    Y_UNIT_TEST(LegacyMaxHeaderSizePackInvariantWithKinesis) {
+        TTestMaxHeaderSizeGuard maxHeaderSizeGuard(false);
+
+        TBatch batch(Max<ui64>(), 0);
+        auto ts = TInstant::Seconds(100);
+        batch.AddBlob(TClientBlob(
+            TString("src"), 1, TString(8_KB, 'a'), TMaybe<TPartData>(),
+            ts, ts, 0, TString("partition-key"), TString("explicit-hash-key")
+        ));
+
+        batch.Pack();
+        UNIT_ASSERT_LE(batch.GetPackedSize(), batch.GetUnpackedSize() + TEST_LEGACY_MAX_HEADER_SIZE);
+        UNIT_ASSERT(batch.Header.HasHasKinesis());
+        UNIT_ASSERT(batch.Header.GetHasKinesis());
+
+        batch.Unpack();
+        UNIT_ASSERT_VALUES_EQUAL(batch.Blobs.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.GetCount(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(batch.Blobs[0].PartitionKey, "partition-key");
+        UNIT_ASSERT_VALUES_EQUAL(batch.Blobs[0].ExplicitHashKey, "explicit-hash-key");
+        UNIT_ASSERT(!batch.Header.HasClientBlobCount());
+        UNIT_ASSERT(!batch.Header.HasOffsetDelta());
     }
 
     Y_UNIT_TEST(BatchSizePackUnpack) {

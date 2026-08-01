@@ -831,6 +831,75 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(mergeConnection->GetMapSafe().contains("SortColumns"), sortPlan);
     }
 
+    Y_UNIT_TEST(TopSortPushedToRowReadAndKept) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto schemeRes = session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Uint64,
+                b String,
+                PRIMARY KEY (a)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_C(schemeRes.IsSuccess(), schemeRes.GetIssues().ToString());
+
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (ui64 i = 0; i < 5; ++i) {
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("a").Uint64(i)
+                .AddMember("b").String(TStringBuilder() << "v" << i)
+                .EndStruct();
+        }
+        rows.EndList();
+        auto upsertRes = db.BulkUpsert("/Root/t1", rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsertRes.IsSuccess(), upsertRes.GetIssues().ToString());
+
+        auto explainAst = [&](const TString& query) -> TString {
+            auto result = session.ExplainDataQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            return TString(result.GetAst());
+        };
+
+        // ORDER BY a (PK) LIMIT 3: order is pushed into the read ("Sorted"), but the
+        // WideTopSort operator must stay in the AST.
+        {
+            auto ast = explainAst("SELECT a FROM `/Root/t1` ORDER BY a LIMIT 3;");
+            UNIT_ASSERT_C(ast.Contains("'\"Sorted\""),
+                "Expected the \"Sorted\" pushdown into the read settings, AST: " << ast);
+            UNIT_ASSERT_C(ast.Contains("WideTopSort"),
+                "WideTopSort must stay after the TopSort pushdown to the row read "
+                "(merge connection for row storage is not produced yet), AST: " << ast);
+        }
+
+        // ORDER BY a DESC (PK) LIMIT 3: the ascending direction is not pushed here, so
+        // WideTopSort stays and the read settings must not carry "Sorted".
+        {
+            auto ast = explainAst("SELECT a FROM `/Root/t1` ORDER BY a DESC LIMIT 3;");
+            UNIT_ASSERT_C(!ast.Contains("'\"Sorted\""),
+                "ASC-only pushdown; DESC must not push \"Sorted\" into the read, AST: " << ast);
+            UNIT_ASSERT_C(ast.Contains("WideTopSort"),
+                "WideTopSort must stay for ORDER BY PK DESC LIMIT, AST: " << ast);
+        }
+
+        // Negative control: ORDER BY b (non-PK) LIMIT 3 -> no pushdown, WideTopSort stays,
+        // the read settings must not carry "Sorted".
+        {
+            auto ast = explainAst("SELECT a FROM `/Root/t1` ORDER BY b LIMIT 3;");
+            UNIT_ASSERT_C(!ast.Contains("'\"Sorted\""),
+                "no pushdown for ORDER BY non-PK; read must not carry \"Sorted\", AST: " << ast);
+            UNIT_ASSERT_C(ast.Contains("WideTopSort"),
+                "WideTopSort must stay for ORDER BY non-PK LIMIT, AST: " << ast);
+        }
+    }
+
     Y_UNIT_TEST(ExplainReadPushdown) {
         TExplainPlanTestContext testContext;
         auto& session = testContext.GetSession();

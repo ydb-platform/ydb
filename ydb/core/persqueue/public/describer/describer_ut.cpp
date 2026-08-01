@@ -317,7 +317,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         auto topics = WaitResult(runtime);
 
         UNIT_ASSERT(topics.contains("/Root/table1"));
-        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/table1"].Status, NDescriber::EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topics["/Root/table1"].Status, NDescriber::EStatus::UNAUTHORIZED);
     }
 
     Y_UNIT_TEST(CustomAccessRightsAlterSchema) {

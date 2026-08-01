@@ -346,56 +346,51 @@ TClientBlob MakeSimpleBlob(
 
 Y_UNIT_TEST_SUITE(ClientBlobSerialization) {
 
-    TClientBlob MakeClientBlob(ui64 size, ui64 seqNo, ui64 totalParts,
-                               ui16 partNo, ui64 totalSize, ui64 partKeySize,
-                               ui64 explisitHashKeySize, TString sourceId) {
-        Cerr << "payloadSize " << size << " totalSize " << totalSize << " partsCount " << totalParts
-             << " partKeySize " << partKeySize << " hashSize " << explisitHashKeySize << " partNo " << partNo << "\n===\n";
-
-        TString data = NUnitTest::RandomString(size);
-        TMaybe<TPartData> partData;
-        auto ts = TInstant::Now().Seconds();
-        if (totalParts) {
-          partData = TPartData{static_cast<ui16>(partNo),
-                               static_cast<ui16>(totalParts),
-                               static_cast<ui32>(totalSize)};
-        }
-        return TClientBlob{std::move(sourceId),
-                           seqNo,
-                           std::move(data),
-                           partData,
-                           TInstant::Seconds(ts),
-                           TInstant::Seconds(ts + 5),
-                           size ? size * 2 : 0,
-                           partKeySize ? NUnitTest::RandomString(partKeySize) : TString(),
-                           explisitHashKeySize
-                               ? NUnitTest::RandomString(explisitHashKeySize)
-                               : TString()};
+    // Serialize() sets optional wire flags from InitFlags:
+    //   HasPartData          ← PartData defined
+    //   HasWriteTimestamp    ← always 1
+    //   HasCreateTimestamp   ← always 1
+    //   HasUncompressedSize  ← UncompressedSize != 0
+    //   HasKinesisData       ← PartitionKey non-empty (ExplicitHash alone is NOT written)
+    //   HasBatchInfo         ← LogicalMessageCount != 1 || IsBatch
+    TClientBlob MakeClientBlob(
+        ui64 seqNo,
+        TString sourceId,
+        TString data,
+        TMaybe<TPartData> partData,
+        ui32 uncompressedSize,
+        TString partitionKey,
+        TString explicitHashKey,
+        ui32 logicalMessageCount,
+        bool isBatch)
+    {
+        auto ts = TInstant::Seconds(100 + (seqNo % 1000));
+        return TClientBlob{
+            std::move(sourceId),
+            seqNo,
+            std::move(data),
+            partData,
+            ts,
+            ts + TDuration::Seconds(5),
+            uncompressedSize,
+            std::move(partitionKey),
+            std::move(explicitHashKey),
+            logicalMessageCount,
+            isBatch};
     }
 
-    Y_UNIT_TEST(EmptyPayload) {
+    void RoundTrip(const TClientBlob& blob) {
         TBuffer buffer;
-        buffer.Reserve(8_MB);
-
-        auto blob = MakeClientBlob(0, 1, 100, 1, 100, 0, 0, "SomeSrcId");
-
-        buffer.Clear();
+        buffer.Reserve(blob.GetSerializedSize() + 64);
         Serialize(blob, buffer);
-
+        UNIT_ASSERT_VALUES_EQUAL(blob.GetSerializedSize(), buffer.size());
         TClientBlob deserialized = DeserializeClientBlob(buffer.data(), buffer.size());
         UNIT_ASSERT(blob == deserialized);
     }
 
-
     Y_UNIT_TEST(MessageMetadataStoresCountInUpperBits) {
         TBuffer buffer;
-        buffer.Reserve(8_MB);
-
-        auto ts = TInstant::Seconds(100);
-        TClientBlob blob(
-            TString("src"), 42, TString("payload"), TMaybe<TPartData>(),
-            ts, ts, 0, "", "", 7);
-
+        auto blob = MakeClientBlob(42, "src", "payload", Nothing(), 0, "", "", 7, false);
         Serialize(blob, buffer);
 
         const char* data = buffer.data();
@@ -407,141 +402,155 @@ Y_UNIT_TEST_SUITE(ClientBlobSerialization) {
         UNIT_ASSERT_VALUES_EQUAL(messageMetadata, 7u << MESSAGE_METADATA_RESERVED_BITS);
     }
 
-    Y_UNIT_TEST(SerializeAndDeserializeMessageMetadata) {
+    Y_UNIT_TEST(IsBatchMetadataLowBit) {
         TBuffer buffer;
-        buffer.Reserve(8_MB);
-
-        auto ts = TInstant::Seconds(100);
-        TClientBlob blob(
-            TString("src"), 42, TString("payload"), TMaybe<TPartData>(),
-            ts, ts, 0, "", "", 7);
-
-        Serialize(blob, buffer);
-        TClientBlob deserialized = DeserializeClientBlob(buffer.data(), buffer.size());
-
-        UNIT_ASSERT(blob == deserialized);
-        UNIT_ASSERT_VALUES_EQUAL(deserialized.LogicalMessageCount, 7u);
-        UNIT_ASSERT(!deserialized.IsBatch);
-    }
-
-    Y_UNIT_TEST(SerializeAndDeserializeIsBatch) {
-        TBuffer buffer;
-        buffer.Reserve(8_MB);
-
-        auto ts = TInstant::Seconds(100);
-        TClientBlob blob(
-            TString("src"), 42, TString("payload"), TMaybe<TPartData>(),
-            ts, ts, 0, "", "", 1, true);
-
+        auto blob = MakeClientBlob(42, "src", "payload", Nothing(), 0, "", "", 1, true);
         Serialize(blob, buffer);
 
         const char* data = buffer.data();
-        data += sizeof(ui32); // total size
-        data += sizeof(ui64); // seqNo
+        data += sizeof(ui32);
+        data += sizeof(ui64);
         TMessageFlags flags(ReadUnaligned<ui8>(data));
         UNIT_ASSERT(flags.F.HasBatchInfo);
         data += sizeof(ui8);
-        const ui32 messageMetadata = ReadUnaligned<ui32>(data);
-        UNIT_ASSERT_VALUES_EQUAL(messageMetadata, (1u << MESSAGE_METADATA_RESERVED_BITS) | 1u);
-
-        TClientBlob deserialized = DeserializeClientBlob(buffer.data(), buffer.size());
-        UNIT_ASSERT(blob == deserialized);
-        UNIT_ASSERT(deserialized.IsBatch);
-        UNIT_ASSERT_VALUES_EQUAL(deserialized.LogicalMessageCount, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(
+            ReadUnaligned<ui32>(data),
+            (1u << MESSAGE_METADATA_RESERVED_BITS) | 1u);
+        RoundTrip(blob);
     }
 
-    Y_UNIT_TEST(SerializeAndDeserializeIsBatchWithLMC) {
-        TBuffer buffer;
-        buffer.Reserve(8_MB);
-
-        auto ts = TInstant::Seconds(100);
-        TClientBlob blob(
-            TString("src"), 7, TString("payload"), TMaybe<TPartData>(),
-            ts, ts, 0, "", "", 5, true);
-
-        Serialize(blob, buffer);
-        TClientBlob deserialized = DeserializeClientBlob(buffer.data(), buffer.size());
-        UNIT_ASSERT(blob == deserialized);
-        UNIT_ASSERT(deserialized.IsBatch);
-        UNIT_ASSERT_VALUES_EQUAL(deserialized.LogicalMessageCount, 5u);
-    }
-
-    Y_UNIT_TEST(SerializeAndDeserialize256BytePartitionKey) {
-        TBuffer buffer;
-        buffer.Reserve(8_MB);
-
+    Y_UNIT_TEST(PartitionKey256RestoredFromZeroSizeByte) {
         TString partitionKey(256, 'p');
-        TString hashKey(10, 'h');
-        auto ts = TInstant::Seconds(100);
-        TClientBlob blob(
-            TString("src"), 1, TString("data"), TMaybe<TPartData>(),
-            ts, ts, 0, TString(partitionKey), TString(hashKey));
-
-        Serialize(blob, buffer);
-        TClientBlob deserialized = DeserializeClientBlob(buffer.data(), buffer.size());
-        UNIT_ASSERT(blob == deserialized);
-        UNIT_ASSERT_VALUES_EQUAL(deserialized.PartitionKey.size(), 256u);
-        UNIT_ASSERT_VALUES_EQUAL(deserialized.ExplicitHashKey.size(), 10u);
+        auto blob = MakeClientBlob(1, "src", "data", Nothing(), 0, partitionKey, TString(10, 'h'), 1, false);
+        RoundTrip(blob);
+        UNIT_ASSERT_VALUES_EQUAL(blob.PartitionKey.size(), 256u);
     }
 
-    Y_UNIT_TEST(GetSerializedSizeMatchesBuffer) {
-        auto ts = TInstant::Seconds(100);
-        TClientBlob blob(
-            TString("src"), 1, TString("payload"), TPartData{0, 2, 100},
-            ts, ts, 50, TString("pk"), TString("hk"), 3, true);
-
+    Y_UNIT_TEST(ExplicitHashWithoutPartitionKeyIsNotSerialized) {
+        // InitFlags gates Kinesis on PartitionKey only; ExplicitHash alone must not round-trip.
+        auto blob = MakeClientBlob(1, "src", "data", Nothing(), 0, "", "hash-only", 1, false);
         TBuffer buffer;
         Serialize(blob, buffer);
-        UNIT_ASSERT_VALUES_EQUAL(blob.GetSerializedSize(), buffer.size());
+        TClientBlob deserialized = DeserializeClientBlob(buffer.data(), buffer.size());
+        UNIT_ASSERT(deserialized.PartitionKey.empty());
+        UNIT_ASSERT(deserialized.ExplicitHashKey.empty());
+        UNIT_ASSERT_VALUES_EQUAL(deserialized.Data, blob.Data);
     }
 
-    Y_UNIT_TEST(SerializeAndDeserializeAllScenarios) {
-        TVector<ui64> payloadSizes = {10, 0, 100, 512_KB};
-        TVector<ui64> partsCount = {0, 1, 10, 40};
-        TVector<ui64> totalSizes = {1, 0, 100, 512_KB, 1_MB, 10_MB};
-        TVector<ui64> partKeySizes = {0, 100, 256};
-        TVector<ui64> hashSizes = {1, 0, 100, 255};
-        TVector<ui16> partNos = {0, 1, 10};
-        TVector<TString> sourceIds = {"", "someSrcId"};
+    Y_UNIT_TEST(SerializeAndDeserializeAllFlagCombinations) {
+        // Axes cover every InitFlags branch that Serialize can emit.
+        const TVector<TMaybe<TPartData>> partCases = {
+            Nothing(),
+            TPartData{0, 1, 50},
+            TPartData{0, 3, 300},
+            TPartData{1, 3, 300},
+            TPartData{2, 3, 300},
+        };
+        const TVector<ui32> uncompressedCases = {0, 1, 42};
+        struct TKinesisCase {
+            TString PartitionKey;
+            TString ExplicitHashKey;
+        };
+        const TVector<TKinesisCase> kinesisCases = {
+            {"", ""},
+            {"pk", ""},
+            {"pk", "hk"},
+            {TString(1, 'x'), TString(255, 'h')},
+            {TString(256, 'p'), TString(10, 'h')},
+        };
+        struct TBatchCase {
+            ui32 LogicalMessageCount;
+            bool IsBatch;
+        };
+        const TVector<TBatchCase> batchCases = {
+            {1, false},
+            {2, false},
+            {1, true},
+            {5, true},
+            {MAX_LOGICAL_MESSAGE_COUNT, false},
+            {MAX_LOGICAL_MESSAGE_COUNT, true},
+        };
+        const TVector<TString> payloads = {
+            "",
+            "x",
+            TString(100, 'a'),
+            TString(1_KB, 'b'),
+        };
+        const TVector<TString> sourceIds = {"", "src", TString(200, 's')};
 
         ui64 seqNo = 1;
-        TBuffer buffer;
-        buffer.Reserve(8_MB);
-
-        for (ui64 payloadSize : payloadSizes) {
-            for (ui64 totalSize : totalSizes) {
-                if (payloadSize > totalSize) {
-                    continue;
-                }
-                for (ui64 partsCount : partsCount) {
-                    if (partsCount < 2 && payloadSize < totalSize) {
-                        continue;
-                    }
-                    for (ui16 partNo : partNos) {
-                        if (partNo >= partsCount) {
-                            continue;
-                        }
-                        for (ui64 partKeySize : partKeySizes) {
-                            for (ui64 hashSize : hashSizes) {
-                                if (hashSize && !partKeySize) {
-                                    continue;
-                                }
-                                for (const auto& srcId : sourceIds) {
-
-                                    auto blob = MakeClientBlob(payloadSize, seqNo++, partsCount, partNo, totalSize,
-                                                            partKeySize, hashSize, srcId);
-
-                                    buffer.Clear();
-                                    Serialize(blob, buffer);
-
-                                    TClientBlob deserialized = DeserializeClientBlob(buffer.data(), buffer.size());
-                                    UNIT_ASSERT(blob == deserialized);
-                                }
+        ui64 cases = 0;
+        for (const auto& partData : partCases) {
+            for (ui32 uncompressedSize : uncompressedCases) {
+                for (const auto& kinesis : kinesisCases) {
+                    for (const auto& batch : batchCases) {
+                        for (const auto& payload : payloads) {
+                            for (const auto& sourceId : sourceIds) {
+                                auto blob = MakeClientBlob(
+                                    seqNo++,
+                                    sourceId,
+                                    payload,
+                                    partData,
+                                    uncompressedSize,
+                                    kinesis.PartitionKey,
+                                    kinesis.ExplicitHashKey,
+                                    batch.LogicalMessageCount,
+                                    batch.IsBatch);
+                                RoundTrip(blob);
+                                ++cases;
                             }
                         }
                     }
                 }
             }
+        }
+        // 5 * 3 * 5 * 6 * 4 * 3 = 5400
+        UNIT_ASSERT_VALUES_EQUAL(cases, 5400u);
+    }
+
+    Y_UNIT_TEST(SerializeAndDeserializeLargePayloadAndPartEdges) {
+        // Large payloads and extreme PartData values — orthogonal to the flag matrix above.
+        struct TCase {
+            ui64 PayloadSize;
+            TMaybe<TPartData> PartData;
+            ui32 UncompressedSize;
+            ui64 PartKeySize;
+            ui64 HashSize;
+            ui32 LogicalMessageCount;
+            bool IsBatch;
+            TString SourceId;
+        };
+        const TVector<TCase> cases = {
+            {0, Nothing(), 0, 0, 0, 1, false, "src"},
+            {0, TPartData{1, 100, 100}, 0, 0, 0, 1, false, ""},
+            {10, TPartData{0, 1, 10}, 20, 0, 0, 1, false, "src"},
+            {100, TPartData{0, 2, 100}, 0, 100, 0, 3, true, "src"},
+            {100, TPartData{1, 2, 100}, 200, 100, 255, 1, true, ""},
+            {512_KB, Nothing(), 0, 0, 0, 1, false, "src"},
+            {512_KB, Nothing(), 512_KB * 2, 256, 10, 5, true, "src"},
+            {512_KB, TPartData{0, 2, 1_MB}, 0, 256, 100, 1, false, ""},
+            {512_KB, TPartData{1, 2, 1_MB}, 1, 0, 0, 2, false, "src"},
+            {100, TPartData{9, 40, 10_MB}, 0, 100, 1, 1, false, "src"},
+            {100, TPartData{39, 40, 10_MB}, 50, 256, 255, MAX_LOGICAL_MESSAGE_COUNT, true, TString(200, 's')},
+            {1_MB, Nothing(), 0, 256, 255, 1, false, "big"},
+        };
+
+        ui64 seqNo = 1;
+        TBuffer buffer;
+        buffer.Reserve(8_MB);
+        for (const auto& c : cases) {
+            TString data = c.PayloadSize ? NUnitTest::RandomString(c.PayloadSize) : TString();
+            TString pk = c.PartKeySize ? NUnitTest::RandomString(c.PartKeySize) : TString();
+            TString hk = c.HashSize ? NUnitTest::RandomString(c.HashSize) : TString();
+            auto blob = MakeClientBlob(
+                seqNo++, c.SourceId, std::move(data), c.PartData,
+                c.UncompressedSize, std::move(pk), std::move(hk),
+                c.LogicalMessageCount, c.IsBatch);
+
+            buffer.Clear();
+            Serialize(blob, buffer);
+            UNIT_ASSERT_VALUES_EQUAL(blob.GetSerializedSize(), buffer.size());
+            UNIT_ASSERT(blob == DeserializeClientBlob(buffer.data(), buffer.size()));
         }
     }
 }
@@ -612,6 +621,106 @@ Y_UNIT_TEST_SUITE(BlobOffset) {
 }
 
 Y_UNIT_TEST_SUITE(BatchPacking) {
+    // Compressed pack chooses optional chunks from OR of blob fields:
+    //   hasUncompressed ← any UncompressedSize > 0
+    //   hasKinesis      ← any PartitionKey OR ExplicitHashKey non-empty
+    //   hasBatchInfo    ← any LogicalMessageCount != 1 || IsBatch
+    // Plus PartData map and multi-SourceId reorder.
+    Y_UNIT_TEST(PackUnpackAllFormatCombinations) {
+        auto ts = TInstant::Seconds(100);
+        ui64 cases = 0;
+
+        for (bool withPartData : {false, true}) {
+            for (bool withUncompressed : {false, true}) {
+                for (bool withKinesis : {false, true}) {
+                    for (bool withBatchInfo : {false, true}) {
+                        for (bool withIsBatch : {false, true}) {
+                            if (withIsBatch && !withBatchInfo) {
+                                continue; // IsBatch implies HasBatchInfo chunk
+                            }
+                            for (bool multiSourceId : {false, true}) {
+                                TBatch batch(0, 0);
+                                TVector<TClientBlob> expected;
+
+                                auto add = [&](TString sid, ui64 seqNo, TString data,
+                                               TMaybe<TPartData> part, ui32 unc,
+                                               TString pk, TString hk, ui32 lmc, bool isBatch) {
+                                    TClientBlob blob(
+                                        std::move(sid), seqNo, std::move(data), part,
+                                        ts, ts + TDuration::Seconds(1), unc,
+                                        std::move(pk), std::move(hk), lmc, isBatch);
+                                    expected.push_back(blob);
+                                    batch.AddBlob(blob);
+                                };
+
+                                const ui32 lmc = withBatchInfo ? (withIsBatch ? 1u : 3u) : 1u;
+                                const bool isBatch = withIsBatch;
+                                const ui32 unc = withUncompressed ? 17u : 0u;
+                                const TString pk = withKinesis ? "partition-key" : "";
+                                const TString hk = withKinesis ? "hash-key" : "";
+
+                                if (withPartData) {
+                                    add(multiSourceId ? "sidA" : "sid", 1, "p0",
+                                        TPartData{0, 2, 20}, unc, pk, hk, 1, false);
+                                    add(multiSourceId ? "sidA" : "sid", 1, "p1",
+                                        TPartData{1, 2, 20}, unc, pk, hk, 1, false);
+                                    add(multiSourceId ? "sidB" : "sid", 2, "next",
+                                        Nothing(), unc, pk, hk, lmc, isBatch);
+                                } else {
+                                    add(multiSourceId ? "sidA" : "sid", 1, "one",
+                                        Nothing(), unc, pk, hk, lmc, isBatch);
+                                    add(multiSourceId ? "sidB" : "sid", 2, "two",
+                                        Nothing(), unc, pk, hk, 1, false);
+                                    if (multiSourceId) {
+                                        add("sidA", 3, "three",
+                                            Nothing(), unc, pk, hk, 1, false);
+                                    }
+                                }
+
+                                batch.Pack();
+                                UNIT_ASSERT(batch.Packed);
+                                UNIT_ASSERT(
+                                    batch.Header.GetFormat() == NKikimrPQ::TBatchHeader::ECompressed ||
+                                    batch.Header.GetFormat() == NKikimrPQ::TBatchHeader::EUncompressed);
+                                if (withKinesis &&
+                                    batch.Header.GetFormat() == NKikimrPQ::TBatchHeader::ECompressed)
+                                {
+                                    UNIT_ASSERT(batch.Header.GetHasKinesis());
+                                }
+
+                                batch.Unpack();
+                                AssertClientBlobsEqual(expected, batch.Blobs);
+                                ++cases;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // 2*2*2 * (1+2) * 2 = 48  (batchInfo/isBatch: 3 valid pairs)
+        UNIT_ASSERT_VALUES_EQUAL(cases, 48u);
+    }
+
+    Y_UNIT_TEST(CompressedPackPreservesExplicitHashWithoutPartitionKey) {
+        // Unlike Serialize(), compressed batch packing emits Kinesis columns when
+        // ExplicitHashKey is set even if PartitionKey is empty.
+        TBatch batch(0, 0);
+        TVector<TClientBlob> expected;
+        auto ts = TInstant::Seconds(100);
+        for (ui32 i = 0; i < 50; ++i) {
+            TClientBlob blob(
+                TString("sid"), i + 1, TString(10, 'a'), Nothing(),
+                ts, ts, 0, "", TString("hash-only"), 1, false);
+            expected.push_back(blob);
+            batch.AddBlob(blob);
+        }
+        batch.Pack();
+        UNIT_ASSERT(batch.Header.GetFormat() == NKikimrPQ::TBatchHeader::ECompressed);
+        UNIT_ASSERT(batch.Header.GetHasKinesis());
+        batch.Unpack();
+        AssertClientBlobsEqual(expected, batch.Blobs);
+    }
+
     // Moved from ydb/core/persqueue/ut/internals_ut.cpp
     Y_UNIT_TEST(TestBatchPacking) {
         TBatch batch;

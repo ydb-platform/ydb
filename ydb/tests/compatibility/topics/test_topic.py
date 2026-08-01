@@ -303,6 +303,8 @@ class BlobSerializationWorkload:
             return b""
         if incompressible:
             # Distinct pseudo-random bytes (columnar pack often falls back to EUncompressed).
+            if hasattr(self.rng, "randbytes"):
+                return self.rng.randbytes(size)
             return bytes(self.rng.getrandbits(8) for _ in range(size))
         # Highly compressible — prefers ECompressed packing.
         return bytes([index % 256]) * size
@@ -331,8 +333,14 @@ class BlobSerializationWorkload:
             return {}
         result = {}
         for key, value in metadata.items():
+            if isinstance(key, (bytes, bytearray)):
+                key = key.decode("utf-8")
+            else:
+                key = str(key)
             if isinstance(value, bytes):
                 result[key] = value
+            elif isinstance(value, bytearray):
+                result[key] = bytes(value)
             else:
                 result[key] = value.encode("utf-8")
         return result
@@ -417,7 +425,7 @@ class BlobSerializationWorkload:
                         "offset": message.offset,
                         "seqno": message.seqno,
                         "data": data,
-                        "metadata_items": dict(message.metadata_items or {}),
+                        "metadata_items": self._normalize_metadata(message.metadata_items or {}),
                     }
                 )
                 reader.commit(message)

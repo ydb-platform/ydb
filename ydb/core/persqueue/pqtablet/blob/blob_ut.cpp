@@ -383,8 +383,8 @@ Y_UNIT_TEST_SUITE(ClientBlobSerialization) {
         TBuffer buffer;
         buffer.Reserve(blob.GetSerializedSize() + 64);
         Serialize(blob, buffer);
-        UNIT_ASSERT_VALUES_EQUAL(blob.GetSerializedSize(), buffer.size());
-        TClientBlob deserialized = DeserializeClientBlob(buffer.data(), buffer.size());
+        UNIT_ASSERT_VALUES_EQUAL(blob.GetSerializedSize(), buffer.Size());
+        TClientBlob deserialized = DeserializeClientBlob(buffer.Data(), buffer.Size());
         UNIT_ASSERT(blob == deserialized);
     }
 
@@ -393,7 +393,7 @@ Y_UNIT_TEST_SUITE(ClientBlobSerialization) {
         auto blob = MakeClientBlob(42, "src", "payload", Nothing(), 0, "", "", 7, false);
         Serialize(blob, buffer);
 
-        const char* data = buffer.data();
+        const char* data = buffer.Data();
         data += sizeof(ui32); // total size
         data += sizeof(ui64); // seqNo
         data += sizeof(ui8);  // flags
@@ -407,7 +407,7 @@ Y_UNIT_TEST_SUITE(ClientBlobSerialization) {
         auto blob = MakeClientBlob(42, "src", "payload", Nothing(), 0, "", "", 1, true);
         Serialize(blob, buffer);
 
-        const char* data = buffer.data();
+        const char* data = buffer.Data();
         data += sizeof(ui32);
         data += sizeof(ui64);
         TMessageFlags flags(ReadUnaligned<ui8>(data));
@@ -431,7 +431,7 @@ Y_UNIT_TEST_SUITE(ClientBlobSerialization) {
         auto blob = MakeClientBlob(1, "src", "data", Nothing(), 0, "", "hash-only", 1, false);
         TBuffer buffer;
         Serialize(blob, buffer);
-        TClientBlob deserialized = DeserializeClientBlob(buffer.data(), buffer.size());
+        TClientBlob deserialized = DeserializeClientBlob(buffer.Data(), buffer.Size());
         UNIT_ASSERT(deserialized.PartitionKey.empty());
         UNIT_ASSERT(deserialized.ExplicitHashKey.empty());
         UNIT_ASSERT_VALUES_EQUAL(deserialized.Data, blob.Data);
@@ -549,8 +549,8 @@ Y_UNIT_TEST_SUITE(ClientBlobSerialization) {
 
             buffer.Clear();
             Serialize(blob, buffer);
-            UNIT_ASSERT_VALUES_EQUAL(blob.GetSerializedSize(), buffer.size());
-            UNIT_ASSERT(blob == DeserializeClientBlob(buffer.data(), buffer.size()));
+            UNIT_ASSERT_VALUES_EQUAL(blob.GetSerializedSize(), buffer.Size());
+            UNIT_ASSERT(blob == DeserializeClientBlob(buffer.Data(), buffer.Size()));
         }
     }
 }

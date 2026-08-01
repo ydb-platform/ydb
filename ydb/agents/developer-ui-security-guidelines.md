@@ -16,7 +16,7 @@ Example of the pull request with CSRF protection and nonce handling in HTTP resp
 >
 > There is **no** `style-src`, `font-src`, `connect-src`, `frame-src`, `img-src`, or `default-src` in the emitted header. So today only `<script>` execution is policed by the browser; rules below for other resource types are **defensive coding guidelines** for forward-compatibility, not browser-enforced.
 >
-> The nonce → CSP-header translation happens in [`THttpMonLegacyActorRequest::Handle(TEvHttpInfoRes…)`](../ydb/core/mon/mon.cpp) (the legacy monitoring path that delivers `TEvHttpInfoRes`/`TEvRemoteHttpInfoRes`). Handlers that reply with a raw `THttpOutgoingResponse` are on their own.
+> The nonce → CSP-header translation happens in [`THttpMonLegacyActorRequest::Handle(TEvHttpInfoRes…)`](../core/mon/mon.cpp) (the legacy monitoring path that delivers `TEvHttpInfoRes`/`TEvRemoteHttpInfoRes`). Handlers that reply with a raw `THttpOutgoingResponse` are on their own.
 
 ### Rule: All inline `<script>` tags MUST use `nonce`
 
@@ -35,7 +35,7 @@ str << R"___(
 
 **✅ CORRECT — generate a nonce per response, attach it to the response event, and use it in `<script>`:**
 
-The monitoring framework (see [#36981](https://github.com/ydb-platform/ydb/pull/36981)) provides [`NActors::NMon::GenerateCspNonce()`](../ydb/library/actors/core/mon.h) — a base64-encoded random GUID. The renderer generates the nonce, uses it in every inline `<script>`, and assigns it to `res->Nonce` on the outgoing `TEvRemoteHttpInfoRes` / `TEvHttpInfoRes`. The HTTP layer then automatically emits a matching `Content-Security-Policy: script-src 'nonce-<value>'` header — you do **not** write the CSP header by hand.
+The monitoring framework (see [#36981](https://github.com/ydb-platform/ydb/pull/36981)) provides [`NActors::NMon::GenerateCspNonce()`](../library/actors/core/mon.h) — a base64-encoded random GUID. The renderer generates the nonce, uses it in every inline `<script>`, and assigns it to `res->Nonce` on the outgoing `TEvRemoteHttpInfoRes` / `TEvHttpInfoRes`. The HTTP layer then automatically emits a matching `Content-Security-Policy: script-src 'nonce-<value>'` header — you do **not** write the CSP header by hand.
 
 ```cpp
 #include <ydb/library/actors/core/mon.h>
@@ -64,9 +64,9 @@ void RenderMainPage(IOutputStream& s, const TString& nonce) {
 }
 ```
 
-For pages served via `TEvHttpInfoRes` (local mon, not forwarded through tablets), the same `res->Nonce = nonce` assignment applies — see `Notify(...)` in [`tablet_monitoring_proxy.cpp`](../ydb/core/tablet/tablet_monitoring_proxy.cpp). Do **not** reuse a nonce across responses — generate a fresh one each time `OnRenderAppHtmlPage` is invoked.
+For pages served via `TEvHttpInfoRes` (local mon, not forwarded through tablets), the same `res->Nonce = nonce` assignment applies — see `Notify(...)` in [`tablet_monitoring_proxy.cpp`](../core/tablet/tablet_monitoring_proxy.cpp). Do **not** reuse a nonce across responses — generate a fresh one each time `OnRenderAppHtmlPage` is invoked.
 
-The nonce is preserved when the response is forwarded across nodes: [`TEvRemoteHttpInfoRes::SerializeToArcadiaStream`](../ydb/library/actors/core/mon.cpp) packs it alongside the HTML, so the same pattern works for remote tablet monitoring.
+The nonce is preserved when the response is forwarded across nodes: [`TEvRemoteHttpInfoRes::SerializeToArcadiaStream`](../library/actors/core/mon.cpp) packs it alongside the HTML, so the same pattern works for remote tablet monitoring.
 
 ### Rule: NEVER weaken the `script-src` CSP
 
@@ -160,7 +160,7 @@ Bootstrap, jQuery, and tablesorter are already bundled and served by the monitor
 
 If a page-specific renderer still needs to reference a bundled resource, follow the relative-link rule above: do not hardcode root-relative paths such as `/static/js/jquery.min.js` or `/jquery.tablesorter.js`.
 
-If you need a library that is not yet bundled, add it to the embedded resources in [`ydb/core/viewer/`](../ydb/core/viewer/) and expose it through the monitoring wrapper/helper without introducing external or root-relative links in page C++.
+If you need a library that is not yet bundled, add it to the embedded resources in [`ydb/core/viewer/`](../core/viewer/) and expose it through the monitoring wrapper/helper without introducing external or root-relative links in page C++.
 
 ### Rule: NEVER make `fetch()`/XHR requests to absolute links
 
@@ -217,12 +217,12 @@ You can either inline this function into every `<script nonce='...'>` block that
 
 ### Rule: Every state-changing request MUST carry a CSRF token — header _or_ hidden form field
 
-The monitoring server accepts the token from either of two places (see `CheckCsrfToken` in [`mon.cpp`](../ydb/core/mon/mon.cpp)):
+The monitoring server accepts the token from either of two places (see `CheckCsrfToken` in [`mon.cpp`](../core/mon/mon.cpp)):
 
 1. The `X-CSRF-Token` request header — preferred for `fetch`/`$.ajax` calls. **Required for any non-form-encoded body** (in particular, JSON requests): the server parses the body as `TCgiParameters`, so a `csrf_token` field inside a JSON payload will not be found.
 2. A `csrf_token` form parameter in the POST body — works **only** for `Content-Type: application/x-www-form-urlencoded` (i.e. a plain `<form method="POST">` or `URLSearchParams` body), because forms cannot set custom request headers.
 
-Either approach is acceptable. Use a form only when you genuinely need a no-JS fallback (the BlobStorage Controller's "Disable Self-Heal" page in the PR is one such case); otherwise prefer `fetch` with the `X-CSRF-Token` header — it composes better with dynamic UI and is the only option for JSON bodies (as in [`state_storage_state.js`](../ydb/core/cms/ui/state_storage_state.js)).
+Either approach is acceptable. Use a form only when you genuinely need a no-JS fallback (the BlobStorage Controller's "Disable Self-Heal" page in the PR is one such case); otherwise prefer `fetch` with the `X-CSRF-Token` header — it composes better with dynamic UI and is the only option for JSON bodies (as in [`state_storage_state.js`](../core/cms/ui/state_storage_state.js)).
 
 **❌ FORBIDDEN — POST without any CSRF token:**
 
@@ -235,7 +235,7 @@ str << "</form>\n";
 
 **✅ CORRECT (option A) — `<form>` with a hidden `csrf_token` field:**
 
-The server-side handler must read the `csrf_token` cookie from the incoming `TEvRemoteHttpInfo` (via `ev->Get()->GetCookie("csrf_token")`) and pass it into the renderer. The token must be HTML-escaped when embedded into an attribute value (use a small inline escaper as in [`self_heal.cpp`](../ydb/core/mind/bscontroller/self_heal.cpp), or `HtmlEscape` — see §5):
+The server-side handler must read the `csrf_token` cookie from the incoming `TEvRemoteHttpInfo` (via `ev->Get()->GetCookie("csrf_token")`) and pass it into the renderer. The token must be HTML-escaped when embedded into an attribute value (use a small inline escaper as in [`self_heal.cpp`](../core/mind/bscontroller/self_heal.cpp), or `HtmlEscape` — see §5):
 
 ```cpp
 void Handle(NMon::TEvRemoteHttpInfo::TPtr& ev) {
@@ -289,11 +289,11 @@ str << R"js(
 str << "</script>\n";
 ```
 
-For an in-repo example of this pattern see [`state_storage_state.js`](../ydb/core/cms/ui/state_storage_state.js) (`loadDistconfStatus`) — a `POST` that reads `csrf_token` from `document.cookie` and forwards it as `X-CSRF-Token`.
+For an in-repo example of this pattern see [`state_storage_state.js`](../core/cms/ui/state_storage_state.js) (`loadDistconfStatus`) — a `POST` that reads `csrf_token` from `document.cookie` and forwards it as `X-CSRF-Token`.
 
 ### Rule: GET handlers MUST NOT perform any state-changing operations
 
-GET requests are not CSRF-protected: `CheckCsrfToken` only validates the token for `POST`/`PUT`/`DELETE`/`PATCH` (see [`mon.cpp`](../ydb/core/mon/mon.cpp), `IsCsrfProtectedMethod`). If your page needs to trigger an action (restart, stop, reconfigure), use one of the protected methods — POST is the conventional choice.
+GET requests are not CSRF-protected: `CheckCsrfToken` only validates the token for `POST`/`PUT`/`DELETE`/`PATCH` (see [`mon.cpp`](../core/mon/mon.cpp), `IsCsrfProtectedMethod`). If your page needs to trigger an action (restart, stop, reconfigure), use one of the protected methods — POST is the conventional choice.
 
 **❌ FORBIDDEN — side effect in GET handler:**
 
@@ -424,7 +424,7 @@ Inline event handlers (`onclick="..."`) and `eval`/`setTimeout('...')`-style str
 
 ## 6. Use `GetHTTPOK()` for HTTP Responses
 
-Always use [`TViewer::GetHTTPOK()`](../ydb/core/viewer/viewer.cpp) and related methods to build HTTP responses — **do not build raw HTTP response strings manually**.
+Always use [`TViewer::GetHTTPOK()`](../core/viewer/viewer.cpp) and related methods to build HTTP responses — **do not build raw HTTP response strings manually**.
 
 Always include `charset=utf-8` in the content type — `GetHTTPOK()` does not add it automatically.
 

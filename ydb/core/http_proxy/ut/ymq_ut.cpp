@@ -2276,6 +2276,15 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
             UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["DelaySeconds"], "1");
         }
 
+        {
+            auto json = GetQueueAttributes({
+                {"QueueUrl", resultQueueUrl},
+                {"AttributeNames", NJson::TJsonArray{"FifoQueue"}}
+            });
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"].GetMapSafe().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["FifoQueue"], "true");
+        }
+
         GetQueueAttributes({
             {"QueueUrl", resultQueueUrl},
             {"AttributeNames", NJson::TJsonArray{"UnknownAttribute"}}
@@ -2387,6 +2396,15 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
             });
             UNIT_ASSERT_VALUES_EQUAL(json["Attributes"].GetMapSafe().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["DelaySeconds"], "1");
+        }
+
+        {
+            auto json = GetQueueAttributes({
+                {"QueueUrl", resultQueueUrl},
+                {"AttributeNames", NJson::TJsonArray{"FifoQueue"}}
+            });
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"].GetMapSafe().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["FifoQueue"], "true");
         }
 
         GetQueueAttributes({

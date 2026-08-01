@@ -212,10 +212,17 @@ int main(int argc, const char* argv[]) {
 
     std::shared_ptr<NSerialization::ISerializer> serializer;
     if (zstdLevel >= 0) {
+        if (zstdLevel < 1 || zstdLevel > 22) {
+            Cerr << "Error: --zstd-level must be in range [1..22]\n";
+            return 1;
+        }
         arrow::ipc::IpcWriteOptions options;
         options.use_threads = false;
         auto codecResult = arrow::util::Codec::Create(arrow::Compression::ZSTD, zstdLevel);
-        AFL_VERIFY(codecResult.ok())("error", codecResult.status().ToString());
+        if (!codecResult.ok()) {
+            Cerr << "Error creating zstd codec: " << codecResult.status().ToString() << "\n";
+            return 1;
+        }
         options.codec = std::move(*codecResult);
         serializer = std::make_shared<NSerialization::TNativeSerializer>(options);
     } else {

@@ -4195,18 +4195,110 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
             });
             UNIT_ASSERT_VALUES_EQUAL(received["Messages"][0]["Body"], "MessageBody-0");
         }
-        // BUG: TGetMessageGroupsActor always filters by QueueIdNumber/QueueIdNumberHash
-        // (shared TablesFormat=1 schema). For TablesFormat=0 per-queue Messages tables this
-        // query fails, so FIFO compatibility ReceiveMessage returns InternalFailure once the
-        // table path is empty instead of reading the topic / returning an empty 200.
-        // Expected after fix: empty Messages (deduplicated send must not create a second message).
         {
             auto received = ReceiveMessage({
                 {"QueueUrl", queueUrl},
                 {"WaitTimeSeconds", 1},
                 {"VisibilityTimeout", 1},
-            }, 500);
-            UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(received, "__type"), "InternalFailure");
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                received["Messages"].GetType(),
+                NJson::EJsonValueType::JSON_UNDEFINED,
+                TStringBuilder() << "deduplicator must work with TablesFormat=0: "
+                    << received.GetStringRobust());
+        }
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST_F(TestReceiveMessage_Fifo_Compatibility_SkipMessageGroups_TablesFormat0, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+
+        NYdb::TDriver driver(CreateDriver(KikimrGrpcPort));
+        SetCreateQueuesTablesFormat(KikimrServer, driver, 0);
+
+        const TString queueName = "SkipMessageGroupsTablesFormat0.fifo";
+        auto json = CreateQueue({
+            {"QueueName", queueName},
+            {"Attributes", NJson::TJsonMap{
+                {"FifoQueue", "true"},
+                {"ReceiveMessageWaitTimeSeconds", "1"},
+                {"VisibilityTimeout", "30"},
+            }}
+        });
+        const TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        // Table-only message locks group-A for topic reads until deleted.
+        SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", "table-group-a"},
+            {"MessageGroupId", "group-A"},
+            {"MessageDeduplicationId", "dedup-table-a"},
+        });
+
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", "topic-group-a"},
+            {"MessageGroupId", "group-A"},
+            {"MessageDeduplicationId", "dedup-topic-a"},
+        });
+        SendMessage({
+            {"QueueUrl", queueUrl},
+            {"MessageBody", "topic-group-b"},
+            {"MessageGroupId", "group-B"},
+            {"MessageDeduplicationId", "dedup-topic-b"},
+        });
+
+        NJson::TJsonValue tableReceipt;
+        {
+            auto received = ReceiveMessage({
+                {"QueueUrl", queueUrl},
+                {"WaitTimeSeconds", 2},
+                {"VisibilityTimeout", 30},
+            });
+            UNIT_ASSERT_VALUES_EQUAL(received["Messages"][0]["Body"], "table-group-a");
+            tableReceipt = received["Messages"][0]["ReceiptHandle"];
+        }
+
+        // group-A is still present in table Messages, so topic message in group-A must be skipped.
+        // group-B topic message should still be readable.
+        {
+            auto received = ReceiveMessage({
+                {"QueueUrl", queueUrl},
+                {"WaitTimeSeconds", 2},
+                {"VisibilityTimeout", 30},
+            });
+            UNIT_ASSERT_VALUES_EQUAL(received["Messages"][0]["Body"], "topic-group-b");
+        }
+        {
+            auto received = ReceiveMessage({
+                {"QueueUrl", queueUrl},
+                {"WaitTimeSeconds", 1},
+                {"VisibilityTimeout", 1},
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                received["Messages"].GetType(),
+                NJson::EJsonValueType::JSON_UNDEFINED,
+                TStringBuilder() << "topic group-A must stay skipped while table group exists: "
+                    << received.GetStringRobust());
+        }
+
+        DeleteMessage({
+            {"QueueUrl", queueUrl},
+            {"ReceiptHandle", tableReceipt},
+        });
+
+        {
+            auto received = ReceiveMessage({
+                {"QueueUrl", queueUrl},
+                {"WaitTimeSeconds", 2},
+                {"VisibilityTimeout", 30},
+            });
+            UNIT_ASSERT_VALUES_EQUAL(received["Messages"][0]["Body"], "topic-group-a");
         }
 
         driver.Stop(true);

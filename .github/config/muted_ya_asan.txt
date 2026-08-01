@@ -635,6 +635,7 @@ ydb/services/ydb/backup_ut BackupRestore.ReplicasAreNotBackedUp-UseSchemeSecret
 ydb/services/ydb/backup_ut BackupRestore.RestoreReplicationThatDoesNotUseSecret
 ydb/tests/compatibility/common test_compatibility.py.TestCompatibility.test_simple[restart_prestable-26-4_to_stable-26-3-1-row]
 ydb/tests/compatibility/common test_followers.py.TestSecondaryIndexFollowers.test_secondary_index_followers[rolling_stable-26-3-1_to_prestable-26-4-False]
+ydb/tests/compatibility/indexes py3test.[test_fulltext_index.py */*] chunk
 ydb/tests/compatibility/indexes py3test.[test_vector_index.py */*] chunk
 ydb/tests/compatibility/indexes test_fulltext_index.py.TestFulltextIndex.test_fulltext_index[rolling_stable-26-3-1_to_prestable-26-4]
 ydb/tests/compatibility/indexes test_vector_index.py.TestVectorIndex.test_vector_index[rolling_stable-26-2-1_to_stable-26-3-1]

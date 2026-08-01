@@ -1,14 +1,14 @@
 items:
 - name: Contents
   href: index.yaml
-- name: Quick start
+- name: Getting started
   href: quickstart.md
 - name: Concepts
   href: concepts/index.md
   include:
     mode: link
     path: concepts/toc_p.yaml
-- name: Cluster Administration
+- name: Cluster administration
   href: devops/index.md
   include:
     mode: link
@@ -53,15 +53,15 @@ items:
   include:
     mode: link
     path: faq/toc_p.yaml
-- name: Public materials
-  include:
-    mode: link
-    path: public-materials/toc_p.yaml
 - name: Downloads
   href: downloads/index.md
   include:
     mode: link
     path: downloads/toc_i.yaml
+- name: Public materials
+  include:
+    mode: link
+    path: public-materials/toc_p.yaml
 - name: Changelog
   include:
     mode: link

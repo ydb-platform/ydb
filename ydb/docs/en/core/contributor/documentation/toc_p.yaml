@@ -1,9 +1,11 @@
 items:
 - name: Review process
   href: review.md
-- name: Style guide
+- name: Style Guide
   href: style-guide.md
 - name: Structure
   href: structure.md
 - name: Genres
   href: genres.md
+- name: Adding media to public materials
+  href: guide-to-public-material.md

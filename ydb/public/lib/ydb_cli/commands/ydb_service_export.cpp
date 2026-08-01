@@ -383,24 +383,24 @@ auto CallExport(NExport::TExportClient& client, const typename TExportTraits<TRe
 
 template <typename TSettings, typename TResponse>
 int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
-    if (EncryptionKey && !EncryptionKeyFile) { // We read key from env YDB_ENCRYPTION_KEY, treat as hex encoded
-        try {
-            EncryptionKey = HexDecode(EncryptionKey);
-        } catch (const std::exception&) {
-            // Don't print error, it may contain secret.
-            Cerr << "Failed to decode encryption key from hex" << Endl;
+    const bool encryption = bool(EncryptionAlgorithm);
+    if (!encryption) {
+        EncryptionKey.clear();
+    } else {
+        if (EncryptionKey && !EncryptionKeyFile) { // We read key from env YDB_ENCRYPTION_KEY, treat as hex encoded
+            try {
+                EncryptionKey = HexDecode(EncryptionKey);
+            } catch (const std::exception&) {
+                // Don't print error, it may contain secret.
+                Cerr << "Failed to decode encryption key from hex" << Endl;
+                return EXIT_FAILURE;
+            }
+        }
+
+        if (!EncryptionKey) {
+            Cerr << "No encryption key provided" << Endl;
             return EXIT_FAILURE;
         }
-    }
-
-    if (EncryptionAlgorithm && !EncryptionKey) {
-        Cerr << "No encryption key provided" << Endl;
-        return EXIT_FAILURE;
-    }
-
-    if (EncryptionKey && !EncryptionAlgorithm) {
-        Cerr << "No encryption algorithm provided" << Endl;
-        return EXIT_FAILURE;
     }
 
     for (const auto& item : Items) {
@@ -421,7 +421,6 @@ int TCommandExportBase::Run(TConfig& config, TSettings& settings) {
         settings.SourcePath(CommonSourcePath);
     }
 
-    const bool encryption = EncryptionAlgorithm && EncryptionKey;
     if (encryption) {
         settings.SymmetricEncryption(EncryptionAlgorithm, EncryptionKey);
     }
@@ -591,9 +590,10 @@ int TCommandExportToS3::Run(TConfig& config) {
         settings.DestinationPrefix(CommonDestinationPrefix);
     }
 
-    const bool encryption = EncryptionAlgorithm && EncryptionKey;
+    const bool encryption = bool(EncryptionAlgorithm);
     if (encryption && !CommonDestinationPrefix) {
-        Cerr << "--destination-prefix parameter is required for exports with encryption" << Endl;
+        Cerr << "--destination-prefix is required for encrypted exports (SchemaMapping is mandatory). "
+                "You can still specify per-item dst= paths alongside it." << Endl;
         return EXIT_FAILURE;
     }
 

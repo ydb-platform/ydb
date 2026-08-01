@@ -31,6 +31,13 @@
 
 namespace NYdb::NConsoleClient {
 
+bool TCommandImportBase::WantsEncryption() const {
+    if (!Items.empty()) {
+        return !EncryptionKeyFile.empty();
+    }
+    return !EncryptionKey.empty() || !EncryptionKeyFile.empty();
+}
+
 TCommandImport::TCommandImport()
     : TClientCommandTree("import", {}, "Import service operations")
 {
@@ -150,7 +157,7 @@ void TCommandImportBase::Parse(TConfig& config) {
         throw TMisuseException() << "Cannot use --item parameter with --list";
     }
 
-    if (!Items.empty() && (!EncryptionKey.empty() || !EncryptionKeyFile.empty())) {
+    if (!Items.empty() && !EncryptionKeyFile.empty()) {
         throw TMisuseException() << "Cannot use --item parameter with encrypted exports";
     }
 }
@@ -178,8 +185,7 @@ void TCommandImportBase::FillCommonImportSettings(TSettings& settings) {
     settings.NoACL(NoACL);
     settings.SkipChecksumValidation(SkipChecksumValidation);
 
-    const bool encryption = !EncryptionKey.empty();
-    if (encryption) {
+    if (EncryptionKey) {
         settings.SymmetricKey(EncryptionKey);
     }
 
@@ -397,8 +403,7 @@ NImport::TListObjectsInS3ExportSettings TCommandImportFromS3::MakeListObjectsSet
     FillS3Settings(settings);
     settings.NumberOfRetries(NumberOfRetries);
 
-    const bool encryption = !EncryptionKey.empty();
-    if (encryption) {
+    if (EncryptionKey) {
         settings.SymmetricKey(EncryptionKey);
     }
 
@@ -442,7 +447,9 @@ static int PrintListObjectResult(const NImport::TListObjectsInS3ExportResult& re
 }
 
 int TCommandImportFromS3::Run(TConfig& config) {
-    if (EncryptionKey && !EncryptionKeyFile) { // We read key from env YDB_ENCRYPTION_KEY, treat as hex encoded
+    if (!WantsEncryption()) {
+        EncryptionKey.clear();
+    } else if (EncryptionKey && !EncryptionKeyFile) { // We read key from env YDB_ENCRYPTION_KEY, treat as hex encoded
         try {
             EncryptionKey = HexDecode(EncryptionKey);
         } catch (const std::exception&) {
@@ -452,8 +459,7 @@ int TCommandImportFromS3::Run(TConfig& config) {
         }
     }
 
-    const bool encryption = !EncryptionKey.empty();
-    if (encryption && !CommonSourcePrefix) {
+    if (EncryptionKey && !CommonSourcePrefix) {
         Cerr << "--source-prefix parameter is required" << Endl;
         return EXIT_FAILURE;
     }
@@ -527,7 +533,9 @@ NImport::TImportFromFsSettings TCommandImportFromNfs::MakeImportSettings() {
 }
 
 int TCommandImportFromNfs::Run(TConfig& config) {
-    if (EncryptionKey && !EncryptionKeyFile) { // We read key from env YDB_ENCRYPTION_KEY, treat as hex encoded
+    if (!WantsEncryption()) {
+        EncryptionKey.clear();
+    } else if (EncryptionKey && !EncryptionKeyFile) { // We read key from env YDB_ENCRYPTION_KEY, treat as hex encoded
         try {
             EncryptionKey = HexDecode(EncryptionKey);
         } catch (const std::exception&) {

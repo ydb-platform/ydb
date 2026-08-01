@@ -59,6 +59,8 @@ protected:
     TString EncryptionKey;
     TString EncryptionKeyFile;
 
+    bool WantsEncryption() const;
+
 private:
     template <typename TSettings>
     void ApplyItems(TSettings& settings) const;

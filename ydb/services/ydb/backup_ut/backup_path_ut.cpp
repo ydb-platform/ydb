@@ -1398,6 +1398,69 @@ void ExportRecursiveWithoutDestinationPrefixImpl(TBackupTestFixture& f, bool isO
 }
 
 template <typename TExportSettings, typename TBackupTestFixture>
+void BackwardCompatibleUnencryptedExportWithEnableEncryptedExportImpl(TBackupTestFixture& f, bool isOlap) {
+    TBackupTraits<TExportSettings> traits;
+    using TImportSettings = typename TBackupTraits<TExportSettings>::TImportSettings;
+    const TString prefixRaw = traits.FilePrefixRaw();
+    f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableFsBackups(true);
+    f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+
+    {
+        auto exportSettings = traits.MakeExportSettingsRaw(f);
+        exportSettings
+            .AppendItem(typename TExportSettings::TItem{.Src = "/Root/RecursiveFolderProcessing/Table0", .Dst = "Table0"})
+            .AppendItem(typename TExportSettings::TItem{.Src = "/Root/RecursiveFolderProcessing/dir1/Table1", .Dst = "Table1"})
+            .AppendItem(typename TExportSettings::TItem{.Src = "/Root/RecursiveFolderProcessing/dir1/dir2/Table2", .Dst = "Table2"});
+        auto res = traits.Export(f, exportSettings);
+        f.WaitOpSuccess(res);
+
+        traits.ValidateFileList(f, {
+            prefixRaw + "Table0/metadata.json",
+            prefixRaw + "Table0/scheme.pb",
+            prefixRaw + "Table0/permissions.pb",
+            prefixRaw + "Table0/data_00.csv",
+            prefixRaw + "Table1/metadata.json",
+            prefixRaw + "Table1/scheme.pb",
+            prefixRaw + "Table1/permissions.pb",
+            prefixRaw + "Table1/data_00.csv",
+            prefixRaw + "Table2/metadata.json",
+            prefixRaw + "Table2/scheme.pb",
+            prefixRaw + "Table2/permissions.pb",
+            prefixRaw + "Table2/data_00.csv",
+
+            prefixRaw + "Table0/metadata.json.sha256",
+            prefixRaw + "Table0/scheme.pb.sha256",
+            prefixRaw + "Table0/permissions.pb.sha256",
+            prefixRaw + "Table0/data_00.csv.sha256",
+            prefixRaw + "Table1/metadata.json.sha256",
+            prefixRaw + "Table1/scheme.pb.sha256",
+            prefixRaw + "Table1/permissions.pb.sha256",
+            prefixRaw + "Table1/data_00.csv.sha256",
+            prefixRaw + "Table2/metadata.json.sha256",
+            prefixRaw + "Table2/scheme.pb.sha256",
+            prefixRaw + "Table2/permissions.pb.sha256",
+            prefixRaw + "Table2/data_00.csv.sha256",
+        });
+    }
+
+    {
+        auto importSettings = traits.MakeImportSettingsRaw(f);
+        importSettings
+            .AppendItem(typename TImportSettings::TItem{.Src = "Table0", .Dst = "/Root/RestorePrefix/Table0"})
+            .AppendItem(typename TImportSettings::TItem{.Src = "Table1", .Dst = "/Root/RestorePrefix/Table1"})
+            .AppendItem(typename TImportSettings::TItem{.Src = "Table2", .Dst = "/Root/RestorePrefix/Table2"});
+        auto res = traits.Import(f, importSettings);
+        f.WaitOpSuccess(res);
+
+        f.ValidateHasYdbPaths({
+            TBackupTestFixture::TEntryPath::TablePath("/Root/RestorePrefix/Table0", isOlap),
+            TBackupTestFixture::TEntryPath::TablePath("/Root/RestorePrefix/Table1", isOlap),
+            TBackupTestFixture::TEntryPath::TablePath("/Root/RestorePrefix/Table2", isOlap),
+        });
+    }
+}
+
+template <typename TExportSettings, typename TBackupTestFixture>
 void ExportDirectoryWithEncryptionImpl(TBackupTestFixture& f, bool isOlap) {
     TBackupTraits<TExportSettings> traits;
     const TString prefix = traits.FilePrefix();
@@ -2156,6 +2219,10 @@ Y_UNIT_TEST_SUITE_F(BackupPathTest, TBackupPathTestFixture) {
 
     Y_UNIT_TEST_TWIN(ExportRecursiveWithoutDestinationPrefix, IsOlap) {
         ExportRecursiveWithoutDestinationPrefixImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap);
+    }
+
+    Y_UNIT_TEST_TWIN(BackwardCompatibleUnencryptedExportWithEnableEncryptedExport, IsOlap) {
+        BackwardCompatibleUnencryptedExportWithEnableEncryptedExportImpl<NExport::TExportToS3Settings, TS3BackupTestFixture>(*this, IsOlap);
     }
 
     Y_UNIT_TEST_TWIN(ParallelBackupWholeDatabase, IsOlap) {

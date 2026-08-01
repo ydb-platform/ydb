@@ -613,6 +613,122 @@ Y_UNIT_TEST_SUITE(ExportTest) {
         }
     }
 
+    Y_UNIT_TEST_F(BackwardCompatibleExportWithoutDestinationPrefix, TExportFixture) {
+        Service<TSchemeImpl>()
+            .ExpectListDirectory("/test_database/dir1")
+            .ExpectChild("/test_database/dir1", "table1", Ydb::Scheme::Entry::TABLE)
+            .ExpectChild("/test_database/dir1", "table2", Ydb::Scheme::Entry::TABLE);
+
+        Service<TExportImpl>()
+            .ExpectBucket(TEST_BUCKET)
+            .ExpectS3Endpoint(TEST_S3_ENDPOINT)
+            .ExpectS3AccessKey("test-key")
+            .ExpectS3SecretKey("test-access-key")
+            .ExpectItem("/test_database/dir1/table1", "Prefix/table1")
+            .ExpectItem("/test_database/dir1/table2", "Prefix/table2");
+
+        RunCli(
+            {
+                "-v",
+                "-e", GetEndpoint(),
+                "-d", GetDatabase(),
+                "export", "s3",
+                "--bucket", TEST_BUCKET,
+                "--s3-endpoint", TEST_S3_ENDPOINT,
+                "--access-key", "test-key",
+                "--secret-key", "test-access-key",
+                "--item", "src=dir1,dst=Prefix",
+            }
+        );
+    }
+
+    Y_UNIT_TEST_F(UnencryptedExportIgnoresEncryptionKeyFromEnv, TExportFixture) {
+        Service<TSchemeImpl>()
+            .ExpectListDirectory("/test_database/dir1")
+            .ExpectChild("/test_database/dir1", "table1", Ydb::Scheme::Entry::TABLE);
+
+        Service<TExportImpl>()
+            .ExpectBucket(TEST_BUCKET)
+            .ExpectS3Endpoint(TEST_S3_ENDPOINT)
+            .ExpectS3AccessKey("test-key")
+            .ExpectS3SecretKey("test-access-key")
+            .ExpectItem("/test_database/dir1/table1", "Prefix/table1");
+
+        RunCli(
+            {
+                "-v",
+                "-e", GetEndpoint(),
+                "-d", GetDatabase(),
+                "export", "s3",
+                "--bucket", TEST_BUCKET,
+                "--s3-endpoint", TEST_S3_ENDPOINT,
+                "--access-key", "test-key",
+                "--secret-key", "test-access-key",
+                "--item", "src=dir1,dst=Prefix",
+            },
+            {
+                {"YDB_ENCRYPTION_KEY", "31323334353637383930"}, // Hex
+            }
+        );
+    }
+
+    Y_UNIT_TEST_F(EncryptedExportRequiresDestinationPrefix, TExportFixture) {
+        const TString encryptionKey = "test-encryption-key";
+        const TString encryptionKeyFile = EnvFile(encryptionKey, "export_requires_prefix.key");
+
+        Service<TExportImpl>().ExpectNoExportCall();
+
+        ExpectFail();
+        RunCli(
+            {
+                "-v",
+                "-e", GetEndpoint(),
+                "-d", GetDatabase(),
+                "export", "s3",
+                "--bucket", TEST_BUCKET,
+                "--s3-endpoint", TEST_S3_ENDPOINT,
+                "--access-key", "test-key",
+                "--secret-key", "test-access-key",
+                "--encryption-algorithm", "AES-128-GCM",
+                "--encryption-key-file", encryptionKeyFile,
+                "--item", "src=table1,dst=dst/table1",
+            }
+        );
+    }
+
+    Y_UNIT_TEST_F(EncryptedExportWithDestinationPrefixAndExplicitItems, TExportFixture) {
+        const TString encryptionKey = "test-encryption-key";
+        const TString encryptionKeyFile = EnvFile(encryptionKey, "export_with_prefix.key");
+
+        Service<TExportImpl>()
+            .ExpectBucket(TEST_BUCKET)
+            .ExpectS3Endpoint(TEST_S3_ENDPOINT)
+            .ExpectS3AccessKey("test-key")
+            .ExpectS3SecretKey("test-access-key")
+            .ExpectCommonDstPrefix("common/prefix")
+            .ExpectSymmetricEncryption("AES-128-GCM", encryptionKey)
+            .ExpectItem("/test_database/table1", "dst/table1")
+            .ExpectItem("/test_database/table2", "dst/table2");
+
+        RunCli(
+            {
+                "-v",
+                "-e", GetEndpoint(),
+                "-d", GetDatabase(),
+                "export", "s3",
+                "--bucket", TEST_BUCKET,
+                "--s3-endpoint", TEST_S3_ENDPOINT,
+                "--access-key", "test-key",
+                "--secret-key", "test-access-key",
+                "--destination-prefix", "common/prefix",
+                "--encryption-algorithm", "AES-128-GCM",
+                "--encryption-key-file", encryptionKeyFile,
+                "--item", "src=table1,dst=dst/table1",
+                "--item", "src=table2,dst=dst/table2",
+            }
+        );
+    }
+
     Y_UNIT_TEST_F(SelectAwsParameters, TExportFixture) {
         EnvHomeFile(".aws/credentials", R"(
             [default]

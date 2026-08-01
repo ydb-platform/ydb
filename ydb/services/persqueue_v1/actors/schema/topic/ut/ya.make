@@ -14,6 +14,7 @@ PEERDIR(
     ydb/core/persqueue/public
     ydb/core/testlib/grpc_request
     ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
+    ydb/public/sdk/cpp/src/client/query
     ydb/public/sdk/cpp/src/client/topic/ut/ut_utils
     library/cpp/testing/unittest
 )

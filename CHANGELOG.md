@@ -76,6 +76,13 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 25538:added basic monitoring tests and separate events file [#25538](https://github.com/ydb-platform/ydb/pull/25538) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 25458:Сейчас при автопартициронировании топиков учитывается скорость записи различными producer-ами: партиция делится не пополам, а стараемся разделить партицию таким образом, что бы producer-ы распределились по новым партициям равномерно с учетом скорости записи. [#25458](https://github.com/ydb-platform/ydb/pull/25458) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 25387:Change the audit logging logic from AllowedList checking to DenyList checking [#25387](https://github.com/ydb-platform/ydb/pull/25387) ([Andrei Rykov](https://github.com/StekPerepolnen))
+* 34015:support decimal group-id, the same format that is used in UI [#34015](https://github.com/ydb-platform/ydb/pull/34015) ([Vlad Kuznetsov](https://github.com/va-kuznecov))
+* 33787:In modern environment (k8s + cilius) keeping udp socket often cause issiues is forwarding was changed after socket creation. https://github.com/ydb-platform/ydb/issues/33688
+
+We do not expect any degradation because socket creation is not bottleneck. [#33787](https://github.com/ydb-platform/ydb/pull/33787) ([Daniil Cherednik](https://github.com/dcherednik))
+* 33344:Introduce basic structures for Retrospective Tracing. [#33344](https://github.com/ydb-platform/ydb/pull/33344) ([Sergey Belyakov](https://github.com/serbel324))
+* 33297:Add smart availability mode to CMS that behaves like strong, but fall backs to weak when necessary. [#33297](https://github.com/ydb-platform/ydb/pull/33297) ([Ilia Shakhov](https://github.com/pixcc))
+* 33259:This PR introduces an annotation-based masking system for protobuf messages to automatically hide sensitive fields (credentials and sensitive data) in debug output. [#33259](https://github.com/ydb-platform/ydb/pull/33259) ([Andrei Rykov](https://github.com/StekPerepolnen))
 
 ### Bug fixes
 
@@ -146,12 +153,27 @@ https://github.com/ydb-platform/ydb/issues/25454 [#25536](https://github.com/ydb
 * 25515:Fixed fault for checkpoint on not drained channels [#25515](https://github.com/ydb-platform/ydb/pull/25515) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 25412:https://github.com/ydb-platform/ydb/issues/23180 [#25412](https://github.com/ydb-platform/ydb/pull/25412) ([Vasily Gerasimov](https://github.com/UgnineSirdis))
 * 25408:Fixed tests:
+* None:CreateStreamingQueryMatchRecognize
+* 34151:Fix constraint violation in a datashard when renaming a table/index. Fixes https://github.com/ydb-platform/ydb/issues/19871. [#34151](https://github.com/ydb-platform/ydb/pull/34151) ([Ilnaz Nizametdinov](https://github.com/CyberROFL))
+* 34146:Fix datashard not allowing row deletions when out of disk space quota. Fixes #34108. [#34146](https://github.com/ydb-platform/ydb/pull/34146) ([Aleksei Borzenkov](https://github.com/snaury))
+* 34101:Fix data race in ldap server mock [#34101](https://github.com/ydb-platform/ydb/pull/34101) ([Andrey Molotkov](https://github.com/molotkov-and))
+* 34036:Fix a race between PDisk actor and its formatting thread. [#34036](https://github.com/ydb-platform/ydb/pull/34036) ([Evgeniy Ivanov](https://github.com/eivanov89))
+* 33936:Now postfilter is also applied to columns that are already covered. [#33936](https://github.com/ydb-platform/ydb/pull/33936) ([Stanislav Tebloev](https://github.com/stebloev))
+* 33869:Support PQ partitons balancer [#33869](https://github.com/ydb-platform/ydb/pull/33869) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 33855:- BATCH is disabled for vector indexes.
+- BATCH is disabled for fulltext indexes.
+- BATCH is disabled for unique without `EnableIndexStreamWrite`.
+- Fix problems and lost parameters for BATCH operations with `EnableIndexStreamWrite`.
 
-* TestRetryLimiter 
-* RestoreScriptPhysicalGraphOnRetry 
-* CreateStreamingQueryMatchRecognize 
+Problem: `BATCH UPDATE` is executed like basic `UPDATE`: #33128
+... [#33855](https://github.com/ydb-platform/ydb/pull/33855) ([Daniil Timižev](https://github.com/dahbka-lis))
+* 33801:Issue #33800
 
-Also increased default test logs level [#25408](https://github.com/ydb-platform/ydb/pull/25408) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+Added locks for PartitionGraph [#33801](https://github.com/ydb-platform/ydb/pull/33801) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
+* 33651:Исправлено редкое падение сервера когда из топика читают по прямому чтению [#33651](https://github.com/ydb-platform/ydb/pull/33651) ([Nikolay Shestakov](https://github.com/nshestakov))
+* 33554:fix an issue where cordon request would hang, resolves https://github.com/ydb-platform/ydb/issues/33147 [#33554](https://github.com/ydb-platform/ydb/pull/33554) ([vporyadke](https://github.com/vporyadke))
+* 32578:closes: [29356](https://github.com/ydb-platform/ydb/issues/29356)
+... [#32578](https://github.com/ydb-platform/ydb/pull/32578) ([Anely](https://github.com/Ane1y))
 
 ### YDB UI
 
@@ -178,4 +200,5 @@ Also increased default test logs level [#25408](https://github.com/ydb-platform/
 * 20428:Improved parallel execution of queries to column-oriented tables. [#20428](https://github.com/ydb-platform/ydb/pull/20428) ([Oleg Doronin](https://github.com/dorooleg))
 * 21705:Introduced a new priority system for PDisks, addressing performance slowdowns caused by shared queue usage for realtime and compaction writes. [#21705](https://github.com/ydb-platform/ydb/pull/21705) ([Vlad Kuznetsov](https://github.com/va-kuznecov))
 * 25668:Used AS threads in topic sdk IO operations [#25668](https://github.com/ydb-platform/ydb/pull/25668) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 33717:New simple TMaxTracker to monitor maximal value of a metric over specified time window [#33717](https://github.com/ydb-platform/ydb/pull/33717) ([Vlad Kuznetsov](https://github.com/va-kuznecov))
 

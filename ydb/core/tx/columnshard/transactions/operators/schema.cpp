@@ -84,7 +84,9 @@ public:
     virtual void DoOnEvent(const std::shared_ptr<NSubscriber::ISubscriptionEvent>& ev) override {
         AFL_VERIFY(ev->GetType() == NSubscriber::EEventType::TxCompleted);
         const auto* evCompleted = static_cast<const NSubscriber::TEventTxCompleted*>(ev.get());
-        AFL_VERIFY(TxIdsToWait.erase(evCompleted->GetTxId()));
+        if (!TxIdsToWait.erase(evCompleted->GetTxId())) {
+            return;
+        }
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("completed", evCompleted->GetTxId())("remained", JoinSeq(",", TxIdsToWait));
     }
 };

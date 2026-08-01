@@ -9,9 +9,9 @@ Practical aspects of working with [streaming queries](../../concepts/glossary.md
 - [Data formats for reading/writing topics](streaming-query-formats.md) — supported data formats when working with topics, examples of their use.
 - [Data delivery guarantees](guarantees.md) — level of guarantees, observed anomalies in window aggregation, and recommendations.
 - [Checkpoints](checkpoints.md) — a mechanism for saving the state of stream processing to ensure fault tolerance and recovery capability.
-- Watermarks — a mechanism for tracking time progress in a data stream.
+- [Watermarks](watermarks.md) — a mechanism for tracking time progress in a data stream.
 
 ## See also
 
 - [Recipes for working with streaming queries](../../recipes/streaming_queries/index.md)
-- Description of streaming queries
+- [Streaming queries overview](../../concepts/streaming-query/streaming-query.md)

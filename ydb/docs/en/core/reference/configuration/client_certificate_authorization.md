@@ -29,7 +29,7 @@ client_certificate_authorization:
 ```
 
 
-| The "Subject Alternative Name" field of the node certificate is a list of the node's network names or IP addresses. Checks can be configured to match the names specified in the certificate against the expected values. | Syntax |
+| Key | Syntax |
 | --- | --- |
 | Key | Description |
 | `client_certificate_required` | Request a valid client certificate for node connections.<br/>Allowed values:<br/><ul><li>`false` — A certificate is not required (used by default if the parameter is omitted).</li><li>`true` — A certificate is required for all node connections.</li></ul> |

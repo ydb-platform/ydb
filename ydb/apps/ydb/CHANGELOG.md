@@ -1,6 +1,6 @@
 
 * Fixed `ydb export s3` treating `YDB_ENCRYPTION_KEY` in the environment as an encryption request when `--encryption-algorithm` is not specified; unencrypted exports work as before.
-* Fixed `ydb import s3` similarly ignoring the environment encryption key in `--item` mode unless `--encryption-key-file` is provided.
+* Fixed `ydb import s3` ignoring `YDB_ENCRYPTION_KEY` in the environment when using `--item`; `--item` remains incompatible with encrypted exports (i.e. `--encryption-key-file`).
 
 * Added `--content-based-deduplication` option to `ydb topic create` and `ydb topic alter` commands.
 * Added support for the new `setnotnull` operation in the `ydb operation` subcommands.

@@ -100,18 +100,20 @@ void TMessageEnricherActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
     }
 
     auto& response = ev->Get()->Record;
-    if (!response.GetPartitionResponse().HasCmdReadResult()) {
-        ProcessQueue();
-        return;
-    }
-
     auto& results = response.GetPartitionResponse().GetCmdReadResult().GetResult();
     size_t& entryIndex = NextEntryIdx;
     int resultIndex = 0;
     const int resultsSize = results.size();
 
-    if (resultsSize <= 0) {
-        ++entryIndex;
+    // Empty / missing read result: advance past the current requested offset and continue.
+    // Do not re-issue the same fetch — that would loop forever.
+    if (!response.GetPartitionResponse().HasCmdReadResult() || resultsSize <= 0) {
+        if (entryIndex < SortedEntries.size()) {
+            ++entryIndex;
+        }
+        if (RepliesSent == PendingResponses.size()) {
+            return PassAway();
+        }
         ProcessQueue();
         return;
     }

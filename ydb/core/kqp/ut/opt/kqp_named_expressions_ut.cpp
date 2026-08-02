@@ -335,6 +335,144 @@ Y_UNIT_TEST_SUITE(KqpNamedExpressions) {
         CompareYson(R"([[[11u];["old"];["one"]]])", FormatResultSetYson(result.GetResultSet(3)));
     }
 
+    Y_UNIT_TEST_TWIN(NamedExpressionMultipleIndexedWrites, EnableIndexStreamWrite) {
+        TKikimrRunner kikimr(NamedExpressionIndexedSettings(EnableIndexStreamWrite));
+        CreateNamedExpressionIndexedTables(kikimr);
+
+        const TString query = R"(
+            $rows = SELECT Key, Tag, Value FROM Source ORDER BY Key;
+
+            UPSERT INTO Dest SELECT * FROM $rows;
+            UPSERT INTO Source SELECT Key + 100u AS Key, Tag, Value FROM $rows;
+
+            SELECT * FROM $rows;
+            SELECT Key, Tag, Value FROM Dest ORDER BY Key;
+            SELECT Key, Tag, Value FROM Source ORDER BY Key;
+        )";
+
+        const auto result = kikimr.GetQueryClient().ExecuteQuery(
+            query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
+
+        const TString originalRows = R"([[[1u];["old"];["one"]];[[2u];["old"];["two"]]])";
+        CompareYson(originalRows, FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(originalRows, FormatResultSetYson(result.GetResultSet(1)));
+        CompareYson(R"([[[1u];["old"];["one"]];[[2u];["old"];["two"]];[[101u];["old"];["one"]];[[102u];["old"];["two"]]])",
+            FormatResultSetYson(result.GetResultSet(2)));
+    }
+
+    Y_UNIT_TEST_TWIN(NamedExpressionPureNondeterministicWriteAndResult, EnableIndexStreamWrite) {
+        TKikimrRunner kikimr(NamedExpressionIndexedSettings(EnableIndexStreamWrite));
+        CreateNamedExpressionIndexedTables(kikimr);
+
+        const TString query = R"(
+            $val = CAST(RandomUuid(1u) AS String);
+
+            UPSERT INTO Dest (Key, Tag, Value) VALUES (1u, "rand", $val);
+            SELECT $val AS Value;
+        )";
+
+        const auto result = kikimr.GetQueryClient().ExecuteQuery(
+            query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
+
+        const auto selectValue = FormatResultSetYson(result.GetResultSet(0));
+        auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto readResult = session.ExecuteDataQuery(R"(
+            SELECT Value FROM Dest WHERE Key = 1u;
+        )", NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(readResult.GetStatus() == EStatus::SUCCESS, readResult.GetIssues().ToString());
+
+        const auto destValue = FormatResultSetYson(readResult.GetResultSet(0));
+        UNIT_ASSERT(selectValue != destValue);
+    }
+
+    Y_UNIT_TEST_TWIN(NamedExpressionWriteThenReuseForWrite, EnableIndexStreamWrite) {
+        TKikimrRunner kikimr(NamedExpressionIndexedSettings(EnableIndexStreamWrite));
+        CreateNamedExpressionIndexedTables(kikimr);
+
+        const TString query = R"(
+            $rows = SELECT Key, Tag, Value FROM Source ORDER BY Key;
+
+            UPSERT INTO Dest SELECT * FROM $rows;
+
+            UPSERT INTO Source (Key, Tag, Value) VALUES (3u, "old", "three");
+
+            UPSERT INTO Dest SELECT Key + 10u AS Key, Tag, Value FROM $rows;
+
+            SELECT * FROM $rows;
+            SELECT Key, Tag, Value FROM Dest ORDER BY Key;
+            SELECT Key, Tag, Value FROM Source ORDER BY Key;
+        )";
+
+        const auto result = kikimr.GetQueryClient().ExecuteQuery(
+            query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
+
+        const TString allRows = R"([[[1u];["old"];["one"]];[[2u];["old"];["two"]];[[3u];["old"];["three"]]])";
+        CompareYson(allRows, FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([[[1u];["old"];["one"]];[[2u];["old"];["two"]];[[11u];["old"];["one"]];[[12u];["old"];["two"]];[[13u];["old"];["three"]]])",
+            FormatResultSetYson(result.GetResultSet(1)));
+        CompareYson(allRows, FormatResultSetYson(result.GetResultSet(2)));
+    }
+
+    Y_UNIT_TEST_TWIN(NamedExpressionClonedStages, EnableIndexStreamWrite) {
+        TKikimrRunner kikimr(NamedExpressionIndexedSettings(EnableIndexStreamWrite));
+        CreateNamedExpressionIndexedTables(kikimr);
+
+        const TString query = R"(
+            $rows = SELECT Key, Tag, Value FROM Source ORDER BY Key;
+
+            UPSERT INTO Dest (Key, Tag, Value)
+                SELECT Key, Tag, Value FROM $rows WHERE Key = 1u;
+
+            UPSERT INTO Source (Key, Tag, Value) VALUES (3u, "old", "three");
+
+            UPSERT INTO Dest (Key, Tag, Value)
+                SELECT Key + 10u, Tag, Value FROM $rows WHERE Key = 2u;
+
+            SELECT * FROM $rows;
+            SELECT Key, Tag, Value FROM Dest ORDER BY Key;
+        )";
+
+        const auto result = kikimr.GetQueryClient().ExecuteQuery(
+            query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
+
+        const TString originalRows = R"([[[1u];["old"];["one"]];[[2u];["old"];["two"]];[[3u];["old"];["three"]]])";
+        CompareYson(originalRows, FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([[[1u];["old"];["one"]];[[12u];["old"];["two"]]])",
+            FormatResultSetYson(result.GetResultSet(1)));
+    }
+
+    Y_UNIT_TEST_TWIN(NamedExpressionResultOnlyNoSink, EnableIndexStreamWrite) {
+        TKikimrRunner kikimr(NamedExpressionIndexedSettings(EnableIndexStreamWrite));
+        CreateNamedExpressionIndexedTables(kikimr);
+
+        const TString query = R"(
+            $rows = SELECT Key, Tag, Value FROM Source ORDER BY Key;
+
+            SELECT * FROM $rows;
+            SELECT * FROM $rows;
+
+            UPSERT INTO Source (Key, Tag, Value) VALUES (1u, "new", "updated");
+
+            SELECT * FROM $rows;
+            SELECT Key, Tag, Value FROM Source ORDER BY Key;
+        )";
+
+        const auto result = kikimr.GetQueryClient().ExecuteQuery(
+            query, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == EStatus::SUCCESS, result.GetIssues().ToString());
+
+        const TString originalRows = R"([[[1u];["old"];["one"]];[[2u];["old"];["two"]]])";
+        CompareYson(originalRows, FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(originalRows, FormatResultSetYson(result.GetResultSet(1)));
+        CompareYson(originalRows, FormatResultSetYson(result.GetResultSet(2)));
+        CompareYson(R"([[[1u];["new"];["updated"]];[[2u];["old"];["two"]]])",
+            FormatResultSetYson(result.GetResultSet(3)));
+    }
+
     Y_UNIT_TEST(NamedExpressionRandomChanged) {
         auto settings = TKikimrSettings().SetWithSampleTables(true);
         TKikimrRunner kikimr(settings);

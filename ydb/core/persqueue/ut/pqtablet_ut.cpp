@@ -4417,6 +4417,391 @@ Y_UNIT_TEST_F(DeferredPublicationRenameThenMidCmdReadKeepsParentOffsets, TPQTabl
     }
 }
 
+namespace {
+
+constexpr TStringBuf kTopicTxInjectionOwner = "-=[ tx-reboot-owner ]=-";
+// Sim-time deadline: after reboot the in-flight response is dropped and pipe is stale;
+// without a timeout GrabEdgeEvent can spin forever on tablet-resolver retries
+// that do not bump ScheduledCount.
+constexpr TDuration kTopicTxInjectionEdgeTimeout = TDuration::Seconds(2);
+
+// Thrown to restart the Topic-tx scenario after a mid-flight reboot/pipe reset.
+class TTopicTxInjectionRetry : public yexception {
+};
+
+class TTopicTxInjectionHelper {
+public:
+    explicit TTopicTxInjectionHelper(TTestContext& tc)
+        : Tc(tc)
+    {}
+
+    ~TTopicTxInjectionHelper() {
+        ResetPipe();
+    }
+
+    void ResetPipe() {
+        if (Pipe) {
+            Tc.Runtime->ClosePipe(Pipe, Tc.Edge, 0);
+            Pipe = {};
+        }
+    }
+
+    void EnsurePipe() {
+        if (!Pipe) {
+            Pipe = Tc.Runtime->ConnectToPipe(Tc.TabletId, Tc.Edge, 0, GetPipeConfigWithRetries());
+        }
+        Y_ABORT_UNLESS(Pipe);
+    }
+
+    void SendToPipe(IEventBase* event) {
+        EnsurePipe();
+        Tc.Runtime->SendToPipe(Pipe, Tc.Edge, event, 0, 0);
+    }
+
+    TString CreateSupportivePartition(const TWriteId& writeId) {
+        for (i32 retriesLeft = 5; retriesLeft > 0; --retriesLeft) {
+            try {
+                Tc.Runtime->ResetScheduledCount();
+                ResetPipe();
+                EnsurePipe();
+
+                auto event = std::make_unique<TEvPersQueue::TEvRequest>();
+                auto* request = event->Record.MutablePartitionRequest();
+                request->SetPartition(0);
+                request->SetCookie(4);
+                request->SetNeedSupportivePartition(true);
+                SetWriteId(*request, writeId);
+                ActorIdToProto(Pipe, request->MutablePipeClient());
+                auto* cmd = request->MutableCmdGetOwnership();
+                cmd->SetOwner(TString{kTopicTxInjectionOwner});
+                cmd->SetForce(true);
+
+                SendToPipe(event.release());
+                auto response = Tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(
+                    kTopicTxInjectionEdgeTimeout);
+                if (!response) {
+                    continue;
+                }
+                if (response->Record.GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
+                    Tc.Runtime->DispatchEvents();
+                    retriesLeft = 5;
+                    continue;
+                }
+                UNIT_ASSERT_VALUES_EQUAL((int)response->Record.GetStatus(), (int)NMsgBusProxy::MSTATUS_OK);
+                return response->Record.GetPartitionResponse().GetCmdGetOwnershipResult().GetOwnerCookie();
+            } catch (const NActors::TSchedulingLimitReachedException&) {
+            } catch (const NActors::TEmptyEventQueueException&) {
+            }
+        }
+        ythrow TTopicTxInjectionRetry() << "CreateSupportivePartition: retries exhausted";
+    }
+
+    void WriteToSupportive(
+        const TWriteId& writeId,
+        const TString& ownerCookie,
+        ui64 seqNo,
+        ui64 messageNo,
+        const TString& data,
+        ui64 cookie)
+    {
+        for (i32 retriesLeft = 5; retriesLeft > 0; --retriesLeft) {
+            try {
+                Tc.Runtime->ResetScheduledCount();
+                EnsurePipe();
+
+                auto event = MakeHolder<TEvPersQueue::TEvRequest>();
+                auto* request = event->Record.MutablePartitionRequest();
+                request->SetTopic("/topic");
+                request->SetPartition(0);
+                request->SetCookie(cookie);
+                request->SetOwnerCookie(ownerCookie);
+                request->SetMessageNo(messageNo);
+                SetWriteId(*request, writeId);
+                ActorIdToProto(Pipe, request->MutablePipeClient());
+
+                auto* cmdWrite = request->AddCmdWrite();
+                cmdWrite->SetSourceId("tx-src");
+                cmdWrite->SetSeqNo(seqNo);
+                cmdWrite->SetData(data);
+                cmdWrite->SetCreateTimeMS(TInstant::Now().MilliSeconds());
+                cmdWrite->SetDisableDeduplication(true);
+                cmdWrite->SetUncompressedSize(data.size());
+                cmdWrite->SetIgnoreQuotaDeadline(true);
+                cmdWrite->SetExternalOperation(true);
+
+                SendToPipe(event.Release());
+                auto response = Tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>(
+                    kTopicTxInjectionEdgeTimeout);
+                if (!response) {
+                    ResetPipe();
+                    continue;
+                }
+                if (response->Record.GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
+                    ResetPipe();
+                    Tc.Runtime->DispatchEvents();
+                    retriesLeft = 5;
+                    continue;
+                }
+                if (response->Record.GetErrorCode() != NPersQueue::NErrorCode::OK) {
+                    ythrow TTopicTxInjectionRetry()
+                        << "WriteToSupportive error="
+                        << static_cast<int>(response->Record.GetErrorCode());
+                }
+                UNIT_ASSERT_VALUES_EQUAL(response->Record.GetPartitionResponse().GetCookie(), cookie);
+                return;
+            } catch (const NActors::TSchedulingLimitReachedException&) {
+                ResetPipe();
+            } catch (const NActors::TEmptyEventQueueException&) {
+                ResetPipe();
+            }
+        }
+        ythrow TTopicTxInjectionRetry() << "WriteToSupportive: retries exhausted";
+    }
+
+    ui32 WaitSupportivePartitionId(const TWriteId& writeId) {
+        for (size_t i = 0; i < 40; ++i) {
+            try {
+                Tc.Runtime->ResetScheduledCount();
+                EnsurePipe();
+                auto request = std::make_unique<TEvKeyValue::TEvRequest>();
+                request->Record.SetCookie(12345);
+                request->Record.AddCmdRead()->SetKey("_txinfo");
+                SendToPipe(request.release());
+
+                auto response = Tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(
+                    kTopicTxInjectionEdgeTimeout);
+                if (!response) {
+                    ResetPipe();
+                    continue;
+                }
+                UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+                const auto& result = response->Record.GetReadResult(0);
+                if (result.GetStatus() == static_cast<ui32>(NKikimrProto::OK)) {
+                    NKikimrPQ::TTabletTxInfo info;
+                    UNIT_ASSERT(info.ParseFromString(result.GetValue()));
+                    for (const auto& txWrite : info.GetTxWrites()) {
+                        if (GetWriteId(txWrite) == writeId) {
+                            return txWrite.GetInternalPartitionId();
+                        }
+                    }
+                } else if (result.GetStatus() != NKikimrProto::NODATA) {
+                    ythrow TTopicTxInjectionRetry() << "WaitSupportivePartitionId: KV status "
+                        << result.GetStatus();
+                }
+                Tc.Runtime->SimulateSleep(TDuration::MilliSeconds(50));
+            } catch (const NActors::TSchedulingLimitReachedException&) {
+                ythrow TTopicTxInjectionRetry() << "WaitSupportivePartitionId: scheduling limit";
+            } catch (const NActors::TEmptyEventQueueException&) {
+                ythrow TTopicTxInjectionRetry() << "WaitSupportivePartitionId: empty queue";
+            }
+        }
+        ythrow TTopicTxInjectionRetry() << "supportive partition id did not appear in _txinfo";
+    }
+
+    void CommitTopicTransaction(const TWriteId& writeId, ui32 supportivePartitionId, ui64 txId) {
+        for (i32 retriesLeft = 5; retriesLeft > 0; --retriesLeft) {
+            try {
+                Tc.Runtime->ResetScheduledCount();
+                ResetPipe();
+                EnsurePipe();
+
+                {
+                    auto event = MakeHolder<TEvPersQueue::TEvProposeTransactionBuilder>();
+                    ActorIdToProto(Tc.Edge, event->Record.MutableSourceActor());
+                    event->Record.SetTxId(txId);
+                    auto* body = event->Record.MutableData();
+                    auto* operation = body->MutableOperations()->Add();
+                    operation->SetPartitionId(0);
+                    operation->SetPath("/topic");
+                    operation->SetSupportivePartition(supportivePartitionId);
+                    body->AddSendingShards(Tc.TabletId);
+                    body->AddReceivingShards(Tc.TabletId);
+                    SetWriteId(*body, writeId);
+                    body->SetImmediate(false);
+                    SendToPipe(event.Release());
+                }
+
+                {
+                    auto event = Tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvProposeTransactionResult>(
+                        kTopicTxInjectionEdgeTimeout);
+                    if (!event) {
+                        continue;
+                    }
+                    if (event->Record.GetTxId() != txId) {
+                        continue;
+                    }
+                    if (event->Record.GetStatus() != NKikimrPQ::TEvProposeTransactionResult::PREPARED) {
+                        ythrow TTopicTxInjectionRetry()
+                            << "Propose PREPARE status="
+                            << static_cast<int>(event->Record.GetStatus());
+                    }
+                }
+
+                {
+                    auto event = MakeHolder<TEvTxProcessing::TEvPlanStep>();
+                    event->Record.SetStep(100 + txId);
+                    auto* tx = event->Record.AddTransactions();
+                    tx->SetTxId(txId);
+                    ActorIdToProto(Tc.Edge, tx->MutableAckTo());
+                    SendToPipe(event.Release());
+                }
+
+                {
+                    auto event = Tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvProposeTransactionResult>(
+                        kTopicTxInjectionEdgeTimeout);
+                    if (!event || event->Record.GetTxId() != txId) {
+                        ythrow TTopicTxInjectionRetry() << "missing COMPLETE after PlanStep";
+                    }
+                    if (event->Record.GetStatus() != NKikimrPQ::TEvProposeTransactionResult::COMPLETE) {
+                        ythrow TTopicTxInjectionRetry()
+                            << "Propose COMPLETE status="
+                            << static_cast<int>(event->Record.GetStatus());
+                    }
+                }
+
+                Tc.Runtime->GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAck>(TDuration::Seconds(1));
+                Tc.Runtime->GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAccepted>(TDuration::Seconds(1));
+                return;
+            } catch (const NActors::TSchedulingLimitReachedException&) {
+                ResetPipe();
+            } catch (const NActors::TEmptyEventQueueException&) {
+                ResetPipe();
+            }
+        }
+        ythrow TTopicTxInjectionRetry() << "CommitTopicTransaction: retries exhausted";
+    }
+
+private:
+    TTestContext& Tc;
+    TActorId Pipe;
+};
+
+ui64 GetEndOffsetOrZero(TTestContext& tc) {
+    for (i32 retriesLeft = 3; retriesLeft > 0; --retriesLeft) {
+        try {
+            tc.Runtime->ResetScheduledCount();
+            auto request = MakeHolder<TEvPersQueue::TEvOffsets>();
+            tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+            auto result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvOffsetsResponse>(
+                kTopicTxInjectionEdgeTimeout);
+            if (!result || result->Record.PartResultSize() == 0) {
+                continue;
+            }
+            if (result->Record.GetPartResult(0).GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
+                tc.Runtime->DispatchEvents();
+                retriesLeft = 3;
+                continue;
+            }
+            return result->Record.GetPartResult(0).GetEndOffset();
+        } catch (const NActors::TSchedulingLimitReachedException&) {
+        } catch (const NActors::TEmptyEventQueueException&) {
+        }
+    }
+    return 0;
+}
+
+void TopicTxWriteAndCommitScenario(TTestContext& tc, bool& activeZone) {
+    constexpr ui32 txCount = 2;
+
+    PQTabletPrepare({.partitions=1}, {{"user1", true}}, tc);
+
+    TTopicTxInjectionHelper helper(tc);
+    for (ui32 attempt = 0; attempt < 20; ++attempt) {
+        try {
+            tc.Runtime->ResetScheduledCount();
+            helper.ResetPipe();
+            activeZone = false;
+
+            const ui64 endBefore = GetEndOffsetOrZero(tc);
+            // Previous attempt may have committed while a later GrabEdgeEvent failed.
+            if (endBefore >= txCount) {
+                const ui64 readFrom = endBefore - txCount;
+                TVector<i32> expectedOffsets;
+                expectedOffsets.reserve(txCount);
+                for (ui32 i = 0; i < txCount; ++i) {
+                    expectedOffsets.push_back(static_cast<i32>(readFrom + i));
+                }
+                PQGetPartInfo(0, endBefore, tc);
+                CmdRead(/*partition=*/0, /*offset=*/readFrom, /*count=*/txCount, /*size=*/16_MB,
+                        /*resCount=*/txCount, /*timeouted=*/false, tc, expectedOffsets);
+                return;
+            }
+
+            const TWriteId writeId(0, 1000 + attempt);
+            const ui64 txId = 9301 + attempt;
+
+            // Ownership + supportive writes stay outside the injection zone so the reboot/pipe
+            // matrix focuses on propose/plan (where Topic tx durability matters).
+            const TString ownerCookie = helper.CreateSupportivePartition(writeId);
+            for (ui32 i = 0; i < txCount; ++i) {
+                helper.WriteToSupportive(
+                    writeId, ownerCookie, /*seqNo=*/i, /*messageNo=*/i,
+                    TStringBuilder() << "topic-tx-reboot-" << attempt << "-" << i,
+                    /*cookie=*/500 + i);
+            }
+            const ui32 supportivePartitionId = helper.WaitSupportivePartitionId(writeId);
+
+            activeZone = true;
+            helper.CommitTopicTransaction(writeId, supportivePartitionId, txId);
+            activeZone = false;
+
+            PQGetPartInfo(0, endBefore + txCount, tc);
+            TVector<i32> expectedOffsets;
+            expectedOffsets.reserve(txCount);
+            for (ui32 i = 0; i < txCount; ++i) {
+                expectedOffsets.push_back(static_cast<i32>(endBefore + i));
+            }
+            CmdRead(/*partition=*/0, /*offset=*/endBefore, /*count=*/txCount, /*size=*/16_MB,
+                    /*resCount=*/txCount, /*timeouted=*/false, tc, expectedOffsets);
+            return;
+        } catch (const TTopicTxInjectionRetry&) {
+            activeZone = false;
+        } catch (const NActors::TSchedulingLimitReachedException&) {
+            activeZone = false;
+        } catch (const NActors::TEmptyEventQueueException&) {
+            activeZone = false;
+        }
+    }
+    UNIT_FAIL("TopicTxWriteAndCommitScenario: retries exhausted");
+}
+
+void RunTopicTxWriteInjectionTest(
+    std::function<void(
+        const TVector<ui64>&,
+        std::function<TTestActorRuntime::TEventFilter()>,
+        std::function<void(const TString&, std::function<void(TTestActorRuntime&)>, bool&)>)> runner)
+{
+    TTestContext tabletIds;
+    const TVector<ui64> rebootTablets{tabletIds.TabletId};
+    runner(
+        rebootTablets,
+        [&]() { return tabletIds.InitialEventsFilter.Prepare(); },
+        [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+            TTestContext tc;
+            TFinalizer finalizer(tc);
+            activeZone = false;
+            tc.Prepare(dispatchName, setup, activeZone);
+            tc.Runtime->SetScheduledLimit(2'000);
+            TopicTxWriteAndCommitScenario(tc, activeZone);
+        });
+}
+
+} // namespace
+
+// Topic API write-tx commit must survive tablet reboots mid-propose/plan.
+Y_UNIT_TEST(TopicTxWriteWithTabletReboots) {
+    RunTopicTxWriteInjectionTest([](const auto& tabletIds, auto filterFactory, auto testFunc) {
+        RunTestWithReboots(tabletIds, filterFactory, testFunc);
+    });
+}
+
+// Same Topic write-tx commit path under pipe client resets.
+Y_UNIT_TEST(TopicTxWriteWithPipeResets) {
+    RunTopicTxWriteInjectionTest([](const auto& tabletIds, auto filterFactory, auto testFunc) {
+        RunTestWithPipeResets(tabletIds, filterFactory, testFunc);
+    });
+}
+
 Y_UNIT_TEST_F(DeferredPublication_Cancel_Successful_Commit, TPQTabletFixture) {
     using TDeferredPublicationApi = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi;
     const TWriteId writeId = NHelpers::MakeDeferredWriteId(43, "ext-43");

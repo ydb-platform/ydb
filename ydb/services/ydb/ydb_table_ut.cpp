@@ -2224,6 +2224,357 @@ R"___(<main>: Error: Transaction not found: , code: 2015
         UNIT_ASSERT_VALUES_EQUAL(lastPart.EOS(), true);
     }
 
+    namespace {
+
+    NKikimrConfig::TAppConfig MakeReadColumnTableAppConfig(bool enable = true) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableReadTableOverColumnTables(enable);
+        return appConfig;
+    }
+
+    TString CollectReadTableYson(TSession& session, const TString& path, const TReadTableSettings& settings = {}) {
+        auto it = session.ReadTable(path, settings).ExtractValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        TStringBuilder out;
+        out << "[";
+        bool first = true;
+        while (true) {
+            TReadTableResultPart streamPart = it.ReadNext().GetValueSync();
+            if (streamPart.EOS()) {
+                break;
+            }
+            UNIT_ASSERT_C(streamPart.IsSuccess(), streamPart.GetIssues().ToString());
+            auto rsParser = TResultSetParser(streamPart.ExtractPart());
+            while (rsParser.TryNextRow()) {
+                if (!first) {
+                    out << ";";
+                }
+                first = false;
+                out << "[";
+                for (size_t c = 0; c < rsParser.ColumnsCount(); ++c) {
+                    if (c) {
+                        out << ";";
+                    }
+                    out << FormatValueYson(rsParser.GetValue(c));
+                }
+                out << "]";
+            }
+        }
+        out << "]";
+        return out;
+    }
+
+    NYdb::TDriver MakeDriver(ui16 grpc) {
+        return NYdb::TDriver(TDriverConfig()
+            .SetEndpoint(TStringBuilder() << "localhost:" << grpc)
+            .SetDatabase("/Root"));
+    }
+
+    } // namespace
+
+    Y_UNIT_TEST(TestReadColumnTableDisabledByFeatureFlag) {
+        TKikimrWithGrpcAndRootSchema server(MakeReadColumnTableAppConfig(false));
+        ui16 grpc = server.GetPort();
+
+        auto connection = MakeDriver(grpc);
+        NYdb::NTable::TTableClient client(connection);
+        auto session = client.CreateSession().ExtractValueSync().GetSession();
+
+        auto result = session.ExecuteSchemeQuery(R"___(
+            CREATE TABLE `/Root/ColumnTable` (
+                Key Uint64 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            )
+            WITH (STORE = COLUMN);
+        )___").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        {
+            TValueBuilder rows;
+            rows.BeginList();
+            rows.AddListItem()
+                .BeginStruct()
+                    .AddMember("Key").Uint64(1)
+                    .AddMember("Value").OptionalString("One")
+                .EndStruct();
+            rows.EndList();
+            auto upsert = client.BulkUpsert("/Root/ColumnTable", rows.Build()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(upsert.GetStatus(), EStatus::SUCCESS, upsert.GetIssues().ToString());
+        }
+
+        auto it = session.ReadTable("/Root/ColumnTable").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(it.GetStatus(), EStatus::SUCCESS);
+        TReadTableResultPart streamPart = it.ReadNext().GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(streamPart.GetStatus(), EStatus::BAD_REQUEST, streamPart.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(streamPart.GetIssues().ToString(), "EnableReadTableOverColumnTables");
+    }
+
+    Y_UNIT_TEST(TestReadColumnTableOneBatch) {
+        TKikimrWithGrpcAndRootSchema server(MakeReadColumnTableAppConfig());
+        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NLog::PRI_DEBUG);
+        ui16 grpc = server.GetPort();
+
+        auto connection = MakeDriver(grpc);
+        NYdb::NTable::TTableClient client(connection);
+        auto session = client.CreateSession().ExtractValueSync().GetSession();
+
+        auto result = session.ExecuteSchemeQuery(R"___(
+            CREATE TABLE `/Root/ColumnTable` (
+                Key Uint64 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            )
+            WITH (STORE = COLUMN);
+        )___").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        {
+            TValueBuilder rows;
+            rows.BeginList();
+            rows.AddListItem()
+                .BeginStruct()
+                    .AddMember("Key").Uint64(1)
+                    .AddMember("Value").OptionalString("One")
+                .EndStruct();
+            rows.AddListItem()
+                .BeginStruct()
+                    .AddMember("Key").Uint64(2)
+                    .AddMember("Value").OptionalString("Two")
+                .EndStruct();
+            rows.EndList();
+            auto upsert = client.BulkUpsert("/Root/ColumnTable", rows.Build()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(upsert.GetStatus(), EStatus::SUCCESS, upsert.GetIssues().ToString());
+        }
+
+        {
+            auto settings = TReadTableSettings().Ordered();
+            auto yson = CollectReadTableYson(session, "/Root/ColumnTable", settings);
+            UNIT_ASSERT_VALUES_EQUAL(yson, "[[[1u];[\"One\"]];[[2u];[\"Two\"]]]");
+        }
+
+        {
+            // Key columns are NOT NULL in column tables, but ReadTable key bounds still use Optional.
+            TValueBuilder valueFrom;
+            valueFrom.BeginTuple()
+                .AddElement()
+                    .OptionalUint64(2)
+                .EndTuple();
+            auto settings = TReadTableSettings()
+                .Ordered()
+                .From(TKeyBound::Inclusive(valueFrom.Build()));
+            auto yson = CollectReadTableYson(session, "/Root/ColumnTable", settings);
+            UNIT_ASSERT_VALUES_EQUAL(yson, "[[[2u];[\"Two\"]]]");
+        }
+    }
+
+    Y_UNIT_TEST(TestReadColumnTableUnordered) {
+        TKikimrWithGrpcAndRootSchema server(MakeReadColumnTableAppConfig());
+        ui16 grpc = server.GetPort();
+
+        auto connection = MakeDriver(grpc);
+        NYdb::NTable::TTableClient client(connection);
+        auto session = client.CreateSession().ExtractValueSync().GetSession();
+
+        auto result = session.ExecuteSchemeQuery(R"___(
+            CREATE TABLE `/Root/ColumnTable` (
+                Key Uint64 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            )
+            WITH (STORE = COLUMN, PARTITION_COUNT = 4);
+        )___").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        {
+            TValueBuilder rows;
+            rows.BeginList();
+            for (ui64 key : {1u, 2u, 3u, 100u, 1000u, 1000000u}) {
+                rows.AddListItem()
+                    .BeginStruct()
+                        .AddMember("Key").Uint64(key)
+                        .AddMember("Value").OptionalString(TStringBuilder() << "v" << key)
+                    .EndStruct();
+            }
+            rows.EndList();
+            auto upsert = client.BulkUpsert("/Root/ColumnTable", rows.Build()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(upsert.GetStatus(), EStatus::SUCCESS, upsert.GetIssues().ToString());
+        }
+
+        auto it = session.ReadTable("/Root/ColumnTable", TReadTableSettings()).ExtractValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        THashSet<ui64> keys;
+        while (true) {
+            TReadTableResultPart streamPart = it.ReadNext().GetValueSync();
+            if (streamPart.EOS()) {
+                break;
+            }
+            UNIT_ASSERT_C(streamPart.IsSuccess(), streamPart.GetIssues().ToString());
+            auto rsParser = TResultSetParser(streamPart.ExtractPart());
+            while (rsParser.TryNextRow()) {
+                rsParser.ColumnParser(0).OpenOptional();
+                keys.insert(rsParser.ColumnParser(0).GetUint64());
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(keys.size(), 6u);
+        for (ui64 key : {1u, 2u, 3u, 100u, 1000u, 1000000u}) {
+            UNIT_ASSERT(keys.contains(key));
+        }
+    }
+
+    Y_UNIT_TEST(TestReadColumnTableMultiShardOrdered) {
+        TKikimrWithGrpcAndRootSchema server(MakeReadColumnTableAppConfig());
+        server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        ui16 grpc = server.GetPort();
+
+        auto connection = MakeDriver(grpc);
+        NYdb::NTable::TTableClient client(connection);
+        auto session = client.CreateSession().ExtractValueSync().GetSession();
+
+        auto result = session.ExecuteSchemeQuery(R"___(
+            CREATE TABLE `/Root/ColumnTable` (
+                Key Uint64 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            )
+            WITH (STORE = COLUMN, PARTITION_COUNT = 4);
+        )___").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        TVector<ui64> keys = {1u, 2u, 3u, 100u, 1000u, 1000000u, 42u, 7u};
+        Sort(keys);
+        {
+            TValueBuilder rows;
+            rows.BeginList();
+            for (ui64 key : keys) {
+                rows.AddListItem()
+                    .BeginStruct()
+                        .AddMember("Key").Uint64(key)
+                        .AddMember("Value").OptionalString(TStringBuilder() << "v" << key)
+                    .EndStruct();
+            }
+            rows.EndList();
+            auto upsert = client.BulkUpsert("/Root/ColumnTable", rows.Build()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(upsert.GetStatus(), EStatus::SUCCESS, upsert.GetIssues().ToString());
+        }
+
+        auto it = session.ReadTable("/Root/ColumnTable", TReadTableSettings().Ordered()).ExtractValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        TVector<ui64> got;
+        while (true) {
+            TReadTableResultPart streamPart = it.ReadNext().GetValueSync();
+            if (streamPart.EOS()) {
+                break;
+            }
+            UNIT_ASSERT_C(streamPart.IsSuccess(), streamPart.GetIssues().ToString());
+            auto rsParser = TResultSetParser(streamPart.ExtractPart());
+            while (rsParser.TryNextRow()) {
+                // Key is NOT NULL for column tables; ReadTable still wraps as optional by default.
+                auto& keyParser = rsParser.ColumnParser(0);
+                if (keyParser.GetKind() == TTypeParser::ETypeKind::Optional) {
+                    keyParser.OpenOptional();
+                }
+                got.push_back(keyParser.GetUint64());
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(got, keys);
+    }
+
+    Y_UNIT_TEST(TestReadColumnTableEmptySnapshot) {
+        TKikimrWithGrpcAndRootSchema server(MakeReadColumnTableAppConfig());
+        ui16 grpc = server.GetPort();
+
+        auto connection = MakeDriver(grpc);
+        NYdb::NTable::TTableClient client(connection);
+        auto session = client.CreateSession().ExtractValueSync().GetSession();
+
+        auto result = session.ExecuteSchemeQuery(R"___(
+            CREATE TABLE `/Root/EmptyColumnTable` (
+                Key Uint64 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            )
+            WITH (STORE = COLUMN);
+        )___").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto it = session.ReadTable("/Root/EmptyColumnTable").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(it.GetStatus(), EStatus::SUCCESS);
+
+        TReadTableResultPart streamPart = it.ReadNext().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(streamPart.IsSuccess(), true, streamPart.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(bool(streamPart.GetSnapshot()), true);
+        UNIT_ASSERT_GT(streamPart.GetSnapshot()->GetStep(), 0u);
+        UNIT_ASSERT_GT(streamPart.GetSnapshot()->GetTxId(), 0u);
+
+        TResultSetParser parser(streamPart.GetPart());
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnsCount(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnIndex("Key"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnIndex("Value"), 1);
+        UNIT_ASSERT(!parser.TryNextRow());
+
+        TReadTableResultPart lastPart = it.ReadNext().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(lastPart.IsSuccess(), false);
+        UNIT_ASSERT_VALUES_EQUAL(lastPart.EOS(), true);
+    }
+
+    Y_UNIT_TEST(TestReadColumnTableRowLimit) {
+        TKikimrWithGrpcAndRootSchema server(MakeReadColumnTableAppConfig());
+        ui16 grpc = server.GetPort();
+
+        auto connection = MakeDriver(grpc);
+        NYdb::NTable::TTableClient client(connection);
+        auto session = client.CreateSession().ExtractValueSync().GetSession();
+
+        auto result = session.ExecuteSchemeQuery(R"___(
+            CREATE TABLE `/Root/ColumnTable` (
+                Key Uint64 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            )
+            WITH (STORE = COLUMN);
+        )___").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        {
+            TValueBuilder rows;
+            rows.BeginList();
+            for (ui64 key = 1; key <= 10; ++key) {
+                rows.AddListItem()
+                    .BeginStruct()
+                        .AddMember("Key").Uint64(key)
+                        .AddMember("Value").OptionalString("x")
+                    .EndStruct();
+            }
+            rows.EndList();
+            auto upsert = client.BulkUpsert("/Root/ColumnTable", rows.Build()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(upsert.GetStatus(), EStatus::SUCCESS, upsert.GetIssues().ToString());
+        }
+
+        auto settings = TReadTableSettings().Ordered().RowLimit(3);
+        auto it = session.ReadTable("/Root/ColumnTable", settings).ExtractValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        ui64 rows = 0;
+        while (true) {
+            TReadTableResultPart streamPart = it.ReadNext().GetValueSync();
+            if (streamPart.EOS()) {
+                break;
+            }
+            UNIT_ASSERT_C(streamPart.IsSuccess(), streamPart.GetIssues().ToString());
+            auto rsParser = TResultSetParser(streamPart.ExtractPart());
+            while (rsParser.TryNextRow()) {
+                ++rows;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(rows, 3u);
+    }
+
     Y_UNIT_TEST(RetryOperationTemplate) {
         TKikimrWithGrpcAndRootSchema server;
         NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));

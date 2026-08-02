@@ -12,6 +12,7 @@ SRCS(
     describe.cpp
     proxy.cpp
     read_table_impl.cpp
+    read_column_table_impl.cpp
     resolvereq.cpp
     rpc_long_tx.cpp
     snapshotreq.cpp
@@ -48,14 +49,23 @@ PEERDIR(
     ydb/core/tx
     ydb/core/tx/balance_coverage
     ydb/core/tx/datashard
+    ydb/core/tx/long_tx_service/public
     ydb/core/tx/scheme_cache
     ydb/core/tx/schemeshard
     ydb/core/tx/tx_allocator
     ydb/core/tx/tx_allocator_client
     ydb/library/aclib
+    ydb/library/formats/arrow
     ydb/library/login
     ydb/library/mkql_proto/protos
     ydb/public/lib/base
+)
+
+# Headers-only deps for column ReadTable (TEvKqpScan stream events + KQP types).
+# Avoid PEERDIR on kqp/* here: it forms a configure dependency loop with tx_proxy.
+ADDINCL(
+    ydb/core/kqp/common
+    ydb/core/kqp/compute_actor
 )
 
 YQL_LAST_ABI_VERSION()

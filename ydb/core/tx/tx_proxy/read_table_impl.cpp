@@ -1,4 +1,5 @@
 #include "read_table_impl.h"
+#include "read_column_table.h"
 #include "proxy.h"
 
 #include <ydb/core/tx/datashard/datashard.h>
@@ -592,6 +593,7 @@ private:
         TableId = res.TableId;
         DomainInfo = res.DomainInfo;
         Y_ABORT_UNLESS(DomainInfo, "Missing DomainInfo in TEvNavigateKeySetResult");
+        IsColumnTable = (res.Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable);
 
         if ((TableId.IsSystemView() || res.Kind == NSchemeCache::TSchemeCacheNavigate::KindSysView) ||
             TSysTables::IsSystemTable(TableId))
@@ -809,6 +811,33 @@ private:
             TString error = TStringBuilder() << "No partitions to read from '" << Settings.TablePath << "'";
             TXLOG_E(error);
             return ReplyAndDie(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest, NKikimrIssues::TStatusIds::BAD_REQUEST, ctx);
+        }
+
+        if (IsColumnTable) {
+            if (!AppData(ctx)->FeatureFlags.GetEnableReadTableOverColumnTables()) {
+                TString error = TStringBuilder()
+                    << "ReadTable over column table '" << Settings.TablePath
+                    << "' is disabled by feature flag EnableReadTableOverColumnTables";
+                TXLOG_E(error);
+                IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, error));
+                return ReplyAndDie(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest,
+                    NKikimrIssues::TStatusIds::BAD_REQUEST, ctx);
+            }
+
+            TXLOG_N("Switching to column table ReadTable path for '" << Settings.TablePath << "'");
+            TReadColumnTableParams columnParams;
+            columnParams.Settings = Settings;
+            columnParams.TxId = TxId;
+            columnParams.Services = Services;
+            columnParams.TxProxyMon = TxProxyMon;
+            columnParams.TableId = TableId;
+            columnParams.Columns = Columns;
+            columnParams.KeyDesc = std::move(KeyDesc);
+            columnParams.DomainInfo = DomainInfo;
+            columnParams.Parent = SelfId();
+            ColumnChild = ctx.Register(CreateReadColumnTableWorker(std::move(columnParams)));
+            Become(&TThis::StateDelegateToColumn);
+            return;
         }
 
         SelectedCoordinator = SelectCoordinator(*request, TxId);
@@ -2790,6 +2819,29 @@ private:
         ProcessQuotaRequests(ctx);
     }
 
+    STFUNC(StateDelegateToColumn) {
+        TRACE_EVENT(NKikimrServices::TX_PROXY)
+        switch (ev->GetTypeRewrite()) {
+            CFunc(TEvents::TSystem::PoisonPill, HandlePoisonDelegateToColumn);
+            CFunc(TEvents::TSystem::Wakeup, HandleColumnChildDone);
+            default:
+                break;
+        }
+    }
+
+    void HandlePoisonDelegateToColumn(const TActorContext& ctx) {
+        if (ColumnChild) {
+            Send(ColumnChild, new TEvents::TEvPoisonPill);
+            ColumnChild = {};
+        }
+        Die(ctx);
+    }
+
+    void HandleColumnChildDone(const TActorContext& ctx) {
+        ColumnChild = {};
+        Die(ctx);
+    }
+
     STFUNC(StateZombie) {
         TRACE_EVENT(NKikimrServices::TX_PROXY)
         switch (ev->GetTypeRewrite()) {
@@ -3031,6 +3083,8 @@ private:
     bool ResolveShardsScheduled = false;
 
     bool SentResultSet = false;
+    bool IsColumnTable = false;
+    TActorId ColumnChild;
 
     ui64 RemainingRows = Max<ui64>();
 

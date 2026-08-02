@@ -249,6 +249,13 @@ private:
                 NYql::IssueToMessage(issue, tmp);
                 return ReplyFinishStream(Ydb::StatusIds::TIMEOUT, issueMessage, ctx);
             }
+            case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest: {
+                TStringStream str = "Got WrongRequest response from TxProxy";
+                const NYql::TIssue& issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, str);
+                auto tmp = issueMessage.Add();
+                NYql::IssueToMessage(issue, tmp);
+                return ReplyFinishStream(Ydb::StatusIds::BAD_REQUEST, issueMessage, ctx);
+            }
             default: {
                 TStringStream str;
                 str << "Got unknown TEvProposeTransactionStatus (" << status << ") response from TxProxy";

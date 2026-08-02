@@ -360,4 +360,6 @@ message TFeatureFlags {
     optional bool EnableKafkaServerlessTransactions = 307 [default = false];
     optional bool EnableGeneratedStored = 308 [default = false];
     optional bool EnableGeneratedVirtual = 309 [default = false];
+    // Enables StreamReadTable / ydb tools dump over column (OLAP) tables via TEvKqpScan.
+    optional bool EnableReadTableOverColumnTables = 310 [default = false];
 }

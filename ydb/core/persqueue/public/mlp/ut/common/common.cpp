@@ -78,6 +78,36 @@ std::shared_ptr<TMlpPipeSetup> CreatePipeSetup() {
     return setup;
 }
 
+void WriteViaMlp(std::shared_ptr<TMlpPipeSetup>& setup, const TString& topic, const TString& body) {
+    auto& runtime = setup->GetRuntime();
+    CreateWriterActor(runtime, {
+        .DatabasePath = "/Root",
+        .TopicName = topic,
+        .Messages = {
+            {
+                .Index = 0,
+                .MessageBody = body,
+            }
+        }
+    });
+    // Longer timeout: under UseRealThreads=false MLP consumer may flood the mailbox.
+    auto response = GetWriteResponse(runtime, TDuration::Seconds(30));
+    UNIT_ASSERT(response);
+    UNIT_ASSERT_VALUES_EQUAL(response->DescribeStatus, NDescriber::EStatus::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Status, Ydb::StatusIds::SUCCESS);
+}
+
+ui64 GetTabletId(std::shared_ptr<TMlpPipeSetup>& setup, const TString& database, const TString& topic,
+    ui32 partitionId)
+{
+    CreateDescriberActor(setup->GetRuntime(), database, topic);
+    auto result = GetDescriberResponse(setup->GetRuntime(), TDuration::Seconds(30));
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_VALUES_EQUAL(result->Topics[topic].Status, NDescriber::EStatus::SUCCESS);
+    return result->Topics[topic].Info->PartitionGraph->GetPartition(partitionId)->TabletId;
+}
+
 TStatus CreatePipeTopic(std::shared_ptr<TMlpPipeSetup>& setup, const TString& topicName,
     const TString& consumerName, size_t partitionCount)
 {
@@ -388,7 +418,8 @@ void ModifyTopicAcl(TTopicSdkTestSetup& setup, const TString& topicName, const N
 TPipeBreakGuard::TPipeBreakGuard(
     NActors::TTestActorRuntime& runtime,
     std::unordered_set<ui32> innerEventTypes,
-    size_t maxBreaks)
+    size_t maxBreaks,
+    std::optional<ui64> onlyTabletId)
     : Broken_(std::make_shared<std::atomic<size_t>>(0))
 {
     auto broken = Broken_;
@@ -396,11 +427,15 @@ TPipeBreakGuard::TPipeBreakGuard(
     auto* rt = &runtime;
 
     Observer_ = runtime.AddObserver<TEvPipeCache::TEvForward>(
-        [rt, broken, types, maxBreaks](TEvPipeCache::TEvForward::TPtr& ev) {
+        [rt, broken, types, maxBreaks, onlyTabletId](TEvPipeCache::TEvForward::TPtr& ev) {
             if (!ev || !ev->Get()->Ev) {
                 return;
             }
             if (!types->contains(ev->Get()->Ev->Type())) {
+                return;
+            }
+            const ui64 tabletId = ev->Get()->TabletId;
+            if (onlyTabletId && tabletId != *onlyTabletId) {
                 return;
             }
             if (broken->load() >= maxBreaks) {
@@ -408,7 +443,6 @@ TPipeBreakGuard::TPipeBreakGuard(
             }
 
             broken->fetch_add(1);
-            const ui64 tabletId = ev->Get()->TabletId;
             const ui64 subscribeCookie = ev->Get()->Options.SubscribeCookie;
 
             rt->Send(new IEventHandle(

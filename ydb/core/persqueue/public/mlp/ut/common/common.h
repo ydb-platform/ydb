@@ -16,6 +16,7 @@
 #include <util/thread/pool.h>
 
 #include <atomic>
+#include <optional>
 #include <unordered_set>
 
 namespace NKikimr::NPQ::NMLP {
@@ -65,6 +66,12 @@ auto RunWithDispatch(NActors::TTestActorRuntime& runtime, TFunc&& func) {
 TStatus CreatePipeTopic(std::shared_ptr<TMlpPipeSetup>& setup, const TString& topicName,
     const TString& consumerName, size_t partitionCount = 1);
 
+// Write a single message via MLP writer under UseRealThreads=false.
+void WriteViaMlp(std::shared_ptr<TMlpPipeSetup>& setup, const TString& topic, const TString& body);
+
+ui64 GetTabletId(std::shared_ptr<TMlpPipeSetup>& setup, const TString& database, const TString& topic,
+    ui32 partitionId = 0);
+
 void ExecuteDDL(TTopicSdkTestSetup& setup, const TString& query);
 TStatus CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& topicName,
     NYdb::NTopic::TCreateTopicSettings& settings);
@@ -111,12 +118,14 @@ void ModifyTopicAcl(TTopicSdkTestSetup& setup, const TString& topicName, const N
 
 // Drops TEvPipeCache::TEvForward wrapping selected inner event types and injects
 // TEvDeliveryProblem to the forward sender. Requires UseRealThreads=false.
+// If tabletId is set, only forwards to that tablet are broken.
 class TPipeBreakGuard {
 public:
     TPipeBreakGuard(
         NActors::TTestActorRuntime& runtime,
         std::unordered_set<ui32> innerEventTypes,
-        size_t maxBreaks = Max<size_t>());
+        size_t maxBreaks = Max<size_t>(),
+        std::optional<ui64> tabletId = std::nullopt);
 
     size_t BrokenCount() const;
 

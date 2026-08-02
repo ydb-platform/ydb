@@ -3,30 +3,6 @@
 
 namespace NKikimr::NPQ::NMLP {
 
-namespace {
-
-void WriteViaMlp(std::shared_ptr<TMlpPipeSetup>& setup, const TString& topic, const TString& body) {
-    auto& runtime = setup->GetRuntime();
-    CreateWriterActor(runtime, {
-        .DatabasePath = "/Root",
-        .TopicName = topic,
-        .Messages = {
-            {
-                .Index = 0,
-                .MessageBody = body,
-            }
-        }
-    });
-    // Longer timeout: under UseRealThreads=false MLP consumer may flood the mailbox.
-    auto response = GetWriteResponse(runtime, TDuration::Seconds(30));
-    UNIT_ASSERT(response);
-    UNIT_ASSERT_VALUES_EQUAL(response->DescribeStatus, NDescriber::EStatus::SUCCESS);
-    UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Status, Ydb::StatusIds::SUCCESS);
-}
-
-} // namespace
-
 Y_UNIT_TEST_SUITE(TMLPPipeBreakTests) {
 
 Y_UNIT_TEST(WriterPipeBreakReturnsInternalError) {

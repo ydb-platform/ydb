@@ -3,9 +3,10 @@
 namespace NKikimr::NPQ::NMLP {
 
 
-std::shared_ptr<TTopicSdkTestSetup> CreateSetup() {
-    auto setup = std::make_shared<TTopicSdkTestSetup>("TODO");
-    setup->GetServer().EnableLogs({
+namespace {
+
+void EnableMlpLogs(TTopicSdkTestSetup& setup) {
+    setup.GetServer().EnableLogs({
             NKikimrServices::PQ_MLP_READER,
             NKikimrServices::PQ_MLP_WRITER,
             NKikimrServices::PQ_MLP_COMMITTER,
@@ -19,7 +20,7 @@ std::shared_ptr<TTopicSdkTestSetup> CreateSetup() {
         },
         NActors::NLog::PRI_DEBUG
     );
-    setup->GetServer().EnableLogs({
+    setup.GetServer().EnableLogs({
             NKikimrServices::PERSQUEUE,
             NKikimrServices::PERSQUEUE_READ_BALANCER,
             NKikimrServices::PQ_WRITE_PROXY
@@ -27,10 +28,89 @@ std::shared_ptr<TTopicSdkTestSetup> CreateSetup() {
         NActors::NLog::PRI_INFO
     );
 
-    setup->GetRuntime().GetAppData().PQConfig.SetBalancerWakeupIntervalSec(1);
-    setup->GetRuntime().GetAppData().PQConfig.SetBalancerStatsWakeupIntervalSec(1);
+    setup.GetRuntime().GetAppData().PQConfig.SetBalancerWakeupIntervalSec(1);
+    setup.GetRuntime().GetAppData().PQConfig.SetBalancerStatsWakeupIntervalSec(1);
+}
 
+} // namespace
+
+std::shared_ptr<TTopicSdkTestSetup> CreateSetup() {
+    auto setup = std::make_shared<TTopicSdkTestSetup>("TODO");
+    EnableMlpLogs(*setup);
     return setup;
+}
+
+std::shared_ptr<TMlpPipeSetup> CreatePipeSetup() {
+    auto settings = TTopicSdkTestSetup::MakeServerSettings();
+    settings.SetUseRealThreads(false);
+
+    auto setup = std::make_shared<TMlpPipeSetup>();
+    setup->Server = std::make_unique<TTestServer>(settings, /*start=*/false);
+    setup->Server->StartServer(/*doClientInit=*/false, TString("/Root"));
+
+    auto& runtime = setup->GetRuntime();
+    runtime.SetLogPriority(NKikimrServices::PQ_MLP_READER, NActors::NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::PQ_MLP_WRITER, NActors::NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::PQ_MLP_COMMITTER, NActors::NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::PQ_MLP_UNLOCKER, NActors::NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::PQ_MLP_DEADLINER, NActors::NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::PQ_MLP_PURGER, NActors::NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::PQ_MLP_CONSUMER, NActors::NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::PQ_MLP_ENRICHER, NActors::NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::PQ_MLP_DLQ_MOVER, NActors::NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::PQ_MLP_DESCRIBER, NActors::NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_INFO);
+    runtime.SetLogPriority(NKikimrServices::PERSQUEUE_READ_BALANCER, NActors::NLog::PRI_INFO);
+    runtime.SetLogPriority(NKikimrServices::PQ_WRITE_PROXY, NActors::NLog::PRI_INFO);
+    runtime.GetAppData().PQConfig.SetBalancerWakeupIntervalSec(1);
+    runtime.GetAppData().PQConfig.SetBalancerStatsWakeupIntervalSec(1);
+
+    // Simulated time starts at 0; sync to wall clock so MLP retention (Now - retention)
+    // does not treat fresh messages as already expired.
+    runtime.UpdateCurrentTime(TInstant::Now());
+
+    // FFC topics do not need PQ config tables / cluster tracker (much faster under fake threads).
+    setup->Server->AnnoyingClient->SetNoConfigMode();
+    RunWithDispatch(runtime, [&] {
+        setup->Server->AnnoyingClient->FullInit();
+        return true;
+    });
+    return setup;
+}
+
+TStatus CreatePipeTopic(std::shared_ptr<TMlpPipeSetup>& setup, const TString& topicName,
+    const TString& consumerName, size_t partitionCount)
+{
+    auto& runtime = setup->GetRuntime();
+    auto config = setup->MakeDriverConfig();
+    // Required for SDK calls under UseRealThreads=false.
+    config.SetDiscoveryMode(EDiscoveryMode::Async);
+
+    return RunWithDispatch(runtime, [&] {
+        auto driver = TDriver(config);
+        auto client = TTopicClient(driver);
+        auto result = client.CreateTopic(topicName, NYdb::NTopic::TCreateTopicSettings()
+            .BeginConfigurePartitioningSettings()
+                .MinActivePartitions(partitionCount)
+                .MaxActivePartitions(128)
+                .BeginConfigureAutoPartitioningSettings()
+                    .Strategy(EAutoPartitioningStrategy::Disabled)
+                .EndConfigureAutoPartitioningSettings()
+            .EndConfigurePartitioningSettings()
+            .BeginAddSharedConsumer(consumerName)
+                .KeepMessagesOrder(false)
+                .BeginDeadLetterPolicy()
+                    .Enable()
+                    .BeginCondition()
+                        .MaxProcessingAttempts(10)
+                    .EndCondition()
+                    .DeleteAction()
+                .EndDeadLetterPolicy()
+            .EndAddConsumer()
+        ).GetValueSync();
+        driver.Stop(true);
+        return result;
+    });
 }
 
 void ExecuteDDL(TTopicSdkTestSetup& setup, const TString& query) {
@@ -92,76 +172,69 @@ TStatus AlterTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& to
     return result;
 }
 
-TActorId CreateReaderActor(NActors::TTestActorRuntime& runtime, TReaderSettings&& settings) {
-    auto edgeId = runtime.AllocateEdgeActor();
-    auto readerId = runtime.Register(CreateReader(edgeId, std::move(settings)));
-    runtime.EnableScheduleForActor(readerId);
-    runtime.DispatchEvents();
+namespace {
 
-    return readerId;
-}
-
-TActorId CreateWriterActor(NActors::TTestActorRuntime& runtime, TWriterSettings&& settings) {
+template <typename TCreateActor>
+TActorId RegisterMlpActor(NActors::TTestActorRuntime& runtime, TCreateActor&& createActor) {
     auto edgeId = runtime.AllocateEdgeActor();
-    auto actorId = runtime.Register(CreateWriter(edgeId, std::move(settings)));
+    auto actorId = runtime.Register(createActor(edgeId));
     runtime.EnableScheduleForActor(actorId);
-    runtime.DispatchEvents();
-
+    // With UseRealThreads=false an idle MLP consumer can keep the mailbox non-empty;
+    // unbounded DispatchEvents then hits the event limit. GrabEdgeEvent drives the run.
+    if (runtime.IsRealThreads()) {
+        runtime.DispatchEvents();
+    }
     return actorId;
 }
 
-TActorId CreateCommitterActor(NActors::TTestActorRuntime& runtime, TCommitterSettings&& settings) {
-    auto edgeId = runtime.AllocateEdgeActor();
-    auto readerId = runtime.Register(CreateCommitter(edgeId, std::move(settings)));
-    runtime.EnableScheduleForActor(readerId);
-    runtime.DispatchEvents();
+} // namespace
 
-    return readerId;
+TActorId CreateReaderActor(NActors::TTestActorRuntime& runtime, TReaderSettings&& settings) {
+    return RegisterMlpActor(runtime, [&](const TActorId& edgeId) {
+        return CreateReader(edgeId, std::move(settings));
+    });
+}
+
+TActorId CreateWriterActor(NActors::TTestActorRuntime& runtime, TWriterSettings&& settings) {
+    return RegisterMlpActor(runtime, [&](const TActorId& edgeId) {
+        return CreateWriter(edgeId, std::move(settings));
+    });
+}
+
+TActorId CreateCommitterActor(NActors::TTestActorRuntime& runtime, TCommitterSettings&& settings) {
+    return RegisterMlpActor(runtime, [&](const TActorId& edgeId) {
+        return CreateCommitter(edgeId, std::move(settings));
+    });
 }
 
 TActorId CreateUnlockerActor(NActors::TTestActorRuntime& runtime, TUnlockerSettings&& settings) {
-    auto edgeId = runtime.AllocateEdgeActor();
-    auto readerId = runtime.Register(CreateUnlocker(edgeId, std::move(settings)));
-    runtime.EnableScheduleForActor(readerId);
-    runtime.DispatchEvents();
-
-    return readerId;
+    return RegisterMlpActor(runtime, [&](const TActorId& edgeId) {
+        return CreateUnlocker(edgeId, std::move(settings));
+    });
 }
 
 TActorId CreateMessageDeadlineChangerActor(NActors::TTestActorRuntime& runtime, TMessageDeadlineChangerSettings&& settings) {
-    auto edgeId = runtime.AllocateEdgeActor();
-    auto readerId = runtime.Register(CreateMessageDeadlineChanger(edgeId, std::move(settings)));
-    runtime.EnableScheduleForActor(readerId);
-    runtime.DispatchEvents();
-
-    return readerId;
+    return RegisterMlpActor(runtime, [&](const TActorId& edgeId) {
+        return CreateMessageDeadlineChanger(edgeId, std::move(settings));
+    });
 }
 
 TActorId CreatePurgerActor(NActors::TTestActorRuntime& runtime, TPurgerSettings&& settings) {
-    auto edgeId = runtime.AllocateEdgeActor();
-    auto readerId = runtime.Register(CreatePurger(edgeId, std::move(settings)));
-    runtime.EnableScheduleForActor(readerId);
-    runtime.DispatchEvents();
-
-    return readerId;
+    return RegisterMlpActor(runtime, [&](const TActorId& edgeId) {
+        return CreatePurger(edgeId, std::move(settings));
+    });
 }
 
 TActorId CreateDescriberActor(NActors::TTestActorRuntime& runtime, TDescribeSettings&& settings) {
-    auto edgeId = runtime.AllocateEdgeActor();
-    auto readerId = runtime.Register(CreateDescriber(edgeId, std::move(settings)));
-    runtime.EnableScheduleForActor(readerId);
-    runtime.DispatchEvents();
-
-    return readerId;
+    return RegisterMlpActor(runtime, [&](const TActorId& edgeId) {
+        return CreateDescriber(edgeId, std::move(settings));
+    });
 }
 
 TActorId CreateDescriberActor(NActors::TTestActorRuntime& runtime, const TString& databasePath, const TString& topicPath) {
-    auto edgeId = runtime.AllocateEdgeActor();
-    auto readerId = runtime.Register(NDescriber::CreateDescriberActor(edgeId, databasePath, {topicPath}));
-    runtime.EnableScheduleForActor(readerId);
-    runtime.DispatchEvents();
-
-    return readerId;
+    return RegisterMlpActor(runtime, [&](const TActorId& edgeId) {
+        return NDescriber::CreateDescriberActor(edgeId, databasePath, {topicPath});
+    });
 }
 
 THolder<TEvPQ::TEvMLPReadResponse> WaitResult(NActors::TTestActorRuntime& runtime) {
@@ -306,6 +379,50 @@ void ReloadPQRBTablet(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString&
     auto tabletId = GetPQRBTabletId(setup, database, topic);
     ForwardToTablet(runtime, tabletId, runtime.AllocateEdgeActor(), new TEvents::TEvPoison());
     Sleep(TDuration::Seconds(1));
+}
+
+void ModifyTopicAcl(TTopicSdkTestSetup& setup, const TString& topicName, const NACLib::TDiffACL& acl) {
+    setup.GetServer().AnnoyingClient->ModifyACL("/Root", topicName, acl.SerializeAsString());
+}
+
+TPipeBreakGuard::TPipeBreakGuard(
+    NActors::TTestActorRuntime& runtime,
+    std::unordered_set<ui32> innerEventTypes,
+    size_t maxBreaks)
+    : Broken_(std::make_shared<std::atomic<size_t>>(0))
+{
+    auto broken = Broken_;
+    auto types = std::make_shared<std::unordered_set<ui32>>(std::move(innerEventTypes));
+    auto* rt = &runtime;
+
+    Observer_ = runtime.AddObserver<TEvPipeCache::TEvForward>(
+        [rt, broken, types, maxBreaks](TEvPipeCache::TEvForward::TPtr& ev) {
+            if (!ev || !ev->Get()->Ev) {
+                return;
+            }
+            if (!types->contains(ev->Get()->Ev->Type())) {
+                return;
+            }
+            if (broken->load() >= maxBreaks) {
+                return;
+            }
+
+            broken->fetch_add(1);
+            const ui64 tabletId = ev->Get()->TabletId;
+            const ui64 subscribeCookie = ev->Get()->Options.SubscribeCookie;
+
+            rt->Send(new IEventHandle(
+                ev->Sender,
+                ev->Recipient,
+                new TEvPipeCache::TEvDeliveryProblem(tabletId, true /*notDelivered*/),
+                0,
+                subscribeCookie));
+            ev.Reset();
+        });
+}
+
+size_t TPipeBreakGuard::BrokenCount() const {
+    return Broken_->load();
 }
 
 }

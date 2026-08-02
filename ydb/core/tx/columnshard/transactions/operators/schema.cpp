@@ -174,6 +174,33 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
         case NKikimrTxColumnShard::TSchemaTxBody::kAlterStore:
         case NKikimrTxColumnShard::TSchemaTxBody::kDropTable:
             break;
+        case NKikimrTxColumnShard::TSchemaTxBody::kTruncateTable: {
+            // TRUNCATE is only supported for standalone column tables. Tables that belong to a column
+            // store are not supported yet (see the matching rejection in the SchemeShard operation).
+            if (owner.TablesManager.IsStoreTablet()) {
+                return TProposeResult(
+                    NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "TRUNCATE is not supported for tables in a column store");
+            }
+            const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(SchemaTxBody.GetTruncateTable());
+            if (const auto internalPathId = owner.TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false)) {
+                if (owner.TablesManager.HasTable(*internalPathId) &&
+                    owner.TablesManager.GetTable(*internalPathId).IsReadOnly(schemeShardLocalPathId)) {
+                    return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR,
+                        TStringBuilder() << "Cannot truncate read-only table " << schemeShardLocalPathId);
+                }
+            }
+            // Fence the path like MoveTablePropose: new EvWrites and CommitWriteLock fail with
+            // "unknown table" until plan applies the generation swap. Without this, a write that
+            // resolved the old InternalPathId before PREPARED could commit into PathsToDrop.
+            if (owner.TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false)) {
+                owner.TablesManager.TruncateTablePropose(schemeShardLocalPathId);
+            }
+            auto txIdsToWait = owner.GetProgressTxController().GetTxs();   //TODO #8650 Get transactions for truncated pathId only
+            if (!txIdsToWait.empty()) {
+                AFL_VERIFY(!txIdsToWait.contains(GetTxId()))("tx_id", GetTxId())("tx_ids", JoinSeq(",", txIdsToWait));
+                WaitOnPropose = std::make_shared<TWaitTxs>(GetTxId(), std::move(txIdsToWait));
+            }
+        } break;
         case NKikimrTxColumnShard::TSchemaTxBody::kMoveTable: {
             const auto srcSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetMoveTable().GetSrcPathId());
             const auto dstSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetMoveTable().GetDstPathId());
@@ -317,6 +344,27 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
         case NKikimrTxColumnShard::TSchemaTxBody::kAlterStore:
         case NKikimrTxColumnShard::TSchemaTxBody::kDropTable:
             break;
+        case NKikimrTxColumnShard::TSchemaTxBody::kTruncateTable: {
+            if (owner.TablesManager.IsStoreTablet()) {
+                break;
+            }
+            const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(SchemaTxBody.GetTruncateTable());
+            // After restart TruncatingLocalToInternal is empty and SchemeShardLocalToInternal is
+            // rebuilt from DB. Re-fence the path (same as MoveTablePropose replay) so writes stay
+            // blocked while TRUNCATE is still pending.
+            if (const auto internalPathId = owner.TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false)) {
+                if (owner.TablesManager.HasTable(*internalPathId) &&
+                    owner.TablesManager.GetTable(*internalPathId).IsReadOnly(schemeShardLocalPathId)) {
+                    break;
+                }
+                owner.TablesManager.TruncateTablePropose(schemeShardLocalPathId);
+            }
+            auto txIdsToWait = owner.GetProgressTxController().GetTxs();
+            AFL_VERIFY(txIdsToWait.erase(GetTxId()));
+            if (!txIdsToWait.empty()) {
+                WaitOnPropose = std::make_shared<TWaitTxs>(GetTxId(), std::move(txIdsToWait));
+            }
+        } break;
         case NKikimrTxColumnShard::TSchemaTxBody::kMoveTable: {
             const auto srcSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetMoveTable().GetSrcPathId());
             const auto dstSchemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetMoveTable().GetDstPathId());

@@ -415,6 +415,16 @@ struct TTestSchema {
         return out;
     }
 
+    static TString TruncateTableTxBody(ui64 pathId, ui32 version) {
+        NKikimrTxColumnShard::TSchemaTxBody tx;
+        NColumnShard::TSchemeShardLocalPathId::FromRawValue(pathId).ToProto(*tx.MutableTruncateTable());
+        tx.MutableSeqNo()->SetRound(version);
+
+        TString out;
+        Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&out);
+        return out;
+    }
+
     static THashMap<TString, NColumnShard::NTiers::TTierConfig> BuildSnapshot(const TTableSpecials& specials);
 
     static TString CommitTxBody(ui64, const std::vector<ui64>& writeIds) {
@@ -494,6 +504,10 @@ inline void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, TPlanStep p
     TSet<ui64> ids;
     ids.insert(txId);
     PlanCommit(runtime, sender, planStep, ids);
+}
+
+inline void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, const NOlap::TSnapshot& snapshot) {
+    PlanCommit(runtime, sender, TPlanStep{snapshot.GetPlanStep()}, snapshot.GetTxId());
 }
 
 void Wakeup(TTestBasicRuntime& runtime, const TActorId& sender, const ui64 shardId);
@@ -651,6 +665,13 @@ struct TestTableDescription {
 
 [[nodiscard]] NTxUT::TPlanStep PrepareTablet(
     TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema, const ui32 keySize = 1);
+
+// Same as PrepareTablet, but creates a standalone (inline-schema) column table rather than an
+// in-store one. TRUNCATE is only supported for standalone tables, so its tests use this helper.
+[[nodiscard]] NTxUT::TPlanStep PrepareStandaloneTablet(
+    TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema, const ui32 keySize = 1);
+
+[[nodiscard]] NTxUT::TPlanStep PrepareTablet(TTestBasicRuntime& runtime, const TString& schemaTxBody);
 
 std::shared_ptr<arrow::RecordBatch> ReadAllAsBatch(
     TTestBasicRuntime& runtime, const ui64 tableId, const NOlap::TSnapshot& snapshot, const std::vector<NArrow::NTest::TTestColumn>& schema);

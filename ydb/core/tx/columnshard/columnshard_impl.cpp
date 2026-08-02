@@ -277,6 +277,10 @@ void TColumnShard::RunSchemaTx(
             RunDropTable(body.GetDropTable(), version, txc);
             return;
         }
+        case NKikimrTxColumnShard::TSchemaTxBody::kTruncateTable: {
+            RunTruncateTable(body.GetTruncateTable(), version, txc);
+            return;
+        }
         case NKikimrTxColumnShard::TSchemaTxBody::kAlterStore: {
             RunAlterStore(body.GetAlterStore(), version, txc);
             return;
@@ -431,6 +435,65 @@ void TColumnShard::RunDropTable(
 
     LOG_S_DEBUG("DropTable for pathId: " << pathId << " at tablet " << TabletID());
     TablesManager.DropTable(schemeShardLocalPathId, *internalPathId, version, db);
+}
+
+void TColumnShard::RunTruncateTable(
+    const NKikimrTxColumnShard::TTruncateTable& truncateProto, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) {
+    NIceDb::TNiceDb db(txc.DB);
+
+    const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(truncateProto);
+    // Prefer the propose-time fence (TruncatingLocalToInternal): ResolveInternalPathId is empty
+    // after TruncateTablePropose, by design. Fall back to Resolve for defensive coverage.
+    std::optional<TInternalPathId> oldInternalPathId = TablesManager.GetTruncatingInternalPathId(schemeShardLocalPathId);
+    if (!oldInternalPathId) {
+        oldInternalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false);
+    }
+
+    if (!oldInternalPathId) {
+        LOG_S_DEBUG("TruncateTable for unknown or deleted scheme shard pathId: " << schemeShardLocalPathId << " at tablet " << TabletID());
+        return;
+    }
+
+    const auto& pathId = TUnifiedPathId::BuildValid(*oldInternalPathId, schemeShardLocalPathId);
+    if (!TablesManager.HasTable(*oldInternalPathId)) {
+        LOG_S_DEBUG("TruncateTable for unknown or deleted pathId: " << pathId << " at tablet " << TabletID());
+        return;
+    }
+
+    LOG_S_DEBUG("TruncateTable for pathId: " << pathId << " at tablet " << TabletID());
+
+    // Capture the TTL/lifecycle settings of the table being truncated BEFORE TruncateTable() drops it,
+    // so the freshly generated internal path id inherits the same TTL and tiering configuration.
+    const auto ttlSettings = TablesManager.GetTableTtlProto(*oldInternalPathId, version);
+
+    const auto newInternalPathId = TablesManager.TruncateTable(schemeShardLocalPathId, *oldInternalPathId, version, db);
+
+    NKikimrTxColumnShard::TTableVersionInfo tableVerProto;
+    newInternalPathId.ToProto(tableVerProto);
+    // TRUNCATE is only allowed for standalone column tables (in-store tables are rejected on propose),
+    // so the tablet carries at most a single schema preset (the id-0 placeholder). Reuse it for the
+    // freshly generated internal path id.
+    const auto& schemaPresets = TablesManager.GetSchemaPresets();
+    AFL_VERIFY(schemaPresets.size() <= 1)("presets", schemaPresets.size());
+    if (!schemaPresets.empty()) {
+        tableVerProto.SetSchemaPresetId(*schemaPresets.begin());
+    }
+
+    if (ttlSettings) {
+        *tableVerProto.MutableTtlSettings() = *ttlSettings;
+        THashSet<NTiers::TExternalStorageId> usedTiers;
+        if (ttlSettings->HasEnabled()) {
+            usedTiers = NOlap::TTiering::GetUsedTiers(ttlSettings->GetEnabled());
+        }
+        if (!usedTiers.empty()) {
+            ActivateTiering(newInternalPathId, usedTiers);
+        }
+    }
+
+    TablesManager.AddTableVersion(newInternalPathId, version, tableVerProto, std::nullopt, db);
+
+    Counters.GetTabletCounters()->SetCounter(COUNTER_TABLES, TablesManager.GetTables().size());
+    Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_TTLS, TablesManager.GetTtl().size());
 }
 
 void TColumnShard::RunMoveTable(

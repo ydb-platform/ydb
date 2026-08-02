@@ -205,13 +205,28 @@ class Workload(unittest.TestCase):
         assert source_process.returncode == 0
 
         print("-----------------")
-        source_count = self.wait_topic_message_count(self.test_topic_path, SOURCE_MESSAGE_COUNT, timeout=60)
-        print(f"Source topic has {source_count} messages")
-        print(f"Waiting up to {self.duration} sec for target topics")
+        expected_source_count = SOURCE_MESSAGE_COUNT if self.source_writer == "kafka" else None
+        messages_info_test = self.read_messages(
+            self.test_topic_path,
+            checkerConsumer,
+            expected_count=expected_source_count,
+            timeout=60,
+        )
+        source_count = self.count_messages(messages_info_test)
+        print(f"Source topic has {source_count} readable messages")
+        print(f"Waiting up to {self.duration} sec for readable target topic messages")
         deadline = time.time() + self.duration
+        messages_info_targets = []
         for i in range(len(testOptions)):
             remaining = max(1, deadline - time.time())
-            self.wait_topic_message_count(f"{self.target_topic_path}-{i}", source_count, timeout=remaining)
+            messages_info_targets.append(
+                self.read_messages(
+                    f"{self.target_topic_path}-{i}",
+                    f"{checkerConsumer}-{i}",
+                    expected_count=source_count,
+                    timeout=remaining,
+                )
+            )
 
         print("Killing processes")
         for process in processes:
@@ -225,10 +240,9 @@ class Workload(unittest.TestCase):
 
         topic_description = self.driver.topic_client.describe_topic(self.test_topic_path, include_stats=True)
         print(topic_description)
-        messages_info_test = self.read_messages(self.test_topic_path, checkerConsumer)
 
         for i in range(len(testOptions)):
-            messages_info_target = self.read_messages(f"{self.target_topic_path}-{i}", f"{checkerConsumer}-{i}")
+            messages_info_target = messages_info_targets[i]
             totalMessCountTest = 0
             totalMessCountTarget = 0
             for partitionNum in messages_info_test.keys():
@@ -328,31 +342,33 @@ class Workload(unittest.TestCase):
             except ProcessLookupError:
                 pass
 
-    def read_messages(self, topic: str, consumer: str):
+    def read_messages(self, topic: str, consumer: str, expected_count=None, timeout=1):
         with self.driver.topic_client.reader(topic, consumer) as reader:
             messages_info = defaultdict(list)
-            while True:
+            total_count = 0
+            deadline = time.time() + timeout
+            while expected_count is None or total_count < expected_count:
+                receive_timeout = 1
+                if expected_count is not None:
+                    remaining = deadline - time.time()
+                    if remaining <= 0:
+                        break
+                    receive_timeout = min(receive_timeout, remaining)
                 try:
-                    mess = reader.receive_message(timeout=1)
+                    mess = reader.receive_message(timeout=receive_timeout)
                     messages_info[mess.partition_id].append([mess.partition_id, mess.seqno, mess.created_at])
+                    total_count += 1
                     reader.commit(mess)
                 except TimeoutError:
-                    print("Have no new messages in a second")
-                    return messages_info
+                    if expected_count is None:
+                        print("Have no new messages in a second")
+                        return messages_info
+            if expected_count is not None and total_count < expected_count:
+                raise AssertionError(f"{topic} did not expose {expected_count} readable messages: got {total_count}")
+            return messages_info
 
-    def get_topic_message_count(self, topic: str):
-        topic_description = self.driver.topic_client.describe_topic(topic, include_stats=True)
-        return sum(partition.partition_stats.partition_end for partition in topic_description.partitions)
-
-    def wait_topic_message_count(self, topic: str, expected_count: int, timeout: float):
-        deadline = time.time() + timeout
-        last_count = 0
-        while time.time() < deadline:
-            last_count = self.get_topic_message_count(topic)
-            if last_count >= expected_count:
-                return last_count
-            time.sleep(1)
-        raise AssertionError(f"{topic} end offset did not reach {expected_count}: got {last_count}")
+    def count_messages(self, messages_info):
+        return sum(len(messages) for messages in messages_info.values())
 
     def create_topic(self, topic: str, consumers: list[str]):
         try:

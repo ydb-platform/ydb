@@ -61,7 +61,7 @@ namespace NActors {
         virtual ~IHarmonizer() {}
         virtual void Harmonize(ui64 ts) = 0;
         virtual void DeclareEmergency(ui64 ts) = 0;
-        virtual void AddPool(IExecutorPool* pool, TSelfPingInfo *pingInfo = nullptr, bool ignoreFullThreadQuota = false) = 0;
+        virtual void AddPool(IExecutorPool* pool, TSelfPingInfo *pingInfo = nullptr, bool ignoreFullThreadQuota = false, ui8 needyCpuWindowSeconds = 1) = 0;
         virtual void Enable(bool enable) = 0;
         virtual TPoolHarmonizerStats GetPoolStats(i16 poolId) const = 0;
         virtual THarmonizerStats GetStats() const = 0;

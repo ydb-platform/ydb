@@ -176,6 +176,8 @@ struct TPDiskConfig : public TThrRefBase {
 
     bool ReadOnly = false;
 
+    bool SortFreeChunksHDD = true;
+
     TPDiskConfig(ui64 pDiskGuid, ui32 pdiskId, ui64 pDiskCategory)
         : TPDiskConfig({}, pDiskGuid, pdiskId, pDiskCategory)
     {}
@@ -437,6 +439,10 @@ struct TPDiskConfig : public TThrRefBase {
 
         if (cfg->HasSeparateHugePriorities()) {
             SeparateHugePriorities = cfg->GetSeparateHugePriorities();
+        }
+
+        if (cfg->HasSortFreeChunksHDD()) {
+            SortFreeChunksHDD = cfg->GetSortFreeChunksHDD();
         }
     }
 };

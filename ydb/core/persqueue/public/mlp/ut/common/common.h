@@ -50,16 +50,13 @@ struct TMlpPipeSetup {
 
 std::shared_ptr<TMlpPipeSetup> CreatePipeSetup();
 
+// Shared pool for RunWithDispatch (non-template so one instance for all call sites).
+IThreadPool& GetMlpPipeDispatchPool();
+
 // Runs SDK/gRPC work off the test thread; dispatches simulated runtime until done.
 template <typename TFunc>
 auto RunWithDispatch(NActors::TTestActorRuntime& runtime, TFunc&& func) {
-    static TThreadPool pool;
-    static bool started = false;
-    if (!started) {
-        pool.Start(2);
-        started = true;
-    }
-    auto future = NThreading::Async(std::forward<TFunc>(func), pool);
+    auto future = NThreading::Async(std::forward<TFunc>(func), GetMlpPipeDispatchPool());
     return static_cast<NKikimr::TTestActorRuntime&>(runtime).WaitFuture(std::move(future));
 }
 

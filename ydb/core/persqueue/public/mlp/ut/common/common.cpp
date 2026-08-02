@@ -34,6 +34,18 @@ void EnableMlpLogs(TTopicSdkTestSetup& setup) {
 
 } // namespace
 
+IThreadPool& GetMlpPipeDispatchPool() {
+    struct TPoolHolder {
+        TThreadPool Pool;
+        TPoolHolder() {
+            Pool.Start(2);
+        }
+    };
+    // Function-local static: one pool for all RunWithDispatch instantiations, init is thread-safe.
+    static TPoolHolder holder;
+    return holder.Pool;
+}
+
 std::shared_ptr<TTopicSdkTestSetup> CreateSetup() {
     auto setup = std::make_shared<TTopicSdkTestSetup>("TODO");
     EnableMlpLogs(*setup);

@@ -113,11 +113,10 @@ struct TWriteQueue {
             , BlockingActors()
             , QueryResponse()
             , WaitingAckFromFRW(false) {
-            YQL_CLOG(INFO, ProviderDq) << "ResultActor init: FullResultTableEnabled=" << FullResultTableEnabled
+            YQL_CLOG(DEBUG, ProviderDq) << "ResultActor init: FullResultTableEnabled=" << FullResultTableEnabled
                 << " discard=" << Discard
-                << " sizeLimit=" << SizeLimit;
-            YQL_CLOG(DEBUG, ProviderDq) << "_AllResultsBytesLimit = " << SizeLimit;
-            YQL_CLOG(DEBUG, ProviderDq) << "_RowsLimitPerWrite = " << (RowsLimit.Defined() ? ToString(RowsLimit.GetRef()) : "nothing");
+                << " sizeLimit=" << SizeLimit
+                << " rowsLimit=" << (RowsLimit.Defined() ? ToString(RowsLimit.GetRef()) : "nothing");
         }
 
         virtual void FinishFullResultWriter() {
@@ -201,7 +200,7 @@ struct TWriteQueue {
         }
 
         void Finish() {
-            YQL_CLOG(INFO, ProviderDq) << __FUNCTION__ << " truncated=" << Truncated
+            YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__ << " truncated=" << Truncated
                 << " hasFullResultWriter=" << (bool)FullResultWriterID
                 << " FullResultTableEnabled=" << FullResultTableEnabled;
             YQL_ENSURE(!FinishCalled);
@@ -260,7 +259,7 @@ struct TWriteQueue {
                 FinishFullResultWriter();
             }
 
-            YQL_CLOG(INFO, ProviderDq) << "Waiting for " << BlockingActors.size() << " blocking actors"
+            YQL_CLOG(DEBUG, ProviderDq) << "Waiting for " << BlockingActors.size() << " blocking actors"
                 << " hasFullResultWriter=" << (bool)FullResultWriterID;
 
             QueryResponse.Reset(ev->Release().Release());
@@ -339,7 +338,7 @@ struct TWriteQueue {
         }
 
         void FlushCurrent() {
-            YQL_CLOG(INFO, ProviderDq) << __FUNCTION__ << ": requesting FullResultWriter on worker";
+            YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__ << ": requesting FullResultWriter on worker";
             YQL_ENSURE(!FullResultWriterID);
             YQL_ENSURE(FullResultTableEnabled);
 

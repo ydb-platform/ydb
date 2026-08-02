@@ -25,7 +25,7 @@ TDataProviderInitializer GetDqDataProviderInitializer(
     bool externalUser,
     TDqCliqueValidator cliqueValidator)
 {
-    return [execTransformerFactory, dqGateway, compFactory, metrics, fileStorage, externalUser, cliqueValidator = std::move(cliqueValidator)] (
+    return [execTransformerFactory, dqGateway, compFactory, metrics, fileStorage, externalUser, cliqueValidator] (
         const TString& userName,
         const TString& sessionId,
         const TGatewaysConfig* gatewaysConfig,
@@ -63,9 +63,7 @@ TDataProviderInitializer GetDqDataProviderInitializer(
             std::move(hiddenAborter)
         );
 
-        if (cliqueValidator) {
-            state->Settings->CliqueValidator = cliqueValidator;
-        }
+        state->Settings->CliqueValidator = cliqueValidator;
 
         TDataProviderInfo info;
         info.Names.insert(TString{DqProviderName});

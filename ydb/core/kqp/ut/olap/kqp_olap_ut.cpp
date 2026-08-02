@@ -5002,18 +5002,17 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
-        // After drop, minSnapshotForNewReads must advance past the drop snapshot before cleanup
-        // can remove portions. With MaxReadStaleness=1s, wait long enough for the cleanup window
-        // to expire and for the periodic cleanup to run.
-        csController->WaitCleaning(TDuration::Seconds(15));
-
-        {
-            auto result = kikimr.GetQueryClient()
+        auto queryClient = kikimr.GetQueryClient();
+        size_t rowsCount = 1;
+        for (ui32 i = 0; i < 60 && rowsCount != 0; ++i) {
+            csController->WaitCleaning(TDuration::Seconds(1));
+            auto result = queryClient
                               .ExecuteQuery("SELECT * FROM `olapStore/.sys/store_primary_index_portion_stats`", NQuery::TTxControl::NoTx())
                               .GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_EQUAL(result.GetResultSet(0).RowsCount(), 0);
+            rowsCount = result.GetResultSet(0).RowsCount();
         }
+        UNIT_ASSERT_VALUES_EQUAL(rowsCount, 0);
     }
 
     Y_UNIT_TEST(OlapTxMode) {

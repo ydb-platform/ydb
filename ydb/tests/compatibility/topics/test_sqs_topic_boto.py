@@ -10,7 +10,6 @@ import pytest
 from botocore.config import Config
 
 from ydb.tests.library.compatibility.fixtures import (
-    RestartToAnotherVersionFixture,
     RollingUpgradeAndDowngradeFixture,
     string_version_to_tuple,
     logger,

@@ -1618,9 +1618,10 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(JoinBothTablesWithNotNullPk, StreamLookup) {
+    void DoJoinBothTablesWithNotNullPk(bool streamLookup, bool rightIsColumn) {
         TKikimrSettings settings;
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookup);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(streamLookup);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(rightIsColumn);
         TKikimrRunner kikimr(settings);
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
@@ -1642,13 +1643,14 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
 
         {
-            auto createTableResult = session.ExecuteSchemeQuery(Q1_(R"(
+            const TString rightStore = rightIsColumn ? "WITH (STORE = COLUMN)" : "";
+            auto createTableResult = session.ExecuteSchemeQuery(Sprintf(R"(
                 CREATE TABLE `/Root/Right` (
                     Key Uint64 NOT NULL,
                     Value String,
                     PRIMARY KEY (Key)
-                );
-            )")).ExtractValueSync();
+                ) %s;
+            )", rightStore.c_str())).ExtractValueSync();
             UNIT_ASSERT_C(createTableResult.IsSuccess(), createTableResult.GetIssues().ToString());
 
             auto result = session.ExecuteDataQuery(Q1_(R"(
@@ -1668,9 +1670,19 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(JoinLeftTableWithNotNullPk, StreamLookup) {
+    Y_UNIT_TEST_TWIN(JoinBothTablesWithNotNullPk, StreamLookup) {
+        DoJoinBothTablesWithNotNullPk(StreamLookup, /* rightIsColumn */ false);
+    }
+
+    // Column-store right table: stream lookup join reads via TEvDataShard::TEvRead.
+    Y_UNIT_TEST(JoinBothTablesWithNotNullPk_RightColumn) {
+        DoJoinBothTablesWithNotNullPk(/* streamLookup */ true, /* rightIsColumn */ true);
+    }
+
+    void DoJoinLeftTableWithNotNullPk(bool streamLookup, bool rightIsColumn) {
         TKikimrSettings settings;
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookup);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(streamLookup);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(rightIsColumn);
         TKikimrRunner kikimr(settings);
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
@@ -1692,13 +1704,14 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
 
         {
-            auto createTableResult = session.ExecuteSchemeQuery(Q1_(R"(
+            const TString rightStore = rightIsColumn ? "WITH (STORE = COLUMN)" : "";
+            auto createTableResult = session.ExecuteSchemeQuery(Sprintf(R"(
                 CREATE TABLE `/Root/Right` (
                     Key Uint64,
                     Value String,
                     PRIMARY KEY (Key)
-                );
-            )")).ExtractValueSync();
+                ) %s;
+            )", rightStore.c_str())).ExtractValueSync();
             UNIT_ASSERT_C(createTableResult.IsSuccess(), createTableResult.GetIssues().ToString());
 
             auto result = session.ExecuteDataQuery(Q1_(R"(
@@ -1738,9 +1751,19 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(JoinRightTableWithNotNullColumns, StreamLookup) {
+    Y_UNIT_TEST_TWIN(JoinLeftTableWithNotNullPk, StreamLookup) {
+        DoJoinLeftTableWithNotNullPk(StreamLookup, /* rightIsColumn */ false);
+    }
+
+    // Column-store right table: stream lookup join reads via TEvDataShard::TEvRead.
+    Y_UNIT_TEST(JoinLeftTableWithNotNullPk_RightColumn) {
+        DoJoinLeftTableWithNotNullPk(/* streamLookup */ true, /* rightIsColumn */ true);
+    }
+
+    void DoJoinRightTableWithNotNullColumns(bool streamLookup, bool rightIsColumn) {
         TKikimrSettings settings;
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookup);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(streamLookup);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(rightIsColumn);
         TKikimrRunner kikimr(settings);
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
@@ -1762,13 +1785,14 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
 
         {
-            auto createTableResult = session.ExecuteSchemeQuery(Q1_(R"(
+            const TString rightStore = rightIsColumn ? "WITH (STORE = COLUMN)" : "";
+            auto createTableResult = session.ExecuteSchemeQuery(Sprintf(R"(
                 CREATE TABLE `/Root/Right` (
                     Key Uint64 NOT NULL,
                     Value String NOT NULL,
                     PRIMARY KEY (Key)
-                );
-            )")).ExtractValueSync();
+                ) %s;
+            )", rightStore.c_str())).ExtractValueSync();
             UNIT_ASSERT_C(createTableResult.IsSuccess(), createTableResult.GetIssues().ToString());
 
             auto result = session.ExecuteDataQuery(Q1_(R"(
@@ -1792,6 +1816,15 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
                 [[2u];["lValue2"];#;#]
             ])", FormatResultSetYson(result.GetResultSet(0)));
         }
+    }
+
+    Y_UNIT_TEST_TWIN(JoinRightTableWithNotNullColumns, StreamLookup) {
+        DoJoinRightTableWithNotNullColumns(StreamLookup, /* rightIsColumn */ false);
+    }
+
+    // Column-store right table: stream lookup join reads via TEvDataShard::TEvRead.
+    Y_UNIT_TEST(JoinRightTableWithNotNullColumns_RightColumn) {
+        DoJoinRightTableWithNotNullColumns(/* streamLookup */ true, /* rightIsColumn */ true);
     }
 
     Y_UNIT_TEST(Describe) {

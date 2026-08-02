@@ -721,12 +721,69 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).reads().bytes(), 40);
     }
 
-    Y_UNIT_TEST_TWIN(IndexLookupJoin, StreamLookupJoin) {
-        TKikimrRunner kikimr(GetAppConfig(true, StreamLookupJoin));
+    void DoIndexLookupJoinCostTest(bool streamLookupJoin, bool rightIsColumn) {
+        TKikimrRunner kikimr(GetAppConfig(true, streamLookupJoin));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        CreateSampleTables(session);
+        if (rightIsColumn) {
+            // Create row-store left table (same schema as CreateSampleTables).
+            UNIT_ASSERT(session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/Join1_1` (
+                    Key Int32,
+                    Fk21 Int32,
+                    Fk22 String,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )").GetValueSync().IsSuccess());
+
+            UNIT_ASSERT(session.ExecuteDataQuery(R"(
+                REPLACE INTO `/Root/Join1_1` (Key, Fk21, Fk22, Value) VALUES
+                    (1, 101, "One", "Value1"),
+                    (2, 102, "Two", "Value1"),
+                    (3, 103, "One", "Value2"),
+                    (4, 104, "Two", "Value2"),
+                    (5, 105, "One", "Value3"),
+                    (6, 106, "Two", "Value3"),
+                    (7, 107, "One", "Value4"),
+                    (8, 108, "One", "Value5");
+            )", TTxControl::BeginTx().CommitTx()).GetValueSync().IsSuccess());
+
+            // Create column-store right table (same schema as Join1_2 in CreateSampleTables).
+            UNIT_ASSERT(session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/Join1_2` (
+                    Key1 Int32,
+                    Key2 String,
+                    Fk3 String,
+                    Value String,
+                    PRIMARY KEY (Key1, Key2)
+                ) WITH (STORE = COLUMN);
+            )").GetValueSync().IsSuccess());
+
+            UNIT_ASSERT(session.ExecuteDataQuery(R"(
+                REPLACE INTO `/Root/Join1_2` (Key1, Key2, Fk3, Value) VALUES
+                    (101, "One",   "Name1", "Value21"),
+                    (101, "Two",   "Name1", "Value22"),
+                    (101, "Three", "Name3", "Value23"),
+                    (102, "One",   "Name2", "Value31"),
+                    (102, "Two",   "Name2", "Value32"),
+                    (103, "One",   "Name3", "Value41"),
+                    (103, "Two",   "Name3", "Value42"),
+                    (104, "One",   "Name4", "Value51"),
+                    (104, "Two",   "Name4", "Value52"),
+                    (105, "One",   "Name5", "Value61"),
+                    (105, "Two",   "Name5", "Value62"),
+                    (106, "One",   "Name6", "Value71"),
+                    (106, "Two",   "Name6", "Value72"),
+                    (107, "One",   "Name7", "Value81"),
+                    (107, "Two",   "Name7", "Value82"),
+                    (108, "One",   "Name8", "Value91"),
+                    (108, "Two",   "Name8", "Value92");
+            )", TTxControl::BeginTx().CommitTx()).GetValueSync().IsSuccess());
+        } else {
+            CreateSampleTables(session);
+        }
 
         auto result = session.ExecuteDataQuery(Q_(R"(
             PRAGMA DisableSimpleColumns;
@@ -752,11 +809,26 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             Cerr << name << " " << rowsAndBytes.first << " " << rowsAndBytes.second << Endl;
         }
 
-        UNIT_ASSERT_VALUES_EQUAL(readsByTable.at("/Root/Join1_2").first, 1);
-        UNIT_ASSERT_VALUES_EQUAL(readsByTable.at("/Root/Join1_2").second, 19);
+        // For row-store right table, verify exact read counts.
+        // For column-store right table, just verify the query succeeded and produced reads.
+        if (!rightIsColumn) {
+            UNIT_ASSERT_VALUES_EQUAL(readsByTable.at("/Root/Join1_2").first, 1);
+            UNIT_ASSERT_VALUES_EQUAL(readsByTable.at("/Root/Join1_2").second, 19);
+            UNIT_ASSERT_VALUES_EQUAL(readsByTable.at("/Root/Join1_1").first, 8);
+            UNIT_ASSERT_VALUES_EQUAL(readsByTable.at("/Root/Join1_1").second, 136);
+        } else {
+            UNIT_ASSERT(readsByTable.contains("/Root/Join1_2"));
+            UNIT_ASSERT_GT(readsByTable.at("/Root/Join1_2").first, 0);
+        }
+    }
 
-        UNIT_ASSERT_VALUES_EQUAL(readsByTable.at("/Root/Join1_1").first, 8);
-        UNIT_ASSERT_VALUES_EQUAL(readsByTable.at("/Root/Join1_1").second, 136);
+    Y_UNIT_TEST_TWIN(IndexLookupJoin, StreamLookupJoin) {
+        DoIndexLookupJoinCostTest(StreamLookupJoin, /* rightIsColumn */ false);
+    }
+
+    // Stream Lookup Join with column-store right table reads via TEvDataShard::TEvRead.
+    Y_UNIT_TEST(IndexLookupJoin_RightColumn) {
+        DoIndexLookupJoinCostTest(/* streamLookupJoin */ true, /* rightIsColumn */ true);
     }
 
     Y_UNIT_TEST(AAARangeFullScan) {

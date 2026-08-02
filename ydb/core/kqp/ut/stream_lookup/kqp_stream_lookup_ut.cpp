@@ -158,10 +158,14 @@ Y_UNIT_TEST_SUITE(KqpStreamLookup) {
         }
     }
 
-    Y_UNIT_TEST(StreamLookupJoinManyPartitions) {
+    // Runs StreamLookupJoinManyPartitions with the given right-table storage kind.
+    // When rightIsColumn is true, the right (lookup) table is column-store and the
+    // stream lookup join reads it via the new TEvDataShard::TEvRead handler in ColumnShard.
+    void DoStreamLookupJoinManyPartitions(bool rightIsColumn) {
         TKikimrSettings settings;
         settings.SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -170,23 +174,23 @@ Y_UNIT_TEST_SUITE(KqpStreamLookup) {
         constexpr ui64 TotalRows = 100000;
         constexpr ui64 BatchSize = 1000;
 
+        const TString rightStore = rightIsColumn ? "WITH (STORE = COLUMN)" :
+            "WITH (UNIFORM_PARTITIONS = 2000, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2000)";
+
         {
-            auto result = session.ExecuteSchemeQuery(R"(
+            auto result = session.ExecuteSchemeQuery(Sprintf(R"(
                 CREATE TABLE `/Root/RightTable` (
                     Key Uint64,
                     Value String,
                     PRIMARY KEY (Key)
-                ) WITH (
-                    UNIFORM_PARTITIONS = 2000,
-                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2000
-                );
+                ) %s;
 
                 CREATE TABLE `/Root/LeftTable` (
                     Id Uint64,
                     Fk Uint64,
                     PRIMARY KEY (Id)
                 );
-            )").GetValueSync();
+            )", rightStore.c_str())).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
@@ -263,15 +267,26 @@ Y_UNIT_TEST_SUITE(KqpStreamLookup) {
         }
     }
 
+    Y_UNIT_TEST(StreamLookupJoinManyPartitions) {
+        DoStreamLookupJoinManyPartitions(/* rightIsColumn */ false);
+    }
+
+    // Stream Lookup Join with a column-store right (lookup) table.
+    // The stream lookup issues point reads by primary key against ColumnShard
+    // via TEvDataShard::TEvRead.
+    Y_UNIT_TEST(StreamLookupJoinManyPartitionsRightColumn) {
+        DoStreamLookupJoinManyPartitions(/* rightIsColumn */ true);
+    }
+
     // Simple Stream Idx Lookup Join cases with column-store (OLAP) tables.
     // The left (streaming) side supplies join keys, the right side is a column-store
     // table looked up by its primary key.
 
-    void CreateSimpleJoinTables(NYdb::NQuery::TQueryClient& db, bool leftColumn, bool rightColumn) {
+    void CreateSimpleJoinTables(NYdb::NQuery::TQueryClient& db, bool leftColumn, bool rightIsColumn) {
         auto session = db.GetSession().GetValueSync().GetSession();
 
         const TString leftStore = leftColumn ? "WITH (STORE = COLUMN)" : "";
-        const TString rightStore = rightColumn ? "WITH (STORE = COLUMN)" : "";
+        const TString rightStore = rightIsColumn ? "WITH (STORE = COLUMN)" : "";
 
         auto ddl = Sprintf(R"(
             CREATE TABLE `/Root/LeftTable` (
@@ -314,8 +329,8 @@ Y_UNIT_TEST_SUITE(KqpStreamLookup) {
     // in block/OLAP form and picks a block-based broadcast MapJoin; that is an
     // independent optimizer strategy choice for OLAP-on-OLAP joins and does not
     // depend on read-iterator support. In every case the produced rows must match.
-    void DoSimpleStreamLookupJoin(bool leftColumn, bool rightColumn) {
-        const bool expectStreamLookup = !(leftColumn && rightColumn);
+    void DoSimpleStreamLookupJoin(bool leftColumn, bool rightIsColumn) {
+        const bool expectStreamLookup = !(leftColumn && rightIsColumn);
 
         TKikimrSettings settings;
         settings.SetWithSampleTables(false);
@@ -325,7 +340,7 @@ Y_UNIT_TEST_SUITE(KqpStreamLookup) {
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetQueryClient();
 
-        CreateSimpleJoinTables(db, leftColumn, rightColumn);
+        CreateSimpleJoinTables(db, leftColumn, rightIsColumn);
 
         const TString query = R"(
             SELECT a.Id AS Id, b.Value AS Value
@@ -340,12 +355,12 @@ Y_UNIT_TEST_SUITE(KqpStreamLookup) {
             UNIT_ASSERT_VALUES_EQUAL_C(explain.GetStatus(), EStatus::SUCCESS, explain.GetIssues().ToString());
             auto ast = explain.GetStats()->GetAst();
             UNIT_ASSERT(ast.has_value());
-            Cerr << "=== AST (leftColumn=" << leftColumn << ", rightColumn=" << rightColumn << ") ===" << Endl;
+            Cerr << "=== AST (leftColumn=" << leftColumn << ", rightIsColumn=" << rightIsColumn << ") ===" << Endl;
             Cerr << *ast << Endl;
             const bool hasStreamLookup = TString(*ast).Contains("StreamLookup");
             UNIT_ASSERT_VALUES_EQUAL_C(hasStreamLookup, expectStreamLookup,
                 TStringBuilder() << "Unexpected join strategy for leftColumn=" << leftColumn
-                    << ", rightColumn=" << rightColumn << "; AST: " << *ast);
+                    << ", rightIsColumn=" << rightIsColumn << "; AST: " << *ast);
         }
 
         auto result = db.ExecuteQuery(query,
@@ -364,20 +379,20 @@ Y_UNIT_TEST_SUITE(KqpStreamLookup) {
     // Right (lookup) side is a column-store table: Stream Lookup Join issues point
     // reads by primary key against ColumnShard via TEvDataShard::TEvRead.
     Y_UNIT_TEST(StreamLookupJoinRightColumnTable) {
-        DoSimpleStreamLookupJoin(/* leftColumn */ false, /* rightColumn */ true);
+        DoSimpleStreamLookupJoin(/* leftColumn */ false, /* rightIsColumn */ true);
     }
 
     // Left (streaming) side is a column-store table, lookup side is row-store:
     // Stream Lookup Join is used as usual.
     Y_UNIT_TEST(StreamLookupJoinLeftColumnTable) {
-        DoSimpleStreamLookupJoin(/* leftColumn */ true, /* rightColumn */ false);
+        DoSimpleStreamLookupJoin(/* leftColumn */ true, /* rightIsColumn */ false);
     }
 
     // Both sides are column-store tables: the optimizer keeps the plan in block/OLAP
     // form and falls back to a block-based broadcast MapJoin. Result must still be
     // correct.
     Y_UNIT_TEST(StreamLookupJoinBothColumnTables) {
-        DoSimpleStreamLookupJoin(/* leftColumn */ true, /* rightColumn */ true);
+        DoSimpleStreamLookupJoin(/* leftColumn */ true, /* rightIsColumn */ true);
     }
 }
 

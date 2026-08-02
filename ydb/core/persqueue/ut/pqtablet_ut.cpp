@@ -3316,6 +3316,99 @@ Y_UNIT_TEST_F(DeferredPublication_Publish_Successful_Commit, TPQTabletFixture) {
     UNIT_ASSERT_VALUES_EQUAL(messages[0], "deferred-publish-payload");
 }
 
+// Full tablet CmdRead after seed (parent EndOffset = S) + kafka-tx BodyKeys rename.
+// Mid-blob Offset = S+k must return parent-space GetOffset(), not supportive header coords.
+Y_UNIT_TEST_F(KafkaTxnRenameThenMidCmdReadKeepsParentOffsets, TPQTabletFixture) {
+    constexpr ui32 seedCount = 5;
+    constexpr ui32 txCount = 6;
+    constexpr ui32 midK = 2;
+    constexpr ui64 parentKeyOffset = seedCount;
+    constexpr ui64 midReadOffset = parentKeyOffset + midK;
+    static_assert(midK > 0 && midK < txCount);
+
+    PQTabletPrepare({.partitions=1}, {{"user1", true}}, *Ctx);
+    EnsurePipeExist();
+
+    // Advance parent so rename maps supportive headers (0..) onto Key.Offset = S.
+    TVector<std::pair<ui64, TString>> seed;
+    for (ui32 i = 0; i < seedCount; ++i) {
+        seed.emplace_back(i + 1, TStringBuilder() << "seed-" << i);
+    }
+    CmdWrite(/*partition=*/0, "seed-src", seed, *Ctx);
+
+    NKafka::TProducerInstanceId producerInstanceId = {7, 0};
+    TString ownerCookie = CreateSupportivePartitionForKafka(producerInstanceId);
+
+    for (ui32 i = 0; i < txCount; ++i) {
+        auto event = MakeHolder<TEvPersQueue::TEvRequest>();
+        auto* request = event->Record.MutablePartitionRequest();
+        request->SetTopic("/topic");
+        request->SetPartition(0);
+        request->SetCookie(200 + i);
+        request->SetOwnerCookie(ownerCookie);
+        request->SetMessageNo(i);
+
+        auto* writeId = request->MutableWriteId();
+        writeId->SetKafkaTransaction(true);
+        auto* requestProducerInstanceId = writeId->MutableKafkaProducerInstanceId();
+        requestProducerInstanceId->SetId(producerInstanceId.Id);
+        requestProducerInstanceId->SetEpoch(producerInstanceId.Epoch);
+
+        ActorIdToProto(Pipe, request->MutablePipeClient());
+
+        auto* cmdWrite = request->AddCmdWrite();
+        cmdWrite->SetSourceId(std::to_string(producerInstanceId.Id));
+        cmdWrite->SetSeqNo(i);
+        const TString data = TStringBuilder() << "tx-" << i;
+        cmdWrite->SetData(data);
+        cmdWrite->SetCreateTimeMS(TInstant::Now().MilliSeconds());
+        cmdWrite->SetDisableDeduplication(true);
+        cmdWrite->SetUncompressedSize(data.size());
+        cmdWrite->SetIgnoreQuotaDeadline(true);
+        cmdWrite->SetExternalOperation(true);
+
+        SendToPipe(Ctx->Edge, event.Release());
+        auto response = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvResponse>();
+        UNIT_ASSERT(response != nullptr);
+        UNIT_ASSERT_VALUES_EQUAL(response->Record.GetPartitionResponse().GetCookie(), 200 + i);
+    }
+
+    CommitKafkaTransaction(producerInstanceId, /*txId=*/9001);
+
+    TPQCmdReadSettings readSettings{"", /*partition=*/0, static_cast<i64>(midReadOffset),
+                                    /*count=*/txCount, 16_MB, 0};
+    readSettings.User = "user1";
+
+    bool found = false;
+    NKikimrClient::TCmdReadResult readResult;
+    auto observer = [&found, &readResult](TAutoPtr<IEventHandle>& event) {
+        if (auto* msg = event->CastAsLocal<TEvPersQueue::TEvResponse>()) {
+            const auto& partitionResponse = msg->Record.GetPartitionResponse();
+            if (partitionResponse.HasCookie() && partitionResponse.GetCookie() == 123
+                && partitionResponse.HasCmdReadResult()) {
+                readResult = partitionResponse.GetCmdReadResult();
+                found = true;
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    };
+    auto prev = Ctx->Runtime->SetObserverFunc(observer);
+    BeginCmdRead(readSettings, *Ctx);
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&found]() { return found; };
+    UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+    Ctx->Runtime->SetObserverFunc(prev);
+
+    UNIT_ASSERT_C(readResult.ResultSize() > 0, "CmdRead returned no rows from mid-blob offset");
+    for (ui32 i = 0; i < readResult.ResultSize(); ++i) {
+        const ui64 expected = midReadOffset + i;
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            readResult.GetResult(i).GetOffset(), expected,
+            "result index=" << i
+                << " (supportive leak would be near " << midK + i << " / header space)");
+    }
+}
+
 Y_UNIT_TEST_F(DeferredPublication_Cancel_Successful_Commit, TPQTabletFixture) {
     using TDeferredPublicationApi = NKikimrPQ::TPartitionOperation::TWriteOp::TDeferredPublicationApi;
     const TWriteId writeId = NHelpers::MakeDeferredWriteId(43, "ext-43");

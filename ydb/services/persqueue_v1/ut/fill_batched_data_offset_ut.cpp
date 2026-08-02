@@ -1,10 +1,46 @@
+#include <ydb/services/persqueue_v1/actors/fill_batched_data.h>
 #include <ydb/services/persqueue_v1/actors/fill_batched_data_offset.h>
+#include <ydb/services/persqueue_v1/actors/partition_id.h>
 
+#include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
+#include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 using namespace NKikimr::NGRpcProxy::V1;
+
+namespace {
+
+TString MakeRegularDataChunk(const TString& payload) {
+    NKikimrPQClient::TDataChunk chunk;
+    chunk.SetChunkType(NKikimrPQClient::TDataChunk::REGULAR);
+    chunk.SetData(payload);
+    chunk.SetCodec(NPersQueueCommon::RAW);
+    TString out;
+    Y_ABORT_UNLESS(chunk.SerializeToString(&out));
+    return out;
+}
+
+NPersQueue::TTopicConverterPtr MakeTestTopicConverter() {
+    NKikimrPQ::TPQTabletConfig cfg;
+    cfg.SetTopicName("topic");
+    cfg.SetTopicPath("/Root/topic");
+    cfg.SetYdbDatabasePath("/Root");
+    cfg.SetLocalDC(true);
+    cfg.SetDC("dc1");
+    return NPersQueue::TTopicNameConverter::ForFirstClass(cfg);
+}
+
+TPartitionId MakeTestPartitionId(ui64 partition, ui64 assignId) {
+    TPartitionId id;
+    id.DiscoveryConverter = MakeTestTopicConverter();
+    id.Partition = partition;
+    id.AssignId = assignId;
+    return id;
+}
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(FillBatchedDataOffset) {
 
@@ -85,6 +121,59 @@ Y_UNIT_TEST(FillBatchedDataLoopAfterTxKeyRenameMidRead) {
     bad->SetLogicalMessageCount(1);
     UNIT_ASSERT(!BatchedResultCoversReadOffset(
         bad->GetOffset(), bad->GetLogicalMessageCount(), readOffsetStart));
+}
+
+// Real FillBatchedData (Topic API): parent-space mid-blob CmdReadResult must pass ENSURE
+// and emit message offsets in key space. Supportive leak must not Cover (would AFL_ENSURE).
+Y_UNIT_TEST(FillBatchedDataTopicApiAfterTxKeyRenameMidRead) {
+    constexpr ui64 parentKeyOffset = 547'189'849;
+    constexpr ui64 readOffsetStart = parentKeyOffset + 2;
+    constexpr ui32 messageCount = 4;
+
+    auto topic = MakeTestTopicConverter();
+    UNIT_ASSERT(topic);
+
+    NKikimrClient::TCmdReadResult res;
+    for (ui32 i = 2; i < messageCount; ++i) {
+        auto* r = res.AddResult();
+        r->SetOffset(parentKeyOffset + i);
+        r->SetLogicalMessageCount(1);
+        r->SetPartNo(0);
+        r->SetSeqNo(i + 1);
+        r->SetWriteTimestampMS(1000); // same write ts → one Topic batch
+        r->SetCreateTimestampMS(1000 + i);
+        r->SetUncompressedSize(1);
+        r->SetData(MakeRegularDataChunk(TString(1, static_cast<char>('a' + i))));
+    }
+
+    // Negative contract before calling FillBatchedData (AFL_ENSURE would abort the process).
+    UNIT_ASSERT(!BatchedResultCoversReadOffset(/*resultOffset=*/393, /*lmc=*/1, readOffsetStart));
+
+    Ydb::Topic::StreamReadMessage::ReadResponse response;
+    ui64 readOffset = readOffsetStart;
+    ui64 wTime = 0;
+    const auto partition = MakeTestPartitionId(/*partition=*/0, /*assignId=*/7);
+
+    const bool hasData = FillBatchedData(
+        &response, res, partition, /*readIdToResponse=*/1, readOffset, wTime,
+        /*endOffset=*/parentKeyOffset + messageCount + 10, topic);
+
+    UNIT_ASSERT(hasData);
+    UNIT_ASSERT_VALUES_EQUAL(readOffset, parentKeyOffset + messageCount);
+    UNIT_ASSERT_VALUES_EQUAL(response.partition_data_size(), 1);
+    const auto& part = response.partition_data(0);
+    UNIT_ASSERT_VALUES_EQUAL(part.partition_session_id(), 7u);
+
+    TVector<ui64> offsets;
+    for (const auto& batch : part.batches()) {
+        for (const auto& msg : batch.message_data()) {
+            offsets.push_back(msg.offset());
+        }
+    }
+    UNIT_ASSERT_VALUES_EQUAL(offsets.size(), messageCount - 2);
+    for (size_t i = 0; i < offsets.size(); ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(offsets[i], parentKeyOffset + 2 + i);
+    }
 }
 
 } // Y_UNIT_TEST_SUITE(FillBatchedDataOffset)

@@ -369,58 +369,66 @@ def write_kafka_batch(driver, topic_name, values, base_sequence=1):
     asyncio.run(_write_kafka_batch_async(driver, topic_name, values, base_sequence))
 
 
-def write_kafka_batch_in_transaction(driver, topic_name, values, base_sequence=1, producer_id=None):
+async def _write_kafka_batch_in_transaction_async(driver, tx, topic_name, values, base_sequence, producer_id):
     payload = make_kafka_batch_payload(values, base_sequence=base_sequence)
-    message = ydb.TopicWriterMessage(
-        payload,
-        seqno=base_sequence + len(values) - 1,
-        created_at=datetime.datetime.now(datetime.timezone.utc),
+    stream = await WriterAsyncIOStream.create(
+        driver,
+        StreamWriteMessage.InitRequest(
+            path=topic_name,
+            producer_id=producer_id or f"tx-kafka-batch-producer-{uuid.uuid4().hex}",
+            write_session_meta={},
+            partitioning=StreamWriteMessage.PartitioningPartitionID(0),
+            get_last_seq_no=True,
+        ),
+        tx_identity=tx._tx_identity(),
     )
+    try:
+        message = InternalMessage(
+            PublicMessage(
+                payload,
+                seqno=base_sequence + len(values) - 1,
+                created_at=datetime.datetime.now(datetime.timezone.utc),
+            )
+        )
+        message.codec = TOPIC_BATCHING_CODEC
+        stream.write([message])
+        response = await asyncio.wait_for(stream.receive(), timeout=30)
+        assert len(response.acks) == 1
+        assert isinstance(
+            response.acks[0].message_write_status,
+            StreamWriteMessage.WriteResponse.WriteAck.StatusWrittenInTx,
+        )
+    finally:
+        await stream.close()
 
+
+def write_kafka_batch_in_transaction(driver, topic_name, values, base_sequence=1, producer_id=None):
     with ydb.QuerySessionPool(driver) as session_pool:
         def callee(tx):
-            writer = driver.topic_client.tx_writer(
+            asyncio.run(_write_kafka_batch_in_transaction_async(
+                driver,
                 tx,
                 topic_name,
-                producer_id=producer_id or f"tx-kafka-batch-producer-{uuid.uuid4().hex}",
-                partition_id=0,
-                auto_seqno=False,
-                auto_created_at=False,
-                codec=ydb.TopicCodec(TOPIC_BATCHING_CODEC),
-                encoders={
-                    ydb.TopicCodec(TOPIC_BATCHING_CODEC): lambda data: data,
-                },
-            )
-            writer.write(message)
+                values,
+                base_sequence,
+                producer_id,
+            ))
 
         session_pool.retry_tx_sync(callee)
 
 
 def write_kafka_batch_and_rollback_transaction(driver, topic_name, values, base_sequence=1, producer_id=None):
-    payload = make_kafka_batch_payload(values, base_sequence=base_sequence)
-    message = ydb.TopicWriterMessage(
-        payload,
-        seqno=base_sequence + len(values) - 1,
-        created_at=datetime.datetime.now(datetime.timezone.utc),
-    )
-
     with ydb.QuerySessionPool(driver) as session_pool:
         with session_pool.checkout() as session:
             tx = session.transaction().begin()
-            writer = driver.topic_client.tx_writer(
+            asyncio.run(_write_kafka_batch_in_transaction_async(
+                driver,
                 tx,
                 topic_name,
-                producer_id=producer_id or f"tx-kafka-batch-rollback-producer-{uuid.uuid4().hex}",
-                partition_id=0,
-                auto_seqno=False,
-                auto_created_at=False,
-                codec=ydb.TopicCodec(TOPIC_BATCHING_CODEC),
-                encoders={
-                    ydb.TopicCodec(TOPIC_BATCHING_CODEC): lambda data: data,
-                },
-            )
-            writer.write(message)
-            writer.flush(timeout=30)
+                values,
+                base_sequence,
+                producer_id or f"tx-kafka-batch-rollback-producer-{uuid.uuid4().hex}",
+            ))
             tx.rollback()
 
 
@@ -434,7 +442,9 @@ def write_raw_messages_in_transaction(driver, topic_name, values, producer_id=No
                 partition_id=partition_id,
             )
             for value in values:
-                writer.write(ydb.TopicWriterMessage(value))
+                writer.write(ydb.TopicWriterMessage(value), timeout=30)
+            writer.flush(timeout=30)
+            writer.close(flush=False)
 
         session_pool.retry_tx_sync(callee)
 

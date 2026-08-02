@@ -5002,7 +5002,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
-        csController->WaitCleaning(TDuration::Seconds(5));
+        // After drop, minSnapshotForNewReads must advance past the drop snapshot before cleanup
+        // can remove portions. With MaxReadStaleness=1s, wait long enough for the cleanup window
+        // to expire and for the periodic cleanup to run.
+        csController->WaitCleaning(TDuration::Seconds(15));
 
         {
             auto result = kikimr.GetQueryClient()

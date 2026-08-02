@@ -377,6 +377,83 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
         }
     }
 
+    Y_UNIT_TEST(ReceiveAttemptIdAfterPartialCommit) {
+        auto setup = CreateSetup();
+        CreateTopic(setup, "/Root/topic1", "mlp-consumer", 1);
+        setup->Write("/Root/topic1", "msg-1", 0);
+        setup->Write("/Root/topic1", "msg-2", 0);
+
+        auto& runtime = setup->GetRuntime();
+        const TString receiveAttemptId = "attempt-partial-commit";
+
+        TVector<TMessageId> firstIds;
+        {
+            CreateReaderActor(runtime, {
+                .DatabasePath = "/Root",
+                .TopicName = "/Root/topic1",
+                .Consumer = "mlp-consumer",
+                .WaitTime = TDuration::Seconds(1),
+                .ProcessingTimeout = TDuration::Seconds(30),
+                .MaxNumberOfMessage = 10,
+                .ReceiveAttemptId = receiveAttemptId,
+            });
+            auto response = GetReadResponse(runtime);
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 2);
+            for (const auto& msg : response->Messages) {
+                firstIds.push_back(msg.MessageId);
+            }
+        }
+
+        // Commit only the first message — attempt replay must be invalidated.
+        CreateCommitterActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .Messages = { firstIds[0] },
+        });
+        UNIT_ASSERT(GetChangeResponse(runtime)->Messages[0].Status == EOperationResult::Success);
+
+        {
+            CreateReaderActor(runtime, {
+                .DatabasePath = "/Root",
+                .TopicName = "/Root/topic1",
+                .Consumer = "mlp-consumer",
+                .WaitTime = TDuration::Seconds(0),
+                .ProcessingTimeout = TDuration::Seconds(30),
+                .MaxNumberOfMessage = 10,
+                .ReceiveAttemptId = receiveAttemptId,
+            });
+            auto response = GetReadResponse(runtime);
+            UNIT_ASSERT_VALUES_EQUAL_C(response->Status, Ydb::StatusIds::SUCCESS, response->ErrorDescription);
+            // Same attempt id no longer replays; remaining message stays locked.
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 0);
+        }
+
+        CreateUnlockerActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .Messages = { firstIds[1] },
+        });
+        UNIT_ASSERT(GetChangeResponse(runtime)->Messages[0].Status == EOperationResult::Success);
+
+        {
+            CreateReaderActor(runtime, {
+                .DatabasePath = "/Root",
+                .TopicName = "/Root/topic1",
+                .Consumer = "mlp-consumer",
+                .WaitTime = TDuration::Seconds(1),
+                .ProcessingTimeout = TDuration::Seconds(30),
+                .MaxNumberOfMessage = 10,
+                .ReceiveAttemptId = "attempt-after-invalidation",
+            });
+            auto response = GetReadResponse(runtime);
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.Offset, firstIds[1].Offset);
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "msg-2");
+        }
+    }
+
     Y_UNIT_TEST(MaxNumberOfMessageZero) {
         auto setup = CreateSetup();
         CreateTopic(setup, "/Root/topic1", "mlp-consumer");

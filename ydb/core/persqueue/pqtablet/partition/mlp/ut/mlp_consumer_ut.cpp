@@ -1052,6 +1052,202 @@ Y_UNIT_TEST(CommitAfterUnlockSucceeds) {
     UNIT_ASSERT(commit->Messages[0].Status == EOperationResult::Success);
 }
 
+Y_UNIT_TEST(KeepMessagesOrderBasicFifo) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    CreateTopic(setup, "/Root/topic1", "mlp-consumer", 1, true);
+
+    CreateWriterActor(runtime, {
+        .DatabasePath = "/Root",
+        .TopicName = "/Root/topic1",
+        .Messages = {
+            {.Index = 0, .MessageBody = "first", .MessageGroupId = "g", .MessageDeduplicationId = "d1"},
+            {.Index = 1, .MessageBody = "second", .MessageGroupId = "g", .MessageDeduplicationId = "d2"},
+        }
+    });
+    UNIT_ASSERT_VALUES_EQUAL(GetWriteResponse(runtime)->Messages.size(), 2);
+
+    TMessageId firstId;
+    {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(1),
+            .ProcessingTimeout = TDuration::Seconds(30),
+            .MaxNumberOfMessage = 10,
+        });
+        auto response = GetReadResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "first");
+        firstId = response->Messages[0].MessageId;
+    }
+
+    CreateCommitterActor(runtime, {
+        .DatabasePath = "/Root",
+        .TopicName = "/Root/topic1",
+        .Consumer = "mlp-consumer",
+        .Messages = { firstId },
+    });
+    UNIT_ASSERT(GetChangeResponse(runtime)->Messages[0].Status == EOperationResult::Success);
+
+    CreateReaderActor(runtime, {
+        .DatabasePath = "/Root",
+        .TopicName = "/Root/topic1",
+        .Consumer = "mlp-consumer",
+        .WaitTime = TDuration::Seconds(1),
+        .ProcessingTimeout = TDuration::Seconds(30),
+        .MaxNumberOfMessage = 10,
+    });
+    auto response = GetReadResponse(runtime);
+    UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "second");
+}
+
+Y_UNIT_TEST(DLQ_MoveFailsThenSucceedsAfterDlqCreated) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    auto driver = TDriver(setup->MakeDriverConfig());
+    auto client = TTopicClient(driver);
+
+    // Destination is missing at first — mover fails and WakeUpDLQ returns the message.
+    client.CreateTopic("/Root/topic1", NYdb::NTopic::TCreateTopicSettings()
+            .BeginAddSharedConsumer("mlp-consumer")
+                .BeginDeadLetterPolicy()
+                    .Enable()
+                    .BeginCondition()
+                        .MaxProcessingAttempts(1)
+                    .EndCondition()
+                    .MoveAction("/Root/topic1-dlq")
+                .EndDeadLetterPolicy()
+            .EndAddConsumer()).GetValueSync();
+
+    const auto msg = "dlq-retry-me";
+    setup->Write("/Root/topic1", msg, 0);
+    Sleep(TDuration::Seconds(1));
+
+    {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(1),
+            .ProcessingTimeout = TDuration::Seconds(30),
+            .MaxNumberOfMessage = 1,
+        });
+        UNIT_ASSERT_VALUES_EQUAL(GetReadResponse(runtime)->Messages.size(), 1);
+    }
+    {
+        CreateUnlockerActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .Messages = { TMessageId(0, 0) },
+        });
+        UNIT_ASSERT_VALUES_EQUAL(GetChangeResponse(runtime)->Status, Ydb::StatusIds::SUCCESS);
+    }
+
+    // After failed move the message must become readable again.
+    for (size_t i = 0; i < 15; ++i) {
+        Sleep(TDuration::Seconds(1));
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(0),
+            .ProcessingTimeout = TDuration::Seconds(5),
+            .MaxNumberOfMessage = 1,
+        });
+        auto response = GetReadResponse(runtime);
+        if (response->Messages.size() == 1) {
+            break;
+        }
+        UNIT_ASSERT_C(i < 14, "message did not return after DLQ move failure");
+    }
+
+    client.CreateTopic("/Root/topic1-dlq", NYdb::NTopic::TCreateTopicSettings()
+            .BeginAddSharedConsumer("mlp-consumer")
+            .EndAddConsumer()).GetValueSync();
+
+    {
+        CreateUnlockerActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .Messages = { TMessageId(0, 0) },
+        });
+        UNIT_ASSERT_VALUES_EQUAL(GetChangeResponse(runtime)->Status, Ydb::StatusIds::SUCCESS);
+    }
+
+    for (size_t i = 0; i < 15; ++i) {
+        Sleep(TDuration::Seconds(1));
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1-dlq",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(0),
+            .ProcessingTimeout = TDuration::Seconds(5),
+            .MaxNumberOfMessage = 1,
+        });
+        auto response = GetReadResponse(runtime);
+        if (i < 14 && response->Messages.empty()) {
+            continue;
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Status, Ydb::StatusIds::SUCCESS, response->ErrorDescription);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, msg);
+        return;
+    }
+}
+
+Y_UNIT_TEST(LongPollDuringPQTabletReload) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    CreateTopic(setup, "/Root/topic1", "mlp-consumer");
+
+    CreateReaderActor(runtime, {
+        .DatabasePath = "/Root",
+        .TopicName = "/Root/topic1",
+        .Consumer = "mlp-consumer",
+        .WaitTime = TDuration::Seconds(30),
+        .ProcessingTimeout = TDuration::Seconds(5),
+        .MaxNumberOfMessage = 1,
+    });
+
+    Sleep(TDuration::MilliSeconds(500));
+    ReloadPQTablet(setup, "/Root", "/Root/topic1", 0);
+    setup->Write("/Root/topic1", "after-reload", 0);
+
+    auto inFlight = GetReadResponse(runtime, TDuration::Seconds(60));
+    UNIT_ASSERT(inFlight);
+    // Consumer PassAway replies UNAVAILABLE "Actor destroyed"; or the read may still succeed.
+    UNIT_ASSERT(inFlight->Status == Ydb::StatusIds::UNAVAILABLE
+        || inFlight->Status == Ydb::StatusIds::SUCCESS);
+    if (inFlight->Status == Ydb::StatusIds::SUCCESS && !inFlight->Messages.empty()) {
+        UNIT_ASSERT_VALUES_EQUAL(inFlight->Messages[0].Data, "after-reload");
+        return;
+    }
+
+    for (size_t i = 0; i < 10; ++i) {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(2),
+            .ProcessingTimeout = TDuration::Seconds(30),
+            .MaxNumberOfMessage = 1,
+        });
+        auto response = GetReadResponse(runtime, TDuration::Seconds(60));
+        UNIT_ASSERT(response);
+        if (response->Status == Ydb::StatusIds::SUCCESS && response->Messages.size() == 1) {
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "after-reload");
+            return;
+        }
+        Sleep(TDuration::Seconds(1));
+    }
+    UNIT_FAIL("message not readable after tablet reload during long-poll");
+}
+
 }
 
 } // namespace NKikimr::NPQ::NMLP

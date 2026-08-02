@@ -668,7 +668,311 @@ Y_UNIT_TEST(UnauthorizedCommitter) {
     UNIT_ASSERT(!result->ErrorDescription.empty());
 }
 
+Y_UNIT_TEST(UnauthorizedUnlocker) {
+    auto setup = CreateSetup();
+    CreateTopic(setup, "/Root/topic1", "mlp-consumer");
+
+    NACLib::TDiffACL acl;
+    acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "user1@staff");
+    ModifyTopicAcl(*setup, "topic1", acl);
+
+    auto& runtime = setup->GetRuntime();
+    CreateUnlockerActor(runtime, {
+        .DatabasePath = "/Root",
+        .TopicName = "/Root/topic1",
+        .Consumer = "mlp-consumer",
+        .Messages = { TMessageId(0, 0) },
+        .UserToken = MakeIntrusiveConst<NACLib::TUserToken>("bad-user@staff", TVector<TString>{}),
+    });
+
+    auto result = GetChangeResponse(runtime);
+    UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SCHEME_ERROR);
+    UNIT_ASSERT(!result->ErrorDescription.empty());
+}
+
+Y_UNIT_TEST(UnauthorizedDeadlineChanger) {
+    auto setup = CreateSetup();
+    CreateTopic(setup, "/Root/topic1", "mlp-consumer");
+
+    NACLib::TDiffACL acl;
+    acl.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "user1@staff");
+    ModifyTopicAcl(*setup, "topic1", acl);
+
+    auto& runtime = setup->GetRuntime();
+    CreateMessageDeadlineChangerActor(runtime, {
+        .DatabasePath = "/Root",
+        .TopicName = "/Root/topic1",
+        .Consumer = "mlp-consumer",
+        .Messages = { TMessageId(0, 0) },
+        .Deadlines = { TInstant::Now() + TDuration::Seconds(30) },
+        .UserToken = MakeIntrusiveConst<NACLib::TUserToken>("bad-user@staff", TVector<TString>{}),
+    });
+
+    auto result = GetChangeResponse(runtime);
+    UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SCHEME_ERROR);
+    UNIT_ASSERT(!result->ErrorDescription.empty());
+}
+
+Y_UNIT_TEST(DeadlineChangerMessagesDeadlinesSizeMismatch) {
+    auto setup = CreateSetup();
+    CreateTopic(setup, "/Root/topic1", "mlp-consumer");
+    setup->Write("/Root/topic1", "msg-1", 0);
+
+    auto& runtime = setup->GetRuntime();
+    CreateMessageDeadlineChangerActor(runtime, {
+        .DatabasePath = "/Root",
+        .TopicName = "/Root/topic1",
+        .Consumer = "mlp-consumer",
+        .Messages = { TMessageId(0, 0), TMessageId(0, 1) },
+        .Deadlines = { TInstant::Now() + TDuration::Seconds(30) },
+    });
+
+    auto result = GetChangeResponse(runtime);
+    UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::BAD_REQUEST);
+    UNIT_ASSERT(result->ErrorDescription.Contains("size mismatch"));
+}
+
+Y_UNIT_TEST(DeadlineChangerMultiPartition) {
+    auto setup = CreateSetup();
+    CreateTopic(setup, "/Root/topic1", "mlp-consumer", 2);
+
+    auto& runtime = setup->GetRuntime();
+    std::vector<TMessageId> messageIds;
+    {
+        CreateWriterActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Messages = {
+                {.Index = 0, .MessageBody = "p0", .MessageGroupId = "g0"},
+                {.Index = 1, .MessageBody = "p1", .MessageGroupId = "g1"},
+            }
+        });
+        auto write = GetWriteResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(write->Messages.size(), 2);
+        messageIds = {*write->Messages[0].MessageId, *write->Messages[1].MessageId};
+        UNIT_ASSERT_VALUES_UNEQUAL(messageIds[0].PartitionId, messageIds[1].PartitionId);
+    }
+
+    std::vector<TMessageId> lockedIds;
+    for (size_t i = 0; i < 2; ++i) {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(2),
+            .ProcessingTimeout = TDuration::Seconds(5),
+            .MaxNumberOfMessage = 1,
+        });
+        auto response = GetReadResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+        lockedIds.push_back(response->Messages[0].MessageId);
+    }
+    UNIT_ASSERT_VALUES_UNEQUAL(lockedIds[0].PartitionId, lockedIds[1].PartitionId);
+
+    const auto far = TInstant::Now() + TDuration::Minutes(10);
+    CreateMessageDeadlineChangerActor(runtime, {
+        .DatabasePath = "/Root",
+        .TopicName = "/Root/topic1",
+        .Consumer = "mlp-consumer",
+        .Messages = lockedIds,
+        .Deadlines = { far, far },
+    });
+    auto result = GetChangeResponse(runtime);
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SUCCESS, result->ErrorDescription);
+    UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 2);
+    for (const auto& msg : result->Messages) {
+        UNIT_ASSERT(msg.Status == EOperationResult::Success);
+    }
+
+    // Extended visibility — immediate re-read must be empty.
+    CreateReaderActor(runtime, {
+        .DatabasePath = "/Root",
+        .TopicName = "/Root/topic1",
+        .Consumer = "mlp-consumer",
+        .WaitTime = TDuration::Seconds(0),
+        .ProcessingTimeout = TDuration::Seconds(5),
+        .MaxNumberOfMessage = 2,
+    });
+    UNIT_ASSERT_VALUES_EQUAL(GetReadResponse(runtime)->Messages.size(), 0);
+}
+
+Y_UNIT_TEST(UnlockMultiPartition) {
+    auto setup = CreateSetup();
+    CreateTopic(setup, "/Root/topic1", "mlp-consumer", 2);
+
+    auto& runtime = setup->GetRuntime();
+    {
+        CreateWriterActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Messages = {
+                {.Index = 0, .MessageBody = "u0", .MessageGroupId = "g0"},
+                {.Index = 1, .MessageBody = "u1", .MessageGroupId = "g1"},
+            }
+        });
+        UNIT_ASSERT_VALUES_EQUAL(GetWriteResponse(runtime)->Messages.size(), 2);
+    }
+
+    std::vector<TMessageId> lockedIds;
+    for (size_t i = 0; i < 2; ++i) {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(2),
+            .ProcessingTimeout = TDuration::Seconds(30),
+            .MaxNumberOfMessage = 1,
+        });
+        auto response = GetReadResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+        lockedIds.push_back(response->Messages[0].MessageId);
+    }
+
+    CreateUnlockerActor(runtime, {
+        .DatabasePath = "/Root",
+        .TopicName = "/Root/topic1",
+        .Consumer = "mlp-consumer",
+        .Messages = lockedIds,
+    });
+    auto result = GetChangeResponse(runtime);
+    UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 2);
+    for (const auto& msg : result->Messages) {
+        UNIT_ASSERT(msg.Status == EOperationResult::Success);
+    }
+}
+
+Y_UNIT_TEST(MixedUnlockResults) {
+    auto setup = CreateSetup();
+    CreateTopic(setup, "/Root/topic1", "mlp-consumer");
+    setup->Write("/Root/topic1", "msg-1", 0);
+
+    auto& runtime = setup->GetRuntime();
+    TMessageId lockedId;
+    {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(1),
+            .ProcessingTimeout = TDuration::Seconds(30),
+            .MaxNumberOfMessage = 1,
+        });
+        lockedId = GetReadResponse(runtime)->Messages[0].MessageId;
+    }
+
+    CreateUnlockerActor(runtime, {
+        .DatabasePath = "/Root",
+        .TopicName = "/Root/topic1",
+        .Consumer = "mlp-consumer",
+        .Messages = { lockedId, TMessageId(0, 99) },
+    });
+    auto result = GetChangeResponse(runtime);
+    UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 2);
+
+    THashMap<ui64, EOperationResult> byOffset;
+    for (const auto& msg : result->Messages) {
+        byOffset[msg.MessageId.Offset] = msg.Status;
+    }
+    UNIT_ASSERT(byOffset[lockedId.Offset] == EOperationResult::Success);
+    UNIT_ASSERT(byOffset[99] == EOperationResult::NotFound);
+}
+
+Y_UNIT_TEST(MixedDeadlineResults) {
+    auto setup = CreateSetup();
+    CreateTopic(setup, "/Root/topic1", "mlp-consumer");
+    setup->Write("/Root/topic1", "msg-1", 0);
+
+    auto& runtime = setup->GetRuntime();
+    TMessageId lockedId;
+    {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(1),
+            .ProcessingTimeout = TDuration::Seconds(30),
+            .MaxNumberOfMessage = 1,
+        });
+        lockedId = GetReadResponse(runtime)->Messages[0].MessageId;
+    }
+
+    const auto deadline = TInstant::Now() + TDuration::Seconds(30);
+    CreateMessageDeadlineChangerActor(runtime, {
+        .DatabasePath = "/Root",
+        .TopicName = "/Root/topic1",
+        .Consumer = "mlp-consumer",
+        .Messages = { lockedId, TMessageId(0, 99) },
+        .Deadlines = { deadline, deadline },
+    });
+    auto result = GetChangeResponse(runtime);
+    UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 2);
+
+    THashMap<ui64, EOperationResult> byOffset;
+    for (const auto& msg : result->Messages) {
+        byOffset[msg.MessageId.Offset] = msg.Status;
+    }
+    UNIT_ASSERT(byOffset[lockedId.Offset] == EOperationResult::Success);
+    UNIT_ASSERT(byOffset[99] == EOperationResult::NotFound);
+}
+
+Y_UNIT_TEST(CapacitySmokeKeepOrder) {
+    // Bounded replacement for the disabled CapacityTest load loop.
+    auto setup = CreateSetup();
+    CreateTopic(setup, "/Root/topic1", "mlp-consumer", 1, true);
+    auto& runtime = setup->GetRuntime();
+
+    CreateWriterActor(runtime, {
+        .DatabasePath = "/Root",
+        .TopicName = "/Root/topic1",
+        .Messages = {
+            {.Index = 0, .MessageBody = "a", .MessageGroupId = "g", .MessageDeduplicationId = "d1"},
+            {.Index = 1, .MessageBody = "b", .MessageGroupId = "g", .MessageDeduplicationId = "d2"},
+        }
+    });
+    UNIT_ASSERT_VALUES_EQUAL(GetWriteResponse(runtime)->Messages.size(), 2);
+
+    TMessageId firstId;
+    {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(1),
+            .ProcessingTimeout = TDuration::Seconds(30),
+            .MaxNumberOfMessage = 1,
+        });
+        auto response = GetReadResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "a");
+        firstId = response->Messages[0].MessageId;
+    }
+
+    CreateCommitterActor(runtime, {
+        .DatabasePath = "/Root",
+        .TopicName = "/Root/topic1",
+        .Consumer = "mlp-consumer",
+        .Messages = { firstId },
+    });
+    UNIT_ASSERT(GetChangeResponse(runtime)->Messages[0].Status == EOperationResult::Success);
+
+    CreateReaderActor(runtime, {
+        .DatabasePath = "/Root",
+        .TopicName = "/Root/topic1",
+        .Consumer = "mlp-consumer",
+        .WaitTime = TDuration::Seconds(1),
+        .ProcessingTimeout = TDuration::Seconds(30),
+        .MaxNumberOfMessage = 1,
+    });
+    auto response = GetReadResponse(runtime);
+    UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "b");
+}
+
 Y_UNIT_TEST(CapacityTest) {
+    // Heavy load benchmark — intentionally disabled in CI. See CapacitySmokeKeepOrder.
     return;
 
     auto setup = CreateSetup();

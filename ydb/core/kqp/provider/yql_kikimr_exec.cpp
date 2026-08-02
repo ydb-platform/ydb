@@ -802,6 +802,9 @@ namespace {
             } else if (name == "setMetricsLevel") {
                 auto metricsLevel = FromString<i32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
                 request->set_metrics_level(metricsLevel);
+            } else if (name == "setContentBasedDeduplication") {
+                auto value = FromString<bool>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                request->set_content_based_deduplication(value);
             }
         }
     }
@@ -877,6 +880,9 @@ namespace {
                 request->set_set_metrics_level(metricsLevel);
             } else if (name == "resetMetricsLevel") {
                 request->mutable_reset_metrics_level();
+            } else if (name == "setContentBasedDeduplication") {
+                auto value = FromString<bool>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                request->set_set_content_based_deduplication(value);
             }
         }
     }

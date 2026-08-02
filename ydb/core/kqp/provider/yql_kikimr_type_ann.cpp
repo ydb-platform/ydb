@@ -2637,6 +2637,10 @@ private:
                 );
                 maxPartitions = value;
                 errorPos = ctx.GetPosition(setting.Value().Ref().Pos());
+            } else if (name == "setContentBasedDeduplication") {
+                if (!EnsureAtom(setting.Value().Ref(), ctx)) {
+                    return false;
+                }
             } else if (name.StartsWith("reset")) {
                 ctx.AddError(TIssue(
                         errorPos,

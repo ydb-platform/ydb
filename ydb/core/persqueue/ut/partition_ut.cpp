@@ -4388,6 +4388,92 @@ Y_UNIT_TEST_F(AddBlobsFromBodyUsesKeyOfCurrentBlob, TPartitionFixture) {
     Ctx->Runtime->DispatchEvents(options);
 }
 
+// Tx commit renames the Key (supportive → parent offset) but does not rewrite batch headers
+// inside the blob value. Mid-blob FindPos returns header-space offsets; assigning
+// Offset = position.Offset without converting back to key-space reports supportive
+// offsets (e.g. 391) while the client ReadOffset stays on the parent scale
+// (e.g. 547189849) → FillBatchedData ENSURE.
+Y_UNIT_TEST_F(AddBlobsFromBodyKeepsKeySpaceOffsetAfterTxKeyRename, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+
+    const TPartitionId partitionId(1);
+    constexpr ui64 supportiveHeaderOffset = 0;
+    constexpr ui32 messageCount = 4;
+    constexpr ui64 parentKeyOffset = 1'000'000;
+    // Mid-blob read forces the FindPos branch (trueOffset < requested Offset).
+    constexpr ui64 readOffset = parentKeyOffset + 2;
+
+    std::deque<TClientBlob> dq;
+    dq.push_back(MakeSinglePartBodyReadBlob(1, 'a'));
+    dq.push_back(MakeSinglePartBodyReadBlob(2, 'b'));
+    dq.push_back(MakeSinglePartBodyReadBlob(3, 'c'));
+    dq.push_back(MakeSinglePartBodyReadBlob(4, 'd'));
+    // Headers keep supportive coordinates (as after PartitionedBlob::Add key rename).
+    TString raw = SerializePackedBatchForReadBodyTest(
+        TBatch::FromBlobs(supportiveHeaderOffset, std::move(dq)));
+
+    const TKey supportiveKey = TKey::ForBody(
+        TKeyPrefix::TypeData, partitionId, supportiveHeaderOffset, 0, messageCount, 0);
+    const TKey parentKey = TKey::FromKey(
+        supportiveKey, TKeyPrefix::TypeData, partitionId, parentKeyOffset);
+    UNIT_ASSERT_VALUES_EQUAL(parentKey.GetOffset(), parentKeyOffset);
+    UNIT_ASSERT_VALUES_EQUAL(parentKey.GetCount(), messageCount);
+
+    TRequestedBlob blob = MakeRequestedBlobForRead(
+        parentKeyOffset, 0, messageCount, 0, std::move(raw), parentKey);
+
+    TVector<TRequestedBlob> blobs;
+    blobs.push_back(std::move(blob));
+
+    auto probe = [&](const TActorContext& ctx) {
+        TReadInfo info = MakeReadInfoForAddBlobsFromBodyTest(Ctx->Edge, readOffset);
+        info.Blobs = blobs;
+        info.CompactedBlobsCount = 1;
+
+        auto answer = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+        NKikimrClient::TResponse& res = *answer->Response;
+        auto* readResult = res.MutablePartitionResponse()->MutableCmdReadResult();
+
+        bool needStop = false;
+        ui32 cnt = 0;
+        ui32 size = 0;
+        ui32 lastBlobSize = 0;
+
+        TMaybe<TReadAnswer> early = info.AddBlobsFromBody(blobs,
+                                                          0,
+                                                          1,
+                                                          nullptr,
+                                                          readOffset,
+                                                          parentKeyOffset + messageCount + 10,
+                                                          kAddBlobsFromBodyProbeSizeLag,
+                                                          Ctx->Edge,
+                                                          readOffset,
+                                                          readResult,
+                                                          answer,
+                                                          needStop,
+                                                          cnt,
+                                                          size,
+                                                          lastBlobSize,
+                                                          ctx);
+
+        UNIT_ASSERT(!early.Defined());
+        UNIT_ASSERT_VALUES_EQUAL(readResult->ResultSize(), 2u);
+
+        // Must stay in parent/key coordinates, not supportive header offsets 2 and 3.
+        UNIT_ASSERT_VALUES_EQUAL(readResult->GetResult(0).GetOffset(), parentKeyOffset + 2);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->GetResult(1).GetOffset(), parentKeyOffset + 3);
+        UNIT_ASSERT_VALUES_EQUAL(info.Offset, parentKeyOffset + messageCount);
+    };
+
+    Ctx->Runtime->Register(new TAddBlobsFromBodyReadTestActor(Ctx->Edge, std::move(probe)));
+
+    TDispatchOptions options;
+    options.FinalEvents.emplace_back([](IEventHandle& ev) {
+        return ev.GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType;
+    });
+    Ctx->Runtime->DispatchEvents(options);
+}
+
 // Empty TRequestedBlob body (retention / requested range past data): AddBlobsFromBody logs
 // "Not full answer here!", fills read result metadata and returns TReadAnswer early.
 Y_UNIT_TEST_F(AddBlobsFromBodyStopsOnEmptyBlob, TPartitionFixture) {

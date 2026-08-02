@@ -16,8 +16,8 @@ ydb/core/blobstorage/ut_blobstorage/ut_replication ReplicationSpace.HugeBlobsWit
 ydb/core/blobstorage/ut_blobstorage/ut_replication ReplicationSpace.SmallBlobsNoDonor
 ydb/core/blobstorage/ut_blobstorage/ut_replication ReplicationSpace.SmallBlobsWithDonor
 ydb/core/blobstorage/ut_blobstorage/ut_replication unittest.[*/*] chunk
+ydb/core/blobstorage/vdisk/synclog/ut_real_pdisk TBlobStorageSyncLogRealPDisk.LocalSyncDataUnsuccessfulFullRecoveryDoesNotExhaustLogChunks
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
-ydb/core/tx/schemeshard/ut_background_cleaning TSchemeshardBackgroundCleaningTest.SchemeshardBackgroundCleaningTestCreateCleanManyTables
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.ColumnTableWithLocalBloomIndexes
 ydb/library/actors/interconnect/ut_fat InterconnectZcLocalOp.ZcDisabledAfterHiddenCopy
 ydb/public/sdk/cpp/tests/integration/topic gtest.[*/*] chunk
@@ -33,7 +33,6 @@ ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/testshard_workload/tests test_workload.py.TestYdbTestShardWorkload.test
 ydb/tests/stress/topic_sqs/tests test_workload.py.TestYdbTopicSqsWorkload.test
 ydb/tools/mnc/viewer/ut py3test.sole chunk
-ydb/tools/mnc/viewer/ut test_navigation.py.ViewerTabNavigationTest.test_operation_tab_navigation_matches_state_machine
 ydb/tools/mnc/viewer/ut test_navigation.py.ViewerTabNavigationTest.test_tab_navigation_matches_state_machine_for_core_command_sequences
 ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite
 ydb/tools/stress_tool/ut TDeviceTestTool.PersistentBufferTestWrite

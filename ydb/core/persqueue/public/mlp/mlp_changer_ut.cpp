@@ -796,6 +796,117 @@ Y_UNIT_TEST(DeadlineChangerMultiPartition) {
     UNIT_ASSERT_VALUES_EQUAL(GetReadResponse(runtime)->Messages.size(), 0);
 }
 
+Y_UNIT_TEST(DeadlineChangerMultiPartitionDifferentDeadlines) {
+    // Different deadlines on different partitions must be applied to the matching offsets
+    // (not the full Deadlines vector to every partition request).
+    auto setup = CreateSetup();
+    CreateTopic(setup, "/Root/topic1", "mlp-consumer", 2);
+    auto& runtime = setup->GetRuntime();
+
+    {
+        CreateWriterActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Messages = {
+                {.Index = 0, .MessageBody = "short-deadline", .MessageGroupId = "g0"},
+                {.Index = 1, .MessageBody = "long-deadline", .MessageGroupId = "g1"},
+            }
+        });
+        auto write = GetWriteResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(write->Messages.size(), 2);
+        UNIT_ASSERT_VALUES_UNEQUAL(write->Messages[0].MessageId->PartitionId,
+            write->Messages[1].MessageId->PartitionId);
+    }
+
+    std::vector<TMessageId> lockedIds;
+    THashMap<TString, TString> dataById;
+    auto messageKey = [](const TMessageId& id) -> TString {
+        return TStringBuilder() << id.PartitionId << ":" << id.Offset;
+    };
+    for (size_t i = 0; i < 2; ++i) {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(2),
+            .ProcessingTimeout = TDuration::Seconds(30),
+            .MaxNumberOfMessage = 1,
+        });
+        auto response = GetReadResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+        lockedIds.push_back(response->Messages[0].MessageId);
+        dataById[messageKey(response->Messages[0].MessageId)] = response->Messages[0].Data;
+    }
+    UNIT_ASSERT_VALUES_UNEQUAL(lockedIds[0].PartitionId, lockedIds[1].PartitionId);
+
+    // Put short deadline on the first locked message, long on the second — regardless of partition order.
+    // Use a few seconds of slack: deadlines are stored with second precision.
+    const auto shortDeadline = TInstant::Now() + TDuration::Seconds(3);
+    const auto longDeadline = TInstant::Now() + TDuration::Minutes(10);
+    CreateMessageDeadlineChangerActor(runtime, {
+        .DatabasePath = "/Root",
+        .TopicName = "/Root/topic1",
+        .Consumer = "mlp-consumer",
+        .Messages = lockedIds,
+        .Deadlines = { shortDeadline, longDeadline },
+    });
+    {
+        auto result = GetChangeResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SUCCESS, result->ErrorDescription);
+        UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 2);
+        for (const auto& msg : result->Messages) {
+            UNIT_ASSERT(msg.Status == EOperationResult::Success);
+        }
+    }
+
+    // Deadlines are stored with second precision.
+    const auto expectedShort = TInstant::Seconds(shortDeadline.Seconds());
+    const auto expectedLong = TInstant::Seconds(longDeadline.Seconds());
+
+    auto assertDeadline = [&](const TMessageId& id, TInstant expected) {
+        auto state = GetConsumerState(setup, "/Root", "/Root/topic1", "mlp-consumer", id.PartitionId);
+        UNIT_ASSERT_VALUES_EQUAL(state->Messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(state->Messages[0].Offset, id.Offset);
+        UNIT_ASSERT_VALUES_EQUAL_C(state->Messages[0].ProcessingDeadline, expected,
+            TStringBuilder() << "partition=" << id.PartitionId << " offset=" << id.Offset);
+    };
+    assertDeadline(lockedIds[0], expectedShort);
+    assertDeadline(lockedIds[1], expectedLong);
+
+    // After short deadline expires only that message becomes readable again.
+    Sleep(TDuration::Seconds(5));
+    TMessageId expiredId;
+    bool gotExpired = false;
+    for (size_t i = 0; i < 5 && !gotExpired; ++i) {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(2),
+            .ProcessingTimeout = TDuration::Seconds(30),
+            .MaxNumberOfMessage = 2,
+        });
+        auto response = GetReadResponse(runtime);
+        UNIT_ASSERT(response);
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Status, Ydb::StatusIds::SUCCESS, response->ErrorDescription);
+        if (response->Messages.size() == 1) {
+            expiredId = response->Messages[0].MessageId;
+            UNIT_ASSERT_VALUES_EQUAL(expiredId.PartitionId, lockedIds[0].PartitionId);
+            UNIT_ASSERT_VALUES_EQUAL(expiredId.Offset, lockedIds[0].Offset);
+            UNIT_ASSERT_VALUES_EQUAL(dataById[messageKey(lockedIds[0])], response->Messages[0].Data);
+            gotExpired = true;
+        }
+    }
+    UNIT_ASSERT_C(gotExpired, "short-deadline message did not become readable");
+
+    // Long-deadline message still has its deadline and is not returned by the read above.
+    auto longState = GetConsumerState(setup, "/Root", "/Root/topic1", "mlp-consumer",
+        lockedIds[1].PartitionId);
+    UNIT_ASSERT_VALUES_EQUAL(longState->Messages.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(longState->Messages[0].Offset, lockedIds[1].Offset);
+    UNIT_ASSERT_VALUES_EQUAL(longState->Messages[0].ProcessingDeadline, expectedLong);
+}
+
 Y_UNIT_TEST(UnlockMultiPartition) {
     auto setup = CreateSetup();
     CreateTopic(setup, "/Root/topic1", "mlp-consumer", 2);

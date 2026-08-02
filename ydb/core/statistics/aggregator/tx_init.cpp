@@ -1,5 +1,7 @@
 #include "aggregator_impl.h"
 
+#include <ydb/core/statistics/aggregator/analyze_actor.h>
+
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/feature_flags.h>
 
@@ -25,14 +27,12 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
         { // precharge
             auto sysParamsRowset = db.Table<Schema::SysParams>().Range().Select();
             auto baseStatisticsRowset = db.Table<Schema::BaseStatistics>().Range().Select();
-            auto statisticsRowset = db.Table<Schema::ColumnStatistics>().Range().Select();
             auto scheduleTraversalRowset = db.Table<Schema::ScheduleTraversals>().Range().Select();
             auto forceTraversalOperationsRowset = db.Table<Schema::ForceTraversalOperations>().Range().Select();
             auto forceTraversalTablesRowset = db.Table<Schema::ForceTraversalTables>().Range().Select();
 
             if (!sysParamsRowset.IsReady() ||
                 !baseStatisticsRowset.IsReady() ||
-                !statisticsRowset.IsReady() ||
                 !scheduleTraversalRowset.IsReady() ||
                 !forceTraversalOperationsRowset.IsReady() ||
                 !forceTraversalTablesRowset.IsReady())
@@ -59,11 +59,6 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                             {"tabletId", Self->TabletID()},
                             {"database", Self->Database});
                         break;
-                    case Schema::SysParam_TraversalStartKey:
-                        Self->TraversalStartKey = TSerializedCellVec(value);
-                        YDB_LOG_DEBUG("Loaded traversal start key",
-                            {"tabletId", Self->TabletID()});
-                        break;
                     case Schema::SysParam_TraversalTableDatabase:
                         Self->TraversalDatabase = value;
                         YDB_LOG_DEBUG("Loaded traversal table database",
@@ -88,20 +83,6 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                         YDB_LOG_DEBUG("Loaded traversal start time",
                             {"tabletId", Self->TabletID()},
                             {"time", us});
-                        break;
-                    }
-                    case Schema::SysParam_TraversalIsColumnTable: {
-                        Self->TraversalIsColumnTable = FromString<bool>(value);
-                        YDB_LOG_DEBUG("Loaded traversal IsColumnTable",
-                            {"tabletId", Self->TabletID()},
-                            {"isColumnTable", value});
-                        break;
-                    }
-                    case Schema::SysParam_GlobalTraversalRound: {
-                        Self->GlobalTraversalRound = FromString<ui64>(value);
-                        YDB_LOG_DEBUG("Loaded global traversal round",
-                            {"tabletId", Self->TabletID()},
-                            {"round", value});
                         break;
                     }
                     case Schema::SysParam_ForceTraversalOperationId:
@@ -146,32 +127,6 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
             YDB_LOG_DEBUG("Loaded BaseStatistics",
                 {"tabletId", Self->TabletID()},
                 {"schemeShardsCount", Self->BaseStatistics.size()});
-        }
-
-        // ColumnStatistics
-        {
-            Self->CountMinSketches.clear();
-
-            auto rowset = db.Table<Schema::ColumnStatistics>().Range().Select();
-            if (!rowset.IsReady()) {
-                return false;
-            }
-
-            while (!rowset.EndOfSet()) {
-                ui32 columnTag = rowset.GetValue<Schema::ColumnStatistics::ColumnTag>();
-                TString sketch = rowset.GetValue<Schema::ColumnStatistics::CountMinSketch>();
-
-                Self->CountMinSketches[columnTag].reset(
-                    TCountMinSketch::FromString(sketch.data(), sketch.size()));
-
-                if (!rowset.Next()) {
-                    return false;
-                }
-            }
-
-            YDB_LOG_DEBUG("Loaded ColumnStatistics",
-                {"tabletId", Self->TabletID()},
-                {"columnCount", Self->CountMinSketches.size()});
         }
 
         // ScheduleTraversals
@@ -335,8 +290,6 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
 
         if (Self->EnableColumnStatistics) {
             Self->Schedule(Self->TraversalPeriod, new TEvPrivate::TEvScheduleTraversal());
-            Self->Schedule(Self->SendAnalyzePeriod, new TEvPrivate::TEvSendAnalyze());
-            Self->Schedule(Self->AnalyzeDeliveryProblemPeriod, new TEvPrivate::TEvAnalyzeDeliveryProblem());
             Self->Schedule(Self->AnalyzeDeadlinePeriod, new TEvPrivate::TEvAnalyzeDeadline());
         } else {
             YDB_LOG_WARN("TTxInit::Complete. EnableColumnStatistics=false",
@@ -347,13 +300,18 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
             Self->InitializeStatisticsTable();
         }
 
-        if (Self->TraversalPathId && Self->TraversalStartKey) {
-            YDB_LOG_DEBUG("TTxInit::Complete. Start navigate.",
+        if (Self->TraversalPathId && !Self->AnalyzeActorId) {
+            YDB_LOG_DEBUG("TTxInit::Complete. Resume traversal with TAnalyzeActor.",
                 {"tabletId", Self->TabletID()},
                 {"traversalPathId", Self->TraversalPathId});
-            Self->NavigateDatabase = Self->TraversalDatabase;
-            Self->NavigatePathId = Self->TraversalPathId;
-            Self->Navigate();
+            auto analyzeActorConfig = TAnalyzeActor::TConfig{
+                .MaxTotalScanActorsInFlight = Self->StatisticsConfig.GetAnalyzeMaxTotalScanActorsInFlight(),
+                .MaxPerNodeScanActorsInFlight = Self->StatisticsConfig.GetAnalyzeMaxPerNodeScanActorsInFlight(),
+            };
+            Self->AnalyzeActorId = ctx.Register(new TAnalyzeActor(
+                Self->SelfId(), Self->ForceTraversalOperationId, Self->TraversalDatabase, Self->TraversalPathId,
+                TVector<ui32>{}, analyzeActorConfig),
+                TMailboxType::HTSwap, AppData()->BatchPoolId);
         }
 
         Self->ReportBaseStatisticsCounters();

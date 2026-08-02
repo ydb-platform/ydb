@@ -139,7 +139,10 @@ class YdbTopicWorkload(WorkloadBase):
 
     def _run_workload(self, topic_name, duration, byte_rate, producers, consumers,
                       consumer_threads=None,
-                      tx_commit_interval=None, use_tx=True, with_config=True) -> None:
+                      tx_commit_interval=None, use_tx=True, with_config=True,
+                      codec="raw", batch_flush_message_count=1,
+                      batch_flush_interval="1s", batch_flush_size=None,
+                      batch_inner_codec=None) -> None:
         """Запускает тестовую нагрузку с мониторингом.
 
         Args:
@@ -163,7 +166,14 @@ class YdbTopicWorkload(WorkloadBase):
             '--byte-rate', byte_rate,
             '-p', str(producers), '-c', str(consumers),
             '--topic', topic_name,
+            '--codec', codec,
+            '--batch-flush-message-count', str(batch_flush_message_count),
+            '--batch-flush-interval', batch_flush_interval,
         ]
+        if batch_flush_size:
+            args.extend(['--batch-flush-size', batch_flush_size])
+        if batch_inner_codec:
+            args.extend(['--batch-inner-codec', batch_inner_codec])
         if consumer_threads:
             args.extend(['-t', str(consumer_threads)])
         if use_tx:
@@ -411,6 +421,36 @@ class YdbTopicWorkload(WorkloadBase):
         finally:
             self._cleanup_test_topic(topic_name)
 
+    # Stress kafka-batch writes without transactions while workload readers continuously cut physical
+    # batches back into logical topic messages.
+    def __batched_non_transactional_workload(self):
+        self.run_topic_write_without_tx(TestConfig(
+            partitions=10,
+            partitions_per_tablet=5,
+            producers=20,
+            consumers=int(self.consumers),
+            consumer_threads=int(self.consumers),
+            byte_rate="1M",
+            codec="kafka-batch",
+            batch_flush_message_count=5,
+            batch_flush_interval="1s",
+        ))
+
+    # Stress kafka-batch writes inside topic transactions and verify workload readers can keep up
+    # with committed physical batches while commits happen periodically.
+    def __batched_transactional_workload(self):
+        self.run_topic_write_with_tx(TestConfig(
+            partitions=10,
+            partitions_per_tablet=5,
+            producers=20,
+            consumers=int(self.consumers),
+            consumer_threads=int(self.consumers),
+            byte_rate="1M",
+            codec="kafka-batch",
+            batch_flush_message_count=5,
+            batch_flush_interval="1s",
+        ))
+
     @property
     def workload_topic_name(self) -> str:
         return f'{self.table_prefix}'
@@ -442,7 +482,7 @@ class YdbTopicWorkload(WorkloadBase):
         self._cleanup_test_topic(self.workload_topic_name)
 
     def run_topic_write_with_tx(self, test_config: TestConfig):
-        topic_name = f'workload_topic_pr{test_config.producers}_p{test_config.partitions}_pq{test_config.partitions_per_tablet}'
+        topic_name = f'workload_topic{self._test_config_suffix(test_config)}'
 
         # Создаем тестовый топик
         self._create_test_topic(
@@ -465,14 +505,19 @@ class YdbTopicWorkload(WorkloadBase):
             test_config.consumers,
             consumer_threads=test_config.consumer_threads,
             use_tx=True,
-            with_config=True
+            with_config=True,
+            codec=test_config.codec,
+            batch_flush_message_count=test_config.batch_flush_message_count,
+            batch_flush_interval=test_config.batch_flush_interval,
+            batch_flush_size=test_config.batch_flush_size,
+            batch_inner_codec=test_config.batch_inner_codec
         )
 
         # Удаляем тестовый топик
         self._cleanup_test_topic(topic_name)
 
     def run_topic_write_without_tx(self, test_config: TestConfig):
-        topic_name = f'workload_ntx_pr{test_config.producers}_p{test_config.partitions}_pq{test_config.partitions_per_tablet}'
+        topic_name = f'workload_ntx{self._test_config_suffix(test_config)}'
 
         # Создаем тестовый топик
         self._create_test_topic(
@@ -495,7 +540,12 @@ class YdbTopicWorkload(WorkloadBase):
             test_config.consumers,
             consumer_threads=test_config.consumer_threads,
             use_tx=False,
-            with_config=True
+            with_config=True,
+            codec=test_config.codec,
+            batch_flush_message_count=test_config.batch_flush_message_count,
+            batch_flush_interval=test_config.batch_flush_interval,
+            batch_flush_size=test_config.batch_flush_size,
+            batch_inner_codec=test_config.batch_inner_codec
         )
 
         # Удаляем тестовый топик
@@ -511,6 +561,8 @@ class YdbTopicWorkload(WorkloadBase):
             self.__immediate_transaction,
             self.__non_transactional_workload,
             self.__keyed_producer_auto_partitioning_workload,
+            self.__batched_non_transactional_workload,
+            self.__batched_transactional_workload,
         ]
         if (self.chunk_index is None) or (self.chunk_size is None):
             return tests
@@ -523,3 +575,10 @@ class YdbTopicWorkload(WorkloadBase):
                 f()
 
         return [run_chunk]
+
+    def _test_config_suffix(self, test_config: TestConfig) -> str:
+        suffix = f'_pr{test_config.producers}_p{test_config.partitions}_pq{test_config.partitions_per_tablet}'
+        if test_config.codec != "raw" or test_config.batch_flush_message_count != 1:
+            codec = test_config.codec.replace("-", "_")
+            suffix += f'_{codec}_b{test_config.batch_flush_message_count}'
+        return suffix

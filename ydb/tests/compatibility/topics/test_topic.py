@@ -1168,6 +1168,73 @@ class TestTopicMessagesBatchingDisabledRead(CurrentToCurrentVersionFixture):
         ]
 
 
+class TestTopicTransactionMidBlobRead(CurrentToCurrentVersionFixture):
+    @pytest.fixture(autouse=True, scope="function")
+    def setup(self):
+        yield from self.setup_cluster()
+
+    # Reproduce the #48508 shape: write a non-zero parent offset prefix, commit a transaction that
+    # stores regular messages from a supportive partition, restart, then start readers from offsets
+    # inside the tx-written blob so FindPos must translate header coordinates back to parent keys.
+    def test_mid_blob_read_after_transaction_commit_uses_parent_offsets(self):
+        utils = Workload(self)
+        consumers = (
+            "tx-mid-blob-consumer-1",
+            "tx-mid-blob-consumer-50",
+            "tx-mid-blob-consumer-last",
+        )
+        utils.create_topic(consumers=consumers)
+
+        prefix_count = 500
+        tx_count = 200
+        prefix_messages = [
+            f"tx-mid-blob-prefix-{i}"
+            for i in range(prefix_count)
+        ]
+        tx_messages = [
+            f"tx-mid-blob-transaction-{i}-" + ("x" * 256)
+            for i in range(tx_count)
+        ]
+
+        write_raw_messages(
+            self.driver,
+            utils.topic_name,
+            prefix_messages,
+            producer_id="tx-mid-blob-prefix-producer",
+        )
+        write_raw_messages_in_transaction(
+            self.driver,
+            utils.topic_name,
+            tx_messages,
+            producer_id="tx-mid-blob-transaction-producer",
+        )
+        wait_topic_end_offset(self.driver, utils.topic_name, prefix_count + tx_count)
+
+        restart_cluster_with_current_config(self)
+
+        for consumer, delta in [
+            ("tx-mid-blob-consumer-1", 1),
+            ("tx-mid-blob-consumer-50", 50),
+            ("tx-mid-blob-consumer-last", tx_count - 1),
+        ]:
+            self.driver.topic_client.commit_offset(
+                utils.topic_name,
+                consumer,
+                0,
+                prefix_count + delta,
+            )
+            assert read_messages(
+                self.driver,
+                utils.topic_name,
+                consumer,
+                tx_count - delta,
+                timeout=120,
+            ) == [
+                message.encode("utf-8")
+                for message in tx_messages[delta:]
+            ]
+
+
 class TestTopicTransaction(RollingUpgradeAndDowngradeFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):

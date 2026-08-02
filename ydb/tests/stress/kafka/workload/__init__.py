@@ -243,15 +243,8 @@ class Workload(unittest.TestCase):
 
         for i in range(len(testOptions)):
             messages_info_target = messages_info_targets[i]
-            totalMessCountTest = 0
-            totalMessCountTarget = 0
-            for partitionNum in messages_info_test.keys():
-                testPartitionMess = messages_info_test[partitionNum]
-                targetPartitionMess = messages_info_target[partitionNum]
-                testCount = len(testPartitionMess)
-                targetCount = len(targetPartitionMess)
-                totalMessCountTest += testCount
-                totalMessCountTarget += targetCount
+            totalMessCountTest = self.count_messages(messages_info_test)
+            totalMessCountTarget = self.count_messages(messages_info_target)
 
             print(f"target {self.target_topic_path}-{i}. totalMessCountTest = {totalMessCountTest}, "
                   f"totalMessCountTarget = {totalMessCountTarget}")

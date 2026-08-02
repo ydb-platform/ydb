@@ -516,6 +516,278 @@ Y_UNIT_TEST(HtmlApp_BadPartition) {
     HtmlApp("mlp-consumer", 13, "Tablet info");
 }
 
+Y_UNIT_TEST(RetentionExpiresMessages) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+
+    auto driver = TDriver(setup->MakeDriverConfig());
+    auto client = TTopicClient(driver);
+    client.CreateTopic("/Root/topic1", NYdb::NTopic::TCreateTopicSettings()
+            .RetentionPeriod(TDuration::Seconds(3))
+            .BeginAddSharedConsumer("mlp-consumer")
+                .KeepMessagesOrder(false)
+            .EndAddConsumer()).GetValueSync();
+
+    setup->Write("/Root/topic1", "expire-me", 0);
+    Sleep(TDuration::Seconds(1));
+
+    {
+        auto state = GetConsumerState(setup, "/Root", "/Root/topic1", "mlp-consumer");
+        UNIT_ASSERT(!state->Messages.empty());
+    }
+
+    // Past retention: consumer wakeups compact expired messages away.
+    for (size_t i = 0; i < 15; ++i) {
+        Sleep(TDuration::Seconds(1));
+        // Nudge the consumer so ProccessDeadlines / Compact run.
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(0),
+            .ProcessingTimeout = TDuration::Seconds(30),
+            .MaxNumberOfMessage = 1,
+        });
+        GetReadResponse(runtime);
+
+        auto state = GetConsumerState(setup, "/Root", "/Root/topic1", "mlp-consumer");
+        if (state->Messages.empty()) {
+            auto describe = setup->DescribeConsumer("/Root/topic1", "mlp-consumer");
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetPartitions()[0].GetPartitionConsumerStats()->GetCommittedOffset(), 1);
+            return;
+        }
+    }
+    UNIT_FAIL("Message was not removed by retention");
+}
+
+Y_UNIT_TEST(DLQ_DeleteActionAfterMaxAttempts) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+
+    auto driver = TDriver(setup->MakeDriverConfig());
+    auto client = TTopicClient(driver);
+    client.CreateTopic("/Root/topic1", NYdb::NTopic::TCreateTopicSettings()
+            .BeginAddSharedConsumer("mlp-consumer")
+                .KeepMessagesOrder(false)
+                .BeginDeadLetterPolicy()
+                    .Enable()
+                    .BeginCondition()
+                        .MaxProcessingAttempts(1)
+                    .EndCondition()
+                    .DeleteAction()
+                .EndDeadLetterPolicy()
+            .EndAddConsumer()).GetValueSync();
+
+    setup->Write("/Root/topic1", "delete-me", 0);
+    Sleep(TDuration::Seconds(1));
+
+    {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(1),
+            .ProcessingTimeout = TDuration::Seconds(30),
+            .MaxNumberOfMessage = 1,
+        });
+        auto response = GetReadResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].MessageId.Offset, 0);
+    }
+
+    {
+        CreateUnlockerActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .Messages = {TMessageId(0, 0)},
+        });
+        auto result = GetChangeResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+    }
+
+    for (size_t i = 0; i < 10; ++i) {
+        Sleep(TDuration::MilliSeconds(500));
+        auto state = GetConsumerState(setup, "/Root", "/Root/topic1", "mlp-consumer");
+        if (!state->Messages.empty()) {
+            continue;
+        }
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(0),
+            .ProcessingTimeout = TDuration::Seconds(5),
+            .MaxNumberOfMessage = 1,
+        });
+        auto response = GetReadResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 0);
+        return;
+    }
+    UNIT_FAIL("Message was not deleted by DLQ DeleteAction");
+}
+
+Y_UNIT_TEST(ZeroVisibilityTimeoutUnlocksImmediately) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+
+    auto driver = TDriver(setup->MakeDriverConfig());
+    auto client = TTopicClient(driver);
+    client.CreateTopic("/Root/topic1", NYdb::NTopic::TCreateTopicSettings()
+            .BeginAddSharedConsumer("mlp-consumer")
+                .KeepMessagesOrder(false)
+                .BeginDeadLetterPolicy()
+                    .Enable()
+                    .BeginCondition()
+                        .MaxProcessingAttempts(1)
+                    .EndCondition()
+                    .DeleteAction()
+                .EndDeadLetterPolicy()
+            .EndAddConsumer()).GetValueSync();
+
+    setup->Write("/Root/topic1", "zero-vis", 0);
+    Sleep(TDuration::Seconds(1));
+
+    {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(1),
+            .ProcessingTimeout = TDuration::Zero(),
+            .MaxNumberOfMessage = 1,
+        });
+        auto response = GetReadResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL_C(response->Status, Ydb::StatusIds::SUCCESS, response->ErrorDescription);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "zero-vis");
+    }
+
+    // DeadlineDelta==0 expires on the next consumer cycle → unlock → delete (max attempts=1).
+    for (size_t i = 0; i < 15; ++i) {
+        Sleep(TDuration::Seconds(1));
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(0),
+            .ProcessingTimeout = TDuration::Seconds(5),
+            .MaxNumberOfMessage = 1,
+        });
+        auto response = GetReadResponse(runtime);
+        auto state = GetConsumerState(setup, "/Root", "/Root/topic1", "mlp-consumer");
+        if (response->Messages.empty() && state->Messages.empty()) {
+            return;
+        }
+    }
+    UNIT_FAIL("Zero-visibility message was not unlocked/deleted");
+}
+
+Y_UNIT_TEST(LongPollEmptyThenDataArrives) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    CreateTopic(setup, "/Root/topic1", "mlp-consumer");
+
+    CreateReaderActor(runtime, {
+        .DatabasePath = "/Root",
+        .TopicName = "/Root/topic1",
+        .Consumer = "mlp-consumer",
+        .WaitTime = TDuration::Seconds(10),
+        .ProcessingTimeout = TDuration::Seconds(30),
+        .MaxNumberOfMessage = 1,
+    });
+
+    Sleep(TDuration::MilliSeconds(500));
+    setup->Write("/Root/topic1", "late-arrival", 0);
+
+    auto response = GetReadResponse(runtime, TDuration::Seconds(15));
+    UNIT_ASSERT(response);
+    UNIT_ASSERT_VALUES_EQUAL_C(response->Status, Ydb::StatusIds::SUCCESS, response->ErrorDescription);
+    UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "late-arrival");
+}
+
+Y_UNIT_TEST(FetchAfterEndOffsetChanged) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    CreateTopic(setup, "/Root/topic1", "mlp-consumer");
+
+    // Let the consumer initialize while the partition is empty.
+    Sleep(TDuration::Seconds(2));
+    {
+        auto state = GetConsumerState(setup, "/Root", "/Root/topic1", "mlp-consumer");
+        UNIT_ASSERT(state->Messages.empty());
+    }
+
+    setup->Write("/Root/topic1", "after-idle", 0);
+
+    for (size_t i = 0; i < 10; ++i) {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(1),
+            .ProcessingTimeout = TDuration::Seconds(30),
+            .MaxNumberOfMessage = 1,
+        });
+        auto response = GetReadResponse(runtime);
+        if (response->Messages.empty()) {
+            Sleep(TDuration::MilliSeconds(500));
+            continue;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "after-idle");
+        return;
+    }
+    UNIT_FAIL("Consumer did not fetch message after EndOffsetChanged");
+}
+
+Y_UNIT_TEST(PurgeClearsInflightAndUnprocessed) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    CreateTopic(setup, "/Root/topic1", "mlp-consumer");
+
+    setup->Write("/Root/topic1", "msg0", 0);
+    setup->Write("/Root/topic1", "msg1", 0);
+    Sleep(TDuration::Seconds(1));
+
+    {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(1),
+            .ProcessingTimeout = TDuration::Seconds(30),
+            .MaxNumberOfMessage = 1,
+        });
+        auto response = GetReadResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+    }
+
+    CreatePurgerActor(runtime, {
+        .DatabasePath = "/Root",
+        .TopicName = "/Root/topic1",
+        .Consumer = "mlp-consumer",
+    });
+    AssertPurgeOK(runtime);
+
+    {
+        auto state = GetConsumerState(setup, "/Root", "/Root/topic1", "mlp-consumer");
+        UNIT_ASSERT(state->Messages.empty());
+    }
+    {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(0),
+            .ProcessingTimeout = TDuration::Seconds(5),
+            .MaxNumberOfMessage = 10,
+        });
+        auto response = GetReadResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 0);
+    }
+}
+
 }
 
 } // namespace NKikimr::NPQ::NMLP

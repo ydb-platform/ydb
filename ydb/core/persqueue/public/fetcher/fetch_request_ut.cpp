@@ -13,6 +13,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <optional>
+
 namespace NKikimr::NPQ {
 using namespace NYdb;
 using namespace NYdb::NQuery;

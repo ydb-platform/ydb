@@ -142,6 +142,8 @@ void TDuplicateManager::HandleWakeup() {
             {"fetch_inflight", InflightExecutors},
             {"merge_inflight", BordersFlowController.IsMergeInflight()},
             {"filter_requests_inflight", InflightFilterRequests},
+            {"pending_executors", PendingExecutors.size()},
+            {"pending_filter_requests", PendingFilterRequests.size()},
             {"borders_flow_controller", BordersFlowController.DebugString()});
         AbortAndPassAway(error);
         return;

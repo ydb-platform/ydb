@@ -239,12 +239,14 @@ public:
     }
 };
 
-void EnsureInlineDeduplicationConveyor(NActors::TTestActorRuntimeBase& runtime) {
-    // Previous tests may enable the conveyor singleton. Register an executor that runs tasks inline
-    // so merge results are delivered in this runtime.
+void EnableDeduplicationConveyorFlag() {
     std::unique_ptr<NActors::IActor> unusedDistributor(NConveyorComposite::TServiceOperator::CreateService(
         NConveyorComposite::NConfig::TConfig::BuildDefault(), MakeIntrusive<NMonitoring::TDynamicCounters>()));
     Y_UNUSED(unusedDistributor);
+}
+
+void EnsureInlineDeduplicationConveyor(NActors::TTestActorRuntimeBase& runtime) {
+    EnableDeduplicationConveyorFlag();
     runtime.RegisterService(
         NConveyorComposite::TServiceOperator::MakeServiceId(runtime.GetNodeId(0)), runtime.Register(new TInlineExecutingConveyorService()));
 }
@@ -3867,9 +3869,7 @@ Y_UNIT_TEST_SUITE(TDuplicateManagerActorTests) {
         InitializeRuntimeWithLogging(runtime);
         NActors::TActorId tabletActorId = runtime.AllocateEdgeActor();
 
-        // Enable composite conveyor flag, but register a sink that drops all tasks.
-        std::unique_ptr<NActors::IActor> unusedDistributor(NConveyorComposite::TServiceOperator::CreateService(
-            NConveyorComposite::NConfig::TConfig::BuildDefault(), MakeIntrusive<NMonitoring::TDynamicCounters>()));
+        EnableDeduplicationConveyorFlag();
         UNIT_ASSERT(NConveyorComposite::TServiceOperator::IsEnabled());
         runtime.RegisterService(NConveyorComposite::TServiceOperator::MakeServiceId(runtime.GetNodeId(0)),
             runtime.Register(new TDroppingDeduplicationConveyorService()));

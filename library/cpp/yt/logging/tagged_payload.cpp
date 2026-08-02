@@ -204,10 +204,8 @@ std::string FormatTaggedPayload(const TTaggedLogEventPayload& payload)
         } else {
             result += parenOpen ? ", " : " (";
             parenOpen = true;
-            if (tag->Key != TraceLoggingTagKey) {
-                result += tag->Key;
-                result += ": ";
-            }
+            result += tag->Key;
+            result += ": ";
             result += tag->Value;
         }
     }

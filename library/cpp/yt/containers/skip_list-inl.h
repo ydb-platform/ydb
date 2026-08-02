@@ -4,10 +4,13 @@
 #include "skip_list.h"
 #endif
 
+#include <library/cpp/yt/assert/assert.h>
+
 #include <library/cpp/yt/memory/chunked_memory_pool.h>
 
 #include <util/random/random.h>
 
+#include <new>
 #include <type_traits>
 
 namespace NYT {
@@ -145,12 +148,13 @@ template <class TKey, class TComparer>
 TSkipList<TKey, TComparer>::~TSkipList()
 {
     if (!std::is_trivially_destructible<TKey>::value) {
-        auto* current = Head_;
-        while (current) {
+        auto* current = Head_->GetNext(0);
+        while (current != Head_) {
             auto* next = current->GetNext(0);
             current->~TNode();
             current = next;
         }
+        Head_->~TNode();
     }
 }
 

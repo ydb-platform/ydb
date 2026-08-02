@@ -140,7 +140,7 @@ struct TLoggingContext
     TFiberId FiberId;
     TTraceId TraceId;
     TRequestId RequestId;
-    TStringBuf TraceLoggingTag;
+    TLoggingTagListPayloadView TraceLoggingTags;
 };
 
 TLoggingContext GetLoggingContext();

@@ -132,13 +132,13 @@ def test_scheme():
 def test_raw_user():
     url = URL("http://user@example.com")
     assert "user" == url.raw_user
-    assert url.raw_user == url._val.username
+    assert url.raw_user == SplitResult(*url._val).username
 
 
 def test_raw_user_non_ascii():
     url = URL("http://бажан@example.com")
     assert "%D0%B1%D0%B0%D0%B6%D0%B0%D0%BD" == url.raw_user
-    assert url.raw_user == url._val.username
+    assert url.raw_user == SplitResult(*url._val).username
 
 
 def test_no_user():
@@ -154,13 +154,13 @@ def test_user_non_ascii():
 def test_raw_password():
     url = URL("http://user:password@example.com")
     assert "password" == url.raw_password
-    assert url.raw_password == url._val.password
+    assert url.raw_password == SplitResult(*url._val).password
 
 
 def test_raw_password_non_ascii():
     url = URL("http://user:пароль@example.com")
     assert "%D0%BF%D0%B0%D1%80%D0%BE%D0%BB%D1%8C" == url.raw_password
-    assert url.raw_password == url._val.password
+    assert url.raw_password == SplitResult(*url._val).password
 
 
 def test_password_non_ascii():
@@ -179,7 +179,7 @@ def test_empty_password_without_user():
     assert url.user is None
     assert url.password == ""
     assert url.raw_password == ""
-    assert url.raw_password == url._val.password
+    assert url.raw_password == SplitResult(*url._val).password
 
 
 def test_user_empty_password():
@@ -191,7 +191,7 @@ def test_user_empty_password():
 def test_raw_host():
     url = URL("http://example.com")
     assert "example.com" == url.raw_host
-    assert url.raw_host == url._val.hostname
+    assert url.raw_host == SplitResult(*url._val).hostname
 
 
 @pytest.mark.parametrize(
@@ -207,6 +207,25 @@ def test_host_subcomponent(host: str):
     assert url.host_subcomponent == host
 
 
+@pytest.mark.parametrize(
+    ("input", "result"),
+    [
+        ("/", None),
+        ("http://example.com", "example.com"),
+        ("http://[::1]", "[::1]"),
+        ("http://xn--gnter-4ya.com", "xn--gnter-4ya.com"),
+        ("http://example.com.", "example.com"),
+        ("https://example.com.", "example.com"),
+        ("http://example.com:80", "example.com"),
+        ("http://example.com:8080", "example.com:8080"),
+        ("http://[::1]:8080", "[::1]:8080"),
+    ],
+)
+def test_host_port_subcomponent(input: str, result: str):
+    url = URL(input)
+    assert url.host_port_subcomponent == result
+
+
 def test_host_subcomponent_return_idna_encoded_host():
     url = URL("http://оун-упа.укр")
     assert url.host_subcomponent == "xn----8sb1bdhvc.xn--j1amh"
@@ -217,10 +236,15 @@ def test_invalid_idna_hyphen_encoding():
     assert url.host == "x-----xn1agdj.tld"
 
 
+def test_invalid_idna_a_label_encoding():
+    url = URL("http://xn--d.tld")
+    assert url.raw_host == "xn--d.tld"
+
+
 def test_raw_host_non_ascii():
     url = URL("http://оун-упа.укр")
     assert "xn----8sb1bdhvc.xn--j1amh" == url.raw_host
-    assert url.raw_host == url._val.hostname
+    assert url.raw_host == SplitResult(*url._val).hostname
 
 
 def test_host_non_ascii():
@@ -241,19 +265,19 @@ def test_host_with_underscore():
 def test_raw_host_when_port_is_specified():
     url = URL("http://example.com:8888")
     assert "example.com" == url.raw_host
-    assert url.raw_host == url._val.hostname
+    assert url.raw_host == SplitResult(*url._val).hostname
 
 
 def test_raw_host_from_str_with_ipv4():
     url = URL("http://127.0.0.1:80")
     assert url.raw_host == "127.0.0.1"
-    assert url.raw_host == url._val.hostname
+    assert url.raw_host == SplitResult(*url._val).hostname
 
 
 def test_raw_host_from_str_with_ipv6():
     url = URL("http://[::1]:80")
     assert url.raw_host == "::1"
-    assert url.raw_host == url._val.hostname
+    assert url.raw_host == SplitResult(*url._val).hostname
 
 
 def test_authority_full() -> None:
@@ -287,13 +311,13 @@ def test_lowercase():
     url = URL("http://gitHUB.com")
     assert url.raw_host == "github.com"
     assert url.host == url.raw_host
-    assert url.raw_host == url._val.hostname
+    assert url.raw_host == SplitResult(*url._val).hostname
 
 
 def test_lowercase_nonascii():
     url = URL("http://Слава.Укр")
     assert url.raw_host == "xn--80aaf8a3a.xn--j1amh"
-    assert url.raw_host == url._val.hostname
+    assert url.raw_host == SplitResult(*url._val).hostname
     assert url.host == "слава.укр"
 
 
@@ -301,7 +325,7 @@ def test_compressed_ipv6():
     url = URL("http://[1DEC:0:0:0::1]")
     assert url.raw_host == "1dec::1"
     assert url.host == url.raw_host
-    assert url.raw_host == url._val.hostname
+    assert url.raw_host == SplitResult(*url._val).hostname
 
 
 def test_ipv6_missing_left_bracket():
@@ -329,19 +353,19 @@ def test_ipv4_zone():
     url = URL("http://1.2.3.4%тест%42:123")
     assert url.raw_host == "1.2.3.4%тест%42"
     assert url.host == url.raw_host
-    assert url.raw_host == url._val.hostname
+    assert url.raw_host == SplitResult(*url._val).hostname
 
 
 def test_port_for_explicit_port():
     url = URL("http://example.com:8888")
     assert 8888 == url.port
-    assert url.explicit_port == url._val.port
+    assert url.explicit_port == SplitResult(*url._val).port
 
 
 def test_port_for_implicit_port():
     url = URL("http://example.com")
     assert 80 == url.port
-    assert url.explicit_port == url._val.port
+    assert url.explicit_port == SplitResult(*url._val).port
 
 
 def test_port_for_relative_url():
@@ -356,28 +380,34 @@ def test_port_for_unknown_scheme():
     assert url.explicit_port is None
 
 
+def test_explicit_zero_port():
+    url = URL("http://example.com:0")
+    assert url.explicit_port == 0
+    assert url.port == 0
+
+
 def test_explicit_port_for_explicit_port():
     url = URL("http://example.com:8888")
     assert 8888 == url.explicit_port
-    assert url.explicit_port == url._val.port
+    assert url.explicit_port == SplitResult(*url._val).port
 
 
 def test_explicit_port_for_implicit_port():
     url = URL("http://example.com")
     assert url.explicit_port is None
-    assert url.explicit_port == url._val.port
+    assert url.explicit_port == SplitResult(*url._val).port
 
 
 def test_explicit_port_for_relative_url():
     url = URL("/path/to")
     assert url.explicit_port is None
-    assert url.explicit_port == url._val.port
+    assert url.explicit_port == SplitResult(*url._val).port
 
 
 def test_explicit_port_for_unknown_scheme():
     url = URL("unknown://example.com")
     assert url.explicit_port is None
-    assert url.explicit_port == url._val.port
+    assert url.explicit_port == SplitResult(*url._val).port
 
 
 def test_raw_path_string_empty():
@@ -1539,7 +1569,7 @@ def test_is_default_port_for_unknown_scheme():
 def test_handling_port_zero():
     url = URL("http://example.com:0")
     assert url.explicit_port == 0
-    assert url.explicit_port == url._val.port
+    assert url.explicit_port == SplitResult(*url._val).port
     assert str(url) == "http://example.com:0"
     assert not url.is_default_port()
 
@@ -1743,13 +1773,13 @@ def test_parent_for_empty_url():
 def test_parent_for_relative_url_with_child():
     url = URL("path/to")
     assert url.parent == URL("path")
-    assert url.parent._val.path == "path"
+    assert SplitResult(*url.parent._val).path == "path"
 
 
 def test_parent_for_relative_url():
     url = URL("path")
     assert url.parent == URL("")
-    assert url.parent._val.path == ""
+    assert SplitResult(*url.parent._val).path == ""
 
 
 def test_parent_for_no_netloc_url():
@@ -1760,7 +1790,7 @@ def test_parent_for_no_netloc_url():
 def test_parent_for_top_level_no_netloc_url():
     url = URL("/")
     assert url.parent == URL("/")
-    assert url.parent._val.path == "/"
+    assert SplitResult(*url.parent._val).path == "/"
 
 
 def test_parent_for_absolute_url():
@@ -1771,7 +1801,7 @@ def test_parent_for_absolute_url():
 def test_parent_for_top_level_absolute_url():
     url = URL("http://go.to/")
     assert url.parent == URL("http://go.to/")
-    assert url.parent._val.path == "/"
+    assert SplitResult(*url.parent._val).path == "/"
 
 
 def test_empty_value_for_query():
@@ -2159,6 +2189,7 @@ def test_parsing_populates_cache():
     assert url._cache["raw_query_string"] == "a=b"
     assert url._cache["raw_fragment"] == "frag"
     assert url._cache["scheme"] == "http"
+    assert url._cache["raw_path"] == "/path"
     assert url.raw_user == "user"
     assert url.raw_password == "password"
     assert url.raw_host == "example.com"
@@ -2174,6 +2205,7 @@ def test_parsing_populates_cache():
     assert url.raw_query_string == "a=b"
     assert url.raw_fragment == "frag"
     assert url.scheme == "http"
+    assert url.raw_path == "/path"
     assert url._cache["raw_user"] == "user"
     assert url._cache["raw_password"] == "password"
     assert url._cache["raw_host"] == "example.com"
@@ -2181,6 +2213,26 @@ def test_parsing_populates_cache():
     assert url._cache["raw_query_string"] == "a=b"
     assert url._cache["raw_fragment"] == "frag"
     assert url._cache["scheme"] == "http"
+    assert url._cache["raw_path"] == "/path"
+
+
+def test_relative_url_populates_cache():
+    """Test that parsing a relative URL populates the cache."""
+    url = URL(".")
+    assert url._cache["raw_query_string"] == ""
+    assert url._cache["raw_fragment"] == ""
+    assert url._cache["scheme"] == ""
+    assert url._cache["raw_path"] == "."
+
+
+def test_parsing_populates_cache_for_single_dot():
+    """Test that parsing a URL populates the cache for a single dot path."""
+    url = URL("http://example.com/.")
+    # raw_path should be normalized to "/"
+    assert url._cache["raw_path"] == "/"
+    assert url._cache["raw_host"] == "example.com"
+    assert url._cache["scheme"] == "http"
+    assert url.raw_path == "/"
 
 
 @pytest.mark.parametrize(

@@ -505,12 +505,13 @@ TEST(TStructuredApiTest, MultipleEvents)
     EXPECT_EQ(GetStructuredYson(manager.GetEvents()[1]), "\"i\"=1");
 }
 
-TEST(TTaggedApiTest, TraceTagMimicsLegacyRendering)
+TEST(TTaggedApiTest, TraceTagsSpliced)
 {
     auto logger = TLogger("Test").WithTag("LoggerTag", 1);
 
+    auto traceTags = TLoggingTagList().With("TraceContextTag", 1);
     TLoggingContext loggingContext{};
-    loggingContext.TraceLoggingTag = "TraceContextTag: 1";
+    loggingContext.TraceLoggingTags = AsView(traceTags.GetPayload());
 
     TTaggedPayloadWriter writer;
     writer.BeginMessage()->AppendString("Message"_sb);
@@ -518,7 +519,7 @@ TEST(TTaggedApiTest, TraceTagMimicsLegacyRendering)
     NDetail::AppendContextualTags(&writer, loggingContext, logger);
     auto payload = writer.Finish();
 
-    // The trace tag travels as a real record, under the key renderers recognize...
+    // Trace tags are ordinary keyed records, spliced after the logger's own.
     TTaggedPayloadReader reader(payload);
     EXPECT_EQ(reader.ReadMessage(), "Message");
     auto loggerTag = reader.TryReadTag();
@@ -526,10 +527,10 @@ TEST(TTaggedApiTest, TraceTagMimicsLegacyRendering)
     EXPECT_EQ(loggerTag->Key, "LoggerTag");
     auto traceTag = reader.TryReadTag();
     ASSERT_TRUE(traceTag);
-    EXPECT_EQ(traceTag->Key, TraceLoggingTagKey);
-    EXPECT_EQ(traceTag->Value, "TraceContextTag: 1");
+    EXPECT_EQ(traceTag->Key, "TraceContextTag");
+    EXPECT_EQ(traceTag->Value, "1");
+    EXPECT_FALSE(reader.TryReadTag());
 
-    // ...yet renders exactly as the legacy path, which folds it into the message text.
     EXPECT_EQ(
         FormatTaggedPayload(payload),
         std::string(GetMessageFromTaggedPayload(

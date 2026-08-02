@@ -13,6 +13,10 @@ from library.python import resource
 import ydb
 
 
+SOURCE_SECONDS = 10
+SOURCE_MESSAGE_RATE = 100
+SOURCE_MESSAGE_COUNT = SOURCE_SECONDS * SOURCE_MESSAGE_RATE
+
 KAFKA_SOURCE_PRODUCER_JAVA = textwrap.dedent("""
     import java.nio.charset.StandardCharsets;
     import java.time.Duration;
@@ -171,9 +175,7 @@ class Workload(unittest.TestCase):
             ],
         )
 
-        processes = [
-            self.start_source_writer(java_path, jar_file_path)
-        ]
+        processes = []
         print("NumWorkers: ", self.num_workers)
         print("Bootstrap:", self.bootstrap, "Endpoint:", self.endpoint, "Database:", self.database)
 
@@ -194,22 +196,32 @@ class Workload(unittest.TestCase):
                     use_transactions,
                     use_idempotence,
                 ], start_new_session=True))
-        processes[0].wait()
-        assert processes[0].returncode == 0
+
+        print("Waiting for Kafka Streams startup")
+        time.sleep(10)
+
+        source_process = self.start_source_writer(java_path, jar_file_path)
+        source_process.wait()
+        assert source_process.returncode == 0
 
         print("-----------------")
-        print(f"Waiting for {self.duration} sec")
-        time.sleep(self.duration)
+        source_count = self.wait_topic_message_count(self.test_topic_path, SOURCE_MESSAGE_COUNT, timeout=60)
+        print(f"Source topic has {source_count} messages")
+        print(f"Waiting up to {self.duration} sec for target topics")
+        deadline = time.time() + self.duration
+        for i in range(len(testOptions)):
+            remaining = max(1, deadline - time.time())
+            self.wait_topic_message_count(f"{self.target_topic_path}-{i}", source_count, timeout=remaining)
 
         print("Killing processes")
-        for i in range(1, len(processes)):
-            self._kill_process_tree(processes[i])
+        for process in processes:
+            self._kill_process_tree(process)
 
-        for i in range(1, len(processes)):
+        for process in processes:
             try:
-                processes[i].wait(timeout=30)
+                process.wait(timeout=30)
             except subprocess.TimeoutExpired:
-                print(f"Process {processes[i].pid} did not terminate in time")
+                print(f"Process {process.pid} did not terminate in time")
 
         topic_description = self.driver.topic_client.describe_topic(self.test_topic_path, include_stats=True)
         print(topic_description)
@@ -255,8 +267,8 @@ class Workload(unittest.TestCase):
             self.cli_path, "-e", self.endpoint, "-d", self.database,
             "workload", "topic", "run", "write",
             "--topic", self.test_topic_path,
-            "-s", "10",
-            "--message-rate", "100",
+            "-s", str(SOURCE_SECONDS),
+            "--message-rate", str(SOURCE_MESSAGE_RATE),
         ]
         print("Write command:", write_command)
         return subprocess.Popen(write_command, start_new_session=True)
@@ -282,9 +294,8 @@ class Workload(unittest.TestCase):
             if bootstrap.startswith(prefix):
                 bootstrap = bootstrap[len(prefix):]
                 break
-        message_rate = 100
         target_batch_messages = 5
-        linger_ms = max(1, 1000 * target_batch_messages // message_rate)
+        linger_ms = max(1, 1000 * target_batch_messages // SOURCE_MESSAGE_RATE)
         producer_command = [
             java_path,
             "-cp",
@@ -292,8 +303,8 @@ class Workload(unittest.TestCase):
             "KafkaSourceProducer",
             bootstrap,
             self.test_topic_path,
-            "10",
-            str(message_rate),
+            str(SOURCE_SECONDS),
+            str(SOURCE_MESSAGE_RATE),
             "256",
             "32768",
             str(linger_ms),
@@ -328,6 +339,20 @@ class Workload(unittest.TestCase):
                 except TimeoutError:
                     print("Have no new messages in a second")
                     return messages_info
+
+    def get_topic_message_count(self, topic: str):
+        topic_description = self.driver.topic_client.describe_topic(topic, include_stats=True)
+        return sum(partition.partition_stats.partition_end for partition in topic_description.partitions)
+
+    def wait_topic_message_count(self, topic: str, expected_count: int, timeout: float):
+        deadline = time.time() + timeout
+        last_count = 0
+        while time.time() < deadline:
+            last_count = self.get_topic_message_count(topic)
+            if last_count >= expected_count:
+                return last_count
+            time.sleep(1)
+        raise AssertionError(f"{topic} end offset did not reach {expected_count}: got {last_count}")
 
     def create_topic(self, topic: str, consumers: list[str]):
         try:

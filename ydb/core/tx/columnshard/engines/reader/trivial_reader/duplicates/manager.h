@@ -4,6 +4,7 @@
 #include "common.h"
 #include "events.h"
 #include "filters.h"
+#include "hang_tracker.h"
 #include "private_events.h"
 
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
@@ -14,7 +15,6 @@
 #include <ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator/collections/constructors.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/monotonic.h>
 #include <ydb/library/range_treap/range_treap.h>
 
 namespace NKikimr::NOlap::NReader::NTrivial {
@@ -68,14 +68,9 @@ private:
 
     void TryStartPendingExecutor();
 
-    static constexpr TDuration DefaultInflightTimeout = TDuration::Minutes(15);
-    const TDuration InflightTimeout;
-    const TDuration WatchdogInterval;
-    std::optional<TMonotonic> LastProgressInstant;
-    bool WatchdogScheduled = false;
+    THangTracker HangTracker;
 
     void OnProgress();
-    void EnsureWatchdogScheduled();
     bool HasInflightFetchOrMerge() const;
     void HandleWakeup();
 
@@ -108,7 +103,7 @@ private:
 
 public:
     TDuplicateManager(const TSpecialReadContext& context, const std::deque<std::shared_ptr<TPortionInfo>>& portions,
-        const TDuration inflightTimeout = DefaultInflightTimeout);
+        const TDuration inflightTimeout = THangTracker::DefaultTimeout);
 };
 
 }   // namespace NKikimr::NOlap::NReader::NTrivial::NDuplicateFiltering

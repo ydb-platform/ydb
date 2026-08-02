@@ -112,8 +112,7 @@ TDuplicateManager::TDuplicateManager(
               GetFetchingColumns()), portions, context.GetCommonContext()->GetReadMetadata(), Counters)
     , FiltersStore(context.GetCommonContext()->GetReadMetadata()->IsDescSorted(), Counters)
     , AbortionFlag(std::make_shared<TAtomicCounter>(0))
-    , InflightTimeout(inflightTimeout)
-    , WatchdogInterval(Max(inflightTimeout / 10, TDuration::MilliSeconds(50)))
+    , HangTracker(inflightTimeout)
 {
 }
 
@@ -122,34 +121,24 @@ bool TDuplicateManager::HasInflightFetchOrMerge() const {
 }
 
 void TDuplicateManager::OnProgress() {
-    LastProgressInstant = TActivationContext::Monotonic();
-    EnsureWatchdogScheduled();
-}
-
-void TDuplicateManager::EnsureWatchdogScheduled() {
-    if (WatchdogScheduled) {
-        return;
+    if (auto interval = HangTracker.OnProgress(TActivationContext::Monotonic())) {
+        Schedule(*interval, new NActors::TEvents::TEvWakeup());
     }
-    WatchdogScheduled = true;
-    Schedule(WatchdogInterval, new NActors::TEvents::TEvWakeup());
 }
 
 void TDuplicateManager::HandleWakeup() {
-    WatchdogScheduled = false;
-    if (AbortionFlag->Val()) {
-        return;
-    }
-    if (HasInflightFetchOrMerge() && LastProgressInstant && (TActivationContext::Monotonic() - *LastProgressInstant) > InflightTimeout) {
+    const auto result = HangTracker.OnWakeup(!AbortionFlag->Val() && HasInflightFetchOrMerge(), TActivationContext::Monotonic());
+    if (result.TimedOut) {
         const TString error =
-            TStringBuilder() << "duplicate filtering inflight timeout after " << InflightTimeout << "; fetch_inflight=" << InflightExecutors
-                             << "; merge_inflight=" << BordersFlowController.IsMergeInflight()
+            TStringBuilder() << "duplicate filtering inflight timeout after " << HangTracker.GetTimeout()
+                             << "; fetch_inflight=" << InflightExecutors << "; merge_inflight=" << BordersFlowController.IsMergeInflight()
                              << "; filter_requests_inflight=" << InflightFilterRequests << "; pending_executors=" << PendingExecutors.size()
                              << "; pending_filter_requests=" << PendingFilterRequests.size()
                              << "; borders_flow_controller=" << BordersFlowController.DebugString();
         YDB_LOG_ERROR("",
             {"component", "duplicates_manager"},
             {"event", "inflight_timeout"},
-            {"timeout", InflightTimeout.ToString()},
+            {"timeout", HangTracker.GetTimeout().ToString()},
             {"fetch_inflight", InflightExecutors},
             {"merge_inflight", BordersFlowController.IsMergeInflight()},
             {"filter_requests_inflight", InflightFilterRequests},
@@ -157,8 +146,8 @@ void TDuplicateManager::HandleWakeup() {
         AbortAndPassAway(error);
         return;
     }
-    if (HasInflightFetchOrMerge()) {
-        EnsureWatchdogScheduled();
+    if (result.RescheduleAfter) {
+        Schedule(*result.RescheduleAfter, new NActors::TEvents::TEvWakeup());
     }
 }
 

@@ -319,7 +319,7 @@ NActors::TActorId SetupDuplicateManager(NActors::TTestActorRuntimeBase& runtime,
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
     const std::shared_ptr<NColumnFetching::TColumnDataManager>& columnDataManager, const NActors::TActorId& scanActorId,
     TManagerSetupResult& result, const ERequestSorting sorting = ERequestSorting::NONE,
-    const TDuration inflightTimeout = TDuration::Minutes(15)) {
+    const TDuration inflightTimeout = THangTracker::DefaultTimeout) {
     auto readContext = MakeTestReadContext(requestSnapshot, dataAccessorsManager, columnDataManager, scanActorId, sorting);
     runtime.Register(new TManagerSetupActor(readContext, portions, &result, inflightTimeout));
 

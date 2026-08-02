@@ -536,6 +536,182 @@ Y_UNIT_TEST(DirectMove_MissingSourceOffset) {
     UNIT_ASSERT_VALUES_EQUAL(result->MovedMessages.size(), 0);
 }
 
+Y_UNIT_TEST(DirectMove_BigMessage) {
+    auto setup = CreateSetup();
+    CreateSourceAndDlqTopics(setup);
+
+    const auto msg = NUnitTest::RandomString(2_MB);
+    setup->Write(TString(kSourceTopic), msg, 0);
+    Sleep(TDuration::Seconds(1));
+
+    auto response = RunDirectMover(setup, TString(kDlqTopic), {{.Offset = 0, .SeqNo = 1}});
+    const auto* result = response->Get();
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SUCCESS, result->ErrorDescription);
+    UNIT_ASSERT_VALUES_EQUAL(result->MovedMessages.size(), 1);
+    ExpectDlqContains(setup, msg);
+}
+
+Y_UNIT_TEST(DirectMove_DestinationNotTopic) {
+    auto setup = CreateSetup();
+    CreateSourceAndDlqTopics(setup);
+    setup->Write(TString(kSourceTopic), "x", 0);
+    Sleep(TDuration::Seconds(1));
+
+    // /Root is a directory, not a topic.
+    auto response = RunDirectMover(setup, TString(kDatabase), {{.Offset = 0, .SeqNo = 1}});
+    const auto* result = response->Get();
+    UNIT_ASSERT_VALUES_UNEQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT(!result->ErrorDescription.empty());
+}
+
+Y_UNIT_TEST(DirectMove_SkipThenMoveNewerSeqNo) {
+    auto setup = CreateSetup();
+    CreateSourceAndDlqTopics(setup);
+
+    const auto msg0 = NUnitTest::RandomString(256);
+    const auto msg1 = NUnitTest::RandomString(256);
+    setup->Write(TString(kSourceTopic), msg0, 0);
+    setup->Write(TString(kSourceTopic), msg1, 0);
+    Sleep(TDuration::Seconds(1));
+
+    {
+        auto response = RunDirectMover(setup, TString(kDlqTopic), {{.Offset = 0, .SeqNo = 1}});
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Status, Ydb::StatusIds::SUCCESS);
+    }
+
+    // SeqNo=1 is skipped (already on DLQ producer); SeqNo=2 is written.
+    {
+        auto response = RunDirectMover(setup, TString(kDlqTopic), {
+            {.Offset = 0, .SeqNo = 1},
+            {.Offset = 1, .SeqNo = 2},
+        });
+        const auto* result = response->Get();
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SUCCESS, result->ErrorDescription);
+        UNIT_ASSERT_VALUES_EQUAL(result->MovedMessages.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(result->MovedMessages[0].second, 1);
+        UNIT_ASSERT_VALUES_EQUAL(result->MovedMessages[1].second, 2);
+    }
+}
+
+Y_UNIT_TEST(DirectMove_DifferentConsumerGenerationIsNewProducer) {
+    auto setup = CreateSetup();
+    CreateSourceAndDlqTopics(setup);
+    const auto msg = NUnitTest::RandomString(128);
+    setup->Write(TString(kSourceTopic), msg, 0);
+    Sleep(TDuration::Seconds(1));
+
+    {
+        auto response = RunDirectMover(setup, TString(kDlqTopic), {{.Offset = 0, .SeqNo = 1}}, /*consumerGeneration=*/1);
+        UNIT_ASSERT_VALUES_EQUAL(response->Get()->Status, Ydb::StatusIds::SUCCESS);
+    }
+
+    // New ProducerId (generation in SourceId) — SeqNo=1 is written again as a new series.
+    {
+        auto response = RunDirectMover(setup, TString(kDlqTopic), {{.Offset = 0, .SeqNo = 1}}, /*consumerGeneration=*/2);
+        const auto* result = response->Get();
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SUCCESS, result->ErrorDescription);
+        UNIT_ASSERT_VALUES_EQUAL(result->MovedMessages.size(), 1);
+    }
+
+    ExpectDlqContains(setup, msg, /*expectedCount=*/2);
+}
+
+Y_UNIT_TEST(DirectMove_PoisonBeforeCompletion) {
+    auto setup = CreateSetup();
+    CreateSourceAndDlqTopics(setup);
+
+    auto& runtime = setup->GetRuntime();
+    const auto parent = runtime.AllocateEdgeActor();
+
+    // Wrong tablet keeps mover in-flight (waiting for pipe / fetch); poison must still reply parent.
+    const auto moverId = runtime.Register(CreateDLQMover({
+        .ParentActorId = parent,
+        .Database = TString(kDatabase),
+        .TabletId = 999999997ull,
+        .PartitionId = 0,
+        .ConsumerName = TString(kConsumer),
+        .ConsumerGeneration = 1,
+        .DestinationTopic = TString(kDlqTopic),
+        .Messages = {{.Offset = 0, .SeqNo = 1}},
+    }));
+    runtime.EnableScheduleForActor(moverId);
+    runtime.Send(new IEventHandle(moverId, parent, new TEvents::TEvPoison()));
+    runtime.DispatchEvents();
+
+    auto response = runtime.GrabEdgeEvent<TEvPQ::TEvMLPDLQMoverResponse>(parent, TDuration::Seconds(10));
+    UNIT_ASSERT(response);
+    // Either poison (UNSPECIFIED) or DeliveryProblem raced in first (INTERNAL_ERROR).
+    UNIT_ASSERT(response->Get()->Status == Ydb::StatusIds::STATUS_CODE_UNSPECIFIED
+        || response->Get()->Status == Ydb::StatusIds::INTERNAL_ERROR);
+}
+
+Y_UNIT_TEST(MoveToDLQ_ThenPurgeSource) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+
+    auto driver = TDriver(setup->MakeDriverConfig());
+    auto client = TTopicClient(driver);
+    client.CreateTopic("/Root/topic1-dlq", NYdb::NTopic::TCreateTopicSettings()
+            .BeginAddSharedConsumer("mlp-consumer")
+            .EndAddConsumer()).GetValueSync();
+    client.CreateTopic("/Root/topic1", NYdb::NTopic::TCreateTopicSettings()
+            .BeginAddSharedConsumer("mlp-consumer")
+                .BeginDeadLetterPolicy()
+                    .Enable()
+                    .BeginCondition()
+                        .MaxProcessingAttempts(1)
+                    .EndCondition()
+                    .MoveAction("/Root/topic1-dlq")
+                .EndDeadLetterPolicy()
+            .EndAddConsumer()).GetValueSync();
+
+    const auto msg = NUnitTest::RandomString(512);
+    setup->Write("/Root/topic1", msg, 0);
+    Sleep(TDuration::Seconds(1));
+
+    CreateReaderActor(runtime, {
+        .DatabasePath = "/Root",
+        .TopicName = "/Root/topic1",
+        .Consumer = "mlp-consumer",
+    });
+    UNIT_ASSERT_VALUES_EQUAL(GetReadResponse(runtime)->Messages.size(), 1);
+
+    CreateUnlockerActor(runtime, {
+        .DatabasePath = "/Root",
+        .TopicName = "/Root/topic1",
+        .Consumer = "mlp-consumer",
+        .Messages = {{0, 0}},
+    });
+    UNIT_ASSERT_VALUES_EQUAL(GetChangeResponse(runtime)->Status, Ydb::StatusIds::SUCCESS);
+
+    bool moved = false;
+    for (size_t i = 0; i < 15; ++i) {
+        Sleep(TDuration::Seconds(1));
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1-dlq",
+            .Consumer = "mlp-consumer",
+        });
+        auto response = GetReadResponse(runtime);
+        if (!response->Messages.empty()) {
+            UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, msg);
+            moved = true;
+            break;
+        }
+    }
+    UNIT_ASSERT(moved);
+
+    CreatePurgerActor(runtime, {
+        .DatabasePath = "/Root",
+        .TopicName = "/Root/topic1",
+        .Consumer = "mlp-consumer",
+    });
+    AssertPurgeOK(runtime);
+
+    auto state = GetConsumerState(setup, "/Root", "/Root/topic1", "mlp-consumer");
+    UNIT_ASSERT(state->Messages.empty());
+}
+
 }
 
 } // namespace NKikimr::NPQ::NMLP

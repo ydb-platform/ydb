@@ -293,6 +293,98 @@ Y_UNIT_TEST(EnrichPoisonSendsShutdown) {
     UNIT_ASSERT(error->Get()->Record.GetErrorMessage().Contains("Shutdown"));
 }
 
+Y_UNIT_TEST(EnrichMixedEmptyAndNonEmptyReplies) {
+    TTopicFixture fx(2);
+    auto& runtime = fx.Runtime();
+    const auto emptyEdge = runtime.AllocateEdgeActor();
+    const auto dataEdge = runtime.AllocateEdgeActor();
+
+    std::deque<TReadResult> replies;
+    replies.push_back(TReadResult(emptyEdge, 1, {}));
+    replies.push_back(TReadResult(dataEdge, 2, MakeReadMessages({0, 1})));
+    fx.RegisterEnricher(std::move(replies));
+
+    auto emptyResponse = runtime.GrabEdgeEvent<TEvPQ::TEvMLPReadResponse>(emptyEdge, TDuration::Seconds(5));
+    auto dataResponse = runtime.GrabEdgeEvent<TEvPQ::TEvMLPReadResponse>(dataEdge, TDuration::Seconds(5));
+    UNIT_ASSERT(emptyResponse);
+    UNIT_ASSERT(dataResponse);
+    UNIT_ASSERT_VALUES_EQUAL(emptyResponse->Cookie, 1);
+    UNIT_ASSERT_VALUES_EQUAL(emptyResponse->Get()->Record.MessageSize(), 0);
+    AssertEnrichedResponse(*dataResponse->Get(), {{0, fx.Bodies[0]}, {1, fx.Bodies[1]}});
+}
+
+Y_UNIT_TEST(EnrichDifferentReceiveCounts) {
+    TTopicFixture fx(2);
+    auto& runtime = fx.Runtime();
+    const auto edge = runtime.AllocateEdgeActor();
+    const auto ts = fx.FirstReceive;
+
+    std::deque<TReadMessage> messages;
+    messages.push_back({.Offset = 0, .ApproximateReceiveCount = 1, .ApproximateFirstReceiveTimestamp = ts});
+    messages.push_back({.Offset = 1, .ApproximateReceiveCount = 9, .ApproximateFirstReceiveTimestamp = ts});
+
+    std::deque<TReadResult> replies;
+    replies.push_back(TReadResult(edge, 3, std::move(messages)));
+    fx.RegisterEnricher(std::move(replies));
+
+    auto response = runtime.GrabEdgeEvent<TEvPQ::TEvMLPReadResponse>(edge, TDuration::Seconds(5));
+    UNIT_ASSERT(response);
+    const auto& record = response->Get()->Record;
+    UNIT_ASSERT_VALUES_EQUAL(record.MessageSize(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(record.GetMessage(0).GetMessageMeta().GetApproximateReceiveCount(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(record.GetMessage(1).GetMessageMeta().GetApproximateReceiveCount(), 9);
+}
+
+Y_UNIT_TEST(EnrichTripleDuplicateOffset) {
+    TTopicFixture fx(1);
+    auto& runtime = fx.Runtime();
+    const auto e0 = runtime.AllocateEdgeActor();
+    const auto e1 = runtime.AllocateEdgeActor();
+    const auto e2 = runtime.AllocateEdgeActor();
+
+    std::deque<TReadResult> replies;
+    replies.push_back(TReadResult(e0, 10, MakeReadMessages({0})));
+    replies.push_back(TReadResult(e1, 11, MakeReadMessages({0})));
+    replies.push_back(TReadResult(e2, 12, MakeReadMessages({0})));
+    fx.RegisterEnricher(std::move(replies));
+
+    for (auto edge : {e0, e1, e2}) {
+        auto response = runtime.GrabEdgeEvent<TEvPQ::TEvMLPReadResponse>(edge, TDuration::Seconds(5));
+        UNIT_ASSERT(response);
+        AssertEnrichedResponse(*response->Get(), {{0, fx.Bodies[0]}});
+    }
+}
+
+Y_UNIT_TEST(EnrichSequentialActors) {
+    TTopicFixture fx(1);
+    auto& runtime = fx.Runtime();
+
+    for (ui64 cookie : {1ull, 2ull}) {
+        const auto edge = runtime.AllocateEdgeActor();
+        std::deque<TReadResult> replies;
+        replies.push_back(TReadResult(edge, cookie, MakeReadMessages({0})));
+        fx.RegisterEnricher(std::move(replies));
+        auto response = runtime.GrabEdgeEvent<TEvPQ::TEvMLPReadResponse>(edge, TDuration::Seconds(5));
+        UNIT_ASSERT(response);
+        UNIT_ASSERT_VALUES_EQUAL(response->Cookie, cookie);
+        AssertEnrichedResponse(*response->Get(), {{0, fx.Bodies[0]}});
+    }
+}
+
+Y_UNIT_TEST(EnrichSingleOffset) {
+    TTopicFixture fx(1);
+    auto& runtime = fx.Runtime();
+    const auto edge = runtime.AllocateEdgeActor();
+
+    std::deque<TReadResult> replies;
+    replies.push_back(TReadResult(edge, 1, MakeReadMessages({0})));
+    fx.RegisterEnricher(std::move(replies));
+
+    auto response = runtime.GrabEdgeEvent<TEvPQ::TEvMLPReadResponse>(edge, TDuration::Seconds(5));
+    UNIT_ASSERT(response);
+    AssertEnrichedResponse(*response->Get(), {{0, fx.Bodies[0]}});
+}
+
 } // Y_UNIT_TEST_SUITE(TMLPEnricherTests)
 
 } // namespace NKikimr::NPQ::NMLP

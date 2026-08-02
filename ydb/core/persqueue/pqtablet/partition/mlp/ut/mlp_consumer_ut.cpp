@@ -788,6 +788,270 @@ Y_UNIT_TEST(PurgeClearsInflightAndUnprocessed) {
     }
 }
 
+Y_UNIT_TEST(VisibilityTimeoutRedelivery) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    CreateTopic(setup, "/Root/topic1", "mlp-consumer");
+    setup->Write("/Root/topic1", "redeliver-me", 0);
+    Sleep(TDuration::Seconds(1));
+
+    {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(1),
+            .ProcessingTimeout = TDuration::Seconds(2),
+            .MaxNumberOfMessage = 1,
+        });
+        auto response = GetReadResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].ApproximateReceiveCount, 1);
+    }
+
+    Sleep(TDuration::Seconds(3));
+
+    {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(2),
+            .ProcessingTimeout = TDuration::Seconds(30),
+            .MaxNumberOfMessage = 1,
+        });
+        auto response = GetReadResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "redeliver-me");
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].ApproximateReceiveCount, 2);
+    }
+
+    auto state = GetConsumerState(setup, "/Root", "/Root/topic1", "mlp-consumer");
+    UNIT_ASSERT_VALUES_EQUAL(state->Messages.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(state->Messages[0].Status, static_cast<ui32>(TStorage::EMessageStatus::Locked));
+    UNIT_ASSERT_VALUES_EQUAL(state->Messages[0].ProcessingCount, 2);
+}
+
+Y_UNIT_TEST(ChangeDeadlineExtendsVisibility) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    CreateTopic(setup, "/Root/topic1", "mlp-consumer");
+    setup->Write("/Root/topic1", "extend-me", 0);
+    Sleep(TDuration::Seconds(1));
+
+    {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(1),
+            .ProcessingTimeout = TDuration::Seconds(2),
+            .MaxNumberOfMessage = 1,
+        });
+        auto response = GetReadResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+    }
+
+    {
+        CreateMessageDeadlineChangerActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .Messages = {TMessageId(0, 0)},
+            .Deadlines = {TInstant::Now() + TDuration::Seconds(30)},
+        });
+        auto result = GetChangeResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
+    }
+
+    Sleep(TDuration::Seconds(3)); // past original 2s visibility
+
+    {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(0),
+            .ProcessingTimeout = TDuration::Seconds(5),
+            .MaxNumberOfMessage = 1,
+        });
+        auto response = GetReadResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 0);
+    }
+
+    auto state = GetConsumerState(setup, "/Root", "/Root/topic1", "mlp-consumer");
+    UNIT_ASSERT_VALUES_EQUAL(state->Messages.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(state->Messages[0].Status, static_cast<ui32>(TStorage::EMessageStatus::Locked));
+}
+
+Y_UNIT_TEST(DelayedMessageNotReadableUntilDeadline) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    CreateTopic(setup, "/Root/topic1", "mlp-consumer");
+
+    CreateWriterActor(runtime, {
+        .DatabasePath = "/Root",
+        .TopicName = "/Root/topic1",
+        .Messages = {{
+            .Index = 0,
+            .MessageBody = "delayed",
+            .Delay = TDuration::Seconds(3),
+        }},
+    });
+    UNIT_ASSERT_VALUES_EQUAL(GetWriteResponse(runtime)->Messages.size(), 1);
+
+    {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(0),
+            .ProcessingTimeout = TDuration::Seconds(5),
+            .MaxNumberOfMessage = 1,
+        });
+        auto response = GetReadResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 0);
+    }
+
+    {
+        auto state = GetConsumerState(setup, "/Root", "/Root/topic1", "mlp-consumer");
+        UNIT_ASSERT_VALUES_EQUAL(state->Messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(state->Messages[0].Status, static_cast<ui32>(TStorage::EMessageStatus::Delayed));
+    }
+
+    Sleep(TDuration::Seconds(4));
+
+    {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(2),
+            .ProcessingTimeout = TDuration::Seconds(5),
+            .MaxNumberOfMessage = 1,
+        });
+        auto response = GetReadResponse(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "delayed");
+    }
+}
+
+Y_UNIT_TEST(FetchThrottledAtMinMessages) {
+    // Consumer skips fetch once InflightMessageCount >= MinMessages (100).
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    CreateTopic(setup, "/Root/topic1", "mlp-consumer");
+    WriteMany(setup, "/Root/topic1", 0, /*messageSize=*/64, /*messageCount=*/150);
+
+    for (size_t i = 0; i < 20; ++i) {
+        Sleep(TDuration::MilliSeconds(500));
+        auto state = GetConsumerState(setup, "/Root", "/Root/topic1", "mlp-consumer");
+        // Fetch stops once Inflight >= MinMessages (100); last batch may overshoot slightly.
+        if (state->Messages.size() >= 100) {
+            UNIT_ASSERT(state->Messages.size() < 150);
+            CreatePurgerActor(runtime, {
+                .DatabasePath = "/Root",
+                .TopicName = "/Root/topic1",
+                .Consumer = "mlp-consumer",
+            });
+            AssertPurgeOK(runtime);
+            return;
+        }
+    }
+    UNIT_FAIL("Consumer did not stop fetching around MinMessages=100");
+}
+
+Y_UNIT_TEST(ReloadWhileMessageLocked) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    CreateTopic(setup, "/Root/topic1", "mlp-consumer");
+    setup->Write("/Root/topic1", "locked-across-reload", 0);
+    Sleep(TDuration::Seconds(1));
+
+    {
+        CreateReaderActor(runtime, {
+            .DatabasePath = "/Root",
+            .TopicName = "/Root/topic1",
+            .Consumer = "mlp-consumer",
+            .WaitTime = TDuration::Seconds(1),
+            .ProcessingTimeout = TDuration::Seconds(60),
+            .MaxNumberOfMessage = 1,
+        });
+        UNIT_ASSERT_VALUES_EQUAL(GetReadResponse(runtime)->Messages.size(), 1);
+    }
+
+    ReloadPQTablet(setup, "/Root", "/Root/topic1", 0);
+
+    for (size_t i = 0; i < 10; ++i) {
+        Sleep(TDuration::Seconds(1));
+        auto state = GetConsumerState(setup, "/Root", "/Root/topic1", "mlp-consumer");
+        if (state->Messages.size() != 1) {
+            continue;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(state->Messages[0].Offset, 0);
+        UNIT_ASSERT_VALUES_EQUAL(state->Messages[0].Status, static_cast<ui32>(TStorage::EMessageStatus::Locked));
+        return;
+    }
+    UNIT_FAIL("Locked message was not restored after reload");
+}
+
+Y_UNIT_TEST(EmptyReadImmediateOnEmptyTopic) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    CreateTopic(setup, "/Root/topic1", "mlp-consumer");
+
+    CreateReaderActor(runtime, {
+        .DatabasePath = "/Root",
+        .TopicName = "/Root/topic1",
+        .Consumer = "mlp-consumer",
+        .WaitTime = TDuration::Seconds(0),
+        .ProcessingTimeout = TDuration::Seconds(5),
+        .MaxNumberOfMessage = 1,
+    });
+    auto response = GetReadResponse(runtime);
+    UNIT_ASSERT_VALUES_EQUAL_C(response->Status, Ydb::StatusIds::SUCCESS, response->ErrorDescription);
+    UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 0);
+}
+
+Y_UNIT_TEST(CommitAfterUnlockSucceeds) {
+    auto setup = CreateSetup();
+    auto& runtime = setup->GetRuntime();
+    CreateTopic(setup, "/Root/topic1", "mlp-consumer");
+
+    setup->Write("/Root/topic1", "msg", 0);
+    Sleep(TDuration::Seconds(1));
+
+    CreateReaderActor(runtime, {
+        .DatabasePath = "/Root",
+        .TopicName = "/Root/topic1",
+        .Consumer = "mlp-consumer",
+        .WaitTime = TDuration::Seconds(1),
+        .ProcessingTimeout = TDuration::Seconds(30),
+        .MaxNumberOfMessage = 1,
+    });
+    UNIT_ASSERT_VALUES_EQUAL(GetReadResponse(runtime)->Messages.size(), 1);
+
+    CreateUnlockerActor(runtime, {
+        .DatabasePath = "/Root",
+        .TopicName = "/Root/topic1",
+        .Consumer = "mlp-consumer",
+        .Messages = {TMessageId(0, 0)},
+    });
+    UNIT_ASSERT_VALUES_EQUAL(GetChangeResponse(runtime)->Status, Ydb::StatusIds::SUCCESS);
+
+    // Unlocked → Unprocessed; commit of Unprocessed is allowed.
+    CreateCommitterActor(runtime, {
+        .DatabasePath = "/Root",
+        .TopicName = "/Root/topic1",
+        .Consumer = "mlp-consumer",
+        .Messages = {TMessageId(0, 0)},
+    });
+    auto commit = GetChangeResponse(runtime);
+    UNIT_ASSERT_VALUES_EQUAL(commit->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(commit->Messages.size(), 1);
+    UNIT_ASSERT(commit->Messages[0].Status == EOperationResult::Success);
+}
+
 }
 
 } // namespace NKikimr::NPQ::NMLP

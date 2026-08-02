@@ -34,6 +34,14 @@ public:
     }
 
     void Bootstrap() {
+        if constexpr (std::is_same_v<TSettings, TMessageDeadlineChangerSettings>) {
+            if (Settings.Messages.size() != Settings.Deadlines.size()) {
+                TBase::Become(&TThis::DescribeState);
+                return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+                    << "Messages and Deadlines size mismatch: "
+                    << Settings.Messages.size() << " vs " << Settings.Deadlines.size());
+            }
+        }
         DoDescribe();
     }
 

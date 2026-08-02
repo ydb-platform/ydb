@@ -19,7 +19,31 @@ TEvPQ::TEvMLPUnlockRequest* TChangerActor<TEvPQ::TEvMLPUnlockRequest, TEvPQ::TEv
 
 template<>
 TEvPQ::TEvMLPChangeMessageDeadlineRequest* TChangerActor<TEvPQ::TEvMLPChangeMessageDeadlineRequest, TEvPQ::TEvMLPChangeMessageDeadlineResponse,  TMessageDeadlineChangerSettings>::CreateRequest(ui32 partitionId, const std::vector<ui64>& offsets) {
-    return new TEvPQ::TEvMLPChangeMessageDeadlineRequest(Settings.TopicName, Settings.Consumer, partitionId, offsets, Settings.Deadlines);
+    // Pair each partition-local offset with the deadline of the matching Settings.Messages entry.
+    // Do not forward the full Settings.Deadlines vector (sizes diverge on multi-partition batches).
+    std::vector<TInstant> deadlines;
+    deadlines.reserve(offsets.size());
+    size_t searchFrom = 0;
+    for (ui64 offset : offsets) {
+        bool found = false;
+        for (size_t i = searchFrom; i < Settings.Messages.size(); ++i) {
+            const auto& messageId = Settings.Messages[i];
+            if (messageId.PartitionId == partitionId && messageId.Offset == offset) {
+                AFL_ENSURE(i < Settings.Deadlines.size())
+                    ("i", i)
+                    ("deadlines", Settings.Deadlines.size());
+                deadlines.push_back(Settings.Deadlines[i]);
+                searchFrom = i + 1;
+                found = true;
+                break;
+            }
+        }
+        AFL_ENSURE(found)
+            ("partitionId", partitionId)
+            ("offset", offset);
+    }
+    return new TEvPQ::TEvMLPChangeMessageDeadlineRequest(
+        Settings.TopicName, Settings.Consumer, partitionId, offsets, deadlines);
 }
 
 IActor* CreateCommitter(const NActors::TActorId& parentId, TCommitterSettings&& settings) {

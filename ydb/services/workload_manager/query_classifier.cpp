@@ -101,21 +101,11 @@ public:
                     };
                     return *PostClassifyResult;
                 }
-                // Explicit guard is required: TryResolve soft-resolves a missing
-                // pool to TResolvedPoolId{PoolId} instead of rejecting. Shared
-                // reading must hard-reject when its configured pool is absent, so
-                // we check existence here before delegating to TryResolve below.
-                if (!FindPool(*ResourcePoolForSharedReading)) {
-                    PostClassifyResult = TReject{
-                        .Code = Ydb::StatusIds::NOT_FOUND,
-                        .Message = TStringBuilder()
-                            << "Resource pool for shared reading: " << *ResourcePoolForSharedReading
-                            << " not found, resolved by: " << resolver,
-                        .Resolver = resolver,
-                    };
-                    return *PostClassifyResult;
-                }
-                TryResolve(*ResourcePoolForSharedReading, PostClassifyResult, resolver, /*retainPoolId=*/true);
+                // Shared reading must run in its configured pool or be rejected.
+                // `mandatoryPool` makes TryResolve hard-reject a missing pool
+                // (instead of soft-resolving) and retain the pool id for an
+                // unconstrained pool (instead of TBypass).
+                TryResolve(*ResourcePoolForSharedReading, PostClassifyResult, resolver, /*mandatoryPool=*/true);
                 return *PostClassifyResult;
             }
 
@@ -296,17 +286,29 @@ private:
     /// Returns true if the resolved result is final (stop searching).
     /// Returns false if the caller should try the next rule.
     ///
-    /// When `retainPoolId` is set, an unconstrained pool (no workload service
-    /// enforcement) is resolved to TResolvedPoolId with SkipAdmission instead of
-    /// TBypass, so the pool id is preserved for accounting/observability. This is
-    /// required for shared-reading queries, which must always run in their
-    /// configured pool.
+    /// `mandatoryPool` marks the pool as required (used for shared-reading
+    /// queries, which must run in their configured pool or be rejected):
+    ///   - a missing pool becomes a NOT_FOUND TReject instead of a soft-resolved
+    ///     TResolvedPoolId{PoolId} (which would let the query run elsewhere);
+    ///   - an unconstrained pool (no workload service enforcement) is resolved to
+    ///     TResolvedPoolId with SkipAdmission instead of TBypass, so the pool id is
+    ///     preserved for accounting/observability.
     ///
     template<typename TStore>
-    bool TryResolve(const TString& poolId, TStore& store, const TString& resolver, bool retainPoolId = false) {
-        auto poolInfo = FindPool(poolId);
+    bool TryResolve(const TString& poolId, TStore& store, const TString& resolver, bool mandatoryPool = false) {
+        const auto* poolInfo = FindPool(poolId);
 
         if (!poolInfo) {
+            if (mandatoryPool) {
+                store = TReject{
+                    .Code = Ydb::StatusIds::NOT_FOUND,
+                    .Message = TStringBuilder()
+                        << "Resource pool: " << poolId << " not found"
+                        << ", resolved by: " << resolver,
+                    .Resolver = resolver,
+                };
+                return true;
+            }
             store = TResolvedPoolId{.PoolId = poolId, .Resolver = resolver};
             return false;
         }
@@ -333,7 +335,7 @@ private:
             return false;
         }
 
-        if (!poolInfo->Config.IsWorkloadServiceRequired() && !retainPoolId) {
+        if (!poolInfo->Config.IsWorkloadServiceRequired() && !mandatoryPool) {
             store = TBypass{.Resolver = resolver};
         } else if (!poolInfo->Config.IsAdmissionRequired()) {
             store = TResolvedPoolId{

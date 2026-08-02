@@ -382,3 +382,11 @@ def test_build_with_none_query_string():
 def test_build_with_none_fragment():
     with pytest.raises(TypeError):
         URL.build(scheme="http", host="example.com", fragment=None)
+
+
+def test_build_uppercase_host():
+    u = URL.build(
+        host="UPPER.case",
+        encoded=False,
+    )
+    assert u.host == "upper.case"

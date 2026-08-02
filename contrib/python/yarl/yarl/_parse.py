@@ -145,10 +145,10 @@ def unsplit_result(
     """Unsplit a URL without any normalization."""
     if netloc or (scheme and scheme in USES_AUTHORITY) or url[:2] == "//":
         if url and url[:1] != "/":
-            url = f"//{netloc or ''}/{url}"
+            url = f"{scheme}://{netloc}/{url}" if scheme else f"{scheme}:{url}"
         else:
-            url = f"//{netloc or ''}{url}"
-    if scheme:
+            url = f"{scheme}://{netloc}{url}" if scheme else f"//{netloc}{url}"
+    elif scheme:
         url = f"{scheme}:{url}"
     if query:
         url = f"{url}?{query}"

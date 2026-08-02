@@ -1,11 +1,12 @@
 #pragma once
 
-#include "public.h"
-
 #include <library/cpp/yt/memory/public.h>
 
 #include <atomic>
 #include <array>
+#include <cstddef>
+#include <cstdint>
+#include <utility>
 
 namespace NYT {
 

@@ -49,7 +49,7 @@ cdef inline int _is_lower_hex(Py_UCS4 v) noexcept:
     return 'a' <= v <= 'f'
 
 
-cdef inline Py_UCS4 _restore_ch(Py_UCS4 d1, Py_UCS4 d2) noexcept:
+cdef inline Py_UCS4 _restore_ch(Py_UCS4 d1, Py_UCS4 d2):
     cdef int digit1 = _from_hex(d1)
     if digit1 < 0:
         return <Py_UCS4>-1

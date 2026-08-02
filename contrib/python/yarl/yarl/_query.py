@@ -97,10 +97,12 @@ def get_str_query(*args: Any, **kwargs: Any) -> Union[str, None]:
         return None
     if not query:
         return ""
+    if type(query) is dict:
+        return get_str_query_from_sequence_iterable(query.items())
+    if type(query) is str or isinstance(query, str):
+        return QUERY_QUOTER(query)
     if isinstance(query, Mapping):
         return get_str_query_from_sequence_iterable(query.items())
-    if isinstance(query, str):
-        return QUERY_QUOTER(query)
     if isinstance(query, (bytes, bytearray, memoryview)):
         msg = "Invalid query type: bytes, bytearray and memoryview are forbidden"
         raise TypeError(msg)

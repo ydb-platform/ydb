@@ -21,6 +21,8 @@ namespace cloud
 
 /**
   The cloud account ID the resource is assigned to.
+  <p>
+  For Azure, this is the subscription ID.
  */
 static constexpr const char *kCloudAccountId = "cloud.account.id";
 

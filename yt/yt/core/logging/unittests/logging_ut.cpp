@@ -1609,8 +1609,9 @@ TEST_P(TLoggingTagsTest, All)
     auto expected = std::get<4>(GetParam());
 
     auto loggingContext = NLogging::GetLoggingContext();
+    auto traceTags = TLoggingTagList().With("TraceContextTag", 1);
     if (hasTraceContext) {
-        loggingContext.TraceLoggingTag = "TraceContextTag: 1";
+        loggingContext.TraceLoggingTags = NLogging::AsView(traceTags.GetPayload());
     }
 
     auto logger = TLogger("Test");

@@ -23,7 +23,7 @@ public:
     visitor->VisitDouble(this);
   }
 
-  double value;
+  double value{0.0};
 };
 
 }  // namespace configuration

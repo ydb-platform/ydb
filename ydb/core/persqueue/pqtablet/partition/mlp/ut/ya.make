@@ -29,3 +29,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE(
+    pipe
+)

@@ -804,10 +804,9 @@ std::vector<TTablesManager::TSchemasChain> TTablesManager::ExtractSchemasToClean
     return chains;
 }
 
-TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::BuildTableMetadataAccessor(
-    const TString& tablePath, const TInternalPathId internalPathId, const TSchemeShardLocalPathId externalPathId,
-    const std::optional<NOlap::TSnapshot>& readSnapshot) {
-        if (!HasTable(internalPathId, /*withDeleted=*/false, readSnapshot)) {
+TConclusion<std::shared_ptr<NOlap::ITableMetadataAccessor>> TTablesManager::BuildTableMetadataAccessor(const TString& tablePath,
+    const TInternalPathId internalPathId, const TSchemeShardLocalPathId externalPathId, const std::optional<NOlap::TSnapshot>& readSnapshot) {
+    if (!HasTable(internalPathId, /*withDeleted=*/false, readSnapshot)) {
         return std::make_shared<NOlap::TAbsentTableAccessor>(
             tablePath, NColumnShard::TUnifiedPathId::BuildValid(internalPathId, externalPathId));
     }

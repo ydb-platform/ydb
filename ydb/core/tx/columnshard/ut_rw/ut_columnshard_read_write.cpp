@@ -3144,7 +3144,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         // minSnapshotForNewReads (based on GetOutdatedStep() - MaxReadStaleness) can exceed
         // the dropSnapshot and allow cleanup of the dropped table's portions.
         for (ui32 i = 0; i < 10; ++i) {
-            PlanCommit(runtime, sender, TPlanStep{dropPlanStep + i + 1}, TSet<ui64>{});
+            PlanCommit(runtime, sender, TPlanStep{ dropPlanStep + i + 1 }, TSet<ui64>{});
             runtime.SimulateSleep(TDuration::Seconds(1));
         }
 

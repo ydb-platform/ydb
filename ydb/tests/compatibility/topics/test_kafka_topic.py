@@ -7,7 +7,6 @@ import signal
 import subprocess
 import tarfile
 import tempfile
-import time
 import urllib.request
 import uuid
 import yatest
@@ -26,7 +25,9 @@ from test_topic import (
     STABLE_26_3,
     read_messages,
     set_feature_flags,
+    wait_topic_end_offset,
     write_kafka_batch,
+    write_raw_messages,
 )
 
 
@@ -153,24 +154,6 @@ def create_kafka_streams_topic(driver, topic, consumers):
     driver.topic_client.create_topic(topic, consumers=consumers, min_active_partitions=1)
 
 
-def write_fixed_messages(driver, topic, messages):
-    with driver.topic_client.writer(topic, producer_id=f"producer-{uuid.uuid4().hex}") as writer:
-        for message in messages:
-            writer.write(ydb.TopicWriterMessage(message))
-
-
-def wait_topic_end_offset(driver, topic, expected_count, timeout=90):
-    deadline = time.time() + timeout
-    last_count = 0
-    while time.time() < deadline:
-        description = driver.topic_client.describe_topic(topic, include_stats=True)
-        last_count = sum(partition.partition_stats.partition_end for partition in description.partitions)
-        if last_count >= expected_count:
-            return last_count
-        time.sleep(1)
-    raise AssertionError(f"{topic} end offset did not reach {expected_count}: got {last_count}")
-
-
 def kill_process_tree(process):
     if process.poll() is not None:
         return
@@ -193,7 +176,7 @@ class KafkaStreamsRuntime:
         urllib.request.urlretrieve(KAFKA_STREAMS_JAR_URL, jar_path)
         urllib.request.urlretrieve(KAFKA_JDK_URL, jdk_path)
         with tarfile.open(jdk_path, "r:gz") as archive:
-            archive.extractall(path=self.workdir)
+            archive.extractall(path=self.workdir, filter='data')
         self.java_path = os.path.join(self.workdir, "bin", "java")
         self.jar_path = jar_path
         return self
@@ -340,7 +323,7 @@ class TestKafkaTopicMessagesBatchingDisabledRead(CurrentToCurrentVersionFixture)
                 target_topic,
             )
             try:
-                write_fixed_messages(self.driver, source_topic, messages)
+                write_raw_messages(self.driver, source_topic, messages)
                 wait_topic_end_offset(self.driver, target_topic, len(messages))
             finally:
                 kill_process_tree(process)
@@ -402,7 +385,7 @@ class TestKafkaTopicMessagesBatchingDisabledRead(CurrentToCurrentVersionFixture)
 
         create_kafka_streams_topic(self.driver, source_topic, [KAFKA_WORKLOAD_CONSUMER])
         create_kafka_streams_topic(self.driver, target_topic, [KAFKA_CHECKER_CONSUMER])
-        write_fixed_messages(self.driver, source_topic, plain_messages)
+        write_raw_messages(self.driver, source_topic, plain_messages)
         write_kafka_batch(self.driver, source_topic, batch_messages, base_sequence=100)
 
         set_feature_flags(self.config, **{BATCHING_FLAG: False})

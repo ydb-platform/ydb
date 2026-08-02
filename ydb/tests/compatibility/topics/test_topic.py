@@ -421,15 +421,17 @@ def write_kafka_batch_and_rollback_transaction(driver, topic_name, values, base_
     with ydb.QuerySessionPool(driver) as session_pool:
         with session_pool.checkout() as session:
             tx = session.transaction().begin()
-            asyncio.run(_write_kafka_batch_in_transaction_async(
-                driver,
-                tx,
-                topic_name,
-                values,
-                base_sequence,
-                producer_id or f"tx-kafka-batch-rollback-producer-{uuid.uuid4().hex}",
-            ))
-            tx.rollback()
+            try:
+                asyncio.run(_write_kafka_batch_in_transaction_async(
+                    driver,
+                    tx,
+                    topic_name,
+                    values,
+                    base_sequence,
+                    producer_id or f"tx-kafka-batch-rollback-producer-{uuid.uuid4().hex}",
+                ))
+            finally:
+                tx.rollback()
 
 
 def write_raw_messages_in_transaction(driver, topic_name, values, producer_id=None, partition_id=0):

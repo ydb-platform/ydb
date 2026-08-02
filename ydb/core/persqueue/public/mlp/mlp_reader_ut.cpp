@@ -398,6 +398,7 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
                 .ReceiveAttemptId = receiveAttemptId,
             });
             auto response = GetReadResponse(runtime);
+            UNIT_ASSERT(response);
             UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 2);
             for (const auto& msg : response->Messages) {
                 firstIds.push_back(msg.MessageId);
@@ -411,7 +412,11 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
             .Consumer = "mlp-consumer",
             .Messages = { firstIds[0] },
         });
-        UNIT_ASSERT(GetChangeResponse(runtime)->Messages[0].Status == EOperationResult::Success);
+        {
+            auto commit = GetChangeResponse(runtime);
+            UNIT_ASSERT(commit);
+            UNIT_ASSERT(commit->Messages[0].Status == EOperationResult::Success);
+        }
 
         {
             CreateReaderActor(runtime, {
@@ -424,6 +429,7 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
                 .ReceiveAttemptId = receiveAttemptId,
             });
             auto response = GetReadResponse(runtime);
+            UNIT_ASSERT(response);
             UNIT_ASSERT_VALUES_EQUAL_C(response->Status, Ydb::StatusIds::SUCCESS, response->ErrorDescription);
             // Same attempt id no longer replays; remaining message stays locked.
             UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 0);
@@ -435,7 +441,11 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
             .Consumer = "mlp-consumer",
             .Messages = { firstIds[1] },
         });
-        UNIT_ASSERT(GetChangeResponse(runtime)->Messages[0].Status == EOperationResult::Success);
+        {
+            auto unlock = GetChangeResponse(runtime);
+            UNIT_ASSERT(unlock);
+            UNIT_ASSERT(unlock->Messages[0].Status == EOperationResult::Success);
+        }
 
         {
             CreateReaderActor(runtime, {

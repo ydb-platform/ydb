@@ -283,35 +283,43 @@ THolder<TEvPQ::TEvMLPReadResponse> WaitResult(NActors::TTestActorRuntime& runtim
     return runtime.GrabEdgeEvent<TEvPQ::TEvMLPReadResponse>();
 }
 
+namespace {
+
+template <typename TEvent>
+THolder<TEvent> ExpectEdgeEvent(NActors::TTestActorRuntime& runtime, TDuration timeout, const char* name) {
+    auto response = runtime.GrabEdgeEvent<TEvent>(timeout);
+    UNIT_ASSERT_C(response, TStringBuilder() << name << " timed out after " << timeout);
+    return response;
+}
+
+} // namespace
+
 THolder<TEvReadResponse> GetReadResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {
-    return runtime.GrabEdgeEvent<TEvReadResponse>(timeout);
+    return ExpectEdgeEvent<TEvReadResponse>(runtime, timeout, "GetReadResponse");
 }
 
 THolder<TEvPurgeResponse> GetPurgeResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {
-    return runtime.GrabEdgeEvent<TEvPurgeResponse>(timeout);
+    return ExpectEdgeEvent<TEvPurgeResponse>(runtime, timeout, "GetPurgeResponse");
 }
 
 THolder<TEvDescribeResponse> GetDescribeResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {
-    return runtime.GrabEdgeEvent<TEvDescribeResponse>(timeout);
+    return ExpectEdgeEvent<TEvDescribeResponse>(runtime, timeout, "GetDescribeResponse");
 }
 
 THolder<TEvWriteResponse> GetWriteResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {
-    return runtime.GrabEdgeEvent<TEvWriteResponse>(timeout);
+    return ExpectEdgeEvent<TEvWriteResponse>(runtime, timeout, "GetWriteResponse");
 }
 
 THolder<TEvChangeResponse> GetChangeResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {
-    return runtime.GrabEdgeEvent<TEvChangeResponse>(timeout);
+    return ExpectEdgeEvent<TEvChangeResponse>(runtime, timeout, "GetChangeResponse");
 }
 
 THolder<NDescriber::TEvDescribeTopicsResponse> GetDescriberResponse(NActors::TTestActorRuntime& runtime, TDuration timeout) {
-    return runtime.GrabEdgeEvent<NDescriber::TEvDescribeTopicsResponse>(timeout);
+    return ExpectEdgeEvent<NDescriber::TEvDescribeTopicsResponse>(runtime, timeout, "GetDescriberResponse");
 }
 
 void AssertReadError(NActors::TTestActorRuntime& runtime, Ydb::StatusIds::StatusCode errorCode, const TString& message, TDuration timeout) {
     auto response = GetReadResponse(runtime, timeout);
-    if (!response) {
-        UNIT_FAIL("Timeout");
-    }
 
     UNIT_ASSERT_VALUES_EQUAL_C(Ydb::StatusIds::StatusCode_Name(response->Status),
         Ydb::StatusIds::StatusCode_Name(errorCode), response->ErrorDescription);
@@ -320,9 +328,6 @@ void AssertReadError(NActors::TTestActorRuntime& runtime, Ydb::StatusIds::Status
 
 void AssertPurgeError(NActors::TTestActorRuntime& runtime, Ydb::StatusIds::StatusCode errorCode, const TString& message, TDuration timeout) {
     auto response = GetPurgeResponse(runtime, timeout);
-    if (!response) {
-        UNIT_FAIL("Timeout");
-    }
 
     UNIT_ASSERT_VALUES_EQUAL_C(Ydb::StatusIds::StatusCode_Name(response->Status),
         Ydb::StatusIds::StatusCode_Name(errorCode), response->ErrorDescription);
@@ -331,9 +336,6 @@ void AssertPurgeError(NActors::TTestActorRuntime& runtime, Ydb::StatusIds::Statu
 
 void AssertPurgeOK(NActors::TTestActorRuntime& runtime, TDuration timeout) {
     auto response = GetPurgeResponse(runtime, timeout);
-    if (!response) {
-        UNIT_FAIL("Timeout");
-    }
 
     UNIT_ASSERT_VALUES_EQUAL_C(Ydb::StatusIds::StatusCode_Name(response->Status),
         Ydb::StatusIds::StatusCode_Name(Ydb::StatusIds::SUCCESS), response->ErrorDescription);
@@ -402,7 +404,9 @@ THolder<NKikimr::TEvPQ::TEvGetMLPConsumerStateResponse> GetConsumerState(std::sh
 
     ForwardToTablet(setup->GetRuntime(), tabletId, setup->GetRuntime().AllocateEdgeActor(),
         new NKikimr::TEvPQ::TEvGetMLPConsumerStateRequest(topic, consumer, partitionId));
-    return setup->GetRuntime().GrabEdgeEvent<NKikimr::TEvPQ::TEvGetMLPConsumerStateResponse>();
+    auto response = setup->GetRuntime().GrabEdgeEvent<NKikimr::TEvPQ::TEvGetMLPConsumerStateResponse>(TDuration::Seconds(30));
+    UNIT_ASSERT_C(response, "GetConsumerState timed out");
+    return response;
 }
 
 void ReloadPQTablet(std::shared_ptr<TTopicSdkTestSetup>& setup, const TString& database, const TString& topic, ui32 partitionId) {

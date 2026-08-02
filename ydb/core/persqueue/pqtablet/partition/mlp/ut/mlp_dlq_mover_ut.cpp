@@ -674,7 +674,11 @@ Y_UNIT_TEST(MoveToDLQ_ThenPurgeSource) {
         .TopicName = "/Root/topic1",
         .Consumer = "mlp-consumer",
     });
-    UNIT_ASSERT_VALUES_EQUAL(GetReadResponse(runtime)->Messages.size(), 1);
+    {
+        auto response = GetReadResponse(runtime);
+        UNIT_ASSERT(response);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+    }
 
     CreateUnlockerActor(runtime, {
         .DatabasePath = "/Root",
@@ -682,7 +686,11 @@ Y_UNIT_TEST(MoveToDLQ_ThenPurgeSource) {
         .Consumer = "mlp-consumer",
         .Messages = {{0, 0}},
     });
-    UNIT_ASSERT_VALUES_EQUAL(GetChangeResponse(runtime)->Status, Ydb::StatusIds::SUCCESS);
+    {
+        auto unlock = GetChangeResponse(runtime);
+        UNIT_ASSERT(unlock);
+        UNIT_ASSERT_VALUES_EQUAL(unlock->Status, Ydb::StatusIds::SUCCESS);
+    }
 
     bool moved = false;
     for (size_t i = 0; i < 15; ++i) {

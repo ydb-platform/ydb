@@ -86,6 +86,7 @@ TActorId CreatePurgerActor(NActors::TTestActorRuntime& runtime, TPurgerSettings&
 TActorId CreateDescriberActor(NActors::TTestActorRuntime& runtime, TDescribeSettings&& settings);
 TActorId CreateDescriberActor(NActors::TTestActorRuntime& runtime, const TString& databasePath, const TString& topicPath);
 THolder<TEvPQ::TEvMLPReadResponse> WaitResult(NActors::TTestActorRuntime& runtime);
+// Grab edge event and fail the test on timeout (never returns null).
 THolder<TEvReadResponse> GetReadResponse(NActors::TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(5));
 THolder<TEvWriteResponse> GetWriteResponse(NActors::TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(5));
 THolder<TEvChangeResponse> GetChangeResponse(NActors::TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(5));

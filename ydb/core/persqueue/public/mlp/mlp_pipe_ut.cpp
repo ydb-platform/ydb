@@ -240,6 +240,7 @@ Y_UNIT_TEST(UnlockerPipeBreakReturnsFailed) {
             .MaxNumberOfMessage = 1,
         });
         auto response = GetReadResponse(runtime, TDuration::Seconds(30));
+        UNIT_ASSERT(response);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
         messageId = response->Messages[0].MessageId;
     }
@@ -280,6 +281,7 @@ Y_UNIT_TEST(DeadlineChangerPipeBreakReturnsFailed) {
             .MaxNumberOfMessage = 1,
         });
         auto response = GetReadResponse(runtime, TDuration::Seconds(30));
+        UNIT_ASSERT(response);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
         messageId = response->Messages[0].MessageId;
     }
@@ -320,7 +322,10 @@ Y_UNIT_TEST(DeadlineChangerPipeBreakThenSuccess) {
             .ProcessingTimeout = TDuration::Seconds(30),
             .MaxNumberOfMessage = 1,
         });
-        messageId = GetReadResponse(runtime, TDuration::Seconds(30))->Messages[0].MessageId;
+        auto response = GetReadResponse(runtime, TDuration::Seconds(30));
+        UNIT_ASSERT(response);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+        messageId = response->Messages[0].MessageId;
     }
 
     {

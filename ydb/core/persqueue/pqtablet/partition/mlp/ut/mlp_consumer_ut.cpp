@@ -898,7 +898,11 @@ Y_UNIT_TEST(DelayedMessageNotReadableUntilDeadline) {
             .Delay = TDuration::Seconds(3),
         }},
     });
-    UNIT_ASSERT_VALUES_EQUAL(GetWriteResponse(runtime)->Messages.size(), 1);
+    {
+        auto write = GetWriteResponse(runtime);
+        UNIT_ASSERT(write);
+        UNIT_ASSERT_VALUES_EQUAL(write->Messages.size(), 1);
+    }
 
     {
         CreateReaderActor(runtime, {
@@ -910,6 +914,7 @@ Y_UNIT_TEST(DelayedMessageNotReadableUntilDeadline) {
             .MaxNumberOfMessage = 1,
         });
         auto response = GetReadResponse(runtime);
+        UNIT_ASSERT(response);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 0);
     }
 
@@ -977,7 +982,9 @@ Y_UNIT_TEST(ReloadWhileMessageLocked) {
             .ProcessingTimeout = TDuration::Seconds(60),
             .MaxNumberOfMessage = 1,
         });
-        UNIT_ASSERT_VALUES_EQUAL(GetReadResponse(runtime)->Messages.size(), 1);
+        auto response = GetReadResponse(runtime);
+        UNIT_ASSERT(response);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
     }
 
     ReloadPQTablet(setup, "/Root", "/Root/topic1", 0);
@@ -1029,7 +1036,11 @@ Y_UNIT_TEST(CommitAfterUnlockSucceeds) {
         .ProcessingTimeout = TDuration::Seconds(30),
         .MaxNumberOfMessage = 1,
     });
-    UNIT_ASSERT_VALUES_EQUAL(GetReadResponse(runtime)->Messages.size(), 1);
+    {
+        auto response = GetReadResponse(runtime);
+        UNIT_ASSERT(response);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+    }
 
     CreateUnlockerActor(runtime, {
         .DatabasePath = "/Root",
@@ -1037,7 +1048,11 @@ Y_UNIT_TEST(CommitAfterUnlockSucceeds) {
         .Consumer = "mlp-consumer",
         .Messages = {TMessageId(0, 0)},
     });
-    UNIT_ASSERT_VALUES_EQUAL(GetChangeResponse(runtime)->Status, Ydb::StatusIds::SUCCESS);
+    {
+        auto unlock = GetChangeResponse(runtime);
+        UNIT_ASSERT(unlock);
+        UNIT_ASSERT_VALUES_EQUAL(unlock->Status, Ydb::StatusIds::SUCCESS);
+    }
 
     // Unlocked → Unprocessed; commit of Unprocessed is allowed.
     CreateCommitterActor(runtime, {
@@ -1065,7 +1080,11 @@ Y_UNIT_TEST(KeepMessagesOrderBasicFifo) {
             {.Index = 1, .MessageBody = "second", .MessageGroupId = "g", .MessageDeduplicationId = "d2"},
         }
     });
-    UNIT_ASSERT_VALUES_EQUAL(GetWriteResponse(runtime)->Messages.size(), 2);
+    {
+        auto write = GetWriteResponse(runtime);
+        UNIT_ASSERT(write);
+        UNIT_ASSERT_VALUES_EQUAL(write->Messages.size(), 2);
+    }
 
     TMessageId firstId;
     {
@@ -1078,6 +1097,7 @@ Y_UNIT_TEST(KeepMessagesOrderBasicFifo) {
             .MaxNumberOfMessage = 10,
         });
         auto response = GetReadResponse(runtime);
+        UNIT_ASSERT(response);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "first");
         firstId = response->Messages[0].MessageId;
@@ -1089,7 +1109,11 @@ Y_UNIT_TEST(KeepMessagesOrderBasicFifo) {
         .Consumer = "mlp-consumer",
         .Messages = { firstId },
     });
-    UNIT_ASSERT(GetChangeResponse(runtime)->Messages[0].Status == EOperationResult::Success);
+    {
+        auto commit = GetChangeResponse(runtime);
+        UNIT_ASSERT(commit);
+        UNIT_ASSERT(commit->Messages[0].Status == EOperationResult::Success);
+    }
 
     CreateReaderActor(runtime, {
         .DatabasePath = "/Root",
@@ -1100,6 +1124,7 @@ Y_UNIT_TEST(KeepMessagesOrderBasicFifo) {
         .MaxNumberOfMessage = 10,
     });
     auto response = GetReadResponse(runtime);
+    UNIT_ASSERT(response);
     UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "second");
 }
@@ -1135,7 +1160,9 @@ Y_UNIT_TEST(DLQ_MoveFailsThenSucceedsAfterDlqCreated) {
             .ProcessingTimeout = TDuration::Seconds(30),
             .MaxNumberOfMessage = 1,
         });
-        UNIT_ASSERT_VALUES_EQUAL(GetReadResponse(runtime)->Messages.size(), 1);
+        auto response = GetReadResponse(runtime);
+        UNIT_ASSERT(response);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
     }
     {
         CreateUnlockerActor(runtime, {
@@ -1144,7 +1171,9 @@ Y_UNIT_TEST(DLQ_MoveFailsThenSucceedsAfterDlqCreated) {
             .Consumer = "mlp-consumer",
             .Messages = { TMessageId(0, 0) },
         });
-        UNIT_ASSERT_VALUES_EQUAL(GetChangeResponse(runtime)->Status, Ydb::StatusIds::SUCCESS);
+        auto unlock = GetChangeResponse(runtime);
+        UNIT_ASSERT(unlock);
+        UNIT_ASSERT_VALUES_EQUAL(unlock->Status, Ydb::StatusIds::SUCCESS);
     }
 
     // After failed move the message must become readable again.
@@ -1176,7 +1205,9 @@ Y_UNIT_TEST(DLQ_MoveFailsThenSucceedsAfterDlqCreated) {
             .Consumer = "mlp-consumer",
             .Messages = { TMessageId(0, 0) },
         });
-        UNIT_ASSERT_VALUES_EQUAL(GetChangeResponse(runtime)->Status, Ydb::StatusIds::SUCCESS);
+        auto unlock = GetChangeResponse(runtime);
+        UNIT_ASSERT(unlock);
+        UNIT_ASSERT_VALUES_EQUAL(unlock->Status, Ydb::StatusIds::SUCCESS);
     }
 
     for (size_t i = 0; i < 15; ++i) {

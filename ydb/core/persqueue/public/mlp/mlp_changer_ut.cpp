@@ -793,7 +793,11 @@ Y_UNIT_TEST(DeadlineChangerMultiPartition) {
         .ProcessingTimeout = TDuration::Seconds(5),
         .MaxNumberOfMessage = 2,
     });
-    UNIT_ASSERT_VALUES_EQUAL(GetReadResponse(runtime)->Messages.size(), 0);
+    {
+        auto response = GetReadResponse(runtime);
+        UNIT_ASSERT(response);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 0);
+    }
 }
 
 Y_UNIT_TEST(DeadlineChangerMultiPartitionDifferentDeadlines) {
@@ -921,7 +925,9 @@ Y_UNIT_TEST(UnlockMultiPartition) {
                 {.Index = 1, .MessageBody = "u1", .MessageGroupId = "g1"},
             }
         });
-        UNIT_ASSERT_VALUES_EQUAL(GetWriteResponse(runtime)->Messages.size(), 2);
+        auto write = GetWriteResponse(runtime);
+        UNIT_ASSERT(write);
+        UNIT_ASSERT_VALUES_EQUAL(write->Messages.size(), 2);
     }
 
     std::vector<TMessageId> lockedIds;
@@ -935,6 +941,7 @@ Y_UNIT_TEST(UnlockMultiPartition) {
             .MaxNumberOfMessage = 1,
         });
         auto response = GetReadResponse(runtime);
+        UNIT_ASSERT(response);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
         lockedIds.push_back(response->Messages[0].MessageId);
     }
@@ -946,6 +953,7 @@ Y_UNIT_TEST(UnlockMultiPartition) {
         .Messages = lockedIds,
     });
     auto result = GetChangeResponse(runtime);
+    UNIT_ASSERT(result);
     UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
     UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 2);
     for (const auto& msg : result->Messages) {
@@ -969,7 +977,10 @@ Y_UNIT_TEST(MixedUnlockResults) {
             .ProcessingTimeout = TDuration::Seconds(30),
             .MaxNumberOfMessage = 1,
         });
-        lockedId = GetReadResponse(runtime)->Messages[0].MessageId;
+        auto response = GetReadResponse(runtime);
+        UNIT_ASSERT(response);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+        lockedId = response->Messages[0].MessageId;
     }
 
     CreateUnlockerActor(runtime, {
@@ -979,6 +990,7 @@ Y_UNIT_TEST(MixedUnlockResults) {
         .Messages = { lockedId, TMessageId(0, 99) },
     });
     auto result = GetChangeResponse(runtime);
+    UNIT_ASSERT(result);
     UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
     UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 2);
 
@@ -1006,7 +1018,10 @@ Y_UNIT_TEST(MixedDeadlineResults) {
             .ProcessingTimeout = TDuration::Seconds(30),
             .MaxNumberOfMessage = 1,
         });
-        lockedId = GetReadResponse(runtime)->Messages[0].MessageId;
+        auto response = GetReadResponse(runtime);
+        UNIT_ASSERT(response);
+        UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
+        lockedId = response->Messages[0].MessageId;
     }
 
     const auto deadline = TInstant::Now() + TDuration::Seconds(30);
@@ -1018,6 +1033,7 @@ Y_UNIT_TEST(MixedDeadlineResults) {
         .Deadlines = { deadline, deadline },
     });
     auto result = GetChangeResponse(runtime);
+    UNIT_ASSERT(result);
     UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
     UNIT_ASSERT_VALUES_EQUAL(result->Messages.size(), 2);
 
@@ -1043,7 +1059,11 @@ Y_UNIT_TEST(CapacitySmokeKeepOrder) {
             {.Index = 1, .MessageBody = "b", .MessageGroupId = "g", .MessageDeduplicationId = "d2"},
         }
     });
-    UNIT_ASSERT_VALUES_EQUAL(GetWriteResponse(runtime)->Messages.size(), 2);
+    {
+        auto write = GetWriteResponse(runtime);
+        UNIT_ASSERT(write);
+        UNIT_ASSERT_VALUES_EQUAL(write->Messages.size(), 2);
+    }
 
     TMessageId firstId;
     {
@@ -1056,6 +1076,7 @@ Y_UNIT_TEST(CapacitySmokeKeepOrder) {
             .MaxNumberOfMessage = 1,
         });
         auto response = GetReadResponse(runtime);
+        UNIT_ASSERT(response);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "a");
         firstId = response->Messages[0].MessageId;
@@ -1067,7 +1088,11 @@ Y_UNIT_TEST(CapacitySmokeKeepOrder) {
         .Consumer = "mlp-consumer",
         .Messages = { firstId },
     });
-    UNIT_ASSERT(GetChangeResponse(runtime)->Messages[0].Status == EOperationResult::Success);
+    {
+        auto commit = GetChangeResponse(runtime);
+        UNIT_ASSERT(commit);
+        UNIT_ASSERT(commit->Messages[0].Status == EOperationResult::Success);
+    }
 
     CreateReaderActor(runtime, {
         .DatabasePath = "/Root",
@@ -1078,6 +1103,7 @@ Y_UNIT_TEST(CapacitySmokeKeepOrder) {
         .MaxNumberOfMessage = 1,
     });
     auto response = GetReadResponse(runtime);
+    UNIT_ASSERT(response);
     UNIT_ASSERT_VALUES_EQUAL(response->Messages.size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(response->Messages[0].Data, "b");
 }

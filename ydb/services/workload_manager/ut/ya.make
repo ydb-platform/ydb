@@ -9,6 +9,8 @@ ELSE()
     REQUIREMENTS(cpu:2)
 ENDIF()
 
+TIMEOUT(300)
+
 SRCS(
     classifier_representation_ut.cpp
     has_app_name_ut.cpp

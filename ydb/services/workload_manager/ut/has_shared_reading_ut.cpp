@@ -40,12 +40,12 @@ std::shared_ptr<IQueryClassifier> MakeClassifier(
         .AppName = "",
         .UserToken = userToken,
     };
-    return CreateQueryClassifierForUt(
+    return CreateQueryClassifier(
         poolSnap ? poolSnap : MakeDefaultPoolSnap(),
         classifierView ? *classifierView : MakeDefaultClassifierView(),
         TEST_DB,
         std::move(ctx),
-        resourcePoolForSharedReading);
+        resourcePoolForSharedReading.empty() ? std::optional<TString>() : resourcePoolForSharedReading);
 }
 
 NKqp::TUserRequestContext MakeStreamingUserContext() {
@@ -172,6 +172,8 @@ Y_UNIT_TEST_SUITE(TQueryClassifierSharedReadingPool) {
     }
 
     Y_UNIT_TEST(RejectsWhenSharedReadingPoolMissing) {
+        // A shared-reading query must be rejected when the configured pool is
+        // not present in the snapshot — it must not soft-resolve to the id.
         auto classifier = MakeClassifier("missing_shared_reading_pool");
         auto userCtx = MakeStreamingUserContext();
         (void)classifier->PreCompileClassify(userCtx);
@@ -211,9 +213,41 @@ Y_UNIT_TEST_SUITE(TQueryClassifierSharedReadingPool) {
         UNIT_ASSERT_VALUES_EQUAL(reject.Resolver, "ResourcePoolForSharedReading");
     }
 
-    Y_UNIT_TEST(UnconstrainedSharedReadingPoolKeepsPoolId) {
-        // Pool with no WMS settings would normally become TBypass via TryResolve.
-        // Force path must still bind to ResourcePoolForSharedReading.
+    Y_UNIT_TEST(RejectsWhenNoDescribeAccessToSharedReadingPool) {
+        // No permissions at all: DescribeSchema fails first, so the pool must be
+        // reported as not found (NOT_FOUND) rather than resolved.
+        auto securityObject = NACLib::TSecurityObject(/*owner=*/"owner", /*isContainer=*/false);
+
+        auto poolSnap = MakeResourcePoolMap({
+            {_JoinPath(TEST_DB, SHARED_READING_POOL), TResourcePoolEntry{
+                .Config = MakePoolEntry(10).Config,
+                .SecurityObject = securityObject,
+            }},
+            {_JoinPath(TEST_DB, USER_POOL), MakePoolEntry(10)},
+            {_JoinPath(TEST_DB, "default"), MakePoolEntry(10)},
+        });
+
+        auto token = MakeIntrusive<NACLib::TUserToken>(
+            NACLib::TSID("alice"), TVector<NACLib::TSID>{});
+        token->SaveSerializationInfo();
+
+        auto classifier = MakeClassifier(
+            SHARED_READING_POOL, /*explicitPoolId=*/{}, /*classifierView=*/std::nullopt, poolSnap, token);
+        auto userCtx = MakeStreamingUserContext();
+        (void)classifier->PreCompileClassify(userCtx);
+
+        auto prepared = MakePreparedQueryWithSharedReading(true);
+        const auto& reject = GetPostReject(classifier->PostCompileClassify(prepared, userCtx));
+        UNIT_ASSERT_VALUES_EQUAL(reject.Code, Ydb::StatusIds::NOT_FOUND);
+        UNIT_ASSERT_STRING_CONTAINS(reject.Message, SHARED_READING_POOL);
+        UNIT_ASSERT_VALUES_EQUAL(reject.Resolver, "ResourcePoolForSharedReading");
+    }
+
+    Y_UNIT_TEST(UnconstrainedSharedReadingPoolRetainsPoolId) {
+        // An unconstrained pool (no WMS/admission settings) would normally resolve
+        // to TBypass, losing the pool id. Shared-reading queries must always run in
+        // their configured pool, so the resolver retains the pool id (SkipAdmission)
+        // instead of bypassing.
         auto poolSnap = MakeResourcePoolMap({
             {_JoinPath(TEST_DB, SHARED_READING_POOL), MakePoolEntry(/*concurrentQueryLimit=*/-1)},
             {_JoinPath(TEST_DB, USER_POOL), MakePoolEntry(10)},
@@ -227,8 +261,7 @@ Y_UNIT_TEST_SUITE(TQueryClassifierSharedReadingPool) {
         auto prepared = MakePreparedQueryWithSharedReading(true);
         auto result = classifier->PostCompileClassify(prepared, userCtx);
         UNIT_ASSERT_C(std::holds_alternative<IQueryClassifier::TResolvedPoolId>(result),
-            TStringBuilder() << "Expected TResolvedPoolId (not TBypass), got variant index: "
-                << result.index());
+            TStringBuilder() << "Expected TResolvedPoolId, got variant index: " << result.index());
         const auto& resolved = std::get<IQueryClassifier::TResolvedPoolId>(result);
         UNIT_ASSERT_VALUES_EQUAL(resolved.PoolId, SHARED_READING_POOL);
         UNIT_ASSERT(resolved.SkipAdmission);

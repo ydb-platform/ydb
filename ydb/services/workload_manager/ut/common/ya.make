@@ -8,8 +8,6 @@ SRCS(
 PEERDIR(
     ydb/core/base
     ydb/core/kqp/ut/common
-    ydb/core/protos
-    ydb/library/actors/core
     ydb/services/metadata
     ydb/services/workload_manager/metadata_subscription/resource_pool_classifier
 )

@@ -4,6 +4,7 @@ import subprocess
 import signal
 import stat
 import os
+import textwrap
 import time
 import unittest
 import urllib.request
@@ -12,10 +13,100 @@ from library.python import resource
 import ydb
 
 
+KAFKA_SOURCE_PRODUCER_JAVA = textwrap.dedent("""
+    import java.nio.charset.StandardCharsets;
+    import java.time.Duration;
+    import java.util.Properties;
+    import java.util.concurrent.atomic.AtomicReference;
+
+    import org.apache.kafka.clients.producer.Callback;
+    import org.apache.kafka.clients.producer.KafkaProducer;
+    import org.apache.kafka.clients.producer.ProducerConfig;
+    import org.apache.kafka.clients.producer.ProducerRecord;
+    import org.apache.kafka.clients.producer.RecordMetadata;
+    import org.apache.kafka.common.serialization.ByteArraySerializer;
+    import org.apache.kafka.common.serialization.StringSerializer;
+
+    public class KafkaSourceProducer {
+        public static void main(String[] args) throws Exception {
+            String bootstrap = args[0];
+            String topic = args[1];
+            int seconds = Integer.parseInt(args[2]);
+            int messageRate = Integer.parseInt(args[3]);
+            int messageSize = Integer.parseInt(args[4]);
+            int batchSize = Integer.parseInt(args[5]);
+            int lingerMs = Integer.parseInt(args[6]);
+            String compressionType = args[7];
+
+            Properties props = new Properties();
+            props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrap);
+            props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+            props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, ByteArraySerializer.class.getName());
+            props.put(ProducerConfig.ACKS_CONFIG, "all");
+            props.put(ProducerConfig.RETRIES_CONFIG, "10");
+            props.put(ProducerConfig.BATCH_SIZE_CONFIG, Integer.toString(batchSize));
+            props.put(ProducerConfig.LINGER_MS_CONFIG, Integer.toString(lingerMs));
+            props.put(ProducerConfig.COMPRESSION_TYPE_CONFIG, compressionType);
+            props.put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, "120000");
+            props.put(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, "30000");
+
+            AtomicReference<Exception> error = new AtomicReference<>();
+            Callback callback = new Callback() {
+                @Override
+                public void onCompletion(RecordMetadata metadata, Exception exception) {
+                    if (exception != null) {
+                        error.compareAndSet(null, exception);
+                    }
+                }
+            };
+
+            byte[] value = makePayload(messageSize);
+            long periodNanos = 1_000_000_000L / Math.max(1, messageRate);
+            long deadline = System.nanoTime() + Duration.ofSeconds(seconds).toNanos();
+            long nextSend = System.nanoTime();
+            int sent = 0;
+
+            try (KafkaProducer<String, byte[]> producer = new KafkaProducer<>(props)) {
+                while (System.nanoTime() < deadline) {
+                    Exception exception = error.get();
+                    if (exception != null) {
+                        throw exception;
+                    }
+
+                    producer.send(new ProducerRecord<>(topic, "key-" + (sent % 16), value), callback);
+                    sent++;
+                    nextSend += periodNanos;
+                    long sleepNanos = nextSend - System.nanoTime();
+                    if (sleepNanos > 0) {
+                        Thread.sleep(sleepNanos / 1_000_000L, (int)(sleepNanos % 1_000_000L));
+                    }
+                }
+
+                producer.flush();
+            }
+
+            Exception exception = error.get();
+            if (exception != null) {
+                throw exception;
+            }
+            System.out.println("KafkaSourceProducer sent " + sent + " messages");
+        }
+
+        private static byte[] makePayload(int messageSize) {
+            StringBuilder builder = new StringBuilder();
+            while (builder.length() < messageSize) {
+                builder.append("kafka-source-batch-message-");
+            }
+            return builder.substring(0, messageSize).getBytes(StandardCharsets.UTF_8);
+        }
+    }
+""").strip()
+
+
 class Workload(unittest.TestCase):
     def __init__(self, endpoint, database, bootstrap, test_topic_path,
                  target_topic_path, workload_consumer_name, num_workers,
-                 duration):
+                 duration, source_writer="topic"):
         self.endpoint = endpoint
         self.database = database
         self.bootstrap = bootstrap
@@ -25,6 +116,7 @@ class Workload(unittest.TestCase):
         self.driver = ydb.Driver(ydb.DriverConfig(endpoint, database))
         self.num_workers = num_workers
         self.duration = duration
+        self.source_writer = source_writer
         self.tmp_dirs = []
         self.archive_path = "https://storage.yandexcloud.net/ydb-ci/kafka/jdk-linux-x86_64.yandex.tgz"
         self.jar_path = "https://storage.yandexcloud.net/ydb-ci/kafka/e2e-kafka-api-tests-1.0-with-parameter-choice.jar"
@@ -72,12 +164,15 @@ class Workload(unittest.TestCase):
         print("Creating test topic")
         testOptions = [("1", "1"), ("0", "1"), ("0", "0")]
         checkerConsumer = "targetCheckerConsumer"
-        self.create_topic(self.test_topic_path, [workloadConsumerName, checkerConsumer] + [f"{checkerConsumer}-{i}" for i in range(len(testOptions))])
+        self.create_topic(
+            self.test_topic_path,
+            [workloadConsumerName, checkerConsumer] + [
+                f"{checkerConsumer}-{i}" for i in range(len(testOptions))
+            ],
+        )
 
-        print("Running workload topic run")
         processes = [
-            subprocess.Popen([self.cli_path, "-e", self.endpoint, "-d", self.database, "workload", "topic", "run", "write",
-                             "--topic", self.test_topic_path, "-s", "10", "--message-rate", "100"], start_new_session=True)
+            self.start_source_writer(java_path, jar_file_path)
         ]
         print("NumWorkers: ", self.num_workers)
         print("Bootstrap:", self.bootstrap, "Endpoint:", self.endpoint, "Database:", self.database)
@@ -87,10 +182,18 @@ class Workload(unittest.TestCase):
             targetTopicName = f"{self.target_topic_path}-{i}"
             self.create_topic(targetTopicName, [checkerConsumer, f"{checkerConsumer}-{i}"])
             for j in range(self.num_workers):
-                processes.append(subprocess.Popen([java_path, "-jar", jar_file_path, self.bootstrap,
-                                                   f"streams-store-{i * self.num_workers + j}", self.test_topic_path,
-                                                   targetTopicName, f"workload-consumer-{i}", use_transactions, use_idempotence],
-                                                  start_new_session=True))
+                processes.append(subprocess.Popen([
+                    java_path,
+                    "-jar",
+                    jar_file_path,
+                    self.bootstrap,
+                    f"streams-store-{i * self.num_workers + j}",
+                    self.test_topic_path,
+                    targetTopicName,
+                    f"workload-consumer-{i}",
+                    use_transactions,
+                    use_idempotence,
+                ], start_new_session=True))
         processes[0].wait()
         assert processes[0].returncode == 0
 
@@ -127,13 +230,77 @@ class Workload(unittest.TestCase):
             print(f"target {self.target_topic_path}-{i}. totalMessCountTest = {totalMessCountTest}, "
                   f"totalMessCountTarget = {totalMessCountTarget}")
             if i >= 1:
-                assert totalMessCountTest <= totalMessCountTarget, f"Source message count is greater than the target {self.target_topic_path}-{i} topic's message count:" + \
-                    f"{totalMessCountTest} and {totalMessCountTarget} respectively."
+                assert totalMessCountTest <= totalMessCountTarget, (
+                    f"Source message count is greater than the target {self.target_topic_path}-{i} topic's "
+                    f"message count: {totalMessCountTest} and {totalMessCountTarget} respectively."
+                )
             else:
-                assert totalMessCountTest == totalMessCountTarget, f"Source and target {self.target_topic_path}-{i} topics total messages count are not equal:" + \
-                    f"{totalMessCountTest} and {totalMessCountTarget} respectively."
+                assert totalMessCountTest == totalMessCountTarget, (
+                    f"Source and target {self.target_topic_path}-{i} topics total messages count are not "
+                    f"equal: {totalMessCountTest} and {totalMessCountTarget} respectively."
+                )
             print(f"Total num of messages: {totalMessCountTest}")
         return
+
+    def start_source_writer(self, java_path, jar_file_path):
+        if self.source_writer == "kafka":
+            return self.start_kafka_source_writer(java_path, jar_file_path)
+        if self.source_writer == "topic":
+            return self.start_topic_source_writer()
+        raise ValueError(f"Unknown source writer: {self.source_writer}")
+
+    def start_topic_source_writer(self):
+        print("Running workload topic run")
+        write_command = [
+            self.cli_path, "-e", self.endpoint, "-d", self.database,
+            "workload", "topic", "run", "write",
+            "--topic", self.test_topic_path,
+            "-s", "10",
+            "--message-rate", "100",
+        ]
+        print("Write command:", write_command)
+        return subprocess.Popen(write_command, start_new_session=True)
+
+    def start_kafka_source_writer(self, java_path, jar_file_path):
+        print("Running Kafka producer source writer")
+        producer_class_dir = "./kafka-source-producer"
+        os.makedirs(producer_class_dir, exist_ok=True)
+        producer_source = os.path.join(producer_class_dir, "KafkaSourceProducer.java")
+        with open(producer_source, "w") as out:
+            out.write(KAFKA_SOURCE_PRODUCER_JAVA)
+
+        javac_path = os.path.join(os.path.dirname(java_path), "javac")
+        subprocess.run([
+            javac_path,
+            "-cp",
+            jar_file_path,
+            producer_source,
+        ], check=True, text=True)
+
+        bootstrap = self.bootstrap
+        for prefix in ("http://", "https://"):
+            if bootstrap.startswith(prefix):
+                bootstrap = bootstrap[len(prefix):]
+                break
+        message_rate = 100
+        target_batch_messages = 5
+        linger_ms = max(1, 1000 * target_batch_messages // message_rate)
+        producer_command = [
+            java_path,
+            "-cp",
+            f"{jar_file_path}:{producer_class_dir}",
+            "KafkaSourceProducer",
+            bootstrap,
+            self.test_topic_path,
+            "10",
+            str(message_rate),
+            "256",
+            "32768",
+            str(linger_ms),
+            "none",
+        ]
+        print("Kafka producer command:", producer_command)
+        return subprocess.Popen(producer_command, start_new_session=True)
 
     def _kill_process_tree(self, process):
         if process.poll() is not None:

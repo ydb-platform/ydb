@@ -511,6 +511,22 @@ def read_messages(driver, topic_name, consumer, expected_count, timeout=60):
     return messages
 
 
+def read_messages_with_offsets(driver, topic_name, consumer, expected_count, timeout=60):
+    messages = []
+    with driver.topic_client.reader(topic_name, consumer=consumer) as reader:
+        deadline = time.time() + timeout
+        while len(messages) < expected_count and time.time() < deadline:
+            try:
+                message = reader.receive_message(timeout=1)
+            except TimeoutError:
+                continue
+            messages.append((message.offset, message.data))
+            reader.commit(message)
+
+    assert len(messages) == expected_count
+    return messages
+
+
 def read_available_messages(driver, topic_name, consumer, min_count, timeout=120, idle_timeout=5):
     messages = []
     with driver.topic_client.reader(topic_name, consumer=consumer) as reader:
@@ -1175,24 +1191,25 @@ class TestTopicTransactionMidBlobRead(CurrentToCurrentVersionFixture):
 
     # Reproduce the #48508 shape: write a non-zero parent offset prefix, commit a transaction that
     # stores regular messages from a supportive partition, restart, then start readers from offsets
-    # inside the tx-written blob so FindPos must translate header coordinates back to parent keys.
+    # inside the tx-written blob and verify that returned offsets stay in parent key space.
     def test_mid_blob_read_after_transaction_commit_uses_parent_offsets(self):
         utils = Workload(self)
         consumers = (
             "tx-mid-blob-consumer-1",
             "tx-mid-blob-consumer-50",
+            "tx-mid-blob-consumer-150",
             "tx-mid-blob-consumer-last",
         )
         utils.create_topic(consumers=consumers)
 
-        prefix_count = 500
-        tx_count = 200
+        prefix_count = 1000
+        tx_count = 300
         prefix_messages = [
             f"tx-mid-blob-prefix-{i}"
             for i in range(prefix_count)
         ]
         tx_messages = [
-            f"tx-mid-blob-transaction-{i}-" + ("x" * 256)
+            f"tx-mid-blob-transaction-{i}-" + ("x" * 4096)
             for i in range(tx_count)
         ]
 
@@ -1215,6 +1232,7 @@ class TestTopicTransactionMidBlobRead(CurrentToCurrentVersionFixture):
         for consumer, delta in [
             ("tx-mid-blob-consumer-1", 1),
             ("tx-mid-blob-consumer-50", 50),
+            ("tx-mid-blob-consumer-150", 150),
             ("tx-mid-blob-consumer-last", tx_count - 1),
         ]:
             self.driver.topic_client.commit_offset(
@@ -1223,13 +1241,17 @@ class TestTopicTransactionMidBlobRead(CurrentToCurrentVersionFixture):
                 0,
                 prefix_count + delta,
             )
-            assert read_messages(
+            read_result = read_messages_with_offsets(
                 self.driver,
                 utils.topic_name,
                 consumer,
                 tx_count - delta,
                 timeout=120,
-            ) == [
+            )
+            assert [offset for offset, _ in read_result] == list(
+                range(prefix_count + delta, prefix_count + tx_count)
+            )
+            assert [data for _, data in read_result] == [
                 message.encode("utf-8")
                 for message in tx_messages[delta:]
             ]

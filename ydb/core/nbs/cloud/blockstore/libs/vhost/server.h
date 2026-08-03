@@ -7,6 +7,7 @@
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/affinity.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/startable.h>
 #include <ydb/core/nbs/cloud/storage/core/protos/media.pb.h>
 
@@ -69,10 +70,40 @@ struct TServerConfig
 
 IServerPtr CreateServer(
     ILoggingServicePtr logging,
+    ITimerPtr timer,
+    ISchedulerPtr scheduler,
     IVHostStatsPtr vhostStats,
     IVhostQueueFactoryPtr vhostQueueFactory,
     IDeviceHandlerFactoryPtr deviceHandlerFactory,
     TServerConfig serverConfig,
     TVhostCallbacks callbacks);
+
+////////////////////////////////////////////////////////////////////////////////
+/*
+               | VHost |
+                   |
+                   v
+       | TUnalignedDeviceHandler |
+                   |
+                   v
+       | TAlignedDeviceHandler |
+                   |
+                   v
+    | TSplitRequestsStorageWrapper |
+                   |
+                   v
+| TOverlappedRequestsGuardStorageWrapper |
+                   |
+                   v
+       | TDurableStorageWrapper |
+                   |
+                   v
+           | TStorageGate |
+                   |
+                   v
+         | TFastPathService |
+*/
+
+////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore::NVhost

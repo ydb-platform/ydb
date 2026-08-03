@@ -7,6 +7,7 @@ SRCS(
     blocks_info.cpp
     context.cpp
     device_handler.cpp
+    durable_wrapper.cpp
     overlapped_requests_guard_wrapper.cpp
     request.cpp
     split_requests_wrapper.cpp

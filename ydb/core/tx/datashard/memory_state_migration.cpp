@@ -170,6 +170,10 @@ private:
                     row.BreakerQuerySpanId = protoLock.GetBreakerQuerySpanId();
                     row.BreakerNodeId = protoLock.GetBreakerNodeId();
                 }
+                if (protoLock.HasWriteIndex()) {
+                    row.WriterIndex = protoLock.GetWriterIndex();
+                    row.WriteIndex = protoLock.GetWriteIndex();
+                }
                 if (protoLock.HasBreakVersion()) {
                     row.BreakVersion = TRowVersion::FromProto(protoLock.GetBreakVersion());
                 }
@@ -645,6 +649,10 @@ TDataShard::TPreservedInMemoryState TDataShard::PreserveInMemoryState() {
         }
         if (const auto& version = lockInfo.GetBreakVersion()) {
             version->ToProto(protoLockInfo->MutableBreakVersion());
+        }
+        if (ui64 writeIndex = lockInfo.GetWriteIndex(); writeIndex != 0) {
+            protoLockInfo->SetWriterIndex(lockInfo.GetWriterIndex());
+            protoLockInfo->SetWriteIndex(writeIndex);
         }
         for (const auto& pathId : lockInfo.GetReadTables()) {
             pathId.ToProto(protoLockInfo->AddReadTables());

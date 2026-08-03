@@ -7,3 +7,5 @@ items:
   href: structure.md
 - name: Genres
   href: genres.md
+- name: Adding media to public materials
+  href: guide-to-public-material.md

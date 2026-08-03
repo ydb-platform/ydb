@@ -852,7 +852,7 @@ Failures at the fail domain level are automatically handled by {{ ydb-short-name
 
 #### Distributed storage channel {#channel}
 
-A **distributed storage channel**, **DS channel**, or **channel** is a logical connection between a [tablet](#tablet) and a [distributed storage](#distributed-storage) group. A tablet can write data to different channels, and each channel maps to a specific [storage group](#storage-group). Having multiple channels allows a tablet to:
+A **distributed storage channel**, **DS channel**, or **channel** is a logical connection between a [tablet](#tablet) and a [storage group](#storage-group). A tablet can write data to different channels, and each channel maps to a specific storage group. Having multiple channels allows a tablet to:
 
 * Write more data than a single storage group can hold.
 * Store different [LogoBlobs](#logoblob) in different storage groups, with different properties, such as erasure coding or on different media (HDD, SSD, NVMe).

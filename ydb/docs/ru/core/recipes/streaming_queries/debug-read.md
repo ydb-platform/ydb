@@ -1,6 +1,6 @@
 # Отладочное чтение из топика
 
-При разработке [потоковых запросов](../../concepts/streaming-query/streaming-query.md) бывает полезно быстро посмотреть, какие данные поступают в [топик](../../concepts/datamodel/topic.md), без создания полноценного потокового запроса. Для этого можно выполнить обычный `SELECT` с параметром `STREAMING = TRUE`.
+При разработке [потоковых запросов](../../concepts/streaming-query/streaming-query.md) бывает полезно быстро посмотреть, какие данные поступают в [топик](../../concepts/datamodel/topic.md), без создания полноценного потокового запроса. Для этого можно выполнить обычный `SELECT` с параметром `STREAMING = "TRUE"`.
 
 {% note warning %}
 
@@ -31,7 +31,7 @@ WITH (
     SCHEMA = (
         Data String
     ),
-    STREAMING = TRUE
+    STREAMING = "TRUE"
 )
 LIMIT 1
 ```
@@ -54,7 +54,7 @@ WITH (
         Level String NOT NULL,
         Host String NOT NULL
     ),
-    STREAMING = TRUE
+    STREAMING = "TRUE"
 )
 LIMIT 5
 ```
@@ -63,4 +63,4 @@ LIMIT 5
 
 * [{#T}](../../concepts/streaming-query/streaming-query.md)
 * [{#T}](../../dev/streaming-query/streaming-query-formats.md) — поддерживаемые форматы данных
-* [{#T}](../../yql/reference/syntax/select/streaming.md) — описание `STREAMING = TRUE` в справочнике YQL
+* [{#T}](../../yql/reference/syntax/select/streaming.md) — описание `STREAMING = "TRUE"` в справочнике YQL

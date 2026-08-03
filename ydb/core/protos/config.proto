@@ -2850,14 +2850,11 @@ message TColumnShardConfig {
         optional double DrainRateStart = 7 [default = 50];
         optional double DrainBurst = 8 [default = 100];
         optional double DrainAimdAdd = 9 [default = 5];       // admits/s additive increase
-        optional uint32 DrainAimdGrowMs = 10 [default = 1000];
-        optional uint32 DrainAimdHoldMs = 11 [default = 2000];
-        optional uint32 DrainAimdFeedbackMs = 12 [default = 5000];
-        optional double DrainAimdBeta = 13 [default = 0.5];    // multiplicative decrease factor
-        optional uint64 MaxDelayedRejectQueueSize = 14 [default = 5000];
+        optional double DrainAimdBeta = 10 [default = 0.5];    // multiplicative decrease factor
+        optional uint64 MaxDelayedRejectQueueSize = 11 [default = 5000];
         // Delay before an OVERLOADED reply is sent for a request placed in the delayed-reject
         // queue, as percent of BulkUpsert operation_timeout (default 10 ⇒ reply after 10% of timeout).
-        optional uint32 DelayedRejectTimeoutPercent = 15 [default = 10];
+        optional uint32 DelayedRejectTimeoutPercent = 12 [default = 10];
     }
 
     optional TFlowControlConfig FlowControl = 73;

@@ -106,9 +106,12 @@ bool IsCsFlowControlEnabled() {
         Y_ABORT_UNLESS(msg->Record.GetOrigin() == ShardId);
 
         ReportTabletLocationToFlowControl(ShardId, ev->Sender.NodeId());
+        LastResultNodeId = ev->Sender.NodeId();
 
         const auto ydbStatus = msg->GetStatus();
         if (ydbStatus == NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED) {
+            // Sticky, even when a retry later succeeds: FCM must see that the shard pushed back.
+            WasEverOverloaded = true;
             if (RetryBySubscription) {
                 if (msg->Record.HasOverloadSubscribed() && msg->Record.GetOverloadSubscribed() == LastOverloadSeqNo && !IsMaxRetriesReached()) {
                     return;
@@ -213,6 +216,10 @@ bool IsCsFlowControlEnabled() {
     }
 
     void TShardWriter::PassAway() {
+        // Single terminal point for every path (success, fail, timeout, delivery problem),
+        // so the FCM outcome is reported exactly once per shard write.
+        ReportWriteOutcomeToFlowControl();
+
         if (RetryBySubscription && LastOverloadSeqNo) {
             SendToTablet(MakeHolder<TEvColumnShard::TEvOverloadUnsubscribe>(LastOverloadSeqNo));
             LastOverloadSeqNo = 0;
@@ -237,5 +244,14 @@ bool IsCsFlowControlEnabled() {
         }
         Send(NColumnShard::NFlowControl::TFlowControlManagerServiceOperator::MakeServiceId(SelfId().NodeId()),
             new NColumnShard::NFlowControl::TEvTabletLocationInvalidated(tabletId));
+    }
+
+    void TShardWriter::ReportWriteOutcomeToFlowControl() {
+        if (!IsCsFlowControlEnabled() || WriteOutcomeReported) {
+            return;
+        }
+        WriteOutcomeReported = true;
+        Send(NColumnShard::NFlowControl::TFlowControlManagerServiceOperator::MakeServiceId(SelfId().NodeId()),
+            new NColumnShard::NFlowControl::TEvWriteOutcome(ShardId, LastResultNodeId, WasEverOverloaded, NumRetries));
     }
 }

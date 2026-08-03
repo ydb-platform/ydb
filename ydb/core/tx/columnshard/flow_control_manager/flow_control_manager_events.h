@@ -27,6 +27,7 @@ enum EEvFlowControl {
     EvTabletLocationUpdated,
     EvTabletLocationInvalidated,
     EvFireDelayedReject,
+    EvWriteOutcome,
 
     EvEnd
 };
@@ -153,6 +154,31 @@ class TEvFireDelayedReject: public NActors::TEventLocal<TEvFireDelayedReject, Ev
 public:
     explicit TEvFireDelayedReject(ui64 rejectId)
         : RejectId(rejectId)
+    {
+    }
+};
+
+// Terminal per-request write outcome, reported by TShardWriter once per shard write.
+// This is the closed-loop feedback that drives drain-rate growth: FCM counts outcomes
+// into a "cohort" and grows the rate only when a full cohort completed with no
+// overload at all. Unlike the node-level TEvNodeOverloadStatus this is per request,
+// immediate and exactly attributable, which is what makes timer-free growth possible.
+//
+// Overloaded must be true if the write was EVER overloaded, even when a later retry
+// succeeded: otherwise retry-by-subscription would launder overload into success and
+// the rate would grow exactly when it should not.
+class TEvWriteOutcome: public NActors::TEventLocal<TEvWriteOutcome, EvWriteOutcome> {
+    YDB_READONLY(ui64, TabletId, 0);
+    YDB_READONLY(ui32, NodeId, 0);
+    YDB_READONLY(bool, Overloaded, false);
+    YDB_READONLY(ui32, Retries, 0);
+
+public:
+    TEvWriteOutcome(ui64 tabletId, ui32 nodeId, bool overloaded, ui32 retries)
+        : TabletId(tabletId)
+        , NodeId(nodeId)
+        , Overloaded(overloaded)
+        , Retries(retries)
     {
     }
 };

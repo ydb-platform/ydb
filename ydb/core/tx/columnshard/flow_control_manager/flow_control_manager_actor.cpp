@@ -248,11 +248,21 @@ TFlowControlManager::TFlowControlManager(TIntrusivePtr<::NMonitoring::TDynamicCo
     Burst = params.Burst;
     AimdAdd = params.AimdAdd;
     AimdBeta = params.AimdBeta;
-    AimdGrow = params.AimdGrow;
-    AimdHold = params.AimdHold;
-    AimdFeedback = params.AimdFeedback;
     Tokens = Burst;
+    // The bounds above are only a seed: if FlowControl config is merged after
+    // construction, SyncDrainBounds() (called each drain cycle) will pick it up.
     PublishDrainGauges();
+}
+
+void TFlowControlManager::SyncDrainBounds() {
+    const auto params = TFlowControlManagerServiceOperator::GetDrainRateParams();
+    RMin = params.RMin;
+    RMax = params.RMax;
+    AimdAdd = params.AimdAdd;
+    AimdBeta = params.AimdBeta;
+    // Keep the live rate inside the (possibly updated) bounds.
+    RefillRateR = Min(RMax, Max(RMin, RefillRateR));
+    RecomputeBurst();
 }
 
 void TFlowControlManager::PublishMapSizes() const {
@@ -387,6 +397,9 @@ void TFlowControlManager::EraseWaiter(ui64 waiterId) {
 }
 
 void TFlowControlManager::RefillTokens(TInstant now) {
+    // Pick up any FlowControl config merged after construction (e.g. dynamic config)
+    // and clamp the live rate into the current bounds before refilling tokens.
+    SyncDrainBounds();
     if (LastRefillAt == TInstant::Zero()) {
         LastRefillAt = now;
         return;
@@ -396,50 +409,93 @@ void TFlowControlManager::RefillTokens(TInstant now) {
         Tokens = Min(Burst, Tokens + RefillRateR * dt);
         LastRefillAt = now;
     }
-    MaybeGrowRate(now);
 }
 
-void TFlowControlManager::MaybeGrowRate(TInstant now) {
-    // Drain-relative additive increase: only grow the rate when there is real drain
-    // demand and progress. Without this, RefillRateR would creep up to RMax during
-    // idle/no-traffic periods just because wall-clock time passed.
-    if (Waiters.empty()) {
+void TFlowControlManager::NoteCohortRelease() {
+    // A cohort targets one full rate-worth of releases: exactly the "send RefillRateR
+    // requests, then judge the result" round.
+    if (!CohortOpen) {
+        CohortOpen = true;
+        CohortTarget = Max<ui64>(1, static_cast<ui64>(std::ceil(RefillRateR)));
+        CohortReleased = 0;
+        CohortOkCount = 0;
+        CohortOverloadCount = 0;
+    }
+    ++CohortReleased;
+}
+
+void TFlowControlManager::NoteCohortOutcome(bool overloaded) {
+    Counters.OnWriteOutcome(overloaded);
+    // Outcomes are the *only* driver of rate changes (both growth in CloseCohort() and cuts in
+    // CutRateByOverloadFraction()). They arrive on the TEvWriteOutcome path, which is independent
+    // of the drain cycle, so bounds must be re-read here as well: otherwise RMax/RMin/AimdAdd/
+    // AimdBeta stay at their construction-time seed and a config merged after construction is
+    // ignored (this is what let RefillRateR climb far above drain_rate_max in production).
+    SyncDrainBounds();
+    if (!CohortOpen) {
+        // Outcome of a write that was not part of an open cohort (e.g. a fast-path admit
+        // with no queueing). Overload still matters as a cut signal.
+        if (overloaded) {
+            CutRateByOverloadFraction(1.0);
+        }
         return;
     }
-    if (!DrainedSinceLastGrow) {
-        return;
+    if (overloaded) {
+        ++CohortOverloadCount;
+    } else {
+        ++CohortOkCount;
     }
-    if (now < HoldUntil) {
-        return;
-    }
-    if (LastOverloadAt && now - LastOverloadAt < AimdGrow) {
-        return;
-    }
-    if (LastGrowAt && now - LastGrowAt < AimdGrow) {
-        return;
-    }
-    if (RefillRateR >= RMax) {
-        return;
-    }
-    const double prev = RefillRateR;
-    RefillRateR = Min(RMax, RefillRateR + AimdAdd);
-    RecomputeBurst();
-    LastGrowAt = now;
-    DrainedSinceLastGrow = false;
-    if (RefillRateR > prev) {
-        Counters.OnDrainRateGrow();
+    if (CohortOkCount + CohortOverloadCount >= CohortTarget) {
+        CloseCohort();
     }
 }
 
-void TFlowControlManager::CutRateOnOverload(TInstant now) {
-    LastOverloadAt = now;
-    if (!LastDrainActivityAt || now - LastDrainActivityAt > AimdFeedback) {
+void TFlowControlManager::CloseCohort() {
+    const ui64 total = CohortOkCount + CohortOverloadCount;
+    const ui64 overloads = CohortOverloadCount;
+
+    CohortOpen = false;
+    CohortTarget = 0;
+    CohortReleased = 0;
+    CohortOkCount = 0;
+    CohortOverloadCount = 0;
+
+    if (!total) {
         return;
     }
+
+    if (!overloads) {
+        // Clean round: a full rate-worth of writes completed without the shards ever
+        // pushing back, so probe a little higher. No clock is consulted.
+        if (RefillRateR < RMax) {
+            const double prev = RefillRateR;
+            RefillRateR = Min(RMax, RefillRateR + AimdAdd);
+            RecomputeBurst();
+            if (RefillRateR > prev) {
+                Counters.OnDrainRateGrow();
+            }
+        }
+        PublishDrainGauges();
+        return;
+    }
+
+    Counters.OnDrainCohortAborted();
+    CutRateByOverloadFraction(static_cast<double>(overloads) / static_cast<double>(total));
+}
+
+void TFlowControlManager::CutRateByOverloadFraction(double overloadFraction) {
+    // Proportional multiplicative decrease: a single overloaded write out of many need
+    // not halve the rate, while an all-overloaded round applies the full AimdBeta.
+    // Possible only because outcomes are per request; the node-level signal could not
+    // express severity.
+    const double fraction = Min(1.0, Max(0.0, overloadFraction));
+    if (fraction <= 0.0) {
+        return;
+    }
+    const double effectiveBeta = 1.0 - fraction * (1.0 - AimdBeta);
     const double prev = RefillRateR;
-    RefillRateR = Max(RMin, RefillRateR * AimdBeta);
+    RefillRateR = Max(RMin, RefillRateR * effectiveBeta);
     RecomputeBurst();
-    HoldUntil = now + AimdHold;
     if (RefillRateR < prev) {
         Counters.OnDrainRateCut();
     }
@@ -639,8 +695,7 @@ void TFlowControlManager::Handle(const NFlowControl::TEvDrainWaiter::TPtr& ev, c
     // Token already reserved at schedule time; clear flag before erase so EraseWaiter does not refund.
     waiter->TokenReserved = false;
     EraseWaiter(waiterId);
-    LastDrainActivityAt = now;
-    DrainedSinceLastGrow = true;
+    NoteCohortRelease();
     Counters.OnWaitQueueDrain(waited);
     Counters.OnAdmitAllowed(TDuration::Zero());
     Counters.OnDrainAllowed();
@@ -648,17 +703,25 @@ void TFlowControlManager::Handle(const NFlowControl::TEvDrainWaiter::TPtr& ev, c
     ScheduleDrainEligible(ctx);
 }
 
+void TFlowControlManager::Handle(const NFlowControl::TEvWriteOutcome::TPtr& ev, const TActorContext& ctx) {
+    // Closed-loop feedback: this is the only input that changes the drain rate.
+    NoteCohortOutcome(ev->Get()->GetOverloaded());
+    // A cohort close may have raised the rate / burst, so re-evaluate eligibility.
+    ScheduleDrainEligible(ctx);
+}
+
 void TFlowControlManager::Handle(const NFlowControl::TEvNodeOverloadStatus::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
     const ui32 nodeId = record.GetNodeId();
     const ui64 generation = record.GetGeneration();
-    const TInstant now = TActivationContext::Now();
 
     switch (record.GetStatus()) {
         case NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_OVERLOADED:
+            // Gating signal only: it marks the node hot so admits are withheld. The drain
+            // rate itself is driven exclusively by per-request outcomes, which are exactly
+            // attributable to our own traffic.
             HotNodes[nodeId] = Max(HotNodes[nodeId], generation);
             Counters.OnStatusOverloaded();
-            CutRateOnOverload(now);
             break;
         case NKikimrTxColumnShard::TEvNodeOverloadStatus::STATUS_READY: {
             auto it = HotNodes.find(nodeId);

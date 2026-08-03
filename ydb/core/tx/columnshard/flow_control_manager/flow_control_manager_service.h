@@ -12,15 +12,15 @@ namespace NKikimr::NColumnShard::NFlowControl {
 
 class TFlowControlManagerServiceOperator {
 public:
+    // Drain-rate control is fully outcome-driven: growth is decided from per-request
+    // write outcomes (TEvWriteOutcome) accumulated into cohorts, never from wall clock.
+    // Hence there are no AimdGrow / AimdHold / AimdFeedback durations here anymore.
     struct TDrainRateParams {
         double RMin = 10.0;
         double RMax = 500.0;
         double RStart = 10.0;
         double Burst = 20.0;
         double AimdAdd = 5.0;
-        TDuration AimdGrow = TDuration::Seconds(1);
-        TDuration AimdHold = TDuration::Seconds(2);
-        TDuration AimdFeedback = TDuration::Seconds(5);
         double AimdBeta = 0.5;
     };
 

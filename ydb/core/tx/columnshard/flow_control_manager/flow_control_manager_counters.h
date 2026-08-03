@@ -22,6 +22,9 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr DrainAllowedCount;
     NMonitoring::TDynamicCounters::TCounterPtr DrainRateCutCount;
     NMonitoring::TDynamicCounters::TCounterPtr DrainRateGrowCount;
+    NMonitoring::TDynamicCounters::TCounterPtr DrainCohortAbortedCount;
+    NMonitoring::TDynamicCounters::TCounterPtr DrainOutcomeOkCount;
+    NMonitoring::TDynamicCounters::TCounterPtr DrainOutcomeOverloadedCount;
 
     NMonitoring::TDynamicCounters::TCounterPtr RequestsCount;
     NMonitoring::TDynamicCounters::TCounterPtr AdmitAllowedCount;
@@ -61,6 +64,9 @@ public:
         , DrainAllowedCount(TBase::GetDeriviative("FlowControl/Drain/Allowed/Count"))
         , DrainRateCutCount(TBase::GetDeriviative("FlowControl/Drain/RateCut/Count"))
         , DrainRateGrowCount(TBase::GetDeriviative("FlowControl/Drain/RateGrow/Count"))
+        , DrainCohortAbortedCount(TBase::GetDeriviative("FlowControl/Drain/CohortAborted/Count"))
+        , DrainOutcomeOkCount(TBase::GetDeriviative("FlowControl/Drain/Outcome/Ok/Count"))
+        , DrainOutcomeOverloadedCount(TBase::GetDeriviative("FlowControl/Drain/Outcome/Overloaded/Count"))
         , RequestsCount(TBase::GetDeriviative("FlowControl/Requests/Count"))
         , AdmitAllowedCount(TBase::GetDeriviative("FlowControl/Admit/Allowed/Count"))
         , AdmitRejectedCount(TBase::GetDeriviative("FlowControl/Admit/Rejected/Count"))
@@ -188,6 +194,20 @@ public:
 
     void OnDrainRateGrow() const {
         DrainRateGrowCount->Inc();
+    }
+
+    // A cohort completed but contained at least one overloaded write, so no growth.
+    void OnDrainCohortAborted() const {
+        DrainCohortAbortedCount->Inc();
+    }
+
+    // Per-request write outcome reported by TShardWriter.
+    void OnWriteOutcome(bool overloaded) const {
+        if (overloaded) {
+            DrainOutcomeOverloadedCount->Inc();
+        } else {
+            DrainOutcomeOkCount->Inc();
+        }
     }
 
     void OnLocationRecheck() const {

@@ -62,6 +62,14 @@ class TFlowControlManager: public NActors::TActor<TFlowControlManager> {
     ui64 NextRejectId = 1;
 
     // Drain token bucket + AIMD (FCM-local).
+    //
+    // Rate control is fully closed-loop on observed per-request write outcomes
+    // (TEvWriteOutcome from TShardWriter) and contains no wall-clock timers:
+    //  * growth: release a "cohort" of ceil(RefillRateR) waiters, then grow by AimdAdd
+    //    only once that many outcomes came back with zero overloads;
+    //  * cut: proportional to the observed overload fraction of a cohort.
+    // LastRefillAt is the only remaining TInstant and is pure token-bucket bookkeeping
+    // (tokens accrue as RefillRateR * dt), not a control-loop timer.
     double Tokens = 0.0;
     double RefillRateR = 10.0;
     double Burst = 20.0;
@@ -69,19 +77,18 @@ class TFlowControlManager: public NActors::TActor<TFlowControlManager> {
     double RMax = 500.0;
     double AimdAdd = 5.0;
     double AimdBeta = 0.5;
-    TDuration AimdGrow = TDuration::Seconds(1);
-    TDuration AimdHold = TDuration::Seconds(2);
-    TDuration AimdFeedback = TDuration::Seconds(5);
     TInstant LastRefillAt;
-    TInstant LastDrainActivityAt;
-    TInstant LastOverloadAt;
-    TInstant HoldUntil;
-    TInstant LastGrowAt;
-    // Set when a waiter is actually drained (TEvDrainWaiter Allow), cleared on each
-    // rate grow. Makes AIMD additive-increase drain-relative: RefillRateR only creeps
-    // up while there is real drain progress, so it does not grow during idle/no-traffic.
-    bool DrainedSinceLastGrow = false;
     bool DrainWakeupScheduled = false;
+
+    // Outcome-counted cohort. Opened when the first waiter of a new round is released,
+    // closed when Target outcomes have arrived. Growth needs no clock: it is decided
+    // purely by counting outcomes, which are positive events (each released write
+    // reports back), unlike the absence of a node-level overload signal.
+    bool CohortOpen = false;
+    ui64 CohortTarget = 0;
+    ui64 CohortReleased = 0;
+    ui64 CohortOkCount = 0;
+    ui64 CohortOverloadCount = 0;
 
     // clang-format off
     STRICT_STFUNC(StateMain,
@@ -95,6 +102,7 @@ class TFlowControlManager: public NActors::TActor<TFlowControlManager> {
                   HFunc(NFlowControl::TEvTabletLocationInvalidated, Handle)
                   HFunc(TEvTabletResolver::TEvForwardResult, Handle)
                   HFunc(NFlowControl::TEvFireDelayedReject, Handle)
+                  HFunc(NFlowControl::TEvWriteOutcome, Handle)
     )
     // clang-format on
 
@@ -108,6 +116,7 @@ class TFlowControlManager: public NActors::TActor<TFlowControlManager> {
     void Handle(const NFlowControl::TEvTabletLocationInvalidated::TPtr& ev, const TActorContext& ctx);
     void Handle(const TEvTabletResolver::TEvForwardResult::TPtr& ev, const TActorContext& ctx);
     void Handle(const NFlowControl::TEvFireDelayedReject::TPtr& ev, const TActorContext& ctx);
+    void Handle(const NFlowControl::TEvWriteOutcome::TPtr& ev, const TActorContext& ctx);
 
     bool IsAdmitAllowed(const TVector<ui64>& tabletIds) const;
     bool HasWaitersOnDestinations(const TVector<ui64>& tabletIds) const;
@@ -118,9 +127,21 @@ class TFlowControlManager: public NActors::TActor<TFlowControlManager> {
     void PublishMapSizes() const;
     void PublishDrainGauges() const;
     void RefillTokens(TInstant now);
+    // Re-read the static AIMD bounds (RMin/RMax/AimdAdd/AimdBeta) from live config and
+    // clamp RefillRateR into them. Called each drain cycle so that FlowControl config
+    // applied AFTER the actor was constructed takes effect — mirroring how the wait-queue
+    // knobs are already read live. Without this the bounds were frozen at construction
+    // (to process defaults if config was not yet merged), e.g. RMax stuck at 500.
+    void SyncDrainBounds();
     void RecomputeBurst();
-    void MaybeGrowRate(TInstant now);
-    void CutRateOnOverload(TInstant now);
+    // Open a cohort (if none) and account one released waiter.
+    void NoteCohortRelease();
+    // Account one arrived outcome and close/apply the cohort when it is complete.
+    void NoteCohortOutcome(bool overloaded);
+    // Applies additive increase (clean cohort) or a cut proportional to the observed
+    // overload fraction, then resets cohort state.
+    void CloseCohort();
+    void CutRateByOverloadFraction(double overloadFraction);
     void ScheduleDrainEligible(const TActorContext& ctx);
     void EraseWaiter(ui64 waiterId);
     void RefundDrainToken(TWaiter& waiter);

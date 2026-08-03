@@ -27,9 +27,6 @@ std::atomic<ui64> DrainRMaxMilli{ 500'000 };
 std::atomic<ui64> DrainRStartMilli{ 50'000 };
 std::atomic<ui64> DrainBurstMilli{ 100'000 };
 std::atomic<ui64> DrainAimdAddMilli{ 5'000 };
-std::atomic<ui64> DrainAimdGrowMs{ 1'000 };
-std::atomic<ui64> DrainAimdHoldMs{ 2'000 };
-std::atomic<ui64> DrainAimdFeedbackMs{ 5'000 };
 std::atomic<ui64> DrainAimdBetaMilli{ 500 };
 
 double MilliToRate(ui64 milli) {
@@ -128,9 +125,6 @@ TFlowControlManagerServiceOperator::TDrainRateParams TFlowControlManagerServiceO
         params.RStart = cfg->GetDrainRateStart();
         params.Burst = cfg->GetDrainBurst();
         params.AimdAdd = cfg->GetDrainAimdAdd();
-        params.AimdGrow = TDuration::MilliSeconds(cfg->GetDrainAimdGrowMs());
-        params.AimdHold = TDuration::MilliSeconds(cfg->GetDrainAimdHoldMs());
-        params.AimdFeedback = TDuration::MilliSeconds(cfg->GetDrainAimdFeedbackMs());
         params.AimdBeta = cfg->GetDrainAimdBeta();
         return params;
     }
@@ -141,9 +135,6 @@ TFlowControlManagerServiceOperator::TDrainRateParams TFlowControlManagerServiceO
     params.RStart = MilliToRate(DrainRStartMilli.load());
     params.Burst = MilliToRate(DrainBurstMilli.load());
     params.AimdAdd = MilliToRate(DrainAimdAddMilli.load());
-    params.AimdGrow = TDuration::MilliSeconds(DrainAimdGrowMs.load());
-    params.AimdHold = TDuration::MilliSeconds(DrainAimdHoldMs.load());
-    params.AimdFeedback = TDuration::MilliSeconds(DrainAimdFeedbackMs.load());
     params.AimdBeta = MilliToRate(DrainAimdBetaMilli.load());
     return params;
 }
@@ -180,9 +171,6 @@ void TFlowControlManagerServiceOperator::SetDrainRateParams(const TDrainRatePara
     DrainRStartMilli.store(RateToMilli(rStart));
     DrainBurstMilli.store(RateToMilli(burst));
     DrainAimdAddMilli.store(RateToMilli(add));
-    DrainAimdGrowMs.store(Max<ui64>(1, params.AimdGrow.MilliSeconds()));
-    DrainAimdHoldMs.store(Max<ui64>(1, params.AimdHold.MilliSeconds()));
-    DrainAimdFeedbackMs.store(Max<ui64>(1, params.AimdFeedback.MilliSeconds()));
     DrainAimdBetaMilli.store(RateToMilli(beta));
 }
 

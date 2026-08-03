@@ -26,9 +26,9 @@
         {"shape":"ServiceQuotaExceededException"},
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"},
+        {"shape":"ConflictException"},
         {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"},
-        {"shape":"ConflictException"},
         {"shape":"InternalServerException"}
       ],
       "documentation":"<p>Creates an environment for your thin client devices.</p>",
@@ -46,9 +46,9 @@
       "errors":[
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"},
+        {"shape":"ConflictException"},
         {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"},
-        {"shape":"ConflictException"},
         {"shape":"InternalServerException"}
       ],
       "documentation":"<p>Deletes a thin client device.</p>",
@@ -67,9 +67,9 @@
       "errors":[
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"},
+        {"shape":"ConflictException"},
         {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"},
-        {"shape":"ConflictException"},
         {"shape":"InternalServerException"}
       ],
       "documentation":"<p>Deletes an environment.</p>",
@@ -88,9 +88,9 @@
       "errors":[
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"},
+        {"shape":"ConflictException"},
         {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"},
-        {"shape":"ConflictException"},
         {"shape":"InternalServerException"}
       ],
       "documentation":"<p>Deregisters a thin client device.</p>",
@@ -239,9 +239,9 @@
       "errors":[
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"},
+        {"shape":"ConflictException"},
         {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"},
-        {"shape":"ConflictException"},
         {"shape":"InternalServerException"}
       ],
       "documentation":"<p>Assigns one or more tags (key-value pairs) to the specified resource.</p>",
@@ -259,9 +259,9 @@
       "errors":[
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"},
+        {"shape":"ConflictException"},
         {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"},
-        {"shape":"ConflictException"},
         {"shape":"InternalServerException"}
       ],
       "documentation":"<p>Removes a tag or tags from a resource.</p>",
@@ -300,6 +300,7 @@
       "errors":[
         {"shape":"ValidationException"},
         {"shape":"AccessDeniedException"},
+        {"shape":"ConflictException"},
         {"shape":"ResourceNotFoundException"},
         {"shape":"ThrottlingException"},
         {"shape":"InternalServerException"}
@@ -634,13 +635,6 @@
         "kmsKeyArn":{
           "shape":"KmsKeyArn",
           "documentation":"<p>The Amazon Resource Name (ARN) of the Key Management Service key used to encrypt the device.</p>"
-        },
-        "tags":{
-          "shape":"TagsMap",
-          "documentation":"<p>The tag keys and optional values for the resource.</p>",
-          "deprecated":true,
-          "deprecatedMessage":"This field will be removed in future releases. Use ListTagsForResource API instead.",
-          "deprecatedSince":"2025-03-25"
         }
       },
       "documentation":"<p>Describes a thin client device.</p>"
@@ -837,13 +831,6 @@
         "kmsKeyArn":{
           "shape":"KmsKeyArn",
           "documentation":"<p>The Amazon Resource Name (ARN) of the Key Management Service key used to encrypt the environment.</p>"
-        },
-        "tags":{
-          "shape":"TagsMap",
-          "documentation":"<p>The tag keys and optional values for the resource.</p>",
-          "deprecated":true,
-          "deprecatedMessage":"This field will be removed in future releases. Use ListTagsForResource API instead.",
-          "deprecatedSince":"2025-03-25"
         },
         "deviceCreationTags":{
           "shape":"DeviceCreationTagsMap",
@@ -1309,13 +1296,6 @@
         "arn":{
           "shape":"Arn",
           "documentation":"<p>The Amazon Resource Name (ARN) of the software set.</p>"
-        },
-        "tags":{
-          "shape":"TagsMap",
-          "documentation":"<p>The tag keys and optional values for the resource.</p>",
-          "deprecated":true,
-          "deprecatedMessage":"This field will be removed in future releases. Use ListTagsForResource API instead.",
-          "deprecatedSince":"2025-03-25"
         }
       },
       "documentation":"<p>Describes a software set.</p>"

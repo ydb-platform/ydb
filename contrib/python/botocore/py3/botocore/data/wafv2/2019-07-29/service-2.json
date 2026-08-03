@@ -997,6 +997,11 @@
       "type":"integer",
       "min":0
     },
+    "ASN":{
+      "type":"long",
+      "max":4294967295,
+      "min":0
+    },
     "AWSManagedRulesACFPRuleSet":{
       "type":"structure",
       "required":[
@@ -1026,7 +1031,7 @@
           "documentation":"<p>Allow the use of regular expressions in the registration page path and the account creation path. </p>"
         }
       },
-      "documentation":"<p>Details for your use of the account creation fraud prevention managed rule group, <code>AWSManagedRulesACFPRuleSet</code>. This configuration is used in <code>ManagedRuleGroupConfig</code>. </p>"
+      "documentation":"<p>Details for your use of the account creation fraud prevention managed rule group, <code>AWSManagedRulesACFPRuleSet</code>. This configuration is used in <code>ManagedRuleGroupConfig</code>. </p> <p>For additional information about this and the other intelligent threat mitigation rule groups, see <a href=\"https://docs.aws.amazon.com/waf/latest/developerguide/waf-managed-protections\">Intelligent threat mitigation in WAF</a> and <a href=\"https://docs.aws.amazon.com/waf/latest/developerguide/aws-managed-rule-groups-list\">Amazon Web Services Managed Rules rule groups list</a> in the <i>WAF Developer Guide</i>. </p>"
     },
     "AWSManagedRulesATPRuleSet":{
       "type":"structure",
@@ -1049,7 +1054,22 @@
           "documentation":"<p>Allow the use of regular expressions in the login page path. </p>"
         }
       },
-      "documentation":"<p>Details for your use of the account takeover prevention managed rule group, <code>AWSManagedRulesATPRuleSet</code>. This configuration is used in <code>ManagedRuleGroupConfig</code>. </p>"
+      "documentation":"<p>Details for your use of the account takeover prevention managed rule group, <code>AWSManagedRulesATPRuleSet</code>. This configuration is used in <code>ManagedRuleGroupConfig</code>. </p> <p>For additional information about this and the other intelligent threat mitigation rule groups, see <a href=\"https://docs.aws.amazon.com/waf/latest/developerguide/waf-managed-protections\">Intelligent threat mitigation in WAF</a> and <a href=\"https://docs.aws.amazon.com/waf/latest/developerguide/aws-managed-rule-groups-list\">Amazon Web Services Managed Rules rule groups list</a> in the <i>WAF Developer Guide</i>. </p>"
+    },
+    "AWSManagedRulesAntiDDoSRuleSet":{
+      "type":"structure",
+      "required":["ClientSideActionConfig"],
+      "members":{
+        "ClientSideActionConfig":{
+          "shape":"ClientSideActionConfig",
+          "documentation":"<p>Configures the request handling that's applied by the managed rule group rules <code>ChallengeAllDuringEvent</code> and <code>ChallengeDDoSRequests</code> during a distributed denial of service (DDoS) attack.</p>"
+        },
+        "SensitivityToBlock":{
+          "shape":"SensitivityToAct",
+          "documentation":"<p>The sensitivity that the rule group rule <code>DDoSRequests</code> uses when matching against the DDoS suspicion labeling on a request. The managed rule group adds the labeling during DDoS events, before the <code>DDoSRequests</code> rule runs. </p> <p>The higher the sensitivity, the more levels of labeling that the rule matches: </p> <ul> <li> <p>Low sensitivity is less sensitive, causing the rule to match only on the most likely participants in an attack, which are the requests with the high suspicion label <code>awswaf:managed:aws:anti-ddos:high-suspicion-ddos-request</code>.</p> </li> <li> <p>Medium sensitivity causes the rule to match on the medium and high suspicion labels.</p> </li> <li> <p>High sensitivity causes the rule to match on all of the suspicion labels: low, medium, and high.</p> </li> </ul> <p>Default: <code>LOW</code> </p>"
+        }
+      },
+      "documentation":"<p>Configures the use of the anti-DDoS managed rule group, <code>AWSManagedRulesAntiDDoSRuleSet</code>. This configuration is used in <code>ManagedRuleGroupConfig</code>. </p> <p>The configuration that you provide here determines whether and how the rules in the rule group are used. </p> <p>For additional information about this and the other intelligent threat mitigation rule groups, see <a href=\"https://docs.aws.amazon.com/waf/latest/developerguide/waf-managed-protections\">Intelligent threat mitigation in WAF</a> and <a href=\"https://docs.aws.amazon.com/waf/latest/developerguide/aws-managed-rule-groups-list\">Amazon Web Services Managed Rules rule groups list</a> in the <i>WAF Developer Guide</i>. </p>"
     },
     "AWSManagedRulesBotControlRuleSet":{
       "type":"structure",
@@ -1064,7 +1084,7 @@
           "documentation":"<p>Applies only to the targeted inspection level. </p> <p>Determines whether to use machine learning (ML) to analyze your web traffic for bot-related activity. Machine learning is required for the Bot Control rules <code>TGT_ML_CoordinatedActivityLow</code> and <code>TGT_ML_CoordinatedActivityMedium</code>, which inspect for anomalous behavior that might indicate distributed, coordinated bot activity.</p> <p>For more information about this choice, see the listing for these rules in the table at <a href=\"https://docs.aws.amazon.com/waf/latest/developerguide/aws-managed-rule-groups-bot.html#aws-managed-rule-groups-bot-rules\">Bot Control rules listing</a> in the <i>WAF Developer Guide</i>.</p> <p>Default: <code>TRUE</code> </p>"
         }
       },
-      "documentation":"<p>Details for your use of the Bot Control managed rule group, <code>AWSManagedRulesBotControlRuleSet</code>. This configuration is used in <code>ManagedRuleGroupConfig</code>. </p>"
+      "documentation":"<p>Details for your use of the Bot Control managed rule group, <code>AWSManagedRulesBotControlRuleSet</code>. This configuration is used in <code>ManagedRuleGroupConfig</code>. </p> <p>For additional information about this and the other intelligent threat mitigation rule groups, see <a href=\"https://docs.aws.amazon.com/waf/latest/developerguide/waf-managed-protections\">Intelligent threat mitigation in WAF</a> and <a href=\"https://docs.aws.amazon.com/waf/latest/developerguide/aws-managed-rule-groups-list\">Amazon Web Services Managed Rules rule groups list</a> in the <i>WAF Developer Guide</i>. </p>"
     },
     "Action":{"type":"string"},
     "ActionCondition":{
@@ -1106,14 +1126,12 @@
     },
     "All":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>Inspect all of the elements that WAF has parsed and extracted from the web request component that you've identified in your <a>FieldToMatch</a> specifications. </p> <p>This is used in the <a>FieldToMatch</a> specification for some web request component types. </p> <p>JSON specification: <code>\"All\": {}</code> </p>"
     },
     "AllQueryArguments":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>Inspect all query arguments of the web request. </p> <p>This is used in the <a>FieldToMatch</a> specification for some web request component types. </p> <p>JSON specification: <code>\"AllQueryArguments\": {}</code> </p>"
     },
     "AllowAction":{
@@ -1137,6 +1155,57 @@
       },
       "documentation":"<p>A logical rule statement used to combine other rule statements with AND logic. You provide more than one <a>Statement</a> within the <code>AndStatement</code>. </p>"
     },
+    "ApplicationAttribute":{
+      "type":"structure",
+      "members":{
+        "Name":{
+          "shape":"AttributeName",
+          "documentation":"<p>Specifies the attribute name.</p>"
+        },
+        "Values":{
+          "shape":"AttributeValues",
+          "documentation":"<p>Specifies the attribute value.</p>"
+        }
+      },
+      "documentation":"<p>Application details defined during the web ACL creation process. Application attributes help WAF give recommendations for protection packs.</p>"
+    },
+    "ApplicationAttributes":{
+      "type":"list",
+      "member":{"shape":"ApplicationAttribute"},
+      "max":10,
+      "min":1
+    },
+    "ApplicationConfig":{
+      "type":"structure",
+      "members":{
+        "Attributes":{
+          "shape":"ApplicationAttributes",
+          "documentation":"<p>Contains the attribute name and a list of values for that attribute.</p>"
+        }
+      },
+      "documentation":"<p>A list of <code>ApplicationAttribute</code>s that contains information about the application.</p>"
+    },
+    "AsnList":{
+      "type":"list",
+      "member":{"shape":"ASN"},
+      "max":100,
+      "min":1
+    },
+    "AsnMatchStatement":{
+      "type":"structure",
+      "required":["AsnList"],
+      "members":{
+        "AsnList":{
+          "shape":"AsnList",
+          "documentation":"<p>Contains one or more Autonomous System Numbers (ASNs). ASNs are unique identifiers assigned to large internet networks managed by organizations such as internet service providers, enterprises, universities, or government agencies. </p>"
+        },
+        "ForwardedIPConfig":{
+          "shape":"ForwardedIPConfig",
+          "documentation":"<p>The configuration for inspecting IP addresses to match against an ASN in an HTTP header that you specify, instead of using the IP address that's reported by the web request origin. Commonly, this is the X-Forwarded-For (XFF) header, but you can specify any header name. </p>"
+        }
+      },
+      "documentation":"<p>A rule statement that inspects web traffic based on the Autonomous System Number (ASN) associated with the request's IP address.</p> <p>For additional details, see <a href=\"https://docs.aws.amazon.com/waf/latest/developerguide/waf-rule-statement-type-asn-match.html\">ASN match rule statement</a> in the <a href=\"https://docs.aws.amazon.com/waf/latest/developerguide/waf-chapter.html\">WAF Developer Guide</a>. </p>"
+    },
     "AssociateWebACLRequest":{
       "type":"structure",
       "required":[
@@ -1156,8 +1225,7 @@
     },
     "AssociateWebACLResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "AssociatedResourceType":{
       "type":"string",
@@ -1178,6 +1246,23 @@
         }
       },
       "documentation":"<p>Specifies custom configurations for the associations between the web ACL and protected resources. </p> <p>Use this to customize the maximum size of the request body that your protected resources forward to WAF for inspection. You can customize this setting for CloudFront, API Gateway, Amazon Cognito, App Runner, or Verified Access resources. The default setting is 16 KB (16,384 bytes). </p> <note> <p>You are charged additional fees when your protected resources forward body sizes that are larger than the default. For more information, see <a href=\"http://aws.amazon.com/waf/pricing/\">WAF Pricing</a>.</p> </note> <p>For Application Load Balancer and AppSync, the limit is fixed at 8 KB (8,192 bytes).</p>"
+    },
+    "AttributeName":{
+      "type":"string",
+      "max":64,
+      "min":1,
+      "pattern":"^[\\w\\-]+$"
+    },
+    "AttributeValue":{
+      "type":"string",
+      "max":64,
+      "min":1
+    },
+    "AttributeValues":{
+      "type":"list",
+      "member":{"shape":"AttributeValue"},
+      "max":10,
+      "min":1
     },
     "BlockAction":{
       "type":"structure",
@@ -1341,6 +1426,36 @@
           "documentation":"<p>The capacity required by the rules and scope.</p>"
         }
       }
+    },
+    "ClientSideAction":{
+      "type":"structure",
+      "required":["UsageOfAction"],
+      "members":{
+        "UsageOfAction":{
+          "shape":"UsageOfAction",
+          "documentation":"<p>Determines whether to use the <code>AWSManagedRulesAntiDDoSRuleSet</code> rules <code>ChallengeAllDuringEvent</code> and <code>ChallengeDDoSRequests</code> in the rule group evaluation and the related label <code>awswaf:managed:aws:anti-ddos:challengeable-request</code>. </p> <ul> <li> <p>If usage is enabled: </p> <ul> <li> <p>The managed rule group adds the label <code>awswaf:managed:aws:anti-ddos:challengeable-request</code> to any web request whose URL does <i>NOT</i> match the regular expressions provided in the <code>ClientSideAction</code> setting <code>ExemptUriRegularExpressions</code>. </p> </li> <li> <p>The two rules are evaluated against web requests for protected resources that are experiencing a DDoS attack. The two rules only apply their action to matching requests that have the label <code>awswaf:managed:aws:anti-ddos:challengeable-request</code>. </p> </li> </ul> </li> <li> <p>If usage is disabled: </p> <ul> <li> <p>The managed rule group doesn't add the label <code>awswaf:managed:aws:anti-ddos:challengeable-request</code> to any web requests. </p> </li> <li> <p>The two rules are not evaluated.</p> </li> <li> <p>None of the other <code>ClientSideAction</code> settings have any effect.</p> </li> </ul> </li> </ul> <note> <p>This setting only enables or disables the use of the two anti-DDOS rules <code>ChallengeAllDuringEvent</code> and <code>ChallengeDDoSRequests</code> in the anti-DDoS managed rule group. </p> <p>This setting doesn't alter the action setting in the two rules. To override the actions used by the rules <code>ChallengeAllDuringEvent</code> and <code>ChallengeDDoSRequests</code>, enable this setting, and then override the rule actions in the usual way, in your managed rule group configuration. </p> </note>"
+        },
+        "Sensitivity":{
+          "shape":"SensitivityToAct",
+          "documentation":"<p>The sensitivity that the rule group rule <code>ChallengeDDoSRequests</code> uses when matching against the DDoS suspicion labeling on a request. The managed rule group adds the labeling during DDoS events, before the <code>ChallengeDDoSRequests</code> rule runs. </p> <p>The higher the sensitivity, the more levels of labeling that the rule matches: </p> <ul> <li> <p>Low sensitivity is less sensitive, causing the rule to match only on the most likely participants in an attack, which are the requests with the high suspicion label <code>awswaf:managed:aws:anti-ddos:high-suspicion-ddos-request</code>.</p> </li> <li> <p>Medium sensitivity causes the rule to match on the medium and high suspicion labels.</p> </li> <li> <p>High sensitivity causes the rule to match on all of the suspicion labels: low, medium, and high.</p> </li> </ul> <p>Default: <code>HIGH</code> </p>"
+        },
+        "ExemptUriRegularExpressions":{
+          "shape":"RegularExpressionList",
+          "documentation":"<p>The regular expression to match against the web request URI, used to identify requests that can't handle a silent browser challenge. When the <code>ClientSideAction</code> setting <code>UsageOfAction</code> is enabled, the managed rule group uses this setting to determine which requests to label with <code>awswaf:managed:aws:anti-ddos:challengeable-request</code>. If <code>UsageOfAction</code> is disabled, this setting has no effect and the managed rule group doesn't add the label to any requests.</p> <p>The anti-DDoS managed rule group doesn't evaluate the rules <code>ChallengeDDoSRequests</code> or <code>ChallengeAllDuringEvent</code> for web requests whose URIs match this regex. This is true regardless of whether you override the rule action for either of the rules in your web ACL configuration. </p> <p>Amazon Web Services recommends using a regular expression. </p> <p>This setting is required if <code>UsageOfAction</code> is set to <code>ENABLED</code>. If required, you can provide between 1 and 5 regex objects in the array of settings. </p> <p>Amazon Web Services recommends starting with the following setting. Review and update it for your application's needs:</p> <p> <code>\\/api\\/|\\.(acc|avi|css|gif|jpe?g|js|mp[34]|ogg|otf|pdf|png|tiff?|ttf|webm|webp|woff2?)$</code> </p>"
+        }
+      },
+      "documentation":"<p>This is part of the <code>AWSManagedRulesAntiDDoSRuleSet</code> <code>ClientSideActionConfig</code> configuration in <code>ManagedRuleGroupConfig</code>.</p>"
+    },
+    "ClientSideActionConfig":{
+      "type":"structure",
+      "required":["Challenge"],
+      "members":{
+        "Challenge":{
+          "shape":"ClientSideAction",
+          "documentation":"<p>Configuration for the use of the <code>AWSManagedRulesAntiDDoSRuleSet</code> rules <code>ChallengeAllDuringEvent</code> and <code>ChallengeDDoSRequests</code>. </p> <note> <p>This setting isn't related to the configuration of the <code>Challenge</code> action itself. It only configures the use of the two anti-DDoS rules named here. </p> </note> <p>You can enable or disable the use of these rules, and you can configure how to use them when they are enabled. </p>"
+        }
+      },
+      "documentation":"<p>This is part of the configuration for the managed rules <code>AWSManagedRulesAntiDDoSRuleSet</code> in <code>ManagedRuleGroupConfig</code>.</p>"
     },
     "ComparisonOperator":{
       "type":"string",
@@ -1915,6 +2030,14 @@
         "AssociationConfig":{
           "shape":"AssociationConfig",
           "documentation":"<p>Specifies custom configurations for the associations between the web ACL and protected resources. </p> <p>Use this to customize the maximum size of the request body that your protected resources forward to WAF for inspection. You can customize this setting for CloudFront, API Gateway, Amazon Cognito, App Runner, or Verified Access resources. The default setting is 16 KB (16,384 bytes). </p> <note> <p>You are charged additional fees when your protected resources forward body sizes that are larger than the default. For more information, see <a href=\"http://aws.amazon.com/waf/pricing/\">WAF Pricing</a>.</p> </note> <p>For Application Load Balancer and AppSync, the limit is fixed at 8 KB (8,192 bytes).</p>"
+        },
+        "OnSourceDDoSProtectionConfig":{
+          "shape":"OnSourceDDoSProtectionConfig",
+          "documentation":"<p>Specifies the type of DDoS protection to apply to web request data for a web ACL. For most scenarios, it is recommended to use the default protection level, <code>ACTIVE_UNDER_DDOS</code>. If a web ACL is associated with multiple Application Load Balancers, the changes you make to DDoS protection in that web ACL will apply to all associated Application Load Balancers.</p>"
+        },
+        "ApplicationConfig":{
+          "shape":"ApplicationConfig",
+          "documentation":"<p>Configures the ability for the WAF console to store and retrieve application attributes during the web ACL creation process. Application attributes help WAF give recommendations for protection packs.</p>"
         }
       }
     },
@@ -2105,8 +2228,7 @@
     },
     "DeleteAPIKeyResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteFirewallManagerRuleGroupsRequest":{
       "type":"structure",
@@ -2163,8 +2285,7 @@
     },
     "DeleteIPSetResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteLoggingConfigurationRequest":{
       "type":"structure",
@@ -2186,8 +2307,7 @@
     },
     "DeleteLoggingConfigurationResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeletePermissionPolicyRequest":{
       "type":"structure",
@@ -2201,8 +2321,7 @@
     },
     "DeletePermissionPolicyResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteRegexPatternSetRequest":{
       "type":"structure",
@@ -2233,8 +2352,7 @@
     },
     "DeleteRegexPatternSetResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteRuleGroupRequest":{
       "type":"structure",
@@ -2265,8 +2383,7 @@
     },
     "DeleteRuleGroupResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DeleteWebACLRequest":{
       "type":"structure",
@@ -2297,8 +2414,7 @@
     },
     "DeleteWebACLResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DescribeAllManagedProductsRequest":{
       "type":"structure",
@@ -2416,8 +2532,7 @@
     },
     "DisassociateWebACLResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "DownloadUrl":{"type":"string"},
     "EmailField":{
@@ -2715,7 +2830,7 @@
           "documentation":"<p>The match status to assign to the web request if the request doesn't have a valid IP address in the specified position.</p> <note> <p>If the specified header isn't present in the request, WAF doesn't apply the rule to the web request at all.</p> </note> <p>You can specify the following fallback behaviors:</p> <ul> <li> <p> <code>MATCH</code> - Treat the web request as matching the rule statement. WAF applies the rule action to the request.</p> </li> <li> <p> <code>NO_MATCH</code> - Treat the web request as not matching the rule statement.</p> </li> </ul>"
         }
       },
-      "documentation":"<p>The configuration for inspecting IP addresses in an HTTP header that you specify, instead of using the IP address that's reported by the web request origin. Commonly, this is the X-Forwarded-For (XFF) header, but you can specify any header name. </p> <note> <p>If the specified header isn't present in the request, WAF doesn't apply the rule to the web request at all.</p> </note> <p>This configuration is used for <a>GeoMatchStatement</a> and <a>RateBasedStatement</a>. For <a>IPSetReferenceStatement</a>, use <a>IPSetForwardedIPConfig</a> instead. </p> <p>WAF only evaluates the first IP address found in the specified HTTP header. </p>"
+      "documentation":"<p>The configuration for inspecting IP addresses in an HTTP header that you specify, instead of using the IP address that's reported by the web request origin. Commonly, this is the X-Forwarded-For (XFF) header, but you can specify any header name. </p> <note> <p>If the specified header isn't present in the request, WAF doesn't apply the rule to the web request at all.</p> </note> <p>This configuration is used for <a>GeoMatchStatement</a>, <a>AsnMatchStatement</a>, and <a>RateBasedStatement</a>. For <a>IPSetReferenceStatement</a>, use <a>IPSetForwardedIPConfig</a> instead. </p> <p>WAF only evaluates the first IP address found in the specified HTTP header. </p>"
     },
     "ForwardedIPHeaderName":{
       "type":"string",
@@ -3243,7 +3358,7 @@
       "members":{
         "OversizeHandling":{
           "shape":"OversizeHandling",
-          "documentation":"<p>What WAF should do if the headers of the request are more numerous or larger than WAF can inspect. WAF does not support inspecting the entire contents of request headers when they exceed 8 KB (8192 bytes) or 200 total headers. The underlying host service forwards a maximum of 200 headers and at most 8 KB of header contents to WAF. </p> <p>The options for oversize handling are the following:</p> <ul> <li> <p> <code>CONTINUE</code> - Inspect the available headers normally, according to the rule inspection criteria. </p> </li> <li> <p> <code>MATCH</code> - Treat the web request as matching the rule statement. WAF applies the rule action to the request.</p> </li> <li> <p> <code>NO_MATCH</code> - Treat the web request as not matching the rule statement.</p> </li> </ul>"
+          "documentation":"<p>What WAF should do if the headers determined by your match scope are more numerous or larger than WAF can inspect. WAF does not support inspecting the entire contents of request headers when they exceed 8 KB (8192 bytes) or 200 total headers. The underlying host service forwards a maximum of 200 headers and at most 8 KB of header contents to WAF. </p> <p>The options for oversize handling are the following:</p> <ul> <li> <p> <code>CONTINUE</code> - Inspect the available headers normally, according to the rule inspection criteria. </p> </li> <li> <p> <code>MATCH</code> - Treat the web request as matching the rule statement. WAF applies the rule action to the request.</p> </li> <li> <p> <code>NO_MATCH</code> - Treat the web request as not matching the rule statement.</p> </li> </ul>"
         }
       },
       "documentation":"<p>Inspect a string containing the list of the request's header names, ordered as they appear in the web request that WAF receives for inspection. WAF generates the string and then uses that as the field to match component in its inspection. WAF separates the header names in the string using colons and no added spaces, for example <code>host:user-agent:accept:authorization:referer</code>.</p>"
@@ -3267,7 +3382,7 @@
         },
         "OversizeHandling":{
           "shape":"OversizeHandling",
-          "documentation":"<p>What WAF should do if the headers of the request are more numerous or larger than WAF can inspect. WAF does not support inspecting the entire contents of request headers when they exceed 8 KB (8192 bytes) or 200 total headers. The underlying host service forwards a maximum of 200 headers and at most 8 KB of header contents to WAF. </p> <p>The options for oversize handling are the following:</p> <ul> <li> <p> <code>CONTINUE</code> - Inspect the available headers normally, according to the rule inspection criteria. </p> </li> <li> <p> <code>MATCH</code> - Treat the web request as matching the rule statement. WAF applies the rule action to the request.</p> </li> <li> <p> <code>NO_MATCH</code> - Treat the web request as not matching the rule statement.</p> </li> </ul>"
+          "documentation":"<p>What WAF should do if the headers determined by your match scope are more numerous or larger than WAF can inspect. WAF does not support inspecting the entire contents of request headers when they exceed 8 KB (8192 bytes) or 200 total headers. The underlying host service forwards a maximum of 200 headers and at most 8 KB of header contents to WAF. </p> <p>The options for oversize handling are the following:</p> <ul> <li> <p> <code>CONTINUE</code> - Inspect the available headers normally, according to the rule inspection criteria. </p> </li> <li> <p> <code>MATCH</code> - Treat the web request as matching the rule statement. WAF applies the rule action to the request.</p> </li> <li> <p> <code>NO_MATCH</code> - Treat the web request as not matching the rule statement.</p> </li> </ul>"
         }
       },
       "documentation":"<p>Inspect all headers in the web request. You can specify the parts of the headers to inspect and you can narrow the set of headers to inspect by including or excluding specific keys.</p> <p>This is used to indicate the web request component to inspect, in the <a>FieldToMatch</a> specification. </p> <p>If you want to inspect just the value of a single header, use the <code>SingleHeader</code> <code>FieldToMatch</code> setting instead.</p> <p>Example JSON: <code>\"Headers\": { \"MatchPattern\": { \"All\": {} }, \"MatchScope\": \"KEY\", \"OversizeHandling\": \"MATCH\" }</code> </p>"
@@ -4059,6 +4174,13 @@
       "min":1,
       "pattern":".*\\S.*"
     },
+    "LowReputationMode":{
+      "type":"string",
+      "enum":[
+        "ACTIVE_UNDER_DDOS",
+        "ALWAYS_ON"
+      ]
+    },
     "ManagedProductDescriptor":{
       "type":"structure",
       "members":{
@@ -4143,9 +4265,13 @@
         "AWSManagedRulesACFPRuleSet":{
           "shape":"AWSManagedRulesACFPRuleSet",
           "documentation":"<p>Additional configuration for using the account creation fraud prevention (ACFP) managed rule group, <code>AWSManagedRulesACFPRuleSet</code>. Use this to provide account creation request information to the rule group. For web ACLs that protect CloudFront distributions, use this to also provide the information about how your distribution responds to account creation requests. </p> <p>For information about using the ACFP managed rule group, see <a href=\"https://docs.aws.amazon.com/waf/latest/developerguide/aws-managed-rule-groups-acfp.html\">WAF Fraud Control account creation fraud prevention (ACFP) rule group</a> and <a href=\"https://docs.aws.amazon.com/waf/latest/developerguide/waf-acfp.html\">WAF Fraud Control account creation fraud prevention (ACFP)</a> in the <i>WAF Developer Guide</i>.</p>"
+        },
+        "AWSManagedRulesAntiDDoSRuleSet":{
+          "shape":"AWSManagedRulesAntiDDoSRuleSet",
+          "documentation":"<p>Additional configuration for using the anti-DDoS managed rule group, <code>AWSManagedRulesAntiDDoSRuleSet</code>. Use this to configure anti-DDoS behavior for the rule group. </p> <p>For information about using the anti-DDoS managed rule group, see <a href=\"https://docs.aws.amazon.com/waf/latest/developerguide/aws-managed-rule-groups-anti-ddos.html\">WAF Anti-DDoS rule group</a> and <a href=\"https://docs.aws.amazon.com/waf/latest/developerguide/waf-anti-ddos.html\">Distributed Denial of Service (DDoS) prevention</a> in the <i>WAF Developer Guide</i>.</p>"
         }
       },
-      "documentation":"<p>Additional information that's used by a managed rule group. Many managed rule groups don't require this.</p> <p>The rule groups used for intelligent threat mitigation require additional configuration: </p> <ul> <li> <p>Use the <code>AWSManagedRulesACFPRuleSet</code> configuration object to configure the account creation fraud prevention managed rule group. The configuration includes the registration and sign-up pages of your application and the locations in the account creation request payload of data, such as the user email and phone number fields. </p> </li> <li> <p>Use the <code>AWSManagedRulesATPRuleSet</code> configuration object to configure the account takeover prevention managed rule group. The configuration includes the sign-in page of your application and the locations in the login request payload of data such as the username and password. </p> </li> <li> <p>Use the <code>AWSManagedRulesBotControlRuleSet</code> configuration object to configure the protection level that you want the Bot Control rule group to use. </p> </li> </ul> <p>For example specifications, see the examples section of <a>CreateWebACL</a>.</p>"
+      "documentation":"<p>Additional information that's used by a managed rule group. Many managed rule groups don't require this.</p> <p>The rule groups used for intelligent threat mitigation require additional configuration: </p> <ul> <li> <p>Use the <code>AWSManagedRulesACFPRuleSet</code> configuration object to configure the account creation fraud prevention managed rule group. The configuration includes the registration and sign-up pages of your application and the locations in the account creation request payload of data, such as the user email and phone number fields. </p> </li> <li> <p>Use the <code>AWSManagedRulesAntiDDoSRuleSet</code> configuration object to configure the anti-DDoS managed rule group. The configuration includes the sensitivity levels to use in the rules that typically block and challenge requests that might be participating in DDoS attacks and the specification to use to indicate whether a request can handle a silent browser challenge. </p> </li> <li> <p>Use the <code>AWSManagedRulesATPRuleSet</code> configuration object to configure the account takeover prevention managed rule group. The configuration includes the sign-in page of your application and the locations in the login request payload of data such as the username and password. </p> </li> <li> <p>Use the <code>AWSManagedRulesBotControlRuleSet</code> configuration object to configure the protection level that you want the Bot Control rule group to use. </p> </li> </ul> <p>For example specifications, see the examples section of <a>CreateWebACL</a>.</p>"
     },
     "ManagedRuleGroupConfigs":{
       "type":"list",
@@ -4180,11 +4306,11 @@
         },
         "ManagedRuleGroupConfigs":{
           "shape":"ManagedRuleGroupConfigs",
-          "documentation":"<p>Additional information that's used by a managed rule group. Many managed rule groups don't require this.</p> <p>The rule groups used for intelligent threat mitigation require additional configuration: </p> <ul> <li> <p>Use the <code>AWSManagedRulesACFPRuleSet</code> configuration object to configure the account creation fraud prevention managed rule group. The configuration includes the registration and sign-up pages of your application and the locations in the account creation request payload of data, such as the user email and phone number fields. </p> </li> <li> <p>Use the <code>AWSManagedRulesATPRuleSet</code> configuration object to configure the account takeover prevention managed rule group. The configuration includes the sign-in page of your application and the locations in the login request payload of data such as the username and password. </p> </li> <li> <p>Use the <code>AWSManagedRulesBotControlRuleSet</code> configuration object to configure the protection level that you want the Bot Control rule group to use. </p> </li> </ul>"
+          "documentation":"<p>Additional information that's used by a managed rule group. Many managed rule groups don't require this.</p> <p>The rule groups used for intelligent threat mitigation require additional configuration: </p> <ul> <li> <p>Use the <code>AWSManagedRulesACFPRuleSet</code> configuration object to configure the account creation fraud prevention managed rule group. The configuration includes the registration and sign-up pages of your application and the locations in the account creation request payload of data, such as the user email and phone number fields. </p> </li> <li> <p>Use the <code>AWSManagedRulesAntiDDoSRuleSet</code> configuration object to configure the anti-DDoS managed rule group. The configuration includes the sensitivity levels to use in the rules that typically block and challenge requests that might be participating in DDoS attacks and the specification to use to indicate whether a request can handle a silent browser challenge. </p> </li> <li> <p>Use the <code>AWSManagedRulesATPRuleSet</code> configuration object to configure the account takeover prevention managed rule group. The configuration includes the sign-in page of your application and the locations in the login request payload of data such as the username and password. </p> </li> <li> <p>Use the <code>AWSManagedRulesBotControlRuleSet</code> configuration object to configure the protection level that you want the Bot Control rule group to use. </p> </li> </ul>"
         },
         "RuleActionOverrides":{
           "shape":"RuleActionOverrides",
-          "documentation":"<p>Action settings to use in the place of the rule actions that are configured inside the rule group. You specify one override for each rule whose action you want to change. </p> <note> <p>Take care to verify the rule names in your overrides. If you provide a rule name that doesn't match the name of any rule in the rule group, WAF doesn't return an error and doesn't apply the override setting.</p> </note> <p>You can use overrides for testing, for example you can override all of rule actions to <code>Count</code> and then monitor the resulting count metrics to understand how the rule group would handle your web traffic. You can also permanently override some or all actions, to modify how the rule group manages your web traffic.</p>"
+          "documentation":"<p>Action settings to use in the place of the rule actions that are configured inside the rule group. You specify one override for each rule whose action you want to change. </p> <note> <p>Verify the rule names in your overrides carefully. With managed rule groups, WAF silently ignores any override that uses an invalid rule name. With customer-owned rule groups, invalid rule names in your overrides will cause web ACL updates to fail. An invalid rule name is any name that doesn't exactly match the case-sensitive name of an existing rule in the rule group.</p> </note> <p>You can use overrides for testing, for example you can override all of rule actions to <code>Count</code> and then monitor the resulting count metrics to understand how the rule group would handle your web traffic. You can also permanently override some or all actions, to modify how the rule group manages your web traffic.</p>"
         }
       },
       "documentation":"<p>A rule statement used to run the rules that are defined in a managed rule group. To use this, provide the vendor name and the name of the rule group in this statement. You can retrieve the required names by calling <a>ListAvailableManagedRuleGroups</a>.</p> <p>You cannot nest a <code>ManagedRuleGroupStatement</code>, for example for use inside a <code>NotStatement</code> or <code>OrStatement</code>. You cannot use a managed rule group inside another rule group. You can only reference a managed rule group as a top-level statement within a rule that you define in a web ACL.</p> <note> <p>You are charged additional fees when you use the WAF Bot Control managed rule group <code>AWSManagedRulesBotControlRuleSet</code>, the WAF Fraud Control account takeover prevention (ATP) managed rule group <code>AWSManagedRulesATPRuleSet</code>, or the WAF Fraud Control account creation fraud prevention (ACFP) managed rule group <code>AWSManagedRulesACFPRuleSet</code>. For more information, see <a href=\"http://aws.amazon.com/waf/pricing/\">WAF Pricing</a>.</p> </note>"
@@ -4346,8 +4472,7 @@
     },
     "Method":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>Inspect the HTTP method of the web request. The method indicates the type of operation that the request is asking the origin to perform. </p> <p>This is used in the <a>FieldToMatch</a> specification for some web request component types. </p> <p>JSON specification: <code>\"Method\": {}</code> </p>"
     },
     "MetricName":{
@@ -4386,8 +4511,7 @@
     },
     "NoneAction":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>Specifies that WAF should do nothing. This is used for the <code>OverrideAction</code> setting on a <a>Rule</a> when the rule uses a rule group reference statement. </p> <p>This is used in the context of other settings, for example to specify values for <a>RuleAction</a> and web ACL <a>DefaultAction</a>. </p> <p>JSON specification: <code>\"None\": {}</code> </p>"
     },
     "NotStatement":{
@@ -4400,6 +4524,17 @@
         }
       },
       "documentation":"<p>A logical rule statement used to negate the results of another rule statement. You provide one <a>Statement</a> within the <code>NotStatement</code>.</p>"
+    },
+    "OnSourceDDoSProtectionConfig":{
+      "type":"structure",
+      "required":["ALBLowReputationMode"],
+      "members":{
+        "ALBLowReputationMode":{
+          "shape":"LowReputationMode",
+          "documentation":"<p>The level of DDoS protection that applies to web ACLs associated with Application Load Balancers. <code>ACTIVE_UNDER_DDOS</code> protection is enabled by default whenever a web ACL is associated with an Application Load Balancer. In the event that an Application Load Balancer experiences high-load conditions or suspected DDoS attacks, the <code>ACTIVE_UNDER_DDOS</code> protection automatically rate limits traffic from known low reputation sources without disrupting Application Load Balancer availability. <code>ALWAYS_ON</code> protection provides constant, always-on monitoring of known low reputation sources for suspected DDoS attacks. While this provides a higher level of protection, there may be potential impacts on legitimate traffic.</p>"
+        }
+      },
+      "documentation":"<p>Configures the level of DDoS protection that applies to web ACLs associated with Application Load Balancers.</p>"
     },
     "OrStatement":{
       "type":"structure",
@@ -4513,7 +4648,8 @@
         "SCOPE_DOWN",
         "CUSTOM_KEYS",
         "ACP_RULE_SET_RESPONSE_INSPECTION",
-        "DATA_PROTECTION_CONFIG"
+        "DATA_PROTECTION_CONFIG",
+        "LOW_REPUTATION_MODE"
       ]
     },
     "ParameterExceptionParameter":{
@@ -4686,13 +4822,11 @@
     },
     "PutPermissionPolicyResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "QueryString":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>Inspect the query string of the web request. This is the part of a URL that appears after a <code>?</code> character, if any.</p> <p>This is used in the <a>FieldToMatch</a> specification for some web request component types. </p> <p>JSON specification: <code>\"QueryString\": {}</code> </p>"
     },
     "RateBasedStatement":{
@@ -4784,6 +4918,10 @@
         "JA4Fingerprint":{
           "shape":"RateLimitJA4Fingerprint",
           "documentation":"<p>Use the request's JA4 fingerprint as an aggregate key. If you use a single JA4 fingerprint as your custom key, then each value fully defines an aggregation instance. </p>"
+        },
+        "ASN":{
+          "shape":"RateLimitAsn",
+          "documentation":"<p>Use an Autonomous System Number (ASN) derived from the request's originating or forwarded IP address as an aggregate key. Each distinct ASN contributes to the aggregation instance. </p>"
         }
       },
       "documentation":"<p>Specifies a single custom aggregate key for a rate-base rule. </p> <note> <p>Web requests that are missing any of the components specified in the aggregation keys are omitted from the rate-based rule evaluation and handling. </p> </note>"
@@ -4812,6 +4950,11 @@
       "max":2000000000,
       "min":10
     },
+    "RateLimitAsn":{
+      "type":"structure",
+      "members":{},
+      "documentation":"<p>Specifies an Autonomous System Number (ASN) derived from the request's originating or forwarded IP address as an aggregate key for a rate-based rule. Each distinct ASN contributes to the aggregation instance. If you use a single ASN as your custom key, then each ASN fully defines an aggregation instance. </p>"
+    },
     "RateLimitCookie":{
       "type":"structure",
       "required":[
@@ -4832,14 +4975,12 @@
     },
     "RateLimitForwardedIP":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>Specifies the first IP address in an HTTP header as an aggregate key for a rate-based rule. Each distinct forwarded IP address contributes to the aggregation instance.</p> <p>This setting is used only in the <code>RateBasedStatementCustomKey</code> specification of a rate-based rule statement. When you specify an IP or forwarded IP in the custom key settings, you must also specify at least one other key to use. You can aggregate on only the forwarded IP address by specifying <code>FORWARDED_IP</code> in your rate-based statement's <code>AggregateKeyType</code>. </p> <p>This data type supports using the forwarded IP address in the web request aggregation for a rate-based rule, in <code>RateBasedStatementCustomKey</code>. The JSON specification for using the forwarded IP address doesn't explicitly use this data type. </p> <p>JSON specification: <code>\"ForwardedIP\": {}</code> </p> <p>When you use this specification, you must also configure the forwarded IP address in the rate-based statement's <code>ForwardedIPConfig</code>. </p>"
     },
     "RateLimitHTTPMethod":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>Specifies the request's HTTP method as an aggregate key for a rate-based rule. Each distinct HTTP method contributes to the aggregation instance. If you use just the HTTP method as your custom key, then each method fully defines an aggregation instance. </p> <p>JSON specification: <code>\"RateLimitHTTPMethod\": {}</code> </p>"
     },
     "RateLimitHeader":{
@@ -4862,8 +5003,7 @@
     },
     "RateLimitIP":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>Specifies the IP address in the web request as an aggregate key for a rate-based rule. Each distinct IP address contributes to the aggregation instance. </p> <p>This setting is used only in the <code>RateBasedStatementCustomKey</code> specification of a rate-based rule statement. To use this in the custom key settings, you must specify at least one other key to use, along with the IP address. To aggregate on only the IP address, in your rate-based statement's <code>AggregateKeyType</code>, specify <code>IP</code>.</p> <p>JSON specification: <code>\"RateLimitIP\": {}</code> </p>"
     },
     "RateLimitJA3Fingerprint":{
@@ -4952,7 +5092,7 @@
           "documentation":"<p>The string representing the regular expression.</p>"
         }
       },
-      "documentation":"<p>A single regular expression. This is used in a <a>RegexPatternSet</a>.</p>"
+      "documentation":"<p>A single regular expression. This is used in a <a>RegexPatternSet</a> and also in the configuration for the Amazon Web Services Managed Rules rule group <code>AWSManagedRulesAntiDDoSRuleSet</code>.</p>"
     },
     "RegexMatchStatement":{
       "type":"structure",
@@ -5529,7 +5669,7 @@
         },
         "RuleActionOverrides":{
           "shape":"RuleActionOverrides",
-          "documentation":"<p>Action settings to use in the place of the rule actions that are configured inside the rule group. You specify one override for each rule whose action you want to change. </p> <note> <p>Take care to verify the rule names in your overrides. If you provide a rule name that doesn't match the name of any rule in the rule group, WAF doesn't return an error and doesn't apply the override setting.</p> </note> <p>You can use overrides for testing, for example you can override all of rule actions to <code>Count</code> and then monitor the resulting count metrics to understand how the rule group would handle your web traffic. You can also permanently override some or all actions, to modify how the rule group manages your web traffic.</p>"
+          "documentation":"<p>Action settings to use in the place of the rule actions that are configured inside the rule group. You specify one override for each rule whose action you want to change. </p> <note> <p>Verify the rule names in your overrides carefully. With managed rule groups, WAF silently ignores any override that uses an invalid rule name. With customer-owned rule groups, invalid rule names in your overrides will cause web ACL updates to fail. An invalid rule name is any name that doesn't exactly match the case-sensitive name of an existing rule in the rule group.</p> </note> <p>You can use overrides for testing, for example you can override all of rule actions to <code>Count</code> and then monitor the resulting count metrics to understand how the rule group would handle your web traffic. You can also permanently override some or all actions, to modify how the rule group manages your web traffic.</p>"
         }
       },
       "documentation":"<p>A rule statement used to run the rules that are defined in a <a>RuleGroup</a>. To use this, create a rule group with your rules, then provide the ARN of the rule group in this statement.</p> <p>You cannot nest a <code>RuleGroupReferenceStatement</code>, for example for use inside a <code>NotStatement</code> or <code>OrStatement</code>. You cannot use a rule group reference statement inside another rule group. You can only reference a rule group as a top-level statement within a rule that you define in a web ACL.</p>"
@@ -5664,6 +5804,14 @@
       "type":"string",
       "enum":[
         "LOW",
+        "HIGH"
+      ]
+    },
+    "SensitivityToAct":{
+      "type":"string",
+      "enum":[
+        "LOW",
+        "MEDIUM",
         "HIGH"
       ]
     },
@@ -5823,6 +5971,10 @@
         "RegexMatchStatement":{
           "shape":"RegexMatchStatement",
           "documentation":"<p>A rule statement used to search web request components for a match against a single regular expression. </p>"
+        },
+        "AsnMatchStatement":{
+          "shape":"AsnMatchStatement",
+          "documentation":"<p>A rule statement that inspects web traffic based on the Autonomous System Number (ASN) associated with the request's IP address.</p> <p>For additional details, see <a href=\"https://docs.aws.amazon.com/waf/latest/developerguide/waf-rule-statement-type-asn-match.html\">ASN match rule statement</a> in the <a href=\"https://docs.aws.amazon.com/waf/latest/developerguide/waf-chapter.html\">WAF Developer Guide</a>. </p>"
         }
       },
       "documentation":"<p>The processing guidance for a <a>Rule</a>, used by WAF to determine whether a web request matches the rule. </p> <p>For example specifications, see the examples section of <a>CreateWebACL</a>.</p>"
@@ -5910,8 +6062,7 @@
     },
     "TagResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "TagValue":{
       "type":"string",
@@ -6030,8 +6181,7 @@
     },
     "UntagResourceResponse":{
       "type":"structure",
-      "members":{
-      }
+      "members":{}
     },
     "UpdateIPSetRequest":{
       "type":"structure",
@@ -6296,6 +6446,10 @@
         "AssociationConfig":{
           "shape":"AssociationConfig",
           "documentation":"<p>Specifies custom configurations for the associations between the web ACL and protected resources. </p> <p>Use this to customize the maximum size of the request body that your protected resources forward to WAF for inspection. You can customize this setting for CloudFront, API Gateway, Amazon Cognito, App Runner, or Verified Access resources. The default setting is 16 KB (16,384 bytes). </p> <note> <p>You are charged additional fees when your protected resources forward body sizes that are larger than the default. For more information, see <a href=\"http://aws.amazon.com/waf/pricing/\">WAF Pricing</a>.</p> </note> <p>For Application Load Balancer and AppSync, the limit is fixed at 8 KB (8,192 bytes).</p>"
+        },
+        "OnSourceDDoSProtectionConfig":{
+          "shape":"OnSourceDDoSProtectionConfig",
+          "documentation":"<p>Specifies the type of DDoS protection to apply to web request data for a web ACL. For most scenarios, it is recommended to use the default protection level, <code>ACTIVE_UNDER_DDOS</code>. If a web ACL is associated with multiple Application Load Balancers, the changes you make to DDoS protection in that web ACL will apply to all associated Application Load Balancers.</p>"
         }
       }
     },
@@ -6320,9 +6474,15 @@
     },
     "UriPath":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>Inspect the path component of the URI of the web request. This is the part of the web request that identifies a resource. For example, <code>/images/daily-ad.jpg</code>.</p> <p>This is used in the <a>FieldToMatch</a> specification for some web request component types. </p> <p>JSON specification: <code>\"UriPath\": {}</code> </p>"
+    },
+    "UsageOfAction":{
+      "type":"string",
+      "enum":[
+        "ENABLED",
+        "DISABLED"
+      ]
     },
     "UsernameField":{
       "type":"structure",
@@ -6644,6 +6804,14 @@
         "RetrofittedByFirewallManager":{
           "shape":"Boolean",
           "documentation":"<p>Indicates whether this web ACL was created by a customer account and then retrofitted by Firewall Manager. If true, then the web ACL is currently being managed by a Firewall Manager WAF policy, and only Firewall Manager can manage any Firewall Manager rule groups in the web ACL. See also the properties <code>ManagedByFirewallManager</code>, <code>PreProcessFirewallManagerRuleGroups</code>, and <code>PostProcessFirewallManagerRuleGroups</code>. </p>"
+        },
+        "OnSourceDDoSProtectionConfig":{
+          "shape":"OnSourceDDoSProtectionConfig",
+          "documentation":"<p>Configures the level of DDoS protection that applies to web ACLs associated with Application Load Balancers.</p>"
+        },
+        "ApplicationConfig":{
+          "shape":"ApplicationConfig",
+          "documentation":"<p>Returns a list of <code>ApplicationAttribute</code>s.</p>"
         }
       },
       "documentation":"<p> A web ACL defines a collection of rules to use to inspect and control web requests. Each rule has a statement that defines what to look for in web requests and an action that WAF applies to requests that match the statement. In the web ACL, you assign a default action to take (allow, block) for any request that does not match any of the rules. The rules in a web ACL can be a combination of the types <a>Rule</a>, <a>RuleGroup</a>, and managed rule group. You can associate a web ACL with one or more Amazon Web Services resources to protect. The resource types include Amazon CloudFront distribution, Amazon API Gateway REST API, Application Load Balancer, AppSync GraphQL API, Amazon Cognito user pool, App Runner service, Amplify application, and Amazon Web Services Verified Access instance. </p>"

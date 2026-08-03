@@ -1,5 +1,7 @@
 #include "config.h"
 
+#include <ydb/core/util/pb.h>
+
 #include <util/generic/string.h>
 #include <util/system/types.h>
 

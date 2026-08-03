@@ -32,10 +32,22 @@
 using namespace NKikimr;
 using namespace NStorage;
 
+TNodeWardenConfig::TNodeWardenConfig(const TIntrusivePtr<IPDiskServiceFactory>& pDiskServiceFactory)
+    : BlobStorageConfig(std::make_unique<NKikimrConfig::TBlobStorageConfig>())
+    , NameserviceConfig(std::make_unique<NKikimrConfig::TStaticNameserviceConfig>())
+    , PDiskServiceFactory(pDiskServiceFactory)
+    , AllVDiskKinds(new TAllVDiskKinds)
+    , AllDriveModels(new NPDisk::TDriveModelDb)
+    , FeatureFlags(std::make_unique<NKikimrConfig::TFeatureFlags>())
+{}
+
+TNodeWardenConfig::~TNodeWardenConfig()
+{}
+
 TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     : Cfg(cfg)
-    , EnablePutBatching(Cfg->FeatureFlags.GetEnablePutBatchingForBlobStorage(), false, true)
-    , EnableVPatch(Cfg->FeatureFlags.GetEnableVPatch(), false, true)
+    , EnablePutBatching(Cfg->FeatureFlags->GetEnablePutBatchingForBlobStorage(), false, true)
+    , EnableVPatch(Cfg->FeatureFlags->GetEnableVPatch(), false, true)
     , EnableLocalSyncLogDataCutting(1, 0, 1)
     , EnableSyncLogChunkCompressionHDD(1, 0, 1)
     , EnableSyncLogChunkCompressionSSD(0, 0, 1)
@@ -104,9 +116,9 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , EnableStorageRetroTraceGeneration(DefaultEnableStorageRetroTraceGeneration, false, true)
     , EnableStorageRetroTraceCollectionSlowRequests(DefaultEnableStorageRetroTraceCollectionSlowRequests, false, true)
 {
-    Y_ABORT_UNLESS(Cfg->BlobStorageConfig.GetServiceSet().AvailabilityDomainsSize() <= 1);
+    Y_ABORT_UNLESS(Cfg->BlobStorageConfig->GetServiceSet().AvailabilityDomainsSize() <= 1);
     AvailDomainId = 1;
-    for (const auto& domain : Cfg->BlobStorageConfig.GetServiceSet().GetAvailabilityDomains()) {
+    for (const auto& domain : Cfg->BlobStorageConfig->GetServiceSet().GetAvailabilityDomains()) {
         AvailDomainId = domain;
     }
     if (Cfg->DomainsConfig) {
@@ -530,7 +542,7 @@ void TNodeWarden::Bootstrap() {
     }
 
     // start replication broker
-    const auto& replBrokerConfig = Cfg->BlobStorageConfig.GetServiceSet().GetReplBrokerConfig();
+    const auto& replBrokerConfig = Cfg->BlobStorageConfig->GetServiceSet().GetReplBrokerConfig();
 
     ui64 requestBytesPerSecond = 500000000; // 500 MB/s by default
     if (replBrokerConfig.HasTotalRequestBytesPerSecond()) {
@@ -559,19 +571,19 @@ void TNodeWarden::Bootstrap() {
         CreateSyncBrokerActor(MaxInProgressSyncCount)));
 
     // create bridge syncer rate quoter
-    SyncRateQuoter = std::make_shared<TReplQuoter>(Cfg->BlobStorageConfig.GetBridgeSyncRateBytesPerSecond());
+    SyncRateQuoter = std::make_shared<TReplQuoter>(Cfg->BlobStorageConfig->GetBridgeSyncRateBytesPerSecond());
 
     // start compaction broker
     actorSystem->RegisterLocalService(MakeBlobStorageCompBrokerID(), Register(
         CreateCompBrokerActor(MaxActiveCompactionsPerPDisk, AppData()->Counters)));
 
     // determine if we are running in 'mock' mode
-    EnableProxyMock = Cfg->BlobStorageConfig.GetServiceSet().GetEnableProxyMock();
+    EnableProxyMock = Cfg->BlobStorageConfig->GetServiceSet().GetEnableProxyMock();
 
     // fill in a base storage config (from the file)
     NKikimrConfig::TAppConfig appConfig;
-    appConfig.MutableBlobStorageConfig()->CopyFrom(Cfg->BlobStorageConfig);
-    appConfig.MutableNameserviceConfig()->CopyFrom(Cfg->NameserviceConfig);
+    appConfig.MutableBlobStorageConfig()->CopyFrom(*Cfg->BlobStorageConfig);
+    appConfig.MutableNameserviceConfig()->CopyFrom(*Cfg->NameserviceConfig);
     if (Cfg->DomainsConfig) {
         appConfig.MutableDomainsConfig()->CopyFrom(*Cfg->DomainsConfig);
     }
@@ -591,16 +603,16 @@ void TNodeWarden::Bootstrap() {
 
     YamlConfig = std::move(Cfg->YamlConfig);
 
-    InferPDiskSlotCountSettings.CopyFrom(Cfg->BlobStorageConfig.GetInferPDiskSlotCountSettings());
+    InferPDiskSlotCountSettings.CopyFrom(Cfg->BlobStorageConfig->GetInferPDiskSlotCountSettings());
     ui32 blobStorageConfigItem = NKikimrConsole::TConfigItem::BlobStorageConfigItem;
     Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
         new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(blobStorageConfigItem));
 
     // Start a statically configured set
-    if (Cfg->BlobStorageConfig.HasServiceSet()) {
-        const auto& serviceSet = Cfg->BlobStorageConfig.GetServiceSet();
+    if (Cfg->BlobStorageConfig->HasServiceSet()) {
+        const auto& serviceSet = Cfg->BlobStorageConfig->GetServiceSet();
         if (serviceSet.GroupsSize()) {
-            ApplyServiceSet(Cfg->BlobStorageConfig.GetServiceSet(), true, false, false, "initial");
+            ApplyServiceSet(Cfg->BlobStorageConfig->GetServiceSet(), true, false, false, "initial");
         } else {
             Groups.try_emplace(0); // group is gonna be configured soon by DistributedConfigKeeper
         }

@@ -437,7 +437,7 @@ struct TEnvironmentSetup {
             } else {
                 auto config = MakeIntrusive<TNodeWardenConfig>(new TMockPDiskServiceFactory(*this));
                 if (Settings.SelfManagementConfig) {
-                    config->SelfManagementConfig = std::make_optional(NKikimrConfig::TSelfManagementConfig());
+                    config->SelfManagementConfig = std::make_unique<NKikimrConfig::TSelfManagementConfig>();
                     config->SelfManagementConfig->SetEnabled(true);
                     if (Settings.AutomaticBootstrap) {
                         config->SelfManagementConfig->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(Settings.Erasure.GetErasure()));
@@ -445,16 +445,15 @@ struct TEnvironmentSetup {
                         config->SelfManagementConfig->SetAutomaticBootstrap(true);
                     }
                     if (Settings.AutomaticBootstrap && Settings.LocationGenerator) {
-                        auto *hostconf = config->BlobStorageConfig.AddDefineHostConfig();
+                        auto *hostconf = config->BlobStorageConfig->AddDefineHostConfig();
                         hostconf->SetHostConfigId(1);
                         auto *drive = hostconf->AddDrive();
                         drive->SetPath("SectorMap:X:1000");
                         drive->SetType(NKikimrBlobStorage::EPDiskType::NVME);
 
-                        auto& ns = config->NameserviceConfig;
-                        auto *box = config->BlobStorageConfig.MutableDefineBox();
+                        auto *box = config->BlobStorageConfig->MutableDefineBox();
                         for (ui32 nodeId : Runtime->GetNodes()) {
-                            auto *node = ns.AddNode();
+                            auto *node = config->NameserviceConfig->AddNode();
                             node->SetNodeId(nodeId);
                             node->SetHost(TStringBuilder() << "host_" << nodeId);
                             node->SetInterconnectHost(node->GetHost());
@@ -503,7 +502,7 @@ config:
 )" << makeHosts();
                     }
                 }
-                config->BlobStorageConfig.MutableServiceSet()->AddAvailabilityDomains(DomainId);
+                config->BlobStorageConfig->MutableServiceSet()->AddAvailabilityDomains(DomainId);
                 config->VDiskReplPausedAtStart = Settings.VDiskReplPausedAtStart;
                 if (Settings.ReplMaxQuantumBytes) {
                     config->ReplMaxQuantumBytes = Settings.ReplMaxQuantumBytes;
@@ -528,10 +527,10 @@ config:
                     };
                     config->CacheAccessor = std::make_unique<TAccessor>(Cache[nodeId]);
                 }
-                config->FeatureFlags = Settings.FeatureFlags;
+                config->FeatureFlags = std::make_unique<NKikimrConfig::TFeatureFlags>(Settings.FeatureFlags);
 
                 if (Settings.NumPiles) {
-                    config->BridgeConfig.emplace().CopyFrom(Runtime->GetAppDataBridgeConfig());
+                    config->BridgeConfig = std::make_unique<NKikimrConfig::TBridgeConfig>(Runtime->GetAppDataBridgeConfig());
                 }
 
                 TAppData* appData = Runtime->GetNode(nodeId)->AppData.get();
@@ -599,7 +598,7 @@ config:
 #undef ADD_ICB_CONTROL
 
                 {
-                    auto* type = config->BlobStorageConfig.MutableVDiskPerformanceSettings()->AddVDiskTypes();
+                    auto* type = config->BlobStorageConfig->MutableVDiskPerformanceSettings()->AddVDiskTypes();
                     type->SetPDiskType(PDiskTypeToPDiskType(Settings.DiskType));
                     if (Settings.MinHugeBlobInBytes) {
                         type->SetMinHugeBlobSizeInBytes(Settings.MinHugeBlobInBytes);

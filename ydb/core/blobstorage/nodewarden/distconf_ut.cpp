@@ -128,9 +128,9 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         UNIT_ASSERT_VALUES_EQUAL(serviceSet.GroupsSize(), 1);
     }
 
-    NKikimrConfig::TDomainsConfig::TStateStorage GenerateSimpleStateStorage(ui32 nodes, std::unordered_set<ui32> usedNodes = {}, ui32 overrideReplicasInRingCount = 0, ui32 overrideRingsCount = 0, ui32 replicasSpecificVolume = 200, std::unordered_set<ui32> nodesToUse = {}, bool *goodConfigOut = nullptr, const NKikimrConfig::TDomainsConfig::TStateStorage& oldSS = {}, bool automaticManagement = true) {
+    NKikimrConfig::TStateStorageConfig GenerateSimpleStateStorage(ui32 nodes, std::unordered_set<ui32> usedNodes = {}, ui32 overrideReplicasInRingCount = 0, ui32 overrideRingsCount = 0, ui32 replicasSpecificVolume = 200, std::unordered_set<ui32> nodesToUse = {}, bool *goodConfigOut = nullptr, const NKikimrConfig::TStateStorageConfig& oldSS = {}, bool automaticManagement = true) {
         NKikimr::NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
-        NKikimrConfig::TDomainsConfig::TStateStorage ss;
+        NKikimrConfig::TStateStorageConfig ss;
         NKikimrBlobStorage::TStorageConfig config;
         for (ui32 i : xrange(nodes)) {
             auto *node = config.AddAllNodes();
@@ -143,7 +143,7 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         return ss;
     }
 
-    NKikimrConfig::TDomainsConfig::TStateStorage GenerateDCStateStorage(
+    NKikimrConfig::TStateStorageConfig GenerateDCStateStorage(
         ui32 dcCnt
         , ui32 racksCnt
         , ui32 nodesInRack
@@ -172,7 +172,7 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
                 }
             }
         }
-        NKikimrConfig::TDomainsConfig::TStateStorage oldSS;
+        NKikimrConfig::TStateStorageConfig oldSS;
         if (!oldConfig.empty()) {
             auto* rg = oldSS.AddRingGroups();
             rg->SetNToSelect(oldNToSelect);
@@ -181,7 +181,7 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
                 ssRing->AddNode(node);
             }
         }
-        NKikimrConfig::TDomainsConfig::TStateStorage ss;
+        NKikimrConfig::TStateStorageConfig ss;
         for (auto [nodeId, state] : nodesState) {
             keeper.SelfHealNodesState[nodeId] = state;
         }
@@ -192,7 +192,7 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         return ss;
     }
 
-    void CheckStateStorage(const NKikimrConfig::TDomainsConfig::TStateStorage& ss, ui32 nToSelect, const std::unordered_set<ui32>& nodes) {
+    void CheckStateStorage(const NKikimrConfig::TStateStorageConfig& ss, ui32 nToSelect, const std::unordered_set<ui32>& nodes) {
         auto &rg = ss.GetRingGroups(0);
         Cerr << "Actual: " << ss << " Expected: NToSelect: " << nToSelect << Endl;
         UNIT_ASSERT_EQUAL(rg.GetNToSelect(), nToSelect);
@@ -224,7 +224,7 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         CheckStateStorage(GenerateDCStateStorage(3, 3, 3), 9, {1, 4, 7, 10, 13, 16, 19, 22, 25});
     }
 
-    void CheckStateStorage2(const NKikimrConfig::TDomainsConfig::TStateStorage& ss, std::string expected) {
+    void CheckStateStorage2(const NKikimrConfig::TStateStorageConfig& ss, std::string expected) {
         TString actual = TStringBuilder() << ss;
         if (actual != expected) {
             Cerr << "Err Actual: " << ss << Endl;
@@ -447,7 +447,7 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
     // untouched and report the result as "good", regardless of node states or overrides.
 
     Y_UNIT_TEST(AutomaticManagementDisabledKeepsOldConfigUnchanged) {
-        NKikimrConfig::TDomainsConfig::TStateStorage oldSS;
+        NKikimrConfig::TStateStorageConfig oldSS;
         {
             auto* rg = oldSS.AddRingGroups();
             rg->SetNToSelect(1);
@@ -464,7 +464,7 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
     }
 
     Y_UNIT_TEST(AutomaticManagementEnabledGeneratesNewConfig) {
-        NKikimrConfig::TDomainsConfig::TStateStorage oldSS;
+        NKikimrConfig::TStateStorageConfig oldSS;
         {
             auto* rg = oldSS.AddRingGroups();
             rg->SetNToSelect(1);
@@ -485,7 +485,7 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         // Even if nodesToUse/overrides would normally produce a bad config, disabling automatic
         // management must short-circuit generation entirely and still report "good", since the
         // old config is kept as-is and self-heal is not supposed to touch it.
-        NKikimrConfig::TDomainsConfig::TStateStorage oldSS;
+        NKikimrConfig::TStateStorageConfig oldSS;
         {
             auto* rg = oldSS.AddRingGroups();
             rg->SetNToSelect(1);
@@ -503,7 +503,7 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         // usedNodes with the node IDs taken from oldConfig, because usedNodes is shared across
         // the StateStorage / StateStorageBoard / SchemeBoard generator invocations, and subsequent
         // subsystem generators rely on it to avoid co-locating replicas on the same nodes.
-        NKikimrConfig::TDomainsConfig::TStateStorage oldSS;
+        NKikimrConfig::TStateStorageConfig oldSS;
         {
             auto* rg = oldSS.AddRingGroups();
             rg->SetNToSelect(2);
@@ -522,7 +522,7 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         // usedNodes is passed by value into GenerateSimpleStateStorage's helper, so re-derive it
         // directly via the keeper API to check that the reference-passed set was actually filled.
         NKikimr::NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
-        NKikimrConfig::TDomainsConfig::TStateStorage ssOut;
+        NKikimrConfig::TStateStorageConfig ssOut;
         NKikimrBlobStorage::TStorageConfig config;
         for (ui32 i : xrange(8)) {
             auto *node = config.AddAllNodes();
@@ -542,7 +542,7 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         // management disabled (its nodes are kept as-is), while StateStorageBoard has it enabled.
         // The board generator must avoid nodes already occupied by StateStorage replicas, which
         // are threaded through the shared usedNodes set.
-        NKikimrConfig::TDomainsConfig::TStateStorage oldStateStorage;
+        NKikimrConfig::TStateStorageConfig oldStateStorage;
         {
             auto* rg = oldStateStorage.AddRingGroups();
             rg->SetNToSelect(3);
@@ -569,7 +569,7 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         std::unordered_set<ui32> usedNodes;
 
         // Step 1: StateStorage generation with automatic management disabled.
-        NKikimrConfig::TDomainsConfig::TStateStorage stateStorageOut;
+        NKikimrConfig::TStateStorageConfig stateStorageOut;
         bool goodConfig1 = keeper.GenerateStateStorageConfig(&stateStorageOut, config, usedNodes, {},
             oldStateStorage, /*automaticManagement=*/false, 0, 0, 200);
         UNIT_ASSERT(goodConfig1);
@@ -578,8 +578,8 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         UNIT_ASSERT(usedNodes.contains(3));
 
         // Step 2: StateStorageBoard generation with automatic management enabled, sharing usedNodes.
-        NKikimrConfig::TDomainsConfig::TStateStorage boardOut;
-        NKikimrConfig::TDomainsConfig::TStateStorage emptyOldBoard;
+        NKikimrConfig::TStateStorageConfig boardOut;
+        NKikimrConfig::TStateStorageConfig emptyOldBoard;
         bool goodConfig2 = keeper.GenerateStateStorageConfig(&boardOut, config, usedNodes, {},
             emptyOldBoard, /*automaticManagement=*/true, 0, 0, 200);
         UNIT_ASSERT(goodConfig2);

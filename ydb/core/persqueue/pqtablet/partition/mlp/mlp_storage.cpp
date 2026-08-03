@@ -1010,7 +1010,6 @@ void TStorage::MoveFirstMessageFromFastZoneToSlowZone() {
             ++FirstOffset;
             break;
         case EMessageStatus::Committed:
-            // Committed messages are not kept in the slow zone, just drop them.
             RemoveFirstMessageFromFastZone();
             break;
     }

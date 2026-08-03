@@ -1029,9 +1029,7 @@ void TStorage::RemoveMessageFromSlowZone(ui64 offset) {
 bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash, TInstant writeTimestamp, TDuration delay, ui64 logicalMessageCount) {
     AFL_ENSURE(offset >= GetLastOffset())("l", offset)("r", GetLastOffset());
 
-    // The fast zone is a contiguous deque indexed by (offset - FirstOffset), so it cannot contain
-    // offset gaps. When the new offset leaves a gap, relocate the current fast-zone messages to the
-    // slow zone (a sparse map) instead of dropping them.
+    // Gap in offsets: move messages to the slow zone, since the fast zone has to be a contiguous region
     while (!Messages.empty() && offset > GetLastOffset()) {
         MoveFirstMessageFromFastZoneToSlowZone();
     }

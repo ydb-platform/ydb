@@ -21,13 +21,6 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRPC_PROXY
 
-#define TXLOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_PROXY, LogPrefix << stream)
-#define TXLOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, LogPrefix << stream)
-#define TXLOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::TX_PROXY, LogPrefix << stream)
-#define TXLOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::TX_PROXY, LogPrefix << stream)
-#define TXLOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_PROXY, LogPrefix << stream)
-#define TXLOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_PROXY, LogPrefix << stream)
-
 namespace NKikimr {
 namespace NGRpcService {
 
@@ -187,7 +180,7 @@ private:
     }
 
     void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
-        TXLOG_D("Handle TEvTxUserProxy::TEvAllocateTxIdResult");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, LogPrefix << "Handle TEvTxUserProxy::TEvAllocateTxIdResult");
 
         const auto* msg = ev->Get();
         TxId = msg->TxId;
@@ -239,7 +232,7 @@ private:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
-        TXLOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, LogPrefix << "Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
                     << ", errors# " << ev->Get()->Request.Get()->ErrorCount);
 
         NSchemeCache::TSchemeCacheNavigate* resp = ev->Get()->Request.Get();
@@ -255,7 +248,7 @@ private:
             }
 
             TString error(builder);
-            TXLOG_E(error);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_PROXY, LogPrefix << error);
             Request_->RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, error));
             return Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
         }
@@ -313,7 +306,7 @@ private:
                 return std::make_unique<NSchemeShard::TEvSetColumnConstraint::TEvCreateRequest>(TxId, DatabaseName, std::move(SetColumnConstraintSettings));
             });
         default:
-            TXLOG_E("Got unexpected cache response");
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_PROXY, LogPrefix << "Got unexpected cache response");
             return Reply(Ydb::StatusIds::INTERNAL_ERROR, ctx);
         }
     }
@@ -328,7 +321,7 @@ private:
             return true;
         }
 
-        TXLOG_W("Access check failed");
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_PROXY, LogPrefix << "Access check failed");
         Reply(Ydb::StatusIds::UNAUTHORIZED,
             TStringBuilder() << "Access denied"
                 << " for# " << UserToken->GetUserSID()
@@ -345,7 +338,7 @@ private:
 
         const auto& domainInfo = entry.DomainInfo;
         if (!domainInfo) {
-            TXLOG_E("Got empty domain info");
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_PROXY, LogPrefix << "Got empty domain info");
             return Reply(Ydb::StatusIds::INTERNAL_ERROR, ctx);
         }
 
@@ -372,7 +365,7 @@ private:
             return issues.ToString();
         };
 
-        TXLOG_D("Handle TEvIndexBuilder::TEvCreateResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, LogPrefix << "Handle TEvIndexBuilder::TEvCreateResponse"
             << ", status# " << status
             << ", issues# " << getDebugIssues()
             << ", Id# " << response.GetIndexBuild().GetId());
@@ -405,7 +398,7 @@ private:
             return issues.ToString();
         };
 
-        TXLOG_D("Handle TEvForcedCompaction::TEvCreateResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, LogPrefix << "Handle TEvForcedCompaction::TEvCreateResponse"
             << ", status# " << status
             << ", issues# " << getDebugIssues()
             << ", Id# " << response.GetForcedCompaction().GetId());
@@ -453,7 +446,7 @@ private:
     void Handle(NSchemeShard::TEvIndexBuilder::TEvGetResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record;
 
-        TXLOG_D("Handle TEvIndexBuilder::TEvGetResponse: record# " << record.ShortDebugString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, LogPrefix << "Handle TEvIndexBuilder::TEvGetResponse: record# " << record.ShortDebugString());
 
         if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
             Request_->ReplyWithYdbStatus(record.GetStatus());
@@ -468,7 +461,7 @@ private:
     void Handle(NSchemeShard::TEvForcedCompaction::TEvGetResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record;
 
-        TXLOG_D("Handle TEvForcedCompaction::TEvGetResponse: record# " << record.ShortDebugString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, LogPrefix << "Handle TEvForcedCompaction::TEvGetResponse: record# " << record.ShortDebugString());
 
         if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
             Request_->ReplyWithYdbStatus(record.GetStatus());

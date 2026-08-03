@@ -71,20 +71,20 @@ Y_UNIT_TEST_SUITE(VolumeCountersTest)
         TVolumeRequestCounters counters(root);
 
         // Inflight is a gauge (non-cumulative) counter.
-        UNIT_ASSERT_VALUES_EQUAL(0, root->GetCounter("Inflight", true)->Val());
+        UNIT_ASSERT_VALUES_EQUAL(0, root->GetCounter("Inflight", false)->Val());
 
         counters.RequestStarted(1024);
         counters.RequestStarted(2048);
 
-        UNIT_ASSERT_VALUES_EQUAL(2, root->GetCounter("Inflight", true)->Val());
+        UNIT_ASSERT_VALUES_EQUAL(2, root->GetCounter("Inflight", false)->Val());
 
         counters.RequestFinished(true, TDuration::MilliSeconds(1));
 
-        UNIT_ASSERT_VALUES_EQUAL(1, root->GetCounter("Inflight", true)->Val());
+        UNIT_ASSERT_VALUES_EQUAL(1, root->GetCounter("Inflight", false)->Val());
 
         counters.RequestFinished(false, TDuration::MilliSeconds(1));
 
-        UNIT_ASSERT_VALUES_EQUAL(0, root->GetCounter("Inflight", true)->Val());
+        UNIT_ASSERT_VALUES_EQUAL(0, root->GetCounter("Inflight", false)->Val());
     }
 
     Y_UNIT_TEST(ShouldCountOkAndErrReplies)
@@ -226,10 +226,10 @@ Y_UNIT_TEST_SUITE(VolumeCountersTest)
 
         UNIT_ASSERT_VALUES_EQUAL(
             2,
-            readGroup->GetCounter("Inflight", true)->Val());
+            readGroup->GetCounter("Inflight", false)->Val());
         UNIT_ASSERT_VALUES_EQUAL(
             1,
-            writeGroup->GetCounter("Inflight", true)->Val());
+            writeGroup->GetCounter("Inflight", false)->Val());
 
         // Finish one read.
         counters.RequestFinished(
@@ -239,10 +239,10 @@ Y_UNIT_TEST_SUITE(VolumeCountersTest)
 
         UNIT_ASSERT_VALUES_EQUAL(
             1,
-            readGroup->GetCounter("Inflight", true)->Val());
+            readGroup->GetCounter("Inflight", false)->Val());
         UNIT_ASSERT_VALUES_EQUAL(
             1,
-            writeGroup->GetCounter("Inflight", true)->Val());
+            writeGroup->GetCounter("Inflight", false)->Val());
 
         // Finish the write.
         counters.RequestFinished(
@@ -252,10 +252,10 @@ Y_UNIT_TEST_SUITE(VolumeCountersTest)
 
         UNIT_ASSERT_VALUES_EQUAL(
             1,
-            readGroup->GetCounter("Inflight", true)->Val());
+            readGroup->GetCounter("Inflight", false)->Val());
         UNIT_ASSERT_VALUES_EQUAL(
             0,
-            writeGroup->GetCounter("Inflight", true)->Val());
+            writeGroup->GetCounter("Inflight", false)->Val());
 
         // Finish the remaining read.
         counters.RequestFinished(
@@ -265,10 +265,10 @@ Y_UNIT_TEST_SUITE(VolumeCountersTest)
 
         UNIT_ASSERT_VALUES_EQUAL(
             0,
-            readGroup->GetCounter("Inflight", true)->Val());
+            readGroup->GetCounter("Inflight", false)->Val());
         UNIT_ASSERT_VALUES_EQUAL(
             0,
-            writeGroup->GetCounter("Inflight", true)->Val());
+            writeGroup->GetCounter("Inflight", false)->Val());
     }
 }
 

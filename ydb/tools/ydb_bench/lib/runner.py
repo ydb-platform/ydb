@@ -64,7 +64,7 @@ def run_command(
     started_at = _utc_now()
     started_monotonic = time.monotonic()
 
-    set_affinity = None
+    preexec_fn = None
     if cpu_affinity is not None:
         if not hasattr(os, "sched_setaffinity"):
             raise BenchmarkError("CPU affinity is not supported by this operating system")
@@ -72,6 +72,8 @@ def run_command(
 
         def set_affinity():
             os.sched_setaffinity(0, affinity)
+
+        preexec_fn = set_affinity
 
     try:
         process = subprocess.Popen(
@@ -84,7 +86,7 @@ def run_command(
             encoding="utf-8",
             errors="replace",
             start_new_session=True,
-            preexec_fn=set_affinity,
+            preexec_fn=preexec_fn,
         )
     except OSError as error:
         if error.errno in (errno.EACCES, errno.EPERM):

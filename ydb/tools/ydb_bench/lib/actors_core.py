@@ -214,6 +214,17 @@ def run_actors_core(binary, configuration, output_directory, tool_revision, work
     }
     manifest_path = output_directory / "run.json"
     atomic_write_json(manifest_path, manifest)
+
+    if not any(placement.supported for placement in placements):
+        failure = "none of the selected affinity modes is supported: {}".format(
+            "; ".join("{}: {}".format(placement.mode, placement.reason) for placement in placements)
+        )
+        manifest["status"] = "failed"
+        manifest["finished_at"] = _utc_now()
+        manifest["error"] = failure
+        atomic_write_json(manifest_path, manifest)
+        raise BenchmarkError(failure)
+
     repetition_rows = []
 
     for placement_index, placement in enumerate(placements):

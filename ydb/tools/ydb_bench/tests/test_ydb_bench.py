@@ -296,6 +296,46 @@ class YdbBenchTest(unittest.TestCase):
         self.assertFalse(placement.supported)
         self.assertIn("two NUMA nodes", placement.reason)
 
+    def test_run_fails_when_all_affinity_modes_are_unsupported(self):
+        script = self._script("exit 99")
+        output = self.root / "unsupported-output"
+        output.mkdir()
+        topology = CpuTopology(
+            allowed_cpus=(0, 1),
+            numa_nodes=((0, (0, 1)),),
+            chiplets=((0, (0, 1)),),
+        )
+        configuration = RunConfiguration(
+            profile="test",
+            threads=(1, 2),
+            actor_pairs=(32,),
+            inflights=(1,),
+            duration_seconds=1,
+            repetitions=1,
+            timeout_seconds=5,
+            affinity_modes=("multi-numa",),
+        )
+
+        with mock.patch(
+            "ydb.tools.ydb_bench.lib.actors_core.discover_topology", return_value=topology
+        ), mock.patch.object(os, "sched_setaffinity", create=True), self.assertRaisesRegex(
+            BenchmarkError, "none of the selected affinity modes is supported"
+        ):
+            run_actors_core(
+                self._binary(script),
+                configuration,
+                output,
+                tool_revision={"commit_id": "test"},
+            )
+
+        manifest = json.loads((output / "run.json").read_text())
+        self.assertEqual(manifest["status"], "failed")
+        self.assertIn("finished_at", manifest)
+        self.assertIn("multi-numa", manifest["error"])
+        self.assertEqual(manifest["runs"], [])
+        self.assertEqual(manifest["affinity"][0]["status"], "unsupported")
+        self.assertFalse((output / "summary.csv").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

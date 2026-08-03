@@ -7,6 +7,7 @@ ydb/core/kqp/ut/query KqpAnalyzeOperations.AnalyzeOperationsLifecycle
 ydb/core/kqp/ut/scheme KqpOlapScheme.AddColumnSimpleReader
 ydb/core/kqp/ut/scheme KqpOlapTypes.PgFloat8Column
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPCountersTests.SimpleCountersWithKeepMessageOrder
+ydb/core/persqueue/ut PQCountersLabeled.PartitionReadCounters
 ydb/core/tx/schemeshard/ut_compaction_reboots unittest.[*/*] chunk
 ydb/library/actors/core/ut TestThreadContextQueueTimestamps.CurrentQueueTimestamps
 ydb/library/actors/interconnect/ut InterconnectDirectSession.SendWithReplyCallbackRegistersReceiver

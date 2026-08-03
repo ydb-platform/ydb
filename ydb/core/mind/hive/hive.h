@@ -34,6 +34,8 @@
 
 #include <util/stream/format.h>
 
+#include "outgoing_requests.h"
+
 namespace NKikimr {
 namespace NHive {
 
@@ -166,7 +168,7 @@ struct TCompleteNotifications {
 };
 
 struct TCompleteActions {
-    std::vector<std::unique_ptr<IActor>> Actors;
+    std::vector<std::pair<std::unique_ptr<IActor>, TString>> Actors;
     std::vector<std::function<void()>> Callbacks;
 
     void Reset() {
@@ -175,20 +177,27 @@ struct TCompleteActions {
     }
 
     void Register(IActor* actor) {
-        Actors.emplace_back(actor);
+        Actors.emplace_back(std::piecewise_construct, std::tuple<IActor*>{actor}, std::tuple{});
+    }
+
+    void RegisterAndTrack(IActor* actor, TString description) {
+        Actors.emplace_back(std::piecewise_construct, std::tuple<IActor*>{actor}, std::tuple<TString>{std::move(description)});
     }
 
     void Callback(std::function<void()> callback) {
         Callbacks.emplace_back(std::move(callback));
     }
 
-    void Run(const TActorContext& ctx) {
+    void Run(const TActorContext& ctx, TRequests& requests) {
         for (auto& callback : Callbacks) {
             callback();
         }
         Callbacks.clear();
-        for (auto& actor : Actors) {
-            ctx.Register(actor.release());
+        for (auto& [actor, description] : Actors) {
+            auto actorId = ctx.Register(actor.release());
+            if (description) {
+                requests.AddRequest(std::move(description), actorId);
+            }
         }
         Actors.clear();
     }
@@ -200,8 +209,8 @@ struct TSideEffects : TCompleteNotifications, TCompleteActions {
         TCompleteNotifications::Reset(selfId);
     }
 
-    void Complete(const TActorContext& ctx) {
-        TCompleteActions::Run(ctx);
+    void Complete(const TActorContext& ctx, TRequests& requests) {
+        TCompleteActions::Run(ctx, requests);
         TCompleteNotifications::Send(ctx);
     }
 };
@@ -465,9 +474,12 @@ inline void Out<NKikimr::NHive::TCompleteActions>(IOutputStream& o, const NKikim
         o << "Actions: ";
         for (auto it = n.Actors.begin(); it != n.Actors.end(); ++it) {
             if (it != n.Actors.begin()) {
-                o << '.';
+                o << ',';
             }
-            o << TypeName(*(it->get()));
+            o << TypeName(*(it->first.get()));
+            if (it->second) {
+                o << ' ' << it->second;
+            }
         }
     }
 }

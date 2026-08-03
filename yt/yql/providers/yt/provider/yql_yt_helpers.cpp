@@ -3,6 +3,8 @@
 #include "yql_yt_op_hash.h"
 #include "yql_yt_optimize.h"
 
+#include <functional>
+
 #include <yt/yql/providers/yt/lib/mkql_helpers/mkql_helpers.h>
 #include <yt/yql/providers/yt/provider/yql_yt_layers_integration.h>
 #include <yt/yql/providers/yt/common/yql_configuration.h>
@@ -173,7 +175,7 @@ bool IsYtIsolatedLambdaImpl(const TExprNode& lambdaBody, TSyncMap& syncList, TSt
 
     if (lambdaBody.IsCallable("WithWorld")) {
         syncList.emplace(lambdaBody.ChildPtr(1), syncList.size());
-        return true;
+        return IsYtIsolatedLambdaImpl(lambdaBody.Head(), syncList, usedCluster, supportsDq, mode, visited);
     }
 
     if (!lambdaBody.GetTypeAnn()->IsComposable()) {
@@ -598,7 +600,7 @@ TExprNode::TPtr YtCleanupWorld(const TExprNode::TPtr& input, TExprContext& ctx, 
     TExprNode::TPtr output = input;
 
     TNodeOnNodeOwnedMap remaps;
-    VisitExpr(output, [&remaps, &ctx](const TExprNode::TPtr& node) {
+    std::function<bool(const TExprNode::TPtr&)> visitor = [&remaps, &ctx, &visitor](const TExprNode::TPtr& node) -> bool {
         if (TYtLength::Match(node.Get())) {
             return false;
         }
@@ -622,6 +624,7 @@ TExprNode::TPtr YtCleanupWorld(const TExprNode::TPtr& input, TExprContext& ctx, 
 
         if (node->IsCallable("WithWorld")) {
             remaps[node.Get()] = node->HeadPtr();
+            VisitExpr(node->HeadPtr(), visitor);
             return false;
         }
 
@@ -669,7 +672,8 @@ TExprNode::TPtr YtCleanupWorld(const TExprNode::TPtr& input, TExprContext& ctx, 
         }
 
         return true;
-    });
+    };
+    VisitExpr(output, visitor);
 
     if (output->IsLambda() && TYtOutput::Match(output->Child(1))) {
         remaps[output->Child(1)] = Build<TYtTableContent>(ctx, output->Child(1)->Pos())

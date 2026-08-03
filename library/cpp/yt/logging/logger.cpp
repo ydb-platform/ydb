@@ -72,7 +72,7 @@ YT_DEFINE_THREAD_LOCAL(bool, ThreadMessageTagDestroyed, false);
 
 struct TThreadMessageTagStorage
 {
-    std::string Tag;
+    TLoggingTagList Tags;
 
     ~TThreadMessageTagStorage()
     {
@@ -82,20 +82,20 @@ struct TThreadMessageTagStorage
 
 YT_DEFINE_THREAD_LOCAL(TThreadMessageTagStorage, ThreadMessageTag);
 
-void SetThreadMessageTag(std::string messageTag)
+void SetThreadMessageTags(TLoggingTagList messageTags)
 {
     if (Y_UNLIKELY(ThreadMessageTagDestroyed())) {
         return;
     }
-    ThreadMessageTag().Tag = std::move(messageTag);
+    ThreadMessageTag().Tags = std::move(messageTags);
 }
 
-std::string& GetThreadMessageTag()
+const TLoggingTagList& GetThreadMessageTags()
 {
     if (Y_UNLIKELY(ThreadMessageTagDestroyed())) {
-        return *LeakySingleton<std::string>();
+        return *LeakySingleton<TLoggingTagList>();
     }
-    return ThreadMessageTag().Tag;
+    return ThreadMessageTag().Tags;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -157,25 +157,22 @@ void TLogger::Write(TLogEvent&& event) const
     LogManager_->Enqueue(std::move(event));
 }
 
-void TLogger::AddRawTag(TStringBuf tag)
+TLogger& TLogger::AddTags(const TLoggingTagList& tags)
 {
-    auto* state = GetMutableCoWState();
-    if (!state->Tag.empty()) {
-        state->Tag += ", ";
-    }
-    state->Tag.append(tag.data(), tag.size());
+    GetMutableCoWState()->Tags.Add(tags);
+    return *this;
 }
 
-TLogger TLogger::WithRawTag(TStringBuf tag) const &
+TLogger TLogger::WithTags(const TLoggingTagList& tags) const &
 {
     auto result = *this;
-    result.AddRawTag(tag);
+    result.AddTags(tags);
     return result;
 }
 
-TLogger TLogger::WithRawTag(TStringBuf tag) &&
+TLogger TLogger::WithTags(const TLoggingTagList& tags) &&
 {
-    AddRawTag(tag);
+    AddTags(tags);
     return std::move(*this);
 }
 
@@ -228,10 +225,10 @@ TLogger TLogger::WithMinLevel(ELogLevel minLevel) &&
     return std::move(*this);
 }
 
-const std::string& TLogger::GetTag() const
+const TLoggingTagList& TLogger::GetTags() const
 {
-    static const std::string emptyResult;
-    return CoWState_ ? CoWState_->Tag : emptyResult;
+    static const TLoggingTagList emptyResult;
+    return CoWState_ ? CoWState_->Tags : emptyResult;
 }
 
 const TLogger::TStructuredTags& TLogger::GetStructuredTags() const

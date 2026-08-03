@@ -1927,6 +1927,14 @@ public:
             // Stats.CodeGenFinalizeTime = f.GetCodeGenFinalizeTime();
             // Stats.CodeGenModulePassTime = f.GetCodeGenModulePassTime();
 
+            Stats.MkqlStats.clear();
+            for (const auto& stat : protoStats.GetMkqlStats()) {
+                Stats.MkqlStats.emplace_back(TMkqlStat{
+                    TStatKey(stat.GetName(), stat.GetDeriv()),
+                    stat.GetValue()
+                });
+            }
+
             for (const auto& input : protoStats.GetInputChannels()) {
                 InputChannels[input.GetChannelId()]->FromProto(input);
             }

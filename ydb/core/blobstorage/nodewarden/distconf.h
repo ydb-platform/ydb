@@ -476,6 +476,13 @@ namespace NKikimr::NStorage {
 
         std::optional<TString> GenerateFirstConfig(NKikimrBlobStorage::TStorageConfig *config, const TString& selfAssemblyUUID);
 
+        struct TStaticGroupReassignment {
+            std::optional<NKikimrBlobStorage::TVSlotId> SourceSlotId;
+            std::optional<NKikimrBlobStorage::TVSlotId> TargetSlotId;
+        };
+
+        using TStaticGroupReassignments = THashMap<TVDiskIdShort, TStaticGroupReassignment>;
+
         struct TAllocateStaticGroupParams {
             NKikimrBlobStorage::TStorageConfig *Config = nullptr;
             TGroupId GroupId;
@@ -493,6 +500,7 @@ namespace NKikimr::NStorage {
             TBridgePileId BridgePileId;
             std::optional<TGroupId> BridgeProxyGroupId;
             bool ApplySelfHealNodeAllowList = false;
+            TStaticGroupReassignments *Reassignments = nullptr;
         };
 
         void AllocateStaticGroup(TAllocateStaticGroupParams params);

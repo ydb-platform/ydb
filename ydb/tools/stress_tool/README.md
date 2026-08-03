@@ -118,9 +118,6 @@ hosts, run two copies of `ydb_stress_tool`:
   routed to the remote responder over the network instead of looping back
   locally.
 
-  Optional: `--use-uring` selects the io_uring transport instead of epoll for
-  the interconnect connection itself (Linux 5.19+).
-
 Each `InterconnectTestList` entry contains one or more `InterconnectLoad`
 sources, run sequentially. Detailed periodic throughput/RTT statistics are
 logged to stderr via the `INTERCONNECT_SPEED_TEST` log component at `NOTICE`

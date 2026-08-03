@@ -12,10 +12,7 @@ ORIGINAL_SOURCE(https://github.com/grpc/grpc-proto/archive/99135b19189588fcc787a
 
 PY_NAMESPACE(grpc.reflection.v1alpha)
 
-PROTO_NAMESPACE(
-    GLOBAL
-    contrib/proto/grpc
-)
+PROTO_NAMESPACE(contrib/proto/grpc)
 
 GRPC()
 

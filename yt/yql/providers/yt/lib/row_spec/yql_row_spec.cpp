@@ -1309,14 +1309,14 @@ void TYqlRowSpecInfo::FillFlags(NYT::TNode& attrs) const {
     attrs[RowSpecAttrStrictSchema] = StrictSchema;
     attrs[RowSpecAttrNativeYtTypeFlags] = NativeYtTypeFlags;
 
-    // Backward compatibility with NTCF_VOID & NTCF_NULL presence in row spec
-    TSingularTypesVisitor visitor;
-    Type->Accept(visitor);
-    attrs[RowSpecAttrNativeYtTypeFlags] = NativeYtTypeFlags | visitor.SingularTypeFlags();
-
     // Backward compatibility. TODO: remove after releasing compatibility flags
     if (NativeYtTypeFlags != 0) {
         attrs[RowSpecAttrUseNativeYtTypes] = true;
+
+        // Backward compatibility with NTCF_VOID & NTCF_NULL presence in row spec
+        TSingularTypesVisitor visitor;
+        Type->Accept(visitor);
+        attrs[RowSpecAttrNativeYtTypeFlags] = NativeYtTypeFlags | visitor.SingularTypeFlags();
     }
 }
 
@@ -1373,8 +1373,16 @@ void TYqlRowSpecInfo::FillAttrNode(NYT::TNode& attrs, bool useCompactForm) const
         if (itemType->GetKind() == ETypeAnnotationKind::Data && itemType->Cast<TDataExprType>()->GetSlot() == EDataSlot::Yson) {
             patchedFields.insert(item->GetName());
         } else {
-            if (itemType->GetKind() == ETypeAnnotationKind::Optional) {
+            const bool wasOptional = itemType->GetKind() == ETypeAnnotationKind::Optional;
+            if (wasOptional) {
                 itemType = itemType->Cast<TOptionalExprType>()->GetItemType();
+            }
+            const bool singular = itemType->GetKind() == ETypeAnnotationKind::Void
+                || itemType->GetKind() == ETypeAnnotationKind::Null;
+            if (wasOptional && singular && !(NativeYtTypeFlags & NTCF_COMPLEX)) {
+                // Backward compatibility with old optional singulars behavior
+                patchedFields.insert(item->GetName());
+                continue;
             }
             auto flags = GetNativeYtTypeFlagsImpl(itemType);
             if (flags != (flags & NativeYtTypeFlags)) {

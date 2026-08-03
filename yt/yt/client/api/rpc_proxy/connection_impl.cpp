@@ -23,6 +23,7 @@
 #include <yt/yt/core/rpc/roaming_channel.h>
 #include <yt/yt/core/rpc/caching_channel_factory.h>
 #include <yt/yt/core/rpc/dynamic_channel_pool.h>
+#include <yt/yt/core/rpc/dynamic_channel_pool_provider.h>
 #include <yt/yt/core/rpc/dispatcher.h>
 #include <yt/yt/core/rpc/peer_discovery.h>
 
@@ -105,23 +106,22 @@ bool IsProxyUrlSecure(const std::string& url)
     return url.starts_with(ProxyUrlCanonicalHttpsPrefix);
 }
 
-std::string MakeConnectionLoggingTag(const TConnectionConfigPtr& config, TGuid connectionId)
+NLogging::TLoggingTagList MakeConnectionLoggingTags(const TConnectionConfigPtr& config, TGuid connectionId)
 {
-    TStringBuilder builder;
-    TDelimitedStringBuilderWrapper delimitedBuilder(&builder);
+    NLogging::TLoggingTagList tags;
     if (config->ClusterUrl) {
-        delimitedBuilder->AppendFormat("ClusterUrl: %v", *config->ClusterUrl);
+        tags.Add("ClusterUrl", *config->ClusterUrl);
     }
     if (config->ProxyRole) {
-        delimitedBuilder->AppendFormat("ProxyRole: %v", *config->ProxyRole);
+        tags.Add("ProxyRole", *config->ProxyRole);
     }
-    delimitedBuilder->AppendFormat("ConnectionId: %v", connectionId);
-    return builder.Flush();
+    tags.Add("ConnectionId", connectionId);
+    return tags;
 }
 
 std::string MakeEndpointDescription(const TConnectionConfigPtr& config, TGuid connectionId)
 {
-    return Format("Rpc{%v}", MakeConnectionLoggingTag(config, connectionId));
+    return Format("Rpc{%v}", MakeConnectionLoggingTags(config, connectionId));
 }
 
 IAttributeDictionaryPtr MakeErrorAttributes(const TConnectionConfigPtr& config)
@@ -157,69 +157,6 @@ std::string MakeConnectionClusterId(const TConnectionConfigPtr& config)
     }
 }
 
-class TProxyChannelProvider
-    : public IRoamingChannelProvider
-{
-public:
-    TProxyChannelProvider(
-        TConnectionConfigPtr config,
-        TGuid connectionId,
-        TDynamicChannelPoolPtr pool,
-        bool sticky)
-        : Pool_(std::move(pool))
-        , Sticky_(sticky)
-        , EndpointDescription_(MakeEndpointDescription(config, connectionId))
-        , EndpointAttributes_(MakeEndpointAttributes(config, connectionId))
-    { }
-
-    const std::string& GetEndpointDescription() const override
-    {
-        return EndpointDescription_;
-    }
-
-    const NYTree::IAttributeDictionary& GetEndpointAttributes() const override
-    {
-        return *EndpointAttributes_;
-    }
-
-    TFuture<IChannelPtr> GetChannel() override
-    {
-        if (Sticky_) {
-            auto guard = Guard(SpinLock_);
-            if (!Channel_) {
-                Channel_ = Pool_->GetRandomChannel();
-            }
-            return Channel_;
-        } else {
-            return Pool_->GetRandomChannel();
-        }
-    }
-
-    void Terminate(const TError& /*error*/) override
-    { }
-
-    TFuture<IChannelPtr> GetChannel(std::string /*serviceName*/) override
-    {
-        return GetChannel();
-    }
-
-    TFuture<IChannelPtr> GetChannel(const IClientRequestPtr& /*request*/) override
-    {
-        return GetChannel();
-    }
-
-private:
-    const TDynamicChannelPoolPtr Pool_;
-    const bool Sticky_;
-    const TGuid ConnectionId_;
-
-    const std::string EndpointDescription_;
-    const IAttributeDictionaryPtr EndpointAttributes_;
-
-    YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
-    TFuture<IChannelPtr> Channel_;
-};
-
 TConnectionConfigPtr GetPostprocessedConfigAndValidate(TConnectionConfigPtr config)
 {
     config->Postprocess();
@@ -234,9 +171,9 @@ TConnectionConfigPtr GetPostprocessedConfigAndValidate(TConnectionConfigPtr conf
 TConnection::TConnection(TConnectionConfigPtr config, TConnectionOptions options)
     : Config_(GetPostprocessedConfigAndValidate(std::move(config)))
     , ConnectionId_(TGuid::Create())
-    , LoggingTag_(MakeConnectionLoggingTag(Config_, ConnectionId_))
+    , LoggingTags_(MakeConnectionLoggingTags(Config_, ConnectionId_))
     , ClusterId_(MakeConnectionClusterId(Config_))
-    , Logger(RpcProxyClientLogger().WithRawTag(LoggingTag_))
+    , Logger(RpcProxyClientLogger().WithTags(LoggingTags_))
     , ChannelFactory_(Config_->ProxyUnixDomainSocket
         ? NRpc::NBus::CreateUdsBusChannelFactory(Config_->BusClient)
         : NRpc::NBus::CreateTcpBusChannelFactory(Config_->BusClient))
@@ -284,11 +221,19 @@ TConnection::~TConnection()
 
 IChannelPtr TConnection::CreateChannel(bool sticky)
 {
-    auto provider = New<TProxyChannelProvider>(
-        Config_,
-        ConnectionId_,
-        ChannelPool_,
-        sticky);
+    auto endpointDescription = MakeEndpointDescription(Config_, ConnectionId_);
+    auto endpointAttributes = MakeEndpointAttributes(Config_, ConnectionId_);
+
+    auto provider = sticky
+        ? CreateStickyDynamicChannelPoolProvider(
+            ChannelPool_,
+            std::move(endpointDescription),
+            std::move(endpointAttributes))
+        : CreateDynamicChannelPoolProvider(
+            ChannelPool_,
+            std::move(endpointDescription),
+            std::move(endpointAttributes));
+
     return CreateRoamingChannel(std::move(provider));
 }
 
@@ -304,9 +249,9 @@ TClusterTag TConnection::GetClusterTag() const
     return *Config_->ClusterTag;
 }
 
-const std::string& TConnection::GetLoggingTag() const
+const NLogging::TLoggingTagList& TConnection::GetLoggingTags() const
 {
-    return LoggingTag_;
+    return LoggingTags_;
 }
 
 const std::string& TConnection::GetClusterId() const

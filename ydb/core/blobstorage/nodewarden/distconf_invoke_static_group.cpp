@@ -23,6 +23,11 @@ namespace NKikimr::NStorage {
                         << " Generation# " << group.GetGroupGeneration()
                         << " VDiskId# " << vdiskId;
                 }
+                if (vdiskId.FailRealm >= group.RingsSize() || vdiskId.FailDomain >= group.GetRings(vdiskId.FailRealm).FailDomainsSize()
+                    || vdiskId.VDisk >= group.GetRings(vdiskId.FailRealm)
+                            .GetFailDomains(vdiskId.FailDomain).VDiskLocationsSize()) {
+                    throw TExError() << "VDiskId# " << vdiskId << " not found in group";
+                }
                 found = true;
                 if (!cmd.GetIgnoreGroupFailModelChecks()) {
                     IssueVStatusQueries(group);
@@ -234,6 +239,7 @@ namespace NKikimr::NStorage {
 
         for (const auto& group : ss.GetGroups()) {
             if (group.GetGroupID() == vdiskId.GroupID.GetRawId()) {
+                TDistributedConfigKeeper::TStaticGroupReassignments reassignments;
                 try {
                     const auto bridgePileId = TBridgePileId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetBridgePileId);
                     std::optional<TGroupId> bridgeProxyGroupId = group.HasBridgeProxyGroupId()
@@ -256,6 +262,7 @@ namespace NKikimr::NStorage {
                         .BridgePileId = bridgePileId,
                         .BridgeProxyGroupId = bridgeProxyGroupId,
                         .ApplySelfHealNodeAllowList = cmd.GetFromSelfHeal(),
+                        .Reassignments = &reassignments,
                     });
                 } catch (const TExConfigError& ex) {
                     YDB_LOG_NOTICE("ReassignGroupDisk failed to allocate group",
@@ -266,6 +273,14 @@ namespace NKikimr::NStorage {
                         {"error", ex.what()});
                     throw TExError() << "Failed to allocate group: " << ex.what();
                 }
+
+                const auto it = reassignments.find(vdiskId);
+                if (it == reassignments.end() || !it->second.SourceSlotId || !it->second.TargetSlotId) {
+                    throw TExError() << "Failed to obtain reassigned VSlotIds";
+                }
+                auto& result = ReassignGroupDiskResult.emplace();
+                result.MutableSourceSlotId()->CopyFrom(*it->second.SourceSlotId);
+                result.MutableTargetSlotId()->CopyFrom(*it->second.TargetSlotId);
 
                 return StartProposition(&config);
             }

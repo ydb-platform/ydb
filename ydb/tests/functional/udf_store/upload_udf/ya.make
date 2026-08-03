@@ -9,6 +9,10 @@ PEERDIR(
     ydb/tests/oss/ydb_sdk_import
 )
 
+NO_CHECK_IMPORTS(
+    *ydb.tests.oss.canonical.*
+)
+
 DEPENDS(
     ydb/tests/stress/kv_volume_tool
 )

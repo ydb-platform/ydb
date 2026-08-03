@@ -43,6 +43,7 @@ SRCS(
     rpc_describe_table.cpp
     rpc_describe_table_options.cpp
     rpc_discovery.cpp
+    rpc_distributed_storage.cpp
     rpc_drop_coordination_node.cpp
     rpc_drop_table.cpp
     rpc_dynamic_config.cpp

@@ -34,7 +34,8 @@ _cython_tree_random += custom_target('_bounded_integer_pxd',
   input: '_bounded_integers.pxd.in',
   command: [tempita_cli, '@INPUT@', '-o', '@OUTPUT@'],
   install: true,
-  install_dir: np_dir / 'random'
+  install_dir: np_dir / 'random',
+  install_tag: 'devel'
 )
 
 _bounded_integers_pyx = custom_target('_bounded_integer_pyx',
@@ -138,6 +139,9 @@ py.install_sources(
     'tests/data/philox-testset-2.csv',
     'tests/data/sfc64-testset-1.csv',
     'tests/data/sfc64-testset-2.csv',
+    'tests/data/sfc64_np126.pkl.gz',
+    'tests/data/generator_pcg64_np126.pkl.gz',
+    'tests/data/generator_pcg64_np121.pkl.gz',
   ],
   subdir: 'numpy/random/tests/data'
 )

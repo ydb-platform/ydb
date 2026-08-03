@@ -7,6 +7,7 @@
 #include <ydb/core/nbs/cloud/blockstore/config/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/tablet.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
@@ -48,6 +49,7 @@ class TPartitionActor
 
 private:
     TLogTitle LogTitle;
+    TDiskDescription DiskDescription;
     TStorageConfigPtr StorageConfig;
     NKikimrBlockStore::TVolumeConfig VolumeConfig;
     NActors::TActorId BSControllerPipeClient;
@@ -82,9 +84,12 @@ private:
     void StateInit(TAutoPtr<NActors::IEventHandle>& ev);
     STFUNC(StateWork);
 
-    void HandleHttpInfo(
-        NActors::NMon::TEvRemoteHttpInfo::TPtr& ev,
-        const NActors::TActorContext& ctx);
+    // The tablet's own monitoring page, reached via the standard tablet page's
+    // "App" link. The base class passes a null event to ask whether that link
+    // should appear - it always should.
+    bool OnRenderAppHtmlPage(
+        NActors::NMon::TEvRemoteHttpInfo::TPtr ev,
+        const NActors::TActorContext& ctx) override;
 
     void OnDetach(const NActors::TActorContext& ctx) override;
     void OnTabletDead(
@@ -93,14 +98,21 @@ private:
     void OnActivateExecutor(const NActors::TActorContext& ctx) override;
     void DefaultSignalTabletActive(const NActors::TActorContext& ctx) override;
 
+    void DetachEndpointAddDie(const NActors::TActorContext& ctx);
+
+    void HandleConnect(
+        NKikimr::TEvTabletPipe::TEvClientConnected::TPtr& ev,
+        const NActors::TActorContext& ctx);
+    void HandleDisconnect(
+        NKikimr::TEvTabletPipe::TEvClientDestroyed::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
     void HandleServerConnected(
         const NKikimr::TEvTabletPipe::TEvServerConnected::TPtr& ev,
         const NActors::TActorContext& ctx);
-
     void HandleServerDisconnected(
         const NKikimr::TEvTabletPipe::TEvServerDisconnected::TPtr& ev,
         const NActors::TActorContext& ctx);
-
     void HandleServerDestroyed(
         const NKikimr::TEvTabletPipe::TEvServerDestroyed::TPtr& ev,
         const NActors::TActorContext& ctx);
@@ -178,6 +190,8 @@ private:
         THostIndex newHostIndex);
 
     [[nodiscard]] TTabletInfo MakeMonTabletInfo() const;
+
+    [[nodiscard]] TString GetSocketPath() const;
 
     void Start(
         const NActors::TActorContext& ctx,

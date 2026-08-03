@@ -38,7 +38,10 @@ public:
         , QueuePath_(std::move(queuePath))
         , PartitionIndex_(partitionIndex)
         , RowBatchReadOptions_({Config_->MaxRowCount, Config_->MaxDataWeight, Config_->DataWeightPerRowHint})
-        , Logger(QueueClientLogger().WithTag("Consumer: %v, Queue: %v, Partition: %v", ConsumerPath_, QueuePath_, PartitionIndex_))
+        , Logger(QueueClientLogger()
+            .WithTag("Consumer", ConsumerPath_)
+            .WithTag("Queue", QueuePath_)
+            .WithTag("Partition", PartitionIndex_))
     {
         PullQueueConsumerOptions_.UseNativeTabletNodeApi = Config_->UseNativeTabletNodeApi;
     }

@@ -14,6 +14,7 @@
 #include "opentelemetry/logs/severity.h"
 #include "opentelemetry/nostd/string_view.h"
 #include "opentelemetry/sdk/common/attribute_utils.h"
+#include "opentelemetry/sdk/logs/log_record_limits.h"
 #include "opentelemetry/sdk/logs/readable_log_record.h"
 #include "opentelemetry/trace/span_id.h"
 #include "opentelemetry/trace/trace_flags.h"
@@ -154,11 +155,24 @@ public:
                     const opentelemetry::common::AttributeValue &value) noexcept override;
 
   /**
+   * Apply attribute count and value length limits. Must be called before any
+   * SetAttribute call to take effect. The limits are copied into this
+   * recordable.
+   */
+  void SetLogRecordLimits(const LogRecordLimits &limits) noexcept override;
+
+  /**
    * Get attributes of this log.
    * @return the body field of this log
    */
   const std::unordered_map<std::string, opentelemetry::sdk::common::OwnedAttributeValue> &
   GetAttributes() const noexcept override;
+
+  /**
+   * Get the number of attributes dropped because the attribute count limit
+   * was reached. Truncated string values are not counted as dropped.
+   */
+  uint32_t GetDroppedAttributesCount() const noexcept override;
 
   /**
    * Get resource of this log
@@ -199,6 +213,13 @@ private:
 
   int64_t event_id_{0};
   std::string event_name_;
+
+  // Stored by value so the recordable does not depend on the limits object
+  // outliving the LoggerContext that supplied it. Defaults to no limits; the
+  // LoggerProvider wiring injects the configured limits via SetLogRecordLimits,
+  // so a recordable used outside a provider does not cap attributes on its own.
+  LogRecordLimits limits_ = LogRecordLimits::NoLimits();
+  uint32_t dropped_attributes_count_{0};
 
   // We do not pay for trace state when not necessary
   struct TraceState

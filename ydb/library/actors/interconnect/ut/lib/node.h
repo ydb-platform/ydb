@@ -12,7 +12,6 @@
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect_proxy_wrapper.h>
 #include <ydb/library/actors/interconnect/interconnect_uring_engine.h>
-#include <ydb/library/actors/interconnect/poller/uring_poller_actor.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/library/actors/interconnect/rdma/cq_actor/cq_actor.h>
 
@@ -75,17 +74,17 @@ public:
         }
         setup.InterconnectCollectSubscriptionStackTrace = common->Settings.CollectSubscriptionStackTrace;
 
-        if (common->Settings.EnableInterconnectSessionV2) {
+        if (common->Settings.V2.Enable) {
             // Mirror production: create the shared v2 io_uring engine up front and publish it in Common; the
             // proxy binds it to the actor system on start (SetActorSystem). Shard count is overridable via
             // YDB_IC_V2_SHARDS so tests can force many connections onto a single ring.
-            ui32 uringShards = 4;
             if (const TString s = GetEnv("YDB_IC_V2_SHARDS"); !s.empty()) {
-                uringShards = FromString<ui32>(s);
+                common->Settings.V2.UringEngineThreads = FromString<ui32>(s);
             }
-            common->UringEngineV2 = CreateUringEngine(uringShards,
-                common->MonCounters->GetSubgroup("subsystem", "uring"),
-                common->Settings.EnableSQPOLLv2);
+            if (const TString s = GetEnv("YDB_IC_V2_RINGS_PER_SHARD"); !s.empty()) {
+                common->Settings.V2.UringEngineRingsPerShard = FromString<ui32>(s);
+            }
+            common->UringEngineV2 = CreateUringEngine(common);
             setup.OnActorSystemCreated.push_back([engine = common->UringEngineV2](TActorSystem *actorSystem) {
                 if (engine) {
                     engine->SetActorSystem(actorSystem);
@@ -132,10 +131,6 @@ public:
 
         setup.LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(counters),
             TMailboxType::ReadAsFilled, 0));
-        if (common->Settings.UseUring && TUringContext::IsSupported()) {
-            setup.LocalServices.emplace_back(MakeUringPollerActorId(), TActorSetupCmd(CreateUringPollerActor(common->Settings.EnableUringSQPOLL),
-                TMailboxType::ReadAsFilled, 0));
-        }
         setup.LocalServices.emplace_back(NInterconnect::NRdma::MakeCqActorId(),
             TActorSetupCmd(NInterconnect::NRdma::CreateCqActor(NInterconnect::NRdma::TRdmaRuntimeParams{-1, 1024, 0, 0}, rdmaCqMode, nullptr),
             TMailboxType::ReadAsFilled, 0));

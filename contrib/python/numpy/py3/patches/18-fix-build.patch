@@ -1,0 +1,5 @@
+--- contrib/python/numpy/py3/numpy/_core/src/umath/string_fastsearch.h	(index)
++++ contrib/python/numpy/py3/numpy/_core/src/umath/string_fastsearch.h	(working tree)
+@@ -132 +132 @@ struct CheckedIndexer {
+-    std::ptrdiff_t
++    ptrdiff_t

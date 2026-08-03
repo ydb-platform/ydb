@@ -51,19 +51,12 @@ namespace NActors {
         HandshakeBrokerPermit,
 
         EvForwardSubscribeSession,
+        EvProxyCall,
+        EvRdmaSyncResult,
 
         // external data channel messages
         EvSubscribeForConnection,
         EvReportConnection,
-
-        // io_uring transport events
-        EvUringRegister,
-        EvUringRegisterResult,
-        EvUringWriteComplete,
-        EvUringRecvComplete,
-        EvUringSendZcNotif,
-        EvUringUnregister,
-        EvUringRegisterFailed,
 
         // wake for the direct-session (v1) lock-free registration queue
         EvProcessDirectSessionQueue,
@@ -73,6 +66,7 @@ namespace NActors {
         EvRegisterSession,
         EvUnregisterSession,
         EvStop,
+        EvUringMonRequest,
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // nonlocal messages; their indices must be preserved in order to work properly while doing rolling update

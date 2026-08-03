@@ -498,7 +498,7 @@
         {"shape":"ConflictException"},
         {"shape":"ValidationException"}
       ],
-      "documentation":"<p>Creates a worker. A worker tells your instance how much processing power (vCPU), and memory (GiB) you’ll need to assemble the digital assets held within a particular instance. You can specify certain instance types to use, or let the worker know which instances types to exclude.</p>",
+      "documentation":"<p>Creates a worker. A worker tells your instance how much processing power (vCPU), and memory (GiB) you’ll need to assemble the digital assets held within a particular instance. You can specify certain instance types to use, or let the worker know which instances types to exclude.</p> <p>Deadline Cloud limits the number of workers to less than or equal to the fleet's maximum worker count. The service maintains eventual consistency for the worker count. If you make multiple rapid calls to <code>CreateWorker</code> before the field updates, you might exceed your fleet's maximum worker count. For example, if your <code>maxWorkerCount</code> is 10 and you currently have 9 workers, making two quick <code>CreateWorker</code> calls might successfully create 2 workers instead of 1, resulting in 11 total workers.</p>",
       "endpoint":{"hostPrefix":"scheduling."},
       "idempotent":true
     },
@@ -2286,11 +2286,11 @@
       "members":{
         "name":{
           "shape":"AcceleratorName",
-          "documentation":"<p>The name of the chip used by the GPU accelerator.</p> <p>If you specify <code>l4</code> as the name of the accelerator, you must specify <code>latest</code> or <code>grid:r550</code> as the runtime.</p> <p>The available GPU accelerators are:</p> <ul> <li> <p> <code>t4</code> - NVIDIA T4 Tensor Core GPU</p> </li> <li> <p> <code>a10g</code> - NVIDIA A10G Tensor Core GPU</p> </li> <li> <p> <code>l4</code> - NVIDIA L4 Tensor Core GPU</p> </li> <li> <p> <code>l40s</code> - NVIDIA L40S Tensor Core GPU</p> </li> </ul>"
+          "documentation":"<p>The name of the chip used by the GPU accelerator.</p> <p>If you specify <code>l4</code> as the name of the accelerator, you must specify <code>latest</code> or <code>grid:r570</code> as the runtime.</p> <p>The available GPU accelerators are:</p> <ul> <li> <p> <code>t4</code> - NVIDIA T4 Tensor Core GPU</p> </li> <li> <p> <code>a10g</code> - NVIDIA A10G Tensor Core GPU</p> </li> <li> <p> <code>l4</code> - NVIDIA L4 Tensor Core GPU</p> </li> <li> <p> <code>l40s</code> - NVIDIA L40S Tensor Core GPU</p> </li> </ul>"
         },
         "runtime":{
           "shape":"AcceleratorRuntime",
-          "documentation":"<p>Specifies the runtime driver to use for the GPU accelerator. You must use the same runtime for all GPUs. </p> <p>You can choose from the following runtimes:</p> <ul> <li> <p> <code>latest</code> - Use the latest runtime available for the chip. If you specify <code>latest</code> and a new version of the runtime is released, the new version of the runtime is used.</p> </li> <li> <p> <code>grid:r550</code> - <a href=\"https://docs.nvidia.com/vgpu/17.0/index.html\">NVIDIA vGPU software 17</a> </p> </li> <li> <p> <code>grid:r535</code> - <a href=\"https://docs.nvidia.com/vgpu/16.0/index.html\">NVIDIA vGPU software 16</a> </p> </li> </ul> <p>If you don't specify a runtime, Deadline Cloud uses <code>latest</code> as the default. However, if you have multiple accelerators and specify <code>latest</code> for some and leave others blank, Deadline Cloud raises an exception.</p>"
+          "documentation":"<p>Specifies the runtime driver to use for the GPU accelerator. You must use the same runtime for all GPUs. </p> <p>You can choose from the following runtimes:</p> <ul> <li> <p> <code>latest</code> - Use the latest runtime available for the chip. If you specify <code>latest</code> and a new version of the runtime is released, the new version of the runtime is used.</p> </li> <li> <p> <code>grid:r570</code> - <a href=\"https://docs.nvidia.com/vgpu/18.0/index.html\">NVIDIA vGPU software 18</a> </p> </li> <li> <p> <code>grid:r535</code> - <a href=\"https://docs.nvidia.com/vgpu/16.0/index.html\">NVIDIA vGPU software 16</a> </p> </li> </ul> <p>If you don't specify a runtime, Deadline Cloud uses <code>latest</code> as the default. However, if you have multiple accelerators and specify <code>latest</code> for some and leave others blank, Deadline Cloud raises an exception.</p>"
         }
       },
       "documentation":"<p>Describes a specific GPU accelerator required for an Amazon Elastic Compute Cloud worker host.</p>"
@@ -2499,7 +2499,6 @@
     "AssignedTaskRunSessionActionDefinition":{
       "type":"structure",
       "required":[
-        "taskId",
         "stepId",
         "parameters"
       ],
@@ -3466,7 +3465,7 @@
         },
         "maxWorkerCount":{
           "shape":"MinZeroMaxInteger",
-          "documentation":"<p>The maximum number of workers for the fleet.</p>"
+          "documentation":"<p>The maximum number of workers for the fleet.</p> <p>Deadline Cloud limits the number of workers to less than or equal to the fleet's maximum worker count. The service maintains eventual consistency for the worker count. If you make multiple rapid calls to <code>CreateWorker</code> before the field updates, you might exceed your fleet's maximum worker count. For example, if your <code>maxWorkerCount</code> is 10 and you currently have 9 workers, making two quick <code>CreateWorker</code> calls might successfully create 2 workers instead of 1, resulting in 11 total workers.</p>"
         },
         "configuration":{
           "shape":"FleetConfiguration",
@@ -3475,6 +3474,10 @@
         "tags":{
           "shape":"Tags",
           "documentation":"<p>Each tag consists of a tag key and a tag value. Tag keys and values are both required, but tag values can be empty strings.</p>"
+        },
+        "hostConfiguration":{
+          "shape":"HostConfiguration",
+          "documentation":"<p>Provides a script that runs as a worker is starting up that you can use to provide additional configuration for workers in your fleet.</p>"
         }
       }
     },
@@ -3525,7 +3528,7 @@
         },
         "priority":{
           "shape":"JobPriority",
-          "documentation":"<p>The priority of the job on a scale of 0 to 100. The highest priority (first scheduled) is 100. When two jobs have the same priority, the oldest job is scheduled first.</p>"
+          "documentation":"<p>The priority of the job. The highest priority (first scheduled) is 100. When two jobs have the same priority, the oldest job is scheduled first.</p>"
         },
         "parameters":{
           "shape":"JobParameters",
@@ -3765,7 +3768,7 @@
         },
         "priority":{
           "shape":"Priority",
-          "documentation":"<p>Sets the priority of the environments in the queue from 0 to 10,000, where 0 is the highest priority. If two environments share the same priority value, the environment created first takes higher priority.</p>"
+          "documentation":"<p>Sets the priority of the environments in the queue from 0 to 10,000, where 0 is the highest priority (activated first and deactivated last). If two environments share the same priority value, the environment created first takes higher priority.</p>"
         },
         "templateType":{
           "shape":"EnvironmentTemplateType",
@@ -3987,6 +3990,10 @@
           "idempotencyToken":true,
           "location":"header",
           "locationName":"X-Amz-Client-Token"
+        },
+        "tags":{
+          "shape":"Tags",
+          "documentation":"<p>Each tag consists of a tag key and a tag value. Tag keys and values are both required, but tag values can be empty strings.</p>"
         }
       }
     },
@@ -4035,6 +4042,10 @@
         "storageProfileId":{
           "shape":"StorageProfileId",
           "documentation":"<p>The storage profile ID.</p>"
+        },
+        "tagPropagationMode":{
+          "shape":"TagPropagationMode",
+          "documentation":"<p>Specifies whether tags associated with a fleet are attached to workers when the worker is launched. </p> <p>When the <code>tagPropagationMode</code> is set to <code>PROPAGATE_TAGS_TO_WORKERS_AT_LAUNCH</code> any tag associated with a fleet is attached to workers when they launch. If the tags for a fleet change, the tags associated with running workers <b>do not</b> change.</p> <p>If you don't specify <code>tagPropagationMode</code>, the default is <code>NO_PROPAGATION</code>.</p>"
         }
       },
       "documentation":"<p>The details of a customer managed fleet configuration.</p>"
@@ -4984,8 +4995,7 @@
       "type":"string",
       "max":64,
       "min":1,
-      "pattern":"[0-9A-Za-z ]*",
-      "sensitive":true
+      "pattern":"[0-9A-Za-z ]*"
     },
     "FileSystemLocationType":{
       "type":"string",
@@ -5448,7 +5458,7 @@
         },
         "status":{
           "shape":"FleetStatus",
-          "documentation":"<p>The Auto Scaling status of the fleet.</p>"
+          "documentation":"<p>The status of the fleet.</p>"
         },
         "autoScalingStatus":{
           "shape":"AutoScalingStatus",
@@ -5473,6 +5483,10 @@
         "configuration":{
           "shape":"FleetConfiguration",
           "documentation":"<p>The configuration setting for the fleet.</p>"
+        },
+        "hostConfiguration":{
+          "shape":"HostConfiguration",
+          "documentation":"<p>The script that runs as a worker is starting up that you can use to provide additional configuration for workers in your fleet.</p>"
         },
         "capabilities":{
           "shape":"FleetCapabilities",
@@ -5618,6 +5632,10 @@
         "taskRunStatusCounts":{
           "shape":"TaskRunStatusCounts",
           "documentation":"<p>The number of tasks running on the job.</p>"
+        },
+        "taskFailureRetryCount":{
+          "shape":"TaskFailureRetryCount",
+          "documentation":"<p>The total number of times tasks from the job failed and were retried.</p>"
         },
         "storageProfileId":{
           "shape":"StorageProfileId",
@@ -6254,7 +6272,7 @@
         },
         "processExitCode":{
           "shape":"ProcessExitCode",
-          "documentation":"<p>The exit code to exit the session.</p>"
+          "documentation":"<p>The process exit code. The default Deadline Cloud worker agent converts unsigned 32-bit exit codes to signed 32-bit exit codes.</p>"
         },
         "progressMessage":{
           "shape":"SessionActionProgressMessage",
@@ -6491,6 +6509,10 @@
         "taskRunStatusCounts":{
           "shape":"TaskRunStatusCounts",
           "documentation":"<p>The number of tasks running on the job.</p>"
+        },
+        "taskFailureRetryCount":{
+          "shape":"TaskFailureRetryCount",
+          "documentation":"<p>The total number of times tasks from the step failed and were retried.</p>"
         },
         "targetTaskRunStatus":{
           "shape":"StepTargetTaskRunStatus",
@@ -6838,6 +6860,33 @@
           "documentation":"<p>The user or system that updated this resource.</p>"
         }
       }
+    },
+    "HostConfiguration":{
+      "type":"structure",
+      "required":["scriptBody"],
+      "members":{
+        "scriptBody":{
+          "shape":"HostConfigurationScript",
+          "documentation":"<p>The text of the script that runs as a worker is starting up that you can use to provide additional configuration for workers in your fleet. The script runs after a worker enters the <code>STARTING</code> state and before the worker processes tasks.</p> <p>For more information about using the script, see <a href=\"https://docs.aws.amazon.com/deadline-cloud/latest/developerguide/smf-admin.html\">Run scripts as an administrator to configure workers</a> in the <i>Deadline Cloud Developer Guide</i>. </p> <important> <p>The script runs as an administrative user (<code>sudo root</code> on Linux, as an Administrator on Windows). </p> </important>"
+        },
+        "scriptTimeoutSeconds":{
+          "shape":"HostConfigurationScriptTimeoutSeconds",
+          "documentation":"<p>The maximum time that the host configuration can run. If the timeout expires, the worker enters the <code>NOT RESPONDING</code> state and shuts down. You are charged for the time that the worker is running the host configuration script.</p> <note> <p>You should configure your fleet for a maximum of one worker while testing your host configuration script to avoid starting additional workers.</p> </note> <p>The default is 300 seconds (5 minutes).</p>"
+        }
+      },
+      "documentation":"<p>Provides a script that runs as a worker is starting up that you can use to provide additional configuration for workers in your fleet. </p> <p>To remove a script from a fleet, use the <a href=\"https://docs.aws.amazon.com/deadline-cloud/latest/APIReference/API_UpdateFleet.html\">UpdateFleet</a> operation with the <code>hostConfiguration</code> <code>scriptBody</code> parameter set to an empty string (\"\").</p>"
+    },
+    "HostConfigurationScript":{
+      "type":"string",
+      "max":15000,
+      "min":0,
+      "sensitive":true
+    },
+    "HostConfigurationScriptTimeoutSeconds":{
+      "type":"integer",
+      "box":true,
+      "max":3600,
+      "min":300
     },
     "HostName":{
       "type":"string",
@@ -7296,9 +7345,14 @@
     },
     "JobParameters":{
       "type":"map",
-      "key":{"shape":"String"},
+      "key":{"shape":"JobParametersKeyString"},
       "value":{"shape":"JobParameter"},
       "sensitive":true
+    },
+    "JobParametersKeyString":{
+      "type":"string",
+      "max":1024,
+      "min":1
     },
     "JobPriority":{
       "type":"integer",
@@ -7363,6 +7417,10 @@
         "taskRunStatusCounts":{
           "shape":"TaskRunStatusCounts",
           "documentation":"<p>The number of tasks running on the job.</p>"
+        },
+        "taskFailureRetryCount":{
+          "shape":"TaskFailureRetryCount",
+          "documentation":"<p>The total number of times tasks from the job failed and were retried.</p>"
         },
         "priority":{
           "shape":"JobPriority",
@@ -7479,6 +7537,10 @@
           "shape":"TaskRunStatusCounts",
           "documentation":"<p>The number of tasks running on the job.</p>"
         },
+        "taskFailureRetryCount":{
+          "shape":"TaskFailureRetryCount",
+          "documentation":"<p>The total number of times tasks from the job failed and were retried.</p>"
+        },
         "maxFailedTasksCount":{
           "shape":"MaxFailedTasksCount",
           "documentation":"<p>The number of task failures before the job stops running and is marked as <code>FAILED</code>.</p>"
@@ -7511,7 +7573,7 @@
     },
     "JobTemplate":{
       "type":"string",
-      "max":300000,
+      "max":1000000,
       "min":1,
       "sensitive":true
     },
@@ -9929,7 +9991,7 @@
           "documentation":"<p>The operators to include in the search.</p>"
         }
       },
-      "documentation":"<p>The filter expression, <code>AND</code> or <code>OR</code>, to use when searching among a group of search strings in a resource. <p>You can use two groupings per search each within parenthesis <code>()</code>.</p></p>"
+      "documentation":"<p>The filter expression, <code>AND</code> or <code>OR</code>, to use when searching among a group of search strings in a resource. You can use two groupings per search each within parenthesis <code>()</code>.</p>"
     },
     "SearchJobsRequest":{
       "type":"structure",
@@ -9951,7 +10013,7 @@
         },
         "filterExpressions":{
           "shape":"SearchGroupedFilterExpressions",
-          "documentation":"<p>The filter expression, <code>AND</code> or <code>OR</code>, to use when searching among a group of search strings in a resource. <p>You can use two groupings per search each within parenthesis <code>()</code>.</p></p>"
+          "documentation":"<p>The filter expression, <code>AND</code> or <code>OR</code>, to use when searching among a group of search strings in a resource. You can use two groupings per search each within parenthesis <code>()</code>.</p>"
         },
         "sortExpressions":{
           "shape":"SearchSortExpressions",
@@ -10055,7 +10117,7 @@
         },
         "filterExpressions":{
           "shape":"SearchGroupedFilterExpressions",
-          "documentation":"<p>The filter expression, <code>AND</code> or <code>OR</code>, to use when searching among a group of search strings in a resource. <p>You can use two groupings per search each within parenthesis <code>()</code>.</p></p>"
+          "documentation":"<p>The filter expression, <code>AND</code> or <code>OR</code>, to use when searching among a group of search strings in a resource. You can use two groupings per search each within parenthesis <code>()</code>.</p>"
         },
         "sortExpressions":{
           "shape":"SearchSortExpressions",
@@ -10134,7 +10196,7 @@
         },
         "filterExpressions":{
           "shape":"SearchGroupedFilterExpressions",
-          "documentation":"<p>The filter expression, <code>AND</code> or <code>OR</code>, to use when searching among a group of search strings in a resource. <p>You can use two groupings per search each within parenthesis <code>()</code>.</p></p>"
+          "documentation":"<p>The filter expression, <code>AND</code> or <code>OR</code>, to use when searching among a group of search strings in a resource. You can use two groupings per search each within parenthesis <code>()</code>.</p>"
         },
         "sortExpressions":{
           "shape":"SearchSortExpressions",
@@ -10201,9 +10263,20 @@
         "searchTerm":{
           "shape":"SearchTerm",
           "documentation":"<p>The term to search for.</p>"
+        },
+        "matchType":{
+          "shape":"SearchTermMatchingType",
+          "documentation":"<p>Specifies how Deadline Cloud matches your search term in the results. If you don't specify a <code>matchType</code> the default is <code>FUZZY_MATCH</code>.</p> <ul> <li> <p> <code>FUZZY_MATCH</code> - Matches if a portion of the search term is found in the result.</p> </li> <li> <p> <code>CONTAINS</code> - Matches if the exact search term is contained in the result.</p> </li> </ul>"
         }
       },
       "documentation":"<p>Searches for a particular search term.</p>"
+    },
+    "SearchTermMatchingType":{
+      "type":"string",
+      "enum":[
+        "FUZZY_MATCH",
+        "CONTAINS"
+      ]
     },
     "SearchWorkersRequest":{
       "type":"structure",
@@ -10225,7 +10298,7 @@
         },
         "filterExpressions":{
           "shape":"SearchGroupedFilterExpressions",
-          "documentation":"<p>The filter expression, <code>AND</code> or <code>OR</code>, to use when searching among a group of search strings in a resource. <p>You can use two groupings per search each within parenthesis <code>()</code>.</p></p>"
+          "documentation":"<p>The filter expression, <code>AND</code> or <code>OR</code>, to use when searching among a group of search strings in a resource. You can use two groupings per search each within parenthesis <code>()</code>.</p>"
         },
         "sortExpressions":{
           "shape":"SearchSortExpressions",
@@ -10302,6 +10375,10 @@
         "instanceMarketOptions":{
           "shape":"ServiceManagedEc2InstanceMarketOptions",
           "documentation":"<p>The Amazon EC2 market type.</p>"
+        },
+        "storageProfileId":{
+          "shape":"StorageProfileId",
+          "documentation":"<p>The storage profile ID.</p>"
         }
       },
       "documentation":"<p>The configuration details for a service managed Amazon EC2 fleet.</p>"
@@ -10423,7 +10500,8 @@
       "type":"string",
       "enum":[
         "SERVICE_QUOTA_EXCEEDED_EXCEPTION",
-        "KMS_KEY_LIMIT_EXCEEDED"
+        "KMS_KEY_LIMIT_EXCEEDED",
+        "DEPENDENCY_LIMIT_EXCEEDED"
       ]
     },
     "SessionActionDefinition":{
@@ -11128,6 +11206,10 @@
           "shape":"TaskRunStatusCounts",
           "documentation":"<p>The number of tasks running on the job.</p>"
         },
+        "taskFailureRetryCount":{
+          "shape":"TaskFailureRetryCount",
+          "documentation":"<p>The total number of times tasks from the step failed and were retried.</p>"
+        },
         "createdAt":{
           "shape":"CreatedAt",
           "documentation":"<p>The date and time the resource was created.</p>"
@@ -11186,6 +11268,10 @@
         "taskRunStatusCounts":{
           "shape":"TaskRunStatusCounts",
           "documentation":"<p>The number of tasks running on the job.</p>"
+        },
+        "taskFailureRetryCount":{
+          "shape":"TaskFailureRetryCount",
+          "documentation":"<p>The total number of times tasks from the step failed and were retried.</p>"
         },
         "targetTaskRunStatus":{
           "shape":"StepTargetTaskRunStatus",
@@ -11339,6 +11425,13 @@
       "type":"timestamp",
       "timestampFormat":"iso8601"
     },
+    "TagPropagationMode":{
+      "type":"string",
+      "enum":[
+        "NO_PROPAGATION",
+        "PROPAGATE_TAGS_TO_WORKERS_AT_LAUNCH"
+      ]
+    },
     "TagResourceRequest":{
       "type":"structure",
       "required":["resourceArn"],
@@ -11364,6 +11457,12 @@
       "type":"map",
       "key":{"shape":"String"},
       "value":{"shape":"String"}
+    },
+    "TaskFailureRetryCount":{
+      "type":"integer",
+      "box":true,
+      "max":2147483647,
+      "min":0
     },
     "TaskId":{
       "type":"string",
@@ -11408,7 +11507,6 @@
     "TaskRunSessionActionDefinition":{
       "type":"structure",
       "required":[
-        "taskId",
         "stepId",
         "parameters"
       ],
@@ -11430,10 +11528,7 @@
     },
     "TaskRunSessionActionDefinitionSummary":{
       "type":"structure",
-      "required":[
-        "taskId",
-        "stepId"
-      ],
+      "required":["stepId"],
       "members":{
         "taskId":{
           "shape":"TaskId",
@@ -11803,11 +11898,15 @@
         },
         "maxWorkerCount":{
           "shape":"MinZeroMaxInteger",
-          "documentation":"<p>The maximum number of workers in the fleet.</p>"
+          "documentation":"<p>The maximum number of workers in the fleet.</p> <p>Deadline Cloud limits the number of workers to less than or equal to the fleet's maximum worker count. The service maintains eventual consistency for the worker count. If you make multiple rapid calls to <code>CreateWorker</code> before the field updates, you might exceed your fleet's maximum worker count. For example, if your <code>maxWorkerCount</code> is 10 and you currently have 9 workers, making two quick <code>CreateWorker</code> calls might successfully create 2 workers instead of 1, resulting in 11 total workers.</p>"
         },
         "configuration":{
           "shape":"FleetConfiguration",
           "documentation":"<p>The fleet configuration to update.</p>"
+        },
+        "hostConfiguration":{
+          "shape":"HostConfiguration",
+          "documentation":"<p>Provides a script that runs as a worker is starting up that you can use to provide additional configuration for workers in your fleet.</p>"
         }
       }
     },
@@ -12426,6 +12525,10 @@
         "log":{
           "shape":"LogConfiguration",
           "documentation":"<p>The worker log to update.</p>"
+        },
+        "hostConfiguration":{
+          "shape":"HostConfiguration",
+          "documentation":"<p>The script that runs as a worker is starting up that you can use to provide additional configuration for workers in your fleet.</p>"
         }
       }
     },
@@ -12506,7 +12609,7 @@
         },
         "processExitCode":{
           "shape":"ProcessExitCode",
-          "documentation":"<p>The process exit code.</p>"
+          "documentation":"<p>The process exit code. The default Deadline Cloud worker agent converts unsigned 32-bit exit codes to signed 32-bit exit codes.</p>"
         },
         "progressMessage":{
           "shape":"SessionActionProgressMessage",

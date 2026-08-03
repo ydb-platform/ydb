@@ -1629,7 +1629,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 INSERT INTO `/Root/foo` (id, str, u_str) VALUES
                     (1, "foobar", "foobar"),
                     (2, "baz", "baz"),
-                    (3, "fooqux", "fooqux")
+                    (3, "fooqux", "fooqux"),
+                    (4, NULL, NULL)
             )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues());
         }

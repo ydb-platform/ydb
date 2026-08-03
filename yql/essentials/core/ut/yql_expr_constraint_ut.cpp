@@ -3814,6 +3814,38 @@ Y_UNIT_TEST(HoppingWindowAfterSqlProject) {
     CheckConstraint<TStreamingConstraintNode>(exprRoot, "MultiHoppingCore", "Streaming(group0)");
 }
 
+Y_UNIT_TEST(HoppingWindowAllowsMatchingDirectCastExtractor) {
+    const TStringBuf s = R"((
+        (let data (AsList
+            (AsStruct '('ts (String '2024-01-01T00:00:01Z)) '('value (String 'x)))
+            (AsStruct '('ts (String '2024-01-01T00:00:02Z)) '('value (String 'y)))
+        ))
+        (let streaming (AssumeConstraints data '"{\"Streaming\" = #}"))
+        (let timeSelector (lambda '(row) (SafeCast (Member row 'ts) (OptionalType (DataType 'Timestamp)))))
+        (let watermarked (WatermarkGenerator streaming timeSelector '()))
+
+        (let interval (Interval '1000000))
+        (let map (lambda '(item) (AsStruct)))
+        (let reduce (lambda '(lhs rhs) (AsStruct)))
+        (let keySelector (lambda '(row) (Uint32 '0)))
+        (let hopping (MultiHoppingCore (Iterator watermarked) keySelector timeSelector interval interval interval 'true map reduce map map reduce
+            (lambda '(key state time) (AsStruct
+                '('group0 time)
+                '('value (String 'out))
+            ))
+            '"0" 'group0
+        ))
+
+        (let res (DataSink 'result))
+        (let world (Write! world res (Key) (ForwardList hopping) '()))
+        (return (Commit! world res))
+    ))";
+
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "MultiHoppingCore", "Streaming(group0)");
+}
+
 Y_UNIT_TEST(SqlProjectStreamingLineage) {
     {
         const TStringBuf s = R"((

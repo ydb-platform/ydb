@@ -204,12 +204,17 @@ IGraphTransformer::TStatus StreamingHoppingWrap(
         const auto directPath = TryExtractDirectEventTimePath(
             TExprBase(&timeExtractor->Tail()),
             TExprBase(&timeExtractor->Head().Head()));
-        if (directPath && *directPath != *streaming->GetEventTime()) {
-            ctx.AddError(TIssue(pos, TStringBuilder()
-                << "HoppingWindow time extractor does not match assigned event time (expected: "
-                << JoinSeq('.', *streaming->GetEventTime())
-                << ", got: " << JoinSeq('.', *directPath) << ")"));
-            return IGraphTransformer::TStatus::Error;
+        if (directPath) {
+            if (*directPath != *streaming->GetEventTime()) {
+                ctx.AddError(TIssue(pos, TStringBuilder()
+                    << "HoppingWindow time extractor does not match assigned event time (expected: "
+                    << JoinSeq('.', *streaming->GetEventTime())
+                    << ", got: " << JoinSeq('.', *directPath) << ")"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            input->AddConstraint(ctx.MakeConstraint<TStreamingConstraintNode>(TPartOfConstraintBase::TPathType{hoppingColumn}));
+            return IGraphTransformer::TStatus::Ok;
         }
 
         ctx.AddError(TIssue(pos, "HoppingWindow time expression must reference the assigned event-time path directly or through a simple timestamp cast"));

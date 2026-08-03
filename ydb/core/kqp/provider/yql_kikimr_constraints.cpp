@@ -159,11 +159,6 @@ private:
                 node->AddConstraint(renamed->GetSimplifiedForType(*node->GetTypeAnn(), ctx));
             }
         }
-        if (const auto* partOfStreaming = sourceInput.Ref().GetConstraint<TPartOfStreamingConstraintNode>()) {
-            if (const auto* renamed = partOfStreaming->RenameFields(ctx, rename)) {
-                node->AddConstraint(renamed);
-            }
-        }
         return TStatus::Ok;
     }
 

@@ -254,7 +254,9 @@ void TWasmArtifactLoadActor::RegisterLoadedModule() {
         }
         // Unique path so multiple WASM modules can be registered in one registry.
         // Replace any leftover module with the same YQL name (e.g. after delete+reupload).
-        FunctionRegistry_->RemoveModule(ParsedManifest_.ModuleName);
+        if (auto* dynamicRegistry = NKqp::AsDynamicFunctionRegistry(FunctionRegistry_.Get())) {
+            dynamicRegistry->RemoveModule(ParsedManifest_.ModuleName);
+        }
         FunctionRegistry_->AddModule(
             TStringBuilder() << "wasm:" << Md5_,
             ParsedManifest_.ModuleName,

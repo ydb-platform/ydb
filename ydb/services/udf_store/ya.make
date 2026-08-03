@@ -16,6 +16,7 @@ SRCS(
 PEERDIR(
     ydb/library/actors/core
     ydb/core/base
+    ydb/core/kqp/common
     ydb/core/keyvalue
     ydb/core/tx/scheme_cache
     ydb/library/aclib

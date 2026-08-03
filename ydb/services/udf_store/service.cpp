@@ -7,6 +7,7 @@
 
 #include <ydb/services/metadata/service.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/kqp/common/dynamic_function_registry.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <util/folder/path.h>
@@ -448,8 +449,8 @@ void TUdfStoreService::Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TP
 
 void TUdfStoreService::UnloadWasmUdf(const TString& md5) {
     if (auto it = LoadedWasmModuleNames.find(md5); it != LoadedWasmModuleNames.end()) {
-        if (FunctionRegistry) {
-            FunctionRegistry->RemoveModule(it->second);
+        if (auto* dynamicRegistry = NKqp::AsDynamicFunctionRegistry(FunctionRegistry.Get())) {
+            dynamicRegistry->RemoveModule(it->second);
         }
         LoadedWasmModuleNames.erase(it);
     }

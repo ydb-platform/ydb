@@ -5,10 +5,10 @@
 #include "wasm/manifest.h"
 #include "wasm/registry_helpers.h"
 
+#include <ydb/core/kqp/common/dynamic_function_registry.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/services/metadata/request/common.h>
-#include <yql/essentials/minikql/mkql_function_registry.h>
 
 namespace NKikimr::NUdfStore {
 

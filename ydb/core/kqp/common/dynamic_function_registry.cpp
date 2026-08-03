@@ -1,21 +1,19 @@
-#include "mkql_function_registry.h"
-#include "mkql_utils.h"
-#include "mkql_type_builder.h"
+#include "dynamic_function_registry.h"
+
+#include <yql/essentials/minikql/mkql_type_builder.h>
+#include <yql/essentials/minikql/mkql_utils.h>
 #include <yql/essentials/public/udf/udf_static_registry.h>
 
-#include <util/folder/iterator.h>
-#include <util/folder/dirut.h>
 #include <util/folder/path.h>
-#include <util/system/dynlib.h>
 #include <util/stream/str.h>
 #include <util/string/builder.h>
-#include <util/string/split.h>
+#include <util/system/dynlib.h>
 
 #include <utility>
 
+namespace NKikimr::NKqp {
 namespace {
 
-using namespace NKikimr;
 using namespace NMiniKQL;
 
 const char MODULE_NAME_DELIMITER = '.';
@@ -26,10 +24,7 @@ const char* BindSymbolsFuncName = "BindSymbols";
 #endif
 const char* SetBackTraceCallbackName = "SetBackTraceCallback";
 
-//////////////////////////////////////////////////////////////////////////////
-// TMutableFunctionRegistry
-//////////////////////////////////////////////////////////////////////////////
-class TMutableFunctionRegistry: public IMutableFunctionRegistry {
+class TDynamicFunctionRegistry: public IDynamicFunctionRegistry {
     struct TUdfModule {
         TString LibraryPath;
         std::shared_ptr<NUdf::IUdfModule> Impl;
@@ -40,9 +35,6 @@ class TMutableFunctionRegistry: public IMutableFunctionRegistry {
     struct TUdfLibrary: public TThrRefBase {
         ui32 AbiVersion = 0;
         TDynamicLibrary Lib;
-        TUdfLibrary()
-        {
-        }
     };
     using TUdfLibraryPtr = TIntrusivePtr<TUdfLibrary>;
 
@@ -66,7 +58,8 @@ class TMutableFunctionRegistry: public IMutableFunctionRegistry {
 
         void AddModule(
             const NUdf::TStringRef& name,
-            NUdf::TUniquePtr<NUdf::IUdfModule> module) override {
+            NUdf::TUniquePtr<NUdf::IUdfModule> module) override
+        {
             Y_DEBUG_ABORT_UNLESS(module, "Module is empty");
 
             if (!HasError()) {
@@ -111,21 +104,20 @@ class TMutableFunctionRegistry: public IMutableFunctionRegistry {
     };
 
 public:
-    explicit TMutableFunctionRegistry(IBuiltinFunctionRegistry::TPtr builtins)
+    explicit TDynamicFunctionRegistry(IBuiltinFunctionRegistry::TPtr builtins)
         : Builtins_(std::move(builtins))
     {
     }
 
-    TMutableFunctionRegistry(const TMutableFunctionRegistry& rhs)
-        : IMutableFunctionRegistry(rhs)
+    TDynamicFunctionRegistry(const TDynamicFunctionRegistry& rhs)
+        : IDynamicFunctionRegistry()
         , Builtins_(rhs.Builtins_)
         , LoadedLibraries_(rhs.LoadedLibraries_)
         , UdfModules_(rhs.UdfModules_)
+        , SystemModulePaths_(rhs.SystemModulePaths_)
+        , BackTraceCallback_(rhs.BackTraceCallback_)
         , SupportsSizedAllocators_(rhs.SupportsSizedAllocators_)
     {
-    }
-
-    ~TMutableFunctionRegistry() override {
     }
 
     void AllowUdfPatch() override {
@@ -136,7 +128,8 @@ public:
         const TUdfModuleRemappings& remmapings,
         ui32 flags = 0,
         const TString& customUdfPrefix = {},
-        THashSet<TString>* modules = nullptr) override {
+        THashSet<TString>* modules = nullptr) override
+    {
         TUdfLibraryPtr lib;
 
         auto libIt = LoadedLibraries_.find(libraryPath);
@@ -156,7 +149,6 @@ public:
             lib->Lib.Open(absPath.data(), loadFlags);
             lib->Lib.SetUnloadable(false);
 
-            // (1) check ABI version
             auto abiVersionFunc = reinterpret_cast<NUdf::TAbiVersionFunctionPtr>(
                 lib->Lib.SymOptional(AbiVersionFuncName));
             if (!abiVersionFunc) {
@@ -193,11 +185,9 @@ public:
             lib = libIt->second;
         }
 
-        // (2) ensure that Register() func is present
         auto registerFunc = reinterpret_cast<NUdf::TRegisterFunctionPtr>(
             lib->Lib.Sym(RegisterFuncName));
 
-        // (3) do load
         THashSet<TString> newModules;
         TUdfModuleLoader loader(
             UdfModules_,
@@ -216,7 +206,8 @@ public:
     void AddModule(
         const TStringBuf& libraryPath,
         const TStringBuf& moduleName,
-        NUdf::TUniquePtr<NUdf::IUdfModule> module) override {
+        NUdf::TUniquePtr<NUdf::IUdfModule> module) override
+    {
         TString libraryPathStr(libraryPath);
         auto inserted = LoadedLibraries_.insert({libraryPathStr, nullptr});
         if (!inserted.second) {
@@ -230,6 +221,26 @@ public:
         loader.AddModule(moduleName, std::move(module));
 
         Y_ENSURE(!loader.HasError(), loader.GetError());
+    }
+
+    void RemoveModule(const TStringBuf& moduleName) override {
+        auto it = UdfModules_.find(TString(moduleName));
+        if (it == UdfModules_.end()) {
+            return;
+        }
+        const TString libraryPath = it->second.LibraryPath;
+        UdfModules_.erase(it);
+        bool pathStillUsed = false;
+        for (const auto& [name, module] : UdfModules_) {
+            Y_UNUSED(name);
+            if (module.LibraryPath == libraryPath) {
+                pathStillUsed = true;
+                break;
+            }
+        }
+        if (!pathStillUsed) {
+            LoadedLibraries_.erase(libraryPath);
+        }
     }
 
     void SetSystemModulePaths(const TUdfModulePathsMap& paths) override {
@@ -253,7 +264,8 @@ public:
         const NUdf::TSourcePosition& pos,
         const NUdf::ISecureParamsProvider* secureParamsProvider,
         const NUdf::ILogProvider* logProvider,
-        TFunctionTypeInfo* funcInfo) const override {
+        TFunctionTypeInfo* funcInfo) const override
+    {
         TStringBuf moduleName;
         TStringBuf funcName;
         if (name.TrySplit(MODULE_NAME_DELIMITER, moduleName, funcName)) {
@@ -383,7 +395,7 @@ public:
     }
 
     TIntrusivePtr<IMutableFunctionRegistry> Clone() const override {
-        return new TMutableFunctionRegistry(*this);
+        return new TDynamicFunctionRegistry(*this);
     }
 
     void SetBackTraceCallback(NUdf::TBackTraceCallback callback) override {
@@ -395,175 +407,33 @@ private:
 
     THashMap<TString, TUdfLibraryPtr> LoadedLibraries_;
     TUdfModulesMap UdfModules_;
-    THolder<TMemoryUsageInfo> UdfMemoryInfo_;
     TUdfModulePathsMap SystemModulePaths_;
     NUdf::TBackTraceCallback BackTraceCallback_ = nullptr;
     bool SupportsSizedAllocators_ = true;
 };
 
-//////////////////////////////////////////////////////////////////////////////
-// TBuiltinsWrapper
-//////////////////////////////////////////////////////////////////////////////
-class TBuiltinsWrapper: public IFunctionRegistry {
-public:
-    explicit TBuiltinsWrapper(IBuiltinFunctionRegistry::TPtr&& builtins)
-        : Builtins_(std::move(builtins))
-    {
-    }
-
-    const IBuiltinFunctionRegistry::TPtr& GetBuiltins() const override {
-        return Builtins_;
-    }
-
-    void AllowUdfPatch() override {
-    }
-
-    TStatus FindFunctionTypeInfo(
-        NYql::TLangVersion langver,
-        const NYql::TRuntimeSettings& runtimeSettings,
-        const TTypeEnvironment& env,
-        NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
-        NUdf::ICountersProvider* countersProvider,
-        const TStringBuf& name,
-        TType* userType,
-        const TStringBuf& typeConfig,
-        ui32 flags,
-        const NUdf::TSourcePosition& pos,
-        const NUdf::ISecureParamsProvider* secureParamsProvider,
-        const NUdf::ILogProvider* logProvider,
-        TFunctionTypeInfo* funcInfo) const override {
-        Y_UNUSED(langver);
-        Y_UNUSED(runtimeSettings);
-        Y_UNUSED(env);
-        Y_UNUSED(typeInfoHelper);
-        Y_UNUSED(countersProvider);
-        Y_UNUSED(name);
-        Y_UNUSED(userType);
-        Y_UNUSED(typeConfig);
-        Y_UNUSED(flags);
-        Y_UNUSED(pos);
-        Y_UNUSED(secureParamsProvider);
-        Y_UNUSED(logProvider);
-        Y_UNUSED(funcInfo);
-        return TStatus::Error(TStringBuf("Unsupported access to builtins registry"));
-    }
-
-    TMaybe<TString> FindUdfPath(
-        const TStringBuf& /* moduleName */) const override {
-        return {};
-    }
-
-    bool IsLoadedUdfModule(const TStringBuf& /* moduleName */) const override {
-        return false;
-    }
-
-    THashSet<TString> GetAllModuleNames() const override {
-        return {};
-    }
-
-    TFunctionsMap GetModuleFunctions(const TStringBuf&) const override {
-        return TFunctionsMap();
-    }
-
-    bool SupportsSizedAllocators() const override {
-        return true;
-    }
-
-    void PrintInfoTo(IOutputStream& out) const override {
-        Builtins_->PrintInfoTo(out);
-    }
-
-    void CleanupModulesOnTerminate() const override {
-    }
-
-    TIntrusivePtr<IMutableFunctionRegistry> Clone() const override {
-        return new TMutableFunctionRegistry(Builtins_);
-    }
-
-private:
-    const IBuiltinFunctionRegistry::TPtr Builtins_;
-};
-
 } // namespace
 
-namespace NKikimr::NMiniKQL {
-
-void FindUdfsInDir(const TString& dirPath, TVector<TString>* paths)
+TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> CreateDynamicFunctionRegistry(
+    NMiniKQL::IBuiltinFunctionRegistry::TPtr&& builtins)
 {
-    static const TStringBuf LibPrefix = TStringBuf(MKQL_UDF_LIB_PREFIX);
-    static const TStringBuf LibSuffix = TStringBuf(MKQL_UDF_LIB_SUFFIX);
-
-    if (!dirPath.empty()) {
-        std::vector<TString> dirs;
-        StringSplitter(dirPath).Split(';').AddTo(&dirs);
-
-        for (auto d : dirs) {
-            TDirIterator dir(d, TDirIterator::TOptions(FTS_LOGICAL).SetMaxLevel(10));
-
-            for (const auto& file : dir) {
-                // skip entries with empty name, and all non-files
-                // all valid symlinks are already dereferenced, provided by FTS_LOGICAL
-                if (file.fts_pathlen == file.fts_namelen || file.fts_info != FTS_F) {
-                    continue;
-                }
-
-                TString path(file.fts_path);
-                TString fileName = GetBaseName(path);
-
-                // skip non shared libraries
-                if (!fileName.StartsWith(LibPrefix) ||
-                    !fileName.EndsWith(LibSuffix))
-                {
-                    continue;
-                }
-
-                // skip test udfs when scanning dir
-                auto udfName = TStringBuf(fileName).Skip(LibPrefix.length());
-                if (udfName.StartsWith(TStringBuf("test_"))) {
-                    continue;
-                }
-
-                paths->push_back(std::move(path));
-            }
-        }
-    }
+    return new TDynamicFunctionRegistry(std::move(builtins));
 }
 
-bool SplitModuleAndFuncName(const TStringBuf& name, TStringBuf& module, TStringBuf& func)
-{
-    return name.TrySplit(MODULE_NAME_DELIMITER, module, func);
-}
-
-TString FullName(const TStringBuf& module, const TStringBuf& func)
-{
-    TString fullName;
-    fullName.reserve(module.size() + func.size() + 1);
-    fullName.append(module);
-    fullName.append(MODULE_NAME_DELIMITER);
-    fullName.append(func);
-    return fullName;
-}
-
-TIntrusivePtr<IFunctionRegistry> CreateFunctionRegistry(IBuiltinFunctionRegistry::TPtr&& builtins)
-{
-    return new TBuiltinsWrapper(std::move(builtins));
-}
-
-TIntrusivePtr<IFunctionRegistry> CreateFunctionRegistry(
+TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> CreateDynamicFunctionRegistry(
     NKikimr::NUdf::TBackTraceCallback backtraceCallback,
-    IBuiltinFunctionRegistry::TPtr&& builtins,
+    NMiniKQL::IBuiltinFunctionRegistry::TPtr&& builtins,
     bool allowUdfPatch,
     const TVector<TString>& udfsPaths,
-    ui32 flags /* = 0 */)
+    ui32 flags)
 {
-    auto registry = MakeHolder<TMutableFunctionRegistry>(std::move(builtins));
+    auto registry = MakeHolder<TDynamicFunctionRegistry>(std::move(builtins));
     if (allowUdfPatch) {
         registry->AllowUdfPatch();
     }
     registry->SetBackTraceCallback(backtraceCallback);
 
-    // system UDFs loaded with default names
-    TUdfModuleRemappings remappings;
+    NMiniKQL::TUdfModuleRemappings remappings;
     THashSet<TString> usedUdfPaths;
     for (const TString& udfPath : udfsPaths) {
         if (usedUdfPaths.insert(udfPath).second) {
@@ -574,11 +444,4 @@ TIntrusivePtr<IFunctionRegistry> CreateFunctionRegistry(
     return registry.Release();
 }
 
-void FillStaticModules(IMutableFunctionRegistry& registry) {
-    for (const auto& wrapper : NUdf::GetStaticUdfModuleWrapperList()) {
-        auto [name, ptr] = wrapper();
-        registry.AddModule(TString(StaticModulePrefix) + name, name, std::move(ptr));
-    }
-}
-
-} // namespace NKikimr::NMiniKQL
+} // namespace NKikimr::NKqp

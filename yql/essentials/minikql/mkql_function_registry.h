@@ -115,10 +115,6 @@ public:
         const TStringBuf& moduleName,
         NUdf::TUniquePtr<NUdf::IUdfModule> module) = 0;
 
-    //! Removes a previously registered module by YQL module name. No-op if missing.
-    //! Also drops the libraryPath entry when no modules from that path remain.
-    virtual void RemoveModule(const TStringBuf& moduleName) = 0;
-
     virtual void SetSystemModulePaths(const TUdfModulePathsMap& paths) = 0;
 };
 

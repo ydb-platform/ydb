@@ -552,13 +552,14 @@ void TLockInfo::SetFrozen(ILocksDb* db) {
     }
 }
 
-void TLockInfo::SetWriteIndex(ui64 writerIndex, ui64 writeIndex, ILocksDb* db) {
-    Y_ENSURE(IsPersistent(), "Cannot set a write index on a non-persistent lock");
+bool TLockInfo::SetWriteIndex(ui64 writerIndex, ui64 writeIndex, ILocksDb* db) {
     WriterIndex = writerIndex;
     WriteIndex = writeIndex;
-    if (db) {
+    if (db && IsPersistent()) {
         db->PersistLockWriteIndex(LockId, writerIndex, writeIndex);
+        return true;
     }
+    return false;
 }
 
 void TLockInfo::AddWaitPersistentCallback(ILocksDb* db) {
@@ -1319,10 +1320,14 @@ std::pair<TVector<TSysLocks::TLock>, TVector<ui64>> TSysLocks::ApplyLocks() {
                 waitPersistent = true;
             }
 
-            if (Update->SetWriteIndex && lock->IsWriteLock()) {
-                // Persisted with the data, so a restart restores the last committed index.
-                lock->SetWriteIndex(Update->SetWriteIndex->WriterIndex, Update->SetWriteIndex->WriteIndex, Db);
-                waitPersistent = true;
+            if (Update->SetWriteIndex) {
+                // Every uncommitted write advances the chain, even one that applied no rows
+                // (e.g. an update of a missing row), so that the writer's indexes stay dense.
+                // When the lock is persistent the index is stored with the data, so a restart
+                // restores the last committed index.
+                if (lock->SetWriteIndex(Update->SetWriteIndex->WriterIndex, Update->SetWriteIndex->WriteIndex, Db)) {
+                    waitPersistent = true;
+                }
             }
 
             if (waitPersistent) {

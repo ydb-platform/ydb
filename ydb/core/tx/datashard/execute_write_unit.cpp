@@ -9,8 +9,6 @@
 #include <ydb/core/engine/mkql_engine_flat_host.h>
 #include <ydb/library/aclib/user_context.h>
 
-#include <util/generic/algorithm.h>
-
 namespace NKikimr {
 namespace NDataShard {
 
@@ -202,16 +200,12 @@ public:
 
         if (const ui64 requested = writeOp->GetWriteIndex()) {
             const ui64 writerIndex = writeOp->GetWriterIndex();
-            // BreakOwn can break the write's own lock before ApplyLocks stores the new index;
-            // the client aborts on the broken counter regardless, so a stale index is fine.
-            const bool lockBroken = AnyOf(locks, [](const auto& lock) { return lock.IsError(); });
-            Y_ENSURE(lockBroken || AnyOf(writeResult.Record.GetTxLocks(), [&](const auto& lock) {
-                         return AnyOf(lock.GetWriteIndexes(), [&](const auto& writeIndex) {
-                             return writeIndex.GetWriterIndex() == writerIndex
-                                 && writeIndex.GetWriteIndex() == requested;
-                         });
-                     }),
-                     "Pipelined write " << writerIndex << ":" << requested << " did not report its lock");
+            for (const auto& lock : locks) {
+                Y_ENSURE(lock.IsError()
+                             || (lock.WriterIndex == writerIndex && lock.WriteIndex == requested),
+                         "Pipelined write " << writerIndex << ":" << requested
+                         << " reported lock with " << lock.WriterIndex << ":" << lock.WriteIndex);
+            }
         }
     }
 

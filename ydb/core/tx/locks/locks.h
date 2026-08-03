@@ -456,7 +456,7 @@ public:
 
     ui64 GetWriterIndex() const { return WriterIndex; }
     ui64 GetWriteIndex() const { return WriteIndex; }
-    void SetWriteIndex(ui64 writerIndex, ui64 writeIndex, ILocksDb* db);
+    bool SetWriteIndex(ui64 writerIndex, ui64 writeIndex, ILocksDb* db);
 
     static void AddWaitPersistentCallback(ILocksDb* db, TVector<TLockInfo::TPtr>&& locks);
 

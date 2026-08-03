@@ -10,7 +10,7 @@
 | --- | --- | --- | --- | --- |
 | Оценка плана без выполнения запроса | EXPLAIN | `ydb sql --explain` | кнопка **Explain** | [EXPLAIN через CLI и SDK](#explain-cli), [EXPLAIN в UI](#explain-ui) |
 | План с фактическими метриками выполнения | EXPLAIN ANALYZE | `ydb sql --explain-analyze` | кнопка **Run** | [ANALYZE через CLI](#analyze-cli), [ANALYZE в UI](#analyze-ui) |
-| Графический план в формате SVG | SVG | `ydb workload … --plan` | **Open Execution Plan** | [SVG через CLI](#svg-cli), [SVG в UI](#svg-ui) |
+| Графический план в формате SVG | SVG | `ydb sql --explain-analyze --format svg` | **Open Execution Plan** | [SVG через CLI](#svg-cli), [SVG в UI](#svg-ui) |
 
 ## Получение плана выполнения запроса в режиме EXPLAIN через CLI и SDK {#explain-cli}
 
@@ -122,19 +122,15 @@ ydb sql -f file1.sql --explain --format json-unicode
 
 ## Получение графического плана запроса через CLI {#svg-cli}
 
-Фактический план выполнения запроса в формате SVG можно получить посредством утилиты командной строки. Для этого надо использовать команду [workload](../../reference/ydb-cli/commands/workload/index.md) с опцией `--plan`. На диске появятся файлы с базовым именем, заданным в опции, в нескольких форматах; расширение `.svg` соответствует графическому представлению.
-
-Для произвольного SQL-запроса:
+Фактический план выполнения запроса в формате SVG можно получить посредством утилиты командной строки. Для этого надо изменить формат вывода плана, добавив опцию `--format svg`:
 
 ```bash
-ydb workload query run --plan filename -q "SELECT count(*) FROM lineitem"
+ydb sql -f file1.sql --explain-analyze --format svg > plan1.svg
 ```
 
-Для запросов из [TPC-H](../../reference/ydb-cli/workload-tpch.md) бенчмарка:
+Формат SVG сам по себе текстовый, но предназначен для отображения специальными средствами просмотра, поэтому обычно имеет смысл сохранить полученный план в файл, как в показанном примере, а потом открыть его, например, в браузере.
 
-```bash
-ydb workload tpch run --plan filename
-```
+Опция `--format svg` может быть использована и вместе с опцией `--explain` тоже. Так как в этом случае запрос реально не выполняется, то никакой статистики не будет, поэтому в плане будет показана только часть, связанная со структурой запроса.
 
 ## Получение графического плана запроса в UI {#svg-ui}
 

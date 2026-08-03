@@ -88,11 +88,17 @@ public:
                 State_->Configuration->GetDatabaseForTopic(cluster),
                 topic,
                 State_->Configuration->Tokens.at(cluster));
-            handles.push_back(pending.Future.IgnoreResult());
+
+            // Use a completion promise that always resolves with a value (never exceptional),
+            // so WaitAll does not see exceptions and DoApplyAsyncChanges is always invoked.
+            // Per-topic errors are handled in DoApplyAsyncChanges via pending.Future.GetValue().
+            auto completionPromise = NThreading::NewPromise();
+            pending.Future.NoexceptSubscribe([p = completionPromise](const auto&) mutable {
+                p.TrySetValue();
+            });
+            handles.push_back(completionPromise.GetFuture());
         }
 
-        // Use WaitAll to ensure ALL futures complete before DoApplyAsyncChanges,
-        // allowing per-topic error handling (e.g. tolerating write topic failures in YtflowEngine mode).
         AsyncFuture_ = NThreading::WaitAll(handles);
         return TStatus::Async;
     }
@@ -103,7 +109,6 @@ public:
     }
 
     TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
-        YQL_ENSURE(AsyncFuture_.HasValue());
         output = input;
 
         for (auto& [key, pending] : PendingTopics_) {

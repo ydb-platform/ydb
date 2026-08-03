@@ -91,7 +91,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
         auto countMin = ExtractCountMin(runtime, tableInfo.PathId);
 
         UNIT_ASSERT(CheckCountMinSketch(countMin, ColumnTableRowsNumber));
-    }
+    }    
 
     Y_UNIT_TEST(TraverseColumnTableRebootSaTabletBeforeResolve) {
         TTestEnv env = CreateTestEnv();

@@ -24,6 +24,11 @@ class StartFromOffsetsEventHandler(ydb.TopicReaderEvents.EventHandler):
         )
 
 
+class StartFromBeginningEventHandler(ydb.TopicReaderEvents.EventHandler):
+    def on_partition_get_start_offset(self, event):
+        return ydb.TopicReaderEvents.OnPartitionGetStartOffsetResponse(start_offset=0)
+
+
 class YdbTopicWorkload(WorkloadBase):
     def __init__(self, endpoint, database, duration, consumers, producers, tables_prefix, *, limit_memory_usage=False, config=None,
                  chunk_index=None, chunk_size=None):
@@ -195,14 +200,30 @@ class YdbTopicWorkload(WorkloadBase):
         self.cmd_run_with_monitoring(self.get_command_prefix(subcmds=args))
 
     def _run_write_workload(self, topic_name, duration, byte_rate, producers,
-                            keyed_writes=False, producer_keys_count=None) -> None:
+                            keyed_writes=False, producer_keys_count=None,
+                            tx_commit_interval=None, use_tx=True,
+                            codec="raw", batch_flush_message_count=1,
+                            batch_flush_interval="1s", batch_flush_size=None,
+                            batch_inner_codec=None) -> None:
+        if tx_commit_interval is None:
+            tx_commit_interval = self.config.TX_COMMIT_INTERVAL
+
         args = [
             'run', 'write', '-s', str(duration),
             f'--window={self.stats_window}',
             '--byte-rate', byte_rate,
             '-t', str(producers),
             '--topic', topic_name,
+            '--codec', codec,
+            '--batch-flush-message-count', str(batch_flush_message_count),
+            '--batch-flush-interval', batch_flush_interval,
         ]
+        if batch_flush_size:
+            args.extend(['--batch-flush-size', batch_flush_size])
+        if batch_inner_codec:
+            args.extend(['--batch-inner-codec', batch_inner_codec])
+        if use_tx:
+            args.extend(['--use-tx', '--tx-commit-interval', tx_commit_interval])
         if keyed_writes:
             args.append('--keyed-writes')
         if producer_keys_count is not None:
@@ -260,6 +281,56 @@ class YdbTopicWorkload(WorkloadBase):
                 f"got {len(records)}, expected {expected_count}"
             )
         return records
+
+    def _run_read_workload(self, topic_name, duration, consumers, consumer_threads,
+                           consumer_prefix) -> None:
+        args = [
+            'run', 'read', '-s', str(duration),
+            f'--window={self.stats_window}',
+            '--topic', topic_name,
+            '-c', str(consumers),
+            '-t', str(consumer_threads),
+            '--consumer-prefix', consumer_prefix,
+        ]
+        if self.limit_memory_usage:
+            args.extend([
+                f'--max-memory-usage-per-consumer={self.config.MEMORY_LIMIT_PER_CONSUMER}',
+            ])
+        self.cmd_run(self.get_command_prefix(subcmds=args))
+
+    def _get_topic_end_offset(self, topic_name):
+        description = self._get_driver().topic_client.describe_topic(topic_name, include_stats=True)
+        return sum(partition.partition_stats.partition_end for partition in description.partitions)
+
+    def _read_topic_from_beginning(self, topic_name, expected_count, timeout):
+        driver = self._get_driver()
+        description = driver.topic_client.describe_topic(topic_name, include_stats=False)
+        partition_ids = [partition.partition_id for partition in description.partitions]
+        topic_selector = ydb.TopicReaderSelector(
+            path=topic_name,
+            partitions=partition_ids,
+        )
+        read_count = 0
+        deadline = time.time() + timeout
+        with driver.topic_client.reader(
+            topic_selector,
+            consumer=None,
+            event_handler=StartFromBeginningEventHandler(),
+        ) as reader:
+            while read_count < expected_count and time.time() < deadline:
+                try:
+                    batch = reader.receive_batch(max_messages=1000, timeout=1)
+                except TimeoutError:
+                    continue
+                if batch is None:
+                    continue
+                read_count += len(batch.messages)
+
+        if read_count != expected_count:
+            raise AssertionError(
+                f"Did not read all logical messages from {topic_name}: "
+                f"got {read_count}, expected {expected_count}"
+            )
 
     def _is_same_or_descendant_partition(self, ancestor, partition, parents_by_partition):
         pending = [partition]
@@ -454,18 +525,8 @@ class YdbTopicWorkload(WorkloadBase):
             batch_flush_interval="1s",
         ))
 
-    # Run plain and kafka-batch writers at the same time, both transactional and non-transactional,
-    # so one topic contains a live mix of regular messages, physical batches, committed tx writes,
-    # and non-tx writes while independent readers consume the interleaved stream.
-    def __mixed_transactional_and_batched_workload(self):
-        topic_name = "workload_mixed_tx_ntx_raw_kafka_batch"
-        phase_consumers = 4
-        availability_period = (
-            int(self.duration)
-            * self.config.AVAILABILITY_PERIOD_NUMERATOR
-            // self.config.AVAILABILITY_PERIOD_DENOMINATOR
-        )
-        phases = [
+    def _mixed_transactional_and_batched_phases(self):
+        return [
             {
                 "name": "raw-ntx",
                 "codec": "raw",
@@ -491,6 +552,19 @@ class YdbTopicWorkload(WorkloadBase):
                 "batch_flush_message_count": 5,
             },
         ]
+
+    # Run plain and kafka-batch writers at the same time, both transactional and non-transactional,
+    # so one topic contains a live mix of regular messages, physical batches, committed tx writes,
+    # and non-tx writes while independent readers consume the interleaved stream.
+    def __mixed_transactional_and_batched_workload(self):
+        topic_name = "workload_mixed_tx_ntx_raw_kafka_batch"
+        phase_consumers = 4
+        availability_period = (
+            int(self.duration)
+            * self.config.AVAILABILITY_PERIOD_NUMERATOR
+            // self.config.AVAILABILITY_PERIOD_DENOMINATOR
+        )
+        phases = self._mixed_transactional_and_batched_phases()
 
         self._create_test_topic(
             topic_name,
@@ -530,6 +604,52 @@ class YdbTopicWorkload(WorkloadBase):
                 ]
                 for future in futures:
                     future.result()
+        finally:
+            self._cleanup_test_topic(topic_name)
+
+    # Write the same mixed raw/kafka-batch and tx/non-tx stream first, then drain it with
+    # a fresh consumer and verify that every logical message written to the topic is read.
+    def __mixed_transactional_and_batched_validated_workload(self):
+        topic_name = "workload_mixed_tx_ntx_raw_kafka_batch_validated"
+        phases = self._mixed_transactional_and_batched_phases()
+        read_duration = max(30, int(self.duration))
+        retention_seconds = int(self.duration) + read_duration + 120
+
+        self._create_test_topic(
+            topic_name,
+            partitions=10,
+            partitions_per_tablet=5
+        )
+        try:
+            self._configure_topic_retention(topic_name, f"{retention_seconds}s")
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=len(phases)) as executor:
+                futures = [
+                    executor.submit(
+                        self._run_write_workload,
+                        topic_name,
+                        self.duration,
+                        "500K",
+                        5,
+                        use_tx=phase["use_tx"],
+                        codec=phase["codec"],
+                        batch_flush_message_count=phase["batch_flush_message_count"],
+                        batch_flush_interval="1s",
+                    )
+                    for phase in phases
+                ]
+                for future in futures:
+                    future.result()
+
+            expected_count = self._get_topic_end_offset(topic_name)
+            if expected_count == 0:
+                raise AssertionError(f"No messages were written to {topic_name}")
+
+            self._read_topic_from_beginning(
+                topic_name,
+                expected_count,
+                timeout=read_duration + 30,
+            )
         finally:
             self._cleanup_test_topic(topic_name)
 
@@ -646,6 +766,7 @@ class YdbTopicWorkload(WorkloadBase):
             self.__batched_non_transactional_workload,
             self.__batched_transactional_workload,
             self.__mixed_transactional_and_batched_workload,
+            self.__mixed_transactional_and_batched_validated_workload,
         ]
         if (self.chunk_index is None) or (self.chunk_size is None):
             return tests

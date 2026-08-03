@@ -505,6 +505,7 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
             readResult->SetEndOffset(endOffset);
             return TReadAnswer{
                 .Size = answerSize,
+                .ConsumedMessages = cnt,
                 .Event = std::move(answer),
                 .IsInternal = IsInternal,
                 .ReplyTo = ReplyTo,
@@ -625,6 +626,7 @@ TReadAnswer TReadInfo::FormAnswer(
         Error = true;
         return TReadAnswer{
             .Size = blobResponse.Error.ErrorStr.size(),
+            .ConsumedMessages = 0,
             .Event = MakeHolder<TEvPQ::TEvError>(blobResponse.Error.ErrorCode, blobResponse.Error.ErrorStr, destination),
             .IsInternal = IsInternal,
             .ReplyTo = ReplyTo
@@ -778,6 +780,7 @@ TReadAnswer TReadInfo::FormAnswer(
 
     return {
         .Size = answerSize,
+        .ConsumedMessages = cnt,
         .Event = std::move(answer),
         .IsInternal = IsInternal,
         .ReplyTo = ReplyTo
@@ -803,7 +806,7 @@ void TPartition::Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ct
     auto& userInfo = UsersInfoStorage->GetOrCreate(res->User, ctx);
 
     userInfo.ForgetSubscription(GetEndOffset(), ctx.Now());
-    OnReadRequestFinished(res->Destination, answer.Size, res->User, ctx);
+    OnReadRequestFinished(res->Destination, answer.Size, answer.ConsumedMessages, res->User, ctx);
 }
 
 void CollectReadRequestFromBody(ui64 startOffset, const ui16 partNo, const ui32 maxCount,
@@ -952,7 +955,7 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
         if (BatchProcessorActor) {
             Send(BatchProcessorActor, new TEvPQ::TEvConsumerRemoved(user));
         }
-        OnReadRequestFinished(read->Cookie, 0, user, ctx);
+        OnReadRequestFinished(read->Cookie, 0, 0, user, ctx);
         return;
     }
     userInfo->ReadsInQuotaQueue--;
@@ -1019,10 +1022,11 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
     ProcessRead(ctx, std::move(info), cookie, false);
 }
 
-void TPartition::OnReadRequestFinished(ui64 cookie, ui64 answerSize, const TString& consumer, const TActorContext& ctx) {
+void TPartition::OnReadRequestFinished(ui64 cookie, ui64 answerSize, ui64 consumedMessages, const TString& consumer, const TActorContext& ctx) {
     AvgReadBytes.Update(answerSize, ctx.Now());
+    AvgReadMessages.Update(consumedMessages, ctx.Now());
     if (ReadQuotaTrackerActor) {
-        Send(ReadQuotaTrackerActor, new TEvPQ::TEvConsumed(answerSize, 0, cookie, consumer));
+        Send(ReadQuotaTrackerActor, new TEvPQ::TEvConsumed(answerSize, consumedMessages, cookie, consumer));
     }
 }
 

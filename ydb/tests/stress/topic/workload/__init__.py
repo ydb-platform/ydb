@@ -24,11 +24,6 @@ class StartFromOffsetsEventHandler(ydb.TopicReaderEvents.EventHandler):
         )
 
 
-class StartFromBeginningEventHandler(ydb.TopicReaderEvents.EventHandler):
-    def on_partition_get_start_offset(self, event):
-        return ydb.TopicReaderEvents.OnPartitionGetStartOffsetResponse(start_offset=0)
-
-
 class YdbTopicWorkload(WorkloadBase):
     def __init__(self, endpoint, database, duration, consumers, producers, tables_prefix, *, limit_memory_usage=False, config=None,
                  chunk_index=None, chunk_size=None):
@@ -298,24 +293,52 @@ class YdbTopicWorkload(WorkloadBase):
             ])
         self.cmd_run(self.get_command_prefix(subcmds=args))
 
-    def _get_topic_end_offset(self, topic_name):
+    def _get_topic_end_offsets(self, topic_name):
         description = self._get_driver().topic_client.describe_topic(topic_name, include_stats=True)
-        return sum(partition.partition_stats.partition_end for partition in description.partitions)
+        return {
+            partition.partition_id: partition.partition_stats.partition_end
+            for partition in description.partitions
+        }
 
-    def _read_topic_from_beginning(self, topic_name, expected_count, timeout):
+    def _write_fixed_messages(self, topic_name, values, producer_id, partition_id=0):
+        with self._get_driver().topic_client.writer(
+            topic_name,
+            producer_id=producer_id,
+            partition_id=partition_id,
+        ) as writer:
+            for value in values:
+                writer.write(ydb.TopicWriterMessage(value), timeout=30)
+
+    def _write_fixed_messages_in_transaction(self, topic_name, values, producer_id,
+                                             partition_id=0):
+        with ydb.QuerySessionPool(self._get_driver()) as session_pool:
+            def callee(tx):
+                writer = self._get_driver().topic_client.tx_writer(
+                    tx,
+                    topic_name,
+                    producer_id=producer_id,
+                    partition_id=partition_id,
+                )
+                for value in values:
+                    writer.write(ydb.TopicWriterMessage(value), timeout=30)
+                writer.flush(timeout=30)
+                writer.close(flush=False)
+
+            session_pool.retry_tx_sync(callee)
+
+    def _read_topic_from_offsets(self, topic_name, offsets_by_partition, expected_count,
+                                 timeout):
         driver = self._get_driver()
-        description = driver.topic_client.describe_topic(topic_name, include_stats=False)
-        partition_ids = [partition.partition_id for partition in description.partitions]
         topic_selector = ydb.TopicReaderSelector(
             path=topic_name,
-            partitions=partition_ids,
+            partitions=list(offsets_by_partition),
         )
         read_count = 0
         deadline = time.time() + timeout
         with driver.topic_client.reader(
             topic_selector,
             consumer=None,
-            event_handler=StartFromBeginningEventHandler(),
+            event_handler=StartFromOffsetsEventHandler(offsets_by_partition),
         ) as reader:
             while read_count < expected_count and time.time() < deadline:
                 try:
@@ -329,7 +352,8 @@ class YdbTopicWorkload(WorkloadBase):
         if read_count != expected_count:
             raise AssertionError(
                 f"Did not read all logical messages from {topic_name}: "
-                f"got {read_count}, expected {expected_count}"
+                f"got {read_count}, expected {expected_count}, "
+                f"offsets_by_partition={offsets_by_partition}"
             )
 
     def _is_same_or_descendant_partition(self, ancestor, partition, parents_by_partition):
@@ -380,6 +404,118 @@ class YdbTopicWorkload(WorkloadBase):
                     )
                 prev_seqno = seqno
                 prev_partition = partition
+
+    def _read_topic_from_beginning(self, topic_name, end_offsets, timeout):
+        expected_count = sum(end_offsets.values())
+        self._read_topic_from_offsets(
+            topic_name,
+            {partition_id: 0 for partition_id in end_offsets},
+            expected_count,
+            timeout,
+        )
+
+    def _read_topic_from_mid_offsets(self, topic_name, end_offsets, read_duration):
+        for read_offset in range(1, 6):
+            offsets_by_partition = {
+                partition_id: read_offset
+                for partition_id, end_offset in end_offsets.items()
+                if end_offset > read_offset
+            }
+            expected_count = sum(
+                end_offsets[partition_id] - read_offset
+                for partition_id in offsets_by_partition
+            )
+            if expected_count == 0:
+                continue
+            self._read_topic_from_offsets(
+                topic_name,
+                offsets_by_partition,
+                expected_count,
+                timeout=read_duration + 30,
+            )
+
+    def _read_partition_from_offset(self, topic_name, partition_id, read_offset,
+                                    expected_count, timeout):
+        driver = self._get_driver()
+        topic_selector = ydb.TopicReaderSelector(
+            path=topic_name,
+            partitions=[partition_id],
+        )
+        messages = []
+        deadline = time.time() + timeout
+        with driver.topic_client.reader(
+            topic_selector,
+            consumer=None,
+            event_handler=StartFromOffsetsEventHandler({partition_id: read_offset}),
+        ) as reader:
+            while len(messages) < expected_count and time.time() < deadline:
+                try:
+                    batch = reader.receive_batch(max_messages=1000, timeout=1)
+                except TimeoutError:
+                    continue
+                if batch is None:
+                    continue
+                messages.extend((message.offset, message.data) for message in batch.messages)
+
+        if len(messages) != expected_count:
+            raise AssertionError(
+                f"Did not read partition {partition_id} from {topic_name} at offset {read_offset}: "
+                f"got {len(messages)}, expected {expected_count}"
+            )
+        return messages
+
+    def _write_and_verify_transactional_mid_blob_probe(self, topic_name, read_duration):
+        partition_id = 0
+        prefix_count = 1000
+        tx_count = 300
+        prefix_messages = [
+            f"stress-mid-blob-prefix-{i}"
+            for i in range(prefix_count)
+        ]
+        tx_messages = [
+            f"stress-mid-blob-transaction-{i}-" + ("x" * 4096)
+            for i in range(tx_count)
+        ]
+
+        self._write_fixed_messages(
+            topic_name,
+            prefix_messages,
+            producer_id="stress-mid-blob-prefix-producer",
+            partition_id=partition_id,
+        )
+        self._write_fixed_messages_in_transaction(
+            topic_name,
+            tx_messages,
+            producer_id="stress-mid-blob-transaction-producer",
+            partition_id=partition_id,
+        )
+
+        for delta in (1, 50, 150, tx_count - 1):
+            read_offset = prefix_count + delta
+            read_result = self._read_partition_from_offset(
+                topic_name,
+                partition_id,
+                read_offset,
+                tx_count - delta,
+                timeout=read_duration + 30,
+            )
+            expected_offsets = list(range(read_offset, prefix_count + tx_count))
+            actual_offsets = [offset for offset, _ in read_result]
+            if actual_offsets != expected_offsets:
+                raise AssertionError(
+                    f"Wrong offsets from partition {partition_id} in {topic_name}: "
+                    f"got {actual_offsets[:10]}..., expected {expected_offsets[:10]}..."
+                )
+            expected_payloads = [
+                message.encode("utf-8")
+                for message in tx_messages[delta:]
+            ]
+            actual_payloads = [data for _, data in read_result]
+            if actual_payloads != expected_payloads:
+                raise AssertionError(
+                    f"Wrong payloads from partition {partition_id} in {topic_name} "
+                    f"at offset {read_offset}"
+                )
 
     def _cleanup_test_topic(self, topic_name) -> None:
         """Удаляет тестовый топик."""
@@ -622,6 +758,7 @@ class YdbTopicWorkload(WorkloadBase):
         )
         try:
             self._configure_topic_retention(topic_name, f"{retention_seconds}s")
+            self._write_and_verify_transactional_mid_blob_probe(topic_name, read_duration)
 
             with concurrent.futures.ThreadPoolExecutor(max_workers=len(phases)) as executor:
                 futures = [
@@ -641,15 +778,17 @@ class YdbTopicWorkload(WorkloadBase):
                 for future in futures:
                     future.result()
 
-            expected_count = self._get_topic_end_offset(topic_name)
+            end_offsets = self._get_topic_end_offsets(topic_name)
+            expected_count = sum(end_offsets.values())
             if expected_count == 0:
                 raise AssertionError(f"No messages were written to {topic_name}")
 
             self._read_topic_from_beginning(
                 topic_name,
-                expected_count,
+                end_offsets,
                 timeout=read_duration + 30,
             )
+            self._read_topic_from_mid_offsets(topic_name, end_offsets, read_duration)
         finally:
             self._cleanup_test_topic(topic_name)
 

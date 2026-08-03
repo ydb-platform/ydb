@@ -51,7 +51,6 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, bool useRealThreads,
     featureFlags.SetEnableStatistics(true);
     featureFlags.SetEnableColumnStatistics(true);
     featureFlags.SetEnableAnalyzeLongRunningOperation(true);
-    featureFlags.SetEnableForcedColumnCompactions(true);
     Settings->SetFeatureFlags(featureFlags);
 
     modifySettings(*Settings);
@@ -245,9 +244,7 @@ static TString GetIssuesString(const Ydb::Operations::Operation& operation) {
     return issues.ToString();
 }
 
-Ydb::StatusIds::StatusCode ExecuteYqlScript(TTestEnv& env, const TString& script,
-    bool mustSucceed, const TString& database)
-{
+Ydb::StatusIds::StatusCode ExecuteYqlScript(TTestEnv& env, const TString& script, bool mustSucceed) {
     auto& runtime = *env.GetServer().GetRuntime();
 
     using TEvExecuteYqlRequest = NGRpcService::TGrpcRequestOperationCall<
@@ -258,7 +255,7 @@ Ydb::StatusIds::StatusCode ExecuteYqlScript(TTestEnv& env, const TString& script
     request.set_script(script);
 
     auto future = NRpcService::DoLocalRpc<TEvExecuteYqlRequest>(
-        std::move(request), database, "", runtime.GetActorSystem(0));
+        std::move(request), "", "", runtime.GetActorSystem(0));
     auto response = runtime.WaitFuture(std::move(future));
 
     UNIT_ASSERT(response.operation().ready());
@@ -411,7 +408,7 @@ TTableInfo PrepareColumnTable(TTestEnv& env, const TString& databaseName, const 
 }
 
 TTableInfo PrepareColumnTableWithIndexes(TTestEnv& env, const TString& databaseName, const TString& tableName,
-    int shardCount, bool forceCompaction)
+    int shardCount)
 {
     auto info = CreateColumnTable(env, databaseName, tableName, shardCount);
 
@@ -421,6 +418,13 @@ TTableInfo PrepareColumnTableWithIndexes(TTestEnv& env, const TString& databaseN
     ExecuteYqlScript(env, Sprintf(R"(
         ALTER OBJECT `%s` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_key, TYPE=COUNT_MIN_SKETCH,
                     FEATURES=`{"column_names" : ['Key']}`);
+    )", fullTableName.c_str()));
+    runtime.SimulateSleep(TDuration::Seconds(1));
+
+    ExecuteYqlScript(env, Sprintf(R"(
+        ALTER OBJECT `%s` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS,
+                    `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`,
+                    `COMPACTION_PLANNER.FEATURES`=`{"accumulator_portion_size_limit":0}`);
     )", fullTableName.c_str()));
     runtime.SimulateSleep(TDuration::Seconds(1));
 
@@ -463,16 +467,6 @@ TTableInfo PrepareColumnTableWithIndexes(TTestEnv& env, const TString& databaseN
 
         UNIT_ASSERT(response.operation().ready());
         UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
-    }
-
-    if (forceCompaction) {
-        ExecuteYqlScript(env, Sprintf(R"(
-            ALTER TABLE `%s` COMPACT;
-        )", info.Path.c_str()), true, Sprintf("/Root/%s", databaseName.c_str()));
-    } else {
-        UNIT_ASSERT_C(env.RunInThreadPool([&env] {
-            return env.GetController()->WaitCompactions(TDuration::Seconds(5));
-        }), "Background compaction did not start");
     }
 
     env.GetController()->WaitActualization(TDuration::Seconds(1));

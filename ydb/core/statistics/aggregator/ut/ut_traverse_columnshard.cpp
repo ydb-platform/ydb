@@ -40,68 +40,15 @@ TTestEnv CreateTestEnv() {
     });
 }
 
-class TBackgroundTraversalGate {
-public:
-    explicit TBackgroundTraversalGate(TTestActorRuntime& runtime)
-        : Runtime(runtime)
-    {
-        PreviousFilter = Runtime.SetScheduledEventFilter(
-            [this](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event,
-                TDuration delay, TInstant& deadline)
-        {
-            const auto recipient = event->GetRecipientRewrite();
-            if (delay == TDuration::Seconds(1)
-                    && runtime.FindActorName(recipient) == "STATISTICS_AGGREGATOR") {
-                if (!ScheduledTraversal) {
-                    ScheduledTraversal.Reset(event.Release());
-                }
-                return true;
-            }
-            return PreviousFilter(runtime, event, delay, deadline);
-        });
-    }
-
-    ~TBackgroundTraversalGate() {
-        StartTraversal();
-    }
-
-    void StartTraversal() {
-        if (!Active) {
-            return;
-        }
-
-        Runtime.SetScheduledEventFilter(std::move(PreviousFilter));
-        Active = false;
-
-        UNIT_ASSERT_C(ScheduledTraversal, "Statistics Aggregator traversal was not scheduled");
-        const ui32 nodeIndex = ScheduledTraversal->GetRecipientRewrite().NodeId() - Runtime.GetFirstNodeId();
-        Runtime.Send(ScheduledTraversal.Release(), nodeIndex, true);
-    }
-
-private:
-    TTestActorRuntime& Runtime;
-    TTestActorRuntime::TScheduledEventFilter PreviousFilter;
-    TAutoPtr<IEventHandle> ScheduledTraversal;
-    bool Active = true;
-};
-
 TTableInfo PrepareDatabaseAndTableWithIndexes(TTestEnv& env) {
-    auto& runtime = *env.GetServer().GetRuntime();
-    TBackgroundTraversalGate traversalGate(runtime);
     CreateDatabase(env, "Database");
-    auto tableInfo = PrepareColumnTableWithIndexes(env, "Database", "Table", ShardCount);
-    traversalGate.StartTraversal();
-    return tableInfo;
+    return PrepareColumnTableWithIndexes(env, "Database", "Table", ShardCount);
 }
 
 TTableInfo PrepareServerlessDatabaseAndTableWithIndexes(TTestEnv& env) {
-    auto& runtime = *env.GetServer().GetRuntime();
-    TBackgroundTraversalGate traversalGate(runtime);
     CreateDatabase(env, "Shared", 1, true);
     CreateServerlessDatabase(env, "Database", "/Root/Shared");
-    auto tableInfo = PrepareColumnTableWithIndexes(env, "Database", "Table", ShardCount, false);
-    traversalGate.StartTraversal();
-    return tableInfo;
+    return PrepareColumnTableWithIndexes(env, "Database", "Table", ShardCount);
 }
 
 }

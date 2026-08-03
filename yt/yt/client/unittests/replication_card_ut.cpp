@@ -9,6 +9,7 @@ namespace NYT::NChaosClient {
 namespace {
 
 using namespace NTabletClient;
+using namespace NTransactionClient;
 using namespace NYTree;
 using namespace NYson;
 
@@ -226,7 +227,7 @@ INSTANTIATE_TEST_SUITE_P(
             std::vector<TReplicaHistoryItem>{
                 TReplicaHistoryItem{
                     .Era = 0,
-                    .Timestamp = {},
+                    .Timestamp = NullTimestamp,
                     .Mode = ETableReplicaMode::Sync,
                     .State = ETableReplicaState::Enabled,
                 }
@@ -238,13 +239,13 @@ INSTANTIATE_TEST_SUITE_P(
             std::vector<TReplicaHistoryItem>{
                 TReplicaHistoryItem{
                     .Era = 0,
-                    .Timestamp = {},
+                    .Timestamp = NullTimestamp,
                     .Mode = ETableReplicaMode::Sync,
                     .State = ETableReplicaState::Disabled,
                 },
                 TReplicaHistoryItem{
                     .Era = 1,
-                    .Timestamp = 1_ts,
+                    .Timestamp = 2_ts,
                     .Mode = ETableReplicaMode::Sync,
                     .State = ETableReplicaState::Enabled,
                 }
@@ -256,7 +257,7 @@ INSTANTIATE_TEST_SUITE_P(
             std::vector<TReplicaHistoryItem>{
                 TReplicaHistoryItem{
                     .Era = 0,
-                    .Timestamp = 0_ts,
+                    .Timestamp = 1_ts,
                     .Mode = ETableReplicaMode::Async,
                     .State = ETableReplicaState::Enabled,
                 }
@@ -268,7 +269,7 @@ INSTANTIATE_TEST_SUITE_P(
             std::vector<TReplicaHistoryItem>{
                 TReplicaHistoryItem{
                     .Era = 0,
-                    .Timestamp = 0_ts,
+                    .Timestamp = 1_ts,
                     .Mode = ETableReplicaMode::Sync,
                     .State = ETableReplicaState::Disabled,
                 }

@@ -308,6 +308,16 @@ public:
             alterData->ApplyAuditSettings(settings.GetAuditSettings());
         }
 
+        // alterData is copy-constructed from subDomainInfo, so the current
+        // level is already carried over; only an explicit request changes it.
+        if (settings.HasTablesMetricsLevel()) {
+            if (!CheckTablesMetricsLevel(settings.GetTablesMetricsLevel(), errStr)) {
+                result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+                return result;
+            }
+            alterData->SetTablesMetricsLevel(settings.GetTablesMetricsLevel());
+        }
+
         NIceDb::TNiceDb db(context.GetDB());
 
         subDomain->LastTxId = OperationId.GetTxId();

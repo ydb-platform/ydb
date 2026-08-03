@@ -258,18 +258,17 @@ private:
             }
             Root_.ForceDelete();
             Root_.MkDirs(DIR_MODE);
-        } catch (...) {
+        } catch (const yexception& e) {
             const TString root = Root_.GetPath();
-            const TString error = CurrentExceptionMessage();
             if (retriesLeft > 0) {
-                LOG_E("Cannot start DQ local file spilling service at " << root << ": " << error << ". Retry "
+                LOG_E("Cannot start DQ local file spilling service at " << root << ": " << e.what() << ". Retry "
                     << (MaxStartupRetries - retriesLeft + 1) << "/" << MaxStartupRetries
                     << " in " << StartupRetryDelay.Seconds() << "s");
                 Schedule(StartupRetryDelay, new TEvPrivate::TEvRetryStart(retriesLeft - 1));
                 Become(&TDqLocalFileSpillingService::BrokenState);
                 return;
             }
-            Y_ABORT("Cannot start DQ local file spilling service at %s: %s", root.c_str(), error.c_str());
+            Y_ABORT("Cannot start DQ local file spilling service at %s: %s", root.c_str(), e.what());
         }
 
         Send(SelfId(), MakeHolder<TEvPrivate::TEvRemoveOldTmp>(Config_.Root, SelfId().NodeId(), Config_.SpillingSessionId));

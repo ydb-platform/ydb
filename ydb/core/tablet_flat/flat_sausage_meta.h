@@ -58,7 +58,7 @@ namespace NPageCollection {
         const TExtra *Extra = nullptr;
         const char *InboundData = nullptr;
         TVector<ui64> Steps;    /* Pages boundaries vector  */
-        mutable ui32 SkippedPages_ = Max<ui32>();
+        ui32 SkippedPages_ = 0;
     };
 
 }

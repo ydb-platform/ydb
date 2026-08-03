@@ -1627,7 +1627,7 @@ void TExecutor::StartStickyBTreePreload(const NTable::TPartStore& partStore,
     if (StickyPreloadsByIndex.contains(indexCollectionId)) {
         return;  // preload already in flight
     }
-    auto* state = new TStickyPreloadState;
+    THolder<TStickyPreloadState> state(new TStickyPreloadState);
     // TIntrusiveConstPtr can't bind to const T*
     state->PartStore = TIntrusiveConstPtr<NTable::TPartStore>(
         const_cast<NTable::TPartStore*>(&partStore));
@@ -1643,15 +1643,16 @@ void TExecutor::StartStickyBTreePreload(const NTable::TPartStore& partStore,
 
         // For non-main groups, replies on the data collection must re-drive this state
         if (groupId.Index != 0) {
-            partStore.PageCollections[groupId.Index]->PreloadByIndex = state;
+            partStore.PageCollections[groupId.Index]->PreloadByIndex = state.Get();
         }
     }
 
-    StickyPreloadsByIndex[indexCollectionId] = state;
-    partStore.PageCollections[0]->PreloadByIndex = state;
+    auto* rawState = state.Release();
+    StickyPreloadsByIndex[indexCollectionId] = rawState;
+    partStore.PageCollections[0]->PreloadByIndex = rawState;
 
     // Drive the first round now (steps every walker).
-    DriveStickyBTreePreload(state);
+    DriveStickyBTreePreload(rawState);
 }
 
 void TExecutor::DriveStickyBTreePreload(TStickyPreloadState* state) {

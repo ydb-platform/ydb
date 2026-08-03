@@ -98,11 +98,17 @@ TBorder TMeta::Bounds(const NTable::NPage::TPageLocation& location) const
 {
     Y_ENSURE(!location.Offset.IsMax());
     if (!location.Offset.IsByteOffset()) {
-        // Accept page-index offsets (from blob forward cache): resolve byte offset from Index
+        // Page-index path (blob forward cache, outer collections):
+        //   resolve byte offset from Index, validate size against metadata.
         const auto pageId = location.Offset.AsPageIndex();
-        Y_ENSURE(pageId < Header->Pages, "Requested page " << pageId << " out of " << Header->Pages << " total pages");
+        Y_ENSURE(pageId < Header->Pages,
+            "Requested page " << pageId << " out of " << Header->Pages << " total pages");
         const ui64 offset = pageId ? Index[pageId - 1].Page : 0;
-        return TAlign(Steps).Lookup(offset, location.Size);
+        const ui64 size = Index[pageId].Page - offset;
+        Y_DEBUG_ABORT_UNLESS(location.Size == size,
+            "Size mismatch at page %" PRIu32 ": location claims %" PRIu64 " but meta has %" PRIu64,
+            pageId, location.Size, size);
+        return TAlign(Steps).Lookup(offset, size);
     }
     return TAlign(Steps).Lookup(location.GetByteOffset(), location.Size);
 }

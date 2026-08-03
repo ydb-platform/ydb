@@ -66,6 +66,7 @@ namespace NWriter {
 
             Offset = 0;
             WrittenPageCount = 0;
+            LastPageId = Max<ui32>();
             return std::exchange(Result, {});
         }
 

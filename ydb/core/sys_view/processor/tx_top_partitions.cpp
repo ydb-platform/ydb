@@ -153,7 +153,7 @@ void TSysViewProcessor::Handle(TEvSysView::TEvSendTopPartitions::TPtr& ev) {
         YDB_LOG_WARN("Handle TEvSysView::TEvSendTopPartitions: interval end mismatch",
             {"tabletId", TabletID()},
             {"intervalEnd", IntervalEnd},
-            {"partitionIntervalEnd", partitionIntervalEnd}
+            {"partitionIntervalEnd", partitionIntervalEnd},
             {"eventTimeUs", TInstant::MicroSeconds(timeUs)});
         return;
     }

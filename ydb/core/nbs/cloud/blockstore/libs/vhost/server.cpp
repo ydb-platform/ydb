@@ -135,6 +135,7 @@ using TRequestPtr = TIntrusivePtr<TRequest>;
 
 struct TAppContext
 {
+    ILoggingServicePtr Logging;
     ITimerPtr Timer;
     ISchedulerPtr Scheduler;
     IVHostStatsPtr VHostStats;
@@ -610,6 +611,7 @@ TServer::TServer(
     TVhostCallbacks callbacks)
 {
     Log = logging->CreateLog("BLOCKSTORE_VHOST");
+    Logging = std::move(logging);
     Timer = std::move(timer);
     Scheduler = std::move(scheduler);
     VHostStats = std::move(vhostStats);
@@ -911,7 +913,11 @@ IStoragePtr TServer::CreateWrappers(
         storage =
             CreateOverlappedRequestsGuardStorageWrapper(std::move(storage));
     }
-    storage = CreateDurableStorageWrapper(std::move(storage), Timer, Scheduler);
+    storage = CreateDurableStorageWrapper(
+        Logging,
+        std::move(storage),
+        Timer,
+        Scheduler);
     return storage;
 }
 

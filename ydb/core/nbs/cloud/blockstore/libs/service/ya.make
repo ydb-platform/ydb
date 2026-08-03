@@ -22,6 +22,7 @@ PEERDIR(
     ydb/core/nbs/cloud/blockstore/public/api/protos
     ydb/core/nbs/cloud/storage/core/libs/common
     ydb/core/nbs/cloud/storage/core/libs/coroutine
+    ydb/core/nbs/cloud/storage/core/libs/diagnostics
     ydb/library/actors/wilson
 
     library/cpp/threading/hot_swap

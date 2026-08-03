@@ -6,9 +6,12 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range_map.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/backoff_delay_provider.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/common/format.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/timer.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/diagnostics/logging.h>
 
 #include <util/string/builder.h>
 
@@ -54,10 +57,17 @@ class TDurable
     : public std::enable_shared_from_this<TDurable<TRequest, TResponse>>
 {
 public:
-    TDurable(IStoragePtr storage, ITimerPtr timer, ISchedulerPtr scheduler)
-        : Storage(std::move(storage))
+    TDurable(
+        TLog log,
+        TString requestName,
+        IStoragePtr storage,
+        ITimerPtr timer,
+        ISchedulerPtr scheduler)
+        : RequestName(std::move(requestName))
+        , Storage(std::move(storage))
         , Timer(std::move(timer))
         , Scheduler(std::move(scheduler))
+        , Log(std::move(log))
     {}
 
     NThreading::TFuture<TResponse> Execute(
@@ -117,6 +127,7 @@ private:
 
         NThreading::TPromise<TResponse> promise;
         TDuration delay;
+        size_t retryCount = 0;
 
         {
             auto guard = Guard(Lock);
@@ -125,7 +136,9 @@ private:
                 // Belated response.
                 return;
             }
+
             auto& request = it->second;
+            retryCount = request.RetryCount;
             if (shouldReply) {
                 promise = std::move(request.Promise);
                 Inflights.erase(it);
@@ -135,8 +148,25 @@ private:
         }
 
         if (shouldReply) {
+            STORAGE_LOG(
+                retryCount == 0 ? TLOG_DEBUG : TLOG_INFO,
+                "[%lu] %s request copleted on retry #%lu with %s",
+                requestId,
+                RequestName.c_str(),
+                retryCount + 1,
+                FormatError(response.Error).c_str());
+
             promise.SetValue(std::move(response));
         } else {
+            STORAGE_WARN(
+                "[%lu] %s request failed with a retriable error %s, "
+                "scheduling retry #%lu in %s",
+                requestId,
+                RequestName.c_str(),
+                FormatError(response.Error).c_str(),
+                retryCount + 1,
+                FormatDuration(delay).c_str());
+
             Scheduler->Schedule(
                 Timer->Now() + delay,
                 [requestId, weakSelf = this->weak_from_this()]()
@@ -152,6 +182,7 @@ private:
     {
         TCallContextPtr callContext;
         std::shared_ptr<TRequest> request;
+        size_t retryCount = 0;
 
         {
             auto guard = Guard(Lock);
@@ -162,20 +193,28 @@ private:
             }
             auto& r = it->second;
             ++r.RetryCount;
+            retryCount = r.RetryCount;
             callContext = r.CallContex;
             request = r.Request;
         }
 
+        STORAGE_DEBUG(
+            "[%lu] retrying %s request (attempt #%lu)",
+            requestId,
+            RequestName.c_str(),
+            retryCount);
+
         DoExecute(requestId, std::move(callContext), std::move(request));
     }
 
+    const TString RequestName;
     const IStoragePtr Storage;
     const ITimerPtr Timer;
     const ISchedulerPtr Scheduler;
 
+    TLog Log;
     TAdaptiveLock Lock;
     ui64 RequestIdGenerator = 0;
-
     THashMap<ui64, TInflight> Inflights{};
 };
 
@@ -193,19 +232,29 @@ class TDurableStorageWrapper final
     , public std::enable_shared_from_this<TDurableStorageWrapper>
 {
 private:
+    const TLog Log;
     const IStoragePtr Storage;
     const ITimerPtr Timer;
     const ISchedulerPtr Scheduler;
 
-    std::shared_ptr<TDurableRead> DurableReads{
-        std::make_shared<TDurableRead>(Storage, Timer, Scheduler)};
-    std::shared_ptr<TDurableWrite> DurableWrites{
-        std::make_shared<TDurableWrite>(Storage, Timer, Scheduler)};
-    std::shared_ptr<TDurableZero> DurableZeroes{
-        std::make_shared<TDurableZero>(Storage, Timer, Scheduler)};
+    std::shared_ptr<TDurableRead> DurableReads{std::make_shared<TDurableRead>(
+        Log,
+        "ReadBlocksLocal",
+        Storage,
+        Timer,
+        Scheduler)};
+    std::shared_ptr<TDurableWrite> DurableWrites{std::make_shared<
+        TDurableWrite>(Log, "WriteBlocksLocal", Storage, Timer, Scheduler)};
+    std::shared_ptr<TDurableZero> DurableZeroes{std::make_shared<TDurableZero>(
+        Log,
+        "ZeroBlocksLocal",
+        Storage,
+        Timer,
+        Scheduler)};
 
 public:
     TDurableStorageWrapper(
+        ILoggingServicePtr logging,
         IStoragePtr storage,
         ITimerPtr timer,
         ISchedulerPtr scheduler);
@@ -230,10 +279,12 @@ public:
 ////////////////////////////////////////////////////////////////////////////////
 
 TDurableStorageWrapper::TDurableStorageWrapper(
+    ILoggingServicePtr logging,
     IStoragePtr storage,
     ITimerPtr timer,
     ISchedulerPtr scheduler)
-    : Storage(std::move(storage))
+    : Log(logging->CreateLog("BLOCKSTORE_DURABLE"))
+    , Storage(std::move(storage))
     , Timer(std::move(timer))
     , Scheduler(std::move(scheduler))
 {}
@@ -274,11 +325,13 @@ void TDurableStorageWrapper::ReportIOError()
 ////////////////////////////////////////////////////////////////////////////////
 
 IStoragePtr CreateDurableStorageWrapper(
+    ILoggingServicePtr logging,
     IStoragePtr storage,
     ITimerPtr timer,
     ISchedulerPtr scheduler)
 {
     return std::make_shared<TDurableStorageWrapper>(
+        std::move(logging),
         std::move(storage),
         std::move(timer),
         std::move(scheduler));

@@ -6,6 +6,7 @@
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler_test.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/timer_test.h>
+#include <ydb/core/nbs/cloud/storage/core/libs/diagnostics/logging.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -46,7 +47,12 @@ struct TTestEnvironment
         // scheduled retries become due (the default clock is TInstant::Max()).
         Scheduler = std::make_shared<TTestScheduler>(TInstant::Zero());
         Timer = std::make_shared<TTestTimer>();
-        Wrapper = CreateDurableStorageWrapper(Storage, Timer, Scheduler);
+        auto logging = CreateLoggingService("console");
+        Wrapper = CreateDurableStorageWrapper(
+            std::move(logging),
+            Storage,
+            Timer,
+            Scheduler);
 
         Storage->ReadBlocksLocalHandler =
             [&](TCallContextPtr callContext,

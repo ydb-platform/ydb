@@ -1036,7 +1036,11 @@ bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
 
     if (Messages.size() >= MaxFastMessages) {
         // Move to slow zone
-        for (size_t i = std::max<size_t>(std::min(std::min(Messages.size(), MaxMessages / 64), MaxSlowMessages - SlowMessages.size()), 1); i; --i) {
+        const size_t slowMoveLimit = (MaxSlowMessages >= SlowMessages.size()) ? MaxSlowMessages - SlowMessages.size() : 0;
+        const size_t fastMoveLimit = MaxMessages / 64;
+        const size_t limit = Min(slowMoveLimit, fastMoveLimit);
+        const size_t count = Max<size_t>(1, limit); // try to move at least one message
+        for (size_t i = Min(Messages.size(), count); i; --i) {
             MoveFirstMessageFromFastZoneToSlowZone();
         }
     }

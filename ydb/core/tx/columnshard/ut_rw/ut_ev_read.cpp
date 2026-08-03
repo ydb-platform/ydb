@@ -34,7 +34,8 @@ using TDefaultTestsController = NKikimr::NYDBTest::NColumnShard::TController;
 
 // Build a TEvRead request for point lookup by primary key.
 std::unique_ptr<TEvDataShard::TEvRead> MakeReadRequest(
-    ui64 readId, ui64 ownerId, ui64 tableId, const std::vector<ui32>& columnIds, const std::vector<TSerializedCellVec>& keys)
+    ui64 readId, ui64 ownerId, ui64 tableId, const std::vector<ui32>& columnIds, const std::vector<TSerializedCellVec>& keys,
+    std::optional<ui64> snapshotStep = std::nullopt)
 {
     auto request = std::make_unique<TEvDataShard::TEvRead>();
     auto& record = request->Record;
@@ -45,6 +46,10 @@ std::unique_ptr<TEvDataShard::TEvRead> MakeReadRequest(
         record.AddColumns(colId);
     }
     record.SetResultFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+    if (snapshotStep) {
+        record.MutableSnapshot()->SetStep(*snapshotStep);
+        record.MutableSnapshot()->SetTxId(100);  // Match committed txId
+    }
     request->Keys.insert(request->Keys.end(), keys.begin(), keys.end());
     return request;
 }
@@ -111,7 +116,7 @@ Y_UNIT_TEST_SUITE(TColumnShardEvRead) {
             TVector<TCell> keyCells = { TCell::Make(ui64(50)) };
             std::vector<TSerializedCellVec> keys = { TSerializedCellVec(TSerializedCellVec::Serialize(keyCells)) };
 
-            auto req = MakeReadRequest(1, 1, tableId, TTestSchema::ExtractIds(ydbSchema), keys);
+            auto req = MakeReadRequest(1, 1, tableId, TTestSchema::ExtractIds(ydbSchema), keys, planStep.Val());
             auto res = SendRead(runtime, TTestTxConfig::TxTablet0, readSender, req.release());
 
             UNIT_ASSERT_VALUES_EQUAL(res->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
@@ -125,7 +130,7 @@ Y_UNIT_TEST_SUITE(TColumnShardEvRead) {
             TVector<TCell> keyCells = { TCell::Make(ui64(0)) };
             std::vector<TSerializedCellVec> keys = { TSerializedCellVec(TSerializedCellVec::Serialize(keyCells)) };
 
-            auto req = MakeReadRequest(2, 1, tableId, TTestSchema::ExtractIds(ydbSchema), keys);
+            auto req = MakeReadRequest(2, 1, tableId, TTestSchema::ExtractIds(ydbSchema), keys, planStep.Val());
             auto res = SendRead(runtime, TTestTxConfig::TxTablet0, readSender, req.release());
 
             UNIT_ASSERT_VALUES_EQUAL(res->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
@@ -163,7 +168,7 @@ Y_UNIT_TEST_SUITE(TColumnShardEvRead) {
                 keys.push_back(TSerializedCellVec(TSerializedCellVec::Serialize(keyCells)));
             }
 
-            auto req = MakeReadRequest(1, 1, tableId, TTestSchema::ExtractIds(ydbSchema), keys);
+            auto req = MakeReadRequest(1, 1, tableId, TTestSchema::ExtractIds(ydbSchema), keys, planStep.Val());
             auto res = SendRead(runtime, TTestTxConfig::TxTablet0, readSender, req.release());
 
             UNIT_ASSERT_VALUES_EQUAL(res->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
@@ -198,7 +203,7 @@ Y_UNIT_TEST_SUITE(TColumnShardEvRead) {
             TVector<TCell> keyCells = { TCell::Make(ui64(999)) };
             std::vector<TSerializedCellVec> keys = { TSerializedCellVec(TSerializedCellVec::Serialize(keyCells)) };
 
-            auto req = MakeReadRequest(1, 1, tableId, TTestSchema::ExtractIds(ydbSchema), keys);
+            auto req = MakeReadRequest(1, 1, tableId, TTestSchema::ExtractIds(ydbSchema), keys, planStep.Val());
             auto res = SendRead(runtime, TTestTxConfig::TxTablet0, readSender, req.release());
 
             UNIT_ASSERT_VALUES_EQUAL(res->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
@@ -233,7 +238,7 @@ Y_UNIT_TEST_SUITE(TColumnShardEvRead) {
             TVector<TCell> keyCells = { TCell::Make(ui64(50)) };
             std::vector<TSerializedCellVec> keys = { TSerializedCellVec(TSerializedCellVec::Serialize(keyCells)) };
 
-            auto req = MakeReadRequest(1, 1, tableId, { 1 }, keys);
+            auto req = MakeReadRequest(1, 1, tableId, { 1 }, keys, planStep.Val());
             auto res = SendRead(runtime, TTestTxConfig::TxTablet0, readSender, req.release());
 
             UNIT_ASSERT_VALUES_EQUAL(res->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
@@ -268,7 +273,7 @@ Y_UNIT_TEST_SUITE(TColumnShardEvRead) {
             TVector<TCell> keyCells = { TCell::Make(ui64(5)) };
             std::vector<TSerializedCellVec> keys = { TSerializedCellVec(TSerializedCellVec::Serialize(keyCells)) };
 
-            auto req = MakeReadRequest(1, 1, tableId, TTestSchema::ExtractIds(ydbSchema), keys);
+            auto req = MakeReadRequest(1, 1, tableId, TTestSchema::ExtractIds(ydbSchema), keys, planStep.Val());
             auto res = SendRead(runtime, TTestTxConfig::TxTablet0, readSender, req.release());
 
             UNIT_ASSERT_VALUES_EQUAL(res->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
@@ -400,7 +405,7 @@ Y_UNIT_TEST_SUITE(TColumnShardEvRead) {
             TVector<TCell> keyCells = { TCell::Make(ui64(0)) };
             std::vector<TSerializedCellVec> keys = { TSerializedCellVec(TSerializedCellVec::Serialize(keyCells)) };
 
-            auto req = MakeReadRequest(1, 1, tableId, { 9999 }, keys);
+            auto req = MakeReadRequest(1, 1, tableId, { 9999 }, keys, 1);
             auto res = SendRead(runtime, TTestTxConfig::TxTablet0, readSender, req.release());
 
             UNIT_ASSERT_VALUES_EQUAL(res->Record.GetStatus().GetCode(), Ydb::StatusIds::SCHEME_ERROR);
@@ -435,12 +440,172 @@ Y_UNIT_TEST_SUITE(TColumnShardEvRead) {
             TVector<TCell> keyCells = { TCell::Make(ui64(5)) };
             std::vector<TSerializedCellVec> keys = { TSerializedCellVec(TSerializedCellVec::Serialize(keyCells)) };
 
-            auto req = MakeReadRequest(1, 1, tableId, {}, keys);
+            auto req = MakeReadRequest(1, 1, tableId, {}, keys, planStep.Val());
             auto res = SendRead(runtime, TTestTxConfig::TxTablet0, readSender, req.release());
 
             UNIT_ASSERT_VALUES_EQUAL(res->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
             UNIT_ASSERT_VALUES_EQUAL(res->Record.GetFinished(), true);
             UNIT_ASSERT_VALUES_EQUAL(res->Record.GetRowCount(), 1u);
+        }
+    }
+
+    Y_UNIT_TEST(LockTxIdRejected) {
+        TTestSetup setup;
+        auto& runtime = setup.Runtime;
+        auto& sender = setup.Sender;
+
+        ui64 tableId = 1;
+        TestTableDescription table;
+        Y_UNUSED(SetupSchema(runtime, sender, tableId, table));
+
+        // TEvRead with LockTxId should be rejected.
+        {
+            auto readSender = runtime.AllocateEdgeActor();
+            TVector<TCell> keyCells = { TCell::Make(ui64(0)) };
+            std::vector<TSerializedCellVec> keys = { TSerializedCellVec(TSerializedCellVec::Serialize(keyCells)) };
+
+            auto req = MakeReadRequest(1, 1, tableId, { 1 }, keys);
+            req->Record.SetLockTxId(12345);
+
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, readSender, req.release());
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(readSender);
+            auto* res = ev->Get();
+
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetStatus().GetCode(), Ydb::StatusIds::UNSUPPORTED);
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetFinished(), true);
+        }
+    }
+
+    Y_UNIT_TEST(MaxRowsRejected) {
+        TTestSetup setup;
+        auto& runtime = setup.Runtime;
+        auto& sender = setup.Sender;
+
+        ui64 tableId = 1;
+        TestTableDescription table;
+        Y_UNUSED(SetupSchema(runtime, sender, tableId, table));
+
+        // TEvRead with MaxRows should be rejected.
+        {
+            auto readSender = runtime.AllocateEdgeActor();
+            TVector<TCell> keyCells = { TCell::Make(ui64(0)) };
+            std::vector<TSerializedCellVec> keys = { TSerializedCellVec(TSerializedCellVec::Serialize(keyCells)) };
+
+            auto req = MakeReadRequest(1, 1, tableId, { 1 }, keys);
+            req->Record.SetMaxRows(100);
+
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, readSender, req.release());
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(readSender);
+            auto* res = ev->Get();
+
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetStatus().GetCode(), Ydb::StatusIds::UNSUPPORTED);
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetFinished(), true);
+        }
+    }
+
+    Y_UNIT_TEST(MaxBytesRejected) {
+        TTestSetup setup;
+        auto& runtime = setup.Runtime;
+        auto& sender = setup.Sender;
+
+        ui64 tableId = 1;
+        TestTableDescription table;
+        Y_UNUSED(SetupSchema(runtime, sender, tableId, table));
+
+        // TEvRead with MaxBytes should be rejected.
+        {
+            auto readSender = runtime.AllocateEdgeActor();
+            TVector<TCell> keyCells = { TCell::Make(ui64(0)) };
+            std::vector<TSerializedCellVec> keys = { TSerializedCellVec(TSerializedCellVec::Serialize(keyCells)) };
+
+            auto req = MakeReadRequest(1, 1, tableId, { 1 }, keys);
+            req->Record.SetMaxBytes(1024);
+
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, readSender, req.release());
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(readSender);
+            auto* res = ev->Get();
+
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetStatus().GetCode(), Ydb::StatusIds::UNSUPPORTED);
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetFinished(), true);
+        }
+    }
+
+    Y_UNIT_TEST(FormatArrowSupported) {
+        TTestSetup setup;
+        auto& runtime = setup.Runtime;
+        auto& sender = setup.Sender;
+
+        ui64 tableId = 1;
+        TestTableDescription table;
+        auto planStep = SetupSchema(runtime, sender, tableId, table);
+        const auto& ydbSchema = table.Schema;
+
+        // Write data for keys [0, 10).
+        ui64 writeId = 0;
+        std::vector<ui64> intWriteIds;
+        UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, MakeTestBlob({ 0, 10 }, ydbSchema), ydbSchema, true, &intWriteIds));
+
+        // Commit.
+        ui64 txId = 100;
+        planStep = ProposeCommit(runtime, sender, txId, intWriteIds);
+        PlanCommit(runtime, sender, planStep, txId);
+
+        // TEvRead with FORMAT_ARROW should succeed.
+        {
+            auto readSender = runtime.AllocateEdgeActor();
+            TVector<TCell> keyCells = { TCell::Make(ui64(5)) };
+            std::vector<TSerializedCellVec> keys = { TSerializedCellVec(TSerializedCellVec::Serialize(keyCells)) };
+
+            auto req = std::make_unique<TEvDataShard::TEvRead>();
+            auto& record = req->Record;
+            record.SetReadId(1);
+            record.MutableTableId()->SetOwnerId(1);
+            record.MutableTableId()->SetTableId(tableId);
+            for (ui32 colId : TTestSchema::ExtractIds(ydbSchema)) {
+                record.AddColumns(colId);
+            }
+            record.SetResultFormat(NKikimrDataEvents::FORMAT_ARROW);
+            record.MutableSnapshot()->SetStep(planStep.Val());
+            record.MutableSnapshot()->SetTxId(txId);
+            req->Keys.insert(req->Keys.end(), keys.begin(), keys.end());
+
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, readSender, req.release());
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(readSender);
+            auto* res = ev->Get();
+
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetFinished(), true);
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetResultFormat(), NKikimrDataEvents::FORMAT_ARROW);
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetRowCount(), 1u);
+        }
+    }
+
+    Y_UNIT_TEST(ZeroSnapshotRejected) {
+        TTestSetup setup;
+        auto& runtime = setup.Runtime;
+        auto& sender = setup.Sender;
+
+        ui64 tableId = 1;
+        TestTableDescription table;
+        Y_UNUSED(SetupSchema(runtime, sender, tableId, table));
+
+        // TEvRead without explicit snapshot should be rejected.
+        {
+            auto readSender = runtime.AllocateEdgeActor();
+            TVector<TCell> keyCells = { TCell::Make(ui64(0)) };
+            std::vector<TSerializedCellVec> keys = { TSerializedCellVec(TSerializedCellVec::Serialize(keyCells)) };
+
+            // MakeReadRequest with no snapshot (default) should be rejected.
+            auto req = MakeReadRequest(1, 1, tableId, { 1 }, keys);
+            // Don't set snapshot - it should be rejected
+            req->Record.ClearSnapshot();
+
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, readSender, req.release());
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadResult>(readSender);
+            auto* res = ev->Get();
+
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetStatus().GetCode(), Ydb::StatusIds::BAD_REQUEST);
+            UNIT_ASSERT_VALUES_EQUAL(res->Record.GetFinished(), true);
         }
     }
 

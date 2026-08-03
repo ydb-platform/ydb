@@ -51,7 +51,14 @@ private:
     // Requested point keys (full PK cells).
     const std::vector<TSerializedCellVec> Keys;
 
+    // Result format requested by the reader.
+    const NKikimrDataEvents::EDataFormat ResultFormat;
+
+    // For CELLVEC format: converted result batch.
     TOwnedCellVecBatch ResultBatch;
+    // For ARROW format: collected arrow table.
+    std::shared_ptr<arrow::Table> ArrowResult;
+
     std::atomic<bool> Finished{false};
     TString Error;
 
@@ -91,13 +98,29 @@ private:
     }
 
     virtual TConclusionStatus DoOnDataChunk(const std::shared_ptr<arrow::Table>& data) override {
-        auto batch = NArrow::ToBatch(data);
-        TRowWriter writer(ResultBatch);
-        NArrow::TArrowToYdbConverter converter(ResultSchema, writer, false, false);
-        TString errorMessage;
-        if (!converter.Process(*batch, errorMessage)) {
-            Error = errorMessage;
-            return TConclusionStatus::Fail(errorMessage);
+        if (ResultFormat == NKikimrDataEvents::FORMAT_ARROW) {
+            // Collect Arrow batches directly.
+            if (!ArrowResult) {
+                ArrowResult = data;
+            } else {
+                // Concatenate with previous data.
+                arrow::Result<std::shared_ptr<arrow::Table>> result = arrow::ConcatenateTables({ArrowResult, data});
+                if (!result.ok()) {
+                    Error = result.status().ToString();
+                    return TConclusionStatus::Fail(Error);
+                }
+                ArrowResult = *result;
+            }
+        } else {
+            // Convert Arrow to CellVec.
+            auto batch = NArrow::ToBatch(data);
+            TRowWriter writer(ResultBatch);
+            NArrow::TArrowToYdbConverter converter(ResultSchema, writer, false, false);
+            TString errorMessage;
+            if (!converter.Process(*batch, errorMessage)) {
+                Error = errorMessage;
+                return TConclusionStatus::Fail(errorMessage);
+            }
         }
         return TConclusionStatus::Success();
     }
@@ -127,13 +150,26 @@ private:
             auto* issue = record.MutableStatus()->AddIssues();
             issue->set_message(Error.data(), Error.size());
         }
-        record.SetResultFormat(NKikimrDataEvents::FORMAT_CELLVEC);
+        record.SetResultFormat(ResultFormat);
         record.MutableSnapshot()->SetStep(Snapshot.GetPlanStep());
         record.MutableSnapshot()->SetTxId(Snapshot.GetTxId());
         record.SetFinished(true);
         if (code == Ydb::StatusIds::SUCCESS) {
-            record.SetRowCount(ResultBatch.Size());
-            ev->SetBatch(std::move(ResultBatch));
+            if (ResultFormat == NKikimrDataEvents::FORMAT_ARROW) {
+                if (ArrowResult) {
+                    // Convert arrow::Table to arrow::RecordBatch for the response.
+                    auto batch = NArrow::ToBatch(ArrowResult);
+                    if (batch) {
+                        ev->SetArrowBatch(std::move(batch));
+                    }
+                    record.SetRowCount(ArrowResult->num_rows());
+                } else {
+                    record.SetRowCount(0);
+                }
+            } else {
+                record.SetRowCount(ResultBatch.Size());
+                ev->SetBatch(std::move(ResultBatch));
+            }
         } else {
             record.SetRowCount(0);
         }
@@ -158,7 +194,8 @@ public:
         const ui64 cookie, const ui64 readId, const NColumnShard::TUnifiedPathId& pathId, const NOlap::TSnapshot& snapshot,
         const std::optional<ui64> schemaVersion, std::vector<std::pair<TString, NScheme::TTypeInfo>>&& ydbPk,
         const std::shared_ptr<arrow::Schema>& arrPk, std::vector<ui32>&& scanColumnIds,
-        std::vector<std::pair<TString, NScheme::TTypeInfo>>&& resultSchema, std::vector<TSerializedCellVec>&& keys)
+        std::vector<std::pair<TString, NScheme::TTypeInfo>>&& resultSchema, std::vector<TSerializedCellVec>&& keys,
+        NKikimrDataEvents::EDataFormat resultFormat)
         : TBase(tabletId, tabletActorId, "read_iterator::" + ::ToString(readId))
         , ReplyTo(replyTo)
         , Cookie(cookie)
@@ -171,6 +208,7 @@ public:
         , ScanColumnIds(std::move(scanColumnIds))
         , ResultSchema(std::move(resultSchema))
         , Keys(std::move(keys))
+        , ResultFormat(resultFormat)
     {
     }
 };
@@ -216,6 +254,36 @@ void TColumnShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& 
         return;
     }
 
+    // Reject requests with LockTxId - column shard read iterator does not support optimistic locking.
+    if (record.HasLockTxId() && record.GetLockTxId()) {
+        SendReadError(ctx, replyTo, cookie, readId, Ydb::StatusIds::UNSUPPORTED,
+            "LockTxId is not supported by column shard read iterator");
+        return;
+    }
+
+    // Reject requests with MaxRows/MaxBytes - column shard read iterator does not support quotas.
+    if (record.HasMaxRows() && record.GetMaxRows()) {
+        SendReadError(ctx, replyTo, cookie, readId, Ydb::StatusIds::UNSUPPORTED,
+            "MaxRows is not supported by column shard read iterator");
+        return;
+    }
+    if (record.HasMaxBytes() && record.GetMaxBytes()) {
+        SendReadError(ctx, replyTo, cookie, readId, Ydb::StatusIds::UNSUPPORTED,
+            "MaxBytes is not supported by column shard read iterator");
+        return;
+    }
+
+    // Determine result format - default to CELLVEC.
+    NKikimrDataEvents::EDataFormat resultFormat = NKikimrDataEvents::FORMAT_CELLVEC;
+    if (record.HasResultFormat()) {
+        resultFormat = record.GetResultFormat();
+        if (resultFormat != NKikimrDataEvents::FORMAT_CELLVEC && resultFormat != NKikimrDataEvents::FORMAT_ARROW) {
+            SendReadError(ctx, replyTo, cookie, readId, Ydb::StatusIds::UNSUPPORTED,
+                "only FORMAT_CELLVEC and FORMAT_ARROW are supported by column shard read iterator");
+            return;
+        }
+    }
+
     if (!TablesManager.HasPrimaryIndex()) {
         SendReadError(ctx, replyTo, cookie, readId, Ydb::StatusIds::NOT_FOUND, "no primary index at column shard");
         return;
@@ -229,12 +297,13 @@ void TColumnShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& 
     }
     const auto pathId = TUnifiedPathId::BuildValid(*internalPathId, schemeShardLocalPathId);
 
-    NOlap::TSnapshot requestSnapshot = NOlap::TSnapshot::Zero();
-    if (record.HasSnapshot() && record.GetSnapshot().GetStep()) {
-        requestSnapshot = NOlap::TSnapshot(record.GetSnapshot().GetStep(), record.GetSnapshot().GetTxId());
-    } else {
-        requestSnapshot = GetMaxReadVersion();
+    // Require explicit snapshot - reject zero snapshot to avoid ambiguous read version.
+    if (!record.HasSnapshot() || !record.GetSnapshot().GetStep()) {
+        SendReadError(ctx, replyTo, cookie, readId, Ydb::StatusIds::BAD_REQUEST,
+            "explicit snapshot is required for column shard read iterator");
+        return;
     }
+    NOlap::TSnapshot requestSnapshot = NOlap::TSnapshot(record.GetSnapshot().GetStep(), record.GetSnapshot().GetTxId());
     const NOlap::TSnapshot snapshot = TablesManager.ResolveReadSnapshot(schemeShardLocalPathId, requestSnapshot);
 
     const NOlap::TIndexInfo& indexInfo = TablesManager.GetIndexInfo(snapshot);
@@ -274,8 +343,18 @@ void TColumnShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& 
     }
 
     auto task = std::make_shared<TReadIteratorRestoreTask>(TabletID(), SelfId(), replyTo, cookie, readId, pathId, snapshot,
-        schemaVersion, std::move(ydbPk), arrPk, std::move(scanColumnIds), std::move(resultSchema), std::move(keys));
+        schemaVersion, std::move(ydbPk), arrPk, std::move(scanColumnIds), std::move(resultSchema), std::move(keys),
+        resultFormat);
     ctx.Register(new NOlap::NDataReader::TActor(task));
+
+}
+
+void TColumnShard::Handle(TEvDataShard::TEvReadCancel::TPtr& ev, const TActorContext& ctx) {
+    // TEvReadCancel is not supported for column shard read iterator point lookups.
+    // The scan is fire-and-forget, and the DataReader actor will clean up on its own.
+    // Log a warning if cancel arrives for an unknown read.
+    Y_UNUSED(ev);
+    Y_UNUSED(ctx);
 }
 
 }   // namespace NKikimr::NColumnShard

@@ -1,6 +1,10 @@
 #include "tracer.h"
 
+#include "config.h"
+
 #include <yt/yt/core/misc/configurable_singleton_def.h>
+
+#include <yt/yt/core/tracing/trace_context.h>
 
 namespace NYT::NTracing {
 

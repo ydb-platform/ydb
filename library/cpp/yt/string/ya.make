@@ -16,6 +16,7 @@ PEERDIR(
     library/cpp/yt/assert
     library/cpp/yt/exception
     library/cpp/yt/misc
+    library/cpp/yt/mpl
 )
 
 CHECK_DEPENDENT_DIRS(

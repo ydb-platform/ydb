@@ -54,6 +54,8 @@ struct TJournalWriterPerformanceCounters
     NProfiling::TCounter IORequestCount;
     NProfiling::TCounter JournalWrittenBytes;
 
+    NProfiling::TCounter PipelinedFlushCount;
+
     IJournalWritesObserverPtr JournalWritesObserver;
 };
 

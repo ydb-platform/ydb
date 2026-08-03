@@ -291,8 +291,9 @@ void TDynamicNameserver::ReplaceNameserverSetup(TIntrusivePtr<TTableNameserverSe
     if (StaticConfig->StaticNodeTable != newStaticConfig->StaticNodeTable) {
         StaticConfig = std::move(newStaticConfig);
         InvalidateListNodesCache();
-        for (const auto& subscriber : StaticNodeChangeSubscribers) {
-            TActivationContext::Send(new IEventHandle(SelfId(), subscriber, new TEvInterconnect::TEvListNodes));
+        for (const auto& [subscriber, onlyAliveDynamicNodes] : StaticNodeChangeSubscribers) {
+            TActivationContext::Send(new IEventHandle(SelfId(), subscriber,
+                new TEvInterconnect::TEvListNodes(false, onlyAliveDynamicNodes)));
         }
         UpdateCounters();
     }
@@ -403,10 +404,10 @@ void TDynamicNameserver::InvalidateListNodesCache()
     ListNodesCacheAlive->Invalidate();
 }
 
-void TDynamicNameserver::SendNodesList(TActorId recipient, bool onlyAliveNodes, const TActorContext &ctx)
+void TDynamicNameserver::SendNodesList(TActorId recipient, bool onlyAliveDynamicNodes, const TActorContext &ctx)
 {
     auto now = ctx.Now();
-    auto& cache = onlyAliveNodes ? ListNodesCacheAlive : ListNodesCacheAll;
+    auto& cache = onlyAliveDynamicNodes ? ListNodesCacheAlive : ListNodesCacheAll;
 
     if (cache->NeedUpdate(now)) {
         auto newNodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
@@ -440,10 +441,14 @@ void TDynamicNameserver::SendNodesList(TActorId recipient, bool onlyAliveNodes, 
         for (auto &config : DynamicConfigs) {
             for (auto &pr : config->DynamicNodes) {
                 if (EnableLongLease) {
-                    if (onlyAliveNodes && pr.second.Liveness != ENodeLiveness::Alive) {
-                        continue; // dead nodes are not included in alive-only list
+                    if (onlyAliveDynamicNodes) {
+                        if (pr.second.Liveness != ENodeLiveness::Alive) {
+                            continue; // dead nodes are not included in alive-only list
+                        }
                     }
-                } else if (pr.second.Expire <= now) {
+                }
+
+                if (pr.second.EffectiveExpire(EnableLongLease) <= now) {
                     continue; // expired nodes are not included
                 }
 
@@ -475,8 +480,8 @@ void TDynamicNameserver::SendNodesList(TActorId recipient, bool onlyAliveNodes, 
 
 void TDynamicNameserver::SendNodesList(const TActorContext &ctx)
 {
-    for (auto &[sender, onlyAliveNodes] : ListNodesQueue) {
-        SendNodesList(sender, onlyAliveNodes, ctx);
+    for (auto &[sender, onlyAliveDynamicNodes] : ListNodesQueue) {
+        SendNodesList(sender, onlyAliveDynamicNodes, ctx);
     }
     ListNodesQueue.clear();
 }
@@ -627,10 +632,10 @@ void TDynamicNameserver::Handle(TEvInterconnect::TEvListNodes::TPtr &ev,
     YDB_LOG_DEBUG("TDynamicNameserver::Handle TEvInterconnect::TEvListNodes",
         {"eventString", ev->Get()->ToString()});
 
-    const bool onlyAliveNodes = ev->Get()->OnlyAliveNodes;
+    const bool onlyAliveDynamicNodes = ev->Get()->OnlyAliveDynamicNodes;
 
     if (ProtocolState == EProtocolState::Connecting) {
-        SendNodesList(ev->Sender, onlyAliveNodes, ctx);
+        SendNodesList(ev->Sender, onlyAliveDynamicNodes, ctx);
     } else {
         if (ListNodesQueue.empty()) {
             auto dinfo = AppData(ctx)->DomainsInfo;
@@ -646,11 +651,11 @@ void TDynamicNameserver::Handle(TEvInterconnect::TEvListNodes::TPtr &ev,
                 PendingRequests.Set(domain);
             }
         }
-        ListNodesQueue.emplace_back(ev->Sender, onlyAliveNodes);
+        ListNodesQueue.emplace_back(ev->Sender, onlyAliveDynamicNodes);
     }
 
     if (ev->Get()->SubscribeToStaticNodeChanges) {
-        StaticNodeChangeSubscribers.insert(ev->Sender);
+        StaticNodeChangeSubscribers[ev->Sender] = onlyAliveDynamicNodes;
     }
 }
 

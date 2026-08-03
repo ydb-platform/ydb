@@ -6,6 +6,7 @@
 
 #include <library/cpp/containers/absl/flat_hash_map.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -76,6 +77,7 @@ TUserInfo::TUserInfo(
     , Partition(partition)
     , AvgReadBytes{{TDuration::Seconds(1), 1000}, {TDuration::Minutes(1), 1000},
                     {TDuration::Hours(1), 2000}, {TDuration::Days(1), 2000}}
+    , AvgReadMessages(TDuration::Minutes(1), 1000)
     , WriteLagMs(TDuration::Minutes(1), 100)
     , NoConsumer(user == CLIENTID_WITHOUT_CONSUMER)
     , MeterRead(meterRead)
@@ -162,6 +164,7 @@ void TUserInfo::ReadDone(const TActorContext& ctx, const TInstant& now, ui64 rea
     for (auto& avg : AvgReadBytes) {
         avg.Update(readSize, now);
     }
+    AvgReadMessages.Update(readCount, now);
     AFL_ENSURE(ActiveReads > 0);
     --ActiveReads;
     UpdateReadingTimeAndState(endOffset, now);
@@ -169,7 +172,7 @@ void TUserInfo::ReadDone(const TActorContext& ctx, const TInstant& now, ui64 rea
 }
 
 static TUserInfo::TPerPartitionCounters CreateDetailedMetricsForSubgroup(const TActorContext& ctx, const TString& user, NMonitoring::TDynamicCounterPtr subgroup) {
-    Y_ABORT_UNLESS(subgroup);
+    AFL_ENSURE(subgroup);
 
     bool fcc = AppData()->PQConfig.GetTopicsAreFirstClassCitizen();
 

@@ -90,8 +90,8 @@ bool TConstructor::DoDeserializeFromProto(const NKikimrArrowAccessorProto::TCons
     return true;
 }
 
-TBlobWithAdditionalAccessorData TConstructor::SerializeToBlobAndMeta(
-    const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) {
+TBlobWithAdditionalAccessorData TConstructor::DoSerializeToBlobAndMeta(
+    const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const {
     const TDictionaryArray* arr = static_cast<const TDictionaryArray*>(columnData.get());
     auto arrDictionary = arr->GetDictionary();
     std::shared_ptr<arrow::Array> arrPositions = arr->GetPositions();
@@ -114,10 +114,6 @@ TBlobWithAdditionalAccessorData TConstructor::SerializeToBlobAndMeta(
     blob.append(blobDictionary);
     blob.append(blobPositions);
     return {std::move(blob), std::move(meta)};
-}
-
-TString TConstructor::DoSerializeToString(const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const {
-    return SerializeToBlobAndMeta(columnData, externalInfo).Blob;
 }
 
 TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstruct(

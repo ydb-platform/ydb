@@ -374,6 +374,10 @@
       {
         "name": "MaintenanceStatus",
         "type": "Utf8?"
+      },
+      {
+        "name": "ExpectedSlotSize",
+        "type": "Uint64?"
       }
     ],
     "primary_key": [
@@ -1027,6 +1031,10 @@
       {
         "name": "HasPath",
         "type": "Utf8?"
+      },
+      {
+        "name": "HasStream",
+        "type": "Bool?"
       }
     ],
     "primary_key": [

@@ -5,7 +5,7 @@
 #include "unversioned_reader.h"
 #include "unversioned_writer.h"
 
-#include <yt/yt/core/misc/ring_queue.h>
+#include <library/cpp/yt/containers/ring_queue.h>
 
 #include <library/cpp/yt/threading/atomic_object.h>
 

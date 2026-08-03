@@ -160,7 +160,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
             auto* logStream = settings.LogStream;
             ServerSettings->SetLoggerInitializer([logStream](NActors::TTestActorRuntime& runtime) {
                 runtime.SetLogBackendFactory([logStream]() {
-                    return new TStreamLogBackend(logStream);
+                    return new TOwningThreadedLogBackend(new TStreamLogBackend(logStream));
                 });
             });
         } else {

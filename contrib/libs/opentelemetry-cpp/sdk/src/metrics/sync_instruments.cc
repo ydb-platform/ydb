@@ -2,24 +2,45 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <stdint.h>
-#include <memory>
+#include <limits>
 #include <ostream>
 #include <string>
 #include <utility>
 
-#include "opentelemetry/common/key_value_iterable.h"
 #include "opentelemetry/context/context.h"
+#include "opentelemetry/version.h"
+
+#ifdef OPENTELEMETRY_HAVE_METRICS_BOUND_INSTRUMENTS_PREVIEW
+#  include "opentelemetry/metrics/sync_instruments.h"
+#endif
+
+#include "opentelemetry/nostd/unique_ptr.h"
 #include "opentelemetry/sdk/common/global_log_handler.h"
 #include "opentelemetry/sdk/metrics/instruments.h"
 #include "opentelemetry/sdk/metrics/state/metric_storage.h"
 #include "opentelemetry/sdk/metrics/sync_instruments.h"
-#include "opentelemetry/version.h"
 
 OPENTELEMETRY_BEGIN_NAMESPACE
 namespace sdk
 {
 namespace metrics
 {
+namespace
+{
+
+bool ToInt64Value(uint64_t value, const char *operation, int64_t &converted) noexcept
+{
+  if (value > static_cast<uint64_t>(std::numeric_limits<int64_t>::max()))
+  {
+    OTEL_INTERNAL_LOG_WARN(operation << " Value not recorded - value exceeds int64_t max");
+    return false;
+  }
+  converted = static_cast<int64_t>(value);
+  return true;
+}
+
+}  // namespace
+
 LongCounter::LongCounter(const InstrumentDescriptor &instrument_descriptor,
                          std::unique_ptr<SyncWritableMetricStorage> storage)
     : Synchronous(instrument_descriptor, std::move(storage))
@@ -41,7 +62,11 @@ void LongCounter::Add(uint64_t value,
                            << instrument_descriptor_.name_);
     return;
   }
-  return storage_->RecordLong(static_cast<int64_t>(value), attributes, context);
+  int64_t converted = 0;
+  if (ToInt64Value(value, "[LongCounter::Add(V,A)]", converted))
+  {
+    return storage_->RecordLong(converted, attributes, context);
+  }
 }
 
 void LongCounter::Add(uint64_t value,
@@ -54,7 +79,11 @@ void LongCounter::Add(uint64_t value,
                            << instrument_descriptor_.name_);
     return;
   }
-  return storage_->RecordLong(static_cast<int64_t>(value), attributes, context);
+  int64_t converted = 0;
+  if (ToInt64Value(value, "[LongCounter::Add(V,A,C)]", converted))
+  {
+    return storage_->RecordLong(converted, attributes, context);
+  }
 }
 
 void LongCounter::Add(uint64_t value) noexcept
@@ -66,7 +95,11 @@ void LongCounter::Add(uint64_t value) noexcept
                            << instrument_descriptor_.name_);
     return;
   }
-  return storage_->RecordLong(static_cast<int64_t>(value), context);
+  int64_t converted = 0;
+  if (ToInt64Value(value, "[LongCounter::Add(V)]", converted))
+  {
+    return storage_->RecordLong(converted, context);
+  }
 }
 
 void LongCounter::Add(uint64_t value, const opentelemetry::context::Context &context) noexcept
@@ -77,7 +110,11 @@ void LongCounter::Add(uint64_t value, const opentelemetry::context::Context &con
                            << instrument_descriptor_.name_);
     return;
   }
-  return storage_->RecordLong(static_cast<int64_t>(value), context);
+  int64_t converted = 0;
+  if (ToInt64Value(value, "[LongCounter::Add(V,C)]", converted))
+  {
+    return storage_->RecordLong(converted, context);
+  }
 }
 
 DoubleCounter::DoubleCounter(const InstrumentDescriptor &instrument_descriptor,
@@ -435,7 +472,11 @@ void LongHistogram::Record(uint64_t value,
         << instrument_descriptor_.name_);
     return;
   }
-  return storage_->RecordLong(static_cast<int64_t>(value), attributes, context);
+  int64_t converted = 0;
+  if (ToInt64Value(value, "[LongHistogram::Record(V,A,C)]", converted))
+  {
+    return storage_->RecordLong(converted, attributes, context);
+  }
 }
 
 void LongHistogram::Record(uint64_t value, const opentelemetry::context::Context &context) noexcept
@@ -446,7 +487,11 @@ void LongHistogram::Record(uint64_t value, const opentelemetry::context::Context
                            << instrument_descriptor_.name_);
     return;
   }
-  return storage_->RecordLong(static_cast<int64_t>(value), context);
+  int64_t converted = 0;
+  if (ToInt64Value(value, "[LongHistogram::Record(V,C)]", converted))
+  {
+    return storage_->RecordLong(converted, context);
+  }
 }
 
 #if OPENTELEMETRY_ABI_VERSION_NO >= 2
@@ -459,8 +504,12 @@ void LongHistogram::Record(uint64_t value,
                            << instrument_descriptor_.name_);
     return;
   }
-  auto context = opentelemetry::context::Context{};
-  return storage_->RecordLong(static_cast<int64_t>(value), attributes, context);
+  auto context      = opentelemetry::context::Context{};
+  int64_t converted = 0;
+  if (ToInt64Value(value, "[LongHistogram::Record(V,A)]", converted))
+  {
+    return storage_->RecordLong(converted, attributes, context);
+  }
 }
 
 void LongHistogram::Record(uint64_t value) noexcept
@@ -471,8 +520,12 @@ void LongHistogram::Record(uint64_t value) noexcept
                            << instrument_descriptor_.name_);
     return;
   }
-  auto context = opentelemetry::context::Context{};
-  return storage_->RecordLong(static_cast<int64_t>(value), context);
+  auto context      = opentelemetry::context::Context{};
+  int64_t converted = 0;
+  if (ToInt64Value(value, "[LongHistogram::Record(V)]", converted))
+  {
+    return storage_->RecordLong(converted, context);
+  }
 }
 #endif
 
@@ -566,6 +619,153 @@ void DoubleHistogram::Record(double value) noexcept
   }
   auto context = opentelemetry::context::Context{};
   return storage_->RecordDouble(value, context);
+}
+#endif
+
+#ifdef OPENTELEMETRY_HAVE_METRICS_BOUND_INSTRUMENTS_PREVIEW
+namespace
+{
+
+class BoundLongCounterImpl : public opentelemetry::metrics::BoundCounter<uint64_t>
+{
+public:
+  explicit BoundLongCounterImpl(std::shared_ptr<BoundSyncWritableMetricStorage> storage) noexcept
+      : storage_(std::move(storage))
+  {}
+  void Add(uint64_t value) noexcept override
+  {
+    if (storage_)
+    {
+      int64_t converted = 0;
+      if (ToInt64Value(value, "[BoundLongCounter::Add(V)]", converted))
+      {
+        storage_->RecordLong(converted);
+      }
+    }
+  }
+
+private:
+  std::shared_ptr<BoundSyncWritableMetricStorage> storage_;
+};
+
+class BoundDoubleCounterImpl : public opentelemetry::metrics::BoundCounter<double>
+{
+public:
+  explicit BoundDoubleCounterImpl(std::shared_ptr<BoundSyncWritableMetricStorage> storage) noexcept
+      : storage_(std::move(storage))
+  {}
+  void Add(double value) noexcept override
+  {
+    if (value < 0)
+    {
+      OTEL_INTERNAL_LOG_WARN("[BoundDoubleCounter::Add(V)] Value not recorded - negative value");
+      return;
+    }
+    if (storage_)
+    {
+      storage_->RecordDouble(value);
+    }
+  }
+
+private:
+  std::shared_ptr<BoundSyncWritableMetricStorage> storage_;
+};
+
+class BoundLongHistogramImpl : public opentelemetry::metrics::BoundHistogram<uint64_t>
+{
+public:
+  explicit BoundLongHistogramImpl(std::shared_ptr<BoundSyncWritableMetricStorage> storage) noexcept
+      : storage_(std::move(storage))
+  {}
+  void Record(uint64_t value) noexcept override
+  {
+    if (storage_)
+    {
+      int64_t converted = 0;
+      if (ToInt64Value(value, "[BoundLongHistogram::Record(V)]", converted))
+      {
+        storage_->RecordLong(converted);
+      }
+    }
+  }
+
+private:
+  std::shared_ptr<BoundSyncWritableMetricStorage> storage_;
+};
+
+class BoundDoubleHistogramImpl : public opentelemetry::metrics::BoundHistogram<double>
+{
+public:
+  explicit BoundDoubleHistogramImpl(
+      std::shared_ptr<BoundSyncWritableMetricStorage> storage) noexcept
+      : storage_(std::move(storage))
+  {}
+  void Record(double value) noexcept override
+  {
+    if (value < 0)
+    {
+      OTEL_INTERNAL_LOG_WARN(
+          "[BoundDoubleHistogram::Record(V)] Value not recorded - negative value");
+      return;
+    }
+    if (storage_)
+    {
+      storage_->RecordDouble(value);
+    }
+  }
+
+private:
+  std::shared_ptr<BoundSyncWritableMetricStorage> storage_;
+};
+
+}  // namespace
+
+opentelemetry::nostd::unique_ptr<opentelemetry::metrics::BoundCounter<uint64_t>> LongCounter::Bind(
+    const opentelemetry::common::KeyValueIterable &attributes) noexcept
+{
+  std::shared_ptr<BoundSyncWritableMetricStorage> bound;
+  if (storage_)
+  {
+    bound = storage_->Bind(attributes);
+  }
+  return opentelemetry::nostd::unique_ptr<opentelemetry::metrics::BoundCounter<uint64_t>>{
+      new BoundLongCounterImpl(std::move(bound))};
+}
+
+opentelemetry::nostd::unique_ptr<opentelemetry::metrics::BoundCounter<double>> DoubleCounter::Bind(
+    const opentelemetry::common::KeyValueIterable &attributes) noexcept
+{
+  std::shared_ptr<BoundSyncWritableMetricStorage> bound;
+  if (storage_)
+  {
+    bound = storage_->Bind(attributes);
+  }
+  return opentelemetry::nostd::unique_ptr<opentelemetry::metrics::BoundCounter<double>>{
+      new BoundDoubleCounterImpl(std::move(bound))};
+}
+
+opentelemetry::nostd::unique_ptr<opentelemetry::metrics::BoundHistogram<uint64_t>>
+LongHistogram::Bind(const opentelemetry::common::KeyValueIterable &attributes) noexcept
+{
+  std::shared_ptr<BoundSyncWritableMetricStorage> bound;
+  if (storage_)
+  {
+    bound = storage_->Bind(attributes);
+  }
+  return opentelemetry::nostd::unique_ptr<opentelemetry::metrics::BoundHistogram<uint64_t>>{
+      new BoundLongHistogramImpl(std::move(bound))};
+}
+
+opentelemetry::nostd::unique_ptr<opentelemetry::metrics::BoundHistogram<double>>
+DoubleHistogram::Bind(const opentelemetry::common::KeyValueIterable &attributes) noexcept
+{
+  std::shared_ptr<BoundSyncWritableMetricStorage> bound;
+  if (storage_)
+  {
+    bound = storage_->Bind(attributes);
+  }
+  return opentelemetry::nostd::unique_ptr<opentelemetry::metrics::BoundHistogram<double>>{
+      new BoundDoubleHistogramImpl(std::move(bound))};
 }
 #endif
 

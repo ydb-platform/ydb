@@ -15,22 +15,24 @@ def test_build_simple():
     assert str(u) == "http://127.0.0.1"
 
 
-@pytest.mark.skip
 def test_url_build_ipv6():
     u = URL.build(scheme="http", host="::1")
-    assert str(u) == "http://::1"
+    assert str(u) == "http://[::1]"
 
 
-@pytest.mark.skip
-def test_url_build_ipv6_brackets():
-    u = URL.build(scheme="http", host="[::1]")
-    assert str(u) == "http://::1"
+def test_url_build_ipv6_brackets_encoded():
+    u = URL.build(scheme="http", host="[::1]", encoded=True)
+    assert str(u) == "http://[::1]"
 
 
-@pytest.mark.skip
+def test_url_build_ipv6_brackets_not_encoded():
+    u = URL.build(scheme="http", host="::1", encoded=False)
+    assert str(u) == "http://[::1]"
+
+
 def test_url_ipv4_in_ipv6():
     u = URL.build(scheme="http", host="2001:db8:122:344::192.0.2.33")
-    assert str(u) == "http://2001:db8:122:344::c000:221"
+    assert str(u) == "http://[2001:db8:122:344::c000:221]"
 
 
 def test_build_with_scheme():
@@ -64,7 +66,7 @@ def test_build_with_scheme_and_host():
             id="port-only",
         ),
         pytest.param(
-            "", TypeError, r"^The port is required to be int\.$", id="port-str"
+            "", TypeError, r"^The port is required to be int, got .*\.$", id="port-str"
         ),
     ],
 )
@@ -118,11 +120,36 @@ def test_build_with_authority_and_host():
         URL.build(authority="host.com", host="example.com")
 
 
+@pytest.mark.parametrize(
+    ("host", "is_authority"),
+    [
+        ("user:pass@host.com", True),
+        ("user@host.com", True),
+        ("host:com", False),
+        ("not_percent_encoded%Zf", False),
+        ("still_not_percent_encoded%fZ", False),
+        *(("other_gen_delim_" + c, False) for c in "/?#[]"),
+    ],
+)
+def test_build_with_invalid_host(host: str, is_authority: bool):
+    match = r"Host '[^']+' cannot contain '[^']+' \(at position \d+\)"
+    if is_authority:
+        match += ", if .* use 'authority' instead of 'host'"
+    with pytest.raises(ValueError, match=f"{match}$"):
+        URL.build(host=host)
+
+
 def test_build_with_authority():
-    url = URL.build(scheme="http", authority="степан:bar@host.com:8000", path="path")
+    url = URL.build(scheme="http", authority="степан:bar@host.com:8000", path="/path")
     assert (
         str(url) == "http://%D1%81%D1%82%D0%B5%D0%BF%D0%B0%D0%BD:bar@host.com:8000/path"
     )
+
+
+def test_build_with_authority_no_leading_flash():
+    msg = r"Path in a URL with authority should start with a slash \('/'\) if set"
+    with pytest.raises(ValueError, match=msg):
+        URL.build(scheme="http", authority="степан:bar@host.com:8000", path="path")
 
 
 def test_build_with_authority_without_encoding():
@@ -130,6 +157,31 @@ def test_build_with_authority_without_encoding():
         scheme="http", authority="foo:bar@host.com:8000", path="path", encoded=True
     )
     assert str(url) == "http://foo:bar@host.com:8000/path"
+
+
+def test_build_with_authority_empty_host_no_scheme():
+    url = URL.build(authority="", path="path")
+    assert str(url) == "path"
+
+
+def test_build_with_authority_and_only_user():
+    url = URL.build(scheme="https", authority="user:@foo.com", path="/path")
+    assert str(url) == "https://user:@foo.com/path"
+
+
+def test_build_with_authority_with_port():
+    url = URL.build(scheme="https", authority="foo.com:8080", path="/path")
+    assert str(url) == "https://foo.com:8080/path"
+
+
+def test_build_with_authority_with_ipv6():
+    url = URL.build(scheme="https", authority="[::1]", path="/path")
+    assert str(url) == "https://[::1]/path"
+
+
+def test_build_with_authority_with_ipv6_and_port():
+    url = URL.build(scheme="https", authority="[::1]:81", path="/path")
+    assert str(url) == "https://[::1]:81/path"
 
 
 def test_query_str():
@@ -214,6 +266,33 @@ def test_build_already_encoded():
         encoded=True,
     )
     assert str(u) == "http://оун-упа.укр/шлях/криївка?ключ=знач#фраг"
+
+
+def test_build_already_encoded_username_password():
+    u = URL.build(
+        scheme="http",
+        host="x.org",
+        path="/x/y/z",
+        query_string="x=z",
+        fragment="any",
+        user="u",
+        password="p",
+        encoded=True,
+    )
+    assert str(u) == "http://u:p@x.org/x/y/z?x=z#any"
+    assert u.host_subcomponent == "x.org"
+
+
+def test_build_already_encoded_empty_host():
+    u = URL.build(
+        host="",
+        path="/x/y/z",
+        query_string="x=z",
+        fragment="any",
+        encoded=True,
+    )
+    assert str(u) == "/x/y/z?x=z#any"
+    assert u.host_subcomponent is None
 
 
 def test_build_percent_encoded():
@@ -303,3 +382,11 @@ def test_build_with_none_query_string():
 def test_build_with_none_fragment():
     with pytest.raises(TypeError):
         URL.build(scheme="http", host="example.com", fragment=None)
+
+
+def test_build_uppercase_host():
+    u = URL.build(
+        host="UPPER.case",
+        encoded=False,
+    )
+    assert u.host == "upper.case"

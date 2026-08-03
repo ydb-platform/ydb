@@ -747,7 +747,10 @@ void Deserialize(
 {
     std::string string;
     Deserialize(string, node);
-    DeserializeProto(&message, TRef::FromString(string));
+    if (!TryDeserializeProto(&message, TRef::FromString(string))) {
+        THROW_ERROR_EXCEPTION("Error parsing protobuf message from string")
+            << TErrorAttribute("protobuf_type", message.GetTypeName());
+    }
 }
 
 template <class T, class TTag, TStrongTypedefOptions Options>

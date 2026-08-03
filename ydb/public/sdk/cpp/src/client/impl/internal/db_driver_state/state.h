@@ -84,8 +84,7 @@ private:
 #endif
     };
 
-    NThreading::TFuture<void> CredentialsReady;
-    NThreading::TFuture<TCredentials> Credentials;
+    TCredentials Credentials;
     mutable std::once_flag ClientTlsValidationOnceFlag_;
     mutable bool ClientTlsCredentialsValid_ = true;
     mutable std::string ClientTlsValidationDetail_;

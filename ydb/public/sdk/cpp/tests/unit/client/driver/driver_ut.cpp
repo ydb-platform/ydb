@@ -1,7 +1,12 @@
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/type_switcher.h>
+#include <ydb/public/sdk/cpp/src/client/impl/observability/constants.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_common.h>
+#include <ydb/public/sdk/cpp/tests/common/fake_metric_registry.h>
+#include <ydb/public/sdk/cpp/tests/common/fake_trace_provider.h>
 
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
@@ -25,6 +30,24 @@ using namespace NYdb::NTable;
 
 namespace {
 
+    constexpr const char LegacyV1Certificate[] = R"(-----BEGIN CERTIFICATE-----
+MIIBbTCCARMCFBthJdWIg/H6ITeelffnCYoK8fDFMAoGCCqGSM49BAMCMDkxCzAJ
+BgNVBAYTAlJVMQwwCgYDVQQKDANZREIxHDAaBgNVBAMME0xlZ2FjeSBUZXN0IFJv
+b3QgQ0EwHhcNMjYwNzI3MDk0NDU2WhcNMzYwNzI0MDk0NDU2WjA5MQswCQYDVQQG
+EwJSVTEMMAoGA1UECgwDWURCMRwwGgYDVQQDDBNMZWdhY3kgVGVzdCBSb290IENB
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE4zlS2ha5hOd20QJEh17FP/mjkzsO
+PmwF7iY9zJ0HILwBjqxJSCGnNMMdT+A2d+Nry6de3WC6RkR72HTe6gffuTAKBggq
+hkjOPQQDAgNIADBFAiEA/0rBKAconmtFcliTZ0i9HzIkQeG+E/zVMiUvlhwpylYC
+IGfPhGBVwOMnr+uhwtpj4PAOIrlOQD/fBsaRtYuBRdg2
+-----END CERTIFICATE-----)";
+
+    std::string ReadBuildInfo(grpc::ServerContext* context) {
+        const auto& metadata = context->client_metadata();
+        const auto it = metadata.find(YDB_SDK_BUILD_INFO_HEADER);
+        Y_ABORT_UNLESS(it != metadata.end());
+        return {it->second.data(), it->second.length()};
+    }
+
     class TMockDiscoveryService : public Ydb::Discovery::V1::DiscoveryService::Service {
     public:
         grpc::Status ListEndpoints(
@@ -32,7 +55,7 @@ namespace {
                 const Ydb::Discovery::ListEndpointsRequest* request,
                 Ydb::Discovery::ListEndpointsResponse* response) override
         {
-            Y_UNUSED(context);
+            BuildInfo = ReadBuildInfo(context);
 
             std::cerr << "ListEndpoints: " << request->ShortDebugString() << std::endl;
 
@@ -48,6 +71,7 @@ namespace {
 
         // From database name to result
         std::unordered_map<std::string, Ydb::Discovery::ListEndpointsResult> MockResults;
+        std::string BuildInfo;
     };
 
     class TMockTableService : public Ydb::Table::V1::TableService::Service {
@@ -57,7 +81,7 @@ namespace {
                 const Ydb::Table::CreateSessionRequest* request,
                 Ydb::Table::CreateSessionResponse* response) override
         {
-            Y_UNUSED(context);
+            BuildInfo = ReadBuildInfo(context);
 
             std::cerr << "CreateSession: " << request->ShortDebugString() << std::endl;
 
@@ -70,6 +94,8 @@ namespace {
             op->mutable_result()->PackFrom(result);
             return grpc::Status::OK;
         }
+
+        std::string BuildInfo;
     };
 
     template<class TService>
@@ -110,32 +136,54 @@ namespace {
         std::atomic_int& ProviderCount_;
     };
 
-    class TDeferredCredentialsFactory final : public ICredentialsProviderFactory {
+    class TDeferredAuthProvider final : public ICredentialsProvider {
     public:
-        TDeferredCredentialsFactory()
-            : Provider_(NThreading::NewPromise<TCredentialsProviderPtr>())
+        TDeferredAuthProvider()
+            : AuthInfo_(NThreading::NewPromise<std::string>())
         {}
 
-        TCredentialsProviderPtr CreateProvider() const override {
-            return CreateInsecureCredentialsProviderFactory()->CreateProvider();
+        std::string GetAuthInfo() const override {
+            return AuthInfo_.GetFuture().GetValueSync();
         }
 
-        NThreading::TFuture<TCredentialsProviderPtr> CreateProviderAsync(std::weak_ptr<ICoreFacility>) const override {
-            return Provider_.GetFuture();
+        NThreading::TFuture<std::string> GetAuthInfoAsync() const override {
+            return AuthInfo_.GetFuture();
+        }
+
+        bool IsValid() const override {
+            return true;
         }
 
         void SetReady() {
-            Provider_.SetValue(CreateProvider());
+            AuthInfo_.SetValue("token");
         }
 
     private:
-        NThreading::TPromise<TCredentialsProviderPtr> Provider_;
+        NThreading::TPromise<std::string> AuthInfo_;
+    };
+
+    class TDeferredCredentialsFactory final : public ICredentialsProviderFactory {
+    public:
+        TDeferredCredentialsFactory()
+            : Provider_(std::make_shared<TDeferredAuthProvider>())
+        {}
+
+        TCredentialsProviderPtr CreateProvider() const override {
+            return Provider_;
+        }
+
+        void SetReady() {
+            Provider_->SetReady();
+        }
+
+    private:
+        std::shared_ptr<TDeferredAuthProvider> Provider_;
     };
 
 } // namespace
 
 Y_UNIT_TEST_SUITE(DeferredCredentialsTest) {
-    Y_UNIT_TEST(RequestWaitsForCredentials) {
+    Y_UNIT_TEST(RequestWaitsForAuthInfo) {
         auto factory = std::make_shared<TDeferredCredentialsFactory>();
         auto driver = TDriver(TDriverConfig()
             .SetEndpoint("localhost:100")
@@ -201,6 +249,35 @@ Y_UNIT_TEST_SUITE(CppGrpcClientSimpleTest) {
         UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::TRANSPORT_UNAVAILABLE);
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Client TLS credentials validation failed");
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "root CA PEM:");
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "failed to parse certificate #1");
+    }
+
+    Y_UNIT_TEST(LegacyV1TrustAnchorPassesValidation) {
+        auto driver = TDriver(
+            TDriverConfig()
+                .SetEndpoint("localhost:100")
+                .UseSecureConnection(LegacyV1Certificate));
+        auto client = NTable::TTableClient(driver);
+
+        auto result = client.CreateSession().GetValueSync();
+        auto issues = result.GetIssues().ToString();
+
+        UNIT_ASSERT_EQUAL(result.GetStatus(), EStatus::TRANSPORT_UNAVAILABLE);
+        UNIT_ASSERT(issues.find("Client TLS credentials validation failed") == std::string::npos);
+    }
+
+    Y_UNIT_TEST(MalformedCertificateAfterValidRootPassesValidation) {
+        const std::string rootBundle = std::string(LegacyV1Certificate) + R"(
+-----BEGIN CERTIFICATE-----
+not-base64
+-----END CERTIFICATE-----)";
+        grpc::SslCredentialsOptions sslOptions{
+            .pem_root_certs = NYdb::TStringType{rootBundle},
+        };
+        std::string validationDetail;
+
+        UNIT_ASSERT(NYdbGrpc::ValidateTlsCredentials(sslOptions, validationDetail));
+        UNIT_ASSERT(validationDetail.empty());
     }
 
     Y_UNIT_TEST(EmptyRootCertificateWithoutClientCredentialsKeepsBehavior) {
@@ -326,7 +403,10 @@ Y_UNIT_TEST_SUITE(CppGrpcClientSimpleTest) {
         auto driver = TDriver(
             TDriverConfig()
                 .SetEndpoint(TStringBuilder() << "localhost:" << discoveryPort)
-                .SetDatabase("/Root/My/DB"));
+                .SetDatabase("/Root/My/DB")
+                .SetTraceProvider(std::make_shared<NTests::TFakeTraceProvider>())
+                .SetMetricRegistry(std::make_shared<NTests::TFakeMetricRegistry>())
+                .AppendBuildInfo("test-client/1.2.3"));
         auto client = NTable::TTableClient(driver);
         auto sessionFuture = client.CreateSession();
 
@@ -335,6 +415,15 @@ Y_UNIT_TEST_SUITE(CppGrpcClientSimpleTest) {
         UNIT_ASSERT(sessionResult.IsSuccess());
         auto session = sessionResult.GetSession();
         UNIT_ASSERT_VALUES_EQUAL(session.GetId(), "my-session-id");
+
+        const auto baseBuildInfo = "ydb-cpp-sdk/" + GetSdkSemver();
+        UNIT_ASSERT_VALUES_EQUAL(
+            discoveryService.BuildInfo,
+            baseBuildInfo
+                + " ydb-sdk-tracing/" + std::string(NObservability::kTracingChainVersion)
+                + " ydb-sdk-metrics/" + std::string(NObservability::kMetricsChainVersion)
+                + ";test-client/1.2.3");
+        UNIT_ASSERT_VALUES_EQUAL(tableService.BuildInfo, baseBuildInfo + ";test-client/1.2.3");
     }
 
     Y_UNIT_TEST(WithoutDiscoveryDriverLevel) {

@@ -56,13 +56,13 @@ Y_UNIT_TEST_SUITE(TEventSerialization) {
         for (int i = 0; i < 4; ++i) {
             TMockEvent event;
             event.msg = &bm;
-            chunker.SetSerializingEvent(&event);
+            chunker.SetSerializingEvent(&event, true);
             char buf1[87];
             TString bmChunkedSerialized;
             while (!chunker.IsComplete()) {
                 auto range = chunker.FeedBuf(&buf1[0], sizeof(buf1));
-                for (auto [data, size] : range) {
-                    bmChunkedSerialized.append(data, size);
+                for (const auto& chunk : range) {
+                    bmChunkedSerialized.append(chunk.Buf, chunk.Size);
                 }
             }
             UNIT_ASSERT_EQUAL(bmSerialized, bmChunkedSerialized);

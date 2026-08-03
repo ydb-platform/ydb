@@ -7,8 +7,10 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/context.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/device_handler.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/overlapped_requests_guard_wrapper.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/split_requests_wrapper.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/storage_gate.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/service/trace_service_gate.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/helpers.h>
@@ -157,7 +159,7 @@ private:
     TAppContext& AppCtx;
     // Single device handler shared by all vhost queues of this endpoint.
     const IDeviceHandlerPtr DeviceHandler;
-    const IPartitionDirectServicePtr PartitionDirectService;
+    const TStorageGatePtr StorageGate;
     const TString SocketPath;
     const TStorageOptions Options;
     const ui32 SocketAccessMode;
@@ -170,27 +172,32 @@ private:
     TIntrusiveList<TRequest> RequestsInFlight;
     TAdaptiveLock RequestsLock;
 
+    TTraceServiceGate TraceServiceGate;
+
     std::atomic_flag Stopped = false;
 
 public:
     TEndpoint(
         TAppContext& appCtx,
         IDeviceHandlerPtr deviceHandler,
-        IPartitionDirectServicePtr partitionDirectService,
+        ITraceServicePtr traceService,
+        TStorageGatePtr storageGate,
         TString socketPath,
         const TStorageOptions& options,
         ui32 socketAccessMode,
         TVector<IVhostQueuePtr> queues)
         : AppCtx(appCtx)
         , DeviceHandler(std::move(deviceHandler))
-        , PartitionDirectService(std::move(partitionDirectService))
+        , StorageGate(std::move(storageGate))
         , SocketPath(std::move(socketPath))
         , Options(options)
         , SocketAccessMode(socketAccessMode)
         , Queues(std::move(queues))
+        , TraceServiceGate(std::move(traceService))
     {
         Y_ABORT_UNLESS(DeviceHandler);
         Y_ABORT_UNLESS(!Queues.empty());
+
         for (const auto& queue: Queues) {
             queue->AssignedEndpointsCount.fetch_add(
                 1,
@@ -289,6 +296,18 @@ public:
         return future;
     }
 
+    void Attach(ITraceServicePtr traceService, IStoragePtr storage)
+    {
+        TraceServiceGate.Attach(std::move(traceService));
+        StorageGate->Attach(std::move(storage));
+    }
+
+    void Detach()
+    {
+        TraceServiceGate.Detach();
+        StorageGate->Detach();
+    }
+
     void Update(ui64 blocksCount)
     {
         TLog& Log = AppCtx.Log;
@@ -360,7 +379,7 @@ private:
             CreateRequestId(),
             std::move(vhostRequest),
             Options,
-            PartitionDirectService->CreteRootSpan(ToStringBuf(requestType)));
+            TraceServiceGate.CreateRootSpan(ToStringBuf(requestType)));
 
         AppCtx.VHostStats->RequestStarted(
             AppCtx.Log,
@@ -516,8 +535,8 @@ private:
 
     TVector<TExecutorPtr> Executors;
 
-    TMap<TString, TEndpointPtr> Endpoints;
-    TMap<TString, TEndpointPtr> StoppingEndpoints;
+    THashMap<TString, TEndpointPtr> Endpoints;
+    THashMap<TString, TEndpointPtr> StoppingEndpoints;
 
 public:
     TServer(
@@ -535,11 +554,13 @@ public:
 
     TFuture<NProto::TError> StartEndpoint(
         TString socketPath,
-        IPartitionDirectServicePtr partitionDirectService,
+        ITraceServicePtr traceService,
         IStoragePtr storage,
         const TStorageOptions& options) override;
 
     TFuture<NProto::TError> StopEndpoint(const TString& socketPath) override;
+
+    void DetachStorage(const TString& socketPath) override;
 
     NProto::TError UpdateEndpoint(
         const TString& socketPath,
@@ -622,7 +643,7 @@ void TServer::Stop()
 
 TFuture<NProto::TError> TServer::StartEndpoint(
     TString socketPath,
-    IPartitionDirectServicePtr partitionDirectService,
+    ITraceServicePtr traceService,
     IStoragePtr storage,
     const TStorageOptions& options)
 {
@@ -640,13 +661,15 @@ TFuture<NProto::TError> TServer::StartEndpoint(
     TVector<IVhostQueuePtr> queues;
 
     with_lock (Lock) {
-        auto it = Endpoints.find(socketPath);
-        if (it != Endpoints.end()) {
+        if (auto* endpoint = Endpoints.FindPtr(socketPath)) {
             NProto::TError error;
             error.SetCode(S_ALREADY);
             error.SetMessage(
                 TStringBuilder() << "endpoint " << socketPath.Quote()
                                  << " has already been started");
+
+            STORAGE_INFO("Reattach storage to " << options.DiskId.Quote());
+            (*endpoint)->Attach(std::move(traceService), std::move(storage));
             return MakeFuture(error);
         }
 
@@ -659,14 +682,17 @@ TFuture<NProto::TError> TServer::StartEndpoint(
         }
     }
 
+    TStorageGatePtr storageGate =
+        std::make_shared<TStorageGate>(std::move(storage));
     // Single device handler shared by all vhost queues of this endpoint.
     // The whole storage-wrapper chain is built once per endpoint.
-    auto deviceHandler = CreateDeviceHandler(options, std::move(storage));
+    auto deviceHandler = CreateDeviceHandler(options, storageGate);
 
     auto endpoint = std::make_shared<TEndpoint>(
         *this,
         std::move(deviceHandler),
-        std::move(partitionDirectService),
+        std::move(traceService),
+        std::move(storageGate),
         socketPath,
         options,
         Config.SocketAccessMode,
@@ -734,6 +760,15 @@ TFuture<NProto::TError> TServer::StopEndpoint(const TString& socketPath)
             ptr->HandleStoppedEndpoint(socketPath, error);
             return error;
         });
+}
+
+void TServer::DetachStorage(const TString& socketPath)
+{
+    with_lock (Lock) {
+        if (auto* endpoint = Endpoints.FindPtr(socketPath)) {
+            (*endpoint)->Detach();
+        }
+    }
 }
 
 NProto::TError TServer::UpdateEndpoint(

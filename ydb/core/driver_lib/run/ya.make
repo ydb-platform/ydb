@@ -26,6 +26,7 @@ SRCS(
 
 PEERDIR(
     contrib/libs/protobuf
+    library/cpp/containers/absl
     library/cpp/getopt/small
     library/cpp/logger
     library/cpp/malloc/api
@@ -121,6 +122,8 @@ PEERDIR(
     ydb/core/tx/long_tx_service
     ydb/core/tx/long_tx_service/public
     ydb/core/tx/mediator
+    ydb/core/tx/priorities/service
+    ydb/core/tx/priorities/usage
     ydb/core/tx/replication/controller
     ydb/core/tx/replication/service
     ydb/core/tx/scheme_board
@@ -178,9 +181,11 @@ PEERDIR(
     ydb/services/persqueue_v1
     ydb/services/rate_limiter
     ydb/services/replication
+    ydb/services/distributed_storage
     ydb/services/tablet
     ydb/services/test_shard
     ydb/services/view
+    ydb/services/workload_manager/service
     ydb/services/ydb
     yql/essentials/minikql/comp_nodes/llvm16
     yql/essentials/public/udf/service/exception_policy
@@ -198,6 +203,7 @@ IF (OS_LINUX AND YDB_EMBEDDED_NBS_ENABLED)
     PEERDIR(
         ydb/core/nbs/cloud/blockstore/bootstrap
         ydb/core/nbs/cloud/blockstore/config/protos
+        ydb/core/nbs/cloud/blockstore/libs/storage/dbs_controller
         ydb/core/nbs/cloud/blockstore/libs/storage/ss_proxy
         ydb/core/nbs/cloud/blockstore/libs/storage/volume
 

@@ -60,7 +60,6 @@ from clickhouse_connect.driver.query import (
     TzMode,
     TzSource,
     arrow_buffer,
-    returns_empty_string_on_empty_body,
 )
 from clickhouse_connect.driver.streaming import StreamingFileAdapter, StreamingInsertSource, StreamingResponseSource
 from clickhouse_connect.driver.summary import QuerySummary
@@ -1005,11 +1004,13 @@ class AsyncClient(Client):
             body = await response.read()
             encoding = response.headers.get("Content-Encoding")
             summary = self._summary(response)
+            result_format = response.headers.get("X-ClickHouse-Format")
         finally:
             _release_lease(response)
 
         if not body:
-            if returns_empty_string_on_empty_body(cmd):
+            # A result-producing statement sends a format header even when the result is empty.
+            if result_format is not None:
                 return ""
             return QuerySummary(summary)
 
@@ -2044,8 +2045,10 @@ class AsyncClient(Client):
                         else:
                             form.add_field(field_name, field_value, content_type="text/plain")
                     request_kwargs["data"] = form
-                elif isinstance(data, dict):
-                    request_kwargs["data"] = data
+                elif isinstance(data, (bytes, bytearray, memoryview)):
+                    request_kwargs["data"] = io.BytesIO(data)
+                elif isinstance(data, str):
+                    request_kwargs["data"] = io.BytesIO(data.encode())
                 else:
                     request_kwargs["data"] = data
 

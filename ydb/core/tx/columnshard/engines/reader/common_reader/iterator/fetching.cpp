@@ -92,21 +92,17 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
         return;
     }
     const auto& step = source->GetExecutionContext().GetCursorStep();
+    const auto& executionVisitor = source->GetExecutionContext().GetExecutionVisitorVerified();
+    const auto& processorContext = executionVisitor->MutableContext();
     const TString tracingName = source->GetExecutionContext().GetPrevCategoryName() + " - " + currentCategoryName;
     const TString tracingExecutionResult = source->GetExecutionContext().GetPrevExecutionResult() + " - " + currentExecutionResult;
     const TDuration finishDurationMs = source->GetAndResetWaitDuration();
     const auto processorType = processor->GetProcessorType();
     const TString details = processor->DebugJson().GetStringRobust();
-    const bool resourcesExtracted =
-        source->GetExecutionContext().GetExecutionVisitorVerified()->MutableContext().IsExtracted();
+    const bool resourcesExtracted = processorContext.IsExtracted();
     const ui32 filteredRows = resourcesExtracted
         ? source->GetRecordsCount()
-        : source->GetExecutionContext()
-              .GetExecutionVisitorVerified()
-              ->MutableContext()
-              .GetResources()
-              .GetRecordsCountActualOptional()
-              .value_or(source->GetRecordsCount());
+        : processorContext.GetResources().GetRecordsCountActualOptional().value_or(source->GetRecordsCount());
 #define PROGRAM_PROBE_ARGS                                                                                                            \
     source->GetDataSourceOrbit(), source->GetRawPathId(), source->GetTabletId(), source->GetTxId(), source->GetDeprecatedPortionId(), \
         step.GetStepIndex(), tracingName, nodeId, finishDurationMs, executionDurationMs, filteredRows
@@ -184,8 +180,7 @@ void TProgramStep::ReportTracing(const std::shared_ptr<IDataSource>& source, con
             ui32 indexFilteredRows = source->GetRecordsCount();
             auto* indexProcessor = dynamic_cast<const NArrow::NSSA::TIndexCheckerProcessor*>(processor.get());
             if (indexProcessor && source->GetSourceSchemaOptional() && !resourcesExtracted) {
-                const auto& resources =
-                    source->GetExecutionContext().GetExecutionVisitorVerified()->MutableContext().GetResources();
+                const auto& resources = processorContext.GetResources();
                 const auto& idxCtx = indexProcessor->GetIndexContext();
                 NIndexes::NRequest::TOriginalDataAddress addr(idxCtx.GetColumnId(), idxCtx.GetSubColumnName());
                 auto skipIndexes = source->GetSourceSchemaOptional()->GetIndexInfo().FindSkipIndexes(addr, idxCtx.GetOperation());
@@ -300,15 +295,19 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
         source->MutableExecutionContext().OnFinishProgramStepExecution();
         GetSignals(iterator->GetCurrentNodeId())->OnExecuteGraphNode(source->GetRecordsCount());
         source->GetContext()->GetCommonContext()->GetCounters().OnExecuteGraphNode(iterator->GetCurrentNode().GetIdentifier());
-        if (source->GetExecutionContext().GetExecutionVisitorVerified()->MutableContext().GetResources().GetRecordsCountActualOptional() == 0) {
-            source->GetExecutionContext().GetExecutionVisitorVerified()->MutableContext().MutableResources().Clear();
+        auto& processorContext = source->GetExecutionContext().GetExecutionVisitorVerified()->MutableContext();
+        if (!processorContext.IsExtracted() && processorContext.GetResources().GetRecordsCountActualOptional() == 0) {
+            processorContext.MutableResources().Clear();
             break;
         }
     }
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("fgraph"));
     YDB_LOG_DEBUG_COMP(NKikimrServices::SSA_GRAPH_EXECUTION, "",
         {"graphConstructed", Program->DebugDOT(source->GetExecutionContext().GetExecutionVisitorVerified()->GetExecutedIds())});
-    source->MutableStageData().ReturnTable(source->GetExecutionContext().GetExecutionVisitorVerified()->MutableContext().ExtractResources());
+    auto& processorContext = source->GetExecutionContext().GetExecutionVisitorVerified()->MutableContext();
+    if (!processorContext.IsExtracted()) {
+        source->MutableStageData().ReturnTable(processorContext.ExtractResources());
+    }
 
     return true;
 }

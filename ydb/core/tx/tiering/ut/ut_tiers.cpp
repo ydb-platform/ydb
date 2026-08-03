@@ -397,6 +397,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         for (auto it = bucket.begin(); it != bucket.end(); ++it) {
             const TString& key = it->first;
             TLogoBlobID blobId;
+            TString error;
             UNIT_ASSERT_C(TObjectKey::Parse(key, blobId, error), error + ", key: " + key);
             UNIT_ASSERT_VALUES_UNEQUAL_C(key, blobId.ToString(), "blob is stored in the bucket root");
 

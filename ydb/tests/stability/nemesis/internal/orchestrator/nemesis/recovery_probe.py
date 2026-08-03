@@ -1,8 +1,7 @@
-"""Fact-based recovery for reserved failure budget.
+"""Fact-based recovery: release reserved budget when an HcSnapshot predicate says the target is back.
 
-Polls a ``recovered(target)`` predicate and releases the lease the moment a target is back, instead
-of guessing a timer. A fault that overshoots its timeout is *not* released — it is reported stuck and
-keeps holding the budget, so chaos does not pile onto a cluster that is not healing.
+Self-healing faults wait on the predicate; toggle faults extract after ``extract_after_sec``, then
+confirm. Blind (stale HC): releases/stuck pause, scheduled extracts still fire.
 """
 
 from __future__ import annotations
@@ -15,16 +14,21 @@ from typing import Callable
 
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_target import ChaosTarget
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import FailureModelGuard
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.hc_model import (
+    HcSnapshot,
+    build_snapshot,
+)
 
 logger = logging.getLogger(__name__)
 
-# Healthcheck self_check_result values that mean "this host's endpoint did not answer".
-_HC_ERROR_RESULTS = frozenset({"HC_REQUEST_ERROR", "HC_RESULT_ERROR"})
-
-# Ignore recovery signals for this long, so a stale pre-fault healthcheck isn't read as recovery.
+# Ignore recovery signals this long so a stale pre-fault HC is not read as recovery.
 DEFAULT_MIN_HOLD_SEC: float = 30.0
-DEFAULT_RECOVERY_TIMEOUT_SEC: float = 300.0
 DEFAULT_POLL_INTERVAL_SEC: float = 15.0
+# Stale beyond this → blind (HC period 15s + up to ~50s per tick).
+DEFAULT_MAX_HC_AGE_SEC: float = 180.0
+
+PHASE_HOLD = "hold"
+PHASE_CONFIRM = "confirm"
 
 
 @dataclass(frozen=True)
@@ -36,6 +40,7 @@ class StuckFault:
     target: ChaosTarget
     held_sec: float
     timeout_sec: float
+    phase: str = PHASE_HOLD
 
 
 @dataclass
@@ -44,25 +49,16 @@ class _Pending:
     target: ChaosTarget
     nemesis_type: str
     reserved_at: float
-    timeout_sec: float
+    recovered: Callable[[HcSnapshot], bool]
+    stuck_timeout_sec: float
     min_hold_sec: float
-    stuck_reported: bool = False
+    # toggle faults: dispatch recover_action after extract_after_sec, then confirm by predicate
     recover_action: Callable[[], None] | None = None
-
-
-def healthcheck_recovery(
-    reporter, error_results: frozenset[str] = _HC_ERROR_RESULTS
-) -> Callable[[ChaosTarget], bool]:
-    """``recovered`` predicate: the host's healthcheck endpoint answers again."""
-
-    def recovered(target: ChaosTarget) -> bool:
-        results = getattr(reporter, "last_results", None) or {}
-        entry = results.get(target.host)
-        if not isinstance(entry, dict):
-            return False  # no data yet -> assume not recovered
-        return entry.get("self_check_result") not in error_results
-
-    return recovered
+    extract_after_sec: float | None = None
+    confirm_timeout_sec: float | None = None
+    phase: str = PHASE_HOLD
+    confirm_since: float | None = None
+    stuck_reported: bool = False
 
 
 class RecoveryProbe:
@@ -70,95 +66,128 @@ class RecoveryProbe:
         self,
         *,
         guard: FailureModelGuard,
-        recovered: Callable[[ChaosTarget], bool],
+        hc_source,
         on_stuck: Callable[[StuckFault], None] | None = None,
+        on_blind: Callable[[], None] | None = None,
+        on_sighted: Callable[[], None] | None = None,
         poll_interval: float = DEFAULT_POLL_INTERVAL_SEC,
-        default_timeout_sec: float = DEFAULT_RECOVERY_TIMEOUT_SEC,
         min_hold_sec: float = DEFAULT_MIN_HOLD_SEC,
+        max_hc_age_sec: float = DEFAULT_MAX_HC_AGE_SEC,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._guard = guard
-        self._recovered = recovered
+        self._hc_source = hc_source  # duck-typed: .last_results (dict), .last_update (monotonic)
         self._on_stuck = on_stuck
+        self._on_blind = on_blind
+        self._on_sighted = on_sighted
         self._poll_interval = float(poll_interval)
-        self._default_timeout_sec = float(default_timeout_sec)
         self._min_hold_sec = float(min_hold_sec)
+        self._max_hc_age_sec = float(max_hc_age_sec)
         self._clock = clock
         self._lock = threading.Lock()
         self._pending: dict[str, _Pending] = {}
+        self._blind = False
+        self._blind_since: float | None = None
+        self._blind_reported = False
+        self._ever_fresh = False
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+
+    # -- healthcheck view -----------------------------------------------------
+
+    def snapshot_now(self) -> HcSnapshot:
+        """Current healthcheck snapshot (also used to capture pre-inject baselines)."""
+        return build_snapshot(
+            getattr(self._hc_source, "last_results", None) or {},
+            now=self._clock(),
+            last_update=getattr(self._hc_source, "last_update", None),
+            max_age_sec=self._max_hc_age_sec,
+        )
+
+    def alive_compute_baseline(self) -> int | None:
+        """Alive compute nodes right now; None when blind (a slot inject must not proceed)."""
+        snap = self.snapshot_now()
+        return snap.alive_compute if snap.fresh else None
+
+    # -- tracking ---------------------------------------------------------------
 
     def track(
         self,
         lease_id: str,
         target: ChaosTarget,
         nemesis_type: str,
-        timeout_sec: float | None = None,
+        *,
+        recovered: Callable[[HcSnapshot], bool],
+        stuck_timeout_sec: float,
         recover_action: Callable[[], None] | None = None,
+        extract_after_sec: float | None = None,
+        confirm_timeout_sec: float | None = None,
     ) -> None:
-        """Track a reserved fault until its budget can be released.
-
-        ``recover_action=None`` (self-recovering): released once ``recovered(target)``, reported
-        stuck past ``timeout_sec``. A callable (toggle): run after ``timeout_sec``, then released.
-        """
+        """Track until HC confirms recovery. Toggle: extract after ``extract_after_sec``, then confirm."""
         if not lease_id:
             return
-        timeout = float(timeout_sec) if timeout_sec is not None else self._default_timeout_sec
+        timeout = float(stuck_timeout_sec)
         with self._lock:
             self._pending[lease_id] = _Pending(
                 lease_id=lease_id,
                 target=target,
                 nemesis_type=nemesis_type,
                 reserved_at=self._clock(),
-                timeout_sec=timeout,
+                recovered=recovered,
+                stuck_timeout_sec=timeout,
                 min_hold_sec=min(self._min_hold_sec, timeout),
                 recover_action=recover_action,
+                extract_after_sec=(
+                    float(extract_after_sec) if extract_after_sec is not None else None
+                ),
+                confirm_timeout_sec=(
+                    float(confirm_timeout_sec) if confirm_timeout_sec is not None else timeout
+                ),
             )
 
     def tick(self) -> list[StuckFault]:
-        """Poll every tracked fault once. Releases recovered ones; returns newly-stuck ones."""
+        """Poll once: release recovered, return newly-stuck."""
         now = self._clock()
+        snap = self.snapshot_now()
+        self._set_blind(not snap.fresh, now)
         with self._lock:
             items = list(self._pending.values())
         stuck: list[StuckFault] = []
         for p in items:
             held = now - p.reserved_at
+            if p.recover_action is not None and p.phase == PHASE_HOLD:
+                # Extracts still fire while blind — do not extend the fault.
+                if held >= (p.extract_after_sec or 0.0):
+                    self._dispatch_extract(p, now)
+                continue
+            if not snap.fresh:
+                continue  # blind: no releases, no stuck
             if held < p.min_hold_sec:
                 continue
-            if p.recover_action is not None:
-                if held >= p.timeout_sec:
-                    self._auto_extract(p, held)
+            # Only trust HC data produced after the fault / extract.
+            evidence_after = p.confirm_since if p.phase == PHASE_CONFIRM else p.reserved_at
+            if snap.data_at is not None and snap.data_at < evidence_after:
                 continue
             try:
-                is_recovered = self._recovered(p.target)
+                is_recovered = p.recovered(snap)
             except Exception:
                 logger.exception("recovery check raised for %s", p.target.identity_key())
                 is_recovered = False
             if is_recovered:
-                self._guard.release(p.lease_id)
-                with self._lock:
-                    self._pending.pop(p.lease_id, None)
-                logger.info(
-                    "recovered: %s (%s) after %.0fs; budget released",
-                    p.target.host, p.nemesis_type, held,
-                )
+                self._release(p, held)
                 continue
-            if held > p.timeout_sec and not p.stuck_reported:
-                p.stuck_reported = True
-                logger.error(
-                    "fault did not recover within %.0fs; holding budget: %s (%s)",
-                    p.timeout_sec, p.target.host, p.nemesis_type,
-                )
-                stuck.append(
-                    StuckFault(
-                        lease_id=p.lease_id,
-                        nemesis_type=p.nemesis_type,
-                        target=p.target,
-                        held_sec=held,
-                        timeout_sec=p.timeout_sec,
-                    )
-                )
+            fault: StuckFault | None = None
+            if p.phase == PHASE_CONFIRM:
+                if (
+                    p.confirm_since is not None
+                    and now - p.confirm_since > (p.confirm_timeout_sec or 0.0)
+                    and not p.stuck_reported
+                ):
+                    fault = self._mark_stuck(p, held, p.confirm_timeout_sec or 0.0)
+            elif held > p.stuck_timeout_sec and not p.stuck_reported:
+                fault = self._mark_stuck(p, held, p.stuck_timeout_sec)
+            if fault is not None:
+                stuck.append(fault)
         for info in stuck:
             if self._on_stuck is not None:
                 try:
@@ -168,35 +197,34 @@ class RecoveryProbe:
         return stuck
 
     def drain_extracts(self) -> int:
-        """Extract every tracked toggle fault now, whatever is left of its hold window.
-
-        Called when chaos is switched off: nothing else would extract them (the scheduler dispatches
-        toggle injects directly, so the planners never saw them). Self-recovering faults stay
-        tracked. Returns the number of extracts dispatched.
-        """
+        """Extract every toggle still in HOLD (chaos off). Leases move to confirm."""
         with self._lock:
-            pending = [p for p in self._pending.values() if p.recover_action is not None]
+            pending = [
+                p
+                for p in self._pending.values()
+                if p.recover_action is not None and p.phase == PHASE_HOLD
+            ]
         if not pending:
             return 0
         logger.info("draining %d pending extract(s) on shutdown", len(pending))
         now = self._clock()
         for p in pending:
-            self._auto_extract(p, now - p.reserved_at, reason="drained on shutdown")
+            self._dispatch_extract(p, now, reason="drained on shutdown")
         return len(pending)
 
-    def _auto_extract(self, p: _Pending, held: float, reason: str = "hold elapsed") -> None:
-        """Toggle fault held long enough: dispatch its extract and release the budget."""
-        try:
-            p.recover_action()
-        except Exception:
-            logger.exception("auto-extract action raised for %s", p.target.identity_key())
-        self._guard.release(p.lease_id)
+    def untrack_identity(self, identity_key: str) -> int:
+        """Drop pendings for ``identity_key`` (pairs with guard ``record_extract`` by identity)."""
         with self._lock:
-            self._pending.pop(p.lease_id, None)
-        logger.info(
-            "auto-extracted: %s (%s) after %.0fs hold (%s); budget released",
-            p.target.host, p.nemesis_type, held, reason,
-        )
+            doomed = [
+                lease_id
+                for lease_id, p in self._pending.items()
+                if p.target.identity_key() == identity_key
+            ]
+            for lease_id in doomed:
+                self._pending.pop(lease_id, None)
+        if doomed:
+            logger.info("untracked %d pending fault(s) for %s (explicit extract)", len(doomed), identity_key)
+        return len(doomed)
 
     def pending(self) -> list[_Pending]:
         with self._lock:
@@ -207,7 +235,90 @@ class RecoveryProbe:
             return {
                 "tracked": len(self._pending),
                 "stuck": sum(1 for p in self._pending.values() if p.stuck_reported),
+                "confirming": sum(1 for p in self._pending.values() if p.phase == PHASE_CONFIRM),
+                "blind": self._blind,
             }
+
+    # -- internals ----------------------------------------------------------------
+
+    def _release(self, p: _Pending, held: float) -> None:
+        # Lease may already be gone (manual extract raced us); drop the pending either way.
+        self._guard.release(p.lease_id)
+        with self._lock:
+            self._pending.pop(p.lease_id, None)
+        logger.info(
+            "recovered: %s (%s) after %.0fs [%s]; budget released",
+            p.target.host, p.nemesis_type, held, p.phase,
+        )
+
+    def _dispatch_extract(self, p: _Pending, now: float, reason: str = "hold elapsed") -> None:
+        """Dispatch extract and move HOLD → CONFIRM."""
+        with self._lock:
+            if p.phase != PHASE_HOLD:  # CAS vs concurrent drain
+                return
+            p.phase = PHASE_CONFIRM
+            p.confirm_since = now
+        try:
+            p.recover_action()
+        except Exception:
+            logger.exception("extract action raised for %s", p.target.identity_key())
+        logger.info(
+            "extract dispatched: %s (%s) after %.0fs hold (%s); awaiting healthcheck confirm",
+            p.target.host, p.nemesis_type, now - p.reserved_at, reason,
+        )
+
+    def _mark_stuck(self, p: _Pending, held: float, timeout_sec: float) -> StuckFault | None:
+        with self._lock:
+            if self._pending.get(p.lease_id) is not p:  # raced with untrack_identity
+                return None
+            p.stuck_reported = True
+        logger.error(
+            "fault did not recover within %.0fs [%s]; holding budget: %s (%s)",
+            timeout_sec, p.phase, p.target.host, p.nemesis_type,
+        )
+        return StuckFault(
+            lease_id=p.lease_id,
+            nemesis_type=p.nemesis_type,
+            target=p.target,
+            held_sec=held,
+            timeout_sec=timeout_sec,
+            phase=p.phase,
+        )
+
+    def _set_blind(self, blind: bool, now: float) -> None:
+        """Track blindness; report only after grace on first boot, immediately if sight was lost."""
+        report = False
+        sighted = False
+        with self._lock:
+            if blind:
+                if self._blind_since is None:
+                    self._blind_since = now
+                self._blind = True
+                if not self._blind_reported and (
+                    self._ever_fresh or now - self._blind_since >= self._max_hc_age_sec
+                ):
+                    self._blind_reported = True
+                    report = True
+            else:
+                sighted = self._blind
+                self._blind = False
+                self._blind_since = None
+                self._blind_reported = False
+                self._ever_fresh = True
+        if report:
+            logger.error("recovery probe is blind: no fresh healthcheck data; releases paused")
+            if self._on_blind is not None:
+                try:
+                    self._on_blind()
+                except Exception:
+                    logger.exception("on_blind callback raised")
+        elif sighted:
+            logger.info("recovery probe can see again; releases resumed")
+            if self._on_sighted is not None:
+                try:
+                    self._on_sighted()
+                except Exception:
+                    logger.exception("on_sighted callback raised")
 
     # -- loop ---------------------------------------------------------------
 
@@ -236,7 +347,8 @@ class RecoveryProbe:
 __all__ = [
     "RecoveryProbe",
     "StuckFault",
-    "healthcheck_recovery",
+    "PHASE_HOLD",
+    "PHASE_CONFIRM",
     "DEFAULT_MIN_HOLD_SEC",
-    "DEFAULT_RECOVERY_TIMEOUT_SEC",
+    "DEFAULT_MAX_HC_AGE_SEC",
 ]

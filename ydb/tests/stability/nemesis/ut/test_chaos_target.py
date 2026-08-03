@@ -150,7 +150,7 @@ class TestFilterSafeAndRecording:
         guard = FailureModelGuard(mirror3dc_topology)
         for i, host in enumerate(("dc1-a", "dc1-b"), start=1):  # sacrifice dc1 entirely
             guard.record_inject(
-                f"dc1-{i}", ChaosTarget.for_node(host, node_id=i), ImpactScope.NODE, recovery_sec=None
+                f"dc1-{i}", ChaosTarget.for_node(host, node_id=i), ImpactScope.NODE
             )
         extra = [ChaosTarget.for_node("dc2-a", node_id=3), ChaosTarget.for_node("dc3-a", node_id=5)]
         safe = guard.filter_safe(extra, ImpactScope.NODE)
@@ -160,7 +160,7 @@ class TestFilterSafeAndRecording:
         guard = FailureModelGuard(block42_topology)
         n1 = ChaosTarget.for_node("h1", node_id=1)
         n2 = ChaosTarget.for_node("h1", node_id=2)  # same host, same domain
-        guard.record_inject("tracked", n1, ImpactScope.NODE, recovery_sec=None)
+        guard.record_inject("tracked", n1, ImpactScope.NODE)
         guard.record_extract("untracked-other", n2, ImpactScope.NODE)
         assert "dc1/r1" in guard.snapshot()["impaired_racks"], "n1 must survive n2's extract"
         guard.record_extract("tracked", n1, ImpactScope.NODE)
@@ -170,7 +170,7 @@ class TestFilterSafeAndRecording:
         guard = FailureModelGuard(block42_topology)
         tablet = ChaosTarget.for_tablet("h1", tablet_id=42)
         assert not guard.footprint_for(tablet, ImpactScope.NODE)
-        guard.record_inject("t1", tablet, ImpactScope.NODE, recovery_sec=None)
+        guard.record_inject("t1", tablet, ImpactScope.NODE)
         assert guard.snapshot()["tracked_executions"] == 0
 
 
@@ -241,7 +241,7 @@ class TestSlotBudget:
         guard = FailureModelGuard(block42_topology, total_slots=10)
         for i in range(3):
             guard.record_inject(
-                f"e{i}", ChaosTarget.for_slot("h1", slot_idx=i), ImpactScope.SLOT, recovery_sec=None
+                f"e{i}", ChaosTarget.for_slot("h1", slot_idx=i), ImpactScope.SLOT
             )
         assert guard.snapshot()["impaired_slots"] == 3
         assert not guard.budget_view().fits(self._slot_fp(guard, 9)), "budget spent"

@@ -17,12 +17,25 @@ from ydb.tests.stability.nemesis.routers.agent_router import create_process_help
 from ydb.tests.stability.nemesis.internal.nemesis.chaos_dispatch import DispatchCommand
 from ydb.tests.stability.nemesis.internal.nemesis.catalog import (
     NEMESIS_TYPES,
+    confirm_timeout_for,
     guard_mode_for,
     impact_scope_for,
-    impairment_hold_sec_for,
+    recovery_mode_for,
+    recovery_sec_for,
+    stuck_timeout_for,
+    target_kind_for,
 )
 from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_state import ChaosOrchestratorStore
-from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import FailureModelGuard, GuardMode
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.chaos_target import TargetKind
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.failure_model import (
+    DEFAULT_RECOVERY_SEC,
+    FailureModelGuard,
+    GuardMode,
+)
+from ydb.tests.stability.nemesis.internal.orchestrator.nemesis.hc_model import (
+    hc_predicate_for,
+    needs_baseline,
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -45,6 +58,10 @@ class OrchestratorNemesisSchedule:
         get_app_port: Callable[[], int],
         history_limit: int = HISTORY_LIMIT,
         failure_guard: FailureModelGuard | None = None,
+        recovery_probe=None,
+        inventory=None,
+        predicate_for: Callable = hc_predicate_for,
+        stuck_timeout_for: Callable[[str], float] = stuck_timeout_for,
     ) -> None:
         self._lock = threading.RLock()
         self._tasks: dict[str, dict] = {}
@@ -55,6 +72,10 @@ class OrchestratorNemesisSchedule:
         self._is_local_host = is_local_host
         self._get_app_port = get_app_port
         self._failure_guard = failure_guard
+        self._recovery_probe = recovery_probe
+        self._inventory = inventory
+        self._predicate_for = predicate_for
+        self._stuck_timeout_for = stuck_timeout_for
 
     @property
     def lock(self) -> threading.RLock:
@@ -244,23 +265,67 @@ class OrchestratorNemesisSchedule:
         for cmd in cmds:
             self._dispatch_and_record(cmd)
 
+    def _extract_action(self, nemesis_type: str, cmd: DispatchCommand) -> Callable[[], None]:
+        """Probe-driven extract for toggle faults (lease blocks planner toggle-back)."""
+        target = cmd.target
+
+        def _recover() -> None:
+            for extract_cmd in self._chaos_store.plan_extract_target(nemesis_type, target):
+                self.dispatch_command(extract_cmd, track_history=True)
+
+        return _recover
+
     def _dispatch_and_record(self, cmd: DispatchCommand) -> None:
-        """Dispatch a planned command and account for its impact (no veto)."""
-        self.dispatch_command(cmd, track_history=True)
+        """Dispatch and account for impact (no veto)."""
         guard = self._failure_guard
-        if guard is None or guard_mode_for(cmd.nemesis_type) is not GuardMode.FULL:
-            return
+        full = guard is not None and guard_mode_for(cmd.nemesis_type) is GuardMode.FULL
+        probe = self._recovery_probe
+        kind = target_kind_for(cmd.nemesis_type)
         scope = impact_scope_for(cmd.nemesis_type)
+        baseline = None
+        if full and cmd.action == "inject" and probe is not None and needs_baseline(kind, scope):
+            # Pre-dispatch; skip when blind — same as the boundary scheduler.
+            baseline = probe.alive_compute_baseline()
+            if baseline is None:
+                logger.warning(
+                    "skipping %s on %s: no fresh healthcheck data for a slot baseline",
+                    cmd.nemesis_type, cmd.target.identity_key(),
+                )
+                return
+        self.dispatch_command(cmd, track_history=True)
+        if not full:
+            return
         if cmd.action == "extract":
             guard.record_extract(cmd.execution_id, cmd.target, scope)
+            if probe is not None:
+                probe.untrack_identity(cmd.target.identity_key())
         elif cmd.action == "inject":
-            guard.record_inject(
-                cmd.execution_id,
-                cmd.target,
-                scope,
-                # This loop toggles a fault back with its next inject, not with an extract.
-                recovery_sec=impairment_hold_sec_for(cmd.nemesis_type, paired_extract=False),
-            )
+            # Held until HC confirms; toggle also gets a timed extract via the probe.
+            guard.record_inject(cmd.execution_id, cmd.target, scope)
+            if probe is not None:
+                track_kwargs: dict = {}
+                if recovery_mode_for(cmd.nemesis_type) == "extract":
+                    track_kwargs = {
+                        "recover_action": self._extract_action(cmd.nemesis_type, cmd),
+                        "extract_after_sec": self._extract_after_sec(cmd.nemesis_type),
+                        "confirm_timeout_sec": confirm_timeout_for(cmd.nemesis_type),
+                    }
+                probe.track(
+                    cmd.execution_id,
+                    cmd.target,
+                    cmd.nemesis_type,
+                    recovered=self._predicate_for(
+                        cmd.target, kind=kind, scope=scope,
+                        inventory=self._inventory, baseline=baseline,
+                    ),
+                    stuck_timeout_sec=self._stuck_timeout_for(cmd.nemesis_type),
+                    **track_kwargs,
+                )
+
+    @staticmethod
+    def _extract_after_sec(nemesis_type: str) -> float:
+        recovery = recovery_sec_for(nemesis_type)
+        return float(recovery) if recovery is not None else DEFAULT_RECOVERY_SEC
 
     def _run_planned_tick(self, process_type: str) -> None:
         hosts = self._get_hosts()

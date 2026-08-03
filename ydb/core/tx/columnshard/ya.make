@@ -13,6 +13,7 @@ SRCS(
     columnshard__progress_tx.cpp
     columnshard__propose_cancel.cpp
     columnshard__propose_transaction.cpp
+    columnshard__read.cpp
     columnshard__scan.cpp
     columnshard__statistics.cpp
     columnshard__tx_abort.cpp
@@ -51,6 +52,7 @@ PEERDIR(
     ydb/core/tx/columnshard/common
     ydb/core/tx/columnshard/counters
     ydb/core/tx/columnshard/data_accessor
+    ydb/core/tx/columnshard/data_reader
     ydb/core/tx/columnshard/data_accessor/in_mem
     ydb/core/tx/columnshard/data_locks
     ydb/core/tx/columnshard/data_sharing

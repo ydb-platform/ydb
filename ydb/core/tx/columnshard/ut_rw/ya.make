@@ -35,6 +35,7 @@ SRCS(
     ut_scan_snapshot_guard_integration.cpp
     ut_normalizer.cpp
     ut_backup.cpp
+    ut_ev_read.cpp
 )
 
 END()

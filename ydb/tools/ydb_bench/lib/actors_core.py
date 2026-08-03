@@ -5,14 +5,15 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ydb.tools.platform_bench.lib.common import (
+from ydb.tools.ydb_bench.lib.common import (
     BenchmarkError,
     BenchmarkInterrupted,
     atomic_write_json,
     atomic_write_text,
 )
-from ydb.tools.platform_bench.lib.runner import run_command
-from ydb.tools.platform_bench.lib.system_info import collect_system_info
+from ydb.tools.ydb_bench.lib.runner import run_command
+from ydb.tools.ydb_bench.lib.system_info import collect_system_info
+from ydb.tools.ydb_bench.lib.topology import discover_topology, plan_affinity, topology_record
 
 
 CSV_COLUMNS = (
@@ -37,6 +38,7 @@ class RunConfiguration:
     duration_seconds: int
     repetitions: int
     timeout_seconds: float
+    affinity_modes: tuple = ("none",)
 
 
 def parse_metrics(stdout):
@@ -103,9 +105,9 @@ def validate_metrics(rows, configuration):
 
 def summarize_metrics(repetition_rows):
     grouped = {}
-    for rows in repetition_rows:
+    for affinity_mode, rows in repetition_rows:
         for row in rows:
-            key = (row["threads"], row["actorPairs"], row["in_flight"])
+            key = (affinity_mode, row["threads"], row["actorPairs"], row["in_flight"])
             grouped.setdefault(key, []).append(row)
 
     summary = []
@@ -115,9 +117,10 @@ def summarize_metrics(repetition_rows):
         elapsed = [row["elapsed_seconds"] for row in rows]
         summary.append(
             {
-                "threads": key[0],
-                "actorPairs": key[1],
-                "in_flight": key[2],
+                "affinity_mode": key[0],
+                "threads": key[1],
+                "actorPairs": key[2],
+                "in_flight": key[3],
                 "repetitions": len(rows),
                 "median_msgs_per_sec": statistics.median(rates),
                 "min_msgs_per_sec": min(rates),
@@ -130,6 +133,7 @@ def summarize_metrics(repetition_rows):
 
 def render_summary(rows):
     columns = (
+        "affinity_mode",
         "threads",
         "actorPairs",
         "in_flight",
@@ -167,8 +171,13 @@ def _command_record(binary_path):
 def run_actors_core(binary, configuration, output_directory, tool_revision, work_dir_hint=None):
     output_directory = Path(output_directory)
     environment = _environment(configuration)
+    topology = discover_topology()
+    placements = [
+        plan_affinity(mode, topology, max(configuration.threads))
+        for mode in configuration.affinity_modes
+    ]
     manifest = {
-        "schema_version": 1,
+        "schema_version": 2,
         "scenario": "actors-core",
         "profile": configuration.profile,
         "status": "running",
@@ -180,6 +189,7 @@ def run_actors_core(binary, configuration, output_directory, tool_revision, work
             "size": binary.size,
         },
         "platform": collect_system_info(),
+        "cpu_topology": topology_record(topology),
         "parameters": {
             "threads": list(configuration.threads),
             "actor_pairs": list(configuration.actor_pairs),
@@ -187,7 +197,17 @@ def run_actors_core(binary, configuration, output_directory, tool_revision, work
             "duration_seconds": configuration.duration_seconds,
             "repetitions": configuration.repetitions,
             "timeout_seconds": configuration.timeout_seconds,
+            "affinity_modes": list(configuration.affinity_modes),
         },
+        "affinity": [
+            {
+                "mode": placement.mode,
+                "status": "pending" if placement.supported else "unsupported",
+                "cpus": None if placement.cpus is None else list(placement.cpus),
+                **({"reason": placement.reason} if placement.reason else {}),
+            }
+            for placement in placements
+        ],
         "environment": environment,
         "command": _command_record(binary.path),
         "runs": [],
@@ -196,83 +216,101 @@ def run_actors_core(binary, configuration, output_directory, tool_revision, work
     atomic_write_json(manifest_path, manifest)
     repetition_rows = []
 
-    for index in range(1, configuration.repetitions + 1):
-        repetition_directory = output_directory / "repeat-{:03d}".format(index)
-        command = _command_record(binary.path)
-        started_at = _utc_now()
-        try:
-            result = run_command(
-                command,
-                environment,
-                configuration.timeout_seconds,
-                work_dir_hint=work_dir_hint,
-            )
-        except BenchmarkError as error:
-            failure = str(error)
-            finished_at = _utc_now()
-            manifest["runs"].append(
-                {
-                    "index": index,
-                    "command": command,
-                    "started_at": started_at,
-                    "finished_at": finished_at,
-                    "exit_code": None,
-                    "timed_out": False,
-                    "interrupted": False,
-                    "error": failure,
-                }
-            )
-            manifest["status"] = "failed"
-            manifest["finished_at"] = finished_at
-            manifest["error"] = failure
-            atomic_write_json(manifest_path, manifest)
-            raise
+    for placement_index, placement in enumerate(placements):
+        affinity_record = manifest["affinity"][placement_index]
+        if not placement.supported:
+            continue
+        affinity_record["status"] = "running"
+        mode_directory = output_directory / placement.mode
+        mode_directory.mkdir()
 
-        repetition_directory.mkdir()
-        atomic_write_text(repetition_directory / "stdout.txt", result.stdout)
-        atomic_write_text(repetition_directory / "stderr.txt", result.stderr)
-        run_record = {
-            "index": index,
-            "command": list(result.command),
-            "started_at": result.started_at,
-            "finished_at": result.finished_at,
-            "duration_seconds": result.duration_seconds,
-            "exit_code": result.exit_code,
-            "timed_out": result.timed_out,
-            "interrupted": result.interrupted,
-            "stdout": str(Path(repetition_directory.name) / "stdout.txt"),
-            "stderr": str(Path(repetition_directory.name) / "stderr.txt"),
-        }
-        manifest["runs"].append(run_record)
-
-        failure = None
-        if result.interrupted:
-            failure = "benchmark was interrupted"
-        elif result.timed_out:
-            failure = "benchmark timed out after {} seconds".format(configuration.timeout_seconds)
-        elif result.exit_code != 0:
-            failure = "benchmark exited with code {}".format(result.exit_code)
-        else:
+        for index in range(1, configuration.repetitions + 1):
+            repetition_directory = mode_directory / "repeat-{:03d}".format(index)
+            command = _command_record(binary.path)
+            started_at = _utc_now()
             try:
-                metrics = parse_metrics(result.stdout)
-                validate_metrics(metrics, configuration)
+                result = run_command(
+                    command,
+                    environment,
+                    configuration.timeout_seconds,
+                    work_dir_hint=work_dir_hint,
+                    cpu_affinity=placement.cpus,
+                )
             except BenchmarkError as error:
                 failure = str(error)
-            else:
-                atomic_write_text(repetition_directory / "metrics.csv", render_metrics(metrics))
-                run_record["metrics"] = str(Path(repetition_directory.name) / "metrics.csv")
-                run_record["metric_rows"] = len(metrics)
-                repetition_rows.append(metrics)
+                finished_at = _utc_now()
+                manifest["runs"].append(
+                    {
+                        "affinity_mode": placement.mode,
+                        "cpus": None if placement.cpus is None else list(placement.cpus),
+                        "index": index,
+                        "command": command,
+                        "started_at": started_at,
+                        "finished_at": finished_at,
+                        "exit_code": None,
+                        "timed_out": False,
+                        "interrupted": False,
+                        "error": failure,
+                    }
+                )
+                affinity_record["status"] = "failed"
+                manifest["status"] = "failed"
+                manifest["finished_at"] = finished_at
+                manifest["error"] = failure
+                atomic_write_json(manifest_path, manifest)
+                raise
 
-        if failure is not None:
-            run_record["error"] = failure
-            manifest["status"] = "interrupted" if result.interrupted else "failed"
-            manifest["finished_at"] = _utc_now()
-            manifest["error"] = failure
-            atomic_write_json(manifest_path, manifest)
+            repetition_directory.mkdir()
+            atomic_write_text(repetition_directory / "stdout.txt", result.stdout)
+            atomic_write_text(repetition_directory / "stderr.txt", result.stderr)
+            relative_directory = Path(placement.mode) / repetition_directory.name
+            run_record = {
+                "affinity_mode": placement.mode,
+                "cpus": None if placement.cpus is None else list(placement.cpus),
+                "index": index,
+                "command": list(result.command),
+                "started_at": result.started_at,
+                "finished_at": result.finished_at,
+                "duration_seconds": result.duration_seconds,
+                "exit_code": result.exit_code,
+                "timed_out": result.timed_out,
+                "interrupted": result.interrupted,
+                "stdout": str(relative_directory / "stdout.txt"),
+                "stderr": str(relative_directory / "stderr.txt"),
+            }
+            manifest["runs"].append(run_record)
+
+            failure = None
             if result.interrupted:
-                raise BenchmarkInterrupted(failure)
-            raise BenchmarkError(failure)
+                failure = "benchmark was interrupted"
+            elif result.timed_out:
+                failure = "benchmark timed out after {} seconds".format(configuration.timeout_seconds)
+            elif result.exit_code != 0:
+                failure = "benchmark exited with code {}".format(result.exit_code)
+            else:
+                try:
+                    metrics = parse_metrics(result.stdout)
+                    validate_metrics(metrics, configuration)
+                except BenchmarkError as error:
+                    failure = str(error)
+                else:
+                    atomic_write_text(repetition_directory / "metrics.csv", render_metrics(metrics))
+                    run_record["metrics"] = str(relative_directory / "metrics.csv")
+                    run_record["metric_rows"] = len(metrics)
+                    repetition_rows.append((placement.mode, metrics))
+
+            if failure is not None:
+                run_record["error"] = failure
+                affinity_record["status"] = "failed"
+                manifest["status"] = "interrupted" if result.interrupted else "failed"
+                manifest["finished_at"] = _utc_now()
+                manifest["error"] = failure
+                atomic_write_json(manifest_path, manifest)
+                if result.interrupted:
+                    raise BenchmarkInterrupted(failure)
+                raise BenchmarkError(failure)
+            atomic_write_json(manifest_path, manifest)
+        affinity_record["status"] = "completed"
         atomic_write_json(manifest_path, manifest)
 
     summary = summarize_metrics(repetition_rows)

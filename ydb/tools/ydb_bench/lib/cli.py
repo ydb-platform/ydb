@@ -7,8 +7,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ydb.tools.platform_bench.lib.actors_core import RunConfiguration, run_actors_core
-from ydb.tools.platform_bench.lib.common import BenchmarkError, BenchmarkInterrupted, extract_executable
+from ydb.tools.ydb_bench.lib.actors_core import RunConfiguration, run_actors_core
+from ydb.tools.ydb_bench.lib.common import BenchmarkError, BenchmarkInterrupted, extract_executable
+from ydb.tools.ydb_bench.lib.topology import AFFINITY_MODES
 
 
 SCENARIO_NAME = "actors-core"
@@ -30,7 +31,7 @@ PROFILES = {
     "smoke": Profile(
         name="smoke",
         description="one short actor-system measurement",
-        threads=(1,),
+        threads=(2,),
         actor_pairs=(32,),
         inflights=(1,),
         duration_seconds=1,
@@ -97,13 +98,25 @@ def _positive_integer_list(value):
     return parsed
 
 
+def _affinity_modes(value):
+    if value == "all":
+        return AFFINITY_MODES
+    modes = tuple(part.strip() for part in value.split(",") if part.strip())
+    invalid = sorted(set(modes) - set(AFFINITY_MODES))
+    if not modes or invalid:
+        raise argparse.ArgumentTypeError(
+            "must be 'all' or a comma-separated subset of {}".format(", ".join(AFFINITY_MODES))
+        )
+    return modes
+
+
 def _default_output_directory():
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    return Path("platform-bench-results") / "{}-{}".format(timestamp, SCENARIO_NAME)
+    return Path("ydb-bench-results") / "{}-{}".format(timestamp, SCENARIO_NAME)
 
 
 def _create_parser():
-    parser = argparse.ArgumentParser(prog="platform_bench")
+    parser = argparse.ArgumentParser(prog="ydb_bench")
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("list", help="list available benchmark scenarios")
 
@@ -121,6 +134,12 @@ def _create_parser():
     run.add_argument("--duration", type=_positive_integer)
     run.add_argument("--repetitions", type=_positive_integer)
     run.add_argument("--timeout", type=_positive_float)
+    run.add_argument(
+        "--affinity",
+        type=_affinity_modes,
+        default=AFFINITY_MODES,
+        help="all (default), or a comma-separated subset of: {}".format(", ".join(AFFINITY_MODES)),
+    )
     return parser
 
 
@@ -130,6 +149,7 @@ def _describe():
         profile = _profile(name)
         print("  {}: {}".format(profile.name, profile.description))
     print("metrics: threads, actorPairs, in_flight, msgs_per_sec, elapsed_seconds")
+    print("affinity: {}".format(", ".join(AFFINITY_MODES)))
     print("artifacts: run.json, per-repeat stdout/stderr/metrics.csv, summary.csv")
 
 
@@ -150,6 +170,7 @@ def _configuration(arguments):
         duration_seconds=duration,
         repetitions=repetitions,
         timeout_seconds=arguments.timeout or default_timeout,
+        affinity_modes=arguments.affinity,
     )
 
 
@@ -173,7 +194,7 @@ def _run(arguments, resource_loader, tool_revision):
     else:
         work_dir_parent = None
 
-    with tempfile.TemporaryDirectory(prefix="platform-bench-", dir=work_dir_parent) as temporary_directory:
+    with tempfile.TemporaryDirectory(prefix="ydb-bench-", dir=work_dir_parent) as temporary_directory:
         binary = extract_executable(resource_loader(RESOURCE_NAME), temporary_directory, RESOURCE_NAME)
         manifest = run_actors_core(
             binary,
@@ -183,6 +204,13 @@ def _run(arguments, resource_loader, tool_revision):
             work_dir_hint=temporary_directory,
         )
     print("completed {}: {}".format(SCENARIO_NAME, output_directory))
+    for affinity in manifest["affinity"]:
+        details = ""
+        if affinity.get("cpus") is not None:
+            details = " cpus={}".format(",".join(map(str, affinity["cpus"])))
+        elif affinity.get("reason"):
+            details = " ({})".format(affinity["reason"])
+        print("affinity {}: {}{}".format(affinity["mode"], affinity["status"], details))
     print("summary: {}".format(output_directory / manifest["summary"]))
     return 0
 
@@ -198,8 +226,8 @@ def main(argv=None, resource_loader=None, tool_revision=None):
             return 0
         return _run(arguments, resource_loader, tool_revision or {"commit_id": "unknown"})
     except BenchmarkInterrupted as error:
-        print("platform_bench: error: {}".format(error), file=sys.stderr)
+        print("ydb_bench: error: {}".format(error), file=sys.stderr)
         return 130
     except BenchmarkError as error:
-        print("platform_bench: error: {}".format(error), file=sys.stderr)
+        print("ydb_bench: error: {}".format(error), file=sys.stderr)
         return 1

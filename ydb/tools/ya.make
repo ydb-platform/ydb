@@ -5,7 +5,7 @@ RECURSE(
     mnc
     include_sanitizer
     partcheck
-    platform_bench
+    ydb_bench
     query_replay
     query_replay_yt
     stress_tool

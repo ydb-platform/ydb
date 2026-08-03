@@ -9,21 +9,29 @@ import textwrap
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from unittest import mock
 
-from ydb.tools.platform_bench.lib.actors_core import (
+from ydb.tools.ydb_bench.lib.actors_core import (
     CSV_HEADER,
     RunConfiguration,
     parse_metrics,
     run_actors_core,
 )
-from ydb.tools.platform_bench.lib.common import BenchmarkError, BenchmarkInterrupted, extract_executable
-from ydb.tools.platform_bench.lib.cli import main
-from ydb.tools.platform_bench.lib.runner import run_command
+from ydb.tools.ydb_bench.lib.common import BenchmarkError, BenchmarkInterrupted, extract_executable
+from ydb.tools.ydb_bench.lib.cli import main
+from ydb.tools.ydb_bench.lib.runner import run_command
+from ydb.tools.ydb_bench.lib.topology import (
+    AFFINITY_MODES,
+    CpuTopology,
+    discover_topology,
+    parse_cpu_list,
+    plan_affinity,
+)
 
 
-class PlatformBenchTest(unittest.TestCase):
+class YdbBenchTest(unittest.TestCase):
     def setUp(self):
-        self.temporary_directory = tempfile.TemporaryDirectory(prefix="platform-bench-test-")
+        self.temporary_directory = tempfile.TemporaryDirectory(prefix="ydb-bench-test-")
         self.root = Path(self.temporary_directory.name)
 
     def tearDown(self):
@@ -138,11 +146,13 @@ class PlatformBenchTest(unittest.TestCase):
         self.assertEqual(manifest["status"], "completed")
         self.assertEqual(len(manifest["runs"]), 3)
         self.assertTrue((output / "summary.csv").is_file())
-        self.assertIn("1,32,1,3,1000.0,1000.0,1000.0,1.0", (output / "summary.csv").read_text())
+        self.assertIn("none,1,32,1,3,1000.0,1000.0,1000.0,1.0", (output / "summary.csv").read_text())
         stored = json.loads((output / "run.json").read_text())
+        self.assertEqual(stored["schema_version"], 2)
+        self.assertEqual(stored["affinity"][0]["mode"], "none")
         self.assertEqual(stored["binary"]["sha256"], self._binary(script).sha256)
         for index in range(1, 4):
-            repetition = output / "repeat-{:03d}".format(index)
+            repetition = output / "none" / "repeat-{:03d}".format(index)
             self.assertTrue((repetition / "stdout.txt").is_file())
             self.assertTrue((repetition / "stderr.txt").is_file())
             self.assertTrue((repetition / "metrics.csv").is_file())
@@ -189,7 +199,7 @@ class PlatformBenchTest(unittest.TestCase):
         self.assertIn("finished_at", manifest["runs"][0])
         self.assertIsNone(manifest["runs"][0]["exit_code"])
         self.assertEqual(manifest["runs"][0]["error"], manifest["error"])
-        self.assertFalse((output / "repeat-001").exists())
+        self.assertFalse((output / "none" / "repeat-001").exists())
 
     @unittest.skipUnless(hasattr(os, "killpg"), "requires POSIX process groups")
     def test_timeout_signals_the_whole_process_group(self):
@@ -225,6 +235,51 @@ class PlatformBenchTest(unittest.TestCase):
         path.chmod(0o644)
         with self.assertRaisesRegex(BenchmarkError, "noexec.*--work-dir"):
             run_command([path], {}, timeout_seconds=1, work_dir_hint=self.root)
+
+    def test_cpu_list_parser(self):
+        self.assertEqual(parse_cpu_list("0-3,8,10-11\n"), (0, 1, 2, 3, 8, 10, 11))
+
+    def test_topology_discovery_intersects_sysfs_with_allowed_cpus(self):
+        sys_root = self.root / "sys" / "devices" / "system"
+        for node_id, cpus in ((0, "0-3"), (1, "4-7")):
+            node = sys_root / "node" / "node{}".format(node_id)
+            node.mkdir(parents=True)
+            node.joinpath("cpulist").write_text(cpus, encoding="utf-8")
+        for cpu, shared in ((0, "0-1"), (1, "0-1"), (2, "2-3"), (3, "2-3")):
+            cache = sys_root / "cpu" / "cpu{}".format(cpu) / "cache" / "index3"
+            cache.mkdir(parents=True)
+            cache.joinpath("level").write_text("3", encoding="utf-8")
+            cache.joinpath("shared_cpu_list").write_text(shared, encoding="utf-8")
+
+        topology = discover_topology(sys_root, allowed_cpus=(1, 2, 3, 4))
+        self.assertEqual(topology.allowed_cpus, (1, 2, 3, 4))
+        self.assertEqual(topology.numa_nodes, ((0, (1, 2, 3)), (1, (4,))))
+        self.assertEqual(topology.chiplets, ((0, (1,)), (0, (2, 3))))
+
+    def test_affinity_modes_select_equal_size_deterministic_masks(self):
+        topology = CpuTopology(
+            allowed_cpus=tuple(range(8)),
+            numa_nodes=((0, (0, 1, 2, 3)), (1, (4, 5, 6, 7))),
+            chiplets=((0, (0, 1)), (0, (2, 3)), (1, (4, 5)), (1, (6, 7))),
+        )
+        with mock.patch.object(os, "sched_setaffinity", create=True):
+            placements = {mode: plan_affinity(mode, topology, 2) for mode in AFFINITY_MODES}
+        self.assertIsNone(placements["none"].cpus)
+        self.assertEqual(placements["single-numa"].cpus, (0, 1))
+        self.assertEqual(placements["multi-numa"].cpus, (0, 4))
+        self.assertEqual(placements["single-chiplet"].cpus, (0, 1))
+        self.assertEqual(placements["multi-chiplet"].cpus, (0, 2))
+
+    def test_unavailable_affinity_mode_is_reported_not_guessed(self):
+        topology = CpuTopology(
+            allowed_cpus=(0, 1),
+            numa_nodes=((0, (0, 1)),),
+            chiplets=((0, (0, 1)),),
+        )
+        with mock.patch.object(os, "sched_setaffinity", create=True):
+            placement = plan_affinity("multi-numa", topology, 2)
+        self.assertFalse(placement.supported)
+        self.assertIn("two NUMA nodes", placement.reason)
 
 
 if __name__ == "__main__":

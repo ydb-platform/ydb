@@ -6,7 +6,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from ydb.tools.platform_bench.lib.common import BenchmarkError
+from ydb.tools.ydb_bench.lib.common import BenchmarkError
 
 
 @dataclass(frozen=True)
@@ -49,12 +49,29 @@ def _stop_process_group(process, first_signal, grace_seconds):
         return process.communicate()
 
 
-def run_command(command, env_overrides, timeout_seconds, cwd=None, work_dir_hint=None, grace_seconds=2.0):
+def run_command(
+    command,
+    env_overrides,
+    timeout_seconds,
+    cwd=None,
+    work_dir_hint=None,
+    grace_seconds=2.0,
+    cpu_affinity=None,
+):
     command = tuple(str(part) for part in command)
     environment = os.environ.copy()
     environment.update({str(key): str(value) for key, value in env_overrides.items()})
     started_at = _utc_now()
     started_monotonic = time.monotonic()
+
+    set_affinity = None
+    if cpu_affinity is not None:
+        if not hasattr(os, "sched_setaffinity"):
+            raise BenchmarkError("CPU affinity is not supported by this operating system")
+        affinity = frozenset(cpu_affinity)
+
+        def set_affinity():
+            os.sched_setaffinity(0, affinity)
 
     try:
         process = subprocess.Popen(
@@ -67,6 +84,7 @@ def run_command(command, env_overrides, timeout_seconds, cwd=None, work_dir_hint
             encoding="utf-8",
             errors="replace",
             start_new_session=True,
+            preexec_fn=set_affinity,
         )
     except OSError as error:
         if error.errno in (errno.EACCES, errno.EPERM):
@@ -79,6 +97,8 @@ def run_command(command, env_overrides, timeout_seconds, cwd=None, work_dir_hint
                 )
             ) from error
         raise BenchmarkError("cannot start {}: {}".format(command[0], error)) from error
+    except subprocess.SubprocessError as error:
+        raise BenchmarkError("cannot start {} with CPU affinity: {}".format(command[0], error)) from error
 
     timed_out = False
     interrupted = False

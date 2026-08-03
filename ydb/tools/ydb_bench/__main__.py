@@ -3,7 +3,7 @@ import sys
 from library.python import resource
 from library.python import svn_version
 
-from ydb.tools.platform_bench.lib.cli import main
+from ydb.tools.ydb_bench.lib.cli import main
 
 
 def load_resource(name):

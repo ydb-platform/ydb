@@ -1,4 +1,4 @@
-PY3_PROGRAM(platform_bench)
+PY3_PROGRAM(ydb_bench)
 
 PY_SRCS(
     __main__.py
@@ -15,7 +15,7 @@ RESOURCE(
 PEERDIR(
     library/python/resource
     library/python/svn_version
-    ydb/tools/platform_bench/lib
+    ydb/tools/ydb_bench/lib
 )
 
 END()

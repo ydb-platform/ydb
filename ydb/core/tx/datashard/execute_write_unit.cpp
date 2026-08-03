@@ -9,6 +9,8 @@
 #include <ydb/core/engine/mkql_engine_flat_host.h>
 #include <ydb/library/aclib/user_context.h>
 
+#include <util/generic/algorithm.h>
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -117,6 +119,61 @@ public:
         return otherLocksBroken.size();
     }
 
+    // Validates this write's position in its writer's chain; on success records the new
+    // position for ApplyLocks to persist. Returns a status when the operation must stop here.
+    std::optional<EExecutionStatus> CheckWriteIndex(TWriteOperation* writeOp, TSetupSysLocks& guardLocks,
+        TTransactionContext& txc, const TActorContext& ctx)
+    {
+        const ui64 requested = writeOp->GetWriteIndex();
+        if (!requested) {
+            return std::nullopt;
+        }
+
+        const ui64 tabletId = DataShard.TabletID();
+        const ui64 writerIndex = writeOp->GetWriterIndex();
+        auto lock = DataShard.SysLocksTable().GetRawLock(guardLocks.LockTxId);
+
+        if (lock && lock->GetWriteIndex() && lock->GetWriterIndex() != writerIndex) {
+            // DataShard tracks a single writer per lock.
+            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, TStringBuilder()
+                << "Multiple writers per lock are not supported: lock already has writer "
+                << lock->GetWriterIndex() << ", got " << writerIndex);
+            return EExecutionStatus::Executed;
+        }
+
+        // No lock means nothing applied yet, so current is 0.
+        const ui64 current = lock ? lock->GetWriteIndex() : 0;
+
+        if (current == requested) {
+            // A duplicate we've already applied: report the unchanged lock, touch nothing else.
+            Y_ENSURE(lock, "A non-zero write index implies the lock that carries it");
+            auto res = NEvents::TDataEvents::TEvWriteResult::BuildAlreadyApplied(tabletId, writeOp->GetTxId());
+            for (const TPathId& pathId : lock->GetWriteTables()) {
+                res->AddTxLock(lock->GetLockId(), tabletId, lock->GetGeneration(),
+                               lock->GetCounter(), pathId.OwnerId, pathId.LocalPathId,
+                               /* hasWrites */ true, writerIndex, current);
+            }
+            writeOp->SetWriteResult(std::move(res));
+            writeOp->ReleaseTxData(txc);
+            return EExecutionStatus::Executed;
+        }
+
+        if (current + 1 != requested) {
+            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, TStringBuilder()
+                << "Uncommitted write index mismatch for writer " << writerIndex
+                << ": expected " << (current + 1) << ", got " << requested
+                << " (some uncommitted writes were lost)");
+            writeOp->GetWriteResult()->Record.MutableTxStats()->SetLocksBrokenAsVictim(1);
+            NDataIntegrity::LogVictimDetected(ctx, tabletId, "Uncommitted writes were lost",
+                DataShard.SysLocksTable().GetVictimQuerySpanIdForLock(guardLocks.LockTxId),
+                guardLocks.QuerySpanId ? TMaybe<ui64>(guardLocks.QuerySpanId) : Nothing());
+            return EExecutionStatus::Executed;
+        }
+
+        guardLocks.SetWriteIndex = TLockWriteIndex{writerIndex, requested};
+        return std::nullopt;
+    }
+
     void AddLocksToResult(TWriteOperation* writeOp, ui64 querySpanId, const TActorContext& ctx,
         const NKikimrDataEvents::TKqpLocks* kqpLocks = nullptr)
     {
@@ -136,12 +193,26 @@ public:
                     {"lock", lock});
             }
 
-            writeResult.AddTxLock(lock.LockId, lock.DataShard, lock.Generation, lock.Counter, lock.SchemeShard, lock.PathId, lock.HasWrites);
+            writeResult.AddTxLock(lock.LockId, lock.DataShard, lock.Generation, lock.Counter, lock.SchemeShard, lock.PathId, lock.HasWrites, lock.WriterIndex, lock.WriteIndex);
 
             YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Add lock",
                 {"result", writeResult.Record.GetTxLocks().rbegin()->ShortDebugString()});
         }
         DataShard.SubscribeNewLocks(ctx);
+
+        if (const ui64 requested = writeOp->GetWriteIndex()) {
+            const ui64 writerIndex = writeOp->GetWriterIndex();
+            // BreakOwn can break the write's own lock before ApplyLocks stores the new index;
+            // the client aborts on the broken counter regardless, so a stale index is fine.
+            const bool lockBroken = AnyOf(locks, [](const auto& lock) { return lock.IsError(); });
+            Y_ENSURE(lockBroken || AnyOf(writeResult.Record.GetTxLocks(), [&](const auto& lock) {
+                         return AnyOf(lock.GetWriteIndexes(), [&](const auto& writeIndex) {
+                             return writeIndex.GetWriterIndex() == writerIndex
+                                 && writeIndex.GetWriteIndex() == requested;
+                         });
+                     }),
+                     "Pipelined write " << writerIndex << ":" << requested << " did not report its lock");
+        }
     }
 
     void ResetChanges(TDataShardUserDb& userDb, TTransactionContext& txc) {
@@ -543,6 +614,10 @@ public:
                     case EEnsureCurrentLock::Missing:
                         Y_ENSURE(false, "unreachable");
                 }
+
+                if (auto status = CheckWriteIndex(writeOp, guardLocks, txc, ctx)) {
+                    return *status;
+                }
             }
 
             Y_DEFER {
@@ -810,7 +885,7 @@ public:
 
         op->ResetCurrentTimer();
 
-        if (txc.DB.HasChanges()) {
+        if (txc.DB.HasChanges() && !writeOp->IsPipelinedWrite()) {
             op->SetWaitCompletionFlag(true);
         }
 

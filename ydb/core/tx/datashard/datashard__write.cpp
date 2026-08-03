@@ -274,6 +274,7 @@ NKikimrDataEvents::TEvWrite::ETxMode NEvWrite::TConvertor::GetTxMode(ui64 flags)
 NKikimrTxDataShard::TEvProposeTransactionResult::EStatus NEvWrite::TConvertor::GetStatus(NKikimrDataEvents::TEvWriteResult::EStatus status) {
     switch (status) {
         case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED:
+        case NKikimrDataEvents::TEvWriteResult::STATUS_ALREADY_APPLIED:
             return NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE;
         case NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED:
             return NKikimrTxDataShard::TEvProposeTransactionResult::PREPARED;

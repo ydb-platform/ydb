@@ -21,6 +21,12 @@
 namespace NKikimr {
 namespace NDataShard {
 
+// One writer's position in a lock's uncommitted write chain
+struct TLockWriteIndex {
+    ui64 WriterIndex = 0;
+    ui64 WriteIndex = 0;
+};
+
 class ILocksDb {
 protected:
     ~ILocksDb() = default;
@@ -40,6 +46,8 @@ public:
         ui64 Counter;
         ui64 CreateTs;
         ui64 Flags;
+        ui64 WriterIndex = 0;
+        ui64 WriteIndex = 0;
         ui64 VictimQuerySpanId = 0;
         ui64 BreakerQuerySpanId = 0;
         ui32 BreakerNodeId = 0;
@@ -68,6 +76,7 @@ public:
     virtual void PersistAddLock(ui64 lockId, ui32 lockNodeId, ui32 generation, ui64 counter, ui64 createTs, ui64 flags = 0) = 0;
     virtual void PersistLockCounter(ui64 lockId, ui64 counter) = 0;
     virtual void PersistLockFlags(ui64 lockId, ui64 flags) = 0;
+    virtual void PersistLockWriteIndex(ui64 lockId, ui64 writerIndex, ui64 writeIndex) = 0;
     virtual void PersistRemoveLock(ui64 lockId) = 0;
 
     // Persist adding/removing info on locked ranges
@@ -445,6 +454,10 @@ public:
     bool IsPersisting() const { return WaitPersistentCounter > 0; }
     void AddWaitPersistentCallback(ILocksDb* db);
 
+    ui64 GetWriterIndex() const { return WriterIndex; }
+    ui64 GetWriteIndex() const { return WriteIndex; }
+    void SetWriteIndex(ui64 writerIndex, ui64 writeIndex, ILocksDb* db);
+
     static void AddWaitPersistentCallback(ILocksDb* db, TVector<TLockInfo::TPtr>&& locks);
 
 private:
@@ -492,6 +505,8 @@ private:
 
     ui64 LastOpId = 0;
     ui64 WaitPersistentCounter = 0;
+    ui64 WriterIndex = 0;
+    ui64 WriteIndex = 0;
 
 public:
     TAsyncEvent OnBrokenEvent;
@@ -937,6 +952,9 @@ struct TLocksUpdate {
     ui64 ConflictBreakerQuerySpanId = 0;
     TLockInfo::TPtr Lock;
 
+    // This uncommitted write's position in its writer's chain; ApplyLocks persists it on the lock.
+    std::optional<TLockWriteIndex> SetWriteIndex;
+
     // Returns effective BreakerQuerySpanId: explicit override (commit path) if set,
     // then conflict-derived SpanId (from AddBreakLock), then falls back to QuerySpanId.
     ui64 GetEffectiveBreakerQuerySpanId() const {
@@ -1248,8 +1266,8 @@ private:
     TLocksCache* Cache = nullptr;
     ILocksDb* Db = nullptr;
 
-    TLock MakeLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId, bool hasWrites) const;
-    TLock MakeAndLogLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId, bool hasWrites) const;
+    TLock MakeLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId, bool hasWrites, ui64 writerIndex = 0, ui64 writeIndex = 0) const;
+    TLock MakeAndLogLock(ui64 lockTxId, ui32 generation, ui64 counter, const TPathId& pathId, bool hasWrites, ui64 writerIndex = 0, ui64 writeIndex = 0) const;
 
     static ui64 GetLockId(const TArrayRef<const TCell>& key) {
         ui64 lockId;

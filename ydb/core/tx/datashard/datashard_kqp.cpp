@@ -92,13 +92,32 @@ TVector<NKikimrDataEvents::TLock> ValidateLocks(const NKikimrDataEvents::TKqpLoc
         auto lockKey = MakeLockKey(lockProto);
 
         auto lock = sysLocks.GetLock(lockKey);
-        if (lock.Generation != lockProto.GetGeneration() || lock.Counter != lockProto.GetCounter()) {
+        // The echoed write indexes must exactly match the shard's.
+        bool writeIndexMismatch = false;
+        if (lock.WriteIndexKnown) {
+            if (lockProto.WriteIndexesSize() > 1) {
+                writeIndexMismatch = true;
+            } else if (lockProto.WriteIndexesSize() == 1) {
+                const auto& writeIndex = lockProto.GetWriteIndexes(0);
+                writeIndexMismatch = writeIndex.GetWriterIndex() != lock.WriterIndex
+                                  || writeIndex.GetWriteIndex() != lock.WriteIndex;
+            } else {
+                writeIndexMismatch = lock.WriteIndex != 0;
+            }
+        }
+        if (lock.Generation != lockProto.GetGeneration() ||
+            lock.Counter != lockProto.GetCounter() ||
+            writeIndexMismatch)
+        {
             YDB_LOG_TRACE("ValidateLocks: broken lock",
                 {"lockId", lockProto.GetLockId()},
                 {"expectedGeneration", lockProto.GetGeneration()},
                 {"expectedCounter", lockProto.GetCounter()},
                 {"actualLockGeneration", lock.Generation},
-                {"actualLockCounter", lock.Counter});
+                {"actualLockCounter", lock.Counter},
+                {"writeIndexes", lockProto.GetWriteIndexes().size()},
+                {"actualWriterIndex", lock.WriterIndex},
+                {"actualWriteIndex", lock.WriteIndex});
             brokenLocks.emplace_back(lockProto);
         }
     }

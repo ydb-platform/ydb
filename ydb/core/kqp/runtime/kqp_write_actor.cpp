@@ -481,6 +481,11 @@ public:
         , LockNodeId(lockNodeId)
         , InconsistentTx(inconsistentTx)
         , IsOlap(isOlap)
+        , PipelinedWrites(
+              AppData()->FeatureFlags.GetEnableDataShardPipelinedUncommittedWrites()
+              && !inconsistentTx
+              && !isOlap
+              && lockTxId != 0)
         , KeyColumnTypes(std::move(keyColumnTypes))
         , Callbacks(callbacks)
         , TxManager(txManager ? txManager : CreateKqpTransactionManager(/* collectOnly= */ true))
@@ -943,6 +948,11 @@ public:
             ProcessWriteCompletedShard(ev);
             return;
         }
+        case NKikimrDataEvents::TEvWriteResult::STATUS_ALREADY_APPLIED: {
+            // A duplicate uncommitted write; the shard reports the unchanged lock.
+            ProcessWriteCompletedShard(ev);
+            return;
+        }
         case NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED: {
             YDB_LOG_ERROR("Received EvWriteResult with aborted status.",
                 {"logPrefix", this->LogPrefix},
@@ -1194,6 +1204,9 @@ public:
             {"mode", static_cast<int>(Mode)},
             {"locks", txLocks});
 
+        // The batch is applied, so the next one to this shard gets a fresh write index
+        InFlightWriteIndex.erase(ev->Get()->Record.GetOrigin());
+
         // Only collect locks in WRITE mode (COLLECTING state required by AddLock)
         if (Mode == EMode::WRITE) {
             for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
@@ -1339,6 +1352,16 @@ public:
             FillEvWritePrepare(evWrite.get(), shardId, *TxId, TxManager);
         } else if (!InconsistentTx) {
             evWrite->SetLockId(LockTxId, LockNodeId);
+            if (PipelinedWrites) {
+                // A resend (overload retry) must repeat the same index, not allocate a new one.
+                auto [it, allocated] = InFlightWriteIndex.try_emplace(shardId, 0);
+                if (allocated) {
+                    it->second = TxManager->NextWriteIndex(WriterIndex, shardId);
+                }
+                auto* writeIndex = evWrite->Record.MutableWriteIndex();
+                writeIndex->SetWriterIndex(WriterIndex);
+                writeIndex->SetWriteIndex(it->second);
+            }
 
             if (MvccSnapshot && LockMode != NKikimrDataEvents::PESSIMISTIC_NONE) {
                 *evWrite->Record.MutableMvccSnapshot() = *MvccSnapshot;
@@ -1695,6 +1718,11 @@ private:
     const ui64 LockNodeId;
     const bool InconsistentTx;
     const bool IsOlap;
+    const bool PipelinedWrites;
+    // This writer's id in the uncommitted write chain; one write actor per table today.
+    static constexpr ui64 WriterIndex = 0;
+    // Write index of the batch in flight at each shard, kept until the shard confirms it.
+    THashMap<ui64, ui64> InFlightWriteIndex;
     const TVector<NScheme::TTypeInfo> KeyColumnTypes;
 
     IKqpTableWriterCallbacks* Callbacks;
@@ -5481,6 +5509,7 @@ public:
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED:
         case NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED:
+        case NKikimrDataEvents::TEvWriteResult::STATUS_ALREADY_APPLIED:
             AFL_ENSURE(false);
         case NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED: {
             YDB_LOG_ERROR("Received external EvWriteResult with aborted status.",

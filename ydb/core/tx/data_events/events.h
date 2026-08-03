@@ -146,6 +146,14 @@ struct TDataEvents {
             return result;
         }
 
+        static std::unique_ptr<TEvWriteResult> BuildAlreadyApplied(const ui64 origin, const ui64 txId) {
+            auto result = std::make_unique<TEvWriteResult>();
+            result->Record.SetOrigin(origin);
+            result->Record.SetTxId(txId);
+            result->Record.SetStatus(NKikimrDataEvents::TEvWriteResult::STATUS_ALREADY_APPLIED);
+            return result;
+        }
+
         static std::unique_ptr<TEvWriteResult> BuildPrepared(const ui64 origin, const ui64 txId, const TCoordinatorInfo& transactionInfo) {
             auto result = std::make_unique<TEvWriteResult>();
             result->Record.SetOrigin(origin);
@@ -158,7 +166,7 @@ struct TDataEvents {
             return result;
         }
 
-        void AddTxLock(ui64 lockId, ui64 shard, ui32 generation, ui64 counter, ui64 ssId, ui64 pathId, bool hasWrites) {
+        void AddTxLock(ui64 lockId, ui64 shard, ui32 generation, ui64 counter, ui64 ssId, ui64 pathId, bool hasWrites, ui64 writerIndex = 0, ui64 writeIndex = 0) {
             auto entry = Record.AddTxLocks();
             entry->SetLockId(lockId);
             entry->SetDataShard(shard);
@@ -168,6 +176,11 @@ struct TDataEvents {
             entry->SetPathId(pathId);
             if (hasWrites) {
                 entry->SetHasWrites(true);
+            }
+            if (writeIndex) {
+                auto* entryWriteIndex = entry->AddWriteIndexes();
+                entryWriteIndex->SetWriterIndex(writerIndex);
+                entryWriteIndex->SetWriteIndex(writeIndex);
             }
         }
 
@@ -179,7 +192,8 @@ struct TDataEvents {
 
         bool IsPrepared() const { return GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED; }
         bool IsComplete() const { return GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED; }
-        bool IsError() const { return !IsPrepared() && !IsComplete(); }
+        bool IsAlreadyApplied() const { return GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_ALREADY_APPLIED; }
+        bool IsError() const { return !IsPrepared() && !IsComplete() && !IsAlreadyApplied(); }
 
         void SetOrbit(NLWTrace::TOrbit&& orbit) { Orbit = std::move(orbit); }
         NLWTrace::TOrbit& GetOrbit() { return Orbit; }

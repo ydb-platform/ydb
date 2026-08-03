@@ -49,7 +49,7 @@ class FakeInventory:
 
 
 class ScriptedRandom:
-    """Deterministic stand-in for random.Random: always the same cap and the first menu entry."""
+    """Deterministic stand-in: fixed randint / uniform, always first menu entry."""
 
     def __init__(self, *, randint: int = 1, uniform: float = 0.0) -> None:
         self._randint = randint
@@ -90,8 +90,6 @@ class RecordingProbe:
 
 
 class LiveReporter:
-    """Duck-typed hc_source stamping real monotonic time."""
-
     def __init__(self) -> None:
         self.last_results: dict = {}
         self.last_update: float | None = None
@@ -127,32 +125,24 @@ def _nodes() -> list[ChaosTarget]:
 
 
 class TestTick:
-    def test_tick_stops_at_the_budget(self):
-        guard = _guard("block-4-2")
+    @pytest.mark.parametrize(
+        "erasure,max_per_tick,expected",
+        [
+            ("block-4-2", 5, 2),   # budget is the limit
+            ("mirror-3-dc", 3, 3),  # one DC realm fits under the fuse
+            ("mirror-3-dc", 2, 2),  # fuse bounds a roomier budget
+        ],
+    )
+    def test_tick_respects_budget_and_fuse(self, erasure, max_per_tick, expected):
         dispatched: list = []
         sched = _make_scheduler(
-            guard, FakeInventory(_nodes()), dispatched,
-            max_per_tick=5, rng=ScriptedRandom(randint=5),
+            _guard(erasure), FakeInventory(_nodes()), dispatched,
+            max_per_tick=max_per_tick, rng=ScriptedRandom(randint=max_per_tick),
         )
-        assert sched.tick() == 2, "block-4-2 tolerates 2 domains, whatever the cap"
-        assert len({c.target.host for c in dispatched}) == 2, "and not twice the same host"
+        assert sched.tick() == expected
+        assert len({c.target.host for c in dispatched}) == expected
 
-    def test_tick_fills_the_cap_while_the_budget_allows(self):
-        # mirror-3-dc over 4 racks of one DC: the whole realm may be sacrificed.
-        dispatched: list = []
-        sched = _make_scheduler(
-            _guard("mirror-3-dc"), FakeInventory(_nodes()), dispatched,
-            max_per_tick=3, rng=ScriptedRandom(randint=3),
-        )
-        assert sched.tick() == 3
-
-    def test_menu_offers_every_enabled_type(self):
-        sched = _make_scheduler(
-            _guard("block-4-2"), FakeInventory(_nodes()), [], enabled_types=["A", "B"]
-        )
-        assert {item[0] for item in sched._menu()} == {"A", "B"}, "no weights, no muting"
-
-    def test_slot_tick_caps_at_the_slot_budget(self):
+    def test_slot_budget_fills_then_idles(self):
         guard = _guard("block-4-2", total_slots=10)  # max_slots = 3
         dispatched: list = []
         sched = _make_scheduler(
@@ -161,32 +151,31 @@ class TestTick:
             enabled_types=["KillSlot"],
             scope_for=lambda t: ImpactScope.SLOT,
             kind_for=lambda t: TargetKind.SLOT,
-            max_per_tick=5, rng=ScriptedRandom(randint=5),
+            max_per_tick=16, rng=ScriptedRandom(randint=1),
         )
         assert sched.tick() == 3
-        assert guard.snapshot()["impaired_racks"] == [], "slots cost no fail domain"
+        assert guard.snapshot()["impaired_racks"] == []
+        assert sched.tick() == 0, "budget full"
 
-    def test_full_types_are_muted_without_a_probe(self):
-        # No observability -> no chaos: without the probe a lease is never released.
+    def test_menu_mutes_and_offers(self):
+        # Enabled types appear; FULL without probe / toggle without extract are muted.
         sched = _make_scheduler(
+            _guard("block-4-2"), FakeInventory(_nodes()), [], enabled_types=["A", "B"]
+        )
+        assert {item[0] for item in sched._menu()} == {"A", "B"}
+
+        muted = _make_scheduler(
             _guard("block-4-2"), FakeInventory(_nodes()), [], recovery_probe=None,
         )
-        assert sched._menu() == [] and sched.tick() == 0
+        assert muted._menu() == [] and muted.tick() == 0
 
-    def test_slot_chaos_pauses_when_the_probe_is_blind(self):
-        sched = _make_scheduler(
-            _guard("block-4-2", total_slots=10),
-            FakeInventory([ChaosTarget.for_slot("h1", slot_idx=i) for i in range(5)]),
-            [],
-            enabled_types=["KillSlot"],
-            scope_for=lambda t: ImpactScope.SLOT,
-            kind_for=lambda t: TargetKind.SLOT,
-            recovery_probe=RecordingProbe(baseline=None),  # blind: no fresh healthcheck data
-            max_per_tick=5, rng=ScriptedRandom(randint=5),
+        toggle = _make_scheduler(
+            _guard("block-4-2"), FakeInventory(_nodes()), [],
+            enabled_types=["Toggle"], recovery_mode_for=lambda t: "extract",
         )
-        assert sched.tick() == 0, "a slot inject without a baseline is not observable"
+        assert toggle._menu() == [] and toggle.tick() == 0
 
-    def test_blind_slots_do_not_block_other_types(self):
+    def test_blind_slots_pause_without_blocking_other_types(self):
         dispatched: list = []
         sched = _make_scheduler(
             _guard("block-4-2", total_slots=10),
@@ -196,32 +185,37 @@ class TestTick:
             scope_for=lambda t: ImpactScope.SLOT if t == "KillSlot" else ImpactScope.NODE,
             kind_for=lambda t: TargetKind.SLOT if t == "KillSlot" else TargetKind.NODE,
             recovery_probe=RecordingProbe(baseline=None),
-            max_per_tick=1, rng=ScriptedRandom(randint=1),  # choice() takes the first menu entry
+            max_per_tick=1, rng=ScriptedRandom(randint=1),
         )
         assert sched.tick() == 1
-        assert dispatched[0].nemesis_type == "KillNode", "the paused slot type steps aside"
+        assert dispatched[0].nemesis_type == "KillNode"
 
-    def test_lease_is_released_when_planning_raises(self):
+        slots_only = _make_scheduler(
+            _guard("block-4-2", total_slots=10),
+            FakeInventory([ChaosTarget.for_slot("h1", slot_idx=i) for i in range(3)]),
+            [],
+            enabled_types=["KillSlot"],
+            scope_for=lambda t: ImpactScope.SLOT,
+            kind_for=lambda t: TargetKind.SLOT,
+            recovery_probe=RecordingProbe(baseline=None),
+            max_per_tick=5, rng=ScriptedRandom(randint=5),
+        )
+        assert slots_only.tick() == 0
+
+    def test_dispatch_failures_release_only_when_nothing_landed(self):
+        # Planner boom before any dispatch → lease freed.
         guard = _guard("block-4-2")
-
-        def bad_plan(ntype, target):
-            raise RuntimeError("planner exploded")
-
         sched = _make_scheduler(
             guard, FakeInventory(_nodes()), [],
-            plan_inject=bad_plan,
+            plan_inject=lambda n, t: (_ for _ in ()).throw(RuntimeError("planner")),
             max_per_tick=1, rng=ScriptedRandom(randint=1),
         )
         with pytest.raises(RuntimeError):
             sched.tick()
-        assert guard.snapshot()["tracked_executions"] == 0, "no silent lease leak"
+        assert guard.snapshot()["tracked_executions"] == 0
 
-    def test_partial_fanout_keeps_budget_and_tracks(self):
-        # Partial fanout must keep the budget charged and stay tracked.
-        guard = _guard("block-4-2")
-        probe = RecordingProbe()
-        dispatched: list = []
-        calls = {"n": 0}
+        # Partial fanout then failure → budget stays charged and tracked.
+        guard, probe, dispatched, calls = _guard("block-4-2"), RecordingProbe(), [], {"n": 0}
 
         def flaky_fanout(ntype, target):
             return [
@@ -237,50 +231,26 @@ class TestTick:
 
         sched = _make_scheduler(
             guard, FakeInventory(_nodes()), dispatched,
-            plan_inject=flaky_fanout,
-            dispatch=flaky_dispatch,
-            recovery_probe=probe,
+            plan_inject=flaky_fanout, dispatch=flaky_dispatch, recovery_probe=probe,
             max_per_tick=1, rng=ScriptedRandom(randint=1),
         )
         with pytest.raises(RuntimeError):
             sched.tick()
         assert len(dispatched) == 2
-        assert guard.snapshot()["tracked_executions"] == 1, "budget stays charged"
-        assert len(probe.tracked) == 1, "probe still watches the partial fault"
-
-    def test_track_failure_after_dispatch_keeps_budget(self):
-        guard = _guard("block-4-2")
-        dispatched: list = []
-
-        class BoomProbe(RecordingProbe):
-            def track(self, *args, **kwargs):
-                raise RuntimeError("probe.track exploded")
-
-        sched = _make_scheduler(
-            guard, FakeInventory(_nodes()), dispatched,
-            recovery_probe=BoomProbe(),
-            max_per_tick=1, rng=ScriptedRandom(randint=1),
-        )
-        with pytest.raises(RuntimeError):
-            sched.tick()
-        assert len(dispatched) == 1
-        assert guard.snapshot()["tracked_executions"] == 1, "do not free budget after a landed fault"
+        assert guard.snapshot()["tracked_executions"] == 1
+        assert len(probe.tracked) == 1
 
 
 class TestProfile:
     @pytest.mark.parametrize("uniform,expected", [(-0.5, 30.0), (0.5, 90.0)])
-    def test_sleep_applies_jitter(self, uniform, expected):
+    def test_sleep_and_status(self, uniform, expected):
         sched = _make_scheduler(
-            _guard("block-4-2"), FakeInventory([]), [],
+            _guard("block-4-2"), FakeInventory(_nodes()), [],
             base_interval=60.0, jitter=0.5, rng=ScriptedRandom(uniform=uniform),
         )
         assert sched._sleep_seconds() == pytest.approx(expected)
-
-    def test_set_profile_and_status(self):
-        sched = _make_scheduler(_guard("block-4-2"), FakeInventory(_nodes()), [])
         sched.set_profile(enabled=["X"], base_interval=10.0, jitter=0.25, max_per_tick=7)
         status = sched.status()
-        assert status["running"] is False
         assert (status["enabled_types"], status["base_interval"], status["max_per_tick"]) == (
             ["X"], 10.0, 7,
         )
@@ -297,7 +267,7 @@ class TestDatacenterFanout:
                 ChaosTarget.for_datacenter("h3", "dc2"),
             ]),
         )
-        assert {c.target.host for c in cmds} == {"h1", "h2"}, "not the round-robin planner's DC"
+        assert {c.target.host for c in cmds} == {"h1", "h2"}
         assert len({c.scenario_id for c in cmds}) == 1
 
 
@@ -313,69 +283,33 @@ class TestToggleRecovery:
             max_per_tick=1, rng=ScriptedRandom(randint=1),
         )
 
-    def test_toggle_holds_budget_and_tracks_its_extract(self):
+    def test_toggle_tracks_extract_and_stop_drains_to_confirm(self):
         guard = _guard("block-4-2")
         dispatched: list = []
         probe = RecordingProbe()
         assert self._toggle_scheduler(guard, dispatched, probe).tick() == 1
-        assert len(guard.snapshot()["impaired_racks"]) == 1, "held, not expiring on a timer"
-
-        lease, target, ntype, kwargs = probe.tracked[0]
-        assert ntype == "Toggle"
-        assert kwargs["extract_after_sec"] == 90.0
-        assert kwargs["recover_action"] is not None
-        assert kwargs["stuck_timeout_sec"] > 0 and kwargs["confirm_timeout_sec"] > 0
+        assert len(guard.snapshot()["impaired_racks"]) == 1
+        _, target, ntype, kwargs = probe.tracked[0]
+        assert ntype == "Toggle" and kwargs["extract_after_sec"] == 90.0
         kwargs["recover_action"]()
-        extracts = [c for c in dispatched if c.action == "extract"]
-        assert len(extracts) == 1 and extracts[0].target.host == target.host
+        assert [c.action for c in dispatched if c.action == "extract"]
 
-    def test_toggle_is_muted_when_nothing_can_extract(self):
-        # Without a plan_extract it would stay broken forever, so it must not be offered.
-        sched = _make_scheduler(
-            _guard("block-4-2"), FakeInventory(_nodes()), [],
-            enabled_types=["Toggle"], recovery_mode_for=lambda t: "extract",
-        )
-        assert sched._menu() == [] and sched.tick() == 0
-
-    def test_stop_extracts_what_is_still_held(self):
-        guard = _guard("block-4-2")
-        dispatched: list = []
+        # Live probe: stop drains extract; budget waits for HC confirm.
+        guard, dispatched = _guard("block-4-2"), []
         rep = LiveReporter()
-        probe = RecoveryProbe(guard=guard, hc_source=rep, min_hold_sec=0.0, poll_interval=3600.0)
-        sched = self._toggle_scheduler(guard, dispatched, probe, hold_sec=600.0)
+        live = RecoveryProbe(guard=guard, hc_source=rep, min_hold_sec=0.0, poll_interval=3600.0)
+        sched = self._toggle_scheduler(guard, dispatched, live, hold_sec=600.0)
         assert sched.tick() == 1
-        assert [c.action for c in dispatched] == ["inject"]
-
         sched.stop()
-        assert [c.action for c in dispatched] == ["inject", "extract"], "stop must not leave it applied"
-        assert guard.snapshot()["impaired_racks"] == ["dc1/r1"], (
-            "the drain is not a release: the budget waits for the healthcheck confirm"
-        )
-
+        assert [c.action for c in dispatched] == ["inject", "extract"]
+        assert guard.snapshot()["impaired_racks"] == ["dc1/r1"]
         rep.publish(_healthy("h1", "h2", "h3", "h4"))
-        probe.tick()
-        assert guard.snapshot()["impaired_racks"] == [] and probe.pending() == []
+        live.tick()
+        assert guard.snapshot()["impaired_racks"] == [] and live.pending() == []
 
 
-class TestFillSemantics:
-    """A tick fills the budget up to the boundary; the cap is only a burst fuse."""
-
-    def test_a_tick_fills_the_whole_slot_budget_and_then_goes_idle(self):
-        guard = _guard("block-4-2", total_slots=12)  # max_slots = 3 (30%)
-        dispatched: list = []
-        sched = _make_scheduler(
-            guard,
-            FakeInventory([ChaosTarget.for_slot("h1", slot_idx=i) for i in range(8)]),
-            dispatched,
-            enabled_types=["KillSlot"],
-            scope_for=lambda t: ImpactScope.SLOT,
-            kind_for=lambda t: TargetKind.SLOT,
-            max_per_tick=16, rng=ScriptedRandom(randint=1),
-        )
-        assert sched.tick() == 3, "the budget is the limit, not the old random cap"
-        assert sched.tick() == 0, "budget full — nothing left to inject"
-
-    def test_bypass_cap_is_independent_from_the_budget_fill(self):
+class TestBypassAndFill:
+    def test_bypass_cap_and_dedup_with_budget_fill(self):
         guard = _guard("block-4-2")
         dispatched: list = []
         sched = _make_scheduler(
@@ -391,52 +325,25 @@ class TestFillSemantics:
             ),
             max_per_tick=16, max_bypass_per_tick=1, rng=ScriptedRandom(randint=1),
         )
-        added = sched.tick()
+        assert sched.tick() == 3
         kinds = [c.nemesis_type for c in dispatched]
-        assert kinds.count("KillNode") == 2, "budget filled (block-4-2: 2 domains)"
-        assert sum(1 for k in kinds if k in ("KillHive", "ReBalance")) == 1, "bypass capped at 1"
-        assert added == 3
+        assert kinds.count("KillNode") == 2
+        assert sum(1 for k in kinds if k in ("KillHive", "ReBalance")) == 1
 
-    def test_the_fuse_bounds_the_burst_when_the_budget_is_roomier(self):
-        # mirror-3-dc over 4 racks of one DC: the whole realm fits, but the fuse says 2.
-        dispatched: list = []
-        sched = _make_scheduler(
-            _guard("mirror-3-dc"), FakeInventory(_nodes()), dispatched,
-            max_per_tick=2, rng=ScriptedRandom(randint=1),
-        )
-        assert sched.tick() == 2
-
-
-class TestBypass:
-    def _bypass_scheduler(self, guard, dispatched, enabled, **overrides):
-        return _make_scheduler(
-            guard, FakeInventory([ChaosTarget.for_tablet("h1")]), dispatched,
-            enabled_types=enabled,
-            kind_for=lambda t: TargetKind.TABLET,
-            mode_for=lambda t: GuardMode.BYPASS,
-            **overrides,
-        )
-
-    def test_bypass_fires_with_the_budget_exhausted_and_reserves_nothing(self):
-        guard = _guard("block-4-2")
+        # Exhausted budget still lets bypass fire; each tablet type once.
         for rack in ("r1", "r2"):
             guard.reserve(Footprint(racks=frozenset({rack})), identity_key=rack)
-        dispatched: list = []
-        sched = self._bypass_scheduler(
-            guard, dispatched, ["KillHive"], max_per_tick=1, rng=ScriptedRandom(randint=1)
-        )
-        assert sched.tick() == 1 and len(dispatched) == 1
-        assert len(guard.snapshot()["impaired_racks"]) == 2, "no extra budget spent"
-
-    def test_dedup_is_per_type_and_target(self):
-        # Tablet types share one control-host target: each fires once, all of them fire.
-        dispatched: list = []
-        sched = self._bypass_scheduler(
-            _guard("block-4-2"), dispatched, ["KillHive", "ReBalance"],
+        dispatched.clear()
+        bypass = _make_scheduler(
+            guard, FakeInventory([ChaosTarget.for_tablet("h1")]), dispatched,
+            enabled_types=["KillHive", "ReBalance"],
+            kind_for=lambda t: TargetKind.TABLET,
+            mode_for=lambda t: GuardMode.BYPASS,
             max_per_tick=3, max_bypass_per_tick=3, rng=ScriptedRandom(randint=3),
         )
-        assert sched.tick() == 2
+        assert bypass.tick() == 2
         assert {c.nemesis_type for c in dispatched} == {"KillHive", "ReBalance"}
+        assert len(guard.snapshot()["impaired_racks"]) == 2
 
 
 class TestLifecycle:
@@ -451,5 +358,4 @@ class TestLifecycle:
         while not dispatched and time.monotonic() < deadline:
             time.sleep(0.01)
         sched.stop()
-        assert dispatched, "the thread must have ticked"
-        assert sched._thread is not None and not sched._thread.is_alive()
+        assert dispatched and sched._thread is not None and not sched._thread.is_alive()

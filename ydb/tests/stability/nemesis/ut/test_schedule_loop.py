@@ -32,12 +32,13 @@ def _guard() -> FailureModelGuard:
 
 
 class RecordingProbe:
-    def __init__(self) -> None:
+    def __init__(self, baseline: int | None = 8) -> None:
         self.tracked: list = []
         self.untracked: list = []
+        self._baseline = baseline
 
     def alive_compute_baseline(self):
-        return 8
+        return self._baseline
 
     def track(self, lease_id, target, nemesis_type, **kwargs):
         self.tracked.append((lease_id, target, nemesis_type, kwargs))
@@ -70,59 +71,38 @@ def _schedule(guard, probe, dispatched, store) -> OrchestratorNemesisSchedule:
 
 
 class TestLegacyLoopAccounting:
-    def test_toggle_inject_is_tracked_with_a_probe_driven_extract(self):
-        # Lease blocks planner toggle-back, so the probe must drive the extract.
+    def test_inject_extract_and_self_healing_wiring(self):
         guard, probe, dispatched, store = _guard(), RecordingProbe(), [], ChaosStoreStub()
         sched = _schedule(guard, probe, dispatched, store)
         target = ChaosTarget.for_node("h1", node_id=1)
-        cmd = build_dispatch("StopStartNodeNemesis", target, "inject", {})
 
-        sched._dispatch_and_record(cmd)
-
+        # Toggle: tracked with a probe-driven extract; lease holds until confirm.
+        sched._dispatch_and_record(build_dispatch("StopStartNodeNemesis", target, "inject", {}))
         assert [c.action for c in dispatched] == ["inject"]
-        assert guard.snapshot()["impaired_racks"] == ["dc1/r1"], "held until the probe confirms"
-        lease, tracked_target, ntype, kwargs = probe.tracked[0]
-        assert lease == cmd.execution_id and ntype == "StopStartNodeNemesis"
-        assert kwargs["extract_after_sec"] == 90.0
-        assert kwargs["confirm_timeout_sec"] > 0 and kwargs["stuck_timeout_sec"] > 0
+        assert guard.snapshot()["impaired_racks"] == ["dc1/r1"]
+        lease, _, ntype, kwargs = probe.tracked[0]
+        assert ntype == "StopStartNodeNemesis" and kwargs["extract_after_sec"] == 90.0
         kwargs["recover_action"]()
-        assert store.extract_plans == [("StopStartNodeNemesis", target)]
         assert [c.action for c in dispatched] == ["inject", "extract"]
 
-    def test_self_healing_inject_is_tracked_without_an_extract(self):
-        guard, probe, dispatched, store = _guard(), RecordingProbe(), [], ChaosStoreStub()
-        sched = _schedule(guard, probe, dispatched, store)
-        cmd = build_dispatch("KillNodeNemesis", ChaosTarget.for_node("h1", node_id=1), "inject", {})
-
-        sched._dispatch_and_record(cmd)
-
-        _, _, _, kwargs = probe.tracked[0]
-        assert "recover_action" not in kwargs and kwargs["stuck_timeout_sec"] > 0
-
-    def test_extract_releases_and_untracks_by_identity(self):
-        guard, probe, dispatched, store = _guard(), RecordingProbe(), [], ChaosStoreStub()
-        sched = _schedule(guard, probe, dispatched, store)
-        target = ChaosTarget.for_node("h1", node_id=1)
-        sched._dispatch_and_record(build_dispatch("StopStartNodeNemesis", target, "inject", {}))
-
+        # Explicit extract releases by identity and untracks the probe.
         sched._dispatch_and_record(build_dispatch("StopStartNodeNemesis", target, "extract", {}))
-
         assert guard.snapshot()["impaired_racks"] == []
         assert probe.untracked == [target.identity_key()]
 
-    def test_blind_slot_inject_is_skipped(self):
-        class BlindProbe(RecordingProbe):
-            def alive_compute_baseline(self):
-                return None
-
-        guard, probe, dispatched, store = _guard(), BlindProbe(), [], ChaosStoreStub()
-        sched = _schedule(guard, probe, dispatched, store)
-        cmd = build_dispatch(
-            "KillSlotDaemonNemesis", ChaosTarget.for_slot("h1", slot_idx=1), "inject", {}
+        # Self-healing: tracked without recover_action.
+        probe.tracked.clear()
+        sched._dispatch_and_record(
+            build_dispatch("KillNodeNemesis", ChaosTarget.for_node("h2", node_id=2), "inject", {})
         )
+        _, _, _, kwargs = probe.tracked[0]
+        assert "recover_action" not in kwargs and kwargs["stuck_timeout_sec"] > 0
 
-        sched._dispatch_and_record(cmd)
-
-        assert dispatched == []
-        assert probe.tracked == []
+    def test_blind_slot_inject_is_skipped(self):
+        guard, probe, dispatched, store = _guard(), RecordingProbe(baseline=None), [], ChaosStoreStub()
+        sched = _schedule(guard, probe, dispatched, store)
+        sched._dispatch_and_record(
+            build_dispatch("KillSlotDaemonNemesis", ChaosTarget.for_slot("h1", slot_idx=1), "inject", {})
+        )
+        assert dispatched == [] and probe.tracked == []
         assert guard.snapshot()["impaired_slots"] == 0

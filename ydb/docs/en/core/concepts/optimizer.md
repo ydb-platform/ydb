@@ -44,7 +44,11 @@ GROUP BY
 
 In this query graph, all `Dim...` tables are joined to the `Fact_Sales` fact table:
 
+<<<<<<< HEAD:ydb/docs/en/core/concepts/optimizer.md
 ![Join graph](_assets/Star-Schema.png)
+=======
+![Join graph](../../../../assets/star_schema.png)
+>>>>>>> b8ff2112edd (Ydbdocs 2400 specify available secondary index parameters during creation (#44927)):ydb/docs/en/core/concepts/query_execution/optimizer.md
 
 Common topologies also include chains and cliques. A "chain" is a topology where tables are connected to each other sequentially and each table participates in no more than one join. A "clique" is a fully connected graph where each table is connected to every other table.
 

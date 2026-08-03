@@ -20,12 +20,14 @@ public:
     using TLevelNodeCounts = std::array<std::atomic<i64>, TILING_PRIORITY_LEVEL_COUNT>;
 
     const std::shared_ptr<TLevelNodeCounts> LevelNodeCounts = std::make_shared<TLevelNodeCounts>();
+    const NMonitoring::TDynamicCounters::TCounterPtr MaxOverload;
     const NColumnShard::TIncrementalHistogram OverloadHistogram;
     const NColumnShard::TIncrementalHistogram WidthHistogram;
     const NColumnShard::TIncrementalHistogram HeightHistogram;
 
     TPortionCategoryCounterAgents(TCommonCountersOwner& base, const TString& categoryName)
         : TBase(base, categoryName)
+        , MaxOverload(TBase::GetValue("Overload/Max"))
         , OverloadHistogram(base.GetModuleId(), "ByLevel/Overload", categoryName, NColumnShard::THistorgamBorders::PortionWidthBorders)
         , WidthHistogram(base.GetModuleId(), "ByLevel/Width", categoryName, NColumnShard::THistorgamBorders::PortionWidthBorders)
         , HeightHistogram(base.GetModuleId(), "ByLevel/Height", categoryName, NColumnShard::THistorgamBorders::PortionWidthBorders)
@@ -38,6 +40,7 @@ private:
     using TBase = NColumnShard::TPortionCategoryCounters;
     using TLevelNodeCounts = TPortionCategoryCounterAgents::TLevelNodeCounts;
     std::shared_ptr<TLevelNodeCounts> LevelNodeCounts;
+    NMonitoring::TDynamicCounters::TCounterPtr MaxOverload;
     std::shared_ptr<NColumnShard::TIncrementalHistogram::TGuard> OverloadHistogram;
     std::shared_ptr<NColumnShard::TIncrementalHistogram::TGuard> WidthHistogram;
     std::shared_ptr<NColumnShard::TIncrementalHistogram::TGuard> HeightHistogram;
@@ -52,6 +55,7 @@ public:
     TPortionCategoryCounters(TPortionCategoryCounterAgents& agents)
         : TBase(agents)
         , LevelNodeCounts(agents.LevelNodeCounts)
+        , MaxOverload(agents.MaxOverload)
         , OverloadHistogram(agents.OverloadHistogram.BuildGuard())
         , WidthHistogram(agents.WidthHistogram.BuildGuard())
         , HeightHistogram(agents.HeightHistogram.BuildGuard())
@@ -85,9 +89,11 @@ public:
     i64 GetMaxOverloadLevel() const {
         for (i64 level = TILING_PRIORITY_LEVEL_COUNT - 1; level >= 0; --level) {
             if ((*LevelNodeCounts)[level].load() > 0) {
+                MaxOverload->Set(level);
                 return level;
             }
         }
+        MaxOverload->Set(0);
         return 0;
     }
 

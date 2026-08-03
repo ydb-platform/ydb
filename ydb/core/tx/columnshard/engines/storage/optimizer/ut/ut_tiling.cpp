@@ -182,6 +182,41 @@ ui64 BuildPlannerAndGetNodePortionsCountLimit(const TString& className, const NJ
 
 }   // namespace
 
+Y_UNIT_TEST_SUITE(TilingCounterUnits) {
+    Y_UNIT_TEST(CurrentMaxOverloadTracksLiveClients) {
+        auto root = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        NColumnShard::TCommonCountersOwner owner("TilingCounterUnits", root);
+        TPortionCategoryCounterAgents agents(owner, "test");
+        const auto maxOverload =
+            root->GetSubgroup("module_id", "TilingCounterUnits")->GetSubgroup("category", "test")->GetCounter("Value/Overload/Max", false);
+
+        auto low = std::make_shared<TPortionCategoryCounters>(agents);
+        const auto assertMaxOverload = [&](const ui64 expected) {
+            UNIT_ASSERT_VALUES_EQUAL(low->GetMaxOverloadLevel(), expected);
+            UNIT_ASSERT_VALUES_EQUAL(maxOverload->Val(), expected);
+        };
+        low->SetOverload(3);
+        assertMaxOverload(3);
+
+        {
+            auto high = std::make_shared<TPortionCategoryCounters>(agents);
+            high->SetOverload(7);
+            assertMaxOverload(7);
+
+            low->SetOverload(17);
+            assertMaxOverload(10);
+
+            low->SetOverload(4);
+            assertMaxOverload(7);
+        }
+
+        assertMaxOverload(4);
+
+        low->SetOverload(0);
+        assertMaxOverload(0);
+    }
+}
+
 Y_UNIT_TEST_SUITE(TilingCoreUnits) {
     Y_UNIT_TEST(AccumulatorReturnsSimpleCompactionTask) {
         TAccumulatorSettings settings;

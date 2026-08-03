@@ -237,7 +237,7 @@ bool TLeaderTabletInfo::ReleaseAllocationUnit(ui32 channelId) {
     return false;
 }
 
-const NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters* TLeaderTabletInfo::FindFreeAllocationUnit(ui32 channelId) {
+const NKikimrBlobStorage::TGroupMetrics::TGroupParameters* TLeaderTabletInfo::FindFreeAllocationUnit(ui32 channelId) {
     TStoragePoolInfo* storagePool = Hive.FindStoragePool(GetChannelStoragePoolName(channelId));
     if (storagePool != nullptr) {
         auto params = Hive.BuildGroupParametersForChannel(*this, channelId);

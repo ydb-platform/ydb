@@ -37,6 +37,8 @@ The following configuration sections are available, listed in alphabetical order
 | [{#T}](tli_config.md) | No | Diagnostics parameters for [transaction lock invalidation](../../concepts/glossary.md#tli) (TLI) |
 | [{#T}](tls.md) | No | TLS configuration for secure connections |
 
+## Practical recommendations
+
 This documentation section provides a complete description of available settings, while practical recommendations on what and when to configure can be found in the following places:
 
 - As part of the initial {{ ydb-short-name }} cluster deployment:

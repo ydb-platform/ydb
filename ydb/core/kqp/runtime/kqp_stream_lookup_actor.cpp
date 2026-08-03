@@ -184,7 +184,7 @@ public:
             tableStats->MutableExtra()->PackFrom(tableExtraStats);
 
             // Add lock stats for broken locks and shard read retries
-            if (!BrokenLocks.empty() || TotalRetryAttempts > 0 || !UserFacingShardReads.empty()) {
+            if (!BrokenLocks.empty() || TotalRetryAttempts > 0 || !UserFacingShardReads.Empty()) {
                 NKqpProto::TKqpTaskExtraStats extraStats;
                 if (stats->HasExtra()) {
                     stats->GetExtra().UnpackTo(&extraStats);
@@ -193,17 +193,7 @@ public:
                     extraStats.MutableLockStats()->SetBrokenAsVictim(
                         extraStats.GetLockStats().GetBrokenAsVictim() + BrokenLocks.size());
                 }
-                if (TotalRetryAttempts > 0) {
-                    extraStats.SetReadRetriesCount(extraStats.GetReadRetriesCount() + TotalRetryAttempts);
-                }
-                for (const auto& [shardId, shard] : UserFacingShardReads) {
-                    if (static_cast<size_t>(extraStats.ShardReadsSize()) >= MaxUserFacingShardReadsPerTask) {
-                        extraStats.SetShardReadsTruncated(
-                            extraStats.GetShardReadsTruncated() + UserFacingShardReads.size() - extraStats.ShardReadsSize());
-                        break;
-                    }
-                    *extraStats.AddShardReads() = shard;
-                }
+                UserFacingShardReads.Export(extraStats, TotalRetryAttempts);
                 stats->MutableExtra()->PackFrom(extraStats);
             }
         }
@@ -655,13 +645,11 @@ private:
         ui64 shardId = read.ShardId;
 
         if (IngressStats.CollectFull()) {
-            auto& shard = UserFacingShardReads[shardId];
-            shard.SetShardId(shardId);
-            shard.SetFinishTimeMs(TInstant::Now().MilliSeconds());
-            shard.SetRows(shard.GetRows() + record.GetRowCount());
+            ui32 retryAttempts = 0;
             if (auto it = Reads.ShardsState.find(shardId); it != Reads.ShardsState.end()) {
-                shard.SetRetries(Max<ui32>(shard.GetRetries(), it->second.RetryAttempts));
+                retryAttempts = it->second.RetryAttempts;
             }
+            UserFacingShardReads.OnFinish(shardId, record.GetRowCount(), retryAttempts);
         }
 
         TStringBuilder txLocks;
@@ -1189,11 +1177,7 @@ private:
 
     void StartTableRead(ui64 shardId, THolder<TEvDataShard::TEvRead> request) {
         if (IngressStats.CollectFull()) {
-            auto& shard = UserFacingShardReads[shardId];
-            shard.SetShardId(shardId);
-            if (!shard.GetStartTimeMs()) {
-                shard.SetStartTimeMs(TInstant::Now().MilliSeconds());
-            }
+            UserFacingShardReads.OnStart(shardId);
         }
         Counters->CreatedIterators->Inc();
         auto& record = request->Record;
@@ -1463,8 +1447,7 @@ private:
     std::deque<NUdf::TUnboxedValue> UnmodifiedOutputRows;
     ui64 OperationId = 0;
     size_t TotalRetryAttempts = 0;
-    // Per-shard read summaries for the user-facing trace; collected at full stats level.
-    THashMap<ui64, NKqpProto::TKqpShardReadStats> UserFacingShardReads;
+    TUserFacingShardReadCollector UserFacingShardReads;
     size_t TotalResolveShardsAttempts = 0;
     bool ResolveShardsInProgress = false;
     NKqpProto::EIsolationLevel IsolationLevel;

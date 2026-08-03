@@ -1544,6 +1544,16 @@ void TQueryExecutionStats::ExportAggExecStats(TAggExecStat* metrics) {
 
 void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats,
         std::optional<Ydb::Table::QueryStatsCollection::Mode> exportMode) {
+    ExportExecStatsImpl(stats, exportMode, true);
+}
+
+void TQueryExecutionStats::CopyExecStats(NYql::NDqProto::TDqExecutionStats& stats,
+        std::optional<Ydb::Table::QueryStatsCollection::Mode> exportMode) {
+    ExportExecStatsImpl(stats, exportMode, false);
+}
+
+void TQueryExecutionStats::ExportExecStatsImpl(NYql::NDqProto::TDqExecutionStats& stats,
+        std::optional<Ydb::Table::QueryStatsCollection::Mode> exportMode, bool moveComputeStats) {
     const auto mode = exportMode.value_or(StatsMode);
     switch (mode) {
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE:
@@ -1638,10 +1648,12 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
                 for (auto& [id, m] : stageStat.Mkql) {
                     ExportAggStats(m, (*stageStats.MutableMkql())[id]);
                 }
-                // Copy, not swap: the export must stay non-destructive — it can run twice
-                // (client-mode export for the response, collection-mode export for the trace).
-                for (const auto& [id, caStats] : stageStat.ComputeActors) {
-                    stageStats.AddComputeActors()->CopyFrom(caStats);
+                for (auto& [id, caStats] : stageStat.ComputeActors) {
+                    if (moveComputeStats) {
+                        stageStats.AddComputeActors()->Swap(&caStats);
+                    } else {
+                        stageStats.AddComputeActors()->CopyFrom(caStats);
+                    }
                 }
 
                 if (CollectProfileStats(mode)) {

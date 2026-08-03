@@ -6160,7 +6160,7 @@ private:
     std::optional<ui64> Coordinator;
     std::optional<TCommitTimestamp> CommitTimestamp;
     bool CollectUserFacingShards = false;
-    THashMap<ui64, TUserFacingShardCommitAck> UserFacingShardAcks;
+    std::unordered_map<ui64, TUserFacingShardCommitAck> UserFacingShardAcks;
     TUserFacingTraceTimeline::TWindow UserFacingCommitPrepareShards;
     TUserFacingTraceTimeline::TWindow UserFacingCommitCoordinator;
     TUserFacingTraceTimeline::TWindow UserFacingCommitApplyShards;

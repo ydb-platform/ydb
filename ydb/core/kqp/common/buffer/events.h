@@ -53,7 +53,7 @@ struct TEvResult : public TEventLocal<TEvResult, TKqpBufferWriterEvents::EvResul
     TUserFacingTraceTimeline::TWindow CommitPrepareShards;
     TUserFacingTraceTimeline::TWindow CommitCoordinator;
     TUserFacingTraceTimeline::TWindow CommitApplyShards;
-    TVector<TUserFacingShardCommitAck> ShardCommitAcks; // capped, full-detail tier only
+    std::vector<TUserFacingShardCommitAck> ShardCommitAcks; // capped, full-detail tier only
 };
 
 struct TEvError : public TEventLocal<TEvError, TKqpBufferWriterEvents::EvError> {

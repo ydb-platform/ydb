@@ -23,7 +23,7 @@ struct TKqpQueryStats {
     // User-facing trace source data, one entry per execution (empty when the executer didn't
     // trace it); self-contained — the renderer never reads Executions for stage detail, those
     // are capped at the client-requested stats mode.
-    TVector<TUserFacingTraceExecutionData> UserFacingTraces;
+    std::vector<TUserFacingTraceExecutionData> UserFacingTraces;
 
     const TVector<NYql::NDqProto::TDqExecutionStats>& GetExecutions() const;
     ui64 GetWorkerCpuTimeUs() const;

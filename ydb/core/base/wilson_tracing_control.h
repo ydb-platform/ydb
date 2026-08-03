@@ -14,8 +14,7 @@ NWilson::TTraceId HandleTracing(const TRequestDiscriminator& discriminator, cons
 NWilson::TTraceId HandleUserFacingTracing(const TRequestDiscriminator& discriminator, const TMaybe<TString>& traceparent);
 
 // For test purposes
-// Clears tracing control TLS variables that depend on AppData
+// Clears TLS controls of both tracing channels that depend on AppData.
 void ClearTracingControl();
-void ClearUserFacingTracingControl();
 
 } // namespace NKikimr::NJaegerTracing

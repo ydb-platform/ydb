@@ -81,9 +81,6 @@ NWilson::TTraceId HandleUserFacingTracing(const TRequestDiscriminator& discrimin
 
 void ClearTracingControl() {
     ClearTracingControl(ETracingChannel::Dev);
-}
-
-void ClearUserFacingTracingControl() {
     ClearTracingControl(ETracingChannel::User);
 }
 

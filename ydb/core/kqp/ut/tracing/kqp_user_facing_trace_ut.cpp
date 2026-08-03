@@ -37,7 +37,9 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         runtime.RegisterService(NWilson::MakeWilsonUploaderId(), runtime.Register(devUploader, 0), 0);
         auto* userUploader = new TFakeWilsonUploader();
         runtime.RegisterService(NWilson::MakeUserFacingWilsonUploaderId(), runtime.Register(userUploader, 0), 0);
-        runtime.SimulateSleep(TDuration::Seconds(10));
+        if (!runtime.IsRealThreads()) {
+            runtime.SimulateSleep(TDuration::Seconds(10));
+        }
         return {devUploader, userUploader};
     }
 
@@ -165,6 +167,40 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         UNIT_ASSERT_VALUES_EQUAL(1, userUploader->Traces.size());
         UNIT_ASSERT_C(FindRootChild(*userUploader, "UPSERT /Root/table-1"),
             "user tree missing when dev tracing is off");
+    }
+
+    Y_UNIT_TEST(UserOnlyProductionConfigSamplesGrpcRequest) {
+        NKqp::TKikimrSettings settings;
+        settings.SetWithSampleTables(false);
+        auto* samplingRule = settings.AppConfig.MutableUserFacingTracingConfig()->AddSampling();
+        samplingRule->SetFraction(1.0);
+        samplingRule->SetLevel(15);
+        samplingRule->SetMaxTracesPerMinute(1'000'000);
+        samplingRule->SetMaxTracesBurst(1'000'000);
+
+        NKqp::TKikimrRunner kikimr(settings);
+        kikimr.GetTestClient().CreateTable("/Root", R"(
+            Name: "table-1"
+            Columns { Name: "key", Type: "Uint64" }
+            Columns { Name: "value", Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto [devUploader, userUploader] = RegisterUploaders(runtime);
+
+        NYdb::NTable::TTableClient tableClient(kikimr.GetDriver());
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        auto result = session.ExecuteDataQuery(
+            "SELECT * FROM `/Root/table-1`;",
+            NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        Sleep(TDuration::Seconds(1));
+
+        UNIT_ASSERT(devUploader->Spans.empty());
+        UNIT_ASSERT(userUploader->BuildTraceTrees());
+        UNIT_ASSERT_C(FindRootChild(*userUploader, "SELECT /Root/table-1"),
+            "user-facing trace was not sampled from UserFacingTracingConfig");
     }
 }
 

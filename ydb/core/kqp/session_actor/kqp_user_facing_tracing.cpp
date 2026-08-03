@@ -112,47 +112,32 @@ TStageSignals CollectStageSignals(const NYql::NDqProto::TDqStageStats& stage) {
     return signals;
 }
 
-// Short action of a stage, inherited by its task spans ("Read task 3"): a task viewed out of
-// context should still say what it was doing.
-TString StageShortVerb(const NYql::NDqProto::TDqStageStats& stage, const TUserFacingStageHint* hint) {
-    if (stage.OperatorJoinSize() > 0) {
-        return "Join";
-    }
-    if (stage.OperatorAggregationSize() > 0) {
-        return "Aggregate";
-    }
-    if (stage.OperatorFilterSize() > 0) {
-        return "Filter";
-    }
-    if (stage.TablesSize() > 0) {
-        return stage.GetTables(0).GetWriteRows().GetSum() > 0 ? "Write" : "Read";
-    }
-    if (hint && hint->TablePath) {
-        return hint->IsWrite ? "Write" : "Read";
-    }
-    return "Compute";
-}
+struct TStageDescription {
+    TString Name;
+    TString Verb;
+};
 
-TString StageDisplayName(const NYql::NDqProto::TDqStageStats& stage, const TUserFacingStageHint* hint) {
-    // Name by the dominant operator first; a table name only labels a pure read/write stage.
+TStageDescription DescribeStage(const NYql::NDqProto::TDqStageStats& stage,
+        const TUserFacingStageHint* hint) {
     if (stage.OperatorJoinSize() > 0) {
-        return "Join";
+        return {"Join", "Join"};
     }
     if (stage.OperatorAggregationSize() > 0) {
-        return "Aggregate";
+        return {"Aggregate", "Aggregate"};
     }
     if (stage.OperatorFilterSize() > 0) {
-        return "Filter";
+        return {"Filter", "Filter"};
     }
     if (stage.TablesSize() > 0) {
         const auto& table = stage.GetTables(0);
-        return TStringBuilder() << (table.GetWriteRows().GetSum() > 0 ? "Write " : "Read ") << table.GetTablePath();
+        const TString verb = table.GetWriteRows().GetSum() > 0 ? "Write" : "Read";
+        return {TStringBuilder() << verb << " " << table.GetTablePath(), verb};
     }
-    // Sink-write stages carry no table info in exported stats; the executer-captured hint does.
     if (hint && hint->TablePath) {
-        return TStringBuilder() << (hint->IsWrite ? "Write " : "Read ") << hint->TablePath;
+        const TString verb = hint->IsWrite ? "Write" : "Read";
+        return {TStringBuilder() << verb << " " << hint->TablePath, verb};
     }
-    return TStringBuilder() << "Step " << stage.GetStageId();
+    return {TStringBuilder() << "Step " << stage.GetStageId(), "Compute"};
 }
 
 // Task start/finish are ABSOLUTE epoch ms (raw from the compute actor), unlike the stage
@@ -254,7 +239,9 @@ void EmitStageSpans(const NWilson::TTraceId& parent, const TUserFacingTraceExecu
     const NYql::NDqProto::TDqExecutionStats& stats = trace.ExecStats;
     const TUserFacingTraceTaskStats& taskStats = trace.TaskStats;
     for (const auto& stage : stats.GetStages()) {
-        const TUserFacingStageHint* hint = trace.StageHints.FindPtr(stage.GetStageId());
+        const auto hintIt = trace.StageHints.find(stage.GetStageId());
+        const TUserFacingStageHint* hint = hintIt != trace.StageHints.end() ? &hintIt->second : nullptr;
+        const TStageDescription description = DescribeStage(stage, hint);
         // Stage start/finish are offsets from BaseTimeMs (absolute epoch ms); base 0 => untimed stage.
         const ui64 base = stage.GetBaseTimeMs();
         const ui64 startMs = stage.GetStartTimeMs().GetMin();
@@ -265,7 +252,7 @@ void EmitStageSpans(const NWilson::TTraceId& parent, const TUserFacingTraceExecu
         NWilson::TSpan span = NWilson::TSpan::ConstructTerminated(
             parent, parent.Span(parent.GetVerbosity()),
             TInstant::MilliSeconds(base + startMs), TInstant::MilliSeconds(base + finishMs),
-            NWilson::NTraceProto::Status::STATUS_CODE_OK, StageDisplayName(stage, hint),
+            NWilson::NTraceProto::Status::STATUS_CODE_OK, description.Name,
             NWilson::MakeUserFacingWilsonUploaderId());
         if (!span) {
             continue;
@@ -315,9 +302,10 @@ void EmitStageSpans(const NWilson::TTraceId& parent, const TUserFacingTraceExecu
         // Task placement: which nodes ran this stage's tasks and how many each — placement skew
         // is often the real cause of a wide finish spread. Extreme-task nodes point at the
         // machine to look at; the fastest task is not retained by the top-N cap, only its node.
-        if (const auto* agg = trace.StageAggs.FindPtr(stage.GetStageId())) {
+        if (const auto aggIt = trace.StageAggs.find(stage.GetStageId()); aggIt != trace.StageAggs.end()) {
+            const auto* agg = &aggIt->second;
             if (!agg->TasksByNode.empty()) {
-                TVector<std::pair<ui32, ui32>> nodes(agg->TasksByNode.begin(), agg->TasksByNode.end());
+                std::vector<std::pair<ui32, ui32>> nodes(agg->TasksByNode.begin(), agg->TasksByNode.end());
                 std::sort(nodes.begin(), nodes.end(),
                     [](const auto& a, const auto& b) { return a.second > b.second; });
                 TStringBuilder byNode;
@@ -348,7 +336,7 @@ void EmitStageSpans(const NWilson::TTraceId& parent, const TUserFacingTraceExecu
                 span.Attribute("ydb.tasks_truncated",
                     static_cast<i64>(stage.GetTotalTasksCount() - stageTasks.size()));
             }
-            EmitTaskSpans(span.GetTraceId(), StageShortVerb(stage, hint), stageTasks, base + startMs, budget);
+            EmitTaskSpans(span.GetTraceId(), description.Verb, stageTasks, base + startMs, budget);
         }
         span.End();
     }
@@ -528,7 +516,7 @@ void BuildPhases(NWilson::TSpan& userSpan, const TKqpQueryState& state) {
     TSpanBudget budget;
     {
         size_t fixedSpans = 0;
-        TVector<ui64> taskDurations;
+        std::vector<ui64> taskDurations;
         for (const auto& trace : state.QueryStats.UserFacingTraces) {
             // Phases, stage spans and per-shard commit children always render (all bounded),
             // so they are budgeted as fixed cost rather than admitted per-span.

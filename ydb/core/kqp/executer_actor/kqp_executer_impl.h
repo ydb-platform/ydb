@@ -1871,10 +1871,6 @@ protected:
 
             {
                 ui64 cycleCount = GetCycleCountFast();
-                // Client export strictly at the requested mode — sampling must not change the
-                // response; the trace gets its own export at collection depth below.
-                Stats->ExportExecStats(*response.MutableResult()->MutableStats(), Request.StatsMode);
-
                 if (UserFacingTraceData) {
                     EndUserFacingPhase();
                     // Stamped after the last phase's end so children never overflow Execute.
@@ -1886,11 +1882,17 @@ protected:
                                 TUserFacingStageHint{stageInfo.Meta.TablePath, stageInfo.Meta.HasWrites()});
                         }
                     }
-                    Stats->ExportExecStats(UserFacingTraceData->ExecStats);
+                    // Copy before the regular destructive export below. Only sampled user traces
+                    // pay for copying the potentially large per-compute stats.
+                    Stats->CopyExecStats(UserFacingTraceData->ExecStats);
                     UserFacingTraceData->TaskStats = std::move(Stats->UserFacingTaskStats);
                     UserFacingTraceData->StageAggs = std::move(Stats->UserFacingStageAggs);
                     ResponseEv->UserFacingTraceData = std::move(UserFacingTraceData);
                 }
+
+                // Client export strictly at the requested mode — sampling must not change the
+                // response. The normal path retains the original move/swap behavior.
+                Stats->ExportExecStats(*response.MutableResult()->MutableStats(), Request.StatsMode);
 
                 if (CollectFullStats(Request.StatsMode)) {
                     ui64 jsonSize = 0;

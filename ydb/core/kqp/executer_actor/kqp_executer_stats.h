@@ -412,6 +412,8 @@ private:
     std::unordered_map<ui32, TDuration> LongestTaskDurations;
     void ExportAggAsyncStats(TAsyncStats& data, NYql::NDqProto::TDqAsyncStatsAggr& stats);
     void ExportAggAsyncBufferStats(TAsyncBufferStats& data, NYql::NDqProto::TDqAsyncBufferStatsAggr& stats);
+    void ExportExecStatsImpl(NYql::NDqProto::TDqExecutionStats& stats,
+        std::optional<Ydb::Table::QueryStatsCollection::Mode> exportMode, bool moveComputeStats);
 public:
     THashMap<NYql::NDq::TStageId, TStageExecutionStats> StageStats;
     const Ydb::Table::QueryStatsCollection::Mode StatsMode;
@@ -456,11 +458,15 @@ public:
     // plan/SVG it feeds) keeps the longest-task-only behavior regardless.
     bool CollectUserFacingTaskStats = false;
     TUserFacingTraceTaskStats UserFacingTaskStats;
-    THashMap<ui32, TUserFacingStageAgg> UserFacingStageAggs;
+    std::unordered_map<ui32, TUserFacingStageAgg> UserFacingStageAggs;
 
     // exportMode overrides StatsMode (the collection mode) for this export — used to keep
     // client-facing stats at the client-requested depth when collection was escalated for tracing.
+    // The regular export moves large per-compute stats into the result; CopyExecStats is reserved
+    // for the additional user-trace snapshot.
     void ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats,
+        std::optional<Ydb::Table::QueryStatsCollection::Mode> exportMode = std::nullopt);
+    void CopyExecStats(NYql::NDqProto::TDqExecutionStats& stats,
         std::optional<Ydb::Table::QueryStatsCollection::Mode> exportMode = std::nullopt);
 
     TQueryExecutionStats(Ydb::Table::QueryStatsCollection::Mode statsMode, const TKqpTasksGraph* const tasksGraph,

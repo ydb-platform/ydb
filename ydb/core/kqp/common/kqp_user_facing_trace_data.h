@@ -4,13 +4,13 @@
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 
 #include <util/datetime/base.h>
-#include <util/generic/hash.h>
+#include <util/generic/string.h>
 #include <util/generic/utility.h>
-#include <util/generic/vector.h>
 #include <util/system/types.h>
 
 #include <array>
 #include <unordered_map>
+#include <vector>
 
 namespace NKikimr::NKqp {
 
@@ -37,7 +37,7 @@ struct TUserFacingTaskSnapshot {
     ui64 WaitOutputTimeUs = 0;
     ui64 SpilledBytes = 0;
     ui32 ReadRetries = 0;
-    TVector<NKqpProto::TKqpShardReadStats> ShardReads; // full-detail tier; capped at source
+    std::vector<NKqpProto::TKqpShardReadStats> ShardReads; // full-detail tier; capped at source
     ui32 ShardReadsTruncated = 0;
 
     ui64 DurationMs() const {
@@ -81,6 +81,55 @@ constexpr size_t MaxUserFacingTraceTasksPerStage = 128;
 // Cap on per-shard read entries a task exports at full stats level (first-come); the task span
 // gets ydb.shards_truncated when hit.
 constexpr size_t MaxUserFacingShardReadsPerTask = 64;
+
+// Shared by the read and stream-lookup actors: both observe the same lifecycle of a shard read
+// and export it through TKqpTaskExtraStats. Callers decide whether collection is enabled.
+class TUserFacingShardReadCollector {
+public:
+    void OnStart(ui64 shardId) {
+        auto& shard = Reads[shardId];
+        shard.SetShardId(shardId);
+        if (!shard.GetStartTimeMs()) {
+            shard.SetStartTimeMs(TInstant::Now().MilliSeconds());
+        }
+    }
+
+    void OnFinish(ui64 shardId, ui64 rows, ui32 retries, ui32 nodeId = 0) {
+        auto& shard = Reads[shardId];
+        shard.SetShardId(shardId);
+        shard.SetFinishTimeMs(TInstant::Now().MilliSeconds());
+        shard.SetRows(shard.GetRows() + rows);
+        shard.SetRetries(Max(shard.GetRetries(), retries));
+        if (nodeId) {
+            shard.SetNodeId(nodeId);
+        }
+    }
+
+    bool Empty() const {
+        return Reads.empty();
+    }
+
+    void Export(NKqpProto::TKqpTaskExtraStats& extraStats, ui32 totalRetries) const {
+        if (totalRetries) {
+            extraStats.SetReadRetriesCount(extraStats.GetReadRetriesCount() + totalRetries);
+        }
+        size_t exported = 0;
+        for (const auto& [shardId, shard] : Reads) {
+            if (static_cast<size_t>(extraStats.ShardReadsSize()) >= MaxUserFacingShardReadsPerTask) {
+                break;
+            }
+            *extraStats.AddShardReads() = shard;
+            ++exported;
+        }
+        if (exported < Reads.size()) {
+            extraStats.SetShardReadsTruncated(
+                extraStats.GetShardReadsTruncated() + Reads.size() - exported);
+        }
+    }
+
+private:
+    std::unordered_map<ui64, NKqpProto::TKqpShardReadStats> Reads;
+};
 
 // Global budget of spans emitted per query: per-container caps alone still multiply into
 // hundreds of thousands of spans on a huge OLAP query, which kills the uploader and trace UIs.
@@ -139,7 +188,7 @@ struct TUserFacingShardCommitAck {
 // final task reports: task placement across nodes and the nodes of the extreme-duration tasks
 // (the fastest task is not retained by the top-N snapshot cap, so its node is recorded here).
 struct TUserFacingStageAgg {
-    THashMap<ui32, ui32> TasksByNode; // nodeId -> finished task count
+    std::unordered_map<ui32, ui32> TasksByNode; // nodeId -> finished task count
     ui64 MinDurationMs = Max<ui64>();
     ui32 MinDurationNode = 0;
     ui64 MaxDurationMs = 0;
@@ -157,9 +206,9 @@ struct TUserFacingStageHint {
 struct TUserFacingTraceExecutionData {
     TUserFacingTraceTimeline Timeline;
     TUserFacingTraceTaskStats TaskStats;
-    THashMap<ui32, TUserFacingStageHint> StageHints; // by exported stage id
-    THashMap<ui32, TUserFacingStageAgg> StageAggs;   // by exported stage id
-    TVector<TUserFacingShardCommitAck> ShardCommitAcks;
+    std::unordered_map<ui32, TUserFacingStageHint> StageHints; // by exported stage id
+    std::unordered_map<ui32, TUserFacingStageAgg> StageAggs;   // by exported stage id
+    std::vector<TUserFacingShardCommitAck> ShardCommitAcks;
     // Stats exported at collection depth for the trace; the response's stats stay at the
     // client-requested mode and must not be used for rendering.
     NYql::NDqProto::TDqExecutionStats ExecStats;

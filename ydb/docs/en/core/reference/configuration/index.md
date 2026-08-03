@@ -23,6 +23,7 @@ The following configuration sections are available, listed in alphabetical order
 | [{#T}](hive_config.md) | No | Tablet launch configuration |
 | [{#T}](host_configs.md) | No | Typical host configurations for cluster nodes |
 | [{#T}](hosts.md) | Yes | Static cluster node configuration |
+| [{#T}](immediate_controls_config.md) | No | Control elements configuration |
 | [{#T}](kafka_proxy_config.md) | No | Configuration of [Kafka Proxy](../../reference/kafka-api/index.md) |
 | [{#T}](log_config.md) | No | Logging configuration and parameters |
 | [{#T}](memory_controller_config.md) | No | Memory allocation and limits for database components |
@@ -35,8 +36,6 @@ The following configuration sections are available, listed in alphabetical order
 | [{#T}](table_service_config.md) | No | Query execution configuration settings |
 | [{#T}](tli_config.md) | No | Diagnostics parameters for [transaction lock invalidation](../../concepts/glossary.md#tli) (TLI) |
 | [{#T}](tls.md) | No | TLS configuration for secure connections |
-
-## Practical recommendations
 
 This documentation section provides a complete description of available settings, while practical recommendations on what and when to configure can be found in the following places:
 

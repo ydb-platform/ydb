@@ -1304,7 +1304,20 @@ Y_UNIT_TEST(BatchedMessagesManyShapesCompactionReadFromEveryBoundary) {
 
     // This test reads from starts, middles, ends, and the next offset after
     // several compacted batches to exercise offset-to-parent-batch mapping.
-    PQTabletPrepare({.partitions = 1, .lowWatermark = 10_MB, .writeSpeed = 50_MB}, {{"user1", true}}, tc);
+    PQTabletPrepare({
+        .partitions = 1,
+        .lowWatermark = 10_MB,
+        .writeSpeed = 50_MB,
+    }, {
+        {"user1", true},
+        {"user2", true},
+        {"user3", true},
+        {"user4", true},
+        {"user5", true},
+        {"user6", true},
+        {"user7", true},
+        {"user8", true},
+    }, tc);
 
     const TString sourceId = "sourceid_batch_many_shapes_boundaries";
     const TVector<TExpectedReadMessage> expected = {

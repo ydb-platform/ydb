@@ -2825,6 +2825,10 @@
         "policy":{
           "shape":"String",
           "documentation":"<p>A stringified JSON policy document that applies to the <code>execute-api</code> service for this DomainName regardless of the caller and Method configuration. Supported only for private custom domain names.</p>"
+        },
+        "routingMode":{
+          "shape":"RoutingMode",
+          "documentation":"<p> The routing mode for this domain name. The routing mode determines how API Gateway sends traffic from your custom domain name to your private APIs. </p>"
         }
       },
       "documentation":"<p>A request to create a new domain name.</p>"
@@ -3765,7 +3769,7 @@
         },
         "domainNameArn":{
           "shape":"String",
-          "documentation":"<p>The ARN of the domain name. Supported only for private custom domain names. </p>"
+          "documentation":"<p>The ARN of the domain name. </p>"
         },
         "certificateName":{
           "shape":"String",
@@ -3838,6 +3842,10 @@
         "policy":{
           "shape":"String",
           "documentation":"<p>A stringified JSON policy document that applies to the <code>execute-api</code> service for this DomainName regardless of the caller and Method configuration. Supported only for private custom domain names.</p>"
+        },
+        "routingMode":{
+          "shape":"RoutingMode",
+          "documentation":"<p>The routing mode for this domain name. The routing mode determines how API Gateway sends traffic from your custom domain name to your private APIs.</p>"
         }
       },
       "documentation":"<p>Represents a custom domain name as a user-friendly host name of an API (RestApi).</p>"
@@ -4076,8 +4084,7 @@
     },
     "GetAccountRequest":{
       "type":"structure",
-      "members":{
-      },
+      "members":{},
       "documentation":"<p>Requests API Gateway to get information about the current Account resource.</p>"
     },
     "GetApiKeyRequest":{
@@ -5366,7 +5373,7 @@
         },
         "timeoutInMillis":{
           "shape":"Integer",
-          "documentation":"<p>Custom timeout between 50 and 29,000 milliseconds. The default value is 29,000 milliseconds or 29 seconds.</p>"
+          "documentation":"<p>Custom timeout between 50 and 29,000 milliseconds. The default value is 29,000 milliseconds or 29 seconds. You can increase the default value to longer than 29 seconds for Regional or private APIs only.</p>"
         },
         "cacheNamespace":{
           "shape":"String",
@@ -5976,7 +5983,7 @@
         },
         "timeoutInMillis":{
           "shape":"NullableInteger",
-          "documentation":"<p>Custom timeout between 50 and 29,000 milliseconds. The default value is 29,000 milliseconds or 29 seconds.</p>"
+          "documentation":"<p>Custom timeout between 50 and 29,000 milliseconds. The default value is 29,000 milliseconds or 29 seconds. You can increase the default value to longer than 29 seconds for Regional or private APIs only.</p>"
         },
         "tlsConfig":{"shape":"TlsConfig"}
       },
@@ -6384,6 +6391,14 @@
         }
       },
       "documentation":"<p>Contains references to your APIs and links that guide you in how to interact with your collection. A collection offers a paginated view of your APIs.</p>"
+    },
+    "RoutingMode":{
+      "type":"string",
+      "enum":[
+        "BASE_PATH_MAPPING_ONLY",
+        "ROUTING_RULE_ONLY",
+        "ROUTING_RULE_THEN_BASE_PATH_MAPPING"
+      ]
     },
     "SdkConfigurationProperty":{
       "type":"structure",

@@ -27,11 +27,10 @@
 
 namespace NYT::NTableClient {
 
-using NYT::ToProto;
-using NYT::FromProto;
-
 using NChunkClient::NProto::TDataStatistics;
 using NCrypto::TMD5Hash;
+using NYT::FromProto;
+using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -378,7 +377,7 @@ private:
             UnsafeWritePod(value.Data);
         }
         // Write timestamp.
-        UnsafeWritePod<ui64>(value.Timestamp);
+        UnsafeWritePod<ui64>(value.Timestamp.Underlying());
     }
 
     TUnversionedValueRange RemapValues(
@@ -787,7 +786,6 @@ private:
     TSharedRef Data_;
     TIterator Current_;
 
-
     void ValidateSizeAvailable(size_t size)
     {
         if (Current_ + size > Data_.End()) {
@@ -936,7 +934,7 @@ private:
         } else if (IsValueType(value->Type)) {
             rawValue[1] = ReadUint64();
         }
-        value->Timestamp = ReadUint64();
+        value->Timestamp = NTransactionClient::TTimestamp(ReadUint64());
     }
 
     void DoReadSchemafulValueRange(
@@ -1300,7 +1298,6 @@ private:
     std::unique_ptr<IWireProtocolWriter> WireWriter_;
     bool Closed_ = false;
     bool SchemaWritten_ = false;
-
 
     void FlushBlock()
     {

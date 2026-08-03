@@ -20,7 +20,7 @@
 namespace NKikimr::NOlap::NReader {
 
 class TColumnShardScan: public TActorBootstrapped<TColumnShardScan>, NArrow::IRowWriter,
-                        NColumnShard::TMonitoringObjectsCounter<TColumnShardScan> {
+                        public NColumnShard::TMonitoringObjectsCounter<TColumnShardScan> {
 private:
     TActorId ResourceSubscribeActorId;
     const std::shared_ptr<IStoragesManager> StoragesManager;

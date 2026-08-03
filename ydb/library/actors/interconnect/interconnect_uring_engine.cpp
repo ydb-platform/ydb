@@ -3,6 +3,7 @@
 #include "uring_context.h" // for TUringContext::IsAvailable() / SqThreadIdleMs
 
 #include "v2_event_serializer.h"
+#include "interconnect_common.h"
 #include "interconnect_direct_session.h"
 #include "interconnect_uring_event_queue.h"
 
@@ -17,6 +18,7 @@
 
 #include <library/cpp/monlib/service/pages/templates.h>
 
+#include <util/datetime/cputimer.h>
 #include <util/system/env.h>
 #include <util/system/hp_timer.h>
 
@@ -45,9 +47,33 @@ namespace NActors {
         constexpr size_t MaxSpansPerWrite = 64;
         constexpr size_t MinSerializeWindowSize = 4096;
         constexpr size_t MaxSerializeWindowSize = 262144;
-        constexpr ui32 RebalanceTimerMs = 500; // drives MaybeOffload and also issues ping packet
+        constexpr TDuration RebalancePeriod = TDuration::MilliSeconds(500); // how often MaybeOffload runs
         constexpr ui32 OffloadBusyThreshold = 700000; // ppm
         constexpr ui32 StealBusyThreshold = 300000; // ppm
+
+        // The shard timer is the only timing source for pings and dead-peer detection, so its period caps
+        // how late either of them can be. Keep it at or below this bound to limit the jitter.
+        constexpr TDuration MaxTickPeriod = TDuration::Seconds(1);
+        constexpr TDuration MinTickPeriod = TDuration::MilliSeconds(100);
+        // Number of ping opportunities that must fit into the dead-peer window, so that a single lost or
+        // late ping cannot bring a healthy link down.
+        constexpr ui32 PingsPerDeadPeerTimeout = 4;
+
+        TDuration CalculateDeadPeerTimeout(const TInterconnectSettings& settings) {
+            return settings.DeadPeer ? settings.DeadPeer : DEFAULT_DEADPEER_TIMEOUT;
+        }
+
+        TDuration CalculatePingPeriod(const TInterconnectSettings& settings, TDuration deadPeerTimeout) {
+            TDuration period = deadPeerTimeout / PingsPerDeadPeerTimeout;
+            if (settings.PingPeriod) {
+                period = Min(period, settings.PingPeriod);
+            }
+            return Max(period, MinTickPeriod);
+        }
+
+        TDuration CalculateTickPeriod(TDuration pingPeriod) {
+            return Max(Min(pingPeriod, MaxTickPeriod), MinTickPeriod);
+        }
     }
 
     struct TEvUringMonRequest : TEventLocal<TEvUringMonRequest, static_cast<ui32>(ENetwork::EvUringMonRequest)> {
@@ -68,9 +94,27 @@ namespace NActors {
         std::once_flag ActorSystemInitFlag;
         std::atomic_bool Stopping{false};
 
+        // Shared interconnect parameters this engine was created with. Common owns the engine as well, so
+        // the reference cycle is broken in Stop(); everything the data plane needs from Settings is derived
+        // into the const members below at construction time and Common is not dereferenced afterwards.
+        TIntrusivePtr<TInterconnectProxyCommon> Common;
+
+        const bool ChecksumEvents;
+
+        // Liveness timing. TickPeriod is the shard timer period and thus the granularity (and worst-case
+        // lateness) of both ping issuance and the dead-peer verdict.
+        const TDuration DeadPeerTimeout;
+        const TDuration PingPeriod;
+        const TDuration TickPeriod;
+        const ui64 DeadPeerTimeoutCycles;
+        const ui64 PingPeriodCycles;
+
         // Low 3 bits of the session pointer are used as an io_uring user_data op tag; heap allocation
         // alignment of this type is already >= 8 (actually 64 via base/members).
-        struct TSession : TEventDeserializer::IEventProcessor {
+        struct TSession
+            : TEventDeserializer::IEventProcessor
+            , TIntrusiveListItem<TSession>
+        {
             std::atomic_uint32_t OwnerShard;
             const TIntrusivePtr<NInterconnect::TStreamSocket> Socket;
             const TActorId SessionId;
@@ -149,6 +193,7 @@ namespace NActors {
 
             void ApplyBytesRead(size_t num) {
                 BytesReceived += num;
+                LastInputActivityTimestamp = GetCycleCountFast();
                 TRcBuf chunk = {TRcBuf::Piece, ReadBuffer.data(), num, ReadBuffer};
                 Deserializer.Push(std::move(chunk), this, SessionId);
                 Y_ABORT_UNLESS(num <= ReadBuffer.size());
@@ -255,12 +300,20 @@ namespace NActors {
             NHPTimer::STime PingRequestSentTimestamp = 0;
             NHPTimer::STime PingResponseSentTimestamp = 0;
 
-            void SendPingRequest() {
+            // When the last ping request was issued. Unlike PingRequestSentTimestamp (which is reset as soon
+            // as the reply arrives) this one keeps the ping cadence independent of the round-trip time.
+            ui64 LastPingSentTimestamp = 0;
+
+            // When we last got anything at all from the peer; drives dead-peer detection.
+            ui64 LastInputActivityTimestamp = GetCycleCountFast();
+
+            void SendPingRequest(ui64 timestamp) {
                 NActorsInterconnect::TSystemPayloadV2 systemRequest;
                 auto *r = systemRequest.AddRequests();
                 r->MutablePingRequest();
                 Serializer.Push(systemRequest);
-                PingRequestSentTimestamp = GetCycleCountFast();
+                PingRequestSentTimestamp = timestamp;
+                LastPingSentTimestamp = timestamp;
             }
 
             void Process(NActorsInterconnect::TSystemPayloadV2& systemRequest) override {
@@ -335,7 +388,7 @@ namespace NActors {
 
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-            void RenderHtml(IOutputStream& str) const {
+            void RenderHtml(IOutputStream& str, TDuration deadPeerTimeout, TDuration pingPeriod) const {
                 HTML(str) {
                     DIV_CLASS("panel panel-info") {
                         DIV_CLASS("panel-heading") {
@@ -370,6 +423,10 @@ namespace NActors {
                                     PARAM(MigrateTargetShard)
                                     PARAM2("ClockSkew", ClockSkew->load())
                                     PARAM2("PingRTT", PingRTT->load())
+                                    PARAM2("SinceLastInputActivity",
+                                        CyclesToDuration(GetCycleCountFast() - LastInputActivityTimestamp))
+                                    PARAM2("DeadPeerTimeout", deadPeerTimeout)
+                                    PARAM2("PingPeriod", pingPeriod)
                                     PARAM2("ReceiveCallbacks size", ReceiveCallbacks.size())
                                     PARAM2("PendingRecordsHeap size", PendingRecordsHeap.size())
                                     PARAM(SerializeWindowSize)
@@ -424,6 +481,8 @@ namespace NActors {
             int TimerFd = -1;
             ui64 ReadTimerBuffer;
             std::atomic_bool WaitingForCQ{false};
+            ui64 TicksPerRebalance = 1;
+            ui64 TicksSinceRebalance = 0;
 
             size_t OpShift = 0;
 
@@ -442,6 +501,7 @@ namespace NActors {
             };
 
             std::unordered_set<std::unique_ptr<TSession>, TSessionHash, TSessionEqual> Sessions;
+            TIntrusiveList<TSession> TouchedSessions;
 
             NMonitoring::TDynamicCounters::TCounterPtr SessionsRegistered;
             NMonitoring::TDynamicCounters::TCounterPtr SessionsUnregistered;
@@ -466,6 +526,7 @@ namespace NActors {
             NMonitoring::TDynamicCounters::TCounterPtr SessionsMigratedIn;
             NMonitoring::TDynamicCounters::TCounterPtr OutOfOrderCameIn;
             NMonitoring::TDynamicCounters::TCounterPtr OutOfOrderProcessed;
+            NMonitoring::TDynamicCounters::TCounterPtr DeadPeersDetected;
 
             NMonitoring::TDynamicCounters::TCounterPtr OtherTotalTime;
             NMonitoring::TDynamicCounters::TCounterPtr CompleteWaitTotalTime;
@@ -587,6 +648,7 @@ namespace NActors {
                 , COUNTER(SessionsMigratedIn, true)
                 , COUNTER(OutOfOrderCameIn, true)
                 , COUNTER(OutOfOrderProcessed, true)
+                , COUNTER(DeadPeersDetected, true)
 #define TOTAL_TIME(NAME) NAME(shardCounters->GetCounter("TotalTime/" #NAME, true))
                 , TOTAL_TIME(OtherTotalTime)
                 , TOTAL_TIME(CompleteWaitTotalTime)
@@ -628,13 +690,17 @@ namespace NActors {
 
                 // Keep the timer armed for the shard lifetime. Disarming while an io_uring read is
                 // outstanding would leave a stuck SQE; idle CPU is controlled via sq_thread_idle instead.
+                const TDuration tickPeriod = Engine.TickPeriod;
                 itimerspec spec{};
-                spec.it_interval.tv_sec = RebalanceTimerMs / 1000;
-                spec.it_interval.tv_nsec = 1'000'000 * (RebalanceTimerMs % 1000);
+                spec.it_interval.tv_sec = tickPeriod.Seconds();
+                spec.it_interval.tv_nsec = tickPeriod.NanoSecondsOfSecond();
                 spec.it_value = spec.it_interval;
                 if (timerfd_settime(TimerFd, 0, &spec, nullptr) < 0) {
                     Y_ABORT("timerfd_settime failed: %s", strerror(errno));
                 }
+
+                // The tick drives liveness, which may be much more frequent than rebalancing needs to be.
+                TicksPerRebalance = Max<ui64>(1, RebalancePeriod.GetValue() / tickPeriod.GetValue());
             }
 
             ~TShard() {
@@ -880,6 +946,17 @@ namespace NActors {
                         break;
                     }
 
+                    // process touched sessions
+                    while (!TouchedSessions.Empty()) {
+                        TSession *session = TouchedSessions.PopFront();
+                        MaybeIssueReadForSession(*session);
+                        MaybeIssueWriteForSession(*session);
+                        if (MaybeFinishMigrate(*session)) {
+                            continue;
+                        }
+                        MaybeEraseSession(*session);
+                    }
+
                     // discard pending events/buffers, if any
                     if (!EvDestroyEvents->Events.empty() || !EvDestroyEvents->Buffers.empty()) {
                         Engine.ActorSystem->Send(new IEventHandle(Engine.DestructorActorId, {}, EvDestroyEvents.release()));
@@ -996,7 +1073,7 @@ namespace NActors {
                         session->OwnerShard.store(ShardIdx, std::memory_order_release);
                         const auto [it, inserted] = Sessions.emplace(std::move(session));
                         Y_ABORT_UNLESS(inserted);
-                        MaybeIssueReadForSession(**it);
+                        TouchedSessions.PushBack(it->get());
                         break;
                     }
 
@@ -1013,7 +1090,7 @@ namespace NActors {
                         if (session.ReadPending) { // cancel pending read in order to unregister the session
                             CancelOp(session, kOpRead, session.ReadPendingRingIdx);
                         }
-                        MaybeEraseSession(session);
+                        TouchedSessions.PushBack(&session);
                         break;
                     }
 
@@ -1030,7 +1107,9 @@ namespace NActors {
                             session.ReceiveCallbacks[record->Ev->Sender] = std::move(record->Callback);
                         }
                         session.Serializer.Push(std::move(record->Ev));
-                        MaybeIssueWriteForSession(session);
+                        if (!session.WritePending) {
+                            TouchedSessions.PushBack(&session);
+                        }
                         break;
                     }
                 }
@@ -1041,7 +1120,7 @@ namespace NActors {
 
             void ProcessMonRequest(TSession& session, NMon::TEvHttpInfoRes::TPtr ev) {
                 TStringOutput str(const_cast<TString&>(static_cast<NMon::TEvHttpInfoRes*>(ev->Get())->Answer));
-                session.RenderHtml(str);
+                session.RenderHtml(str, Engine.DeadPeerTimeout, Engine.PingPeriod);
                 Engine.ActorSystem->Send(ev.Release());
             }
 
@@ -1108,16 +1187,36 @@ namespace NActors {
             }
 
             void DispatchTimer() {
+                const ui64 now = GetCycleCountFast();
+
                 for (auto& session : Sessions) {
-                    if (!session->Terminated && session->MigrateTargetShard != ShardIdx && session->SendPings &&
-                            session->PingRequestSentTimestamp == 0) {
-                        session->SendPingRequest();
-                        MaybeIssueWriteForSession(*session);
+                    if (session->Terminated || session->MigrateTargetShard != ShardIdx) {
+                        continue;
+                    }
+
+                    // Anything arriving from the peer -- payload, ping request, ping response -- counts as
+                    // proof of life; when nothing has for the whole timeout, the link is declared dead. The
+                    // peer keeps the stream flowing either by pinging us or by answering our pings, so this
+                    // works on both sides of the connection.
+                    if (now - session->LastInputActivityTimestamp >= Engine.DeadPeerTimeoutCycles) {
+                        ++*DeadPeersDetected;
+                        session->Disconnect(TDisconnectReason::DeadPeer());
+                        continue;
+                    }
+
+                    if (session->SendPings && session->PingRequestSentTimestamp == 0 &&
+                            now - session->LastPingSentTimestamp >= Engine.PingPeriodCycles) {
+                        session->SendPingRequest(now);
+                        TouchedSessions.PushBack(session.get());
                     }
                 }
 
-                // Rebalance at most once per ping period to limit churn under short load spikes.
-                MaybeOffload();
+                // Rebalancing is far less urgent than liveness, so it runs on its own, coarser period to
+                // limit churn under short load spikes.
+                if (++TicksSinceRebalance >= TicksPerRebalance) {
+                    TicksSinceRebalance = 0;
+                    MaybeOffload();
+                }
             }
 
             void MaybeOffload() {
@@ -1157,7 +1256,7 @@ namespace NActors {
                     CancelOp(*candidate, kOpRead, candidate->ReadPendingRingIdx);
                 }
 
-                MaybeFinishMigrate(*candidate);
+                TouchedSessions.PushBack(candidate);
             }
 
             void CancelOp(TSession& session, EOperationType op, int ringIdx) {
@@ -1216,12 +1315,7 @@ namespace NActors {
                     }
                 }
 
-                MaybeIssueReadForSession(session);
-                MaybeIssueWriteForSession(session); // some reads may lead to generation of traffic
-                if (MaybeFinishMigrate(session)) {
-                    return;
-                }
-                MaybeEraseSession(session);
+                TouchedSessions.PushBack(&session);
             }
 
             void MaybeIssueReadForSession(TSession& session) {
@@ -1262,11 +1356,7 @@ namespace NActors {
                     }
                 }
 
-                MaybeIssueWriteForSession(session);
-                if (MaybeFinishMigrate(session)) {
-                    return;
-                }
-                MaybeEraseSession(session);
+                TouchedSessions.PushBack(&session);
             }
 
             void MaybeIssueWriteForSession(TSession& session) {
@@ -1318,22 +1408,34 @@ namespace NActors {
         TActorId DestructorActorId;
 
     public:
-        TUringEngine(ui32 numShards, NMonitoring::TDynamicCounterPtr counters, bool sqpoll, ui32 ringsPerShard,
-                ui32 sqThreadIdleMs, bool shareRingsAmongThreads, TActorId destructorActorId)
-            : UringCounters(std::move(counters))
-            , DestructorActorId(destructorActorId)
+        TUringEngine(TIntrusivePtr<TInterconnectProxyCommon> common)
+            : Common(std::move(common))
+            , ChecksumEvents(Common->Settings.V2.ChecksumEvents)
+            , DeadPeerTimeout(CalculateDeadPeerTimeout(Common->Settings))
+            , PingPeriod(CalculatePingPeriod(Common->Settings, DeadPeerTimeout))
+            , TickPeriod(CalculateTickPeriod(PingPeriod))
+            , DeadPeerTimeoutCycles(DurationToCycles(DeadPeerTimeout))
+            , PingPeriodCycles(DurationToCycles(PingPeriod))
+            , UringCounters(Common->MonCounters->GetSubgroup("subsystem", "uring"))
         {
+            const auto& v2 = Common->Settings.V2;
+            const ui32 numShards = Max<ui32>(1, v2.UringEngineThreads);
+            const ui32 ringsPerShard = Max<ui32>(1, v2.UringEngineRingsPerShard);
+            const ui32 sqThreadIdleMs = v2.UringEngineSqThreadIdleMs
+                ? v2.UringEngineSqThreadIdleMs
+                : TUringContext::SqThreadIdleMs;
+
             ShardLoads = std::vector<TShardLoad>(numShards);
             Shards.reserve(numShards);
             for (ui32 i = 0; i < numShards; ++i) {
                 Shards.push_back(std::make_unique<TShard>(*this,
                     i, // shardIdx
                     UringCounters->GetSubgroup("shard", "0" /*ToString(i)*/),
-                    sqpoll,
+                    v2.EnableSQPOLL,
                     ringsPerShard,
                     sqThreadIdleMs,
                     ShardLoads[i],
-                    shareRingsAmongThreads && !Shards.empty() ? Shards.front().get() : nullptr));
+                    v2.ShareRingsAmongThreads && !Shards.empty() ? Shards.front().get() : nullptr));
             }
             for (auto& shard : Shards) {
                 shard->Start();
@@ -1346,6 +1448,10 @@ namespace NActors {
 
         void SetActorSystem(TActorSystem* actorSystem) override {
             Y_ABORT_UNLESS(actorSystem);
+            // DestructorId is filled in after the engine is created, so it is picked up here rather than in
+            // the constructor. Published together with ActorSystem, i.e. before the first Register and thus
+            // before any shard worker can reach the code using either of them.
+            DestructorActorId = Common->DestructorId;
             ActorSystem = actorSystem;
             // Stop the reaper threads while the actor system is still up, so no completion is posted to a
             // torn-down system.
@@ -1353,7 +1459,7 @@ namespace NActors {
         }
 
         ui64 Register(TIntrusivePtr<NInterconnect::TStreamSocket> socket, const TActorId& sessionActorId,
-                bool checksumming, TScopeId peerScopeId, std::function<void(TDisconnectReason)> onDisconnectCallback,
+                TScopeId peerScopeId, std::function<void(TDisconnectReason)> onDisconnectCallback,
                 bool sendPings, std::shared_ptr<std::atomic<int64_t>> clockSkew,
                 std::shared_ptr<std::atomic<uint64_t>> pingRTT) override {
             if (Stopping) {
@@ -1372,8 +1478,8 @@ namespace NActors {
             }
 
             auto session = std::make_unique<TSession>(shardIdx, std::move(socket), sessionActorId,
-                checksumming, peerScopeId, std::move(onDisconnectCallback), ActorSystem, sendPings, std::move(clockSkew),
-                std::move(pingRTT));
+                ChecksumEvents, peerScopeId, std::move(onDisconnectCallback), ActorSystem, sendPings,
+                std::move(clockSkew), std::move(pingRTT));
             const ui64 conn = reinterpret_cast<ui64>(session.get());
             Shards[shardIdx]->Register(std::move(session));
             return conn;
@@ -1417,6 +1523,10 @@ namespace NActors {
                 for (auto& shard : Shards) {
                     shard->Stop();
                 }
+                // Common holds this engine, so keeping a reference to it here would make the pair
+                // unreclaimable. The workers are joined by now and nothing dereferences Common past this
+                // point (all of its data the engine needs is cached in const members).
+                Common.Reset();
             }
         }
 
@@ -1425,22 +1535,13 @@ namespace NActors {
         }
     };
 
-    TUringEnginePtr CreateUringEngine(ui32 numShards, NMonitoring::TDynamicCounterPtr counters, bool sqpoll,
-            ui32 ringsPerShard, ui32 sqThreadIdleMs, bool shareRingsAmongThreads, TActorId destructorActorId) {
+    TUringEnginePtr CreateUringEngine(TIntrusivePtr<TInterconnectProxyCommon> common) {
         if (!TUringContext::IsAvailable()) {
             return nullptr;
         }
-        if (numShards < 1) {
-            numShards = 1;
-        }
-        if (ringsPerShard < 1) {
-            ringsPerShard = 1;
-        }
-        if (sqThreadIdleMs < 1) {
-            sqThreadIdleMs = TUringContext::SqThreadIdleMs;
-        }
-        return MakeIntrusive<TUringEngine>(numShards, std::move(counters), sqpoll, ringsPerShard, sqThreadIdleMs,
-            shareRingsAmongThreads, destructorActorId);
+        Y_ABORT_UNLESS(common);
+        Y_ABORT_UNLESS(common->MonCounters);
+        return MakeIntrusive<TUringEngine>(std::move(common));
     }
 
 } // namespace NActors

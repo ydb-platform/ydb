@@ -6524,4 +6524,19 @@ Y_UNIT_TEST(DropSecretIfExistsIncorrect) {
     }
 }
 
+Y_UNIT_TEST(YQL_21478) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT+(-a::_((SELECT
+        0group by(SELECT
+        0group by
+        cube(m)))))
+    )sql", settings);
+
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "3:19: Error: Column references are not allowed without FROM");
+}
+
 } // Y_UNIT_TEST_SUITE(SqlParsingOnly)

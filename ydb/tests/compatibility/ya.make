@@ -3,6 +3,7 @@ RECURSE(
     workloads
     indexes
     topics
+    sqs
     stress
     rolling
     udf

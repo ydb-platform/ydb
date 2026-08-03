@@ -489,6 +489,7 @@
     "jsonrpc": "2.0",
     "result": {
       "capabilities": {
+        "documentFormattingProvider": {},
         "completionProvider": {
           "triggerCharacters": [
             "`",

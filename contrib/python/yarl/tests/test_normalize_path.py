@@ -1,6 +1,6 @@
 import pytest
 
-from yarl import URL
+from yarl._path import normalize_path
 
 PATHS = [
     # No dots
@@ -33,4 +33,4 @@ PATHS = [
 
 @pytest.mark.parametrize("original,expected", PATHS)
 def test__normalize_path(original, expected):
-    assert URL._normalize_path(original) == expected
+    assert normalize_path(original) == expected

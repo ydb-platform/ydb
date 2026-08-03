@@ -24,8 +24,8 @@
       "output":{"shape":"CancelJobRunResponse"},
       "errors":[
         {"shape":"ValidationException"},
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"InternalServerException"}
+        {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"}
       ],
       "documentation":"<p>Cancels a job run.</p>",
       "idempotent":true
@@ -41,8 +41,8 @@
       "output":{"shape":"CreateApplicationResponse"},
       "errors":[
         {"shape":"ValidationException"},
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ConflictException"}
       ],
       "documentation":"<p>Creates an application.</p>",
@@ -59,8 +59,8 @@
       "output":{"shape":"DeleteApplicationResponse"},
       "errors":[
         {"shape":"ValidationException"},
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"InternalServerException"}
+        {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"}
       ],
       "documentation":"<p>Deletes an application. An application has to be in a stopped or created state in order to be deleted.</p>",
       "idempotent":true
@@ -76,8 +76,8 @@
       "output":{"shape":"GetApplicationResponse"},
       "errors":[
         {"shape":"ValidationException"},
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"InternalServerException"}
+        {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"}
       ],
       "documentation":"<p>Displays detailed information about a specified application.</p>"
     },
@@ -108,8 +108,8 @@
       "output":{"shape":"GetJobRunResponse"},
       "errors":[
         {"shape":"ValidationException"},
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"InternalServerException"}
+        {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"}
       ],
       "documentation":"<p>Displays detailed information about a job run.</p>"
     },
@@ -139,8 +139,8 @@
       "output":{"shape":"ListJobRunAttemptsResponse"},
       "errors":[
         {"shape":"ValidationException"},
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"InternalServerException"}
+        {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"}
       ],
       "documentation":"<p>Lists all attempt of a job run.</p>"
     },
@@ -170,8 +170,8 @@
       "output":{"shape":"ListTagsForResourceResponse"},
       "errors":[
         {"shape":"ValidationException"},
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"InternalServerException"}
+        {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"}
       ],
       "documentation":"<p>Lists the tags assigned to the resources.</p>"
     },
@@ -186,8 +186,8 @@
       "output":{"shape":"StartApplicationResponse"},
       "errors":[
         {"shape":"ValidationException"},
-        {"shape":"ResourceNotFoundException"},
         {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"},
         {"shape":"ServiceQuotaExceededException"}
       ],
       "documentation":"<p>Starts a specified application and initializes initial capacity if configured.</p>",
@@ -222,8 +222,8 @@
       "output":{"shape":"StopApplicationResponse"},
       "errors":[
         {"shape":"ValidationException"},
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"InternalServerException"}
+        {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"}
       ],
       "documentation":"<p>Stops a specified application and releases initial capacity if configured. All scheduled and running jobs must be completed or cancelled before stopping an application.</p>",
       "idempotent":true
@@ -239,8 +239,8 @@
       "output":{"shape":"TagResourceResponse"},
       "errors":[
         {"shape":"ValidationException"},
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"InternalServerException"}
+        {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"}
       ],
       "documentation":"<p>Assigns tags to resources. A tag is a label that you assign to an Amazon Web Services resource. Each tag consists of a key and an optional value, both of which you define. Tags enable you to categorize your Amazon Web Services resources by attributes such as purpose, owner, or environment. When you have many resources of the same type, you can quickly identify a specific resource based on the tags you've assigned to it. </p>"
     },
@@ -255,8 +255,8 @@
       "output":{"shape":"UntagResourceResponse"},
       "errors":[
         {"shape":"ValidationException"},
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"InternalServerException"}
+        {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"}
       ],
       "documentation":"<p>Removes tags from resources.</p>",
       "idempotent":true
@@ -272,8 +272,8 @@
       "output":{"shape":"UpdateApplicationResponse"},
       "errors":[
         {"shape":"ValidationException"},
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"InternalServerException"}
+        {"shape":"InternalServerException"},
+        {"shape":"ResourceNotFoundException"}
       ],
       "documentation":"<p>Updates a specified application. An application has to be in a stopped or created state in order to be updated.</p>"
     }
@@ -375,6 +375,10 @@
         "schedulerConfiguration":{
           "shape":"SchedulerConfiguration",
           "documentation":"<p>The scheduler configuration for batch and streaming jobs running on this application. Supported with release labels emr-7.0.0 and above.</p>"
+        },
+        "identityCenterConfiguration":{
+          "shape":"IdentityCenterConfiguration",
+          "documentation":"<p>The IAM Identity Center configuration applied to enable trusted identity propagation. </p>"
         }
       },
       "documentation":"<p>Information about an application. Amazon EMR Serverless uses applications to run jobs.</p>"
@@ -481,6 +485,12 @@
         "X86_64"
       ]
     },
+    "Arn":{
+      "type":"string",
+      "max":2048,
+      "min":20,
+      "pattern":"([    -~ -퟿-�က0-ჿFF]+)"
+    },
     "AttemptNumber":{
       "type":"integer",
       "box":true,
@@ -538,6 +548,12 @@
           "documentation":"<p>The ID of the job run to cancel.</p>",
           "location":"uri",
           "locationName":"jobRunId"
+        },
+        "shutdownGracePeriodInSeconds":{
+          "shape":"ShutdownGracePeriodInSeconds",
+          "documentation":"<p>The duration in seconds to wait before forcefully terminating the job after cancellation is requested.</p>",
+          "location":"querystring",
+          "locationName":"shutdownGracePeriodInSeconds"
         }
       }
     },
@@ -737,6 +753,10 @@
         "schedulerConfiguration":{
           "shape":"SchedulerConfiguration",
           "documentation":"<p>The scheduler configuration for batch and streaming jobs running on this application. Supported with release labels emr-7.0.0 and above.</p>"
+        },
+        "identityCenterConfiguration":{
+          "shape":"IdentityCenterConfigurationInput",
+          "documentation":"<p>The IAM Identity Center Configuration accepts the Identity Center instance parameter required to enable trusted identity propagation. This configuration allows identity propagation between integrated services and the Identity Center instance.</p>"
         }
       }
     },
@@ -811,14 +831,15 @@
     },
     "EntryPointArgument":{
       "type":"string",
-      "max":10280,
       "min":1,
       "pattern":".*\\S.*",
       "sensitive":true
     },
     "EntryPointArguments":{
       "type":"list",
-      "member":{"shape":"EntryPointArgument"}
+      "member":{"shape":"EntryPointArgument"},
+      "max":1024,
+      "min":0
     },
     "EntryPointPath":{
       "type":"string",
@@ -959,6 +980,40 @@
       "max":2048,
       "min":20,
       "pattern":"arn:(aws[a-zA-Z0-9-]*):iam::([0-9]{12}):(role((\\u002F)|(\\u002F[\\u0021-\\u007F]+\\u002F))[\\w+=,.@-]+)"
+    },
+    "IdentityCenterApplicationArn":{
+      "type":"string",
+      "pattern":"arn:(aws[a-zA-Z0-9-]*):sso::\\d{12}:application/(sso)?ins-[a-zA-Z0-9-.]{16}/apl-[a-zA-Z0-9]{16}"
+    },
+    "IdentityCenterConfiguration":{
+      "type":"structure",
+      "members":{
+        "identityCenterInstanceArn":{
+          "shape":"IdentityCenterInstanceArn",
+          "documentation":"<p>The ARN of the IAM Identity Center instance.</p>"
+        },
+        "identityCenterApplicationArn":{
+          "shape":"IdentityCenterApplicationArn",
+          "documentation":"<p>The ARN of the EMR Serverless created IAM Identity Center Application that provides trusted-identity propagation.</p>"
+        }
+      },
+      "documentation":"<p>The IAM Identity Center Configuration that includes the Identify Center instance and application ARNs that provide trusted-identity propagation.</p>"
+    },
+    "IdentityCenterConfigurationInput":{
+      "type":"structure",
+      "members":{
+        "identityCenterInstanceArn":{
+          "shape":"IdentityCenterInstanceArn",
+          "documentation":"<p>The ARN of the IAM Identity Center instance.</p>"
+        }
+      },
+      "documentation":"<p>Specifies the IAM Identity Center configuration used to enable or disable trusted identity propagation. When provided, this configuration determines how the application interacts with IAM Identity Center for user authentication and access control.</p>"
+    },
+    "IdentityCenterInstanceArn":{
+      "type":"string",
+      "max":1024,
+      "min":10,
+      "pattern":"arn:(aws[a-zA-Z0-9-]*):sso:::instance/(sso)?ins-[a-zA-Z0-9-.]{16}"
     },
     "ImageConfiguration":{
       "type":"structure",
@@ -1122,6 +1177,7 @@
           "shape":"IAMRoleArn",
           "documentation":"<p>The execution role ARN of the job run.</p>"
         },
+        "executionIamPolicy":{"shape":"JobRunExecutionIamPolicy"},
         "state":{
           "shape":"JobRunState",
           "documentation":"<p>The state of the job run.</p>"
@@ -1281,6 +1337,20 @@
     "JobRunAttempts":{
       "type":"list",
       "member":{"shape":"JobRunAttemptSummary"}
+    },
+    "JobRunExecutionIamPolicy":{
+      "type":"structure",
+      "members":{
+        "policy":{
+          "shape":"PolicyDocument",
+          "documentation":"<p>An IAM inline policy to use as an execution IAM policy.</p>"
+        },
+        "policyArns":{
+          "shape":"PolicyArnList",
+          "documentation":"<p>A list of Amazon Resource Names (ARNs) to use as an execution IAM policy.</p>"
+        }
+      },
+      "documentation":"<p>Optional IAM policy. The resulting job IAM role permissions will be an intersection of the policies passed and the policy associated with your job execution role.</p>"
     },
     "JobRunId":{
       "type":"string",
@@ -1707,6 +1777,18 @@
       "min":1,
       "pattern":"[A-Za-z0-9_=-]+"
     },
+    "PolicyArnList":{
+      "type":"list",
+      "member":{"shape":"Arn"},
+      "max":10,
+      "min":0
+    },
+    "PolicyDocument":{
+      "type":"string",
+      "max":2048,
+      "min":1,
+      "pattern":"([    -ÿ]+)"
+    },
     "PrometheusMonitoringConfiguration":{
       "type":"structure",
       "members":{
@@ -1859,6 +1941,10 @@
       },
       "exception":true
     },
+    "ShutdownGracePeriodInSeconds":{
+      "type":"integer",
+      "box":true
+    },
     "SparkSubmit":{
       "type":"structure",
       "required":["entryPoint"],
@@ -1924,6 +2010,10 @@
         "executionRoleArn":{
           "shape":"IAMRoleArn",
           "documentation":"<p>The execution role ARN for the job run.</p>"
+        },
+        "executionIamPolicy":{
+          "shape":"JobRunExecutionIamPolicy",
+          "documentation":"<p>You can pass an optional IAM policy. The resulting job IAM role permissions will be an intersection of this policy and the policy associated with your job execution role.</p>"
         },
         "jobDriver":{
           "shape":"JobDriver",
@@ -2178,6 +2268,10 @@
         "schedulerConfiguration":{
           "shape":"SchedulerConfiguration",
           "documentation":"<p>The scheduler configuration for batch and streaming jobs running on this application. Supported with release labels emr-7.0.0 and above.</p>"
+        },
+        "identityCenterConfiguration":{
+          "shape":"IdentityCenterConfigurationInput",
+          "documentation":"<p>Specifies the IAM Identity Center configuration used to enable or disable trusted identity propagation. When provided, this configuration determines how the application interacts with IAM Identity Center for user authentication and access control.</p>"
         }
       }
     },

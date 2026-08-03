@@ -935,6 +935,10 @@ ISource* ISource::GetCompositeSource() {
     return nullptr;
 }
 
+void ISource::SetCompositeSelect(TCompositeSelect* composite) {
+    Y_UNUSED(composite);
+}
+
 bool ISource::IsSelect() const {
     return true;
 }

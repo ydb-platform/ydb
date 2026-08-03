@@ -46,6 +46,9 @@ public:
         static_assert(N >= 2, "Logging tag key must be a non-empty string literal");
         for (size_t index = 0; index + 1 < N; ++index) {
             if (key[index] == '%' || key[index] == ':') {
+                // Throwing rather than calling an undefined function: a default member
+                // initializer makes the compiler emit this ctor as a runtime function, and
+                // an undefined sentinel would then fail at link time.
                 throw "Logging tag key must not contain '%' or ':'";
             }
         }

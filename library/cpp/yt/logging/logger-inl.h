@@ -162,7 +162,7 @@ inline bool HasMessageTags(
     if (!logger.GetTags().IsEmpty()) {
         return true;
     }
-    if (!loggingContext.TraceLoggingTag.empty()) {
+    if (!loggingContext.TraceLoggingTags.Underlying().empty()) {
         return true;
     }
     if (!GetThreadMessageTags().IsEmpty()) {
@@ -179,12 +179,7 @@ inline void AppendContextualTags(
     const TLogger& logger)
 {
     writer->AppendTags(AsView(logger.GetTags().GetPayload()));
-    // The trace context still carries a rendered string; give it a key of its own until
-    // it carries a tag list too.
-    if (!loggingContext.TraceLoggingTag.empty()) {
-        writer->BeginTag(TraceLoggingTagKey)->AppendString(loggingContext.TraceLoggingTag);
-        writer->EndTag();
-    }
+    writer->AppendTags(loggingContext.TraceLoggingTags);
     writer->AppendTags(AsView(GetThreadMessageTags().GetPayload()));
 }
 
@@ -204,18 +199,8 @@ inline void AppendMessageTags(
         FormatValue(builder, tags, "v"_sb);
         printComma = true;
     };
-    auto appendString = [&] (TStringBuf tags) {
-        if (tags.empty()) {
-            return;
-        }
-        if (printComma) {
-            builder->AppendString(", "_sb);
-        }
-        builder->AppendString(tags);
-        printComma = true;
-    };
     append(AsView(logger.GetTags().GetPayload()));
-    appendString(loggingContext.TraceLoggingTag);
+    append(loggingContext.TraceLoggingTags);
     append(AsView(GetThreadMessageTags().GetPayload()));
 }
 

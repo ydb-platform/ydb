@@ -33,6 +33,9 @@ namespace NActors {
         IC_MSG_ZEROCOPY,
     };
 
+    // Effective dead-peer timeout when TInterconnectSettings::DeadPeer is left unset.
+    static constexpr TDuration DEFAULT_DEADPEER_TIMEOUT = TDuration::Seconds(10);
+
     struct TInterconnectSettings {
         TDuration Handshake;
         TDuration DeadPeer;

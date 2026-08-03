@@ -156,6 +156,7 @@ namespace NActors {
         TMutableContiguousSpan Buffer;
         size_t TotalSizeRemain;
         std::vector<TChunk> Chunks;
+        TChunk LastChunk{nullptr, 0, nullptr};
         EAliasedMode AliasedMode = EAliasedMode::PassThrough;
         const IEventBase *Event = nullptr;
         bool CancelFlag = false;

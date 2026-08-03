@@ -164,7 +164,7 @@ void TWriteRequestExecutor::OnIndirectWriteResponse(
 
     CompletedWrites = CompletedWrites.Include(completedWritesOfCurrentResponse);
 
-    if (ShouldReplyOk()) {
+    if (IsQuorumReached()) {
         ReplyOrNotifyBelated(MakeError(S_OK), completedWritesOfCurrentResponse);
         return;
     }
@@ -315,7 +315,7 @@ void TWriteRequestExecutor::OnDirectWriteResponse(
 
     if (!HasError(response.Error)) {
         CompletedWrites.Set(host);
-        if (ShouldReplyOk()) {
+        if (IsQuorumReached()) {
             ReplyOrNotifyBelated(MakeError(S_OK), THostMask::MakeOne(host));
         }
         return;
@@ -396,6 +396,8 @@ void TWriteRequestExecutor::Reply(NProto::TError error)
             LogTitle.GetWithTime().c_str(),
             ExtendedDebugState().c_str(),
             FormatError(error).c_str());
+
+        Y_ABORT_UNLESS(!IsQuorumReached());
     } else {
         LOG_DEBUG(
             *ActorSystem,
@@ -403,6 +405,8 @@ void TWriteRequestExecutor::Reply(NProto::TError error)
             "%s Reply OK. %s",
             LogTitle.GetWithTime().c_str(),
             ExtendedDebugState().c_str());
+
+        Y_ABORT_UNLESS(IsQuorumReached());
     }
 
     Bundle->Reply(
@@ -508,7 +512,7 @@ void TWriteRequestExecutor::OnRequestTimeout()
     ReplyOrNotifyBelated(MakeError(E_TIMEOUT, "Write request timeout"), {});
 }
 
-bool TWriteRequestExecutor::ShouldReplyOk() const
+bool TWriteRequestExecutor::IsQuorumReached() const
 {
     return CompletedWrites.Count() >= QuorumDirectBlockGroupHostCount;
 }

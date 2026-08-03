@@ -66,6 +66,7 @@ TInflightInfo::TInflightInfo(TInflightInfo&& other) noexcept
 TInflightInfo::~TInflightInfo()
 {
     Y_ABORT_UNLESS(PBuffersLockCount == 0);
+    Y_ABORT_UNLESS(WriteConfirmed.Exclude(WriteRequested).Empty());
 
     ApplyBytes(WriteRequested, IReadyQueue::EPBufferCounter::Total, false);
 }

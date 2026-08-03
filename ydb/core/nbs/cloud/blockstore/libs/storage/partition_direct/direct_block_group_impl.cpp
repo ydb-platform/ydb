@@ -1578,6 +1578,16 @@ void TDirectBlockGroup::OnConnectionEstablished(
                                        : PBufferConnections[hostIndex];
 
     NProto::TError error = TranslateError(result);
+
+    LOG_LOG(
+        *ActorSystem,
+        HasError(error) ? NActors::NLog::PRI_WARN : NActors::NLog::PRI_TRACE,
+        NKikimrServices::NBS_PARTITION,
+        "%s OnConnectionEstablished: %s %s",
+        LogTitle.GetWithTime().c_str(),
+        PrintHostAndNode(hostIndex).c_str(),
+        FormatError(error).c_str());
+
     if (!HasError(error)) {
         Counters.OnConnectOk(ToDBGConnectionType(connectionType));
         connection.HostConnection.Credentials.DDiskInstanceGuid =
@@ -1921,11 +1931,11 @@ void TDirectBlockGroup::HandleBlockedGeneration(
     BlockedGenerationDetected = true;
 
     DDiskConnections[hostIndex].SessionState = EDDiskSessionState::Broken;
-    const TString reason = TStringBuilder()
-                           << "DDisk returned BLOCKED (stale tablet generation "
-                           << TabletGeneration << "); context: " << context
-                           << "; " << PrintHostIndex(hostIndex)
-                           << "; DBGIndex: " << DirectBlockGroupIndex;
+    const TString reason =
+        TStringBuilder() << "dbg:" << DirectBlockGroupIndex << " "
+                         << PrintHostAndNode(hostIndex)
+                         << " DDisk returned BLOCKED (stale tablet generation) "
+                         << context;
 
     LOG_ERROR(
         *ActorSystem,

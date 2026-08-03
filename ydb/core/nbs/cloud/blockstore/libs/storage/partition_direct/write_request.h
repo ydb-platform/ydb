@@ -63,7 +63,7 @@ private:
     void OnHedgingTimeout();
     void OnRequestTimeout();
 
-    [[nodiscard]] bool ShouldReplyOk() const;
+    [[nodiscard]] bool IsQuorumReached() const;
     [[nodiscard]] bool IsQuorumReachable() const;
     [[nodiscard]] size_t GetQuorumDeficit() const;
     [[nodiscard]] THostMask GetRunningDirectWrites() const;

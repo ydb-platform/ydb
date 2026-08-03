@@ -28,9 +28,7 @@
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
 #include <ydb/library/yql/dq/tasks/dq_connection_builder.h>
-#include <ydb/library/yql/providers/pq/gateway/abstract/yql_pq_gateway.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
-#include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
 #include <ydb/library/wilson_ids/wilson.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
@@ -591,39 +589,13 @@ private:
                     // For restored streaming queries with PQ sources, asynchronously fetch
                     // the current partition count so we can update the task graph before
                     // RestoreTasksGraph() is called (avoids SCHEME_ERROR on first partition check).
-                    if (Request.QueryPhysicalGraph
+                    if (AppData()->FeatureFlags.GetEnableUpdatingPartitionsOnStreamingQueryRestart()
+                        && transaction.Body->GetHasPqSources()
+                        && Request.QueryPhysicalGraph
                         && FederatedQuerySetup
                         && FederatedQuerySetup->PqGatewayFactory)
                     {
-                        const auto& extSrc = stage.GetSources(0).GetExternalSource();
-                        if (extSrc.GetType() == "PqSource") {
-                                // If the partition list was already fixed at compile time by a
-                                // __ydb_partition_id predicate, the ReadRanges are authoritative
-                                // and must not be overwritten with the current total partition count.
-                                NYql::NPq::NProto::TDqPqTopicSource topicSourceProto;
-                                const bool usedPartitionPredicate =
-                                    extSrc.GetSettings().UnpackTo(&topicSourceProto)
-                                    && topicSourceProto.GetUsedPartitionPredicate();
-                                if (!usedPartitionPredicate) {
-                                    TopicPartitionSnapshotRequired = true;
-                                    // Collect the source; the resolver is launched after secrets
-                                    // are resolved so that SecureParams is populated and we can
-                                    // fetch the auth token from the external data source.
-                                    NYql::NPq::NProto::TDqPqTopicSource ts;
-                                    extSrc.GetSettings().UnpackTo(&ts);
-                                    TPqTopicResolverSource resolverSrc;
-                                    resolverSrc.Cluster   = extSrc.GetSourceName();
-                                    resolverSrc.Endpoint  = ts.GetEndpoint();
-                                    resolverSrc.Database  = ts.GetEndpoint().empty()
-                                                                ? Database
-                                                                : ts.GetDatabase();
-                                    resolverSrc.TopicPath = ts.GetTopicPath();
-                                    resolverSrc.TokenName = ts.GetToken().GetName();
-                                    resolverSrc.UseSsl    = ts.GetUseSsl();
-                                    resolverSrc.DatabaseForClusterConfig = ts.GetDatabase();
-                                    PendingPqTopicResolveSources.push_back(std::move(resolverSrc));
-                                }
-                            }
+                        TopicPartitionSnapshotRequired = true;
                     }
                 }
                 if (requestContext->CurrentExecutionId) {
@@ -1413,10 +1385,11 @@ private:
     }
 
 private:
-    // Starts TKqpPqTopicResolver for all collected PQ source stages.
+    // Starts TKqpPqTopicResolver.
     // Must be called only after SecureParams has been populated.
+    // The resolver collects PQ source descriptors from transactions internally.
     void StartPqTopicResolver() {
-        if (PendingPqTopicResolveSources.empty()) {
+        if (!TopicPartitionSnapshotRequired) {
             return;
         }
 
@@ -1441,20 +1414,17 @@ private:
         auto* resolverActor = CreateKqpPqTopicResolver(
             SelfId(),
             TxId,
-            std::move(PendingPqTopicResolveSources),
+            Request.Transactions,
+            Database,
             std::move(resolvedSecureParams),
             FederatedQuerySetup->PqGatewayFactory,
             std::move(mutableGraph));
 
         RegisterWithSameMailbox(resolverActor);
-        PendingPqTopicResolveSources.clear();
     }
 
     TShardIdToTableInfoPtr ShardIdToTableInfo;
     TVector<NKikimr::TTableId> TableIdsForSnapshot;
-
-    // PQ source stages whose topic describes are deferred until after secrets are resolved.
-    TVector<TPqTopicResolverSource> PendingPqTopicResolveSources;
 
     bool HasExternalSources = false;
     bool SecretSnapshotRequired = false;

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/kqp/gateway/kqp_gateway.h>
+
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/yql/providers/pq/gateway/abstract/yql_pq_gateway.h>
 
@@ -13,36 +15,31 @@ class TQueryPhysicalGraph;
 
 namespace NKikimr::NKqp {
 
-// Description of a single PQ topic source that needs to be resolved.
-struct TPqTopicResolverSource {
-    TString Cluster;
-    TString Endpoint;
-    TString Database;     // real YDB database path for the describe RPC
-    TString TopicPath;
-    TString TokenName;    // key in SecureParams to look up the auth token
-    bool    UseSsl = false;
-    TString DatabaseForClusterConfig; // raw "database" field from the proto (may be cluster alias)
-};
-
 // Creates a TKqpPqTopicResolver actor.
 //
-// The actor describes every topic in `sources` in parallel using `pqGatewayFactory`,
-// patches the partition counts in `*queryPhysicalGraph`, and then sends
+// The actor collects PQ source descriptors from `transactions`, describes every
+// discovered topic in parallel using `pqGatewayFactory`, patches the partition
+// counts in `*queryPhysicalGraph`, and then sends
 // TEvKqpExecuter::TEvPqTopicResolveStatus back to `owner`.
 //
-// Must be called only after SecureParams is already populated.
+// Must be called only after SecureParams have been resolved (i.e. after secrets
+// snapshot is obtained) so that the secureParams map is fully populated.
 //
 // Parameters:
 //   owner               – actor to notify when done
 //   txId                – for logging
-//   sources             – PQ topic sources collected during DoExecute()
-//   secureParams        – populated SecureParams (token name → token value)
+//   transactions        – physical transactions whose stages will be scanned for
+//                         PqSource external sources
+//   database            – YDB database path used as a fallback when the topic
+//                         source proto does not carry an explicit endpoint
+//   secureParams        – populated SecureParams (source name → token value)
 //   pqGatewayFactory    – used to create the gateway that does DescribeFederatedTopic
 //   queryPhysicalGraph  – will be patched in-place with new partition counts
 NActors::IActor* CreateKqpPqTopicResolver(
     const NActors::TActorId& owner,
     ui64 txId,
-    TVector<TPqTopicResolverSource> sources,
+    const TVector<IKqpGateway::TPhysicalTxData>& transactions,
+    const TString& database,
     THashMap<TString, TString> secureParams,
     NYql::IPqGatewayFactory::TPtr pqGatewayFactory,
     std::shared_ptr<NKikimrKqp::TQueryPhysicalGraph> queryPhysicalGraph);

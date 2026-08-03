@@ -178,6 +178,21 @@ Y_UNIT_TEST_SUITE(SelfHealActorTest) {
         });
     }
 
+    Y_UNIT_TEST(MaintenanceTreatsOnlyPhantomsAsUnreplicated) {
+        RunTestCase([&](const TActorId& selfHealId, const TActorId& parentId, TTestActorSystem& runtime) {
+            auto info = CreateGroup();
+            RegisterDiskResponders(runtime, info);
+            auto content = Convert(info, {}, {}, {0});
+            auto& phantomOnlyVDisk = content.VDisks.at(info->GetVDiskId(1));
+            phantomOnlyVDisk.OnlyPhantomsRemain = true;
+
+            auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
+            ev->GroupsToUpdate[info->GroupID] = std::move(content);
+            runtime.Send(new IEventHandle(selfHealId, parentId, ev.release()), 1);
+            ValidateNoCmd(parentId, runtime);
+        });
+    }
+
     Y_UNIT_TEST(MaintenanceWaitsForFullyReplicatedLiveState) {
         RunTestCase([&](const TActorId& selfHealId, const TActorId& parentId, TTestActorSystem& runtime) {
             auto info = CreateGroup();

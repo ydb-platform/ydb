@@ -631,8 +631,19 @@ namespace NKikimr::NBsController {
             // semi-replicated disk to prevent selfheal blocking
             TBlobStorageGroupInfo::TGroupVDisks failedByReadiness(topology);
             TBlobStorageGroupInfo::TGroupVDisks failedByUnavailabilityRisk(topology);
+            TBlobStorageGroupInfo::TGroupVDisks notFullyOperational(topology);
+            std::optional<ESelfHealReassignmentReason> preferredReassignmentReason;
             bool alreadySeenReplicatingWithPhantomsOnly = false;
             for (const auto& [vdiskId, vdisk] : content.VDisks) {
+                if (vdisk.RequiresReassignment() && (!preferredReassignmentReason ||
+                        vdisk.ReassignmentReason < *preferredReassignmentReason)) {
+                    preferredReassignmentReason = vdisk.ReassignmentReason;
+                }
+                if (vdisk.UnavailabilityRisk || vdisk.OnlyPhantomsRemain ||
+                        vdisk.VDiskStatus != NKikimrBlobStorage::EVDiskStatus::READY || !IsReady(vdisk, now)) {
+                    notFullyOperational |= {topology, vdiskId};
+                }
+
                 bool replicatingWithPhantomsOnly = false;
                 switch (vdisk.VDiskStatus) {
                     case NKikimrBlobStorage::EVDiskStatus::REPLICATING:
@@ -660,40 +671,32 @@ namespace NKikimr::NBsController {
             const auto& checker = topology->GetQuorumChecker();
             const auto failed = failedByReadiness | failedByUnavailabilityRisk;
 
-            for (const ESelfHealReassignmentReason reason : {
-                    ESelfHealReassignmentReason::Faulty,
-                    ESelfHealReassignmentReason::ToBeRemoved,
-                    ESelfHealReassignmentReason::Decommit,
-                    ESelfHealReassignmentReason::Maintenance,
-                }) {
-                for (const auto& [vdiskId, vdisk] : content.VDisks) {
-                    if (vdisk.ReassignmentReason != reason) {
+            if (!preferredReassignmentReason) {
+                return std::nullopt;
+            }
+            const ESelfHealReassignmentReason reason = *preferredReassignmentReason;
+            for (const auto& [vdiskId, vdisk] : content.VDisks) {
+                if (vdisk.ReassignmentReason != reason) {
+                    continue;
+                }
+
+                if (reason == ESelfHealReassignmentReason::Maintenance) {
+                    const TBlobStorageGroupInfo::TGroupVDisks otherNotFullyOperational = notFullyOperational -
+                        TBlobStorageGroupInfo::TGroupVDisks(topology, vdiskId);
+                    if (otherNotFullyOperational) {
                         continue;
                     }
-
-                    if (reason == ESelfHealReassignmentReason::Maintenance) {
-                        const bool allOtherVDisksAreFullyOperational = AllOf(content.VDisks, [&](const auto& item) {
-                            const auto& [otherVDiskId, otherVDisk] = item;
-                            return otherVDiskId == vdiskId || (
-                                !otherVDisk.UnavailabilityRisk &&
-                                otherVDisk.VDiskStatus == NKikimrBlobStorage::EVDiskStatus::READY &&
-                                IsReady(otherVDisk, now));
-                        });
-                        if (!allOtherVDisksAreFullyOperational) {
-                            continue;
-                        }
-                    }
-
-                    const auto newFailed = failed | TBlobStorageGroupInfo::TGroupVDisks(topology, vdiskId);
-                    if (!checker.CheckFailModelForGroup(newFailed)) {
-                        continue; // healing this disk would break the group
-                    } else if (checker.IsDegraded(failed) < checker.IsDegraded(newFailed)) {
-                        continue; // this group will become degraded when applying self-heal logic, skip disk
-                    }
-                    *reassignmentReason = reason;
-                    *ignoreDegradedGroupsChecks = checker.IsDegraded(failedByReadiness) && *EnableSelfHealWithDegraded;
-                    return vdiskId;
                 }
+
+                const auto newFailed = failed | TBlobStorageGroupInfo::TGroupVDisks(topology, vdiskId);
+                if (!checker.CheckFailModelForGroup(newFailed)) {
+                    continue; // healing this disk would break the group
+                } else if (checker.IsDegraded(failed) < checker.IsDegraded(newFailed)) {
+                    continue; // this group will become degraded when applying self-heal logic, skip disk
+                }
+                *reassignmentReason = reason;
+                *ignoreDegradedGroupsChecks = checker.IsDegraded(failedByReadiness) && *EnableSelfHealWithDegraded;
+                return vdiskId;
             }
 
             // no options for this group

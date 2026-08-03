@@ -58,6 +58,7 @@ message TSystemTablets {
     repeated NKikimrConfig.TBootstrap.TTablet FlatTxCoordinator = 9 [(NMarkers.AsMap) = "Tablets"];
     repeated NKikimrConfig.TBootstrap.TTablet TxAllocator = 10 [(NMarkers.AsMap) = "Tablets"];
     repeated NKikimrConfig.TBootstrap.TTablet TxMediator = 11 [(NMarkers.AsMap) = "Tablets"];
+    repeated NKikimrConfig.TBootstrap.TTablet DbsController = 12 [(NMarkers.AsMap) = "Tablets"];
 }
 
 message TExtendedHostConfigDrive {

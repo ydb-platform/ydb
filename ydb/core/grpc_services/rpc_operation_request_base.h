@@ -30,20 +30,29 @@ protected:
     }
 
     void AllocateTxId() {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Allocate txId");
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_PROXY, "Allocate txId",
+            {"logPrefix", GetLogPrefix()},
+            {"#_this->SelfId", this->SelfId()},
+            {"#_this->TxId", this->TxId});
         this->Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId);
     }
 
     void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
         TxId = ev->Get()->TxId;
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "TEvTxUserProxy::TEvAllocateTxIdResult");
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_PROXY, "TEvTxUserProxy::TEvAllocateTxIdResult",
+            {"logPrefix", GetLogPrefix()},
+            {"#_this->SelfId", this->SelfId()},
+            {"#_this->TxId", this->TxId});
         ResolveDatabase();
     }
 
     void ResolveDatabase() {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Resolve database"
-            << ": name# " << this->GetDatabaseName());
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_PROXY, "Resolve database",
+            {"logPrefix", GetLogPrefix()},
+            {"#_this->SelfId", this->SelfId()},
+            {"#_this->TxId", this->TxId},
+            {"name", this->GetDatabaseName()});
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
         request->DatabaseName = this->GetDatabaseName();
@@ -58,8 +67,11 @@ protected:
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto& request = ev->Get()->Request;
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
-            << ": request# " << (request ? request->ToString(*AppData()->TypeRegistry) : "nullptr"));
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_PROXY, "Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
+            {"logPrefix", GetLogPrefix()},
+            {"#_this->SelfId", this->SelfId()},
+            {"#_this->TxId", this->TxId},
+            {"request", (request ? request->ToString(*AppData()->TypeRegistry) : "nullptr")});
 
         if (request->ResultSet.empty()) {
             return this->Reply(Ydb::StatusIds::SCHEME_ERROR, NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR);
@@ -90,7 +102,10 @@ protected:
 
         auto domainInfo = entry.DomainInfo;
         if (!domainInfo) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Got empty domain info");
+            YDB_LOG_ERROR_COMP(NKikimrServices::TX_PROXY, "Got empty domain info",
+                {"logPrefix", GetLogPrefix()},
+                {"#_this->SelfId", this->SelfId()},
+                {"#_this->TxId", this->TxId});
             return this->Reply(Ydb::StatusIds::INTERNAL_ERROR, NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR);
         }
 
@@ -98,8 +113,11 @@ protected:
     }
 
     void SendRequest(ui64 schemeShardId) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Send request"
-            << ": schemeShardId# " << schemeShardId);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::TX_PROXY, "Send request",
+            {"logPrefix", GetLogPrefix()},
+            {"#_this->SelfId", this->SelfId()},
+            {"#_this->TxId", this->TxId},
+            {"schemeShardId", schemeShardId});
 
         if (!PipeClient) {
             NTabletPipe::TClientConfig config;
@@ -121,7 +139,10 @@ protected:
     }
 
     void DeliveryProblem() {
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_PROXY, GetLogPrefix() << " " << this->SelfId() << " [" << this->TxId << "] " << "Delivery problem");
+        YDB_LOG_WARN_COMP(NKikimrServices::TX_PROXY, "Delivery problem",
+            {"logPrefix", GetLogPrefix()},
+            {"#_this->SelfId", this->SelfId()},
+            {"#_this->TxId", this->TxId});
         this->Reply(Ydb::StatusIds::UNAVAILABLE);
     }
 

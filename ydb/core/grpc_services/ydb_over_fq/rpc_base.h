@@ -111,7 +111,8 @@ protected:
         auto& acl = *queryContent.mutable_acl();
         acl.set_visibility(FederatedQuery::Acl_Visibility::Acl_Visibility_SCOPE);
 
-        LOG_LOG_S(ctx, NActors::NLog::PRI_TRACE, NKikimrServices::FQ_INTERNAL_SERVICE, TLogCtx{.Owner_ = *this} << "creating query");
+        YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::FQ_INTERNAL_SERVICE, "Creating query",
+            {"#_TLogCtx{.Owner_ = *this}", TLogCtx{.Owner_ = *this}});
 
         Become(&TRpcBase::CreateQueryState);
         MakeLocalCall(std::move(req), ctx);
@@ -160,9 +161,10 @@ protected:
         resp.operation().result().UnpackTo(&result);
 
         if (!NFq::IsTerminalStatus(result.status())) {
-            LOG_LOG_S(ctx, NActors::NLog::PRI_TRACE, NKikimrServices::FQ_INTERNAL_SERVICE, TLogCtx{.Owner_ = *this} <<
-                "still waiting for query: " << QueryId_ <<
-                ", current status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(result.status()));
+            YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::FQ_INTERNAL_SERVICE, "Still waiting for current",
+                {"#_TLogCtx{.Owner_ = *this}", TLogCtx{.Owner_ = *this}},
+                {"query", QueryId_},
+                {"status", FederatedQuery::QueryMeta::ComputeStatus_Name(result.status())});
             auto delay = WaitRetryState_->GetNextRetryDelay(result.status());
             if (!delay) {
                 TBase::Reply(Ydb::StatusIds_StatusCode_TIMEOUT,
@@ -203,8 +205,10 @@ protected:
         NYql::IssuesFromMessage(operation.issues(), issues);
 
         TString errorMsg = TStringBuilder{} << "failed to " << opName << " with status: " << Ydb::StatusIds::StatusCode_Name(operation.status());
-        LOG_LOG_S(ctx, NActors::NLog::PRI_INFO, NKikimrServices::FQ_INTERNAL_SERVICE, TLogCtx{.Owner_ = *this} <<
-            errorMsg << ", issues: " << issues.ToOneLineString());
+        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::FQ_INTERNAL_SERVICE, "",
+            {"#_TLogCtx{.Owner_ = *this}", TLogCtx{.Owner_ = *this}},
+            {"errorMsg", errorMsg},
+            {"issues", issues.ToOneLineString()});
         issues.AddIssue(errorMsg);
 
         TBase::Reply(Ydb::StatusIds_StatusCode_INTERNAL_ERROR, issues, ctx);

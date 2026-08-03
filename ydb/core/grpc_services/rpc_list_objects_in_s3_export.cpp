@@ -7,6 +7,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_PROXY
+
 namespace NKikimr::NGRpcService {
 
 using TEvListObjectsInS3ExportRequest = TGrpcRequestOperationCall<Ydb::Import::ListObjectsInS3ExportRequest,
@@ -46,8 +48,9 @@ public:
     }
 
     void ResolveDatabase() {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, "[ListObjectsInS3Export] " << SelfId() << " " << "Resolve database"
-            << ": name# " << Request_->GetDatabaseName());
+        YDB_LOG_DEBUG("[ListObjectsInS3Export] Resolve database",
+            {"selfId", SelfId()},
+            {"name", Request_->GetDatabaseName()});
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
         request->DatabaseName = *Request_->GetDatabaseName();
@@ -62,8 +65,9 @@ public:
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto& request = ev->Get()->Request;
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, "[ListObjectsInS3Export] " << SelfId() << " " << "Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
-            << ": request# " << (request ? request->ToString(*AppData()->TypeRegistry) : "nullptr"));
+        YDB_LOG_DEBUG("[ListObjectsInS3Export] Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
+            {"selfId", SelfId()},
+            {"request", (request ? request->ToString(*AppData()->TypeRegistry) : "nullptr")});
 
         if (request->ResultSet.empty()) {
             return Reply(Ydb::StatusIds::SCHEME_ERROR, "Scheme error", NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, NActors::TActivationContext::AsActorContext());
@@ -94,7 +98,8 @@ public:
 
         auto domainInfo = entry.DomainInfo;
         if (!domainInfo) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_PROXY, "[ListObjectsInS3Export] " << SelfId() << " " << "Got empty domain info");
+            YDB_LOG_ERROR("[ListObjectsInS3Export] Got empty domain info",
+                {"selfId", SelfId()});
             return Reply(Ydb::StatusIds::INTERNAL_ERROR, "Internal error", NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR, NActors::TActivationContext::AsActorContext());
         }
 
@@ -124,7 +129,9 @@ public:
     }
 
     void SendRequestToSchemeShard() {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, "[ListObjectsInS3Export] " << SelfId() << " " << "Send request: schemeShardId# " << SchemeShardId);
+        YDB_LOG_DEBUG("[ListObjectsInS3Export] Send request",
+            {"selfId", SelfId()},
+            {"schemeShardId", SchemeShardId});
 
         if (!PipeClient) {
             NTabletPipe::TClientConfig config;
@@ -145,8 +152,9 @@ public:
     void Handle(NKikimr::NSchemeShard::TEvImport::TEvListObjectsInS3ExportResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_PROXY, "[ListObjectsInS3Export] " << SelfId() << " " << "Handle TListObjectsInS3ExportRPC::TEvListObjectsInS3ExportResponse"
-            << ": record# " << record.ShortDebugString());
+        YDB_LOG_DEBUG("[ListObjectsInS3Export] Handle TListObjectsInS3ExportRPC::TEvListObjectsInS3ExportResponse",
+            {"selfId", SelfId()},
+            {"record", record.ShortDebugString()});
 
         if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
             return Reply(record.GetStatus(), record.GetIssues(), NActors::TActivationContext::AsActorContext());
@@ -166,7 +174,8 @@ public:
     }
 
     void DeliveryProblem() {
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_PROXY, "[ListObjectsInS3Export] " << SelfId() << " " << "Delivery problem");
+        YDB_LOG_WARN("[ListObjectsInS3Export] Delivery problem",
+            {"selfId", SelfId()});
         Reply(Ydb::StatusIds::UNAVAILABLE, "Delivery problem", NKikimrIssues::TIssuesIds::DEFAULT_ERROR, NActors::TActivationContext::AsActorContext());
     }
 

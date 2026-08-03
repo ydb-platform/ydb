@@ -4,6 +4,8 @@
 
 #include <ydb/core/grpc_services/rpc_deferrable.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_INTERNAL_SERVICE
+
 namespace NKikimr::NGRpcService::NYdbOverFq {
 
 class ListDirectoryRPC
@@ -31,7 +33,8 @@ public:
         req.set_limit(Limit);
         req.set_page_token(std::move(continuationToken));
 
-        LOG_LOG_S(ctx, NActors::NLog::PRI_TRACE, NKikimrServices::FQ_INTERNAL_SERVICE, TLogCtx{.Owner_ = *this} << "listing bindings");
+        YDB_LOG_TRACE_CTX(ctx, "Listing bindings",
+            {"#_TLogCtx{.Owner_ = *this}", TLogCtx{.Owner_ = *this}});
 
         Become(&ListDirectoryRPC::ListBindingsState);
         MakeLocalCall(std::move(req), ctx);

@@ -21,7 +21,7 @@ items:
   include:
     mode: link
     path: primary-key/toc_p.yaml
-- name: Работа с таблицами
+- name: Партицирование
   href: tables/index.md
   include:
     mode: link

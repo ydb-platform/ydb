@@ -24,4 +24,4 @@ ALTER TABLE `my_table` SET (
 
 ---
 
-<span id="cluster-partition-size-limit">\*</span> Независимо от `AUTO_PARTITIONING_MAX_PARTITIONS_COUNT`, на уровне кластера действует жёсткий лимит размера партиции (**2 ГБ** по умолчанию): при его превышении партиция разделится, даже если табличный лимит на число партиций уже достигнут. См. [{#T}](auto/limits.md) и [{#T}](../../../concepts/datamodel/table.md#partitioning_row_table).
+<span id="cluster-partition-size-limit">\*</span> Независимо от `AUTO_PARTITIONING_MAX_PARTITIONS_COUNT`, на уровне кластера действует жёсткий лимит размера партиции (**2 ГБ** по умолчанию): при его превышении партиция разделится, даже если табличный лимит на число партиций уже достигнут. См. [{#T}](auto/index.md#auto-sharding-limits) и [{#T}](../../../concepts/datamodel/table.md#partitioning_row_table).

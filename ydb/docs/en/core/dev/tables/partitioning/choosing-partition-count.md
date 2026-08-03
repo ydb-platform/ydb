@@ -24,4 +24,4 @@ Optional initial spreading across keys uses [`UNIFORM_PARTITIONS`](../../../conc
 
 ---
 
-<span id="cluster-partition-size-limit">\*</span> Regardless of `AUTO_PARTITIONING_MAX_PARTITIONS_COUNT`, the cluster enforces a hard partition size limit (**2 GB** by default): if a partition exceeds it, it splits even when the table-level partition count cap is already reached. See [{#T}](auto/limits.md) and [{#T}](../../../concepts/datamodel/table.md#partitioning_row_table).
+<span id="cluster-partition-size-limit">\*</span> Regardless of `AUTO_PARTITIONING_MAX_PARTITIONS_COUNT`, the cluster enforces a hard partition size limit (**2 GB** by default): if a partition exceeds it, it splits even when the table-level partition count cap is already reached. See [{#T}](auto/index.md#auto-sharding-limits) and [{#T}](../../../concepts/datamodel/table.md#partitioning_row_table).

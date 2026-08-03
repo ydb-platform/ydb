@@ -12,6 +12,6 @@ In this subsection:
 
 {% note info %}
 
-Column-oriented tables partition differently and **do not support** the same automatic repartitioning workflow as row tables. See [{#T}](../../primary-key/column-oriented.md).
+Column-oriented tables partition differently and **do not support** the same automatic repartitioning workflow as row tables. See [{#T}](column-oriented.md).
 
 {% endnote %}

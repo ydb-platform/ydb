@@ -1,6 +1,9 @@
-# Working with tables
+# Partitioning
 
-This subsection focuses on modeling and operating **row-oriented tables** in applications — primarily [**partitioning**](partitioning/index.md).
+This subsection covers table partitioning in applications:
+
+* [Row-oriented tables](partitioning/index.md)
+* [Column-oriented tables](partitioning/column-oriented.md)
 
 See also:
 

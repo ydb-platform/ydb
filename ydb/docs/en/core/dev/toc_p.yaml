@@ -21,7 +21,7 @@ items:
   include:
     mode: link
     path: primary-key/toc_p.yaml
-- name: Working with tables
+- name: Partitioning
   href: tables/index.md
   include:
     mode: link

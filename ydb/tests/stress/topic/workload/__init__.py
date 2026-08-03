@@ -1,3 +1,4 @@
+import concurrent.futures
 import logging
 import os
 import stat
@@ -142,7 +143,7 @@ class YdbTopicWorkload(WorkloadBase):
                       tx_commit_interval=None, use_tx=True, with_config=True,
                       codec="raw", batch_flush_message_count=1,
                       batch_flush_interval="1s", batch_flush_size=None,
-                      batch_inner_codec=None) -> None:
+                      batch_inner_codec=None, consumer_prefix=None) -> None:
         """Запускает тестовую нагрузку с мониторингом.
 
         Args:
@@ -176,6 +177,8 @@ class YdbTopicWorkload(WorkloadBase):
             args.extend(['--batch-inner-codec', batch_inner_codec])
         if consumer_threads:
             args.extend(['-t', str(consumer_threads)])
+        if consumer_prefix:
+            args.extend(['--consumer-prefix', consumer_prefix])
         if use_tx:
             args.extend(['--use-tx', '--tx-commit-interval', tx_commit_interval])
         if self.limit_memory_usage:
@@ -451,6 +454,85 @@ class YdbTopicWorkload(WorkloadBase):
             batch_flush_interval="1s",
         ))
 
+    # Run plain and kafka-batch writers at the same time, both transactional and non-transactional,
+    # so one topic contains a live mix of regular messages, physical batches, committed tx writes,
+    # and non-tx writes while independent readers consume the interleaved stream.
+    def __mixed_transactional_and_batched_workload(self):
+        topic_name = "workload_mixed_tx_ntx_raw_kafka_batch"
+        phase_consumers = 4
+        availability_period = (
+            int(self.duration)
+            * self.config.AVAILABILITY_PERIOD_NUMERATOR
+            // self.config.AVAILABILITY_PERIOD_DENOMINATOR
+        )
+        phases = [
+            {
+                "name": "raw-ntx",
+                "codec": "raw",
+                "use_tx": False,
+                "batch_flush_message_count": 1,
+            },
+            {
+                "name": "raw-tx",
+                "codec": "raw",
+                "use_tx": True,
+                "batch_flush_message_count": 1,
+            },
+            {
+                "name": "kafka-batch-ntx",
+                "codec": "kafka-batch",
+                "use_tx": False,
+                "batch_flush_message_count": 5,
+            },
+            {
+                "name": "kafka-batch-tx",
+                "codec": "kafka-batch",
+                "use_tx": True,
+                "batch_flush_message_count": 5,
+            },
+        ]
+
+        self._create_test_topic(
+            topic_name,
+            partitions=10,
+            partitions_per_tablet=5
+        )
+        try:
+            self._configure_topic_retention(topic_name, self.config.RETENTION)
+            self._add_data_holder_consumer_to_topic(topic_name)
+            for phase in phases:
+                consumer_prefix = f"mixed-{phase['name']}-consumer"
+                for consumer_idx in range(phase_consumers):
+                    self._add_consumer_to_topic(
+                        topic_name,
+                        f"{consumer_prefix}-{consumer_idx}",
+                        availability_period
+                    )
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=len(phases)) as executor:
+                futures = [
+                    executor.submit(
+                        self._run_workload,
+                        topic_name,
+                        self.duration,
+                        "500K",
+                        5,
+                        phase_consumers,
+                        consumer_threads=phase_consumers,
+                        use_tx=phase["use_tx"],
+                        with_config=False,
+                        codec=phase["codec"],
+                        batch_flush_message_count=phase["batch_flush_message_count"],
+                        batch_flush_interval="1s",
+                        consumer_prefix=f"mixed-{phase['name']}-consumer",
+                    )
+                    for phase in phases
+                ]
+                for future in futures:
+                    future.result()
+        finally:
+            self._cleanup_test_topic(topic_name)
+
     @property
     def workload_topic_name(self) -> str:
         return f'{self.table_prefix}'
@@ -563,6 +645,7 @@ class YdbTopicWorkload(WorkloadBase):
             self.__keyed_producer_auto_partitioning_workload,
             self.__batched_non_transactional_workload,
             self.__batched_transactional_workload,
+            self.__mixed_transactional_and_batched_workload,
         ]
         if (self.chunk_index is None) or (self.chunk_size is None):
             return tests

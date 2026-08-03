@@ -47,23 +47,44 @@ public:
     }
 };
 
-class THistogram {
-private:
+class TBaseHistogram {
+protected:
     NMonitoring::THistogramPtr Histo;
 
 public:
+    virtual ~TBaseHistogram() = default;
+
+    virtual void Initialize(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
+                           const TString &name, NPDisk::EDeviceType deviceType) = 0;
+
+    void Increment(double value) {
+        if (Histo) {
+            Histo->Collect(value);
+        }
+    }
+};
+
+class TTimesHistogram : public TBaseHistogram {
+public:
     void Initialize(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
-            const TString &name, NPDisk::EDeviceType deviceType) {
+            const TString &name, NPDisk::EDeviceType deviceType) override {
         TString histName = name + "Ms";
-        // Histogram backets in milliseconds
+        // Histogram buckets in milliseconds
         auto h = NMonitoring::ExplicitHistogram(GetCommonLatencyHistBounds(deviceType));
         Histo = counters->GetNamedHistogram("sensor", histName, std::move(h));
     }
+};
 
-    void Increment(double timeMs) {
-        if (Histo) {
-            Histo->Collect(timeMs);
-        }
+class TBytesHistogram : public TBaseHistogram {
+public:
+    void Initialize(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
+            const TString &name, NPDisk::EDeviceType deviceType) override {
+        Y_UNUSED(deviceType);
+        TString histName = name + "KB";
+        // Histogram buckets in KB
+        TVector<double> bounds = {1_KB, 2_KB,4_KB, 8_KB, 16_KB, 32_KB, 64_KB};
+        auto h = NMonitoring::ExplicitHistogram(bounds);
+        Histo = counters->GetNamedHistogram("sensor", histName, std::move(h));
     }
 };
 
@@ -311,6 +332,8 @@ struct TPDiskMon {
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceIoErrors;
     ::NMonitoring::TDynamicCounters::TCounterPtr DeviceWaitTimeMs;
 
+    TBytesHistogram DeviceWritesSizes;
+
     // queue subgroup
     TIntrusivePtr<::NMonitoring::TDynamicCounters> QueueGroup;
     ::NMonitoring::TDynamicCounters::TCounterPtr QueueRequests;
@@ -320,10 +343,10 @@ struct TPDiskMon {
     TUpdateDurationTracker UpdateDurationTracker;
 
     // Device times
-    THistogram DeviceReadDuration;
-    THistogram DeviceWriteDuration;
-    THistogram DeviceTrimDuration;
-    THistogram DeviceFlushDuration;
+    TTimesHistogram DeviceReadDuration;
+    TTimesHistogram DeviceWriteDuration;
+    TTimesHistogram DeviceTrimDuration;
+    TTimesHistogram DeviceFlushDuration;
 
     // <BASE_BITS, EXP_BITS, FRAME_COUNT>
     using TDurationTracker = NMonitoring::TPercentileTrackerLg<5, 4, 15>;
@@ -374,20 +397,20 @@ struct TPDiskMon {
     TSizeTracker WriteHullCompSizeBytes;
 
     // log response time
-    THistogram LogResponseTime;
+    TTimesHistogram LogResponseTime;
     // get response time
-    THistogram GetResponseSyncLog;
-    THistogram GetResponseHullComp;
-    THistogram GetResponseHullOnlineRt;
-    THistogram GetResponseHullOnlineOther;
-    THistogram GetResponseHullLoad;
-    THistogram GetResponseHullLow;
+    TTimesHistogram GetResponseSyncLog;
+    TTimesHistogram GetResponseHullComp;
+    TTimesHistogram GetResponseHullOnlineRt;
+    TTimesHistogram GetResponseHullOnlineOther;
+    TTimesHistogram GetResponseHullLoad;
+    TTimesHistogram GetResponseHullLow;
     // write response time
-    THistogram WriteResponseSyncLog;
-    THistogram WriteResponseHullFresh;
-    THistogram WriteResponseHullHugeAsync;
-    THistogram WriteResponseHullHugeUser;
-    THistogram WriteResponseHullComp;
+    TTimesHistogram WriteResponseSyncLog;
+    TTimesHistogram WriteResponseHullFresh;
+    TTimesHistogram WriteResponseHullHugeAsync;
+    TTimesHistogram WriteResponseHullHugeUser;
+    TTimesHistogram WriteResponseHullComp;
 
     // scheduler subgroup
     TIntrusivePtr<::NMonitoring::TDynamicCounters> SchedulerGroup;

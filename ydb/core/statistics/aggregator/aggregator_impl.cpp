@@ -953,13 +953,22 @@ void TStatisticsAggregator::FinishTraversal(
 
         if (traversalSucceeded) {
             auto current = GetCurrentChangeCounters(pathId);
-            traversalTable.LastAnalyzeRowUpdates = current.RowUpdates;
-            traversalTable.LastAnalyzeRowDeletes = current.RowDeletes;
+            // Do not baseline at (0, 0): that happens when FinishTraversal races
+            // ahead of the first full SchemeShard stats report, and the next
+            // full report then looks like a huge change ratio. Keep Max so the
+            // table stays "never analyzed" until real counters arrive.
+            if (current.RowCount > 0 || current.RowUpdates > 0 || current.RowDeletes > 0) {
+                traversalTable.LastAnalyzeRowUpdates = current.RowUpdates;
+                traversalTable.LastAnalyzeRowDeletes = current.RowDeletes;
 
-            db.Table<Schema::ScheduleTraversals>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
-                NIceDb::TUpdate<Schema::ScheduleTraversals::LastUpdateTime>(TraversalStartTime.MicroSeconds()),
-                NIceDb::TUpdate<Schema::ScheduleTraversals::LastAnalyzeRowUpdates>(current.RowUpdates),
-                NIceDb::TUpdate<Schema::ScheduleTraversals::LastAnalyzeRowDeletes>(current.RowDeletes));
+                db.Table<Schema::ScheduleTraversals>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+                    NIceDb::TUpdate<Schema::ScheduleTraversals::LastUpdateTime>(TraversalStartTime.MicroSeconds()),
+                    NIceDb::TUpdate<Schema::ScheduleTraversals::LastAnalyzeRowUpdates>(current.RowUpdates),
+                    NIceDb::TUpdate<Schema::ScheduleTraversals::LastAnalyzeRowDeletes>(current.RowDeletes));
+            } else {
+                db.Table<Schema::ScheduleTraversals>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
+                    NIceDb::TUpdate<Schema::ScheduleTraversals::LastUpdateTime>(TraversalStartTime.MicroSeconds()));
+            }
         } else {
             db.Table<Schema::ScheduleTraversals>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
                 NIceDb::TUpdate<Schema::ScheduleTraversals::LastUpdateTime>(TraversalStartTime.MicroSeconds()));
@@ -1509,7 +1518,10 @@ bool TStatisticsAggregator::IsChangeRatioAboveThreshold(
     const TChangeCounters& lastAnalyze, const TChangeCounters& current) const
 {
     if (lastAnalyze.RowUpdates == Max<ui64>() || lastAnalyze.RowDeletes == Max<ui64>()) {
-        return true;  // Never analyzed — stale (primary collection)
+        // Never analyzed — but only treat as stale once SchemeShard has sent
+        // real counters. Otherwise FinishTraversal would keep baselining at
+        // zero and we would re-analyze on every scheduling tick.
+        return current.RowCount > 0 || current.RowUpdates > 0 || current.RowDeletes > 0;
     }
     // RowUpdates and RowDeletes are monotonic cumulative counters, so current
     // should not fall below the snapshot taken at the last ANALYZE. Guard

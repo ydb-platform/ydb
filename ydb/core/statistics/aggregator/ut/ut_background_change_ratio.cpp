@@ -26,8 +26,7 @@ TTestEnv CreateTestEnv(ui32 changeRatioThresholdPercent = 20) {
 
 Y_UNIT_TEST_SUITE(BackgroundChangeRatio) {
 
-    // 1. Primary collection: table never analyzed -> background traversal picks it up immediately
-    //    (no 24h wait)
+    // Table never analyzed -> background traversal picks it up immediately (no 24h wait).
     Y_UNIT_TEST(PrimaryCollection) {
         TTestEnv env = CreateTestEnv();
         auto& runtime = *env.GetServer().GetRuntime();
@@ -44,7 +43,7 @@ Y_UNIT_TEST_SUITE(BackgroundChangeRatio) {
         UNIT_ASSERT_VALUES_EQUAL(countMin->GetElementCount(), ColumnTableRowsNumber);
     }
 
-    // 2. Change ratio trigger: insert/update/delete rows exceeding threshold -> ANALYZE is triggered
+    // Insert/update/delete rows exceeding threshold -> ANALYZE is triggered.
     Y_UNIT_TEST(ChangeRatioTrigger) {
         TTestEnv env = CreateTestEnv();
         auto& runtime = *env.GetServer().GetRuntime();
@@ -80,7 +79,7 @@ Y_UNIT_TEST_SUITE(BackgroundChangeRatio) {
         UNIT_ASSERT(countMin);
     }
 
-    // 3. No trigger below threshold: small changes below threshold -> no ANALYZE triggered
+    // Small changes below threshold -> no ANALYZE triggered.
     Y_UNIT_TEST(NoTriggerBelowThreshold) {
         // Use a high threshold (50%) so small changes don't trigger.
         TTestEnv env = CreateTestEnv(50);
@@ -116,9 +115,8 @@ Y_UNIT_TEST_SUITE(BackgroundChangeRatio) {
         UNIT_ASSERT_VALUES_EQUAL(saveCount, 0);
     }
 
-    // 4. Change counters reset after ANALYZE: after ANALYZE completes,
-    //    LastAnalyzeRowUpdates and LastAnalyzeRowDeletes are updated ->
-    //    subsequent small changes do not trigger another ANALYZE
+    // After ANALYZE completes, LastAnalyzeRowUpdates/RowDeletes are updated so
+    // subsequent small changes do not trigger another ANALYZE.
     Y_UNIT_TEST(CountersResetAfterAnalyze) {
         TTestEnv env = CreateTestEnv();
         auto& runtime = *env.GetServer().GetRuntime();
@@ -152,7 +150,7 @@ Y_UNIT_TEST_SUITE(BackgroundChangeRatio) {
         UNIT_ASSERT_VALUES_EQUAL(saveCount, 0);
     }
 
-    // 5. Config threshold: change BackgroundAnalyzeChangeRatioThresholdPercent -> verify behavior changes
+    // BackgroundAnalyzeChangeRatioThresholdPercent controls when ANALYZE fires.
     Y_UNIT_TEST(ConfigThresholdHigh) {
         // With a 100% threshold, even large changes should not trigger.
         TTestEnv env = CreateTestEnv(100);
@@ -213,7 +211,7 @@ Y_UNIT_TEST_SUITE(BackgroundChangeRatio) {
         UNIT_ASSERT_VALUES_EQUAL(saveCount, 1);
     }
 
-    // 6. Table deletion: delete table -> verify change tracking is cleaned up
+    // Delete table -> change tracking is cleaned up.
     Y_UNIT_TEST(TableDeletion) {
         TTestEnv env = CreateTestEnv();
         auto& runtime = *env.GetServer().GetRuntime();
@@ -249,9 +247,8 @@ Y_UNIT_TEST_SUITE(BackgroundChangeRatio) {
         UNIT_ASSERT(!saveOccurred);
     }
 
-    // 7. Counters: verify BackgroundAnalyze dynamic counter with status label is reported
-    //    This test verifies that the monitoring counters are set correctly.
-    //    We check the dynamic counters via GetSubgroup("status", ...).
+    // Verify BackgroundAnalyze dynamic counter with status label is reported
+    // via GetSubgroup("status", ...).
     Y_UNIT_TEST(Counters) {
         TTestEnv env = CreateTestEnv();
         auto& runtime = *env.GetServer().GetRuntime();
@@ -297,9 +294,9 @@ Y_UNIT_TEST_SUITE(BackgroundChangeRatio) {
         }
     }
 
-    // 8. The BackgroundAnalyze completed/failed counters must track background
-    //    traversals only. A force (user-initiated) ANALYZE shares FinishTraversal()
-    //    with the background path, so it must not inflate these counters.
+    // BackgroundAnalyze completed/failed counters must track background
+    // traversals only. A force (user-initiated) ANALYZE shares FinishTraversal()
+    // with the background path, so it must not inflate these counters.
     Y_UNIT_TEST(ForceAnalyzeDoesNotAffectBackgroundCounters) {
         // Background collection disabled: the only traversal is the force one.
         TTestEnv env(1, 1);
@@ -329,9 +326,8 @@ Y_UNIT_TEST_SUITE(BackgroundChangeRatio) {
         UNIT_ASSERT_VALUES_EQUAL(failedCounter->Val(), 0);
     }
 
-    // 9. Deduplication: when a background traversal completes for a table that
-    //    also has a pending force (user-initiated) ANALYZE, the force request
-    //    should be marked as done — the statistics were just collected.
+    // When a background traversal completes for a table that also has a pending
+    // force (user-initiated) ANALYZE, the force request should be marked as done.
     Y_UNIT_TEST(BackgroundDeduplicatesForceAnalyze) {
         TTestEnv env = CreateTestEnv();
         auto& runtime = *env.GetServer().GetRuntime();
@@ -383,14 +379,12 @@ Y_UNIT_TEST_SUITE(BackgroundChangeRatio) {
         UNIT_ASSERT(countMin);
     }
 
-    // 10. Restart persistence: the analyze baseline (LastAnalyzeRowUpdates
-    //     and LastAnalyzeRowDeletes) and LastUpdateTime live only in the
-    //     SA-local ScheduleTraversals table. After a primary collection, an
-    //     SA tablet restart must reload all of them, so a subsequent
-    //     below-threshold change still does NOT trigger a re-analysis.
-    //     If either field were lost on reload, the table would look either
-    //     "never analyzed" (baseline -> Max<ui64>()) or time-stale
-    //     (LastUpdateTime -> 0) and be re-analyzed immediately.
+    // The analyze baseline (LastAnalyzeRowUpdates/RowDeletes) and LastUpdateTime
+    // live in the SA-local ScheduleTraversals table. After a primary collection,
+    // an SA tablet restart must reload them so a below-threshold change still
+    // does NOT trigger a re-analysis. If either field were lost on reload, the
+    // table would look either "never analyzed" (baseline -> Max<ui64>()) or
+    // time-stale (LastUpdateTime -> 0) and be re-analyzed immediately.
     Y_UNIT_TEST(RestartPreservesAnalyzeBaseline) {
         TTestEnv env = CreateTestEnv();
         auto& runtime = *env.GetServer().GetRuntime();
@@ -429,6 +423,72 @@ Y_UNIT_TEST_SUITE(BackgroundChangeRatio) {
 
         // No re-analysis: both persisted fields survived the restart.
         UNIT_ASSERT_VALUES_EQUAL(saveCount, 0);
+    }
+
+    // SchemeShard restart without persistent partition stats: SS loses
+    // in-memory RowCount/RowUpdates/RowDeletes and first re-sends
+    // AreStatsFull=false (zeros) to SA. TTxSchemeShardStats must keep the
+    // previously committed counters, so the analyze baseline stays
+    // meaningful and a below-threshold change does NOT spuriously
+    // re-trigger ANALYZE. A later above-threshold change still must.
+    Y_UNIT_TEST(SchemeShardRestartWithoutPersistentStats) {
+        TTestEnv env(1, 1, false, [](Tests::TServerSettings& settings) {
+            settings.AppConfig->MutableStatisticsConfig()
+                ->SetEnableBackgroundColumnStatsCollection(true);
+            settings.AppConfig->MutableStatisticsConfig()
+                ->SetBackgroundAnalyzeChangeRatioThresholdPercent(20);
+            // After reboot SS waits 30s before the first SendBaseStatsToSA; keep
+            // the subsequent interval short so recovery is observable quickly.
+            settings.AppConfig->MutableStatisticsConfig()
+                ->SetBaseStatsSendIntervalSecondsDedicated(3);
+            settings.FeatureFlags.SetEnablePersistentPartitionStats(false);
+        });
+        auto& runtime = *env.GetServer().GetRuntime();
+
+        CreateDatabase(env, "Database");
+        const auto tableInfo = PrepareColumnTableWithIndexes(env, "Database", "Table", 1);
+
+        WaitForSavedStatistics(runtime, tableInfo.PathId);
+
+        const ui64 ssTabletId = tableInfo.PathId.OwnerId;
+
+        // Wait until SA has a full base-stats snapshot and any catch-up
+        // re-analysis (baselining LastAnalyze from real counters) has finished.
+        WaitForSchemeShardStatsUpdate(runtime, ssTabletId, /*requireFull=*/true);
+        runtime.SimulateSleep(TDuration::Seconds(5));
+
+        // Reboot tenant SchemeShard. Partition stats are not persisted, so
+        // AreStatsFull becomes false until columnshards re-report.
+        auto sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, ssTabletId, sender);
+
+        // Wait until SS reconnects and delivers a full stats blob again
+        // (incomplete reports must be merged with the previous full values).
+        WaitForSchemeShardStatsUpdate(runtime, ssTabletId, /*requireFull=*/true);
+
+        size_t saveCount = 0;
+        auto observer = runtime.AddObserver<TEvStatistics::TEvSaveStatisticsQueryResponse>([&](auto& ev) {
+            if (ev->Get()->PathId == tableInfo.PathId) {
+                ++saveCount;
+            }
+        });
+
+        // Below-threshold change (5% << 20%). Must not re-analyze: proving that
+        // SA did not replace the live counters with zeros from the incomplete
+        // post-reboot report.
+        InsertDataIntoTable(env, "Database", "Table", 50);
+        runtime.SimulateSleep(TDuration::Seconds(10));
+        UNIT_ASSERT_VALUES_EQUAL(saveCount, 0);
+
+        // Above-threshold change must still trigger — the pipeline works after
+        // the SchemeShard restart.
+        InsertDataIntoTable(env, "Database", "Table", 500);
+        runtime.WaitFor("TEvSaveStatisticsQueryResponse after SchemeShard restart", [&] {
+            return saveCount >= 1;
+        });
+
+        observer.Remove();
+        UNIT_ASSERT_VALUES_EQUAL(saveCount, 1);
     }
 
 } // Y_UNIT_TEST_SUITE(BackgroundChangeRatio)

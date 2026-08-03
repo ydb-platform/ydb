@@ -33,15 +33,18 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
 
         TSerializedBaseStats& existingStats = Self->BaseStatistics[schemeShardId];
 
-        // if statistics is sent from schemeshard for the first time or
-        // AreAllStatsFull field is not set (schemeshard is working on previous code version) or
-        // statistics is full for all tables
-        // then persist incoming statistics without changes
-        if (!existingStats.Latest ||
-            !statRecord.HasAreAllStatsFull() || statRecord.GetAreAllStatsFull())
-        {
+        // Persist incoming statistics without changes when:
+        //  - AreAllStatsFull is unset (old schemeshard) or true, or
+        //  - this is the first report AND it is already full.
+        // Never bootstrap BaseStatistics from an incomplete (zeroed) snapshot:
+        // FinishTraversal would baseline LastAnalyze at 0 and the next full
+        // report would look like a huge change ratio. Path discovery below
+        // still runs so never-analyzed tables can be scheduled.
+        const bool areAllStatsFull =
+            !statRecord.HasAreAllStatsFull() || statRecord.GetAreAllStatsFull();
+        if (areAllStatsFull) {
             UpdatedStats = std::make_shared<TString>(stats);
-        } else {
+        } else if (existingStats.Latest) {
             NKikimrStat::TSchemeShardStats oldStatRecord;
             Y_PROTOBUF_SUPPRESS_NODISCARD oldStatRecord.ParseFromString(*existingStats.Latest);
 
@@ -93,9 +96,11 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
             Y_PROTOBUF_SUPPRESS_NODISCARD newStatRecord.SerializeToString(UpdatedStats.get());
         }
 
-        db.Table<Schema::BaseStatistics>().Key(schemeShardId).Update(
-            NIceDb::TUpdate<Schema::BaseStatistics::Stats>(*UpdatedStats));
-        existingStats.Latest = UpdatedStats;
+        if (UpdatedStats) {
+            db.Table<Schema::BaseStatistics>().Key(schemeShardId).Update(
+                NIceDb::TUpdate<Schema::BaseStatistics::Stats>(*UpdatedStats));
+            existingStats.Latest = UpdatedStats;
+        }
 
         if (!Self->EnableColumnStatistics) {
             return true;
@@ -149,7 +154,9 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
     void Complete(const TActorContext&) override {
         YDB_LOG_DEBUG("TTxSchemeShardStats::Complete",
             {"tabletId", Self->TabletID()});
-        Self->BaseStatistics[Record.GetSchemeShardId()].Committed = UpdatedStats;
+        if (UpdatedStats) {
+            Self->BaseStatistics[Record.GetSchemeShardId()].Committed = UpdatedStats;
+        }
 
         Self->InvalidateCachedChangeCounters();
         Self->ReportBaseStatisticsCounters();

@@ -21,25 +21,31 @@ namespace {
 
 class TPqLoadTopicMetadataTransformer : public TGraphTransformerBase {
 private:
-    using TTopics = THashMap<std::pair<TString, TString>, TPqState::TTopicMeta>;
+    struct TPendingTopic {
+        TPqState::TTopicMeta Meta;
+        IPqGateway::TAsyncDescribeFederatedTopicResult Future;
+        bool IsWrite = false;
+    };
+    using TTopics = THashMap<std::pair<TString, TString>, TPendingTopic>;
+
 public:
     explicit TPqLoadTopicMetadataTransformer(TPqState::TPtr state)
         : State_(std::move(state))
     {}
 
-    void AddToPendingTopics(const TString& cluster, const TString& topicPath, TPositionHandle pos, TExprNode::TPtr rowSpec, TExprNode::TPtr columnOrder, TTopics& pendingTopics) {
+    void AddToPendingTopics(const TString& cluster, const TString& topicPath, TPositionHandle pos, TExprNode::TPtr rowSpec, TExprNode::TPtr columnOrder, bool isWrite) {
         const auto topicKey = std::make_pair(cluster, topicPath);
-        const auto found = State_->Topics.FindPtr(topicKey);
-        if (found) {
+        if (State_->Topics.FindPtr(topicKey) || PendingTopics_.FindPtr(topicKey)) {
             return;
         }
 
         YQL_CLOG(INFO, ProviderPq) << "Load topic meta for: `" << cluster << "`.`" << topicPath << "`";
-        TPqState::TTopicMeta m;
-        m.Pos = pos;
-        m.RowSpec = rowSpec;
-        m.ColumnOrder = columnOrder;
-        pendingTopics.emplace(topicKey, m);
+        TPendingTopic pending;
+        pending.Meta.Pos = pos;
+        pending.Meta.RowSpec = rowSpec;
+        pending.Meta.ColumnOrder = columnOrder;
+        pending.IsWrite = isWrite;
+        PendingTopics_.emplace(topicKey, std::move(pending));
     }
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
@@ -57,23 +63,38 @@ public:
                 }
 
                 TTopicKeyParser topicParser(read.Arg(2).Ref(), read.Ref().Child(4), ctx);
-                AddToPendingTopics(read.DataSource().Cluster().StringValue(), topicParser.GetTopicPath(), node->Pos(), topicParser.GetUserSchema(), topicParser.GetColumnOrder(), PendingReadTopics_);
+                AddToPendingTopics(read.DataSource().Cluster().StringValue(), topicParser.GetTopicPath(), node->Pos(), topicParser.GetUserSchema(), topicParser.GetColumnOrder(), /*isWrite*/ false);
             } else if (auto maybePqWrite = TMaybeNode<TPqWrite>(node)) {
                 TPqWrite write = maybePqWrite.Cast();
                 if (write.DataSink().Category().Value() == PqProviderName) {
                     TTopicKeyParser topicParser(write.Arg(2).Ref(), nullptr, ctx);
-                    AddToPendingTopics(write.DataSink().Cluster().StringValue(), topicParser.GetTopicPath(), node->Pos(), {}, {}, PendingWriteTopics_);
+                    AddToPendingTopics(write.DataSink().Cluster().StringValue(), topicParser.GetTopicPath(), node->Pos(), {}, {}, /*isWrite*/ true);
                 }
             }
             return true;
         });
 
-        TStatus status = FillState(PendingReadTopics_, ctx, /*isWrite*/ false);
-        if (status != TStatus::Ok) {
-            return status;
+        if (PendingTopics_.empty()) {
+            return TStatus::Ok;
         }
 
-        return FillState(PendingWriteTopics_, ctx, /*isWrite*/ true);
+        TVector<NThreading::TFuture<void>> handles;
+        handles.reserve(PendingTopics_.size());
+        for (auto& [key, pending] : PendingTopics_) {
+            auto& [cluster, topic] = key;
+            pending.Future = State_->Gateway->DescribeFederatedTopic(
+                State_->SessionId,
+                cluster,
+                State_->Configuration->GetDatabaseForTopic(cluster),
+                topic,
+                State_->Configuration->Tokens.at(cluster));
+            handles.push_back(pending.Future.IgnoreResult());
+        }
+
+        // Use WaitAll to ensure ALL futures complete before DoApplyAsyncChanges,
+        // allowing per-topic error handling (e.g. tolerating write topic failures in YtflowEngine mode).
+        AsyncFuture_ = NThreading::WaitAll(handles);
+        return TStatus::Async;
     }
 
     NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) final {
@@ -82,9 +103,33 @@ public:
     }
 
     TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
-        Y_UNUSED(ctx);
         YQL_ENSURE(AsyncFuture_.HasValue());
         output = input;
+
+        for (auto& [key, pending] : PendingTopics_) {
+            const TStructExprType* itemType = nullptr;
+            try {
+                pending.Meta.FederatedTopic = pending.Future.GetValue();
+                itemType = CreateDefaultItemType(ctx);
+            } catch (const std::exception& ex) {
+                if (!State_->UseYtflowEngine || !pending.IsWrite) {
+                    TIssues issues;
+                    issues.AddIssue(ex.what());
+                    ctx.IssueManager.AddIssues(issues);
+                    return TStatus::Error;
+                }
+            }
+
+            if (!itemType) {
+                itemType = CreateDefaultItemType(ctx);
+            }
+
+            if (!pending.Meta.RowSpec) {
+                pending.Meta.RowSpec = ExpandType(pending.Meta.Pos, *itemType, ctx);
+            }
+            State_->Topics.emplace(key, pending.Meta);
+        }
+        PendingTopics_.clear();
         return TStatus::Ok;
     }
 
@@ -106,51 +151,14 @@ private:
         return ctx.MakeType<TStructExprType>(items);
     }
 
-    TStatus FillState(TTopics& pendingTopics, TExprContext& ctx, bool isWrite) {
-        for (auto& [x, meta] : pendingTopics) {
-            const TStructExprType* itemType = nullptr;
-            try {
-                itemType = LoadTopicMeta(x.first, x.second, ctx, meta);
-            } catch (const std::exception& ex) {
-                if (!State_->UseYtflowEngine || !isWrite) {
-                    TIssues issues;
-                    issues.AddIssue(ex.what());
-                    ctx.IssueManager.AddIssues(issues);
-                    return TStatus::Error;
-                }
-            }
-
-            if (!itemType) {
-                itemType = CreateDefaultItemType(ctx);
-            }
-
-            if (!meta.RowSpec) {
-                meta.RowSpec = ExpandType(meta.Pos, *itemType, ctx);
-            }
-            State_->Topics.emplace(x, meta);
-        }
-        pendingTopics.clear();
-        return TStatus::Ok;
-    }
-
-    const TStructExprType* LoadTopicMeta(const TString& cluster, const TString& topic, TExprContext& ctx, TPqState::TTopicMeta& meta) {
-        // todo: return TFuture
-        auto future = State_->Gateway->DescribeFederatedTopic(State_->SessionId, cluster, State_->Configuration->GetDatabaseForTopic(cluster), topic, State_->Configuration->Tokens.at(cluster));
-        meta.FederatedTopic = future.GetValueSync();
-        return CreateDefaultItemType(ctx);
-    }
-
     void Rewind() final {
-        PendingWriteTopics_.clear();
-        PendingReadTopics_.clear();
+        PendingTopics_.clear();
         AsyncFuture_ = {};
     }
 
 private:
     TPqState::TPtr State_;
-    // (cluster, topic) -> meta
-    TTopics PendingWriteTopics_;
-    TTopics PendingReadTopics_;
+    TTopics PendingTopics_;
     NThreading::TFuture<void> AsyncFuture_;
 };
 

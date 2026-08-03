@@ -65,6 +65,28 @@ Y_UNIT_TEST_SUITE(VolumeCountersTest)
         UNIT_ASSERT_VALUES_EQUAL(3072, root->GetCounter("Bytes", true)->Val());
     }
 
+    Y_UNIT_TEST(ShouldCountInflightRequests)
+    {
+        auto root = MakeRoot();
+        TVolumeRequestCounters counters(root);
+
+        // Inflight is a gauge (non-cumulative) counter.
+        UNIT_ASSERT_VALUES_EQUAL(0, root->GetCounter("Inflight", true)->Val());
+
+        counters.RequestStarted(1024);
+        counters.RequestStarted(2048);
+
+        UNIT_ASSERT_VALUES_EQUAL(2, root->GetCounter("Inflight", true)->Val());
+
+        counters.RequestFinished(true, TDuration::MilliSeconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(1, root->GetCounter("Inflight", true)->Val());
+
+        counters.RequestFinished(false, TDuration::MilliSeconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(0, root->GetCounter("Inflight", true)->Val());
+    }
+
     Y_UNIT_TEST(ShouldCountOkAndErrReplies)
     {
         auto root = MakeRoot();
@@ -187,6 +209,66 @@ Y_UNIT_TEST_SUITE(VolumeCountersTest)
         UNIT_ASSERT_VALUES_EQUAL(1, GetCountInBucket(*readSnapshot, 2.0));
         UNIT_ASSERT_VALUES_EQUAL(1, GetCountInBucket(*writeSnapshot, 3.0));
         UNIT_ASSERT_VALUES_EQUAL(1, GetCountInBucket(*writeSnapshot, 100.0));
+    }
+
+    Y_UNIT_TEST(ShouldCountInflightPerOperation)
+    {
+        auto root = MakeRoot();
+        TVolumeCounters counters(root);
+
+        auto readGroup = root->GetSubgroup("operation", "ReadBlocks");
+        auto writeGroup = root->GetSubgroup("operation", "WriteBlocks");
+
+        // Start two reads and one write.
+        counters.RequestStarted(EBlockStoreRequest::ReadBlocks, 128);
+        counters.RequestStarted(EBlockStoreRequest::ReadBlocks, 256);
+        counters.RequestStarted(EBlockStoreRequest::WriteBlocks, 512);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            2,
+            readGroup->GetCounter("Inflight", true)->Val());
+        UNIT_ASSERT_VALUES_EQUAL(
+            1,
+            writeGroup->GetCounter("Inflight", true)->Val());
+
+        // Finish one read.
+        counters.RequestFinished(
+            EBlockStoreRequest::ReadBlocks,
+            true,
+            TDuration::MilliSeconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            1,
+            readGroup->GetCounter("Inflight", true)->Val());
+        UNIT_ASSERT_VALUES_EQUAL(
+            1,
+            writeGroup->GetCounter("Inflight", true)->Val());
+
+        // Finish the write.
+        counters.RequestFinished(
+            EBlockStoreRequest::WriteBlocks,
+            true,
+            TDuration::MilliSeconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            1,
+            readGroup->GetCounter("Inflight", true)->Val());
+        UNIT_ASSERT_VALUES_EQUAL(
+            0,
+            writeGroup->GetCounter("Inflight", true)->Val());
+
+        // Finish the remaining read.
+        counters.RequestFinished(
+            EBlockStoreRequest::ReadBlocks,
+            false,
+            TDuration::MilliSeconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            0,
+            readGroup->GetCounter("Inflight", true)->Val());
+        UNIT_ASSERT_VALUES_EQUAL(
+            0,
+            writeGroup->GetCounter("Inflight", true)->Val());
     }
 }
 

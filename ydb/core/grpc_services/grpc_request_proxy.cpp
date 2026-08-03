@@ -367,8 +367,8 @@ void TGRpcRequestProxyImpl::Bootstrap(const TActorContext& ctx) {
     if (AppData()->DynamicNameserviceConfig) {
         DynamicNode = nodeID > AppData()->DynamicNameserviceConfig->MaxStaticNodeId;
         YDB_LOG_NOTICE_CTX(ctx, "Grpc request proxy started, serve as node",
-            {"nodeid", nodeID},
-            {"#_num_0", (DynamicNode ? "dynamic" : "static")});
+            {"nodeId", nodeID},
+            {"type", (DynamicNode ? "dynamic" : "static")});
     }
 
     Counters = CreateGRpcProxyCounters(AppData()->Counters);
@@ -572,7 +572,7 @@ void TGRpcRequestProxyImpl::HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyUpdat
 
 void TGRpcRequestProxyImpl::HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyDelete::TPtr& ev) {
     YDB_LOG_WARN("SchemeBoardDelete",
-        {"#_ev->Get()->Path", ev->Get()->Path},
+        {"path", ev->Get()->Path},
         {"strong", ev->Get()->Strong});
 
     if (ev->Get()->Strong) {
@@ -637,11 +637,11 @@ void LogRequest(const TEvent& event) {
 
     if constexpr (std::is_same_v<TEvListEndpointsRequest::TPtr, TEvent>) {
         YDB_LOG_INFO_CTX(*TlsActivationContext, "",
-            {"#_getDebugString().c_str", getDebugString()});
+            {"ev", getDebugString()});
     }
     else {
         YDB_LOG_DEBUG_CTX(*TlsActivationContext, "Dump #_getDebugString().c_str",
-            {"#_getDebugString().c_str", getDebugString()});
+            {"ev", getDebugString()});
     }
 }
 

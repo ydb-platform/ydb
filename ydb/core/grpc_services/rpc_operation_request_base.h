@@ -32,8 +32,8 @@ protected:
     void AllocateTxId() {
         YDB_LOG_DEBUG_COMP(NKikimrServices::TX_PROXY, "Allocate txId",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId});
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId});
         this->Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId);
     }
 
@@ -42,16 +42,16 @@ protected:
 
         YDB_LOG_DEBUG_COMP(NKikimrServices::TX_PROXY, "TEvTxUserProxy::TEvAllocateTxIdResult",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId});
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId});
         ResolveDatabase();
     }
 
     void ResolveDatabase() {
         YDB_LOG_DEBUG_COMP(NKikimrServices::TX_PROXY, "Resolve database",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"name", this->GetDatabaseName()});
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
@@ -69,8 +69,8 @@ protected:
 
         YDB_LOG_DEBUG_COMP(NKikimrServices::TX_PROXY, "Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"request", (request ? request->ToString(*AppData()->TypeRegistry) : "nullptr")});
 
         if (request->ResultSet.empty()) {
@@ -104,8 +104,8 @@ protected:
         if (!domainInfo) {
             YDB_LOG_ERROR_COMP(NKikimrServices::TX_PROXY, "Got empty domain info",
                 {"logPrefix", GetLogPrefix()},
-                {"#_this->SelfId", this->SelfId()},
-                {"#_this->TxId", this->TxId});
+                {"selfId", this->SelfId()},
+                {"txId", this->TxId});
             return this->Reply(Ydb::StatusIds::INTERNAL_ERROR, NKikimrIssues::TIssuesIds::GENERIC_RESOLVE_ERROR);
         }
 
@@ -115,8 +115,8 @@ protected:
     void SendRequest(ui64 schemeShardId) {
         YDB_LOG_DEBUG_COMP(NKikimrServices::TX_PROXY, "Send request",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"schemeShardId", schemeShardId});
 
         if (!PipeClient) {
@@ -141,8 +141,8 @@ protected:
     void DeliveryProblem() {
         YDB_LOG_WARN_COMP(NKikimrServices::TX_PROXY, "Delivery problem",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId});
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId});
         this->Reply(Ydb::StatusIds::UNAVAILABLE);
     }
 

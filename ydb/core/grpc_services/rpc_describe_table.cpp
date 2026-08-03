@@ -301,7 +301,7 @@ private:
         auto& ctx = TlsActivationContext->AsActorContext();
         YDB_LOG_ERROR_CTX(ctx, "",
             {"logPrefix", logPrefix},
-            {"#_ex.what", ex.what()});
+            {"ex", ex.what()});
         Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
         return Reply(Ydb::StatusIds::INTERNAL_ERROR, ctx);
     }

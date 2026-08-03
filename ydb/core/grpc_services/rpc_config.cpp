@@ -127,7 +127,7 @@ bool ConvertGetConfigToFetchConfigResult(
                 // Any other value that comes from a newer Console is skipped with a warning
                 // so we don't fail on forward-compatible additions
                 YDB_LOG_NOTICE("Convert Ydb::DynamicConfig::ConfigIdentity to Ydb::Config::FetchConfigResult: skipped unknown config identity",
-                    {"#_DescribeConfigIdentity(srcIdentity)", DescribeConfigIdentity(srcIdentity)});
+                    {"srcIdentity", DescribeConfigIdentity(srcIdentity)});
                 break;
         }
     }

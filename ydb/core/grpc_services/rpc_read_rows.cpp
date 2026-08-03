@@ -509,7 +509,7 @@ public:
 
         YDB_LOG_DEBUG("TReadRowsRPC send TEvRead shardId",
             {"shardId", shardId},
-            {"#_keys.size", keys.size()});
+            {"keys", keys.size()});
         Send(PipeCache, new TEvPipeCache::TEvForward(request.release(), shardId, true), IEventHandle::FlagTrackDelivery, 0, Span.GetTraceId());
         ++ReadsInFlight;
     }
@@ -654,7 +654,7 @@ public:
                         const NPg::TConvertResult& pgResult = NPg::PgNativeTextFromNativeBinary(cell.AsBuf(), colMeta.Type.GetPgTypeDesc());
                         if (pgResult.Error) {
                             YDB_LOG_DEBUG("PgNativeTextFromNativeBinary error",
-                                {"#_*pgResult.Error", *pgResult.Error});
+                                {"pgResult", *pgResult.Error});
                         }
                         const NYdb::TPgValue pgValue{cell.IsNull() ? NYdb::TPgValue::VK_NULL : NYdb::TPgValue::VK_TEXT, pgResult.Str, getPgTypeFromColMeta(colMeta)};
                         vb.Pg(pgValue);
@@ -712,7 +712,7 @@ public:
 
         RuCost = NKqp::NRuCalc::CalcRequestUnit(stats);
         YDB_LOG_DEBUG("TReadRowsRPC created ReadRowsResponse",
-            {"#_response->DebugString", response->DebugString()});
+            {"response", response->DebugString()});
     }
 
     void SendResult(const Ydb::StatusIds::StatusCode& status, const TString& errorMsg,
@@ -764,8 +764,7 @@ public:
         ss << "]";
 
         if (hasActiveReads) {
-            YDB_LOG_WARN("",
-                {"#_ss.Str", ss.Str()});
+            YDB_LOG_WARN(ss.Str());
         }
     }
 

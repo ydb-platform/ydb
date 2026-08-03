@@ -310,7 +310,7 @@ private:
         };
 
         YDB_LOG_DEBUG_CTX(ctx, "Table",
-            {"#_TEvKikhouseDescribeTableRequest::GetProtoRequest(Request)->path", TEvKikhouseDescribeTableRequest::GetProtoRequest(Request)->path()},
+            {"path", TEvKikhouseDescribeTableRequest::GetProtoRequest(Request)->path()},
             {"shards", getShardsString(KeyRange->GetPartitions())});
 
         for (const TKeyDesc::TPartitionInfo& partition : KeyRange->GetPartitions()) {

@@ -163,8 +163,7 @@ private:
     void Reply(Ydb::StatusIds::StatusCode status, Ydb::Operations::Operation&& result, const NYql::TIssues& issues = {}) {
         YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Execute script",
             {"status", Ydb::StatusIds::StatusCode_Name(status)},
-            {"#_num_0", (issues ? ". Issues: " : "")},
-            {"#_issues.ToOneLineString", issues.ToOneLineString()});
+            {"issues", issues.ToOneLineString()});
 
         google::protobuf::RepeatedPtrField<TYdbIssueMessageType> issuesMessage;
         for (const auto& issue : issues) {

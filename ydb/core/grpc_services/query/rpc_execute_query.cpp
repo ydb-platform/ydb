@@ -349,7 +349,7 @@ private:
 
     void Handle(TRpcServices::TEvGrpcNextReply::TPtr& ev, const TActorContext& ctx) {
         YDB_LOG_DEBUG_CTX(ctx, "NextReply",
-            {"#_this->SelfId", this->SelfId()},
+            {"selfId", this->SelfId()},
             {"left", ev->Get()->LeftInQueue},
             {"queue", FlowControl_.QueueSize()},
             {"inflightBytes", FlowControl_.InflightBytes()},
@@ -364,7 +364,7 @@ private:
             for (auto& [channelId, channel] : StreamChannels_) {
                 if (channel.ResumeIfStopped(SelfId(), freeSpaceBytes)) {
                     YDB_LOG_DEBUG_CTX(ctx, "Resume execution",
-                        {"#_this->SelfId", this->SelfId()},
+                        {"selfId", this->SelfId()},
                         {"channel", channelId},
                         {"seqNo", channel.LastSeqNo},
                         {"freeSpace", freeSpaceBytes});
@@ -401,7 +401,7 @@ private:
         channel.ChannelId = ev->Get()->Record.GetChannelId();
 
         YDB_LOG_DEBUG_CTX(ctx, "Send stream data ack",
-            {"#_this->SelfId", this->SelfId()},
+            {"selfId", this->SelfId()},
             {"seqNo", ev->Get()->Record.GetSeqNo()},
             {"freeSpace", freeSpaceBytes},
             {"to", ev->Sender},

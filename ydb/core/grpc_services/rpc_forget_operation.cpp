@@ -175,8 +175,8 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
 
         YDB_LOG_DEBUG("Handle TEvExport::TEvForgetExportResponse",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"record", record.ShortDebugString()});
 
         Reply(record.GetStatus(), record.GetIssues());
@@ -187,8 +187,8 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
 
         YDB_LOG_DEBUG("Handle TEvImport::TEvForgetImportResponse",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"record", record.ShortDebugString()});
 
         Reply(record.GetStatus(), record.GetIssues());
@@ -199,8 +199,8 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
 
         YDB_LOG_DEBUG("Handle TEvIndexBuilder::TEvForgetResponse",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"record", record.ShortDebugString()});
 
         Reply(record.GetStatus(), record.GetIssues());
@@ -211,8 +211,8 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
 
         YDB_LOG_DEBUG("Handle TEvForcedCompaction::TEvForgetResponse",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"record", record.ShortDebugString()});
 
         Reply(record.GetStatus(), record.GetIssues());
@@ -223,8 +223,8 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
 
         YDB_LOG_DEBUG("Handle TEvSetColumnConstraint::TEvForgetResponse",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"record", record.ShortDebugString()});
 
         Reply(record.GetStatus(), record.GetIssues());
@@ -235,8 +235,8 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
         NYql::IssuesToMessage(ev->Get()->Issues, &issuesProto);
         YDB_LOG_DEBUG("Handle NKqp::TEvForgetScriptExecutionOperationResponse response",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"status", ev->Get()->Status});
         Reply(ev->Get()->Status, issuesProto);
     }
@@ -250,8 +250,8 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
 
         YDB_LOG_DEBUG("Handle TEvBackup::TEvForgetIncrementalBackupResponse",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"record", record.ShortDebugString()});
 
         Reply(record.GetStatus(), record.GetIssues());
@@ -262,8 +262,8 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
 
         YDB_LOG_DEBUG("Handle TEvBackup::TEvForgetBackupCollectionRestoreResponse",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"record", record.ShortDebugString()});
 
         Reply(record.GetStatus(), record.GetIssues());
@@ -274,8 +274,8 @@ class TForgetOperationRPC: public TRpcOperationRequestActor<TForgetOperationRPC,
 
         YDB_LOG_DEBUG("Handle TEvBackup::TEvForgetFullBackupResponse",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"record", record.ShortDebugString()});
 
         Reply(record.GetStatus(), record.GetIssues());

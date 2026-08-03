@@ -178,8 +178,7 @@ private:
                     if (msg->Record.HasReadTableResponseVersion()) {
                         str << " , got: " << msg->Record.GetReadTableResponseVersion();
                     }
-                    YDB_LOG_ERROR_CTX(ctx, "",
-                        {"#_str.Str().data", str.Str().data()});
+                    YDB_LOG_ERROR_CTX(ctx, str.Str().data());
                     const NYql::TIssue& issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, str.Str());
                     auto tmp = issueMessage.Add();
                     NYql::IssueToMessage(issue, tmp);
@@ -315,7 +314,7 @@ private:
     void Handle(TEvents::TEvSubscribe::TPtr& ev, const TActorContext &ctx) {
         YDB_LOG_DEBUG_CTX(ctx, "Add stream subscriber",
             {"selfId", SelfId()},
-            {"#_ev->Sender", ev->Sender});
+            {"sender", ev->Sender});
 
         StreamSubscribers_.insert(ev->Sender);
     }
@@ -340,7 +339,7 @@ private:
     void ProcessRlSendAllowed(const TActorContext& ctx) {
         YDB_LOG_DEBUG_CTX(ctx, "Success rate limiter response, we got",
             {"selfId", SelfId()},
-            {"#_SendBuffer_.size", SendBuffer_.size()},
+            {"sendBufferSize", SendBuffer_.size()},
             {"success", HasPendingSuccess});
         TBuffEntry& entry = SendBuffer_.front();
 
@@ -359,7 +358,7 @@ private:
             "Throughput limit exceeded for read table request");
         YDB_LOG_NOTICE_CTX(ctx, "Throughput limit exceeded, we got stream will be terminated",
             {"selfId", SelfId()},
-            {"#_SendBuffer_.size", SendBuffer_.size()},
+            {"sendBufferSize", SendBuffer_.size()},
             {"success", HasPendingSuccess});
 
         google::protobuf::RepeatedPtrField<TYdbIssueMessageType> message;
@@ -381,8 +380,7 @@ private:
             TStringStream ss;
             ss << SelfId() << " Client cannot process data in " << processTime
                 << " which exceeds client timeout " << InactiveClientTimeout_;
-            YDB_LOG_NOTICE_CTX(ctx, "",
-                {"#_ss.Str", ss.Str()});
+            YDB_LOG_NOTICE_CTX(ctx, ss.Str());
             return HandleStreamTimeout(ctx, ss.Str());
         }
 
@@ -408,8 +406,7 @@ private:
                 << " QuotaLimit: " << QuotaLimit_
                 << " QuotaReserved: " << QuotaReserved_
                 << " QuotaByShard: " << QuotaByShard_.size() << ")";
-            YDB_LOG_NOTICE_CTX(ctx, "",
-                {"#_ss.Str", ss.Str()});
+            YDB_LOG_NOTICE_CTX(ctx, ss.Str());
             return HandleStreamTimeout(ctx, ss.Str());
         } else {
             timeout = InactiveServerTimeout_ - processTime;
@@ -551,8 +548,8 @@ private:
 
             YDB_LOG_DEBUG_CTX(ctx, "Send zero quota to Shard TxId",
                 {"selfId", SelfId()},
-                {"#_rec.GetShardId", rec.GetShardId()},
-                {"#_rec.GetTxId", rec.GetTxId()});
+                {"shardId", rec.GetShardId()},
+                {"txId", rec.GetTxId()});
             ctx.Send(request->Sender, response.Release(), 0, request->Cookie);
         }
 
@@ -570,7 +567,7 @@ private:
         YDB_LOG_DEBUG_CTX(ctx, "Starting inactivity timer for with tag",
             {"selfId", SelfId()},
             {"timeout", timeout},
-            {"#_int(tag)", int(tag)});
+            {"tag", int(tag)});
 
         if (timer) {
             ctx.Send(timer, new TEvents::TEvPoison);
@@ -616,7 +613,7 @@ private:
 
         if (ReleasedShards_.contains(rec.GetShardId())) {
             YDB_LOG_ERROR("Quota request from released shard",
-                {"#_rec.GetShardId", rec.GetShardId()});
+                {"shardId", rec.GetShardId()});
             return TryToAllocateQuota();
         }
 
@@ -634,9 +631,9 @@ private:
 
         YDB_LOG_DEBUG("Assign stream quota to Shard Quota TxId of",
             {"selfId", SelfId()},
-            {"#_rec.GetShardId", rec.GetShardId()},
+            {"shardId", rec.GetShardId()},
             {"quotaSize", quotaSize},
-            {"#_rec.GetTxId", rec.GetTxId()},
+            {"txId", rec.GetTxId()},
             {"reserved", QuotaReserved_},
             {"quotaLimit", QuotaLimit_},
             {"queued", LeftInGRpcAdaptorQueue_});

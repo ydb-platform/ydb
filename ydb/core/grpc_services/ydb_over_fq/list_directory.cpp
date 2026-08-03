@@ -34,7 +34,7 @@ public:
         req.set_page_token(std::move(continuationToken));
 
         YDB_LOG_TRACE_CTX(ctx, "Listing bindings",
-            {"#_TLogCtx{.Owner_ = *this}", TLogCtx{.Owner_ = *this}});
+            {"logContext", TLogCtx{.Owner_ = *this}});
 
         Become(&ListDirectoryRPC::ListBindingsState);
         MakeLocalCall(std::move(req), ctx);

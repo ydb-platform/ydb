@@ -164,8 +164,8 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
 
         YDB_LOG_DEBUG("Handle TEvExport::TEvCancelExportResponse",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"record", record.ShortDebugString()});
 
         Reply(record.GetStatus(), record.GetIssues());
@@ -176,8 +176,8 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
 
         YDB_LOG_DEBUG("Handle TEvImport::TEvCancelImportResponse",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"record", record.ShortDebugString()});
 
         Reply(record.GetStatus(), record.GetIssues());
@@ -188,8 +188,8 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
 
         YDB_LOG_DEBUG("Handle TEvIndexBuilder::TEvCancelResponse",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"record", record.ShortDebugString()});
 
         Reply(record.GetStatus(), record.GetIssues());
@@ -200,8 +200,8 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
 
         YDB_LOG_DEBUG("Handle TEvForcedCompaction::TEvCancelResponse",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"record", record.ShortDebugString()});
 
         Reply(record.GetStatus(), record.GetIssues());
@@ -212,8 +212,8 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
 
         YDB_LOG_DEBUG("Handle TEvSetColumnConstraint::TEvCancelResponse",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"record", record.ShortDebugString()});
 
         Reply(record.GetStatus(), record.GetIssues());

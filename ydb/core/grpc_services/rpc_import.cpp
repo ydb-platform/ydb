@@ -116,8 +116,8 @@ class TImportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
 
         YDB_LOG_DEBUG("Handle TEvImport::TEvCreateImportResponse",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"record", record.ShortDebugString()});
 
         this->Reply(TImportConv::ToOperation(record.GetEntry()));

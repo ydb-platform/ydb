@@ -688,7 +688,7 @@ private:
         for (size_t i = 0; i < shardResponse.CommonPrefixesRowsSize(); ++i) {
             if (!CommonPrefixesRows.empty() && CommonPrefixesRows.back() == shardResponse.GetCommonPrefixesRows(i)) {
                 YDB_LOG_ERROR_CTX(ctx, "S3 listing got duplicate common prefix from shard",
-                    {"#_shardResponse.GetTabletID", shardResponse.GetTabletID()});
+                    {"tabletId", shardResponse.GetTabletID()});
             }
             CommonPrefixesRows.emplace_back(shardResponse.GetCommonPrefixesRows(i));
         }
@@ -759,7 +759,7 @@ private:
                     const NPg::TConvertResult& pgResult = NPg::PgNativeTextFromNativeBinary(cell.AsBuf(), colMeta.PType.GetPgTypeDesc());
                     if (pgResult.Error) {
                         YDB_LOG_DEBUG("PgNativeTextFromNativeBinary error",
-                            {"#_*pgResult.Error", *pgResult.Error});
+                            {"pgResult", *pgResult.Error});
                     }
                     const NYdb::TPgValue pgValue{cell.IsNull() ? NYdb::TPgValue::VK_NULL : NYdb::TPgValue::VK_TEXT, pgResult.Str, getPgTypeFromColMeta(colMeta)};
                     vb.Pg(pgValue);

@@ -108,8 +108,8 @@ class TListOperationsRPC
 
         YDB_LOG_DEBUG("Handle TEvExport::TEvListExportsResponse",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"record", record.ShortDebugString()});
 
         TResponse response;
@@ -129,8 +129,8 @@ class TListOperationsRPC
 
         YDB_LOG_DEBUG("Handle TEvImport::TEvListImportsResponse",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"record", record.ShortDebugString()});
 
         TResponse response;
@@ -150,8 +150,8 @@ class TListOperationsRPC
 
         YDB_LOG_DEBUG("Handle TEvIndexBuilder::TEvListResponse",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"record", record.ShortDebugString()});
 
         TResponse response;
@@ -173,8 +173,8 @@ class TListOperationsRPC
 
         YDB_LOG_DEBUG("Handle TEvForcedCompaction::TEvListResponse",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"record", record.ShortDebugString()});
 
         TResponse response;
@@ -196,8 +196,8 @@ class TListOperationsRPC
 
         YDB_LOG_DEBUG("Handle TEvSchemeShard::TEvBGTasksListResponse",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"record", record.ShortDebugString()});
 
         TResponse response;
@@ -304,8 +304,8 @@ class TListOperationsRPC
 
         YDB_LOG_DEBUG("Handle TEvAnalyzeOpListResponse",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"record", record.ShortDebugString()});
 
         TResponse response;
@@ -346,8 +346,8 @@ class TListOperationsRPC
 
         YDB_LOG_DEBUG("Handle TEvBackup::TEvListIncrementalBackupsResponse",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"record", record.ShortDebugString()});
 
         TResponse response;
@@ -367,8 +367,8 @@ class TListOperationsRPC
 
         YDB_LOG_DEBUG("Handle TEvBackup::TEvListBackupCollectionRestoresResponse",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"record", record.ShortDebugString()});
 
         TResponse response;
@@ -388,8 +388,8 @@ class TListOperationsRPC
 
         YDB_LOG_DEBUG("Handle TEvBackup::TEvListFullBackupsResponse",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"record", record.ShortDebugString()});
 
         TResponse response;
@@ -409,8 +409,8 @@ class TListOperationsRPC
 
         YDB_LOG_DEBUG("Handle TEvSetColumnConstraint::TEvListResponse",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"record", record.ShortDebugString()});
 
         TResponse response;

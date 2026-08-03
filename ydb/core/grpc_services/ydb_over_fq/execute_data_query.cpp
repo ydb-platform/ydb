@@ -37,7 +37,7 @@ public:
     void CreateQuery(const TActorContext& ctx) {
         if (!TBase::GetProtoRequest()->query().has_yql_text()) {
             YDB_LOG_INFO_CTX(ctx, "Got request with id instead of text",
-                {"#_TLogCtx{.Owner_ = *this}", TLogCtx{.Owner_ = *this}});
+                {"logContext", TLogCtx{.Owner_ = *this}});
             TBase::Reply(
                 Ydb::StatusIds::BAD_REQUEST,
                 TStringBuilder {} << "query id in " << TDerived::RpcName << " is not supported",
@@ -51,8 +51,8 @@ public:
     }
 
     void Handle(const FederatedQuery::CreateQueryResult& result, const TActorContext& ctx) {
-        YDB_LOG_TRACE_CTX(ctx, "Created",
-            {"#_TLogCtx{.Owner_ = *this}", TLogCtx{.Owner_ = *this}},
+        YDB_LOG_TRACE_CTX(ctx, "Created query",
+            {"logContext", TLogCtx{.Owner_ = *this}},
             {"query", result.query_id()});
 
         TBase::WaitForTermination(result.query_id(), ctx);
@@ -62,8 +62,8 @@ public:
 
     void OnQueryTermination(const TString& queryId, FederatedQuery::QueryMeta_ComputeStatus status, const TActorContext& ctx) {
         YDB_LOG_INFO_CTX(ctx, "Finished query execution with status",
-            {"#_(TLogCtx{.Owner_ = *this, .QueryId_ = queryId})", (TLogCtx{.Owner_ = *this, .QueryId_ = queryId})},
-            {"#_FederatedQuery::QueryMeta::ComputeStatus_Name(status)", FederatedQuery::QueryMeta::ComputeStatus_Name(status)});
+            {"logContext", (TLogCtx{.Owner_ = *this, .QueryId_ = queryId})},
+            {"status", FederatedQuery::QueryMeta::ComputeStatus_Name(status)});
 
         // Whether query is successful or not, we want to call DescribeQuery
         //   to get either ResultSet size or issues
@@ -77,9 +77,9 @@ public:
         if (status != FederatedQuery::QueryMeta_ComputeStatus_COMPLETED) {
             TString errorMsg = TStringBuilder{} << "created query " << result.query().meta().common().id() <<
                 " finished with non-success status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(status);
-            YDB_LOG_INFO_CTX(ctx, "",
-                {"#_TLogCtx{.Owner_ = *this}", TLogCtx{.Owner_ = *this}},
-                {"error", errorMsg});
+            YDB_LOG_INFO_CTX(ctx, "Query finished with non-success status",
+                {"logContext", TLogCtx{.Owner_ = *this}},
+                {"errorMsg", errorMsg});
 
             NYql::TIssues issues;
             issues.AddIssue(std::move(errorMsg));
@@ -212,9 +212,9 @@ public:
             issues.AddIssue("Scan query should have a single result set.");
             issues.back().SetCode(NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, NYql::TSeverityIds::S_ERROR);
             Reply(Ydb::StatusIds::BAD_REQUEST, issues, ctx);
-            YDB_LOG_INFO_CTX(ctx, "Failed: got result sets",
-                {"#_(TLogCtx{.Owner_ = *this, .QueryId_ = queryId})", (TLogCtx{.Owner_ = *this, .QueryId_ = queryId})},
-                {"#_ResultSetSizes_.size", ResultSetSizes_.size()});
+            YDB_LOG_INFO_CTX(ctx, "Failed: scan query has multiple result sets",
+                {"logContext", (TLogCtx{.Owner_ = *this, .QueryId_ = queryId})},
+                {"resultSetCount", ResultSetSizes_.size()});
             return;
         }
 
@@ -235,9 +235,9 @@ public:
                 SentRowsInCurrRS_ << ":" << (SentRowsInCurrRS_ + result.result_set().rows_size()) << "]";
             issues.AddIssue(issueMsg);
             issues.back().SetCode(NYql::TIssuesIds::CORE_EXEC, NYql::TSeverityIds::S_ERROR);
-            YDB_LOG_INFO_CTX(ctx, "",
-                {"#_TLogCtx{.Owner_ = *this}", TLogCtx{.Owner_ = *this}},
-                {"error", issueMsg});
+            YDB_LOG_INFO_CTX(ctx, "Failed to serialize result set response",
+                {"logContext", TLogCtx{.Owner_ = *this}},
+                {"errorMsg", issueMsg});
             Reply(Ydb::StatusIds::INTERNAL_ERROR, issues, ctx);
             return;
         }
@@ -246,19 +246,19 @@ public:
         SentRowsInCurrRS_ += result.result_set().rows_size();
 
         if (SentRowsInCurrRS_ < ResultSetSizes_[CurrentResultSet_]) {
-            YDB_LOG_TRACE_CTX(ctx, "RS[ still got",
-                {"#_TLogCtx{.Owner_ = *this}", TLogCtx{.Owner_ = *this}},
-                {"currentResultSet", CurrentResultSet_},
-                {"#_(SentRowsInCurrRS_ - result.result_set().rows_size())", (SentRowsInCurrRS_ - result.result_set().rows_size())},
-                {"sentRowsInCurrRS", SentRowsInCurrRS_},
-                {"#_(ResultSetSizes_[CurrentResultSet_] - CurrentResultSet_)", (ResultSetSizes_[CurrentResultSet_] - CurrentResultSet_)});
+            YDB_LOG_TRACE_CTX(ctx, "Sent result set chunk, fetching more rows",
+                {"logContext", TLogCtx{.Owner_ = *this}},
+                {"resultSetIndex", CurrentResultSet_},
+                {"rowsRangeStart", (SentRowsInCurrRS_ - result.result_set().rows_size())},
+                {"rowsRangeEnd", SentRowsInCurrRS_},
+                {"remainingRows", (ResultSetSizes_[CurrentResultSet_] - CurrentResultSet_)});
             MakeLocalCall(CreateResultSetRequest(QueryId_, CurrentResultSet_, SentRowsInCurrRS_), ctx);
         } else {
-            YDB_LOG_TRACE_CTX(ctx, "RS[ fully sent",
-                {"#_TLogCtx{.Owner_ = *this}", TLogCtx{.Owner_ = *this}},
-                {"currentResultSet", CurrentResultSet_},
-                {"#_(SentRowsInCurrRS_ - result.result_set().rows_size())", (SentRowsInCurrRS_ - result.result_set().rows_size())},
-                {"sentRowsInCurrRS", SentRowsInCurrRS_});
+            YDB_LOG_TRACE_CTX(ctx, "Sent result set chunk completely",
+                {"logContext", TLogCtx{.Owner_ = *this}},
+                {"resultSetIndex", CurrentResultSet_},
+                {"rowsRangeStart", (SentRowsInCurrRS_ - result.result_set().rows_size())},
+                {"rowsRangeEnd", SentRowsInCurrRS_});
 
             Y_ABORT_UNLESS(SentRowsInCurrRS_ == ResultSetSizes_[CurrentResultSet_]);
             ++CurrentResultSet_;
@@ -266,8 +266,8 @@ public:
             if (CurrentResultSet_ < static_cast<i64>(ResultSetSizes_.size())) {
                 MakeLocalCall(CreateResultSetRequest(QueryId_, CurrentResultSet_, SentRowsInCurrRS_), ctx);
             } else {
-                YDB_LOG_TRACE_CTX(ctx, "Finish",
-                    {"#_TLogCtx{.Owner_ = *this}", TLogCtx{.Owner_ = *this}});
+                YDB_LOG_TRACE_CTX(ctx, "Finished streaming scan query results",
+                    {"logContext", TLogCtx{.Owner_ = *this}});
                 Request_->FinishStream(Ydb::StatusIds::SUCCESS);
                 this->Die(ctx);
             }

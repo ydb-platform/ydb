@@ -218,11 +218,11 @@ void LogRequest(const TEvent& event) {
 
     if constexpr (std::is_same_v<TEvListEndpointsRequest::TPtr, TEvent>) {
         YDB_LOG_INFO_CTX(*TlsActivationContext, "",
-            {"#_getDebugString().c_str", getDebugString()});
+            {"ev", getDebugString()});
     }
     else {
         YDB_LOG_DEBUG_CTX(*TlsActivationContext, "Dump #_getDebugString().c_str",
-            {"#_getDebugString().c_str", getDebugString()});
+            {"ev", getDebugString()});
     }
 }
 

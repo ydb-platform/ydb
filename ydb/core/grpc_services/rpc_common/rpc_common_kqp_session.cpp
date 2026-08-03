@@ -50,7 +50,7 @@ public:
         if (deadline <= now) {
             YDB_LOG_WARN("Request deadline has expired for seconds",
                 {"selfId", SelfId()},
-                {"#_now - deadline", now - deadline});
+                {"expiredTime", now - deadline});
 
             Reply(Ydb::StatusIds::TIMEOUT);
             return;

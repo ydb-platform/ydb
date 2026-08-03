@@ -44,7 +44,7 @@ public:
         filter.set_name(BindingName_);
 
         YDB_LOG_TRACE_CTX(ctx, "Listing bindings",
-            {"#_TLogCtx{.Owner_ = *this}", TLogCtx{.Owner_ = *this}});
+            {"logContext", TLogCtx{.Owner_ = *this}});
 
         Become(&DescribeTableRPC::ListBindingsState);
         MakeLocalCall(std::move(req), ctx);
@@ -61,7 +61,7 @@ public:
         if (result.next_page_token().empty()) {
             TString errorMsg = TStringBuilder{} << "couldn't find binding with matching name for " << BindingName_;
             YDB_LOG_INFO_CTX(ctx, "",
-                {"#_TLogCtx{.Owner_ = *this}", TLogCtx{.Owner_ = *this}},
+                {"logContext", TLogCtx{.Owner_ = *this}},
                 {"failed", errorMsg});
             Reply(
                 Ydb::StatusIds_StatusCode_NOT_FOUND, errorMsg, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
@@ -80,7 +80,7 @@ public:
         req.set_binding_id(bindingId);
 
         YDB_LOG_TRACE_CTX(ctx, "Describing",
-            {"#_TLogCtx{.Owner_ = *this}", TLogCtx{.Owner_ = *this}},
+            {"logContext", TLogCtx{.Owner_ = *this}},
             {"binding", bindingId});
 
         Become(&DescribeTableRPC::DescribeBindingState);
@@ -104,7 +104,7 @@ public:
             TString errorMsg = TStringBuilder{} << "binding " << result.binding().meta().id() << " got unexpected type: " <<
                 static_cast<int>(settings.binding_case());
             YDB_LOG_INFO_CTX(ctx, "",
-                {"#_TLogCtx{.Owner_ = *this}", TLogCtx{.Owner_ = *this}},
+                {"logContext", TLogCtx{.Owner_ = *this}},
                 {"failed", errorMsg});
             Reply(
                 Ydb::StatusIds_StatusCode_INTERNAL_ERROR, errorMsg, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);

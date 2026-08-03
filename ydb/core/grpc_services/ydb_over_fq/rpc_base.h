@@ -112,7 +112,7 @@ protected:
         acl.set_visibility(FederatedQuery::Acl_Visibility::Acl_Visibility_SCOPE);
 
         YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::FQ_INTERNAL_SERVICE, "Creating query",
-            {"#_TLogCtx{.Owner_ = *this}", TLogCtx{.Owner_ = *this}});
+            {"logContext", TLogCtx{.Owner_ = *this}});
 
         Become(&TRpcBase::CreateQueryState);
         MakeLocalCall(std::move(req), ctx);
@@ -162,7 +162,7 @@ protected:
 
         if (!NFq::IsTerminalStatus(result.status())) {
             YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::FQ_INTERNAL_SERVICE, "Still waiting for current",
-                {"#_TLogCtx{.Owner_ = *this}", TLogCtx{.Owner_ = *this}},
+                {"logContext", TLogCtx{.Owner_ = *this}},
                 {"query", QueryId_},
                 {"status", FederatedQuery::QueryMeta::ComputeStatus_Name(result.status())});
             auto delay = WaitRetryState_->GetNextRetryDelay(result.status());
@@ -206,7 +206,7 @@ protected:
 
         TString errorMsg = TStringBuilder{} << "failed to " << opName << " with status: " << Ydb::StatusIds::StatusCode_Name(operation.status());
         YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::FQ_INTERNAL_SERVICE, "",
-            {"#_TLogCtx{.Owner_ = *this}", TLogCtx{.Owner_ = *this}},
+            {"logContext", TLogCtx{.Owner_ = *this}},
             {"errorMsg", errorMsg},
             {"issues", issues.ToOneLineString()});
         issues.AddIssue(errorMsg);

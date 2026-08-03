@@ -24,7 +24,7 @@ public:
 
     void Handle(const FederatedQuery::CreateQueryResult& result, const TActorContext& ctx) {
         YDB_LOG_TRACE_CTX(ctx, "Created query",
-            {"#_(TLogCtx{.Owner_ = *this, .QueryId_ = result.query_id()})", (TLogCtx{.Owner_ = *this, .QueryId_ = result.query_id()})});
+            {"logContext", (TLogCtx{.Owner_ = *this, .QueryId_ = result.query_id()})});
 
         WaitForTermination(result.query_id(), ctx);
     }
@@ -32,8 +32,8 @@ public:
     // WaitForTermination
     void OnQueryTermination(const TString& queryId, FederatedQuery::QueryMeta_ComputeStatus status, const TActorContext& ctx) {
         YDB_LOG_INFO_CTX(ctx, "Finished query execution with status",
-            {"#_(TLogCtx{.Owner_ = *this, .QueryId_ = queryId})", (TLogCtx{.Owner_ = *this, .QueryId_ = queryId})},
-            {"#_FederatedQuery::QueryMeta::ComputeStatus_Name(status)", FederatedQuery::QueryMeta::ComputeStatus_Name(status)});
+            {"logContext", (TLogCtx{.Owner_ = *this, .QueryId_ = queryId})},
+            {"status", FederatedQuery::QueryMeta::ComputeStatus_Name(status)});
 
         // Whether query is successful or not, we want to call DescribeQuery
         //   to get either AST and statistics or for issues
@@ -47,7 +47,7 @@ public:
             TString errorMsg = TStringBuilder{} << "created query " << result.query().meta().common().id() <<
                 " finished with non-success status: " << FederatedQuery::QueryMeta::ComputeStatus_Name(status);
             YDB_LOG_INFO_CTX(ctx, "",
-                {"#_(TLogCtx{.Owner_ = *this, .QueryId_ = result.query().meta().common().id()})", (TLogCtx{.Owner_ = *this, .QueryId_ = result.query().meta().common().id()})},
+                {"logContext", (TLogCtx{.Owner_ = *this, .QueryId_ = result.query().meta().common().id()})},
                 {"error", errorMsg});
 
             NYql::TIssues issues;

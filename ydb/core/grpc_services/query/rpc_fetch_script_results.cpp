@@ -102,8 +102,7 @@ private:
     void Reply(Ydb::StatusIds::StatusCode status, Ydb::Query::FetchScriptResultsResponse&& result, const NYql::TIssues& issues = {}) {
         YDB_LOG_INFO_CTX(TActivationContext::AsActorContext(), "Fetch script results",
             {"status", Ydb::StatusIds::StatusCode_Name(status)},
-            {"#_num_0", (issues ? ". Issues: " : "")},
-            {"#_issues.ToOneLineString", issues.ToOneLineString()});
+            {"issues", issues.ToOneLineString()});
 
         for (const auto& issue : issues) {
             auto item = result.add_issues();

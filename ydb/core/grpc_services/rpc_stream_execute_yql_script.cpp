@@ -278,7 +278,7 @@ private:
         RequestPtr()->SendSerializedResult(std::move(out), StatusIds::SUCCESS);
 
         YDB_LOG_DEBUG_CTX(ctx, "Send stream data ack",
-            {"#_this->SelfId", this->SelfId()},
+            {"selfId", this->SelfId()},
             {"seqNo", ev->Get()->Record.GetSeqNo()},
             {"freeSpace", freeSpaceBytes},
             {"to", ev->Sender},
@@ -292,7 +292,7 @@ private:
 
     void Handle(TRpcServices::TEvGrpcNextReply::TPtr& ev, const TActorContext& ctx) {
         YDB_LOG_DEBUG_CTX(ctx, "NextReply",
-            {"#_this->SelfId", this->SelfId()},
+            {"selfId", this->SelfId()},
             {"left", ev->Get()->LeftInQueue},
             {"queue", FlowControl_.QueueSize()},
             {"inflightBytes", FlowControl_.InflightBytes()},
@@ -321,7 +321,7 @@ private:
             const i64 freeSpaceBytes = FlowControl_.FreeSpaceBytes();
             if (freeSpaceBytes > 0 && LastSeqNo_ && AckedFreeSpaceBytes_ <= 0) {
                 YDB_LOG_DEBUG_CTX(ctx, "Send stream data ack",
-                    {"#_this->SelfId", this->SelfId()},
+                    {"selfId", this->SelfId()},
                     {"seqNo", *LastSeqNo_},
                     {"freeSpace", freeSpaceBytes},
                     {"to", GatewayRequestHandlerActorId_});
@@ -372,7 +372,7 @@ private:
 private:
     void SetClientTimeoutTimer(TDuration timeout, const TActorContext& ctx) {
         YDB_LOG_DEBUG_CTX(ctx, "Set stream timeout timer",
-            {"#_this->SelfId", this->SelfId()},
+            {"selfId", this->SelfId()},
             {"timeout", timeout});
 
         auto *ev = new IEventHandle(this->SelfId(), this->SelfId(), new TEvents::TEvWakeup(EStreamRpcWakeupTag::ClientTimeoutTag));
@@ -417,7 +417,7 @@ private:
 
     void HandleOperationTimeout(const TActorContext& ctx) {
         YDB_LOG_INFO_CTX(ctx, "Operation timeout",
-            {"#_this->SelfId", this->SelfId()});
+            {"selfId", this->SelfId()});
 
         CancelationFlag->store(true);
         auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, "Operation timeout");

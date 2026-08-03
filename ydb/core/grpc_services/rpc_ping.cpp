@@ -55,17 +55,17 @@ private:
 
     void Proceed(const TActorContext &ctx) {
         YDB_LOG_TRACE_CTX(ctx, "Sending ping to KQP proxy",
-            {"#_this->SelfId", this->SelfId()});
+            {"selfId", this->SelfId()});
         if (!ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), new NKqp::TEvKqp::TEvProxyPingRequest())) {
             YDB_LOG_ERROR_CTX(ctx, "Failed to send ping",
-                {"#_this->SelfId", this->SelfId()});
+                {"selfId", this->SelfId()});
             ReplyWithResult(StatusIds::INTERNAL_ERROR, ctx);
         }
     }
 
     void Handle(NKqp::TEvKqp::TEvProxyPingResponse::TPtr&, const TActorContext& ctx) {
         YDB_LOG_TRACE_CTX(ctx, "Got ping response",
-            {"#_this->SelfId", this->SelfId()});
+            {"selfId", this->SelfId()});
         ReplyWithResult(StatusIds::SUCCESS, ctx);
     }
 
@@ -125,19 +125,19 @@ private:
 
     void Proceed(const TActorContext &ctx) {
         YDB_LOG_TRACE_CTX(ctx, "Sending ping to SchemeCache",
-            {"#_this->SelfId", this->SelfId()});
+            {"selfId", this->SelfId()});
 
         auto* request = new TEvTxProxySchemeCache::TEvNavigateKeySet(new NSchemeCache::TSchemeCacheNavigate());
         if (!ctx.Send(MakeSchemeCacheID(), request)) {
             YDB_LOG_ERROR_CTX(ctx, "Failed to send ping to SchemeCache",
-                {"#_this->SelfId", this->SelfId()});
+                {"selfId", this->SelfId()});
             ReplyWithResult(StatusIds::INTERNAL_ERROR, ctx);
         }
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr&, const TActorContext& ctx) {
         YDB_LOG_TRACE_CTX(ctx, "Got ping response from SchemeCache",
-            {"#_this->SelfId", this->SelfId()});
+            {"selfId", this->SelfId()});
         ReplyWithResult(StatusIds::SUCCESS, ctx);
     }
 
@@ -197,17 +197,17 @@ private:
 
     void Proceed(const TActorContext &ctx) {
         YDB_LOG_TRACE_CTX(ctx, "Sending ping to TxProxy",
-            {"#_this->SelfId", this->SelfId()});
+            {"selfId", this->SelfId()});
         if (!ctx.Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId)) {
             YDB_LOG_ERROR_CTX(ctx, "Failed to send ping to TxProxy",
-                {"#_this->SelfId", this->SelfId()});
+                {"selfId", this->SelfId()});
             ReplyWithResult(StatusIds::INTERNAL_ERROR, ctx);
         }
     }
 
     void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr&, const TActorContext& ctx) {
         YDB_LOG_TRACE_CTX(ctx, "Got ping response from TxProxy",
-            {"#_this->SelfId", this->SelfId()});
+            {"selfId", this->SelfId()});
         ReplyWithResult(StatusIds::SUCCESS, ctx);
     }
 
@@ -391,7 +391,7 @@ private:
         bool noTailChain = req->GetNoTailChain();
 
         YDB_LOG_TRACE_CTX(ctx, "Sending ping to ActorChain of length with work usec",
-            {"#_this->SelfId", this->SelfId()},
+            {"selfId", this->SelfId()},
             {"chainLength", chainLength},
             {"workUsec", workUsec});
 
@@ -409,14 +409,14 @@ private:
 
         if (!nextChainActorId) {
             YDB_LOG_ERROR_CTX(ctx, "Failed to send ping to ActorChain",
-                {"#_this->SelfId", this->SelfId()});
+                {"selfId", this->SelfId()});
             ReplyWithResult(StatusIds::INTERNAL_ERROR, ctx);
         }
     }
 
     void Handle(TEvPrivate::TEvChainItemComplete::TPtr&, const TActorContext& ctx) {
         YDB_LOG_TRACE_CTX(ctx, "Got ping response from full ActorChain",
-            {"#_this->SelfId", this->SelfId()});
+            {"selfId", this->SelfId()});
         ReplyWithResult(StatusIds::SUCCESS, ctx);
     }
 

@@ -297,7 +297,7 @@ public:
         const auto& entry = navigate->ResultSet.front();
 
         YDB_LOG_DEBUG_COMP(NKikimrServices::GRPC_SERVER, "Handle",
-            {"#_ev->Get()->ToString", ev->Get()->ToString()},
+            {"ev", ev->Get()->ToString()},
             {"entry", entry});
 
         switch (entry.Status) {

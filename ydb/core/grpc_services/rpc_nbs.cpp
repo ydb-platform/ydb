@@ -183,7 +183,7 @@ public:
         const TString diskId = request->GetDiskId();
 
         YDB_LOG_DEBUG_CTX(ctx, "GetLoadActorAdapterActorId: sending DescribeScheme request for disk",
-            {"#_diskId.data", diskId.data()});
+            {"diskId", diskId.data()});
 
         auto describeRequest = std::make_unique<TEvSSProxy::TEvDescribeSchemeRequest>(diskId);
 
@@ -227,7 +227,7 @@ private:
 
         if (pathType != NKikimrSchemeOp::EPathTypeBlockStoreVolume) {
             YDB_LOG_ERROR_CTX(ctx, "GetLoadActorAdapterActorId: path is not a BlockStoreVolume",
-                {"#_(type", static_cast<int>(pathType)});
+                {"type", static_cast<int>(pathType)});
             auto issue = NYql::TIssue("Path is not a BlockStoreVolume");
             Request_->RaiseIssue(issue);
             Reply(Ydb::StatusIds::BAD_REQUEST, ActorContext());

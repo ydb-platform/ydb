@@ -348,8 +348,8 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
 
         YDB_LOG_DEBUG("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"request", (request ? request->ToString(*AppData()->TypeRegistry) : "nullptr")});
 
         if (request->ResultSet.empty()) {
@@ -495,8 +495,8 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
             if (!entry.DomainInfo) {
                 YDB_LOG_ERROR("Got empty domain info",
                     {"logPrefix", GetLogPrefix()},
-                    {"#_this->SelfId", this->SelfId()},
-                    {"#_this->TxId", this->TxId});
+                    {"selfId", this->SelfId()},
+                    {"txId", this->TxId});
                 return this->Reply(StatusIds::INTERNAL_ERROR, TIssuesIds::GENERIC_RESOLVE_ERROR);
             }
 
@@ -521,8 +521,8 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
 
         YDB_LOG_DEBUG("Handle TEvExport::TEvCreateExportResponse",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"record", record.ShortDebugString()});
 
         this->Reply(TExportConv::ToOperation(record.GetEntry()));

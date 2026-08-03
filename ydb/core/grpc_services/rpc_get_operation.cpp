@@ -354,8 +354,8 @@ private:
 
         YDB_LOG_DEBUG("Handle TEvExport::TEvGetExportResponse",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"record", record.ShortDebugString()});
 
         TEvGetOperationRequest::TResponse resp;
@@ -368,8 +368,8 @@ private:
 
         YDB_LOG_DEBUG("Handle TEvImport::TEvGetImportResponse",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"record", record.ShortDebugString()});
 
         TEvGetOperationRequest::TResponse resp;
@@ -382,8 +382,8 @@ private:
 
         YDB_LOG_DEBUG("Handle TEvIndexBuilder::TEvGetResponse",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"record", record.ShortDebugString()});
 
         if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
@@ -401,8 +401,8 @@ private:
 
         YDB_LOG_DEBUG("Handle TEvForcedCompaction::TEvGetResponse",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"record", record.ShortDebugString()});
 
         if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
@@ -420,8 +420,8 @@ private:
 
         YDB_LOG_DEBUG("Handle TEvSetColumnConstraint::TEvGetResponse",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"record", record.ShortDebugString()});
 
         if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
@@ -458,8 +458,8 @@ private:
 
         YDB_LOG_DEBUG("Handle TEvBackup::TEvGetIncrementalBackupResponse",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"record", record.ShortDebugString()});
 
         TEvGetOperationRequest::TResponse resp;
@@ -472,8 +472,8 @@ private:
 
         YDB_LOG_DEBUG("Handle TEvBackup::TEvGetBackupCollectionRestoreResponse",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"record", record.ShortDebugString()});
 
         TEvGetOperationRequest::TResponse resp;
@@ -486,8 +486,8 @@ private:
 
         YDB_LOG_DEBUG("Handle TEvBackup::TEvGetFullBackupResponse",
             {"logPrefix", GetLogPrefix()},
-            {"#_this->SelfId", this->SelfId()},
-            {"#_this->TxId", this->TxId},
+            {"selfId", this->SelfId()},
+            {"txId", this->TxId},
             {"record", record.ShortDebugString()});
 
         TEvGetOperationRequest::TResponse resp;

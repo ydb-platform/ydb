@@ -51,7 +51,9 @@ void TMaxTasksGraph::AddNode(TNodeId node) {
     CheckInvariants();
 }
 
-void TMaxTasksGraph::AddStage(TStageInfo& stageInfo, EStageType type, const std::list<TStageId>& inputs, std::optional<TStageId> copyInput) {
+void TMaxTasksGraph::AddStage(TStageInfo& stageInfo, EStageType type, const std::list<TStageId>& inputs, std::optional<TStageId> copyInput,
+    const std::list<TStageId>& scatterInputs)
+{
     TStage newStage;
     newStage.Info = &stageInfo;
     newStage.Type = type;
@@ -71,6 +73,9 @@ void TMaxTasksGraph::AddStage(TStageInfo& stageInfo, EStageType type, const std:
 
     for (const auto& input : inputs) {
         newStage.Inputs.push_back(StageIds.at(input));
+    }
+    for (const auto& input : scatterInputs) {
+        newStage.ScatterInputs.insert(StageIds.at(input));
     }
 
     const TStageIdx newStageIdx = Stages.size();
@@ -684,14 +689,28 @@ size_t TMaxTasksGraph::CountChannelsOnNode(const std::vector<TColumnsPerNode>& c
         ui64 channelsPerTask = 0;
 
         // An edge within the same group is a copy connection: 1 local channel per task (the paired task is co-located).
-        // An edge to another group is a full mesh: a channel to every task of the other stage.
+        // A scatter edge gives each consumer task exactly one incoming channel, so it also costs 1 per task on the
+        // consumer side and ceil(consumers/producers) on the producer side (see BuildScatterChannels).
+        // Any other edge to another group is a full mesh: a channel to every task of the other stage.
         for (TStageIdx input : stage.Inputs) {
             const TGroupIdx inputGroup = Stages[input].Group;
-            channelsPerTask += (inputGroup == stage.Group) ? 1 : groupTotal[inputGroup];
+            if (inputGroup == stage.Group || stage.ScatterInputs.contains(input)) {
+                channelsPerTask += 1;
+            } else {
+                channelsPerTask += groupTotal[inputGroup];
+            }
         }
         for (TStageIdx output : stage.Outputs) {
             const TGroupIdx outputGroup = Stages[output].Group;
-            channelsPerTask += (outputGroup == stage.Group) ? 1 : groupTotal[outputGroup];
+            if (outputGroup == stage.Group) {
+                channelsPerTask += 1;
+            } else if (Stages[output].ScatterInputs.contains(stageIdx)) {
+                const size_t producers = groupTotal[stage.Group];
+                const size_t consumers = groupTotal[outputGroup];
+                channelsPerTask += producers ? (consumers + producers - 1) / producers : consumers;
+            } else {
+                channelsPerTask += groupTotal[outputGroup];
+            }
         }
 
         totalChannels += tasksOnNode * channelsPerTask;

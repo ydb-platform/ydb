@@ -1009,6 +1009,95 @@ private:
     std::shared_ptr<TDqFillAggregator> Aggregator;
 };
 
+// Static round-robin across the output's channels: every row goes to exactly one channel, picked by a plain counter.
+// Deliberately does NOT consult channel fill levels - routing by that signal was measured to concentrate rows on a
+// straggler under node degradation and to add variance on a healthy cluster. Row placement is decided by the plan
+// (which channels this producer owns), not at runtime.
+class TDqOutputScatterConsumer : public IDqOutputConsumer {
+public:
+    TDqOutputScatterConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth)
+        : Outputs(std::move(outputs))
+        , OutputWidth(outputWidth)
+    {
+        YQL_ENSURE(!Outputs.empty());
+        Aggregator = std::make_shared<TDqFillAggregator>();
+        for (auto output : Outputs) {
+            output->SetFillAggregator(Aggregator);
+        }
+    }
+
+    EDqFillLevel GetFillLevel() const override {
+        auto result = Aggregator->GetFillLevel();
+        if (result == HardLimit) {
+            for (auto output : Outputs) {
+                output->UpdateFillLevel();
+            }
+            result = Aggregator->GetFillLevel();
+        }
+        return result;
+    }
+
+    void Consume(TUnboxedValue&& value) final {
+        YQL_ENSURE(!OutputWidth.Defined());
+        Next()->Push(std::move(value));
+    }
+
+    void WideConsume(TUnboxedValue* values, ui32 count) final {
+        YQL_ENSURE(OutputWidth.Defined() && OutputWidth == count);
+        Next()->WidePush(values, count);
+    }
+
+    // Checkpoints and watermarks are control messages, not rows: every channel must see them.
+    void Consume(NDqProto::TCheckpoint&& checkpoint) override {
+        for (auto& output : Outputs) {
+            output->Push(NDqProto::TCheckpoint(checkpoint));
+        }
+    }
+
+    void Consume(NDqProto::TWatermark&& watermark) override {
+        for (auto& output : Outputs) {
+            output->Push(NDqProto::TWatermark(watermark));
+        }
+    }
+
+    void Finish() override {
+        for (auto& output : Outputs) {
+            output->Finish();
+        }
+    }
+
+    void Flush() override {
+        for (auto& output : Outputs) {
+            output->Flush();
+        }
+    }
+
+    bool IsFinished() const override {
+        return Aggregator->IsFinished();
+    }
+
+    bool IsEarlyFinished() const override {
+        return Aggregator->IsEarlyFinished();
+    }
+
+    TString DebugString() override {
+        return TStringBuilder() << "TDqOutputScatterConsumer channels=" << Outputs.size();
+    }
+
+private:
+    IDqOutput::TPtr& Next() {
+        if (RoundRobin >= Outputs.size()) {
+            RoundRobin = 0;
+        }
+        return Outputs[RoundRobin++];
+    }
+
+    TVector<IDqOutput::TPtr> Outputs;
+    const TMaybe<ui32> OutputWidth;
+    std::shared_ptr<TDqFillAggregator> Aggregator;
+    size_t RoundRobin = 0;
+};
+
 } // namespace
 
 IDqOutputConsumer::TPtr CreateOutputMultiConsumer(TVector<IDqOutputConsumer::TPtr>&& consumers) {
@@ -1124,6 +1213,10 @@ IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
 
 IDqOutputConsumer::TPtr CreateOutputBroadcastConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth) {
     return MakeIntrusive<TDqOutputBroadcastConsumer>(std::move(outputs), outputWidth);
+}
+
+IDqOutputConsumer::TPtr CreateOutputScatterConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth) {
+    return MakeIntrusive<TDqOutputScatterConsumer>(std::move(outputs), outputWidth);
 }
 
 } // namespace NYql::NDq

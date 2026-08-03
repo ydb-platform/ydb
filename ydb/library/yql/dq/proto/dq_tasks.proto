@@ -140,6 +140,12 @@ message TTaskOutputRangePartition {
 message TTaskOutputBroadcast {
 }
 
+// Static round-robin over this output's channels: each row goes to exactly one channel, chosen without looking at
+// channel state. Used for ParallelUnionAll, where row placement is unconstrained, to feed more consumer tasks than
+// there are producers.
+message TTaskOutputScatter {
+}
+
 message THashV1 {
 }
 
@@ -180,6 +186,7 @@ message TTaskOutput {
         TTaskOutputBroadcast Broadcast = 13;
         TTaskOutputEffects Effects = 14;
         TTaskOutputSink Sink = 15;
+        TTaskOutputScatter Scatter = 16;
     }
     TDqTransform Transform = 30;
 }

@@ -947,12 +947,56 @@ void TKqpTasksGraph::BuildParallelUnionAllChannels(const TStageInfo& stageInfo, 
     Y_ENSURE(originStageTasksSize);
     Y_ENSURE(nextOriginTaskId < originStageTasksSize);
 
+    // More consumers than producers: one-to-one wiring would leave the extra consumers without any input, so give every
+    // producer a fan of channels instead. Only reachable when the consumer stage was sized from resources.
+    if (originStageTasksSize > inputStageTasksSize) {
+        BuildScatterChannels(stageInfo, inputIndex, inputStageInfo, outputIndex, enableSpilling, logFunc);
+        return;
+    }
+
     for (ui64 i = 0; i < inputStageTasksSize; ++i) {
         const auto originTaskId = inputStageInfo.Tasks[i];
         const auto targetTaskId = stageInfo.Tasks[nextOriginTaskId];
         BuildChannelBetweenTasks(stageInfo, inputStageInfo, originTaskId, targetTaskId, inputIndex, outputIndex, enableSpilling, logFunc);
         nextOriginTaskId = (nextOriginTaskId + 1) % originStageTasksSize;
     }
+}
+
+// Bounded-degree wiring for a ParallelUnionAll whose consumer stage is wider than its producer stage. Each producer gets
+// ceil(M/N) channels (a contiguous slice of the consumer tasks), so every consumer has exactly one incoming channel and
+// the total is M rather than the N*M of a full mesh - the mesh's per-query channel-setup cost was measured at ~0.85s for
+// 234x234, and TMaxTasksGraph would charge that mesh against MaxChannelCountPerNode, shrinking the whole query.
+void TKqpTasksGraph::BuildScatterChannels(const TStageInfo& stageInfo, ui32 inputIndex, const TStageInfo& inputStageInfo,
+    ui32 outputIndex, bool enableSpilling, const TChannelLogFunc& logFunc)
+{
+    const ui64 producers = inputStageInfo.Tasks.size();
+    const ui64 consumers = stageInfo.Tasks.size();
+    Y_ENSURE(producers);
+    Y_ENSURE(consumers >= producers);
+
+    ui64 nextConsumer = 0;
+    for (ui64 i = 0; i < producers; ++i) {
+        const auto originTaskId = inputStageInfo.Tasks[i];
+        // Spread the remainder over the first (consumers % producers) producers so degrees differ by at most one.
+        const ui64 degree = consumers / producers + (i < consumers % producers ? 1 : 0);
+
+        for (ui64 j = 0; j < degree; ++j) {
+            const auto targetTaskId = stageInfo.Tasks[nextConsumer++];
+            BuildChannelBetweenTasks(stageInfo, inputStageInfo, originTaskId, targetTaskId, inputIndex, outputIndex,
+                enableSpilling, logFunc);
+        }
+        // BuildChannelBetweenTasks marks the output as Map; with a fan of channels the runtime needs the round-robin
+        // consumer instead (Map asserts on a single channel).
+        GetTask(originTaskId).Outputs[outputIndex].Type = TTaskOutputType::Scatter;
+    }
+    Y_ENSURE(nextConsumer == consumers);
+
+    YDB_LOG_DEBUG("Built ParallelUnionAll scatter channels",
+        {"srcStageId", inputStageInfo.Id.StageId},
+        {"dstStageId", stageInfo.Id.StageId},
+        {"producers", producers},
+        {"consumers", consumers},
+        {"channels", consumers});
 }
 
 void TKqpTasksGraph::BuildStreamLookupChannels(const TStageInfo& stageInfo, ui32 inputIndex, const TStageInfo& inputStageInfo, ui32 outputIndex,
@@ -1650,6 +1694,12 @@ void TKqpTasksGraph::FillOutputDesc(NYql::NDqProto::TTaskOutput& outputDesc, con
             break;
         }
 
+        case TTaskOutputType::Scatter: {
+            YQL_ENSURE(!output.Channels.empty());
+            outputDesc.MutableScatter();
+            break;
+        }
+
         case TTaskOutputType::Effects: {
             outputDesc.MutableEffects();
             break;
@@ -2236,6 +2286,10 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
                 }
                 case NDqProto::TTaskOutput::kBroadcast: {
                     newOutput.Type = TTaskOutputType::Broadcast;
+                    break;
+                }
+                case NDqProto::TTaskOutput::kScatter: {
+                    newOutput.Type = TTaskOutputType::Scatter;
                     break;
                 }
                 case NDqProto::TTaskOutput::kEffects: {
@@ -3671,7 +3725,8 @@ TKqpTasksGraph::TKqpTasksGraph(
     const TKqpRequestCounters::TPtr& counters,
     TActorId bufferActorId,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken,
-    bool useKqpTasksGraphV2)
+    bool useKqpTasksGraphV2,
+    bool enableParallelUnionAllConsumerSizing)
     : Transactions(transactions)
     , TxAlloc(txAlloc)
     , AggregationSettings(aggregationSettings)
@@ -3691,6 +3746,7 @@ TKqpTasksGraph::TKqpTasksGraph(
     GetMeta().Arena = MakeIntrusive<NActors::TProtoArenaHolder>();
     GetMeta().Database = database;
     GetMeta().RequestIsolationLevel = NKqpProto::EIsolationLevel::ISOLATION_LEVEL_SERIALIZABLE;
+    GetMeta().EnableParallelUnionAllConsumerSizing = enableParallelUnionAllConsumerSizing;
 
     if (Transactions.empty()) {
         return;
@@ -4059,8 +4115,11 @@ void TKqpTasksGraph::CountComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
     bool isShuffle = false;
     bool forceMapTasks = false;
     ui32 mapConnectionCount = 0;
+    ui32 parallelUnionAllTasks = 0;
+    bool isParallelUnionAll = false;
 
     std::list<TStageId> inputs;
+    std::list<TStageId> scatterInputs;
     std::optional<TStageId> copyInput;
     TMaxTasksGraph::EStageType stageType = TMaxTasksGraph::ANY;
     for (ui32 inputIndex = 0; inputIndex < stage.InputsSize(); ++inputIndex) {
@@ -4132,6 +4191,8 @@ void TKqpTasksGraph::CountComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
             }
             case NKqpProto::TKqpPhyConnection::kParallelUnionAll: {
                 partitionsCount = std::max<ui64>(partitionsCount, MaxTasksGraph->GetStageTasksCount(inputStageId));
+                parallelUnionAllTasks += MaxTasksGraph->GetStageTasksCount(inputStageId);
+                isParallelUnionAll = true;
                 break;
             }
             case NKqpProto::TKqpPhyConnection::kVectorResolve:
@@ -4156,6 +4217,34 @@ void TKqpTasksGraph::CountComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
             auto [newPartitionCount, _] = GetMaxTasksAggregation(stageInfo, inputTasks, nodesCount);
             partitionsCount = std::max(newPartitionCount, partitionsCount);
         }
+    } else if (isParallelUnionAll && !forceMapTasks && GetMeta().EnableParallelUnionAllConsumerSizing) {
+        // A ParallelUnionAll consumer is not bound to its producers by correctness: any row may go to any consumer
+        // task. Size it from resources instead, so a consumer-heavy stage is not capped by the producer count.
+        if (stage.GetTaskCount()) {
+            stageType = TMaxTasksGraph::FIXED;
+            partitionsCount = stage.GetTaskCount();
+        } else {
+            // Zero previous-stage count on purpose: CalcTasksOptimalCount clamps its result to that argument, which is
+            // exactly the producer-count cap being lifted here.
+            auto [newPartitionCount, _] = GetMaxTasksAggregation(stageInfo, 0, nodesCount);
+            partitionsCount = std::max(newPartitionCount, partitionsCount);
+        }
+        YDB_LOG_DEBUG("Sized ParallelUnionAll consumer stage from resources",
+            {"stageId", stageInfo.Id.StageId},
+            {"producers", parallelUnionAllTasks},
+            {"consumers", partitionsCount});
+
+        // Tell the channel budget which edges will be wired as a bounded-degree scatter instead of a full mesh - only
+        // those where this stage actually ended up wider than its producer (see BuildParallelUnionAllChannels).
+        for (const auto& input : stage.GetInputs()) {
+            if (input.GetTypeCase() != NKqpProto::TKqpPhyConnection::kParallelUnionAll) {
+                continue;
+            }
+            const auto inputStageId = NYql::NDq::TStageId(stageId.TxId, input.GetStageIndex());
+            if (partitionsCount > MaxTasksGraph->GetStageTasksCount(inputStageId)) {
+                scatterInputs.push_back(inputStageId);
+            }
+        }
     }
 
     // Tasks writing through the shared per-query buffer actor must run on the executer's own node (see
@@ -4166,7 +4255,7 @@ void TKqpTasksGraph::CountComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
         pinnedNode = GetMeta().ExecuterId.NodeId();
     }
 
-    MaxTasksGraph->AddStage(stageInfo, stageType, inputs, copyInput);
+    MaxTasksGraph->AddStage(stageInfo, stageType, inputs, copyInput, scatterInputs);
     if (partitionsCount) {
         // It's possible to have zero partitions in case we COPY from input stage, which is empty because of non-intersecting param values:
         // i.e. "WHERE a > $1 AND a < $2", where $1 = $2 = 10

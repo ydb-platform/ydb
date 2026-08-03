@@ -178,6 +178,9 @@ struct TBuildConfig {
     // production the RM board delivers the snapshot in arbitrary order, so reversing it here is a legitimate
     // scenario - and the only way to make that difference observable.
     bool ReverseSnapshotNodeOrder = false;
+
+    // Lets a ParallelUnionAll consumer stage size itself from resources instead of copying the producer task count.
+    bool EnableParallelUnionAllConsumerSizing = false;
 };
 
 namespace {
@@ -271,7 +274,8 @@ public:
             NKikimrConfig::TTableServiceConfig::TResourceManager{},
             NKikimrConfig::TTableServiceConfig::TAggregationConfig{},
             MakeIntrusive<TKqpRequestCounters>(),
-            NActors::TActorId{}, nullptr, true);
+            NActors::TActorId{}, nullptr, true,
+            Config.EnableParallelUnionAllConsumerSizing);
 
         Graph->GetMeta().IsScan             = Config.IsScan;
         Graph->GetMeta().AllowOlapDataQuery = true;
@@ -670,12 +674,20 @@ public:
         });
     }
 
+    // Physical plan of the query most recently passed to BuildTasks. Lets a test locate stages by their connection
+    // kinds instead of hardcoding stage indices, which shift whenever the optimizer changes.
+    const NKqpProto::TKqpPhyQuery& LastPhysicalQuery() const {
+        UNIT_ASSERT_C(LastPlan, "BuildTasks has not been called yet");
+        return LastPlan->GetPhysicalQuery();
+    }
+
     // Compile sql, run the full TKqpTasksGraph init sequence, return task counts.
     TTaskDistribution BuildTasks(const TString& sql, TBuildConfig cfg = {}) {
         auto plan = CompileQuery(sql);
         UNIT_ASSERT_C(plan, "Failed to compile: " << sql);
 
         DumpExplain(*plan);
+        LastPlan = plan;
 
         auto edge = Runtime->AllocateEdgeActor();
         Runtime->Register(new TBuildTasksActor(edge, std::move(plan), std::move(cfg)));
@@ -756,6 +768,7 @@ private:
 private:
     std::optional<TKikimrRunner> Kikimr;
     TTestActorRuntime* Runtime = nullptr;
+    std::shared_ptr<const TPreparedQueryHolder> LastPlan;
 };
 
 class TKqpTasksGraphTpchFixture : public TKqpTasksGraphBuildFixture<32> {
@@ -2941,5 +2954,95 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild) {
     }
 
 } // Y_UNIT_TEST_SUITE(TKqpTasksGraphBuild)
+
+// A ParallelUnionAll consumer stage is not bound to its producers by correctness (any row may go to any consumer task),
+// so EnableParallelUnionAllConsumerSizing lets it size itself from resources. Without the flag the consumer count is
+// pinned to the producer count, which caps a consumer-heavy stage at however many partitions the source table has.
+Y_UNIT_TEST_SUITE(TKqpTasksGraphParallelUnionAll) {
+
+    // 4 partitions on 1 node -> few producers, and the aggregating consumer stage above UNION ALL copies that count.
+    class TFixture : public TKqpTasksGraphBuildFixture<16> {
+    public:
+        void SetUp(NUnitTest::TTestContext& ctx) override {
+            TKqpTasksGraphBuildFixture::SetUp(ctx);
+            Execute(R"(
+                CREATE TABLE pua_src (
+                    k Int64 NOT NULL,
+                    part Int32 NOT NULL,
+                    v Double NOT NULL,
+                    PRIMARY KEY (k)
+                ) PARTITION BY HASH (k)
+                WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4);
+            )");
+        }
+
+        TTaskDistribution Build(bool enableSizing) {
+            TBuildConfig cfg;
+            cfg.NodeCount = 1;
+            cfg.NodeComputeActors = 1u << 20;
+            cfg.NodeTotalMemoryBytes = 256ULL << 30;
+            cfg.EnableParallelUnionAllConsumerSizing = enableSizing;
+
+            return TKqpTasksGraphBuildFixture::BuildTasks(TString(Query), cfg);
+        }
+
+        // The scan stage (both union branches read the same table, so the optimizer emits a single shared scan) is
+        // pinned to 2 tasks, leaving the 16-thread pool free for the consumer to grow into. Pinning anything else would
+        // make that stage FIXED and defeat the sizing under test.
+        static constexpr TStringBuf Query = R"(
+            PRAGMA ydb.OptimizerHints = 'Rows(pua_src # 1e9)';
+            PRAGMA ydb.OverridePlanner = @@ [
+                {"tx": 0, "stage": 0, "tasks": 2}
+            ] @@;
+            SELECT k, SUM(v) AS s, MIN(v) AS mn, MAX(v) AS mx, COUNT(*) AS c FROM (
+                SELECT k, v FROM pua_src WHERE part = 0
+                UNION ALL
+                SELECT k, v FROM pua_src WHERE part = 1
+            ) GROUP BY k;
+        )";
+    };
+
+    // Returns the task count of the stage whose only inputs are ParallelUnionAll connections, plus the largest task
+    // count among its producer stages - that maximum is what CountComputeTasks pins the consumer to by default.
+    static std::pair<ui32, ui32> FindPuaConsumer(const TTaskDistribution& dist, const NKqpProto::TKqpPhyQuery& phy) {
+        for (ui32 stageIdx = 0; stageIdx < phy.GetTransactions(0).StagesSize(); ++stageIdx) {
+            const auto& stage = phy.GetTransactions(0).GetStages(stageIdx);
+            ui32 producers = 0;
+            bool allPua = stage.InputsSize() > 0;
+            for (const auto& input : stage.GetInputs()) {
+                if (input.GetTypeCase() != NKqpProto::TKqpPhyConnection::kParallelUnionAll) {
+                    allPua = false;
+                    break;
+                }
+                producers = std::max(producers, dist.Count(0, input.GetStageIndex()));
+            }
+            if (allPua) {
+                return {dist.Count(0, stageIdx), producers};
+            }
+        }
+        return {0, 0};
+    }
+
+    Y_UNIT_TEST_F(ConsumerCopiesProducerCountByDefault, TFixture) {
+        auto dist = Build(/* enableSizing */ false);
+        AssertNoCrossNodeCopyChannels(dist);
+
+        auto [consumers, producers] = FindPuaConsumer(dist, LastPhysicalQuery());
+        UNIT_ASSERT_C(producers > 0, "no ParallelUnionAll consumer stage found in the plan");
+        UNIT_ASSERT_VALUES_EQUAL_C(consumers, producers,
+            "without the flag the consumer stage must copy the producer count");
+    }
+
+    Y_UNIT_TEST_F(ConsumerSizedFromResources, TFixture) {
+        auto dist = Build(/* enableSizing */ true);
+        AssertNoCrossNodeCopyChannels(dist);
+
+        auto [consumers, producers] = FindPuaConsumer(dist, LastPhysicalQuery());
+        UNIT_ASSERT_C(producers > 0, "no ParallelUnionAll consumer stage found in the plan");
+        UNIT_ASSERT_C(consumers > producers,
+            "consumer stage must exceed the producer count when sized from resources, got "
+                << consumers << " consumers for " << producers << " producers");
+    }
+}
 
 } // namespace NKikimr::NKqp

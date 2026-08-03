@@ -7,6 +7,7 @@
 
 #include <list>
 #include <optional>
+#include <set>
 #include <vector>
 
 namespace NKikimr::NKqp {
@@ -39,7 +40,8 @@ public:
     void AddNodes(const TVector<NKikimrKqp::TKqpNodeResources>& resourcesSnapshot);
     void AddNode(TNodeId node); // TODO: it's workaround. remove later.
 
-    void AddStage(TStageInfo& stageInfo, EStageType type, const std::list<TStageId>& inputs, std::optional<TStageId> copyInput = std::nullopt);
+    void AddStage(TStageInfo& stageInfo, EStageType type, const std::list<TStageId>& inputs, std::optional<TStageId> copyInput = std::nullopt,
+        const std::list<TStageId>& scatterInputs = {});
 
     void AddTask(const TTask& task, std::optional<TNodeId> node);
 
@@ -79,6 +81,10 @@ private:
 
         std::list<TStageIdx> Inputs;
         std::list<TStageIdx> Outputs;
+
+        // Inputs wired as a bounded-degree scatter (BuildScatterChannels) rather than a full mesh: the edge costs one
+        // channel per consumer task in total, not one per (producer, consumer) pair. Subset of Inputs.
+        std::set<TStageIdx> ScatterInputs;
 
         // Task Ids in creation order; the position is the column index. Every stage of a group holds exactly one task
         // per column, so all of them have the same number of tasks (== the group's column count).

@@ -51,4 +51,7 @@ IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
 
 IDqOutputConsumer::TPtr CreateOutputBroadcastConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth);
 
+// Static round-robin over the outputs: one row to one channel, chosen by a counter rather than by channel state.
+IDqOutputConsumer::TPtr CreateOutputScatterConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth);
+
 } // namespace NYql::NDq

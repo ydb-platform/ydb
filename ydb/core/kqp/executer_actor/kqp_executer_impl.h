@@ -148,7 +148,8 @@ public:
         , BatchOperationSettings(std::move(batchOperationSettings))
         , AccountDefaultPoolInScheduler(executerConfig.TableServiceConfig.GetComputeSchedulerSettings().GetAccountDefaultPool())
         , NewRboEnabled(executerConfig.TableServiceConfig.GetEnableNewRBO())
-        , TasksGraph(Database, Request.Transactions, Request.TxAlloc, executerConfig.TableServiceConfig.GetResourceManager(), AggregationSettings, Counters, BufferActorId, UserToken, useKqpTasksGraphV2)
+        , TasksGraph(Database, Request.Transactions, Request.TxAlloc, executerConfig.TableServiceConfig.GetResourceManager(), AggregationSettings, Counters, BufferActorId, UserToken, useKqpTasksGraphV2,
+              executerConfig.TableServiceConfig.GetEnableParallelUnionAllConsumerSizing())
         , ChannelService(channelService)
         , PartitionPruner(MakeHolder<TPartitionPruner>(Request.TxAlloc->HolderFactory, Request.TxAlloc->TypeEnv, std::move(partitionPrunerConfig)))
         , EnableWatermarks(executerConfig.TableServiceConfig.GetEnableWatermarks())

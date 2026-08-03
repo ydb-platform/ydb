@@ -1089,3 +1089,123 @@ Y_UNIT_TEST(BackPressureWithSpillingLoad) {
 }
 
 }
+
+// Static round-robin scatter: rows spread evenly across the output's channels, and the choice never consults channel
+// fill level (routing by that signal was measured to pile rows onto a straggler under degradation).
+Y_UNIT_TEST_SUITE(Scatter) {
+
+namespace {
+
+TVector<IDqOutputChannel::TPtr> MakeChannels(TTestContext& ctx, ui32 count, ui64 maxStoredBytes = 1_MB) {
+    TDqChannelSettings settings = {
+        .RowType = ctx.GetOutputType(),
+        .HolderFactory = &ctx.HolderFactory,
+        .DstStageId = 1000,
+        .Level = TCollectStatsLevel::Profile,
+        .TransportVersion = ctx.TransportVersion,
+        .MaxStoredBytes = maxStoredBytes,
+        .MaxChunkBytes = 100
+    };
+
+    TVector<IDqOutputChannel::TPtr> channels;
+    for (ui32 i = 0; i < count; ++i) {
+        settings.ChannelId = i;
+        channels.emplace_back(CreateDqOutputChannel(settings, Log));
+    }
+    return channels;
+}
+
+IDqOutputConsumer::TPtr MakeScatterConsumer(TTestContext& ctx, const TVector<IDqOutputChannel::TPtr>& channels) {
+    TVector<IDqOutput::TPtr> outputs;
+    for (auto c : channels) {
+        outputs.emplace_back(c);
+    }
+    return CreateOutputScatterConsumer(std::move(outputs),
+        ctx.IsWide ? TMaybe<ui32>(ctx.Width()) : TMaybe<ui32>());
+}
+
+} // namespace
+
+Y_UNIT_TEST(RowsSpreadEvenly) {
+    TTestContext ctx(WIDE_CHANNEL);
+    constexpr ui32 CHANNEL_COUNT = 4;
+    constexpr ui32 ROWS_PER_CHANNEL = 5;
+
+    auto channels = MakeChannels(ctx, CHANNEL_COUNT);
+    auto consumer = MakeScatterConsumer(ctx, channels);
+
+    for (ui32 i = 0; i < CHANNEL_COUNT * ROWS_PER_CHANNEL; ++i) {
+        ConsumeRow(ctx, ctx.CreateRow(i), consumer);
+    }
+
+    for (auto c : channels) {
+        UNIT_ASSERT_VALUES_EQUAL(ROWS_PER_CHANNEL, c->GetValuesCount());
+    }
+}
+
+// A row count that is not a multiple of the channel count must differ by at most one per channel.
+Y_UNIT_TEST(UnevenRowCountDiffersByOne) {
+    TTestContext ctx(WIDE_CHANNEL);
+    constexpr ui32 CHANNEL_COUNT = 4;
+    constexpr ui32 ROWS = 4 * 3 + 2;
+
+    auto channels = MakeChannels(ctx, CHANNEL_COUNT);
+    auto consumer = MakeScatterConsumer(ctx, channels);
+
+    for (ui32 i = 0; i < ROWS; ++i) {
+        ConsumeRow(ctx, ctx.CreateRow(i), consumer);
+    }
+
+    ui32 total = 0;
+    for (auto c : channels) {
+        const auto count = c->GetValuesCount();
+        UNIT_ASSERT_C(count == ROWS / CHANNEL_COUNT || count == ROWS / CHANNEL_COUNT + 1,
+            "channel got " << count << " rows, expected " << (ROWS / CHANNEL_COUNT) << " or one more");
+        total += count;
+    }
+    UNIT_ASSERT_VALUES_EQUAL(ROWS, total);
+}
+
+// The whole point of static distribution: a channel sitting at HardLimit still gets its turn. An adaptive router would
+// steer rows away from it, which is what concentrated load on a straggler in the measurements.
+Y_UNIT_TEST(FullChannelStillReceivesRows) {
+    TTestContext ctx(WIDE_CHANNEL, NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0, true);
+    constexpr ui32 CHANNEL_COUNT = 2;
+
+    auto channels = MakeChannels(ctx, CHANNEL_COUNT, /* maxStoredBytes */ 100);
+    auto consumer = MakeScatterConsumer(ctx, channels);
+
+    // First row is huge and lands on channel 0, driving it to HardLimit.
+    ConsumeRow(ctx, ctx.CreateBigRow(0, 10000), consumer);
+    UNIT_ASSERT_VALUES_EQUAL(HardLimit, channels[0]->UpdateFillLevel());
+    UNIT_ASSERT_VALUES_EQUAL(HardLimit, consumer->GetFillLevel());
+
+    // Round-robin keeps its order regardless: next row to channel 1, the one after that back to the full channel 0.
+    ConsumeRow(ctx, ctx.CreateRow(1), consumer);
+    ConsumeRow(ctx, ctx.CreateRow(2), consumer);
+
+    UNIT_ASSERT_VALUES_EQUAL(2, channels[0]->GetValuesCount());
+    UNIT_ASSERT_VALUES_EQUAL(1, channels[1]->GetValuesCount());
+}
+
+// Checkpoints and watermarks are control messages, not rows: every channel must see them.
+Y_UNIT_TEST(ControlMessagesGoToEveryChannel) {
+    TTestContext ctx(WIDE_CHANNEL);
+    constexpr ui32 CHANNEL_COUNT = 3;
+
+    auto channels = MakeChannels(ctx, CHANNEL_COUNT);
+    auto consumer = MakeScatterConsumer(ctx, channels);
+
+    NDqProto::TWatermark watermark;
+    watermark.SetTimestampUs(12345);
+    consumer->Consume(std::move(watermark));
+
+    // Watermarks are not rows, so GetValuesCount() stays at zero - pop the watermark itself from every channel.
+    for (auto c : channels) {
+        NDqProto::TWatermark popped;
+        UNIT_ASSERT_C(c->Pop(popped), "channel did not receive the watermark");
+        UNIT_ASSERT_VALUES_EQUAL(12345, popped.GetTimestampUs());
+    }
+}
+
+}

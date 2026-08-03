@@ -560,7 +560,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     const bool isDelete = *mType == NEvWrite::EModificationType::Delete;
     const bool outOfSpace = SpaceWatcher->SubDomainOutOfSpace && !isDelete;
     const bool smallBlobsQuotaExceeded =
-        AppDataVerified().FeatureFlags.GetEnableSmallBlobsQuotaEnforcement() && SpaceWatcher->SubDomainSmallBlobsQuotaExceeded && !isDelete;
+        AppDataVerified().FeatureFlags.GetEnableSmallBlobsQuotaEnforcement() && SpaceWatcher->SubDomainSmallBlobsQuotaExceeded;
     if (outOfSpace) {
         YDB_LOG_WARN_COMP(NKikimrServices::TX_COLUMNSHARD, "",
             {"event", "skip_writing"},
